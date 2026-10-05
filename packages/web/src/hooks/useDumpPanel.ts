@@ -34,6 +34,7 @@ import {
   runSweep,
   type WorkflowContext,
 } from '@seek-fw/core';
+import { reportInUseElsewhere } from '../lib/camera-lock';
 import { downloadArchive, mib } from '../lib/download';
 import { logHint } from '../lib/hints';
 import {
@@ -154,11 +155,26 @@ export function useDumpPanel(params: DumpPanelParams): DumpPanelApi {
               `${String(result.selectorsWithData)} with data${partial}. Check your downloads.`,
           );
         } else {
+          /* A window the build's own table reaches and that did not come
+           * back is not a gap, it is a failed read: core logged each one and
+           * gap-filled it, and the manifest lists it. The archive is still
+           * worth keeping, so this is a warning, not a failure, but "Done"
+           * alone would read as a complete copy, which it is not. */
+          const missing = result.windowsExpected - result.windowsRead;
+          const incomplete = !result.cancelled && missing > 0;
+          if (incomplete) {
+            reporter.reporter.log(
+              `incomplete: ${String(missing)} of the ${String(result.windowsExpected)} windows ` +
+                'this build can read did not come back (their lines are above) and are ' +
+                'gap-filled in the image — run the dump again for a complete copy',
+              'warn',
+            );
+          }
           reporter.reporter.progress(
             1,
             1,
             `Done — ${String(result.windowsRead)}/${String(result.windowsExpected)} windows read` +
-              `${partial}. Check your downloads.`,
+              `${incomplete ? ' (incomplete — see the log)' : partial}. Check your downloads.`,
           );
         }
       } finally {
@@ -169,8 +185,8 @@ export function useDumpPanel(params: DumpPanelParams): DumpPanelApi {
   );
 
   const start = useCallback(
-    (mode: DumpMode): Promise<void> =>
-      runner.start(id, async (signal) => {
+    async (mode: DumpMode): Promise<void> => {
+      const outcome = await runner.start(id, async (signal) => {
         reporter.reset('Starting ...');
         onOptionsFailure(null);
         setActing(null);
@@ -201,7 +217,9 @@ export function useDumpPanel(params: DumpPanelParams): DumpPanelApi {
         } finally {
           reporter.flush();
         }
-      }),
+      });
+      if (outcome === 'in-use-elsewhere') reportInUseElsewhere(reporter);
+    },
     [execute, id, onOptionsFailure, reporter, runner],
   );
 

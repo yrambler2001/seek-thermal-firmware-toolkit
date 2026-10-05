@@ -28,6 +28,7 @@
 import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CancelledError, nextStepAfter, type Artifact, type SessionOpener } from '@seek-fw/core';
+import { IN_USE_ELSEWHERE_LOG, IN_USE_ELSEWHERE_STATUS } from '@/lib/camera-lock';
 import { DEFAULT_OPTIONS_FORM } from '@/lib/options';
 import type * as PreserveClient from '@/lib/preserve/client';
 import { useDevice, type DeviceHandle } from './useDevice';
@@ -41,6 +42,7 @@ import type {
   PreserveStepOutcome,
 } from '@/lib/preserve/types';
 import { renderHook, waitFor } from '@/test-helpers';
+import { installLocks, removeLocks } from '@/test-locks';
 
 /* ---- the fakes ----------------------------------------------------------- */
 
@@ -613,6 +615,95 @@ describe('the reset is not a swap — the guard and the opener ladder cooperate'
      * against exactly this state — core's own gates (its emulator suites
      * prove them); the wizard's job is only to never hand a step a state
      * the previous step did not vouch for. */
+    mounted.unmount();
+  });
+});
+
+describe('the camera lock holds for the whole phase, across tabs', () => {
+  afterEach(() => {
+    removeLocks();
+  });
+
+  it('phase ②: another tab is refused through the reset, the re-enumeration and the replug wait; the cancel lets go', async () => {
+    const locks = installLocks();
+    const unitA = fakeCameraUnit(0x0010);
+    const mounted = mountPanel([unitA]);
+    await waitFor(() => current(mounted).device.device !== null);
+    await runTo(mounted, 'read-build', () => current(mounted).panel.state?.nextStep === 'commit');
+    await waitFor(() => current(mounted).panel.activePhase === null);
+    expect(locks.isHeld()).toBe(false); /* nothing is held between phases */
+
+    hungStep = 'drain';
+    act(() => {
+      void current(mounted).panel.runPhase('patch-dump');
+    });
+    await waitFor(() => handed.some(([step]) => step === 'drain'));
+    expect(locks.isHeld()).toBe(true);
+
+    /* The second tab: its own runner, device seat and wizard, on the same
+     * browser's locks and grants. */
+    const other = mountPanel([unitA]);
+    const stepsBefore = handed.length;
+    /** One try at a phase in the other tab; it must be refused, unsent. */
+    const otherTabTries = async (): Promise<void> => {
+      await act(async () => {
+        await current(other).panel.runPhase('read-build');
+      });
+      expect(current(other).panel.phaseReporters['read-build'].progress.text).toBe(
+        IN_USE_ELSEWHERE_STATUS,
+      );
+      expect(linesOf(current(other).panel, 'read-build')).toContain(IN_USE_ELSEWHERE_LOG);
+      expect(current(other).panel.state).toBeNull(); /* not even a run was created */
+      expect(current(other).runner.busy).toBe(false);
+      expect(handed.length).toBe(stepsBefore); /* no step ran there */
+    };
+    await otherTabTries();
+
+    /* THE RESET: the camera leaves the bus mid-drain. Still held. */
+    usb.authorized = [];
+    act(() => {
+      usb.fire('disconnect', unitA);
+    });
+    await waitFor(() =>
+      linesOf(current(mounted).panel, 'patch-dump').includes('restarting, as expected'),
+    );
+    expect(locks.isHeld()).toBe(true);
+    await otherTabTries();
+
+    /* THE RE-ENUMERATION. Still held. */
+    const unitA2 = fakeCameraUnit(0x0010);
+    usb.authorized = [unitA2];
+    act(() => {
+      usb.fire('connect', unitA2);
+    });
+    await waitFor(() =>
+      linesOf(current(mounted).panel, 'patch-dump').includes('the camera is back — continuing'),
+    );
+    expect(locks.isHeld()).toBe(true);
+    await otherTabTries();
+
+    /* The drain finishes and the phase waits for the replug. Still held. */
+    act(() => {
+      deferreds
+        .get('drain')
+        ?.resolve(fakeOutcome('drain', handed.at(-1)?.[1] ?? current(mounted).panel.state!));
+    });
+    await waitFor(() =>
+      linesOf(current(mounted).panel, 'patch-dump').includes('Your turn: unplug the camera'),
+    );
+    expect(locks.isHeld()).toBe(true);
+    await otherTabTries();
+
+    /* Cancelling the wait ends the phase, and the lock goes with it. */
+    act(() => {
+      current(mounted).panel.cancel();
+    });
+    await waitFor(() => current(mounted).panel.activePhase === null);
+    expect(locks.isHeld()).toBe(false);
+    await act(async () => {
+      expect(await current(other).runner.start('test', () => Promise.resolve())).toBe('ran');
+    });
+    other.unmount();
     mounted.unmount();
   });
 });

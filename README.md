@@ -684,6 +684,23 @@ Without a camera on the bench, the packaging was checked against real hardware a
 WebUSB is a Chromium feature; Firefox and Safari have both declined to implement it. Only the dumping
 half depends on it — offline decryption works everywhere.
 
+### One tab at a time
+
+Every tab and window of the page in one browser shares the camera's permission, and USB alone does
+not keep them apart. A second tab's claim of the camera's interface is refused the same way a system
+driver's would be, and the fallback the transport has for that case (device-recipient requests, see
+`isPlatformClaimRefusal`) would let it read alongside the first: two dumps at once both came back
+"Done", with wrong images. So the page holds a lock, a [Web Lock](https://developer.mozilla.org/docs/Web/API/Web_Locks_API)
+shared by its tabs, for the length of every camera operation: a connection test, a dump, a
+device-info read, a flash write, and each Preserve phase, its camera restarts and re-picks
+included. A tab that tries while another holds it sends nothing and says _"The camera is in use in
+another tab or window — finish or close it there first."_ Forget device waits for it too, since
+forgetting the camera closes it in every tab. The lock goes when the operation ends, however it
+ends, and when its tab is closed or reloaded. An idle tab holds nothing. A browser without Web Locks
+(Chromium before 69) runs without it, as the page did before. It does not reach another browser,
+another profile, the hosted page from a local one, or the CLI. Between those the operating system's
+own claim is the only guard, so run one of them at a time.
+
 ### Linux udev rule
 
 ```

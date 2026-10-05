@@ -171,6 +171,13 @@ export const WALL_CLOCK: DeadlineClock = {
  * `0xC1/0x41` to interface 0 (sec.9.9, all eleven FW-V1 `usb_core.c`
  * reconstructions). The CLI's adapter maps nusb's two "held by someone else"
  * claim errors onto this same name.
+ *
+ * One refusal looks the same and is not that case: a second tab or window of
+ * the same browser, refused because the first one holds the interface.
+ * Falling back there would read alongside the first tab. This transport cannot
+ * tell the two apart, so the web app keeps a second tab from getting this far:
+ * every camera operation there holds a cross-tab lock
+ * (packages/web/src/lib/camera-lock.ts), and a tab without it opens nothing.
  */
 export function isPlatformClaimRefusal(error: unknown): boolean {
   return (

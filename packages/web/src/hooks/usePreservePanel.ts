@@ -54,6 +54,7 @@ import {
   type WebUsbTransport,
 } from '@seek-fw/core';
 import { errorMessage } from '@seek-fw/core';
+import { reportInUseElsewhere } from '../lib/camera-lock';
 import { downloadBytes } from '../lib/download';
 import { isPowerCycleRefusal, logHint } from '../lib/hints';
 import { readOptions, type OptionsForm } from '../lib/options';
@@ -604,9 +605,12 @@ export function usePreservePanel(params: PreservePanelParams): PreservePanelApi 
 
   /* ---- run one phase ---------------------------------------------------- */
 
+  /* One runner task per phase, so the camera lock is held for the whole
+   * phase: through the reset, the boot silence, the re-pick and the replug
+   * wait, which all happen inside it. */
   const runPhase = useCallback(
-    (phase: PreservePhaseId, options: PreservePhaseRunOptions = {}): Promise<void> =>
-      runner.start(phasePanelId(phase), async (signal) => {
+    async (phase: PreservePhaseId, options: PreservePhaseRunOptions = {}): Promise<void> => {
+      const outcome = await runner.start(phasePanelId(phase), async (signal) => {
         const rep = phaseReporters[phase];
         const meta = phaseMeta(phase);
         sawDisconnect.current = false;
@@ -793,80 +797,88 @@ export function usePreservePanel(params: PreservePanelParams): PreservePanelApi 
           await closeAll();
           rep.flush();
         }
-      }),
+      });
+      if (outcome === 'in-use-elsewhere') reportInUseElsewhere(phaseReporters[phase]);
+    },
     [applyState, awaitReplug, form, hasCheckpoint, makeOpener, phaseReporters, runner, saveRunFile],
   );
 
   /* ---- resume from a run file ------------------------------------------ */
 
+  /* Reads a file, never the camera: no camera lock. */
   const loadRunFile = useCallback(
-    (file: File): Promise<void> =>
-      runner.start(LOAD_PANEL_ID, async () => {
-        const rep = loadReporter;
-        rep.reset('Reading run file …');
-        try {
-          const bytes = new Uint8Array(await file.arrayBuffer());
-          rep.reporter.log(`${file.name} — ${String(bytes.length)} B`, 'detail');
-          const parsed = parseRunFile(bytes);
-          checkpoints.current = new Map(parsed.checkpoints);
-          extra.current = new Map(parsed.extra);
-          applyState(parsed.state);
-          for (const meta of PRESERVE_PHASES) {
-            const phaseRep = phaseReporters[meta.id];
-            const records = meta.steps.map((id) => parsed.state.steps[id]);
-            if (records.every((record) => record?.status === 'done')) {
-              phaseRep.reset('Done earlier — loaded from the run file.');
-            } else if (records.some((record) => record?.status === 'failed')) {
-              const failed = records.find((record) => record?.status === 'failed');
-              phaseRep.reset(`Failed earlier: ${failed?.error ?? 'unknown reason'}`);
-            } else {
-              phaseRep.reset('Not run yet.');
+    async (file: File): Promise<void> => {
+      await runner.start(
+        LOAD_PANEL_ID,
+        async () => {
+          const rep = loadReporter;
+          rep.reset('Reading run file …');
+          try {
+            const bytes = new Uint8Array(await file.arrayBuffer());
+            rep.reporter.log(`${file.name} — ${String(bytes.length)} B`, 'detail');
+            const parsed = parseRunFile(bytes);
+            checkpoints.current = new Map(parsed.checkpoints);
+            extra.current = new Map(parsed.extra);
+            applyState(parsed.state);
+            for (const meta of PRESERVE_PHASES) {
+              const phaseRep = phaseReporters[meta.id];
+              const records = meta.steps.map((id) => parsed.state.steps[id]);
+              if (records.every((record) => record?.status === 'done')) {
+                phaseRep.reset('Done earlier — loaded from the run file.');
+              } else if (records.some((record) => record?.status === 'failed')) {
+                const failed = records.find((record) => record?.status === 'failed');
+                phaseRep.reset(`Failed earlier: ${failed?.error ?? 'unknown reason'}`);
+              } else {
+                phaseRep.reset('Not run yet.');
+              }
             }
+            rep.reporter.log(
+              'run ' +
+                parsed.state.runId +
+                ' — created ' +
+                parsed.state.createdAt +
+                ', schema version ' +
+                String(parsed.state.version),
+              'detail',
+            );
+            if (parsed.state.expectedVersion !== undefined) {
+              rep.reporter.log(`firmware ${parsed.state.expectedVersion}`, 'detail');
+            }
+            rep.reporter.log(
+              parsed.state.imageSource === 'device'
+                ? 'the factory plaintext derives from the camera’s own active slot — the run ' +
+                    'file carries it; nothing else is needed'
+                : 'the run predates the self-sourcing schema; its steps work off the artifacts ' +
+                    'the file carries',
+              'detail',
+            );
+            rep.reporter.log(
+              `checkpoints loaded: ${[...parsed.checkpoints.keys()].join(', ') || 'none yet'}`,
+              'detail',
+            );
+            rep.reporter.progress(
+              1,
+              1,
+              `Resumed at ${parsed.state.nextStep}. The phase list picks up from there.`,
+            );
+            setLastSave({
+              runId: parsed.state.runId,
+              afterStep: 'loaded',
+              at: new Date().toISOString(),
+              bytes: bytes.length,
+              fileName: file.name,
+            });
+          } catch (error) {
+            rep.log(`cannot resume from this file: ${errorMessage(error)}`, 'error');
+            logHint(rep.log, error);
+            rep.setStatus('Not resumed — see the log above.');
+          } finally {
+            rep.flush();
           }
-          rep.reporter.log(
-            'run ' +
-              parsed.state.runId +
-              ' — created ' +
-              parsed.state.createdAt +
-              ', schema version ' +
-              String(parsed.state.version),
-            'detail',
-          );
-          if (parsed.state.expectedVersion !== undefined) {
-            rep.reporter.log(`firmware ${parsed.state.expectedVersion}`, 'detail');
-          }
-          rep.reporter.log(
-            parsed.state.imageSource === 'device'
-              ? 'the factory plaintext derives from the camera’s own active slot — the run ' +
-                  'file carries it; nothing else is needed'
-              : 'the run predates the self-sourcing schema; its steps work off the artifacts ' +
-                  'the file carries',
-            'detail',
-          );
-          rep.reporter.log(
-            `checkpoints loaded: ${[...parsed.checkpoints.keys()].join(', ') || 'none yet'}`,
-            'detail',
-          );
-          rep.reporter.progress(
-            1,
-            1,
-            `Resumed at ${parsed.state.nextStep}. The phase list picks up from there.`,
-          );
-          setLastSave({
-            runId: parsed.state.runId,
-            afterStep: 'loaded',
-            at: new Date().toISOString(),
-            bytes: bytes.length,
-            fileName: file.name,
-          });
-        } catch (error) {
-          rep.log(`cannot resume from this file: ${errorMessage(error)}`, 'error');
-          logHint(rep.log, error);
-          rep.setStatus('Not resumed — see the log above.');
-        } finally {
-          rep.flush();
-        }
-      }),
+        },
+        { camera: false },
+      );
+    },
     [applyState, loadReporter, phaseReporters, runner],
   );
 

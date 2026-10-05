@@ -20,6 +20,7 @@ import { useFlashPanel } from './hooks/useFlashPanel';
 import { useOfflineDecrypt } from './hooks/useOfflineDecrypt';
 import { usePreservePanel } from './hooks/usePreservePanel';
 import { useRunner } from './hooks/useRunner';
+import { reportInUseElsewhere, withCameraLock } from './lib/camera-lock';
 import type { ProfileChoice } from './lib/identify';
 import { DEFAULT_OPTIONS_FORM, type OptionsFailure, type OptionsForm } from './lib/options';
 import { useRoute } from './lib/routing';
@@ -117,8 +118,18 @@ export function App({ support }: AppProps = {}): ReactElement {
     });
   }, [device, viewReporter]);
 
+  /* Forgetting revokes the grant for every tab of this origin, and Chrome
+   * closes the camera in each of them, so a Forget here would pull it from
+   * under a run in another tab. It takes the camera lock for the moment it
+   * needs, like any operation (lib/camera-lock.ts), and while another tab
+   * holds the camera it is refused the same way. */
   const onForget = useCallback((): void => {
-    void device.forget().then((outcome) => {
+    void withCameraLock(() => device.forget()).then((locked) => {
+      if (!locked.ran) {
+        reportInUseElsewhere(viewReporter);
+        return;
+      }
+      const outcome = locked.value;
       if (outcome.kind === 'failed') viewReporter.log(`forget failed: ${outcome.message}`, 'error');
       else viewReporter.log('device permission revoked', 'detail');
     });

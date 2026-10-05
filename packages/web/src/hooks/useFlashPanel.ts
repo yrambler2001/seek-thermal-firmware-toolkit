@@ -32,6 +32,7 @@ import {
   type PreparedFlash,
   type WorkflowContext,
 } from '@seek-fw/core';
+import { reportInUseElsewhere } from '../lib/camera-lock';
 import { downloadArchive, mib } from '../lib/download';
 import { logHint } from '../lib/hints';
 import { chooseActingProfile, refusalOf, type ProfileChoice, type Refusal } from '../lib/identify';
@@ -159,148 +160,153 @@ export function useFlashPanel(params: FlashPanelParams): FlashPanelApi {
 
   /* ---- read device info --------------------------------------------- */
 
-  const readInfo = useCallback(
-    (): Promise<void> =>
-      runner.start(INFO_PANEL_ID, async (signal) => {
-        infoReporter.reset('Reading ...');
-        flashReporter.setStatus('No image chosen.');
-        dropAnalysis(null);
-        setRefusal(null);
-        onOptionsFailure(null);
-        let transport: ReturnType<DeviceHandle['makeTransport']> | null = null;
-        try {
-          const options = readOptions(form);
-          transport = device.makeTransport({
-            recipient: options.recipient,
-            onWarning: (message) => {
-              infoReporter.reporter.log(message, 'warn');
-            },
-          });
-          const client = new SeekDevice(transport, { reporter: infoReporter.reporter, signal });
-          await transport.open();
-          /* 'auto' ASKS THE CAMERA. It used to read under modern-4x without
-           * asking anything, which armed a 2016 camera's locked boot config on
-           * the plain channel and reported "no boot config". A hand-picked
-           * family skips the questions and nothing else: readDeviceInfo reads
-           * the version itself and refuses before its first arm. */
-          const chosen = await chooseActingProfile(
-            client,
-            profileChoice,
-            'read the device info',
-            (text, level) => {
-              infoReporter.reporter.log(text, level);
-            },
+  const readInfo = useCallback(async (): Promise<void> => {
+    const outcome = await runner.start(INFO_PANEL_ID, async (signal) => {
+      infoReporter.reset('Reading ...');
+      flashReporter.setStatus('No image chosen.');
+      dropAnalysis(null);
+      setRefusal(null);
+      onOptionsFailure(null);
+      let transport: ReturnType<DeviceHandle['makeTransport']> | null = null;
+      try {
+        const options = readOptions(form);
+        transport = device.makeTransport({
+          recipient: options.recipient,
+          onWarning: (message) => {
+            infoReporter.reporter.log(message, 'warn');
+          },
+        });
+        const client = new SeekDevice(transport, { reporter: infoReporter.reporter, signal });
+        await transport.open();
+        /* 'auto' ASKS THE CAMERA. It used to read under modern-4x without
+         * asking anything, which armed a 2016 camera's locked boot config on
+         * the plain channel and reported "no boot config". A hand-picked
+         * family skips the questions and nothing else: readDeviceInfo reads
+         * the version itself and refuses before its first arm. */
+        const chosen = await chooseActingProfile(
+          client,
+          profileChoice,
+          'read the device info',
+          (text, level) => {
+            infoReporter.reporter.log(text, level);
+          },
+        );
+        const ctx: WorkflowContext = {
+          device: client,
+          profile: chosen.profile,
+          detection: chosen.detection,
+          reporter: infoReporter.reporter,
+          signal,
+        };
+        const state = await readDeviceInfo(ctx, {
+          chunk: options.chunk,
+          gapFill: options.gapFill,
+          retries: options.retries,
+          retryDelayMs: options.retryDelayMs,
+          decrypt: options.decrypt,
+        });
+        stateRef.current = state;
+        setDeviceState(state);
+        const readable = state.slots.filter((slot) => slot.present).length;
+        infoReporter.reporter.progress(
+          1,
+          1,
+          state.canFlash
+            ? `Read. ${String(readable)}/${String(state.slots.length)} slots readable.`
+            : 'Read, but this camera cannot be flashed from here — see the log.',
+        );
+      } catch (error) {
+        const failure = asOptionsFailure(error);
+        if (failure !== null) onOptionsFailure(failure);
+        if (error instanceof CancelledError) {
+          infoReporter.log('cancelled', 'warn');
+          infoReporter.setStatus('Cancelled.');
+        } else {
+          const refused = refusalOf(error);
+          if (refused !== null) setRefusal(refused);
+          infoReporter.log(`ERROR: ${errorMessage(error)}`, 'error');
+          logHint(infoReporter.log, error);
+          infoReporter.setStatus(
+            refused === null
+              ? 'Failed — see the log above.'
+              : 'Refused — nothing was armed. See the message below the log.',
           );
-          const ctx: WorkflowContext = {
-            device: client,
-            profile: chosen.profile,
-            detection: chosen.detection,
-            reporter: infoReporter.reporter,
-            signal,
-          };
-          const state = await readDeviceInfo(ctx, {
-            chunk: options.chunk,
-            gapFill: options.gapFill,
-            retries: options.retries,
-            retryDelayMs: options.retryDelayMs,
-            decrypt: options.decrypt,
-          });
-          stateRef.current = state;
-          setDeviceState(state);
-          const readable = state.slots.filter((slot) => slot.present).length;
-          infoReporter.reporter.progress(
-            1,
-            1,
-            state.canFlash
-              ? `Read. ${String(readable)}/${String(state.slots.length)} slots readable.`
-              : 'Read, but this camera cannot be flashed from here — see the log.',
-          );
-        } catch (error) {
-          const failure = asOptionsFailure(error);
-          if (failure !== null) onOptionsFailure(failure);
-          if (error instanceof CancelledError) {
-            infoReporter.log('cancelled', 'warn');
-            infoReporter.setStatus('Cancelled.');
-          } else {
-            const refused = refusalOf(error);
-            if (refused !== null) setRefusal(refused);
-            infoReporter.log(`ERROR: ${errorMessage(error)}`, 'error');
-            logHint(infoReporter.log, error);
-            infoReporter.setStatus(
-              refused === null
-                ? 'Failed — see the log above.'
-                : 'Refused — nothing was armed. See the message below the log.',
-            );
-          }
-        } finally {
-          if (transport !== null) await transport.close();
-          infoReporter.flush();
         }
-      }),
-    [
-      device,
-      dropAnalysis,
-      flashReporter,
-      form,
-      infoReporter,
-      onOptionsFailure,
-      profileChoice,
-      runner,
-    ],
-  );
+      } finally {
+        if (transport !== null) await transport.close();
+        infoReporter.flush();
+      }
+    });
+    if (outcome === 'in-use-elsewhere') reportInUseElsewhere(infoReporter);
+  }, [
+    device,
+    dropAnalysis,
+    flashReporter,
+    form,
+    infoReporter,
+    onOptionsFailure,
+    profileChoice,
+    runner,
+  ]);
 
   /* ---- pick an image ------------------------------------------------- */
 
+  /* Packages a file in memory and sends the camera nothing: no camera lock. */
   const pickImage = useCallback(
-    (file: File): Promise<void> =>
-      runner.start(PREPARE_PANEL_ID, async () => {
-        flashReporter.reset('Reading image ...');
-        preparedRef.current = null;
-        setPrepared(null);
-        const state = stateRef.current;
-        try {
-          if (state === null) {
-            throw new Error(
-              "read the device info first — the camera's Key A and target slot come from it",
+    async (file: File): Promise<void> => {
+      await runner.start(
+        PREPARE_PANEL_ID,
+        async () => {
+          flashReporter.reset('Reading image ...');
+          preparedRef.current = null;
+          setPrepared(null);
+          const state = stateRef.current;
+          try {
+            if (state === null) {
+              throw new Error(
+                "read the device info first — the camera's Key A and target slot come from it",
+              );
+            }
+            const bytes = new Uint8Array(await file.arrayBuffer());
+            flashReporter.reporter.log(
+              `${file.name} — ${bytes.length.toLocaleString()} bytes`,
+              'detail',
             );
+            const prep = prepareImage(state, bytes, file.name);
+            const sha256 = await sha256hex(prep.payload);
+            const ready: PreparedImage = { prep, sha256 };
+            preparedRef.current = ready;
+            setPrepared(ready);
+            flashReporter.reporter.log(
+              `packaged ${String(prep.payload.length)} B bank payload, transfer checksum ` +
+                hexUp(prep.sum16, 4),
+              'ok',
+            );
+            flashReporter.reporter.log('nothing sent to the camera yet', 'detail');
+            flashReporter.reporter.progress(
+              1,
+              1,
+              'Ready — review the plan above, then press "Write to camera".',
+            );
+          } catch (error) {
+            flashReporter.log(`cannot use this file: ${errorMessage(error)}`, 'error');
+            logHint(flashReporter.log, error);
+            flashReporter.setStatus('Rejected — see the log above.');
+          } finally {
+            flashReporter.flush();
           }
-          const bytes = new Uint8Array(await file.arrayBuffer());
-          flashReporter.reporter.log(
-            `${file.name} — ${bytes.length.toLocaleString()} bytes`,
-            'detail',
-          );
-          const prep = prepareImage(state, bytes, file.name);
-          const sha256 = await sha256hex(prep.payload);
-          const ready: PreparedImage = { prep, sha256 };
-          preparedRef.current = ready;
-          setPrepared(ready);
-          flashReporter.reporter.log(
-            `packaged ${String(prep.payload.length)} B bank payload, transfer checksum ` +
-              hexUp(prep.sum16, 4),
-            'ok',
-          );
-          flashReporter.reporter.log('nothing sent to the camera yet', 'detail');
-          flashReporter.reporter.progress(
-            1,
-            1,
-            'Ready — review the plan above, then press "Write to camera".',
-          );
-        } catch (error) {
-          flashReporter.log(`cannot use this file: ${errorMessage(error)}`, 'error');
-          logHint(flashReporter.log, error);
-          flashReporter.setStatus('Rejected — see the log above.');
-        } finally {
-          flashReporter.flush();
-        }
-      }),
+        },
+        { camera: false },
+      );
+    },
     [flashReporter, runner],
   );
 
   /* ---- write --------------------------------------------------------- */
 
   const write = useCallback(
-    (dumpFirst: boolean): Promise<void> =>
-      runner.start(FLASH_PANEL_ID, async (signal) => {
+    async (dumpFirst: boolean): Promise<void> => {
+      const outcome = await runner.start(FLASH_PANEL_ID, async (signal) => {
         const state = stateRef.current;
         const ready = preparedRef.current;
         flashReporter.reset('Writing ...');
@@ -452,7 +458,9 @@ export function useFlashPanel(params: FlashPanelParams): FlashPanelApi {
           if (transport !== null) await transport.close();
           flashReporter.flush();
         }
-      }),
+      });
+      if (outcome === 'in-use-elsewhere') reportInUseElsewhere(flashReporter);
+    },
     [device, dropAnalysis, flashReporter, form, onOptionsFailure, profileChoice, runner],
   );
 

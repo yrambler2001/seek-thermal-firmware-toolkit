@@ -153,26 +153,33 @@ export function useOfflineDecrypt(params: OfflineDecryptParams): OfflineDecryptA
     [reporter],
   );
 
+  /* Reads a file, never the camera: it neither waits for another tab nor
+   * blocks one. */
   const decryptFile = useCallback(
-    (file: File): Promise<void> =>
-      runner.start(id, async (signal) => {
-        reporter.reset('Reading file ...');
-        setDetection(null);
-        try {
-          await execute(file, signal);
-        } catch (error) {
-          if (error instanceof CancelledError) {
-            reporter.log('cancelled', 'warn');
-            reporter.setStatus('Cancelled.');
-            return;
+    async (file: File): Promise<void> => {
+      await runner.start(
+        id,
+        async (signal) => {
+          reporter.reset('Reading file ...');
+          setDetection(null);
+          try {
+            await execute(file, signal);
+          } catch (error) {
+            if (error instanceof CancelledError) {
+              reporter.log('cancelled', 'warn');
+              reporter.setStatus('Cancelled.');
+              return;
+            }
+            reporter.log(`ERROR: ${errorMessage(error)}`, 'error');
+            logHint(reporter.log, error);
+            reporter.setStatus('Failed — see the log above.');
+          } finally {
+            reporter.flush();
           }
-          reporter.log(`ERROR: ${errorMessage(error)}`, 'error');
-          logHint(reporter.log, error);
-          reporter.setStatus('Failed — see the log above.');
-        } finally {
-          reporter.flush();
-        }
-      }),
+        },
+        { camera: false },
+      );
+    },
     [execute, id, reporter, runner],
   );
 

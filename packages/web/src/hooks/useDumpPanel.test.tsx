@@ -9,7 +9,7 @@
  */
 
 import { act } from 'react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   OP,
   SAFE_BEFORE_IDENTITY,
@@ -21,6 +21,8 @@ import {
   type WebUsbDevice,
 } from '@seek-fw/core';
 import { renderHook } from '../test-helpers';
+import { deferred, installLocks, removeLocks } from '../test-locks';
+import { IN_USE_ELSEWHERE_LOG, IN_USE_ELSEWHERE_STATUS, withCameraLock } from '../lib/camera-lock';
 import { FIRMWARE_TOO_OLD_HINT, permissionHint } from '../lib/hints';
 import type { ProfileChoice } from '../lib/identify';
 import { DEFAULT_OPTIONS_FORM, type OptionsFailure } from '../lib/options';
@@ -245,6 +247,119 @@ describe('useDumpPanel', () => {
     expect(result.current.panel.reporter.progress.text).toBe('Failed — see the log above.');
     unmount();
   });
+});
+
+/* ---- another tab, and a dump that missed windows ----------------------- */
+
+/** `camera`, with every call that would reach the device recorded. */
+function watched(camera: WebUsbDevice, sent: string[]): WebUsbDevice {
+  return {
+    ...camera,
+    open: () => {
+      sent.push('open');
+      return camera.open();
+    },
+    claimInterface: (n) => {
+      sent.push('claimInterface');
+      return camera.claimInterface(n);
+    },
+    selectConfiguration: (value) => {
+      sent.push('selectConfiguration');
+      return camera.selectConfiguration(value);
+    },
+    controlTransferIn: (setup, length, timeoutMs) => {
+      sent.push(`in ${hex(setup.request)}`);
+      return camera.controlTransferIn(setup, length, timeoutMs);
+    },
+    controlTransferOut: (setup, data, timeoutMs) => {
+      sent.push(`out ${hex(setup.request)}`);
+      return camera.controlTransferOut(setup, data, timeoutMs);
+    },
+  };
+}
+
+describe('useDumpPanel and another tab', () => {
+  afterEach(() => {
+    removeLocks();
+  });
+
+  it('sends the camera nothing while another tab holds it, and says so calmly', async () => {
+    const locks = installLocks();
+    const sent: string[] = [];
+    const { result, unmount } = renderHook(() => useHarness(watched(fakeCamera(), sent)));
+
+    /* The other tab's dump, holding the camera lock until it finishes. */
+    const otherTab = deferred();
+    const other = withCameraLock(() => otherTab.promise);
+    await vi.waitFor(() => {
+      expect(locks.isHeld()).toBe(true);
+    });
+
+    await act(async () => {
+      await result.current.panel.start('dump');
+    });
+    expect(sent).toEqual([]);
+    expect(downloads).toHaveLength(0);
+    expect(result.current.runner.busy).toBe(false);
+    expect(result.current.panel.reporter.progress.text).toBe(IN_USE_ELSEWHERE_STATUS);
+    const last = result.current.panel.reporter.lines.at(-1);
+    expect(last?.text).toBe(IN_USE_ELSEWHERE_LOG);
+    expect(last?.level).toBe('info');
+
+    /* The other tab finishes; this one can now read. */
+    otherTab.resolve();
+    await other;
+    await act(async () => {
+      await result.current.panel.start('dump');
+    });
+    expect(sent[0]).toBe('open');
+    expect(downloads).toHaveLength(1);
+    expect(result.current.panel.reporter.progress.text).toMatch(/^Done — (\d+)\/\1 windows read\./);
+    unmount();
+  }, 30_000);
+});
+
+describe('a dump that read fewer windows than its plan', () => {
+  it('ends "Done", with the archive, but says it is incomplete', async () => {
+    /* The first few arms (the identity questions, then the first windows)
+     * read; after them every read stalls. */
+    const camera = fakeCamera();
+    let arms = 0;
+    const flaky: WebUsbDevice = {
+      ...camera,
+      controlTransferOut: (setup, data, timeoutMs) => {
+        if (setup.request === OP.BEGIN_FIRMWARE_UPGRADE) arms += 1;
+        return camera.controlTransferOut(setup, data, timeoutMs);
+      },
+      controlTransferIn: (setup, length, timeoutMs) =>
+        setup.request === OP.GET_FEATURED_FIRMWARE_DATA && arms > 5
+          ? Promise.resolve({ status: 'stall' })
+          : camera.controlTransferIn(setup, length, timeoutMs),
+    };
+    const { result, unmount } = renderHook(() =>
+      useHarness(flaky, { retries: '0', retryDelay: '0' }),
+    );
+
+    await act(async () => {
+      await result.current.panel.start('dump');
+    });
+
+    expect(downloads).toHaveLength(1);
+    const status = result.current.panel.reporter.progress.text;
+    const counts =
+      /^Done — (\d+)\/(\d+) windows read \(incomplete — see the log\)\. Check your downloads\.$/.exec(
+        status,
+      );
+    expect(counts, status).not.toBeNull();
+    expect(Number(counts?.[1])).toBeGreaterThan(0);
+    expect(Number(counts?.[1])).toBeLessThan(Number(counts?.[2]));
+    const warning = result.current.panel.reporter.lines.find((line) =>
+      line.text.startsWith('incomplete: '),
+    );
+    expect(warning?.level).toBe('warn');
+    expect(warning?.text).toContain('run the dump again');
+    unmount();
+  }, 30_000);
 });
 
 /* ---- the camera says which family it is ------------------------------- */
