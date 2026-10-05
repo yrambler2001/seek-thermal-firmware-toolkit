@@ -239,6 +239,36 @@ describe('seek-fw flash', () => {
     expect(viewOf(plain).getUint32(0x200, true)).toBe(0xa1b2c3d4);
   });
 
+  it('writes nothing when a window of the rescue dump did not come back', async () => {
+    const image = await writeImage({ keyA: FOREIGN_KEY_A, keyB: FOREIGN_KEY_B }, 'foreign');
+    /* The last window: the device-info read never touches it, so only the
+     * rescue dump finds it gone. */
+    const lost = modern4x.windowMap().at(-1);
+    if (lost === undefined) throw new Error('the modern profile has no windows');
+    const camera = cameraWithFlash(synthetic.flash, {
+      stallAt: [{ subcmd: lost.subcmd, offset: 0 }],
+    });
+    const before = camera.flash.slice();
+    const rescueDir = join(dir, 'rescue');
+    const { io, stderr } = testIo({
+      backend: fixedBackend([camera]),
+      stdinIsTty: true,
+      answer: true,
+    });
+
+    const code = await run(
+      ['flash', image, '--out', rescueDir, '--chunk', '65536', '--retries', '0'],
+      io,
+      signal(),
+    );
+    expect(code).toBe(EXIT_FAILED);
+    expect(stderr.text).toContain('the rescue dump failed (incomplete: 1 of the');
+    expect(stderr.text).toContain('refusing to write without a backup');
+    /* The partial read is kept, and the camera is exactly as it was. */
+    expect(await readdir(rescueDir)).toContain('manifest.json');
+    expect(bytesToHex(camera.flash)).toBe(bytesToHex(before));
+  });
+
   it('shows the plan even under --quiet, because it is about to be confirmed', async () => {
     const image = await writeImage({ keyA: KEY_A, keyB: KEY_B }, 'quiet');
     const camera = cameraWithFlash(synthetic.flash);

@@ -27,7 +27,7 @@ import { renderHook } from '../test-helpers';
 import type { ProfileChoice } from '../lib/identify';
 import { DEFAULT_OPTIONS_FORM } from '../lib/options';
 import { scriptedCamera } from '../test-fixtures';
-import { useFlashPanel } from './useFlashPanel';
+import { rescueDumpRefusal, useFlashPanel } from './useFlashPanel';
 import { useRunner } from './useRunner';
 import type { DeviceHandle } from './useDevice';
 
@@ -262,5 +262,18 @@ describe('Read device info asks the camera which family it is', () => {
     });
     expect(result.current.panel.refusal).toBeNull();
     unmount();
+  });
+});
+
+describe('the rescue dump has to be a whole copy before the write', () => {
+  it('lets a complete rescue dump through', () => {
+    expect(rescueDumpRefusal({ windowsRead: 31, windowsExpected: 31 })).toBeNull();
+  });
+
+  it('stops the write when a window did not come back, and says nothing was written', () => {
+    const refusal = rescueDumpRefusal({ windowsRead: 6, windowsExpected: 31 });
+    expect(refusal?.code).toBe('flash/refused');
+    expect(refusal?.message).toContain('25 of the 31 windows did not come back');
+    expect(refusal?.message).toContain('Nothing was written to flash');
   });
 });

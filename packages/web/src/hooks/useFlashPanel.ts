@@ -105,6 +105,29 @@ export function canWriteNow(args: {
   return args.hasDevice && !args.busy && args.hasImage && args.state?.canFlash === true;
 }
 
+/**
+ * Why the rescue dump cannot stand in for a backup, or null when it can.
+ *
+ * The rescue dump is the reason the write is allowed to be risky, so it has to
+ * be a whole copy: a window the build reaches that did not come back is
+ * gap-filled in the archive, and a gap-filled copy cannot restore the camera.
+ * That stops the write exactly as a cancel does.
+ */
+export function rescueDumpRefusal(result: {
+  readonly windowsRead: number;
+  readonly windowsExpected: number;
+}): SeekError | null {
+  const missing = result.windowsExpected - result.windowsRead;
+  if (missing <= 0) return null;
+  return new SeekError(
+    'flash/refused',
+    `the rescue dump is incomplete — ${String(missing)} of the ` +
+      `${String(result.windowsExpected)} windows did not come back, so it is not a ` +
+      'rescue copy. Nothing was written to flash; keep that archive, then read the device ' +
+      'info and write again for a complete rescue dump.',
+  );
+}
+
 export function useFlashPanel(params: FlashPanelParams): FlashPanelApi {
   const { runner, device, form, profileChoice, onOptionsFailure } = params;
   const infoReporter = useReporter('Idle.');
@@ -399,6 +422,8 @@ export function useFlashPanel(params: FlashPanelParams): FlashPanelApi {
                 'cancelled during the rescue dump — nothing was written to flash',
               );
             }
+            const refusal = rescueDumpRefusal(result);
+            if (refusal !== null) throw refusal;
             log.log('');
             log.log('rescue dump downloaded; continuing to the write', 'ok');
             log.log('');

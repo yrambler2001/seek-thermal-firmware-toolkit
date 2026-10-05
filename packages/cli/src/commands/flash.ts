@@ -345,6 +345,16 @@ async function takeRescueDump(
           'to the camera',
       );
     }
+    /* A window the build reaches that did not come back is gap-filled in the
+     * archive, and a gap-filled copy cannot restore the camera: the same
+     * refusal as a failed dump (the catch below words it). */
+    const missing = result.windowsExpected - result.windowsRead;
+    if (missing > 0) {
+      throw new Error(
+        `incomplete: ${String(missing)} of the ${String(result.windowsExpected)} windows did ` +
+          'not come back; the partial read was saved',
+      );
+    }
     ctx.reporter.log('rescue dump complete', 'ok');
     return {
       taken: true,
