@@ -929,9 +929,9 @@ npm run e2e:offline        # the hosted docs/ bundle, run with the network cut a
 npm run e2e:resume         # load a patch-built run file and resume at step 03 (+ flat-layout and broken-zip)
 npm run e2e:reload         # reload mid-step-02 (clean restart) and after it (resume)
 npm run e2e:forget         # Forget device -> revoke -> getDevices() empty -> connect again (camera by default)
-npm run e2e:second         # a second window on the same profile: the known claim bug (emu), a no-transfer probe (camera)
+npm run e2e:second         # a second window while the first reads: refused with the message, sends nothing
 npm run e2e:phone          # 375x812 screenshots of each state, light and dark, overflow asserted
-npm run e2e:unplug         # unplug mid-dump -> clean error -> replug -> read again (emulator)
+npm run e2e:unplug         # power cut mid-dump -> clean error -> power back -> re-pick -> read again
 npm run e2e:flash          # the Flash view on the emulator: reads, then flashes the camera's own image and boots it
 npm run e2e:write          # Preserve 02->03->04: a write run, gated on the camera (see below)
 ```
@@ -951,8 +951,8 @@ camera; without it they default to the emulator. Each test picks a sensible defa
 | `e2e:resume`     | resumes; writes 03–04 with `SEEK_E2E_RESUME_FULL=1` | read-only (resume check only)       |
 | `e2e:reload`     | read-only                                           | read-only                           |
 | `e2e:forget`     | read-only                                           | read-only                           |
-| `e2e:second`     | two windows dump at once: pins the known claim bug  | read-only (window 2 sends nothing)  |
-| `e2e:unplug`     | read-only                                           | manual/hardware switch (supervised) |
+| `e2e:second`     | window 2 refused while window 1 dumps, then dumps   | read-only (window 2 sends nothing)  |
+| `e2e:unplug`     | read-only                                           | read-only; rp2040 switch cuts power |
 | `e2e:flash`      | reads; writes its own image and boots it            | n/a (view never opened)             |
 | `e2e:write`      | writes 02–04                                        | SUPERVISED only                     |
 | `e2e:phone`      | n/a (no device)                                     | n/a (no device)                     |
@@ -974,7 +974,12 @@ The unplug / power-cycle flows on the camera use a USB power switch (`e2e/lib/po
 MANUAL mode that asks a human to unplug and replug and waits for the bus, or the RP2040 hardware
 switch at `SEEK_E2E_SWITCH_DIR` driven over serial (`on/off/cycle <channel>`). The channel the
 camera is on must be given (`SEEK_E2E_SWITCH_CHANNEL`) before anything toggles — the switch has two
-channels and the wrong one would cut power to whatever else is plugged into it.
+channels and the wrong one would cut power to whatever else is plugged into it. Without it,
+`e2e:unplug` on the camera toggles nothing and only reports. With it
+(`SEEK_E2E_TARGET=camera SEEK_E2E_SWITCH_CHANNEL=2 npm run e2e:unplug`; the bench camera is on
+channel 2), it cuts the power only during a read-only dump, with the page's write guard in place.
+It cuts it with the switch's own `cycle`, so the switch turns the camera back on by itself even if
+the run dies, and the run turns it on again afterwards anyway.
 
 `SEEK_E2E_HEADED=1` shows the browser window, `SEEK_E2E_KEEP=1` keeps the downloads and the
 emulator's flash images (the path is printed), `SEEK_E2E_SCRATCH` chooses where they go,

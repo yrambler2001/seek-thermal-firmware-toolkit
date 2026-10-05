@@ -1,79 +1,167 @@
 /* ==================================================================== *
  * Unplug / replug mid-read — `npm run e2e:unplug`.
  *
- * On the emulator (the default, unattended): stopping the emulator IS the
- * cable being pulled. A dump in flight then fails cleanly — an error, not a
- * hang — and once a fresh emulator is booted from the same flash (the replug)
- * and re-picked, the camera reads again with the same sha.
+ * The same body on both targets. A Dump & decrypt is cut off mid-read by
+ * taking the camera's power away. It must then END cleanly, with an error and
+ * not a hang. Once the power is back and the camera is picked again, the
+ * camera reads whole, with the same sha as before.
  *
- * On the camera target the unplug is a human (the manual power switch) or the
- * rp2040 hardware switch — supervised, never unattended — so this spec runs its
- * unplug only on the emulator, and on the camera reports what would drive it.
+ *   emulator   stopping the emulator IS the cable being pulled; a fresh
+ *              emulator booted from the same flash is the replug.
+ *   camera     the rp2040 USB power switch cuts the camera's VBUS
+ *              (`e2e/lib/power-switch.ts`), on the channel named by
+ *              `SEEK_E2E_SWITCH_CHANNEL` (the bench camera is on 2). Without
+ *              it nothing is toggled and the test only reports. The power is
+ *              cut only during the read-only dump, with the page's write guard
+ *              in place. It comes back three ways: the switch's own `cycle`
+ *              turns it on again by itself, the test turns it on in a
+ *              `finally`, and once more after the last test.
  *
  * The "replug after an unfixed-patch drain" ask and the "power-cycle" ask are
- * NOT reachable on this emulator build: the shipped five-site patch resets the
- * reader cursor (no replug owed), and the emulator's reader never spends (no
- * power-cycle refusal). Both are covered on real hardware by
- * `camera-restart.e2e.ts`; see the report.
+ * NOT reached here. The first follows only the drain of step 03, which writes.
+ * The second needs a reader that is still spent after the wire reboots of
+ * step 02, which a power cut cannot produce (it gives a fresh boot) and stock
+ * firmware never shows. Both stay covered by the wizard's unit tests
+ * (`usePreservePanel.adoption.test.tsx`).
  * ==================================================================== */
 
-import { expect, it } from 'vitest';
+import { afterAll, expect, it } from 'vitest';
 
 import { say } from './lib/browser.js';
-import { CAMERA_FLASH_SHA } from './lib/camera-flow.js';
 import { sha256 } from './lib/checks.js';
-import { ManualPowerSwitch, Rp2040PowerSwitch, switchInfo } from './lib/power-switch.js';
+import {
+  Rp2040PowerSwitch,
+  seekCamerasOnBus,
+  switchInfo,
+  waitForCameras,
+} from './lib/power-switch.js';
 import { targetSpec } from './lib/spec.js';
+import type { TargetHandle } from './lib/target.js';
+import {
+  expectedImageSha,
+  guardInstalled,
+  refusalsOf,
+  waitForProgress,
+} from './lib/target-tools.js';
 
 const image = (entries: readonly { name: string; data: Uint8Array }[]): Uint8Array =>
   entries.find((e) => /^[^/]+\/flash_4m_usb[^/]*\.bin$/.test(e.name))?.data ?? new Uint8Array(0);
 
+/** Taking the camera's power away and giving it back, on this target. */
+interface Power {
+  readonly what: string;
+  /** Cut the power, and wait until the camera has left the bus. */
+  off(): Promise<void>;
+  /** Restore the power, and wait until the camera is back on the bus. */
+  on(): Promise<void>;
+}
+
+/** How long the camera's channel stays off. The switch's own firmware turns it
+ *  back on after this (`cycle`), so even a run killed mid-cut leaves the camera
+ *  powered. */
+const POWER_OFF_MS = 8000;
+
+function powerFor(t: TargetHandle, hw: Rp2040PowerSwitch | null): Power | null {
+  const emu = t.emu;
+  if (emu !== null) {
+    return {
+      what: 'the emulator stopped (the cable pulled)',
+      off: () => emu.unplug(),
+      on: () => emu.replug(),
+    };
+  }
+  if (hw === null) return null;
+  return {
+    what: `${hw.describe()}, off for ${String(POWER_OFF_MS)} ms`,
+    off: async () => {
+      await hw.cycle(POWER_OFF_MS);
+      if (!(await waitForCameras(0, 5000))) {
+        throw new Error(`the camera is still on the bus after ${hw.describe()} went off`);
+      }
+    },
+    on: async () => {
+      /* The cycle ends by itself; `on` is idempotent, and makes sure of it. */
+      await waitForCameras(1, POWER_OFF_MS + 15_000);
+      await hw.on();
+      if (!(await waitForCameras(1, 30_000))) {
+        throw new Error(`the camera did not come back after ${hw.describe()} went on`);
+      }
+    },
+  };
+}
+
 targetSpec({ title: 'unplug / replug mid-read', slug: 'unplug' }, (ctx) => {
+  const hw = ctx.name === 'camera' ? Rp2040PowerSwitch.fromEnv() : null;
+
+  /* Whatever happened above, the camera ends the run powered. */
+  afterAll(async () => {
+    if (hw === null) return;
+    await hw.on();
+    say(`switch at the end: ${await hw.status()}`);
+  });
+
   it('connects', async () => {
     await ctx.target().wizard.connect();
   });
 
-  it('a mid-dump unplug fails cleanly, and a replug + re-pick reads again', async () => {
+  it('a mid-dump power cut fails cleanly, and power back + re-pick reads again', async () => {
     const t = ctx.target();
-    if (t.emu === null) {
+    const power = powerFor(t, hw);
+    if (power === null) {
       const info = await switchInfo();
-      const hw = Rp2040PowerSwitch.fromEnv();
       say(
-        'camera target: the unplug is supervised — ' +
-          (hw === null
-            ? 'set SEEK_E2E_SWITCH_CHANNEL for the rp2040 switch, or a human does it'
-            : hw.describe()) +
-          `; switch board: ${info.detail}`,
+        'camera target: SEEK_E2E_SWITCH_CHANNEL is not set, so nothing is toggled — set it to ' +
+          `the rp2040 channel the camera is on, or unplug by hand; switch board: ${info.detail}`,
       );
-      const manual = new ManualPowerSwitch({ present: () => Promise.resolve(true) });
-      expect(manual.describe()).toMatch(/manual/);
-      return; /* never auto-toggle the camera's power */
+      return;
+    }
+    if (hw !== null) {
+      /* The camera must be powered and alone on the bus before anything is cut. */
+      const status = await hw.status();
+      say(`switch: ${status}`);
+      expect(await hw.isOn(), `${hw.describe()} is on`).toBe(true);
+      expect(seekCamerasOnBus(), 'one Seek camera on the bus').toBe(1);
     }
 
     const w = t.wizard;
     await w.route('#/');
     await w.startDump('dump', 'Start dump');
-    await w.dumpProgressed('dump', 3);
-    say('pulling the cable (stopping the emulator) mid-dump');
-    await t.emu.unplug();
+    await waitForProgress(t.page, 'dump', 10);
+    /* Nothing but the read-only dump is running, under the page's write guard. */
+    expect(await w.text('#dump-status')).not.toMatch(/^(Done|Failed|Cancelled|Refused)/);
+    expect(await guardInstalled(t), 'the write guard is in place').toBe(true);
+    expect(await refusalsOf(t)).toEqual([]);
 
-    /* The dump must END — an error, not a hang. */
-    await t.page.waitForFunction(
-      () =>
-        /^(Failed|Refused|Cancelled|Done)/.test(
-          document.querySelector<HTMLElement>('#dump-status')?.innerText ?? '',
-        ),
-      { timeout: 90_000, polling: 500 },
-    );
-    const ended = await w.text('#dump-status');
-    say(`after the unplug: ${ended}`);
+    say(`cutting the power mid-dump: ${power.what}`);
+    let ended: string;
+    try {
+      await power.off();
+      say('the camera has left the bus');
+      /* The dump must END — an error, not a hang. */
+      await t.page.waitForFunction(
+        () =>
+          /^(Failed|Refused|Cancelled|Done)/.test(
+            document.querySelector<HTMLElement>('#dump-status')?.innerText ?? '',
+          ),
+        { timeout: 90_000, polling: 500 },
+      );
+      ended = await w.text('#dump-status');
+      say(`after the power cut: ${ended}`);
+      say(`dump log tail:\n${await w.logTail('dump', 6)}`);
+    } finally {
+      say('restoring the power');
+      await power.on();
+    }
     expect(ended).toMatch(/^(Failed|Refused|Cancelled)/);
+    say('the camera is back on the bus');
 
-    say('plugging back in (a fresh emulator from the same flash)');
-    await t.emu.replug();
-    await w.connect(); /* the replugged device is new — Chrome needs a pick */
+    await w.connect(); /* the camera that came back is new to the browser — it needs a pick */
     const again = await w.dumpAndDecrypt(20 * 60_000);
-    expect(again.status).toMatch(/^Done — /);
-    if (CAMERA_FLASH_SHA !== '') expect(sha256(image(again.entries))).toBe(CAMERA_FLASH_SHA);
+    const read = sha256(image(again.entries));
+    say(`read again after the power came back: ${again.status} sha ${read.slice(0, 16)}`);
+    expect(again.status).toMatch(/^Done — (\d+)\/\1 windows read\. /);
+    const sha = expectedImageSha(t);
+    if (sha !== '') expect(read).toBe(sha);
+    expect(await refusalsOf(t)).toEqual([]);
   });
 });

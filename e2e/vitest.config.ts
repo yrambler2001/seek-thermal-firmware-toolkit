@@ -22,6 +22,8 @@ export default defineConfig({
     name: 'e2e',
     root: fileURLToPath(new URL('.', import.meta.url)),
     include: ['**/*.e2e.ts'],
+    /* The run's pid for the camera lock, and the lock's release at the end. */
+    globalSetup: ['lib/global-setup.ts'],
     environment: 'node',
     fileParallelism: false,
     maxConcurrency: 1,

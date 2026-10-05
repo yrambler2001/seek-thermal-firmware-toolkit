@@ -24,7 +24,7 @@
  * `info()` is read-only (`id`) and always safe.
  */
 
-import { execFile } from 'node:child_process';
+import { execFile, execFileSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 
@@ -63,6 +63,25 @@ export async function switchInfo(): Promise<{ ok: boolean; detail: string }> {
     return { ok: reply.startsWith('OK'), detail: reply };
   } catch (error) {
     return { ok: false, detail: error instanceof Error ? error.message : String(error) };
+  }
+}
+
+/** How many Seek cameras (vendor 0x289d) macOS lists on the USB bus. Read-only: asks `ioreg`. */
+export function seekCamerasOnBus(): number {
+  const tree = execFileSync('ioreg', ['-p', 'IOUSB', '-l', '-w0'], {
+    encoding: 'utf8',
+    maxBuffer: 64 * 1024 * 1024,
+  });
+  return tree.split('\n').filter((line) => /"idVendor" = 10397\b/.test(line)).length;
+}
+
+/** Waits until `seekCamerasOnBus()` answers `count`; false if it never does in `timeoutMs`. */
+export async function waitForCameras(count: number, timeoutMs: number): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    if (seekCamerasOnBus() === count) return true;
+    if (Date.now() > deadline) return false;
+    await sleep(250);
   }
 }
 
@@ -124,8 +143,8 @@ export class ManualPowerSwitch implements PowerSwitch {
 
 /**
  * The RP2040 switch, driving ONE channel. Never toggles until the channel is
- * known (`SEEK_E2E_SWITCH_CHANNEL`). Built this round; not exercised — the user
- * must first confirm which channel the camera is on.
+ * known (`SEEK_E2E_SWITCH_CHANNEL`). The bench camera is on channel 2, checked
+ * by turning it off and watching the camera leave the bus (2026-10-05).
  */
 export class Rp2040PowerSwitch implements PowerSwitch {
   readonly mode = 'rp2040' as const;
@@ -158,6 +177,17 @@ export class Rp2040PowerSwitch implements PowerSwitch {
 
   async cycle(ms = 3000): Promise<void> {
     await run(this.dir, ['cycle', String(this.channel), String(ms)]);
+  }
+
+  /** The switch's `status` reply (`OK 1=off 2=on`) — read-only. */
+  status(): Promise<string> {
+    return run(this.dir, ['status']);
+  }
+
+  /** Whether this switch's channel is on, from `status`. */
+  async isOn(): Promise<boolean> {
+    const reply = await this.status();
+    return new RegExp(`\\b${String(this.channel)}=on\\b`).test(reply);
   }
 
   private async command(verb: 'on' | 'off'): Promise<void> {

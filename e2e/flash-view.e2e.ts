@@ -42,7 +42,10 @@ interface InfoView {
 
 /** Presses "Read device info" and waits for it to settle; returns the panel's key rows. */
 async function readDeviceInfo(w: Wizard, page: Page): Promise<InfoView> {
+  /* Until the read starts, the line still shows the last one's "Read." */
+  const started = await w.watchStatus('#fwinfo-status');
   await w.click(FW_SECTION, 'Read device info');
+  await started();
   await page.waitForFunction(
     () => {
       const s = document.querySelector<HTMLElement>('#fwinfo-status')?.innerText ?? '';

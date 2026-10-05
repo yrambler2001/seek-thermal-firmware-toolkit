@@ -197,6 +197,37 @@ export class Wizard {
     );
   }
 
+  /**
+   * Watches a run panel's status line from before the click that starts a
+   * run, and returns a wait for its first change. The run starts one task
+   * after the click, once the page holds the camera lock, so until then the
+   * line still shows the LAST run's outcome ("Failed", "Done"), which a poll
+   * straight after the click would take for this run's. A line not on the page
+   * yet carries no stale outcome, so there is nothing to wait for.
+   */
+  async watchStatus(selector: string): Promise<() => Promise<void>> {
+    await this.page.evaluate((sel: string) => {
+      const flags = window as unknown as Record<string, boolean>;
+      const flag = `e2eStatusMoved:${sel}`;
+      const node = document.querySelector(sel);
+      flags[flag] = node === null;
+      if (node === null) return;
+      const observer = new MutationObserver(() => {
+        flags[flag] = true;
+        observer.disconnect();
+      });
+      observer.observe(node, { childList: true, characterData: true, subtree: true });
+    }, selector);
+    return async () => {
+      await this.page.waitForFunction(
+        (sel: string) =>
+          (window as unknown as Record<string, boolean>)[`e2eStatusMoved:${sel}`] === true,
+        { timeout: 30_000, polling: 50 },
+        selector,
+      );
+    };
+  }
+
   /** The last lines of a run panel's log, for a failure message. */
   async logTail(panelId: string, lines = 60): Promise<string> {
     const text = await this.text(`#${panelId}-log`);
@@ -272,7 +303,7 @@ export class Wizard {
     for (;;) {
       const status = await this.text(statusSel);
       if (status.startsWith('Done — ')) break;
-      if (/^(Failed|Refused|Cancelled)/.test(status)) {
+      if (/^(Failed|Refused|Cancelled|The camera is in use)/.test(status)) {
         throw new Error(`${options.button} ended: ${status}\n${await this.logTail(options.panel)}`);
       }
       if (Date.now() - t0 > options.timeoutMs) {
@@ -296,16 +327,12 @@ export class Wizard {
     return { ms: Date.now() - t0, archive, entries: readZip(archive.bytes), status };
   }
 
-  /** Clicks a dump/sweep start button and waits past the previous "Done" line. */
+  /** Clicks a dump/sweep start button and waits until the run has taken over its status line. */
   async startDump(panel: string, button: string): Promise<void> {
     const section = `section[aria-labelledby="${panel === 'manual' ? 'manual' : 'dump'}-heading"]`;
+    const started = await this.watchStatus(`#${panel}-status`);
     await this.click(section, button);
-    await this.page.waitForFunction(
-      (sel: string) =>
-        !(document.querySelector<HTMLElement>(sel)?.innerText ?? '').startsWith('Done'),
-      { timeout: 15_000, polling: 100 },
-      `#${panel}-status`,
-    );
+    await started();
   }
 
   /** Waits until a dump has read at least `windows` windows (its progress text). */
@@ -440,11 +467,13 @@ export class Wizard {
     const section = phaseSection(phase);
     const panel = `preserve-phase-${phase}`;
     const t0 = Date.now();
+    const started = await this.watchStatus(`#${panel}-status`);
     await this.click(section, Wizard.startLabel(phase));
     if (options.confirm) {
       await this.page.waitForSelector('[role="alertdialog"]', { timeout: 10_000 });
       await this.click('[role="alertdialog"]', 'Yes — write to the camera');
     }
+    await started();
     let asks = 0;
     const askViews: AskView[] = [];
     let lastReport = 0;
@@ -469,7 +498,9 @@ export class Wizard {
       );
       status = view.status;
       if (/ — done[.,]/.test(status) && !view.running) break;
-      if (/^(Failed|Refused|Stopped|Cancelled|Not created|No run)/.test(status)) {
+      if (
+        /^(Failed|Refused|Stopped|Cancelled|Not created|No run|The camera is in use)/.test(status)
+      ) {
         throw new Error(`${PHASE_LABEL[phase]} ended: ${status}\n${await this.logTail(panel)}`);
       }
       if (Date.now() - t0 > options.timeoutMs) {

@@ -14,12 +14,35 @@ import path from 'node:path';
 
 /**
  * One e2e run on the camera at a time, across processes: the run that passes
- * the pre-flight takes this lock (its pid), and keeps it until its process
- * exits. A second run — another terminal, another agent — skips instead of
- * reaching the camera in the gap between the first run's sessions (a restart,
- * the pause between two spec files), where `ioreg` sees no claim.
+ * the pre-flight takes this lock, and keeps it until the run ends. A second
+ * run — another terminal, another agent — skips instead of reaching the camera
+ * in the gap between the first run's sessions (a restart, the pause between
+ * two spec files), where `ioreg` sees no claim.
+ *
+ * The lock names the RUN's process: the vitest main process, whose pid the
+ * global setup (`global-setup.ts`) hands every worker as `SEEK_E2E_RUN_PID`.
+ * It outlives every spec file of the run, so the lock covers the gaps between
+ * them, and the global teardown removes it when the run ends. It used to name
+ * the worker, which vitest ends without running its `exit` hooks, so the file
+ * was left behind after every camera spec. A lock whose process is gone (a run
+ * that was killed) is taken over by the next run, as before.
  */
 export const CAMERA_LOCK = path.join(tmpdir(), 'seek-e2e-camera.lock');
+
+/** The process the lock is held for: the run's main process, or this one outside a run. */
+function lockOwner(): number {
+  const run = Number(process.env.SEEK_E2E_RUN_PID);
+  return Number.isInteger(run) && run > 0 ? run : process.pid;
+}
+
+/** Removes the camera lock when `owner` holds it; anyone else's is left alone. */
+export function releaseCameraLock(owner: number = lockOwner()): void {
+  try {
+    if (readFileSync(CAMERA_LOCK, 'utf8').trim() === String(owner)) rmSync(CAMERA_LOCK);
+  } catch {
+    /* already gone */
+  }
+}
 
 function alive(pid: number): boolean {
   try {
@@ -31,16 +54,17 @@ function alive(pid: number): boolean {
 }
 
 function takeCameraLock(): string | null {
+  const owner = lockOwner();
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
-      writeFileSync(CAMERA_LOCK, String(process.pid), { flag: 'wx' });
-      process.once('exit', () => {
-        try {
-          if (readFileSync(CAMERA_LOCK, 'utf8').trim() === String(process.pid)) rmSync(CAMERA_LOCK);
-        } catch {
-          /* already gone */
-        }
-      });
+      writeFileSync(CAMERA_LOCK, String(owner), { flag: 'wx' });
+      /* Outside a run (no global setup) this process is the owner; a process
+       * that does get to run its exit hooks lets go here too. */
+      if (owner === process.pid) {
+        process.once('exit', () => {
+          releaseCameraLock(owner);
+        });
+      }
       return null;
     } catch {
       let holder = NaN;
@@ -49,7 +73,7 @@ function takeCameraLock(): string | null {
       } catch {
         /* removed between the two calls: try again */
       }
-      if (holder === process.pid) return null;
+      if (holder === owner) return null;
       if (Number.isInteger(holder) && holder > 0 && alive(holder)) {
         return `another e2e run (pid ${String(holder)}) is using the camera (lock ${CAMERA_LOCK})`;
       }
