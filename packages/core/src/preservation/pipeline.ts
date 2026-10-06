@@ -307,14 +307,17 @@ export async function openProbedSession(
         /* 'dropped' is the usual answer, not a failure: the camera reboots
          * before it acknowledges, so the transfer dies with the wire (measured
          * over real WebUSB, 2026-10-05). The next open tells whether it took. */
-        reporter.log(
-          `${label}: reboot command ${
-            outcome === 'sent'
-              ? 'acknowledged'
-              : 'sent — no reply, as when the camera reboots before answering'
-          }`,
-          'detail',
-        );
+        if (outcome === 'refused') reporter.log(resetRefusedLine(label), 'warn');
+        else {
+          reporter.log(
+            `${label}: reboot command ${
+              outcome === 'sent'
+                ? 'acknowledged'
+                : 'sent — no reply, as when the camera reboots before answering'
+            }`,
+            'detail',
+          );
+        }
         await opener.close(reboot);
       } catch (rebootError) {
         /* the camera may already be down; the next open's ladder rides it */
@@ -353,7 +356,7 @@ export async function openProbedSession(
         ' — rebooting by command and retrying',
       'warn',
     );
-    await resetDevice(device).catch(() => undefined);
+    if ((await resetDevice(device)) === 'refused') reporter.log(resetRefusedLine(label), 'warn');
     await opener.close(device);
   }
   throw new SeekError(
@@ -579,14 +582,38 @@ export async function commitToBank(
 }
 
 /** ResetDevice (0x59), payload u16 0. The transfer usually drops as the part
- *  resets; both outcomes are fine, and a non-zero payload is never sent. */
-export async function resetDevice(device: SeekDevice): Promise<'sent' | 'dropped'> {
+ *  resets; both outcomes are fine, and a non-zero payload is never sent.
+ *
+ *  'refused' is neither: the HOST refused the transfer before it left (a
+ *  WebUSB SecurityError: a browser policy, or the e2e write guard), so the
+ *  camera was not reset. It used to read as 'dropped', the usual answer to a
+ *  reset that worked, and a run then carried on as if the camera had
+ *  rebooted. A caller says so instead. */
+export async function resetDevice(device: SeekDevice): Promise<'sent' | 'dropped' | 'refused'> {
   try {
     await device.rpcOut(RESET_OP, u16Payload(0), 3000);
     return 'sent';
-  } catch {
-    return 'dropped';
+  } catch (error) {
+    return refusedByHost(error) ? 'refused' : 'dropped';
   }
+}
+
+/** A SecurityError anywhere in the cause chain: the transfer never left the host. */
+function refusedByHost(error: unknown): boolean {
+  for (let at: unknown = error, depth = 0; at instanceof Error && depth < 8; depth++) {
+    if (at.name === 'SecurityError') return true;
+    at = at.cause;
+  }
+  return false;
+}
+
+/** The log line for a reset the host refused: the camera did NOT reboot. */
+function resetRefusedLine(label: string): string {
+  return (
+    `${label}: the reboot command was REFUSED by the host before it left (a SecurityError: a ` +
+    'browser policy or a test guard) — the camera was not rebooted, so the retry reads the same ' +
+    'boot'
+  );
 }
 
 /** The version a running build reports (wire 0x4E), as `1.3.0.0`. */

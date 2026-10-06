@@ -3,7 +3,7 @@
  *
  * The CLI's host stack is `usb` 3.1.0: node-usb-rs over nusb 0.2.7, not
  * libusb. It ships a WebUSB-shaped API, and core's `WebUsbTransport` is written
- * against WebUSB, but the shape and the behaviour differ in five places. Each
+ * against WebUSB, but the shape and the behaviour differ in six places. Each
  * one is corrected here and nowhere else, so core keeps one transport for both
  * front ends (TESTING.md sec.11):
  *
@@ -61,6 +61,15 @@
  *      when the device is found: node-usb re-reads on every access, which for
  *      a camera with no OS copy is a GET_DESCRIPTOR in the middle of a
  *      session each time the transport's description is read.
+ *   6. A DEVICE THAT HAS LEFT THE BUS. The `configuration` getter reads the
+ *      configuration's name through the same `getString`, so on a camera that
+ *      has just rebooted or been unplugged it throws "getString error: unknown
+ *      (error 0xe00002d9)" (kIOReturnNotAttached, measured on macOS
+ *      2026-10-06), or "open error: ..." for the implicit open. WebUSB keeps a
+ *      departed device's attributes as they were. So the getter answers the
+ *      last configuration it read, or null if it never read one, for those
+ *      two failures; anything else still throws. The e2e bridge reads it for
+ *      the `disconnect` it sends the page, and a throw there lost that event.
  */
 
 import {
@@ -183,6 +192,8 @@ export function fromNodeUsb(device: NodeUsbDevice): WebUsbDevice {
   const manufacturerName = stringOnce(device, 'manufacturerName');
   const productName = stringOnce(device, 'productName');
   const serialNumber = stringOnce(device, 'serialNumber');
+  /* The last configuration read, for a device that has left the bus (see 6). */
+  let lastConfiguration: WebUsbConfiguration | null = null;
   return {
     get vendorId(): number {
       return device.vendorId;
@@ -201,9 +212,15 @@ export function fromNodeUsb(device: NodeUsbDevice): WebUsbDevice {
     },
     get configuration(): WebUsbConfiguration | null {
       try {
-        return device.configuration;
+        lastConfiguration = device.configuration;
+        return lastConfiguration;
       } catch (error) {
-        if (messageOf(error).includes(NOT_CONFIGURED)) return null;
+        const message = messageOf(error);
+        if (message.includes(NOT_CONFIGURED)) {
+          lastConfiguration = null;
+          return null;
+        }
+        if (STRING_FAILURES.some((prefix) => message.startsWith(prefix))) return lastConfiguration;
         throw error;
       }
     },

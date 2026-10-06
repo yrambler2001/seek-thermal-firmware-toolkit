@@ -62,6 +62,7 @@ export {
   legacyAuth,
   legacyReaderOp,
   legacySelectorRows,
+  legacyVersionLine,
   legacyWindowPlan,
 } from './legacy-auth.js';
 export { agreedRows, buildWindowPlan, placeableAddresses } from './plan.js';

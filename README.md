@@ -132,6 +132,17 @@ overrides detection and skips the probe — but not the version check: the run s
 version first and refuses a camera that does not report it, or runs a build older than 0.8.0.0,
 whatever family was named.
 
+**`legacy-auth` and `compact-2016` share every selector, so the probe cannot tell them apart; the
+slots can.** A 2016 Compact PRO (1.0.3.x) is read under `legacy-auth`, by design, and the read is
+the same 31 windows either way. Once the slots are read, detection keeps the probe's answers and
+adds what only the slots say: a bank under a real xorshift128 keystream that decrypts to a word
+sum of 0 is the 2016 cipher, and rules `legacy-auth` out; a bank stored plain (the 2014 chain,
+whose stored words sum to 0) rules `compact-2016` out. The version line (1.0.3.x is the Compact
+PRO's) and the bootloader's (1.2.0.0 on the 2016 part, 0.9.0.0 on the 2014 Compact) corroborate.
+`seek-fw info` and the Flash view's "Read device info" then redo the analysis under the detected
+family, and a dump decrypts its slots under it, saying in the report which profile the read acted
+under. Neither family's flashing changes: `compact-2016` stays read-only.
+
 **`compact-2014` refuses to dump, and that refusal is the point.** Every decrypted image carries
 its own RPC method table — wire id = index + 53 — and recovering it from all 36 images in the
 reference corpus shows five builds (0.3.0.1, 0.5.0.2, 0.5.1.0, 0.5.1.3, 0.6.0.4) with no

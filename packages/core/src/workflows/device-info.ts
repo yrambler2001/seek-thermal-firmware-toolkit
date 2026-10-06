@@ -27,7 +27,7 @@ import {
   type PickedKeyTable,
   type StoreKey,
 } from '../crypto/keys.js';
-import { CANDIDATE_K, recoverKeyInfo } from '../crypto/recover.js';
+import { CANDIDATE_K, recoverKeyInfo, slotChainOf } from '../crypto/recover.js';
 import { sameState, type Xorshift128State } from '../crypto/xorshift128.js';
 import {
   bankPayloadSize,
@@ -70,6 +70,7 @@ import {
   type WorkflowContext,
   warnIfRecipientFellBack,
 } from './types.js';
+import { channelEvidenceOf } from './capability.js';
 import { planForDevice } from './window-plan.js';
 
 /** Bytes of the bootloader block scanned for the key table. */
@@ -684,7 +685,19 @@ export async function readDeviceInfo(
       storeKey,
       keyWhiteningK,
     );
-    const bootable = identity.bootable && slot.footerOk;
+    /* THE FOOTER IS THE BOOTLOADER'S QUESTION, NOT EVERY ONE'S. This used to
+     * require a "CODE" footer of every slot, and so called a 2016 part's
+     * running bank "NOT bootable": that bootloader checks none, and the bank
+     * has none (see `BootPolicy.checksFooter`). */
+    const footerPasses = !profile.boot.checksFooter || slot.footerOk;
+    const bootability: SlotState['bootability'] = storedPlain(slot)
+      ? /* the chain's own model: see the verdict below */ 'bootable'
+      : identity.bootable && footerPasses
+        ? 'bootable'
+        : slot.present && slot.accepts && footerPasses && keyTable === null
+          ? /* everything but the key checks out, and the key cannot be named */ 'unknown'
+          : 'not-bootable';
+    const bootable = bootability === 'bootable';
 
     const state: SlotState = {
       key: descriptor.key,
@@ -705,6 +718,7 @@ export async function readDeviceInfo(
       sha256: slot.sha256,
       keyName: identity.name,
       bootable,
+      bootability,
     };
     slots.push(state);
     byKey.set(descriptor.key, state);
@@ -726,14 +740,23 @@ export async function readDeviceInfo(
         'ok',
       );
     } else {
+      const footer = profile.boot.checksFooter
+        ? `footer ${slot.footerOk ? 'ok' : 'BAD'}`
+        : 'no footer check (this bootloader generation reads none)';
+      const verdict =
+        bootability === 'bootable'
+          ? 'bootable'
+          : bootability === 'unknown'
+            ? "bootable unknown: the bootloader's key table was not read, so the keys it tries " +
+              'cannot be named'
+            : 'NOT bootable';
       reporter.log(
         `${descriptor.name}: firmware ${slot.plainHeader?.versionStr ?? '?'}, ` +
           `${String(slot.header?.length ?? 0)} B, ${identity.name ?? 'unknown key'}, ` +
-          `acceptance ${slot.accepts ? 'ok' : 'FAILS'}, footer ${slot.footerOk ? 'ok' : 'BAD'}` +
-          ` -> ${bootable ? 'bootable' : 'NOT bootable'}`,
-        bootable ? 'ok' : 'warn',
+          `acceptance ${slot.accepts ? 'ok' : 'FAILS'}, ${footer} -> ${verdict}`,
+        bootable ? 'ok' : bootability === 'unknown' ? 'detail' : 'warn',
       );
-      if (slot.accepts && slot.footerOk && !identity.bootable) {
+      if (bootability === 'not-bootable' && slot.accepts && footerPasses) {
         reporter.log(
           '    it decrypts and checksums under its own key, but the bootloader only tries ' +
             `${storeKey.name} and Key A — so it will be skipped at boot`,
@@ -756,7 +779,10 @@ export async function readDeviceInfo(
       if (error instanceof CancelledError) throw error;
       prediction = null;
       reporter.log('');
-      reporter.log(`boot prediction unavailable: ${errorMessage(error)}`, 'warn');
+      reporter.log(
+        `boot prediction unavailable under ${profile.name}: ${errorMessage(error)}`,
+        'warn',
+      );
     }
   }
 
@@ -895,6 +921,13 @@ export async function readDeviceInfo(
   }
 
   const evidence: DeviceEvidence = {
+    /* THE PROBE'S MEASUREMENTS, KEPT. This read arms each protected bank on
+     * the channel its profile names and never tries the other, so it cannot
+     * see a plain arm refused; the probe that chose the profile did. That
+     * answer used to be dropped here, and detection after the read scored
+     * the camera on less than detection before it. Kept first, so whatever
+     * this read observes itself takes precedence. */
+    ...channelEvidenceOf(ctx.detection?.evidence),
     ...(version !== null ? { firmwareVersion: version } : {}),
     ...(bootloaderVersion !== null ? { bootloaderVersion } : {}),
     ...(bootloaderString !== null && bootloaderString !== '' ? { bootloaderString } : {}),
@@ -907,6 +940,13 @@ export async function readDeviceInfo(
     observedAcceptanceSums: slots
       .map((slot) => slot.recovered?.checksum)
       .filter((sum): sum is number => sum !== undefined),
+    /* The same slots with their chain: a sum of 0 is the 2014 chain stored
+     * plain or the 2016 cipher, and only the recovered state tells which. */
+    observedSlots: slots.flatMap((slot) =>
+      slot.recovered === null
+        ? []
+        : [{ acceptanceSum: slot.recovered.checksum, chain: slotChainOf(slot.recovered.state) }],
+    ),
     imageVersions: slots
       .map((slot) => slot.plainHeader?.versionStr)
       .filter((v): v is string => v !== undefined),
@@ -1117,6 +1157,32 @@ export function runningApplicationKeyBlock(
     );
   }
   return null;
+}
+
+/**
+ * The profile a device read should be redone under, or null.
+ *
+ * A read commits to one family before it can judge the family (see the
+ * "evidence says" refusal above), so a slot's verdict is its ACTING profile's.
+ * When detection after the read confidently names another family whose cipher
+ * differs, "does this slot pass acceptance?" has a different answer under it,
+ * and reporting the acting one's is reporting the wrong one. The caller re-reads
+ * under this profile, explicitly; a family named by hand (`forced`) is never
+ * second-guessed. The CLI's `info` has applied this rule since it existed; the
+ * web's device-info read applies it through here.
+ */
+export function profileToRereadUnder(state: DeviceState, forced: boolean): FirmwareProfile | null {
+  if (forced || state.detection.ambiguous) return null;
+  const best = state.detection.best.profile;
+  if (best.id === state.profile.id) return null;
+  const a = state.profile.cipher;
+  const b = best.cipher;
+  const differs =
+    a.whiteningK !== b.whiteningK ||
+    a.acceptanceSum !== b.acceptanceSum ||
+    a.clearWords[0] !== b.clearWords[0] ||
+    a.clearWords[1] !== b.clearWords[1];
+  return differs ? best : null;
 }
 
 /** The slot the camera booted from, when the boot policy could name one. */

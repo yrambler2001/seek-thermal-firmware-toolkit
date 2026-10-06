@@ -39,6 +39,7 @@ import {
 } from '@seek-fw/core';
 import { fakeCamera, type FakeCamera } from '../../core/test/fake-transport.js';
 import { NodeUsbBackend, type NodeUsbDevice } from '../src/backend.js';
+import { fromNodeUsb } from '../src/node-usb.js';
 import { cameraWithFlash, buildSyntheticFlash } from './helpers.js';
 
 type ShimIn = (
@@ -345,6 +346,55 @@ describe('the CLI transport: an unconfigured device', () => {
       /no descriptor found for active configuration 2/,
     );
     expect(device.selected).toEqual([]);
+  });
+});
+
+describe('the CLI transport: a device that has left the bus', () => {
+  /* node-usb's `configuration` getter reads the configuration's name string,
+   * and on a camera that has just rebooted that read fails: "getString error:
+   * unknown (error 0xe00002d9)", measured on macOS 2026-10-06. The e2e bridge
+   * reads it for the `disconnect` it sends the page, and the throw lost the
+   * event. WebUSB keeps a departed device's attributes as they were. */
+  const DEPARTED = 'getString error: unknown (error 0xe00002d9)';
+
+  it('answers the last configuration it read once the device is gone', () => {
+    let gone = false;
+    const device = fromNodeUsb(
+      nodeUsbDevice(fakeCamera(), {
+        configuration: () => {
+          if (gone) throw new Error(DEPARTED);
+          return { configurationValue: 1 };
+        },
+      }),
+    );
+    expect(device.configuration?.configurationValue).toBe(1);
+    gone = true;
+    expect(() => device.configuration).not.toThrow();
+    expect(device.configuration?.configurationValue).toBe(1);
+  });
+
+  it('answers null for a device that left before its configuration was ever read', () => {
+    for (const failure of [DEPARTED, 'open error: device disconnected']) {
+      const device = fromNodeUsb(
+        nodeUsbDevice(fakeCamera(), {
+          configuration: () => {
+            throw new Error(failure);
+          },
+        }),
+      );
+      expect(device.configuration, failure).toBeNull();
+    }
+  });
+
+  it('still throws a configuration error that is not a departed device', () => {
+    const device = fromNodeUsb(
+      nodeUsbDevice(fakeCamera(), {
+        configuration: () => {
+          throw new Error('configuration error: no descriptor found for active configuration 2');
+        },
+      }),
+    );
+    expect(() => device.configuration).toThrow(/no descriptor found/);
   });
 });
 

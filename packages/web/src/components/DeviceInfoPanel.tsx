@@ -37,7 +37,7 @@ function perDeviceKey(state: DeviceState): string | null {
   return blank ? 'not programmed — the camera falls back to Key B' : bytesToHex(slot);
 }
 
-function verdict(slot: SlotState): ReactElement {
+function verdict(slot: SlotState, checksFooter: boolean): ReactElement {
   if (slot.bootable) {
     return <span className="text-ok">the bootloader can boot this</span>;
   }
@@ -50,7 +50,17 @@ function verdict(slot: SlotState): ReactElement {
       </span>
     );
   }
-  if (!slot.footerOk) return <span className="text-destructive">no valid CODE footer</span>;
+  /* Only where the bootloader reads one: a 2016 part's has none and needs none. */
+  if (checksFooter && !slot.footerOk) {
+    return <span className="text-destructive">no valid CODE footer</span>;
+  }
+  if (slot.bootability === 'unknown') {
+    return (
+      <span>
+        passes acceptance; whether the bootloader can key it is unknown — its key table was not read
+      </span>
+    );
+  }
   return <span className="text-destructive">key unknown to the bootloader — skipped at boot</span>;
 }
 
@@ -88,8 +98,15 @@ export function DeviceInfoPanel({ state }: DeviceInfoPanelProps): ReactElement {
     ['Per-device key', perDeviceKey(state)],
   ];
 
+  /* Slots the bootloader provably skips: everything checks out but the key it
+   * tries. A slot whose keys could not be named at all is not one of them. */
+  const checksFooter = state.profile.boot.checksFooter;
   const orphans = state.slots.filter(
-    (slot) => slot.present && slot.accepts && slot.footerOk && !slot.bootable,
+    (slot) =>
+      slot.present &&
+      slot.accepts &&
+      (slot.footerOk || !checksFooter) &&
+      slot.bootability === 'not-bootable',
   );
   const targetIsOrphan = target !== null && orphans.includes(target);
 
@@ -159,7 +176,7 @@ export function DeviceInfoPanel({ state }: DeviceInfoPanelProps): ReactElement {
                     </TableCell>
                     <TableCell label="Encryption">
                       {slot.keyName ?? 'unknown'}
-                      <span className="block text-[0.75rem]">{verdict(slot)}</span>
+                      <span className="block text-[0.75rem]">{verdict(slot, checksFooter)}</span>
                     </TableCell>
                     <TableCell label="SHA-256 of plaintext">
                       <span className="font-mono text-[0.75rem] text-muted-foreground">

@@ -45,8 +45,10 @@ import {
 import { detectProfile } from '../src/profiles/registry.js';
 import type { FirmwareProfile, SlotKey } from '../src/profiles/types.js';
 import { decryptDump, detectProfileForDump, evidenceFromDump } from '../src/workflows/decrypt.js';
+import { identifyCamera } from '../src/workflows/capability.js';
 import {
   blankSlotCapture,
+  profileToRereadUnder,
   readDeviceInfo,
   staleDescriptorCapture,
 } from '../src/workflows/device-info.js';
@@ -290,6 +292,7 @@ function slot(
     sha256: null,
     keyName: 'Key A',
     bootable: true,
+    bootability: 'bootable',
     ...extra,
   };
 }
@@ -1407,6 +1410,215 @@ describe('detectProfileForDump', () => {
     expect(recovered.whitening.keyHex).toBe(bytesToHex(keyA));
     expect(result.bootloaderKeys).not.toBeNull();
     expect(recovered.embedded).not.toBeNull();
+  });
+});
+
+/* ==================================================================== *
+ * The 2016 Compact PRO, read and judged (FINDINGS 2026-10-06)
+ * ==================================================================== */
+
+/**
+ * A camera shaped like the bench part on Compact PRO 1.0.3.0: that build's own
+ * window table (the bootloader block refused on every channel, the protected
+ * banks behind the token), three banks holding one 2016 cipher-chain image —
+ * keyed xorshift128 under K=0, decrypting to a word sum of 0, and NO "CODE"
+ * footer — an erased boot-config record, and bootloader 1.2.0.0 on
+ * GetFirmwareInfo selector 1.
+ */
+function compactPro1030Camera(): FakeCamera {
+  const flash = new Uint8Array(FLASH_SIZE).fill(0xff);
+  const keyA = makeKey(60);
+  const plain = makePlainImage(keyA, makeKey(61), compact2016);
+  const cipher = cryptBytes(plain, stateFromKey(keyA, 0), compact2016.cipher);
+  for (const offset of [0x50000, 0x60000, 0x70000]) flash.set(cipher, offset);
+  const rows = legacySelectorRows('1.0.3.0') ?? [];
+  const live = rows.filter((r) => r.address !== null && r.channel !== 'refused');
+  const bootloader = new Uint8Array(36);
+  bootloader.set([1, 2, 0, 0], 0);
+  bootloader.set(new TextEncoder().encode('Jun 26 2016'), 4);
+  return fakeCamera({
+    flash,
+    windows: live.map((r) => ({ subcmd: r.subcmd, offset: (r.address ?? 0) - FLASH_BASE })),
+    authBanks: live.filter((r) => r.channel === 'auth').map((r) => r.subcmd),
+    authToken: OLD_FW_UNLOCK_TOKEN,
+    fwInfo: new Map([
+      [0, buildBlock('1.0.3.0')],
+      [1, bootloader],
+    ]),
+  });
+}
+
+/** The probe, then the read under the profile it picked: what `seek-fw info` does first. */
+async function probeThenRead(
+  camera: FakeCamera,
+  reporter: Reporter,
+): Promise<{ readonly ctx: WorkflowContext; readonly state: DeviceState }> {
+  await camera.open();
+  const device = new SeekDevice(camera, { reporter });
+  const { detection } = await identifyCamera(device);
+  const ctx: WorkflowContext = { device, profile: detection.best.profile, detection, reporter };
+  return { ctx, state: await readDeviceInfo(ctx, { chunk: 4096 }) };
+}
+
+function logOf(reporter: { readonly events: readonly RunEvent[] }): string {
+  return reporter.events
+    .filter((e): e is LogEvent => e.type === 'log')
+    .map((e) => e.message)
+    .join('\n');
+}
+
+describe('a 2016 Compact PRO (1.0.3.0), read and judged', () => {
+  it('is read under legacy-auth, then detected as compact-2016 with the probe kept', async () => {
+    const reporter = collectingReporter();
+    const { ctx, state } = await probeThenRead(compactPro1030Camera(), reporter);
+
+    /* the probe's pick, by design: the two share every selector */
+    expect(ctx.profile.id).toBe('legacy-auth');
+    /* the probe's refused plain arm survives into the read's evidence ... */
+    expect(state.evidence.plainSelectorRefused).toBe(true);
+    expect(state.evidence.bootloaderVersion).toBe('1.2.0.0');
+    expect(state.evidence.observedSlots?.every((s) => s.chain === 'cipher')).toBe(true);
+    /* ... and the slots settle the cipher: not a coin toss at 0.90 to 0.85 */
+    expect(state.detection.best.profile.id).toBe('compact-2016');
+    expect(state.detection.ambiguous).toBe(false);
+    expect(state.detection.ranked.find((m) => m.profile.id === 'legacy-auth')?.score).toBe(0);
+    /* so the read under the wrong cipher says so, and asks to be redone */
+    expect(state.flashBlockedBy.join(' ')).toContain(
+      'the evidence says this camera is 2016 Compact Pro',
+    );
+    expect(profileToRereadUnder(state, false)?.id).toBe('compact-2016');
+    expect(profileToRereadUnder(state, true)).toBeNull();
+  }, 60_000);
+
+  it('judges its slots under compact-2016: they accept, need no footer, and are not "NOT bootable"', async () => {
+    const camera = compactPro1030Camera();
+    const { ctx, state: first } = await probeThenRead(camera, collectingReporter());
+    const reporter = collectingReporter();
+    const state = await readDeviceInfo(
+      { ...ctx, reporter, profile: compact2016, detection: first.detection },
+      { chunk: 4096 },
+    );
+    const log = logOf(reporter);
+
+    expect(state.slots.every((slot) => slot.present && slot.accepts)).toBe(true);
+    expect(state.slots.every((slot) => !slot.footerOk)).toBe(true);
+    /* the bootloader block is refused, so the keys it tries cannot be named:
+     * that is "unknown", not the "NOT bootable" the footer used to force */
+    expect(state.keyTable).toBeNull();
+    expect(state.slots.map((slot) => slot.bootability)).toEqual(['unknown', 'unknown', 'unknown']);
+    expect(log).not.toContain('NOT bootable');
+    expect(log).not.toContain('footer BAD');
+    expect(log).toContain('no footer check');
+    /* the boot note names the profile the read acted under, not "Legacy" */
+    expect(log).toContain('boot prediction unavailable under 2016 Compact Pro');
+    expect(log).not.toContain('Legacy locked firmware:');
+
+    /* detection agrees with the profile now, and the gate stays shut for the
+     * profile's own, honest reason */
+    expect(state.detection.best.profile.id).toBe('compact-2016');
+    expect(state.canFlash).toBe(false);
+    const blocked = state.flashBlockedBy.join(' ');
+    expect(blocked).not.toContain('the evidence says');
+    expect(blocked).toContain("shares legacy-auth's locked BeginFirmwareUpgrade handler");
+    expect(blocked).not.toContain('different BeginFirmwareUpgrade selector map');
+    expect(camera.calls.some((c) => c.op === 0x50 || c.op === 0x51)).toBe(false);
+  }, 60_000);
+
+  it('a dump of it decrypts under compact-2016, not the profile the read acted under', async () => {
+    const camera = compactPro1030Camera();
+    await camera.open();
+    const reporter = collectingReporter();
+    const device = new SeekDevice(camera, { reporter });
+    const { detection } = await identifyCamera(device);
+    expect(detection.best.profile.id).toBe('legacy-auth');
+
+    const result = await runDump(
+      { device, profile: detection.best.profile, detection, reporter },
+      { chunk: 4096 },
+    );
+
+    const report = new TextDecoder().decode(
+      result.artifacts.find((a) => a.name === 'decrypted/decryption_report.txt')?.data,
+    );
+    expect(report).toContain(
+      'Profile   : 2016 Compact Pro [compact-2016] (detected from this dump and the camera; ' +
+        'the read acted under legacy-auth)',
+    );
+    expect(report).toContain('[VERIFIED(profile)]');
+    expect(report).not.toContain('unknown profile');
+    /* the read itself is still legacy-auth's: the manifest says what it acted under */
+    expect(result.manifest.profile.id).toBe('legacy-auth');
+  }, 60_000);
+
+  it('a family named by hand is decrypted under as named', async () => {
+    const camera = compactPro1030Camera();
+    const ctx = await contextFor(legacyAuth, camera);
+
+    const result = await runDump(ctx, { chunk: 4096 });
+
+    const report = new TextDecoder().decode(
+      result.artifacts.find((a) => a.name === 'decrypted/decryption_report.txt')?.data,
+    );
+    expect(report).toContain(
+      'Profile   : Legacy locked firmware [legacy-auth] (given by the caller)',
+    );
+  }, 60_000);
+});
+
+describe('decryptDump with the camera beside the dump', () => {
+  it('falls back to the profile the read acted under when detection does not settle it', async () => {
+    /* Two keyed slots whose sums match no family and whose headers disagree
+     * about the version, so the dump names nothing; the camera adds only the
+     * authenticated channel working, a lead and not a verdict. */
+    const dump = new Uint8Array(FLASH_SIZE).fill(0xff);
+    const keyA = makeKey(62);
+    for (const [offset, version] of [
+      [0x30000, 0x00021204],
+      [0x50000, 0x00030001],
+    ] as const) {
+      const plain = makePlainImage(keyA, makeKey(63), modern4x);
+      viewOf(plain).setUint32(HEADER_OFFSET + 12, version, true);
+      viewOf(plain).setUint32(0x300, 0x5eed1234, true); /* off any family's sum */
+      dump.set(
+        cryptBytes(plain, stateFromKey(keyA, modern4x.cipher.whiteningK), modern4x.cipher),
+        offset,
+      );
+    }
+    const result = await decryptDump(
+      dump,
+      'fallback',
+      {
+        dumpPath: 'fallback.bin',
+        cameraEvidence: { authSelectorWorks: true },
+        fallbackProfile: compact2016,
+      },
+      silentReporter,
+    );
+    expect(result.detection?.ambiguous).toBe(true);
+    const report = new TextDecoder().decode(
+      result.artifacts.find((a) => a.name === 'decrypted/decryption_report.txt')?.data,
+    );
+    expect(report).toContain(
+      'Profile   : 2016 Compact Pro [compact-2016] (the profile the read acted under; ' +
+        'detection did not settle the family)',
+    );
+  });
+
+  it('names a bank stored plain for what it is, not an unknown cipher profile', async () => {
+    const dump = new Uint8Array(FLASH_SIZE).fill(0xff);
+    const plain = makePlainImage(makeKey(64), makeKey(65), compact2016);
+    dump.set(plain, 0x50000);
+    const result = await decryptDump(
+      dump,
+      'plain',
+      { profile: legacyAuth, dumpPath: 'plain.bin' },
+      silentReporter,
+    );
+    const report = new TextDecoder().decode(
+      result.artifacts.find((a) => a.name === 'decrypted/decryption_report.txt')?.data,
+    );
+    expect(report).toContain('stored plain — the 2014 chain');
+    expect(report).not.toContain('unknown profile');
   });
 });
 

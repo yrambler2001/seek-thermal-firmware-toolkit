@@ -1053,9 +1053,13 @@ function deriveFactoryImage(
       ),
     );
   }
+  /* The reads are not the problem here — they agreed, and a spent reader was
+   * ruled out above. What failed is every derivation's gate set, so the first
+   * line says that, and the list says which gate. */
   fail(
-    'the two agreeing reads of the active slot do not yield the factory plaintext, and the ' +
-      'run refuses rather than write over a slot it cannot read. Every candidate was tried:\n  - ' +
+    'both reads of the active slot agree, but no candidate derivation of the factory ' +
+      'plaintext from them passes every gate below, so this run has no image it can patch and ' +
+      'refuses rather than write over the slot. Every candidate was tried:\n  - ' +
       reasons.join('\n  - '),
   );
 }

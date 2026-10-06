@@ -786,7 +786,7 @@ describe.skipIf(
               .catch((e: unknown) => e);
             if (
               error instanceof SeekError &&
-              error.message.includes('do not yield the factory plaintext')
+              error.message.includes('no candidate derivation of the factory plaintext')
             ) {
               break;
             }
@@ -796,7 +796,9 @@ describe.skipIf(
             );
           }
           expect(error).toBeInstanceOf(SeekError);
-          expect((error as Error).message).toMatch(/do not yield the factory plaintext/);
+          expect((error as Error).message).toMatch(
+            /no candidate derivation of the factory plaintext/,
+          );
           /* The identity candidate got as far as the build gates (the
            * verbatim header window parses straight through the cipher)... */
           expect((error as Error).message).toMatch(/failed its build gates/);

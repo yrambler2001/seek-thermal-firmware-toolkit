@@ -17,6 +17,7 @@ import { MemorySink } from '../src/sink.js';
 import {
   buildSyntheticFlash,
   cameraWithFlash,
+  compactPro1030Camera,
   fixedBackend,
   tempDir,
   testIo,
@@ -122,6 +123,75 @@ describe('seek-fw info', () => {
     const parsed = JSON.parse(stdout.text) as { canFlash: boolean; flashBlockedBy: string[] };
     expect(parsed.canFlash).toBe(false);
     expect(parsed.flashBlockedBy.join(' ')).toContain('does not support flashing');
+  });
+});
+
+describe('seek-fw info on a 2016 Compact PRO (1.0.3.0)', () => {
+  /* The probe picks legacy-auth here by design (the two share every
+   * selector). The slots then name compact-2016, whose cipher differs, so the
+   * analysis is redone under it rather than reporting every slot as failing
+   * legacy-auth's 0xFFFF target (FINDINGS 2026-10-06). */
+  it('judges the slots under the detected profile, not the one the probe acted under', async () => {
+    const camera = compactPro1030Camera();
+    const { io, stdout, stderr } = testIo({ backend: fixedBackend([camera]) });
+    const code = await run(['info', '--json'], io, signal());
+
+    expect(code).toBe(EXIT_OK);
+    expect(stderr.text).toContain('re-reading under it');
+    const parsed = JSON.parse(stdout.text) as {
+      profile: { actedUnder: { id: string }; detected: { id: string; ambiguous: boolean } };
+      firmware: { bootloaderVersion: string | null };
+      slots: { accepts: boolean; footerOk: boolean; bootable: boolean; bootability: string }[];
+      canFlash: boolean;
+      flashBlockedBy: string[];
+    };
+    expect(parsed.profile.actedUnder.id).toBe('compact-2016');
+    expect(parsed.profile.detected).toMatchObject({ id: 'compact-2016', ambiguous: false });
+    expect(parsed.firmware.bootloaderVersion).toBe('1.2.0.0');
+    for (const slot of parsed.slots) {
+      expect(slot).toMatchObject({
+        accepts: true,
+        footerOk: false,
+        bootable: false,
+        bootability: 'unknown',
+      });
+    }
+    /* still read-only, for compact-2016's own reason */
+    expect(parsed.canFlash).toBe(false);
+    const blocked = parsed.flashBlockedBy.join(' ');
+    expect(blocked).toContain("shares legacy-auth's locked BeginFirmwareUpgrade handler");
+    expect(blocked).not.toContain('the evidence says');
+    const sent = new Set(camera.calls.map((call) => call.op));
+    expect(sent.has(OP.SET_FEATURED_FIRMWARE_DATA)).toBe(false);
+    expect(sent.has(OP.COMPLETE_MEMORY_UPGRADE)).toBe(false);
+  });
+
+  it('says only what it knows about the store key, the footer and bootability', async () => {
+    const { io, stdout } = testIo({ backend: fixedBackend([compactPro1030Camera()]) });
+    expect(await run(['info'], io, signal())).toBe(EXIT_OK);
+    const text = stdout.text;
+    /* "Key B (no per-device key programmed)" was printed with Key B itself
+     * "(not identified)" two lines up and the per-device slot never read */
+    expect(text).toMatch(/store key\s+unknown — the bootloader block holding the per-device key/);
+    expect(text).not.toContain('no per-device key programmed');
+    /* the footer column says it does not apply; bootability says unknown */
+    const row = text.split('\n').find((line) => line.startsWith('App image bank 0x14050000 '));
+    expect(row).toMatch(/\byes\s+n\/a\s+unknown\b/);
+  });
+});
+
+describe('seek-fw dump on a 2016 Compact PRO (1.0.3.0)', () => {
+  it('decrypts under the detected profile and says the read acted under another', async () => {
+    const camera = compactPro1030Camera();
+    const { io } = testIo({ backend: fixedBackend([camera]) });
+    expect(await run(['dump', '--out', dir], io, signal())).toBe(EXIT_OK);
+    const report = await readFile(join(dir, 'decrypted', 'decryption_report.txt'), 'utf8');
+    expect(report).toContain(
+      'Profile   : 2016 Compact Pro [compact-2016] (detected from this dump and the camera; ' +
+        'the read acted under legacy-auth)',
+    );
+    expect(report).toContain('[VERIFIED(profile)]');
+    expect(report).not.toContain('unknown profile');
   });
 });
 

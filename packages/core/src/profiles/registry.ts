@@ -115,7 +115,7 @@ export function detectProfile(evidence: DeviceEvidence): DetectionResult {
     best.score < CONFIDENT_SCORE ||
     (runnerUp !== undefined && best.score - runnerUp.score < TIE_MARGIN);
 
-  return { best, ranked, ambiguous };
+  return { best, ranked, ambiguous, evidence };
 }
 
 /**

@@ -49,6 +49,7 @@ function slotJson(slot: SlotState): Record<string, unknown> {
     accepts: slot.accepts,
     footerOk: slot.footerOk,
     bootable: slot.bootable,
+    bootability: slot.bootability,
     sha256: slot.sha256,
   };
 }
@@ -190,10 +191,7 @@ export function renderState(ctx: CommandContext, state: DeviceState): void {
         : `${hexUp(state.keyTable.offset)} in the bootloader block, confirmed against a slot`,
     ],
     ['whitening K', hexUp(state.keyWhiteningK)],
-    [
-      'store key',
-      `${state.storeKey.name}${state.storeKey.programmed ? '' : ' (no per-device key programmed)'}`,
-    ],
+    ['store key', storeKeyText(state)],
   ]);
 
   ctx.out('');
@@ -207,8 +205,9 @@ export function renderState(ctx: CommandContext, state: DeviceState): void {
         slot.header === null ? '—' : `${String(slot.header.length)} B`,
         slot.keyName ?? '—',
         slot.present ? yesNo(slot.accepts) : '—',
-        slot.present ? yesNo(slot.footerOk) : '—',
-        slot.present ? yesNo(slot.bootable) : '—',
+        /* "n/a" where the bootloader reads no footer: a missing one is not a fault there */
+        slot.present ? (state.profile.boot.checksFooter ? yesNo(slot.footerOk) : 'n/a') : '—',
+        slot.present ? (slot.bootability === 'unknown' ? 'unknown' : yesNo(slot.bootable)) : '—',
         slot.sha256 === null ? '—' : slot.sha256.slice(0, 16),
       ]),
       ['slot', 'address', 'version', 'size', 'key', 'accepts', 'footer', 'bootable', 'sha256'],
@@ -227,6 +226,23 @@ export function renderState(ctx: CommandContext, state: DeviceState): void {
     for (const reason of state.flashBlockedBy) ctx.out(`    · ${reason}`);
   }
   ctx.out('');
+}
+
+/**
+ * Which key the bootloader stores an upgrade under, said only as far as the
+ * read knows it. It used to print "Key B (no per-device key programmed)"
+ * whenever the per-device slot was not seen programmed, including when the
+ * bootloader block was never read at all (a 2016 part refuses it on every
+ * channel) and Key B itself was "(not identified)" two lines up.
+ */
+function storeKeyText(state: DeviceState): string {
+  if (state.storeKey.programmed) return state.storeKey.name;
+  if (state.deviceKeySlot === null) {
+    return 'unknown — the bootloader block holding the per-device key slot was not read';
+  }
+  return state.keyTable === null
+    ? 'Key B (no per-device key programmed; Key B itself not identified)'
+    : 'Key B (no per-device key programmed)';
 }
 
 function slotName(state: DeviceState, key: string): string {

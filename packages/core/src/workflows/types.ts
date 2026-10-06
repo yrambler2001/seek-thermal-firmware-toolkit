@@ -257,6 +257,15 @@ export interface SlotState {
   readonly keyName: string | null;
   /** The bootloader can actually key AND take this slot. Not implied by `accepts`. */
   readonly bootable: boolean;
+  /**
+   * `bootable`, said without guessing. 'unknown' when the slot passes every
+   * check this read can make — the acceptance sum, and the footer where the
+   * bootloader checks one — but the keys the bootloader tries could not be
+   * named, because its key table was not read or not confirmed (a 2016 part
+   * refuses the bootloader block on every channel). `bootable` stays false
+   * then: nothing acts on a slot the read cannot vouch for.
+   */
+  readonly bootability: 'bootable' | 'not-bootable' | 'unknown';
 }
 
 export interface DeviceState {

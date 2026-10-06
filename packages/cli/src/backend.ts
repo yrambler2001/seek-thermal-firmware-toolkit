@@ -4,9 +4,9 @@
  * The `usb` package ships a WebUSB-shaped API, and core's `WebUsbTransport`
  * already speaks that shape — so this file contains no protocol code at all.
  * It finds Seek devices, wraps each one in the transport core exports — through
- * `fromNodeUsb`, which corrects the five places `usb` 3.x behaves unlike WebUSB
+ * `fromNodeUsb`, which corrects the six places `usb` 3.x behaves unlike WebUSB
  * (timeouts, stalls, an unconfigured device, a refused claim, a string the
- * device cannot produce) — and turns the
+ * device cannot produce, a device that has left the bus) — and turns the
  * host's permission failures into the udev advice from the README.
  *
  * `usb` is imported DYNAMICALLY: it is a native addon, and `seek-fw decrypt`

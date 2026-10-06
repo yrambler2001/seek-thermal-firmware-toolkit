@@ -16,14 +16,21 @@
 import { act } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  HEADER_OFFSET,
+  IMAGE_MAGIC,
   OP,
   SAFE_BEFORE_IDENTITY,
   WebUsbTransport,
+  compact2016,
+  cryptBytes,
   hex,
+  setAcceptSum,
+  stateFromKey,
   type Opcode,
   type WebUsbDevice,
 } from '@seek-fw/core';
-import { renderHook } from '../test-helpers';
+import { DeviceInfoPanel } from '../components/DeviceInfoPanel';
+import { render, renderHook } from '../test-helpers';
 import type { ProfileChoice } from '../lib/identify';
 import { DEFAULT_OPTIONS_FORM } from '../lib/options';
 import { scriptedCamera } from '../test-fixtures';
@@ -76,6 +83,29 @@ function fakeCamera(): WebUsbDevice {
     },
     controlTransferOut: () => Promise.resolve({ status: 'ok', bytesWritten: 2 }),
   };
+}
+
+/**
+ * One 64 KiB bank as a 2016 Compact PRO stores it: an image with a sane vector
+ * table, the header at 0x200 saying 1.0.3.0, the word sum balanced to 0, all
+ * under a real xorshift128 keystream (K=0) — and no "CODE" footer after it.
+ */
+function compact2016Bank(): Uint8Array {
+  const image = new Uint8Array(0x4000);
+  const dv = new DataView(image.buffer);
+  dv.setUint32(0, 0x1000_4000, true); /* SP */
+  dv.setUint32(4, 0x1403_0201, true); /* reset, Thumb; words 7..10 and 13 stay 0 */
+  for (let at = 0x400; at < image.length; at += 4) dv.setUint32(at, (at * 2654435761) >>> 0, true);
+  dv.setUint32(HEADER_OFFSET, IMAGE_MAGIC, true);
+  dv.setUint32(HEADER_OFFSET + 4, image.length, true);
+  dv.setUint32(HEADER_OFFSET + 8, 0x0000_1234, true);
+  dv.setUint32(HEADER_OFFSET + 12, 0x0003_0001, true); /* 1.0.3.0 */
+  dv.setUint32(HEADER_OFFSET + 16, 0x1403_0201, true);
+  const plain = setAcceptSum(image, compact2016.cipher).image;
+  const key = Uint8Array.from({ length: 16 }, (_, i) => (i * 37 + 11) & 0xff);
+  const bank = new Uint8Array(0x10000).fill(0xff);
+  bank.set(cryptBytes(plain, stateFromKey(key, 0), compact2016.cipher), 0);
+  return bank;
 }
 
 function deviceHandle(camera: WebUsbDevice): DeviceHandle {
@@ -195,6 +225,46 @@ describe('Read device info asks the camera which family it is', () => {
     expect(result.current.panel.refusal).toBeNull();
     expect(result.current.panel.deviceState?.profile.id).toBe('legacy-auth');
     expect(result.current.panel.deviceState?.version).toBe('1.0.3.0');
+    unmount();
+  }, 30_000);
+
+  it('judges a 2016 camera’s slots under compact-2016, reading again once the slots say so', async () => {
+    /* The probe picks legacy-auth by design; the slots — keyed xorshift128
+     * decrypting to a word sum of 0, no "CODE" footer, the bench part's shape
+     * (FINDINGS 2026-10-06) — name compact-2016, whose cipher differs. Its
+     * slots used to show "fails the acceptance sum (0x00000000)" here. */
+    const bank = compact2016Bank();
+    const { camera, calls } = scriptedCamera({
+      version: [1, 0, 3, 0],
+      legacy: true,
+      windows: new Map([
+        [7, bank],
+        [8, bank],
+        [9, bank],
+      ]),
+    });
+    const { result, unmount } = renderHook(() => useHarness(camera));
+    await act(async () => {
+      await result.current.panel.readInfo();
+    });
+    const state = result.current.panel.deviceState;
+    if (state === null) throw new Error('no analysis');
+    expect(state.profile.id).toBe('compact-2016');
+    expect(state.detection.best.profile.id).toBe('compact-2016');
+    expect(state.slots.every((slot) => slot.accepts)).toBe(true);
+    expect(state.slots.map((slot) => slot.bootability)).toEqual(['unknown', 'unknown', 'unknown']);
+    expect(state.canFlash).toBe(false);
+    const lines = result.current.panel.infoReporter.lines.map((line) => line.text);
+    expect(lines.some((line) => line.includes('reading again under it'))).toBe(true);
+    expect(calls.some((call) => call.request === 0x50 || call.request === 0x51)).toBe(false);
+
+    /* and the panel says what the read knows, not "no valid CODE footer" */
+    const panel = render(<DeviceInfoPanel state={state} />);
+    const text = panel.container.textContent;
+    expect(text).toContain('passes acceptance; whether the bootloader can key it is unknown');
+    expect(text).not.toContain('no valid CODE footer');
+    expect(text).not.toContain('fails the acceptance sum');
+    panel.unmount();
     unmount();
   }, 30_000);
 

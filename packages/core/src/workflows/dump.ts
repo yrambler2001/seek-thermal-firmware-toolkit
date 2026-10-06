@@ -364,10 +364,32 @@ export async function runDump(
   } else if (args.decrypt && okCount > 0) {
     try {
       const stem = combinedFile.replace(/\.bin$/, '');
+      /* THE DETECTED PROFILE, NOT THE ACTING ONE. The read's profile was chosen
+       * before any slot was read: on a 2016 Compact PRO the probe picks
+       * legacy-auth by design (the two share every selector), and its 0xFFFF
+       * target then called every slot "unknown profile". So the decrypt
+       * detects from the dump, with the camera's own answers (its version, the
+       * probe's channel) beside it, and falls back to the acting profile only
+       * when that does not settle the family. A family named by hand
+       * (`detection` null) is decrypted under as named. */
+      const decryptProfile =
+        ctx.detection === null
+          ? { profile }
+          : {
+              cameraEvidence: {
+                ...(ctx.detection.evidence ?? {}),
+                ...(firmware.version === null ? {} : { firmwareVersion: firmware.version }),
+              },
+              fallbackProfile: profile,
+            };
       const result = await decryptDump(
         combined,
         stem,
-        { profile, dumpPath: combinedFile, ...(ctx.signal ? { signal: ctx.signal } : {}) },
+        {
+          ...decryptProfile,
+          dumpPath: combinedFile,
+          ...(ctx.signal ? { signal: ctx.signal } : {}),
+        },
         reporter,
       );
       for (const artifact of result.artifacts) artifacts.push(artifact);

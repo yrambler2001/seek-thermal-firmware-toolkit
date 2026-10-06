@@ -45,12 +45,18 @@ import {
   CHECK_ZERO_IDX,
   KNOWN_ZERO_IDX,
   recoverKeyInfo,
+  slotChainOf,
   type RecoveredKey,
 } from '../crypto/recover.js';
 import { parseImageHeader } from '../image/header.js';
 import { findImages } from '../image/scan.js';
 import { detectProfile, getProfile } from '../profiles/registry.js';
-import type { DetectionResult, DeviceEvidence, FirmwareProfile } from '../profiles/types.js';
+import type {
+  DetectionResult,
+  DeviceEvidence,
+  FirmwareProfile,
+  ObservedSlot,
+} from '../profiles/types.js';
 import type { DecryptResult, DecryptedSlot } from './types.js';
 
 /** How much of a dump's head is scanned for the bootloader's key table. */
@@ -61,10 +67,27 @@ export interface DecryptOptions {
    * Supplies the cipher (clear-word window, acceptance sum, K) and the flash
    * base. OPTIONAL: with no camera attached there is no device evidence, so an
    * omitted profile is detected from the dump itself via `detectProfileForDump`
-   * and the choice is logged and recorded in the summary. The device path,
-   * which already knows the profile, passes it explicitly.
+   * and the choice is logged and recorded in the summary. A family named by
+   * hand is passed here. The dump stage passes `cameraEvidence` and
+   * `fallbackProfile` instead: the profile a read ACTED under is chosen before
+   * any slot is read, and the slots it then reads can name another cipher.
    */
   readonly profile?: FirmwareProfile;
+  /**
+   * What the camera a dump came off said about itself: its reported version
+   * and the capability probe's channel answers. Merged with the dump's own
+   * evidence when the profile is detected (no `profile` given), so a dump's
+   * decrypt stage is judged on everything the run knows, not on the bytes
+   * alone. Ignored when `profile` is given.
+   */
+  readonly cameraEvidence?: DeviceEvidence;
+  /**
+   * The profile to decrypt under when detection does not settle the family:
+   * for the dump stage, the one the read acted under. Without it an ambiguous
+   * detection still decides, as an offline decrypt always has. Ignored when
+   * `profile` is given.
+   */
+  readonly fallbackProfile?: FirmwareProfile;
   /** What to print as the source in the reports, e.g. the dump's file name. */
   readonly dumpPath: string;
   readonly signal?: AbortSignal;
@@ -111,17 +134,23 @@ export function evidenceFromDump(bytes: Uint8Array): DeviceEvidence {
   const images = findImages(view, bytes.length);
 
   const observedAcceptanceSums: number[] = [];
+  const observedSlots: ObservedSlot[] = [];
   const imageVersions: string[] = [];
   const imageBaseOffsets: number[] = [];
   for (const image of images) {
     imageBaseOffsets.push(image.base);
-    observedAcceptanceSums.push(
-      recoverKeyInfo(view, image.base, image.len, reference).checksum >>> 0,
-    );
+    const recovered = recoverKeyInfo(view, image.base, image.len, reference);
+    observedAcceptanceSums.push(recovered.checksum >>> 0);
+    /* The chain, which the sum alone does not name: the 2014 Compacts store
+     * their banks plain and the 2016 Compact PRO keyed, and both sum to 0. */
+    observedSlots.push({
+      acceptanceSum: recovered.checksum >>> 0,
+      chain: slotChainOf(recovered.state),
+    });
     const header = parseImageHeader(bytes, image.base);
     if (header !== null) imageVersions.push(header.versionStr);
   }
-  return { observedAcceptanceSums, imageVersions, imageBaseOffsets };
+  return { observedAcceptanceSums, observedSlots, imageVersions, imageBaseOffsets };
 }
 
 /** Which firmware family a dump file looks like, scored and ranked. */
@@ -184,13 +213,36 @@ export async function decryptDump(
   let detection: DetectionResult | null = null;
   let profile = options.profile;
   let detectionNote: string | undefined;
+  /* Where the profile came from, for the report's Profile line. */
+  let profileSource = 'given by the caller';
   if (profile === undefined) {
-    detection = detectProfileForDump(bytes);
-    profile = detection.best.profile;
-    detectionNote =
-      `profile detected from the dump: ${profile.name} [${profile.id}, score ` +
-      `${String(detection.best.score)}${detection.ambiguous ? ', AMBIGUOUS' : ''}] — ` +
-      detection.best.reasons.join('; ');
+    /* The dump's own evidence over the camera's: the dump measures the slots,
+     * the camera adds what only it could say (its version, the probe). */
+    const camera = options.cameraEvidence;
+    detection = detectProfile(
+      camera === undefined ? evidenceFromDump(bytes) : { ...camera, ...evidenceFromDump(bytes) },
+    );
+    const best = detection.best;
+    const from = camera === undefined ? 'the dump' : 'the dump and the camera';
+    const scored =
+      `${best.profile.name} [${best.profile.id}, score ${String(best.score)}` +
+      `${detection.ambiguous ? ', AMBIGUOUS' : ''}] — ${best.reasons.join('; ')}`;
+    const fallback = options.fallbackProfile;
+    if (detection.ambiguous && fallback !== undefined) {
+      profile = fallback;
+      profileSource = 'the profile the read acted under; detection did not settle the family';
+      detectionNote =
+        `profile: ${fallback.name} [${fallback.id}], the one the read acted under — ` +
+        `detection from ${from} did not settle the family (best ${scored})`;
+    } else {
+      profile = best.profile;
+      profileSource =
+        `detected from ${camera === undefined ? 'this dump' : 'this dump and the camera'}` +
+        (fallback !== undefined && fallback.id !== profile.id
+          ? `; the read acted under ${fallback.id}`
+          : '');
+      detectionNote = `profile detected from ${from}: ${scored}`;
+    }
     reporter.log(`decrypt: ${detectionNote}`, detection.ambiguous ? 'warn' : 'detail');
   }
 
@@ -286,8 +338,7 @@ export async function decryptDump(
     `Generated : ${clock().toISOString()}`,
     `Dump      : ${dumpPath} (${String(len)} bytes)`,
     'Method    : cryptanalytic (xorshift128 linear GF(2) solve); no key search',
-    `Profile   : ${profile.name} [${profile.id}]` +
-      (detectionNote === undefined ? ' (given by the caller)' : ' (detected from this dump)'),
+    `Profile   : ${profile.name} [${profile.id}] (${profileSource})`,
     `Slots     : ${images.map((image) => hexUp(flashBase + image.base)).join(', ')}`,
     '',
   ];
@@ -346,10 +397,15 @@ export async function decryptDump(
     const keyHex = whitening.keyHex;
     const keyBytes = keyFromState(state, whitening.whiteningK);
     const named = matchesProfile || whitening.evidence === 'plaintext';
+    /* A bank stored plain is no cipher's, and calling it an unknown one hid
+     * what it is: the 2014 chain, whose bootloader takes the stored words. */
+    const storedPlain = slotChainOf(state) === 'plain' && checksum === 0;
     const profileName = matchesProfile
       ? `${profile.name} (K=${hexUp(whitening.whiteningK)}, ` +
         `TARGET=${hexUp(profile.cipher.acceptanceSum)})`
-      : `xs128/K=? (checksum=${hexUp(checksum)}, unknown profile)`;
+      : storedPlain
+        ? `stored plain — the 2014 chain (identity keystream, stored word sum ${hexUp(0)})`
+        : `xs128/K=? (checksum=${hexUp(checksum)}, unknown profile)`;
 
     /* Only stamp the filename when the keys are genuinely inside this image.
      * A build that derives its key at runtime has no table to find, and saying

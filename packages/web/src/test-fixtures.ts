@@ -156,6 +156,11 @@ export interface ScriptedCameraOptions {
    * every bank on either form.
    */
   readonly legacy?: boolean;
+  /**
+   * What some subcommands' windows hold, read back in order from the arm.
+   * Every other window reads as 0xA5, as before.
+   */
+  readonly windows?: ReadonlyMap<number, Uint8Array>;
 }
 
 export interface ScriptedCamera {
@@ -170,15 +175,18 @@ function sameBytes(a: Uint8Array, b: Uint8Array): boolean {
 
 /**
  * A camera that answers like one firmware line: its version, its channel lock
- * and its token check. Every window reads back as 0xA5, so no image is found
- * and the decrypt stage stays out of the way. A refusal is a STALL, as it is
- * on the wire: the dispatcher stalls a control request whose handler returns
- * an error status.
+ * and its token check. Every window reads back as 0xA5 unless `windows` says
+ * otherwise, so by default no image is found and the decrypt stage stays out
+ * of the way. A refusal is a STALL, as it is on the wire: the dispatcher
+ * stalls a control request whose handler returns an error status.
  */
 export function scriptedCamera(options: ScriptedCameraOptions): ScriptedCamera {
   const calls: CameraCall[] = [];
   let opened = false;
   let armed = false;
+  /* The armed window's own bytes and the read cursor into them, when scripted. */
+  let window: Uint8Array | null = null;
+  let cursor = 0;
   const ok = (bytes: Uint8Array): Promise<WebUsbInTransferResult> =>
     Promise.resolve({
       status: 'ok',
@@ -222,8 +230,13 @@ export function scriptedCamera(options: ScriptedCameraOptions): ScriptedCamera {
           block.set(new TextEncoder().encode('Jan  6 2017 11:16:17'), 4);
           return ok(block.subarray(0, Math.min(length, block.length)));
         }
-        case OP.GET_FEATURED_FIRMWARE_DATA:
-          return armed ? ok(new Uint8Array(length).fill(0xa5)) : stall();
+        case OP.GET_FEATURED_FIRMWARE_DATA: {
+          if (!armed) return stall();
+          if (window === null) return ok(new Uint8Array(length).fill(0xa5));
+          const bytes = window.subarray(cursor, cursor + length);
+          cursor += bytes.length;
+          return ok(bytes);
+        }
         default:
           return stall();
       }
@@ -243,6 +256,8 @@ export function scriptedCamera(options: ScriptedCameraOptions): ScriptedCamera {
         if (bytes.length === 2 && subcmd >= 2 && subcmd <= 9) return refused;
       }
       armed = true;
+      window = options.windows?.get(subcmd) ?? null;
+      cursor = 0;
       return accepted;
     },
   };

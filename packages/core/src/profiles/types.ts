@@ -155,6 +155,15 @@ export interface BootPrediction {
 export interface BootPolicy {
   /** Selector that arms the slot the camera did NOT boot from. */
   readonly updateTargetSubcmd: number;
+  /**
+   * Whether this bootloader generation requires the "CODE" footer at the end
+   * of a bank before it boots it. The 4.x bootloader does. The locked line's
+   * do not: the 2014 plaintext chain has no footer, and a 2016 Compact PRO
+   * part boots bank A with none either (measured: on the 1.0.3.0 donor image
+   * and on a camera running it, the bank data ends at 0xCA87 and nothing
+   * follows). A bootable verdict asks for a footer only where this is true.
+   */
+  readonly checksFooter: boolean;
   describeCfg0(cfg0: number): string;
   /** Replays the bootloader's select_boot_slot() over observed slot state. */
   selectBootSlot(cfg0: number, isBootable: (key: SlotKey) => boolean): BootPrediction;
@@ -183,6 +192,18 @@ export interface DeviceEvidence {
   readonly productId?: number;
   /** Acceptance sums produced by decrypting the slots that were found. */
   readonly observedAcceptanceSums?: readonly number[];
+  /**
+   * The same slots with the chain each is stored on, which the sum alone does
+   * not say.
+   *
+   * A word sum of 0 is two different firmwares. The 2014 Compacts store their
+   * banks PLAIN: the keystream solve returns the identity state and the stored
+   * words themselves sum to 0. The 2016 Compact PRO stores them under a real
+   * xorshift128 keystream whose DECRYPTED words sum to 0. Scored on the sum
+   * alone the two were one family, and a 2014 camera read as `compact-2016`.
+   * Absent (an older caller), profiles fall back to `observedAcceptanceSums`.
+   */
+  readonly observedSlots?: readonly ObservedSlot[];
   /** Image header version strings found in a dump or on the device. */
   readonly imageVersions?: readonly string[];
   /**
@@ -230,6 +251,18 @@ export interface DeviceEvidence {
   readonly windowReadable?: boolean;
   /** Byte offsets at which image-header magic was found in a dump. */
   readonly imageBaseOffsets?: readonly number[];
+}
+
+/** One decrypted slot, as detection scores it. */
+export interface ObservedSlot {
+  /** The decrypted word sum: the number `observedAcceptanceSums` carries. */
+  readonly acceptanceSum: number;
+  /**
+   * 'plain' when the keystream solve returned the identity state, so the
+   * stored bytes ARE the image (the 2014 plaintext chain); 'cipher' when it
+   * returned a real key's state.
+   */
+  readonly chain: 'plain' | 'cipher';
 }
 
 export interface DetectionVerdict {
@@ -281,4 +314,10 @@ export interface DetectionResult {
   readonly ranked: readonly ProfileMatch[];
   /** True when the winner scored no better than the generic fallback. */
   readonly ambiguous: boolean;
+  /**
+   * The evidence that was scored, as `detectProfile` received it. A read that
+   * follows this detection keeps the measurements only the earlier step could
+   * make (the probe's plain arm of a protected bank) instead of losing them.
+   */
+  readonly evidence?: DeviceEvidence;
 }

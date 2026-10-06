@@ -327,6 +327,25 @@ const LEGACY_BUILDS: ReadonlyMap<string, LegacyTraits> = new Map<string, LegacyT
 /** The versions `legacyWindowPlan` has a decoded table for, in no particular order. */
 export const LEGACY_KNOWN_VERSIONS: readonly string[] = [...LEGACY_BUILDS.keys()];
 
+/**
+ * Which product line a version of this protocol belongs to, by the numbering
+ * the corpus shows: the 2016 Compact PRO ships as 1.0.3.x (1.0.3.0, 1.0.3.2 and
+ * their FF builds); the Compact as 0.x and as 1.0.0.0, 1.2.0.0, 1.3.0.0 and
+ * 1.3.0.8. Null for any other version, whose line no image has shown.
+ *
+ * The two lines share this handler and its selector tables, so the line
+ * decides nothing about a read. It is evidence about the CIPHER: the Compact
+ * PRO's banks are keyed xorshift128 that decrypts to sum 0 (`compact-2016`),
+ * the Compact's are stored plain (the 2014 chain) or keyed to 0xFFFF (1.3.0.8).
+ */
+export function legacyVersionLine(version: string | null): 'compact-pro-2016' | 'compact' | null {
+  const v = normalisedVersion(version);
+  if (v === null) return null;
+  if (v.startsWith('1.0.3.')) return 'compact-pro-2016';
+  if (v.startsWith('0.') || LEGACY_BUILDS.has(v)) return 'compact';
+  return null;
+}
+
 /** The table a version's own image decodes to, or null for a build not in the corpus. */
 export function legacySelectorRows(version: string): readonly SelectorRow[] | null {
   const traits = LEGACY_BUILDS.get(version);
@@ -563,19 +582,24 @@ export const LEGACY_BOOT: BootPolicy = {
    * and the chain gate — never from this field. -1 cannot be encoded as a
    * uint16 subcommand, so a stray write fails loudly instead of arming bank 0. */
   updateTargetSubcmd: -1,
+  /* Neither the 2014 bootloader nor the 2016 one reads a footer: see
+   * `BootPolicy.checksFooter`. */
+  checksFooter: false,
 
   describeCfg0(cfg0: number): string {
     return `cfg0 ${String(cfg0 >>> 0)}: the legacy bootloader's boot-config layout was never decoded`;
   },
 
+  /* Shared by legacy-auth, compact-2016 and compact-2014, so the refusal names
+   * the line rather than one of the three. */
   selectBootSlot(): BootPrediction {
     throw new SeekError(
       'profile/unsupported',
-      "Legacy locked firmware: this generation's select_boot_slot() has not been " +
-        'reconstructed, so the booted slot cannot be replayed from cfg[0]. On the 2014 ' +
-        "plaintext chain the write path does not replay it — the camera's own active-slot " +
-        'word names both ends of an upgrade (mode 0, fw_update_slot_address()).',
-      { detail: { profile: 'legacy-auth', capability: 'flash' } },
+      "the locked line's bootloader select_boot_slot() has not been reconstructed, so the " +
+        'booted slot cannot be replayed from cfg[0]. On the 2014 plaintext chain the write ' +
+        "path does not replay it — the camera's own active-slot word names both ends of an " +
+        'upgrade (mode 0, fw_update_slot_address()).',
+      { detail: { capability: 'flash' } },
     );
   },
 };
@@ -605,6 +629,10 @@ const CAPABILITIES: ProfileCapabilities = {
 const SCORE_DECISIVE = 0.95;
 /** That refusal AND the authenticated channel working on the same bank. */
 const SCORE_PROVEN = 0.98;
+/** A slot stored plain with a word sum of 0: the 2014 chain, measured on the image. */
+const SCORE_PLAIN_CHAIN = 0.9;
+/** That chain and a version on this line, agreeing. */
+const SCORE_PLAIN_CHAIN_VERSION = 0.92;
 /** A legacy version and the authenticated channel, agreeing. */
 const SCORE_CORROBORATED = 0.85;
 /** One strong but indirect signal (a version, from the camera or a header). */
@@ -652,6 +680,35 @@ function detectLegacy(evidence: DeviceEvidence): DetectionVerdict {
     return { score: 0, reasons };
   }
 
+  /* THE CIPHER, BEFORE THE CHANNEL — added 2026-10-06. This line's banks are
+   * stored plain with a word sum of 0 (the 2014 chain) or keyed to 0xFFFF
+   * (Compact 1.3.0.8). A bank under a real keystream that decrypts to 0 is the
+   * 2016 Compact PRO's cipher, which shares this handler: the channel answers
+   * cannot tell the two apart, and this profile would fail every such slot's
+   * acceptance check. Skipping this let the probe's refusal outscore
+   * `compact-2016` on a camera whose slots it had just read. */
+  const slots = evidence.observedSlots ?? [];
+  const keyedZero = slots.some((s) => s.chain === 'cipher' && s.acceptanceSum >>> 0 === 0);
+  const keyedOwn = slots.some(
+    (s) => s.chain === 'cipher' && s.acceptanceSum >>> 0 === LEGACY_CIPHER.acceptanceSum,
+  );
+  const plainZero = slots.some((s) => s.chain === 'plain' && s.acceptanceSum >>> 0 === 0);
+  if (keyedZero && !keyedOwn && !plainZero) {
+    reasons.push(
+      `a slot stored under a real xorshift128 keystream decrypts to ${hexUp(0)} — the 2016 ` +
+        "Compact PRO's cipher (compact-2016). This line stores its banks plain with a word sum " +
+        `of 0 (the 2014 chain) or keyed to ${hexUp(LEGACY_CIPHER.acceptanceSum)} (Compact ` +
+        '1.3.0.8), and its acceptance check fails such a slot',
+    );
+    return { score: 0, reasons };
+  }
+  const chainReasons: string[] = plainZero
+    ? [
+        'a slot is stored plain with a word sum of 0 — the 2014 plaintext chain, which this ' +
+          "line's 2014 bootloader boots",
+      ]
+    : [];
+
   /* THE OBSERVATION THIS PROFILE'S OWN COMMENTS SAID NOBODY MADE.
    * `probeSelectorChannel` sends a plain 2-byte arm at a bank this firmware
    * locks, precisely so the refusal can be seen. A refusal is this generation
@@ -670,9 +727,9 @@ function detectLegacy(evidence: DeviceEvidence): DetectionVerdict {
         'and the same bank armed on the 18-byte authenticated channel, so the token in this ' +
           'profile is the one this build compares against',
       );
-      return { score: SCORE_PROVEN, reasons };
+      return { score: SCORE_PROVEN, reasons: [...reasons, ...chainReasons] };
     }
-    return { score: SCORE_DECISIVE, reasons };
+    return { score: SCORE_DECISIVE, reasons: [...reasons, ...chainReasons] };
   }
 
   /* A protected bank that opened on the plain 2-byte channel proves the
@@ -713,6 +770,12 @@ function detectLegacy(evidence: DeviceEvidence): DetectionVerdict {
         'numbering line from the post-2018 application versions, not an older 4.x',
     );
     score = authWorks ? SCORE_CORROBORATED : Math.max(score, SCORE_STRONG);
+  }
+  /* The 2014 chain, measured on the slots: decisive offline too, where no
+   * channel was asked. A version on the line corroborates it. */
+  if (plainZero) {
+    reasons.push(...chainReasons);
+    score = Math.max(score, version !== null ? SCORE_PLAIN_CHAIN_VERSION : SCORE_PLAIN_CHAIN);
   }
   if (score === 0) reasons.push('nothing observed points at the authenticated read channel');
   return { score, reasons };

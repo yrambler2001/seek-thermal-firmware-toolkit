@@ -612,6 +612,30 @@ export function evidenceFromChannelProbe(probe: SelectorChannelProbe): DeviceEvi
   };
 }
 
+/**
+ * The channel answers an earlier detection scored, and nothing else: what a
+ * later read keeps rather than measures again. The device-info read arms each
+ * bank on the channel its acting profile names and never tries the other, so
+ * the probe's plain arm of a protected bank, refused, is an observation only
+ * the probe makes. Slot sums and versions are left out on purpose: a read
+ * measures those itself, and stale ones would double-count.
+ */
+export function channelEvidenceOf(evidence: DeviceEvidence | undefined): DeviceEvidence {
+  if (evidence === undefined) return {};
+  return {
+    ...(evidence.plainSelectorRefused === undefined
+      ? {}
+      : { plainSelectorRefused: evidence.plainSelectorRefused }),
+    ...(evidence.plainSelectorWorks === undefined
+      ? {}
+      : { plainSelectorWorks: evidence.plainSelectorWorks }),
+    ...(evidence.authSelectorWorks === undefined
+      ? {}
+      : { authSelectorWorks: evidence.authSelectorWorks }),
+    ...(evidence.windowReadable === undefined ? {} : { windowReadable: evidence.windowReadable }),
+  };
+}
+
 /** What asking an attached camera settled, for a caller that has not named a profile. */
 export interface CameraIdentification {
   /** The four questions and their answers (`probeSelectorChannel`). */

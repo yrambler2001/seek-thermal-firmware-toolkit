@@ -209,6 +209,16 @@ describe('the 2014 plaintext chain on the normal flash path', () => {
     /* the upgrade target: the camera's own active-slot word, not a replay */
     expect(state.boot).toEqual({ booted: 'a', target: 'b' });
     expect(state.updateTargetSubcmd).toBe(0);
+
+    /* and the family: a bank stored plain is the 2014 chain, so its zero sum
+     * no longer reads as the 2016 cipher (compact-2016 used to win here at
+     * 0.90, ambiguously, on the sum alone) */
+    expect(state.evidence.observedSlots?.map((s) => s.chain)).toEqual(['plain', 'plain']);
+    expect(state.detection.best.profile.id).toBe('legacy-auth');
+    expect(state.detection.ambiguous).toBe(false);
+    expect(state.detection.ranked.find((m) => m.profile.id === 'compact-2016')?.score).toBe(0);
+    /* the banks the chain boots say so in the slot table too */
+    expect(state.slots.map((s) => s.bootability)).toEqual(['bootable', 'not-bootable', 'bootable']);
   }, 60_000);
 
   it('renders the chain’s own per-slot verdict, never the cipher clauses', async () => {

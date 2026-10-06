@@ -16,9 +16,14 @@ import {
   HEADER_OFFSET,
   IMAGE_MAGIC,
   KNOWN_ZERO_IDX,
+  OLD_FW_UNLOCK_TOKEN,
   buildBankPayload,
+  compact2016,
+  cryptBytes,
+  legacySelectorRows,
   modern4x,
   setAcceptSum,
+  stateFromKey,
   utf8,
   viewOf,
   type UsbBackend,
@@ -189,6 +194,44 @@ export function cameraWithFlash(
     offset: slotAddress('b') - FLASH_BASE,
   });
   return fakeCamera({ fwInfo: new Map([[0, runningBuildBlock()]]), ...options, flash, windows });
+}
+
+/** GetFirmwareInfo's build-block shape: four version bytes, then the date string. */
+function infoBlock(version: readonly number[], date: string): Uint8Array {
+  const block = new Uint8Array(36);
+  block.set(version, 0);
+  block.set(utf8(date), 4);
+  return block;
+}
+
+/**
+ * A camera shaped like the bench part on Compact PRO 1.0.3.0 (2026-10-06):
+ * that build's own window table, the bootloader block refused on every
+ * channel, the protected banks behind the token, and its three banks holding
+ * one 2016 cipher-chain image — keyed xorshift128 under K=0, decrypting to a
+ * word sum of 0, with no "CODE" footer. Bootloader 1.2.0.0 on selector 1.
+ */
+export function compactPro1030Camera(): ReturnType<typeof fakeCamera> {
+  const image = buildPlainImage();
+  viewOf(image).setUint32(HEADER_OFFSET + 12, 0x0003_0001, true); /* version 1.0.3.0 */
+  viewOf(image).setUint32(ADJUST_OFFSET, 0, true);
+  const plain = setAcceptSum(image, compact2016.cipher).image;
+  const cipher = cryptBytes(plain, stateFromKey(KEY_A, 0), compact2016.cipher);
+  const flash = new Uint8Array(FLASH_SIZE).fill(0xff);
+  for (const offset of [0x50000, 0x60000, 0x70000]) flash.set(cipher, offset);
+  const rows = (legacySelectorRows('1.0.3.0') ?? []).filter(
+    (row) => row.address !== null && row.channel !== 'refused',
+  );
+  return fakeCamera({
+    flash,
+    windows: rows.map((row) => ({ subcmd: row.subcmd, offset: (row.address ?? 0) - FLASH_BASE })),
+    authBanks: rows.filter((row) => row.channel === 'auth').map((row) => row.subcmd),
+    authToken: OLD_FW_UNLOCK_TOKEN,
+    fwInfo: new Map([
+      [0, infoBlock([1, 0, 3, 0], 'Jul  6 2016')],
+      [1, infoBlock([1, 2, 0, 0], 'Jun 26 2016')],
+    ]),
+  });
 }
 
 /** A `UsbBackend` that hands out exactly the transports it was given. */

@@ -35,6 +35,16 @@ export const CHECK_ZERO_IDX = 13;
  */
 export const CANDIDATE_K: readonly number[] = [0x00000000, 0x13579bdf];
 
+/**
+ * Which chain a slot is stored on, from the state its own ciphertext solved to:
+ * 'plain' for the identity state (an all-zero keystream, so the stored words
+ * ARE the image: the 2014 chain), 'cipher' for a real key's. The solve reads
+ * the slot's reserved vectors, so an all-zero state means nothing was XORed in.
+ */
+export function slotChainOf(state: Xorshift128State): 'plain' | 'cipher' {
+  return state.every((word) => word === 0) ? 'plain' : 'cipher';
+}
+
 /** Keystream words at the requested positions for a chosen initial state. */
 function outsAtState(state: Xorshift128State, positions: readonly number[]): number[] {
   const s = cloneState(state);

@@ -39,7 +39,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { hexToBytes, sha256hex } from '../../src/bytes.js';
-import { silentReporter, type Reporter } from '../../src/events.js';
+import { collectingReporter, silentReporter, type Reporter } from '../../src/events.js';
 import { CancelledError, SeekError } from '../../src/errors.js';
 import { FLASH_SIZE } from '../../src/profiles/modern-4x.js';
 import { SeekDevice } from '../../src/protocol/client.js';
@@ -62,6 +62,8 @@ import {
   doubleReadWindows,
   openProbedSession,
   parseBootConfig,
+  resetDevice,
+  RESET_OP,
   planWindowAt,
   recordStepFailure,
   rotatedDrainBase,
@@ -457,7 +459,7 @@ describe('runPreserveStep(backup) — the double read and the derived-image gate
       expect(message).toMatch(/preserve --resume/);
       expect(message).toMatch(/served garbage on three boots/);
       expect(message).toMatch(/no image header parses at 0x200/);
-      expect(message).not.toMatch(/do not yield the factory plaintext/);
+      expect(message).not.toMatch(/no candidate derivation of the factory plaintext/);
     },
   );
 
@@ -502,7 +504,7 @@ describe('runPreserveStep(backup) — the double read and the derived-image gate
         (e: unknown) => e,
       );
       expect(error).toBeInstanceOf(SeekError);
-      expect((error as Error).message).toMatch(/do not yield the factory plaintext/);
+      expect((error as Error).message).toMatch(/no candidate derivation of the factory plaintext/);
       expect((error as Error).message).toMatch(/does not carry the v1 2014 update machinery/);
       expect((error as Error).message).toMatch(/failed its build gates/);
     },
@@ -838,7 +840,7 @@ describe('the spent-reader refusals and the two-arm double read', () => {
       expect(message).toMatch(/boot-config block \(0x14010000\) and bank A \(0x14050000\)/);
       expect(message).toMatch(/both served entirely unprogrammed 0xFF fill/);
       /* The generic puzzle text stays out of this shape. */
-      expect(message).not.toMatch(/do not yield the factory plaintext/);
+      expect(message).not.toMatch(/no candidate derivation of the factory plaintext/);
     },
   );
 
@@ -907,7 +909,7 @@ describe('the spent-reader refusals and the two-arm double read', () => {
       expect(message).toMatch(/0x10018000/);
       expect(message).toMatch(/stale reader descriptor/);
       expect(message).toMatch(/initial SP/);
-      expect(message).not.toMatch(/do not yield the factory plaintext/);
+      expect(message).not.toMatch(/no candidate derivation of the factory plaintext/);
     },
   );
 
@@ -1053,6 +1055,70 @@ describe('the segment probe — reader-boot classification and admission', () =>
     expect((error as Error).message).toMatch(/reader probe failed on 4 consecutive boots/);
     expect((error as Error).message).toMatch(/power-cycle the camera/);
     expect(opener2.count).toBe(4);
+  });
+});
+
+/* ==================================================================== *
+ * A reboot the host refused is said, not taken for a reboot
+ *
+ * On the camera's e2e guard a reset outside an allowed window is refused
+ * before it leaves the page (a WebUSB SecurityError). `resetDevice` used to
+ * report that as 'dropped', the usual answer to a reset that WORKED, so the
+ * step logged "sent — no reply" and carried on as if the camera had rebooted.
+ * ==================================================================== */
+
+describe('a reset the host refused', () => {
+  const plain = syntheticPlain();
+  const refusal = (): SeekError =>
+    new SeekError('usb/transfer-failed', 'ResetDevice failed: refused', {
+      cause: new DOMException(
+        'e2e write guard: ResetDevice outside Preserve step 02',
+        'SecurityError',
+      ),
+    });
+
+  /** A device whose reset the host refuses; everything else is the camera's. */
+  class RefusedResetDevice extends CfgServeDevice {
+    override async rpcOut(op: number, payload: Uint8Array, timeoutMs?: number): Promise<void> {
+      if (op === RESET_OP) throw refusal();
+      return super.rpcOut(op, payload, timeoutMs);
+    }
+  }
+
+  it("is 'refused', and a reset the wire dropped is still 'dropped'", async () => {
+    const camera = v1Camera(plain);
+    await camera.open();
+    expect(await resetDevice(new RefusedResetDevice(camera, [null]))).toBe('refused');
+    class DroppedResetDevice extends CfgServeDevice {
+      override async rpcOut(op: number, payload: Uint8Array, timeoutMs?: number): Promise<void> {
+        if (op === RESET_OP) throw new SeekError('usb/transfer-failed', 'the device went away');
+        return super.rpcOut(op, payload, timeoutMs);
+      }
+    }
+    expect(await resetDevice(new DroppedResetDevice(camera, [null]))).toBe('dropped');
+  });
+
+  it('the reader probe says the camera was not rebooted', async () => {
+    const camera = v1Camera(plain);
+    const reporter = collectingReporter();
+    const blank = new Uint8Array(BOOT_CONFIG_BYTES).fill(0xff);
+    const opener: SessionOpener = {
+      open: async (): Promise<SeekDevice> => {
+        await camera.open();
+        return new RefusedResetDevice(camera, [blank]);
+      },
+      close: async (): Promise<void> => {
+        await camera.close();
+      },
+    };
+    const { device } = await openProbedSession(opener, reporter, undefined, 'test');
+    await opener.close(device);
+    const warnings = reporter.events
+      .filter((e) => e.type === 'log' && e.level === 'warn')
+      .map((e) => (e.type === 'log' ? e.message : ''));
+    expect(
+      warnings.some((line) => /REFUSED by the host .* the camera was not rebooted/.test(line)),
+    ).toBe(true);
   });
 });
 

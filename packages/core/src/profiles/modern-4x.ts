@@ -249,6 +249,7 @@ export const MODERN_SLOTS: readonly SlotDescriptor[] = [
  */
 export const MODERN_BOOT: BootPolicy = {
   updateTargetSubcmd: SUBCMD_UPDATE_TARGET,
+  checksFooter: true,
 
   describeCfg0(cfg0: number): string {
     if (cfg0 === 0 || cfg0 === 0xffffffff) return 'blank/0: prefer slot A, then B, then recovery';

@@ -35,6 +35,7 @@ export {
 
 export { describeDevice, runDump } from './dump.js';
 export {
+  channelEvidenceOf,
   evidenceFromChannelProbe,
   identifyCamera,
   identityGate,
@@ -70,5 +71,11 @@ export {
   evidenceFromDump,
   type DecryptOptions,
 } from './decrypt.js';
-export { assertFlashable, bootedSlot, readDeviceInfo, targetSlot } from './device-info.js';
+export {
+  assertFlashable,
+  bootedSlot,
+  profileToRereadUnder,
+  readDeviceInfo,
+  targetSlot,
+} from './device-info.js';
 export { flashInvalidatesAnalysis, prepareImage, writeFirmware } from './flash.js';

@@ -23,6 +23,7 @@ import {
   hexUp,
   isoStamp,
   prepareImage,
+  profileToRereadUnder,
   readDeviceInfo,
   runDump,
   sha256hex,
@@ -221,13 +222,32 @@ export function useFlashPanel(params: FlashPanelParams): FlashPanelApi {
           reporter: infoReporter.reporter,
           signal,
         };
-        const state = await readDeviceInfo(ctx, {
+        const infoOptions = {
           chunk: options.chunk,
           gapFill: options.gapFill,
           retries: options.retries,
           retryDelayMs: options.retryDelayMs,
           decrypt: options.decrypt,
-        });
+        };
+        let state = await readDeviceInfo(ctx, infoOptions);
+        /* JUDGED UNDER WHAT THE CAMERA IS, as the CLI's `info` does. The read
+         * acted under the probe's pick, chosen before any slot was read; on a
+         * 2016 Compact PRO that is legacy-auth by design, whose 0xFFFF target
+         * fails every slot. When the slots confidently name a family with a
+         * different cipher, the read is redone under it, said in the log. A
+         * hand-picked family is never second-guessed. */
+        const better = profileToRereadUnder(state, chosen.forced);
+        if (better !== null) {
+          infoReporter.reporter.log(
+            `the slots identify this camera as ${better.name} (${better.id}), whose cipher ` +
+              'differs from the one this read used — reading again under it',
+            'warn',
+          );
+          state = await readDeviceInfo(
+            { ...ctx, profile: better, detection: state.detection },
+            infoOptions,
+          );
+        }
         stateRef.current = state;
         setDeviceState(state);
         const readable = state.slots.filter((slot) => slot.present).length;
