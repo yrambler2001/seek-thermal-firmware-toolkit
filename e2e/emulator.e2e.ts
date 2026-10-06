@@ -42,14 +42,15 @@ import {
 } from './lib/browser.js';
 import { describeWire, entry, names, runState, sha256, wireSince } from './lib/checks.js';
 import { EmulatorBus } from './lib/emulator-bus.js';
+import { BENCH_PART_1300, knownPartByFlash } from './lib/preserve-expectations.js';
 import { EVERYTHING, PHASE_FOLDER, Wizard, type PhaseRun } from './lib/wizard.js';
 
 const CORPUS_ENTRY = '101310HSNEA2/dump';
 const JEDEC = '010215';
 /** The bench camera's part as it booted (the J-Link dump, TESTING.md sec. 34). */
-const AS_BOOTED_1300_SHA = '40447c7e6da5cbc84621f4694ffff5bda0f783e7807a45e80443383b19a8eb72';
+const AS_BOOTED_1300_SHA = BENCH_PART_1300.asBooted;
 /** The same part with the five-site patch committed (TESTING.md sec. 36.2). */
-const POST_COMMIT_1300_SHA = 'b22e9e20a9928241348c089f4e046c62f8a3f73db0ecb29dd2ce17eaa1cb6dcd';
+const POST_COMMIT_1300_SHA = BENCH_PART_1300.postCommit;
 const FLASH_BYTES = 4 * 1024 * 1024;
 
 /**
@@ -61,9 +62,14 @@ const FLASH_BYTES = 4 * 1024 * 1024;
  * part's dump image is gap-filled where no selector reaches, so it is not the
  * part's sha), the version `SEEK_E2E_EMU_VERSION` (TESTING.md sec. 38: the
  * bench camera's Compact PRO 1.0.3.0 flash: 1.0.3.0, raw 759280a2…, dump
- * image 0cb0e544…).
+ * image 0cb0e544…). For a part the expectation table knows by its flash
+ * (`KNOWN_PARTS`, lib/preserve-expectations.ts) the two shas default to the
+ * table's.
  */
 const PART_FILE = process.env.SEEK_E2E_EMU_FLASH ?? '';
+const PART_SHA =
+  PART_FILE !== '' && existsSync(PART_FILE) ? sha256(new Uint8Array(readFileSync(PART_FILE))) : '';
+const KNOWN = knownPartByFlash(PART_SHA);
 const PART: {
   readonly flash: string | null;
   readonly asBooted: string;
@@ -84,9 +90,9 @@ const PART: {
       }
     : {
         flash: PART_FILE,
-        asBooted: existsSync(PART_FILE) ? sha256(new Uint8Array(readFileSync(PART_FILE))) : '',
-        postCommit: process.env.SEEK_E2E_EMU_POST_COMMIT_SHA ?? null,
-        dumpImage: process.env.SEEK_E2E_EMU_DUMP_SHA ?? null,
+        asBooted: PART_SHA,
+        postCommit: process.env.SEEK_E2E_EMU_POST_COMMIT_SHA ?? KNOWN?.postCommit ?? null,
+        dumpImage: process.env.SEEK_E2E_EMU_DUMP_SHA ?? KNOWN?.dumpImage ?? null,
         version: process.env.SEEK_E2E_EMU_VERSION ?? '',
         product: /Thermal Camera/,
       };

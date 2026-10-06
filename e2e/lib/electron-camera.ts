@@ -81,13 +81,17 @@ export async function guardOf(page: Page): Promise<WriteGuardControl> {
   }, WRITE_GUARD_GLOBAL);
 }
 
-/** Sets the guard's test-controlled fields (never its whitelist). */
+/** Sets the guard's test-controlled fields (never its whitelist: the write
+ *  budgets open nothing on a guard installed without `writeOps`). */
 export async function setGuard(
   page: Page,
   patch: {
     readonly allowReset?: boolean;
     readonly resetBudget?: number | null;
     readonly fault?: InjectedStall | null;
+    readonly stageBudget?: number;
+    readonly commitBudget?: number;
+    readonly commitSum16?: number | null;
   },
 ): Promise<void> {
   await page.evaluate(

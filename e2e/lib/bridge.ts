@@ -239,13 +239,30 @@ const UNABLE_TO_CLAIM =
  * event: the page kept retrying a dead handle for ten minutes instead of
  * asking for the camera. The CLI adapter now answers the last value it read
  * (`fromNodeUsb`, point 6); this keeps any other host stack from doing the same.
+ *
+ * AND IT IS A TRANSFER. That name read is a GET_DESCRIPTOR on the camera's
+ * control pipe, made synchronously on the Node thread. The bridge used to read
+ * the value after every call, some 33,000 times per step 02, between the app's
+ * own requests; on the third camera-bridge run of 2026-10-06 one of them never
+ * returned (node-usb blocked in a dispatch semaphore wait), the whole worker
+ * froze in step 02, and no timeout could fire. Chrome reads a device's
+ * configuration when it opens it or selects one and keeps it, so the bridge
+ * does the same: the value is read when the device is first described, on
+ * `open` and on `selectConfiguration` (`fresh`), and served from here
+ * otherwise.
  */
-function configurationValueOf(device: BusDevice): number | null {
+const configurationValues = new WeakMap<BusDevice, number | null>();
+
+function configurationValueOf(device: BusDevice, fresh = false): number | null {
+  if (!fresh && configurationValues.has(device)) return configurationValues.get(device) ?? null;
+  let value: number | null;
   try {
-    return device.device.configuration?.configurationValue ?? null;
+    value = device.device.configuration?.configurationValue ?? null;
   } catch {
-    return null;
+    value = null;
   }
+  configurationValues.set(device, value);
+  return value;
 }
 
 function infoOf(device: BusDevice): DeviceInfo {
@@ -640,8 +657,11 @@ export class UsbBridge implements DevicePrompter {
       value,
       state: {
         opened: device.opened && mine(),
-        /* Read after the transfer, when a reset may have taken the device off the bus. */
-        configurationValue: configurationValueOf(entry),
+        /* Read again only where Chrome reads it; a transfer leaves it as it was. */
+        configurationValue: configurationValueOf(
+          entry,
+          request.method === 'open' || request.method === 'selectConfiguration',
+        ),
       },
     };
   }

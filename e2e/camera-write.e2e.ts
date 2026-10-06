@@ -1,38 +1,95 @@
 /* ==================================================================== *
  * The supervised write flow — `npm run e2e:write`.
  *
- * Preserve 02 -> 03 -> 04. On the emulator (default) it is a normal write run.
- * On the camera it is gated by `approveWrite` (lib/supervised-write.ts): an
- * explicit env switch, a non-CI interactive TTY, and a typed-back confirmation
- * of the camera's own version and image sha. Under automation (vitest, no TTY)
- * the gate refuses, so NOTHING is ever written to the camera here.
+ * Preserve 02 -> 03 -> 04, every step held to the camera's own row of the
+ * expectation table (`lib/preserve-expectations.ts`): the row the camera's
+ * version, build and edit select, never one the operator picks.
  *
- * Proven this round:
- *   - the gate's decision on each target (emulator waves through; camera
- *     without the env refuses; camera with SEEK_E2E_WRITE=dry-run reaches the
- *     write boundary after step 02 and stops);
- *   - the write RPC sequence, on the emulator, via the full 02/03/04 run when
- *     SEEK_E2E_WRITE_FULL=1 (and always by `emulator.e2e.ts`).
+ *   1. Connect, and Dump & decrypt: the image this run holds the camera to,
+ *      and the version it answered on the wire.
+ *   2. Step 02 (read-only): the plan must be the row's EXACTLY — the build,
+ *      the edit and its balance, the sites, the rebalance word, the chunks,
+ *      the bank, the bytes that move, no reboot — and the backup must equal
+ *      the dump in every block both read. Anything else stops the run here.
+ *   3. The gate (`approveWrite`, lib/supervised-write.ts). On the emulator it
+ *      waves through. On the camera it needs `SEEK_E2E_WRITE=i-understand`, a
+ *      terminal, no CI, and the person typing back `<version>:<image sha8>`;
+ *      `SEEK_E2E_WRITE=dry-run` stops here, nothing written. Under automation
+ *      (no terminal) it refuses, so NOTHING is ever written to the camera.
+ *   4. Steps 03 and 04 in a new window: the app reopened with the write
+ *      guards (`PRESERVE_WRITE`, and on the camera the page guard of
+ *      `writeGuardScript({ lifted: true })`, each phase opened with its row's
+ *      exact budget: the chunks, one commit with the plan's checksum, the
+ *      resets), connected, the step 02 run file loaded, then the commit, the
+ *      drain, the restore and the verify, each checked against the row. The
+ *      emulator runs the same sequence (`SEEK_E2E_WRITE_FULL=1`), so the path a
+ *      person takes on the camera is the one proven there.
  *
- * The camera's actual 03/04 execution (with the guard lifted) is wired but
- * reachable only by a human answering the confirmation at a terminal; it is
- * never run in this batch.
+ * Step 03's checks are soft: once the commit has landed, step 04 must still
+ * run to put the original bank back, whatever the dump looked like.
  * ==================================================================== */
 
-import { mkdirSync, rmSync } from 'node:fs';
+import { mkdirSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
+import type { Page } from 'puppeteer-core';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { say } from './lib/browser.js';
-import { NEVER_ON_THE_WIRE, writeGuardScript } from './lib/camera-flow.js';
-import { describeWire, runState } from './lib/checks.js';
+import {
+  NEVER_ON_THE_WIRE,
+  checkCameraName,
+  checkCameraVersion,
+  checkDumpArchive,
+  checkStep02RunFile,
+  checkStep03Offered,
+  writeGuardScript,
+} from './lib/camera-flow.js';
+import {
+  describeWire,
+  entry,
+  runState,
+  sha256,
+  wireSince,
+  type RunStateView,
+} from './lib/checks.js';
+import { guardOf, setGuard } from './lib/electron-camera.js';
+import {
+  BENCH_PART_1300,
+  describeKey,
+  hexWord,
+  knownPartByDump,
+  preserveRowFor,
+  type KnownPart,
+  type PreserveRow,
+} from './lib/preserve-expectations.js';
 import { approveWrite, type WriteApproval } from './lib/supervised-write.js';
-import { openTarget, targetUnavailable, wantedTarget } from './lib/target.js';
-import { refusalsOf, wireOf } from './lib/target-tools.js';
-import type { TargetHandle } from './lib/target.js';
-import { EVERYTHING } from './lib/wizard.js';
+import {
+  EMU_FLASH,
+  emuFlashAsBooted,
+  openTarget,
+  targetUnavailable,
+  wantedTarget,
+  type TargetHandle,
+} from './lib/target.js';
+import {
+  bridgeOf,
+  expectedImageSha,
+  guardInstalled,
+  refusalsOf,
+  runStep02,
+  wireOf,
+} from './lib/target-tools.js';
+import {
+  PHASE_FOLDER,
+  PRESERVE_WRITE,
+  Wizard,
+  phaseSection,
+  type DumpRun,
+  type PhaseId,
+  type PhaseRun,
+} from './lib/wizard.js';
 
 const FULL = process.env.SEEK_E2E_WRITE_FULL === '1';
 const KEEP = process.env.SEEK_E2E_KEEP === '1';
@@ -40,102 +97,570 @@ const HEADED = process.env.SEEK_E2E_HEADED === '1';
 const SCRATCH =
   process.env.SEEK_E2E_SCRATCH ?? path.join(tmpdir(), `seek-e2e-write-${String(process.pid)}`);
 
+const FLASH_BYTES = 4 * 1024 * 1024;
+const FLASH_BASE = 0x14000000;
+/** The 31 windows step 02 backs up and step 04 verifies: 0x14010000..0x141FFFFF. */
+const WINDOWS = { from: 0x10000, to: 0x200000 } as const;
+/** Resets a write phase may send beyond its row's, before the page guard
+ *  refuses: the app's own retries (a page-shifted drain, a probe reboot) go
+ *  out and are reported by the exact count after the phase; a loop does not. */
+const RESET_SLACK = 2;
+
 const target = wantedTarget('emu');
 const reason = targetUnavailable(target);
 const title = `supervised write flow [${target}]`;
 if (reason !== null) process.stderr.write(`\n[skip] ${title}: ${reason}\n`);
 
+/** The flash image inside a Dump & decrypt archive. */
+function dumpImageOf(dump: DumpRun): Uint8Array {
+  return (
+    dump.entries.find((e) => /^[^/]+\/flash_4m_usb[^/]*\.bin$/.test(e.name))?.data ??
+    new Uint8Array(0)
+  );
+}
+
+/** The firmware version the app recorded in a dump's manifest. */
+function manifestVersion(dump: DumpRun): string | null {
+  const manifest = dump.entries.find((e) => /^[^/]+\/manifest\.json$/.test(e.name));
+  if (manifest === undefined) return null;
+  const parsed = JSON.parse(new TextDecoder().decode(manifest.data)) as {
+    readonly selectorTable?: { readonly firmwareVersion?: string | null };
+  };
+  return parsed.selectorTable?.firmwareVersion ?? null;
+}
+
+/** Every offset where `a` and `b` differ. */
+function diffOffsets(a: Uint8Array, b: Uint8Array): number[] {
+  const out: number[] = [];
+  for (let i = 0; i < Math.max(a.length, b.length); i++) if (a[i] !== b[i]) out.push(i);
+  return out;
+}
+
+/** Whether two images agree over the 31 windows. */
+function sameWindows(a: Uint8Array, b: Uint8Array): boolean {
+  return (
+    diffOffsets(a.subarray(WINDOWS.from, WINDOWS.to), b.subarray(WINDOWS.from, WINDOWS.to))
+      .length === 0
+  );
+}
+
+const hexList = (offsets: readonly number[]): string =>
+  offsets.map((o) => `0x${o.toString(16).toUpperCase()}`).join(', ');
+
+/** A phase panel's log, line by line, as the page shows it. */
+function phaseLog(page: Page, phase: PhaseId): Promise<string[]> {
+  return page.evaluate(
+    (id: string) =>
+      [...(document.getElementById(`${id}-log`)?.children ?? [])].map((line) => line.textContent),
+    `preserve-phase-${phase}`,
+  );
+}
+
+/** One wire count in a wire delta, 0 when absent. */
+const count = (wire: ReadonlyMap<string, number>, key: string): number => wire.get(key) ?? 0;
+
+/**
+ * Runs one write phase with its budget open. On the camera the page guard
+ * lets out exactly the row's chunks, one commit with the plan's checksum, and
+ * the row's resets (plus `RESET_SLACK`), and nothing once the phase is over.
+ * The emulator's bridge needs nothing opened.
+ */
+async function inWritePhase<T>(
+  t: TargetHandle,
+  row: PreserveRow,
+  phase: 'patch-dump' | 'restore-verify',
+  body: () => Promise<T>,
+): Promise<T> {
+  if (t.name !== 'camera') return body();
+  await setGuard(t.page, {
+    allowReset: true,
+    resetBudget: row.phases[phase].resets + RESET_SLACK,
+    stageBudget: row.chunkCount,
+    commitBudget: 1,
+    commitSum16: phase === 'patch-dump' ? row.sum16.commit : row.sum16.restore,
+  });
+  try {
+    return await body();
+  } finally {
+    await setGuard(t.page, {
+      allowReset: false,
+      resetBudget: null,
+      stageBudget: 0,
+      commitBudget: 0,
+      commitSum16: null,
+    }).catch(() => undefined);
+  }
+}
+
+/** Every "Your turn" ask the phase raised was the reconnect pick, never a replug. */
+function checkAsks(run: PhaseRun, row: PreserveRow, soft: boolean): void {
+  const check = soft ? expect.soft : expect;
+  check(run.asks, `${run.phase}: "Your turn" picks`).toBe(row.phases[run.phase].picks);
+  for (const ask of run.askViews) {
+    check(ask.text, 'the reconnect pick, not a replug').toContain(
+      'press Connect device and pick the camera',
+    );
+    check(ask.tone, 'the calm blue box').toBe('info');
+    check(ask.redAlerts, 'no red alert beside it').toEqual([]);
+  }
+}
+
+/** A write phase's wire: the row's chunks, one commit, the row's resets. */
+function checkWriteWire(
+  wire: ReadonlyMap<string, number>,
+  row: PreserveRow,
+  phase: 'patch-dump' | 'restore-verify',
+  soft: boolean,
+): void {
+  const check = soft ? expect.soft : expect;
+  say(`${phase} wire: ${describeWire(wire)}`);
+  check(count(wire, 'out 0x50'), 'SetFeaturedFirmwareData chunks').toBe(row.chunkCount);
+  check(count(wire, 'out 0x51'), 'CompleteMemoryUpgrade').toBe(1);
+  check(count(wire, 'out 0x59'), 'resets').toBe(row.phases[phase].resets);
+  check(count(wire, 'out 0x55') + count(wire, 'out 0x5a'), 'the RAM selectors').toBe(0);
+}
+
+/** The commit's lines in a phase log: its checksum, and its chunks with status 0. */
+function checkCommitLog(
+  lines: readonly string[],
+  label: string,
+  row: PreserveRow,
+  sum16: number,
+  soft: boolean,
+): void {
+  const check = soft ? expect.soft : expect;
+  const text = lines.join('\n');
+  check(text, `${label}: the checksum`).toContain(
+    `${label}: committing, sum16 ${hexWord(sum16, 4)}`,
+  );
+  check(text, `${label}: the chunks and the status`).toMatch(
+    new RegExp(`${label}: ${String(row.chunkCount)} chunks staged, \\d+ ms, commit status 0x0+\\b`),
+  );
+}
+
 describe.skipIf(reason !== null)(title, () => {
-  let handle: TargetHandle | null = null;
-  const need = (): TargetHandle => {
-    if (handle === null) throw new Error('the target is not open');
-    return handle;
+  /** Steps 01-02 and the gate: the target's own read-only guards. */
+  let read: TargetHandle | null = null;
+  /** Steps 03-04: the target reopened with the write guards, after the gate. */
+  let write: TargetHandle | null = null;
+
+  let image: { readonly sha: string; readonly bytes: Uint8Array } | null = null;
+  let version = '';
+  let product = '';
+  let step02: PhaseRun | null = null;
+  let plan: {
+    readonly row: PreserveRow;
+    readonly part: KnownPart | null;
+    readonly state: RunStateView;
+    readonly backup: Uint8Array;
+  } | null = null;
+  let approval: WriteApproval | null = null;
+  let step03: PhaseRun | null = null;
+  let step04: PhaseRun | null = null;
+
+  const need = <T>(value: T | null, what: string): T => {
+    if (value === null) throw new Error(`${what} is not there (an earlier step failed)`);
+    return value;
   };
 
   beforeAll(async () => {
     mkdirSync(SCRATCH, { recursive: true });
-    /* The target's own UI guard: everything on the emulator, read-only on the
-     * camera. Only the confirmed camera write below reopens with EVERYTHING. */
-    handle = await openTarget(target, { scratchDir: SCRATCH, headed: HEADED });
+    say(`scratch: ${SCRATCH}`);
+    read = await openTarget(target, { scratchDir: SCRATCH, headed: HEADED });
   });
 
   afterAll(async () => {
-    await handle?.close().catch(() => undefined);
-    handle = null;
-    if (!KEEP) rmSync(SCRATCH, { recursive: true, force: true });
+    await read?.close().catch(() => undefined);
+    read = null;
+    await write?.close().catch(() => undefined);
+    write = null;
+    /* A camera write's run files are the camera's flash: never deleted. */
+    const keep = KEEP || (target === 'camera' && approval?.approved === true);
+    if (keep) {
+      say(`kept: ${SCRATCH}`);
+      for (const run of [step02, step03, step04]) {
+        if (run !== null) say(`  ${run.phase}: ${run.runFile.path}`);
+      }
+    } else {
+      rmSync(SCRATCH, { recursive: true, force: true });
+    }
   });
 
-  it(
-    'runs step 02, passes the write gate as the target allows, then writes only when safe',
-    { timeout: 70 * 60_000 },
-    async () => {
-      const t = need();
-      await t.wizard.connect();
-      const step02 = await t.wizard.runPhase('read-build', {
-        confirm: false,
-        timeoutMs: 30 * 60_000,
-      });
-      const state = runState(step02.entries);
-      expect(state.nextStep).toBe('commit');
+  it('connects, and Dump & decrypt reads the camera without a write or a reset', async () => {
+    const t = need(read, 'the target');
+    const name = await t.wizard.connect();
+    product = t.name === 'camera' ? checkCameraName(name) : name;
+    expect(await guardInstalled(t), 'the write guard is in place').toBe(true);
 
-      const approval: WriteApproval = await approveWrite(t.name, () =>
-        Promise.resolve({
-          token: `${state.expectedVersion ?? '?'}:${String(state.patch?.sites.length ?? 0)}sites`,
-          describe:
-            `camera firmware ${state.expectedVersion ?? '?'}, run ${state.runId}, ` +
-            `about to COMMIT a patch to the active bank and later restore it`,
-        }),
+    const before = await wireOf(t);
+    const dump = await t.wizard.dumpAndDecrypt(30 * 60_000);
+    const wire = wireSince(before, await wireOf(t));
+    say(`dump wire: ${describeWire(wire)}`);
+    for (const op of [...NEVER_ON_THE_WIRE, 'out 0x59']) expect(wire.has(op), op).toBe(false);
+    checkDumpArchive(dump, expectedImageSha(t));
+    const bytes = dumpImageOf(dump);
+    image = { sha: sha256(bytes), bytes };
+    version =
+      t.name === 'camera'
+        ? checkCameraVersion((await guardOf(t.page)).version, dump)
+        : (manifestVersion(dump) ?? '');
+    expect(version, 'the version the camera reported').toMatch(/^\d+\.\d+\.\d+\.\d+$/);
+    const part = knownPartByDump(image.sha);
+    say(
+      `${product}: firmware ${version}, image ${image.sha} — ` +
+        (part === null
+          ? 'not a known part (its whole-part shas are reported, not pinned)'
+          : part.name),
+    );
+  });
+
+  it("step 02 builds the plan its firmware's row names, exactly, with no reboot", async () => {
+    const t = need(read, 'the target');
+    const theImage = need(image, "the Dump & decrypt's image");
+    const before = await wireOf(t);
+    const run = await runStep02(t);
+    const wire = wireSince(before, await wireOf(t));
+    say(`step 02 wire: ${describeWire(wire)}; ${String(run.asks)} pick(s)`);
+    for (const op of NEVER_ON_THE_WIRE) expect(wire.has(op), op).toBe(false);
+    step02 = run;
+
+    const state = checkStep02RunFile(run);
+    const row = preserveRowFor(state);
+    if (row === null) {
+      throw new Error(
+        `no expectation row for ${describeKey(state)} — the write run is held to a measured ` +
+          'row, so it stops here, before the gate. Measure one on the emulator and add it to ' +
+          'PRESERVE_ROWS (e2e/lib/preserve-expectations.ts).',
       );
+    }
+    say(`the row: ${row.name}`);
+
+    /* The camera's own values, as the run recorded them. */
+    expect(state.expectedVersion, 'the version step 02 recorded is the one the dump read').toBe(
+      version,
+    );
+    expect(state.expectedVersion).toBe(row.version);
+    expect(state.buildId).toBe(row.buildId);
+    expect(state.buildLabel).toBe(row.buildLabel);
+    expect(state.buildFamily).toBe(row.buildFamily);
+    expect(state.imageDerivation ?? null, 'the edit on the factory image').toEqual(row.derivation);
+    expect(state.imageSha256, "the slot's decrypted image").toBe(row.imageSha256);
+    expect(state.stagedForm).toBe(row.stagedForm);
+    expect(state.restoreForm).toBe(row.restoreForm);
+    expect(state.route).toBe('active-bank');
+    expect(state.slotReadShas?.[0], 'the two reads of the slot agree').toBe(
+      state.slotReadShas?.[1],
+    );
+
+    /* The plan. */
+    const patch = need(state.patch ?? null, 'the patch summary');
+    expect(
+      patch.sites.map(({ offset, before: b, after: a }) => ({ offset, before: b, after: a })),
+      'the sites',
+    ).toEqual(row.sites);
+    expect(hexWord(patch.rebalanceWord ?? -1), 'the rebalance word').toBe(
+      hexWord(row.rebalanceWord),
+    );
+    expect(patch.stagedLength).toBe(row.stagedLength);
+    expect(patch.chunkCount).toBe(row.chunkCount);
+    expect(patch.patchedSha256).toBe(row.patchedSha256);
+    expect(patch.diffCount, 'the bytes that move').toBe(row.moved.length);
+    expect(patch.armResetsCursor, 'the drain leaves the reader readable: no replug').toBe(
+      row.armResetsCursor,
+    );
+    const plain = entry(run.entries, `${PHASE_FOLDER['read-build']}/preserve_image_plain.bin`);
+    const patched = entry(
+      run.entries,
+      `${PHASE_FOLDER['read-build']}/preserve_patch_plain_patched.bin`,
+    );
+    expect(sha256(plain)).toBe(row.imageSha256);
+    expect(sha256(patched)).toBe(row.patchedSha256);
+    expect(hexList(diffOffsets(plain, patched)), 'the patched image moves exactly these').toBe(
+      hexList(row.moved),
+    );
+
+    /* The backup against the dump: two reads of the same 31 windows. */
+    const backup = entry(run.entries, `${PHASE_FOLDER['read-build']}/preserve_backup_windows.bin`);
+    expect(backup.length).toBe(FLASH_BYTES);
+    expect(sha256(backup)).toBe(state.steps.backup?.artifactShas?.['preserve_backup_windows.bin']);
+    expect(
+      sameWindows(backup, theImage.bytes),
+      'the backup equals the dump in all 31 windows',
+    ).toBe(true);
+
+    /* The bank, and on a known part its record and its backup. */
+    const detection = need(state.detection ?? null, 'the slot detection');
+    const part = knownPartByDump(theImage.sha);
+    say(
+      `detection: cfg[0]=${hexWord(detection.cfg0)}, bank ${detection.bank} ` +
+        `${hexWord(detection.bankAddress)} (mode ${String(detection.bankMode)})`,
+    );
+    expect(detection.bankAddress).toBe(
+      { a: 0x14050000, b: 0x14060000, r: 0x14070000 }[detection.bank],
+    );
+    if (part !== null) {
+      expect(sha256(backup), `${part.name}: the backup`).toBe(part.backupImage);
+      expect(hexWord(detection.cfg0), 'the boot record').toBe(hexWord(part.cfg0));
+      expect(
+        { key: detection.bank, address: detection.bankAddress, mode: detection.bankMode },
+        'the bank the record boots, the bank the run writes',
+      ).toEqual(part.bank);
+    }
+
+    /* The wizard: no reboot, no pick, and the plan on the page. */
+    checkAsks(run, row, false);
+    expect(count(wire, 'out 0x59'), 'step 02 resets').toBe(row.phases['read-build'].resets);
+    const shown = await t.page.evaluate(
+      (sel: string) => document.querySelector(`${sel} details`)?.textContent ?? '',
+      phaseSection('read-build'),
+    );
+    expect(shown).toContain(
+      `The plan — ${row.buildLabel}, ${String(row.moved.length)} bytes change`,
+    );
+    expect(shown).toContain(`${String(row.stagedLength)} B in ${String(row.chunkCount)} chunks`);
+    expect(shown).toContain(
+      row.derivation === null
+        ? `Rebalance word${hexWord(row.rebalanceWord)}`
+        : `${hexWord(row.rebalanceWord)} (was ${hexWord(row.derivation.balanceWord)}`,
+    );
+    for (const site of row.sites) expect(shown).toContain(hexWord(site.offset));
+    await checkStep03Offered(t.wizard, t.page);
+    expect(await refusalsOf(t)).toEqual([]);
+
+    plan = { row, part, state, backup };
+    say(
+      `step 02 matches its row: ${row.buildLabel}` +
+        (row.derivation === null ? '' : ` + ${row.derivation.label}`) +
+        `; sites ${row.sites.map((s) => hexWord(s.offset)).join(' / ')}; rebalance ` +
+        hexWord(row.rebalanceWord) +
+        (row.derivation === null ? '' : ` (was ${hexWord(row.derivation.balanceWord)})`) +
+        `; ${String(row.moved.length)} bytes move in bank ${detection.bank} ` +
+        `${hexWord(detection.bankAddress)}: ${hexList(row.moved)}`,
+    );
+  });
+
+  it('the write gate decides, after step 02 and before any write', async (test) => {
+    test.skip(plan === null, 'step 02 did not match its row, so the gate is never reached');
+    const t = need(read, 'the target');
+    const p = need(plan, 'the plan');
+    const theImage = need(image, 'the image');
+    const bank = `bank ${p.state.detection?.bank ?? '?'} (${hexWord(p.state.detection?.bankAddress ?? 0)})`;
+    const describe = [
+      `camera ${product}: firmware ${version}, ${p.row.buildLabel}` +
+        (p.row.derivation === null ? '' : ` carrying ${p.row.derivation.label}`) +
+        `, run ${p.state.runId}`,
+      `this run's image: sha256 ${theImage.sha}` +
+        (p.part === null ? ' (not a known part)' : ` (${p.part.name})`),
+      `step 03 COMMITS the patch into ${bank}: ${String(p.row.chunkCount)} chunks, checksum ` +
+        `${hexWord(p.row.sum16.commit, 4)}; ${String(p.row.moved.length)} bytes move ` +
+        `(${hexList(p.row.moved)}); rebalance word ${hexWord(p.row.rebalanceWord)}` +
+        (p.row.derivation === null ? '' : ` (was ${hexWord(p.row.derivation.balanceWord)})`) +
+        `; then ${String(p.row.phases['patch-dump'].resets)} reboot and the whole 4 MiB read`,
+      `step 04 RESTORES the original bank: ${String(p.row.chunkCount)} chunks, checksum ` +
+        `${hexWord(p.row.sum16.restore, 4)}; then ${String(p.row.phases['restore-verify'].resets)} ` +
+        'reboot and the 31 windows verified against the backup',
+      'each reboot is answered in the chooser by the run itself; nothing to unplug',
+    ].join('\n  ');
+    approval = await approveWrite(t.name, () =>
+      Promise.resolve({
+        token: `${version}:${theImage.sha.slice(0, 8)}`,
+        describe: `  ${describe}`,
+      }),
+    );
+    say(
+      `write gate on ${t.name}: approved=${String(approval.approved)} ` +
+        `dry=${String(approval.dry)} — ${approval.reason}`,
+    );
+    if (approval.approved) return;
+
+    /* Camera default, or a camera dry run: nothing is written. We stopped at
+     * the write boundary, step 02 done, next step commit. The page's guard is
+     * the strict one, so its record is what went to the camera. */
+    expect(t.name).toBe('camera');
+    expect(t.writesSafe).toBe(false);
+    const wire = await wireOf(t);
+    say(`camera wire at the write boundary: ${describeWire(wire)}`);
+    for (const op of NEVER_ON_THE_WIRE) expect(wire.has(op), op).toBe(false);
+    expect(await refusalsOf(t), 'nothing was refused (no write was even tried)').toEqual([]);
+    await checkStep03Offered(t.wizard, t.page);
+    const text = await t.page.evaluate(() => document.body.innerText);
+    expect(text).not.toContain('Patch & dump — done');
+  });
+
+  it('step 03 commits the patch and drains the whole part, exactly as the row says', async (test) => {
+    test.skip(
+      approval?.approved !== true,
+      approval === null ? 'the gate was not reached' : `no write: ${approval.reason}`,
+    );
+    test.skip(
+      target === 'emu' && !FULL,
+      'the emulator stops at the gate unless SEEK_E2E_WRITE_FULL=1 (emulator.e2e.ts writes 02-04 too)',
+    );
+    const p = need(plan, 'the plan');
+    const run02 = need(step02, "step 02's run file");
+
+    /* The app reopened with the write guards: a new window, as a person
+     * would open the page again to continue from the step 02 run file. */
+    await read?.close();
+    read = null;
+    say(`the write: reopening the ${target} target with the write guards`);
+    write = await openTarget(target, {
+      scratchDir: path.join(SCRATCH, 'write'),
+      headed: HEADED,
+      uiGuard: PRESERVE_WRITE,
+      ...(target === 'camera' ? { preloadSource: writeGuardScript({ lifted: true }) } : {}),
+    });
+    const t = write;
+    const name = await t.wizard.connect();
+    if (t.name === 'camera') checkCameraName(name);
+    expect(await guardInstalled(t), 'the write guard is in place').toBe(true);
+    expect(await t.wizard.loadRunFile(run02.runFile.path)).toMatch(/^Resumed at commit/);
+    await checkStep03Offered(t.wizard, t.page);
+
+    const before = await wireOf(t);
+    const run = await inWritePhase(t, p.row, 'patch-dump', () =>
+      t.wizard.runPhase('patch-dump', { confirm: true, timeoutMs: 60 * 60_000 }),
+    );
+    step03 = run;
+    const wire = wireSince(before, await wireOf(t));
+
+    /* Soft from here: the commit has landed, and step 04 must run whatever this shows. */
+    checkAsks(run, p.row, true);
+    checkWriteWire(wire, p.row, 'patch-dump', true);
+    const state = runState(run.entries);
+    expect.soft(state.steps.commit?.status).toBe('done');
+    expect
+      .soft(state.steps.commit?.notes)
+      .toContain(
+        `${String(p.row.chunkCount)} chunks staged (${String(p.row.stagedLength)} B, image length ` +
+          `only), commit status 0, sum16 ${p.row.sum16.commit.toString(16)}`,
+      );
+    expect.soft(state.steps.drain?.status).toBe('done');
+    expect.soft(state.nextStep).toBe('restore');
+    checkCommitLog(
+      await phaseLog(t.page, 'patch-dump'),
+      'preserve commit',
+      p.row,
+      p.row.sum16.commit,
+      true,
+    );
+
+    const folder = PHASE_FOLDER['patch-dump'];
+    const raw = entry(run.entries, `${folder}/preserve_dump_postwrite.bin`);
+    const delivered = entry(run.entries, `${folder}/preserve_dump_original.bin`);
+    const rawSha = sha256(raw);
+    const deliveredSha = sha256(delivered);
+    say(`step 03: raw ${rawSha}, delivered ${deliveredSha}`);
+    expect.soft(raw.length, 'the drain read the whole 4 MiB').toBe(FLASH_BYTES);
+    expect.soft(delivered.length).toBe(FLASH_BYTES);
+    expect.soft(state.rawDumpSha256).toBe(rawSha);
+    expect.soft(state.deliveredSha256).toBe(deliveredSha);
+    const bank = (p.state.detection?.bankAddress ?? 0) - FLASH_BASE;
+    expect
+      .soft(
+        hexList(diffOffsets(raw, delivered)),
+        'the commit moved exactly the row bytes, in the bank',
+      )
+      .toBe(hexList(p.row.moved.map((o) => bank + o)));
+    expect
+      .soft(
+        sameWindows(delivered, p.backup),
+        'the delivered image equals the backup in all 31 windows',
+      )
+      .toBe(true);
+    if (p.part !== null) {
+      expect.soft(rawSha, `${p.part.name}: the post-commit part`).toBe(p.part.postCommit);
+      expect.soft(deliveredSha, `${p.part.name}: the part as it booted`).toBe(p.part.asBooted);
+    }
+    const text = await t.page.evaluate(() => document.body.innerText);
+    expect.soft(text, 'no replug before step 04').not.toContain('Before step 04');
+    expect
+      .soft(
+        await t.wizard.isEnabled(
+          phaseSection('restore-verify'),
+          Wizard.startLabel('restore-verify'),
+        ),
+        'step 04 is offered',
+      )
+      .toBe(true);
+    expect.soft(await refusalsOf(t)).toEqual([]);
+  });
+
+  it('step 04 restores the original bank and verifies all 31 windows', async (test) => {
+    if (approval?.approved === true && (target === 'camera' || FULL) && step03 === null) {
       say(
-        `write gate on ${t.name}: approved=${String(approval.approved)} dry=${String(approval.dry)} — ${approval.reason}`,
+        'STEP 03 DID NOT FINISH. Do not run this spec again from the start: the camera may hold ' +
+          "the patched bank, and step 02 would read that. Load the last run file on the app's " +
+          'Preserve page and finish the run there (a landed commit is never replayed).',
       );
+    }
+    test.skip(step03 === null, 'step 03 did not run or did not finish');
+    const t = need(write, 'the write target');
+    const p = need(plan, 'the plan');
 
-      if (!approval.approved) {
-        /* Camera default, or a camera dry run: nothing is written. We stopped
-         * at the write boundary, step 02 done, next step commit. The page's
-         * guard is the strict one, so its record is what went to the camera. */
-        expect(t.name).toBe('camera');
-        expect(t.writesSafe).toBe(false);
-        const wire = await wireOf(t);
-        say(`camera wire at the write boundary: ${describeWire(wire)}`);
-        for (const op of NEVER_ON_THE_WIRE) expect(wire.has(op), op).toBe(false);
-        expect(await refusalsOf(t), 'nothing was refused (no write was even tried)').toEqual([]);
-        const text = await t.page.evaluate(() => document.body.innerText);
-        expect(text).not.toContain('Patch & dump — done');
-        return;
-      }
+    const before = await wireOf(t);
+    const run = await inWritePhase(t, p.row, 'restore-verify', () =>
+      t.wizard.runPhase('restore-verify', { confirm: true, timeoutMs: 60 * 60_000 }),
+    );
+    step04 = run;
+    const wire = wireSince(before, await wireOf(t));
+    checkAsks(run, p.row, false);
+    checkWriteWire(wire, p.row, 'restore-verify', false);
 
-      if (t.name === 'emu') {
-        if (!FULL) {
-          say(
-            'emulator: gate allowed; the full 03/04 continuation is proven by emulator.e2e.ts (SEEK_E2E_WRITE_FULL=1 to run it here)',
-          );
-          return;
-        }
-        await t.wizard.runPhase('patch-dump', { confirm: true, timeoutMs: 60 * 60_000 });
-        await t.wizard.runPhase('restore-verify', { confirm: true, timeoutMs: 60 * 60_000 });
-        const text = await t.page.evaluate(() => document.body.innerText);
-        expect(text).toContain('Verified — a perfect match.');
-        return;
-      }
+    const state = runState(run.entries);
+    expect(state.steps.restore?.status).toBe('done');
+    expect(state.steps.restore?.notes).toBe(
+      `original bank content staged back (${String(p.row.stagedLength)} B, ` +
+        `${p.row.restoreStaged}) and committed; reset sent`,
+    );
+    expect(state.steps.restore?.rebootRefused).toBeUndefined();
+    checkCommitLog(
+      await phaseLog(t.page, 'restore-verify'),
+      'preserve restore',
+      p.row,
+      p.row.sum16.restore,
+      false,
+    );
+    expect(state.verify).toEqual({ diffBytes: 0, windowsRead: 31, badWindows: [] });
+    expect(state.steps.verify?.notes).toMatch(
+      /^a fresh boot re-read 31\/31 windows at 0 differing/,
+    );
+    expect(state.nextStep).toBe('done');
+    const verified = entry(
+      run.entries,
+      `${PHASE_FOLDER['restore-verify']}/preserve_verify_windows.bin`,
+    );
+    expect(sha256(verified), 'the verify re-read equals the backup').toBe(sha256(p.backup));
 
-      /* Camera, confirmed at a TTY: lift the page guard for this run only and
-       * write. Reachable only by a human; never under automation. */
-      say('camera write CONFIRMED — reopening with the lifted guard');
-      await handle?.close();
-      handle = await openTarget('camera', {
-        scratchDir: SCRATCH,
-        headed: HEADED,
-        uiGuard: EVERYTHING,
-        preloadSource: writeGuardScript({ lifted: true }),
-      });
-      const t2 = need();
-      await t2.wizard.connect();
-      await t2.wizard.loadRunFile(step02.runFile.path);
-      await t2.wizard.runPhase('patch-dump', { confirm: true, timeoutMs: 60 * 60_000 });
-      await t2.wizard.runPhase('restore-verify', { confirm: true, timeoutMs: 60 * 60_000 });
-      const text = await t2.page.evaluate(() => document.body.innerText);
-      expect(text).toContain('Verified — a perfect match.');
-    },
-  );
+    const text = await t.page.evaluate(() => document.body.innerText);
+    expect(text).toContain('Done — your firmware is preserved');
+    expect(text).toContain('matches the backup on all 31 blocks');
+    expect(text).toContain('Verified — a perfect match.');
+    expect(text).not.toContain('Before step 04');
+    expect(await t.wizard.redAlerts()).toEqual([]);
+  });
+
+  it('nothing was refused, and the part is back as it booted', async (test) => {
+    test.skip(step04 === null, 'step 04 did not run');
+    const t = need(write, 'the write target');
+    expect(await refusalsOf(t)).toEqual([]);
+    const bridge = bridgeOf(t);
+    if (t.emu !== null && bridge !== null) {
+      await t.emu.settled();
+      expect(t.emu.rebootFailure).toBeNull();
+      expect(t.emu.deaths).toEqual([]);
+      /* The drain's reset (step 03) and the restore's (step 04). */
+      expect(t.emu.reboots.map((r) => r.boot)).toEqual([1, 2]);
+      const last = t.emu.bootImages().at(-1);
+      const now = sha256(new Uint8Array(readFileSync(last?.flashOut ?? '')));
+      const asBooted = EMU_FLASH === '' ? BENCH_PART_1300.asBooted : emuFlashAsBooted();
+      expect(now, "the emulator's flash after the restore is the part it booted").toBe(asBooted);
+      say(`the emulator after the restore boots ${now}`);
+      return;
+    }
+    const guard = await guardOf(t.page);
+    expect(guard.refusals).toEqual([]);
+    expect(t.app?.timeline.filter((line) => line.includes('REFUSED')) ?? []).toEqual([]);
+    say(`resets on the wire: ${guard.resets.map((r) => r.outcome).join(', ')}`);
+  });
 });

@@ -3,7 +3,8 @@
  * of a real-enough camera:
  *
  *   emu     Google Chrome (puppeteer-core), `navigator.usb` replaced by the
- *           bridge stand-in, served in Node by the FW-V1 emulator. Writes and
+ *           bridge stand-in, served in Node by the FW-V1 emulator, booted from
+ *           the bench Compact 1.3.0.0 or from `SEEK_E2E_EMU_FLASH`. Writes and
  *           steps 03/04 are fine here — that is what the emulator is for.
  *   camera  Electron, Chromium's own WebUSB on the real macOS USB stack, with
  *           the page-side write guard. READ-ONLY unless a run passes through the
@@ -17,7 +18,8 @@
  * hosted `docs/` bundle over plain HTTP (`source: 'docs'`).
  */
 
-import { existsSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 
 import type { Page } from 'puppeteer-core';
@@ -47,6 +49,23 @@ export type TargetName = 'emu' | 'camera';
 const CORPUS_ENTRY = '101310HSNEA2/dump';
 const JEDEC = '010215';
 
+/**
+ * The part the emulator target boots: the corpus entry (the bench Compact
+ * 1.3.0.0), or the 4 MiB flash file `SEEK_E2E_EMU_FLASH` names (a J-Link
+ * dump, booted on the emulator's default board) — as `emulator.e2e.ts` does.
+ * `asBooted` is that flash's sha256, which the expectation table
+ * (`preserve-expectations.ts`) knows a part by; '' for the corpus entry.
+ */
+export const EMU_FLASH = process.env.SEEK_E2E_EMU_FLASH ?? '';
+
+let emuFlashSha: string | null = null;
+
+export function emuFlashAsBooted(): string {
+  if (EMU_FLASH === '' || !existsSync(EMU_FLASH)) return '';
+  emuFlashSha ??= createHash('sha256').update(readFileSync(EMU_FLASH)).digest('hex');
+  return emuFlashSha;
+}
+
 /** What `SEEK_E2E_TARGET` says, or `fallback` (default `emu`). */
 export function wantedTarget(fallback: TargetName = 'emu'): TargetName {
   const value = process.env.SEEK_E2E_TARGET;
@@ -61,6 +80,7 @@ export function wantedTarget(fallback: TargetName = 'emu'): TargetName {
 export function targetUnavailable(target: TargetName): string | null {
   if (target === 'emu') {
     if (EMU_DIR === null) return 'no FW-V1 emulator found (set SEEK_EMU_DIR)';
+    if (EMU_FLASH !== '' && !existsSync(EMU_FLASH)) return `no part at ${EMU_FLASH}`;
     if (!existsSync(CHROME_PATH)) return `no Chrome at ${CHROME_PATH} (set SEEK_E2E_CHROME)`;
     return null;
   }
@@ -132,6 +152,7 @@ async function openEmu(options: OpenTargetOptions): Promise<TargetHandle> {
   const bus = await EmulatorBus.start({
     emuDir: EMU_DIR ?? '',
     entryId: CORPUS_ENTRY,
+    ...(EMU_FLASH === '' ? {} : { flash: EMU_FLASH }),
     jedec: JEDEC,
     scratchDir: path.join(options.scratchDir, 'flash'),
     log: say,

@@ -15,6 +15,10 @@
  * node-usb with no event at all, neither the leaving nor the arrival, so the
  * camera bus held a device the registry no longer had. The last test drives
  * `CameraBus` over a fake host whose re-enumeration sends no event.
+ *
+ * The same getter is a transfer on the camera's control pipe, and the bridge
+ * read it after every call; one such read never returned and froze a run in
+ * step 02. The bridge now reads it where Chrome does (open, select).
  * ==================================================================== */
 
 import type { Page } from 'puppeteer-core';
@@ -24,7 +28,7 @@ import { fromNodeUsb, type NodeUsbDevice } from '../packages/cli/src/node-usb.js
 import { CameraBus } from './lib/camera-bus.js';
 import type { WebUsbDevice } from '../packages/core/src/protocol/webusb.js';
 import { UsbBridge, type BusChange, type BusDevice, type UsbBus } from './lib/bridge.js';
-import type { BridgeReply, BridgeRequest, BusEvent } from './lib/protocol.js';
+import type { BridgeReply, BridgeRequest, BusEvent, DeviceCall } from './lib/protocol.js';
 
 const DEPARTED = 'getString error: unknown (error 0xe00002d9)';
 
@@ -156,8 +160,9 @@ describe('the bridge and a device that has left the bus', () => {
   });
 
   it('still sends it when the host stack throws on the departed device', async () => {
-    /* Any other stack's device, with no adapter in front: the bridge reads
-     * nothing it cannot read, and the page hears the camera go regardless. */
+    /* Any other stack's device, with no adapter in front: the page hears the
+     * camera go regardless. The bridge reads nothing from the departed device:
+     * the event carries the configuration as it was, as Chrome keeps it. */
     const departing = departingDevice();
     const raw: WebUsbDevice = departing.device;
     const { bus, leave } = oneDeviceBus(raw);
@@ -171,7 +176,47 @@ describe('the bridge and a device that has left the bus', () => {
     await settle();
 
     expect(page.events.map((event) => event.type)).toEqual(['disconnect']);
-    expect(page.events[0]?.device.configurationValue).toBeNull();
+    expect(page.events[0]?.device.configurationValue).toBe(1);
+    bridge.detach();
+  });
+
+  it('reads the configuration where Chrome does, never after a transfer', async () => {
+    /* node-usb's getter is a GET_DESCRIPTOR on the control pipe, made on the
+     * Node thread: read after every transfer, one of some 33,000 per step 02
+     * never returned on the camera, and the worker froze (2026-10-06). */
+    let reads = 0;
+    const device = {
+      ...departingDevice().device,
+      get configuration() {
+        reads += 1;
+        return { configurationValue: 1 };
+      },
+      controlTransferIn: () =>
+        Promise.resolve({ status: 'ok' as const, data: new DataView(new ArrayBuffer(64)) }),
+    } as unknown as WebUsbDevice;
+    const { bus } = oneDeviceBus(device);
+    const page = recordingPage();
+    const bridge = await UsbBridge.attach(page.page, bus);
+    await grant(bridge, page);
+    const call = (request: DeviceCall): Promise<BridgeReply> =>
+      page.call({ op: 'call', key: 'cam-0', doc: 'doc-1', ...request });
+    expect((await call({ method: 'open' })).ok).toBe(true);
+    expect((await call({ method: 'claimInterface', n: 0 })).ok).toBe(true);
+    const before = reads;
+    const setup = {
+      requestType: 'vendor',
+      recipient: 'interface',
+      request: 0x4f,
+      value: 0,
+      index: 0,
+    } as const;
+    for (let i = 0; i < 100; i++) {
+      const reply = await call({ method: 'controlTransferIn', setup, length: 64 });
+      expect(reply.ok && reply.state?.configurationValue).toBe(1);
+    }
+    expect(reads - before, 'no configuration read for 100 transfers').toBe(0);
+    expect((await call({ method: 'selectConfiguration', n: 1 })).ok).toBe(true);
+    expect(reads - before, 'one read for a selectConfiguration').toBe(1);
     bridge.detach();
   });
 

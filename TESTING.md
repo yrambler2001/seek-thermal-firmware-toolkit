@@ -5659,3 +5659,160 @@ pick, "Verified — a perfect match", and the emulator after the restore booting
 emulator's Dump & decrypt image is `0cb0e544…`, the same sha the real camera's USB dump has (the
 first attempt compared it to the part's sha, and the spec now takes the dump image separately).
 The default run on the corpus 1.3.0.0 part stays 5/5.
+
+## 39. The supervised write run on Compact PRO 1.0.3.0: an expectation table, a gate a person can pass, a write guard that writes, and a bridge read that froze (2026-10-06)
+
+`e2e:write` (`camera-write.e2e.ts`) is the run a person makes to Preserve the bench camera,
+which now runs the board-patched Compact PRO 1.0.3.0 (secs. 37, 38). It had never run past its
+gate, and three things would have stopped a person on this camera before any check was made.
+
+### 39.1 What would have stopped a person
+
+- **The gate could not be passed.** `approveWrite` asked for a TTY on stdin and stdout. Vitest 5
+  forks its workers with `stdio: 'pipe'` (`node_modules/vitest/dist/chunks/index.DzobfTyw.js`,
+  the forks pool's `fork(..., { stdio: "pipe" })`), so a spec never has one, and a person at a
+  terminal was refused like CI. The gate now asks on the controlling terminal (`/dev/tty`), which
+  the worker shares with the `npm run` it came from. Its four conditions are unchanged:
+  `SEEK_E2E_WRITE=i-understand`, a terminal, no `CI`, and the challenge typed back. A process
+  with no controlling terminal (CI, a scheduler, an agent's shell, where opening `/dev/tty` fails
+  with ENXIO) is refused before the camera is even read for a challenge. `dry-run` still needs
+  none. The challenge is now what the README always said: `<version>:<first 8 hex of the image
+sha>`, `1.0.3.0:0cb0e544` on this camera. It used to be `<version>:<n>sites`.
+- **The lifted write guard refused the writes.** `writeGuardScript({ lifted: true })` dropped
+  SetFeaturedFirmwareData and CompleteMemoryUpgrade from `neverOps` and nothing else, so both
+  fell through to "not on this run's whitelist". The first staged chunk would have been refused
+  unsent, and step 03 would have failed with the camera untouched. The guard now has `writeOps`,
+  and both stay shut until the test opens a phase with its row's exact budget: the chunks (of at
+  most 64 B), one commit carrying the plan's checksum, and the resets plus two. Anything past the
+  budget, of another shape, or with another checksum is refused unsent, before the camera erases
+  anything.
+- **The emulator target ignored `SEEK_E2E_EMU_FLASH`.** Only `emulator.e2e.ts` booted another
+  part, so the write spec could not run on the camera's own flash. `openTarget('emu')` now boots
+  it, and `expectedImageSha` takes that part's dump image from the table.
+
+### 39.2 The expectation table
+
+`e2e/lib/preserve-expectations.ts`. A row is chosen by what the camera reports, never by the
+operator: the version it answered (`expectedVersion`), the build step 02 found (`buildId`), and
+the edit on it (`imageDerivation`). A camera with no row stops after step 02, before the gate.
+
+| row field                 | Compact 1.3.0.0 (the 2014 chain)                                    | Compact PRO 1.0.3.0 + the PN297 board patch        |
+| ------------------------- | ------------------------------------------------------------------- | -------------------------------------------------- |
+| key                       | `1.3.0.0`, `v1-2014`, no edit                                       | `1.0.3.0`, `compact-pro-1.0.3.0`, `…-accept-pn297` |
+| build label, family       | `v1 2014 chain`, `v1-2014`                                          | `Compact Pro 1.0.3.0 (9 Hz)`, `compact-2016`       |
+| edit balance              | —                                                                   | `0x6322E32A`                                       |
+| slot image                | `862717a8…`                                                         | `68c63334…`                                        |
+| staged / restore form     | `plain` / `capture-verbatim`                                        | `xor-ks0` / `factory-staged`                       |
+| sites                     | 0x3DB4, 0x3C1C, 0x3C68, 0x3C70, 0x3DC6                              | 0x352E (`06 d1`→`06 e0`), 0x3636 (`…33`→`…03`)     |
+| rebalance word            | `0x50C06240`                                                        | `0x5423132A`                                       |
+| staged length, chunks     | 47,768 B, 747                                                       | 51,848 B, 811                                      |
+| patched image             | `8473b5e4…`                                                         | `2074f659…`                                        |
+| bytes that move (in bank) | 13: 0x238–0x23B, 0x3C1C/1D, 0x3C68/69, 0x3C70/71, 0x3DB7, 0x3DC6/C7 | 5: 0x239, 0x23A, 0x23B, 0x352F, 0x3639             |
+| commit / restore sum16    | `0x60CA` / `0x5ECC`                                                 | `0x128F` / `0x132C`                                |
+| resets = picks per step   | 02: 0, 03: 1, 04: 1                                                 | 02: 0, 03: 1, 04: 1                                |
+
+A part's whole-flash shas cannot come from a run (a 2016 part's bootloader block and upper 2 MiB
+are out of the wire's reach), so the two bench parts are named, recognised by their Dump &
+decrypt image:
+
+| part                    | dump image  | backup      | boot record, bank            | raw (post-commit) | delivered = as booted |
+| ----------------------- | ----------- | ----------- | ---------------------------- | ----------------- | --------------------- |
+| bench Compact 1.3.0.0   | `40447c7e…` | `983a7010…` | cfg[0] 0, A `0x14050000`     | `b22e9e20…`       | `40447c7e…`           |
+| bench camera on 1.0.3.0 | `0cb0e544…` | `0cb0e544…` | cfg[0] blank, A `0x14050000` | `759280a2…`       | `202cb5c1…`           |
+
+The rest comes from the run itself: the version from the wire and the dump manifest, the image
+from Dump & decrypt; the backup must equal that dump in all 31 windows, the delivered image must
+equal the backup there, the raw and delivered dumps must differ in exactly the row's bytes inside
+the detected bank, and the verify re-read must equal the backup.
+
+### 39.3 The run
+
+1. Connect, and Dump & decrypt (no write, no reset).
+2. Step 02, checked against the row with hard asserts: the version, the build and its label, the
+   edit and its balance, the slot image, the staged and restore forms, the sites byte for byte,
+   the rebalance word, the chunks, the patched image and the diff between the two images, the
+   bank, no reboot and no pick, and the plan the page shows. Only then:
+3. The gate.
+4. The app is reopened with the write guards (`PRESERVE_WRITE`: steps 03 and 04 and their
+   confirmation, and nothing of the Flash view; on the camera, the budgeted page guard), connected,
+   and the step 02 run file loaded ("Resumed at commit"). Step 03 is checked softly, since
+   once the commit has landed step 04 must still run: the chunks, one commit, one reset, one
+   pick (the reconnect, never a replug), the commit's record and log line (`… 811 chunks staged,
+… commit status 0x00000000`, `sum16 0x128F`), the raw and delivered dumps, and the bytes that
+   moved. Step 04 is checked with hard asserts: the same counts, the restore's record and its
+   checksum, 31/31 windows at 0 diffs, the verify file equal to the backup, and the page's
+   "Verified — a perfect match.". On the emulator, the last boot's flash is the part it booted.
+
+The emulator runs the same sequence, so the path a person takes on the camera is the one proven.
+
+### 39.4 The bridge read that froze a run
+
+`camera-bridge.e2e` hung in step 02 for ten minutes, its worker at 0 % CPU. A sample showed the
+Node thread blocked in node-usb's native `configuration` getter (`_dispatch_semaphore_wait_slow`),
+called from `UsbBridge.call` right after a transfer resolved. The bridge read the device's
+configuration after every call to report it to the page. On node-usb 3.1.0 that read is a string
+descriptor request on the camera's control pipe, made synchronously, about 33,000 times per step 02. No JavaScript timeout can fire while the thread is blocked. The bridge now keeps the value
+the way Chrome does: it reads it when the device is described, on `open` and on
+`selectConfiguration`, and reuses it otherwise. A departed device's `disconnect` now carries the
+value it had, which is also what WebUSB does. `bridge-departed.e2e` pins it: 100 transfers, no
+read, and one read for a `selectConfiguration`.
+
+### 39.5 What the tests pin
+
+- `supervised-gate.e2e` (no browser, no device), 11 tests: the refusals as before; no terminal
+  refuses before the challenge is read; a scripted terminal passes only on the exact token and
+  times out into a refusal; the page guard of a confirmed write, run from the exact preload source
+  in a VM context against a recording `USBDevice`, lets nothing out before a phase opens, passes
+  exactly its budget, refuses 65-byte and empty chunks, a wrong checksum, a non-u16 commit and a
+  second commit, keeps the RAM selectors refused, and the strict guard opens nothing whatever
+  budget is set on it.
+- `bridge-departed.e2e`, 4 tests (above).
+
+### 39.6 Results
+
+**Emulator, the write run end to end** (`SEEK_E2E_WRITE_FULL=1 npm run e2e:write`, real emulator
+writes, the reopen and the run-file load included), 6/6 on each part:
+
+| part                                                              | step 02                                | step 03                                                                                                                                            | step 04                                                                                                              |
+| ----------------------------------------------------------------- | -------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| the camera's own flash (`SEEK_E2E_EMU_FLASH`, J-Link `202cb5c1…`) | 85 s, 0 resets, 0 picks; the row exact | 154 s; 811 chunks, 1 commit (`0x128F`, status 0), 1 reset, 1 pick, no replug; raw `759280a2…`, delivered `202cb5c1…`; 5 bytes moved, all in bank A | 121 s; 811 chunks, 1 commit (`0x132C`), 1 reset, 1 pick; 31/31 windows, 0 diffs; the emulator then boots `202cb5c1…` |
+| the corpus Compact 1.3.0.0 (default)                              | 96 s, 0 resets, 0 picks; the row exact | 214 s; 747 chunks, 1 commit (`0x60CA`), 1 reset, 1 pick; raw `b22e9e20…`, delivered `40447c7e…`; 13 bytes moved                                    | 143 s; 747 chunks, 1 commit (`0x5ECC`), 1 reset, 1 pick; 31/31, 0 diffs; boots `40447c7e…`                           |
+
+`emulator.e2e` on the camera's flash, with no `_SHA` variable, took its raw and dump shas from
+the table: 5/5.
+
+**The camera, read-only**, one spec at a time (`SEEK_E2E_TARGET=camera`), PIR324 on 1.0.3.0:
+
+| spec                                         | result                             | step 02                                                                            |
+| -------------------------------------------- | ---------------------------------- | ---------------------------------------------------------------------------------- |
+| `camera.e2e`                                 | 5/5                                | 25.1 s, 0 resets, 0 picks                                                          |
+| `camera-restart.e2e`                         | 4/4                                | 26.9 s, 1 reset (the injected one), 1 pick                                         |
+| `camera-bridge.e2e`                          | 4/4 (after 39.4)                   | 36.6 s, 0, 0                                                                       |
+| `second-window.e2e`                          | 5/5                                | —                                                                                  |
+| `cancel.e2e`                                 | 3/3                                | cancelled at 6 %, 0 picks                                                          |
+| `reload.e2e`                                 | 3/3                                | 21.0 s after the mid-step reload, 0, 0                                             |
+| `resume.e2e`                                 | 4/4, 1 skipped (emu-only)          | 21.5 s, 0, 0                                                                       |
+| `offline-bundle.e2e`                         | 3/4                                | the committed `docs/` bundle (old code): 32 picks, then the busy-word refusal      |
+| `flash-view.e2e`                             | 2/2                                | —                                                                                  |
+| `forget.e2e`                                 | 1/1                                | —                                                                                  |
+| `dump-variants.e2e`                          | 2/2, 2 skipped (no file, no sweep) | —                                                                                  |
+| `soak.e2e` (`SEEK_E2E_SOAK_N=3`)             | 2/2                                | 3 dumps, 23.6–24.6 s, all `0cb0e544…`                                              |
+| `unplug.e2e` (`SEEK_E2E_SWITCH_CHANNEL=2`)   | 2/2                                | power cut mid-dump: Failed cleanly; back, re-pick, `0cb0e544…`; switch `1=on 2=on` |
+| `camera-write.e2e`, no `SEEK_E2E_WRITE`      | 3/3, 3 skipped                     | 22.2 s, 0, 0; the row exact; the gate refused; nothing written                     |
+| `camera-write.e2e`, `SEEK_E2E_WRITE=dry-run` | 3/3, 3 skipped                     | 25.2 s, 0, 0; the row exact; the dry run stopped at the gate                       |
+
+The first `camera-bridge` run is the hang of 39.4. `offline-bundle` needs `docs/` rebuilt, which
+this change does not do.
+
+**What a person runs**, at a terminal, with the camera alone on the bus and no tab of the app
+open:
+
+```sh
+SEEK_E2E_TARGET=camera SEEK_E2E_WRITE=i-understand \
+  SEEK_E2E_CAMERA_NAME='PIR324 Thermal Camera' SEEK_E2E_CAMERA_VERSION=1.0.3.0 \
+  SEEK_E2E_CAMERA_SHA=0cb0e5444174d2dc2e851abdaff0d172c92adf3947ab3d115e9aabc933b57bf0 \
+  npm run e2e:write
+```
+
+It asks for `1.0.3.0:0cb0e544` after printing what step 03 and step 04 will write. The camera
+was not written by this change.

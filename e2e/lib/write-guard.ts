@@ -24,6 +24,17 @@
  * the test fails on any. `resetBudget`, when the test sets it, caps how many
  * resets may go out at all (the restart run allows exactly one).
  *
+ * THE SUPERVISED WRITE RUN, and only it (`writeOps`, set by
+ * `writeGuardScript({ lifted: true })` once the gate in `supervised-write.ts`
+ * has passed), may also send the two flash writes Preserve's steps 03 and 04
+ * send: SetFeaturedFirmwareData in chunks of at most `maxStageBytes`, and
+ * CompleteMemoryUpgrade with a u16 checksum. Not freely: each phase is opened
+ * by the test with the exact budget its expectation row names
+ * (`stageBudget` chunks, `commitBudget` commits, and `commitSum16`, the
+ * checksum the commit must carry), and both budgets are 0 until it does. A
+ * write past them, or of another shape or checksum, is refused unsent like any
+ * other — before the camera has erased anything.
+ *
  * TWO THINGS HERE ARE NOT GUARDS, and neither loosens one:
  *  - `fault`, when the test sets it, answers the next `remaining` vendor IN
  *    requests of exactly `request`/`length` with `status: 'stall'` WITHOUT
@@ -52,6 +63,18 @@ export interface WriteGuardConfig {
    * unset and refuse them like any other id off the whitelist.
    */
   readonly infoOps?: { readonly firmwareInfo: number; readonly ramData: number } | null;
+  /**
+   * The supervised write run's flash writes, let out only when set, and then
+   * only inside the phase budgets in the control object: `stage`
+   * (SetFeaturedFirmwareData) with 1..`maxStageBytes` bytes, `commit`
+   * (CompleteMemoryUpgrade) with a u16 checksum. Every other run leaves it
+   * unset and lists both ids in `neverOps`.
+   */
+  readonly writeOps?: {
+    readonly stage: number;
+    readonly commit: number;
+    readonly maxStageBytes: number;
+  } | null;
 }
 
 /** A test-only fault: the next `remaining` matching reads answer a stall, unsent. */
@@ -67,6 +90,12 @@ export interface WriteGuardControl {
   allowReset: boolean;
   /** How many more resets may go out, or null for no cap (still only while `allowReset`). */
   resetBudget: number | null;
+  /** How many more SetFeaturedFirmwareData chunks may go out (`writeOps` only; 0 = none). */
+  stageBudget: number;
+  /** How many more CompleteMemoryUpgrade requests may go out (`writeOps` only; 0 = none). */
+  commitBudget: number;
+  /** The checksum the next commit must carry, or null for any (`writeOps` only). */
+  commitSum16: number | null;
   /** The last four bytes GetFirmwareInfo answered, as a version: what arming waits for. */
   version: string | null;
   /**
@@ -97,6 +126,9 @@ export function installWriteGuard(config: WriteGuardConfig): void {
     installed: false,
     allowReset: false,
     resetBudget: null,
+    stageBudget: 0,
+    commitBudget: 0,
+    commitSum16: null,
     version: null,
     versionsSeen: [],
     refusals: [],
@@ -161,6 +193,31 @@ export function installWriteGuard(config: WriteGuardConfig): void {
         if (control.resetBudget <= 0) refuse("ResetDevice beyond this run's reset budget");
         control.resetBudget -= 1;
       }
+      return;
+    }
+    const write = config.writeOps ?? null;
+    if (write !== null && op === write.stage) {
+      if (bytes.length === 0 || bytes.length > write.maxStageBytes) {
+        refuse(
+          `SetFeaturedFirmwareData with ${String(bytes.length)} B (Preserve stages ` +
+            `1..${String(write.maxStageBytes)} B)`,
+        );
+      }
+      if (control.stageBudget <= 0) refuse("SetFeaturedFirmwareData beyond this phase's budget");
+      control.stageBudget -= 1;
+      return;
+    }
+    if (write !== null && op === write.commit) {
+      if (bytes.length !== 2) refuse('CompleteMemoryUpgrade with a payload other than a u16');
+      if (control.commitBudget <= 0) refuse("CompleteMemoryUpgrade beyond this phase's budget");
+      const sum = (bytes[0] ?? 0) | ((bytes[1] ?? 0) << 8);
+      if (control.commitSum16 !== null && sum !== control.commitSum16) {
+        refuse(
+          `CompleteMemoryUpgrade with checksum ${hex(sum)}, not the plan's ` +
+            hex(control.commitSum16),
+        );
+      }
+      control.commitBudget -= 1;
       return;
     }
     const info = config.infoOps ?? null;

@@ -19,21 +19,28 @@ import { UsbBridge } from './bridge.js';
 import { say } from './browser.js';
 import { CAMERA_IMAGE_SHA, CAMERA_NAME, checkImageSha, step02 } from './camera-flow.js';
 import { countsOf, guardOf, setGuard } from './electron-camera.js';
-import type { TargetHandle } from './target.js';
+import { BENCH_PART_1300, knownPartByFlash } from './preserve-expectations.js';
+import { EMU_FLASH, emuFlashAsBooted, type TargetHandle } from './target.js';
 import { EVERYTHING, READ_ONLY_CAMERA, Wizard, type PhaseRun } from './wizard.js';
 
-/** The bench Compact 1.3.0.0's part as it booted: what the emulator boots, and the camera holds. */
-export const BENCH_IMAGE_SHA = '40447c7e6da5cbc84621f4694ffff5bda0f783e7807a45e80443383b19a8eb72';
+/** The bench Compact 1.3.0.0's part as it booted: what the emulator boots, and the camera held. */
+export const BENCH_IMAGE_SHA = BENCH_PART_1300.asBooted;
 /** That part's active-slot firmware image, decrypted (the run state's `imageSha256`). */
 export const BENCH_PLAIN_SHA = '862717a8a605021def7858ac0c04ad4aa1abe23d357d6c2417699939137f481c';
 
 /**
  * The whole-part image a Dump & decrypt must produce here, or '' when none is
- * named: the emulator's part is known; the camera's is `SEEK_E2E_CAMERA_SHA`,
- * and with that unset a run compares a dump with its re-dump (`checkImage`).
+ * named. On the emulator it is the corpus part's, or for a `SEEK_E2E_EMU_FLASH`
+ * part `SEEK_E2E_EMU_DUMP_SHA`, else the dump image of the known part that
+ * flash is (`preserve-expectations.ts`; a 2016 part's dump image is
+ * gap-filled, so it is not the flash's sha). On the camera it is
+ * `SEEK_E2E_CAMERA_SHA`. With none, a run compares a dump with its re-dump
+ * (`checkImage`).
  */
 export function expectedImageSha(t: TargetHandle): string {
-  return t.name === 'emu' ? BENCH_IMAGE_SHA : CAMERA_IMAGE_SHA;
+  if (t.name !== 'emu') return CAMERA_IMAGE_SHA;
+  if (EMU_FLASH === '') return BENCH_IMAGE_SHA;
+  return process.env.SEEK_E2E_EMU_DUMP_SHA ?? knownPartByFlash(emuFlashAsBooted())?.dumpImage ?? '';
 }
 
 /** A whole-part image's sha on this target: the named image, or the run's first (`checkImageSha`). */

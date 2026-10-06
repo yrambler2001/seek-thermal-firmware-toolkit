@@ -87,6 +87,23 @@ export const FLASH_VIEW_READ_ONLY: UiGuard = {
   allowPhase: () => false,
 };
 
+/**
+ * The supervised write run's second half, after its gate: Preserve steps 03
+ * and 04, their write confirmation and the "Your turn" picks. Nothing else
+ * that writes: the Flash view, its image picker, its write and its
+ * confirmation stay refused, and so do the jump past the commit, a second
+ * step 02 and the replug button (no row the run checks asks for a replug).
+ */
+export const PRESERVE_WRITE: UiGuard = {
+  name: 'Preserve steps 03 and 04 (the supervised write)',
+  allowClick: (label) =>
+    !/flash|^write to camera$|— write to camera$|choose plaintext image|jump past|skip the commit|i replugged it|read & build/i.test(
+      label,
+    ),
+  allowRoute: (hash) => !/flash/i.test(hash),
+  allowPhase: (phase) => phase === 'patch-dump' || phase === 'restore-verify',
+};
+
 export interface PhaseRun {
   readonly phase: PhaseId;
   /** How many "Your turn: press Connect device" asks were answered. */

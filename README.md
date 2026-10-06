@@ -902,7 +902,8 @@ camera's flash is back to exactly what it booted with. It takes about six minute
 `SEEK_E2E_EMU_FLASH=<4 MiB dump>` boots another part instead, on the emulator's default board,
 and checks against it (`SEEK_E2E_EMU_VERSION`, `SEEK_E2E_EMU_POST_COMMIT_SHA` and
 `SEEK_E2E_EMU_DUMP_SHA` add the strict checks; TESTING.md sec. 38 ran the bench Compact PRO
-1.0.3.0 flash this way).
+1.0.3.0 flash this way). For a part the expectation table knows (`e2e/lib/preserve-expectations.ts`)
+the two shas come from the table. Every other spec's emulator target boots the same part.
 
 **`e2e:camera`** and **`e2e:camera:bridge`** are read-only:
 
@@ -976,7 +977,7 @@ npm run e2e:second         # a second window while the first reads: refused with
 npm run e2e:phone          # 375x812 screenshots of each state, light and dark, overflow asserted
 npm run e2e:unplug         # power cut mid-dump -> clean error -> power back -> re-pick -> read again
 npm run e2e:flash          # the Flash view: reads, then (emulator only) flashes the camera's own image and boots it
-npm run e2e:write          # Preserve 02->03->04: a write run, gated on the camera (see below)
+npm run e2e:write          # Preserve 02->03->04 against the camera's expectation row, gated on the camera
 ```
 
 `SEEK_E2E_TARGET=camera npm run e2e:cancel` (and the like) runs a read-only check on the real
@@ -1016,16 +1017,46 @@ passes acceptance under the profile the read settled on.
 
 #### Writing the real camera (supervised only)
 
-`e2e:write` runs Preserve 02→03→04. On the emulator that is an ordinary write run. On the camera it
-passes through a gate (`approveWrite`, `e2e/lib/supervised-write.ts`) that is deliberately hard to
-pass and impossible to pass by accident: it needs `SEEK_E2E_WRITE=i-understand`, a non-CI
-interactive terminal, and the operator to type back the camera's own firmware version and image
-sha. Under automation (no TTY) it refuses, so nothing is ever written to the camera. `SEEK_E2E_WRITE=dry-run`
-reads the camera up to the first write and stops. The gate's refusals are pinned by `e2e:gate`; the
-write RPC sequence is proven on the emulator (`e2e:emu`, and `e2e:write` with
-`SEEK_E2E_WRITE_FULL=1`). The actual camera 03/04 execution lifts the page write-guard for that run
-only, keeps every other guard (the vendor-id pick, the expected RPC sequence), and is left for a
-human at a terminal.
+`e2e:write` runs Preserve 02→03→04 and holds every step to the camera's own row of an expectation
+table (`e2e/lib/preserve-expectations.ts`). The row is chosen by what the camera reports: the version
+it answered on the wire, the build step 02 found in its slot, and the edit on that build, if any.
+There are two rows, the bench Compact 1.3.0.0 and Compact PRO 1.0.3.0 with the Compact board patch
+(the bench camera now). A camera with no row stops after step 02, before the gate. The run:
+
+1. Connects, and runs Dump & decrypt. That gives the image the run is held to (or
+   `SEEK_E2E_CAMERA_SHA`) and the version the camera answered.
+2. Runs step 02, which must match the row exactly before the gate is asked: the build, the edit
+   and its balance, the two or five sites, the rebalance word, the chunks, the bank, the bytes that
+   move, and no reboot. Its backup must also equal the dump in all 31 windows.
+3. Asks the gate.
+4. Reopens the app with the write guards, loads the step 02 run file, and runs steps 03 and 04.
+   Each is checked: the chunks and the one commit with the row's checksum, one reboot and one pick
+   each, no replug, the bytes the commit moved (all in the bank), the restore's record, and the
+   31-window verify. For the two bench parts, the raw and delivered dumps are pinned to their
+   measured shas.
+
+On the emulator that is an ordinary write run (with `SEEK_E2E_WRITE_FULL=1`; `SEEK_E2E_EMU_FLASH`
+boots another part, as for `e2e:emu`). It takes the same steps a person takes on the camera.
+
+On the camera it passes through a gate (`approveWrite`, `e2e/lib/supervised-write.ts`) that is
+deliberately hard to pass and impossible to pass by accident. It needs `SEEK_E2E_WRITE=i-understand`,
+a non-CI session, and the operator to type back `<version>:<first 8 hex of the image sha>` at the
+terminal the run was started from. The gate asks on the controlling terminal (`/dev/tty`). Vitest
+runs a spec with its stdin and stdout piped, so the old check on those refused everyone, the person
+included. A process with no terminal (CI, a scheduler, an agent's shell) is refused, so nothing is
+ever written to the camera under automation. `SEEK_E2E_WRITE=dry-run` needs no terminal: it reads
+the camera, checks step 02 against the row, and stops before the first write.
+
+Past the gate, the page write guard (`writeGuardScript({ lifted: true })`) opens each write phase
+with exactly its row's budget: the chunks, one CompleteMemoryUpgrade carrying the plan's checksum,
+and the resets. Anything else is refused unsent, before the camera erases anything. The vendor-id
+pick in Electron's main process is unchanged. The bench camera's run, at a terminal:
+
+```sh
+SEEK_E2E_TARGET=camera SEEK_E2E_WRITE=i-understand npm run e2e:write
+```
+
+The run files are kept (the path is printed): the step 03 one holds the camera's whole flash.
 
 The unplug / power-cycle flows on the camera use a USB power switch (`e2e/lib/power-switch.ts`): a
 MANUAL mode that asks a human to unplug and replug and waits for the bus, or the RP2040 hardware

@@ -7,7 +7,7 @@ import type { Page } from 'puppeteer-core';
 import { expect } from 'vitest';
 
 import { OP } from '../../packages/core/src/protocol/ops.js';
-import { RESET_OP } from '../../packages/core/src/preservation/pipeline.js';
+import { RESET_OP, STAGE_CHUNK } from '../../packages/core/src/preservation/pipeline.js';
 import { say } from './browser.js';
 import { entry, sha256, names, runState, type RunStateView } from './checks.js';
 import { cameraOnBus } from './preflight.js';
@@ -160,29 +160,46 @@ export const DEVICE_INFO_GUARD: WriteGuardConfig = {
 };
 
 /**
+ * The supervised write run's guard: the strict one, plus Preserve's two flash
+ * writes (`writeOps`), each phase opened by the test with its row's exact
+ * budget (`openWritePhase` in `camera-write.e2e.ts`) and shut after. The two
+ * RAM selectors stay refused (Preserve never sends them), and so does every
+ * reset outside a phase the test opened.
+ */
+export const SUPERVISED_WRITE_GUARD: WriteGuardConfig = {
+  ...WRITE_GUARD,
+  neverOps: [OP.SET_FIRMWARE_INFO_FEATURES, OP.SET_RAM_DATA_FEATURES],
+  writeOps: {
+    stage: OP.SET_FEATURED_FIRMWARE_DATA,
+    commit: OP.COMPLETE_MEMORY_UPGRADE,
+    maxStageBytes: STAGE_CHUNK,
+  },
+};
+
+/**
  * The guard as a script for Electron's preload. The default is the strict
  * read-only guard. `deviceInfo` is that guard plus the Flash view's read
  * (`DEVICE_INFO_GUARD`): still read-only, for `flash-view.e2e.ts` on the
- * camera. `lifted` is ONLY for a supervised camera write that has
- * passed the gate (`supervised-write.ts`): it drops the flash-write ids from
- * `neverOps` and pre-arms the reset, so the write flow's own RPCs pass — while
- * the guard still installs, locks the prototype methods and records every
+ * camera. `lifted` is ONLY for a supervised camera write that has passed the
+ * gate (`supervised-write.ts`): `SUPERVISED_WRITE_GUARD`, whose writes and
+ * resets stay shut until the test opens a phase with its row's budgets. The
+ * guard still installs, locks the prototype methods and records every
  * transfer, and the vendor-id device pick in Electron's main process is
  * untouched. Never used by the unattended read-only runs.
+ *
+ * (It used to drop the flash-write ids from `neverOps` and nothing more, which
+ * left them refused as "not on this run's whitelist": a confirmed camera run
+ * would have stopped at its first staged chunk.)
  */
 export function writeGuardScript(
   options: { readonly lifted?: boolean; readonly deviceInfo?: boolean } = {},
 ): string {
   const config: WriteGuardConfig = options.lifted
-    ? { ...WRITE_GUARD, neverOps: [] }
+    ? SUPERVISED_WRITE_GUARD
     : options.deviceInfo === true
       ? DEVICE_INFO_GUARD
       : WRITE_GUARD;
-  const arm = options.lifted
-    ? `globalThis[${JSON.stringify(WRITE_GUARD_GLOBAL)}].allowReset = true;` +
-      `globalThis[${JSON.stringify(WRITE_GUARD_GLOBAL)}].resetBudget = null;`
-    : '';
-  return `(${installWriteGuard.toString()})(${JSON.stringify(config)});\n${arm}\n`;
+  return `(${installWriteGuard.toString()})(${JSON.stringify(config)});\n`;
 }
 
 /**
