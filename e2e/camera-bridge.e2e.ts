@@ -10,11 +10,13 @@
  * `navigator.usb.requestDevice()` (`device-prompt.e2e.ts` measures that) — and
  * a policy that pre-grants the device would change the machine.
  *
- * WHAT IT DOES: Connect (the bridge's chooser), Dump & decrypt, then Preserve
- * step 02 "Read & build" — reads, builds the patch in memory, and may reboot
- * the camera by command if its reader comes up spent (each reboot's
- * "Your turn" ask is answered in the chooser). It checks the 02 run file and
- * that the page offers step 03 with no red alarm, and STOPS.
+ * WHAT IT DOES: Connect (the bridge's chooser), Dump & decrypt twice, then
+ * Preserve step 02 "Read & build" — reads, builds the patch in memory, and may
+ * reboot the camera by command if its reader comes up spent (each reboot's
+ * "Your turn" ask is answered in the chooser). It checks the camera it picked,
+ * the version it reports and the dump's image the way `camera.e2e.ts` does —
+ * from the camera, or the environment — then the 02 run file and that the page
+ * offers step 03 with no red alarm, and STOPS.
  *
  * WHAT IT WILL NOT DO, and what stops it: it never starts step 03 or 04, never
  * confirms a write, never opens the Flash view (`READ_ONLY_CAMERA`, the UI
@@ -44,9 +46,12 @@ import { CameraBus, PAGE_REFUSED_OUT } from './lib/camera-bus.js';
 import {
   CAMERA_NAME,
   NEVER_ON_THE_WIRE,
+  checkCameraName,
+  checkCameraVersion,
   checkDumpArchive,
   checkStep02RunFile,
   checkStep03Offered,
+  step02,
 } from './lib/camera-flow.js';
 import { cameraBusyReason } from './lib/preflight.js';
 import { describeWire, wireSince } from './lib/checks.js';
@@ -117,15 +122,27 @@ describe.skipIf(UNAVAILABLE !== null)(
     it('connects through the chooser, and Dump & decrypt reads the camera without a write or a reset', async () => {
       const w = need(wizard, 'the wizard');
       const b = need(bridge, 'the bridge');
-      need(bus, 'the camera').allowReset = false;
-      expect(await w.connect()).toMatch(/PIR206 Thermal Camera/);
+      const camera = need(bus, 'the camera');
+      camera.allowReset = false;
+      checkCameraName(await w.connect());
       const before = new Map(b.counts);
       const dump = await w.dumpAndDecrypt(20 * 60_000);
       const wire = wireSince(before, b.counts);
       say(`dump wire: ${describeWire(wire)}`);
       checkDumpArchive(dump);
       for (const op of [...NEVER_ON_THE_WIRE, 'out 0x59']) expect(wire.has(op), op).toBe(false);
+      say(`the camera reports firmware ${checkCameraVersion(camera.version, dump)}`);
       expect(b.refusals).toEqual([]);
+    });
+
+    it('Dump & decrypt again reads the same image', async () => {
+      const w = need(wizard, 'the wizard');
+      const b = need(bridge, 'the bridge');
+      const before = new Map(b.counts);
+      const dump = await w.dumpAndDecrypt(20 * 60_000);
+      const wire = wireSince(before, b.counts);
+      checkDumpArchive(dump);
+      for (const op of [...NEVER_ON_THE_WIRE, 'out 0x59']) expect(wire.has(op), op).toBe(false);
     });
 
     it('Preserve step 02 reads & builds, saves its run file, offers step 03 — and the run stops there', async () => {
@@ -137,7 +154,9 @@ describe.skipIf(UNAVAILABLE !== null)(
       camera.allowReset = true;
       let run;
       try {
-        run = await w.runPhase('read-build', { confirm: false, timeoutMs: 30 * 60_000 });
+        run = await step02(() =>
+          w.runPhase('read-build', { confirm: false, timeoutMs: 30 * 60_000 }),
+        );
       } finally {
         camera.allowReset = false;
       }

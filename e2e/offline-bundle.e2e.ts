@@ -8,6 +8,10 @@
  * offline, which is what the page's airplane-mode advice promises. Every
  * network request the page makes AFTER it has loaded is recorded and reported,
  * so a stray fetch (a font, an analytics ping) would show up.
+ *
+ * Step 02 runs as it does in `camera.e2e.ts` (`runStep02`): its plain reset is
+ * allowed while it runs, and no guard may refuse anything. The bundle is the
+ * committed one, so what it runs is the code `docs/` was last built from.
  * ==================================================================== */
 
 import { expect, it } from 'vitest';
@@ -15,6 +19,7 @@ import { expect, it } from 'vitest';
 import { say } from './lib/browser.js';
 import { checkDumpArchive, checkStep02RunFile } from './lib/camera-flow.js';
 import { targetSpec } from './lib/spec.js';
+import { expectedImageSha, runStep02 } from './lib/target-tools.js';
 
 interface Req {
   readonly url: string;
@@ -42,7 +47,7 @@ targetSpec(
       await t.setOffline(true);
       try {
         const dump = await t.wizard.dumpAndDecrypt(20 * 60_000);
-        checkDumpArchive(dump);
+        checkDumpArchive(dump, expectedImageSha(t));
       } finally {
         await t.setOffline(false);
       }
@@ -52,11 +57,7 @@ targetSpec(
       const t = ctx.target();
       await t.setOffline(true);
       try {
-        const run = await t.wizard.runPhase('read-build', {
-          confirm: false,
-          timeoutMs: 30 * 60_000,
-        });
-        checkStep02RunFile(run);
+        checkStep02RunFile(await runStep02(t));
       } finally {
         await t.setOffline(false);
       }

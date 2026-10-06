@@ -27,6 +27,17 @@
  * A reboot is the camera's own: it leaves the bus and re-enumerates, node-usb
  * reports both, and the bridge turns them into what Chrome would show the
  * page.
+ *
+ * NOT ALWAYS BOTH. Measured 2026-10-06 on a camera whose step 02 reboots it
+ * once per window: on the third reboot node-usb reported neither the camera
+ * leaving nor the new enumeration arriving, so the bus kept the old device,
+ * every open failed "open error: not found by registry id", and the page
+ * waited for a `disconnect` that never came. Each enumeration has its own id
+ * (`DeviceId(<IORegistry id>)`, node-usb's `handle`), so the bus also polls
+ * `getDevices()` — a registry query, no transfer — once a second and
+ * reconciles: a held device whose id is gone has left, and a camera the bus
+ * does not hold has arrived. The events, when they come, are matched by id
+ * too, so a late event for an older enumeration cannot unseat a newer one.
  */
 
 import { fromNodeUsb, type NodeUsbDevice } from '../../packages/cli/src/node-usb.js';
@@ -69,6 +80,43 @@ function isU16Zero(data: Uint8Array | null): boolean {
   return data !== null && data.length === 2 && data[0] === 0 && data[1] === 0;
 }
 
+/**
+ * A field of a device node-usb may refuse to read: while a transfer on the same
+ * native object is still pending (the reset that is taking the camera off the
+ * bus), a read throws "The same native value cannot be borrowed mutably while
+ * another borrow is active" — measured 2026-10-06, from inside a `disconnect`
+ * handler, where a throw is an uncaught exception. Null when it refused.
+ */
+function readable<T>(read: () => T): T | null {
+  try {
+    return read();
+  } catch {
+    return null;
+  }
+}
+
+/** node-usb's id for one enumeration (`DeviceId(<IORegistry id>)`), or null when it has none. */
+function enumerationOf(device: NodeUsbDevice): string | null {
+  const handle = readable(() => (device as unknown as { readonly handle?: unknown }).handle);
+  return typeof handle === 'string' ? handle : null;
+}
+
+/** The enumeration the bus holds: its id is taken once, at adoption, never read again. */
+interface Held {
+  readonly bus: BusDevice;
+  readonly raw: NodeUsbDevice;
+  readonly id: string | null;
+}
+
+/** Whether a device object is the held enumeration: node-usb hands out new objects. */
+function isHeld(device: NodeUsbDevice, held: Held): boolean {
+  const id = enumerationOf(device);
+  return id !== null && held.id !== null ? id === held.id : device === held.raw;
+}
+
+/** How often the bus checks the registry for an enumeration the events missed. */
+const POLL_MS = 1000;
+
 export class CameraBus implements UsbBus {
   readonly name = 'real camera (node-usb)';
   /** nusb needs a timeout; this is above every deadline the read paths set (20 s). */
@@ -82,8 +130,10 @@ export class CameraBus implements UsbBus {
   private readonly log: (line: string) => void;
   private readonly listeners = new Set<(change: BusChange) => void>();
   private readonly webusb: EventTarget & { getDevices: () => Promise<NodeUsbDevice[]> };
-  private current: { readonly bus: BusDevice; readonly raw: NodeUsbDevice } | null = null;
+  private current: Held | null = null;
   private enumerations = 0;
+  private poll: ReturnType<typeof setInterval> | null = null;
+  private polling = false;
 
   private constructor(
     webusb: EventTarget & { getDevices: () => Promise<NodeUsbDevice[]> },
@@ -98,6 +148,14 @@ export class CameraBus implements UsbBus {
     const webusb = new WebUSB({ allowAllDevices: true }) as unknown as EventTarget & {
       getDevices: () => Promise<NodeUsbDevice[]>;
     };
+    return CameraBus.over(webusb, log);
+  }
+
+  /** The bus over any WebUSB-shaped host stack: node-usb's in a run, a fake in a test. */
+  static async over(
+    webusb: EventTarget & { getDevices: () => Promise<NodeUsbDevice[]> },
+    log: (line: string) => void,
+  ): Promise<CameraBus> {
     const bus = new CameraBus(webusb, log);
     const cameras = (await webusb.getDevices()).filter((d) => d.vendorId === SEEK_VENDOR_ID);
     if (cameras.length !== 1) {
@@ -107,12 +165,28 @@ export class CameraBus implements UsbBus {
     if (camera !== undefined) bus.adopt(camera);
     webusb.addEventListener('connect', bus.onConnect);
     webusb.addEventListener('disconnect', bus.onDisconnect);
+    bus.poll = setInterval(() => {
+      void bus.reconcile();
+    }, POLL_MS);
     return bus;
   }
 
   private readonly onConnect = (event: Event): void => {
     const device = (event as unknown as { device: NodeUsbDevice }).device;
-    if (device.vendorId !== SEEK_VENDOR_ID || this.current !== null) return;
+    const vendor = readable(() => device.vendorId);
+    if (vendor === null) {
+      this.log(
+        '[camera] a connect event whose device could not be read — the registry poll settles it',
+      );
+      void this.reconcile();
+      return;
+    }
+    if (vendor !== SEEK_VENDOR_ID) return;
+    const held = this.current;
+    if (held !== null && isHeld(device, held)) return;
+    /* A new enumeration while the bus still holds an older one: that one's
+     * disconnect was missed or is late. It has left either way. */
+    if (held !== null) this.leave(held, 'its disconnect never came; a new enumeration did');
     this.log('[camera] a Seek camera arrived on the bus');
     this.adopt(device);
   };
@@ -120,11 +194,49 @@ export class CameraBus implements UsbBus {
   private readonly onDisconnect = (event: Event): void => {
     const device = (event as unknown as { device: NodeUsbDevice }).device;
     const held = this.current;
-    if (held === null || device.vendorId !== SEEK_VENDOR_ID) return;
-    this.current = null;
-    this.log('[camera] the camera left the bus');
-    this.emit({ kind: 'detach', device: held.bus });
+    if (held === null) return;
+    const vendor = readable(() => device.vendorId);
+    if (vendor === null) {
+      this.log(
+        '[camera] a disconnect event whose device could not be read — the registry poll settles it',
+      );
+      void this.reconcile();
+      return;
+    }
+    /* A late disconnect for an enumeration already replaced is not this one's. */
+    if (vendor !== SEEK_VENDOR_ID || !isHeld(device, held)) return;
+    this.leave(held, null);
   };
+
+  /** The held enumeration is gone: tell the bridge, once. */
+  private leave(held: { readonly bus: BusDevice }, why: string | null): void {
+    if (this.current?.bus.key !== held.bus.key) return;
+    this.current = null;
+    this.log(`[camera] the camera left the bus${why === null ? '' : ` (${why})`}`);
+    this.emit({ kind: 'detach', device: held.bus });
+  }
+
+  /** The registry's answer, for whatever the hotplug events missed (see the file comment). */
+  private async reconcile(): Promise<void> {
+    if (this.polling) return;
+    this.polling = true;
+    try {
+      const cameras = (await this.webusb.getDevices()).filter((d) => d.vendorId === SEEK_VENDOR_ID);
+      const held = this.current;
+      if (held !== null && !cameras.some((d) => isHeld(d, held))) {
+        this.leave(held, 'no event; the registry no longer lists it');
+      }
+      const [only] = cameras;
+      if (this.current === null && cameras.length === 1 && only !== undefined) {
+        this.log('[camera] a Seek camera arrived on the bus (no event; the registry lists it)');
+        this.adopt(only);
+      }
+    } catch {
+      /* the next poll asks again */
+    } finally {
+      this.polling = false;
+    }
+  }
 
   present(): readonly BusDevice[] {
     return this.current === null ? [] : [this.current.bus];
@@ -152,7 +264,7 @@ export class CameraBus implements UsbBus {
       manufacturerName: device.manufacturerName,
       serialNumber: device.serialNumber,
     };
-    this.current = { bus, raw };
+    this.current = { bus, raw, id: enumerationOf(raw) };
     this.log(
       `[camera] ${bus.key}: ${bus.productName ?? '?'} ${hexOp(bus.vendorId)}:${hexOp(bus.productId)}, ` +
         `serial ${bus.serialNumber ?? 'none'}`,
@@ -268,6 +380,8 @@ export class CameraBus implements UsbBus {
 
   /** Closes the handle (if the page left it open) and stops listening. */
   async close(): Promise<void> {
+    if (this.poll !== null) clearInterval(this.poll);
+    this.poll = null;
     this.webusb.removeEventListener('connect', this.onConnect);
     this.webusb.removeEventListener('disconnect', this.onDisconnect);
     const held = this.current;

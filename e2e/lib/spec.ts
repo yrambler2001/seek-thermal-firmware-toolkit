@@ -38,6 +38,8 @@ export function targetSpec(
     readonly fallback?: TargetName;
     readonly source?: OpenTargetOptions['source'];
     readonly uiGuard?: OpenTargetOptions['uiGuard'];
+    /** The camera target's preload (its page-side write guard); ignored on the emulator. */
+    readonly preloadSource?: OpenTargetOptions['preloadSource'];
     /** A slug for the scratch directory. */
     readonly slug: string;
   },
@@ -62,6 +64,7 @@ export function targetSpec(
         ...(options.source === undefined ? {} : { source: options.source }),
         headed: HEADED,
         ...(options.uiGuard === undefined ? {} : { uiGuard: options.uiGuard }),
+        ...(options.preloadSource === undefined ? {} : { preloadSource: options.preloadSource }),
       });
     });
 

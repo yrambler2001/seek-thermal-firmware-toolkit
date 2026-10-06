@@ -72,6 +72,21 @@ export const READ_ONLY_CAMERA: UiGuard = {
   allowPhase: (phase) => phase === 'read-build',
 };
 
+/**
+ * The Flash view's read on the real camera: the route and "Read device info",
+ * nothing that writes. Every label that picks an image, writes, confirms, or
+ * starts a Preserve phase is refused, as in `READ_ONLY_CAMERA`.
+ */
+export const FLASH_VIEW_READ_ONLY: UiGuard = {
+  name: 'Flash view, read-only (real camera)',
+  allowClick: (label) =>
+    !/write to|choose plaintext image|yes —|patch & dump|restore & verify|jump past|skip the commit|i replugged it|read & build/i.test(
+      label,
+    ),
+  allowRoute: () => true,
+  allowPhase: () => false,
+};
+
 export interface PhaseRun {
   readonly phase: PhaseId;
   /** How many "Your turn: press Connect device" asks were answered. */
@@ -510,33 +525,8 @@ export class Wizard {
         );
       }
       if (view.ask !== null) {
-        if (!view.ask.includes('press Connect device and pick the camera')) {
-          throw new Error(`${PHASE_LABEL[phase]}: an ask this run does not answer: ${view.ask}`);
-        }
         asks += 1;
-        const asked = await this.yourTurn(section);
-        const tone = await asked.evaluate((el) => {
-          const classes = el.className;
-          if (classes.includes('border-l-destructive')) return 'err' as const;
-          if (classes.includes('border-l-warn')) return 'warn' as const;
-          if (classes.includes('border-l-ok')) return 'ok' as const;
-          if (classes.includes('border-l-primary')) return 'info' as const;
-          return 'unknown' as const;
-        });
-        const askView: AskView = { tone, text: view.ask, redAlerts: await this.redAlerts() };
-        askViews.push(askView);
-        await options.onAsk?.(askView);
-        say(`${PHASE_LABEL[phase]}: "Your turn" ask #${String(asks)} (${tone}) — answering it`);
-        const picked = await this.pickCamera(asked, 'Connect device', 240_000);
-        say(`${PHASE_LABEL[phase]}: picked ${picked} in the chooser`);
-        await this.page.waitForFunction(
-          (sel: string) =>
-            ![...(document.querySelector(sel)?.querySelectorAll('[data-slot="alert"]') ?? [])].some(
-              (a) => (a as HTMLElement).innerText.includes('Your turn'),
-            ),
-          { timeout: 120_000, polling: 250 },
-          section,
-        );
+        askViews.push(await this.answerAsk(phase, view.ask, asks, options.onAsk));
         continue;
       }
       if (Date.now() - lastReport > 15_000) {
@@ -556,6 +546,102 @@ export class Wizard {
       `${PHASE_LABEL[phase]}: done in ${(ms / 1000).toFixed(1)} s, ${String(asks)} ask(s) — ${runFile.name}`,
     );
     return { phase, asks, askViews, ms, runFile, entries: readZip(runFile.bytes), status };
+  }
+
+  /**
+   * Answers one "Your turn: press Connect device" ask in `phase`'s section
+   * through the chooser, as a person would, and waits for the box to go.
+   * Anything else that asks stops the run.
+   */
+  private async answerAsk(
+    phase: PhaseId,
+    text: string,
+    n: number,
+    onAsk?: (ask: AskView) => Promise<void>,
+  ): Promise<AskView> {
+    if (!text.includes('press Connect device and pick the camera')) {
+      throw new Error(`${PHASE_LABEL[phase]}: an ask this run does not answer: ${text}`);
+    }
+    const section = phaseSection(phase);
+    const asked = await this.yourTurn(section);
+    const tone = await asked.evaluate((el) => {
+      const classes = el.className;
+      if (classes.includes('border-l-destructive')) return 'err' as const;
+      if (classes.includes('border-l-warn')) return 'warn' as const;
+      if (classes.includes('border-l-ok')) return 'ok' as const;
+      if (classes.includes('border-l-primary')) return 'info' as const;
+      return 'unknown' as const;
+    });
+    const askView: AskView = { tone, text, redAlerts: await this.redAlerts() };
+    await onAsk?.(askView);
+    say(`${PHASE_LABEL[phase]}: "Your turn" ask #${String(n)} (${tone}) — answering it`);
+    const picked = await this.pickCamera(asked, 'Connect device', 240_000);
+    say(`${PHASE_LABEL[phase]}: picked ${picked} in the chooser`);
+    await this.page.waitForFunction(
+      (sel: string) =>
+        ![...(document.querySelector(sel)?.querySelectorAll('[data-slot="alert"]') ?? [])].some(
+          (a) => (a as HTMLElement).innerText.includes('Your turn'),
+        ),
+      { timeout: 120_000, polling: 250 },
+      section,
+    );
+    return askView;
+  }
+
+  /**
+   * Waits until `phase`'s bar reads at least `percent`, answering every "Your
+   * turn" ask on the way as `runPhase` does. A camera whose step 02 reboots it
+   * between windows would otherwise sit at its first ask, and the bar with it,
+   * until the wait timed out. Returns the bar's value and the asks answered.
+   */
+  async waitForPhaseProgress(
+    phase: PhaseId,
+    percent: number,
+    timeoutMs = 10 * 60_000,
+  ): Promise<{ readonly percent: number; readonly asks: number }> {
+    const section = phaseSection(phase);
+    const panel = `preserve-phase-${phase}`;
+    const t0 = Date.now();
+    let asks = 0;
+    for (;;) {
+      const view = await this.page.evaluate(
+        (sel: string, id: string) => {
+          const bar = document
+            .getElementById(`${id}-status`)
+            ?.parentElement?.querySelector('[role="progressbar"]');
+          const alerts = [
+            ...(document.querySelector(sel)?.querySelectorAll('[data-slot="alert"]') ?? []),
+          ].map((a) => (a as HTMLElement).innerText);
+          return {
+            value: Number(bar?.getAttribute('aria-valuenow') ?? 'NaN'),
+            status: document.getElementById(`${id}-status`)?.innerText ?? '',
+            ask: alerts.find((t) => t.includes('Your turn')) ?? null,
+          };
+        },
+        section,
+        panel,
+      );
+      if (Number.isFinite(view.value) && view.value >= percent) {
+        return { percent: view.value, asks };
+      }
+      if (/^(Failed|Refused|Stopped|Cancelled|Not created|No run)/.test(view.status)) {
+        throw new Error(
+          `${PHASE_LABEL[phase]} ended: ${view.status}\n${await this.logTail(panel)}`,
+        );
+      }
+      if (Date.now() - t0 > timeoutMs) {
+        throw new Error(
+          `${PHASE_LABEL[phase]} did not reach ${String(percent)} % in ${String(timeoutMs)} ms: ` +
+            view.status,
+        );
+      }
+      if (view.ask !== null) {
+        asks += 1;
+        await this.answerAsk(phase, view.ask, asks);
+        continue;
+      }
+      await sleep(250);
+    }
   }
 
   private async yourTurn(section: string): Promise<ElementHandle> {

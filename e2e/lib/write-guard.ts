@@ -13,7 +13,8 @@
  *   OUT  `modeOp` with payload u16 0; `armOp` only once `versionOp` has
  *        answered (nothing but identity reads before the build is known);
  *        `resetOp` with payload u16 0, and only while the test has set
- *        `allowReset` (Preserve step 02, whose probe may reboot a spent reader).
+ *        `allowReset` (Preserve step 02, whose probe may reboot a spent reader);
+ *        and, for the Flash view's device-info read only, `infoOps`.
  *
  * Everything else is refused before it leaves the page — above all the ids in
  * `neverOps` (the flash writes and the flash path's selectors), in either
@@ -42,6 +43,15 @@ export interface WriteGuardConfig {
   readonly armOp: number;
   readonly versionOp: number;
   readonly resetOp: number;
+  /**
+   * The two RAM selectors the Flash view's "Read device info" sends, let out
+   * only when set: `firmwareInfo` (SetFirmwareInfoFeatures) with a u16 record
+   * selector, `ramData` (SetRamDataFeatures) for the device-id block alone
+   * (case 0, a 6-byte payload). Neither touches flash — the CLI's `info`
+   * sends both — but the dump and step 02 never do, so their runs leave this
+   * unset and refuse them like any other id off the whitelist.
+   */
+  readonly infoOps?: { readonly firmwareInfo: number; readonly ramData: number } | null;
 }
 
 /** A test-only fault: the next `remaining` matching reads answer a stall, unsent. */
@@ -57,7 +67,15 @@ export interface WriteGuardControl {
   allowReset: boolean;
   /** How many more resets may go out, or null for no cap (still only while `allowReset`). */
   resetBudget: number | null;
+  /** The last four bytes GetFirmwareInfo answered, as a version: what arming waits for. */
   version: string | null;
+  /**
+   * Every GetFirmwareInfo answer, in order. Not every one is the firmware
+   * version: a device-info read selects other records (the bootloader's, the
+   * platform's) and their first four bytes land here too. The version read's
+   * own rule makes the SECOND answer of a session the build block.
+   */
+  readonly versionsSeen: string[];
   readonly refusals: string[];
   /** `out 0x52` -> how many went out (injected stalls never went out, so never count). */
   readonly counts: Record<string, number>;
@@ -80,6 +98,7 @@ export function installWriteGuard(config: WriteGuardConfig): void {
     allowReset: false,
     resetBudget: null,
     version: null,
+    versionsSeen: [],
     refusals: [],
     counts: {},
     wrapped: [],
@@ -141,6 +160,17 @@ export function installWriteGuard(config: WriteGuardConfig): void {
       if (control.resetBudget !== null) {
         if (control.resetBudget <= 0) refuse("ResetDevice beyond this run's reset budget");
         control.resetBudget -= 1;
+      }
+      return;
+    }
+    const info = config.infoOps ?? null;
+    if (info !== null && op === info.firmwareInfo) {
+      if (bytes.length !== 2) refuse('SetFirmwareInfoFeatures with a payload other than a u16');
+      return;
+    }
+    if (info !== null && op === info.ramData) {
+      if (bytes.length !== 6 || bytes[0] !== 0 || bytes[1] !== 0) {
+        refuse('SetRamDataFeatures other than the device-id block (case 0)');
       }
       return;
     }
@@ -227,6 +257,7 @@ export function installWriteGuard(config: WriteGuardConfig): void {
         data.byteLength >= 4
       ) {
         control.version = [0, 1, 2, 3].map((i) => String(data.getUint8(i))).join('.');
+        control.versionsSeen.push(control.version);
       }
       return result;
     },

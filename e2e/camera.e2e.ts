@@ -11,11 +11,14 @@
  * with no serial number are Chrome's (an ephemeral grant, dropped when the
  * camera leaves the bus); the test records the serial string Chromium read.
  *
- * WHAT IT DOES: Connect, Dump & decrypt, then Preserve step 02 "Read & build"
- * — reads, builds the patch in memory, and may reboot the camera by command if
- * its reader comes up spent (each restart's "Your turn" ask is answered through
- * the chooser). It checks the dump's image against this camera's flash, the
- * 02 run file, that the page offers step 03 with no red alarm, and STOPS.
+ * WHAT IT DOES: Connect, Dump & decrypt twice, then Preserve step 02 "Read &
+ * build" — reads, builds the patch in memory, and may reboot the camera by
+ * command if its reader comes up spent (each restart's "Your turn" ask is
+ * answered through the chooser). It checks the dump's image (against
+ * `SEEK_E2E_CAMERA_SHA` when set, else against the re-dump), the version the
+ * camera reports, the 02 run file, that the page offers step 03 with no red
+ * alarm, and STOPS. Whichever camera is attached: the product, version and
+ * image come from the camera or the environment (`camera-flow.ts`).
  *
  * WHAT STOPS A WRITE, three times over, none of them depending on another:
  *   1. the UI guard (`READ_ONLY_CAMERA`): the test refuses to click step 03 /
@@ -37,9 +40,11 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { say } from './lib/browser.js';
 import {
   NEVER_ON_THE_WIRE,
+  checkCameraVersion,
   checkDumpArchive,
   checkStep02RunFile,
   checkStep03Offered,
+  step02,
 } from './lib/camera-flow.js';
 import { describeWire, wireSince } from './lib/checks.js';
 import {
@@ -109,8 +114,17 @@ describe.skipIf(UNAVAILABLE !== null)(
       say(`dump wire: ${describeWire(wire)}`);
       checkDumpArchive(dump);
       for (const op of [...NEVER_ON_THE_WIRE, 'out 0x59']) expect(wire.has(op), op).toBe(false);
-      expect(after.version).toBe('1.3.0.0');
+      say(`the camera reports firmware ${checkCameraVersion(after.version, dump)}`);
       expect(after.refusals).toEqual([]);
+    });
+
+    it('Dump & decrypt again reads the same image', async () => {
+      const { app, wizard } = need();
+      const before = countsOf(await guardOf(app.page));
+      const dump = await wizard.dumpAndDecrypt(20 * 60_000);
+      const wire = wireSince(before, countsOf(await guardOf(app.page)));
+      checkDumpArchive(dump);
+      for (const op of [...NEVER_ON_THE_WIRE, 'out 0x59']) expect(wire.has(op), op).toBe(false);
     });
 
     it('Preserve step 02 reads & builds, saves its run file, offers step 03 — and the run stops there', async () => {
@@ -120,7 +134,9 @@ describe.skipIf(UNAVAILABLE !== null)(
       await setGuard(app.page, { allowReset: true });
       let run;
       try {
-        run = await wizard.runPhase('read-build', { confirm: false, timeoutMs: 30 * 60_000 });
+        run = await step02(() =>
+          wizard.runPhase('read-build', { confirm: false, timeoutMs: 30 * 60_000 }),
+        );
       } finally {
         await setGuard(app.page, { allowReset: false });
       }

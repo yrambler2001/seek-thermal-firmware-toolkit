@@ -15,9 +15,9 @@ import { existsSync } from 'node:fs';
 import { expect, it } from 'vitest';
 
 import { say } from './lib/browser.js';
-import { CAMERA_FLASH_SHA } from './lib/camera-flow.js';
 import { names, sha256 } from './lib/checks.js';
 import { targetSpec } from './lib/spec.js';
+import { checkImage } from './lib/target-tools.js';
 
 const DUMP_FILE = process.env.SEEK_E2E_DUMP_FILE ?? '';
 const RUN_SWEEP = process.env.SEEK_E2E_SWEEP === '1';
@@ -53,6 +53,13 @@ targetSpec({ title: 'Dump & decrypt — variants', slug: 'dump-variants' }, (ctx
     const dir = names(run.entries)[0]?.split('/')[0] ?? '';
     expect(dir).toMatch(/^seek_flash4m_legacy-auth_/);
     expect(decryptedSlots(run.entries).size).toBeGreaterThanOrEqual(1);
+    /* The same windows as an auto-family dump, so the same image. */
+    const image = run.entries.find((e) => /^[^/]+\/flash_4m_usb[^/]*\.bin$/.test(e.name));
+    checkImage(
+      ctx.target(),
+      sha256(image?.data ?? new Uint8Array(0)),
+      "the hand-picked family's dump",
+    );
   });
 
   it.skipIf(!RUN_SWEEP)('sweep mode probes every selector and saves what answers', async () => {
@@ -81,9 +88,7 @@ targetSpec({ title: 'Dump & decrypt — variants', slug: 'dump-variants' }, (ctx
      * same per-slot plaintext. */
     const live = await w.dumpAndDecrypt(20 * 60_000);
     const liveImage = live.entries.find((e) => /^[^/]+\/flash_4m_usb[^/]*\.bin$/.test(e.name));
-    if (CAMERA_FLASH_SHA !== '') {
-      expect(sha256(liveImage?.data ?? new Uint8Array(0))).toBe(CAMERA_FLASH_SHA);
-    }
+    checkImage(ctx.target(), sha256(liveImage?.data ?? new Uint8Array(0)), 'the live dump');
     const liveSlots = decryptedSlots(live.entries);
     for (const [address, hash] of slots) {
       if (liveSlots.has(address)) expect(liveSlots.get(address), `slot ${address}`).toBe(hash);

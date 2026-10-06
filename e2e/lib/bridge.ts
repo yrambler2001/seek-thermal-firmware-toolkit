@@ -229,6 +229,25 @@ export class BrowserUsbState {
 const UNABLE_TO_CLAIM =
   "Failed to execute 'claimInterface' on 'USBDevice': Unable to claim interface.";
 
+/**
+ * The device's configuration value, or null when the host cannot say.
+ *
+ * A DEPARTED DEVICE CAN THROW HERE. node-usb's `configuration` getter reads the
+ * configuration's name string, so on a camera that has just left the bus it
+ * threw "getString error: unknown (error 0xe00002d9)" (measured 2026-10-06).
+ * That read builds the `disconnect` the page is sent, so the throw lost the
+ * event: the page kept retrying a dead handle for ten minutes instead of
+ * asking for the camera. The CLI adapter now answers the last value it read
+ * (`fromNodeUsb`, point 6); this keeps any other host stack from doing the same.
+ */
+function configurationValueOf(device: BusDevice): number | null {
+  try {
+    return device.device.configuration?.configurationValue ?? null;
+  } catch {
+    return null;
+  }
+}
+
 function infoOf(device: BusDevice): DeviceInfo {
   return {
     key: device.key,
@@ -237,7 +256,7 @@ function infoOf(device: BusDevice): DeviceInfo {
     productName: device.productName,
     manufacturerName: device.manufacturerName,
     serialNumber: device.serialNumber,
-    configurationValue: device.device.configuration?.configurationValue ?? null,
+    configurationValue: configurationValueOf(device),
   };
 }
 
@@ -297,7 +316,13 @@ export class UsbBridge implements DevicePrompter {
     this.persistentGrants = this.shared.persistentGrants;
     for (const device of bus.present()) this.known.set(device.key, device);
     this.unsubscribe = bus.subscribe((change) => {
-      void this.onBusChange(change);
+      /* Never an unhandled rejection: a bus change that fails to reach the
+       * page is a line on the timeline, where the test's report shows it. */
+      this.onBusChange(change).catch((error: unknown) => {
+        this.note(
+          `bus: could not handle the ${change.kind} of ${change.device.key}: ${String(error)}`,
+        );
+      });
     });
   }
 
@@ -615,7 +640,8 @@ export class UsbBridge implements DevicePrompter {
       value,
       state: {
         opened: device.opened && mine(),
-        configurationValue: device.configuration?.configurationValue ?? null,
+        /* Read after the transfer, when a reset may have taken the device off the bus. */
+        configurationValue: configurationValueOf(entry),
       },
     };
   }

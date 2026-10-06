@@ -11,6 +11,10 @@
  * Also: an old flat-layout run file (checkpoints at the top, no step folders)
  * loads and resumes, and a broken/foreign zip fails calmly — a clear "Not
  * resumed" line, not a wall of red.
+ *
+ * Step 02 runs as it does in `camera.e2e.ts` (`runStep02`): its plain reset is
+ * allowed while it runs, and no guard may refuse anything. When it ends without
+ * a run file, the tests that need one say so and skip.
  * ==================================================================== */
 
 import { readFileSync, writeFileSync } from 'node:fs';
@@ -20,46 +24,59 @@ import { buildZip } from '@seek-fw/core';
 import { expect, it } from 'vitest';
 
 import { say } from './lib/browser.js';
-import { checkStep03Offered } from './lib/camera-flow.js';
+import { checkStep03Offered, needsStep02 } from './lib/camera-flow.js';
 import { runState } from './lib/checks.js';
 import { targetSpec } from './lib/spec.js';
+import { runStep02 } from './lib/target-tools.js';
 import { readZip } from './lib/zip.js';
 
 const FULL = process.env.SEEK_E2E_RESUME_FULL === '1';
 
 targetSpec({ title: 'resume from a run file', slug: 'resume' }, (ctx) => {
   let patchBuilt = '';
+  let step02Failure: string | null = null;
 
   it('step 02 produces a patch-built run file', async () => {
     const t = ctx.target();
     await t.wizard.connect();
-    const run = await t.wizard.runPhase('read-build', { confirm: false, timeoutMs: 30 * 60_000 });
-    patchBuilt = run.runFile.path;
-    expect(runState(run.entries).nextStep).toBe('commit');
+    try {
+      const run = await runStep02(t);
+      patchBuilt = run.runFile.path;
+      expect(runState(run.entries).nextStep).toBe('commit');
+    } catch (error) {
+      step02Failure = error instanceof Error ? error.message : String(error);
+      throw error;
+    }
   });
 
-  it('a reloaded page loads that run file and resumes at step 03', async () => {
+  it('a reloaded page loads that run file and resumes at step 03', async (test) => {
     const t = ctx.target();
+    test.skip(step02Failure !== null, needsStep02(step02Failure) ?? '');
     await t.reload();
     const status = await t.wizard.loadRunFile(patchBuilt);
     expect(status).toMatch(/^Resumed at commit/);
     await checkStep03Offered(t.wizard, t.page);
   });
 
-  it.skipIf(!FULL)('continues through 03 and 04 to Verified (emulator write path)', async () => {
-    const t = ctx.target();
-    if (!t.writesSafe) {
-      say('camera target: the continue-through-03/04 write path is gated — not run here');
-      return;
-    }
-    await t.wizard.runPhase('patch-dump', { confirm: true, timeoutMs: 60 * 60_000 });
-    await t.wizard.runPhase('restore-verify', { confirm: true, timeoutMs: 60 * 60_000 });
-    const text = await t.page.evaluate(() => document.body.innerText);
-    expect(text).toContain('Verified — a perfect match.');
-  });
+  it.skipIf(!FULL)(
+    'continues through 03 and 04 to Verified (emulator write path)',
+    async (test) => {
+      const t = ctx.target();
+      test.skip(step02Failure !== null, needsStep02(step02Failure) ?? '');
+      if (!t.writesSafe) {
+        say('camera target: the continue-through-03/04 write path is gated — not run here');
+        return;
+      }
+      await t.wizard.runPhase('patch-dump', { confirm: true, timeoutMs: 60 * 60_000 });
+      await t.wizard.runPhase('restore-verify', { confirm: true, timeoutMs: 60 * 60_000 });
+      const text = await t.page.evaluate(() => document.body.innerText);
+      expect(text).toContain('Verified — a perfect match.');
+    },
+  );
 
-  it('an old flat-layout run file still loads', async () => {
+  it('an old flat-layout run file still loads', async (test) => {
     const t = ctx.target();
+    test.skip(step02Failure !== null, needsStep02(step02Failure) ?? '');
     /* Rebuild the patch-built zip with every entry at the top level. */
     const flat = buildZip(
       readZip(new Uint8Array(readFileSync(patchBuilt))).map((e) => ({

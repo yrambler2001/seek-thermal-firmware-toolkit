@@ -5346,3 +5346,142 @@ now.
 - `families.test.ts`: the eight 0.x builds' five-site pins (sec. 36.5).
 - `families.emulator.test.ts`: the three layout rows' five-site diff sets.
 - `steps.test.ts`: the 0.7.0.7 commit session stays on wire 88 (sec. 36.6).
+
+## 37. A camera on Compact PRO 1.0.3.0: the harness made camera-agnostic, the reboots the bridge lost, and the 2016 family told from the 2014 one (2026-10-06)
+
+The bench camera is a 2014 Compact board (PIR206) now running a patched Compact PRO 1.0.3.0
+whole-flash image. It enumerates as `PIR324 Thermal Camera` (289D:0011) with no USB serial, runs
+firmware 1.0.3.0 "Jul 6 2016" on bootloader 1.2.0.0 "Jun 26 2016", and its three app banks hold
+one 1.0.3.0 image under the 2016 cipher (keyed xorshift128, K=0, decrypted word sum 0, no "CODE"
+footer). Its boot-config block is erased. Its USB dump image is `0cb0e544…`: the real flash with
+0x14000000 and the upper 2 MiB gap-filled, since no selector on this build reaches them.
+
+### 37.1 Which camera: asked, or named
+
+The e2e runs carried the old camera's identity. They expected "PIR206 Thermal Camera", firmware
+1.3.0.0, and a whole-part sha of `40447c7e…`, so this camera failed before anything was tested.
+Each value now comes from the camera. An environment variable turns it into a strict check:
+
+- the product string is the one the camera enumerated with (`ioreg`, no transfer), or
+  `SEEK_E2E_CAMERA_NAME`;
+- the version is the one GetFirmwareInfo answered on the wire. It must equal the one the app
+  recorded in the dump manifest, and `SEEK_E2E_CAMERA_VERSION` when that is set;
+- the image is checked against the first whole image the spec read, or `SEEK_E2E_CAMERA_SHA`.
+  `camera`, `camera-bridge` and `second-window` take a second dump for that comparison. It is
+  the dump image's sha, not the flash's.
+
+`camera-restart` assumed stock firmware never restarts in step 02, and capped the run at one
+reset. On this camera step 02 restarts it once per window. The cap is now a sanity bound (64).
+The injected restart must go out, and the extra restarts are reported: 32 to 34 per run here.
+
+The Flash view now has read-only camera coverage. It presses "Read device info" under the strict
+page guard plus exactly the two RAM selectors that read sends (SetFirmwareInfoFeatures and the
+device-id SetRamDataFeatures, checked by payload shape). It checks the version shown against the
+build block on the wire, and that a slot passes acceptance under the profile the read settled on.
+
+### 37.2 The bridge, and the reboots it lost
+
+Three faults sat between a camera reboot and the page's `disconnect`.
+
+1. The bridge built the event from the departed device, and node-usb's `configuration` getter
+   threw `getString error: unknown (error 0xe00002d9)`. The listener was called with `void`, so
+   the rejection went unhandled and the page never heard the camera go. `fromNodeUsb` now
+   answers the last configuration it read for that error class (point 6 in `node-usb.ts`). The
+   bridge reads it defensively and logs any listener failure on its timeline.
+2. With that fixed, node-usb reported some reboots with no event at all: 13 of 32 in one run.
+   `CameraBus` held a device the registry no longer had, every open failed `open error: not
+found by registry id`, and the page waited for a `disconnect` that never came. The bus now
+   polls `getDevices()` once a second and reconciles by node-usb's per-enumeration `handle`
+   (`DeviceId(<IORegistry id>)`). Late events for an older enumeration are ignored.
+3. A `disconnect` handler that reads the departing device can throw `The same native value
+cannot be borrowed mutably while another borrow is active` while the reset transfer on it is
+   still pending. That was an uncaught exception. The handler now leaves such an event to the
+   poll.
+
+`bridge-departed.e2e.ts` (no browser, no device) pins all three. Its first two tests fail on the
+old bridge and adapter with the same unhandled rejection the camera produced.
+
+### 37.3 Step 02's resets, allowed and checked
+
+`cancel`, `reload`, `resume` and `offline-bundle` ran step 02 without allowing its reset. The
+camera's page guard refused the resets unsent, core's `resetDevice` reported each refusal as
+`'dropped'` (the normal answer to a reset that worked), and the step carried on as if the camera
+had rebooted. Now:
+
+- every spec runs step 02 through `runStep02` (or does what it does). The reset is allowed while
+  the step runs, "Your turn" asks are answered (`waitForPhaseProgress` answers them while
+  waiting for progress), and any guard refusal fails the test;
+- `resetDevice` returns `'refused'` for a SecurityError anywhere in the cause chain, and the
+  reader probe logs it as a warning that the camera was not rebooted.
+
+### 37.4 compact-2016 against legacy-auth, after the read
+
+The probe picks legacy-auth on a 1.0.3.0 camera by design: the two share every selector. After
+the read the old detection scored on the sum alone. A 2014 Compact's banks are stored plain and
+sum to 0 as well, so the original 1.3.0.0 camera read as `compact-2016` at 0.90, ambiguously.
+`legacy-auth` never looked at a sum, and the read dropped the probe's refused plain arm, so on
+this camera the result was a 0.90 to 0.85 "ambiguous" tie. Kept probe evidence alone would have
+given legacy-auth 0.98.
+
+Detection now reads the chain each slot is stored on (`observedSlots`: the identity keystream is
+'plain', a real key's is 'cipher'):
+
+- a slot stored plain rules `compact-2016` out;
+- a slot under a real keystream that decrypts to 0, with no 0xFFFF slot and no plain one, rules
+  `legacy-auth` out;
+- the version line (1.0.3.x is the Compact PRO's, 0.x and 1.0.0.0–1.3.0.8 the Compact's) and
+  the bootloader generation (1.2.0.0 and 0.9.0.0, the two measured) corroborate;
+- the probe's channel answers are kept (`channelEvidenceOf`).
+
+This camera now detects as `compact-2016` at 0.98 with `legacy-auth` at 0, and the 1.3.0.0 dump
+as `legacy-auth` at 0.92 offline and 0.98 with the probe. With no slot read, legacy-auth still
+wins the probe (0.98 against 0.45), as before.
+
+Consequences:
+
+- `seek-fw info` and the Flash view re-read under the detected profile
+  (`profileToRereadUnder`). Slots accept, the footer column reads "n/a" (`checksFooter` is
+  false on the locked line), and "bootable" reads "unknown" because the bootloader block, and
+  with it the key table, is refused on every channel.
+- `runDump` decrypts under the detected profile. It passes the camera's evidence and falls back
+  to the acting profile only on an ambiguous detection. The report reads
+  `2016 Compact Pro [compact-2016] (detected from this dump and the camera; the read acted under
+legacy-auth)`, VERIFIED(profile).
+- A bank stored plain is reported as "stored plain — the 2014 chain" rather than an unknown
+  cipher. This also changes the offline decrypt of a 2014 dump, from a wrong "VERIFIED(profile)
+  under 2016 Compact Pro" to VERIFIED(structural) under legacy-auth.
+- compact-2016's refusal no longer claims a different selector map, the boot-prediction note
+  names the profile it ran under, and the store key says "unknown" when the per-device slot was
+  never read.
+
+No gate opened: `compact-2016` still refuses flash, and legacy-auth still flashes only the 2014
+plaintext chain.
+
+### 37.5 What the tests pin
+
+- `profiles.test.ts`: 1.0.3.0 evidence with the probe kept names compact-2016 and zeroes
+  legacy-auth; the probe alone still names legacy-auth; a plain-stored 2014 bank keeps
+  legacy-auth and zeroes compact-2016, offline and online; Compact build numbers count against
+  compact-2016; `legacyVersionLine`; `checksFooter` per profile; the shared boot refusal; the
+  compact-2016 flash reason.
+- `workflows.test.ts`: a 1.0.3.0-shaped fake read through the real probe keeps
+  `plainSelectorRefused`, detects compact-2016, and asks for the re-read. Re-read, its slots
+  accept with bootability 'unknown' and no "NOT bootable". `runDump` decrypts it under
+  compact-2016, a hand-picked family is decrypted as named, and the ambiguous fallback and the
+  plain-stored label are covered.
+- `plain-chain-flash.test.ts`: the 2014 chain detects as legacy-auth, unambiguously, with its
+  banks 'bootable'.
+- `steps.test.ts`: the refusal's new first line, and a host-refused reset reported as
+  'refused' and logged.
+- CLI `camera.test.ts`: `info` on the 1.0.3.0 fake re-reads under compact-2016, with the store
+  key, footer and bootable columns. `dump`'s report names compact-2016. `node-usb.test.ts`
+  covers the departed device.
+- web `useFlashPanel.test.tsx`: the Flash view's read on the 1.0.3.0 fake ends under
+  compact-2016 and the panel shows no footer or acceptance failure.
+
+### 37.6 Still open (handed to the Preserve follow-up)
+
+- Step 02 restarts this camera once per window: its erased boot-config record reads blank on
+  every boot, and `openProbedSession` reboots until two boots agree on it.
+- Step 02 then refuses at `the rebalance word at 0x00000238 is not free`. The boot patch on
+  these banks uses that word. Both reads agree, and the r16 solve derives the plaintext.

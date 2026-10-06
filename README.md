@@ -886,11 +886,19 @@ camera's flash is back to exactly what it booted with. It takes about six minute
 
 **`e2e:camera`** and **`e2e:camera:bridge`** are read-only:
 
-- **They will** connect, run Dump & decrypt and check its image against the camera's flash (the
-  bench unit's `40447c7e…`; `SEEK_E2E_CAMERA_SHA` names another, empty skips the check), run
-  Preserve step 02 (read the camera, build the patch in memory, and, if its reader comes up spent,
-  reboot it by command and answer the "Your turn" pick), check the step 02 run file, and check that
-  the page offers step 03 with no red alarm.
+- **They will** connect, run Dump & decrypt twice and check the image, run Preserve step 02 (read
+  the camera, build the patch in memory, and, if its reader comes up spent, reboot it by command and
+  answer the "Your turn" pick), check the step 02 run file, and check that the page offers step 03
+  with no red alarm. They work on whichever camera is attached: the product string is the one the
+  camera enumerated with (`ioreg`), the version is the one it answered on the wire (and recorded in
+  the dump's manifest), and the image is checked against the re-dump. `SEEK_E2E_CAMERA_NAME`,
+  `SEEK_E2E_CAMERA_VERSION` and `SEEK_E2E_CAMERA_SHA` make each of those a strict check (the bench
+  Compact 1.3.0.0 is `PIR206 Thermal Camera`, `1.3.0.0` and `40447c7e…`). The sha is the dump
+  image's, gap-filled where no selector reaches, which on a 2016 part is not the flash's.
+- **A known app refusal** fails step 02 with a first line that names it: on Compact PRO 1.0.3.0 the
+  patch builder refuses the slot (`the rebalance word at 0x00000238 is not free`), so step 02, and
+  every test that needs its run file, cannot pass there yet. The tests that need the run file skip
+  and say why.
 - **They will not** start step 03 or 04, confirm a write, or open the Flash view. Three guards stop
   it independently. The script refuses those buttons. The page refuses the flash-write requests
   before they leave it: on real WebUSB a guard loaded before any app code locks
@@ -911,8 +919,11 @@ on `0x4F`, the probe's whole budget) with a stall, without sending them, which i
 reader answers on the wire. Everything after that is the app's own code. The probe gives up, the
 step reboots the camera with its plain `ResetDevice`, and the camera leaves the bus and comes back
 as a new device. The page shows its blue "Your turn" box, the test answers the new pick, and the
-step finishes on real reads. The guards are unchanged, and the run allows exactly one reset to go
-out. The run checks the step 02 run file and a second Dump & decrypt with the same image as the
+step finishes on real reads. The guards are unchanged. The run used to allow exactly one reset; a
+camera whose step 02 restarts it by itself (an erased boot-config record reads blank on every
+boot, as on the bench part on Compact PRO 1.0.3.0) needs more, so the cap is far above any honest
+run, the injected restart must go out, and the extra restarts are counted and reported, not
+failed. The run checks the step 02 run file and a second Dump & decrypt with the same image as the
 first, and it checks that step 03 is offered with no red alarm. It also records what Electron does
 across the re-enumeration:
 
@@ -943,7 +954,7 @@ npm run e2e:forget         # Forget device -> revoke -> getDevices() empty -> co
 npm run e2e:second         # a second window while the first reads: refused with the message, sends nothing
 npm run e2e:phone          # 375x812 screenshots of each state, light and dark, overflow asserted
 npm run e2e:unplug         # power cut mid-dump -> clean error -> power back -> re-pick -> read again
-npm run e2e:flash          # the Flash view on the emulator: reads, then flashes the camera's own image and boots it
+npm run e2e:flash          # the Flash view: reads, then (emulator only) flashes the camera's own image and boots it
 npm run e2e:write          # Preserve 02->03->04: a write run, gated on the camera (see below)
 ```
 
@@ -964,9 +975,23 @@ camera; without it they default to the emulator. Each test picks a sensible defa
 | `e2e:forget`     | read-only                                           | read-only                           |
 | `e2e:second`     | window 2 refused while window 1 dumps, then dumps   | read-only (window 2 sends nothing)  |
 | `e2e:unplug`     | read-only                                           | read-only; rp2040 switch cuts power |
-| `e2e:flash`      | reads; writes its own image and boots it            | n/a (view never opened)             |
+| `e2e:flash`      | reads; writes its own image and boots it            | read-only (Read device info only)   |
 | `e2e:write`      | writes 02–04                                        | SUPERVISED only                     |
 | `e2e:phone`      | n/a (no device)                                     | n/a (no device)                     |
+
+Every test that runs Preserve step 02 runs it the way `e2e:camera` does: the plain reset the step
+may send is allowed while it runs, every "Your turn" ask is answered, and a reset or any other
+request a guard refused fails the test. The camera's guard used to refuse those resets unsent while
+the step carried on as if the camera had rebooted, and nothing failed. The image a dump must come
+back as is the emulator's known part, or on the camera the one `SEEK_E2E_CAMERA_SHA` names, or
+else the first whole image the test read.
+
+`e2e:flash` on the camera opens the Flash view and presses "Read device info", nothing else. That
+read sends two RAM selectors the dump never does (SetFirmwareInfoFeatures and the device-id
+SetRamDataFeatures, which `seek-fw info` sends too), so its write guard is the read-only one plus
+exactly those two, by payload shape; the image picker, the write and its confirmation are refused
+by the UI guard. It checks the version shown against the one the camera answered, and that a slot
+passes acceptance under the profile the read settled on.
 
 #### Writing the real camera (supervised only)
 
@@ -994,8 +1019,10 @@ the run dies, and the run turns it on again afterwards anyway.
 
 `SEEK_E2E_HEADED=1` shows the browser window, `SEEK_E2E_KEEP=1` keeps the downloads and the
 emulator's flash images (the path is printed), `SEEK_E2E_SCRATCH` chooses where they go,
-`SEEK_E2E_PORT` pins the dev server's port, `SEEK_E2E_SHOTS` is the phone-screenshot directory, and
-`SEEK_E2E_DUMP_FILE` is a 4 MiB dump for the offline-decrypt check.
+`SEEK_E2E_PORT` pins the dev server's port, `SEEK_E2E_SHOTS` is the phone-screenshot directory,
+`SEEK_E2E_DUMP_FILE` is a 4 MiB dump for the offline-decrypt check, and `SEEK_E2E_CAMERA_NAME`,
+`SEEK_E2E_CAMERA_VERSION` and `SEEK_E2E_CAMERA_SHA` pin the camera's product string, firmware
+version and dump image (each is otherwise taken from the camera).
 
 ### Verifying a change against the original
 

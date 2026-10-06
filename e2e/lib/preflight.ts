@@ -115,6 +115,43 @@ function otherCameraRun(): string | null {
     : `another e2e run is on the camera: ${others.map((l) => l.slice(0, 120)).join('; ')}`;
 }
 
+/** The camera as macOS enumerated it: its own USB descriptors, cached by the OS. */
+export interface CameraOnBus {
+  /** iProduct, as the camera answered it (`kUSBProductString`), or null when it named none. */
+  readonly productName: string | null;
+  readonly productId: number;
+}
+
+/**
+ * The one Seek camera on the bus, from `ioreg` — the camera's own descriptors,
+ * read without a transfer — or null when there is not exactly one. A run that
+ * checks the chooser's camera against this checks it against the camera
+ * attached, not against a name written into the test for one camera.
+ */
+export function cameraOnBus(): CameraOnBus | null {
+  let tree: string;
+  try {
+    tree = execFileSync('ioreg', ['-l', '-w0', '-p', 'IOService'], {
+      encoding: 'utf8',
+      maxBuffer: 256 * 1024 * 1024,
+    });
+  } catch {
+    return null;
+  }
+  const lines = tree.split('\n');
+  const found: CameraOnBus[] = [];
+  for (let i = 0; i < lines.length; i++) {
+    if (!/\+-o .*<class IOUSBHostDevice/.test(lines[i] ?? '')) continue;
+    const next = lines.findIndex((l, j) => j > i && l.includes('+-o'));
+    const own = lines.slice(i + 1, next < 0 ? undefined : next);
+    if (!own.some((l) => /"idVendor" = 10397\b/.test(l))) continue;
+    const product = own.map((l) => /"kUSBProductString" = "(.*)"/.exec(l)?.[1]).find(Boolean);
+    const pid = own.map((l) => /"idProduct" = (\d+)/.exec(l)?.[1]).find(Boolean);
+    found.push({ productName: product ?? null, productId: Number(pid ?? NaN) });
+  }
+  return found.length === 1 ? (found[0] ?? null) : null;
+}
+
 /**
  * Why the camera cannot be used right now, or null when it can: it must be
  * on the bus exactly once, no program may hold its interface (macOS shows a

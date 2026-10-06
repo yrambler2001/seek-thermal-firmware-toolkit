@@ -17,19 +17,28 @@ import { TargetType, type Page } from 'puppeteer-core';
 
 import { UsbBridge } from './bridge.js';
 import { say } from './browser.js';
-import { CAMERA_FLASH_SHA, CAMERA_NAME } from './camera-flow.js';
+import { CAMERA_IMAGE_SHA, CAMERA_NAME, checkImageSha, step02 } from './camera-flow.js';
 import { countsOf, guardOf, setGuard } from './electron-camera.js';
 import type { TargetHandle } from './target.js';
-import { EVERYTHING, READ_ONLY_CAMERA, Wizard } from './wizard.js';
+import { EVERYTHING, READ_ONLY_CAMERA, Wizard, type PhaseRun } from './wizard.js';
 
 /** The bench Compact 1.3.0.0's part as it booted: what the emulator boots, and the camera holds. */
 export const BENCH_IMAGE_SHA = '40447c7e6da5cbc84621f4694ffff5bda0f783e7807a45e80443383b19a8eb72';
 /** That part's active-slot firmware image, decrypted (the run state's `imageSha256`). */
 export const BENCH_PLAIN_SHA = '862717a8a605021def7858ac0c04ad4aa1abe23d357d6c2417699939137f481c';
 
-/** The whole-part image a Dump & decrypt must produce here, or '' to skip the check. */
+/**
+ * The whole-part image a Dump & decrypt must produce here, or '' when none is
+ * named: the emulator's part is known; the camera's is `SEEK_E2E_CAMERA_SHA`,
+ * and with that unset a run compares a dump with its re-dump (`checkImage`).
+ */
 export function expectedImageSha(t: TargetHandle): string {
-  return t.name === 'emu' ? BENCH_IMAGE_SHA : CAMERA_FLASH_SHA;
+  return t.name === 'emu' ? BENCH_IMAGE_SHA : CAMERA_IMAGE_SHA;
+}
+
+/** A whole-part image's sha on this target: the named image, or the run's first (`checkImageSha`). */
+export function checkImage(t: TargetHandle, sha: string, what: string): void {
+  checkImageSha(sha, what, expectedImageSha(t));
 }
 
 /** The decrypted active slot's sha, when the target is the bench part; else null. */
@@ -77,6 +86,43 @@ export async function duringStep02<T>(
   } finally {
     await allowStep02Reset(t, false, page).catch(() => undefined);
   }
+}
+
+/**
+ * Preserve step 02, the way `camera.e2e.ts` runs it, on either target: the
+ * plain reset the step may send is allowed while it runs (`duringStep02`),
+ * every "Your turn" ask is answered, and afterwards no guard may have refused
+ * anything. That last check is the one these runs lacked: the camera's guard
+ * refused the step's resets unsent, the step carried on as if the camera had
+ * rebooted, and nothing failed. A known app refusal comes back with a first
+ * line that names it (`step02`).
+ */
+export async function runStep02(t: TargetHandle, wizard: Wizard = t.wizard): Promise<PhaseRun> {
+  const before = (await refusalsOf(t)).length;
+  let run: PhaseRun | null = null;
+  let failure: Error | null = null;
+  try {
+    run = await step02(() =>
+      duringStep02(t, () =>
+        wizard.runPhase('read-build', { confirm: false, timeoutMs: 30 * 60_000 }),
+      ),
+    );
+  } catch (error) {
+    failure = error instanceof Error ? error : new Error(String(error));
+  }
+  const refused = (await refusalsOf(t).catch((): string[] => [])).slice(before);
+  if (refused.length > 0) {
+    /* A refused transfer never reached the camera, so what the step did after
+     * it was not what it reported; that outranks how the step ended. */
+    const line = `a guard refused what the page sent during step 02, unsent: ${refused.join(' | ')}`;
+    throw new Error(
+      failure === null ? line : `${line}\n\nand the step itself ended: ${failure.message}`,
+      { cause: failure ?? undefined },
+    );
+  }
+  if (failure !== null) throw failure;
+  if (run === null) throw new Error('step 02 returned no run');
+  return run;
 }
 
 /** How many devices `navigator.usb.getDevices()` answers on `page`. */

@@ -11,7 +11,12 @@ import type { Page } from 'puppeteer-core';
 import { expect } from 'vitest';
 
 import { say, startDevServer, type DevServer } from './browser.js';
-import { CAMERA_NAME, WRITE_GUARD_GLOBAL, writeGuardScript } from './camera-flow.js';
+import {
+  CAMERA_NAME,
+  WRITE_GUARD_GLOBAL,
+  checkCameraName,
+  writeGuardScript,
+} from './camera-flow.js';
 import { describeWire } from './checks.js';
 import { ElectronApp } from './electron.js';
 import { READ_ONLY_CAMERA, Wizard } from './wizard.js';
@@ -147,7 +152,8 @@ export async function checkGuardAndConnect(
   expect((await guardOf(app.page)).refusals).toEqual([]);
 
   expect(await app.page.evaluate(async () => (await navigator.usb.getDevices()).length)).toBe(0);
-  expect(await wizard.connect()).toMatch(/PIR206 Thermal Camera/);
+  /* The camera on the bus, whichever it is (`checkCameraName`). */
+  checkCameraName(await wizard.connect());
   const granted = await app.page.evaluate(async () =>
     (await navigator.usb.getDevices()).map((d) => d.serialNumber ?? null),
   );
