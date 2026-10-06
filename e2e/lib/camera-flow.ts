@@ -213,9 +213,10 @@ export const KNOWN_STEP02_REFUSALS: readonly { readonly pattern: RegExp; readonl
       pattern: /the rebalance word at 0x00000238 is not free/,
       why:
         "KNOWN APP LIMITATION — Preserve step 02 refused this camera's slot image: the " +
-        'rebalance word at 0x00000238 is already in use (a boot patch on this part uses it), so ' +
-        'no patch can be built. Preserve does not support this firmware yet (Compact PRO ' +
-        '1.0.3.0 on the bench part); the read itself completed. Not a harness failure.',
+        'rebalance word at 0x00000238 is already in use by an edit this build of Preserve does ' +
+        'not know, so no patch is built; the read itself completed. The source knows the ' +
+        'Compact board patch on Compact PRO 1.0.3.0 (`KNOWN_DERIVATIONS`); a bundle built ' +
+        'before it (the committed docs/, until it is rebuilt) does not. Not a harness failure.',
     },
   ];
 

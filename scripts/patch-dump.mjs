@@ -35,6 +35,13 @@
  * "CODE" footer carries no image checksum, and the length does not change, so
  * it is left as it is.
  *
+ * PRESERVE KNOWS THIS EDIT. The adjust word is also the one Preserve's
+ * widening patch balances through. Preserve recognizes a slot this script
+ * patched by the same bytes (`KNOWN_DERIVATIONS` in
+ * packages/core/src/preservation/patch.ts) and adds its own share to the word
+ * on top of this one: the word sum is linear, so the two coexist and either can
+ * be taken back out. Keep the two tables in step.
+ *
  * WHAT IT REFUSES.
  * A patch applies only to a slot whose decrypted image has the exact SHA-256
  * it was written for, and only if the bytes at the site are the expected

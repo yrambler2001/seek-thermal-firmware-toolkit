@@ -247,6 +247,18 @@ runs.
 | Compact Pro 1.0.3.0 (9 Hz)                               | compact-2016 | guard + widen (by shape), `0xF1003000`                               | plain ⊕ ks(block 0)                | factory image, staged   | yes — the doc-33 chain                                                                                                                                                                                                          |
 | Compact Pro 1.0.3.2 (9 Hz and 18 Hz FF)                  | compact-2016 | guard + widen + the arm-tail hook nop, `0x29FD6B0F`                  | plain ⊕ ks(block 0)                | factory image, staged   | **refused** — 128 B is the lossless read unit and the EP0 sessions die at ~64–81 KB; backup → patch → commit → restore → verify only                                                                                            |
 
+**Compact Pro 1.0.3.0 on a Compact board.** The 1.0.3.0 app reboots on any board but the PRO's,
+so a Compact (PN297) running it carries a board patch in its banks (`scripts/patch-dump.mjs`:
+eight bytes of app_init's board switch, balanced through the adjust word at `0x238`). That is the
+word the widening patch balances through, and Preserve used to refuse it as "not free". It now
+knows the edit (`KNOWN_DERIVATIONS` in `patch.ts`) and takes an image as it only when the edit's
+bytes are in place, taking them back out leaves the adjust word at 0, and the image underneath
+detects as the factory 1.0.3.0 build. The patch then balances ON TOP of the edit's share of the
+word: the word sum is linear, so on the bench camera `0x6322E32A` (the edit's) + `0xF1003000`
+(the patch's) = `0x5423132A`, and five bytes move instead of four. The restore stages the image
+as the slot held it, edit included, so the camera gets back the image that boots on its board. An
+adjust word held by any other edit still refuses, naming the edits Preserve knows.
+
 Three 0.x-specific facts the plan print states and the gates enforce:
 
 - **The 0.x line is emulator-proven, not hardware-proven.** Every 0.x patch was derived from the
@@ -431,7 +443,11 @@ step continues by itself. These hand-offs are the expected flow, so the page ask
 red is kept for real failures. A run whose committed patch predates the arm-tail cursor reset (the
 fifth site) ends Patch & dump by asking you, the same way, to unplug the camera and plug it back
 in: without that site the drain leaves the reader dead until it is powered off. With it, the
-restore reads on the same boot and no replug is asked for.
+restore reads on the same boot and no replug is asked for. Compact Pro 1.0.3.0 needs no site for
+it: its own arm tail already zeroes the whole cursor (`str r5,[r4,#12]`), so its runs read on the
+same boot too. A camera whose boot-config block is erased (every 2016 Compact PRO in the record)
+reads its record as blank on every boot; step 02 admits such a boot when the same boot serves the
+device-identity block at `0x14020000`, so it no longer restarts the camera once per window.
 
 ## Operation mode 0, and why a cold camera used to hang
 
@@ -883,6 +899,10 @@ checks each run file's name (`preserve-<start>-<saved>-patch-built.zip`, `…-fu
 checks the raw and delivered dumps byte for byte against the emulated part, and the final page's
 "matches the backup on all 31 blocks" and "Verified — a perfect match.". It also checks that the
 camera's flash is back to exactly what it booted with. It takes about six minutes, headless.
+`SEEK_E2E_EMU_FLASH=<4 MiB dump>` boots another part instead, on the emulator's default board,
+and checks against it (`SEEK_E2E_EMU_VERSION`, `SEEK_E2E_EMU_POST_COMMIT_SHA` and
+`SEEK_E2E_EMU_DUMP_SHA` add the strict checks; TESTING.md sec. 38 ran the bench Compact PRO
+1.0.3.0 flash this way).
 
 **`e2e:camera`** and **`e2e:camera:bridge`** are read-only:
 
@@ -895,10 +915,10 @@ camera's flash is back to exactly what it booted with. It takes about six minute
   `SEEK_E2E_CAMERA_VERSION` and `SEEK_E2E_CAMERA_SHA` make each of those a strict check (the bench
   Compact 1.3.0.0 is `PIR206 Thermal Camera`, `1.3.0.0` and `40447c7e…`). The sha is the dump
   image's, gap-filled where no selector reaches, which on a 2016 part is not the flash's.
-- **A known app refusal** fails step 02 with a first line that names it: on Compact PRO 1.0.3.0 the
-  patch builder refuses the slot (`the rebalance word at 0x00000238 is not free`), so step 02, and
-  every test that needs its run file, cannot pass there yet. The tests that need the run file skip
-  and say why.
+- **A known app refusal** fails step 02 with a first line that names it: an adjust word at
+  `0x238` held by an edit Preserve does not know (`the rebalance word at 0x00000238 is not
+free`). The board-patched Compact PRO 1.0.3.0 on the bench part is a known edit and passes. The
+  tests that need the run file skip and say why.
 - **They will not** start step 03 or 04, confirm a write, or open the Flash view. Three guards stop
   it independently. The script refuses those buttons. The page refuses the flash-write requests
   before they leave it: on real WebUSB a guard loaded before any app code locks
@@ -919,11 +939,12 @@ on `0x4F`, the probe's whole budget) with a stall, without sending them, which i
 reader answers on the wire. Everything after that is the app's own code. The probe gives up, the
 step reboots the camera with its plain `ResetDevice`, and the camera leaves the bus and comes back
 as a new device. The page shows its blue "Your turn" box, the test answers the new pick, and the
-step finishes on real reads. The guards are unchanged. The run used to allow exactly one reset; a
-camera whose step 02 restarts it by itself (an erased boot-config record reads blank on every
-boot, as on the bench part on Compact PRO 1.0.3.0) needs more, so the cap is far above any honest
-run, the injected restart must go out, and the extra restarts are counted and reported, not
-failed. The run checks the step 02 run file and a second Dump & decrypt with the same image as the
+step finishes on real reads. The guards are unchanged. The run used to allow exactly one reset,
+and the bench part on Compact PRO 1.0.3.0 needed one per window (its erased boot-config record
+read blank on every boot, and the probe rebooted until two boots agreed). The probe now admits
+such a boot on the device-identity block, so the injected restart should be the only one; the cap
+stays far above any honest run, the injected restart must go out, and any extra restarts are
+counted and reported, not failed. The run checks the step 02 run file and a second Dump & decrypt with the same image as the
 first, and it checks that step 03 is offered with no red alarm. It also records what Electron does
 across the re-enumeration:
 

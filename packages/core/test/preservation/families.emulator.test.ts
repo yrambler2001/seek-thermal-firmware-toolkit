@@ -51,8 +51,11 @@ import { FLASH_SIZE } from '../../src/profiles/modern-4x.js';
 import {
   PRESERVE_DUMP_ORIGINAL_FILE,
   PRESERVE_DUMP_POSTWRITE_FILE,
+  bankWindow,
   createPreserveRun,
   describeStepGate,
+  drainExact,
+  openProbedSession,
   readVersion,
   runPreserveStep,
   type CreatedPreserveRun,
@@ -61,11 +64,14 @@ import {
   type SessionOpener,
 } from '../../src/preservation/index.js';
 import {
+  KNOWN_DERIVATIONS,
+  applyDerivation,
   buildV1Patch,
   keyWordsOf,
   keystream,
   xorWindowVerbatim,
 } from '../../src/preservation/patch.js';
+import { solvePlainFromCapture } from '../../src/preservation/solve.js';
 import {
   InfrastructureDefect,
   liveEmulatorCount,
@@ -290,15 +296,21 @@ async function warmServer(server: Emulator, label: string): Promise<void> {
  *  FRESH server booted from the committed part. The reset belongs to the
  *  step; the commit is never replayed. Every freshly booted server is
  *  warmed first (the doc 35.4 shape). */
-function drainOpener(row: RowEmulators, bootOptions: BootOptions): SessionOpener {
+function drainOpener(
+  row: RowEmulators,
+  bootOptions: BootOptions,
+): SessionOpener & { lastServer: () => Emulator | null } {
   let resetServer: Emulator | null = null;
   let visitsOnResetServer = 0;
   let current: Attached | null = null;
+  let last: Emulator | null = null;
   return {
+    lastServer: () => last,
     open: async () => {
       if (resetServer === null) {
         resetServer = await boot(row, bootOptions);
         await warmServer(resetServer, 'drain reset server');
+        last = resetServer;
         current = await attach(resetServer, 'drain reset session');
         return current.seek;
       }
@@ -306,10 +318,12 @@ function drainOpener(row: RowEmulators, bootOptions: BootOptions): SessionOpener
         if (visitsOnResetServer < 1) {
           visitsOnResetServer += 1;
           await new Promise((resolve) => setTimeout(resolve, REBOOT_WAIT_MS));
+          last = resetServer;
           return attach(resetServer, 'drain attempt on the reset server');
         }
         const fresh = await boot(row, bootOptions);
         await warmServer(fresh, 'drain fresh server');
+        last = fresh;
         return attach(fresh, 'drain on a fresh server');
       })();
       return current.seek;
@@ -377,6 +391,10 @@ async function runFullInPlace(spec: {
   /** Offline oracle for the delivered dump: the bytes the part must have
    *  carried before the run (the corpus dump itself, for a native boot). */
   readonly expectDelivered?: Uint8Array;
+  /** After the drain, on the boot that drained: an admitted probe session
+   *  and the active bank's head must read — the restore's first reads, with
+   *  no power cycle between (`drainLeavesReaderReadable`). */
+  readonly readsAfterDrain?: boolean;
 }): Promise<void> {
   /* NO image input: the run is created empty and self-sources at the backup
    * step (double read -> derive -> gate). The expectedSlotPrefix is an
@@ -497,11 +515,13 @@ async function runFullInPlace(spec: {
   const truthPath = scratchFile(`families_${spec.label}_truth.bin`);
   const t1 = Date.now();
   let drained: Awaited<ReturnType<typeof runPreserveStep>> | null = null;
+  let drainLadder: ReturnType<typeof drainOpener> | null = null;
   for (let attempt = 0; attempt < 2 && drained === null; attempt++) {
     try {
+      drainLadder = drainOpener(drainRow, { flash: truthPath });
       drained = await runPreserveStep(
         'drain',
-        drainOpener(drainRow, { flash: truthPath }),
+        drainLadder,
         state,
         store.load,
         progressReporter('drain'),
@@ -525,6 +545,31 @@ async function runFullInPlace(spec: {
   store.keep(drained);
   state = drained.state;
   expect(state.nextStep).toBe('restore');
+  if (spec.readsAfterDrain === true) {
+    /* THE DRAIN'S OWN BOOT: the restore's reads, with no power cycle. The
+     * server that drained is still up; an admitted session on it reads the
+     * active bank's head as the commit left it. */
+    const server = drainLadder?.lastServer() ?? null;
+    if (server === null) throw new Error('the drain ran on no server');
+    const opener = singleServerOpener(server);
+    const { device } = await openProbedSession(opener, silentReporter, undefined, 'post-drain');
+    try {
+      await device.armWindow(bankWindow('a'));
+      const head = await drainExact(device, 0x400, 'post-drain bank head', { chunk: 64 });
+      const truthBytes = new Uint8Array(readFileSync(truthPath));
+      expect(
+        diffOffsets(head, truthBytes.subarray(spec.bankFlashOffset, spec.bankFlashOffset + 0x400)),
+        'the bank head read on the drain’s own boot',
+      ).toEqual([]);
+      process.stderr.write(
+        `[families] ${spec.label} reads on the drain's own boot: the probe admitted and the ` +
+          'bank head matched the committed part\n',
+      );
+    } finally {
+      await opener.close(device);
+    }
+    expect(state.patch?.armResetsCursor).toBe(true);
+  }
   await assertDelivery(drainRow);
   process.stderr.write(
     `[families] ${spec.label} drain took ${((Date.now() - t1) / 1000).toFixed(1)} s\n`,
@@ -824,6 +869,75 @@ describe.skipIf(
             `no 0x41/${opcode} may go out against the corrupted capture`,
           ).toBe(0);
         }
+        expect(liveEmulatorCount()).toBe(0);
+      },
+    );
+  },
+);
+
+/* ==================================================================== *
+ * 2b — THE BENCH CAMERA'S PART: Compact PRO 1.0.3.0 with the Compact board
+ * patch (TESTING.md sec. 38). Built from the native dump the way
+ * `scripts/patch-dump.mjs` built the camera's flash — every bank solved,
+ * given the board patch, and stored again under its own device stream — and
+ * checked against the camera's own J-Link dump sha before anything boots.
+ * The emulator runs it on its default board (model 714, the PRO), where the
+ * patched arm of app_init's board switch is never taken; every byte Preserve
+ * reads, writes and restores is the camera's.
+ * ==================================================================== */
+
+/** sha256 of the bench camera's whole 4 MiB flash, read over SWD (2026-10-06). */
+const BENCH_1030_FLASH_SHA = '202cb5c19020aeca6c0bffa83f970c09f50d8dd6162cecad78c4ad798447ef27';
+
+function benchFlashFromDonor(donor: Uint8Array): Uint8Array {
+  const board = KNOWN_DERIVATIONS.find((d) => d.id === 'compact-pro-1.0.3.0-accept-pn297');
+  if (board === undefined) throw new Error('the board patch is not a known derivation');
+  const out = new Uint8Array(donor);
+  for (const at of [0x50000, 0x60000, 0x70000]) {
+    const solved = solvePlainFromCapture('compact-2016', donor.slice(at, at + 0x10000));
+    if (!solved.ok) throw new Error(`bank ${at.toString(16)}: ${solved.reason}`);
+    const block1 = buildV1Patch(solved.plain).keys?.block1Hex ?? '';
+    const ks1 = keystream(keyWordsOf(block1), solved.plain.length >> 2);
+    out.set(xorWindowVerbatim(applyDerivation(solved.plain, board), ks1), at);
+  }
+  return out;
+}
+
+describe.skipIf(
+  UNSUPPORTED ?? (DUMP_1030 === null ? 'the corpus does not carry the native 1.0.3.0 dump' : null),
+)(
+  'the bench camera’s part — Compact PRO 1.0.3.0 with the board patch, full in-place (emulator)',
+  () => {
+    it(
+      'self-sourced: the board-patched slot derives, the patch balances on top, commit, whole-part drain, the restore reads on the drain’s boot, restore puts the edit back, verify',
+      { timeout: 5_400_000 },
+      async () => {
+        const bench = benchFlashFromDonor(new Uint8Array(readFileSync(DUMP_1030!)));
+        expect(sha256(bench), 'the synthesized part is the bench camera’s flash').toBe(
+          BENCH_1030_FLASH_SHA,
+        );
+        const benchPath = scratchFile('families_1030_bench.bin');
+        writeFileSync(benchPath, bench);
+
+        const slot = solvePlainFromCapture('compact-2016', bench.slice(0x50000, 0x60000));
+        if (!slot.ok) throw new Error(slot.reason);
+        const patch = buildV1Patch(slot.plain);
+        expect(patch.derivation?.derivation.id).toBe('compact-pro-1.0.3.0-accept-pn297');
+        expect(patch.derivation?.balanceWord).toBe(0x6322e32a);
+        expect(patch.rebalanceWord).toBe(0x5423132a);
+        expect([...patch.diffOffsets]).toEqual([0x239, 0x23a, 0x23b, 0x352f, 0x3639]);
+        const ks1 = keystream(keyWordsOf(patch.keys?.block1Hex ?? ''), slot.plain.length >> 2);
+        await runFullInPlace({
+          label: '1030-bench',
+          expectedSlotPrefix: xorWindowVerbatim(slot.plain, ks1),
+          expectedDiffOffsets: patch.diffOffsets,
+          bankFlashOffset: 0x50000 /* bank A: the erased boot-config record boots A */,
+          boot: { flash: benchPath },
+          restore: true,
+          expectDetectionBank: 'a',
+          expectDelivered: bench,
+          readsAfterDrain: true,
+        });
         expect(liveEmulatorCount()).toBe(0);
       },
     );

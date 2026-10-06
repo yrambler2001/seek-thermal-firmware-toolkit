@@ -332,12 +332,24 @@ async function confirmDerivedPlan(
   say(
     `  image version      ${state.expectedVersion ?? '?'} (${String(patch?.stagedLength ?? 0)} B)`,
   );
+  const edit = state.imageDerivation;
+  if (edit !== undefined) {
+    say(`  image edit         ${edit.label} (${edit.id})`);
+    say(
+      `                     on the factory image; its balance ${hexUp(edit.balanceWord)} is in the`,
+    );
+    say('                     adjust word, the patch balances on top of it, and the restore');
+    say('                     puts the image back with the edit');
+  }
   say(`  patch sites        ${String(patch?.sites.length ?? 0)} instruction edit(s)`);
   for (const site of patch?.sites ?? []) {
     say(`    ${hexUp(site.offset)}  ${site.name}`);
   }
   if (patch !== undefined) {
-    say(`  rebalance word     ${hexUp(patch.rebalanceWord)} at 0x00000238`);
+    say(
+      `  rebalance word     ${hexUp(patch.rebalanceWord)} at 0x00000238` +
+        (edit === undefined ? '' : ` (was ${hexUp(edit.balanceWord)}, the edit's balance)`),
+    );
     say(
       `  bytes that move    ${String(patch.diffCount ?? 0)} on the part, all inside the ` +
         (state.route === 'recovery-only' ? 'recovery bank' : 'active bank'),
@@ -680,6 +692,12 @@ async function printStateCommand(ctx: CommandContext, runDir: string): Promise<C
         state.buildFamily === undefined ? '' : ')'
       }`,
     );
+    if (state.imageDerivation !== undefined) {
+      say(
+        `  image edit         ${state.imageDerivation.label} (${state.imageDerivation.id}), ` +
+          `balance ${hexUp(state.imageDerivation.balanceWord)}`,
+      );
+    }
     if (state.capability !== undefined) {
       say(`  drain              ${describeCapability(state.capability)}`);
     }

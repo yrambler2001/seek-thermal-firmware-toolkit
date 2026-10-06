@@ -177,10 +177,11 @@ export interface PreservePhaseMeta {
    *  restore's wire-89 reset): a disconnect there is the reset, not a swap. */
   readonly resetsCamera: boolean;
   /** The phase ends by asking for an unplug and replug, and waits to see it,
-   *  when the committed patch lacks the arm tail's cursor reset: a part
-   *  patched without it keeps a dead reader after the drain that the wire
-   *  reboot does not revive (TESTING.md secs. 28.4, 35, 36). Only when the
-   *  phase's last step ran in that invocation. */
+   *  when the patched image's arm tail does not reset the whole cursor
+   *  (`drainLeavesReaderReadable`: neither the fifth site nor a build tail
+   *  that already does): such a part keeps a dead reader after the drain that
+   *  the wire reboot does not revive (TESTING.md secs. 28.4, 35, 36). Only
+   *  when the phase's last step ran in that invocation. */
   readonly replugAfter: boolean;
 }
 

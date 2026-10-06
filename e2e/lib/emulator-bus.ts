@@ -39,6 +39,9 @@ export interface EmulatorBusOptions {
   readonly emuDir: string;
   /** The corpus entry the first boot serves (`--corpus-entry`). */
   readonly entryId: string;
+  /** A 4 MiB part the first boot serves INSTEAD of `entryId` (`--flash <file>
+   *  --jedec`, the emulator's default board): another camera's flash. */
+  readonly flash?: string;
   /** The NOR's JEDEC id for every later boot (`--flash <file> --jedec`). */
   readonly jedec: string;
   /** Where every boot's `--flash-out` (and `.final`) lands. */
@@ -95,7 +98,9 @@ export class EmulatorBus implements UsbBus {
 
   static async start(options: EmulatorBusOptions): Promise<EmulatorBus> {
     const bus = new EmulatorBus(options);
-    await bus.boot({ corpus: options.entryId });
+    await bus.boot(
+      options.flash === undefined ? { corpus: options.entryId } : { flash: options.flash },
+    );
     return bus;
   }
 

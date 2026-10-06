@@ -85,9 +85,12 @@ import { sum16 } from './patch.js';
 import {
   BACKUP_WINDOW_COUNT,
   BANKS,
+  DEVICE_BLOCK_ADDRESS,
   bankWindow,
   cfgWindow,
+  deviceBlockWindow,
   isBlankWindow,
+  isDeviceBlockHead,
   isPageShiftedHead,
   isStaleDescriptorWord,
   parseBootConfig,
@@ -213,8 +216,10 @@ export interface BackupResult {
  * (completing is fine; nothing else is read on that boot), reboot by command,
  * next. 31 windows ≈ 13 s each. Every session is admitted by the mode-3
  * probe: a written record is a healthy boot, the page-shift anchor is a
- * page-shifted boot (reboot and retry), blank retries once (a genuinely blank
- * record is legitimate) before it proceeds, anything else reboots and retries.
+ * page-shifted boot (reboot and retry), a blank record is admitted when the
+ * same boot serves the device-identity block where the plan puts it (else it
+ * retries once, as a genuinely blank record is legitimate, before it
+ * proceeds), anything else reboots and retries.
  */
 
 /** How the mode-3 probe read classifies this boot's reader. */
@@ -241,12 +246,59 @@ export function classifyReaderBoot(head: Uint8Array): ReaderBoot {
 export const SEGMENT_BOOT_ATTEMPTS = 4;
 
 /**
+ * THE BLANK RECORD, SETTLED ON THE BOOT THAT READ IT.
+ *
+ * A probe that reads the record as 0xFF is ambiguous. On the reference
+ * Compact (cfg[0]=0, written) it meant a spent or page-walked reader: the
+ * completion poison served blank (sec. 34.1), and the reboot is what cleared
+ * it. On a camera whose boot-config block is ERASED it is just the record:
+ * every native 2016 dump in the corpus (1.0.3.0 and both 1.0.3.0-FF) has no
+ * record at all. The probe used to settle that by spending a reboot: blank
+ * once, reboot, blank again, admit. The count lived in one call, so every
+ * segment paid it again: one reboot per window, 33 per step 02 on the bench
+ * Compact PRO, and in Chrome a "Connect device" pick for each (this camera
+ * has no USB serial).
+ *
+ * The same boot can settle it instead. The plan's mode-4 window is the
+ * device-identity block, whose header word (`isDeviceBlockHead`) sits at
+ * 0x14020000 and at no other block. A reader that serves it there, on the
+ * boot whose record read blank, is serving real bytes at the plan's own
+ * addresses: not spent (a spent reader serves fill or stalls) and not page
+ * walked (one page up, mode 3 itself serves this block and the probe already
+ * reboots; further up, mode 4 serves an erased or foreign block). So the
+ * blank is the record, and the session is admitted with no reboot. When the
+ * check does not pass, the old two-boot rule decides, unchanged: what the
+ * probe protects on the written-record cameras is exactly what it was.
+ */
+async function servesDeviceBlock(
+  device: SeekDevice,
+  label: string,
+  signal: AbortSignal | undefined,
+): Promise<boolean> {
+  try {
+    await device.armWindow(deviceBlockWindow());
+    const head = await drainExact(device, BOOT_CONFIG_BYTES, `${label} device-block check`, {
+      retries: 0,
+      timeoutMs: 5000,
+      ...(signal === undefined ? {} : { signal }),
+    });
+    return isDeviceBlockHead(head);
+  } catch (error) {
+    if (error instanceof CancelledError) throw error;
+    /* a refused arm or a stalled read is not the evidence; the old rule decides */
+    return false;
+  }
+}
+
+/**
  * Open ONE admitted session: ride the opener's ladder through any reset
  * silence, then probe the reader with the mode-3 head read. A boot that is
- * page-shifted or unreadable is rebooted by command and retried; a blank
- * probe proceeds after two blank boots (a genuinely blank-record camera).
- * Returns the device and its probe head — the head IS the boot-config record
- * on a healthy boot, so callers get the slot detection for free.
+ * page-shifted or unreadable is rebooted by command and retried. A blank
+ * probe is admitted at once when the same boot serves the device-identity
+ * block where the plan puts it (`servesDeviceBlock`), and otherwise after two
+ * blank boots (a genuinely blank-record camera). Returns the device and its
+ * probe head — the head IS the boot-config record on a healthy boot, so
+ * callers get the slot detection for free.
  */
 export async function openProbedSession(
   opener: SessionOpener,
@@ -334,6 +386,14 @@ export async function openProbedSession(
       head.every((b) => b === 0xff) /* stale garbage never proceeds — only a
        * genuinely unprogrammed record does */
     ) {
+      if (await servesDeviceBlock(device, label, signal)) {
+        reporter.log(
+          `${label}: the boot-config record is unprogrammed, and this boot serves the ` +
+            `device-identity block at ${hexUp(DEVICE_BLOCK_ADDRESS, 8)} — admitted, no reboot`,
+          'detail',
+        );
+        return { device, cfgHead: head, boots: attempt };
+      }
       blankBoots += 1;
       if (blankBoots >= 2) {
         /* Two independent boots read an unprogrammed record: a genuinely

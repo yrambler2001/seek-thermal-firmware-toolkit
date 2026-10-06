@@ -44,6 +44,8 @@ export const FAKE_ERR = {
   NOT_ARMED: 0x40000,
   /** More bytes staged than the window holds. */
   OVERFLOW: 0x50000,
+  /** The commit's own acceptance refused the staged image (`commitTransform`). */
+  REJECTED: 0x60000,
   BAD_CHECKSUM: ERR_BAD_CHECKSUM,
 } as const;
 
@@ -99,6 +101,14 @@ export interface FakeCameraOptions {
   /** The RAM block SetRamDataFeatures(0) arms, e.g. the device-id block. */
   readonly ramData?: Uint8Array;
   readonly description?: Partial<DeviceDescription>;
+  /**
+   * What the camera's own commit programs for the staged bytes, or null when
+   * its acceptance refuses them (the bank is then left untouched). Default:
+   * the staged bytes verbatim, the 2014 plain chain. The 2016 line's app
+   * decrypts the stage with key block 0, checks the word sum, and stores the
+   * image under key block 1.
+   */
+  readonly commitTransform?: (staged: Uint8Array) => Uint8Array | null;
 }
 
 /** Deterministic non-repeating fill, so a test can assert exact bytes. */
@@ -462,9 +472,16 @@ export class FakeCamera implements UsbTransport {
       this.errorCode = FAKE_ERR.BAD_CHECKSUM;
       return;
     }
-    this.flash.set(Uint8Array.from(this.staged), armed.commitAt);
+    const staged = Uint8Array.from(this.staged);
+    const programmed =
+      this.options.commitTransform === undefined ? staged : this.options.commitTransform(staged);
     this.staged = [];
     this.armed = null;
+    if (programmed === null) {
+      this.errorCode = FAKE_ERR.REJECTED;
+      return;
+    }
+    this.flash.set(programmed, armed.commitAt);
     this.errorCode = FAKE_ERR.NONE;
   }
 }

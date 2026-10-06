@@ -37,6 +37,7 @@ import {
   type UsbBackend,
 } from '@seek-fw/core';
 import { FakeCamera, type FakeWindowSpec } from '../../core/test/fake-transport.js';
+import { boardPatched, cp1030Camera } from '../../core/test/preservation/fixtures-2016.js';
 import type { StallPoint } from '../../core/test/fake-transport.js';
 import { run } from '../src/cli.js';
 import { EXIT_CANCELLED, EXIT_FAILED, EXIT_OK, EXIT_USAGE } from '../src/errors.js';
@@ -371,6 +372,60 @@ describe('preserve — a fresh run, checkpointed after every step', () => {
 });
 
 /* ==================================================================== *
+ * the bench camera's firmware: Compact PRO 1.0.3.0 with the Compact board
+ * patch (TESTING.md sec. 38) — an erased boot-config record, the 2016 cipher
+ * chain, and an adjust word the board patch already balances through
+ * ==================================================================== */
+
+describe('preserve — Compact PRO 1.0.3.0 with the board patch', () => {
+  it(
+    'runs all six steps: no reboot to read the erased record, the plan names the edit, the part comes back as it was',
+    { timeout: 180_000 },
+    async () => {
+      const camera = cp1030Camera();
+      const asBooted = new Uint8Array(camera.flash);
+      const test = testIo({ backend: backendOf(camera) });
+      const code = await run(['preserve', '--out', runDir(), '--yes'], test.io, signal());
+      expect(code, test.stderr.text).toBe(EXIT_OK);
+
+      const state = await loadState();
+      expect(state.nextStep).toBe('done');
+      expect(state.buildId).toBe('compact-pro-1.0.3.0');
+      expect(state.imageDerivation?.id).toBe('compact-pro-1.0.3.0-accept-pn297');
+      expect(state.verify).toEqual({ diffBytes: 0, windowsRead: 31, badWindows: [] });
+      /* The derived image is the slot's own, the board patch in it. */
+      const derived = await readFile(join(runDir(), PRESERVE_PLAIN_NAME));
+      expect(await sha256hex(new Uint8Array(derived))).toBe(await sha256hex(boardPatched()));
+      /* The part is the as-booted part again, and the delivered dump is it. */
+      expect(await sha256hex(camera.flash)).toBe(await sha256hex(asBooted));
+      const delivered = await readFile(join(runDir(), PRESERVE_DUMP_ORIGINAL_FILE));
+      expect(await sha256hex(new Uint8Array(delivered))).toBe(await sha256hex(asBooted));
+      /* Two resets, the drain's and the restore's: the erased record cost none. */
+      expect(camera.calls.filter((c) => c.direction === 'out' && c.op === 0x59)).toHaveLength(2);
+
+      /* The derived plan names the edit and the word it shares. */
+      expect(test.stdout.text).toMatch(/Compact Pro 1\.0\.3\.0 \(9 Hz\)/);
+      expect(test.stdout.text).toMatch(
+        /image edit\s+the Compact \(PN297\) board patch \(compact-pro-1\.0\.3\.0-accept-pn297\)/,
+      );
+      expect(test.stdout.text).toMatch(/its balance 0x6322E32A is in the/);
+      expect(test.stdout.text).toMatch(
+        /rebalance word\s+0x5423132A at 0x00000238 \(was 0x6322E32A, the edit's balance\)/,
+      );
+
+      /* --print-state names it too. */
+      const printed = testIo({ backend: backendOf(camera) });
+      expect(await run(['preserve', '--print-state', runDir()], printed.io, signal())).toBe(
+        EXIT_OK,
+      );
+      expect(printed.stderr.text + printed.stdout.text).toMatch(
+        /image edit\s+the Compact \(PN297\) board patch/,
+      );
+    },
+  );
+});
+
+/* ==================================================================== *
  * the spent-reader retry gate: a failed backup re-runs only past the
  * power-cycle acknowledgement (the 2026-10-02 incident: a backup attempt +
  * retry back-to-back with no reset served stale and blank descriptor bytes)
@@ -673,22 +728,26 @@ describe('preserve — resume from a run the drain killed', () => {
     },
   );
 
-  it('--resume on a run that is already done says so and touches no camera', async () => {
-    const camera = v1Camera(syntheticPlain());
-    await run(
-      ['preserve', '--out', runDir(), '--yes'],
-      testIo({ backend: backendOf(camera) }).io,
-      signal(),
-    );
-    /* No backend injected: if anything reached for a camera, the run would
-     * fail on the missing device instead of exiting cleanly. */
-    const done = testIo();
-    const code = await run(['preserve', '--resume', runDir(), '--yes'], done.io, signal());
-    expect(code).toBe(EXIT_OK);
-    expect(done.stdout.text).toMatch(/run .* is already done — nothing to resume/);
-    /* The state is untouched. */
-    expect((await loadState()).nextStep).toBe('done');
-  });
+  it(
+    '--resume on a run that is already done says so and touches no camera',
+    { timeout: 180_000 } /* it runs a whole run first, like its siblings */,
+    async () => {
+      const camera = v1Camera(syntheticPlain());
+      await run(
+        ['preserve', '--out', runDir(), '--yes'],
+        testIo({ backend: backendOf(camera) }).io,
+        signal(),
+      );
+      /* No backend injected: if anything reached for a camera, the run would
+       * fail on the missing device instead of exiting cleanly. */
+      const done = testIo();
+      const code = await run(['preserve', '--resume', runDir(), '--yes'], done.io, signal());
+      expect(code).toBe(EXIT_OK);
+      expect(done.stdout.text).toMatch(/run .* is already done — nothing to resume/);
+      /* The state is untouched. */
+      expect((await loadState()).nextStep).toBe('done');
+    },
+  );
 
   it('--from-step needs --resume, and a bogus step id is a usage error', async () => {
     const usage = testIo();

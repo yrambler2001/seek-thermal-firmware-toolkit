@@ -106,6 +106,7 @@ import {
 } from './pipeline.js';
 import {
   buildV1Patch,
+  clearsArmCursor,
   conjugateCapture,
   preWideningRefusal,
   stagedAcceptanceSum,
@@ -174,6 +175,11 @@ export interface PreserveStepRecord {
    *  refuses a backup re-run until the caller asserts the power cycle
    *  (`powerCycled`), which core itself cannot observe. */
   readonly powerCycleRequired?: boolean;
+  /** Set on a DONE restore record whose commit landed but whose reboot the
+   *  host refused: the bank holds the original, and the camera runs the
+   *  patched image from RAM until it is power-cycled. The verify then reads
+   *  that boot, and says so. */
+  readonly rebootRefused?: boolean;
 }
 
 /** The patch summary, as the run state carries it after the patch step. */
@@ -192,6 +198,23 @@ export interface PreservePatchSummary {
    *  part's whole enumerated change, rebalance word included. Absent in a
    *  version-1 run directory's summary (readers may ignore). */
   readonly diffCount?: number;
+  /** The patched image's arm tail zeroes the reader's whole cursor word — by
+   *  a site (the 2014 trio builds' fifth) or by the build's own tail (the
+   *  2016 line): the drain leaves the reader readable on its own boot.
+   *  Absent in run files written before it was recorded; `drainLeavesReaderReadable`
+   *  then falls back to the sites. */
+  readonly armResetsCursor?: boolean;
+}
+
+/**
+ * Whether the drain leaves the camera's reader readable on its own boot, so
+ * the restore can read without a power cycle: the committed patch's arm tail
+ * zeroes the whole cursor word (TESTING.md secs. 35.4, 36). Recorded by the
+ * patch step; an older summary is judged by its sites alone.
+ */
+export function drainLeavesReaderReadable(patch: PreservePatchSummary | undefined): boolean {
+  if (patch === undefined) return false;
+  return patch.armResetsCursor === true || clearsArmCursor(patch.sites);
 }
 
 export interface PreserveRunState {
@@ -238,6 +261,11 @@ export interface PreserveRunState {
   buildId?: string;
   /** The detected build's display name, as the plan print shows it. */
   buildLabel?: string;
+  /** The known edit the slot's image carries on top of its factory build
+   *  (`KNOWN_DERIVATIONS`), and the share of the adjust word at 0x238 it
+   *  holds: the patch balances on top of it, and the restore puts the image
+   *  back with the edit in it. Absent on a factory image. */
+  imageDerivation?: { readonly id: string; readonly label: string; readonly balanceWord: number };
   /** How the wire-80 staged bytes relate to the patched plaintext. */
   stagedForm?: StagedFormId;
   /** How (and whether) the restore step can put the original bank back
@@ -1230,6 +1258,18 @@ async function captureAndDerive(
       `build ${derived.patch.buildId} (family ${derived.patch.family})`,
     'detail',
   );
+  const edit = derived.patch.derivation;
+  if (edit !== null) {
+    reporter.log(
+      `the slot's image is the ${derived.patch.buildId} factory image with ` +
+        `${edit.derivation.label} (${edit.derivation.id}): ` +
+        `${String(edit.derivation.site.after.length)} bytes at ` +
+        `${hexUp(edit.derivation.site.offset)}, balanced through the adjust word at 0x238 ` +
+        `(${hexUp(edit.balanceWord)}). The patch balances on top of it, and the restore puts ` +
+        'this image back, edit included.',
+      'detail',
+    );
+  }
   return {
     detection,
     capture,
@@ -1396,6 +1436,15 @@ async function runBackupStep(
     slotReadShas: read.slotReadShas,
     buildId: patch.buildId,
     buildLabel: patch.label,
+    ...(patch.derivation === null
+      ? {}
+      : {
+          imageDerivation: {
+            id: patch.derivation.derivation.id,
+            label: patch.derivation.derivation.label,
+            balanceWord: patch.derivation.balanceWord,
+          },
+        }),
     stagedForm: patch.stagedForm,
     restoreForm: patch.restoreForm,
     route: patch.route,
@@ -1416,6 +1465,9 @@ async function runBackupStep(
           'the factory plaintext derived from the ' +
           `capture (${read.derived.method}, ${String(read.derived.plain.length)} B) and gated; ` +
           `build ${patch.buildId}` +
+          (patch.derivation === null
+            ? ''
+            : ` with ${patch.derivation.derivation.label} (${patch.derivation.derivation.id})`) +
           (read.repointed
             ? '; the capture re-pointed at the recovery bank (the build boots recovery unchecked)'
             : '') +
@@ -1455,6 +1507,7 @@ async function runPatchStep(
     chunkCount: Math.ceil(plain.length / STAGE_CHUNK),
     patchedSha256: patchedSha,
     diffCount: patch.diffOffsets.length,
+    armResetsCursor: patch.armResetsCursor,
   };
   const artifacts: Artifact[] = [named(PRESERVE_PATCHED_FILE, patch.patched)];
   const shas = await shasOf(artifacts);
@@ -1501,11 +1554,11 @@ async function runPatchStep(
  * sixteen asks deliver a contiguous, byte-accurate 1 KiB.
  *
  * THE LENGTH: 1 KiB is ENOUGH — the rebalance word at 0x238 (568) is among
- * the patch bytes, 0 on the factory image (buildV1Patch refuses a busy
- * rebalance word) and the nonzero rebalance on the patched one — so the head
- * alone distinguishes original from patched, which is the only question the
- * pre-checks exist to answer. The instruction-site bytes (0x3C1C..0x3DC7) lie
- * beyond it and are NOT checked live.
+ * the patch bytes: 0 on a factory image (or a known derivation's balance) and
+ * a different value on the patched one, which buildV1Patch guarantees — so
+ * the head alone distinguishes original from patched, which is the only
+ * question the pre-checks exist to answer. The instruction-site bytes
+ * (0x3C1C..0x3DC7) lie beyond it and are NOT checked live.
  */
 const BANK_HEAD_BYTES = 0x400;
 const BANK_HEAD_ASK = 64;
@@ -1586,8 +1639,8 @@ async function runCommitStep(
        * bank RIGHT NOW decides what may be written. A crash between the commit
        * transfer and its checkpoint leaves this run at nextStep `commit`;
        * re-running it must never stage a second commit blind. The head carries
-       * the rebalance word (0x238), which is 0 on the original and the nonzero
-       * rebalance on the patched bytes — enough to tell the two apart. The
+       * the rebalance word (0x238), which differs between the original and the
+       * patched bytes (BANK_HEAD_BYTES) — enough to tell the two apart. The
        * comparison is against SLOT bytes (what the reader serves): the patched
        * expectation is the conjugated capture, which is the payload itself on
        * the plaintext families. */
@@ -1678,7 +1731,16 @@ async function runDrainStep(
   /* The reset, ONCE, on its own first session: after it the camera boots the
    * patched image, and the session that sent it holds the reset's own
    * orphaned URB. Nothing else reads before the drain — the reader's per-arm
-   * budget is consumed in asks (TESTING.md sec. 23.3). */
+   * budget is consumed in asks (TESTING.md sec. 23.3).
+   *
+   * A reset the HOST refused never left (a WebUSB SecurityError: a browser
+   * policy, or the e2e write guard), so the camera still runs the image it
+   * booted with — the committed patch is in flash and not running. The drain
+   * must not go on: the widened window only exists in the patched image, a
+   * stock 2016 or 1.3.0.8-FF guard refuses mode 2 and every other build serves
+   * its stock 64 KiB (a "wedge" after a reset that never happened), and on
+   * 0.8.0.0 / 0.7.0.8 the unpatched mode-2 row faults the camera. Nothing has
+   * been read, so the step stops here and can simply run again. */
   await withSession(opener, async (device) => {
     assertLive(signal);
     const version = await gateVersion(device, state);
@@ -1686,7 +1748,15 @@ async function runDrainStep(
       `camera reports firmware ${version}; resetting so it boots the patched image`,
       'detail',
     );
-    await resetDevice(device);
+    if ((await resetDevice(device)) === 'refused') {
+      fail(
+        'the drain’s reboot command was REFUSED by the host before it left (a SecurityError: ' +
+          'a browser policy or a test guard), so the camera still runs the image it booted ' +
+          'with, not the committed patch. The drain reads only through the patched image’s ' +
+          'widened window, so it stops before arming anything; nothing was read. Run the drain ' +
+          'again where the reset can go out (the CLI, or a browser that allows it).',
+      );
+    }
   });
 
   const attempts = state.postResetAttempts ?? 2;
@@ -1715,7 +1785,16 @@ async function runDrainStep(
             'boot-config block, not a vector) — rebooting by command and taking another boot',
           'warn',
         );
-        await resetDevice(device).catch(() => undefined);
+        /* A refused reboot re-rolls nothing: the next attempt would drain the
+         * same shifted boot, so the step stops instead. */
+        if ((await resetDevice(device)) === 'refused') {
+          fail(
+            'the drain came back one page high, and the reboot that takes another boot was ' +
+              'REFUSED by the host before it left (a SecurityError: a browser policy or a test ' +
+              'guard) — another attempt would drain the same shifted boot. Nothing was kept; run ' +
+              'the drain again where the reset can go out.',
+          );
+        }
         rawDump = null;
         lastError = 'page-shifted boot (rebooting for another)';
         continue;
@@ -1744,6 +1823,8 @@ async function runDrainStep(
       }
     } catch (error) {
       if (error instanceof CancelledError) throw error;
+      /* the refused reboot above: another attempt would read the same boot */
+      if (error instanceof SeekError && error.code === 'pipeline/refused') throw error;
       lastError = `attempt ${String(n)}: ${error instanceof Error ? error.message : String(error)}`;
       reporter.log(`drain attempt failed: ${lastError}`, 'warn');
     } finally {
@@ -1863,8 +1944,8 @@ async function runRestoreStep(
         );
       }
 
-      /* Head read (see BANK_HEAD_BYTES): the rebalance word at 0x238 is 0 on
-       * the original and the nonzero rebalance on the patched bytes. */
+      /* Head read (see BANK_HEAD_BYTES): the rebalance word at 0x238 differs
+       * between the original and the patched bytes. */
       const live = await readBankHead(
         device,
         detection.bank,
@@ -1877,7 +1958,7 @@ async function runRestoreStep(
           'restore: the bank already holds the original content — nothing to stage',
           'detail',
         );
-        return false;
+        return 'already original' as const;
       }
       reporter.log(
         'restore: the bank holds something other than the original content — staging the backup ' +
@@ -1889,27 +1970,53 @@ async function runRestoreStep(
         reporter,
         ...(signal === undefined ? {} : { signal }),
       });
-      await resetDevice(device);
-      return true;
+      /* The commit LANDED (status 0): the bank holds the original. The reset
+       * only boots it. One the host refused (a SecurityError: a browser
+       * policy or a test guard) left the camera running the patched image
+       * from RAM, which is harmless to the flash and ends at its next
+       * power-up — so the restore is done, and the record says the reboot is
+       * owed instead of "reset sent". Failing the step would not help: its
+       * re-run finds the original in the bank and stages nothing, and sends
+       * no reset either. */
+      if ((await resetDevice(device)) === 'refused') {
+        reporter.log(
+          'restore: the bank holds the original content, but the reboot command was REFUSED by ' +
+            'the host before it left (a SecurityError: a browser policy or a test guard) — the ' +
+            'camera still runs the patched image from RAM; unplug it and plug it back in to boot ' +
+            'the restored bank',
+          'warn',
+        );
+        return 'restored, reboot refused' as const;
+      }
+      return 'restored' as const;
     } finally {
       await opener.close(device);
     }
   })();
 
-  const notes = restored
-    ? `original bank content staged back (${String(payload.length)} B${
-        payload === original
-          ? ', the capture verbatim'
-          : `, the ${state.stagedForm ?? ''} staged form`
-      }) and committed; reset sent`
-    : 'the bank already held the original content (a previous restore landed) — nothing ' +
-      'staged, no reset sent';
+  const staged = `original bank content staged back (${String(payload.length)} B${
+    payload === original ? ', the capture verbatim' : `, the ${state.stagedForm ?? ''} staged form`
+  }) and committed`;
+  const notes =
+    restored === 'restored'
+      ? `${staged}; reset sent`
+      : restored === 'restored, reboot refused'
+        ? `${staged}; the reset was REFUSED by the host, so the camera still runs the patched ` +
+          'image until it is unplugged and plugged back in (the bank holds the original)'
+        : 'the bank already held the original content (a previous restore landed) — nothing ' +
+          'staged, no reset sent';
   const nextState: PreserveRunState = {
     ...state,
     nextStep: nextStepAfter('restore'),
     steps: {
       ...state.steps,
-      restore: { status: 'done', startedAt, finishedAt: new Date().toISOString(), notes },
+      restore: {
+        status: 'done',
+        startedAt,
+        finishedAt: new Date().toISOString(),
+        notes,
+        ...(restored === 'restored, reboot refused' ? { rebootRefused: true } : {}),
+      },
     },
   };
   return { state: nextState, artifacts: [] };
@@ -1972,7 +2079,11 @@ async function runVerifyStep(
       ...state.steps,
       verify: stepRecord(
         startedAt,
-        `a fresh boot re-read ${String(result.windowsRead)}/` +
+        (state.steps.restore?.rebootRefused === true
+          ? 'the boot the restore ran on (its reboot was refused by the host — the camera still ' +
+            'runs the patched image until it is unplugged and plugged back in) re-read '
+          : 'a fresh boot re-read ') +
+          `${String(result.windowsRead)}/` +
           `${String(BACKUP_WINDOW_COUNT)} windows at ${String(result.diffBytes)} differing ` +
           "byte(s) — the camera's flash is byte-identical to the backup",
         shas,

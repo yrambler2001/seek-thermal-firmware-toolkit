@@ -22,12 +22,14 @@
  * NOT EVERY FIRMWARE IS STOCK 2014. The cap used to be ONE reset, on the
  * premise that the step never restarts the camera by itself — and a camera
  * whose boot-config block is erased (Compact PRO 1.0.3.0 on the bench part)
- * reads "blank" on every boot, so its step 02 restarts it once per window.
- * That is the app's behaviour, not this run's, so it is measured and reported:
- * the injected restart must go out, every restart must be answered the same
- * way, and the count beyond the injected one is said, not failed. The cap
- * (`RESET_CAP`) stays, far above any honest run, so a reset loop still ends
- * refused unsent.
+ * reads "blank" on every boot, so its step 02 used to restart it once per
+ * window. The probe now admits such a boot when it serves the device-identity
+ * block where the plan puts it (TESTING.md sec. 38), so the injected restart
+ * should be the only one; any more are the app's behaviour, not this run's,
+ * so they are measured and reported: the injected restart must go out, every
+ * restart must be answered the same way, and the count beyond the injected
+ * one is said, not failed. The cap (`RESET_CAP`) stays, far above any honest
+ * run, so a reset loop still ends refused unsent.
  *
  * It also measures what Electron does across a real re-enumeration: whether
  * the page gets a `disconnect` and a `connect`, what `getDevices()` answers
@@ -164,9 +166,9 @@ describe.skipIf(UNAVAILABLE !== null)(
       if (own > 0) {
         say(
           `this firmware restarted the camera ${String(own)} more time(s) in step 02 on its own ` +
-            '(the step reboots when its reader probe reads the boot-config record as blank, ' +
-            'and an erased record reads blank on every boot), so the "stock firmware never ' +
-            'restarts" premise does not hold here; every restart was answered as the injected one',
+            '(the step reboots when its reader probe cannot admit a boot: a page-shifted or ' +
+            'unreadable reader, or a blank record on a boot that does not serve the device ' +
+            'block); every restart was answered as the injected one',
         );
       }
       const wire = wireSince(countsOf(before), countsOf(after));

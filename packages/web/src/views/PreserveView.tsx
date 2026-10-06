@@ -719,6 +719,17 @@ function PlanFromState({ state }: { readonly state: PreserveRunState }): ReactEl
             `${state.buildLabel ?? state.buildId ?? '?'} — family ${state.buildFamily ?? '?'}`,
           ],
           ['Firmware version', state.expectedVersion ?? '?'],
+          ...(state.imageDerivation === undefined
+            ? []
+            : [
+                [
+                  'Image edit',
+                  `${state.imageDerivation.label} (${state.imageDerivation.id}) on the factory ` +
+                    `image. Its balance, ${hexUp(state.imageDerivation.balanceWord)}, is in the ` +
+                    'adjust word; the patch balances on top of it, and step 04 puts the image ' +
+                    'back with the edit.',
+                ] as const,
+              ]),
           ['Factory plaintext sha256', state.imageSha256 ?? '?'],
           ['Patched sha256', patch.patchedSha256],
           ...(patch.diffCount === undefined
@@ -728,7 +739,13 @@ function PlanFromState({ state }: { readonly state: PreserveRunState }): ReactEl
             'Staged length',
             `${String(patch.stagedLength)} B in ${String(patch.chunkCount)} chunks`,
           ],
-          ['Rebalance word', hexUp(patch.rebalanceWord)],
+          [
+            'Rebalance word',
+            state.imageDerivation === undefined
+              ? hexUp(patch.rebalanceWord)
+              : `${hexUp(patch.rebalanceWord)} (was ${hexUp(state.imageDerivation.balanceWord)}, ` +
+                'the edit’s balance)',
+          ],
           ...(state.stagedForm === undefined
             ? []
             : [['Staged form', stagedFormLine(state.stagedForm)] as const]),

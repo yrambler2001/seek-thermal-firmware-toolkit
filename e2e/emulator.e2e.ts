@@ -47,10 +47,50 @@ import { EVERYTHING, PHASE_FOLDER, Wizard, type PhaseRun } from './lib/wizard.js
 const CORPUS_ENTRY = '101310HSNEA2/dump';
 const JEDEC = '010215';
 /** The bench camera's part as it booted (the J-Link dump, TESTING.md sec. 34). */
-const AS_BOOTED_SHA = '40447c7e6da5cbc84621f4694ffff5bda0f783e7807a45e80443383b19a8eb72';
+const AS_BOOTED_1300_SHA = '40447c7e6da5cbc84621f4694ffff5bda0f783e7807a45e80443383b19a8eb72';
 /** The same part with the five-site patch committed (TESTING.md sec. 36.2). */
-const POST_COMMIT_SHA = 'b22e9e20a9928241348c089f4e046c62f8a3f73db0ecb29dd2ce17eaa1cb6dcd';
+const POST_COMMIT_1300_SHA = 'b22e9e20a9928241348c089f4e046c62f8a3f73db0ecb29dd2ce17eaa1cb6dcd';
 const FLASH_BYTES = 4 * 1024 * 1024;
+
+/**
+ * ANOTHER PART, on request: `SEEK_E2E_EMU_FLASH` boots a 4 MiB flash file
+ * (a J-Link dump) on the emulator's default board instead of the corpus
+ * 1.3.0.0 part, and the run checks against that part: the delivered image
+ * must be the file itself, the raw dump `SEEK_E2E_EMU_POST_COMMIT_SHA` and the
+ * Dump & decrypt image `SEEK_E2E_EMU_DUMP_SHA` when they are given (a 2016
+ * part's dump image is gap-filled where no selector reaches, so it is not the
+ * part's sha), the version `SEEK_E2E_EMU_VERSION` (TESTING.md sec. 38: the
+ * bench camera's Compact PRO 1.0.3.0 flash: 1.0.3.0, raw 759280a2…, dump
+ * image 0cb0e544…).
+ */
+const PART_FILE = process.env.SEEK_E2E_EMU_FLASH ?? '';
+const PART: {
+  readonly flash: string | null;
+  readonly asBooted: string;
+  readonly postCommit: string | null;
+  /** The Dump & decrypt image, or null to skip that check. */
+  readonly dumpImage: string | null;
+  readonly version: string;
+  readonly product: RegExp;
+} =
+  PART_FILE === ''
+    ? {
+        flash: null,
+        asBooted: AS_BOOTED_1300_SHA,
+        postCommit: POST_COMMIT_1300_SHA,
+        dumpImage: AS_BOOTED_1300_SHA /* every block of this part is reachable */,
+        version: '1.3.0.0',
+        product: /PIR206 Thermal Camera/,
+      }
+    : {
+        flash: PART_FILE,
+        asBooted: existsSync(PART_FILE) ? sha256(new Uint8Array(readFileSync(PART_FILE))) : '',
+        postCommit: process.env.SEEK_E2E_EMU_POST_COMMIT_SHA ?? null,
+        dumpImage: process.env.SEEK_E2E_EMU_DUMP_SHA ?? null,
+        version: process.env.SEEK_E2E_EMU_VERSION ?? '',
+        product: /Thermal Camera/,
+      };
+const AS_BOOTED_SHA = PART.asBooted;
 
 const SCRATCH =
   process.env.SEEK_E2E_SCRATCH ?? path.join(tmpdir(), `seek-e2e-emu-${String(process.pid)}`);
@@ -59,6 +99,7 @@ const HEADED = process.env.SEEK_E2E_HEADED === '1';
 
 function unavailable(): string | null {
   if (EMU_DIR === null) return 'no FW-V1 emulator found (set SEEK_EMU_DIR)';
+  if (PART.flash !== null && !existsSync(PART.flash)) return `no part at ${PART.flash}`;
   if (!existsSync(CHROME_PATH)) return `no Chrome at ${CHROME_PATH} (set SEEK_E2E_CHROME)`;
   return null;
 }
@@ -86,6 +127,7 @@ describe.skipIf(UNAVAILABLE !== null)('the web app on the emulated camera (bridg
     bus = await EmulatorBus.start({
       emuDir: EMU_DIR ?? '',
       entryId: CORPUS_ENTRY,
+      ...(PART.flash === null ? {} : { flash: PART.flash }),
       jedec: JEDEC,
       scratchDir: path.join(SCRATCH, 'flash'),
       log: say,
@@ -103,7 +145,7 @@ describe.skipIf(UNAVAILABLE !== null)('the web app on the emulated camera (bridg
       prompter: bridge,
       downloads: chrome.downloads,
       guard: EVERYTHING,
-      camera: /PIR206|Seek|Thermal|289d/i,
+      camera: /PIR206|PIR324|Seek|Thermal|289d/i,
     });
   });
 
@@ -134,7 +176,7 @@ describe.skipIf(UNAVAILABLE !== null)('the web app on the emulated camera (bridg
     const w = need(wizard, 'the wizard');
     const b = need(bridge, 'the bridge');
     const name = await w.connect();
-    expect(name).toMatch(/PIR206 Thermal Camera/);
+    expect(name).toMatch(PART.product);
 
     const before = new Map(b.counts);
     const dump = await w.dumpAndDecrypt(30 * 60_000);
@@ -150,12 +192,15 @@ describe.skipIf(UNAVAILABLE !== null)('the web app on the emulated camera (bridg
     expect(all).toContain(`${dir}/manifest.json`);
     expect(all).toContain(`${dir}/README.md`);
     /* The whole-image file at the archive's top: every window the dump read, at
-     * its address, 0xFF where it read nothing — on this part, the part itself. */
+     * its address, 0xFF where it read nothing — on the 1.3.0.0 part, the part itself. */
     const combined = dump.entries.find((e) => /^[^/]+\/flash_4m_usb[^/]*\.bin$/.test(e.name));
     expect(combined?.data.length).toBe(FLASH_BYTES);
-    expect(sha256(combined?.data ?? new Uint8Array(0)), 'the dump: the emulated part').toBe(
-      AS_BOOTED_SHA,
-    );
+    say(`dump image sha256 ${sha256(combined?.data ?? new Uint8Array(0))}`);
+    if (PART.dumpImage !== null) {
+      expect(sha256(combined?.data ?? new Uint8Array(0)), 'the dump: the emulated part').toBe(
+        PART.dumpImage,
+      );
+    }
   });
 
   it('step 02 reads & builds: no restart on the emulator, the run file in 02-read-build/', async () => {
@@ -185,7 +230,7 @@ describe.skipIf(UNAVAILABLE !== null)('the web app on the emulated camera (bridg
     }
     expect(all.filter((n) => /^0[34]-/.test(n))).toEqual([]);
     const state = runState(run.entries);
-    expect(state.expectedVersion).toBe('1.3.0.0');
+    if (PART.version !== '') expect(state.expectedVersion).toBe(PART.version);
     expect(state.steps.backup?.status).toBe('done');
     expect(state.steps.patch?.status).toBe('done');
     expect(state.nextStep).toBe('commit');
@@ -213,7 +258,12 @@ describe.skipIf(UNAVAILABLE !== null)('the web app on the emulated camera (bridg
     const raw = entry(run.entries, `${folder}/preserve_dump_postwrite.bin`);
     const delivered = entry(run.entries, `${folder}/preserve_dump_original.bin`);
     expect(raw.length).toBe(FLASH_BYTES);
-    expect(sha256(raw), 'the raw dump: the post-commit part, byte for byte').toBe(POST_COMMIT_SHA);
+    say(`raw dump sha256 ${sha256(raw)}`);
+    if (PART.postCommit !== null) {
+      expect(sha256(raw), 'the raw dump: the post-commit part, byte for byte').toBe(
+        PART.postCommit,
+      );
+    }
     expect(sha256(delivered), 'the delivered image: the part as it booted').toBe(AS_BOOTED_SHA);
     const state = runState(run.entries);
     expect(state.steps.commit?.status).toBe('done');

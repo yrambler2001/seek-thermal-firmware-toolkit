@@ -48,7 +48,7 @@ import {
   FLASH_BASE,
   SeekDevice,
   SEEK_VENDOR_ID,
-  clearsArmCursor,
+  drainLeavesReaderReadable,
   preservationWindows,
   type SessionOpener,
   type WebUsbTransport,
@@ -723,13 +723,14 @@ export function usePreservePanel(params: PreservePanelParams): PreservePanelApi 
             meta.replugAfter &&
             lastStep !== undefined &&
             ran.has(lastStep) &&
-            !clearsArmCursor(current.patch?.sites ?? []);
+            !drainLeavesReaderReadable(current.patch);
           if (meta.replugAfter && lastStep !== undefined && ran.has(lastStep) && !replugOwed) {
-            /* The committed patch carries the arm tail's cursor reset: the
-             * drain left the reader readable, and the restore reads on this
-             * boot (TESTING.md sec. 36). */
+            /* The patched image's arm tail resets the whole cursor — by the
+             * fifth site on the 2014 trio builds, by its own tail on 1.0.3.0:
+             * the drain left the reader readable, and the restore reads on
+             * this boot (TESTING.md secs. 36, 38). */
             rep.reporter.log(
-              'the committed patch resets the reader’s cursor on every arm, so the drain left ' +
+              'the patched firmware resets the reader’s cursor on every arm, so the drain left ' +
                 'it readable — no replug needed; the restore reads on this boot',
               'detail',
             );

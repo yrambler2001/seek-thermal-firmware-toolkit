@@ -18,9 +18,11 @@
  */
 
 export {
+  applyDerivation,
   buildV1Patch,
   clearsArmCursor,
   conjugateCapture,
+  locateDerivation,
   keystream,
   preWideningRefusal,
   stagedAcceptanceSum,
@@ -32,6 +34,7 @@ export {
   keyWordsOf,
   REBALANCE_WORD_OFFSET,
   BUILD_PATCH_PROFILES,
+  KNOWN_DERIVATIONS,
   V1_2014_PATCH_SITES,
   V1_PAYLOAD_VMA_BASE,
 } from './patch.js';
@@ -39,6 +42,8 @@ export type {
   BuildPatchProfile,
   CommitRouteId,
   DrainCapability,
+  ImageDerivation,
+  LocatedDerivation,
   LocatedKeys,
   PatchSite,
   PreserveFamilyId,
@@ -118,6 +123,7 @@ export {
   backupResultFromImage,
   createPreserveRun,
   describeStepGate,
+  drainLeavesReaderReadable,
   isPreserveStepId,
   nextStepAfter,
   recordStepFailure,

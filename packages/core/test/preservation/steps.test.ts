@@ -60,6 +60,7 @@ import {
   describeStepGate,
   detectActiveSlotFromHead,
   doubleReadWindows,
+  drainLeavesReaderReadable,
   openProbedSession,
   parseBootConfig,
   resetDevice,
@@ -75,14 +76,26 @@ import {
   type PreserveStepId,
   type SessionOpener,
 } from '../../src/preservation/index.js';
-import { PAGE_SHIFT_ANCHOR } from '../../src/preservation/windows.js';
+import { PAGE_SHIFT_ANCHOR, isPageShiftedHead } from '../../src/preservation/windows.js';
 import {
   REBALANCE_WORD_OFFSET,
   V1_2014_PATCH_SITES,
   buildV1Patch,
+  keyWordsOf,
+  keystream,
   wordSum,
+  xorWindowVerbatim,
 } from '../../src/preservation/patch.js';
 import { FakeCamera, type FakeWindowSpec } from '../fake-transport.js';
+import {
+  BOARD_PATCH,
+  CP1030_VERSION,
+  DEVICE_BLOCK_HEAD,
+  KEY_CP103,
+  boardPatched,
+  cp1030Camera,
+  cp1030Flash,
+} from './fixtures-2016.js';
 
 /* ---- the synthetic factory plaintext (the patch sites included) --------- */
 
@@ -539,10 +552,11 @@ describe('runPreserveStep(backup) — the double read and the derived-image gate
       );
       expect(state.steps.backup?.notes).toMatch(/identity/);
       /* THE SERVE BUDGET, on the wire: mode 7 went out TWICE — the sweep's arm
-       * (whose row is read #1) and the fresh arm (read #2) — and mode 3 twice
-       * (the boot-config read and its verified-arm re-arm; the fake's record
-       * is unprogrammed fill, so the ladder re-arms once). */
-      expect(camera.arms.slice(-3)).toEqual([3, 3, 7]);
+       * (whose row is read #1) and the fresh arm (read #2) — and the capture
+       * segment's probe twice: the fake's record is unprogrammed fill and its
+       * mode-4 window is fill too (no device block), so the device-block check
+       * fails and the two-boot rule admits the second boot (3, 4; 3, 4; 7). */
+      expect(camera.arms.slice(-5)).toEqual([3, 4, 3, 4, 7]);
       expect(camera.arms.filter((mode) => mode === 7)).toHaveLength(2);
       /* The capture, as before, is the bank verbatim. */
       const capture = await store.load(PRESERVE_BANK_CAPTURE_FILE);
@@ -1860,4 +1874,344 @@ describe('the 0.7.0.7 rotation — the base from the detection, and the algebra'
     /* A non-slot-aligned base refuses. */
     expect(() => unrotateDump(served, FLASH_BASE + 0x123)).toThrow(/slot-aligned/);
   });
+});
+
+/* ==================================================================== *
+ * Compact PRO 1.0.3.0 with the board patch: the fake bench camera
+ * (TESTING.md sec. 38)
+ *
+ * The bench part's shape: the boot-config block ERASED (every native 2016
+ * dump has no record), the device-identity block at 0x14020000, and banks
+ * A/B/R holding the factory 1.0.3.0 image with the Compact board patch, under
+ * the at-rest device stream. The fake's commit is the 2016 app's: decrypt
+ * the stage with key block 0, accept a word sum of 0, store under block 1.
+ * ==================================================================== */
+
+/** Counts the ResetDevice transfers a run sent. */
+function resetsSent(camera: FakeCamera): number {
+  return camera.calls.filter((call) => call.direction === 'out' && call.op === RESET_OP).length;
+}
+
+/** A device whose ResetDevice the HOST refuses before it leaves (the e2e
+ *  write guard's SecurityError); everything else is the camera's. */
+class HostRefusesResetDevice extends SeekDevice {
+  override async rpcOut(op: number, payload: Uint8Array, timeoutMs?: number): Promise<void> {
+    if (op === RESET_OP) {
+      throw new SeekError('usb/transfer-failed', 'ResetDevice failed: refused', {
+        cause: new DOMException('e2e write guard: ResetDevice refused', 'SecurityError'),
+      });
+    }
+    return super.rpcOut(op, payload, timeoutMs);
+  }
+}
+
+function refusingOpener(camera: FakeCamera): SessionOpener {
+  return {
+    open: async () => {
+      await camera.open();
+      return new HostRefusesResetDevice(camera, { reporter: silentReporter });
+    },
+    close: async () => {
+      await camera.close();
+    },
+  };
+}
+
+/** The 2016 slot decrypted: the at-rest device stream off the header window. */
+function decryptBank(bank: Uint8Array, length: number): Uint8Array {
+  return xorWindowVerbatim(
+    bank.subarray(0, length),
+    keystream(keyWordsOf(KEY_CP103.block1), length >> 2),
+  );
+}
+
+describe('Compact PRO 1.0.3.0 with the board patch — the fake bench camera', () => {
+  it('the probe: an erased record is admitted on the boot that serves the device block, with no reboot', async () => {
+    const camera = cp1030Camera();
+    const reporter = collectingReporter();
+    const { cfgHead, boots } = await openProbedSession(
+      fakeOpener(camera),
+      reporter,
+      undefined,
+      'test',
+    );
+    expect(boots).toBe(1);
+    expect(cfgHead.every((b) => b === 0xff)).toBe(true);
+    expect(resetsSent(camera)).toBe(0);
+    /* the check armed the plan's mode-4 window, the device-identity block */
+    expect(camera.arms).toEqual([3, 4]);
+    const lines = reporter.events.map((e) => (e.type === 'log' ? e.message : ''));
+    expect(lines.some((line) => /device-identity block .* admitted, no reboot/.test(line))).toBe(
+      true,
+    );
+    await camera.close();
+  });
+
+  it('the probe: an erased record with NO device block keeps the two-boot rule', async () => {
+    const flash = cp1030Flash();
+    flash.fill(0xff, 0x20000, 0x30000);
+    const camera = cp1030Camera(flash);
+    const { boots } = await openProbedSession(
+      fakeOpener(camera),
+      silentReporter,
+      undefined,
+      'test',
+    );
+    expect(boots).toBe(2);
+    expect(resetsSent(camera)).toBe(1);
+    await camera.close();
+  });
+
+  it('the probe: the 2016 device block served where the record should be is a page-shifted boot', () => {
+    /* This camera's block 0x14020000: the reference anchor's header word, its
+     * own serial. The exact 28-byte anchor read it as a written record. */
+    expect(isPageShiftedHead(DEVICE_BLOCK_HEAD)).toBe(true);
+    expect(classifyReaderBoot(DEVICE_BLOCK_HEAD)).toBe('page-shifted');
+    const zeroFlag = Uint8Array.from(DEVICE_BLOCK_HEAD);
+    zeroFlag[0] = 0x00;
+    expect(classifyReaderBoot(zeroFlag)).toBe('page-shifted');
+    /* a record naming a slot is never mistaken for it */
+    const record = new Uint8Array(BOOT_CONFIG_BYTES).fill(0xff);
+    new DataView(record.buffer).setUint32(0, 1, true);
+    expect(classifyReaderBoot(record)).toBe('healthy');
+  });
+
+  it('the probe: a boot whose mode-4 window serves the wrong block is rebooted, not admitted', async () => {
+    /* The page-walked boot the reboot exists for: the record reads blank and
+     * mode 4 serves a block that is not the device block. */
+    const camera = cp1030Camera();
+    class WalkedMode4Device extends SeekDevice {
+      private mode = -1;
+      override async armWindow(...args: Parameters<SeekDevice['armWindow']>): Promise<void> {
+        this.mode = args[0].subcmd;
+        return super.armWindow(...args);
+      }
+      override async rpcIn(op: number, length: number, timeoutMs?: number): Promise<Uint8Array> {
+        const data = await super.rpcIn(op, length, timeoutMs);
+        return op === OP.GET_FEATURED_FIRMWARE_DATA && this.mode === 4
+          ? new Uint8Array(data.length).fill(0xff)
+          : data;
+      }
+    }
+    let opens = 0;
+    const opener: SessionOpener = {
+      open: async () => {
+        opens += 1;
+        await camera.open();
+        return opens === 1
+          ? new WalkedMode4Device(camera, { reporter: silentReporter })
+          : new SeekDevice(camera, { reporter: silentReporter });
+      },
+      close: async () => {
+        await camera.close();
+      },
+    };
+    const { boots } = await openProbedSession(opener, silentReporter, undefined, 'test');
+    expect(boots).toBe(2);
+    expect(resetsSent(camera)).toBe(1);
+    await camera.close();
+  });
+
+  it(
+    'the backup reads the erased-record camera without a reboot and derives the board-patched image',
+    { timeout: 120_000 },
+    async () => {
+      const camera = cp1030Camera();
+      const store = memoryStore();
+      const created = await createPreserveRun({ runId: 'cp1030' });
+      const state = await step('backup', camera, created.state, store);
+      expect(resetsSent(camera)).toBe(0);
+      expect(state.detection?.blank).toBe(true);
+      expect(state.detection?.bank).toBe('a');
+      expect(state.expectedVersion).toBe(CP1030_VERSION);
+      expect(state.buildFamily).toBe('compact-2016');
+      expect(state.buildId).toBe('compact-pro-1.0.3.0');
+      expect(state.imageDerivation?.id).toBe('compact-pro-1.0.3.0-accept-pn297');
+      expect(state.imageDerivation?.balanceWord).toBe(
+        new DataView(boardPatched().buffer).getUint32(REBALANCE_WORD_OFFSET, true),
+      );
+      expect(state.steps.backup?.notes).toMatch(/with the Compact \(PN297\) board patch/);
+      /* the derived image is the slot's: the factory image WITH the board patch */
+      const plain = await store.load(PRESERVE_PLAIN_NAME);
+      expect(plain).toEqual(boardPatched());
+    },
+  );
+
+  it(
+    'the six steps land on the cipher chain: the patch balances on the edit, and the restore puts the edit back',
+    { timeout: 180_000 },
+    async () => {
+      const camera = cp1030Camera();
+      const asBooted = new Uint8Array(camera.flash);
+      const store = memoryStore();
+      let state = (await createPreserveRun({ runId: 'cp1030-full' })).state;
+      for (const id of ['backup', 'patch'] as const) state = await step(id, camera, state, store);
+
+      const image = boardPatched();
+      const patch = buildV1Patch(image);
+      expect(state.patch?.armResetsCursor).toBe(true);
+      expect(drainLeavesReaderReadable(state.patch)).toBe(true);
+      expect(state.patch?.rebalanceWord).toBe(patch.rebalanceWord);
+
+      state = await step('commit', camera, state, store);
+      /* Bank A now decrypts to the patched image: the guard, the widen and
+       * the word moved, and the board patch is still in it. */
+      const committed = decryptBank(camera.flash.subarray(0x50000), image.length);
+      expect(committed).toEqual(patch.patched);
+      expect([...committed.subarray(BOARD_PATCH.site.offset, BOARD_PATCH.site.offset + 8)]).toEqual(
+        BOARD_PATCH.site.after,
+      );
+      /* Only bank A changed, and only at the patch's bytes. */
+      for (let i = 0; i < asBooted.length; i++) {
+        if (camera.flash[i] === asBooted[i]) continue;
+        expect(i >= 0x50000 && i < 0x60000, `byte ${i.toString(16)} outside bank A`).toBe(true);
+        expect(patch.diffOffsets).toContain(i - 0x50000);
+      }
+      const afterCommit = new Uint8Array(camera.flash);
+
+      state = await step('drain', camera, state, store);
+      expect(await store.load(PRESERVE_DUMP_POSTWRITE_FILE)).toEqual(afterCommit);
+      expect(await store.load(PRESERVE_DUMP_ORIGINAL_FILE)).toEqual(asBooted);
+
+      state = await step('restore', camera, state, store);
+      expect(state.steps.restore?.notes).toMatch(/xor-ks0 staged form\) and committed; reset sent/);
+      expect(state.steps.restore?.rebootRefused).toBeUndefined();
+      /* the part is the as-booted part again, the board patch included */
+      expect(camera.flash).toEqual(asBooted);
+
+      state = await step('verify', camera, state, store);
+      expect(state.nextStep).toBe('done');
+      expect(state.verify).toEqual({ diffBytes: 0, windowsRead: 31, badWindows: [] });
+      expect(state.steps.verify?.notes).toMatch(/^a fresh boot re-read 31\/31/);
+      /* Two resets in the whole run, the drain's and the restore's: no probe
+       * rebooted the camera on its erased record. */
+      expect(resetsSent(camera)).toBe(2);
+    },
+  );
+
+  it(
+    'a reset the host refuses stops the drain before it arms the widened window',
+    { timeout: 180_000 },
+    async () => {
+      const camera = cp1030Camera();
+      const store = memoryStore();
+      let state = (await createPreserveRun({ runId: 'cp1030-drain-refused' })).state;
+      for (const id of ['backup', 'patch', 'commit'] as const) {
+        state = await step(id, camera, state, store);
+      }
+      const armsBefore = camera.arms.length;
+      const error: unknown = await runPreserveStep(
+        'drain',
+        refusingOpener(camera),
+        state,
+        store.load,
+        silentReporter,
+      ).catch((e: unknown) => e);
+      expect(error).toBeInstanceOf(SeekError);
+      expect((error as SeekError).code).toBe('pipeline/refused');
+      expect((error as Error).message).toMatch(/reboot command was REFUSED by the host/);
+      expect((error as Error).message).toMatch(/nothing was read/);
+      expect(camera.arms.slice(armsBefore)).not.toContain(2);
+      expect(
+        camera.calls.filter((c) => c.op === OP.GET_FEATURED_FIRMWARE_DATA).length,
+      ).toBeGreaterThan(0); /* the backup read; the drain read nothing after the refusal */
+    },
+  );
+
+  it(
+    'a reset the host refuses after the restore commit: done, the reboot owed, and the verify says so',
+    { timeout: 180_000 },
+    async () => {
+      const camera = cp1030Camera();
+      const asBooted = new Uint8Array(camera.flash);
+      const store = memoryStore();
+      let state = (await createPreserveRun({ runId: 'cp1030-restore-refused' })).state;
+      for (const id of ['backup', 'patch', 'commit', 'drain'] as const) {
+        state = await step(id, camera, state, store);
+      }
+      const reporter = collectingReporter();
+      const restored = await runPreserveStep(
+        'restore',
+        refusingOpener(camera),
+        state,
+        store.load,
+        reporter,
+      );
+      state = restored.state;
+      expect(state.steps.restore?.status).toBe('done');
+      expect(state.steps.restore?.rebootRefused).toBe(true);
+      expect(state.steps.restore?.notes).toMatch(/the reset was REFUSED by the host/);
+      expect(state.steps.restore?.notes).not.toMatch(/reset sent/);
+      expect(camera.flash).toEqual(asBooted); /* the commit landed */
+      const warnings = reporter.events
+        .filter((e) => e.type === 'log' && e.level === 'warn')
+        .map((e) => (e.type === 'log' ? e.message : ''));
+      expect(warnings.some((line) => line.includes('still runs the patched image'))).toBe(true);
+
+      state = await step('verify', camera, state, store);
+      expect(state.verify).toEqual({ diffBytes: 0, windowsRead: 31, badWindows: [] });
+      expect(state.steps.verify?.notes).toMatch(/its reboot was refused by the host/);
+      expect(state.steps.verify?.notes).not.toMatch(/^a fresh boot/);
+    },
+  );
+
+  it(
+    'a refused reboot after a page-shifted drain stops the step instead of draining the same boot',
+    { timeout: 180_000 },
+    async () => {
+      const camera = cp1030Camera();
+      const store = memoryStore();
+      let state = (await createPreserveRun({ runId: 'cp1030-shift-refused' })).state;
+      for (const id of ['backup', 'patch', 'commit'] as const) {
+        state = await step(id, camera, state, store);
+      }
+      /* The drain's reset goes out; the boot after it serves mode 2 one page
+       * up (the dump starts with zeros), and its reboot is refused. */
+      class ShiftedDrainDevice extends SeekDevice {
+        private mode = -1;
+        private served = 0;
+        override async armWindow(...args: Parameters<SeekDevice['armWindow']>): Promise<void> {
+          this.mode = args[0].subcmd;
+          this.served = 0;
+          return super.armWindow(...args);
+        }
+        override async rpcIn(op: number, length: number, timeoutMs?: number): Promise<Uint8Array> {
+          const data = await super.rpcIn(op, length, timeoutMs);
+          if (op !== OP.GET_FEATURED_FIRMWARE_DATA || this.mode !== 2) return data;
+          const out = this.served === 0 ? new Uint8Array(data.length) : data;
+          this.served += data.length;
+          return out;
+        }
+        override async rpcOut(op: number, payload: Uint8Array, timeoutMs?: number): Promise<void> {
+          if (op === RESET_OP && opens > 1) {
+            throw new SeekError('usb/transfer-failed', 'ResetDevice failed: refused', {
+              cause: new DOMException('refused', 'SecurityError'),
+            });
+          }
+          return super.rpcOut(op, payload, timeoutMs);
+        }
+      }
+      let opens = 0;
+      const opener: SessionOpener = {
+        open: async () => {
+          opens += 1;
+          await camera.open();
+          return new ShiftedDrainDevice(camera, { reporter: silentReporter });
+        },
+        close: async () => {
+          await camera.close();
+        },
+      };
+      const error: unknown = await runPreserveStep(
+        'drain',
+        opener,
+        state,
+        store.load,
+        silentReporter,
+      ).catch((e: unknown) => e);
+      expect(error).toBeInstanceOf(SeekError);
+      expect((error as Error).message).toMatch(/one page high, and the reboot .* was REFUSED/);
+      expect(opens).toBe(2); /* the reset session, then ONE drain attempt — no second */
+    },
+  );
 });

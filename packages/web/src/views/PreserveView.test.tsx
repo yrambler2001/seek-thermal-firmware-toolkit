@@ -302,6 +302,44 @@ describe('PreserveView', () => {
     unmount();
   });
 
+  it('a board-patched image: the plan names the edit and the adjust-word share it holds', () => {
+    const { container, unmount } = renderPreserve({
+      state: runState(
+        { backup: 'done', patch: 'done' },
+        {
+          nextStep: 'commit',
+          buildFamily: 'compact-2016',
+          buildId: 'compact-pro-1.0.3.0',
+          buildLabel: 'Compact Pro 1.0.3.0 (9 Hz)',
+          expectedVersion: '1.0.3.0',
+          stagedForm: 'xor-ks0',
+          restoreForm: 'factory-staged',
+          imageDerivation: {
+            id: 'compact-pro-1.0.3.0-accept-pn297',
+            label: 'the Compact (PN297) board patch',
+            balanceWord: 0x6322e32a,
+          },
+          patch: {
+            sites: [{ name: 'widen', offset: 0x3636, before: [1, 2, 3, 4], after: [5, 6, 7, 8] }],
+            rebalanceWord: 0x5423132a,
+            stagedLength: 51848,
+            chunkCount: 811,
+            patchedSha256: 'b'.repeat(64),
+            diffCount: 5,
+            armResetsCursor: true,
+          },
+        },
+      ),
+      connected: true,
+    });
+    const row = phaseRow(container, 'Read & build');
+    expect(row.textContent).toContain('Image edit');
+    expect(row.textContent).toContain('the Compact (PN297) board patch');
+    expect(row.textContent).toContain('0x6322E32A');
+    expect(row.textContent).toContain('0x5423132A (was 0x6322E32A, the edit’s balance)');
+    unmount();
+  });
+
   it('the verify verdict is unmistakable, both ways', () => {
     const matched = runState(
       { backup: 'done', patch: 'done', commit: 'done', drain: 'done', restore: 'done' },

@@ -25,8 +25,10 @@ import { SeekError } from '../../src/errors.js';
 import { legacyReaderOp } from '../../src/profiles/legacy-auth.js';
 import {
   BUILD_PATCH_PROFILES,
+  applyDerivation,
   buildV1Patch,
   conjugateCapture,
+  locateDerivation,
   keyWordsOf,
   keystream,
   stagedAcceptanceSum,
@@ -45,6 +47,7 @@ import {
 } from '../../src/preservation/patch.js';
 import { describeStepGate, type PreserveRunState } from '../../src/preservation/steps.js';
 import { emulatorDir } from '../emulator/harness.js';
+import { BOARD_PATCH, boardPatched, cp1030Plain } from './fixtures-2016.js';
 import facts from '../firmware/facts.json' with { type: 'json' };
 
 const sha256 = (bytes: Uint8Array): string => createHash('sha256').update(bytes).digest('hex');
@@ -779,6 +782,135 @@ describe('the build table — the five real builds, pinned to the RE records', (
       eightHzProfile?.detect(readImage(CORPUS_IMAGES['compact-1.3.0.8-ff'] ?? null)) ?? false,
     ).toBe(false);
   });
+});
+
+/* ==================================================================== *
+ * known derivations: the board patch on Compact PRO 1.0.3.0 (TESTING.md
+ * sec. 38) — a factory image with a balanced edit of its own, identified
+ * exactly, patched on top, and put back as the slot held it
+ * ==================================================================== */
+
+describe('known derivations — the 1.0.3.0 board patch, identified and balanced on', () => {
+  const adjust = (image: Uint8Array): number =>
+    new DataView(image.buffer, image.byteOffset).getUint32(REBALANCE_WORD_OFFSET, true);
+
+  it('locateDerivation names the edit and hands back the factory image under it', () => {
+    const factory = cp1030Plain();
+    const asHeld = boardPatched(factory);
+    expect(locateDerivation(factory)).toBeNull();
+    const located = locateDerivation(asHeld);
+    expect(located?.derivation.id).toBe('compact-pro-1.0.3.0-accept-pn297');
+    expect(located?.base).toEqual(factory);
+    expect(located?.balanceWord).toBe(adjust(asHeld));
+    /* the edit moved its eight bytes and the adjust word, and the sum not at all */
+    expect(adjust(asHeld)).not.toBe(0);
+    expect(wordSum(asHeld)).toBe(0);
+    const moved = [...asHeld.keys()].filter((i) => asHeld[i] !== factory[i]);
+    expect(moved.every((i) => (i >= 0x238 && i < 0x23c) || (i >= 0x6d4c && i < 0x6d54))).toBe(true);
+  });
+
+  it('the patch balances ON TOP of the edit: the word is the sum of the two shares', () => {
+    const factory = cp1030Plain();
+    const asHeld = boardPatched(factory);
+    const onFactory = buildV1Patch(factory);
+    const onHeld = buildV1Patch(asHeld);
+    expect(onFactory.derivation).toBeNull();
+    expect(onHeld.buildId).toBe('compact-pro-1.0.3.0');
+    expect(onHeld.derivation?.derivation.id).toBe('compact-pro-1.0.3.0-accept-pn297');
+    expect(onHeld.derivation?.balanceWord).toBe(adjust(asHeld));
+    /* linear: factory 0 + the edit's share + the patch's share */
+    expect(onHeld.rebalanceWord).toBe((adjust(asHeld) + onFactory.rebalanceWord) >>> 0);
+    expect(wordSum(onHeld.patched)).toBe(0);
+    /* the same instruction sites, the edit untouched */
+    expect(onHeld.sites).toEqual(onFactory.sites);
+    expect([...onHeld.patched.subarray(0x6d4c, 0x6d54)]).toEqual(BOARD_PATCH.site.after);
+    const sitesOnly = (offsets: readonly number[]): number[] =>
+      offsets.filter((o) => o < 0x238 || o >= 0x23c);
+    expect(sitesOnly(onHeld.diffOffsets)).toEqual(sitesOnly(onFactory.diffOffsets));
+    /* the two edits commute: the board patch applied to the factory image's
+     * patched bytes is exactly the patch built on the board-patched image */
+    expect(applyDerivation(onFactory.patched, BOARD_PATCH)).toEqual(onHeld.patched);
+  });
+
+  it('the restore stages the image as the slot held it — the commit transform lands the original bank', () => {
+    const asHeld = boardPatched();
+    const patch = buildV1Patch(asHeld);
+    const ks0 = keystream(keyWordsOf(KEY_CP103.block0), asHeld.length >> 2);
+    const ks1 = keystream(keyWordsOf(KEY_CP103.block1), asHeld.length >> 2);
+    const capture = xorWindowVerbatim(asHeld, ks1);
+    /* the commit: staged patched image -> the conjugated capture */
+    const committed = xorWindowVerbatim(
+      xorWindowVerbatim(stagedFormOf(patch, patch.patched), ks0),
+      ks1,
+    );
+    expect(committed).toEqual(conjugateCapture(capture, patch));
+    /* the restore: the staged slot image -> the capture, board patch and all */
+    const restored = xorWindowVerbatim(xorWindowVerbatim(stagedFormOf(patch, asHeld), ks0), ks1);
+    expect(restored).toEqual(capture);
+    /* the head the pre-checks compare differs between the two */
+    expect(committed.subarray(0, 0x400)).not.toEqual(capture.subarray(0, 0x400));
+  });
+
+  it('an adjust word that is not the edit’s balance refuses, naming the edits Preserve knows', () => {
+    const asHeld = boardPatched();
+    const dv = new DataView(asHeld.buffer);
+    /* move one unit between the word and the scratch word: the sum stays 0 */
+    dv.setUint32(
+      REBALANCE_WORD_OFFSET,
+      (dv.getUint32(REBALANCE_WORD_OFFSET, true) + 1) >>> 0,
+      true,
+    );
+    dv.setUint32(0x7ff0, (dv.getUint32(0x7ff0, true) - 1) >>> 0, true);
+    expect(wordSum(asHeld)).toBe(0);
+    expect(locateDerivation(asHeld)).toBeNull();
+    expect(() => buildV1Patch(asHeld)).toThrow(/the rebalance word at 0x00000238 is not free/);
+    expect(() => buildV1Patch(asHeld)).toThrow(/compact-pro-1\.0\.3\.0-accept-pn297/);
+  });
+
+  it('a factory 1.0.3.0 image with a busy word and no known edit refuses the same way', () => {
+    const factory = cp1030Plain();
+    const dv = new DataView(factory.buffer);
+    dv.setUint32(REBALANCE_WORD_OFFSET, 0x12345678, true);
+    dv.setUint32(0x7ff0, (dv.getUint32(0x7ff0, true) - 0x12345678) >>> 0, true);
+    expect(locateDerivation(factory)).toBeNull();
+    expect(() => buildV1Patch(factory)).toThrow(/holds 0x12345678, the balance of an edit/);
+  });
+
+  it('the edit’s bytes on an image whose base is not the build it was written for are not the derivation', () => {
+    /* the board patch's after-bytes on a 1.3.0.8 8 Hz-shaped image */
+    const image = new Uint8Array(0x8000);
+    image.set(SYN_8HZ(), 0);
+    image.set(BOARD_PATCH.site.before, BOARD_PATCH.site.offset);
+    new DataView(image.buffer).setUint32(0x204, image.length, true);
+    expect(locateDerivation(applyDerivation(image, BOARD_PATCH))).toBeNull();
+  });
+
+  it('armResetsCursor: the 2016 tail does it stock, the 2014 trio by the fifth site, 1.3.0.8 not at all', () => {
+    expect(buildV1Patch(cp1030Plain()).armResetsCursor).toBe(true);
+    expect(buildV1Patch(boardPatched()).armResetsCursor).toBe(true);
+    expect(buildV1Patch(cp1030Plain({ noArmTail: true })).armResetsCursor).toBe(false);
+    expect(buildV1Patch(SYN_8HZ()).armResetsCursor).toBe(false);
+  });
+
+  it.skipIf(CORPUS_IMAGES['compact-pro-1.0.3.0'] === null)(
+    'the REAL 1.0.3.0 image: the board patch lands the bench camera’s adjust word, and the patch builds on it',
+    () => {
+      const factory = readImage(CORPUS_IMAGES['compact-pro-1.0.3.0'] ?? null);
+      const asHeld = applyDerivation(factory, BOARD_PATCH);
+      /* the bench camera's banks carry exactly this word (J-Link, 2026-10-06) */
+      expect(adjust(asHeld)).toBe(0x6322e32a);
+      expect(locateDerivation(asHeld)?.base).toEqual(factory);
+      const patch = buildV1Patch(asHeld);
+      expect(patch.buildId).toBe('compact-pro-1.0.3.0');
+      expect(patch.derivation?.balanceWord).toBe(0x6322e32a);
+      /* 0x6322E32A + 0xF1003000, the factory patch's word */
+      expect(patch.rebalanceWord).toBe(0x5423132a);
+      expect([...patch.diffOffsets]).toEqual([0x239, 0x23a, 0x23b, 0x352f, 0x3639]);
+      expect(patch.sites.map((site) => site.offset)).toEqual([0x352e, 0x3636]);
+      expect(patch.armResetsCursor).toBe(true);
+      expect(wordSum(patch.patched)).toBe(0);
+    },
+  );
 });
 
 /* ==================================================================== *

@@ -5479,9 +5479,183 @@ plaintext chain.
 - web `useFlashPanel.test.tsx`: the Flash view's read on the 1.0.3.0 fake ends under
   compact-2016 and the panel shows no footer or acceptance failure.
 
-### 37.6 Still open (handed to the Preserve follow-up)
+### 37.6 Still open (handed to the Preserve follow-up; both fixed in sec. 38)
 
 - Step 02 restarts this camera once per window: its erased boot-config record reads blank on
   every boot, and `openProbedSession` reboots until two boots agree on it.
 - Step 02 then refuses at `the rebalance word at 0x00000238 is not free`. The boot patch on
   these banks uses that word. Both reads agree, and the r16 solve derives the plaintext.
+
+## 38. Preserve on the bench camera's Compact PRO 1.0.3.0: the blank record settled on its own boot, the board patch as a known derivation, and refused resets in steps 03/04 (2026-10-06)
+
+Sec. 37.6 left two refusals on the bench camera (a PN297 Compact board running the donor
+`0C21A1M5KP15`'s whole Compact PRO 1.0.3.0 flash, each bank carrying the board patch of
+`scripts/patch-dump.mjs`). Both are fixed here, the steps that write now act on a reset the host
+refuses, and the whole run is proven on the emulator on the camera's own flash bytes.
+
+### 38.1 Why step 02 rebooted the camera once per window
+
+`openProbedSession` admits each segment with the mode-3 probe. A blank (0xFF) head was
+ambiguous: on the reference Compact (cfg[0]=0, written) it meant a spent or page-walked reader,
+the sec. 34 completion poison, which a reboot clears; on a camera whose boot-config block is
+erased it is just the record. The probe settled it with a reboot: blank, reboot, blank again,
+admit. The count lived in one call, and `backupWindows`, the capture and `verifyAgainstBackup`
+open one session per window, so every window paid it: 33 resets and 32 "Your turn" picks per
+step 02 on this camera (Chrome keeps no grant for a camera without a USB serial). Every native
+2016 dump in the corpus (1.0.3.0 and both 1.0.3.0-FF) has an erased record, so this was the
+2016 line's normal case, not this camera's.
+
+The same boot settles it now. The plan's mode-4 window is the device-identity block at
+0x14020000, whose header word `00|01 00 31 f7` (`isDeviceBlockHead`) is in 14 of the 15 corpus
+dumps, each time at 0x14020000 and at no other 64 KiB block. On a blank head the probe reads that
+window's first 28 bytes: the block where the plan puts it means the reader serves real bytes at
+the plan's addresses (a spent reader serves fill or stalls; a page-walked one serves another
+block there), so the blank is the record and the session is admitted with no reboot. If the
+check fails, the old two-boot rule decides as before, so a written-record camera is protected
+exactly as it was.
+
+The page-shift test was tightened with it. The anchor was the reference Compact's 28 bytes of
+that block, its serial included, so on any other camera a page-shifted mode-3 head (the device
+block, one page up) passed as a written record. It now matches the header word, which a record
+can never be (cfg[0] 0xF731000x names no slot). That is also why the device-block check cannot
+admit a shifted boot: one page up is caught as shifted first, and further up mode 4 serves an
+erased or foreign block.
+
+### 38.2 The board patch, a known derivation
+
+`buildV1Patch` refused the camera's image because the adjust word at 0x238 held 0x6322E32A, the
+board patch's balance. `KNOWN_DERIVATIONS` (`patch.ts`) now names that edit against the build it
+was written for, and `locateDerivation` takes an image as it only when all of this holds:
+
+- the edit's after-bytes are at image +0x6D4C;
+- putting the before-bytes back and taking the edit's drift out of the adjust word leaves that
+  word at 0, so the whole word is the edit's balance;
+- the build table detects the image underneath as `compact-pro-1.0.3.0` and as nothing else.
+
+Detection then runs on that factory image, and the patch is built on the image as the slot holds
+it: the same two sites, balanced on top. The word sum is linear, so the edit and the patch each
+own an additive share of the word: 0x6322E32A + 0xF1003000 = 0x5423132A. Five bytes move
+(0x239, 0x23A, 0x23B, 0x352F, 0x3639), and either edit can still be taken back out exactly. That
+is also why `patch-dump.mjs` needs no other free word, and it is unchanged. The restore stages
+the image as the slot held it, edit included, so the camera gets back the image that boots on
+its board. An adjust word held by any other edit still refuses, now naming the edits Preserve
+knows. `buildV1Patch` also refuses a patch that would leave the word where it was, since the
+commit and restore pre-checks tell the banks apart by it.
+
+The run state records `imageDerivation` (id, label, balance), and the CLI plan print,
+`--print-state` and the wizard's plan show it beside the rebalance word.
+
+### 38.3 A reset the host refuses, in steps 03/04
+
+`resetDevice` has answered `'refused'` since sec. 37.3. The drain and the restore ignored it.
+
+- **The drain's reset.** A refused reset leaves the camera on the image it booted, with the
+  commit in flash and not running. The step now stops before arming anything. Otherwise mode 2
+  would be armed on the unpatched image: the 2016 and FF guards refuse it, every other build
+  serves its stock 64 KiB and the run calls it a wedge, and on 0.8.0.0 / 0.7.0.8 that row faults
+  the camera. Nothing has been read, so the step can run again.
+- **The page-shift reboot inside the drain.** Another attempt would read the same shifted boot,
+  so the step stops instead of looping.
+- **The restore's reset.** The commit has landed and the bank holds the original. The camera
+  runs the patched image from RAM until its next power-up, which is harmless to flash. The step
+  is recorded done with `rebootRefused`, its notes say the reboot is owed, and the verify's
+  notes say it read that boot, not a fresh one. Failing the step would not help: a re-run finds
+  the original and stages nothing, and sends no reset either.
+
+### 38.4 Steps 03–06 on this line
+
+- **Cipher chain.** The commit stages patched ⊕ ks(block 0); the app's transform stores the
+  conjugated capture. The restore stages the slot's image ⊕ ks(block 0), and the transform lands
+  the original bank byte for byte.
+- **Footerless banks.** The banks end at the image (0xCA88). The commit erases the block and
+  programs the image length, so the restored bank is the original bank.
+- **Bootloader 1.2.0.0 and the erased record.** A blank record boots bank A, the bank the run
+  writes. Banks B and R hold the same image, so an interrupted commit falls back to a bootable
+  bank.
+- **Selector map.** The legacy-auth map: modes 7/8/9 with the token for the banks, mode 2
+  widened by the patch.
+- **The replug after the drain.** The wizard asked for one because the patch has no fifth site.
+  It needs none. 1.0.3.0's own arm tail zeroes the reader's cursor as a word
+  (`movs r5,#0; …; str r5,[r4,#12]` at widen + 0x0C, read from the image), so the drain leaves
+  the reader readable and the restore reads on the drain's own boot. Measured on the emulator
+  (38.5). `V1Patch.armResetsCursor` (from the sites, or the build's `stockArmResetsCursor`) goes
+  into the patch summary, and the wizard asks `drainLeavesReaderReadable` instead of
+  `clearsArmCursor`.
+
+### 38.5 The proofs
+
+**Emulator: the camera's flash, end to end.** `families.emulator.test.ts`'s new row builds the
+bench part from the native dump the way `patch-dump.mjs` did. Each bank is solved, given the
+board patch, and stored again under its own device stream. The result is checked against the
+camera's J-Link sha, `202cb5c1…`, before it boots. The emulator runs it on its default board
+(model 714, the PRO), where the patched arm of the board switch is never taken; every byte
+Preserve reads, writes and restores is the camera's. One run, 201 s, GREEN:
+
+| proof                                        | result                                                                                           |
+| -------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| backup + patch + commit                      | 46.8 s; the derivation found, word 0x5423132A, the commit moved exactly the five bytes in bank A |
+| raw dump == the post-commit part             | 0 diffs; sha256 `759280a209e0239f…`                                                              |
+| delivered == as-booted == the camera's flash | 0 diffs; sha256 `202cb5c19020aeca…`                                                              |
+| on the drain's own boot                      | an admitted probe session, and the bank head as the commit left it                               |
+| restore                                      | the restored `.final` == as-booted, 0 diffs, `202cb5c1…`                                         |
+| verify                                       | 31/31 windows, 0 diffs                                                                           |
+
+The native 1.0.3.0 row (the factory image) stays green on the new probe: raw `59e3f446…`,
+delivered and restored `db4efc84…`, as in sec. 26.5, and its corrupted-byte negative still
+refuses with nothing write-shaped sent.
+
+**Unit (no emulator).** `fixtures-2016.ts` is a synthetic 1.0.3.0 camera: the shapes, the crib,
+the cp103 keys, the board patch's before-bytes, the erased record and the device block, and the
+2016 app's commit (`FakeCamera`'s new `commitTransform`).
+
+- `steps.test.ts`: the probe admits the erased record on its first boot with no reset and keeps
+  the two-boot rule with no device block; a mode 4 serving the wrong block is rebooted; the 2016
+  device block as a mode-3 head is page-shifted. The backup sends no reset and records the
+  derivation. The six steps land with two resets (the drain's and the restore's): the commit
+  decrypts to the patched image with the board patch in it, the restore puts the part back
+  byte for byte, and verify reads 0 diffs. A refused drain reset stops before any mode-2 arm. A
+  refused restore reset records `rebootRefused`, and the verify says so. A refused page-shift
+  reboot ends the drain after one attempt.
+- `families.test.ts`: `locateDerivation` and its refusals (a word off by one, a busy word with no
+  edit, the edit's bytes on another build); the shares add (`rebalance == balance + factory
+rebalance`) and the two edits commute; the restore round trip through the transform;
+  `armResetsCursor` per build. On the corpus image: the board patch lands 0x6322E32A, and the
+  patch is 0x5423132A over the five bytes.
+- CLI `preserve.test.ts`: a fresh run on the synthetic camera completes with two resets, the
+  plan and `--print-state` name the edit, and the part comes back. The whole-run "already done"
+  test got the explicit timeout its siblings have: it took 4.7 s of the default 5 s before, and
+  the probe's extra arm on the 2014 fake (no device block) pushed it over.
+- web: the plan shows the edit and the shared word; phase ② on a summary with `armResetsCursor`
+  and no site ends with no replug.
+
+### 38.6 On the camera, read-only
+
+One spec at a time, `SEEK_E2E_TARGET=camera`, on the bench camera (PIR324, 1.0.3.0, no USB
+serial), with the write guard in place and nothing written. Step 02 completed on every run that
+ran the current code, wrote its run file (`nextStep: commit`) and offered step 03 with no red
+alarm; the guard stopped there.
+
+| spec                 | result                                  | step 02                                | resets               | "Your turn" picks |
+| -------------------- | --------------------------------------- | -------------------------------------- | -------------------- | ----------------- |
+| `camera.e2e`         | 5/5                                     | 24.6 s                                 | 0                    | 0                 |
+| `camera-restart.e2e` | 4/4                                     | 28.5 s                                 | 1 (the injected one) | 1                 |
+| `camera-bridge.e2e`  | 4/4                                     | 39.7 s                                 | 0                    | 0                 |
+| `resume.e2e`         | 4/4, 1 skipped (the emulator-only full) | 24.3 s                                 | 0                    | 0                 |
+| `reload.e2e`         | 3/3                                     | 22.3 s after the mid-step reload       | 0                    | 0                 |
+| `offline-bundle.e2e` | 3/4                                     | the committed `docs/` bundle: old code | 32+                  | 32                |
+
+`offline-bundle` serves the committed `docs/` bundle, which predates this change: its step 02
+still reboots once per window and then refuses the busy word (its first line now names the
+limitation as the bundle's). It needs `docs/` rebuilt from this source, which this change does not
+do.
+Before this change the same specs took 33 resets and 32 picks per step 02, about two minutes.
+
+**The wizard on the emulator, on the camera's flash.** `emulator.e2e.ts` can now boot another
+part (`SEEK_E2E_EMU_FLASH`, with `SEEK_E2E_EMU_VERSION`, `_POST_COMMIT_SHA` and `_DUMP_SHA`).
+Booted from the bench camera's J-Link dump, the wizard ran steps 02 → 03 → 04 through its
+buttons, 5/5: step 02 in 59 s with no restart; step 03 in 128 s with one pick (the drain's
+restart) and no replug, raw dump `759280a2…` and delivered `202cb5c1…`; step 04 in 67 s with one
+pick, "Verified — a perfect match", and the emulator after the restore booting `202cb5c1…`. The
+emulator's Dump & decrypt image is `0cb0e544…`, the same sha the real camera's USB dump has (the
+first attempt compared it to the part's sha, and the spec now takes the dump image separately).
+The default run on the corpus 1.3.0.0 part stays 5/5.

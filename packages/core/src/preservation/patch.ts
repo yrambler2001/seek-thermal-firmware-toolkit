@@ -913,6 +913,10 @@ export interface BuildPatchProfile {
   readonly route: CommitRouteId;
   readonly routeNote: string | null;
   readonly capability: DrainCapability;
+  /** True when the build's OWN arm tail already zeroes the reader's whole
+   *  cursor word, so the drain leaves the reader readable on its boot without
+   *  a site for it (`armResetsCursor`). Read from the image, never assumed. */
+  readonly stockArmResetsCursor?: (plain: Uint8Array) => boolean;
 }
 
 const PLAIN_BANK_CAPABILITY: DrainCapability = {
@@ -1061,9 +1065,30 @@ const COMPACT_1308_FF_PROFILE: BuildPatchProfile = {
   },
 };
 
+/**
+ * The 2016 arm tail, right after its widen tail (widen site + 0x0C):
+ * `movs r5,#0; str r3,[r4,#24]; movs r3,#8; str r5,[r4,#4]; str r5,[r4,#12]`
+ * (read from the 1.0.3.0 image at 0x3642). The last store zeroes the reader's
+ * cursor (+12) as a WORD — the very instruction the 2014 trio builds need
+ * their fifth site for (`ARM_CURSOR_RESET_AFTER`, `e5 60`). With it every arm
+ * restarts the widened reader from 0, so after the 4 MiB drain the next arm
+ * reads again on the same boot and no replug is owed (sec. 35.4's dead reader
+ * was the halfword reset's).
+ */
+const ARM_TAIL_2016_FROM_WIDEN = 0x0c;
+const ARM_TAIL_2016: readonly number[] = [
+  0x00, 0x25, 0xa3, 0x61, 0x08, 0x23, 0x65, 0x60, 0xe5, 0x60,
+];
+
+function armTail2016ResetsCursor(plain: Uint8Array): boolean {
+  const widen = widen2016Site(plain, ladderOffset(plain));
+  return hasBytesAt(plain, widen.offset + ARM_TAIL_2016_FROM_WIDEN, ARM_TAIL_2016);
+}
+
 /** Compact Pro 1.0.3.0 — the 2016 cipher chain: TWO sites (guard + widen),
  *  staged = plain ^ ks(block 0), acceptance = DECRYPTED word sum 0 (doc 33
- *  sec. 11). The arm-tail hook is a `bx lr` stub here and needs no site. */
+ *  sec. 11). The arm-tail hook is a `bx lr` stub here and needs no site, and
+ *  the arm tail already zeroes the whole cursor word (`ARM_TAIL_2016`). */
 const CP_1030_PROFILE: BuildPatchProfile = {
   buildId: 'compact-pro-1.0.3.0',
   family: 'compact-2016',
@@ -1085,6 +1110,7 @@ const CP_1030_PROFILE: BuildPatchProfile = {
   route: 'active-bank',
   routeNote: null,
   capability: CIPHER_2016_CAPABILITY,
+  stockArmResetsCursor: armTail2016ResetsCursor,
 };
 
 /** Compact Pro 1.0.3.2 (both variants): the 1.0.3.0 sites PLUS the arm-tail
@@ -1149,11 +1175,136 @@ export const BUILD_PATCH_PROFILES: readonly BuildPatchProfile[] = [
   V1_2014_PROFILE,
 ];
 
+/* ---- known derivations: a factory image with a balanced edit of its own ------
+ *
+ * A slot does not always hold a factory image. The bench Compact (a PN297
+ * board) runs the Compact PRO 1.0.3.0 image, which reboots on any board but
+ * 603 and 714, so its banks carry a board patch (`scripts/patch-dump.mjs`):
+ * eight bytes of app_init's board switch, with the adjust word at 0x238
+ * retuned so the acceptance sum does not move. That word is the one this
+ * builder balances through, so on such an image it is not free, and it must
+ * not be treated as if it were: its value is the edit's balance.
+ *
+ * A DERIVATION names one such edit against one build. The image is taken as
+ * that derivation only when every part of it checks out, exactly:
+ *  - the edit's after-bytes sit at its offset;
+ *  - putting the before-bytes back and taking the edit's drift out of the
+ *    adjust word leaves that word at 0, the factory value (the whole word is
+ *    the edit's balance and nothing else's);
+ *  - the build table detects the image that comes back as exactly the build
+ *    the edit was written against (shapes, key blocks, hook), and nothing else.
+ * Anything short of that is not a derivation, and the image goes through the
+ * table as it is (where a busy adjust word still refuses).
+ *
+ * BALANCING ON TOP. The word sum is linear, so each balanced edit owns an
+ * additive share of the adjust word: 0 (factory) + the edit's share + this
+ * patch's share. The widening patch adds its share to the word as the slot
+ * holds it, and either edit can still be taken back out exactly — which is
+ * also why `patch-dump.mjs` needs no other free word to coexist with it. The
+ * patch is built on, committed onto and restored to the image AS THE SLOT
+ * HOLDS IT: the restore stages that image back, edit included, so the camera
+ * gets the image that boots on its board.
+ */
+
+/** One known edit of a factory image, and the build it was written against. */
+export interface ImageDerivation {
+  readonly id: string;
+  /** The name the plan print shows. */
+  readonly label: string;
+  /** The build table entry the factory image must detect as. */
+  readonly baseBuildId: string;
+  /** The edit: `before` is the factory bytes, `after` what the slot holds. */
+  readonly site: PatchSite;
+}
+
+/** The edits Preserve recognizes. The board patch's bytes are
+ *  `scripts/patch-dump.mjs`'s, written for the factory 1.0.3.0 plaintext
+ *  (sha256 5e1f3f24…, the corpus image and the bench camera's own). */
+export const KNOWN_DERIVATIONS: readonly ImageDerivation[] = [
+  {
+    id: 'compact-pro-1.0.3.0-accept-pn297',
+    label: 'the Compact (PN297) board patch',
+    baseBuildId: 'compact-pro-1.0.3.0',
+    site: {
+      offset: 0x6d4c,
+      before: [0x04, 0x20, 0x27, 0x49, 0xf9, 0xf7, 0x27, 0xfc],
+      after: [0x40, 0xf2, 0x29, 0x12, 0x93, 0x42, 0x02, 0xd0],
+      what:
+        'app_init’s board switch (VMA 0x100870B4): movs r0,#4; ldr r1,[pc,#0x9c]; bl ' +
+        '<log stub> -> movw r2,#297; cmp r3,r2; beq <the PRO arm> — a PN297 (Compact 32k) ' +
+        'board takes the PRO’s arm instead of rebooting',
+    },
+  },
+];
+
+/** A derivation found in an image, and the factory image under it. */
+export interface LocatedDerivation {
+  readonly derivation: ImageDerivation;
+  /** The factory image: the before-bytes back, the adjust word back to 0. */
+  readonly base: Uint8Array;
+  /** The adjust word as the slot holds it — the edit's own balance. */
+  readonly balanceWord: number;
+}
+
+function hasBytesAt(plain: Uint8Array, offset: number, bytes: readonly number[]): boolean {
+  if (offset < 0 || offset + bytes.length > plain.length) return false;
+  return bytes.every((b, i) => plain[offset + i] === b);
+}
+
+/** Writes `bytes` at `offset` and moves the adjust word by the opposite of
+ *  the drift, so the word sum is what it was. */
+function writeBalanced(image: Uint8Array, offset: number, bytes: readonly number[]): Uint8Array {
+  const out = new Uint8Array(image);
+  out.set(bytes, offset);
+  const drift = (wordSum(out) - wordSum(image)) >>> 0;
+  const dv = viewOf(out);
+  dv.setUint32(
+    REBALANCE_WORD_OFFSET,
+    (dv.getUint32(REBALANCE_WORD_OFFSET, true) - drift) >>> 0,
+    true,
+  );
+  return out;
+}
+
+/** The derivation applied to its factory image: the edit, balanced through
+ *  the adjust word — the bytes `scripts/patch-dump.mjs` writes. */
+export function applyDerivation(base: Uint8Array, derivation: ImageDerivation): Uint8Array {
+  const { site } = derivation;
+  if (!hasBytesAt(base, site.offset, site.before)) {
+    throw new SeekError(
+      'pipeline/refused',
+      `bytes at raw ${hexUp(site.offset)} are not the expected ` +
+        `${bytesToHex(Uint8Array.from(site.before))} — ${derivation.id} does not apply here`,
+    );
+  }
+  return writeBalanced(base, site.offset, site.after);
+}
+
+/** The known derivation `plain` is, with its factory image — or null. */
+export function locateDerivation(plain: Uint8Array): LocatedDerivation | null {
+  if (plain.length < REBALANCE_WORD_OFFSET + 4) return null;
+  for (const derivation of KNOWN_DERIVATIONS) {
+    const { site } = derivation;
+    if (!hasBytesAt(plain, site.offset, site.after)) continue;
+    const base = writeBalanced(plain, site.offset, site.before);
+    if (viewOf(base).getUint32(REBALANCE_WORD_OFFSET, true) !== 0) continue;
+    const detected = BUILD_PATCH_PROFILES.filter((profile) => profile.detect(base));
+    if (detected.length !== 1 || detected[0]?.buildId !== derivation.baseBuildId) continue;
+    return {
+      derivation,
+      base,
+      balanceWord: viewOf(plain).getUint32(REBALANCE_WORD_OFFSET, true),
+    };
+  }
+  return null;
+}
+
 /* ---- building the patch ------------------------------------------------------ */
 
 /** The factory plaintext every assertion below hangs off. */
 export interface V1Patch {
-  /** The input, verbatim. */
+  /** The input, verbatim: the image the slot holds — a factory image, or a
+   *  known derivation of one (`derivation`). */
   readonly factory: Uint8Array;
   /** `factory` with the sites applied and word 142 rebalanced. */
   readonly patched: Uint8Array;
@@ -1186,6 +1337,17 @@ export interface V1Patch {
   readonly route: CommitRouteId;
   readonly routeNote: string | null;
   readonly capability: DrainCapability;
+  /** True when the PATCHED image's arm tail zeroes the reader's whole cursor
+   *  word — by a site of this patch (`clearsArmCursor`, the 2014 trio
+   *  builds) or by the build's own tail (`stockArmResetsCursor`, 1.0.3.0).
+   *  The drain then leaves the reader readable on its own boot. */
+  readonly armResetsCursor: boolean;
+  /** The known edit the image carries on top of its factory build, with the
+   *  share of the adjust word it holds; null on a factory image. */
+  readonly derivation: {
+    readonly derivation: ImageDerivation;
+    readonly balanceWord: number;
+  } | null;
 }
 
 const NO_MATCH_GUIDANCE =
@@ -1235,7 +1397,11 @@ export function preWideningRefusal(version: string | null): string | null {
  * the per-family gates refuse — before anything is derived — when the
  * plaintext does not carry the expected `before` bytes at the located sites,
  * when its acceptance sum is not what the family assumes, or when the
- * rebalance word is not free.
+ * rebalance word is not free (or held by a known derivation's balance).
+ *
+ * A known derivation (`locateDerivation`) is detected by its factory image,
+ * and the patch is built on the image as the slot holds it: the same sites,
+ * balanced on top of the edit's share of the adjust word.
  */
 export function buildV1Patch(plain: Uint8Array): V1Patch {
   if (plain.length & 3) {
@@ -1248,7 +1414,9 @@ export function buildV1Patch(plain: Uint8Array): V1Patch {
     throw new SeekError('pipeline/refused', 'image is too small to hold the header window');
   }
 
-  const matches = BUILD_PATCH_PROFILES.filter((profile) => profile.detect(plain));
+  const derived = locateDerivation(plain);
+  const subject = derived?.base ?? plain;
+  const matches = BUILD_PATCH_PROFILES.filter((profile) => profile.detect(subject));
   if (matches.length > 1) {
     throw new SeekError(
       'pipeline/refused',
@@ -1257,7 +1425,7 @@ export function buildV1Patch(plain: Uint8Array): V1Patch {
     );
   }
   const matched = matches.at(0);
-  if (matched !== undefined) return buildWithProfile(plain, matched);
+  if (matched !== undefined) return buildWithProfile(plain, matched, derived);
 
   /* No table entry matched. The generation the route explicitly does not
    * reach gets its doc-cited refusal first, then the 2014 chain's own pinned
@@ -1292,7 +1460,25 @@ export function buildV1Patch(plain: Uint8Array): V1Patch {
   );
 }
 
-function buildWithProfile(plain: Uint8Array, profile: BuildPatchProfile): V1Patch {
+/** The refusal for an adjust word some edit already spent, when that edit is
+ *  not one Preserve knows: balancing on top of an unknown edit is fine for the
+ *  sum, but the run would restore and vouch for an image it cannot name. */
+function busyWordRefusal(word: number): SeekError {
+  return new SeekError(
+    'pipeline/refused',
+    `the rebalance word at ${hexUp(REBALANCE_WORD_OFFSET)} is not free (0): it holds ` +
+      `${hexUp(word)}, the balance of an edit made to this image, and the edit is none of the ` +
+      `ones Preserve knows (${KNOWN_DERIVATIONS.map((d) => `${d.id}: ${d.label}`).join('; ')}) — ` +
+      'refusing to patch, and later restore, an image it cannot name',
+    { detail: { rebalanceWord: word } },
+  );
+}
+
+function buildWithProfile(
+  plain: Uint8Array,
+  profile: BuildPatchProfile,
+  derived: LocatedDerivation | null = null,
+): V1Patch {
   const dv = new DataView(plain.buffer, plain.byteOffset, plain.byteLength);
   const rawSum = wordSum(plain);
   if (profile.family === 'v1-2014-ff') {
@@ -1312,15 +1498,37 @@ function buildWithProfile(plain: Uint8Array, profile: BuildPatchProfile): V1Patc
       'the factory plaintext word sum is not 0 — this builder only rebalances a balanced image',
     );
   }
-  if (dv.getUint32(REBALANCE_WORD_OFFSET, true) !== 0) {
-    throw new SeekError(
-      'pipeline/refused',
-      `the rebalance word at ${hexUp(REBALANCE_WORD_OFFSET)} is not free (0)`,
-    );
+  /* THE ADJUST WORD: free (0) on a factory image; on a known derivation it is
+   * the edit's own balance, which `locateDerivation` proved is all it holds.
+   * The FF build solves the word outright (below), so it never builds on one. */
+  const heldWord = dv.getUint32(REBALANCE_WORD_OFFSET, true);
+  if (derived === null || profile.family === 'v1-2014-ff') {
+    if (heldWord !== 0) throw busyWordRefusal(heldWord);
+  } else if (heldWord !== derived.balanceWord) {
+    throw busyWordRefusal(heldWord);
+  }
+
+  const located = profile.locate(plain);
+  if (derived !== null) {
+    /* The edit and the patch must not touch the same bytes: each is gated on
+     * the other's absence, and the restore puts the edit back unchanged. */
+    const edit = derived.derivation.site;
+    for (const site of located) {
+      const apart =
+        site.offset + site.before.length <= edit.offset ||
+        edit.offset + edit.after.length <= site.offset;
+      if (!apart) {
+        throw new SeekError(
+          'pipeline/refused',
+          `patch site ${hexUp(site.offset)} overlaps ${derived.derivation.id} at ` +
+            `${hexUp(edit.offset)} — refusing to stack two edits on the same bytes`,
+        );
+      }
+    }
   }
 
   const patched = new Uint8Array(plain);
-  for (const site of profile.locate(plain)) {
+  for (const site of located) {
     for (let i = 0; i < site.before.length; i++) {
       if (patched[site.offset + i] !== site.before[i]) {
         throw new SeekError(
@@ -1362,11 +1570,24 @@ function buildWithProfile(plain: Uint8Array, profile: BuildPatchProfile): V1Patc
       );
     }
   } else {
-    rebalanceWord = (0 - wordSum(patched)) >>> 0;
+    /* The patch's share goes ON TOP of whatever the word holds: 0 on a
+     * factory image (this is then `0 - sum`, as it always was), the edit's
+     * balance on a known derivation. */
+    rebalanceWord = (heldWord - wordSum(patched)) >>> 0;
     new DataView(patched.buffer).setUint32(REBALANCE_WORD_OFFSET, rebalanceWord, true);
     if (wordSum(patched) !== 0) {
       throw new SeekError('pipeline/refused', 'the rebalance did not bring the word sum to 0');
     }
+  }
+  /* The commit and restore pre-checks read the bank's first 1 KiB and tell the
+   * original from the patched bank by this word (the instruction sites lie
+   * past it), so a patch that left it where it was could not be told apart. */
+  if (rebalanceWord === heldWord) {
+    throw new SeekError(
+      'pipeline/refused',
+      `the patch leaves the rebalance word at ${hexUp(heldWord)} — the bank-head pre-checks ` +
+        'could not tell the patched bank from the original, so the run refuses',
+    );
   }
 
   const diffOffsets: number[] = [];
@@ -1388,7 +1609,7 @@ function buildWithProfile(plain: Uint8Array, profile: BuildPatchProfile): V1Patc
     buildId: profile.buildId,
     family: profile.family,
     label: profile.label,
-    sites: profile.locate(plain),
+    sites: located,
     keys,
     stagedForm: profile.stagedForm,
     restoreForm: profile.restoreForm,
@@ -1396,6 +1617,11 @@ function buildWithProfile(plain: Uint8Array, profile: BuildPatchProfile): V1Patc
     route: profile.route,
     routeNote: profile.routeNote,
     capability: profile.capability,
+    armResetsCursor: clearsArmCursor(located) || (profile.stockArmResetsCursor?.(plain) ?? false),
+    derivation:
+      derived === null
+        ? null
+        : { derivation: derived.derivation, balanceWord: derived.balanceWord },
   };
 }
 

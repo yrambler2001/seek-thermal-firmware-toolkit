@@ -63,6 +63,9 @@ const openGates = new Map<PreserveStepId, () => void>();
 /** The sites the fake patch step records — empty is a patch without the arm
  *  tail's cursor reset, which owes the replug after the drain. */
 let fakePatchSites: { name: string; offset: number; before: number[]; after: number[] }[] = [];
+/** The summary's `armResetsCursor`: the build's own arm tail resets the whole
+ *  cursor (the 2016 line), with no site for it. Undefined: not recorded. */
+let fakeArmResetsCursor: boolean | undefined;
 
 function fakeOutcome(step: PreserveStepId, state: PreserveRunState): PreserveStepOutcome {
   const record = { status: 'done' as const, startedAt: 's', finishedAt: 'f', notes: 'fake' };
@@ -114,6 +117,7 @@ function fakeOutcome(step: PreserveStepId, state: PreserveRunState): PreserveSte
             chunkCount: 256,
             patchedSha256: 'b'.repeat(64),
             diffCount: 10,
+            ...(fakeArmResetsCursor === undefined ? {} : { armResetsCursor: fakeArmResetsCursor }),
           },
         },
         artifacts,
@@ -302,6 +306,7 @@ beforeEach(() => {
   openingStep = null;
   openGates.clear();
   fakePatchSites = [];
+  fakeArmResetsCursor = undefined;
   handed.length = 0;
   downloads.length = 0;
   installUsb();
@@ -491,6 +496,25 @@ describe('the reset is not a swap — the guard and the opener ladder cooperate'
     expect(current(mounted).panel.phaseReporters['patch-dump'].progress.text).toContain(
       'The run file in your downloads is up to date',
     );
+    mounted.unmount();
+  });
+
+  it('phase ②: a build whose own arm tail resets the cursor (1.0.3.0) owes no replug, with no site for it', async () => {
+    fakePatchSites = [];
+    fakeArmResetsCursor = true;
+    const unitA = fakeCameraUnit(0x0010);
+    const mounted = mountPanel([unitA]);
+    await waitFor(() => current(mounted).device.device !== null);
+    await runTo(mounted, 'read-build', () => current(mounted).panel.state?.nextStep === 'commit');
+    act(() => {
+      void current(mounted).panel.runPhase('patch-dump');
+    });
+    await waitFor(() => current(mounted).panel.activePhase === null);
+    const log = linesOf(current(mounted).panel, 'patch-dump');
+    expect(log).toContain('no replug needed');
+    expect(log).not.toContain('unplug the camera');
+    expect(current(mounted).panel.prompt).toBeNull();
+    expect(current(mounted).panel.state?.steps.drain?.status).toBe('done');
     mounted.unmount();
   });
 

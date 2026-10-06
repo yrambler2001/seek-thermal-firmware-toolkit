@@ -39,6 +39,10 @@ export const BOOT_CONFIG_BYTES = 28;
  * answers with the plan's block m+1): the mode-3 probe then returns THESE
  * bytes instead of the boot-config record, which is how the pipeline tells a
  * page-shifted boot from a healthy one before it trusts any window read.
+ *
+ * Past its first word these bytes are that one camera's own (its serial,
+ * `101310HSNEA2`, sits at +16), so the test is the block's header word, which
+ * every camera carries (`isDeviceBlockHead`).
  */
 export const PAGE_SHIFT_ANCHOR = Uint8Array.from(
   Object.freeze([
@@ -47,14 +51,35 @@ export const PAGE_SHIFT_ANCHOR = Uint8Array.from(
   ]),
 );
 
-/** True when a mode-3 probe read is the page-shift anchor instead of the
- *  boot-config record — the boot is serving windows one page up. */
+/** The device-identity block (mode 4 in the plan): the block the page-shift
+ *  anchor was cut from. */
+export const DEVICE_BLOCK_ADDRESS = 0x14020000;
+
+/**
+ * True when `head` starts with the device-identity block's header word,
+ * `00|01 00 31 f7` (a cfg0 of 0xF731000x, which names no slot). Measured over
+ * every 4 MiB dump in the FW-V1 corpus (2026-10-06): 14 of the 15 carry it,
+ * each at 0x14020000 and at no other 64 KiB block — the reference Compact
+ * 1.3.0.0, the three 2016 Compact PRO dumps (1.0.3.0 and both 1.0.3.0-FF), and
+ * the 4.x, XR, Nano and Mosaic lines. The serial and the calibration fields
+ * after it differ per camera, which is why the test stops at the word.
+ */
+export function isDeviceBlockHead(head: Uint8Array): boolean {
+  return (
+    head.length >= 4 &&
+    (head[0] === 0x00 || head[0] === 0x01) &&
+    head[1] === 0x00 &&
+    head[2] === 0x31 &&
+    head[3] === 0xf7
+  );
+}
+
+/** True when a mode-3 probe read is the device-identity block instead of the
+ *  boot-config record — the boot is serving windows one page up. The exact
+ *  28-byte anchor matched only the reference Compact: on the 2016 Compact PRO
+ *  (serial `0C21A1M5KP15` at +16) a shifted head passed as a written record. */
 export function isPageShiftedHead(block: Uint8Array): boolean {
-  if (block.length < PAGE_SHIFT_ANCHOR.length) return false;
-  for (let i = 0; i < PAGE_SHIFT_ANCHOR.length; i++) {
-    if (block[i] !== PAGE_SHIFT_ANCHOR[i]) return false;
-  }
-  return true;
+  return isDeviceBlockHead(block);
 }
 
 /** The three app-image banks, in the bootloader's A/B/recovery order. */
@@ -138,6 +163,11 @@ export function planWindowAt(address: number): WindowEntry {
     );
   }
   return entry;
+}
+
+/** The plan's own window for the device-identity block (mode 4, token form). */
+export function deviceBlockWindow(): WindowEntry {
+  return planWindowAt(DEVICE_BLOCK_ADDRESS);
 }
 
 /**
