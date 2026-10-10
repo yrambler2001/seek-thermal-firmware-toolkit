@@ -2,7 +2,7 @@
 import { hex } from '../bytes.js';
 import { SeekError } from '../errors.js';
 import { readRunningFirmware } from '../workflows/capability.js';
-import { readDeviceInfo } from '../workflows/device-info.js';
+import { profileToRereadUnder, readDeviceInfo } from '../workflows/device-info.js';
 import type { DeviceState, WorkflowContext } from '../workflows/types.js';
 import { buildSlotPlan } from './capability.js';
 import type { SlotEntry, SlotPlan, SlotsReport, SlotView } from './types.js';
@@ -54,7 +54,24 @@ export async function inspectSlots(
     );
   }
 
-  const state = await readDeviceInfo(ctx);
+  let state = await readDeviceInfo(ctx);
+  let finalPlan = plan;
+  /* JUDGED UNDER WHAT THE CAMERA IS, as the flash page and `seek-fw info` do.
+   * The first read acts under the probe's pick, chosen before any bank was
+   * read; on a 2016 Compact PRO that is legacy-auth by design, whose 0xFFFF
+   * target fails every bank ("unknown key, NOT bootable"). When the banks
+   * confidently name a family with a different cipher, the read is redone under
+   * it, and the plan is rebuilt for that family (unless a plan was injected). */
+  const better = profileToRereadUnder(state, false);
+  if (better !== null) {
+    ctx.reporter.log(
+      `the slots identify this camera as ${better.name} (${better.id}), whose cipher differs ` +
+        'from the one this read used — reading again under it',
+      'warn',
+    );
+    state = await readDeviceInfo({ ...ctx, profile: better, detection: state.detection });
+    if (options.plan === undefined) finalPlan = buildSlotPlan(better, firmware.version);
+  }
   /* The analysis must be of the build the plan was made for. A camera that
    * changed build between the two reads is not the one the plan describes. */
   if (state.version !== firmware.version) {
@@ -66,7 +83,7 @@ export async function inspectSlots(
     );
   }
 
-  return { state, plan, slots: joinSlotViews(plan, state) };
+  return { state, plan: finalPlan, slots: joinSlotViews(finalPlan, state) };
 }
 
 /**
