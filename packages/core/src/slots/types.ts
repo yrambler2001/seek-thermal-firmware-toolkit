@@ -11,8 +11,10 @@
  *     (or one that is a hazard) and is reported `unsupported`, never tried;
  *   - there is NO "select the active slot" operation: the protocol has no
  *     boot-config write, only the side effect of a mode-0 upgrade;
- *   - all three banks are addressable: A (0x14050000), B (0x14060000) and
- *     the recovery bank R (0x14070000), both for reading and for writing.
+ *   - all three banks are addressable: A, B and the recovery bank R (0x14070000),
+ *     both for reading and for writing. Addresses differ by generation and come
+ *     from the build's plan: the locked line is 0x14050000/0x14060000/0x14070000,
+ *     the modern line 0x14030000/0x14050000/0x14070000.
  *     The bootloader at 0x14000000 and the boot-config block are NOT slots
  *     and are never written here.
  * ==================================================================== */
