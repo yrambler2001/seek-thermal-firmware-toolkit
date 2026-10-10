@@ -37,6 +37,7 @@ import { sweepCommand } from './commands/sweep.js';
 import { decryptCommand } from './commands/decrypt.js';
 import { flashCommand } from './commands/flash.js';
 import { preserveCommand } from './commands/preserve.js';
+import { slotsCommand } from './commands/slots.js';
 
 /* ==================================================================== *
  * Options
@@ -81,6 +82,19 @@ export interface GlobalOptions {
   readonly printState: string | null;
 }
 
+/**
+ * The flags only `slots flash` reads. Parsed for every command, read by none but
+ * `slots`, the same way the preserve-only options are.
+ */
+export interface SlotFlags {
+  /** `--raw`: the file is prepared bytes, sent verbatim, not a decrypted image. */
+  readonly raw: boolean;
+  /** `--acknowledge-risk`: allows a write to the booted bank or to recovery. */
+  readonly acknowledgeRisk: boolean;
+  /** False when `--no-verify` was passed: skip the read-back after the commit. */
+  readonly verify: boolean;
+}
+
 export type ParsedCli =
   /* `json` rides along on all three: `--json` means "stdout is a JSON
    * document", and help and version are no exception. */
@@ -91,6 +105,9 @@ export type ParsedCli =
       readonly command: CommandName;
       /** The single positional `decrypt` and `flash` take. */
       readonly file: string | null;
+      /** Every positional after the command word. Only `slots` takes more than `file`. */
+      readonly args: readonly string[];
+      readonly slotFlags: SlotFlags;
       readonly options: GlobalOptions;
     };
 
@@ -164,6 +181,9 @@ export function parseCli(argv: readonly string[]): ParsedCli {
         resume: { type: 'string' },
         'from-step': { type: 'string' },
         'print-state': { type: 'string' },
+        raw: { type: 'boolean', default: false },
+        'acknowledge-risk': { type: 'boolean', default: false },
+        verify: { type: 'boolean', default: true },
         help: { type: 'boolean', short: 'h', default: false },
         version: { type: 'boolean', short: 'V', default: false },
       },
@@ -188,12 +208,15 @@ export function parseCli(argv: readonly string[]): ParsedCli {
   if (values.help) return { kind: 'help', command: commandWord, json: values.json };
 
   const takesFile = FILE_COMMANDS.has(commandWord);
+  /* `slots` takes a subcommand, a bank and a file, and its own parser (commands/slots.ts)
+   * counts them and says what each one is for, so the count is not checked here. */
+  const takesArgs = commandWord === 'slots';
   /* `preserve` takes NO positional at all: the image always derives from the
    * camera itself, and `--resume`/`--print-state` need nothing else. */
-  if (takesFile && rest.length === 0) {
+  if (!takesArgs && takesFile && rest.length === 0) {
     throw new UsageError(`${commandWord} needs a file argument`);
   }
-  if (rest.length > (takesFile ? 1 : 0)) {
+  if (!takesArgs && rest.length > (takesFile ? 1 : 0)) {
     const extra = rest[takesFile ? 1 : 0] ?? '';
     throw new UsageError(`unexpected argument '${extra}' after '${commandWord}'`);
   }
@@ -244,7 +267,18 @@ export function parseCli(argv: readonly string[]): ParsedCli {
     throw new UsageError('--quiet and --verbose contradict each other');
   }
 
-  return { kind: 'run', command: commandWord, file: takesFile ? (rest[0] ?? null) : null, options };
+  return {
+    kind: 'run',
+    command: commandWord,
+    file: takesFile ? (rest[0] ?? null) : null,
+    args: rest,
+    slotFlags: {
+      raw: values.raw,
+      acknowledgeRisk: values['acknowledge-risk'],
+      verify: values.verify,
+    },
+    options,
+  };
 }
 
 /* ==================================================================== *
@@ -274,6 +308,13 @@ export interface CommandContext {
   readonly options: GlobalOptions;
   /** The positional file, for `decrypt` and `flash`. */
   readonly file: string | null;
+  /**
+   * Every positional after the command word. Optional, because only `slots` reads it and a
+   * context built by hand for any other command need not carry it.
+   */
+  readonly args?: readonly string[];
+  /** The `slots` flags. Optional for the same reason; absent means none was given. */
+  readonly slotFlags?: SlotFlags;
   readonly reporter: TerminalReporter;
   readonly io: Io;
   readonly signal: AbortSignal;
@@ -307,6 +348,7 @@ const COMMANDS: Record<CommandName, Command> = {
   decrypt: decryptCommand,
   flash: flashCommand,
   preserve: preserveCommand,
+  slots: slotsCommand,
 };
 
 /**
@@ -372,7 +414,7 @@ export async function run(argv: readonly string[], io: Io, signal: AbortSignal):
     return EXIT_OK;
   }
 
-  const { options, command, file } = parsed;
+  const { options, command, file, args, slotFlags } = parsed;
   const logSink = options.json ? io.stderr : io.stdout;
   const color = shouldColor({
     noColorFlag: !options.colorFlag,
@@ -390,6 +432,8 @@ export async function run(argv: readonly string[], io: Io, signal: AbortSignal):
   const ctx: CommandContext = {
     options,
     file,
+    args,
+    slotFlags,
     reporter,
     io,
     signal,
