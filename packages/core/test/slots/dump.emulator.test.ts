@@ -74,6 +74,8 @@ const TIMEOUT_MS = Number(process.env.SEEK_EMU_SLOTS_TIMEOUT_MS ?? '900000');
 const BANK_LAYOUT: Readonly<Record<string, Readonly<Record<SlotKey, number>>>> = {
   'modern-4x': { a: 0x14030000, b: 0x14050000, r: 0x14070000 },
   'legacy-auth': { a: 0x14050000, b: 0x14060000, r: 0x14070000 },
+  /* The 2016 Compact PRO: inspectSlots re-reads under the family the banks name. */
+  'compact-2016': { a: 0x14050000, b: 0x14060000, r: 0x14070000 },
 };
 
 /**
