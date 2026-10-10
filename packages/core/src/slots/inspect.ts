@@ -1,11 +1,14 @@
 /* OWNER: reader agent. See ./types.ts. */
 import { hex } from '../bytes.js';
 import { SeekError } from '../errors.js';
-import { readRunningFirmware } from '../workflows/capability.js';
+import { readRunningFirmware, type RunningFirmware } from '../workflows/capability.js';
 import { profileToRereadUnder, readDeviceInfo } from '../workflows/device-info.js';
 import type { DeviceState, WorkflowContext } from '../workflows/types.js';
 import { buildSlotPlan } from './capability.js';
 import type { SlotEntry, SlotPlan, SlotsReport, SlotView } from './types.js';
+
+/** The build the caller already read: what `readRunningFirmware` or an identify probe returns. */
+export type InspectFirmware = Pick<RunningFirmware, 'version'>;
 
 export interface InspectSlotsOptions {
   /**
@@ -14,6 +17,14 @@ export interface InspectSlotsOptions {
    * the reader can be exercised before, and independently of, that matrix.
    */
   readonly plan?: SlotPlan;
+  /**
+   * The build the caller has already read on this same transport, in this run.
+   * Left out, the reader asks the camera for its version itself, as the CLI
+   * does. Passed, the reader sends no version read of its own, and everything
+   * else is checked as before: the plan is for this build, and `readDeviceInfo`
+   * must report this same version, or the run is refused.
+   */
+  readonly firmware?: InspectFirmware;
 }
 
 /**
@@ -21,9 +32,10 @@ export interface InspectSlotsOptions {
  * plan says about it.
  *
  * ORDER IS THE SAFETY PROPERTY. The build is asked for first, with the one
- * version read every workflow here makes, and the plan is consulted before any
- * bank is touched. An unsupported build (anything older than 0.8.0.0, or a
- * camera that does not say what it runs) is refused with the banks unread: the
+ * version read every workflow here makes (or is taken from the caller, who asked
+ * for it the same way), and the plan is consulted before any bank is touched.
+ * An unsupported build (anything older than 0.8.0.0, or a camera that does not
+ * say what it runs) is refused with the banks unread: the
  * wire ids a 0.7.x or 0.3.x build reads windows with mean something else, so the
  * bank reads that `readDeviceInfo` makes must not go out on them.
  */
@@ -31,7 +43,15 @@ export async function inspectSlots(
   ctx: WorkflowContext,
   options: InspectSlotsOptions = {},
 ): Promise<SlotsReport> {
-  const firmware = await readRunningFirmware(ctx.device);
+  /* THE BUILD, READ ONCE. A caller that has already read it, on this transport
+   * and in this run (the web page's identify step does), passes it, and no
+   * second version read goes out. The checks below run on it exactly as they do
+   * on a read made here. The camera is still checked: `readDeviceInfo` reads the
+   * version under its own plan, and the run is refused below if that is not the
+   * version passed in. No serial is compared, because a run's only identity is
+   * the transport it was opened on. Left out, the version read is made here, and
+   * it is the only request sent before an unsupported build is refused. */
+  const firmware: InspectFirmware = options.firmware ?? (await readRunningFirmware(ctx.device));
   const plan = options.plan ?? buildSlotPlan(ctx.profile, firmware.version);
 
   if (!plan.supportedBuild.supported) {
@@ -49,7 +69,7 @@ export async function inspectSlots(
       'slots/refused',
       `the slot plan is for firmware ${plan.firmwareVersion ?? 'unknown'} under ` +
         `${plan.profileId}, but the camera reports ${firmware.version ?? 'no version'} under ` +
-        `${ctx.profile.id}`,
+        ctx.profile.id,
       { detail: { firmwareVersion: firmware.version, profile: ctx.profile.id } },
     );
   }

@@ -98,7 +98,7 @@ function makeBackend(
   const backend: SlotsBackend = {
     identify: (device, log) => mocks.identify(device, log) as Promise<ActingProfile>,
     plan: (profile, version) => mocks.plan(profile, version) as SlotPlan,
-    inspect: (ctx) => mocks.inspect(ctx) as Promise<SlotsReport>,
+    inspect: (ctx, firmware) => mocks.inspect(ctx, firmware) as Promise<SlotsReport>,
     dump: (ctx, report, key) => mocks.dump(ctx, report, key) as Promise<DumpedSlot>,
     prepare: (report, key, input) => mocks.prepare(report, key, input) as SlotFlashPlan,
     flash: (ctx, report, plan, opts) =>
@@ -159,6 +159,8 @@ describe('useSlotsPanel: reading the banks', () => {
     expect(mocks.identify).toHaveBeenCalledTimes(1);
     expect(mocks.plan).toHaveBeenCalledWith(actingProfile().profile, '0.8.0.0');
     expect(mocks.inspect).toHaveBeenCalledTimes(1);
+    /* The build identify read is handed to the reader, so it is not asked for again. */
+    expect(mocks.inspect).toHaveBeenCalledWith(expect.anything(), { version: '0.8.0.0' });
     expect(result.current.panel.plan?.supportedBuild.supported).toBe(true);
     expect(result.current.panel.report?.slots.map((slot) => slot.entry.key)).toEqual([
       'a',

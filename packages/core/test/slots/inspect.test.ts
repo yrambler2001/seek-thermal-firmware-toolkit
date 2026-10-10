@@ -9,7 +9,7 @@
 
 import { createHash } from 'node:crypto';
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { silentReporter } from '../../src/events.js';
 import { SeekError } from '../../src/errors.js';
@@ -21,8 +21,21 @@ import { buildSlotPlan } from '../../src/slots/capability.js';
 import { dumpSlot } from '../../src/slots/dump.js';
 import { inspectSlots, joinSlotViews } from '../../src/slots/inspect.js';
 import type { SlotEntry, SlotKey, SlotPlan, SlotsReport } from '../../src/slots/types.js';
+import type * as DeviceInfo from '../../src/workflows/device-info.js';
+import { readDeviceInfo } from '../../src/workflows/device-info.js';
 import type { DeviceState, SlotState, WorkflowContext } from '../../src/workflows/types.js';
 import { fakeCamera, type FakeCamera } from '../fake-transport.js';
+
+/*
+ * readDeviceInfo is the real one, except where a test replaces one answer. The
+ * version guard after it can only be exercised with a read that reports another
+ * build, and a fake camera cannot be made to finish the whole read and then say
+ * so. Left as the real function by default, so every other test is unaffected.
+ */
+vi.mock('../../src/workflows/device-info.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof DeviceInfo>();
+  return { ...actual, readDeviceInfo: vi.fn(actual.readDeviceInfo) };
+});
 
 /** GetFirmwareInfo's build block: four version bytes, then the build date. */
 function buildBlock(version: readonly [number, number, number, number]): Uint8Array {
@@ -80,7 +93,7 @@ function slotStub(key: SlotKey, overrides: Partial<SlotState> = {}): SlotState {
     bootable: false,
     bootability: 'not-bootable',
     ...overrides,
-  } as SlotState;
+  };
 }
 
 /** A report with no camera analysis behind it, for the refusals that need none. */
@@ -162,7 +175,7 @@ describe('inspectSlots refuses before any bank is touched', () => {
     expect((error as SeekError).message).toMatch(/0\.8\.0\.0/);
     expect(opsOf(camera).filter((op) => op === BEGIN || op === FEATURED)).toEqual([]);
     const safe: ReadonlySet<number> = SAFE_BEFORE_IDENTITY;
-    for (const op of opsOf(camera)) expect(safe.has(op), `op ${op}`).toBe(true);
+    for (const op of opsOf(camera)) expect(safe.has(op), `op ${String(op)}`).toBe(true);
   });
 
   it('refuses a camera that does not say what it runs, before any bank is touched', async () => {
@@ -191,7 +204,9 @@ describe('dumpSlot refuses before any transfer', () => {
   it('refuses a slot whose dump is unsupported, sending nothing', async () => {
     const camera = cameraAt([4, 8, 2, 1]);
     const ctx = await contextFor(camera);
-    const plan = withSlot(MODERN_PLAN, 'b', { dump: { supported: false, reason: 'test: no dump' } });
+    const plan = withSlot(MODERN_PLAN, 'b', {
+      dump: { supported: false, reason: 'test: no dump' },
+    });
 
     const error = await dumpSlot(ctx, reportWith(plan), 'b').catch((caught: unknown) => caught);
 
@@ -216,7 +231,10 @@ describe('dumpSlot refuses before any transfer', () => {
   it('refuses a key that the plan does not have', async () => {
     const camera = cameraAt([4, 8, 2, 1]);
     const ctx = await contextFor(camera);
-    const plan: SlotPlan = { ...MODERN_PLAN, slots: MODERN_PLAN.slots.filter((s) => s.key !== 'r') };
+    const plan: SlotPlan = {
+      ...MODERN_PLAN,
+      slots: MODERN_PLAN.slots.filter((s) => s.key !== 'r'),
+    };
 
     const error = await dumpSlot(ctx, reportWith(plan), 'r').catch((caught: unknown) => caught);
 
@@ -266,5 +284,92 @@ describe('dumpSlot reads one bank as stored, read-only', () => {
     expect(ops.filter((op) => WRITE_OPS.has(op))).toEqual([]);
     /* THE READ-ONLY ASSERTION: every opcode this slot read sent is in READ_ONLY_OPS. */
     for (const op of ops) expect(isReadOnlyOp(op), `op 0x${op.toString(16)}`).toBe(true);
+  });
+});
+
+/** The GetFirmwareInfo requests a camera has been sent, over its whole log. */
+const versionRequests = (camera: FakeCamera): number =>
+  camera.calls.filter((call) => call.op === OP.GET_FIRMWARE_INFO).length;
+
+describe('inspectSlots takes a build the caller already read', () => {
+  it('sends two GetFirmwareInfo requests fewer when the build is passed in than when it is read here', async () => {
+    const asked = cameraAt([4, 8, 2, 1]);
+    const askedError = await inspectSlots(await contextFor(asked)).catch(
+      (caught: unknown) => caught,
+    );
+
+    const passed = cameraAt([4, 8, 2, 1]);
+    const passedError = await inspectSlots(await contextFor(passed), {
+      firmware: { version: '4.8.2.1' },
+    }).catch((caught: unknown) => caught);
+
+    /* Both runs go on to readDeviceInfo, which makes its own version read on
+     * either. Neither is refused for the build. */
+    expect(askedError).not.toBeInstanceOf(SeekError);
+    expect(passedError).not.toBeInstanceOf(SeekError);
+    /* One version read is two requests, the reader's own. Passing the build in drops exactly that. */
+    expect(versionRequests(asked)).toBeGreaterThan(versionRequests(passed));
+    expect(versionRequests(asked) - versionRequests(passed)).toBe(2);
+  });
+
+  it('refuses an unsupported build it was handed before sending anything, even to a camera that answers nothing', async () => {
+    const camera = cameraAt(null);
+    const ctx = await contextFor(camera, getProfile('legacy-auth'));
+
+    const error = await inspectSlots(ctx, { firmware: { version: '0.7.0.7' } }).catch(
+      (caught: unknown) => caught,
+    );
+
+    expect((error as SeekError).code).toBe('slots/refused');
+    expect((error as SeekError).message).toMatch(/0\.8\.0\.0/);
+    expect(camera.calls).toEqual([]);
+  });
+
+  it('refuses a passed build that is not known, before sending anything', async () => {
+    const camera = cameraAt([4, 8, 2, 1]);
+    const ctx = await contextFor(camera);
+
+    const error = await inspectSlots(ctx, { firmware: { version: null } }).catch(
+      (caught: unknown) => caught,
+    );
+
+    expect((error as SeekError).code).toBe('slots/refused');
+    expect(camera.calls).toEqual([]);
+  });
+
+  it('refuses when the camera reads back another build than the one passed in, as it does for a build read here', async () => {
+    const camera = cameraAt([4, 8, 2, 2]);
+    const ctx = await contextFor(camera);
+    vi.mocked(readDeviceInfo).mockResolvedValueOnce({
+      version: '4.8.2.2',
+      serial: 'TESTSERIAL',
+      profile: modern4x,
+      detection: { ambiguous: false, best: { profile: modern4x } },
+      slots: [],
+      byKey: new Map(),
+      boot: null,
+    } as unknown as DeviceState);
+
+    const error = await inspectSlots(ctx, { firmware: { version: '4.8.2.1' } }).catch(
+      (caught: unknown) => caught,
+    );
+
+    expect((error as SeekError).code).toBe('slots/refused');
+    expect((error as SeekError).message).toContain('4.8.2.1');
+    expect((error as SeekError).message).toContain('4.8.2.2');
+    expect((error as SeekError).detail).toMatchObject({
+      firmwareVersion: '4.8.2.1',
+      readVersion: '4.8.2.2',
+    });
+  });
+
+  it('still asks the camera for its build when none is passed, as the CLI does', async () => {
+    const camera = cameraAt(null);
+    const ctx = await contextFor(camera, getProfile('legacy-auth'));
+
+    const error = await inspectSlots(ctx).catch((caught: unknown) => caught);
+
+    expect((error as SeekError).code).toBe('slots/refused');
+    expect(versionRequests(camera)).toBeGreaterThan(0);
   });
 });
