@@ -80,6 +80,7 @@ brevity; substitute `node packages/cli/dist/bin.js` if you have not linked it.
 | `seek-fw sweep`          | probe every `BeginFirmwareUpgrade` selector and report what each exposes |
 | `seek-fw decrypt <file>` | decrypt a dump or image you already have — no camera needed              |
 | `seek-fw flash <image>`  | write a decrypted image to the camera                                    |
+| `seek-fw slots ...`      | list, dump or flash one firmware bank (A, B or recovery)                 |
 | `seek-fw profiles`       | list the supported firmware families                                     |
 
 Common options:
@@ -696,6 +697,47 @@ Without a camera on the bench, the packaging was checked against real hardware a
   it booted, like real hardware does. Flashing a foreign-key image without retargeting reproduces the
   failure above — the camera comes up running the foreign keys and the next flash lands unbootable —
   and with retargeting the running keys are the camera's own and every later flash stays bootable.
+
+## Firmware slots: list, dump and flash one bank
+
+The **[`#slots`](https://yrambler2001.github.io/seek-thermal-firmware-dump/#/slots)** page and `seek-fw slots`
+work on one 64 KiB firmware bank at a time — A, B or the recovery bank R — on every build from
+**0.8.0.0** up. Older builds (0.3.0.1 .. 0.7.0.8) are reported as unsupported, with the reason, and
+nothing is sent to them: they have no usable read handler.
+
+```sh
+seek-fw slots list                                  # banks, versions, keys, what each can do
+seek-fw slots dump r --out ./banks                  # the bank as stored, plus the decrypted image
+seek-fw slots flash b my-image.bin --dry-run        # print the plan, send nothing
+seek-fw slots flash b my-image.bin                  # decrypted image, encrypted for THAT bank
+seek-fw slots flash r prepared.bin --raw --acknowledge-risk   # raw staged bytes, verbatim
+```
+
+- **Flash a decrypted image.** The page stamps the length, balances the acceptance sum and encrypts
+  the image the way that generation needs: under the camera's Key A on the 2017+ line (the camera
+  re-encrypts it under its own store key), under the image's block-0 key stream on the 2016 Compact
+  PRO (the camera re-encrypts it into the bank's key), plain on the 2014 plaintext chain.
+- **Flash raw bytes.** The bytes you give go through the staging stream as they are. Whether they
+  boot is the camera's business, and the plan says what the bootloader's checks make of them.
+- **Writes arm bank 7/8/9 and nothing else.** They program that bank and leave the boot config
+  alone, so there is no "select the active slot": the protocol has no such command. Writing the bank
+  the camera boots now, or the recovery bank, needs an explicit acknowledgement (a checkbox on the
+  page, `--acknowledge-risk` on the CLI). The bootloader (`0x14000000`) and the boot-config block are
+  never written. After a write, unplug and replug the camera: a bank is only used at boot.
+- **Bank addresses follow the generation.** The locked line (Compact 0.8 - 1.3, Compact PRO 1.0.3.x) has
+  A/B/R at `0x14050000` / `0x14060000` / `0x14070000`. The modern line (2.x, 4.x, XR, Mosaic, Nano) has
+  them at `0x14030000` / `0x14050000` / `0x14070000`; no selector reaches `0x14060000` there.
+- **What each build can do is a table, not a guess.** `buildSlotPlan` (`packages/core/src/slots/`)
+  derives it from the profile and the build's own selector table, with the reason for every "no", and a
+  test checks every corpus build against it.
+- **Read-back.** After a commit the bank is read again and its decrypted image compared with the
+  image that was meant to be written.
+
+What has been run: the whole path on the emulator for every build from 0.8.0.0 in the corpus
+(`TESTING.md` §41); on a **real** camera (a Compact PRO 1.0.3.0 on a Compact board), a dump of all three banks
+and a write of the recovery bank with the bank's own image, with an image changed by one byte
+(the read-back decrypted to exactly that image) and with raw staged bytes, then restored. Every
+other family is emulator-proven only.
 
 ## Browser and platform support
 

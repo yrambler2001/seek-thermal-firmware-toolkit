@@ -5890,3 +5890,77 @@ delivered `202cb5c1…`; step 04 83.6 s; the emulator then boots `202cb5c1…`.
 
 Afterwards `seek-fw devices` lists the PIR324 alone, `seek-fw info` shows all three banks
 decrypting to `68c63334…` again, and `seek-fw dump` reads `0cb0e544…`: the camera is as it was.
+
+## 41. The firmware slots page and `seek-fw slots`: list, dump and flash one bank (2026-10-10)
+
+`packages/core/src/slots/` (the contract is `types.ts`), the `#/slots` page and `seek-fw slots`.
+Builds from 0.8.0.0; older ones are reported unsupported and nothing is sent to them. Each write
+arms bank 7/8/9 and commits, so it programs that bank and leaves the boot config alone.
+
+### 41.1 What is pinned, and where
+
+| Layer                         | Test                                                                                                                                                                                     |
+| ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| The per-build capability plan | `test/slots/capability.test.ts`: every corpus version has an explicit expectation; bank addresses and write modes match each image's own decoded switch (a mutated table fails 56 tests) |
+| Reader                        | `test/slots/inspect.test.ts` (join, refusals before any bank read, one version read), `dump.emulator.test.ts` (12 firmwares, banks byte-identical to the emulator's flash)               |
+| Writer                        | `write.test.ts`, `verify.test.ts` (verification by decryption for every staging form, against a fake that programs verbatim or re-encrypts), `write-commit.test.ts` (status classes)     |
+| Every modern-line firmware    | `test/slots/corpus-modern.emulator.test.ts`: 23 entries, 257 tests; `packages/cli/test/slots.emulator.test.ts`: the CLI end to end on two firmwares                                      |
+| Every locked-line firmware    | `test/slots/corpus-locked.emulator.test.ts`: 18 firmwares (0.8.0.0 .. 1.3.0.8, FF, Compact PRO 1.0.3.0 / 1.0.3.2), 251 tests                                                             |
+| The page in a browser         | `e2e/slots-view.e2e.ts` (`npx vitest run --config e2e/vitest.config.ts slots-view.e2e`): 12 tests on emulated 4.8.2.1 and 1.3.0.0, and the refusals on 0.5.1.3 / 0.7.0.7                 |
+
+Run the emulator ones with `SEEK_EMU_DIR=<FW-V1>/emu npx vitest run <file>` (they skip loudly
+without it). `SEEK_EMU_MODERN_ONLY=<label fragment>` narrows the modern corpus run to one firmware.
+
+### 41.2 What the emulator runs found
+
+- **Verification has to decrypt.** On the Key A line and on the 2016 line the device re-encrypts
+  what it was sent into the bank's own store key, so the stored bytes are not the staged bytes.
+  A write is verified by recovering the key stream from the read-back and comparing the decrypted
+  image with the one meant to be written (`write-verify.ts`); only the 2014 plain chain is
+  byte-compared.
+- **Bank addresses differ by generation.** Locked line A/B/R = `0x14050000` / `0x14060000` /
+  `0x14070000`; modern line `0x14030000` / `0x14050000` / `0x14070000`, and no selector reaches
+  `0x14060000` there. The first version of the contract assumed the locked line's for both.
+- **The 2016 commits "refused" on the emulator** (`0x00040005/6/7` for bank A/B/R) because the
+  emulator's default flash chip is a Winbond part and the 2016 app's SPI-NOR driver only knows
+  the Spansion one: the erase refuses before any command goes out. With `--jedec 010215` all six
+  2016 rows pass every check. This was an emulator setting, not a camera behaviour.
+- **Five modern rows are known gaps, pinned with their reasons** (Mosaic 10.9.1.31 and the
+  Compact FF 4.16.1.7 chimera cannot be written plain because the application's built-in Key A is
+  not the bootloader's; the Compact PRO 4.9.1.15 dump's bank B holds neither of the camera's
+  keys; the FF 4.16.1.7 chimera refuses raw bytes with `0x00050000`). Raw writes still work on the
+  ones that cannot be written plain.
+- **The 1.3.0.8 FF (16 Hz) build** is refused for a plain image (its staged form folds two key
+  streams this page does not build), and the camera itself refuses a raw payload with
+  `0x00070100` after the whole stage, before erasing anything.
+- **No bootloader read-back where no window exists** (Compact 0.8.0.0, 1.3.0.8, the 2016 Compact
+  PRO): the boot-config block is checked and the bootloader half is reported as a gap.
+
+### 41.3 The real camera (Compact PRO 1.0.3.0 on a Compact board, serial `0C21A1M5KP15`)
+
+Banks A, B and R all held the same image (stored `027247e7…`, decrypted `68c63334…`, 51,848 B).
+
+| Run                                                                      | Result                                                                                                                                                               |
+| ------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `slots list`                                                             | the probe's pick is `legacy-auth`, which fails every bank; `inspectSlots` now re-reads under `compact-2016` as the flash page does, and all three banks read cleanly |
+| `slots dump a / b / r`                                                   | each 65,536 B, identical, decrypting (acceptance sum 0)                                                                                                              |
+| write R with its own decrypted image                                     | commit status 0; the bank is byte-identical afterwards, so the device re-encrypted the block-0 stage into the bank's own key                                         |
+| write R with the image changed by one byte                               | commit 0; the bank decrypts to exactly that image, with only the balance byte at `+0x23B` additionally changed                                                       |
+| write R with the staged payload as raw bytes                             | commit 0; same stored bytes as the plain write                                                                                                                       |
+| write B and A with their own image                                       | commit 0; each read-back verified                                                                                                                                    |
+| write A with a one-byte-different image, power cycle on switch channel 2 | the camera enumerated as the PIR324 afterwards                                                                                                                       |
+| everything restored                                                      | all three banks back to `027247e7…`; the verdict printed by the CLI after the fix is "matches the staged image"                                                      |
+
+What the real-camera run does NOT show: which bank the camera boots (the locked line's boot
+replay is not reconstructed, so `active` is "unknown" and the page treats every bank as possibly
+booted), and a boot from a bank that differs in a way that matters. Every other family is
+emulator-proven only.
+
+### 41.4 Open
+
+- The Read still sends the version request twice (the identify step, then `readDeviceInfo`);
+  removing the second needs a change in `workflows/device-info.ts`.
+- On the 1.3.0.8 FF build the page does not pre-check a raw payload's word sum, so a bad one costs
+  a whole stage before the camera refuses it.
+- The hook logs core's "did not report its firmware version" line for a pre-0.8 build, next to
+  the page's own copy.
