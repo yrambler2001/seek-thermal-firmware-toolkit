@@ -5964,3 +5964,49 @@ emulator-proven only.
   a whole stage before the camera refuses it.
 - The hook logs core's "did not report its firmware version" line for a pre-0.8 build, next to
   the page's own copy.
+
+### 41.5 Whole-flash boot matrix on the bench Compact board (2026-10-10, J-Link)
+
+Each of the 16 full 4 MiB dumps in the corpus was flashed over SWD onto the bench camera (an LPC4330
+Compact board), as the whole part and nothing less (`erase-spifi-range` over `0x14000000..0x143FFFFF`,
+then `flash-factory-4m`, both through the FW-V1 `jlink-runner`). Each flash was proven by a halted
+read-back of all 4,194,304 bytes whose sha256 equals the dump's; the camera was then power-cycled on
+switch channel 2 and polled on USB for 40 s, and `seek-fw info` read the running version. The camera
+started as the unit's original (PIR206, Compact 1.3.0.0, bootloader 0.9.0.0, flash sha `40447c7e…`) and
+was restored to exactly that, read-back verified.
+
+| n   | Dump                                            | Flash = dump | Enumerates | USB product (0x289d:pid), serial    | Reported firmware / bootloader |
+| --- | ----------------------------------------------- | ------------ | ---------- | ----------------------------------- | ------------------------------ |
+| 1   | Compact 1.3.0.0 (`40447c7e`)                    | yes          | yes        | PIR206 (0x0010), 101310HSNEA2       | 1.3.0.0 / 0.9.0.0              |
+| 2   | Compact PRO 1.0.3.0 (`db4efc84`)                | yes          | **no**     | none; core halts at PC `0x1008097C` | -                              |
+| 2b  | the same + the Compact board patch (`202cb5c1`) | yes          | yes        | PIR324 (0x0011), 0C21A1M5KP15       | 1.0.3.0 / 1.2.0.0              |
+| 3   | Compact PRO FF 1.0.3.0 (`e6a3354f`)             | yes          | **no**     | none; halts at PC `0x10080980`      | -                              |
+| 4   | Compact PRO FF 1.0.3.0 (`195f5338`)             | yes          | **no**     | none; halts at PC `0x100811B8`      | -                              |
+| 5   | Compact 4.8.2.1 (`31cc2b7e`)                    | yes          | yes        | Compact (0x0010), 2229A0YZ7E28      | 4.8.2.1 / 2.0.2.3              |
+| 6   | Compact PRO 4.9.1.15 (`9fa38b8d`)               | yes          | yes        | PIR324 (0x0011), 1C0EZ0KTAMA5       | 4.9.1.15 / 201.9.3.0           |
+| 7   | Compact PRO 4.9.2.0 (`5738bc27`)                | yes          | yes        | PIR324 (0x0011), 1215A0YZ9AA8       | 4.9.2.0 / 201.9.3.0            |
+| 8   | Compact PRO 4.9.2.0 (`29e65170`)                | yes          | yes        | PIR324 (0x0011), 1D0DB0Y6ZDC7       | 4.9.2.0 / 201.9.3.0            |
+| 9   | Compact PRO FF 4.18.2.0 (`a042bb71`)            | yes          | yes        | PIR324 (0x0011), 090BB12PR939       | 4.18.2.0 / 201.18.3.0          |
+| 10  | Compact PRO FF 4.18.2.0 (`d7d28caf`)            | yes          | yes        | PIR324 (0x0011), 0E1CA0Z16D19       | 4.18.2.0 / 201.18.3.0          |
+| 11  | Compact PRO FF 4.18.2.0 (`42b8fe12`)            | yes          | yes        | PIR324 (0x0011), 1818B0Z3K6C8       | 4.18.2.0 / 201.18.3.0          |
+| 12  | Compact XR 4.8.2.1 (`8aa32da0`)                 | yes          | yes        | CompactXR (0x0010), 1F1660P7U967    | 4.8.2.1 / 2.0.2.3              |
+| 13  | Mosaic 10.9.1.31 (`99359797`)                   | yes          | yes        | PIR324 (0x0011), 0821Z0NNH457       | 10.9.1.31 / 2.18.2.1           |
+| 14  | Mosaic FF 2.27.1.33 (`eef8f27b`)                | yes          | yes        | PIR324 (0x0011), serial blank       | 2.27.1.33 / 201.27.3.0         |
+| 15  | Nano 200 42.32.3.10 (`de417eec`)                | yes          | yes        | Nano200 (0x0010), 0E1CA0YWX3A9      | 42.32.3.10 / 220.32.3.0        |
+| 16  | Nano 300 44.27.3.10 (`3ddf55b0`)                | yes          | yes        | PIR324 (0x0011), 1713A171RJB9       | 44.27.3.10 / 220.27.3.0        |
+
+- **Every flash was exactly the full part**, verified by a halted read-back sha256, not by the
+  programmer's own verify. The three rows that do not enumerate were read back a second time to show
+  the flash was right and the image is what does not run.
+- **The 2016-chain images (1.0.3.0, both FF 1.0.3.0) do not run on this board as dumped** (the
+  1.0.3.0 app reboots on any board but the Compact PRO's). Row 2b shows the board patch
+  (`scripts/patch-dump.mjs`) makes the 9 Hz build run; it has no derivation for the FF images, so rows
+  3b and 4b were not produced.
+- **Every 2017+ build (4.x, XR, Mosaic, Nano) runs and enumerates on this board** with its own
+  firmware, bootloader and serial. The USB product name reflects the image, not the board.
+- Runner notes: the erase returned `-5` on rows 1 to 5 and the runner's compare-then-write still
+  landed the right bytes; the first `h` after a flash often said "CPU could not be halted", and a
+  power cycle followed by a halted read-back matched in every row. `dump-spifi-4m` was not used.
+
+This is what the slots page's "bootable" column cannot say on its own: a bank that reads back
+correctly is not the same as an image the board runs. These rows are.
