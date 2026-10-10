@@ -469,3 +469,5 @@ export type {
   V1Patch,
   WindowBytes,
 } from './preservation/index.js';
+
+export * from './slots/index.js';

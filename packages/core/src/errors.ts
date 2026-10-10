@@ -32,6 +32,8 @@ export type SeekErrorCode =
    * preservation pipeline's own gates. See `src/preservation/`.
    */
   | 'pipeline/refused'
+  /** The slot workflows (`src/slots/`) refused: an unsupported build, slot or input. Nothing was sent. */
+  | 'slots/refused'
   | 'cancelled';
 
 export interface SeekErrorOptions extends ErrorOptions {
