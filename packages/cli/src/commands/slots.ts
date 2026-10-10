@@ -99,7 +99,12 @@ export type SlotsRequest =
     };
 
 /** The flags a command without `slots` never sees: all three default to "not asked for". */
-const NO_SLOT_FLAGS: SlotFlags = { raw: false, acknowledgeRisk: false, verify: true };
+const NO_SLOT_FLAGS: SlotFlags = {
+  raw: false,
+  acknowledgeRisk: false,
+  verify: true,
+  dryRun: false,
+};
 
 export function parseBank(text: string): SlotKey {
   const key = text.toLowerCase();
@@ -123,6 +128,7 @@ function refuseFlashOnlyFlags(flags: SlotFlags, subcommand: string): void {
   if (flags.raw) given.push('--raw');
   if (flags.acknowledgeRisk) given.push('--acknowledge-risk');
   if (!flags.verify) given.push('--no-verify');
+  if (flags.dryRun) given.push('--dry-run');
   if (given.length > 0) {
     const verb = given.length === 1 ? 'applies' : 'apply';
     throw new UsageError(
@@ -604,7 +610,8 @@ async function flashAction(
 ): Promise<CommandResult> {
   /* (1) Nobody to ask. Checked before the image is read and before the camera is opened, so a
    * script that forgot --yes fails at once. */
-  if (!ctx.options.yes && !ctx.io.stdinIsTty) {
+  const dryRun = ctx.slotFlags?.dryRun ?? false;
+  if (!dryRun && !ctx.options.yes && !ctx.io.stdinIsTty) {
     throw new CliError(
       'refusing to flash without confirmation: stdin is not a terminal, so there is nobody to ask',
       {
@@ -636,6 +643,25 @@ async function flashAction(
     /* (3) The plan is always shown, even under --json (where it lands on stderr): nobody is asked
      * to confirm a write they were not shown. */
     ctx.reporter.write(flashPlanLines(plan, fileName, expectedSha256, ctx.color).join('\n'));
+
+    /* --dry-run stops here: the plan is the whole output, the bank is never armed. */
+    if (dryRun) {
+      return {
+        action: 'flash',
+        bank: key,
+        address: hexUp(plan.address),
+        file: fileName,
+        kind: plan.kind,
+        staging: plan.staging,
+        payloadBytes: plan.payload.length,
+        sum16: hexUp(plan.sum16, 4),
+        expectedSha256,
+        notes: [],
+        warnings: [...plan.warnings],
+        written: false,
+        dryRun: true,
+      };
+    }
 
     if (!ctx.options.yes) {
       const confirmed = await ctx.io.confirm(flashQuestion(report, plan, fileName));

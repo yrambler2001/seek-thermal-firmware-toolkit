@@ -93,6 +93,8 @@ export interface SlotFlags {
   readonly acknowledgeRisk: boolean;
   /** False when `--no-verify` was passed: skip the read-back after the commit. */
   readonly verify: boolean;
+  /** `--dry-run`: build and print the flash plan, send nothing to the bank. */
+  readonly dryRun: boolean;
 }
 
 export type ParsedCli =
@@ -184,6 +186,7 @@ export function parseCli(argv: readonly string[]): ParsedCli {
         raw: { type: 'boolean', default: false },
         'acknowledge-risk': { type: 'boolean', default: false },
         verify: { type: 'boolean', default: true },
+        'dry-run': { type: 'boolean', default: false },
         help: { type: 'boolean', short: 'h', default: false },
         version: { type: 'boolean', short: 'V', default: false },
       },
@@ -276,6 +279,7 @@ export function parseCli(argv: readonly string[]): ParsedCli {
       raw: values.raw,
       acknowledgeRisk: values['acknowledge-risk'],
       verify: values.verify,
+      dryRun: values['dry-run'],
     },
     options,
   };

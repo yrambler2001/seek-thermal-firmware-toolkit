@@ -226,7 +226,7 @@ Usage
   seek-fw slots list [--serial <id>] [--json]
   seek-fw slots dump <a|b|r> [--out <dir> | --zip <file>] [options]
   seek-fw slots flash <a|b|r> <file> [--raw] [--yes] [--acknowledge-risk]
-                                     [--no-verify] [options]
+                                     [--no-verify] [--dry-run] [options]
 
 Banks: A (0x14050000) and B (0x14060000) are the application banks; R is the
 recovery bank. Builds 0.8.0.0 and newer only; an older build is reported as
@@ -246,6 +246,7 @@ not banks and are never written.
                          or bank R. Without it the write is refused, and nothing
                          is sent
   --no-verify            flash: skip the read-back after the commit
+  --dry-run              flash: print the plan and send nothing to the bank
   --yes                  flash: skip the confirmation (required when stdin is
                          not a tty)
 

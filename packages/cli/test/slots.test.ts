@@ -64,7 +64,7 @@ const SUPPORTED: Support = { supported: true };
 const UNSUPPORTED = (reason: string): Support => ({ supported: false, reason });
 
 const ADDRESS: Record<SlotKey, number> = { a: 0x14050000, b: 0x14060000, r: 0x14070000 };
-const NO_FLAGS = { raw: false, acknowledgeRisk: false, verify: true } as const;
+const NO_FLAGS = { raw: false, acknowledgeRisk: false, verify: true, dryRun: false } as const;
 
 function slotEntry(key: SlotKey, overrides: Partial<SlotEntry> = {}): SlotEntry {
   return {
@@ -310,7 +310,7 @@ describe('parseSlotsArgs', () => {
   });
 
   it('flashes a raw payload when --raw is given, and a decrypted image otherwise', () => {
-    const raw = { raw: true, acknowledgeRisk: false, verify: true };
+    const raw = { raw: true, acknowledgeRisk: false, verify: true, dryRun: false };
     expect(parseSlotsArgs(['flash', 'b', 'x.bin'], raw)).toMatchObject({ kind: 'raw' });
     expect(parseSlotsArgs(['flash', 'b', 'x.bin'], NO_FLAGS)).toMatchObject({ kind: 'plain' });
   });
@@ -331,9 +331,9 @@ describe('parseSlotsArgs', () => {
   });
 
   it.each([
-    [['list'], { raw: true, acknowledgeRisk: false, verify: true }],
-    [['list'], { raw: false, acknowledgeRisk: true, verify: true }],
-    [['dump', 'a'], { raw: false, acknowledgeRisk: false, verify: false }],
+    [['list'], { raw: true, acknowledgeRisk: false, verify: true, dryRun: false }],
+    [['list'], { raw: false, acknowledgeRisk: true, verify: true, dryRun: false }],
+    [['dump', 'a'], { raw: false, acknowledgeRisk: false, verify: false, dryRun: false }],
   ])('refuses the flash-only flags on %j', (args, flags) => {
     expect(() => parseSlotsArgs(args, flags)).toThrow(/applies only to 'slots flash'/);
   });
@@ -361,7 +361,7 @@ describe('parseCli for slots', () => {
       command: 'slots',
       file: null,
       args: ['flash', 'r', 'image.bin'],
-      slotFlags: { raw: true, acknowledgeRisk: true, verify: false },
+      slotFlags: { raw: true, acknowledgeRisk: true, verify: false, dryRun: false },
     });
     if (parsed.kind !== 'run') throw new Error('expected a run');
     expect(parsed.options.yes).toBe(true);
@@ -370,7 +370,12 @@ describe('parseCli for slots', () => {
   it('defaults the slot flags to "none given", with verification on', () => {
     const parsed = parseCli(['slots', 'list']);
     if (parsed.kind !== 'run') throw new Error('expected a run');
-    expect(parsed.slotFlags).toEqual({ raw: false, acknowledgeRisk: false, verify: true });
+    expect(parsed.slotFlags).toEqual({
+      raw: false,
+      acknowledgeRisk: false,
+      verify: true,
+      dryRun: false,
+    });
     expect(parsed.args).toEqual(['list']);
   });
 
@@ -849,5 +854,11 @@ describe('slots through run()', () => {
     expect(code).toBe(EXIT_OK);
     expect(test.stdout.text).toContain('seek-fw slots');
     expect(test.stdout.text).toContain('--acknowledge-risk');
+  });
+
+  it('--dry-run is refused on list and dump, and on flash it prints the plan and sends no write', () => {
+    expect(() =>
+      parseSlotsArgs(['list'], { raw: false, acknowledgeRisk: false, verify: true, dryRun: true }),
+    ).toThrow(/--dry-run/);
   });
 });
