@@ -97,7 +97,7 @@ function slotState(overrides: Partial<SlotState> & { key: SlotKey }): SlotState 
     bootable: false,
     bootability: 'not-bootable',
     ...overrides,
-  } as SlotState;
+  };
 }
 
 /** A DeviceState carrying only what the writer reads. The rest is never touched. */
@@ -147,23 +147,26 @@ interface Recorder {
 function recordingDevice(readStored: Uint8Array = new Uint8Array(SLOT_BYTES).fill(0xff)): Recorder {
   const calls: { op: string; arg?: unknown }[] = [];
   const device = {
-    transport: { isOpen: true, open: async () => undefined, info: { recipientFallback: null } },
-    armWindow: async (entry: WindowEntry) => {
+    transport: { isOpen: true, open: () => Promise.resolve(), info: { recipientFallback: null } },
+    armWindow: (entry: WindowEntry) => {
       calls.push({ op: 'arm', arg: entry.subcmd });
+      return Promise.resolve();
     },
-    setFeaturedFirmwareData: async (data: Uint8Array) => {
+    setFeaturedFirmwareData: (data: Uint8Array) => {
       calls.push({ op: 'stage', arg: data.length });
+      return Promise.resolve();
     },
-    getErrorCode: async () => {
+    getErrorCode: () => {
       calls.push({ op: 'status' });
-      return 0;
+      return Promise.resolve(0);
     },
-    completeMemoryUpgrade: async (sum: number) => {
+    completeMemoryUpgrade: (sum: number) => {
       calls.push({ op: 'commit', arg: sum });
+      return Promise.resolve();
     },
-    readWindow: async () => {
+    readWindow: () => {
       calls.push({ op: 'read' });
-      return { data: readStored, stoppedAt: readStored.length, stopReason: null, chunkUsed: 64 };
+      return Promise.resolve({ data: readStored, stoppedAt: readStored.length, stopReason: null, chunkUsed: 64 });
     },
   } as unknown as SeekDevice;
   return { device, calls };
@@ -392,6 +395,8 @@ describe('prepareSlotFlash builds each staging form', () => {
     expect(equalBytes(out.expectedStored!.subarray(0, 0x9000), out.payload)).toBe(true);
     expect(out.expectedStored![0x9000]).toBe(0xff);
     expect(out.sum16).toBe(transferSum16(out.payload));
+    /* On the chain the stored bytes ARE the image, so the plain image is the payload. */
+    expect(out.expectedPlain && equalBytes(out.expectedPlain, out.payload)).toBe(true);
   });
 
   it('slot keystream (2016 line): the payload is the image XOR the stage key, and decrypts to a zero sum', () => {
@@ -410,6 +415,11 @@ describe('prepareSlotFlash builds each staging form', () => {
     expect(parseImageHeader(decrypted)?.length).toBe(0x6000);
     /* The header window is verbatim: the cleartext adjust word carries the balance. */
     expect(parseImageHeader(out.payload)?.length).toBe(0x6000);
+    /* The device stores the image under its own key, so the stored bytes are not
+     * predicted; the plain image is, and it is the stamped image the stage XOR came from. */
+    expect(out.expectedStored).toBeNull();
+    expect(out.expectedPlain?.length).toBe(0x6000);
+    expect(equalBytes(xorWindowVerbatim(out.payload, keystream(keyWordsOf(pair.block0), 0x6000 >>> 2)), out.expectedPlain!)).toBe(true);
   });
 
   it('key-a (2017+): the image is retargeted to this camera, footered, and encrypted under its Key A', () => {
@@ -434,6 +444,8 @@ describe('prepareSlotFlash builds each staging form', () => {
     expect(wordSum32(decrypted, length)).toBe(modern.cipher.acceptanceSum);
     expect(equalBytes(decrypted.subarray(0x4000, 0x4010), KEY_A)).toBe(true);
     expect(equalBytes(decrypted.subarray(0x4020, 0x4030), KEY_B)).toBe(true);
+    /* The plain image the bank must decrypt to is the retargeted image the payload carries. */
+    expect(out.expectedPlain && equalBytes(out.expectedPlain, decrypted)).toBe(true);
   });
 
   it('raw: sent verbatim, and the bootloader checks it would fail are warned, not refused', () => {
@@ -448,7 +460,86 @@ describe('prepareSlotFlash builds each staging form', () => {
     expect(out.payload).not.toBe(bytes);
     expect(out.warnings.some((w) => w.includes('sent exactly as given'))).toBe(true);
     expect(out.warnings.some((w) => w.includes('would reject this payload') && w.includes('no footer at'))).toBe(true);
-    expect(out.expectedStored?.length).toBe(SLOT_BYTES);
+    /* Key A line: the device decodes and re-encrypts, so the stored bytes are not predicted. */
+    expect(out.expectedStored).toBeNull();
+    expect(out.warnings.some((w) => w.includes('re-encrypts what it keeps'))).toBe(true);
+    /* No Key A on this camera's state, so not even the plain image can be said. */
+    expect(out.expectedPlain).toBeNull();
+  });
+
+  it('raw on the 2014 chain: the stored bytes are the payload, erased past it (the chain programs them as sent)', () => {
+    const plan = buildSlotPlan(legacy, '1.3.0.0');
+    const slot = slotState({ key: 'a', present: true, accepts: true });
+    const report = reportFor(stateFor(legacy, { version: '1.3.0.0', slots: [slot] }), plan);
+    /* A payload the chain accepts, built by the plain builder, then sent raw. */
+    const staged = prepareSlotFlash(report, 'a', { kind: 'plain', bytes: imageOf(0x9000, 8), fileName: 'x' });
+    const raw = prepareSlotFlash(report, 'a', { kind: 'raw', bytes: staged.payload, fileName: 'raw.bin' });
+    expect(raw.expectedStored?.length).toBe(SLOT_BYTES);
+    expect(equalBytes(raw.expectedStored!.subarray(0, staged.payload.length), staged.payload)).toBe(true);
+    expect(raw.expectedStored![staged.payload.length]).toBe(0xff);
+    expect(raw.expectedPlain && equalBytes(raw.expectedPlain, staged.payload)).toBe(true);
+  });
+
+  it('raw on the 2016 line: the plain image is what the block-0 stage key decrypts it to, and the stored bytes are not predicted', () => {
+    const plan = buildSlotPlan(compact2016, '1.0.3.0');
+    const slot = slotState({ key: 'r', present: true, accepts: true });
+    const report = reportFor(stateFor(compact2016, { version: '1.0.3.0', slots: [slot] }), plan);
+    const image = imageOf(0x6000, 12);
+    image.set(hexToBytes(KEY_PAIRS.cp103.block0), 0x3000);
+    image.set(hexToBytes(KEY_PAIRS.cp103.block1), 0x3100);
+    /* The block-0-staged payload of a valid image: the form a real write sends. */
+    const staged = prepareSlotFlash(report, 'r', { kind: 'plain', bytes: image, fileName: 'x' });
+    const raw = prepareSlotFlash(report, 'r', { kind: 'raw', bytes: staged.payload, fileName: 'raw.bin' });
+    expect(raw.staging).toBe('verbatim');
+    expect(raw.expectedStored).toBeNull();
+    expect(raw.expectedPlain).not.toBeNull();
+    expect(equalBytes(raw.expectedPlain!, staged.expectedPlain!)).toBe(true);
+  });
+});
+
+/* ==================================================================== *
+ * prepareSlotFlash: the compare rows claim only what they can predict
+ * ==================================================================== */
+
+describe('prepareSlotFlash compare rows', () => {
+  const plan = buildSlotPlan(compact2016, '1.0.3.0');
+  const row = (rows: readonly { field: string; after: string }[], field: string) =>
+    rows.find((r) => r.field === field);
+
+  it('2016 image: the sha row is the expected PLAIN image, labelled as such, not a sha of stored bytes', () => {
+    const slot = slotState({ key: 'a', present: true, accepts: true });
+    const report = reportFor(stateFor(compact2016, { version: '1.0.3.0', slots: [slot] }), plan);
+    const image = imageOf(0x6000, 4);
+    image.set(hexToBytes(KEY_PAIRS.cp103.block0), 0x3000);
+    image.set(hexToBytes(KEY_PAIRS.cp103.block1), 0x3100);
+    const out = prepareSlotFlash(report, 'a', { kind: 'plain', bytes: image, fileName: 'x' });
+    const shaRow = out.compare.find((r) => r.field.startsWith('SHA-256'));
+    expect(shaRow?.field).toBe('SHA-256 of the expected plain image (stored bytes not predicted)');
+    expect(shaRow?.after).toBe(sha256Sync(out.expectedPlain!));
+    expect(shaRow?.after).not.toBe(sha256Sync(out.payload));
+  });
+
+  it('2014 chain: the sha row is the image, which is also what the chain stores', () => {
+    const chain = buildSlotPlan(legacy, '1.3.0.0');
+    const slot = slotState({ key: 'a', present: true, accepts: true });
+    const report = reportFor(stateFor(legacy, { version: '1.3.0.0', slots: [slot] }), chain);
+    const out = prepareSlotFlash(report, 'a', { kind: 'plain', bytes: imageOf(0x9000, 3), fileName: 'x' });
+    const shaRow = out.compare.find((r) => r.field.startsWith('SHA-256'));
+    expect(shaRow?.field).toBe('SHA-256 of the image');
+    expect(shaRow?.after).toBe(sha256Sync(out.payload));
+  });
+
+  it('raw bytes on a form whose device re-encrypts, with no Key A: nothing is claimed; the rows say not predicted', () => {
+    const modernPlan = buildSlotPlan(modern, '4.8.1.9');
+    const slot = slotState({ key: 'b', present: true, accepts: true });
+    const report = reportFor(stateFor(modern, { version: '4.8.1.9', slots: [slot] }), modernPlan);
+    const out = prepareSlotFlash(report, 'b', { kind: 'raw', bytes: imageOf(0x3000, 7), fileName: 'raw.bin' });
+    expect(out.expectedPlain).toBeNull();
+    const shaRow = out.compare.find((r) => r.field.startsWith('SHA-256'));
+    expect(shaRow?.field).toBe('SHA-256 of the expected plain image');
+    expect(shaRow?.after).toMatch(/not predicted/);
+    expect(row(out.compare, 'Initial SP')?.after).toMatch(/not predicted/);
+    expect(row(out.compare, 'Reset vector')?.after).toMatch(/not predicted/);
   });
 });
 
@@ -579,9 +670,9 @@ describe('flashSlot gates', () => {
   it('a status word after staging stops the write before the commit, and says so', async () => {
     const rec = recordingDevice();
     let polls = 0;
-    (rec.device as unknown as { getErrorCode: () => Promise<number> }).getErrorCode = async () => {
+    (rec.device as unknown as { getErrorCode: () => Promise<number> }).getErrorCode = () => {
       polls++;
-      return polls > 3 ? 0x31 : 0;
+      return Promise.resolve(polls > 3 ? 0x31 : 0);
     };
     const { report, payload } = built('a');
     const error = await flashSlot(ctxFor(rec.device, legacy), report, payload, { acknowledgeRisk: false }).catch((e: unknown) => e);

@@ -134,6 +134,16 @@ export interface SlotFlashPlan {
   readonly sum16: number;
   /** What the slot will hold afterwards, when it can be predicted (else null). */
   readonly expectedStored: Uint8Array | null;
+  /**
+   * The plain image the bank must decrypt to after the write: the image as its
+   * staging builder stamped and balanced it (length, acceptance adjust word, key
+   * pair), or, for raw bytes, what the payload decrypts to under the staging key
+   * when that can be said. Null when no plain image can be predicted. The read-back
+   * is decrypted under the keystream it carries and compared with this, which is the
+   * check on the forms whose device re-encrypts the bank. Optional (added in wave 2)
+   * so plans built before it still type-check; an absent field reads as null.
+   */
+  readonly expectedPlain?: Uint8Array | null;
   /** Human-readable rows: field, what the slot has now, what it will have. */
   readonly compare: readonly { field: string; before: string; after: string }[];
   /** Things to say loudly (writing the booted slot, writing recovery, a raw payload). */

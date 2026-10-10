@@ -18,9 +18,9 @@
  * every read from SlotEntry.read; no subcommand or address is written here.
  * ==================================================================== */
 
-import { equalBytes, hexUp, sha256hex, hex } from '../bytes.js';
+import { hexUp, sha256hex, hex } from '../bytes.js';
 import { transferSum16 } from '../image/bank.js';
-import { FOOTER_TAG, parseImageHeader, type ImageHeader } from '../image/header.js';
+import { FOOTER_TAG } from '../image/header.js';
 import type { CipherProfile, WindowEntry } from '../profiles/types.js';
 import { isCancelled, slotByKey, type SlotState, type WorkflowContext } from '../workflows/types.js';
 import {
@@ -42,11 +42,13 @@ import {
   buildPlainPayload,
   buildSlotKeystreamPayload,
   compareRows,
+  predictRawPlain,
   retargetImageKeys,
   slotRefused,
   type StagedBytes,
 } from './write-image.js';
 import { readBackBank, stageAndCommit } from './write-commit.js';
+import { compareReadBack } from './write-verify.js';
 
 /* ==================================================================== *
  * The guards every write passes through
@@ -125,10 +127,18 @@ function ackNeeded(report: SlotsReport, key: SlotKey): string | null {
 
 interface Body {
   readonly payload: Uint8Array;
-  /** The plaintext image the bank will decrypt to, when there is one. */
-  readonly image: Uint8Array | null;
+  /**
+   * The plain image the bank must decrypt to, when this page can say it: the image
+   * as its staging builder stamped and balanced it, or, for raw bytes, what the
+   * payload decrypts to under the staging key. Null when no image can be predicted.
+   */
+  readonly expectedPlain: Uint8Array | null;
   readonly staging: StagingForm | 'verbatim';
   readonly keyAfter: string;
+  /**
+   * The exact bank bytes, only where the device programs exactly what it is sent
+   * (the 2014 plain chain). The encrypting forms re-encrypt, so this is null there.
+   */
   readonly expectedStored: Uint8Array | null;
 }
 
@@ -176,13 +186,32 @@ export function prepareSlotFlash(
       );
     }
     const payload = input.bytes.slice();
-    body = { payload, image: null, staging: 'verbatim', keyAfter: 'as given (raw)', expectedStored: bankImageOf(payload, bankBytes) };
+    /* What the bank will hold depends on the form the device decodes the bytes
+     * with. Only the 2014 plain chain programs them as sent, so only there are
+     * the stored bytes predicted; the encrypting forms re-encrypt, and what they
+     * decrypt to is what can be checked (`predictRawPlain`). */
+    body = {
+      payload,
+      expectedPlain:
+        entry.staging === null
+          ? null
+          : predictRawPlain(entry.staging, payload, { keyA: state.keyTable?.keyA ?? null }, cipher),
+      staging: 'verbatim',
+      keyAfter: 'as given (raw)',
+      expectedStored: entry.staging === 'plain' ? bankImageOf(payload, bankBytes) : null,
+    };
     warnings.push(
       'Raw payload: sent exactly as given. This page does not check that it is bootable.',
     );
     if (entry.staging === null) {
       warnings.push('This build names no staging form for the slot, so the bootloader checks cannot be stated.');
     } else {
+      if (entry.staging !== 'plain') {
+        warnings.push(
+          'The device decodes this payload and re-encrypts what it keeps, so the stored bytes are ' +
+            'not predicted. The read-back is checked as the image it decrypts to, where that can be said.',
+        );
+      }
       for (const failure of bootloaderFailures(entry.staging, payload, cipher, {
         keyA: state.keyTable?.keyA ?? null,
       })) {
@@ -211,7 +240,9 @@ export function prepareSlotFlash(
     const staged = stageImage(report, slot, entry.staging, input, cipher);
     body = {
       payload: staged.staged.payload,
-      image: staged.staged.stamped,
+      /* The stamped image is what the builder made the bank hold, after the length
+       * stamp and the acceptance balance; the device stores it under its own key. */
+      expectedPlain: staged.staged.stamped,
       staging: entry.staging,
       keyAfter: staged.keyAfter,
       expectedStored: staged.expectedStored(bankBytes),
@@ -236,13 +267,11 @@ export function prepareSlotFlash(
   }
   for (const note of [...plan.notes, ...entry.notes]) warnings.push(`Note: ${note}`);
 
-  const afterHeader: ImageHeader | null =
-    body.image !== null ? parseImageHeader(body.image) : parseImageHeader(body.payload);
   const compare = compareRows(
     { header: slot.plainHeader, sha256: slot.sha256, keyName: slot.keyName },
     {
-      header: afterHeader,
-      image: body.image ?? body.payload,
+      plain: body.expectedPlain,
+      storedPredicted: body.expectedStored !== null,
       keyName: body.keyAfter,
     },
   );
@@ -255,6 +284,7 @@ export function prepareSlotFlash(
     payload: body.payload,
     sum16: transferSum16(body.payload),
     expectedStored: body.expectedStored,
+    expectedPlain: body.expectedPlain,
     compare,
     warnings,
     serial: state.serial,
@@ -306,7 +336,12 @@ function stageImage(
     return {
       staged,
       keyAfter: 'the stage key (key block 0 of the image)',
-      expectedStored: (bankBytes) => bankImageOf(staged.payload, bankBytes),
+      /* The 2016 device decrypts with the stage key and stores the image under its
+       * own store key (key block 1 of the pair), so the staged bytes are not what
+       * the bank keeps. Measured on the Compact PRO 1.0.3.0: a bank written with its
+       * own image reads back byte-identical to before, and the bytes differ from the
+       * payload. The bank is checked as the plain image it decrypts to instead. */
+      expectedStored: () => null,
       rekeyRisk: false,
     };
   }
@@ -381,7 +416,7 @@ export async function flashSlot(
   assertPlanIsCurrent(report, plan, entry);
 
   const risk = ackNeeded(report, plan.key);
-  if (risk !== null && options.acknowledgeRisk !== true) {
+  if (risk !== null && !options.acknowledgeRisk) {
     throw slotRefused(
       `${risk}. Writing it needs acknowledgeRisk: true. Nothing was sent.`,
       { key: plan.key },
@@ -423,21 +458,17 @@ export async function flashSlot(
     }
     if (after !== null) {
       notes.push(`read back ${String(after.length)} B, SHA-256 ${await sha256hex(after)}`);
-      if (plan.expectedStored !== null) {
-        const same =
-          after.length === plan.expectedStored.length && equalBytes(after, plan.expectedStored);
-        verified = same;
-        notes.push(
-          same
-            ? 'the bank matches the bytes the plan predicted'
-            : 'the bank does NOT match the bytes the plan predicted',
-        );
-      } else {
-        notes.push(
-          'no predicted bytes for this staging form (the device re-encrypts the bank), so the ' +
-            'read-back is reported, not compared',
-        );
-      }
+      /* Byte comparison where the plan predicts the stored bytes; otherwise the bank
+       * is decrypted under the keystream the read-back itself carries and compared
+       * with the plain image. See write-verify.ts for why that is the check. */
+      const verdict = compareReadBack(
+        after,
+        { stored: plan.expectedStored, plain: plan.expectedPlain ?? null },
+        report.state.profile.cipher,
+        plan.kind,
+      );
+      verified = verdict.verified;
+      notes.push(...verdict.notes);
     }
   } else {
     notes.push('verify is off: the bank was not read back');

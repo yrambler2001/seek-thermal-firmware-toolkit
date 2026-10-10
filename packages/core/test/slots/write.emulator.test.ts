@@ -596,7 +596,9 @@ describe.skipIf(!available)('the slot writer on the emulated cameras', () => {
         expect(run.bWrite.decryptsToSameImage, run.bWrite.notes.join('\n')).toBe(true);
         expect(run.bWrite.accepts).toBe(true);
         if (subject.staging === 'key-a-ciphertext') expect(run.bWrite.bootable).toBe(true);
-        if (run.bWrite.verified !== null) expect(run.bWrite.verified).toBe(true);
+        /* Every image write has a plain image predicted, so the read-back verdict must be
+         * true: a byte comparison on the 2014 chain, a decrypt-and-compare on the others. */
+        expect(run.bWrite.verified, run.bWrite.notes.join('\n')).toBe(true);
       });
 
       it('(2) a staged payload sent as raw bytes into recovery R reads back as sent', () => {
@@ -606,14 +608,18 @@ describe.skipIf(!available)('the slot writer on the emulated cameras', () => {
           `${run.rWrite.firstDiff === null ? 'none' : String(run.rWrite.firstDiff)}, ` +
           `bytes past the payload not erased: ${String(run.rWrite.tailNonErased)}`;
         expect(run.rWrite.tailErased, detail).toBe(true);
-        if (subject.staging === 'key-a-ciphertext') {
-          /* The Key A line: the commit decrypts the staged bytes under Key A and stores the
-           * image under the store key, so the bytes are not kept verbatim; the bank must
-           * still decrypt to the same image. Measured, and reported as such. */
-          expect(run.rWrite.identical, `not verbatim on the Key A line (${detail})`).toBe(false);
-          expect(run.rWrite.decryptsToSameImage, detail).toBe(true);
-        } else {
+        /* A raw payload of an image is checked as the image it decrypts to, on every form. */
+        expect(run.rWrite.verified, `${detail}\n${run.rWrite.notes.join('\n')}`).toBe(true);
+        if (subject.staging === 'plain') {
+          /* The 2014 chain programs exactly what it is sent. */
           expect(run.rWrite.identical, detail).toBe(true);
+        } else {
+          /* The encrypting lines decode the staged bytes and store the image under the bank's
+           * own store key, so the bytes are not kept verbatim (Key A line: measured; 2016 line:
+           * from the bench, where the emulator refuses the commit). The bank must still decrypt
+           * to the same image. */
+          expect(run.rWrite.identical, `not verbatim on the ${subject.staging} line (${detail})`).toBe(false);
+          expect(run.rWrite.decryptsToSameImage, detail).toBe(true);
         }
       });
 
@@ -626,7 +632,7 @@ describe.skipIf(!available)('the slot writer on the emulated cameras', () => {
         expect(bw.error, `${bw.notes.join('\n')}\n${String(bw.afterError)}`).toBeNull();
         expect(bw.decryptsToSameImage, bw.notes.join('\n')).toBe(true);
         expect(bw.accepts).toBe(true);
-        if (bw.verified !== null) expect(bw.verified).toBe(true);
+        expect(bw.verified, bw.notes.join('\n')).toBe(true);
       });
 
       it('(4) the boot-config block and the bootloader are unchanged after every write, byte for byte', () => {

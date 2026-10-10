@@ -380,34 +380,87 @@ export function compareRows(
     readonly keyName: string | null;
   },
   after: {
-    /** Null when the bytes do not parse as an image (a raw payload may not). */
-    readonly header: ImageHeader | null;
-    readonly image: Uint8Array;
+    /**
+     * The plain image the bank will decrypt to, or null when this page cannot say
+     * (a raw payload on a form whose device re-encrypts it, with no way to decrypt it).
+     * Nothing the page cannot predict is shown as if it were predicted.
+     */
+    readonly plain: Uint8Array | null;
+    /** True only where the bank's stored bytes are predicted (the 2014 plain chain). */
+    readonly storedPredicted: boolean;
     readonly keyName: string;
   },
 ): { field: string; before: string; after: string }[] {
   const none = '(no image)';
   const notImage = '(not an image)';
+  const unknown = '(not predicted: the device decides what it stores)';
   const b = before.header;
-  const a = after.header;
+  const a = after.plain === null ? null : parseImageHeader(after.plain);
+  /* A header row is claimed only from the predicted plain image, never from the
+   * payload: on the encrypting forms the payload's vector words are ciphertext. */
   const row = (
     field: string,
     onCamera: string,
-    inImage: string | null,
+    fromImage: (header: ImageHeader) => string,
   ): { field: string; before: string; after: string } => ({
     field,
     before: onCamera,
-    after: inImage ?? notImage,
+    after: after.plain === null ? unknown : a === null ? notImage : fromImage(a),
   });
+  const shaRow =
+    after.plain === null
+      ? { field: 'SHA-256 of the expected plain image', before: before.sha256 ?? none, after: unknown }
+      : after.storedPredicted
+        ? { field: 'SHA-256 of the image', before: before.sha256 ?? none, after: sha256Sync(after.plain) }
+        : {
+            field: 'SHA-256 of the expected plain image (stored bytes not predicted)',
+            before: before.sha256 ?? none,
+            after: sha256Sync(after.plain),
+          };
   return [
-    row('Firmware version', b?.versionStr ?? none, a?.versionStr ?? null),
-    row('Image id', b ? hexUp(b.imageId) : none, a ? hexUp(a.imageId) : null),
-    row('Initial SP', b ? hexUp(b.sp) : none, a ? hexUp(a.sp) : null),
-    row('Reset vector', b ? hexUp(b.entry) : none, a ? hexUp(a.entry) : null),
-    row('Size', b ? `${hex(b.length)} B` : none, a ? `${hex(a.length)} B` : null),
-    { field: 'SHA-256 of the image', before: before.sha256 ?? none, after: sha256Sync(after.image) },
+    row('Firmware version', b?.versionStr ?? none, (h) => h.versionStr),
+    row('Image id', b ? hexUp(b.imageId) : none, (h) => hexUp(h.imageId)),
+    row('Initial SP', b ? hexUp(b.sp) : none, (h) => hexUp(h.sp)),
+    row('Reset vector', b ? hexUp(b.entry) : none, (h) => hexUp(h.entry)),
+    row('Size', b ? `${hex(b.length)} B` : none, (h) => `${hex(h.length)} B`),
+    shaRow,
     { field: 'Key', before: before.keyName ?? none, after: after.keyName },
   ];
+}
+
+/**
+ * The plain image a RAW payload will decrypt to once the device has stored it,
+ * when this page can say so from the bytes alone. It is the decryption the
+ * bootloader makes before it accepts the payload, so a payload that commits is
+ * one whose decryption already met the acceptance sum on the device:
+ *   'plain'                     the bytes are the image; the 2014 chain stores them as sent;
+ *   'key-a-ciphertext'          decrypted under this camera's Key A (as `bootloaderFailures` does);
+ *   'slot-keystream-ciphertext' decrypted by the 2016 stage key (key block 0). Exactly one of the
+ *                               line's key pairs must give the acceptance sum; none or two is no answer.
+ * Null when the bytes do not parse as an image of a sane length, when there is no Key A to decrypt
+ * with, or when no single candidate gives the acceptance sum.
+ */
+export function predictRawPlain(
+  staging: StagingForm,
+  payload: Uint8Array,
+  keys: { readonly keyA: Uint8Array | null },
+  cipher: CipherProfile,
+): Uint8Array | null {
+  if (staging === 'plain') return payload.slice();
+  const header = parseImageHeader(payload);
+  if (header?.magic !== IMAGE_MAGIC) return null;
+  const length = header.length;
+  if (length < HEADER_OFFSET + HEADER_SIZE || length > payload.length || length & 3) return null;
+  const body = payload.subarray(0, length);
+  if (staging === 'key-a-ciphertext') {
+    if (keys.keyA === null) return null;
+    const plain = cryptBytes(body, stateFromKey(keys.keyA, cipher.whiteningK), cipher);
+    return wordSum32(plain, length) === cipher.acceptanceSum ? plain : null;
+  }
+  const accepted = LINE_2016_PAIRS.map((pair) =>
+    xorWindowVerbatim(body, keystream(keyWordsOf(pair.block0), length >>> 2)),
+  ).filter((plain) => wordSum32(plain, length) === cipher.acceptanceSum);
+  return accepted.length === 1 ? (accepted[0] ?? null) : null;
 }
 
 /** The header of a stamped image, or a refusal when it no longer parses as one. */
