@@ -39,7 +39,6 @@ import type {
   DumpedSlot,
   FlashSlotResult,
   SlotFlashInput,
-  SlotFlashPlan,
   SlotInputKind,
   SlotPlan,
   SlotsReport,
@@ -307,14 +306,13 @@ async function writeStep(
     notes: [],
   };
   const mark = sent.length;
-  let plan: SlotFlashPlan | null = null;
   try {
-    plan = prepareSlotFlash(report, key, input);
+    const plan = prepareSlotFlash(report, key, input);
     row.notes.push(...plan.warnings.filter((w) => !w.startsWith('Note:')));
     const result: FlashSlotResult = await flashSlot(ctx, report, plan, { acknowledgeRisk });
     row.commitStatus = result.commitStatus;
     row.verified = result.verified;
-    row.notes.push(...result.notes.filter((n) => n.startsWith('committed') === false));
+    row.notes.push(...result.notes.filter((n) => !n.startsWith('committed')));
     const after = result.after;
     if (after === null) {
       row.error = 'the bank was not read back';

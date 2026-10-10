@@ -28,7 +28,14 @@ function rotr(x: number, n: number): number {
 /** SHA-256 of `bytes`, as lowercase hex. */
 export function sha256Sync(bytes: Uint8Array): string {
   const H = Uint32Array.of(
-    0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19,
+    0x6a09e667,
+    0xbb67ae85,
+    0x3c6ef372,
+    0xa54ff53a,
+    0x510e527f,
+    0x9b05688c,
+    0x1f83d9ab,
+    0x5be0cd19,
   );
   /* Message, 0x80, zero fill, then the 64-bit big-endian bit length. */
   const padded = (((bytes.length + 9 + 63) >>> 6) << 6) >>> 0;

@@ -335,12 +335,10 @@ describe.skipIf(EMU_DIR === null)('the slot reader against the emulator', () => 
           const truthPath = scratchFile(`slots_${entry.id.replace(/[^\w.-]+/g, '_')}.bin`);
           const sent: Sent[] = [];
           let inspectEnd = 0;
-          let report: SlotsReport | null = null;
           let family = 'unknown';
-          const banks: Array<{ key: SlotKey; dumped: DumpedSlot | null; refusal: string | null }> =
-            [];
+          const banks: { key: SlotKey; dumped: DumpedSlot | null; refusal: string | null }[] = [];
 
-          await withCamera(row, entry.id, sent, truthPath, async (seek) => {
+          const report = await withCamera(row, entry.id, sent, truthPath, async (seek) => {
             const profile = await probedProfile(seek);
             const ctx: WorkflowContext = {
               device: seek,
@@ -351,7 +349,6 @@ describe.skipIf(EMU_DIR === null)('the slot reader against the emulator', () => 
 
             /* The real capability matrix, by default: no plan is injected. */
             const inspected = await inspectSlots(ctx);
-            report = inspected;
             inspectEnd = sent.length;
             family = classifyBuild(profile, inspected.state.version).family;
 
@@ -364,12 +361,12 @@ describe.skipIf(EMU_DIR === null)('the slot reader against the emulator', () => 
                 banks.push({ key: slot.key, dumped: null, refusal: error.message });
               }
             }
+            return inspected;
           });
           await row.assertDelivery();
 
           const truth = new Uint8Array(readFileSync(truthPath));
           expect(truth.length, 'the emulator wrote its 4 MiB as-booted image').toBe(FLASH_SIZE);
-          if (report === null) throw new Error('the reader produced no report');
           const done: SlotsReport = report;
           const plan = done.plan;
 
@@ -437,9 +434,10 @@ describe.skipIf(EMU_DIR === null)('the slot reader against the emulator', () => 
               dumped.address - FLASH_BASE + BANK_BYTES,
             );
             expect(dumped.raw.length, `${where} raw length`).toBe(BANK_BYTES);
-            expect(describeDiff(want, dumped.raw), `${where} raw against the emulator's flash`).toBe(
-              'identical',
-            );
+            expect(
+              describeDiff(want, dumped.raw),
+              `${where} raw against the emulator's flash`,
+            ).toBe('identical');
             expect(dumped.sha256, `${where} sha256 of the raw bank`).toBe(sha256(want));
 
             let line = `${where}: raw identical to the emulator's flash`;
@@ -457,8 +455,10 @@ describe.skipIf(EMU_DIR === null)('the slot reader against the emulator', () => 
                 expect(sha256(file), `${entry.id}: the vendored file is the manifest's`).toBe(
                   entry.sha256,
                 );
-                expect(file.length, `${where} the vendored image is at least as long as the plain`)
-                  .toBeGreaterThanOrEqual(plain.length);
+                expect(
+                  file.length,
+                  `${where} the vendored image is at least as long as the plain`,
+                ).toBeGreaterThanOrEqual(plain.length);
                 expect(
                   sha256(file.subarray(0, plain.length)),
                   `${where} plain image against the head of the vendored file`,
@@ -468,7 +468,9 @@ describe.skipIf(EMU_DIR === null)('the slot reader against the emulator', () => 
               /* A full dump's committed corpus pins the length and sha of its plain image. */
               const pinned = corpusSlot(entry, dumped.address);
               if (pinned !== null) {
-                expect(plain.length, `${where} plain length against the corpus`).toBe(pinned.length);
+                expect(plain.length, `${where} plain length against the corpus`).toBe(
+                  pinned.length,
+                );
                 expect(dumped.plainSha256, `${where} plain sha against the corpus`).toBe(
                   pinned.plainSha256,
                 );
@@ -491,7 +493,7 @@ describe.skipIf(EMU_DIR === null)('the slot reader against the emulator', () => 
           outcome.status = 'works';
         } catch (error) {
           outcome.lines.push(
-            `FAILED: ${error instanceof Error ? error.message.split('\n')[0] : String(error)}`,
+            `FAILED: ${error instanceof Error ? (error.message.split('\n')[0] ?? '') : String(error)}`,
           );
           throw error;
         } finally {
@@ -514,9 +516,7 @@ describe.skipIf(EMU_DIR === null)('the slot reader against the emulator', () => 
         const row = new RowEmulators(entry.id);
         try {
           const sent: Sent[] = [];
-          let refusal: SeekError | null = null;
-
-          await withCamera(row, entry.id, sent, undefined, async (seek) => {
+          const refusal = await withCamera(row, entry.id, sent, undefined, async (seek) => {
             /* No probe: the selector probe is itself a set of arms, and this test is about
              * what the reader sends. The profile is a stand-in; the refusal is the build's. */
             try {
@@ -526,9 +526,10 @@ describe.skipIf(EMU_DIR === null)('the slot reader against the emulator', () => 
                 detection: null,
                 reporter: silentReporter,
               });
+              return null;
             } catch (error) {
-              if (error instanceof SeekError) refusal = error;
-              else throw error;
+              if (error instanceof SeekError) return error;
+              throw error;
             }
           });
           await row.assertDelivery();
@@ -543,15 +544,17 @@ describe.skipIf(EMU_DIR === null)('the slot reader against the emulator', () => 
             'requests sent beyond the version read',
           ).toEqual([]);
           expect(ops).not.toContain(OP.BEGIN_FIRMWARE_UPGRADE);
+          /* `detail` values are `unknown`: print the version only when it is a string. */
+          const version = refused.detail?.firmwareVersion;
           outcome.lines.push(
-            `version ${String(refused.detail?.firmwareVersion ?? 'unknown')}: refused: ` +
+            `version ${typeof version === 'string' ? version : 'unknown'}: refused: ` +
               `${refused.message.slice(0, 220)}; sent ${String(sent.length)} request(s), all of them ` +
               'the version read',
           );
           outcome.status = 'refused';
         } catch (error) {
           outcome.lines.push(
-            `FAILED: ${error instanceof Error ? error.message.split('\n')[0] : String(error)}`,
+            `FAILED: ${error instanceof Error ? (error.message.split('\n')[0] ?? '') : String(error)}`,
           );
           throw error;
         } finally {

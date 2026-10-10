@@ -22,7 +22,12 @@ import { hexUp, sha256hex, hex } from '../bytes.js';
 import { transferSum16 } from '../image/bank.js';
 import { FOOTER_TAG } from '../image/header.js';
 import type { CipherProfile, WindowEntry } from '../profiles/types.js';
-import { isCancelled, slotByKey, type SlotState, type WorkflowContext } from '../workflows/types.js';
+import {
+  isCancelled,
+  slotByKey,
+  type SlotState,
+  type WorkflowContext,
+} from '../workflows/types.js';
 import {
   SLOT_BYTES,
   type FlashSlotOptions,
@@ -75,7 +80,9 @@ function entryFor(report: SlotsReport, key: SlotKey): SlotEntry {
  */
 export function writeWindowOf(entry: SlotEntry): WindowEntry {
   if (entry.write === null) {
-    throw slotRefused(`${entry.name} has no write window on this build, so nothing can be armed for it`);
+    throw slotRefused(
+      `${entry.name} has no write window on this build, so nothing can be armed for it`,
+    );
   }
   if (entry.commitEffect !== 'bank-only') {
     throw slotRefused(
@@ -99,24 +106,26 @@ export function writeWindowOf(entry: SlotEntry): WindowEntry {
 }
 
 function unreadWhy(report: SlotsReport, key: SlotKey): string {
-  return report.slots.find((view) => view.entry.key === key)?.unreadReason ?? 'the read did not reach it';
+  return (
+    report.slots.find((view) => view.entry.key === key)?.unreadReason ?? 'the read did not reach it'
+  );
 }
 
 /** The image footer a Key A payload should carry: this bank's own, else any valid one on the camera. */
 function footerTemplateFor(report: SlotsReport, slot: SlotState): Uint8Array | null {
   const valid = (s: SlotState | null | undefined): boolean =>
     s !== null && s !== undefined && s.footer !== null && s.footer.tag === FOOTER_TAG;
-  const source = valid(slot)
-    ? slot
-    : (report.state.slots.find((s) => valid(s)) ?? null);
+  const source = valid(slot) ? slot : (report.state.slots.find((s) => valid(s)) ?? null);
   return source?.footer?.raw ?? null;
 }
 
 /** Whether writing this bank needs the risk acknowledgement: the booted bank, recovery, or a boot that could not be named. */
 function ackNeeded(report: SlotsReport, key: SlotKey): string | null {
   const boot = report.state.boot;
-  if (boot === null) return 'the booted bank could not be named, so this one is treated as the booted one';
-  if (boot.booted === key) return `${key === 'r' ? 'recovery bank R' : `bank ${key.toUpperCase()}`} is the bank the camera boots now`;
+  if (boot === null)
+    return 'the booted bank could not be named, so this one is treated as the booted one';
+  if (boot.booted === key)
+    return `${key === 'r' ? 'recovery bank R' : `bank ${key.toUpperCase()}`} is the bank the camera boots now`;
   if (key === 'r') return 'recovery bank R is written only with acknowledgeRisk';
   return null;
 }
@@ -177,7 +186,9 @@ export function prepareSlotFlash(
   let body: Body;
   if (input.kind === 'raw') {
     if (!entry.flashRaw.supported) {
-      throw slotRefused(`${entry.name} cannot take raw bytes on this build: ${entry.flashRaw.reason}`);
+      throw slotRefused(
+        `${entry.name} cannot take raw bytes on this build: ${entry.flashRaw.reason}`,
+      );
     }
     if (input.bytes.length > bankBytes) {
       throw slotRefused(
@@ -204,7 +215,9 @@ export function prepareSlotFlash(
       'Raw payload: sent exactly as given. This page does not check that it is bootable.',
     );
     if (entry.staging === null) {
-      warnings.push('This build names no staging form for the slot, so the bootloader checks cannot be stated.');
+      warnings.push(
+        'This build names no staging form for the slot, so the bootloader checks cannot be stated.',
+      );
     } else {
       if (entry.staging !== 'plain') {
         warnings.push(
@@ -226,10 +239,14 @@ export function prepareSlotFlash(
     }
   } else {
     if (!entry.flashPlain.supported) {
-      throw slotRefused(`${entry.name} cannot take a decrypted image on this build: ${entry.flashPlain.reason}`);
+      throw slotRefused(
+        `${entry.name} cannot take a decrypted image on this build: ${entry.flashPlain.reason}`,
+      );
     }
     if (entry.staging === null) {
-      throw slotRefused(`${entry.name} has no staging form on this build, so an image cannot be encoded for it`);
+      throw slotRefused(
+        `${entry.name} has no staging form on this build, so an image cannot be encoded for it`,
+      );
     }
     assertImageShape(input.bytes);
     if (input.bytes.length > bankBytes) {
@@ -259,11 +276,15 @@ export function prepareSlotFlash(
   }
 
   if (key === 'r') {
-    warnings.push('Recovery bank R: writing it needs acknowledgeRisk. Nothing here checks that the camera boots afterwards.');
+    warnings.push(
+      'Recovery bank R: writing it needs acknowledgeRisk. Nothing here checks that the camera boots afterwards.',
+    );
   }
   const risk = ackNeeded(report, key);
   if (risk !== null && key !== 'r') {
-    warnings.push(`${risk}: writing it needs acknowledgeRisk, and the camera runs whatever it holds after the next power cycle.`);
+    warnings.push(
+      `${risk}: writing it needs acknowledgeRisk, and the camera runs whatever it holds after the next power cycle.`,
+    );
   }
   for (const note of [...plan.notes, ...entry.notes]) warnings.push(`Note: ${note}`);
 
@@ -318,10 +339,17 @@ function stageImage(
     }
     const keyTable = state.keyTable;
     if (keyTable === null) {
-      throw slotRefused("the analysis does not name this camera's Key A, so the bank cannot be encrypted for it");
+      throw slotRefused(
+        "the analysis does not name this camera's Key A, so the bank cannot be encrypted for it",
+      );
     }
     const mine = retargetImageKeys(input.bytes, input.fileName, keyTable);
-    const staged = buildKeyAPayload(mine, keyTable.keyA, footerTemplateFor(report, slot), state.profile);
+    const staged = buildKeyAPayload(
+      mine,
+      keyTable.keyA,
+      footerTemplateFor(report, slot),
+      state.profile,
+    );
     return {
       staged,
       keyAfter: "this camera's Key A",
@@ -368,7 +396,9 @@ function assertPlanIsCurrent(report: SlotsReport, plan: SlotFlashPlan, entry: Sl
   const { state } = report;
   if (!report.plan.supportedBuild.supported) throw slotRefused(report.plan.supportedBuild.reason);
   if (state.version === null) {
-    throw slotRefused('the analysis does not say which firmware the camera runs. Nothing was written.');
+    throw slotRefused(
+      'the analysis does not say which firmware the camera runs. Nothing was written.',
+    );
   }
   if (plan.firmwareVersion !== state.version) {
     throw slotRefused(
@@ -392,11 +422,15 @@ function assertPlanIsCurrent(report: SlotsReport, plan: SlotFlashPlan, entry: Sl
     throw slotRefused(`the analysis no longer reads ${entry.name}. Nothing was written.`);
   }
   if (plan.sum16 !== transferSum16(plan.payload)) {
-    throw slotRefused('the plan checksum does not match its payload, so the plan was edited. Nothing was written.');
+    throw slotRefused(
+      'the plan checksum does not match its payload, so the plan was edited. Nothing was written.',
+    );
   }
   const bankBytes = Math.min(entry.length, SLOT_BYTES);
   if (plan.payload.length === 0 || plan.payload.length > bankBytes) {
-    throw slotRefused(`the payload is ${hex(plan.payload.length)} B, outside the ${entry.name} bank`);
+    throw slotRefused(
+      `the payload is ${hex(plan.payload.length)} B, outside the ${entry.name} bank`,
+    );
   }
 }
 
@@ -417,10 +451,9 @@ export async function flashSlot(
 
   const risk = ackNeeded(report, plan.key);
   if (risk !== null && !options.acknowledgeRisk) {
-    throw slotRefused(
-      `${risk}. Writing it needs acknowledgeRisk: true. Nothing was sent.`,
-      { key: plan.key },
-    );
+    throw slotRefused(`${risk}. Writing it needs acknowledgeRisk: true. Nothing was sent.`, {
+      key: plan.key,
+    });
   }
   if (plan.staging === 'key-a-ciphertext' && !report.state.canFlash) {
     throw slotRefused(
@@ -453,7 +486,9 @@ export async function flashSlot(
       } catch (error) {
         if (isCancelled(ctx)) throw error;
         verified = false;
-        notes.push(`the read-back failed: ${error instanceof Error ? error.message : String(error)}`);
+        notes.push(
+          `the read-back failed: ${error instanceof Error ? error.message : String(error)}`,
+        );
       }
     }
     if (after !== null) {

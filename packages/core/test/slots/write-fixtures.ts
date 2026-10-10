@@ -9,7 +9,11 @@ import type { SlotPlan, SlotsReport, SlotView } from '../../src/slots/types.js';
 import type { DeviceState } from '../../src/workflows/types.js';
 
 /** The window a build's own table arms for one address, or null when it names none there. */
-export function windowAt(profile: FirmwareProfile, version: string, address: number): WindowEntry | null {
+export function windowAt(
+  profile: FirmwareProfile,
+  version: string,
+  address: number,
+): WindowEntry | null {
   return profile.windowPlan(version).windows.find((w) => w.address === address) ?? null;
 }
 

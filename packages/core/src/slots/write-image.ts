@@ -56,7 +56,10 @@ import type { StagingForm } from './types.js';
 import { sha256Sync } from './write-sha.js';
 
 /** Every refusal of this page is one code, so a front end can tell "nothing was sent" apart. */
-export function slotRefused(message: string, detail?: Readonly<Record<string, unknown>>): SeekError {
+export function slotRefused(
+  message: string,
+  detail?: Readonly<Record<string, unknown>>,
+): SeekError {
   return new SeekError('slots/refused', message, detail === undefined ? {} : { detail });
 }
 
@@ -409,9 +412,17 @@ export function compareRows(
   });
   const shaRow =
     after.plain === null
-      ? { field: 'SHA-256 of the expected plain image', before: before.sha256 ?? none, after: unknown }
+      ? {
+          field: 'SHA-256 of the expected plain image',
+          before: before.sha256 ?? none,
+          after: unknown,
+        }
       : after.storedPredicted
-        ? { field: 'SHA-256 of the image', before: before.sha256 ?? none, after: sha256Sync(after.plain) }
+        ? {
+            field: 'SHA-256 of the image',
+            before: before.sha256 ?? none,
+            after: sha256Sync(after.plain),
+          }
         : {
             field: 'SHA-256 of the expected plain image (stored bytes not predicted)',
             before: before.sha256 ?? none,

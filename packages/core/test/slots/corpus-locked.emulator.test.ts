@@ -131,27 +131,19 @@ function dumpCell(run: LockedRun): string {
 
 /** Whether the image was written into `w`, and read back as the image (or as sent, raw). */
 function wrote(w: WriteRow | undefined): boolean {
-  return w !== undefined && w.error === null && w.commitStatus === 0 && w.decrypts !== false;
+  return w?.error === null && w.commitStatus === 0 && w.decrypts !== false;
 }
 
 /** Whether the page refused `w` before sending anything, for the FF image's own reason. */
 function refusedFF(w: WriteRow | undefined): boolean {
   return (
-    w !== undefined &&
-    w.code === 'slots/refused' &&
-    w.requests === 0 &&
-    (w.error ?? '').includes('word sum 0xFFFF')
+    w?.code === 'slots/refused' && w.requests === 0 && (w.error ?? '').includes('word sum 0xFFFF')
   );
 }
 
 /** The camera rejected the FF build's own stored bytes as a payload, and R was left as it was. */
 function rejectedFFRaw(w: WriteRow | undefined): boolean {
-  return (
-    w !== undefined &&
-    w.code === 'flash/commit' &&
-    w.deviceCode === 0x70100 &&
-    w.bankAfterError === 'unchanged'
-  );
+  return w?.code === 'flash/commit' && w.deviceCode === 0x70100 && w.bankAfterError === 'unchanged';
 }
 
 /** Every check the suite makes on this firmware passed. */
@@ -162,8 +154,7 @@ function passed(run: LockedRun): boolean {
   if (!run.planSupported || run.planStaging !== s.staging) return false;
   if (run.dumps.length !== 3 || run.dumps.some((d) => d.identical !== true || d.error !== null))
     return false;
-  if (run.refusal === null || run.refusal.code !== 'slots/refused' || run.refusal.requests !== 0)
-    return false;
+  if (run.refusal?.code !== 'slots/refused' || run.refusal.requests !== 0) return false;
   if (run.writes.length !== 3) return false;
   const [nonBooted, recovery, raw] = run.writes;
   if (refusesFFImage(s)) {
@@ -171,7 +162,7 @@ function passed(run: LockedRun): boolean {
     if (!rejectedFFRaw(raw)) return false;
   } else {
     if (!wrote(nonBooted) || !wrote(recovery)) return false;
-    if (raw === undefined || raw.commitStatus !== 0) return false;
+    if (raw?.commitStatus !== 0) return false;
     if (
       s.staging === 'plain'
         ? raw.identical !== true || raw.tailErased !== true

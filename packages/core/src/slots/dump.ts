@@ -45,7 +45,8 @@ async function readBankWindow(
   for (let attempt = 0; attempt <= options.retries; attempt++) {
     try {
       const raw = await device.readWindow(entry, options.chunk);
-      if (attempt > 0) reporter.log(`${label}: recovered on attempt ${String(attempt + 1)}`, 'warn');
+      if (attempt > 0)
+        reporter.log(`${label}: recovered on attempt ${String(attempt + 1)}`, 'warn');
       return { data: raw.data, stopReason: raw.stopReason };
     } catch (error) {
       if (error instanceof CancelledError) throw error;
@@ -155,7 +156,7 @@ export async function dumpSlot(
     notes.push('erased: the header window is all 0xFF, so the bank holds no image');
   } else {
     const header = parseImageHeader(raw);
-    if (header === null || header.magic !== IMAGE_MAGIC) {
+    if (header?.magic !== IMAGE_MAGIC) {
       notes.push(
         `no image header (magic ${hexUp(header?.magic ?? 0)}), so there is no image to decrypt`,
       );
@@ -182,7 +183,7 @@ export async function dumpSlot(
         notes.push(
           `decrypted ${String(plain.length)} B under the key recovered from this bank ` +
             `(confidence ${recovered.confidence}, acceptance sum ${hexUp(recovered.checksum)}` +
-            `${recovered.matchesProfile ? ', matches the profile' : ', does not match the profile'}` +
+            (recovered.matchesProfile ? ', matches the profile' : ', does not match the profile') +
             (keyName === null ? '' : `; the analysis names it '${keyName}'`) +
             ')',
         );
