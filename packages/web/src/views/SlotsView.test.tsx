@@ -293,6 +293,49 @@ describe('SlotsView', () => {
     unmount();
   });
 
+  it('says it cannot identify the build, and that builds before 0.8.0.0 are outside the page, when the camera gives no version', () => {
+    const { container, unmount } = view(
+      panel({
+        refusal: {
+          code: 'device/version-unknown',
+          message:
+            'refusing to read the device info: the camera did not report its firmware version ' +
+            '(GetFirmwareInfo did not answer on any of 26 reads). Nothing was armed. Unplug the camera, ' +
+            'let it finish starting up, plug it back in and try again.',
+          hint:
+            'Nothing that could change the camera was sent. Unplug it, let it finish starting up, ' +
+            'plug it back in and try again; a camera that reports its firmware version is read normally.',
+        },
+      }),
+    );
+
+    const text = container.textContent;
+    expect(text).toContain('Not identified: this page cannot tell which build the camera runs.');
+    expect(text).toContain('Builds before 0.8.0.0 are outside what the slots page supports');
+    /* The page does not blame the camera for not reporting, or send the user to unplug it first. */
+    expect(text).not.toContain('did not report its firmware version');
+    expect(text).not.toContain('refusing to read the device info');
+    /* The re-plug advice is still there, as the secondary hint, after the statement of what the page covers. */
+    expect(text).toContain('If the camera runs a supported build, it may only be starting up.');
+    expect(text.indexOf('Builds before 0.8.0.0')).toBeLessThan(text.indexOf('Unplug it'));
+    expect(container.querySelector('table')).toBeNull();
+    unmount();
+  });
+
+  it('still states the 0.8.0.0 limit when the refusal has no hint to add', () => {
+    const { container, unmount } = view(
+      panel({
+        refusal: { code: 'device/version-unknown', message: 'no version', hint: null },
+      }),
+    );
+
+    expect(container.textContent).toContain(
+      'Builds before 0.8.0.0 are outside what the slots page supports',
+    );
+    expect(container.textContent).not.toContain('it may only be starting up');
+    unmount();
+  });
+
   it('keeps the table a real, labelled table on a phone, with no unnamed control', () => {
     const { container, unmount } = view(panel({ plan: slotPlan(true), report: slotReport(base) }));
 

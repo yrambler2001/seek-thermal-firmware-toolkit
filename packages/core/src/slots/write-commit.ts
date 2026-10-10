@@ -29,6 +29,144 @@ function sleep(ms: number): Promise<void> {
 /** Report progress this often while staging (a power of two, in bytes). */
 const PROGRESS_MASK = 0x7ff;
 
+/* ==================================================================== *
+ * What a commit status proves
+ *
+ * The status is read AFTER the commit transfer, so it is the only evidence
+ * of how far the commit got. Each value below is one the firmware returns
+ * from a named site (FW-V1 codegen/fn/cmd_CompleteMemoryUpgrade.c and
+ * fw_validate_decrypt_program.c, the base variants that the 1.3.0.8, Compact
+ * PRO and 4.x builds carry; the nano and Compact XR revisions add 0x70100):
+ *
+ *  - BAD_IMAGE 0x70000: the staged bytes do not sum to the checksum the host
+ *    sent. Returned before the image is decrypted or anything is erased.
+ *  - UNSUPPORTED 0x50000: the image did not decrypt under the camera's keys, or
+ *    the data type is one this build refuses. Returned before erase.
+ *  - BAD_IMAGE_KEYS 0x70100 (nano and Compact XR revisions only): the key probe
+ *    after the re-key refused the image. Returned before erase.
+ *  - WRONG_FW_OP 0x0003_02xx: no bank upgrade was armed, so the commit did
+ *    nothing. Returned before the image is looked at.
+ *  - FLASH_ERASE_FAILED 0x0004_00SS: the erase of the bank's block failed. The
+ *    program call is never reached, but the erase was attempted, so the block
+ *    may be partly erased. SS is the bank's address byte (0x05, 0x06, 0x07).
+ *  - FLASH_PROGRAM_FAILED 0x0004_01SS and FLASH_VERIFY_FAILED 0x0004_02SS: the
+ *    program or verify stage ran, so the bank may hold part of an image.
+ *
+ * So three classes, and only the first is "the bank is unchanged".
+ * ==================================================================== */
+
+const ERR_UNSUPPORTED = 0x50000;
+const ERR_BAD_IMAGE_KEYS = 0x70100;
+/** The class of RPC_STATUS_WRONG_FW_OP(op): the detail is 0x0302, the value is the armed op byte. */
+const WRONG_FW_OP_CLASS = 0x00030200;
+/** The class of the three RPC_STATUS_FLASH_*_FAILED codes; the low byte is the slot. */
+const FLASH_FAILURE_CLASS = 0x00040000;
+/** The detail byte (bits 8-15) of a flash failure: 0 erase, 1 program, 2 verify. */
+const ERASE_DETAIL = 0x0000;
+const PROGRAM_DETAIL = 0x0100;
+const VERIFY_DETAIL = 0x0200;
+
+/** What one non-zero commit status proves about the bank. */
+export type CommitStatusClass =
+  /** Returned before any erase or program call: the bank is unchanged. */
+  | 'refused-before-programming'
+  /** The erase stage failed: nothing was programmed, the bank may be partly erased. */
+  | 'erase-stage'
+  /** The program or verify stage ran, or the status is unknown: the bank may be partly written. */
+  | 'may-be-partial';
+
+/**
+ * Which class a commit status falls in. `null` (the status could not be read)
+ * is treated as the worst case, because nothing says the commit stopped early.
+ * Call it for a status other than 0, the success value.
+ */
+export function classifyCommitStatus(status: number | null): CommitStatusClass {
+  if (status === null) return 'may-be-partial';
+  if (
+    status === ERR_BAD_CHECKSUM ||
+    status === ERR_UNSUPPORTED ||
+    status === ERR_BAD_IMAGE_KEYS ||
+    (status & 0xffffff00) === WRONG_FW_OP_CLASS
+  ) {
+    return 'refused-before-programming';
+  }
+  if ((status & 0xffff0000) === FLASH_FAILURE_CLASS && (status & 0xff00) === ERASE_DETAIL) {
+    return 'erase-stage';
+  }
+  return 'may-be-partial';
+}
+
+/** The cause in words for a status, as the firmware's own return site names it. */
+function causeOf(status: number): string {
+  if (status === ERR_BAD_CHECKSUM) return 'the transfer checksum did not match the staged bytes';
+  if (status === ERR_UNSUPPORTED) {
+    return "the image did not decrypt under the camera's keys, or the data type is refused";
+  }
+  if (status === ERR_BAD_IMAGE_KEYS) return 'the image keys were refused after the re-key';
+  if ((status & 0xffffff00) === WRONG_FW_OP_CLASS) return 'no bank upgrade was armed';
+  if ((status & 0xffff0000) === FLASH_FAILURE_CLASS) {
+    const detail = status & 0xff00;
+    if (detail === ERASE_DETAIL) return 'the erase stage failed';
+    if (detail === PROGRAM_DETAIL) return 'the program stage failed';
+    if (detail === VERIFY_DETAIL) return 'the verify stage failed';
+  }
+  return 'a status this page does not recognise';
+}
+
+/**
+ * The error for a commit whose status is not 0. Every one carries
+ * `dropAnalysis`, whatever its class: the commit transfer is where the camera
+ * could have touched the bank, so the caller re-reads before it does anything
+ * else. Only the words differ. `refused before programming; the bank is
+ * unchanged` is said for the first class and for nothing else, and `may be
+ * partially written` for the classes that cannot say so.
+ */
+export function commitRefusal(name: string, status: number | null): SeekError {
+  const outcome = classifyCommitStatus(status);
+  const reread = 'Re-read the device info before doing anything else';
+  if (status === null) {
+    return new SeekError(
+      'flash/commit',
+      `the commit status could not be read after CompleteMemoryUpgrade, so ${name} may be ` +
+        `partially written. ${reread}, and keep your dump.`,
+      { detail: { dropAnalysis: true, safeToRetry: false, commitOutcome: outcome } },
+    );
+  }
+  const shown = hexUp(status);
+  if (outcome === 'refused-before-programming') {
+    return new SeekError(
+      'flash/commit',
+      `CompleteMemoryUpgrade returned ${shown} (${causeOf(status)}) for ${name}: refused before ` +
+        `programming; the bank is unchanged. ${reread}.`,
+      {
+        deviceCode: status,
+        detail: { dropAnalysis: true, safeToRetry: true, commitOutcome: outcome },
+      },
+    );
+  }
+  if (outcome === 'erase-stage') {
+    return new SeekError(
+      'flash/commit',
+      `CompleteMemoryUpgrade returned ${shown} (${causeOf(status)}) for ${name}: nothing was ` +
+        'programmed, but the erase may have started, so the bank may be partly erased. ' +
+        `${reread}, and keep your dump.`,
+      {
+        deviceCode: status,
+        detail: { dropAnalysis: true, safeToRetry: false, commitOutcome: outcome },
+      },
+    );
+  }
+  return new SeekError(
+    'flash/commit',
+    `CompleteMemoryUpgrade returned ${shown} (${causeOf(status)}) — ${name} may be partially ` +
+      `written. ${reread}, and keep your dump.`,
+    {
+      deviceCode: status,
+      detail: { dropAnalysis: true, safeToRetry: false, commitOutcome: outcome },
+    },
+  );
+}
+
 /**
  * Arm `write`, stream `payload` in EP0-sized chunks, polling the status word
  * after every chunk (both staging failures the camera reports are sticky), then
@@ -36,9 +174,8 @@ const PROGRESS_MASK = 0x7ff;
  * throws.
  *
  * Failure before the commit transfer: nothing was erased, and the error says
- * so. Failure at or after it: the erase/program/verify chain ran inside the
- * transfer, so the error carries `dropAnalysis`, and the caller must re-read
- * the camera before it does anything else.
+ * so. Failure at or after it: the commit ran, and the error carries
+ * `dropAnalysis` and says what the status proves (`commitRefusal`).
  */
 export async function stageAndCommit(
   ctx: WorkflowContext,
@@ -113,26 +250,8 @@ export async function stageAndCommit(
     if (error instanceof CancelledError) throw error;
     status = null;
   }
-  if (status === ERR_BAD_CHECKSUM) {
-    /* Checked before anything is erased: the bank is untouched. */
-    throw new SeekError(
-      'flash/commit',
-      `the camera rejected the transfer checksum (${hex(ERR_BAD_CHECKSUM)}) — nothing was committed`,
-      { deviceCode: status, detail: { safeToRetry: true } },
-    );
-  }
-  if (status !== 0) {
-    const shown = status === null ? 'no status' : hexUp(status);
-    throw new SeekError(
-      'flash/commit',
-      `CompleteMemoryUpgrade returned ${shown} — ${entry.name} may be partially written. ` +
-        'Re-read the device info before doing anything else, and keep your dump.',
-      {
-        ...(status === null ? {} : { deviceCode: status }),
-        detail: { dropAnalysis: true, safeToRetry: false },
-      },
-    );
-  }
+  /* Not a success: what the status proves is decided by `commitRefusal`. */
+  if (status !== 0) throw commitRefusal(entry.name, status);
   reporter.log(`${entry.name}: committed, commit status 0`, 'ok');
   return status;
 }

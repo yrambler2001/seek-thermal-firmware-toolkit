@@ -22,6 +22,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Toolbar } from '@/components/ui/toolbar';
 import { writeRisk, type SlotFlashOutcome, type SlotsPanelApi } from '@/hooks/useSlotsPanel';
+import type { Refusal } from '@/lib/identify';
 
 export interface SlotsViewProps {
   readonly slots: SlotsPanelApi;
@@ -68,6 +69,43 @@ function OutcomePanel({ outcome }: { readonly outcome: SlotFlashOutcome }): Reac
           ))}
         </ul>
       )}
+    </Alert>
+  );
+}
+
+/**
+ * The refusal the page shows. A camera that does not give a usable firmware
+ * version is not a refused write: the page cannot tell which build it runs, and
+ * it says so, and says what it covers. It does not say the camera "did not
+ * report its version" and send the user to unplug it, which is the advice for a
+ * camera that is still starting up, so that advice is kept only as the secondary
+ * hint. The toolkit's own sentence stays in the run log, where its detail is.
+ */
+function RefusalAlert({ refusal }: { readonly refusal: Refusal }): ReactElement {
+  if (refusal.code === 'device/version-unknown') {
+    return (
+      <Alert tone="err">
+        <p>
+          <strong>Not identified: this page cannot tell which build the camera runs.</strong>
+        </p>
+        <p>
+          The camera gave no usable firmware version, so no bank was read and nothing was armed.
+          This page covers builds 0.8.0.0 and newer. Builds before 0.8.0.0 are outside what the
+          slots page supports, so a camera on one of them is never read here.
+        </p>
+        {refusal.hint !== null && (
+          <p>If the camera runs a supported build, it may only be starting up. {refusal.hint}</p>
+        )}
+      </Alert>
+    );
+  }
+  return (
+    <Alert tone="err">
+      <p>
+        <strong>Refused — nothing was armed.</strong>
+      </p>
+      <p>{refusal.message}</p>
+      {refusal.hint !== null && <p>{refusal.hint}</p>}
     </Alert>
   );
 }
@@ -139,15 +177,7 @@ export function SlotsView({ slots, connected, busy }: SlotsViewProps): ReactElem
           trimmed={slots.reporter.trimmed}
         />
 
-        {refusal !== null && (
-          <Alert tone="err">
-            <p>
-              <strong>Refused — nothing was armed.</strong>
-            </p>
-            <p>{refusal.message}</p>
-            {refusal.hint !== null && <p>{refusal.hint}</p>}
-          </Alert>
-        )}
+        {refusal !== null && <RefusalAlert refusal={refusal} />}
 
         {unsupported !== null && (
           <Alert tone="err">

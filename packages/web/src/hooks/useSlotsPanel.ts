@@ -35,6 +35,7 @@ import {
   type FirmwareProfile,
   type FlashSlotOptions,
   type FlashSlotResult,
+  type InspectFirmware,
   type LogLevel,
   type Reporter,
   type SlotEntry,
@@ -78,7 +79,11 @@ export interface SlotsBackend {
     log: (text: string, level: LogLevel) => void,
   ) => Promise<ActingProfile>;
   readonly plan: (profile: FirmwareProfile, firmwareVersion: string | null) => SlotPlan;
-  readonly inspect: (ctx: WorkflowContext) => Promise<SlotsReport>;
+  /**
+   * Reads the banks. `firmware` is the build the identify step has just read on
+   * this camera, so the reader does not ask for it a second time.
+   */
+  readonly inspect: (ctx: WorkflowContext, firmware?: InspectFirmware) => Promise<SlotsReport>;
   readonly dump: (ctx: WorkflowContext, report: SlotsReport, key: SlotKey) => Promise<DumpedSlot>;
   /** Pure: builds the payload and sends nothing. */
   readonly prepare: (report: SlotsReport, key: SlotKey, input: SlotFlashInput) => SlotFlashPlan;
@@ -93,7 +98,7 @@ export interface SlotsBackend {
 export const CORE_SLOTS_BACKEND: SlotsBackend = {
   identify: (device, log) => chooseActingProfile(device, 'auto', 'read the device info', log),
   plan: (profile, firmwareVersion) => buildSlotPlan(profile, firmwareVersion),
-  inspect: (ctx) => inspectSlots(ctx),
+  inspect: (ctx, firmware) => inspectSlots(ctx, firmware === undefined ? {} : { firmware }),
   dump: (ctx, report, key) => dumpSlot(ctx, report, key),
   prepare: (report, key, input) => prepareSlotFlash(report, key, input),
   flash: (ctx, report, plan, options) => flashSlot(ctx, report, plan, options),
@@ -366,7 +371,12 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
           reporter: workflow,
           signal,
         };
-        const next = await backend.inspect(ctx);
+        /* The build the identify step read a moment ago, on this same client, is
+         * handed on rather than read again: one version read fewer per Read. The
+         * reader still checks it against the version the read reports. */
+        const identified: InspectFirmware | undefined =
+          acting.firmwareVersion === null ? undefined : { version: acting.firmwareVersion };
+        const next = await backend.inspect(ctx, identified);
         setCurrentReport(next);
         workflow.progress(1, 1, `Read. ${summarise(next)}`);
       } catch (error) {
