@@ -28,9 +28,11 @@ import { readFile } from 'node:fs/promises';
 import { basename } from 'node:path';
 import {
   dumpSlot,
+  findEmbeddedKeyTable,
   flashSlot,
   hexUp,
   inspectSlots,
+  keyFilenameSuffix,
   prepareSlotFlash,
   sha256hex,
   withLevelMap,
@@ -520,11 +522,27 @@ export function safeVersion(version: string | null): string {
  * `slot-<key>-<version>-<sha8>.bin` for the bank as stored, and the same stem with
  * `-decrypted.bin` when a key recovered and the image decrypts. The eight-digit tag is the first
  * eight hex digits of the stored bank's own SHA-256, so the two files of one read share it.
+ *
+ * THE KEY PAIR IN THE NAME. A decrypted file is named with the pair its image holds, the way
+ * `decrypt` names its files: `slots flash` retargets an image from the pair its file name carries
+ * and refuses a name without one (write-image.ts, retargetImageKeys). So when the image holds this
+ * camera's own pair, the suffix is added; when it holds neither, the name stays bare and the flash
+ * refuses the file for the reason that is true.
  */
-export function dumpArtifacts(version: string | null, dumped: DumpedSlot): Artifact[] {
+export function dumpArtifacts(
+  version: string | null,
+  dumped: DumpedSlot,
+  keys: { readonly keyA: Uint8Array; readonly keyB: Uint8Array } | null = null,
+): Artifact[] {
   const stem = `slot-${dumped.key}-${safeVersion(version)}-${dumped.sha256.slice(0, 8)}`;
   const artifacts: Artifact[] = [{ name: `${stem}.bin`, data: dumped.raw }];
-  if (dumped.plain !== null) artifacts.push({ name: `${stem}-decrypted.bin`, data: dumped.plain });
+  if (dumped.plain !== null) {
+    const suffix =
+      keys !== null && findEmbeddedKeyTable(dumped.plain, keys.keyA, keys.keyB) !== null
+        ? keyFilenameSuffix(keys.keyA, keys.keyB)
+        : '';
+    artifacts.push({ name: `${stem}-decrypted${suffix}.bin`, data: dumped.plain });
+  }
   return artifacts;
 }
 
@@ -573,7 +591,11 @@ async function dumpAction(ctx: CommandContext, ops: SlotOps, key: SlotKey): Prom
 
     const dumped = await ops.dump(workflow, report, key);
     const version = versionOf(view);
-    const written = await writeRun(ctx, 'slots', dumpArtifacts(version, dumped));
+    const written = await writeRun(
+      ctx,
+      'slots',
+      dumpArtifacts(version, dumped, report.state.keyTable),
+    );
 
     if (ctx.human) {
       ctx.out(

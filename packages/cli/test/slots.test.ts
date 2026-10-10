@@ -12,6 +12,7 @@ import { readFile, readdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
+  keyFilenameSuffix,
   type DeviceState,
   type DumpedSlot,
   type FlashSlotOptions,
@@ -48,9 +49,14 @@ import {
 } from '../src/commands/slots.js';
 import { TerminalReporter } from '../src/reporter.js';
 import {
+  buildPlainImage,
   cameraWithFlash,
   buildSyntheticFlash,
+  FOREIGN_KEY_A,
+  FOREIGN_KEY_B,
   fixedBackend,
+  KEY_A,
+  KEY_B,
   tempDir,
   testIo,
   type TestIo,
@@ -524,6 +530,18 @@ describe('dump file names', () => {
   it('writes only the raw bank when no key recovers the image', () => {
     const artifacts = dumpArtifacts('4.9.5.0', fakeDumped('r', false));
     expect(artifacts.map((artifact) => artifact.name)).toEqual(['slot-r-4.9.5.0-deadbeef.bin']);
+  });
+
+  it('names the decrypted image with the key pair it holds, as decrypt does, and bare when it holds neither', () => {
+    /* A flash takes its keys from the file name (write-image.ts), so a dumped image the flash can
+     * retarget must carry the pair the image contains. */
+    const dumped = { ...fakeDumped('b', true), plain: buildPlainImage() };
+    const named = `slot-b-4.9.5.0-deadbeef-decrypted${keyFilenameSuffix(KEY_A, KEY_B)}.bin`;
+    expect(dumpArtifacts('4.9.5.0', dumped, { keyA: KEY_A, keyB: KEY_B })[1]?.name).toBe(named);
+    expect(
+      dumpArtifacts('4.9.5.0', dumped, { keyA: FOREIGN_KEY_A, keyB: FOREIGN_KEY_B })[1]?.name,
+    ).toBe('slot-b-4.9.5.0-deadbeef-decrypted.bin');
+    expect(dumpArtifacts('4.9.5.0', dumped)[1]?.name).toBe('slot-b-4.9.5.0-deadbeef-decrypted.bin');
   });
 
   it('keeps a version that is not known, or not safe in a name, out of the path', () => {
