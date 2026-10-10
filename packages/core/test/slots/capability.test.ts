@@ -321,6 +321,50 @@ describe.each(corpusCases)('buildSlotPlan %s under %s', (version, profileId) => 
   }
 });
 
+/* ---- the bank addresses against each image's own switch ---------------- */
+
+/**
+ * `facts.json` holds each image's BeginFirmwareUpgrade switch as decoded from
+ * its bytes. A mode whose address is a constant has it in `address`; a computed
+ * one carries the bank base as the last of its `loads`. Those are the bytes the
+ * plan's addresses and write arms must agree with, not the plan's own tables.
+ */
+interface DecodedRow {
+  readonly mode: number;
+  readonly kind: string;
+  readonly address?: string;
+  readonly loads?: readonly string[];
+}
+interface ImageFacts {
+  readonly version: string;
+  readonly product: string;
+  readonly windowTable?: { readonly rows: readonly DecodedRow[] } | null;
+}
+const imageFacts: readonly ImageFacts[] = Object.values(facts.images);
+
+describe('the bank addresses agree with each image\u2019s own decoded switch', () => {
+  for (const image of imageFacts) {
+    const parsed = parseVersion(image.version);
+    const table = image.windowTable;
+    if (!table || parsed === null) continue;
+    if (parsed.major === 0 && parsed.minor < 8) continue;
+    const profileId = profileIdsFor(image.version)[0] ?? generic.id;
+
+    it(`${image.product} ${image.version}: modes 7, 8 and 9 arm the banks the plan names`, () => {
+      const plan = buildSlotPlan(profileOf(profileId), image.version);
+      const rows = table.rows;
+      plan.slots.forEach((slot, index) => {
+        const mode = [7, 8, 9][index] ?? -1;
+        const row = rows.find((r) => r.mode === mode);
+        expect(row, `mode ${String(mode)} in the decoded switch`).toBeDefined();
+        const decoded = row?.address ?? row?.loads?.at(-1);
+        expect(decoded === undefined ? null : Number(decoded)).toBe(slot.address);
+        expect(slot.write?.subcmd).toBe(mode);
+      });
+    });
+  }
+});
+
 /* ---- what the notes must say -------------------------------------------- */
 
 describe('the facts a person is shown with the plan', () => {
