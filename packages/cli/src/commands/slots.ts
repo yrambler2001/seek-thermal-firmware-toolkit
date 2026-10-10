@@ -499,6 +499,12 @@ export function readBackLines(
     );
   } else if (result.verified === false) {
     lines.push(paint(`read-back: bank ${bank} DIFFERS from the staged bytes${sha}`, 'red', color));
+  } else if (afterSha256 !== null) {
+    /* Read back, but nothing was predicted to compare it with (a Key A bank is re-encrypted by the
+     * device, so the bytes it keeps are not the bytes sent). Said as what happened, not "skipped". */
+    lines.push(
+      `read-back: bank ${bank} read back${sha}; no bytes were predicted for this staging form, so it is reported, not compared`,
+    );
   } else {
     lines.push('read-back: skipped (--no-verify)');
   }

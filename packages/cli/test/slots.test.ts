@@ -601,6 +601,14 @@ describe('the flash plan and read-back', () => {
     expect(readBackLines({ ...base, verified: null }, null, false).join('\n')).toContain(
       'skipped (--no-verify)',
     );
+    /* Read back, with nothing predicted to compare it with (a Key A bank): not "skipped". */
+    const readBack = readBackLines(
+      { ...base, after: new Uint8Array(4), verified: null },
+      'abc123',
+      false,
+    ).join('\n');
+    expect(readBack).toContain('read back (sha256 abc123)');
+    expect(readBack).not.toContain('skipped');
     for (const verified of [true, false, null]) {
       expect(readBackLines({ ...base, verified }, null, false).join('\n')).toContain(
         'Unplug the camera and plug it back in',
