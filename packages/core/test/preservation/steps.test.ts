@@ -1134,6 +1134,72 @@ describe('a reset the host refused', () => {
       warnings.some((line) => /REFUSED by the host .* the camera was not rebooted/.test(line)),
     ).toBe(true);
   });
+
+  /** An opener whose every boot serves `head` to the probe, on `Device`. */
+  const openerOf = (
+    camera: FakeCamera,
+    Device: new (camera: FakeCamera, serves: readonly (Uint8Array | null)[]) => CfgServeDevice,
+    head: Uint8Array | null,
+  ): SessionOpener => ({
+    open: async (): Promise<SeekDevice> => {
+      await camera.open();
+      return new Device(camera, [head]);
+    },
+    close: async (): Promise<void> => {
+      await camera.close();
+    },
+  });
+
+  it('a probe that fails on every boot while its reboots are refused is not a spent reader', async () => {
+    /* Stale garbage (the bootloader's SRAM word), as in the segment probe's tests. */
+    const stale = new Uint8Array(BOOT_CONFIG_BYTES).fill(0xff);
+    new DataView(stale.buffer).setUint32(0, 0x10018000, true);
+    const error: unknown = await openProbedSession(
+      openerOf(v1Camera(plain), RefusedResetDevice, stale),
+      silentReporter,
+      undefined,
+      'the commit session',
+    ).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(SeekError);
+    expect((error as SeekError).code).toBe('pipeline/refused');
+    const message = (error as Error).message;
+    expect(message).toMatch(/failed on 4 consecutive boots, and the host REFUSED the reboot/);
+    expect(message).toMatch(/not a spent reader, and a power cycle will not fix it/);
+    /* The web's power-cycle hint keys on this phrase; it must not fire. */
+    expect(message).not.toMatch(/power-cycle the camera|budgeted per boot/);
+  });
+
+  it('a reader probe the host refuses is said as refused, not stalled', async () => {
+    /* The e2e guard of a fresh window refusing BeginFirmwareUpgrade before it
+     * has seen a version (TESTING.md sec. 40): the reboots themselves go out. */
+    class RefusedProbeDevice extends CfgServeDevice {
+      override async armWindow(...args: Parameters<SeekDevice['armWindow']>): Promise<void> {
+        if (args[0].subcmd === 3) {
+          throw new SeekError('device/window', 'BeginFirmwareUpgrade(0x3) failed: refused', {
+            cause: new DOMException(
+              'e2e write guard: BeginFirmwareUpgrade before the camera reported its version',
+              'SecurityError',
+            ),
+          });
+        }
+        return super.armWindow(...args);
+      }
+    }
+    const reporter = collectingReporter();
+    const error: unknown = await openProbedSession(
+      openerOf(v1Camera(plain), RefusedProbeDevice, null),
+      reporter,
+      undefined,
+      'the commit session',
+    ).catch((e: unknown) => e);
+    const warnings = reporter.events
+      .filter((e) => e.type === 'log' && e.level === 'warn')
+      .map((e) => (e.type === 'log' ? e.message : ''));
+    expect(warnings).toHaveLength(4);
+    for (const line of warnings) expect(line).toMatch(/reader probe was REFUSED by the host/);
+    expect((error as Error).message).toMatch(/the host REFUSED the reader probe before it left/);
+    expect((error as Error).message).not.toMatch(/power-cycle the camera/);
+  });
 });
 
 describe('describeStepGate — every prerequisite refusal', () => {

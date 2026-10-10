@@ -1,5 +1,5 @@
 /* ==================================================================== *
- * The supervised write flow — `npm run e2e:write`.
+ * The camera write flow — `npm run e2e:write`.
  *
  * Preserve 02 -> 03 -> 04, every step held to the camera's own row of the
  * expectation table (`lib/preserve-expectations.ts`): the row the camera's
@@ -12,15 +12,16 @@
  *      the bank, the bytes that move, no reboot — and the backup must equal
  *      the dump in every block both read. Anything else stops the run here.
  *   3. The gate (`approveWrite`, lib/supervised-write.ts). On the emulator it
- *      waves through. On the camera it needs `SEEK_E2E_WRITE=i-understand`, a
- *      terminal, no CI, and the person typing back `<version>:<image sha8>`;
- *      `SEEK_E2E_WRITE=dry-run` stops here, nothing written. Under automation
- *      (no terminal) it refuses, so NOTHING is ever written to the camera.
+ *      waves through. On the camera it needs `SEEK_E2E_WRITE=i-understand` and
+ *      no CI, and prints the plan before it lets the write go;
+ *      `SEEK_E2E_WRITE=dry-run` stops here, nothing written. Without the env
+ *      switch it refuses, so nothing is ever written to the camera by default.
  *   4. Steps 03 and 04 in a new window: the app reopened with the write
  *      guards (`PRESERVE_WRITE`, and on the camera the page guard of
- *      `writeGuardScript({ lifted: true })`, each phase opened with its row's
- *      exact budget: the chunks, one commit with the plan's checksum, the
- *      resets), connected, the step 02 run file loaded, then the commit, the
+ *      `writeGuardScript({ lifted: true })`, seeded with the version step 02
+ *      matched, each phase opened with its row's exact budget: the chunks,
+ *      one commit with the plan's checksum, the resets), connected, the
+ *      step 02 run file loaded, then the commit, the
  *      drain, the restore and the verify, each checked against the row. The
  *      emulator runs the same sequence (`SEEK_E2E_WRITE_FULL=1`), so the path a
  *      person takes on the camera is the one proven there.
@@ -54,6 +55,7 @@ import {
   wireSince,
   type RunStateView,
 } from './lib/checks.js';
+import { readZip } from './lib/zip.js';
 import { guardOf, setGuard } from './lib/electron-camera.js';
 import {
   BENCH_PART_1300,
@@ -108,7 +110,7 @@ const RESET_SLACK = 2;
 
 const target = wantedTarget('emu');
 const reason = targetUnavailable(target);
-const title = `supervised write flow [${target}]`;
+const title = `write flow [${target}]`;
 if (reason !== null) process.stderr.write(`\n[skip] ${title}: ${reason}\n`);
 
 /** The flash image inside a Dump & decrypt archive. */
@@ -220,6 +222,46 @@ function checkWriteWire(
   check(count(wire, 'out 0x55') + count(wire, 'out 0x5a'), 'the RAM selectors').toBe(0);
 }
 
+/**
+ * What a step 03 that failed left on the camera, from its own run file and
+ * the phase's wire: whether a commit can have landed, and the line to say.
+ * Nothing was written when the run file still has the commit to do and no
+ * flash write left the page (the counts include anything the guard refused).
+ */
+async function whatStep03Left(
+  t: TargetHandle,
+  wire: ReadonlyMap<string, number>,
+): Promise<{ readonly written: boolean; readonly line: string }> {
+  const file = await t.downloads
+    .waitFor((name) => /^preserve-.*-failed\.zip$/.test(name), 30_000, 'the failed run file')
+    .catch(() => null);
+  const state = file === null ? null : runState(readZip(file.bytes));
+  const commit = state?.steps.commit?.status ?? 'unknown';
+  const next = state?.nextStep ?? 'unknown';
+  const chunks = count(wire, 'out 0x50');
+  const commits = count(wire, 'out 0x51');
+  const facts =
+    `the run file${file === null ? ' (none downloaded)' : ` ${file.name}`} says commit ` +
+    `${commit}, next step ${next}; the wire shows ${String(chunks)} chunk(s) staged and ` +
+    `${String(commits)} CompleteMemoryUpgrade`;
+  if (commit !== 'done' && next === 'commit' && chunks === 0 && commits === 0) {
+    return {
+      written: false,
+      line:
+        `STEP 03 FAILED BEFORE ITS COMMIT — NOTHING WAS WRITTEN: ${facts}. The camera holds ` +
+        'its original bank; there is nothing to finish or restore.',
+    };
+  }
+  return {
+    written: true,
+    line:
+      `STEP 03 DID NOT FINISH, AND A COMMIT MAY HAVE LANDED: ${facts}. Do not run this spec ` +
+      'again from the start: the camera may hold the patched bank, and step 02 would read ' +
+      "that. Load the last run file on the app's Preserve page and finish the run there (a " +
+      'landed commit is never replayed).',
+  };
+}
+
 /** The commit's lines in a phase log: its checksum, and its chunks with status 0. */
 function checkCommitLog(
   lines: readonly string[],
@@ -256,6 +298,8 @@ describe.skipIf(reason !== null)(title, () => {
   } | null = null;
   let approval: WriteApproval | null = null;
   let step03: PhaseRun | null = null;
+  /** What a failed step 03 left on the camera, when it failed. */
+  let step03Left: { readonly written: boolean; readonly line: string } | null = null;
   let step04: PhaseRun | null = null;
 
   const need = <T>(value: T | null, what: string): T => {
@@ -461,12 +505,7 @@ describe.skipIf(reason !== null)(title, () => {
         'reboot and the 31 windows verified against the backup',
       'each reboot is answered in the chooser by the run itself; nothing to unplug',
     ].join('\n  ');
-    approval = await approveWrite(t.name, () =>
-      Promise.resolve({
-        token: `${version}:${theImage.sha.slice(0, 8)}`,
-        describe: `  ${describe}`,
-      }),
-    );
+    approval = await approveWrite(t.name, () => Promise.resolve({ describe: `  ${describe}` }));
     say(
       `write gate on ${t.name}: approved=${String(approval.approved)} ` +
         `dry=${String(approval.dry)} — ${approval.reason}`,
@@ -503,24 +542,45 @@ describe.skipIf(reason !== null)(title, () => {
      * would open the page again to continue from the step 02 run file. */
     await read?.close();
     read = null;
-    say(`the write: reopening the ${target} target with the write guards`);
+    /* The new window's page guard has seen no version, and the commit
+     * session probes the reader before it reads one: seeded with the version
+     * step 02 matched, the probe is judged as in the first window, and the
+     * camera's own answer must agree with it. */
+    const seededVersion = p.row.version;
+    say(
+      `the write: reopening the ${target} target with the write guards` +
+        (target === 'camera' ? `, the page guard seeded with ${seededVersion} (step 02's)` : ''),
+    );
     write = await openTarget(target, {
       scratchDir: path.join(SCRATCH, 'write'),
       headed: HEADED,
       uiGuard: PRESERVE_WRITE,
-      ...(target === 'camera' ? { preloadSource: writeGuardScript({ lifted: true }) } : {}),
+      ...(target === 'camera'
+        ? { preloadSource: writeGuardScript({ lifted: true, seededVersion }) }
+        : {}),
     });
     const t = write;
     const name = await t.wizard.connect();
-    if (t.name === 'camera') checkCameraName(name);
+    if (t.name === 'camera') {
+      checkCameraName(name);
+      expect((await guardOf(t.page)).seededVersion, 'the seed').toBe(seededVersion);
+    }
     expect(await guardInstalled(t), 'the write guard is in place').toBe(true);
     expect(await t.wizard.loadRunFile(run02.runFile.path)).toMatch(/^Resumed at commit/);
     await checkStep03Offered(t.wizard, t.page);
 
     const before = await wireOf(t);
-    const run = await inWritePhase(t, p.row, 'patch-dump', () =>
-      t.wizard.runPhase('patch-dump', { confirm: true, timeoutMs: 60 * 60_000 }),
-    );
+    let run: PhaseRun;
+    try {
+      run = await inWritePhase(t, p.row, 'patch-dump', () =>
+        t.wizard.runPhase('patch-dump', { confirm: true, timeoutMs: 60 * 60_000 }),
+      );
+    } catch (error) {
+      step03Left = await whatStep03Left(t, wireSince(before, await wireOf(t)));
+      say(step03Left.line);
+      const why = error instanceof Error ? error.message : String(error);
+      throw new Error(`${step03Left.line}\n\n${why}`, { cause: error });
+    }
     step03 = run;
     const wire = wireSince(before, await wireOf(t));
 
@@ -589,9 +649,10 @@ describe.skipIf(reason !== null)(title, () => {
   it('step 04 restores the original bank and verifies all 31 windows', async (test) => {
     if (approval?.approved === true && (target === 'camera' || FULL) && step03 === null) {
       say(
-        'STEP 03 DID NOT FINISH. Do not run this spec again from the start: the camera may hold ' +
-          "the patched bank, and step 02 would read that. Load the last run file on the app's " +
-          'Preserve page and finish the run there (a landed commit is never replayed).',
+        step03Left?.line ??
+          'STEP 03 DID NOT FINISH. Do not run this spec again from the start: the camera may ' +
+            "hold the patched bank, and step 02 would read that. Load the last run file on the app's " +
+            'Preserve page and finish the run there (a landed commit is never replayed).',
       );
     }
     test.skip(step03 === null, 'step 03 did not run or did not finish');

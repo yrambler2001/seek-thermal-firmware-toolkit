@@ -5815,4 +5815,78 @@ SEEK_E2E_TARGET=camera SEEK_E2E_WRITE=i-understand \
 ```
 
 It asks for `1.0.3.0:0cb0e544` after printing what step 03 and step 04 will write. The camera
-was not written by this change.
+was not written by this change. (Sec. 40 drops the typed confirmation.)
+
+## 40. The camera write gate drops the typed confirmation (2026-10-06)
+
+The owner decided the human gate on `e2e:write` is not needed. `approveWrite`
+(`e2e/lib/supervised-write.ts`) no longer asks on a terminal or wants a challenge typed back: on the
+camera it needs `SEEK_E2E_WRITE=i-understand` and no `CI`, builds the plan, prints it to the run's
+log, and approves. Without the switch, or with any other value, it refuses before reading the
+camera, so a default run and `e2e:all` never write. `dry-run` is unchanged. Everything else that
+holds a camera write is unchanged too: step 02 must match the camera's row of the expectation table
+before the gate is asked, the vendor-id pick, and the page write guard's per-phase budget (the
+chunks, one commit with the plan's checksum, the resets). `e2e:gate` pins the new gate, 10/10 with
+the four page-guard tests of 39.5: emulator waved through; no switch, a wrong value, or CI refused
+without reading the camera; `i-understand` approved after the plan is built and printed to the
+log; `dry-run` stopped after it. The "supervised" wording in the e2e comments, and the lifted
+guard's name (`CAMERA_WRITE_GUARD`), now say "camera write"; the file names stay.
+
+**Emulator** (`SEEK_E2E_EMU_FLASH` = the camera's own flash, `SEEK_E2E_WRITE_FULL=1`): 6/6, as in
+39.6. Step 02 87.9 s, 0 resets, 0 picks, the row exact; step 03 181.1 s, 811 chunks, 1 commit, 1
+reset, 1 pick, raw `759280a2…`, delivered `202cb5c1…`; step 04 85.9 s, 811 chunks, 1 commit, 1
+reset, 1 pick, 31/31 at 0 diffs; the emulator then boots `202cb5c1…`.
+
+**The camera** (PIR324 on 1.0.3.0, the command of 39.6), run once: 3 passed, 1 failed, 2
+skipped, and **nothing written**. The dump was `0cb0e544…` in 24.0 s; step 02 took 21.4 s with 0
+resets and 0 picks and matched the row exactly; the gate printed the plan (bank A `0x14050000`,
+811 chunks, `0x128F` / `0x132C`, the 5 bytes, `0x5423132A` was `0x6322E32A`) and approved. Step 03
+failed in the reopened window before anything was staged. The commit session probes the reader
+first (BeginFirmwareUpgrade mode 3, deliberately ahead of the version gate, `steps.ts`), and the
+fresh page guard refused it unsent: "BeginFirmwareUpgrade before the camera reported its
+version". The guard learns the version only from a GetFirmwareInfo answer. In the first window
+the dump had given it one; the reopened window had none. The app took each refusal for a stalled
+reader and rebooted by command, 3 times (each picked), and the guard refused the 4th reset at its
+budget (1 + 2). The run file says `commit: failed`, next step `commit`. Afterwards `seek-fw info`
+shows all three banks decrypting to `68c63334…` (unpatched; the patched slot would be
+`2074f659…`), and `seek-fw dump` gives `0cb0e544…` again. The emulator target has no page guard,
+so the emulator run cannot show this.
+
+### 40.1 The write window's version seed, and two messages that pointed the wrong way
+
+- **The seed.** The guard stays strict: BeginFirmwareUpgrade still waits for a version. The write
+  window's guard is now born knowing the one step 02 matched (`seededVersion` on
+  `writeGuardScript({ lifted: true })`, the row's version, `1.0.3.0` here), so the commit
+  session's mode-3 probe is judged as it was in the first window. The seed is no exception to the rule: in a seeded window
+  every GetFirmwareInfo answer must equal it, and one that does not is refused (withheld from the
+  page), and so is every arm after it. `e2e:gate` pins it in the VM, 14/14: the fresh window
+  refuses the probe (3 of the 4 new tests fail on the old guard), the seeded one lets it out and
+  takes an agreeing answer, a disagreeing answer is refused with every later arm, an unseeded
+  window behaves as before, and a seed must read like a version.
+- **The spec's failure text.** A failed step 03 now reads its own run file and the phase's wire.
+  When the run file still has the commit to do and no chunk and no CompleteMemoryUpgrade left the
+  page, it says `STEP 03 FAILED BEFORE ITS COMMIT — NOTHING WAS WRITTEN`. Otherwise it keeps the
+  old advice: a commit may have landed, so finish the run from its run file.
+- **The app (core `openProbedSession`).** When the host refused the probe or a reboot (a
+  SecurityError), the probe's line says `was REFUSED by the host`, not `stalled`, and the step
+  ends on `the host REFUSED … — so this is not a spent reader, and a power cycle will not fix it`.
+  It no longer gives the spent-reader power-cycle remedy, so the web's power-cycle hint does not
+  fire. Two new `steps.test.ts` cases cover it: refused reboots, and a refused probe.
+
+**Emulator** after the change (same setup): 6/6. Step 02 69.0 s; step 03 153.6 s, raw `759280a2…`,
+delivered `202cb5c1…`; step 04 83.6 s; the emulator then boots `202cb5c1…`.
+
+**The camera**, run once more (PIR324 on 1.0.3.0, the command of 39.6; a dump just before it read
+`0cb0e544…`, all three banks `68c63334…`): **6/6**.
+
+| step           | observed                                                                                                                                 |
+| -------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| Dump & decrypt | `0cb0e544…`, 23.1 s, no write, no reset                                                                                                  |
+| step 02        | 22.6 s, 0 resets, 0 picks; the row exact: bank A `0x14050000`, sites 0x352E / 0x3636, rebalance `0x5423132A` (was `0x6322E32A`), 5 bytes |
+| the gate       | the plan printed, approved; the write window's guard seeded with `1.0.3.0`                                                               |
+| step 03        | 47.6 s; 811 chunks, 1 commit (`0x128F`, status 0), 1 reset, 1 pick, no replug; raw `759280a2…`, delivered `202cb5c1…`                    |
+| step 04        | 29.5 s; 811 chunks, 1 commit (`0x132C`), 1 reset, 1 pick; 31/31 windows at 0 differing bytes, "Verified — a perfect match."              |
+| the last check | no refusal; both resets dropped by the reboot (`NetworkError … transfer error`), as a reboot answers                                     |
+
+Afterwards `seek-fw devices` lists the PIR324 alone, `seek-fw info` shows all three banks
+decrypting to `68c63334…` again, and `seek-fw dump` reads `0cb0e544…`: the camera is as it was.

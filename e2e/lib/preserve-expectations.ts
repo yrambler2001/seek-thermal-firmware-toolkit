@@ -1,6 +1,6 @@
 /**
  * What a Preserve write run must produce, per firmware: the table the
- * supervised write run (`camera-write.e2e.ts`) holds every step to, on the
+ * write run (`camera-write.e2e.ts`) holds every step to, on the
  * emulator and on the camera alike.
  *
  * A ROW IS FOUND BY WHAT THE CAMERA REPORTS, never picked by the operator: the

@@ -24,7 +24,7 @@
  * the test fails on any. `resetBudget`, when the test sets it, caps how many
  * resets may go out at all (the restart run allows exactly one).
  *
- * THE SUPERVISED WRITE RUN, and only it (`writeOps`, set by
+ * THE CAMERA WRITE RUN, and only it (`writeOps`, set by
  * `writeGuardScript({ lifted: true })` once the gate in `supervised-write.ts`
  * has passed), may also send the two flash writes Preserve's steps 03 and 04
  * send: SetFeaturedFirmwareData in chunks of at most `maxStageBytes`, and
@@ -34,6 +34,17 @@
  * checksum the commit must carry), and both budgets are 0 until it does. A
  * write past them, or of another shape or checksum, is refused unsent like any
  * other — before the camera has erased anything.
+ *
+ * THE WRITE WINDOW'S VERSION SEED (`seededVersion`). The write run opens steps
+ * 03 and 04 in a new window, a fresh page whose guard has seen no version,
+ * and Preserve's commit session probes the reader (BeginFirmwareUpgrade mode
+ * 3) BEFORE its own version read, so the arm rule above refused that probe
+ * unsent on every boot (TESTING.md sec. 40). The run seeds the window's guard
+ * with the version its step 02 matched: arming is then judged exactly as in
+ * the first window once the camera had answered. The seed is no exception to
+ * the rule: every GetFirmwareInfo answer in a seeded window must equal it, and
+ * one that does not is refused (withheld from the page), and so is every arm
+ * after it.
  *
  * TWO THINGS HERE ARE NOT GUARDS, and neither loosens one:
  *  - `fault`, when the test sets it, answers the next `remaining` vendor IN
@@ -55,6 +66,12 @@ export interface WriteGuardConfig {
   readonly versionOp: number;
   readonly resetOp: number;
   /**
+   * The version an earlier window of the same run already read and matched
+   * (the write run's step 02), for a window opened after it; null or absent
+   * for every other window. See THE WRITE WINDOW'S VERSION SEED above.
+   */
+  readonly seededVersion?: string | null;
+  /**
    * The two RAM selectors the Flash view's "Read device info" sends, let out
    * only when set: `firmwareInfo` (SetFirmwareInfoFeatures) with a u16 record
    * selector, `ramData` (SetRamDataFeatures) for the device-id block alone
@@ -64,7 +81,7 @@ export interface WriteGuardConfig {
    */
   readonly infoOps?: { readonly firmwareInfo: number; readonly ramData: number } | null;
   /**
-   * The supervised write run's flash writes, let out only when set, and then
+   * The camera write run's flash writes, let out only when set, and then
    * only inside the phase budgets in the control object: `stage`
    * (SetFeaturedFirmwareData) with 1..`maxStageBytes` bytes, `commit`
    * (CompleteMemoryUpgrade) with a u16 checksum. Every other run leaves it
@@ -98,6 +115,10 @@ export interface WriteGuardControl {
   commitSum16: number | null;
   /** The last four bytes GetFirmwareInfo answered, as a version: what arming waits for. */
   version: string | null;
+  /** The version this window was seeded with (`WriteGuardConfig.seededVersion`), or null. */
+  readonly seededVersion: string | null;
+  /** The first GetFirmwareInfo answer that disagreed with the seed: arming is refused after it. */
+  versionMismatch: string | null;
   /**
    * Every GetFirmwareInfo answer, in order. Not every one is the firmware
    * version: a device-info read selects other records (the bootloader's, the
@@ -130,6 +151,8 @@ export function installWriteGuard(config: WriteGuardConfig): void {
     commitBudget: 0,
     commitSum16: null,
     version: null,
+    seededVersion: config.seededVersion ?? null,
+    versionMismatch: null,
     versionsSeen: [],
     refusals: [],
     counts: {},
@@ -182,7 +205,13 @@ export function installWriteGuard(config: WriteGuardConfig): void {
       return;
     }
     if (op === config.armOp) {
-      if (control.version === null)
+      if (control.versionMismatch !== null) {
+        refuse(
+          `BeginFirmwareUpgrade after GetFirmwareInfo answered ${control.versionMismatch}, not ` +
+            `the seeded ${String(control.seededVersion)}`,
+        );
+      }
+      if ((control.version ?? control.seededVersion) === null)
         refuse('BeginFirmwareUpgrade before the camera reported its version');
       return;
     }
@@ -313,8 +342,17 @@ export function installWriteGuard(config: WriteGuardConfig): void {
         data !== undefined &&
         data.byteLength >= 4
       ) {
-        control.version = [0, 1, 2, 3].map((i) => String(data.getUint8(i))).join('.');
-        control.versionsSeen.push(control.version);
+        const answered = [0, 1, 2, 3].map((i) => String(data.getUint8(i))).join('.');
+        control.versionsSeen.push(answered);
+        const seeded = control.seededVersion;
+        if (seeded !== null && answered !== seeded) {
+          control.versionMismatch ??= answered;
+          refuse(
+            `GetFirmwareInfo answered ${answered}, not ${seeded}, the version this run matched ` +
+              'before the window opened — not the camera the write was planned on',
+          );
+        }
+        control.version = answered;
       }
       return result;
     },

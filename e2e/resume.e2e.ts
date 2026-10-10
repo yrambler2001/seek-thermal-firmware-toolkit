@@ -6,7 +6,7 @@
  * file resumes the run at step 03 (next step "commit"), with no red past-commit
  * alarm. On the emulator, and only with SEEK_E2E_RESUME_FULL=1, the run then
  * CONTINUES through 03 and 04 to "Verified — a perfect match."; on the camera
- * that is a write and is never run here (it would need the supervised gate).
+ * that is a write and is never run here (it would need the write gate).
  *
  * Also: an old flat-layout run file (checkpoints at the top, no step folders)
  * loads and resumes, and a broken/foreign zip fails calmly — a clear "Not

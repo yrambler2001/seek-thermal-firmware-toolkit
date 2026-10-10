@@ -8,7 +8,7 @@
  *           steps 03/04 are fine here — that is what the emulator is for.
  *   camera  Electron, Chromium's own WebUSB on the real macOS USB stack, with
  *           the page-side write guard. READ-ONLY unless a run passes through the
- *           supervised write gate (`supervised-write.ts`); this module never
+ *           camera write gate (`supervised-write.ts`); this module never
  *           lifts the guard on its own.
  *
  * `SEEK_E2E_TARGET` (or a spec's own default) picks one; `emu` is the default
@@ -95,13 +95,13 @@ export interface OpenTargetOptions {
   readonly headed?: boolean;
   /**
    * The UI guard the wizard runs under. The default is the target's safe one
-   * (everything on the emulator, read-only on the camera). A supervised write
+   * (everything on the emulator, read-only on the camera). A camera write
    * run passes `EVERYTHING` for the camera — only `supervised-write.ts` does.
    */
   readonly uiGuard?: UiGuard;
   /**
    * Camera target only: the Electron preload source. Defaults to the strict
-   * read-only write guard. A supervised camera write (only after the gate)
+   * read-only write guard. A camera write run (only after the gate)
    * passes the lifted guard here. Ignored on the emulator target.
    */
   readonly preloadSource?: string;

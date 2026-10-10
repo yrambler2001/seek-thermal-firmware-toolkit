@@ -308,6 +308,10 @@ export async function openProbedSession(
   prepare?: (device: SeekDevice) => void,
 ): Promise<{ device: SeekDevice; cfgHead: Uint8Array; boots: number }> {
   let blankBoots = 0;
+  /* What the HOST refused along the way (a SecurityError: the probe's own
+   * request, or a reboot command). Then the failed boots say nothing about the
+   * reader, and the power-cycle remedy would send the user the wrong way. */
+  const hostRefused = new Set<string>();
   for (let attempt = 1; attempt <= SEGMENT_BOOT_ATTEMPTS; attempt++) {
     assertLive(signal);
     const device = await opener.open();
@@ -342,6 +346,8 @@ export async function openProbedSession(
       })();
     } catch (error) {
       await opener.close(device);
+      const refused = refusedByHost(error);
+      if (refused) hostRefused.add('the reader probe');
       /* A stall is the dead reader's wire answer; reboot by command on the
        * next open and try again — the wire-89 clears the completion poison
        * (measured on stock). It did NOT revive the reader a 4 MiB drain
@@ -349,8 +355,8 @@ export async function openProbedSession(
        * own failure and the reboot's outcome: every attempt must say what the
        * wire answered, not only that it failed. */
       reporter.log(
-        `${label}: the reader probe stalled (${errorMessage(error)}) — rebooting by command ` +
-          'and retrying',
+        `${label}: the reader probe ${refused ? 'was REFUSED by the host' : 'stalled'} ` +
+          `(${errorMessage(error)}) — rebooting by command and retrying`,
         'warn',
       );
       try {
@@ -359,8 +365,10 @@ export async function openProbedSession(
         /* 'dropped' is the usual answer, not a failure: the camera reboots
          * before it acknowledges, so the transfer dies with the wire (measured
          * over real WebUSB, 2026-10-05). The next open tells whether it took. */
-        if (outcome === 'refused') reporter.log(resetRefusedLine(label), 'warn');
-        else {
+        if (outcome === 'refused') {
+          hostRefused.add('the reboot command');
+          reporter.log(resetRefusedLine(label), 'warn');
+        } else {
           reporter.log(
             `${label}: reboot command ${
               outcome === 'sent'
@@ -416,8 +424,20 @@ export async function openProbedSession(
         ' — rebooting by command and retrying',
       'warn',
     );
-    if ((await resetDevice(device)) === 'refused') reporter.log(resetRefusedLine(label), 'warn');
+    if ((await resetDevice(device)) === 'refused') {
+      hostRefused.add('the reboot command');
+      reporter.log(resetRefusedLine(label), 'warn');
+    }
     await opener.close(device);
+  }
+  if (hostRefused.size > 0) {
+    throw new SeekError(
+      'pipeline/refused',
+      `${label}: the reader probe failed on ${String(SEGMENT_BOOT_ATTEMPTS)} consecutive boots, ` +
+        `and the host REFUSED ${[...hostRefused].join(' and ')} before it left (a ` +
+        'SecurityError: a browser policy or a test guard) — so this is not a spent reader, and ' +
+        'a power cycle will not fix it. Find what refused the request, then run the step again.',
+    );
   }
   throw new SeekError(
     'pipeline/refused',

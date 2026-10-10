@@ -160,13 +160,13 @@ export const DEVICE_INFO_GUARD: WriteGuardConfig = {
 };
 
 /**
- * The supervised write run's guard: the strict one, plus Preserve's two flash
+ * The camera write run's guard: the strict one, plus Preserve's two flash
  * writes (`writeOps`), each phase opened by the test with its row's exact
- * budget (`openWritePhase` in `camera-write.e2e.ts`) and shut after. The two
+ * budget (`inWritePhase` in `camera-write.e2e.ts`) and shut after. The two
  * RAM selectors stay refused (Preserve never sends them), and so does every
  * reset outside a phase the test opened.
  */
-export const SUPERVISED_WRITE_GUARD: WriteGuardConfig = {
+export const CAMERA_WRITE_GUARD: WriteGuardConfig = {
   ...WRITE_GUARD,
   neverOps: [OP.SET_FIRMWARE_INFO_FEATURES, OP.SET_RAM_DATA_FEATURES],
   writeOps: {
@@ -180,25 +180,37 @@ export const SUPERVISED_WRITE_GUARD: WriteGuardConfig = {
  * The guard as a script for Electron's preload. The default is the strict
  * read-only guard. `deviceInfo` is that guard plus the Flash view's read
  * (`DEVICE_INFO_GUARD`): still read-only, for `flash-view.e2e.ts` on the
- * camera. `lifted` is ONLY for a supervised camera write that has passed the
- * gate (`supervised-write.ts`): `SUPERVISED_WRITE_GUARD`, whose writes and
+ * camera. `lifted` is ONLY for a camera write run that has passed the
+ * gate (`supervised-write.ts`): `CAMERA_WRITE_GUARD`, whose writes and
  * resets stay shut until the test opens a phase with its row's budgets. The
  * guard still installs, locks the prototype methods and records every
  * transfer, and the vendor-id device pick in Electron's main process is
- * untouched. Never used by the unattended read-only runs.
+ * untouched. Never used by the unattended read-only runs. `seededVersion` is
+ * for the write window alone: the version the run's step 02 matched, which a
+ * fresh page has not seen (see `write-guard.ts`).
  *
  * (It used to drop the flash-write ids from `neverOps` and nothing more, which
- * left them refused as "not on this run's whitelist": a confirmed camera run
+ * left them refused as "not on this run's whitelist": an approved camera run
  * would have stopped at its first staged chunk.)
  */
 export function writeGuardScript(
-  options: { readonly lifted?: boolean; readonly deviceInfo?: boolean } = {},
+  options: {
+    readonly lifted?: boolean;
+    readonly deviceInfo?: boolean;
+    /** The version step 02 matched, for the write window (`WriteGuardConfig.seededVersion`). */
+    readonly seededVersion?: string;
+  } = {},
 ): string {
-  const config: WriteGuardConfig = options.lifted
-    ? SUPERVISED_WRITE_GUARD
+  const base: WriteGuardConfig = options.lifted
+    ? CAMERA_WRITE_GUARD
     : options.deviceInfo === true
       ? DEVICE_INFO_GUARD
       : WRITE_GUARD;
+  const seed = options.seededVersion;
+  if (seed !== undefined && !/^\d+\.\d+\.\d+\.\d+$/.test(seed)) {
+    throw new Error(`a version seed must read like 1.0.3.0, not ${JSON.stringify(seed)}`);
+  }
+  const config: WriteGuardConfig = seed === undefined ? base : { ...base, seededVersion: seed };
   return `(${installWriteGuard.toString()})(${JSON.stringify(config)});\n`;
 }
 
