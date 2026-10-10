@@ -185,9 +185,14 @@ export function prepareSlotFlash(
     } else {
       for (const failure of bootloaderFailures(entry.staging, payload, cipher, {
         keyA: state.keyTable?.keyA ?? null,
-        slot,
       })) {
         warnings.push(`The bootloader would reject this payload: ${failure}.`);
+      }
+      if (entry.staging === 'slot-keystream-ciphertext') {
+        warnings.push(
+          "The 2016 stage key (key block 0) is not in raw bytes, so this payload's decrypted " +
+            'word sum is not checked here.',
+        );
       }
     }
   } else {
@@ -297,10 +302,10 @@ function stageImage(
     };
   }
   if (staging === 'slot-keystream-ciphertext') {
-    const staged = buildSlotKeystreamPayload(input.bytes, slot, cipher);
+    const staged = buildSlotKeystreamPayload(input.bytes, cipher);
     return {
       staged,
-      keyAfter: "the bank's own keystream (unchanged)",
+      keyAfter: 'the stage key (key block 0 of the image)',
       expectedStored: (bankBytes) => bankImageOf(staged.payload, bankBytes),
       rekeyRisk: false,
     };

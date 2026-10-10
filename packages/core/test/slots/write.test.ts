@@ -14,7 +14,7 @@ import { createHash } from 'node:crypto';
 
 import { describe, expect, it } from 'vitest';
 
-import { equalBytes } from '../../src/bytes.js';
+import { equalBytes, hexToBytes } from '../../src/bytes.js';
 import { silentReporter } from '../../src/events.js';
 import { SeekError } from '../../src/errors.js';
 import { cryptBytes } from '../../src/crypto/cipher.js';
@@ -26,7 +26,9 @@ import type { FirmwareProfile, WindowEntry } from '../../src/profiles/types.js';
 import type { SeekDevice } from '../../src/protocol/client.js';
 import type { DeviceState, SlotState, WorkflowContext } from '../../src/workflows/types.js';
 import { prepareSlotFlash, flashSlot } from '../../src/slots/write.js';
-import { planFor, reportFor } from './write-fixtures.js';
+import { reportFor } from './write-fixtures.js';
+import { buildSlotPlan } from '../../src/slots/capability.js';
+import { KEY_PAIRS, keystream, keyWordsOf, xorWindowVerbatim } from '../../src/preservation/patch.js';
 import { sha256Sync } from '../../src/slots/write-sha.js';
 import {
   SLOT_BYTES,
@@ -72,6 +74,7 @@ function imageOf(length: number, seed: number): Uint8Array {
 
 const modern = getProfile('modern-4x');
 const legacy = getProfile('legacy-auth');
+const compact2016 = getProfile('compact-2016');
 
 function slotState(overrides: Partial<SlotState> & { key: SlotKey }): SlotState {
   return {
@@ -206,7 +209,7 @@ describe('sha256Sync (the synchronous digest of the compare rows)', () => {
 
 describe('prepareSlotFlash refuses before it builds anything', () => {
   const version = '4.8.1.9';
-  const plan = planFor(modern, version, 'key-a-ciphertext');
+  const plan = buildSlotPlan(modern, version);
   const image = imageOf(0x4000, 1);
 
   it('an unsupported build is refused with the plan reason', () => {
@@ -341,16 +344,28 @@ describe('prepareSlotFlash refuses before it builds anything', () => {
     );
   });
 
-  it('keystream staging needs the bank keystream, and the bank must be read', () => {
-    const slotPlan = planFor(modern, version, 'slot-keystream-ciphertext');
-    const report = reportFor(stateFor(modern, { version, slots: [slotState({ key: 'b', present: true })] }), slotPlan);
-    expect(() => prepareSlotFlash(report, 'b', { kind: 'plain', bytes: image, fileName: 'x' })).toThrow(
-      /keystream is not known/,
+  it('2016 staging needs a key pair of its line in the image', () => {
+    const slotPlan = buildSlotPlan(compact2016, '1.0.3.0');
+    const report = reportFor(stateFor(compact2016, { version: '1.0.3.0', slots: [slotState({ key: 'a', present: true, accepts: true })] }), slotPlan);
+    expect(() => prepareSlotFlash(report, 'a', { kind: 'plain', bytes: imageOf(0x6000, 5), fileName: 'x' })).toThrow(
+      /no key pair of the 2016 line/,
     );
   });
 
+  it('the 16 Hz FF image (word sum 0xFFFF) is refused as a plain image, nothing staged', () => {
+    const plan = buildSlotPlan(legacy, '1.3.0.8');
+    const report = reportFor(stateFor(legacy, { version: '1.3.0.8', slots: [slotState({ key: 'b', present: true, accepts: true })] }), plan);
+    const image = imageOf(0x2000, 33);
+    /* Balance the file's own word sum to 0xFFFF, as the FF image's adjust word does. */
+    const dv = new DataView(image.buffer);
+    dv.setUint32(0x238, 0, true);
+    dv.setUint32(0x238, (0xffff - wordSum32(image, image.length)) >>> 0, true);
+    expect(wordSum32(image, image.length)).toBe(0xffff);
+    expect(() => prepareSlotFlash(report, 'b', { kind: 'plain', bytes: image, fileName: 'x' })).toThrow(/16 Hz FF image/);
+  });
+
   it('a build with no staging form refuses a decrypted image', () => {
-    const noStaging = planFor(modern, version, null);
+    const noStaging = { ...buildSlotPlan(modern, version), slots: buildSlotPlan(modern, version).slots.map((s) => ({ ...s, staging: null })) };
     const report = reportFor(stateFor(modern, { version, slots: [slotState({ key: 'b', present: true })] }), noStaging);
     expect(() => prepareSlotFlash(report, 'b', { kind: 'plain', bytes: image, fileName: 'x' })).toThrow(
       /no staging form/,
@@ -364,7 +379,7 @@ describe('prepareSlotFlash refuses before it builds anything', () => {
 
 describe('prepareSlotFlash builds each staging form', () => {
   it('plain (2014 chain): length stamped, stored word sum 0, the bank holds the payload then erased', () => {
-    const plan = planFor(legacy, '1.3.0.0', 'plain');
+    const plan = buildSlotPlan(legacy, '1.3.0.0');
     const slot = slotState({ key: 'a', present: true, accepts: true, recovered: null });
     const report = reportFor(stateFor(legacy, { version: '1.3.0.0', slots: [slot] }), plan);
     const image = imageOf(0x9000, 3);
@@ -379,30 +394,26 @@ describe('prepareSlotFlash builds each staging form', () => {
     expect(out.sum16).toBe(transferSum16(out.payload));
   });
 
-  it('slot keystream (2016 line): the payload is the image XOR the bank keystream, and decrypts to a zero sum', () => {
-    const plan = planFor(legacy, '1.0.3.0', 'slot-keystream-ciphertext');
-    const keystreamState = Uint32Array.of(0x12345678, 0x9abcdef0, 0x0badc0de, 0x13572468);
-    const slot = slotState({
-      key: 'a',
-      present: true,
-      accepts: true,
-      recovered: { state: keystreamState } as unknown as SlotState['recovered'],
-    });
-    const report = reportFor(stateFor(legacy, { version: '1.0.3.0', slots: [slot] }), plan);
+  it('slot keystream (2016 line): the payload is the image XOR the stage key, and decrypts to a zero sum', () => {
+    const plan = buildSlotPlan(compact2016, '1.0.3.0');
+    const slot = slotState({ key: 'a', present: true, accepts: true });
+    const report = reportFor(stateFor(compact2016, { version: '1.0.3.0', slots: [slot] }), plan);
     const image = imageOf(0x6000, 4);
+    const pair = KEY_PAIRS.cp103;
+    image.set(hexToBytes(pair.block0), 0x3000);
+    image.set(hexToBytes(pair.block1), 0x3100);
     const out = prepareSlotFlash(report, 'a', { kind: 'plain', bytes: image, fileName: 'x' });
     expect(out.staging).toBe('slot-keystream-ciphertext');
-    /* Decrypting the staged bytes with the bank's keystream gives the stamped image back,
-     * and that image's decrypted word sum is the family's acceptance target. */
-    const decrypted = cryptBytes(out.payload, keystreamState, legacy.cipher);
-    expect(wordSum32(decrypted, decrypted.length)).toBe(legacy.cipher.acceptanceSum);
+    /* The bootloader decrypts with key block 0 and checks the word sum: that is the stage key. */
+    const decrypted = xorWindowVerbatim(out.payload, keystream(keyWordsOf(pair.block0), 0x6000 >>> 2));
+    expect(wordSum32(decrypted, decrypted.length)).toBe(compact2016.cipher.acceptanceSum);
     expect(parseImageHeader(decrypted)?.length).toBe(0x6000);
     /* The header window is verbatim: the cleartext adjust word carries the balance. */
     expect(parseImageHeader(out.payload)?.length).toBe(0x6000);
   });
 
   it('key-a (2017+): the image is retargeted to this camera, footered, and encrypted under its Key A', () => {
-    const plan = planFor(modern, '4.8.1.9', 'key-a-ciphertext');
+    const plan = buildSlotPlan(modern, '4.8.1.9');
     const slot = slotState({ key: 'b', present: true, accepts: true });
     const report = reportFor(stateFor(modern, { version: '4.8.1.9', slots: [slot], keyA: KEY_A, keyB: KEY_B }), plan);
     const image = imageOf(0x5000, 5);
@@ -426,7 +437,7 @@ describe('prepareSlotFlash builds each staging form', () => {
   });
 
   it('raw: sent verbatim, and the bootloader checks it would fail are warned, not refused', () => {
-    const plan = planFor(modern, '4.8.1.9', 'key-a-ciphertext');
+    const plan = buildSlotPlan(modern, '4.8.1.9');
     const slot = slotState({ key: 'b', present: true, accepts: true });
     const report = reportFor(stateFor(modern, { version: '4.8.1.9', slots: [slot] }), plan);
     /* An image with a header but no footer: the bootloader's own footer check fails. */
@@ -447,7 +458,7 @@ describe('prepareSlotFlash builds each staging form', () => {
 
 describe('prepareSlotFlash warnings', () => {
   it('names the booted bank, recovery, and an unnamed boot, and carries the build notes', () => {
-    const plan = planFor(modern, '4.8.1.9', 'plain');
+    const plan = buildSlotPlan(modern, '4.8.1.9');
     const withNotes = {
       ...plan,
       notes: ['build note one'],
@@ -478,19 +489,19 @@ describe('prepareSlotFlash warnings', () => {
  * ==================================================================== */
 
 describe('flashSlot gates', () => {
-  const plan = planFor(modern, '4.8.1.9', 'plain');
+  const plan = buildSlotPlan(legacy, '1.3.0.0');
   const slots = (['a', 'b', 'r'] as const).map((k) => slotState({ key: k, present: true, accepts: true }));
   const image = imageOf(0x2000, 21);
 
   function built(booted: SlotKey | null = 'a'): { report: SlotsReport; payload: SlotFlashPlan } {
-    const report = reportFor(stateFor(modern, { slots, booted }), plan);
+    const report = reportFor(stateFor(legacy, { version: '1.3.0.0', slots, booted }), plan);
     return { report, payload: prepareSlotFlash(report, 'b', { kind: 'plain', bytes: image, fileName: 'x' }) };
   }
 
   it('the booted bank is refused without acknowledgeRisk, with nothing sent', async () => {
     const rec = recordingDevice();
     const { report, payload } = built('b');
-    const error = await flashSlot(ctxFor(rec.device, modern), report, payload, { acknowledgeRisk: false }).catch(
+    const error = await flashSlot(ctxFor(rec.device, legacy), report, payload, { acknowledgeRisk: false }).catch(
       (e: unknown) => e,
     );
     expect(error).toBeInstanceOf(SeekError);
@@ -502,7 +513,7 @@ describe('flashSlot gates', () => {
     const rec = recordingDevice();
     const { report } = built('a');
     const rPlan = prepareSlotFlash(report, 'r', { kind: 'plain', bytes: image, fileName: 'x' });
-    await expect(flashSlot(ctxFor(rec.device, modern), report, rPlan, { acknowledgeRisk: false })).rejects.toThrow(/acknowledgeRisk/);
+    await expect(flashSlot(ctxFor(rec.device, legacy), report, rPlan, { acknowledgeRisk: false })).rejects.toThrow(/acknowledgeRisk/);
     expect(sends(rec.calls)).toEqual([]);
   });
 
@@ -510,9 +521,9 @@ describe('flashSlot gates', () => {
     const rec = recordingDevice();
     const { report, payload } = built('a');
     const otherCamera: SlotFlashPlan = { ...payload, serial: 'SOMEONE-ELSE' };
-    await expect(flashSlot(ctxFor(rec.device, modern), report, otherCamera, { acknowledgeRisk: false })).rejects.toThrow(/another camera|camera SOMEONE-ELSE/);
+    await expect(flashSlot(ctxFor(rec.device, legacy), report, otherCamera, { acknowledgeRisk: false })).rejects.toThrow(/another camera|camera SOMEONE-ELSE/);
     const otherFirmware: SlotFlashPlan = { ...payload, firmwareVersion: '4.8.2.1' };
-    await expect(flashSlot(ctxFor(rec.device, modern), report, otherFirmware, { acknowledgeRisk: false })).rejects.toThrow(/stale/);
+    await expect(flashSlot(ctxFor(rec.device, legacy), report, otherFirmware, { acknowledgeRisk: false })).rejects.toThrow(/stale/);
     expect(sends(rec.calls)).toEqual([]);
   });
 
@@ -520,16 +531,16 @@ describe('flashSlot gates', () => {
     const rec = recordingDevice();
     const { report, payload } = built('a');
     const edited: SlotFlashPlan = { ...payload, payload: payload.payload.slice(), sum16: (payload.sum16 + 1) & 0xffff };
-    await expect(flashSlot(ctxFor(rec.device, modern), report, edited, { acknowledgeRisk: false })).rejects.toThrow(/edited/);
+    await expect(flashSlot(ctxFor(rec.device, legacy), report, edited, { acknowledgeRisk: false })).rejects.toThrow(/edited/);
     const moved: SlotFlashPlan = { ...payload, address: 0x14040000 };
-    await expect(flashSlot(ctxFor(rec.device, modern), report, moved, { acknowledgeRisk: false })).rejects.toThrow(/targets/);
+    await expect(flashSlot(ctxFor(rec.device, legacy), report, moved, { acknowledgeRisk: false })).rejects.toThrow(/targets/);
     expect(sends(rec.calls)).toEqual([]);
   });
 
   it('a non-booted bank is written: arm the plan window, stage in 64-byte chunks, commit the u16 sum, read back', async () => {
     const { report, payload } = built('a');
     const rec = recordingDevice(payload.expectedStored!);
-    const result = await flashSlot(ctxFor(rec.device, modern), report, payload, { acknowledgeRisk: false });
+    const result = await flashSlot(ctxFor(rec.device, legacy), report, payload, { acknowledgeRisk: false });
     const ops = sends(rec.calls);
     expect(ops[0]).toBe('arm');
     expect(rec.calls[0]?.arg).toBe(report.plan.slots.find((s) => s.key === 'b')?.write?.subcmd);
@@ -546,7 +557,7 @@ describe('flashSlot gates', () => {
   it('verify off: nothing is read back and no comparison is claimed', async () => {
     const rec = recordingDevice();
     const { report, payload } = built('a');
-    const result = await flashSlot(ctxFor(rec.device, modern), report, payload, { acknowledgeRisk: false, verify: false });
+    const result = await flashSlot(ctxFor(rec.device, legacy), report, payload, { acknowledgeRisk: false, verify: false });
     expect(sends(rec.calls)).not.toContain('read');
     expect(result.verified).toBeNull();
     expect(result.after).toBeNull();
@@ -555,11 +566,11 @@ describe('flashSlot gates', () => {
   it('a read-back that matches the predicted bytes verifies; one that does not, does not', async () => {
     const { report, payload } = built('a');
     const expected = payload.expectedStored!;
-    const good = await flashSlot(ctxFor(recordingDevice(expected).device, modern), report, payload, { acknowledgeRisk: false });
+    const good = await flashSlot(ctxFor(recordingDevice(expected).device, legacy), report, payload, { acknowledgeRisk: false });
     expect(good.verified).toBe(true);
     const wrong = expected.slice();
     wrong[7] = (wrong[7] ?? 0) ^ 0xff;
-    const bad = await flashSlot(ctxFor(recordingDevice(wrong).device, modern), report, payload, { acknowledgeRisk: false });
+    const bad = await flashSlot(ctxFor(recordingDevice(wrong).device, legacy), report, payload, { acknowledgeRisk: false });
     expect(bad.verified).toBe(false);
     expect(bad.notes.join('\n')).toContain('does NOT match');
     expect(sha256Sync(expected)).toHaveLength(64);
@@ -573,7 +584,7 @@ describe('flashSlot gates', () => {
       return polls > 3 ? 0x31 : 0;
     };
     const { report, payload } = built('a');
-    const error = await flashSlot(ctxFor(rec.device, modern), report, payload, { acknowledgeRisk: false }).catch((e: unknown) => e);
+    const error = await flashSlot(ctxFor(rec.device, legacy), report, payload, { acknowledgeRisk: false }).catch((e: unknown) => e);
     expect((error as SeekError).code).toBe('slots/refused');
     expect(sends(rec.calls)).not.toContain('commit');
   });

@@ -19,7 +19,7 @@
  *                                0 (the 2014 plaintext chain).
  * ==================================================================== */
 
-import { bytesToHex, equalBytes, hex, hexUp, viewOf } from '../bytes.js';
+import { bytesToHex, equalBytes, findAll, hex, hexToBytes, hexUp, viewOf } from '../bytes.js';
 import { SeekError } from '../errors.js';
 import { cryptBytes } from '../crypto/cipher.js';
 import {
@@ -50,8 +50,8 @@ import {
   TRY_KEYS_MAX_LEN,
   type ImageHeader,
 } from '../image/header.js';
+import { KEY_PAIRS, keystream, keyWordsOf, xorWindowVerbatim } from '../preservation/patch.js';
 import type { CipherProfile } from '../profiles/types.js';
-import type { SlotState } from '../workflows/types.js';
 import type { StagingForm } from './types.js';
 import { sha256Sync } from './write-sha.js';
 
@@ -204,21 +204,46 @@ export function buildKeyAPayload(
 }
 
 /**
- * The image XOR the bank's own keystream, acceptance balanced through the
- * cleartext adjust word at 0x238 (the 2016 line's staged form, as
- * preservation/patch.ts stages it). The keystream is the generator the bank was
- * recovered under, so the bootloader decrypts the staged bytes back to the
- * stamped image word for word; the header window passes verbatim through the
- * cipher, which is why the adjust word can carry the balance.
+ * The 2016 line's key pairs, as the preservation patch stages with them. The
+ * 1.3.0.8 FF pair is not here: that build is refused as a plain image (see
+ * `buildPlainPayload`), and its staged form is a different one.
  */
-export function buildSlotKeystreamPayload(
-  image: Uint8Array,
-  slot: SlotState,
-  cipher: CipherProfile,
-): StagedBytes {
-  if (slot.recovered === null) {
-    throw slotRefused('the bank keystream is not known — the bank was not read under a key');
+const LINE_2016_PAIRS = [KEY_PAIRS.cp103, KEY_PAIRS.cp1032ff] as const;
+
+/**
+ * The stage key of a 2016 image: key block 0 of the pair the image carries,
+ * found BY VALUE (each half exactly once). The bootloader decrypts the staged
+ * bytes with this block and checks the decrypted word sum; the bank's own
+ * keystream is the other block, so it is not used to stage.
+ */
+export function stageKeyBlockOf(image: Uint8Array): string {
+  for (const pair of LINE_2016_PAIRS) {
+    if (
+      findAll(image, hexToBytes(pair.block0)).length === 1 &&
+      findAll(image, hexToBytes(pair.block1)).length === 1
+    ) {
+      return pair.block0;
+    }
   }
+  throw slotRefused(
+    'the image carries no key pair of the 2016 line, so there is no stage key to encode it with',
+  );
+}
+
+/**
+ * The image XOR the stage keystream (key block 0 of the image's own pair),
+ * acceptance balanced through the cleartext adjust word at 0x238. This is the
+ * 2016 staged form preservation/patch.ts builds (`xor-ks0`): the header window
+ * passes verbatim, so the adjust word carries the balance, and the device
+ * programs exactly these bytes.
+ *
+ * Why not the bank's own recovered keystream: the emulated Compact PRO 1.0.3.0
+ * refused a payload staged with the recovered state ("Invalid image", 0x70100)
+ * and erased nothing. The bank holds key block 1 (plain ^ ks(block 1)), while the
+ * staging the device accepts is key block 0.
+ */
+export function buildSlotKeystreamPayload(image: Uint8Array, cipher: CipherProfile): StagedBytes {
+  const block0 = stageKeyBlockOf(image);
   let stamped: AcceptSumResult;
   try {
     stamped = setAcceptSum(image, cipher);
@@ -228,7 +253,8 @@ export function buildSlotKeystreamPayload(
   if (stamped.sum !== cipher.acceptanceSum) {
     throw slotRefused('could not balance the decrypted word sum to the bootloader target');
   }
-  const payload = cryptBytes(stamped.image, slot.recovered.state, cipher);
+  const ks0 = keystream(keyWordsOf(block0), stamped.image.length >>> 2);
+  const payload = xorWindowVerbatim(stamped.image, ks0);
   return { payload, stamped: stamped.image };
 }
 
@@ -237,6 +263,19 @@ export function buildSlotKeystreamPayload(
  * word sum balanced to 0, and the chain's own three acceptance checks.
  */
 export function buildPlainPayload(image: Uint8Array, cipher: CipherProfile): StagedBytes {
+  /* The 16 Hz FF build shares 1.3.0.8's version string and is told apart by its
+   * word sum: the 8 Hz build's image sums to 0, the FF image to 0xFFFF. The FF
+   * image boots only from recovery, and its staged form folds two keystreams
+   * (preservation/patch.ts `xor-ks0-ksD`); this page does not produce that form,
+   * so the write is refused rather than staged as a plain image it would reject. */
+  const fileSum = wordSum32(image, image.length);
+  if (fileSum === 0xffff) {
+    throw slotRefused(
+      'this is the 16 Hz FF image (word sum 0xFFFF): it boots only from recovery and its ' +
+        'staged form is the two-stream one, which this page does not produce. Nothing was written.',
+      { fileSum },
+    );
+  }
   try {
     const stamped = setAcceptSum(image, { ...cipher, acceptanceSum: 0 });
     if (stamped.sum !== 0) throw slotRefused('could not balance the stored word sum to 0');
@@ -259,7 +298,7 @@ export function bootloaderFailures(
   staging: StagingForm | null,
   payload: Uint8Array,
   cipher: CipherProfile,
-  keys: { readonly keyA: Uint8Array | null; readonly slot: SlotState | null },
+  keys: { readonly keyA: Uint8Array | null },
 ): string[] {
   if (payload.length < HEADER_OFFSET + HEADER_SIZE) {
     return [`the payload is ${String(payload.length)} B, too short to hold a header at 0x200`];
@@ -321,20 +360,9 @@ export function bootloaderFailures(
         );
       }
     }
-  } else if (staging === 'slot-keystream-ciphertext') {
-    if (keys.slot?.recovered == null) {
-      failures.push('the bank keystream is not known, so the decrypted word sum cannot be checked');
-    } else {
-      const plain = cryptBytes(payload.subarray(0, length), keys.slot.recovered.state, cipher);
-      const sum = wordSum32(plain, length);
-      if (sum !== cipher.acceptanceSum) {
-        failures.push(
-          `decrypted with the bank's keystream the word sum is ${hexUp(sum)}, the bootloader ` +
-            `needs ${hexUp(cipher.acceptanceSum)}`,
-        );
-      }
-    }
   }
+  /* The 2016 staged form is checked against its stage key (key block 0), which
+   * a raw payload does not carry: its decrypted word sum is not checked here. */
   return failures;
 }
 
