@@ -492,11 +492,11 @@ export function readBackLines(
   const sha = afterSha256 === null ? '' : ` (sha256 ${afterSha256})`;
   const lines: string[] = [`commit status: ${hexUp(result.commitStatus, 4)}`];
   if (result.verified === true) {
-    lines.push(
-      paint(`read-back: bank ${bank} holds exactly the staged bytes${sha}`, 'green', color),
-    );
+    lines.push(paint(`read-back: bank ${bank} matches the staged image${sha}`, 'green', color));
   } else if (result.verified === false) {
-    lines.push(paint(`read-back: bank ${bank} DIFFERS from the staged bytes${sha}`, 'red', color));
+    lines.push(
+      paint(`read-back: bank ${bank} does NOT match the staged image${sha}`, 'red', color),
+    );
   } else {
     lines.push('read-back: skipped (--no-verify)');
   }

@@ -575,10 +575,10 @@ describe('the flash plan and read-back', () => {
   it('reports a read-back that matches, one that does not, and one that was skipped', () => {
     const base = { key: 'b' as const, commitStatus: 0, after: null, notes: [] };
     expect(readBackLines({ ...base, verified: true }, 'abc123', false).join('\n')).toContain(
-      'holds exactly the staged bytes (sha256 abc123)',
+      'matches the staged image (sha256 abc123)',
     );
     expect(readBackLines({ ...base, verified: false }, 'abc123', false).join('\n')).toContain(
-      'DIFFERS from the staged bytes',
+      'does NOT match the staged image',
     );
     expect(readBackLines({ ...base, verified: null }, null, false).join('\n')).toContain(
       'skipped (--no-verify)',
@@ -792,7 +792,7 @@ describe('slots command', () => {
     expect(error).toBeInstanceOf(CliError);
     expect((error as CliError).code).toBe('slots/verify-failed');
     expect((error as CliError).exitCode).toBe(EXIT_FAILED);
-    expect(test.stdout.text).toContain('DIFFERS from the staged bytes');
+    expect(test.stdout.text).toContain('does NOT match the staged image');
   });
 
   it('reports an image file it cannot read, before the camera is touched', async () => {
