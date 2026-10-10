@@ -36,7 +36,10 @@ function viewOf(report: SlotsReport, key: SlotKey) {
 function verdict(verified: boolean | null): string {
   if (verified === true) return 'the bank reads back as written.';
   if (verified === false) return 'the read-back does NOT match what was written.';
-  return 'verification was off, so nothing was checked.';
+  /* The page always asks for the read-back. Null means core took it but had no
+   * expected image to compare it with (a bank the device re-encrypts), which is
+   * not the same as verification being switched off. Its notes say why. */
+  return 'the read-back was taken but not compared, so this write is not verified here.';
 }
 
 function OutcomePanel({ outcome }: { readonly outcome: SlotFlashOutcome }): ReactElement {

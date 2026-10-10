@@ -49,6 +49,7 @@ import {
   type SlotsBackend,
 } from './useSlotsPanel';
 import { useRunner } from './useRunner';
+import { keyPairToName } from './useSlotsPanel';
 
 vi.mock('../lib/download', () => ({
   downloadBytes: vi.fn(),
@@ -423,6 +424,34 @@ describe('slot helpers', () => {
     expect(slotDumpFileName('b', null, 'raw', '12345678aa')).toBe(
       'seek-slot-B-vunknown-raw-12345678.bin',
     );
+  });
+
+  it('ends a decrypted dump with its key pair, so the flash path can read the keys back', () => {
+    const keyA = new Uint8Array(16).fill(0x11);
+    const keyB = new Uint8Array(16).fill(0x22);
+    expect(slotDumpFileName('a', '4.8.2.1', 'decrypted', 'ab'.repeat(32), { keyA, keyB })).toBe(
+      `seek-slot-A-v4.8.2.1-decrypted-abababab-KeyA-${'11'.repeat(16)}-KeyB-${'22'.repeat(16)}.bin`,
+    );
+    /* A raw bank never carries a pair: its bytes are not decrypted. */
+    expect(slotDumpFileName('a', '4.8.2.1', 'raw', 'ab'.repeat(32), { keyA, keyB })).toBe(
+      `seek-slot-A-v4.8.2.1-raw-abababab-KeyA-${'11'.repeat(16)}-KeyB-${'22'.repeat(16)}.bin`,
+    );
+  });
+
+  it('names a decrypted dump with the camera key pair only when the image holds both keys', () => {
+    const keyA = new Uint8Array(16).fill(0x11);
+    const keyB = new Uint8Array(16).fill(0x22);
+    const table = { keyA, keyB, offset: 0, matchA: true, matchB: true };
+    const withKeys = new Uint8Array(256);
+    withKeys.set(keyA, 32);
+    withKeys.set(keyB, 96);
+    expect(keyPairToName(withKeys, table)).toMatchObject({ keyA, keyB });
+    /* A key missing from the image is not claimed: the name stays bare. */
+    const without = new Uint8Array(256);
+    without.set(keyA, 32);
+    expect(keyPairToName(without, table)).toBeNull();
+    /* No camera table at all: nothing to claim. */
+    expect(keyPairToName(withKeys, null)).toBeNull();
   });
 
   it('explains every disabled action in words, and the support comes first', () => {

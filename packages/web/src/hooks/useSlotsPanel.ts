@@ -24,10 +24,13 @@ import {
   buildSlotPlan,
   dumpSlot,
   errorMessage,
+  findEmbeddedKeyTable,
   flashSlot,
   hexUp,
   inspectSlots,
+  keyFilenameSuffix,
   prepareSlotFlash,
+  type KeyPair,
   type DumpedSlot,
   type FirmwareProfile,
   type FlashSlotOptions,
@@ -168,15 +171,33 @@ export function slotVersion(report: SlotsReport, key: SlotKey): string | null {
 /**
  * The name a dump is saved under: the slot, the version the bank reports, and
  * a short hash so two dumps of the same slot never overwrite each other.
+ *
+ * A decrypted image may end in its key pair (`-KeyA-<hex>-KeyB-<hex>`), which is
+ * how the flash path learns which keys the image was built for. `keys` is that
+ * pair when the image really holds it (see `keyPairToName`); null leaves the name
+ * bare, and the flash path then refuses the file rather than guessing.
  */
 export function slotDumpFileName(
   key: SlotKey,
   version: string | null,
   kind: 'raw' | 'decrypted',
   sha256: string,
+  keys: KeyPair | null = null,
 ): string {
   const label = (version ?? 'unknown').replace(/[^0-9A-Za-z.]+/g, '-');
-  return `seek-slot-${key.toUpperCase()}-v${label}-${kind}-${sha256.slice(0, 8)}.bin`;
+  const suffix = keys === null ? '' : keyFilenameSuffix(keys.keyA, keys.keyB);
+  return `seek-slot-${key.toUpperCase()}-v${label}-${kind}-${sha256.slice(0, 8)}${suffix}.bin`;
+}
+
+/**
+ * The key pair to name a decrypted dump with: the camera's own table, but only
+ * when both keys are found, exactly once each, inside the decrypted image. The
+ * same rule `decrypt.ts` applies to a dump's file names, so a name never claims
+ * keys the bytes do not hold. Null when the table is unknown or not in the image.
+ */
+export function keyPairToName(plain: Uint8Array, table: KeyPair | null): KeyPair | null {
+  if (table === null) return null;
+  return findEmbeddedKeyTable(plain, table.keyA, table.keyB) === null ? null : table;
 }
 
 function contextOf(
@@ -423,9 +444,12 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
             'ok',
           );
           if (dumped.plain !== null && dumped.plainSha256 !== null) {
+            /* Named with the camera's key pair when the image holds it: the flash
+             * path reads the pair from the name and refuses a file without one. */
+            const keys = keyPairToName(dumped.plain, current.state.keyTable);
             downloadBytes(
               dumped.plain,
-              slotDumpFileName(key, version, 'decrypted', dumped.plainSha256),
+              slotDumpFileName(key, version, 'decrypted', dumped.plainSha256, keys),
             );
             log(
               `slot ${name} decrypted — ${String(dumped.plain.length)} B, sha256 ${dumped.plainSha256}`,
