@@ -319,7 +319,13 @@ async function runFirmware(subject: Subject, row: RowEmulators, run: Run): Promi
   const start = {
     entryId: subject.entryId,
     readyTimeoutMs: BOOT_TIMEOUT_MS,
-    ...(subject.donor === undefined ? {} : { donor: subject.donor, jedec: JEDEC }),
+    ...(subject.donor === undefined ? {} : { donor: subject.donor }),
+    /* The 2016 app's SPI-NOR driver knows only the Spansion part (JEDEC manufacturer 0x01); on the
+     * emulator's default Winbond part its erase refuses with 0x0004000x before any command goes
+     * out (the locked-line corpus run found this). The chimeras always boot with it. */
+    ...(subject.donor !== undefined || subject.staging === 'slot-keystream-ciphertext'
+      ? { jedec: JEDEC }
+      : {}),
   };
   const emu = await row.start(EMU_DIR!, start);
   await row.guard(emu, async () => {
