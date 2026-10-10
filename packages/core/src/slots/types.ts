@@ -37,10 +37,11 @@ export const SLOT_BYTES = 0x10000;
  *                              under the camera's KEY A. The device decrypts it
  *                              and re-encrypts it under the store key itself
  *                              (`fw_validate_decrypt_program`). The 2017+ line.
- *  - 'slot-keystream-ciphertext' plain image XOR the keystream the slot already
- *                              carries (recovered from the slot's own vector
- *                              table). The 2016 Compact PRO line; the device
- *                              programs exactly what is staged.
+ *  - 'slot-keystream-ciphertext' plain image XOR the stage key's keystream (key
+ *                              block 0 of the image). The 2016 Compact PRO line;
+ *                              measured on a real camera: the device re-encrypts
+ *                              the payload into the bank's own store key, so the
+ *                              stored bytes are NOT the staged bytes.
  *  - 'plain'                   the image bytes themselves: the 2014 plaintext
  *                              chain, no cipher, no footer.
  */
