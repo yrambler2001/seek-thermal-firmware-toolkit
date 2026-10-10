@@ -10,6 +10,7 @@ export const COMMAND_NAMES = [
   'sweep',
   'decrypt',
   'flash',
+  'slots',
   'preserve',
   'profiles',
 ] as const;
@@ -51,6 +52,7 @@ Commands
   sweep                  probe every BeginFirmwareUpgrade selector and report what each exposes
   decrypt <file>         decrypt a dump or image you already have — no camera needed
   flash <image>          write a decrypted image to the camera
+  slots list|dump|flash  identify, dump or write one firmware bank (A, B, recovery R)
   preserve               v1 full-flash preservation: in-place patch, whole-part dump, restore
                          (the image is the camera's own active slot, read twice and agreed)
   profiles               list the supported firmware families
@@ -217,6 +219,38 @@ preserve_patch_plain_patched.bin, preserve_dump_postwrite.bin (the patched
 part), preserve_dump_original.bin (the delivered, original-content image),
 manifest.json and README.md (the backup's dump archive) plus the decrypted
 slots under decrypted/.
+`,
+  slots: `seek-fw slots — the three firmware banks: identify, dump, or write one
+
+Usage
+  seek-fw slots list [--serial <id>] [--json]
+  seek-fw slots dump <a|b|r> [--out <dir> | --zip <file>] [options]
+  seek-fw slots flash <a|b|r> <file> [--raw] [--yes] [--acknowledge-risk]
+                                     [--no-verify] [options]
+
+Banks: A (0x14050000) and B (0x14060000) are the application banks; R is the
+recovery bank. Builds 0.8.0.0 and newer only; an older build is reported as
+unsupported and is never tried. The bootloader and the boot-config block are
+not banks and are never written.
+
+  list     the camera, each bank's address, whether the camera boots it, its
+           version, key and bootability, and what this build can do with each
+  dump     read one bank as stored: slot-<bank>-<version>-<sha8>.bin, and the
+           decrypted image beside it when its key recovers (-decrypted.bin)
+  flash    write one bank. The default image is a DECRYPTED image, encrypted the
+           way that bank's firmware needs; --raw sends the bytes verbatim. The
+           plan is shown and the write asked for, unless --yes
+
+  --raw                  flash: the file is prepared bytes, staged verbatim
+  --acknowledge-risk     flash: needed to write the bank the camera boots now,
+                         or bank R. Without it the write is refused, and nothing
+                         is sent
+  --no-verify            flash: skip the read-back after the commit
+  --yes                  flash: skip the confirmation (required when stdin is
+                         not a tty)
+
+After a flash, unplug the camera and plug it back in: a bank is only used when
+the camera boots, so the new image runs after the next start.
 `,
   profiles: `seek-fw profiles — list the supported firmware families
 
