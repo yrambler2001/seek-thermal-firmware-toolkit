@@ -1,17 +1,19 @@
 /**
- * Three views, selected by the URL hash — the same shape the original page had,
- * with `#/`, `#/flash` and `#/preserve` as the canonical forms. The original's
- * `#dump` and `#flash` still resolve, because links to them exist in the wild.
+ * Four views, selected by the URL hash — the same shape the original page had,
+ * with `#/`, `#/flash`, `#/preserve` and `#/slots` as the canonical forms. The
+ * original's `#dump` and `#flash` still resolve, because links to them exist in
+ * the wild.
  */
 
 import { useEffect, useState } from 'react';
 
-export type Route = 'dump' | 'flash' | 'preserve';
+export type Route = 'dump' | 'flash' | 'preserve' | 'slots';
 
 export const ROUTE_HREF: Readonly<Record<Route, string>> = {
   dump: '#/',
   flash: '#/flash',
   preserve: '#/preserve',
+  slots: '#/slots',
 };
 
 /** Page titles, carried over from the original's `applyView()`. */
@@ -19,12 +21,14 @@ export const ROUTE_TITLE: Readonly<Record<Route, string>> = {
   dump: 'Seek Thermal Firmware Dump (WebUSB)',
   flash: 'Seek Thermal Firmware & Flashing (WebUSB)',
   preserve: 'Seek Thermal Firmware — Preserve (WebUSB)',
+  slots: 'Seek Thermal Firmware — Firmware slots (WebUSB)',
 };
 
 export function parseRoute(hash: string): Route {
   const cleaned = hash.replace(/^#/, '').replace(/^\//, '').replace(/\/$/, '').toLowerCase();
   if (cleaned === 'flash') return 'flash';
   if (cleaned === 'preserve') return 'preserve';
+  if (cleaned === 'slots') return 'slots';
   return 'dump';
 }
 

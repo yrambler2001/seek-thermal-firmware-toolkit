@@ -15,10 +15,12 @@ afterEach(() => {
 });
 
 describe('parseRoute', () => {
-  it('treats the canonical forms as the three views', () => {
+  it('treats the canonical forms as the four views', () => {
     expect(parseRoute('#/')).toBe('dump');
     expect(parseRoute('#/flash')).toBe('flash');
     expect(parseRoute('#/preserve')).toBe('preserve');
+    expect(parseRoute('#/slots')).toBe('slots');
+    expect(ROUTE_HREF.slots).toBe('#/slots');
   });
 
   it('still understands the original page hashes', () => {

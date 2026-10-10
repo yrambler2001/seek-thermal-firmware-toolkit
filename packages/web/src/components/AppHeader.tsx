@@ -7,7 +7,7 @@
  */
 
 import type { ReactElement } from 'react';
-import { Archive, FlameKindling, Radar, Thermometer } from 'lucide-react';
+import { Archive, FlameKindling, Layers, Radar, Thermometer } from 'lucide-react';
 import { ROUTE_HREF, type Route } from '@/lib/routing';
 import { cn } from '@/lib/utils';
 
@@ -41,6 +41,14 @@ const NAV: readonly NavItem[] = [
      * the one-shot flasher. */
     danger: false,
   },
+  {
+    route: 'slots',
+    label: 'Firmware slots',
+    icon: <Layers className="size-4" />,
+    /* It writes one bank at a time, from a decrypted image or raw bytes, and
+     * each write asks first — so it reads like the flasher it is. */
+    danger: true,
+  },
 ];
 
 export function AppHeader({ route, connected, canUseUsb }: AppHeaderProps): ReactElement {
@@ -51,7 +59,7 @@ export function AppHeader({ route, connected, canUseUsb }: AppHeaderProps): Reac
         aria-hidden="true"
         className={cn(
           'absolute inset-x-0 top-0 h-0.5',
-          route === 'flash' ? 'bg-destructive' : 'bg-primary/70',
+          route === 'flash' || route === 'slots' ? 'bg-destructive' : 'bg-primary/70',
         )}
       />
       <div className="mx-auto w-full max-w-[64rem] px-4 pt-5 pb-0 sm:px-6">
@@ -77,7 +85,7 @@ export function AppHeader({ route, connected, canUseUsb }: AppHeaderProps): Reac
           </span>
         </div>
 
-        <nav aria-label="Views" className="-mb-px flex gap-1 pt-4">
+        <nav aria-label="Views" className="-mb-px flex flex-wrap gap-1 pt-4">
           {NAV.map((item) => {
             const current = route === item.route;
             return (

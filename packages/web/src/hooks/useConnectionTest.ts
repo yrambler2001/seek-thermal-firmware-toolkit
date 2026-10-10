@@ -63,7 +63,9 @@ export function useConnectionTest(params: ConnectionTestParams): ConnectionTestA
             ? 'transport works — press "Read device info" to see what this camera is running'
             : route === 'preserve'
               ? 'transport works — run a step in the preserve wizard when you are ready'
-              : 'transport works — ready to dump',
+              : route === 'slots'
+                ? 'transport works — press "Read slots" to see the three firmware banks'
+                : 'transport works — ready to dump',
           'ok',
         );
       } catch (error) {

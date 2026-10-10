@@ -20,6 +20,7 @@ import { useFlashPanel } from './hooks/useFlashPanel';
 import { useOfflineDecrypt } from './hooks/useOfflineDecrypt';
 import { usePreservePanel } from './hooks/usePreservePanel';
 import { useRunner } from './hooks/useRunner';
+import { useSlotsPanel } from './hooks/useSlotsPanel';
 import { reportInUseElsewhere, withCameraLock } from './lib/camera-lock';
 import type { ProfileChoice } from './lib/identify';
 import { DEFAULT_OPTIONS_FORM, type OptionsFailure, type OptionsForm } from './lib/options';
@@ -28,6 +29,7 @@ import { detectSupport, readBrowserEnvironment, type SupportStatus } from './lib
 import { DumpView } from './views/DumpView';
 import { FlashView } from './views/FlashView';
 import { PreserveView } from './views/PreserveView';
+import { SlotsView } from './views/SlotsView';
 
 export interface AppProps {
   /** Injectable so the render tests can drive every environment. */
@@ -89,6 +91,8 @@ export function App({ support }: AppProps = {}): ReactElement {
 
   const preserve = usePreservePanel({ runner, device, form: options });
 
+  const slots = useSlotsPanel({ runner, device, form: options, onOptionsFailure });
+
   /* The original routed the Connect panel's own log lines into whichever
    * view's main panel was showing. Same rule — on the wizard, the step that
    * is running, since that is where a mid-run Connect pick belongs. */
@@ -97,7 +101,9 @@ export function App({ support }: AppProps = {}): ReactElement {
       ? flash.infoReporter
       : route === 'preserve'
         ? preserve.phaseReporters[preserve.activePhase ?? 'read-build']
-        : dump.reporter;
+        : route === 'slots'
+          ? slots.reporter
+          : dump.reporter;
   const { testing, test } = useConnectionTest({
     runner,
     device,
@@ -147,6 +153,14 @@ export function App({ support }: AppProps = {}): ReactElement {
               firmware images it finds. Everything runs locally in your browser — nothing is
               uploaded anywhere. <strong>Read-only:</strong> this view issues no flash write, erase,
               upload, commit, or reset command.
+            </p>
+          ) : route === 'slots' ? (
+            <p>
+              Reads the camera&apos;s three firmware banks — A, B and the recovery bank R — and
+              shows what each holds, which one the camera boots, and what this build can do with it.
+              Everything runs locally in your browser. <strong>This view writes to flash:</strong>{' '}
+              it can flash one bank from a decrypted image or from raw bytes, and asks before every
+              write.
             </p>
           ) : route === 'flash' ? (
             <p>
@@ -207,6 +221,8 @@ export function App({ support }: AppProps = {}): ReactElement {
             profileChoice={profileChoice}
             onProfileChoice={setProfileChoice}
           />
+        ) : route === 'slots' ? (
+          <SlotsView slots={slots} connected={device.device !== null} busy={runner.busy} />
         ) : (
           <PreserveView
             preserve={preserve}
