@@ -36,7 +36,7 @@ const APPROVED: WriteApproval = { approved: true, dry: false, reason: 'test' };
 const DRY: WriteApproval = { approved: false, dry: true, reason: 'dry run' };
 const SN = 'TEST-JLINK-SN';
 const CAMERA_SERIAL = 'TEST-CAMERA-SERIAL';
-const TARGET = 'compact_32k_1_3_0_8';
+const TARGET = 'compact_8hz_1_3_0_8';
 const NO_HASH = 'b'.repeat(64);
 const BOARD = 'Compact on board 297 (PN297 32K Compact; its own flash is the 1.3.0.0 original)';
 
@@ -510,8 +510,8 @@ describe('flashFull: the runner, exact command lines', () => {
     expect(calls).toHaveLength(2);
     const [erase, flash] = calls;
     expect(erase).toMatchObject({
-      command: 'make',
-      args: ['jlink-run', 'CMD=erase-spifi-range'],
+      command: 'node',
+      args: ['tools/jlink/jlink-runner.js', 'erase-spifi-range'],
       cwd: TARGET_DIR,
     });
     expect(erase?.env).toEqual({
@@ -523,8 +523,8 @@ describe('flashFull: the runner, exact command lines', () => {
       ERASE_LEN: '0x400000',
     });
     expect(flash).toMatchObject({
-      command: 'make',
-      args: ['jlink-run', 'CMD=flash-factory-4m'],
+      command: 'node',
+      args: ['tools/jlink/jlink-runner.js', 'flash-factory-4m'],
       cwd: TARGET_DIR,
     });
     expect(flash?.env.FACTORY_IMAGE).toBe(path.resolve(IMAGE));
@@ -532,7 +532,7 @@ describe('flashFull: the runner, exact command lines', () => {
 
   it('tolerates the erase error -5 the recipe names, and still runs the flash', async () => {
     const { exec, calls } = fakeExec((call) =>
-      call.args.includes('CMD=erase-spifi-range')
+      call.args.includes('erase-spifi-range')
         ? {
             code: 2,
             stdout:
@@ -542,10 +542,7 @@ describe('flashFull: the runner, exact command lines', () => {
         : OK,
     );
     await bench(exec).flashFull(IMAGE);
-    expect(calls.map((call) => call.args[1])).toEqual([
-      'CMD=erase-spifi-range',
-      'CMD=flash-factory-4m',
-    ]);
+    expect(calls.map((call) => call.args[1])).toEqual(['erase-spifi-range', 'flash-factory-4m']);
   });
 
   it('refuses an erase failure it does not tolerate, and does not flash', async () => {

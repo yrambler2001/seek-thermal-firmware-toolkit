@@ -3,8 +3,9 @@
  * own jlink-runner, read the whole flash back halted, reset the CPU.
  *
  * WHAT IT MAY RUN. Exactly three things, all built here:
- *   - `make jlink-run CMD=erase-spifi-range` and `make jlink-run CMD=flash-factory-4m`
- *     in <SEEK_E2E_FWV1_DIR>/targets/<target> (the runner's own commands);
+ *   - `node tools/jlink/jlink-runner.js erase-spifi-range` and `... flash-factory-4m`
+ *     in <SEEK_E2E_FWV1_DIR>/targets/<target> (the runner's own commands; this is
+ *     what the target's `make jlink-run` rule runs, which not every target keeps);
  *   - one `JLinkExe` session per read (`h`, `savebin`, `g`, `q`) and one per reset
  *     (`r`, `g`, `q`), each a command file in a scratch directory.
  * It never runs `dump-spifi-4m`: that overwrites the unit's original dump in
@@ -31,7 +32,11 @@ import type { WriteApproval } from '../supervised-write.js';
 import { BENCH_FLASH_BASE, BENCH_FLASH_BYTES, type JlinkBench } from './types.js';
 
 /** The FW-V1 target directory the recipe runs in (TESTING.md 41.5). */
-export const DEFAULT_TARGET = 'compact_32k_1_3_0_8';
+export const DEFAULT_TARGET = 'compact_8hz_1_3_0_8';
+/** The same target's name before FW-V1 renamed its targets (product, delivered rate, version). */
+/** The runner script, relative to the target directory. */
+export const RUNNER_SCRIPT = 'tools/jlink/jlink-runner.js';
+export const LEGACY_TARGET = 'compact_32k_1_3_0_8';
 
 /** The SWD speed and interface the recipe uses (kilohertz for `-speed`). */
 const INTERFACE = 'SWD';
@@ -132,7 +137,7 @@ export interface JlinkBenchOptions {
   readonly serial?: string;
   /** The target device (default SEEK_E2E_JLINK_DEVICE, else LPC4330_M4). */
   readonly device?: string;
-  /** The FW-V1 target directory under targets/ (default compact_32k_1_3_0_8). */
+  /** The FW-V1 target directory under targets/ (default compact_8hz_1_3_0_8, or its old name compact_32k_1_3_0_8 when only that exists). */
   readonly target?: string;
   /** Runs every command (default: spawn). */
   readonly exec?: Exec;
@@ -200,8 +205,15 @@ export function createJlinkBench(options: JlinkBenchOptions): JlinkBench {
     'SEEK_E2E_JLINK_SN is not set: give the J-Link serial number',
   );
   const device = nonEmpty(options.device ?? env.SEEK_E2E_JLINK_DEVICE) ?? DEFAULT_DEVICE;
-  const target = nonEmpty(options.target) ?? DEFAULT_TARGET;
-  const targetDir = path.join(path.resolve(fwv1Dir), 'targets', target);
+  const targetsDir = path.join(path.resolve(fwv1Dir), 'targets');
+  const asked = nonEmpty(options.target);
+  const target =
+    asked ??
+    (existsSync(path.join(targetsDir, DEFAULT_TARGET)) ||
+    !existsSync(path.join(targetsDir, LEGACY_TARGET))
+      ? DEFAULT_TARGET
+      : LEGACY_TARGET);
+  const targetDir = path.join(targetsDir, target);
   if (!existsSync(targetDir)) {
     throw new Error(
       `no FW-V1 target directory ${targetDir} (SEEK_E2E_FWV1_DIR must be the FW-V1 checkout ` +
@@ -213,12 +225,12 @@ export function createJlinkBench(options: JlinkBenchOptions): JlinkBench {
   const tmpRoot = options.tmpRoot ?? tmpdir();
   const log = options.log ?? defaultLog;
 
-  /** One runner command (make jlink-run), with the runner's own environment set. */
+  /** One runner command (`node tools/jlink/jlink-runner.js <command>`), with the runner's own environment set. */
   function runRunner(
     command: RunnerCommand,
     extra: Readonly<Record<string, string>>,
   ): Promise<ExecResult> {
-    return exec('make', ['jlink-run', `CMD=${command}`], {
+    return exec('node', [RUNNER_SCRIPT, command], {
       cwd: targetDir,
       env: {
         JLINK_SERIAL: serial,
@@ -314,11 +326,11 @@ export function createJlinkBench(options: JlinkBenchOptions): JlinkBench {
       const erase = { ERASE_ADDR: hex(BENCH_FLASH_BASE), ERASE_LEN: hex(BENCH_FLASH_BYTES) };
       if (dry) {
         log(
-          `[dry-run] would run: make jlink-run CMD=erase-spifi-range in ${targetDir} ` +
+          `[dry-run] would run: node tools/jlink/jlink-runner.js erase-spifi-range in ${targetDir} ` +
             `(ERASE_ADDR=${erase.ERASE_ADDR} ERASE_LEN=${erase.ERASE_LEN}, JLINK_SERIAL=${serial})`,
         );
         log(
-          `[dry-run] would run: make jlink-run CMD=flash-factory-4m in ${targetDir} ` +
+          `[dry-run] would run: node tools/jlink/jlink-runner.js flash-factory-4m in ${targetDir} ` +
             `(FACTORY_IMAGE=${image}); the caller's verifyFull is the success check`,
         );
         return;
