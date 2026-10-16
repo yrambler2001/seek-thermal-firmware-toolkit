@@ -49,6 +49,26 @@ export const BOOTLOADER_ADDRESS = 0x14000000;
 export const ENUMERATE_MS = 40_000;
 /** The banks, in the order they are written. */
 export const WRITE_ORDER: readonly BankLetter[] = ['b', 'a', 'r'];
+/**
+ * The header's cleartext adjust word (core `ADJUST_OFFSET`, image/header.ts). The page
+ * stamps every image it writes so its word sum is the bootloader's target, by rewriting
+ * this word; an image that already sums right is unchanged.
+ */
+export const ADJUST_OFFSET = 0x238;
+
+/**
+ * Whether a bank's decrypted read-back is the image that was written, allowing for the
+ * one word the page's stamp may rebalance (the adjust word). A patched build string
+ * changes the sum, so the stamp moves the adjust word and nothing else.
+ */
+export function sameAsWritten(readBack: Uint8Array, written: Uint8Array): boolean {
+  if (readBack.length !== written.length) return false;
+  for (let at = 0; at < written.length; at++) {
+    if (at >= ADJUST_OFFSET && at < ADJUST_OFFSET + 4) continue;
+    if (readBack[at] !== written[at]) return false;
+  }
+  return true;
+}
 
 const UPPER: Readonly<Record<BankLetter, string>> = { a: 'A', b: 'B', r: 'R' };
 
@@ -425,7 +445,7 @@ async function writeBank(
   }
   if (dump.decrypted === null) {
     problems.push(`bank ${name}: the read-back does not decrypt under any recovered key`);
-  } else if (sha256(dump.decrypted) !== sha256(image.bytes)) {
+  } else if (!sameAsWritten(dump.decrypted, image.bytes)) {
     problems.push(
       `bank ${name}: the read-back decrypts to ${short(sha256(dump.decrypted))}, not the image written ${short(sha256(image.bytes))}`,
     );

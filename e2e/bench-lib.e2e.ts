@@ -41,6 +41,7 @@ import {
   type ExecResult,
   type JlinkBench,
 } from './lib/bench/index.js';
+import { ADJUST_OFFSET, sameAsWritten } from './lib/bench/spec-flow.js';
 import type { WriteApproval } from './lib/supervised-write.js';
 
 const APPROVED: WriteApproval = { approved: true, dry: false, reason: 'test' };
@@ -1073,5 +1074,29 @@ describe.skipIf(CORPUS === undefined)('the corpus (SEEK_FULL_DUMPS_BY_CAMERA)', 
     const patched = Buffer.from(result?.patched ?? new Uint8Array());
     expect(patched.indexOf('Oct 21 2014')).toBe(-1);
     expect(patched.indexOf('Oct 21 2015')).toBeGreaterThan(-1);
+  });
+});
+
+describe('sameAsWritten: the page may rebalance only the adjust word', () => {
+  /** The bytes with one byte flipped, as a copy. */
+  function flipped(bytes: Uint8Array, at: number): Uint8Array {
+    const copy = new Uint8Array(bytes);
+    copy[at] = (copy[at] ?? 0) ^ 0xff;
+    return copy;
+  }
+
+  it('accepts the same bytes, and a difference in the adjust word alone', () => {
+    const written = dump(0x21);
+    expect(sameAsWritten(written, written)).toBe(true);
+    let stamped: Uint8Array = written;
+    for (let at = ADJUST_OFFSET; at < ADJUST_OFFSET + 4; at++) stamped = flipped(stamped, at);
+    expect(sameAsWritten(stamped, written)).toBe(true);
+  });
+
+  it('refuses a difference anywhere else, a word past the adjust word included', () => {
+    const written = dump(0x21);
+    expect(sameAsWritten(flipped(written, ADJUST_OFFSET + 4), written)).toBe(false);
+    expect(sameAsWritten(flipped(written, ADJUST_OFFSET - 1), written)).toBe(false);
+    expect(sameAsWritten(written.subarray(1), written)).toBe(false);
   });
 });
