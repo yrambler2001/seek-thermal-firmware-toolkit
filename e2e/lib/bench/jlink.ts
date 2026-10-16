@@ -24,7 +24,15 @@
 
 import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import {
+  chmodSync,
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
@@ -42,6 +50,27 @@ export const LEGACY_TARGET = 'compact_32k_1_3_0_8';
 const INTERFACE = 'SWD';
 const SPEED_KHZ = '4000';
 const DEFAULT_DEVICE = 'LPC4330_M4';
+/**
+ * JLinkExe's GUI off: without it SEGGER's flash download progress window is a modal
+ * that pops up during a flash. Added to every session the bench runs itself.
+ */
+export const NO_GUI_ARGS: readonly string[] = ['-NoGui', '1'];
+
+/**
+ * The JLinkExe the runner starts, as a shell shim: the real JLinkExe with `-NoGui 1`
+ * added, every other argument and the exit code passed through unchanged. The
+ * runner reads its JLinkExe path from `JLINKEXE` (FW-V1's jlink-runner.js), so
+ * FW-V1 itself is not changed.
+ */
+export function jlinkShimScript(): string {
+  return [
+    '#!/bin/sh',
+    '# Written by the bench: JLinkExe with -NoGui 1 (no flash download window).',
+    '# Every other argument and the exit code pass through.',
+    'exec JLinkExe -NoGui 1 "$@"',
+    '',
+  ].join('\n');
+}
 
 /** The message that marks a halt that did not happen (J-Link's own wording). */
 const HALT_FAILED = /could not be halted|CPU is not halted/i;
@@ -225,7 +254,10 @@ export function createJlinkBench(options: JlinkBenchOptions): JlinkBench {
   const tmpRoot = options.tmpRoot ?? tmpdir();
   const log = options.log ?? defaultLog;
 
-  /** One runner command (`node tools/jlink/jlink-runner.js <command>`), with the runner's own environment set. */
+  /**
+   * One runner command (`node tools/jlink/jlink-runner.js <command>`), with the runner's
+   * own environment set. `extra` carries JLINKEXE (the shim) for the flashes.
+   */
   function runRunner(
     command: RunnerCommand,
     extra: Readonly<Record<string, string>>,
@@ -259,11 +291,20 @@ export function createJlinkBench(options: JlinkBenchOptions): JlinkBench {
         SPEED_KHZ,
         '-autoconnect',
         '1',
+        ...NO_GUI_ARGS,
         '-CommandFile',
         commandFile,
       ],
       {},
     );
+  }
+
+  /** The shim the runner's JLinkExe is, written into `dir` (removed with the scratch). */
+  function writeShim(dir: string): string {
+    const file = path.join(dir, 'JLinkExe');
+    writeFileSync(file, jlinkShimScript());
+    chmodSync(file, 0o755);
+    return file;
   }
 
   /** A scratch directory for one operation, removed when it ends. */
@@ -335,24 +376,31 @@ export function createJlinkBench(options: JlinkBenchOptions): JlinkBench {
         );
         return;
       }
-      const erased = await runRunner('erase-spifi-range', erase);
-      if (erased.code !== 0) {
-        if (!ERASE_TOLERATED.test(`${erased.stdout}\n${erased.stderr}`)) {
-          throw new Error(
-            `erase-spifi-range failed (exit ${String(erased.code)}): ${tail(erased)}`,
+      /* The runner's JLinkExe is the shim, so its flash runs with the GUI off. */
+      await withScratch(async (dir) => {
+        const jlinkExe = writeShim(dir);
+        const erased = await runRunner('erase-spifi-range', { ...erase, JLINKEXE: jlinkExe });
+        if (erased.code !== 0) {
+          if (!ERASE_TOLERATED.test(`${erased.stdout}\n${erased.stderr}`)) {
+            throw new Error(
+              `erase-spifi-range failed (exit ${String(erased.code)}): ${tail(erased)}`,
+            );
+          }
+          log(
+            `erase-spifi-range reported error -5 (exit ${String(erased.code)}): tolerated, as the ` +
+              'recipe says; the read-back decides',
           );
         }
-        log(
-          `erase-spifi-range reported error -5 (exit ${String(erased.code)}): tolerated, as the ` +
-            'recipe says; the read-back decides',
-        );
-      }
-      const flashed = await runRunner('flash-factory-4m', { FACTORY_IMAGE: image });
-      if (flashed.code !== 0) {
-        log(
-          `flash-factory-4m exited ${String(flashed.code)}: ${tail(flashed)} (the read-back decides)`,
-        );
-      }
+        const flashed = await runRunner('flash-factory-4m', {
+          FACTORY_IMAGE: image,
+          JLINKEXE: jlinkExe,
+        });
+        if (flashed.code !== 0) {
+          log(
+            `flash-factory-4m exited ${String(flashed.code)}: ${tail(flashed)} (the read-back decides)`,
+          );
+        }
+      });
     },
 
     readFlash(address: number, length: number): Promise<Uint8Array> {

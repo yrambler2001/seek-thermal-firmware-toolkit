@@ -7,8 +7,17 @@
  *   npx vitest run --config e2e/vitest.config.ts bench-lib.e2e
  */
 
+import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
@@ -18,9 +27,11 @@ import {
   BENCH_FLASH_BASE,
   BENCH_FLASH_BYTES,
   DRY_RUN_READ,
+  NO_GUI_ARGS,
   benchRoot,
   createBenchCamera,
   createJlinkBench,
+  jlinkShimScript,
   lockedPowerSwitchChannel,
   listBenchSubjects,
   parseRunningInfo,
@@ -521,6 +532,7 @@ describe('flashFull: the runner, exact command lines', () => {
       JLINK_SPEED: '4000',
       ERASE_ADDR: '0x14000000',
       ERASE_LEN: '0x400000',
+      JLINKEXE: expect.stringMatching(/JLinkExe$/),
     });
     expect(flash).toMatchObject({
       command: 'node',
@@ -528,6 +540,47 @@ describe('flashFull: the runner, exact command lines', () => {
       cwd: TARGET_DIR,
     });
     expect(flash?.env.FACTORY_IMAGE).toBe(path.resolve(IMAGE));
+    expect(flash?.env.JLINKEXE).toBe(erase?.env.JLINKEXE);
+  });
+
+  it('runs the runner JLinkExe through a shim written for the flash, and removes it after', async () => {
+    const seen: string[] = [];
+    const { exec, calls } = fakeExec((call) => {
+      const shim = call.env.JLINKEXE ?? '';
+      seen.push(`${String(existsSync(shim))} ${readFileSync(shim, 'utf8')}`);
+      return OK;
+    });
+    await bench(exec).flashFull(IMAGE);
+    expect(seen).toEqual([`true ${jlinkShimScript()}`, `true ${jlinkShimScript()}`]);
+    const shim = calls[0]?.env.JLINKEXE ?? '';
+    expect(existsSync(shim)).toBe(false);
+    expect(readdirSync(TMP_ROOT)).toEqual([]);
+  });
+
+  it('the shim runs JLinkExe with -NoGui 1 first, passes every argument and the exit code through', () => {
+    const bin = path.join(scratch, 'shim-fake-bin');
+    mkdirSync(bin, { recursive: true });
+    writeFileSync(
+      path.join(bin, 'JLinkExe'),
+      '#!/bin/sh\nfor a in "$@"; do printf "arg:%s\\n" "$a"; done\nexit 7\n',
+      { mode: 0o755 },
+    );
+    const shim = path.join(scratch, 'shim-under-test', 'JLinkExe');
+    mkdirSync(path.dirname(shim), { recursive: true });
+    writeFileSync(shim, jlinkShimScript(), { mode: 0o755 });
+    const run = spawnSync(shim, ['-SelectEmuBySN', SN, '-CommandFile', '/tmp/a b.jlink'], {
+      env: { PATH: `${bin}:/usr/bin:/bin` },
+      encoding: 'utf8',
+    });
+    expect(run.status).toBe(7);
+    expect(run.stdout.split('\n').filter((line) => line !== '')).toEqual([
+      'arg:-NoGui',
+      'arg:1',
+      'arg:-SelectEmuBySN',
+      `arg:${SN}`,
+      'arg:-CommandFile',
+      'arg:/tmp/a b.jlink',
+    ]);
   });
 
   it('tolerates the erase error -5 the recipe names, and still runs the flash', async () => {
@@ -586,8 +639,11 @@ describe('readFlash, verifyFull and resetCpu: one JLinkExe session each', () => 
       '4000',
       '-autoconnect',
       '1',
+      '-NoGui',
+      '1',
       '-CommandFile',
     ]);
+    expect(NO_GUI_ARGS).toEqual(['-NoGui', '1']);
     const out = /savebin "([^"]+)"/.exec(call?.script ?? '')?.[1] ?? '';
     expect(call?.script).toBe(`h\nsavebin "${out}", 0x14000000, 0x400000\ng\nq\n`);
     expect(readdirSync(TMP_ROOT)).toEqual([]);
@@ -662,6 +718,7 @@ describe('readFlash, verifyFull and resetCpu: one JLinkExe session each', () => 
     expect(calls).toHaveLength(1);
     expect(calls[0]?.script).toBe('r\ng\nq\n');
     expect(calls[0]?.args).toContain('-CommandFile');
+    expect(calls[0]?.args).toEqual(expect.arrayContaining(NO_GUI_ARGS));
   });
 
   it('resetCpu fails on a non-zero exit', async () => {
