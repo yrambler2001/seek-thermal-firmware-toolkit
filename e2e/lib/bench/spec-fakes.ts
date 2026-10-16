@@ -204,7 +204,7 @@ export function createFakeRig(options: {
     },
   };
 
-  const patch = (image: Uint8Array): PatchedBuildString | null => {
+  const patch = (image: Uint8Array, _buildString: string): PatchedBuildString | null => {
     const from = 'AAAAAA';
     const to = 'BBBBBB';
     const at = findBytes(image, new TextEncoder().encode(`${MARKER}${from}`));

@@ -223,14 +223,14 @@ export async function createRealRig(
    * until the run ends. Every window's openTarget takes the same check again. */
   const busy = cameraBusyReason();
   if (busy !== null) throw new Error(`the bench camera is not free: ${busy}`);
-  const jlink = await createJlinkBench({ approval });
-  const camera = await createBenchCamera({ approval });
+  const jlink = createJlinkBench({ gate: approval });
+  const camera = createBenchCamera({ gate: approval });
   let windows = 0;
   return {
     kind: 'real',
     jlink,
     camera,
-    patch: (image: Uint8Array) => patchBuildString(image),
+    patch: (image: Uint8Array, buildString: string) => patchBuildString(image, buildString),
     openPage: () => {
       windows += 1;
       return openBenchPage(path.join(scratchRoot, `window-${String(windows)}`));

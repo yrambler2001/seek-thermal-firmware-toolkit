@@ -453,17 +453,26 @@ async function writeBank(
  * with the banks as the page read them after the writes.
  */
 async function bootProof(rig: BenchRig, reading: Reading, r: SubjectResult): Promise<void> {
+  /* The booted bank's image when the page names a booted bank; the locked line cannot, and the
+   * patch is written to all three banks anyway, so any bank's image will do. */
   const booted = reading.read.banks.find((bank) => bank.booted);
-  const image = booted === undefined ? null : (reading.images.get(booted.letter) ?? null);
-  if (booted === undefined || image === null) {
+  const source = booted ?? reading.read.banks.find((bank) => reading.images.has(bank.letter));
+  const image = source === undefined ? null : (reading.images.get(source.letter) ?? null);
+  if (image === null) {
     r.bootProof = 'skipped';
-    r.notes.push('boot proof skipped: no decrypted image of the booted bank to patch');
+    r.notes.push('boot proof skipped: no decrypted image of any bank to patch');
     return;
   }
-  const patched = rig.patch(image.bytes);
+  const buildString = (await rig.camera.runningInfo())?.buildString ?? null;
+  if (buildString === null) {
+    r.bootProof = 'skipped';
+    r.notes.push('boot proof skipped: the camera did not report a build string to look for');
+    return;
+  }
+  const patched = rig.patch(image.bytes, buildString);
   if (patched === null) {
     r.bootProof = 'skipped';
-    r.notes.push('boot proof skipped: patchBuildString found no build string in the booted image');
+    r.notes.push('boot proof skipped: patchBuildString found no build string in the bank image');
     return;
   }
   r.notes.push(

@@ -83,7 +83,7 @@ export interface BenchRig {
   readonly kind: 'real' | 'fake';
   readonly jlink: JlinkBench;
   readonly camera: BenchCamera;
-  readonly patch: (image: Uint8Array) => PatchedBuildString | null;
+  readonly patch: (image: Uint8Array, buildString: string) => PatchedBuildString | null;
   openPage(): Promise<BenchPage>;
 }
 
@@ -107,7 +107,7 @@ export async function loadSubjects(): Promise<LoadedSubjects> {
     camera,
     ...(only === '' ? {} : { only }),
   };
-  const listed = await listBenchSubjects(query);
+  const listed = listBenchSubjects(query);
   const subjects = listed.filter((subject) => subject.launches && subject.slotsSupported);
   const left = listed.filter((subject) => !subjects.includes(subject));
   if (subjects.length === 0) {
