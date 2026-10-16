@@ -455,8 +455,10 @@ async function writeBank(
 async function bootProof(rig: BenchRig, reading: Reading, r: SubjectResult): Promise<void> {
   /* The booted bank's image when the page names a booted bank; the locked line cannot, and the
    * patch is written to all three banks anyway, so any bank's image will do. */
-  const booted = reading.read.banks.find((bank) => bank.booted);
-  const source = booted ?? reading.read.banks.find((bank) => reading.images.has(bank.letter));
+  const withImage = reading.read.banks.filter(
+    (bank) => (reading.images.get(bank.letter) ?? null) !== null,
+  );
+  const source = withImage.find((bank) => bank.booted) ?? withImage[0];
   const image = source === undefined ? null : (reading.images.get(source.letter) ?? null);
   if (image === null) {
     r.bootProof = 'skipped';
@@ -602,9 +604,13 @@ export async function runSubject(
     const name = UPPER[result.bank];
     const image = reading.images.get(result.bank) ?? null;
     if (image === null) {
-      result.state = 'failed';
-      result.notes.push('no decrypted image of this bank to write');
-      r.failures.push(`write ${name}: no decrypted image of the bank to write`);
+      /* An empty bank (or one the page cannot decrypt) has no image of its own to write.
+       * That is recorded, not failed: the boot proof writes all three banks anyway. */
+      result.state = 'skipped';
+      result.notes.push("the bank holds no image of its own: its write is the boot proof's");
+      r.notes.push(
+        `bank ${name}: no image of its own, so no slot write (the boot proof writes it)`,
+      );
       continue;
     }
     let outcome: WriteOutcome;
@@ -624,7 +630,7 @@ export async function runSubject(
     result.state = 'passed';
     log(`${r.label}: bank ${name} written, verified, and read back`);
   }
-  if (r.slotWrites.some((result) => result.state !== 'passed')) {
+  if (r.slotWrites.some((result) => result.state === 'failed' || result.state === 'not-run')) {
     r.notes.push('boot proof not run: a slot write did not pass');
     return r;
   }
