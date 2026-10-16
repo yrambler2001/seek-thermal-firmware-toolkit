@@ -532,8 +532,9 @@ describe('flashFull: the runner, exact command lines', () => {
       JLINK_SPEED: '4000',
       ERASE_ADDR: '0x14000000',
       ERASE_LEN: '0x400000',
-      JLINKEXE: expect.stringMatching(/JLinkExe$/),
+      JLINKEXE: erase?.env.JLINKEXE,
     });
+    expect(erase?.env.JLINKEXE ?? '').toMatch(/JLinkExe$/);
     expect(flash).toMatchObject({
       command: 'node',
       args: ['tools/jlink/jlink-runner.js', 'flash-factory-4m'],
@@ -718,7 +719,7 @@ describe('readFlash, verifyFull and resetCpu: one JLinkExe session each', () => 
     expect(calls).toHaveLength(1);
     expect(calls[0]?.script).toBe('r\ng\nq\n');
     expect(calls[0]?.args).toContain('-CommandFile');
-    expect(calls[0]?.args).toEqual(expect.arrayContaining(NO_GUI_ARGS));
+    expect(calls[0]?.args).toEqual(expect.arrayContaining([...NO_GUI_ARGS]));
   });
 
   it('resetCpu fails on a non-zero exit', async () => {
