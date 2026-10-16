@@ -149,6 +149,9 @@ describe.skipIf(!runnable)('the slots bench', () => {
                   say(line);
                 });
           results.push(result);
+          /* The run's log is the only place a failure's cause shows before the run ends. */
+          for (const note of result.notes) say(`${result.label}: note: ${note}`);
+          for (const failure of result.failures) say(`${result.label}: FAILED: ${failure}`);
           process.stdout.write(`${reportLine(result)}\n`);
           expect(result.failures, `${result.label}: ${result.failures.join(' ;; ')}`).toEqual([]);
         },

@@ -430,6 +430,7 @@ export function createJlinkBench(options: JlinkBenchOptions): JlinkBench {
       await withScratch(async (dir) => {
         const result = await session(dir, 'reset', ['r', 'g', 'q']);
         const text = `${result.stdout}\n${result.stderr}`;
+        log(`reset: JLinkExe exit ${String(result.code)}: ${tail(result)}`);
         if (result.code !== 0 || JLINK_ERROR.test(text)) {
           throw new Error(`reset failed (exit ${String(result.code)}): ${tail(result)}`);
         }

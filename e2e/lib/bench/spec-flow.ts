@@ -245,6 +245,16 @@ async function readWindow(
   const page = await rig.openPage();
   try {
     const read = await page.readSlots();
+    r.notes.push(
+      `page: "${read.status}", running build ${read.runningBuild ?? 'none shown'}, banks ` +
+        read.banks
+          .map(
+            (bank) =>
+              `${UPPER[bank.letter]} ${hex(bank.address)} ${bank.version ?? 'no version'}` +
+              (bank.booted ? ' (booted)' : ''),
+          )
+          .join(', '),
+    );
     const letters = read.banks.map((bank) => bank.letter).join(',');
     if (letters !== 'a,b,r') {
       throw new Error(`the table has ${letters === '' ? 'no banks' : letters}, not a, b, r`);
