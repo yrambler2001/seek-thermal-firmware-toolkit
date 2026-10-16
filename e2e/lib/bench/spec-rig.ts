@@ -99,7 +99,7 @@ export interface LoadedSubjects {
  * it is for (SEEK_BENCH_CAMERA, default 'Compact'), and SEEK_BENCH_ONLY. Only
  * launchable rows the slots page supports are run.
  */
-export async function loadSubjects(): Promise<LoadedSubjects> {
+export function loadSubjects(): Promise<LoadedSubjects> {
   const camera = process.env.SEEK_BENCH_CAMERA ?? 'Compact';
   const only = process.env.SEEK_BENCH_ONLY ?? '';
   const query: BenchSubjectQuery = {
@@ -111,9 +111,11 @@ export async function loadSubjects(): Promise<LoadedSubjects> {
   const subjects = listed.filter((subject) => subject.launches && subject.slotsSupported);
   const left = listed.filter((subject) => !subjects.includes(subject));
   if (subjects.length === 0) {
-    throw new Error(
-      `no launchable ${camera} row at 0.8.0.0 or above in the tree (${String(listed.length)} listed)`,
+    return Promise.reject(
+      new Error(
+        `no launchable ${camera} row at 0.8.0.0 or above in the tree (${String(listed.length)} listed)`,
+      ),
     );
   }
-  return { subjects, left };
+  return Promise.resolve({ subjects, left });
 }

@@ -215,18 +215,15 @@ function windowOf(target: TargetHandle, scratchDir: string): BenchPage {
  * The real rig: the bench library's J-Link and camera (both given the write
  * gate's result, which they check before any flash write), and the Electron page.
  */
-export async function createRealRig(
-  approval: WriteApproval,
-  scratchRoot: string,
-): Promise<BenchRig> {
+export function createRealRig(approval: WriteApproval, scratchRoot: string): Promise<BenchRig> {
   /* The run's camera lock (preflight.ts): taken here, before the first flash, and held
    * until the run ends. Every window's openTarget takes the same check again. */
   const busy = cameraBusyReason();
-  if (busy !== null) throw new Error(`the bench camera is not free: ${busy}`);
+  if (busy !== null) return Promise.reject(new Error(`the bench camera is not free: ${busy}`));
   const jlink = createJlinkBench({ gate: approval });
   const camera = createBenchCamera({ gate: approval });
   let windows = 0;
-  return {
+  return Promise.resolve({
     kind: 'real',
     jlink,
     camera,
@@ -235,5 +232,5 @@ export async function createRealRig(
       windows += 1;
       return openBenchPage(path.join(scratchRoot, `window-${String(windows)}`));
     },
-  };
+  });
 }
