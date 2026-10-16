@@ -143,7 +143,11 @@ function windowOf(target: TargetHandle, scratchDir: string): BenchPage {
   return {
     async readSlots(): Promise<PageRead> {
       const status = await readSlots(target.wizard, target.page);
-      if (!status.startsWith('Read. 3/3')) throw new Error(`Read slots ended "${status}"`);
+      if (!status.startsWith('Read. 3/3')) {
+        throw new Error(
+          `Read slots ended "${status}"\n${await target.wizard.logTail('slotsrun', 25)}`,
+        );
+      }
       const summary = await summaryRows(target.page);
       return {
         status,
@@ -174,7 +178,11 @@ function windowOf(target: TargetHandle, scratchDir: string): BenchPage {
       });
       try {
         const status = await pickImage(target.wizard, target.page, letter, 'plain', file);
-        if (!status.startsWith('Ready — ')) throw new Error(`the picker answered "${status}"`);
+        if (!status.startsWith('Ready — ')) {
+          throw new Error(
+            `the picker answered "${status}"\n${await target.wizard.logTail('slotsrun', 25)}`,
+          );
+        }
         await openWriteConfirm(target.wizard, target.page, name);
         const ackShown = (await target.page.$(ACK_BOX)) !== null;
         if (ackShown !== acknowledge) {
@@ -188,7 +196,11 @@ function windowOf(target: TargetHandle, scratchDir: string): BenchPage {
           throw new Error(`${name}: Yes is on before the acknowledgement is ticked`);
         }
         const status2 = await confirmWrite(target.wizard, target.page, name, ackShown);
-        if (!status2.startsWith('Written. ')) throw new Error(`the write ended "${status2}"`);
+        if (!status2.startsWith('Written. ')) {
+          throw new Error(
+            `the write ended "${status2}"\n${await target.wizard.logTail('slotsrun', 25)}`,
+          );
+        }
         return { status: status2, ackShown, outcome: (await outcomeAlert(target.page)) ?? null };
       } finally {
         await setGuard(target.page, {
