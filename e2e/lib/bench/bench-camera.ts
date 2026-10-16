@@ -165,6 +165,17 @@ export function createBenchCamera(options: BenchCameraOptions): BenchCamera {
 
     waitForEnumeration,
 
+    async waitForReboot(dropMs: number, timeoutMs: number): Promise<number | null> {
+      const start = now();
+      while (present()) {
+        const elapsed = now() - start;
+        if (elapsed >= dropMs) return null;
+        await sleep(Math.min(DEFAULT_POLL_MS, dropMs - elapsed));
+      }
+      const back = await waitForEnumeration(timeoutMs);
+      return back === null ? null : now() - start;
+    },
+
     async powerCycle(offMs: number = DEFAULT_OFF_MS): Promise<void> {
       const channel = lockedPowerSwitchChannel(env);
       if (dry) {

@@ -47,6 +47,20 @@ export const BOOT_CONFIG_ADDRESS = 0x14010000;
 export const BOOTLOADER_ADDRESS = 0x14000000;
 /** How long the camera has to come back on USB after a reset or a replug. */
 export const ENUMERATE_MS = 40_000;
+/**
+ * How long a reset may take to take the camera off the bus. A reset that reboots the
+ * camera drops it at once, and it is back in about 4 s; a camera still on the bus after
+ * this long was not reset, and the page must not be read from it.
+ */
+export const RESET_DROP_MS = 5_000;
+
+/** The failure for a reset that did not reboot the camera, or that did not bring it back. */
+function rebootFailure(dropMs: number, timeoutMs: number): string {
+  return (
+    `the camera stayed on the bus ${String(dropMs / 1000)} s after the reset (not rebooted), ` +
+    `or did not come back within ${String(timeoutMs / 1000)} s`
+  );
+}
 /** The banks, in the order they are written. */
 export const WRITE_ORDER: readonly BankLetter[] = ['b', 'a', 'r'];
 /**
@@ -527,10 +541,8 @@ async function bootProof(rig: BenchRig, reading: Reading, r: SubjectResult): Pro
   }
 
   await rig.jlink.resetCpu();
-  if ((await rig.camera.waitForEnumeration(ENUMERATE_MS)) === null) {
-    r.failures.push(
-      `boot: the camera did not enumerate within ${String(ENUMERATE_MS / 1000)} s of the reset`,
-    );
+  if ((await rig.camera.waitForReboot(RESET_DROP_MS, ENUMERATE_MS)) === null) {
+    r.failures.push(`boot: ${rebootFailure(RESET_DROP_MS, ENUMERATE_MS)}`);
     r.bootProof = 'failed';
     return;
   }
@@ -606,13 +618,11 @@ export async function runSubject(
     r.notes.push('steps 2-4 not run: the flash, its read-back, or the reset failed');
     return r;
   }
-  const enumerated = await rig.camera.waitForEnumeration(ENUMERATE_MS);
+  const enumerated = await rig.camera.waitForReboot(RESET_DROP_MS, ENUMERATE_MS);
   r.enumerated = enumerated !== null;
   r.enumerateMs = enumerated;
   if (enumerated === null) {
-    r.failures.push(
-      `enumeration: the camera did not enumerate within ${String(ENUMERATE_MS / 1000)} s of the reset`,
-    );
+    r.failures.push(rebootFailure(RESET_DROP_MS, ENUMERATE_MS));
     r.notes.push('steps 2-4 not run: the camera is not on the bus');
     return r;
   }

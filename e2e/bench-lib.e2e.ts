@@ -919,6 +919,54 @@ describe('the camera on the bus and in the CLI', () => {
     expect(await camera.waitForEnumeration(5000, 500)).toBe(1000);
   });
 
+  it('waitForReboot: the camera must leave the bus, then come back, and the wait is from the reset', async () => {
+    let clock = 0;
+    /* On the bus at the reset, off from 1 s to 3 s (the reboot), then back. */
+    const onBus = (ms: number) => (ms < 1000 || ms >= 3000 ? 1 : 0);
+    const camera = createBenchCamera({
+      gate: APPROVED,
+      env: {},
+      countCameras: () => onBus(clock),
+      now: () => clock,
+      sleep: (ms) => {
+        clock += ms;
+        return Promise.resolve();
+      },
+    });
+    expect(await camera.waitForReboot(5000, 40_000)).toBe(3000);
+  });
+
+  it('waitForReboot: a camera still on the bus at the drop limit was not rebooted', async () => {
+    let clock = 0;
+    const camera = createBenchCamera({
+      gate: APPROVED,
+      env: {},
+      countCameras: () => 1,
+      now: () => clock,
+      sleep: (ms) => {
+        clock += ms;
+        return Promise.resolve();
+      },
+    });
+    expect(await camera.waitForReboot(5000, 40_000)).toBeNull();
+    expect(clock).toBe(5000);
+  });
+
+  it('waitForReboot: null when the camera never comes back', async () => {
+    let clock = 0;
+    const camera = createBenchCamera({
+      gate: APPROVED,
+      env: {},
+      countCameras: () => (clock < 1000 ? 1 : 0),
+      now: () => clock,
+      sleep: (ms) => {
+        clock += ms;
+        return Promise.resolve();
+      },
+    });
+    expect(await camera.waitForReboot(5000, 3000)).toBeNull();
+  });
+
   it('waitForEnumeration returns null on timeout, at the timeout and no later', async () => {
     let clock = 0;
     const camera = createBenchCamera({

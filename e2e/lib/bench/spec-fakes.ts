@@ -179,16 +179,19 @@ export function createFakeRig(options: {
     },
   };
 
+  /* The fake camera is on the bus whenever it has a subject; its enumerate failure is injected once. */
+  const enumerate = (): number | null => {
+    if (current < 0) return null;
+    if (failsAt('enumerate') && !enumerateFailed) {
+      enumerateFailed = true;
+      return null;
+    }
+    return 1500;
+  };
   const camera: BenchCamera = {
     present: () => current >= 0,
-    async waitForEnumeration(): Promise<number | null> {
-      if (current < 0) return null;
-      if (failsAt('enumerate') && !enumerateFailed) {
-        enumerateFailed = true;
-        return null;
-      }
-      return 1500;
-    },
+    waitForEnumeration: () => Promise.resolve(enumerate()),
+    waitForReboot: () => Promise.resolve(enumerate()),
     async powerCycle(): Promise<void> {
       /* The fake camera holds nothing across a power cycle but its flash. */
     },

@@ -80,6 +80,12 @@ export interface BenchCamera {
   present(): boolean;
   /** Poll the bus every `pollMs` until a camera is present; the wait in ms, or null on timeout. */
   waitForEnumeration(timeoutMs: number, pollMs?: number): Promise<number | null>;
+  /**
+   * Waits for a reset to take effect: the camera leaves the bus, then comes back. Null when
+   * it is still on the bus `dropMs` after the reset (the reset did not reboot it) or does not
+   * come back within `timeoutMs`; otherwise the wait in ms from the reset.
+   */
+  waitForReboot(dropMs: number, timeoutMs: number): Promise<number | null>;
   /** Cut and restore the camera's power on switch channel 2 only. */
   powerCycle(offMs?: number): Promise<void>;
   /** What `seek-fw info --json` says is running, or null when it cannot be read. */
