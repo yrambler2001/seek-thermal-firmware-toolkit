@@ -54,7 +54,7 @@ const DEFAULT_DEVICE = 'LPC4330_M4';
  * JLinkExe's GUI off: without it SEGGER's flash download progress window is a modal
  * that pops up during a flash. Added to every session the bench runs itself.
  */
-export const NO_GUI_ARGS: readonly string[] = ['-NoGui', '1'];
+export const NO_GUI_ARGS: readonly [string, string] = ['-NoGui', '1'];
 
 /**
  * The JLinkExe the runner starts, as a shell shim: the real JLinkExe with `-NoGui 1`
