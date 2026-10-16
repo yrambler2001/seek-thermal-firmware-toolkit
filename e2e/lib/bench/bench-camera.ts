@@ -30,6 +30,16 @@ const DEFAULT_POLL_MS = 500;
 /** The default power-off time for `powerCycle`, as the switch's own default. */
 const DEFAULT_OFF_MS = 3000;
 
+/** How long the camera has to come back on USB after its power returns. */
+const BACK_ON_BUS_MS = 40_000;
+
+/**
+ * Settle time once the camera is on the bus, before the J-Link may read it: the
+ * target's SWD is not reachable until its firmware has powered up, and a read in
+ * that gap fails with "Could not connect to the target device".
+ */
+const SWD_SETTLE_MS = 5_000;
+
 /**
  * The switch channel the bench may power-cycle, read from SEEK_E2E_SWITCH_CHANNEL.
  * Anything but '2' throws: channel 1 powers the J-Link.
@@ -137,21 +147,23 @@ export function createBenchCamera(options: BenchCameraOptions): BenchCamera {
     }
   }
 
+  async function waitForEnumeration(
+    timeoutMs: number,
+    pollMs: number = DEFAULT_POLL_MS,
+  ): Promise<number | null> {
+    const start = now();
+    for (;;) {
+      if (present()) return now() - start;
+      const elapsed = now() - start;
+      if (elapsed >= timeoutMs) return null;
+      await sleep(Math.min(pollMs, timeoutMs - elapsed));
+    }
+  }
+
   return {
     present,
 
-    async waitForEnumeration(
-      timeoutMs: number,
-      pollMs: number = DEFAULT_POLL_MS,
-    ): Promise<number | null> {
-      const start = now();
-      for (;;) {
-        if (present()) return now() - start;
-        const elapsed = now() - start;
-        if (elapsed >= timeoutMs) return null;
-        await sleep(Math.min(pollMs, timeoutMs - elapsed));
-      }
-    },
+    waitForEnumeration,
 
     async powerCycle(offMs: number = DEFAULT_OFF_MS): Promise<void> {
       const channel = lockedPowerSwitchChannel(env);
@@ -162,6 +174,14 @@ export function createBenchCamera(options: BenchCameraOptions): BenchCamera {
         return;
       }
       await switchFor(channel).cycle(offMs);
+      /* The power is back, but the camera enumerates on USB a few seconds later, and its
+       * SWD after that: a J-Link read before both fails. Wait for the bus, then settle. */
+      if ((await waitForEnumeration(BACK_ON_BUS_MS)) === null) {
+        throw new Error(
+          `the camera did not come back on the bus within ${String(BACK_ON_BUS_MS / 1000)} s of the power cycle`,
+        );
+      }
+      await sleep(SWD_SETTLE_MS);
     },
 
     async runningInfo(): Promise<RunningInfo | null> {

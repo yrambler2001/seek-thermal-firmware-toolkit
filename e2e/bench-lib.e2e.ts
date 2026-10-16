@@ -753,6 +753,8 @@ describe('the power switch is channel 2 only', () => {
     const camera = createBenchCamera({
       gate: APPROVED,
       env: { SEEK_E2E_SWITCH_CHANNEL: '2' },
+      countCameras: () => 1,
+      sleep: () => Promise.resolve(),
       switchFor: (channel) => ({
         cycle: (ms = 3000) => {
           cycles.push({ channel, ms });
@@ -766,6 +768,48 @@ describe('the power switch is channel 2 only', () => {
       { channel: 2, ms: 3000 },
       { channel: 2, ms: 1500 },
     ]);
+  });
+
+  it('after the cycle, waits for the camera on the bus and then settles for SWD', async () => {
+    let clock = 0;
+    const waits: number[] = [];
+    let polls = 0;
+    const camera = createBenchCamera({
+      gate: APPROVED,
+      env: { SEEK_E2E_SWITCH_CHANNEL: '2' },
+      /* The camera is absent for two polls after the cycle, then enumerates. */
+      countCameras: () => {
+        polls += 1;
+        return polls >= 3 ? 1 : 0;
+      },
+      now: () => clock,
+      sleep: (ms) => {
+        waits.push(ms);
+        clock += ms;
+        return Promise.resolve();
+      },
+      switchFor: () => ({ cycle: () => Promise.resolve() }),
+    });
+    await camera.powerCycle();
+    expect(polls).toBe(3);
+    expect(waits.at(-1)).toBe(5000);
+    expect(waits.slice(0, -1).every((ms) => ms <= 500)).toBe(true);
+  });
+
+  it('throws when the camera never comes back on the bus after the cycle', async () => {
+    let clock = 0;
+    const camera = createBenchCamera({
+      gate: APPROVED,
+      env: { SEEK_E2E_SWITCH_CHANNEL: '2' },
+      countCameras: () => 0,
+      now: () => clock,
+      sleep: (ms) => {
+        clock += ms;
+        return Promise.resolve();
+      },
+      switchFor: () => ({ cycle: () => Promise.resolve() }),
+    });
+    await expect(camera.powerCycle()).rejects.toThrow(/did not come back on the bus/);
   });
 
   it('a dry run logs the cycle and touches no switch', async () => {
