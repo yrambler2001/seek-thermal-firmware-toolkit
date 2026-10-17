@@ -40,6 +40,7 @@ import {
   type Exec,
   type ExecResult,
   type JlinkBench,
+  wordAt,
 } from './lib/bench/index.js';
 import { ADJUST_OFFSET, sameAsWritten } from './lib/bench/spec-flow.js';
 import type { WriteApproval } from './lib/supervised-write.js';
@@ -734,6 +735,74 @@ describe('readFlash, verifyFull and resetCpu: one JLinkExe session each', () => 
   it('resetCpu fails on a non-zero exit', async () => {
     const { exec } = fakeExec(() => ({ code: 1, stdout: '', stderr: 'no probe' }));
     await expect(bench(exec).resetCpu()).rejects.toThrow(/reset failed/);
+  });
+});
+
+describe('readFlash: a refused window goes to the SPIFI memory-mode re-init, then a reset', () => {
+  /* The firmware-left command mode on the 4.8.1.7 and 4.16.1.7 PRO FF builds: the halted
+   * window answers "Could not read memory" while SPIFI STAT MCINIT is clear (bench run 2). */
+  const REFUSED: ExecResult = {
+    code: 0,
+    stdout: 'Reading 4096 bytes from addr 0x14000000 into file...Could not read memory.',
+    stderr: '',
+  };
+  const state = (stat: string, mcmd: string): ExecResult => ({
+    code: 0,
+    stdout: `4000301C = ${stat} \n40003018 = ${mcmd} \n`,
+    stderr: '',
+  });
+
+  it('wordAt reads the word a mem32 line printed, by address', () => {
+    expect(wordAt('4000301C = 02000025 \n40003018 = EB930000 ', 0x4000301c)).toBe(0x02000025);
+    expect(wordAt('40003018 = EB930000 ', 0x40003018)).toBe(0xeb930000);
+    expect(wordAt('Could not read memory.', 0x4000301c)).toBeUndefined();
+  });
+
+  it('command mode (MCINIT clear): writes MCMD with the value it holds, then reads halted', async () => {
+    const { exec, calls } = fakeExec((call) => {
+      const script = call.script ?? '';
+      if (script.includes('mem32 0x4000301c,1')) return state('02000020', 'EB930000');
+      if (script.includes('w4 0x40003018,0xeb930000')) {
+        saveBinFor(call.script, FLASH);
+        return OK;
+      }
+      return REFUSED;
+    });
+    const bytes = await bench(exec).readFlash(BENCH_FLASH_BASE, BENCH_FLASH_BYTES);
+    expect(sha256(bytes)).toBe(FLASH_SHA);
+    expect(calls.map((call) => (call.script ?? '').split('\n')[0])).toEqual(['h', 'h', 'h']);
+    expect(calls[1]?.script).toBe('h\nmem32 0x4000301c,1\nmem32 0x40003018,1\ng\nq\n');
+    expect(calls[2]?.script).toMatch(/^h\nw4 0x40003018,0xeb930000\nsavebin "[^"]+", 0x14000000/);
+    expect(readdirSync(TMP_ROOT)).toEqual([]);
+  });
+
+  it('MCINIT set: no re-init is written, a reset then a halted read answers', async () => {
+    const { exec, calls } = fakeExec((call) => {
+      const script = call.script ?? '';
+      if (script.includes('mem32 0x4000301c,1')) return state('02000025', 'EB930000');
+      if (script.startsWith('r\nh\nsavebin')) {
+        saveBinFor(call.script, FLASH);
+        return OK;
+      }
+      return REFUSED;
+    });
+    const bytes = await bench(exec).readFlash(BENCH_FLASH_BASE, BENCH_FLASH_BYTES);
+    expect(sha256(bytes)).toBe(FLASH_SHA);
+    expect(calls).toHaveLength(3);
+    expect(calls.some((call) => (call.script ?? '').includes('w4 '))).toBe(false);
+    expect(calls[2]?.script).toMatch(/^r\nh\nsavebin "[^"]+", 0x14000000, 0x400000\ng\nq\n$/);
+  });
+
+  it('when every road is refused, names the reset among the roads tried', async () => {
+    const { exec, calls } = fakeExec((call) => {
+      const script = call.script ?? '';
+      if (script.includes('mem32 0x4000301c,1')) return state('02000020', 'EB930000');
+      return REFUSED;
+    });
+    await expect(bench(exec).readFlash(BENCH_FLASH_BASE, BENCH_FLASH_BYTES)).rejects.toThrow(
+      /did not answer a halted read, after the SPIFI memory-mode re-init and a reset/,
+    );
+    expect(calls).toHaveLength(4);
   });
 });
 

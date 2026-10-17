@@ -74,6 +74,25 @@ export function jlinkShimScript(): string {
 
 /** The message that marks a halt that did not happen (J-Link's own wording). */
 const HALT_FAILED = /could not be halted|CPU is not halted/i;
+/** The window's refusal, as J-Link prints it when a savebin reads a SPIFI address it cannot serve. */
+const WINDOW_REFUSED = 'Could not read memory';
+/** The LPC43xx SPIFI controller registers (UM10503 SPIFI), read and written halted. */
+export const SPIFI_MCMD = 0x40003018;
+export const SPIFI_STAT = 0x4000301c;
+/**
+ * SPIFI STAT bit 0, MCINIT: the memory command is initialised, so the window is served. Measured
+ * on the bench: 0x02000020 (refused, bit 0 clear), 0x02000021 (after the MCMD write, served),
+ * 0x02000025 (factory and after a reset, served). Bit 5 is set in both 0x20 and 0x25.
+ */
+export const SPIFI_STAT_MCINIT = 0x01;
+
+/** The 32-bit word a `mem32` line printed for `address` ("4000301C = 02000025"), if any. */
+export function wordAt(text: string, address: number): number | undefined {
+  const label = address.toString(16).toUpperCase().padStart(8, '0');
+  const match = new RegExp(`^${label} = ([0-9A-Fa-f]{8})`, 'm').exec(text);
+  return match === null ? undefined : Number.parseInt(match[1] ?? '', 16);
+}
+
 /** The erase error the recipe says to tolerate: the compare-then-write still lands the bytes. */
 const ERASE_TOLERATED = /Failed to erase sectors|Erase returned with error code -5/;
 /** A J-Link error line, as a command-file session prints it. */
@@ -318,19 +337,54 @@ export function createJlinkBench(options: JlinkBenchOptions): JlinkBench {
   }
 
   /**
-   * One halted read of [address, address+length). A halt that fails is reported,
-   * the caller's hook runs (the power cycle), and the read is retried once.
+   * One JLinkExe session that runs `lines`, then saves [address, address+length) to a
+   * file and resumes. `bytes` is set only when the file holds exactly `length` bytes.
+   */
+  async function saveWindow(
+    dir: string,
+    name: string,
+    lines: readonly string[],
+    address: number,
+    length: number,
+  ): Promise<{ readonly result: ExecResult; readonly size: number; readonly bytes?: Uint8Array }> {
+    const out = path.join(dir, `${name}.bin`);
+    const result = await session(dir, name, [
+      ...lines,
+      `savebin "${out}", ${hex(address)}, ${hex(length)}`,
+      'g',
+      'q',
+    ]);
+    const size = existsSync(out) ? statSync(out).size : -1;
+    return size === length
+      ? { result, size, bytes: new Uint8Array(readFileSync(out)) }
+      : { result, size };
+  }
+
+  /**
+   * One halted read of [address, address+length). Three roads, in order:
+   *   1. HALTED: `h`, then savebin. A halt that fails is reported, the caller's hook runs
+   *      (the power cycle), and the read is retried once.
+   *   2. HALTED AFTER A SPIFI MEMORY-MODE RE-INIT: when the window answers "Could not read
+   *      memory", the firmware has left the SPIFI controller in command mode (SPIFI STAT
+   *      MCINIT clear). Then MCMD is written with the value it already holds, which puts the
+   *      controller back in memory mode, and the read is repeated. Registers only, never flash.
+   *   3. RESET THEN HALTED: `r`, then `h` (the reset leaves the controller in memory mode),
+   *      then savebin.
+   * Any road that answers is the read; success is still the caller's sha256 check.
    */
   function readHalted(address: number, length: number): Promise<Uint8Array> {
     return withScratch(async (dir) => {
+      let refused = false;
+      let last: ExecResult | undefined;
       for (let attempt = 1; attempt <= 2; attempt++) {
-        const out = path.join(dir, `read-${String(attempt)}.bin`);
-        const result = await session(dir, `read-${String(attempt)}`, [
-          'h',
-          `savebin "${out}", ${hex(address)}, ${hex(length)}`,
-          'g',
-          'q',
-        ]);
+        const { result, size, bytes } = await saveWindow(
+          dir,
+          `read-${String(attempt)}`,
+          ['h'],
+          address,
+          length,
+        );
+        last = result;
         const text = `${result.stdout}\n${result.stderr}`;
         if (HALT_FAILED.test(text)) {
           log(`the CPU could not be halted (read ${String(attempt)} of 2)`);
@@ -342,15 +396,56 @@ export function createJlinkBench(options: JlinkBenchOptions): JlinkBench {
           await options.onHaltFailed?.();
           continue;
         }
-        const size = existsSync(out) ? statSync(out).size : -1;
-        if (size !== length) {
-          throw new Error(
-            `savebin of ${hex(address)}+${hex(length)} wrote ${String(size)} bytes, not ${String(length)}: ${tail(result)}`,
-          );
+        if (bytes !== undefined) return bytes;
+        if (text.includes(WINDOW_REFUSED)) {
+          refused = true;
+          break;
         }
-        return new Uint8Array(readFileSync(out));
+        throw new Error(
+          `savebin of ${hex(address)}+${hex(length)} wrote ${String(size)} bytes, not ${String(length)}: ${tail(result)}`,
+        );
       }
-      throw new Error('unreachable: the read loop ends by returning or throwing');
+      if (!refused) throw new Error('unreachable: the read loop ends by returning or throwing');
+
+      log(
+        'the halted window read was refused (Could not read memory): checking the SPIFI controller',
+      );
+      const state = await session(dir, 'spifi-state', [
+        'h',
+        `mem32 ${hex(SPIFI_STAT)},1`,
+        `mem32 ${hex(SPIFI_MCMD)},1`,
+        'g',
+        'q',
+      ]);
+      const stateText = `${state.stdout}\n${state.stderr}`;
+      const stat = wordAt(stateText, SPIFI_STAT);
+      const mcmd = wordAt(stateText, SPIFI_MCMD);
+      if (stat !== undefined && mcmd !== undefined && (stat & SPIFI_STAT_MCINIT) === 0) {
+        log(
+          `SPIFI STAT ${hex(stat)} has MCINIT clear (command mode); writing MCMD ${hex(mcmd)} to re-enter memory mode`,
+        );
+        const again = await saveWindow(
+          dir,
+          'read-mcmd',
+          ['h', `w4 ${hex(SPIFI_MCMD)},${hex(mcmd)}`],
+          address,
+          length,
+        );
+        if (again.bytes !== undefined) return again.bytes;
+        last = again.result;
+      } else {
+        log(
+          `SPIFI STAT ${stat === undefined ? '(unread)' : hex(stat)}, MCMD ${mcmd === undefined ? '(unread)' : hex(mcmd)}: no memory-mode re-init`,
+        );
+      }
+
+      log('reset, then halted, for the read');
+      const reset = await saveWindow(dir, 'read-reset', ['r', 'h'], address, length);
+      if (reset.bytes !== undefined) return reset.bytes;
+      throw new Error(
+        `the window ${hex(address)}+${hex(length)} did not answer a halted read, after the SPIFI ` +
+          `memory-mode re-init and a reset: ${tail(reset.result)} (before: ${tail(last ?? reset.result)})`,
+      );
     });
   }
 
