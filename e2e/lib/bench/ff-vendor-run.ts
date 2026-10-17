@@ -147,9 +147,41 @@ export async function readAnswers(camera: BenchCamera): Promise<CameraAnswers> {
 }
 
 /** Power-cycles the camera and waits for it to come back on the bus. Returns whether it did. */
-async function cycleAndWait(camera: BenchCamera): Promise<boolean> {
+export async function cycleAndWait(camera: BenchCamera): Promise<boolean> {
   await camera.powerCycle();
   return (await camera.waitForEnumeration(60_000)) !== null;
+}
+
+/**
+ * A halted read of the flash. The first halted read after a flash or a page write can fail (TESTING 42.4 and
+ * 42.10); a channel-2 power cycle clears it, so the read is retried once after one.
+ */
+export async function haltedRead(
+  jlink: JlinkBench,
+  camera: BenchCamera,
+  address: number,
+  length: number,
+): Promise<Uint8Array> {
+  try {
+    return await jlink.readFlash(address, length);
+  } catch {
+    await cycleAndWait(camera);
+    return jlink.readFlash(address, length);
+  }
+}
+
+/** The whole flash, halted-read and checked against `sha256`; retried once after a power cycle, as `haltedRead`. */
+export async function verifyWithRetry(
+  jlink: JlinkBench,
+  camera: BenchCamera,
+  sha: string,
+): Promise<void> {
+  try {
+    await jlink.verifyFull(sha);
+  } catch {
+    await cycleAndWait(camera);
+    await jlink.verifyFull(sha);
+  }
 }
 
 /**
@@ -199,7 +231,7 @@ export async function runFfVendor(
 
   try {
     /* Step 0: the restore point, read halted and checked before anything is written. */
-    const whole = await jlink.readFlash(0x14000000, 0x400000);
+    const whole = await haltedRead(jlink, camera, 0x14000000, 0x400000);
     restoreOk = sha256(whole) === files.restoreSha256;
     log(`restore point: halted read sha256 ${sha256(whole)} (${restoreOk ? 'the original' : 'NOT the original'})`);
     if (!restoreOk) {
@@ -210,7 +242,7 @@ export async function runFfVendor(
     /* Step (a), the 8 Hz platform: the whole flash of the 1.3.0.8 8 Hz build, power cycled. */
     touched = true;
     await jlink.flashFull(files.platformFile);
-    await jlink.verifyFull(files.platformSha256);
+    await verifyWithRetry(jlink, camera, files.platformSha256);
     if (!(await cycleAndWait(camera))) {
       failures.push('the 8 Hz platform did not come back on the bus after the power cycle');
       return report();
@@ -223,7 +255,7 @@ export async function runFfVendor(
     await jlink.writeBank(FF_BANK_ADDRESS.r, files.plainFfBankFile);
     for (const letter of ['a', 'b'] as const) {
       await jlink.eraseRange(FF_BANK_ADDRESS[letter], FF_BANK_BYTES);
-      const erased = await jlink.readFlash(FF_BANK_ADDRESS[letter], FF_BANK_BYTES);
+      const erased = await haltedRead(jlink, camera, FF_BANK_ADDRESS[letter], FF_BANK_BYTES);
       if (!erased.every((byte) => byte === 0xff)) {
         failures.push(`bank ${letter.toUpperCase()} is not erased after its erase`);
       }
@@ -242,7 +274,7 @@ export async function runFfVendor(
         running16Hz: true,
       });
       const predicted = predictedFFStored(plain);
-      const readBack = await jlink.readFlash(FF_BANK_ADDRESS[letter], FF_BANK_BYTES);
+      const readBack = await haltedRead(jlink, camera, FF_BANK_ADDRESS[letter], FF_BANK_BYTES);
       const predictedSha256 = sha256(predicted);
       const jlinkSha256 = sha256(readBack);
       const problems: string[] = [];
@@ -287,7 +319,7 @@ export async function runFfVendor(
     try {
       if (!touched) throw new Error('nothing was written, so there is nothing to restore');
       await jlink.flashFull(files.restoreFile);
-      await jlink.verifyFull(files.restoreSha256);
+      await verifyWithRetry(jlink, camera, files.restoreSha256);
       if (await cycleAndWait(camera)) {
         const back = await readAnswers(camera);
         restoredVersion = back.version;
@@ -297,7 +329,12 @@ export async function runFfVendor(
         log('restore: the camera did not come back on the bus after the restore');
       }
     } catch (error) {
-      if (touched) failures.push(`restore: ${error instanceof Error ? error.message : String(error)}`);
+      /* A failed restore is said loudly: the flash is then not the original, and the run's own error is kept. */
+      const why = error instanceof Error ? error.message : String(error);
+      if (touched) {
+        failures.push(`restore: ${why}`);
+        log(`RESTORE FAILED: ${why}`);
+      }
     }
   }
 

@@ -508,16 +508,15 @@ function sha256Hex(bytes: Uint8Array): string {
 /* ====================================================================
  * THE 1.3.0.8 FF (16 Hz) IMAGE, through the CLI: `slots flash r <ff image>`.
  *
- * The 2014 bootloader rejects the FF image's word sum at banks A and B and boots recovery
- * unchecked, so the image goes to R only, staged as the image XOR two keystreams. The camera
- * folds that back and stores the plain image with its adjust word (0x238) solved. One emulator
+ * The FF image goes to A, B and R in the vendor's staged form, the image XOR Key A with the header
+ * verbatim, and the camera stores the image XOR Key B (TESTING.md 42.12). One emulator
  * boot (the 2014 plaintext donor, the Spansion part its commit needs; the corpus-locked suite's
  * FF row and the preservation suite's FF row use the same), then this sequence:
  *
  *   slots list --json                                  the camera and its banks, the FF note
  *   slots flash b <ff> --acknowledge-risk --yes        refused for bank B before any byte is sent
  *   slots flash r <ff> --yes                           refused: recovery needs --acknowledge-risk
- *   slots flash r <ff> --acknowledge-risk --dry-run    the plan (two-stream), no write opcode
+ *   slots flash r <ff> --acknowledge-risk --dry-run    the plan (vendor form), no write opcode
  *   slots flash r <ff> --acknowledge-risk --yes        the write, read back, verified
  *   slots dump r --out <dir>                           the bank after the write
  *
@@ -536,13 +535,15 @@ interface FFSequence {
   defect: string | null;
   image: Uint8Array | null;
   list: CliRun | null;
-  refusedBankB: CliRun | null;
+  writtenB: CliRun | null;
   refusedNoAck: CliRun | null;
   dryRun: CliRun | null;
   flash: CliRun | null;
   dump: CliRun | null;
   /** The bank-R file the dump wrote after the write. */
   stored: Uint8Array | null;
+  /** The dump's decrypted file of bank R, read while the dump's directory still exists. */
+  decrypted: Uint8Array | null;
 }
 
 async function ffSequence(entry: ManifestEntry): Promise<FFSequence> {
@@ -551,12 +552,13 @@ async function ffSequence(entry: ManifestEntry): Promise<FFSequence> {
     defect: null,
     image: null,
     list: null,
-    refusedBankB: null,
+    writtenB: null,
     refusedNoAck: null,
     dryRun: null,
     flash: null,
     dump: null,
     stored: null,
+    decrypted: null,
   };
   const row = new RowEmulators(entry.id);
   const out = await tempDir();
@@ -584,19 +586,23 @@ async function ffSequence(entry: ManifestEntry): Promise<FFSequence> {
       const device = await nodeUsbOverUsbIp(usbip);
 
       seq.list = await cli(['slots', 'list'], device, emu);
-      seq.refusedBankB = await cli(
-        ['slots', 'flash', 'b', ffFile, '--acknowledge-risk', '--yes'],
+      seq.writtenB = await cli(
+        ['slots', 'flash', 'b', ffFile, '--acknowledge-risk', '--yes', '--running-16hz'],
         device,
         emu,
       );
-      seq.refusedNoAck = await cli(['slots', 'flash', 'r', ffFile, '--yes'], device, emu);
+      seq.refusedNoAck = await cli(
+        ['slots', 'flash', 'r', ffFile, '--yes', '--running-16hz'],
+        device,
+        emu,
+      );
       seq.dryRun = await cli(
-        ['slots', 'flash', 'r', ffFile, '--acknowledge-risk', '--dry-run'],
+        ['slots', 'flash', 'r', ffFile, '--acknowledge-risk', '--dry-run', '--running-16hz'],
         device,
         emu,
       );
       seq.flash = await cli(
-        ['slots', 'flash', 'r', ffFile, '--acknowledge-risk', '--yes'],
+        ['slots', 'flash', 'r', ffFile, '--acknowledge-risk', '--yes', '--running-16hz'],
         device,
         emu,
       );
@@ -608,6 +614,10 @@ async function ffSequence(entry: ManifestEntry): Promise<FFSequence> {
             const name = path.basename(file);
             return /^slot-r-.*\.bin$/.test(name) && !name.includes('-decrypted');
           }) ?? null,
+        ) ?? null;
+      seq.decrypted =
+        readOrNull(
+          written.find((file) => /^slot-r-.*-decrypted.*\.bin$/.test(path.basename(file))) ?? null,
         ) ?? null;
     });
     await row.assertDelivery();
@@ -633,12 +643,13 @@ describe.skipIf(!available)(
           defect: null,
           image: null,
           list: null,
-          refusedBankB: null,
+          writtenB: null,
           refusedNoAck: null,
           dryRun: null,
           flash: null,
           dump: null,
           stored: null,
+          decrypted: null,
         },
       };
 
@@ -655,7 +666,7 @@ describe.skipIf(!available)(
         return bank;
       }
 
-      it('slots list --json: 1.3.0.8 on legacy-auth, three banks, and the FF image is said to go to R only', () => {
+      it('slots list --json: 1.3.0.8 on legacy-auth, three banks, and the FF image is said to be untested on the bench', () => {
         const list = seq.current.list;
         expect(list?.code, list?.stderr ?? seq.current.setup ?? '').toBe(EXIT_OK);
         expect(list?.json).toMatchObject({
@@ -667,27 +678,26 @@ describe.skipIf(!available)(
           build: { supported: true },
         });
         const notes = (list?.json?.notes as string[] | undefined) ?? [];
-        expect(notes.join('\n')).toMatch(/writes the FF image to bank R\s+only/);
+        expect(notes.join('\n')).toMatch(/UNTESTED/);
         const slots = (list?.json?.slots as Json[] | undefined) ?? [];
         expect(slots.map((slot) => slot.bank)).toEqual(['a', 'b', 'r']);
         for (const slot of slots) expect(slot.staging, String(slot.bank)).toBe('plain');
       });
 
-      it('slots flash b <ff> --acknowledge-risk --yes: refused with exit 1 before any byte is sent, naming recovery R', () => {
-        const refusal = seq.current.refusedBankB;
-        expect(refusal?.code).toBe(EXIT_FAILED);
-        expect(refusal?.json).toMatchObject({
+      it('slots flash b <ff> --acknowledge-risk --yes --running-16hz: written in the vendor form, committed, read back', () => {
+        const written = seq.current.writtenB;
+        expect(written?.code, written?.stderr).toBe(EXIT_OK);
+        expect(written?.json).toMatchObject({
           command: 'slots',
-          ok: false,
-          error: { code: 'slots/refused' },
+          ok: true,
+          action: 'flash',
+          bank: 'b',
+          staging: 'key-a-keystream',
+          written: true,
+          commitStatus: 0,
+          verified: true,
         });
-        const message = String((refusal?.json?.error as Json | undefined)?.message);
-        expect(message).toContain('recovery bank R');
-        expect(message).toContain('not to bank B');
-        expect(sentOf(refusal?.sent ?? new Map(), STAGE_OP), 'SetFeaturedFirmwareData sent').toBe(
-          0,
-        );
-        expect(sentOf(refusal?.sent ?? new Map(), COMMIT_OP), 'CompleteMemoryUpgrade sent').toBe(0);
+        expect(sentOf(written?.sent ?? new Map(), COMMIT_OP)).toBe(1);
       });
 
       it('slots flash r <ff> --yes: refused without --acknowledge-risk, nothing sent', () => {
@@ -705,7 +715,7 @@ describe.skipIf(!available)(
         expect(sentOf(refusal?.sent ?? new Map(), COMMIT_OP)).toBe(0);
       });
 
-      it('slots flash r <ff> --acknowledge-risk --dry-run: exit 0, the two-stream plan, the image it will leave, no write opcode', () => {
+      it('slots flash r <ff> --acknowledge-risk --dry-run: exit 0, the vendor-form plan, the image it will leave, no write opcode', () => {
         const dry = seq.current.dryRun;
         expect(dry?.code, dry?.stderr).toBe(EXIT_OK);
         expect(dry?.json).toMatchObject({
@@ -715,7 +725,7 @@ describe.skipIf(!available)(
           bank: 'r',
           address: '0x14070000',
           kind: 'plain',
-          staging: 'two-stream',
+          staging: 'key-a-keystream',
           written: false,
           dryRun: true,
         });
@@ -724,14 +734,14 @@ describe.skipIf(!available)(
         /* The plan says the bank will hold the solved image, then erased, by its digest. */
         expect(dry?.json?.expectedSha256).toBe(sha256Hex(expectedBank()));
         const warnings = (dry?.json?.warnings as string[] | undefined) ?? [];
-        expect(warnings.join('\n')).toMatch(/XOR two keystreams/);
-        expect(warnings.join('\n')).toMatch(/header word at 0x238 is set to 0x[0-9A-F]+/);
+        expect(warnings.join('\n')).toMatch(/block 0 \(Key A\)/);
+        expect(warnings.join('\n')).toMatch(/under Key B/);
         for (const opcode of [STAGE_OP, COMMIT_OP, RESET_OP]) {
           expect(sentOf(dry?.sent ?? new Map(), opcode), `opcode ${String(opcode)}`).toBe(0);
         }
       });
 
-      it('slots flash r <ff> --acknowledge-risk --yes: exit 0, committed, and the read-back is the solved image', () => {
+      it('slots flash r <ff> --acknowledge-risk --yes: exit 0, committed, and the read-back is the image XOR Key B', () => {
         const flash = seq.current.flash;
         expect(flash?.code, flash?.stderr).toBe(EXIT_OK);
         expect(flash?.json).toMatchObject({
@@ -739,7 +749,7 @@ describe.skipIf(!available)(
           ok: true,
           action: 'flash',
           bank: 'r',
-          staging: 'two-stream',
+          staging: 'key-a-keystream',
           written: true,
           commitStatus: 0,
           verified: true,
@@ -751,7 +761,7 @@ describe.skipIf(!available)(
         expect(sentOf(flash?.sent ?? new Map(), RESET_OP), 'ResetDevice is never sent').toBe(0);
       });
 
-      it('slots dump r afterwards: the stored bank is the solved image (the file differs from the FF image in the adjust word only), then erased', () => {
+      it('slots dump r afterwards: the stored bank is the image XOR Key B (the header window verbatim), then erased', () => {
         const dump = seq.current.dump;
         expect(dump?.code, dump?.stderr).toBe(EXIT_OK);
         const stored = seq.current.stored;
@@ -759,10 +769,15 @@ describe.skipIf(!available)(
         expect(Buffer.compare(Buffer.from(stored ?? []), Buffer.from(expectedBank()))).toBe(0);
         expect(dump?.json?.sha256).toBe(sha256Hex(stored ?? new Uint8Array()));
         const image = seq.current.image ?? new Uint8Array();
+        /* The dump decodes the bank under Key B: its decrypted file is the plain FF image, byte for byte. */
+        const decrypted = seq.current.decrypted;
+        expect(decrypted, 'the decrypted file of bank R').not.toBeNull();
+        expect(Buffer.compare(Buffer.from(decrypted ?? []), Buffer.from(image))).toBe(0);
         const changed: number[] = [];
         for (let i = 0; i < image.length; i++) if (stored?.[i] !== image[i]) changed.push(i);
         expect(changed.length).toBeGreaterThan(0);
-        expect(changed.every((at) => at >= 0x238 && at < 0x23c)).toBe(true);
+        /* The header window 0x200..0x23F is verbatim; everything after it is XORed with Key B. */
+        expect(changed.every((at) => at < 0x200 || at >= 0x240)).toBe(true);
       });
 
       it('the run had no setup failure and no instrument defect', () => {

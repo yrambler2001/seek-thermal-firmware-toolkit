@@ -21,7 +21,7 @@ import { wordSum32 } from '../image/bank.js';
 import { HEADER_OFFSET, IMAGE_MAGIC, LENGTH_OFFSET } from '../image/header.js';
 import type { FirmwareProfile, SlotKey } from '../profiles/types.js';
 import { keystream, keyWordsOf, KEY_PAIRS, xorWindowVerbatim } from '../preservation/patch.js';
-import type { BankVerdicts, DeviceState } from '../workflows/types.js';
+import type { BankVerdicts, DeviceState, SlotState } from '../workflows/types.js';
 import { classifyBuild, FF_1308_VERSION } from './capability-family.js';
 import { FF_ACCEPT_SUM } from './ff-form.js';
 
@@ -82,6 +82,16 @@ export interface RunningApplication {
 
 const KEYS: readonly SlotKey[] = ['a', 'b', 'r'];
 
+/**
+ * The bytes a bank's answer is computed from. An erased bank read clean (`blank`) keeps only its header
+ * window on the read, which is all 0xFF: both builds refuse it, so that window is the whole answer.
+ */
+function bankBytesOf(slot: SlotState): Uint8Array | null {
+  if (slot.raw) return slot.raw;
+  if (slot.blank === true && !slot.unread) return new Uint8Array(HEADER_OFFSET + 8).fill(0xff);
+  return null;
+}
+
 /** One build's three answers from the page's bank reads, or null when a bank the answer needs was not read. */
 function predicted(
   state: DeviceState,
@@ -90,8 +100,9 @@ function predicted(
   const out: Record<SlotKey, Verdict | null> = { a: null, b: null, r: null };
   for (const key of KEYS) {
     const slot = state.byKey.get(key);
-    if (slot === undefined || slot.unread || !slot.raw) return null;
-    const answer = verdict(slot.raw);
+    const bytes = slot === undefined || slot.unread ? null : bankBytesOf(slot);
+    if (bytes === null) return null;
+    const answer = verdict(bytes);
     if (answer === null) return null;
     out[key] = answer;
   }

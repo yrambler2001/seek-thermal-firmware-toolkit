@@ -285,6 +285,15 @@ describe('runningApplicationOf: the camera’s answers decide the build', () => 
     expect(app.why).toMatch(/was not read/);
   });
 
+  it('an erased bank read clean, which keeps no bytes past its header window, answers both builds 0 and does not block the decision', () => {
+    const erased = { ...emptyBank('b'), raw: null };
+    const banks = [presentBank('a', plainImage(PLAIN_LENGTH, 31)), erased, presentBank('r', plainImage(PLAIN_LENGTH, 31))];
+    const app = runningApplicationOf(stateOf(banks, EIGHT_HZ_ANSWERS));
+    expect(app.build).toBe('plain');
+    expect(app.predicted.plain).toEqual(EIGHT_HZ_ANSWERS);
+    expect(app.predicted.ff).toEqual({ a: 0, b: 0, r: 0 });
+  });
+
   it('another version is not decided here: the two builds share 1.3.0.8 only', () => {
     const app = runningApplicationOf(stateOf(EIGHT_HZ_BANKS, EIGHT_HZ_ANSWERS, '1.3.0.0'));
     expect(app.build).toBeNull();

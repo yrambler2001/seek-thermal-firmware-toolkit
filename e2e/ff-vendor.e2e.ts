@@ -21,7 +21,17 @@ import path from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { createBenchCamera, createJlinkBench, ffVendorFilesFromEnv, runFfVendor } from './lib/bench/index.js';
+import {
+  createBenchCamera,
+  createJlinkBench,
+  cycleAndWait,
+  ffVendorFilesFromEnv,
+  haltedRead,
+  ORIGINAL_SHA256,
+  readAnswers,
+  runFfVendor,
+  verifyWithRetry,
+} from './lib/bench/index.js';
 import { approveWrite, type WriteApproval } from './lib/supervised-write.js';
 
 const gate: WriteApproval = await approveWrite('camera', async () => ({
@@ -59,5 +69,40 @@ describe.skipIf(!gate.approved)('the 1.3.0.8 FF vendor-form run (TESTING 42.12)'
       expect(report.restored).toBe(true);
     },
     3 * 60 * 60 * 1000,
+  );
+});
+
+/**
+ * The recovery: SEEK_BENCH_FF_RECOVER=i-understand reads the whole flash halted, and if it is not the camera's
+ * original, flashes the original back, verifies it, power-cycles and requires the 1.3.0.0 build to run again.
+ * It is what a run that stopped mid-way needs; it does not run the FF steps.
+ */
+const recover = process.env.SEEK_BENCH_FF_RECOVER === 'i-understand';
+describe.skipIf(!gate.approved || !recover)('the recovery to the original flash (TESTING 42.12)', () => {
+  it(
+    'puts the original 4 MiB back and checks the camera runs 1.3.0.0',
+    async () => {
+      const files = ffVendorFilesFromEnv(process.env, scratch);
+      if (typeof files === 'string') throw new Error(files);
+      const jlink = createJlinkBench({ gate });
+      const camera = createBenchCamera({ gate });
+      const log = (line: string): void => {
+        process.stdout.write(`[ff-recover] ${line}\n`);
+      };
+      if (!(await cycleAndWait(camera))) log('the camera is not on the bus after the power cycle; reading the flash anyway');
+      const whole = await haltedRead(jlink, camera, 0x14000000, 0x400000);
+      const { createHash } = await import('node:crypto');
+      const sha = createHash('sha256').update(whole).digest('hex');
+      log(`the flash now reads ${sha}`);
+      if (sha !== ORIGINAL_SHA256) {
+        await jlink.flashFull(files.restoreFile);
+        await verifyWithRetry(jlink, camera, ORIGINAL_SHA256);
+      }
+      expect(await cycleAndWait(camera)).toBe(true);
+      const back = await readAnswers(camera);
+      log(`the camera runs ${String(back.version)} ${String(back.buildString)}`);
+      expect(back.version).toBe('1.3.0.0');
+    },
+    60 * 60 * 1000,
   );
 });
