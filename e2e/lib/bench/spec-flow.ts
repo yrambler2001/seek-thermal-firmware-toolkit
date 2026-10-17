@@ -417,9 +417,11 @@ async function writeBank(
     if (bank.address !== address) {
       throw new Error(`the row for ${name} is at ${hex(bank.address)}, not ${hex(address)}`);
     }
-    /* The page asks for the extra tick on the booted bank and on recovery; the
-     * plan expects exactly that, and a page that disagrees stops the write. */
-    const acknowledge = bank.booted || letter === 'r';
+    /* The page asks for the extra tick on the booted bank, on recovery, and on every bank
+     * when the camera names no booted bank (the core's rule). The plan expects exactly
+     * that, and a page that disagrees stops the write. */
+    const bootUnnamed = !read.banks.some((candidate) => candidate.booted);
+    const acknowledge = bank.booted || letter === 'r' || bootUnnamed;
     const written = await page.write(letter, image, acknowledge);
     const outcome = written.outcome ?? '';
     if (!outcome.startsWith(`Slot ${name} — `)) {
