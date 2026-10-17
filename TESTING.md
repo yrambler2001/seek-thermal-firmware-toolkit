@@ -6034,20 +6034,20 @@ full pass (86 min) and two reruns of the failing subjects after the fixes below.
 
 ### 42.1 Matrix (final, after the fixes)
 
-23 of 28 subjects pass all four steps. "B skipped" means the dump has no image for bank B (the
+23 of 28 subjects pass all four steps in the full pass and its reruns; the follow-up in 42.4 brings Compact 4.8.1.7 to its slot steps passing, so 24 of 28. "B skipped" means the dump has no image for bank B (the
 1.3.0.0-era layouts), which is recorded as skipped, not failed.
 
-| Group                                | Subjects                                                                                                                                                                                                                                                                          | Result |
-| ------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
-| Compact 2014 chain (A and R)         | 0.8.0.0, 0.9.0.2, 0.9.0.6, 0.9.0.7, 0.9.1.0, 0.10.0.0, 1.0.0.0, 1.2.0.0, 1.3.0.0, 1.3.0.8 std                                                                                                                                                                                     | pass   |
-| Compact 4.x (B, A, R)                | 4.8.1.9, 4.8.2.1                                                                                                                                                                                                                                                                  | pass   |
-| Compact Pro 2016 chain               | 1.0.3.0 std and FF, 1.0.3.2 std, FF and FF-FF                                                                                                                                                                                                                                     | pass   |
-| Compact Pro 4.x                      | 4.9.2.0, 4.18.2.0 FF                                                                                                                                                                                                                                                              | pass   |
-| XR, Mosaic, Nano                     | XR 4.8.2.1, Mosaic 2.27.1.33 FF, Nano 200 42.32.3.10, Nano 300 44.27.3.10                                                                                                                                                                                                         | pass   |
-| **Compact 1.3.0.8 FF**               | by design: the page refuses the 16 Hz FF image (it boots only from recovery and its staged form is the two-stream one the page does not produce); nothing is written                                                                                                              | fail   |
-| **Mosaic 10.9.1.31 std**             | by design: the running application does not carry this camera's Key A, so the bootloader would refuse the slot; nothing is written                                                                                                                                                | fail   |
-| **Compact Pro 4.9.1.15 std**         | the tree's dump holds a 1.0.3.2 image in bank B, bank B's decrypted file has no key pair in its name, so the page refuses to write it back; the page and the J-Link agree                                                                                                         | fail   |
-| **Compact 4.8.1.7 std, 4.16.1.7 FF** | the flash is written and verifies (runner: "Verify successful"), the camera enumerates and stays up for 90 s, but every halted SWD read fails ("Could not read memory", even 4 KiB at 0x14000000), so the read-back cannot prove the flash. The firmware-side cause was not found | fail   |
+| Group                                | Subjects                                                                                                                                                                                                                                                                                                              | Result   |
+| ------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
+| Compact 2014 chain (A and R)         | 0.8.0.0, 0.9.0.2, 0.9.0.6, 0.9.0.7, 0.9.1.0, 0.10.0.0, 1.0.0.0, 1.2.0.0, 1.3.0.0, 1.3.0.8 std                                                                                                                                                                                                                         | pass     |
+| Compact 4.x (B, A, R)                | 4.8.1.9, 4.8.2.1                                                                                                                                                                                                                                                                                                      | pass     |
+| Compact Pro 2016 chain               | 1.0.3.0 std and FF, 1.0.3.2 std, FF and FF-FF                                                                                                                                                                                                                                                                         | pass     |
+| Compact Pro 4.x                      | 4.9.2.0, 4.18.2.0 FF                                                                                                                                                                                                                                                                                                  | pass     |
+| XR, Mosaic, Nano                     | XR 4.8.2.1, Mosaic 2.27.1.33 FF, Nano 200 42.32.3.10, Nano 300 44.27.3.10                                                                                                                                                                                                                                             | pass     |
+| **Compact 1.3.0.8 FF**               | by design: the page refuses the 16 Hz FF image (it boots only from recovery and its staged form is the two-stream one the page does not produce); nothing is written                                                                                                                                                  | fail     |
+| **Mosaic 10.9.1.31 std**             | by design: the running application does not carry this camera's Key A, so the bootloader would refuse the slot; nothing is written                                                                                                                                                                                    | fail     |
+| **Compact Pro 4.9.1.15 std**         | the tree's dump holds a 1.0.3.2 image in bank B, bank B's decrypted file has no key pair in its name, so the page refuses to write it back; the page and the J-Link agree                                                                                                                                             | fail     |
+| **Compact 4.8.1.7 std, 4.16.1.7 FF** | the flash is written and verifies (runner: "Verify successful"), the camera enumerates and stays up for 90 s, but every halted SWD read fails ("Could not read memory", even 4 KiB at 0x14000000), so the read-back cannot prove the flash. Cause found in 42.4 (SPIFI left in command mode); the read-back now works | see 42.4 |
 
 The three "by design" rows are the page's refusals working; they are scored as failures only because
 the suite expects a write. The two 4.x rows are a bench limit, not a slots result: no slot step was
@@ -6075,3 +6075,35 @@ reached.
 The camera was restored to its original (Compact 1.3.0.0, flash sha256 `40447c7e…`) with the runner's
 `erase-spifi-range` and `flash-factory-4m`, and a halted read-back of the whole part matched, before and
 after the run.
+
+### 42.4 Follow-up: the 4.x read-back (SPIFI mode), the Mosaic refusal, the FF refusal (2026-10-17)
+
+- **Cause of the failed halted read-back on Compact 4.8.1.7 and 4.16.1.7 FF: the SPIFI controller is
+  left in command mode.** Controller STAT bit 0 (MCINIT) is clear while the application runs
+  (STAT `0x02000020`, MCMD `EB930000`, CMD `EB930040`), so a halted read of the `0x14000000` window is
+  refused. It is set on a working image (4.8.1.9, STAT `0x02000025`) and after a reset. The clocks
+  are the same on both images. Rewriting MCMD with the value it already holds sets MCINIT (STAT
+  `0x02000021`) and the whole 4 MiB then reads back with the sha256 of the dump; a reset-halt read also
+  works. `readHalted` in `e2e/lib/bench/jlink.ts` now tries the plain halted read, then the MCMD
+  rewrite (only when MCINIT is clear; registers only, never flash), then a reset-halt read, and the
+  caller still checks the sha256. Unit tests added.
+- **Rerun of the two subjects.** Compact 4.8.1.7 std: flash verified, page identified, banks = J-Link,
+  B, A and R ok; the boot proof is skipped (the camera reports no build string for this image).
+  Compact 4.16.1.7 FF: flash verified and banks = J-Link, but the page refuses bank B with the Key A
+  message (the running application does not carry this camera's Key A; the gap noted in 41.2), so it
+  fails as a page refusal, not a read-back failure.
+- **Mosaic 10.9.1.31: the refusal is right, and its wording understates the damage.** With the page's
+  gate bypassed on the raw path, a patched Key A image written to bank B committed with a matching
+  read-back, and after a reset the camera still ran the old build from A. Writing A the same way also
+  committed, and after a reset the camera booted recovery: the bootloader reported A and B as "unknown
+  key, NOT bootable" and only R stayed bootable. So a write the page refuses does not merely leave the
+  old firmware running: it can leave the camera on recovery. B's bootability alone was not checked
+  (the A write followed at once). The refusal text could say so; product behaviour is unchanged.
+- **Compact 1.3.0.8 FF refusal.** `buildPlainPayload` refuses when the word sum is `0xFFFF` (the 16 Hz
+  build, which boots only from recovery). Its staged form is plain XOR ks0 XOR ksD, not the plain
+  form; supporting it needs that staging builder (the `xor-ks0-ksD` form of `stagedFormOf` in
+  `preservation/patch.ts`, both key blocks located by value), the rebalance-word solve so the
+  collapsed gate sums to `0xFFFF`, a recovery-only route (bank R) with the risk acknowledgement, and a
+  differential test against `stagedFormOf` plus the emulator corpus and a bench write to R.
+- **What the boot proof does and does not show.** It writes the same patched image to every bank, then
+  resets, so it proves the camera boots one of the banks, not that each bank boots on its own.
