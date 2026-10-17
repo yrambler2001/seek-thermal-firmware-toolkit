@@ -172,6 +172,18 @@ export function slotActionGate(args: {
       reason: `Not read: ${args.view.unreadReason ?? 'this bank was not read'}. Read the slots again before writing it.`,
     };
   }
+  /* An empty bank is writable where the plan says so; where it does not, the write is off
+   * with the plan's own reason (a dump is still a read, and stays allowed). */
+  if (
+    args.action !== 'dump' &&
+    args.view.content === 'empty' &&
+    !args.entry.emptyBank.writable.supported
+  ) {
+    return {
+      enabled: false,
+      reason: `This bank is empty and cannot be written on this build: ${args.entry.emptyBank.writable.reason}`,
+    };
+  }
   return { enabled: true, reason: null };
 }
 
@@ -196,7 +208,10 @@ export function slotDumpFileName(
   kind: 'raw' | 'decrypted',
   sha256: string,
   keys: KeyPair | null = null,
+  empty = false,
 ): string {
+  /* An empty bank has no version to name it by; it says what it is instead. */
+  if (empty) return `seek-slot-${key.toUpperCase()}-empty-${kind}-${sha256.slice(0, 8)}.bin`;
   const label = (version ?? 'unknown').replace(/[^0-9A-Za-z.]+/g, '-');
   const suffix = keys === null ? '' : keyFilenameSuffix(keys.keyA, keys.keyB);
   return `seek-slot-${key.toUpperCase()}-v${label}-${kind}-${sha256.slice(0, 8)}${suffix}.bin`;
@@ -211,6 +226,61 @@ export function slotDumpFileName(
 export function keyPairToName(plain: Uint8Array, table: KeyPair | null): KeyPair | null {
   if (table === null) return null;
   return findEmbeddedKeyTable(plain, table.keyA, table.keyB) === null ? null : table;
+}
+
+/**
+ * A decrypted image an empty bank could be filled from, taken from the read the page
+ * already made: no second read, nothing asked of the camera.
+ */
+export interface BankImageSource {
+  readonly key: SlotKey;
+  readonly name: string;
+  readonly version: string | null;
+  readonly bytes: Uint8Array;
+  /**
+   * The name the image is prepared under. It carries the camera's key pair when the image
+   * holds it, exactly as a dump's decrypted file is named: a write on the Key A line reads
+   * the pair from the name and refuses an image whose name has none.
+   */
+  readonly fileName: string;
+  /** The camera names this bank as the one it boots; false when it is only a bank that holds an image. */
+  readonly booted: boolean;
+}
+
+/**
+ * The running firmware's decrypted image, for an empty bank: the bank the camera boots
+ * when it holds an image this read decrypted, else a bank the bootloader can key, else
+ * any other bank that holds one. Never the target itself. Null when no bank qualifies.
+ */
+export function bankImageSource(report: SlotsReport, target: SlotKey): BankImageSource | null {
+  const holds = (candidate: SlotView): boolean =>
+    candidate.entry.key !== target &&
+    candidate.content === 'image' &&
+    candidate.state?.plain != null;
+  const view =
+    report.slots.find((candidate) => candidate.active && holds(candidate)) ??
+    report.slots.find((candidate) => candidate.state?.bootable === true && holds(candidate)) ??
+    report.slots.find(holds) ??
+    null;
+  const state = view?.state ?? null;
+  const plain = state?.plain ?? null;
+  if (view === null || state === null || plain === null) return null;
+  const version = slotVersion(report, view.entry.key);
+  const keys = keyPairToName(plain, report.state.keyTable);
+  return {
+    key: view.entry.key,
+    name: view.entry.name,
+    version,
+    bytes: plain,
+    fileName: slotDumpFileName(
+      view.entry.key,
+      version,
+      'decrypted',
+      state.sha256 ?? 'unknown',
+      keys,
+    ),
+    booted: view.active,
+  };
 }
 
 function contextOf(
@@ -243,6 +313,11 @@ export interface PendingSlotFlash {
   readonly plan: SlotFlashPlan;
   /** The report the plan was checked against. Only that report may send it. */
   readonly report: SlotsReport;
+  /**
+   * Where the image came from when it is not a file the person picked: "the booted bank's
+   * image". Null for a file. Shown beside the plan so the source is never a surprise.
+   */
+  readonly source: string | null;
 }
 
 /** What the last write did, kept on screen until the next run starts. */
@@ -250,6 +325,8 @@ export interface SlotFlashOutcome {
   readonly key: SlotKey;
   readonly fileName: string;
   readonly result: FlashSlotResult;
+  /** The bank held no image before this write, so no firmware was overwritten. */
+  readonly targetEmpty?: boolean;
 }
 
 export interface SlotsPanelParams {
@@ -276,6 +353,11 @@ export interface SlotsPanelApi {
   readSlots: () => Promise<void>;
   dump: (key: SlotKey) => Promise<void>;
   pickFile: (key: SlotKey, kind: SlotInputKind, file: File) => Promise<void>;
+  /**
+   * Prepares a write of the running firmware's own decrypted image (`bankImageSource`) into
+   * an empty bank, as if its file had been picked. Sends nothing.
+   */
+  fillWithBankImage: (key: SlotKey) => Promise<void>;
   write: (acknowledged: boolean) => Promise<void>;
   discardPending: () => void;
   cancel: () => void;
@@ -456,12 +538,20 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
             key,
           );
           const version = slotVersion(current, key);
-          downloadBytes(dumped.raw, slotDumpFileName(key, version, 'raw', dumped.sha256));
+          downloadBytes(
+            dumped.raw,
+            slotDumpFileName(key, version, 'raw', dumped.sha256, null, dumped.empty),
+          );
           log(
-            `slot ${name} as stored — ${String(dumped.raw.length)} B, sha256 ${dumped.sha256}`,
+            dumped.empty
+              ? `slot ${name} is empty — nothing to decrypt: ${String(dumped.raw.length)} B of 0xFF, ` +
+                  `sha256 ${dumped.sha256}`
+              : `slot ${name} as stored — ${String(dumped.raw.length)} B, sha256 ${dumped.sha256}`,
             'ok',
           );
-          if (dumped.plain !== null && dumped.plainSha256 !== null) {
+          if (dumped.empty) {
+            /* No decrypted file: there is nothing in the bank to decrypt. */
+          } else if (dumped.plain !== null && dumped.plainSha256 !== null) {
             /* Named with the camera's key pair when the image holds it: the flash
              * path reads the pair from the name and refuses a file without one. */
             const keys = keyPairToName(dumped.plain, current.state.keyTable);
@@ -502,8 +592,22 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
 
   /* ---- prepare a file (sends nothing) -------------------------------- */
 
-  const pickFile = useCallback(
-    async (key: SlotKey, kind: SlotInputKind, file: File): Promise<void> => {
+  /**
+   * Builds the plan for one input and holds it. `load` yields the bytes, the name and where
+   * they came from, given the current report; whatever it throws is shown as a rejection.
+   * Nothing here touches the camera.
+   */
+  const prepareFrom = useCallback(
+    async (
+      key: SlotKey,
+      kind: SlotInputKind,
+      load: (current: SlotsReport) => Promise<{
+        readonly bytes: Uint8Array;
+        readonly fileName: string;
+        readonly source: string | null;
+      }>,
+      retry: string,
+    ): Promise<void> => {
       const result = await runner.start(
         SLOTS_PREPARE_PANEL_ID,
         async () => {
@@ -527,10 +631,22 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
                   'read the slots again before preparing a write to it.',
               );
             }
-            const bytes = new Uint8Array(await file.arrayBuffer());
-            log(`${file.name} — ${bytes.length.toLocaleString()} bytes`, 'detail');
-            const prepared = backend.prepare(current, key, { kind, bytes, fileName: file.name });
-            setCurrentPending({ key, kind, fileName: file.name, plan: prepared, report: current });
+            const input = await load(current);
+            log(`${input.fileName} — ${input.bytes.length.toLocaleString()} bytes`, 'detail');
+            if (input.source !== null) log(`image taken from ${input.source}`, 'detail');
+            const prepared = backend.prepare(current, key, {
+              kind,
+              bytes: input.bytes,
+              fileName: input.fileName,
+            });
+            setCurrentPending({
+              key,
+              kind,
+              fileName: input.fileName,
+              plan: prepared,
+              report: current,
+              source: input.source,
+            });
             log(
               `prepared ${String(prepared.payload.length)} B for slot ${key.toUpperCase()}, ` +
                 `transfer checksum ${hexUp(prepared.sum16, 4)}`,
@@ -549,10 +665,62 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
         { camera: false },
       );
       if (result === 'busy') {
-        log('another operation is running — wait for it, then pick the file again', 'warn');
+        log(`another operation is running — wait for it, then ${retry}`, 'warn');
       }
     },
     [backend, flush, log, reset, runner, setCurrentPending, setStatus],
+  );
+
+  const pickFile = useCallback(
+    (key: SlotKey, kind: SlotInputKind, file: File): Promise<void> =>
+      prepareFrom(
+        key,
+        kind,
+        async () => ({
+          bytes: new Uint8Array(await file.arrayBuffer()),
+          fileName: file.name,
+          source: null,
+        }),
+        'pick the file again',
+      ),
+    [prepareFrom],
+  );
+
+  /* The running firmware's own image, offered for an empty bank. The bytes are the decrypted
+   * image this read already holds (the bank's `plain`); the name carries the camera's key pair
+   * when the image holds it, as a dump's file would, so every check the file path makes is made. */
+  const fillWithBankImage = useCallback(
+    (key: SlotKey): Promise<void> =>
+      prepareFrom(
+        key,
+        'plain',
+        (current) => {
+          const view = current.slots.find((candidate) => candidate.entry.key === key);
+          if (view?.content !== 'empty') {
+            throw new SeekError(
+              'slots/refused',
+              `slot ${key.toUpperCase()} is not empty, so there is no empty bank to fill. Pick a ` +
+                'file to replace what it holds.',
+            );
+          }
+          const source = bankImageSource(current, key);
+          if (source === null) {
+            throw new SeekError(
+              'slots/refused',
+              'no other bank holds a decrypted image to copy — pick an image file instead',
+            );
+          }
+          return Promise.resolve({
+            bytes: source.bytes,
+            fileName: source.fileName,
+            source: source.booted
+              ? `${source.name}, the bank the camera boots now${source.version === null ? '' : ` (${source.version})`}`
+              : `${source.name}, the first bank that holds an image${source.version === null ? '' : ` (${source.version})`}`,
+          });
+        },
+        'press the button again',
+      ),
+    [prepareFrom],
   );
 
   /* ---- write ---------------------------------------------------------- */
@@ -597,7 +765,8 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
           /* The record of what was written: it names the file and the bank. */
           const view = current.slots.find((candidate) => candidate.entry.key === ready.key);
           log(
-            `slot ${ready.key.toUpperCase()} at ${hexUp(view?.entry.address ?? 0)} <- ${ready.fileName}`,
+            `slot ${ready.key.toUpperCase()} at ${hexUp(view?.entry.address ?? 0)} <- ${ready.fileName}` +
+              (ready.plan.targetEmpty === true ? ' (an empty bank: nothing is overwritten)' : ''),
             'ok',
           );
           log(
@@ -613,7 +782,12 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
             ready.plan,
             { verify: true, acknowledgeRisk: acknowledged },
           );
-          setOutcome({ key: ready.key, fileName: ready.fileName, result: written });
+          setOutcome({
+            key: ready.key,
+            fileName: ready.fileName,
+            result: written,
+            targetEmpty: ready.plan.targetEmpty === true,
+          });
           for (const note of written.notes) log(note, 'detail');
           log('NOW UNPLUG AND REPLUG THE CAMERA.', 'warn');
           log(
@@ -676,6 +850,7 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
       readSlots,
       dump,
       pickFile,
+      fillWithBankImage,
       write,
       discardPending,
       cancel,
@@ -691,6 +866,7 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
       readSlots,
       dump,
       pickFile,
+      fillWithBankImage,
       write,
       discardPending,
       cancel,

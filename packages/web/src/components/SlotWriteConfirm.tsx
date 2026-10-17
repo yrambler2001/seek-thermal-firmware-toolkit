@@ -28,6 +28,8 @@ export interface SlotWriteConfirmProps {
   readonly slotName: string;
   readonly slotAddress: string;
   readonly risk: WriteRisk;
+  /** The bank holds no image: the write overwrites no firmware. */
+  readonly targetEmpty?: boolean;
   readonly onConfirm: (acknowledged: boolean) => void;
   readonly onCancel: () => void;
 }
@@ -38,6 +40,7 @@ export function SlotWriteConfirm({
   slotName,
   slotAddress,
   risk,
+  targetEmpty = false,
   onConfirm,
   onCancel,
 }: SlotWriteConfirmProps): ReactElement {
@@ -92,8 +95,15 @@ export function SlotWriteConfirm({
         )}
 
         <AlertDialogDescription id="slot-write-confirm-what" className="space-y-2">
+          {targetEmpty && (
+            <span className="block font-medium">
+              {`${slotName} is empty: it holds no image, so no firmware is overwritten.`}
+            </span>
+          )}
           <span className="block">
-            {`This erases a 64 KiB block of the camera's flash and programs it at ${slotName}.`}
+            {targetEmpty
+              ? `The write still erases the 64 KiB block of the camera's flash at ${slotName} (already blank) and programs it.`
+              : `This erases a 64 KiB block of the camera's flash and programs it at ${slotName}.`}
           </span>
           <span className="block">
             No reset is sent. Unplug and replug the camera afterwards for the bank to take effect.

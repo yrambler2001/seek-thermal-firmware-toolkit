@@ -48,6 +48,9 @@ export const SLOT_HEADER: ImageHeader = {
   versionStr: '4.9.1.5',
 };
 
+/** The decrypted image a bank that holds one carries, as an analysis that decrypted it has it. */
+export const SLOT_PLAIN: Uint8Array = new Uint8Array(0x100).fill(0x5a);
+
 export const UNSUPPORTED_REASON =
   'firmware 0.7.4.0 predates the slot workflows (0.8.0.0 and newer)';
 
@@ -102,6 +105,7 @@ export function readSlotState(
     unread: false,
     header: SLOT_HEADER,
     plainHeader: SLOT_HEADER,
+    plain: SLOT_PLAIN,
     keyName: 'Key A',
     bootable: true,
     bootability: 'bootable',
@@ -110,6 +114,53 @@ export function readSlotState(
     sha256: 'ee'.repeat(32),
     ...overrides,
   };
+}
+
+/** One bank as a read found it erased: a clean read of all 0xFF, no image, `blank` set. */
+export function emptySlotState(
+  base: DeviceState,
+  key: SlotKey,
+  overrides: Partial<SlotState> = {},
+): SlotState {
+  const template = base.slots[0];
+  if (template === undefined) throw new Error('the fake camera has no slot to copy');
+  return {
+    ...template,
+    key,
+    name: SLOT_NAME[key],
+    address: SLOT_ADDRESS[key],
+    present: false,
+    blank: true,
+    reason: 'no image header (magic 0xFFFFFFFF)',
+    unread: false,
+    header: null,
+    raw: null,
+    footer: null,
+    recovered: null,
+    plain: null,
+    plainHeader: null,
+    accepts: false,
+    footerOk: false,
+    sha256: null,
+    keyName: null,
+    bootable: false,
+    bootability: 'not-bootable',
+    ...overrides,
+  };
+}
+
+/** A bank view whose bank is empty. */
+export function emptySlotView(
+  base: DeviceState,
+  key: SlotKey,
+  overrides: Partial<SlotView> = {},
+): SlotView {
+  return slotView(base, key, {
+    state: emptySlotState(base, key),
+    content: 'empty',
+    active: false,
+    ...overrides,
+  });
 }
 
 export function slotView(
@@ -131,7 +182,11 @@ export function slotView(
  * The three banks: slot A is the one booted, B a standby, R recovery. `unread`
  * names the one whose window would not arm, which leaves its state null.
  */
-export function slotReport(base: DeviceState, unread: SlotKey | null = null): SlotsReport {
+export function slotReport(
+  base: DeviceState,
+  unread: SlotKey | null = null,
+  empty: readonly SlotKey[] = [],
+): SlotsReport {
   const slots = (['a', 'b', 'r'] as const).map((key) =>
     key === unread
       ? slotView(base, key, {
@@ -139,7 +194,9 @@ export function slotReport(base: DeviceState, unread: SlotKey | null = null): Sl
           unreadReason: 'the window would not arm',
           content: 'unread',
         })
-      : slotView(base, key),
+      : empty.includes(key)
+        ? emptySlotView(base, key)
+        : slotView(base, key),
   );
   return { state: base, plan: slotPlan(true), slots };
 }
@@ -151,6 +208,20 @@ export function actingProfile(): ActingProfile {
     firmwareVersion: '0.8.0.0',
     buildString: null,
     forced: false,
+  };
+}
+
+/** What dumping an empty bank returns: the raw 64 KiB of 0xFF, nothing decrypted. */
+export function dumpedEmptySlot(key: SlotKey): DumpedSlot {
+  return {
+    key,
+    address: SLOT_ADDRESS[key],
+    raw: new Uint8Array(0x10000).fill(0xff),
+    sha256: 'ff'.repeat(32),
+    empty: true,
+    plain: null,
+    plainSha256: null,
+    notes: ['empty, nothing to decrypt: all 65536 B of the bank read as 0xFF'],
   };
 }
 
@@ -167,8 +238,14 @@ export function dumpedSlot(key: SlotKey): DumpedSlot {
   };
 }
 
-export function preparedSlot(key: SlotKey, kind: SlotInputKind, bytes: Uint8Array): SlotFlashPlan {
+export function preparedSlot(
+  key: SlotKey,
+  kind: SlotInputKind,
+  bytes: Uint8Array,
+  targetEmpty = false,
+): SlotFlashPlan {
   return {
+    targetEmpty,
     key,
     address: SLOT_ADDRESS[key],
     kind,

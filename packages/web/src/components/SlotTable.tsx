@@ -9,7 +9,7 @@
  */
 
 import type { ReactElement, ReactNode } from 'react';
-import { Download, FileUp } from 'lucide-react';
+import { Copy, Download, FileUp } from 'lucide-react';
 import {
   SLOT_BYTES,
   hexUp,
@@ -31,7 +31,14 @@ import {
   TableRow,
   TableRowHeader,
 } from './ui/table';
-import { slotActionGate, slotVersion, writeRisk, type WriteRisk } from '@/hooks/useSlotsPanel';
+import {
+  bankImageSource,
+  slotActionGate,
+  slotVersion,
+  writeRisk,
+  type BankImageSource,
+  type WriteRisk,
+} from '@/hooks/useSlotsPanel';
 
 /** The same image types the flash view takes. */
 const IMAGE_ACCEPT = '.bin,.img,.rom,application/octet-stream';
@@ -42,11 +49,16 @@ export interface SlotTableProps {
   readonly busy: boolean;
   readonly onDump: (key: SlotKey) => void;
   readonly onPickFile: (key: SlotKey, kind: SlotInputKind, file: File) => void;
+  /** Prepare a write of the running firmware's own image into an empty bank. */
+  readonly onFillWithBankImage: (key: SlotKey) => void;
 }
 
 function bootability(view: SlotView): ReactNode {
   const state = view.state;
   if (state === null) return '—';
+  /* An empty bank holds nothing the bootloader could take: "not bootable" would read as a
+   * verdict on an image that is not there. */
+  if (view.content === 'empty') return <span>— nothing to boot</span>;
   if (state.bootability === 'bootable') {
     return <span className="text-ok">bootable — the bootloader can key it</span>;
   }
@@ -66,6 +78,20 @@ function riskNote(risk: WriteRisk): string | null {
     return 'The camera does not name its booted bank: writing it asks for an extra confirmation.';
   }
   return null;
+}
+
+/** What the "use the booted bank's image" button does, in words, with the extra confirmation it will ask for. */
+function fillNote(source: BankImageSource, risk: string | null): string {
+  const version = source.version === null ? '' : ` (${source.version})`;
+  const which = source.booted
+    ? 'That is the bank the camera boots now.'
+    : 'The camera does not say which bank it boots; this is the first bank that holds an image.';
+  return [
+    `Copies the firmware ${source.name} holds${version} into this empty bank, so the camera has a second slot with the same firmware.`,
+    which,
+    'You review the plan before anything is sent.',
+    ...(risk === null ? [] : [risk]),
+  ].join(' ');
 }
 
 /** A control and, under it, the words for why it is off (or what it will ask). */
@@ -97,6 +123,7 @@ export function SlotTable({
   busy,
   onDump,
   onPickFile,
+  onFillWithBankImage,
 }: SlotTableProps): ReactElement {
   return (
     <Table>
@@ -127,6 +154,10 @@ export function SlotTable({
           const rawGate = gate('flash-raw');
           const note = riskNote(risk);
           const version = slotVersion(report, key);
+          const empty = view.content === 'empty';
+          /* An empty bank can be filled with the firmware the camera already runs, when another
+           * bank holds a decrypted image of it. */
+          const source = empty ? bankImageSource(report, key) : null;
 
           return (
             <TableRow key={key}>
@@ -155,6 +186,19 @@ export function SlotTable({
               <TableCell label="Firmware">
                 {state === null ? (
                   <span className="text-warn">{`not read — ${view.unreadReason ?? 'the bank was not read'}`}</span>
+                ) : empty ? (
+                  <>
+                    <Badge tone="neutral">empty</Badge>
+                    <span className="mt-1 block text-[0.75rem] text-muted-foreground">
+                      No image: this bank&apos;s header window reads as all 0xFF, so nothing is
+                      decrypted from it and writing it overwrites no firmware.
+                    </span>
+                    <span className="mt-1 block text-[0.72rem] leading-snug text-muted-foreground">
+                      {entry.emptyBank.writable.supported
+                        ? `Can be written. ${entry.emptyBank.why}`
+                        : `Cannot be written on this build: ${entry.emptyBank.writable.reason}`}
+                    </span>
+                  </>
                 ) : state.present ? (
                   <>
                     {version ?? 'unknown version'}
@@ -230,6 +274,23 @@ export function SlotTable({
                       }}
                     />
                   </Action>
+
+                  {source !== null && (
+                    <Action reason={plainGate.reason} note={fillNote(source, note)}>
+                      <Button
+                        variant="outline"
+                        disabled={!plainGate.enabled}
+                        onClick={() => {
+                          onFillWithBankImage(key);
+                        }}
+                      >
+                        <Copy />
+                        {source.booted
+                          ? "Use the booted bank's image"
+                          : `Use ${source.name}'s image`}
+                      </Button>
+                    </Action>
+                  )}
                 </div>
               </TableCell>
             </TableRow>

@@ -52,6 +52,9 @@ function OutcomePanel({ outcome }: { readonly outcome: SlotFlashOutcome }): Reac
         <strong>{`Slot ${key.toUpperCase()} — ${fileName}: ${verdict(result.verified)}`}</strong>
       </p>
       <p>{`The camera's commit returned status ${hexUp(result.commitStatus, 4)}.`}</p>
+      {outcome.targetEmpty === true && (
+        <p>{`Slot ${key.toUpperCase()} was empty before this write, so no firmware was overwritten.`}</p>
+      )}
       <p>
         Proven so far: the payload was streamed and committed
         {result.verified === true ? ', and the bank reads back as written' : ''}. NOT proven: that
@@ -214,6 +217,10 @@ export function SlotsView({ slots, connected, busy }: SlotsViewProps): ReactElem
                 setConfirming(false);
                 void slots.pickFile(key, kind, file);
               }}
+              onFillWithBankImage={(key: SlotKey) => {
+                setConfirming(false);
+                void slots.fillWithBankImage(key);
+              }}
             />
           </>
         )}
@@ -236,6 +243,8 @@ export function SlotsView({ slots, connected, busy }: SlotsViewProps): ReactElem
             kind={pending.kind}
             plan={pending.plan}
             busy={busy}
+            targetEmpty={pending.plan.targetEmpty === true}
+            source={pending.source}
             onWrite={() => {
               setConfirming(true);
             }}
@@ -250,6 +259,7 @@ export function SlotsView({ slots, connected, busy }: SlotsViewProps): ReactElem
             slotName={pendingView.entry.name}
             slotAddress={hexUp(pendingView.entry.address)}
             risk={writeRisk(pending.report, pending.key)}
+            targetEmpty={pending.plan.targetEmpty === true}
             onCancel={() => {
               setConfirming(false);
             }}
@@ -275,6 +285,15 @@ export function SlotsView({ slots, connected, busy }: SlotsViewProps): ReactElem
             bank&apos;s firmware needs before it is staged, and shows the plan.{' '}
             <strong>Flash raw bytes</strong> stages the file exactly as given. Neither sends
             anything until you confirm.
+          </p>
+          <p>
+            An <strong>empty</strong> bank (its header window reads as all 0xFF, as on many 2014
+            cameras&apos; bank B) is a state, not a fault. It dumps as the raw 64 KiB of 0xFF with
+            nothing to decrypt, and it is written exactly like any other bank; the plan and the
+            confirmation say that no firmware is overwritten. When another bank holds a decrypted
+            image, <strong>Use the booted bank&apos;s image</strong> prepares a copy of the firmware
+            the camera runs now, so a second slot with the same firmware exists. You still review
+            the plan and confirm.
           </p>
           <p>
             A write erases one 64 KiB bank and programs it. The bootloader at{' '}
