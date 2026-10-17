@@ -14,7 +14,8 @@
  *                                under Key A (`buildBankPayload`);
  *   'slot-keystream-ciphertext'  the image, stamped so its decrypted word sum
  *                                is the acceptance target, XORed with the
- *                                keystream the bank already carries;
+ *                                keystream of its OWN key block 0 (the stage
+ *                                key; nothing is read from the target bank);
  *   'plain'                      the image, stamped so its stored word sum is
  *                                0 (the 2014 plaintext chain).
  * ==================================================================== */

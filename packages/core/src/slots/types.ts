@@ -38,7 +38,8 @@ export const SLOT_BYTES = 0x10000;
  *                              and re-encrypts it under the store key itself
  *                              (`fw_validate_decrypt_program`). The 2017+ line.
  *  - 'slot-keystream-ciphertext' plain image XOR the stage key's keystream (key
- *                              block 0 of the image). The 2016 Compact PRO line;
+ *                              block 0 of the IMAGE's own pair, not a key read from
+ *                              the target bank). The 2016 Compact PRO line;
  *                              measured on a real camera: the device re-encrypts
  *                              the payload into the bank's own store key, so the
  *                              stored bytes are NOT the staged bytes.
@@ -54,6 +55,20 @@ export type CommitEffect =
   /** Arming 0 (the upgrade-target selector) also rewrites cfg[0]. Not offered here. */
   | 'bank-and-boot-config';
 
+/**
+ * What writing a bank means while it holds no image (its header window reads as
+ * all 0xFF). An empty bank is a first-class state, not an error: every staging
+ * form here builds its payload from the IMAGE and the camera's own keys, and the
+ * commit erases the block before programming it, so nothing is read from the
+ * target bank to write it. The plan says so per bank, with the reason.
+ */
+export interface EmptyBankPolicy {
+  /** Whether an empty bank may be written, with the reason when it may not. */
+  readonly writable: Support;
+  /** One sentence for the page and the CLI: why an empty bank can (or cannot) be written. */
+  readonly why: string;
+}
+
 export interface SlotEntry {
   readonly key: SlotKey;
   readonly name: string;
@@ -68,6 +83,8 @@ export interface SlotEntry {
   readonly flashRaw: Support;
   readonly staging: StagingForm | null;
   readonly commitEffect: CommitEffect;
+  /** What an empty (all 0xFF) bank means for a write on this build. */
+  readonly emptyBank: EmptyBankPolicy;
   /** Facts the UI shows next to the slot (e.g. "boots only from recovery"). */
   readonly notes: readonly string[];
 }
@@ -87,12 +104,23 @@ export interface SlotPlan {
   readonly notes: readonly string[];
 }
 
+/**
+ * What a bank holds, as far as one read can say. Four distinct facts, never merged:
+ *  - 'image'    a firmware image header was read;
+ *  - 'empty'    the header window reads as all 0xFF: an erased bank, no image, no error;
+ *  - 'foreign'  read cleanly, not erased, and not an image header this page recognises;
+ *  - 'unread'   the bank was not read (no window, the read failed, or a spent reader).
+ */
+export type SlotContent = 'image' | 'empty' | 'foreign' | 'unread';
+
 /** A slot as the page shows it: the plan's entry joined to what was read. */
 export interface SlotView {
   readonly entry: SlotEntry;
   /** What the read found; null when the slot was not read (see `unreadReason`). */
   readonly state: SlotState | null;
   readonly unreadReason: string | null;
+  /** What the bank holds. 'unread' exactly when `state` is null. */
+  readonly content: SlotContent;
   /** The bootloader boots this slot now. */
   readonly active: boolean;
 }
@@ -110,6 +138,12 @@ export interface DumpedSlot {
   /** The 64 KiB exactly as stored in flash. */
   readonly raw: Uint8Array;
   readonly sha256: string;
+  /**
+   * The whole bank was read and every byte is 0xFF: an empty bank. Then `raw` is
+   * the 64 KiB of 0xFF, `plain` is null, and there is nothing to decrypt. False for
+   * a short read, whatever the bytes that did come back hold.
+   */
+  readonly empty: boolean;
   /** The decrypted image, when the slot decrypts under a recovered key. */
   readonly plain: Uint8Array | null;
   readonly plainSha256: string | null;
@@ -147,6 +181,12 @@ export interface SlotFlashPlan {
   readonly expectedPlain?: Uint8Array | null;
   /** Human-readable rows: field, what the slot has now, what it will have. */
   readonly compare: readonly { field: string; before: string; after: string }[];
+  /**
+   * The target bank held no image when the plan was built (its header window read
+   * as all 0xFF), so the write overwrites no firmware. Optional so a plan built
+   * before the field existed reads as false.
+   */
+  readonly targetEmpty?: boolean;
   /** Things to say loudly (writing the booted slot, writing recovery, a raw payload). */
   readonly warnings: readonly string[];
   /** The device analysis this plan was built from. `flashSlot` re-checks it. */

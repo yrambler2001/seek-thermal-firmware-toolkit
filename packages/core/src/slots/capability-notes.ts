@@ -39,9 +39,11 @@ const LOCKED_PLAIN_STAGING_NOTE =
   'through the adjust word at 0x238.';
 
 const LOCKED_2016_STAGING_NOTE =
-  'Staged: the image, XORed with this bank’s own xorshift128 keystream, image length only ' +
-  '(at most 0xE000 bytes). The keystream is recovered from a readable copy of THIS bank, so a ' +
-  'bank that cannot be read cannot be written in this form.';
+  'Staged: the image, XORed with the xorshift128 keystream of its OWN key block 0 (the stage ' +
+  'key, found in the image by value), image length only (at most 0xE000 bytes). The device ' +
+  'decrypts the payload with that key and stores it under the bank’s own key (block 1), so the ' +
+  'stored bytes are not the staged ones. Nothing is read from the target bank to stage it: the ' +
+  'bank’s keystream is used only to read the bank back.';
 
 /**
  * The general flash command refuses this profile (its own capabilities.flash
@@ -93,6 +95,48 @@ const PRODUCT_NOTES: Readonly<Record<string, string>> = {
     'Its BeginFirmwareUpgrade rejects a wider type span (0x7F, BAD_ARG0), and modes 7 to 9 are inside ' +
     'the span it accepts.',
 };
+
+/* ---- an empty bank ------------------------------------------------------ *
+ * An empty bank (its header window reads all 0xFF) is writable wherever the
+ * family can be written at all, because no staging form reads the target bank:
+ * the payload comes from the IMAGE and from the camera's own keys, and the commit
+ * erases the 64 KiB block before it programs it. What differs is the evidence.
+ * ------------------------------------------------------------------------- */
+
+const EMPTY_PLAIN_WHY =
+  'An empty bank takes an image exactly as a used one does. The plaintext chain stages the ' +
+  'image bytes as they are, with no key, and the commit erases the block first, so nothing is ' +
+  'read from the target bank. Measured on the bench Compact: an image written into an empty ' +
+  'bank B read back identical, and B booted alone (TESTING.md 42.8).';
+
+const EMPTY_MODERN_WHY =
+  'An empty bank takes an image exactly as a used one does. The payload is encrypted under this ' +
+  'camera’s Key A, which comes from the analysis and not from the bank, and the device re-keys ' +
+  'it and erases the block without reading it. The footer is copied from a bank that holds a ' +
+  'valid one, else built blank. Proven on the emulator; not yet measured on a real camera ' +
+  '(TESTING.md 42.8).';
+
+const EMPTY_2016_WHY =
+  'An empty bank takes an image exactly as a used one does. The stage key is key block 0 of the ' +
+  'IMAGE’s own pair, not a key read from the target bank, and the device decrypts the payload ' +
+  'with it, stores it under its own key and erases the block without reading it. Proven on the ' +
+  'emulator; not yet measured on a real camera (TESTING.md 42.8).';
+
+/** Why an empty bank can be written on this family, in one sentence; null when the family has no write. */
+export function emptyBankWhy(family: SlotFamily): string | null {
+  switch (family) {
+    case 'locked-plain':
+      return EMPTY_PLAIN_WHY;
+    case 'modern':
+      return EMPTY_MODERN_WHY;
+    case 'locked-2016':
+      return EMPTY_2016_WHY;
+    case 'unverified-locked':
+    case 'pre-0.8':
+    case 'unidentified':
+      return null;
+  }
+}
 
 /** Facts about a whole build, shown once above its slots. */
 export function planNotes(family: SlotFamily, version: FirmwareVersion): string[] {
@@ -173,8 +217,8 @@ export function bankNotes(family: SlotFamily, key: SlotKey): string[] {
       if (key === 'r') {
         notes.push(
           'Recovery bank, mode 9, token form. A write needs acknowledgeRisk; the only measured ' +
-            '2016 commits are into the booted bank, so R is the same arm with its own keystream and ' +
-            'unmeasured on this family.',
+            '2016 commits are into the booted bank, so R is the same arm and unmeasured on this ' +
+            'family.',
         );
       }
       break;

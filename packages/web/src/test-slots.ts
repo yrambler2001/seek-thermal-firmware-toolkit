@@ -64,6 +64,7 @@ export function slotEntry(key: SlotKey, overrides: Partial<SlotEntry> = {}): Slo
     flashRaw: { supported: true },
     staging: 'plain',
     commitEffect: 'bank-only',
+    emptyBank: { writable: { supported: true }, why: 'an empty bank is written like a used one' },
     notes: [],
     ...overrides,
   };
@@ -120,6 +121,7 @@ export function slotView(
     entry: slotEntry(key),
     state: readSlotState(base, key),
     unreadReason: null,
+    content: 'image',
     active: key === 'a',
     ...overrides,
   };
@@ -135,6 +137,7 @@ export function slotReport(base: DeviceState, unread: SlotKey | null = null): Sl
       ? slotView(base, key, {
           state: null,
           unreadReason: 'the window would not arm',
+          content: 'unread',
         })
       : slotView(base, key),
   );
@@ -157,6 +160,7 @@ export function dumpedSlot(key: SlotKey): DumpedSlot {
     address: SLOT_ADDRESS[key],
     raw: new Uint8Array(0x10000).fill(0xab),
     sha256: 'ab'.repeat(32),
+    empty: false,
     plain: new Uint8Array(0x10000).fill(0x01),
     plainSha256: 'cd'.repeat(32),
     notes: [],

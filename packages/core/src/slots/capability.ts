@@ -52,8 +52,14 @@ import {
   stagingFor,
   type SlotFamily,
 } from './capability-family.js';
-import { bankNotes, planNotes, profileFlashNote } from './capability-notes.js';
-import { SLOT_BYTES, type CommitEffect, type SlotEntry, type SlotPlan } from './types.js';
+import { bankNotes, emptyBankWhy, planNotes, profileFlashNote } from './capability-notes.js';
+import {
+  SLOT_BYTES,
+  type CommitEffect,
+  type EmptyBankPolicy,
+  type SlotEntry,
+  type SlotPlan,
+} from './types.js';
 
 /**
  * Committing a 7/8/9 arm programs the named bank and nothing else. Measured in
@@ -91,6 +97,7 @@ function refusedPlan(
     flashRaw: unsupported(refusal),
     staging: null,
     commitEffect: COMMIT_EFFECT,
+    emptyBank: { writable: unsupported(refusal), why: refusal },
     notes: [],
   }));
   return {
@@ -191,6 +198,24 @@ function flashSupport(
   return gate.supported ? SUPPORTED : gate;
 }
 
+/**
+ * What an empty bank means for a write. It follows the flash verdict exactly: a
+ * bank that can be written from an image can be written while empty, because no
+ * family's staging reads the target bank. A family that cannot be written at all
+ * says the same reason it says for a used bank.
+ */
+function emptyBankPolicy(family: SlotFamily, flash: Support): EmptyBankPolicy {
+  if (!flash.supported) return { writable: flash, why: flash.reason };
+  const why = emptyBankWhy(family);
+  if (why === null) {
+    return {
+      writable: unsupported('this build has no staging form, so an empty bank is not written'),
+      why: 'this build has no staging form, so an empty bank is not written',
+    };
+  }
+  return { writable: SUPPORTED, why };
+}
+
 function supportedEntry(
   profile: FirmwareProfile,
   family: SlotFamily,
@@ -214,6 +239,7 @@ function supportedEntry(
     flashRaw: flash,
     staging: stagingFor(family),
     commitEffect: COMMIT_EFFECT,
+    emptyBank: emptyBankPolicy(family, flash),
     notes: bankNotes(family, key),
   };
 }

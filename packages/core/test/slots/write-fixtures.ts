@@ -5,6 +5,7 @@
  * ==================================================================== */
 
 import type { FirmwareProfile, WindowEntry } from '../../src/profiles/types.js';
+import { slotContentOf } from '../../src/slots/inspect.js';
 import type { SlotPlan, SlotsReport, SlotView } from '../../src/slots/types.js';
 import type { DeviceState } from '../../src/workflows/types.js';
 
@@ -19,11 +20,15 @@ export function windowAt(
 
 /** The report a writer call takes: the analysis, the plan, and one view per planned slot. */
 export function reportFor(state: DeviceState, plan: SlotPlan): SlotsReport {
-  const slots: SlotView[] = plan.slots.map((entry) => ({
-    entry,
-    state: state.byKey.get(entry.key) ?? null,
-    unreadReason: null,
-    active: state.boot?.booted === entry.key,
-  }));
+  const slots: SlotView[] = plan.slots.map((entry) => {
+    const found = state.byKey.get(entry.key) ?? null;
+    return {
+      entry,
+      state: found,
+      unreadReason: null,
+      content: slotContentOf(found),
+      active: state.boot?.booted === entry.key,
+    };
+  });
   return { state, plan, slots };
 }

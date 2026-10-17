@@ -85,6 +85,7 @@ function slotEntry(key: SlotKey, overrides: Partial<SlotEntry> = {}): SlotEntry 
     flashRaw: SUPPORTED,
     staging: 'key-a-ciphertext',
     commitEffect: 'bank-only',
+    emptyBank: { writable: SUPPORTED, why: 'an empty bank is written like a used one' },
     notes: [],
     ...overrides,
   };
@@ -148,6 +149,7 @@ function reportOf(options: ReportOptions = {}): SlotsReport {
       entry,
       state: unread ? null : slotStateFake(entry.key, entry.key !== 'b'),
       unreadReason: unread ? 'the window would not arm' : null,
+      content: unread ? 'unread' : 'image',
       active: entry.key === booted,
     };
   });
@@ -176,6 +178,7 @@ function fakeDumped(key: SlotKey, decrypts: boolean): DumpedSlot {
     address: ADDRESS[key],
     raw: new Uint8Array(0x10000).fill(0xab),
     sha256: 'deadbeef'.repeat(8),
+    empty: false,
     plain: decrypts ? new Uint8Array(0x1000).fill(0x01) : null,
     plainSha256: decrypts ? 'feedface'.repeat(8) : null,
     notes: [],
