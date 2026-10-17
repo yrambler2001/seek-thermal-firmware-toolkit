@@ -8,7 +8,7 @@
  * page, and its behaviour is pinned by its own tests. Keep the two in step by
  * hand when either one changes a guard.
  *
- * The three staging forms (see types.ts):
+ * The staging forms (see types.ts):
  *   'key-a-ciphertext'           the image, retargeted to this camera's keys,
  *                                stamped, padded and footered, then encrypted
  *                                under Key A (`buildBankPayload`);
@@ -16,7 +16,11 @@
  *                                is the acceptance target, XORed with the
  *                                keystream the bank already carries;
  *   'plain'                      the image, stamped so its stored word sum is
- *                                0 (the 2014 plaintext chain).
+ *                                0 (the 2014 plaintext chain);
+ *   'two-stream'                 the 1.3.0.8 FF image on the 2014 chain: the image
+ *                                XOR ks0 XOR ksD, its adjust word solved so the
+ *                                collapsed gate sums to 0xFFFF (`buildFFPayload`,
+ *                                built by preservation/patch.ts). Recovery only.
  * ==================================================================== */
 
 import { bytesToHex, equalBytes, findAll, hex, hexToBytes, hexUp, viewOf } from '../bytes.js';
@@ -50,9 +54,17 @@ import {
   TRY_KEYS_MAX_LEN,
   type ImageHeader,
 } from '../image/header.js';
-import { KEY_PAIRS, keystream, keyWordsOf, xorWindowVerbatim } from '../preservation/patch.js';
+import {
+  ffFoldedFormOf,
+  ffStagedFormOf,
+  KEY_PAIRS,
+  keystream,
+  keyWordsOf,
+  locateFFKeys,
+  xorWindowVerbatim,
+} from '../preservation/patch.js';
 import type { CipherProfile } from '../profiles/types.js';
-import type { StagingForm } from './types.js';
+import type { SlotKey, StagingForm } from './types.js';
 import { sha256Sync } from './write-sha.js';
 
 /** Every refusal of this page is one code, so a front end can tell "nothing was sent" apart. */
@@ -208,8 +220,8 @@ export function buildKeyAPayload(
 
 /**
  * The 2016 line's key pairs, as the preservation patch stages with them. The
- * 1.3.0.8 FF pair is not here: that build is refused as a plain image (see
- * `buildPlainPayload`), and its staged form is a different one.
+ * 1.3.0.8 FF pair is not here: that build's staged form is a different one
+ * (`buildFFPayload`), chosen by `plainChainBuildOf`.
  */
 const LINE_2016_PAIRS = [KEY_PAIRS.cp103, KEY_PAIRS.cp1032ff] as const;
 
@@ -262,21 +274,52 @@ export function buildSlotKeystreamPayload(image: Uint8Array, cipher: CipherProfi
 }
 
 /**
- * The 2014 plaintext chain's form: the image itself, length-stamped, the stored
- * word sum balanced to 0, and the chain's own three acceptance checks.
+ * Which build of the 2014 plaintext chain an image is. The slot plan cannot tell
+ * the 1.3.0.8 8 Hz build from its 16 Hz FF build (one version string), so the
+ * IMAGE decides, as `patch.ts` does: the 8 Hz image's stored word sum is 0, and
+ * the FF image carries the 1.3.0.8-FF key pair (each half once) with a stored word
+ * sum of 0xFFFF as built. A bank this page wrote carries that sum plus its solved
+ * adjust word, so the key pair is what keeps such an image recognised. A sum of
+ * 0xFFFF with no such pair is no image this page knows how to stage: refused.
  */
-export function buildPlainPayload(image: Uint8Array, cipher: CipherProfile): StagedBytes {
-  /* The 16 Hz FF build shares 1.3.0.8's version string and is told apart by its
-   * word sum: the 8 Hz build's image sums to 0, the FF image to 0xFFFF. The FF
-   * image boots only from recovery, and its staged form folds two keystreams
-   * (preservation/patch.ts `xor-ks0-ksD`); this page does not produce that form,
-   * so the write is refused rather than staged as a plain image it would reject. */
+export type PlainChainBuild = 'plain' | 'ff-1308';
+
+export function plainChainBuildOf(image: Uint8Array): PlainChainBuild {
   const fileSum = wordSum32(image, image.length);
+  if (fileSum === 0) return 'plain';
+  if (locateFFKeys(image) !== null) return 'ff-1308';
   if (fileSum === 0xffff) {
     throw slotRefused(
-      'this is the 16 Hz FF image (word sum 0xFFFF): it boots only from recovery and its ' +
-        'staged form is the two-stream one, which this page does not produce. Nothing was written.',
+      'this image has the 16 Hz FF word sum 0xFFFF but does not carry the 1.3.0.8-FF key pair ' +
+        '(both halves, once each), so its staged form cannot be built. Nothing was written.',
       { fileSum },
+    );
+  }
+  return 'plain';
+}
+
+/** The refusal for an FF image aimed at a bank the 2014 bootloader would reject it in. */
+export function ffBankRefusal(key: SlotKey): SeekError {
+  return slotRefused(
+    'this is the 1.3.0.8 FF (16 Hz) image, whose word sum is the 0xFFFF sentinel and not the 0 ' +
+      'the 2014 bootloader needs at banks A and B; the camera boots it only from the recovery ' +
+      `bank R (unchecked). It can be written to R only, not to bank ${key.toUpperCase()}. ` +
+      'Nothing was written.',
+    { key },
+  );
+}
+
+/**
+ * The 2014 plaintext chain's form: the image itself, length-stamped, the stored
+ * word sum balanced to 0, and the chain's own three acceptance checks. The FF
+ * build is not this form (`plainChainBuildOf`, `buildFFPayload`); it is refused
+ * here rather than staged as a plain image the camera would reject.
+ */
+export function buildPlainPayload(image: Uint8Array, cipher: CipherProfile): StagedBytes {
+  if (plainChainBuildOf(image) === 'ff-1308') {
+    throw slotRefused(
+      'this is the 1.3.0.8 FF (16 Hz) image, which is staged in its own two-stream form, not as ' +
+        'a plain image. Nothing was written.',
     );
   }
   try {
@@ -287,6 +330,65 @@ export function buildPlainPayload(image: Uint8Array, cipher: CipherProfile): Sta
   } catch (error) {
     throw asSlotRefusal(error);
   }
+}
+
+/** The FF image, staged: the payload, the stamped image the bank will hold, and the adjust word. */
+export interface FFStagedBytes extends StagedBytes {
+  /** The adjust word (0x238) as solved, and as stored. */
+  readonly rebalanceWord: number;
+  /** What the image held at 0x238 before. */
+  readonly heldWord: number;
+  /** The stored word sum of the stamped image (the collapsed gate is 0xFFFF, not this). */
+  readonly storedWordSum: number;
+}
+
+/**
+ * The 1.3.0.8 FF image in the form the camera accepts: the header length stamped, the
+ * adjust word at 0x238 solved so the staged form's collapsed word sum is 0xFFFF, and the
+ * image folded through ks0 and ksD. The fold and the solve are `ffStagedFormOf` in
+ * preservation/patch.ts (the staged form that pipeline commits on the emulator); this adds
+ * only the stage-size guard of the chain's descriptor.
+ *
+ * `payload` is what goes through SetFeaturedFirmwareData; `stamped` is what the bank holds
+ * afterwards (the camera folds the payload back to it), so a read-back is compared with
+ * `stamped`, not with `payload`.
+ */
+export function buildFFPayload(image: Uint8Array): FFStagedBytes {
+  try {
+    if (image.length > PLAIN_CHAIN_STAGE_MAX) {
+      throw slotRefused(
+        `image is ${String(image.length)} B; the upgrade descriptor's staging buffer holds ` +
+          `${hexUp(PLAIN_CHAIN_STAGE_MAX)} B (0x20002000 + 0xE000), so the stream would stop ` +
+          'part-way and the commit would program a truncated image',
+      );
+    }
+    /* The header length is the length of the file, as `setAcceptSum` stamps it. */
+    const sized = image.slice();
+    const dv = viewOf(sized);
+    if (dv.getUint32(LENGTH_OFFSET, true) !== sized.length) {
+      dv.setUint32(LENGTH_OFFSET, sized.length >>> 0, true);
+    }
+    const staged = ffStagedFormOf(sized);
+    return {
+      payload: staged.staged,
+      stamped: staged.stamped,
+      rebalanceWord: staged.rebalanceWord,
+      heldWord: staged.heldWord,
+      storedWordSum: staged.storedWordSum,
+    };
+  } catch (error) {
+    throw asSlotRefusal(error);
+  }
+}
+
+/**
+ * The plain image a RAW payload folds to when it is the FF staged form, else null: both
+ * of the app's accepts would pass it and the image it folds to carries the 1.3.0.8-FF key
+ * pair (`ffFoldedFormOf`). The page sends raw bytes as given; this only lets it say what
+ * the bank will hold.
+ */
+export function foldedFFPayload(payload: Uint8Array): Uint8Array | null {
+  return ffFoldedFormOf(payload);
 }
 
 /* ---- what the bootloader will check, stated without refusing ----------- */

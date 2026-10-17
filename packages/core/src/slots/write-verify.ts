@@ -6,8 +6,12 @@
  * staged under Key A (2017+) or under the 2016 stage key is decrypted by the
  * bootloader and re-encrypted under the bank's own store key, so the bytes the
  * bank keeps are not the bytes that were sent, and nothing about them can be
- * predicted from the plan. The 2014 plain chain is the one form that programs
- * exactly what it is sent, so only there are the stored bytes compared.
+ * predicted from the plan. The 2014 plain chain stores plain, so there the stored
+ * bytes are compared: exactly what was sent, except on the 1.3.0.8 FF build, whose
+ * staged payload is the image XOR two keystreams and which stores the image the
+ * payload folds to (`storedAs: 'two-stream-fold'`, measured on the emulator). The
+ * plan predicts those bytes too, so the compare is the same byte comparison with
+ * its own words.
  *
  * What survives every form is the IMAGE the bank decrypts to. So the check
  * reads the bank back, recovers its keystream from the read-back ITSELF (the
@@ -33,10 +37,16 @@ export interface ReadBackVerdict {
 
 /** What the plan says the bank must hold: the exact bytes, or the plain image, or neither. */
 export interface ReadBackExpectation {
-  /** The exact bank bytes, when the device programs what it is sent (the 2014 plain chain). */
+  /** The exact bank bytes, when they are predictable (the 2014 plain chain, FF build included). */
   readonly stored: Uint8Array | null;
   /** The plain image the bank must decrypt to, after stamping and balancing. */
   readonly plain: Uint8Array | null;
+  /**
+   * How `stored` relates to what was sent. 'as-sent' (the default) is the plain chain
+   * programming the payload; 'two-stream-fold' is the FF build programming the image its
+   * payload folds to. Only the words of the verdict differ.
+   */
+  readonly storedAs?: 'as-sent' | 'two-stream-fold';
 }
 
 /** The first offset at which two equal-length or longer arrays differ, or -1. */
@@ -62,12 +72,17 @@ export function compareReadBack(
 ): ReadBackVerdict {
   if (expected.stored !== null) {
     const stored = expected.stored;
+    /* The FF build stores the image its payload folds to, not the payload: say so. */
+    const folded = expected.storedAs === 'two-stream-fold';
+    const predicted = folded
+      ? 'the plain image the two-stream payload folds to'
+      : 'the bytes the plan predicted';
     if (after.length !== stored.length) {
       return {
         verified: false,
         notes: [
           `the read-back is ${String(after.length)} B, the plan predicted ${String(stored.length)} B: ` +
-            'the bank does NOT match the bytes the plan predicted',
+            `the bank does NOT match ${predicted}`,
         ],
       };
     }
@@ -75,17 +90,18 @@ export function compareReadBack(
       return {
         verified: true,
         notes: [
-          'the bank matches the bytes the plan predicted (the 2014 plain chain programs exactly ' +
-            'what it is sent)',
+          folded
+            ? 'the bank holds the plain image the two-stream payload folds to (the FF build stores ' +
+              'the image, not the staged bytes), and the rest of the bank is erased'
+            : 'the bank matches the bytes the plan predicted (the 2014 plain chain programs exactly ' +
+              'what it is sent)',
         ],
       };
     }
     const at = firstDifference(after, stored);
     return {
       verified: false,
-      notes: [
-        `the bank does NOT match the bytes the plan predicted (first difference at ${hex(at)})`,
-      ],
+      notes: [`the bank does NOT match ${predicted} (first difference at ${hex(at)})`],
     };
   }
 

@@ -1650,26 +1650,127 @@ export function stagedFormOf(patch: V1Patch, image: Uint8Array): Uint8Array {
         `${String(patch.factory.length)} B`,
     );
   }
-  if (patch.stagedForm === 'plain') return image;
-  if (patch.keys === null) {
+  return stageWithKeys(patch.stagedForm, patch.keys, image);
+}
+
+/** The staged form of `image` under `form`, from the key blocks found in it. The one
+ *  copy of the fold: `stagedFormOf` stages a patch with it and `ffStagedFormOf` stages
+ *  a bare FF image with it, so the two cannot drift. */
+function stageWithKeys(
+  form: StagedFormId,
+  keys: LocatedKeys | null,
+  image: Uint8Array,
+): Uint8Array {
+  if (form === 'plain') return image;
+  if (keys === null) {
     throw new SeekError(
       'pipeline/refused',
       'the staged form needs this build key blocks and they were not located by value',
     );
   }
   const words = image.length >> 2;
-  const ks0 = keystream(keyWordsOf(patch.keys.block0Hex), words);
+  const ks0 = keystream(keyWordsOf(keys.block0Hex), words);
   let out = xorWindowVerbatim(image, ks0);
-  if (patch.stagedForm === 'xor-ks0-ksD') {
-    if (patch.keys.block1Hex === null) {
+  if (form === 'xor-ks0-ksD') {
+    if (keys.block1Hex === null) {
       throw new SeekError(
         'pipeline/refused',
         'the two-stream staged form needs key block 1 and it was not located by value',
       );
     }
-    out = xorWindowVerbatim(out, keystream(keyWordsOf(patch.keys.block1Hex), words));
+    out = xorWindowVerbatim(out, keystream(keyWordsOf(keys.block1Hex), words));
   }
   return out;
+}
+
+/* ---- the FF staged form for a bare image ------------------------------------
+ *
+ * `buildV1Patch` stages the PATCHED plaintext of an FF image it is widening. The
+ * slot writer stages an image as it is given, with no patch, and needs the same
+ * two-stream form and the same solved header word. These three functions are that,
+ * built from the shared fold above and the same arithmetic as the FF branch of
+ * `buildV1Patch`; the differential test in test/slots/write-ff.test.ts pins them to
+ * `stagedFormOf` over the corpus image.
+ */
+
+/** The 1.3.0.8-FF key pair as found in `image` by value (each half exactly once), or null. */
+export function locateFFKeys(image: Uint8Array): LocatedKeys | null {
+  return findKeyPair(image, KEY_PAIRS.ff1308);
+}
+
+/** An FF image, stamped and staged. */
+export interface FFStaging {
+  /** The image as the bank will hold it: the input with word 142 (0x238) solved. */
+  readonly stamped: Uint8Array;
+  /** The wire payload: `stamped` XOR ks0 XOR ksD, header window verbatim. */
+  readonly staged: Uint8Array;
+  /** The solved word 142, as stored. */
+  readonly rebalanceWord: number;
+  /** What word 142 held in the input. */
+  readonly heldWord: number;
+  /** The raw word sum of `stamped` (not the collapsed gate, which is 0xFFFF). */
+  readonly storedWordSum: number;
+}
+
+/**
+ * Stage a bare FF image: solve word 142 so the collapsed gate sum(S ^ ks0) is 0xFFFF
+ * (S is the staged form; its header words are verbatim, so the gate reads the image
+ * XOR ksD off the header), then fold the image through ks0 and ksD. The input's word
+ * 142 is overwritten whatever it held, which makes the solve idempotent: an image that
+ * already carries its solved word stages to the same bytes. Throws `pipeline/refused`
+ * when the image does not carry the 1.3.0.8-FF key pair or is too short.
+ */
+export function ffStagedFormOf(image: Uint8Array): FFStaging {
+  const keys = locateFFKeys(image);
+  const block1Hex = keys?.block1Hex;
+  if (keys == null || block1Hex == null) {
+    throw new SeekError(
+      'pipeline/refused',
+      'the FF staged form needs the 1.3.0.8-FF key pair, and the image does not carry both ' +
+        'halves exactly once',
+    );
+  }
+  if (image.length < REBALANCE_WORD_OFFSET + 4 || (image.length & 3) !== 0) {
+    throw new SeekError(
+      'pipeline/refused',
+      `an FF image is a whole number of words past ${hexUp(REBALANCE_WORD_OFFSET + 4)}, got ` +
+        `${String(image.length)} B`,
+    );
+  }
+  const words = image.length >> 2;
+  const ks0 = keystream(keyWordsOf(keys.block0Hex), words);
+  const ksD = keystream(keyWordsOf(block1Hex), words);
+  const stamped = new Uint8Array(image);
+  const dv = viewOf(stamped);
+  const heldWord = dv.getUint32(REBALANCE_WORD_OFFSET, true);
+  dv.setUint32(REBALANCE_WORD_OFFSET, 0, true);
+  const base = wordSum(xorWindowVerbatim(stamped, ksD)); /* word 142 is 0 here */
+  const rebalanceWord = (0xffff - base) >>> 0;
+  dv.setUint32(REBALANCE_WORD_OFFSET, rebalanceWord, true);
+  const staged = stageWithKeys('xor-ks0-ksD', keys, stamped);
+  if (wordSum(xorWindowVerbatim(staged, ks0)) !== 0xffff) {
+    throw new SeekError(
+      'pipeline/refused',
+      'the rebalance did not bring the staged-form acceptance to 0xFFFF',
+    );
+  }
+  return { stamped, staged, rebalanceWord, heldWord, storedWordSum: wordSum(stamped) };
+}
+
+/**
+ * The inverse of `ffStagedFormOf`, for bytes sent raw: the plain image `staged` folds to,
+ * or null when `staged` is not an FF staged payload. It is one only when both of the app's
+ * accepts would pass it (sum(staged ^ ks0) == 0xFFFF) AND the image it folds to carries the
+ * 1.3.0.8-FF key pair, so a random payload is not mistaken for one.
+ */
+export function ffFoldedFormOf(staged: Uint8Array): Uint8Array | null {
+  if (staged.length < REBALANCE_WORD_OFFSET + 4 || (staged.length & 3) !== 0) return null;
+  const words = staged.length >> 2;
+  const ks0 = keystream(keyWordsOf(KEY_PAIRS.ff1308.block0), words);
+  const unfolded = xorWindowVerbatim(staged, ks0);
+  if (wordSum(unfolded) !== 0xffff) return null;
+  const folded = xorWindowVerbatim(unfolded, keystream(keyWordsOf(KEY_PAIRS.ff1308.block1), words));
+  return locateFFKeys(folded) === null ? null : folded;
 }
 
 /**

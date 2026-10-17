@@ -65,11 +65,24 @@ export interface LockedSubject {
    * configuration the preservation suites run these builds on.
    */
   readonly jedec: string | null;
+  /**
+   * `--donor` for this boot: the corpus entry an image-only boot is spliced onto, when it is not
+   * the manifest's own. Absent means the manifest's donor.
+   */
+  readonly donor?: string;
   /** What is particular about this row, printed with it. */
   readonly note: string;
 }
 
 const CHIMERA_2014 = 'the image-only entry on the 1.3.0.0 2014 donor dump';
+
+/**
+ * The 2014 plaintext donor the preservation suite boots the FF image on (families.emulator.test.ts):
+ * its banks hold the image as-is, as the 2014 chain stores it. The FF entry's manifest donor is the
+ * 4.8.2.1 dump, which stores the image under another bank form, so its bytes are not the FF build's
+ * own and a commit there says nothing about the camera the FF image runs on.
+ */
+const DONOR_2014 = '101310HSNEA2/dump';
 
 export const LOCKED_SUBJECTS: readonly LockedSubject[] = [
   {
@@ -225,8 +238,12 @@ export const LOCKED_SUBJECTS: readonly LockedSubject[] = [
     serial: 'no-serial',
     profileId: 'legacy-auth',
     staging: 'plain',
-    jedec: null,
-    note: 'boots only from recovery (word sum 0xFFFF); its donor is the 4.8.2.1 dump',
+    /* The 2014 donor with the Spansion part the preservation suite runs the FF commit on: the app's
+     * commit only erases a Spansion part (the same driver fact as the 2016 rows, see the FINDING in
+     * corpus-locked.emulator.test.ts), and the FF build's own tests use this boot. */
+    jedec: SPANSION_4MB_JEDEC,
+    donor: DONOR_2014,
+    note: 'boots only from recovery (word sum 0xFFFF); written to R only, in the two-stream staged form; on the 2014 donor with a Spansion part',
   },
   {
     label: 'Compact PRO 1.0.3.0 (9 Hz, native dump)',
@@ -335,10 +352,11 @@ export function bootedIsNamed(subject: LockedSubject): boolean {
 }
 
 /**
- * The 16 Hz 1.3.0.8 FF image (word sum 0xFFFF) is refused by the writer before anything
- * is sent: its staged form is the two-stream one, which the page does not produce.
+ * The 16 Hz 1.3.0.8 FF image (word sum 0xFFFF) is written to recovery R only, in the two-stream
+ * staged form: the 2014 bootloader rejects its sum at A and B, so the writer refuses those banks
+ * before anything is sent. The camera stores the plain image, with the adjust word at 0x238 solved.
  */
-export function refusesFFImage(subject: LockedSubject): boolean {
+export function isFFImage(subject: LockedSubject): boolean {
   return subject.staging === 'plain' && subject.variant === 'ff';
 }
 

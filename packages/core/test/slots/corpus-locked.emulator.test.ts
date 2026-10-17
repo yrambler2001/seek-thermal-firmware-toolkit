@@ -13,8 +13,12 @@
  *     reaches the camera;
  *   - the image flashed into the non-booted bank commits with status 0 and reads back
  *     as that image; the same into recovery R, acknowledged; a RAW payload into R
- *     reads back as sent. On the FF build the image is refused before anything is
- *     sent (its word sum is 0xFFFF), and recovery's own stored bytes go raw instead;
+ *     reads back as sent. The 1.3.0.8 FF image (word sum 0xFFFF) is the exception on A and B:
+ *     the writer refuses it there before anything is sent, because the 2014 bootloader rejects
+ *     its sum. Into R it commits with status 0 in the two-stream staged form and reads back as
+ *     the plain image with its adjust word solved; its staged payload sent raw does the same;
+ *     and R's original stored bytes sent raw are rejected by the camera (0x00070100) before
+ *     any erase, leaving R as the FF write made it;
  *   - the boot-config block (and the bootloader, where the build exposes it) reads
  *     back unchanged after every write;
  *   - ResetDevice is never sent, and the write path never arms subcommand 0.
@@ -82,7 +86,7 @@ import {
   entryFor,
   LOCKED_SUBJECTS,
   type CorpusEntry,
-  refusesFFImage,
+  isFFImage,
   vendoredBytes,
 } from './corpus-locked-subjects.js';
 
@@ -134,14 +138,18 @@ function wrote(w: WriteRow | undefined): boolean {
   return w?.error === null && w.commitStatus === 0 && w.decrypts !== false;
 }
 
-/** Whether the page refused `w` before sending anything, for the FF image's own reason. */
+/** Whether the page refused `w` before sending anything, for the FF image's own reason (R only). */
 function refusedFF(w: WriteRow | undefined): boolean {
+  const error = w?.error ?? '';
   return (
-    w?.code === 'slots/refused' && w.requests === 0 && (w.error ?? '').includes('word sum 0xFFFF')
+    w?.code === 'slots/refused' &&
+    w.requests === 0 &&
+    error.includes('the 0xFFFF sentinel') &&
+    error.includes('recovery bank R')
   );
 }
 
-/** The camera rejected the FF build's own stored bytes as a payload, and R was left as it was. */
+/** The camera rejected the FF build's plain stored bytes as a payload, and R was left as the FF write made it. */
 function rejectedFFRaw(w: WriteRow | undefined): boolean {
   return w?.code === 'flash/commit' && w.deviceCode === 0x70100 && w.bankAfterError === 'unchanged';
 }
@@ -155,11 +163,16 @@ function passed(run: LockedRun): boolean {
   if (run.dumps.length !== 3 || run.dumps.some((d) => d.identical !== true || d.error !== null))
     return false;
   if (run.refusal?.code !== 'slots/refused' || run.refusal.requests !== 0) return false;
-  if (run.writes.length !== 3) return false;
-  const [nonBooted, recovery, raw] = run.writes;
-  if (refusesFFImage(s)) {
-    if (!refusedFF(nonBooted) || !refusedFF(recovery)) return false;
-    if (!rejectedFFRaw(raw)) return false;
+  if (run.writes.length !== (isFFImage(s) ? 4 : 3)) return false;
+  const [nonBooted, recovery, raw, rejected] = run.writes;
+  if (isFFImage(s)) {
+    /* A and B refuse it; R takes it, verified by the writer, accepted by the app's collapsed gate;
+     * its staged payload sent raw does the same; and the plain stored bytes are rejected. */
+    if (!refusedFF(nonBooted) || !wrote(recovery)) return false;
+    if (recovery?.verified !== true || recovery.accepts !== true) return false;
+    if (raw?.commitStatus !== 0 || raw.verified !== true) return false;
+    if (raw.identical !== true || raw.tailErased !== true || raw.decrypts !== true) return false;
+    if (!rejectedFFRaw(rejected)) return false;
   } else {
     if (!wrote(nonBooted) || !wrote(recovery)) return false;
     if (raw?.commitStatus !== 0) return false;
@@ -202,6 +215,9 @@ function matrixLine(run: LockedRun): string {
     `${' '.repeat(38)} ${writeOf(run, 'plain image -> ')?.step ?? 'plain -> non-booted'}: ${writeCell(run.writes[0])}`,
     `${' '.repeat(38)} plain -> R (ack): ${writeCell(writeOf(run, 'plain image -> R'))}`,
     `${' '.repeat(38)} ${run.writes[2]?.step ?? 'raw -> R'}: ${writeCell(run.writes[2])}`,
+    ...(run.writes[3] === undefined
+      ? []
+      : [`${' '.repeat(38)} ${run.writes[3].step}: ${writeCell(run.writes[3])}`]),
     `${' '.repeat(38)} ${blocks}; ${passed(run) ? 'PASS' : 'FAIL'}` +
       (run.setup === null ? '' : ` [setup: ${run.setup}]`) +
       (run.inspectError === null ? '' : ` [inspect: ${run.inspectError}]`),
@@ -235,8 +251,8 @@ describe.skipIf(!available)(
       describe.skipIf(entry === null)(subject.label, () => {
         const run = blankLockedRun(subject, entry?.id ?? '');
         const row = new RowEmulators(entry?.id ?? '');
-        /* The 1.3.0.8 16 Hz image: refused by the writer, so its own tests differ. */
-        const ffImage = refusesFFImage(subject);
+        /* The 1.3.0.8 16 Hz image: written to R only, in its own staged form, so its tests differ. */
+        const ffImage = isFFImage(subject);
         const bootloaderRead = bootloaderIsRead(subject);
         const named = bootedIsNamed(subject);
 
@@ -311,7 +327,7 @@ describe.skipIf(!available)(
         /* What the donor's own banks hold, as the emulator serves them. The 2014 donor keeps B
          * erased (65536 of 65536 bytes, measured on the 1.3.0.0 dump), so only A and R hold the
          * image there; the 2016 donors hold it in all three banks, keystream-stored. */
-        if (!ffImage && subject.staging === 'plain' && entry?.kind === 'image-only') {
+        if (subject.staging === 'plain' && entry?.kind === 'image-only') {
           it('A and R hold the corpus image as stored; B is erased, as the 2014 donor carries it', () => {
             const byKey = Object.fromEntries(run.dumps.map((d) => [d.key, d]));
             expect(
@@ -354,29 +370,52 @@ describe.skipIf(!available)(
           expect(run.refusal?.requests, 'requests the camera received for the refused call').toBe(
             0,
           );
-          if (!ffImage)
-            expect(run.refusal?.message, 'the refusal names the acknowledgement').toMatch(
-              /acknowledgeRisk/,
-            );
+          expect(run.refusal?.message, 'the refusal names the acknowledgement').toMatch(
+            /acknowledgeRisk/,
+          );
         });
 
         if (ffImage) {
-          it('refuses the 1.3.0.8-FF image (word sum 0xFFFF) into the non-booted bank and into R, before sending anything', () => {
+          it('refuses the 1.3.0.8-FF image (word sum 0xFFFF) for the non-booted bank, before sending anything, and says only R takes it', () => {
             const nb = run.writes[0];
-            const rec = writeOf(run, 'plain image -> R');
             expect(nb?.code, nb?.error ?? 'the non-booted write ran').toBe('slots/refused');
             expect(nb?.requests, 'requests for the refused non-booted write').toBe(0);
-            expect(nb?.error).toContain('word sum 0xFFFF');
-            expect(rec?.code, rec?.error ?? 'the recovery write ran').toBe('slots/refused');
-            expect(rec?.requests, 'requests for the refused recovery write').toBe(0);
-            expect(rec?.error).toContain('word sum 0xFFFF');
+            expect(nb?.error).toContain('the 0xFFFF sentinel');
+            expect(nb?.error).toContain('recovery bank R');
           });
 
-          /* The raw path is not refused by the page: the camera refuses the payload itself. Recovery's
-           * stored bytes are the FF build's two-stream form, which the commit does not accept as an
-           * image (0x00070100, the rejected-image status, raised before anything is erased). */
-          it("PINNED GAP: the camera rejects recovery's own stored bytes as a raw payload (0x00070100), and R is left unchanged", () => {
-            const raw = run.writes[2];
+          it('the booted-bank refusal is taken on R, the only bank the FF image goes to: it names the acknowledgement and sends nothing', () => {
+            expect(run.refusal?.key).toBe('r');
+          });
+
+          it('writes the FF image into recovery R, acknowledged: commit status 0, the bank holds the plain image with its adjust word solved, and the writer verifies it', () => {
+            const w = writeOf(run, 'plain image -> R');
+            expect(w?.error, w?.notes.join('\n')).toBeNull();
+            expect(w?.commitStatus).toBe(0);
+            expect(w?.requests, 'the payload was staged and committed').toBeGreaterThan(0);
+            expect(w?.decrypts, w?.notes.join('\n')).toBe(true);
+            /* The stored image passes the app's collapsed gate: it can be staged again. */
+            expect(w?.accepts).toBe(true);
+            expect(w?.verified, 'the writer compares the stored bytes').toBe(true);
+          });
+
+          it('sends the staged payload as RAW bytes into R: commit status 0; the bank holds the image it folds to, the tail erased, the writer verifies it', () => {
+            const w = writeOf(run, 'raw staged');
+            expect(w?.error, w?.notes.join('\n')).toBeNull();
+            expect(w?.commitStatus).toBe(0);
+            expect(w?.identical, 'the stored bytes are the folded image, not the payload').toBe(
+              true,
+            );
+            expect(w?.tailErased, 'bytes past the image are erased').toBe(true);
+            expect(w?.decrypts, w?.notes.join('\n')).toBe(true);
+            expect(w?.verified).toBe(true);
+          });
+
+          /* The raw path is not refused by the page: the camera refuses the payload itself. R's original
+           * stored bytes are the plain image, not the two-stream form, so the app's collapsed gate
+           * rejects them (0x00070100, the rejected-image status, raised before anything is erased). */
+          it("PINNED GAP: the camera rejects recovery's original stored bytes as a raw payload (0x00070100), and R is left as the FF write made it", () => {
+            const raw = writeOf(run, 'raw stored bytes');
             expect(raw?.code, raw?.error ?? 'the raw write ran').toBe('flash/commit');
             expect(raw?.deviceCode, raw?.error ?? '').toBe(0x70100);
             expect(raw?.bankAfterError, 'recovery read back after the refusal').toBe('unchanged');

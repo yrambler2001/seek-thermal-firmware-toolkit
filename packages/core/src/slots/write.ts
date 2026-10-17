@@ -11,6 +11,8 @@
  *   - send ResetDevice (0x59): nothing in this directory calls it;
  *   - write the booted bank, or recovery R, without `acknowledgeRisk` (`flashSlot`
  *     checks it before the first byte is sent);
+ *   - write the 1.3.0.8 FF (16 Hz) image anywhere but the recovery bank R: the 2014
+ *     bootloader rejects its sum at A and B (`stageImage`, and `flashSlot` again on the plan);
  *   - write a plan whose camera, firmware or address no longer match the
  *     analysis it is checked against (`flashSlot`).
  *
@@ -32,26 +34,33 @@ import {
   SLOT_BYTES,
   type FlashSlotOptions,
   type FlashSlotResult,
+  type PlanStaging,
   type SlotEntry,
   type SlotFlashInput,
   type SlotFlashPlan,
   type SlotKey,
   type SlotsReport,
   type StagingForm,
+  type StoredForm,
 } from './types.js';
 import {
   assertImageShape,
   bankImageOf,
   bootloaderFailures,
+  buildFFPayload,
   buildKeyAPayload,
   buildPlainPayload,
   buildSlotKeystreamPayload,
   compareRows,
+  ffBankRefusal,
+  foldedFFPayload,
+  plainChainBuildOf,
   predictRawPlain,
   retargetImageKeys,
   slotRefused,
   type StagedBytes,
 } from './write-image.js';
+import { FF_1308_VERSION } from './capability-family.js';
 import { readBackBank, stageAndCommit } from './write-commit.js';
 import { compareReadBack } from './write-verify.js';
 
@@ -142,13 +151,36 @@ interface Body {
    * payload decrypts to under the staging key. Null when no image can be predicted.
    */
   readonly expectedPlain: Uint8Array | null;
-  readonly staging: StagingForm | 'verbatim';
+  readonly staging: PlanStaging;
   readonly keyAfter: string;
   /**
-   * The exact bank bytes, only where the device programs exactly what it is sent
-   * (the 2014 plain chain). The encrypting forms re-encrypt, so this is null there.
+   * The exact bank bytes, only where they are predictable: the 2014 plain chain, which programs
+   * what it is sent, and the 1.3.0.8 FF build, which programs the image the payload folds to
+   * (`storedForm`). The encrypting forms re-encrypt, so this is null there.
    */
   readonly expectedStored: Uint8Array | null;
+  /** How `expectedStored` relates to the payload; absent means 'as-sent'. */
+  readonly storedForm?: StoredForm;
+}
+
+/** Words for the FF image's staging, said beside the plan (a payload that is not the stored bytes). */
+function ffStagingWarnings(args: {
+  readonly rebalanceWord: number;
+  readonly heldWord: number;
+  readonly storedWordSum: number;
+}): string[] {
+  const { rebalanceWord, heldWord, storedWordSum } = args;
+  return [
+    'This is the 1.3.0.8 FF (16 Hz) image. It is staged as the image XOR two keystreams (key block ' +
+      '0, then key block 1) so the running app accepts it; the camera folds that back and stores ' +
+      'the plain image. The staged payload is not the stored bytes.',
+    `The header word at 0x238 is set to ${hexUp(rebalanceWord)} (${
+      heldWord === rebalanceWord ? 'the file already holds it' : `the file holds ${hexUp(heldWord)}`
+    }) so the staged form's collapsed word sum is 0xFFFF, the sum the app accepts. The stored ` +
+      `image carries that word, so its own word sum is ${hexUp(storedWordSum)}, not 0xFFFF. ` +
+      'Recovery is booted unchecked, so that does not stop it booting.',
+    'The 2014 bootloader rejects this build at banks A and B, so only the recovery bank R takes it.',
+  ];
 }
 
 /**
@@ -197,24 +229,47 @@ export function prepareSlotFlash(
       );
     }
     const payload = input.bytes.slice();
+    /* The 1.3.0.8 FF build's staged form is told by its bytes: both of the app's accepts pass
+     * it and it folds to an image carrying the FF key pair. Sent as given all the same; this
+     * only decides what the bank is said to hold, and which bank may take it. */
+    const folded = entry.staging === 'plain' ? foldedFFPayload(payload) : null;
+    if (folded !== null && key !== 'r') throw ffBankRefusal(key);
     /* What the bank will hold depends on the form the device decodes the bytes
-     * with. Only the 2014 plain chain programs them as sent, so only there are
-     * the stored bytes predicted; the encrypting forms re-encrypt, and what they
-     * decrypt to is what can be checked (`predictRawPlain`). */
+     * with. The 2014 plain chain programs them as sent (the FF build, the image they
+     * fold to), so there the stored bytes are predicted; the encrypting forms
+     * re-encrypt, and what they decrypt to is what can be checked (`predictRawPlain`). */
     body = {
       payload,
       expectedPlain:
-        entry.staging === null
+        folded ??
+        (entry.staging === null
           ? null
-          : predictRawPlain(entry.staging, payload, { keyA: state.keyTable?.keyA ?? null }, cipher),
+          : predictRawPlain(
+              entry.staging,
+              payload,
+              { keyA: state.keyTable?.keyA ?? null },
+              cipher,
+            )),
       staging: 'verbatim',
       keyAfter: 'as given (raw)',
-      expectedStored: entry.staging === 'plain' ? bankImageOf(payload, bankBytes) : null,
+      expectedStored:
+        folded !== null
+          ? bankImageOf(folded, bankBytes)
+          : entry.staging === 'plain'
+            ? bankImageOf(payload, bankBytes)
+            : null,
+      ...(folded === null ? {} : { storedForm: 'two-stream-fold' as const }),
     };
     warnings.push(
       'Raw payload: sent exactly as given. This page does not check that it is bootable.',
     );
-    if (entry.staging === null) {
+    if (folded !== null) {
+      warnings.push(
+        'This payload is the 1.3.0.8 FF staged form (image XOR two keystreams, collapsed word sum ' +
+          '0xFFFF). The camera folds it back and stores the plain image, so the read-back is ' +
+          'checked against that image, not against these bytes. Only the recovery bank R takes it.',
+      );
+    } else if (entry.staging === null) {
       warnings.push(
         'This build names no staging form for the slot, so the bootloader checks cannot be stated.',
       );
@@ -254,21 +309,23 @@ export function prepareSlotFlash(
         `image is ${String(input.bytes.length)} B, longer than the ${entry.name} bank (${hex(bankBytes)} B)`,
       );
     }
-    const staged = stageImage(report, slot, entry.staging, input, cipher);
+    const staged = stageImage(report, slot, entry.staging, input, cipher, key);
     body = {
       payload: staged.staged.payload,
       /* The stamped image is what the builder made the bank hold, after the length
        * stamp and the acceptance balance; the device stores it under its own key. */
       expectedPlain: staged.staged.stamped,
-      staging: entry.staging,
+      staging: staged.staging ?? entry.staging,
       keyAfter: staged.keyAfter,
       expectedStored: staged.expectedStored(bankBytes),
+      ...(staged.storedForm === undefined ? {} : { storedForm: staged.storedForm }),
     };
     if (staged.rekeyRisk) {
       warnings.push(
         `${entry.name} already holds an image the bootloader cannot take. This write lands in the same state.`,
       );
     }
+    warnings.push(...(staged.warnings ?? []));
   }
 
   if (body.payload.length > bankBytes) {
@@ -305,6 +362,7 @@ export function prepareSlotFlash(
     payload: body.payload,
     sum16: transferSum16(body.payload),
     expectedStored: body.expectedStored,
+    ...(body.storedForm === undefined ? {} : { storedForm: body.storedForm }),
     expectedPlain: body.expectedPlain,
     compare,
     warnings,
@@ -320,6 +378,12 @@ interface StagedImage {
   /** The bank-sized bytes the bank will hold, when they are predictable. */
   expectedStored(bankBytes: number): Uint8Array | null;
   readonly rekeyRisk: boolean;
+  /** The staging the plan reports, when it is not the bank's own (the FF image's 'two-stream'). */
+  readonly staging?: PlanStaging;
+  /** How the stored bytes relate to the payload, when not 'as-sent'. */
+  readonly storedForm?: StoredForm;
+  /** Extra words beside the plan. */
+  readonly warnings?: readonly string[];
 }
 
 function stageImage(
@@ -328,6 +392,7 @@ function stageImage(
   staging: StagingForm,
   input: SlotFlashInput,
   cipher: CipherProfile,
+  key: SlotKey,
 ): StagedImage {
   if (staging === 'key-a-ciphertext') {
     const { state } = report;
@@ -371,6 +436,30 @@ function stageImage(
        * payload. The bank is checked as the plain image it decrypts to instead. */
       expectedStored: () => null,
       rekeyRisk: false,
+    };
+  }
+  /* The 2014 chain holds two builds under one version string; the image says which. */
+  if (plainChainBuildOf(input.bytes) === 'ff-1308') {
+    if (key !== 'r') throw ffBankRefusal(key);
+    const version = report.state.version;
+    if (version !== FF_1308_VERSION) {
+      throw slotRefused(
+        `this is the ${FF_1308_VERSION} FF (16 Hz) image, whose two-stream staging was measured on ` +
+          `a camera running ${FF_1308_VERSION}; this camera reports ${version ?? 'no version'}. ` +
+          'Nothing was written.',
+        { version },
+      );
+    }
+    const ff = buildFFPayload(input.bytes);
+    return {
+      staged: ff,
+      keyAfter: 'none (plaintext chain, staged in the FF two-stream form)',
+      /* The camera folds the payload back and programs the stamped image: those are the bytes. */
+      expectedStored: (bankBytes) => bankImageOf(ff.stamped, bankBytes),
+      rekeyRisk: false,
+      staging: 'two-stream',
+      storedForm: 'two-stream-fold',
+      warnings: ffStagingWarnings(ff),
     };
   }
   const staged = buildPlainPayload(input.bytes, cipher);
@@ -431,6 +520,13 @@ function assertPlanIsCurrent(report: SlotsReport, plan: SlotFlashPlan, entry: Sl
     throw slotRefused(
       `the payload is ${hex(plan.payload.length)} B, outside the ${entry.name} bank`,
     );
+  }
+  /* The FF build's staged form lands only in recovery. A plan for another bank was edited. */
+  if (
+    (plan.staging === 'two-stream' || plan.storedForm === 'two-stream-fold') &&
+    plan.key !== 'r'
+  ) {
+    throw ffBankRefusal(plan.key);
   }
 }
 
@@ -498,7 +594,11 @@ export async function flashSlot(
        * with the plain image. See write-verify.ts for why that is the check. */
       const verdict = compareReadBack(
         after,
-        { stored: plan.expectedStored, plain: plan.expectedPlain ?? null },
+        {
+          stored: plan.expectedStored,
+          plain: plan.expectedPlain ?? null,
+          storedAs: plan.storedForm ?? 'as-sent',
+        },
         report.state.profile.cipher,
         plan.kind,
       );

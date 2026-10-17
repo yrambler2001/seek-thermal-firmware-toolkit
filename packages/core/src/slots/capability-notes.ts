@@ -7,18 +7,20 @@
 
 import type { SlotKey } from '../profiles/types.js';
 import type { FirmwareVersion } from '../profiles/version.js';
-import type { SlotFamily } from './capability-family.js';
+import { FF_1308_VERSION, type SlotFamily } from './capability-family.js';
 
 /** The 1.3.0.8 16 Hz build, which shares the version string with the 8 Hz build. */
 export const FF_1308_NOTE =
   '1.3.0.8-FF (16 Hz) reports the same version as the 8 Hz build, and this plan cannot tell ' +
-  'them apart. The FF build boots ONLY from recovery (mode 9): its word sum is the 0xFFFF ' +
-  'sentinel, which the 2014 bootloader rejects at slots A and B, so it boots the recovery bank ' +
-  'unchecked. Its banks are staged plain XOR ks0 XOR ksD, not plain, and a commit into A or B ' +
-  'of that build is refused (README; patch.ts compact-1.3.0.8-ff: route recovery-only). The ' +
-  'plain staging here is the 8 Hz form. Before any write, decide on the image itself, as ' +
-  'patch.ts does: word sum 0 is the 8 Hz plain chain, 0xFFFF is FF, and FF needs its own staged ' +
-  'form, which this plan does not produce.';
+  'them apart, so the image being written decides: a word sum of 0 is the 8 Hz plain chain, and ' +
+  'the FF image (the 0xFFFF sentinel, with its own key pair) is staged in its own form. The FF ' +
+  'build boots ONLY from recovery (mode 9): its word sum is not 0, which the 2014 bootloader ' +
+  'rejects at slots A and B, so it boots the recovery bank unchecked (README; patch.ts ' +
+  'compact-1.3.0.8-ff: route recovery-only). This page therefore writes the FF image to bank R ' +
+  'only, and refuses it for A and B. It is staged as the image XOR ks0 XOR ksD (patch.ts ' +
+  'xor-ks0-ksD) with the header word at 0x238 solved so the collapsed sum is 0xFFFF; the camera ' +
+  'folds that back and stores the plain image, so the stored bank differs from the file in that ' +
+  'one word. Measured on the emulator (TESTING.md 42.6); a bench write to R is still to come.';
 
 /** Compact Pro 1.0.3.2: the EP0 limit that keeps a whole-part dump from running. */
 export const EP0_1032_NOTE =
@@ -114,7 +116,7 @@ export function planNotes(family: SlotFamily, version: FirmwareVersion): string[
             'SRAM (README). The slot page arms modes 7 to 9 only and never mode 2.',
         );
       }
-      if (text === '1.3.0.8') notes.push(FF_1308_NOTE);
+      if (text === FF_1308_VERSION) notes.push(FF_1308_NOTE);
       break;
     case 'locked-2016':
       notes.push(TOKEN_NOTE);
@@ -141,8 +143,19 @@ export function planNotes(family: SlotFamily, version: FirmwareVersion): string[
   return notes;
 }
 
-/** Facts about one bank, shown beside it. */
-export function bankNotes(family: SlotFamily, key: SlotKey): string[] {
+/** What the 1.3.0.8 bank rows say about the FF image, beside the bank it can and cannot go to. */
+const FF_1308_BANK_NOTES: Readonly<Record<SlotKey, string>> = {
+  a: 'The 1.3.0.8 FF (16 Hz) image is refused here: the 2014 bootloader rejects its word sum at A, so it can be written to recovery R only. The 8 Hz image is written normally.',
+  b: 'The 1.3.0.8 FF (16 Hz) image is refused here: the 2014 bootloader rejects its word sum at B, so it can be written to recovery R only. The 8 Hz image is written normally.',
+  r: 'Takes the 1.3.0.8 FF (16 Hz) image too, in its own two-stream staged form (the only bank that does): the camera boots FF from here, unchecked. The 8 Hz image is written as plain.',
+};
+
+/** Facts about one bank, shown beside it. `version` is the build's version string, when it is known. */
+export function bankNotes(
+  family: SlotFamily,
+  key: SlotKey,
+  version: string | null = null,
+): string[] {
   const notes: string[] = [];
   switch (family) {
     case 'modern':
@@ -167,6 +180,7 @@ export function bankNotes(family: SlotFamily, key: SlotKey): string[] {
             ? 'Mode 8 (0x14060000), token form.'
             : 'Recovery bank, mode 9 (0x14070000), token form. A write needs acknowledgeRisk.',
       );
+      if (version === FF_1308_VERSION) notes.push(FF_1308_BANK_NOTES[key]);
       break;
     case 'locked-2016':
       notes.push(LOCKED_2016_STAGING_NOTE);

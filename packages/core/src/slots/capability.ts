@@ -26,6 +26,8 @@
  * THE FAMILIES AND WHAT EACH PROVES (see capability-family.ts for the reasons):
  *   modern          2.x/4.x/10.x/42.x/44.x  key-a-ciphertext    dump yes, flash yes
  *   locked-plain    0.8.0.0 .. 1.3.0.8 8 Hz  plain               dump yes, flash yes
+ *                   (1.3.0.8 shares its string with the FF build: the writer tells them apart
+ *                   on the image, and stages FF in its own form for bank R only)
  *   locked-2016     Compact PRO 1.0.3.0/1.0.3.2  slot-keystream  dump yes, flash yes
  *   unverified-locked other 0.x/1.x          none                dump yes, flash no
  *   pre-0.8 / unidentified                   none                dump no, flash no
@@ -196,6 +198,7 @@ function supportedEntry(
   family: SlotFamily,
   plan: WindowPlan,
   key: SlotKey,
+  versionText: string,
 ): SlotEntry {
   const address = bankAddress(profile, key);
   const read = plan.windows.find((w) => w.address === address) ?? null;
@@ -214,7 +217,7 @@ function supportedEntry(
     flashRaw: flash,
     staging: stagingFor(family),
     commitEffect: COMMIT_EFFECT,
-    notes: bankNotes(family, key),
+    notes: bankNotes(family, key, versionText),
   };
 }
 
@@ -237,7 +240,9 @@ export function buildSlotPlan(profile: FirmwareProfile, firmwareVersion: string 
   if (family === 'locked-2016' && !profile.capabilities.flash.supported) {
     notes.push(profileFlashNote(profile.id));
   }
-  const slots = BANK_KEYS.map((key) => supportedEntry(profile, family, plan, key));
+  const slots = BANK_KEYS.map((key) =>
+    supportedEntry(profile, family, plan, key, verdict.version?.text ?? ''),
+  );
 
   return {
     profileId: profile.id,
