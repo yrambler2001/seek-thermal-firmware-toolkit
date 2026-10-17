@@ -479,17 +479,18 @@ describe.skipIf(!available)('seek-fw slots, through the CLI, on the emulated cam
         expect(sentOf(refusal?.sent ?? new Map(), COMMIT_OP), 'CompleteMemoryUpgrade sent').toBe(0);
       });
 
-      it('slots flash b <file named without its key pair> --yes: refused by the name, nothing sent', () => {
+      it('slots flash b <file named without its key pair> --yes: the pair is found in the image by value, so it is written', () => {
+        /* The name used to be the only source of the pair, so a bare name was refused. The pair is
+         * now located in the image itself (the camera's own, or a decoded application pair), so the
+         * same bytes under a bare name stage and commit like the named copy. An image carrying no
+         * known pair is still refused, by `write-keys.test.ts` and the corpus rows. */
         const bare = seq.current.bare;
-        expect(bare?.code).toBe(EXIT_FAILED);
-        expect(bare?.json).toMatchObject({
-          command: 'slots',
-          ok: false,
-          error: { code: 'slots/refused' },
-        });
-        expect(String(bare?.json?.error && (bare.json.error as Json).message)).toMatch(/key pair/);
-        expect(sentOf(bare?.sent ?? new Map(), STAGE_OP), 'SetFeaturedFirmwareData sent').toBe(0);
-        expect(sentOf(bare?.sent ?? new Map(), COMMIT_OP), 'CompleteMemoryUpgrade sent').toBe(0);
+        expect(bare?.code).toBe(EXIT_OK);
+        expect(
+          sentOf(bare?.sent ?? new Map(), STAGE_OP),
+          'SetFeaturedFirmwareData sent',
+        ).toBeGreaterThan(0);
+        expect(sentOf(bare?.sent ?? new Map(), COMMIT_OP), 'CompleteMemoryUpgrade sent').toBe(1);
       });
 
       it('the run had no setup failure and no instrument defect', () => {
