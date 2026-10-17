@@ -250,6 +250,13 @@ not banks and are never written.
   --yes                  flash: skip the confirmation (required when stdin is
                          not a tty)
 
+An EMPTY bank (its header window reads as all 0xFF, as on many 2014 cameras'
+bank B) is a state, not an error. list shows it as 'empty'; dump returns the raw
+64 KiB of 0xFF (slot-<bank>-empty-<sha8>.bin) and says there is nothing to
+decrypt; flash writes it like any other bank, and the plan says nothing is
+overwritten. To give it the firmware another bank holds, dump that bank and
+flash the -decrypted file it writes.
+
 After a flash, unplug the camera and plug it back in: a bank is only used when
 the camera boots, so the new image runs after the next start.
 `,

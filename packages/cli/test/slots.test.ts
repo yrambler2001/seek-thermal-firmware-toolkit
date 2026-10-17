@@ -34,10 +34,12 @@ import {
   bootRisk,
   dumpArtifacts,
   dumpRefusal,
+  emptyBankNote,
   findView,
   flashPlanLines,
   flashQuestion,
   flashRefusal,
+  imageSourceFor,
   listLines,
   listResult,
   parseBank,
@@ -130,6 +132,39 @@ function slotStateFake(key: SlotKey, bootable: boolean): SlotState {
   return partial as SlotState;
 }
 
+/** A bank the read found erased: a clean read, no image, `blank` set (the analysis' own shape). */
+function emptyStateFake(key: SlotKey): SlotState {
+  const partial: Pick<
+    SlotState,
+    | 'key'
+    | 'present'
+    | 'blank'
+    | 'unread'
+    | 'reason'
+    | 'header'
+    | 'plainHeader'
+    | 'keyName'
+    | 'bootable'
+    | 'bootability'
+    | 'sha256'
+    | 'plain'
+  > = {
+    key,
+    present: false,
+    blank: true,
+    unread: false,
+    reason: 'no image header (magic 0xFFFFFFFF)',
+    header: null,
+    plainHeader: null,
+    keyName: null,
+    bootable: false,
+    bootability: 'not-bootable',
+    sha256: null,
+    plain: null,
+  };
+  return partial as SlotState;
+}
+
 interface ReportOptions {
   /** The bank the bootloader boots now. null means the camera reports none. */
   readonly booted?: SlotKey | null;
@@ -137,6 +172,8 @@ interface ReportOptions {
   readonly entries?: Partial<Record<SlotKey, Partial<SlotEntry>>>;
   /** A bank whose read failed. */
   readonly unread?: SlotKey;
+  /** Banks the read found erased (all 0xFF): a state of their own, not unread. */
+  readonly empty?: readonly SlotKey[];
 }
 
 function reportOf(options: ReportOptions = {}): SlotsReport {
@@ -145,11 +182,16 @@ function reportOf(options: ReportOptions = {}): SlotsReport {
   const entries = keys.map((key) => slotEntry(key, options.entries?.[key] ?? {}));
   const slots: SlotView[] = entries.map((entry) => {
     const unread = entry.key === options.unread;
+    const empty = options.empty?.includes(entry.key) === true;
     return {
       entry,
-      state: unread ? null : slotStateFake(entry.key, entry.key !== 'b'),
+      state: unread
+        ? null
+        : empty
+          ? emptyStateFake(entry.key)
+          : slotStateFake(entry.key, entry.key !== 'b'),
       unreadReason: unread ? 'the window would not arm' : null,
-      content: unread ? 'unread' : 'image',
+      content: unread ? 'unread' : empty ? 'empty' : 'image',
       active: entry.key === booted,
     };
   });
@@ -172,7 +214,31 @@ function view(report: SlotsReport, key: SlotKey): SlotView {
   return found;
 }
 
-function fakeDumped(key: SlotKey, decrypts: boolean): DumpedSlot {
+/** The same report, with every bank that holds an image carrying its decrypted image, as a real analysis has it. */
+function withPlain(report: SlotsReport): SlotsReport {
+  return {
+    ...report,
+    slots: report.slots.map((slot) =>
+      slot.state === null || slot.content !== 'image'
+        ? slot
+        : { ...slot, state: { ...slot.state, plain: new Uint8Array(4) } },
+    ),
+  };
+}
+
+function fakeDumped(key: SlotKey, decrypts: boolean, empty = false): DumpedSlot {
+  if (empty) {
+    return {
+      key,
+      address: ADDRESS[key],
+      raw: new Uint8Array(0x10000).fill(0xff),
+      sha256: 'ffeeddcc'.repeat(8),
+      empty: true,
+      plain: null,
+      plainSha256: null,
+      notes: ['empty, nothing to decrypt: all 65536 B of slot B read as 0xFF (an erased bank).'],
+    };
+  }
   return {
     key,
     address: ADDRESS[key],
@@ -185,8 +251,14 @@ function fakeDumped(key: SlotKey, decrypts: boolean): DumpedSlot {
   };
 }
 
-function fakePlan(key: SlotKey, kind: SlotInputKind, bytes: Uint8Array): SlotFlashPlan {
+function fakePlan(
+  key: SlotKey,
+  kind: SlotInputKind,
+  bytes: Uint8Array,
+  targetEmpty = false,
+): SlotFlashPlan {
   return {
+    targetEmpty,
     key,
     address: ADDRESS[key],
     kind,
@@ -222,11 +294,13 @@ function fakeOps(
     },
     dump: (_ctx, _report, key) => {
       log.dumped.push(key);
-      return Promise.resolve(fakeDumped(key, behaviour.decrypts ?? true));
+      const empty = findView(report, key)?.content === 'empty';
+      return Promise.resolve(fakeDumped(key, behaviour.decrypts ?? true, empty));
     },
     prepare: (_report, key, input) => {
       log.prepared.push({ key, kind: input.kind, fileName: input.fileName, bytes: input.bytes });
-      return fakePlan(key, input.kind, input.bytes);
+      const empty = findView(report, key)?.content === 'empty';
+      return fakePlan(key, input.kind, input.bytes, empty);
     },
     flash: (_ctx, _report, plan, options) => {
       log.flashed.push({ key: plan.key, options });
@@ -889,5 +963,308 @@ describe('slots through run()', () => {
     expect(() =>
       parseSlotsArgs(['list'], { raw: false, acknowledgeRisk: false, verify: true, dryRun: true }),
     ).toThrow(/--dry-run/);
+  });
+});
+
+/* ==================================================================== *
+ * Empty banks: a state, not an error
+ * ==================================================================== */
+
+describe('empty banks', () => {
+  let temp: { path: string; cleanup: () => Promise<void> };
+
+  beforeEach(async () => {
+    temp = await tempDir();
+  });
+  afterEach(async () => {
+    await temp.cleanup();
+  });
+
+  describe('slots list', () => {
+    it('shows an empty bank as "empty" with no version, key or bootability, and keeps the others', () => {
+      const text = listLines(reportOf({ booted: 'a', empty: ['b'] }), false).join('\n');
+      expect(text).toMatch(/A\s+0x14050000\s+yes\s+4\.9\.5\.0/);
+      expect(text).toMatch(/B\s+0x14060000\s+no\s+empty\s+-\s+-\s+-\s+-/);
+      expect(text).toMatch(/R\s+0x14070000\s+no\s+4\.9\.5\.0/);
+    });
+
+    it('says in the notes what empty means, that it can be written, and how to fill it', () => {
+      const report = withPlain(reportOf({ booted: 'a', empty: ['b'] }));
+      const text = listLines(report, false).join('\n');
+      expect(text).toContain(
+        'B: empty — its header window reads as all 0xFF, so it holds no image',
+      );
+      expect(text).toContain('nothing is overwritten by a write');
+      expect(text).toContain('It can be written. an empty bank is written like a used one');
+      /* The booted bank holds an image, so the note names it as the source. */
+      expect(text).toContain('To give it the firmware bank A holds');
+      expect(text).toContain('`seek-fw slots dump a`');
+      expect(text).toContain('`seek-fw slots flash b <the -decrypted file>`');
+    });
+
+    it('says an empty bank cannot be written where the plan says so, with the plan’s reason', () => {
+      const report = withPlain(
+        reportOf({
+          booted: 'a',
+          empty: ['b'],
+          entries: {
+            b: {
+              emptyBank: { writable: UNSUPPORTED('no staging form on this build'), why: 'because' },
+            },
+          },
+        }),
+      );
+      const note = emptyBankNote(report, view(report, 'b'));
+      expect(note).toContain('It cannot be written on this build: no staging form on this build');
+      expect(note).not.toContain('To give it');
+    });
+
+    it('offers no source when no other bank holds an image', () => {
+      const report = reportOf({ booted: 'a', empty: ['a', 'b', 'r'] });
+      expect(imageSourceFor(report, 'b')).toBeNull();
+      expect(emptyBankNote(report, view(report, 'b'))).not.toContain('To give it');
+    });
+
+    it('names the booted bank as the source, else the first bank that holds an image, never the target', () => {
+      const booted = withPlain(reportOf({ booted: 'r', empty: ['b'] }));
+      expect(imageSourceFor(booted, 'b')?.entry.key).toBe('r');
+      const unnamed = withPlain(reportOf({ booted: null, empty: ['a'] }));
+      expect(imageSourceFor(unnamed, 'a')?.entry.key).toBe('b');
+      expect(imageSourceFor(withPlain(reportOf({ booted: 'a' })), 'a')?.entry.key).toBe('b');
+      /* An image bank that did not decrypt is no source. */
+      expect(imageSourceFor(reportOf({ booted: 'a', empty: ['b'] }), 'b')).toBeNull();
+    });
+
+    it('returns content and the empty verdict in the document', () => {
+      const report = reportOf({ booted: 'a', empty: ['b'] });
+      const document = JSON.parse(JSON.stringify(listResult(report))) as {
+        slots: {
+          bank: string;
+          content: string;
+          empty: boolean;
+          emptyBank: { writable: Support; why: string };
+        }[];
+      };
+      expect(document.slots.map((slot) => [slot.bank, slot.content, slot.empty])).toEqual([
+        ['a', 'image', false],
+        ['b', 'empty', true],
+        ['r', 'image', false],
+      ]);
+      expect(document.slots[1]?.emptyBank.writable).toEqual({ supported: true });
+    });
+  });
+
+  describe('refusals', () => {
+    it('writes an empty bank the camera does not boot with no acknowledgement', () => {
+      const report = reportOf({ booted: 'a', empty: ['b'] });
+      expect(flashRefusal(report, 'b', 'plain', false)).toBeNull();
+      expect(flashRefusal(report, 'b', 'raw', false)).toBeNull();
+    });
+
+    it('does not exempt an empty bank from the acknowledgement rules', () => {
+      /* No booted bank named: every bank may be the booted one, an empty one included. */
+      const unnamed = reportOf({ booted: null, empty: ['b'] });
+      expect(flashRefusal(unnamed, 'b', 'plain', false)?.message).toMatch(
+        /booted bank could not be determined/,
+      );
+      expect(flashRefusal(unnamed, 'b', 'plain', true)).toBeNull();
+      /* An empty recovery bank is still recovery. */
+      const recovery = reportOf({ booted: 'a', empty: ['r'] });
+      expect(flashRefusal(recovery, 'r', 'plain', false)?.message).toMatch(/recovery bank/);
+      expect(flashRefusal(recovery, 'r', 'plain', true)).toBeNull();
+    });
+
+    it('refuses an empty bank the plan says cannot be written, naming the reason, before anything is sent', () => {
+      const report = reportOf({
+        booted: 'a',
+        empty: ['b'],
+        entries: {
+          b: { emptyBank: { writable: UNSUPPORTED('no empty writes here'), why: 'no' } },
+        },
+      });
+      const refusal = flashRefusal(report, 'b', 'plain', false);
+      expect(refusal?.message).toBe(
+        'bank B is empty and cannot be written on this build: no empty writes here',
+      );
+      expect(refusal?.hint).toContain('Nothing was sent');
+      /* A used bank on the same plan is not affected. */
+      expect(flashRefusal(report, 'r', 'plain', true)).toBeNull();
+    });
+
+    it('dumps an empty bank: a dump is a read, and empty is not a reason to refuse it', () => {
+      expect(dumpRefusal(reportOf({ booted: 'a', empty: ['b'] }), 'b')).toBeNull();
+    });
+  });
+
+  describe('dump', () => {
+    it('names an empty dump by what it is, and writes no decrypted file', () => {
+      const artifacts = dumpArtifacts(null, fakeDumped('b', true, true));
+      expect(artifacts.map((artifact) => artifact.name)).toEqual(['slot-b-empty-ffeeddcc.bin']);
+      expect(artifacts[0]?.data).toHaveLength(0x10000);
+      expect(artifacts[0]?.data.every((byte) => byte === 0xff)).toBe(true);
+    });
+
+    it('writes the raw 64 KiB of 0xFF only, and says "empty, nothing to decrypt"', async () => {
+      const { ops, log } = fakeOps(reportOf({ booted: 'a', empty: ['b'] }));
+      const out = join(temp.path, 'dump');
+      const test = cameraIo();
+      const result = await slotsCommandWith(ops)(
+        contextFor(['slots', 'dump', 'b', '--out', out, '--no-probe'], test),
+      );
+
+      expect(log.dumped).toEqual(['b']);
+      expect(result).toMatchObject({
+        action: 'dump',
+        bank: 'b',
+        empty: true,
+        decrypted: false,
+        plainSha256: null,
+        version: null,
+      });
+      expect(await readdir(out)).toEqual(['slot-b-empty-ffeeddcc.bin']);
+      const raw = await readFile(join(out, 'slot-b-empty-ffeeddcc.bin'));
+      expect(raw).toHaveLength(0x10000);
+      expect(raw.every((byte) => byte === 0xff)).toBe(true);
+      expect(test.stdout.text).toContain('bank B: empty, nothing to decrypt');
+      expect(test.stdout.text).toContain('raw 65536 B of 0xFF');
+      expect(test.stdout.text).not.toContain('no key recovered');
+    });
+
+    it('a bank that holds an image is unchanged: empty false, its decrypted file beside it', async () => {
+      const { ops } = fakeOps(reportOf({ booted: 'a', empty: ['b'] }));
+      const out = join(temp.path, 'dump-a');
+      const result = await slotsCommandWith(ops)(
+        contextFor(['slots', 'dump', 'a', '--out', out, '--no-probe'], cameraIo()),
+      );
+      expect(result).toMatchObject({ empty: false, decrypted: true });
+      expect((await readdir(out)).sort()).toEqual([
+        'slot-a-4.9.5.0-deadbeef-decrypted.bin',
+        'slot-a-4.9.5.0-deadbeef.bin',
+      ]);
+    });
+  });
+
+  describe('flash', () => {
+    it('shows the target as empty in the plan, and in the question', () => {
+      const report = reportOf({ booted: 'a', empty: ['b'] });
+      const plan = fakePlan('b', 'plain', new Uint8Array(0x10000), true);
+      const text = flashPlanLines(plan, 'image.bin', null, false).join('\n');
+      expect(text).toContain('target');
+      expect(text).toContain('empty — the bank holds no image, so nothing is overwritten');
+      expect(flashQuestion(report, plan, 'image.bin')).toBe(
+        'Write image.bin to bank B (empty — nothing is overwritten) on Seek Compact PRO (SN-1)? [y/N] ',
+      );
+    });
+
+    it('does not mention emptiness for a plan whose target held an image', () => {
+      const report = reportOf({ booted: 'a' });
+      const plan = fakePlan('b', 'plain', new Uint8Array(0x10000));
+      expect(flashPlanLines(plan, 'image.bin', null, false).join('\n')).not.toContain('empty');
+      expect(flashQuestion(report, plan, 'image.bin')).not.toContain('empty');
+    });
+
+    it('writes into an empty bank like any other: plan shown, prompt says empty, read-back reported', async () => {
+      const { ops, log } = fakeOps(reportOf({ booted: 'a', empty: ['b'] }));
+      await writeFile(join(temp.path, 'image.bin'), new Uint8Array(64).fill(1));
+      const test = cameraIo({ stdinIsTty: true, answer: true });
+      const result = await slotsCommandWith(ops)(
+        contextFor(['slots', 'flash', 'b', join(temp.path, 'image.bin'), '--no-probe'], test),
+      );
+
+      expect(test.questions).toHaveLength(1);
+      expect(test.questions[0]).toContain(
+        'Write image.bin to bank B (empty — nothing is overwritten)',
+      );
+      expect(log.flashed).toEqual([
+        { key: 'b', options: { verify: true, acknowledgeRisk: false } },
+      ]);
+      expect(test.stdout.text).toContain(
+        'empty — the bank holds no image, so nothing is overwritten',
+      );
+      expect(test.stdout.text).toContain('matches the staged image');
+      expect(result).toMatchObject({
+        action: 'flash',
+        bank: 'b',
+        written: true,
+        verified: true,
+        targetEmpty: true,
+      });
+    });
+
+    it('--dry-run reports the empty target and sends nothing', async () => {
+      const { ops, log } = fakeOps(reportOf({ booted: 'a', empty: ['b'] }));
+      await writeFile(join(temp.path, 'image.bin'), new Uint8Array(64).fill(1));
+      const result = await slotsCommandWith(ops)(
+        contextFor(
+          ['slots', 'flash', 'b', join(temp.path, 'image.bin'), '--dry-run', '--no-probe'],
+          cameraIo(),
+        ),
+      );
+      expect(result).toMatchObject({ written: false, dryRun: true, targetEmpty: true });
+      expect(log.flashed).toEqual([]);
+    });
+
+    it('keeps the acknowledgement for an empty bank when no booted bank is named, and for an empty R', async () => {
+      const { ops, log } = fakeOps(reportOf({ booted: null, empty: ['b', 'r'] }));
+      await writeFile(join(temp.path, 'image.bin'), new Uint8Array(64).fill(1));
+      for (const bank of ['b', 'r']) {
+        await expect(
+          slotsCommandWith(ops)(
+            contextFor(
+              ['slots', 'flash', bank, join(temp.path, 'image.bin'), '--yes', '--no-probe'],
+              cameraIo(),
+            ),
+          ),
+        ).rejects.toMatchObject({ code: 'slots/refused' });
+      }
+      expect(log.prepared).toEqual([]);
+      expect(log.flashed).toEqual([]);
+
+      const ok = await slotsCommandWith(ops)(
+        contextFor(
+          [
+            'slots',
+            'flash',
+            'b',
+            join(temp.path, 'image.bin'),
+            '--yes',
+            '--acknowledge-risk',
+            '--no-probe',
+          ],
+          cameraIo(),
+        ),
+      );
+      expect(ok).toMatchObject({ written: true, targetEmpty: true });
+    });
+
+    it('a write to a bank that held an image reports targetEmpty false', async () => {
+      const { ops } = fakeOps(reportOf({ booted: 'a', empty: ['b'] }));
+      await writeFile(join(temp.path, 'image.bin'), new Uint8Array(64).fill(1));
+      const result = await slotsCommandWith(ops)(
+        contextFor(
+          [
+            'slots',
+            'flash',
+            'r',
+            join(temp.path, 'image.bin'),
+            '--yes',
+            '--acknowledge-risk',
+            '--no-probe',
+          ],
+          cameraIo(),
+        ),
+      );
+      expect(result).toMatchObject({ written: true, targetEmpty: false });
+    });
+  });
+
+  describe('help', () => {
+    it('the slots usage says what an empty bank is and how to fill one', async () => {
+      const test = testIo();
+      const code = await run(['slots', '--help'], test.io, new AbortController().signal);
+      expect(code).toBe(EXIT_OK);
+      expect(test.stdout.text).toContain('An EMPTY bank');
+      expect(test.stdout.text).toContain('slot-<bank>-empty-<sha8>.bin');
+    });
   });
 });
