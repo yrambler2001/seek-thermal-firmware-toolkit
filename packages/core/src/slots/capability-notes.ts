@@ -62,10 +62,11 @@ export function profileFlashNote(profileId: string): string {
 }
 
 const MODERN_STAGING_NOTE =
-  'Staged: the whole 64 KiB bank, image + 0xFF pad + "CODE" footer, encrypted under the ' +
-  'camera’s Key A. The device decrypts it and re-encrypts it under the store key ' +
-  '(cmd_CompleteMemoryUpgrade, data types 7 to 9 call fw_validate_decrypt_program). The footer ' +
-  'is what lets the bootloader take the bank, so a bank short of it is refused.';
+  'Staged: the whole 64 KiB bank, image + 0xFF pad + "CODE" footer. The image is XORed with the ' +
+  'keystreams that make the running application’s own two passes (its Key A, then its store key; ' +
+  'cmd_CompleteMemoryUpgrade, data types 7 to 9, call fw_validate_decrypt_program) land it under ' +
+  'the key the booted bank holds (write-keys.ts). The footer is what lets the bootloader take ' +
+  'the bank, so a bank short of it is refused.';
 
 const MODERN_GAP_NOTE =
   'Bank B is 0x14050000 on this line (mode 8). No selector reaches 0x14060000 on any 2.x, 4.x, ' +

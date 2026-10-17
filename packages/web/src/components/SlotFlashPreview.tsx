@@ -8,7 +8,7 @@
 
 import type { ReactElement } from 'react';
 import { FileUp, Flame } from 'lucide-react';
-import { hexUp, type SlotFlashPlan, type SlotInputKind } from '@seek-fw/core';
+import { derivedKeyLine, hexUp, type SlotFlashPlan, type SlotInputKind } from '@seek-fw/core';
 import { KeyValue, type KeyValueRow } from './KeyValue';
 import { Panel, PanelTitle } from './Panel';
 import { Prose } from './Prose';
@@ -30,7 +30,7 @@ import { Toolbar } from './ui/toolbar';
 const CHUNK = 64;
 
 const STAGING_TEXT: Readonly<Record<SlotFlashPlan['staging'], string>> = {
-  'key-a-ciphertext': "encrypted under Key A, the key this camera's bootloader reads",
+  'key-a-ciphertext': 'encrypted so the device stores it under the key the booted bank holds',
   'slot-keystream-ciphertext':
     "encrypted under the image's own stage key (key block 0); the camera stores it under the bank's own key",
   plain: 'plaintext, no cipher',
@@ -96,6 +96,11 @@ export function SlotFlashPreview({
         : 'raw bytes — staged exactly as given',
     ],
     ['Staging', STAGING_TEXT[plan.staging]],
+    ...(plan.derivedFrom
+      ? ([
+          ['Key', derivedKeyLine(plan.derivedFrom, `bank ${plan.derivedFrom.bank.toUpperCase()}`)],
+        ] as const satisfies readonly KeyValueRow[])
+      : []),
     [
       'Payload',
       `${plan.payload.length.toLocaleString()} B in ${String(chunks)} chunk${

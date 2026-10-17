@@ -32,6 +32,8 @@
 import { readFile } from 'node:fs/promises';
 import { basename } from 'node:path';
 import {
+  derivedKeyLine,
+  deriveWriteKeys,
   dumpSlot,
   findEmbeddedKeyTable,
   flashSlot,
@@ -40,6 +42,7 @@ import {
   keyFilenameSuffix,
   prepareSlotFlash,
   sha256hex,
+  slotWriteRefusal,
   withLevelMap,
   type Artifact,
   type DumpedSlot,
@@ -386,6 +389,33 @@ export function emptyBankNote(report: SlotsReport, view: SlotView): string {
 }
 
 /** The `slots list` report: the camera, its banks, what each bank can take, and why not. */
+/**
+ * The keys every bank is written under, from the booted bank and the running application
+ * (write-keys.ts): which key the booted bank holds, that the other banks are written the same way,
+ * and the measured reason when a bank cannot be written.
+ */
+export function writeKeyLines(report: SlotsReport, color: boolean): string[] {
+  const refusal = slotWriteRefusal(report.state);
+  const keys = deriveWriteKeys(report.state);
+  const lines: string[] = ['', heading('Write keys', color)];
+  if (refusal !== null || keys.atRest === null || keys.booted === null) {
+    lines.push(table([['  refused', refusal ?? keys.refusal ?? 'the keys could not be derived']]));
+    return lines;
+  }
+  const booted = bankName(keys.booted);
+  lines.push(
+    table([
+      ['  booted bank', `${booted} holds ${keys.bootedKeyName ?? 'a key the page cannot name'}`],
+      [
+        '  written as',
+        `${derivedKeyLine({ key: keys.atRest.name, holds: keys.bootedKeyName }, `bank ${booted}`)}; every bank is written the same way`,
+      ],
+    ]),
+  );
+  for (const line of keys.evidence) lines.push(`  · ${line}`);
+  return lines;
+}
+
 export function listLines(report: SlotsReport, color: boolean): string[] {
   const build = report.plan.supportedBuild;
   const lines: string[] = [];
@@ -414,6 +444,8 @@ export function listLines(report: SlotsReport, color: boolean): string[] {
       'sha256',
     ]),
   );
+
+  lines.push(...writeKeyLines(report, color));
 
   lines.push('', heading('Operations', color));
   const operationRows: string[][] = [];
@@ -470,8 +502,14 @@ function slotJson(view: SlotView): Record<string, unknown> {
 
 /** The `--json` document for `slots list`. Every value must stringify. */
 export function listResult(report: SlotsReport): CommandResult {
+  const keys = deriveWriteKeys(report.state);
   return {
     action: 'list',
+    writeKeys: {
+      refused: slotWriteRefusal(report.state),
+      booted: keys.booted,
+      key: keys.atRest?.name ?? null,
+    },
     product: report.state.description.productName,
     serial: report.state.serial,
     firmware: report.plan.firmwareVersion,
@@ -510,6 +548,9 @@ export function flashPlanLines(
         : []),
       ['  image', `${fileName} — ${kind}`],
       ['  staging', plan.staging],
+      ...(plan.derivedFrom
+        ? [['  key', derivedKeyLine(plan.derivedFrom, `bank ${bankName(plan.derivedFrom.bank)}`)]]
+        : []),
       ['  payload', `${String(plan.payload.length)} B in ${String(chunks)} chunk(s) of 64 B`],
       ['  transfer checksum', hexUp(plan.sum16, 4)],
       ['  firmware', plan.firmwareVersion ?? '(unknown)'],

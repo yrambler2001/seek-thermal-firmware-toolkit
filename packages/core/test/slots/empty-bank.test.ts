@@ -127,6 +127,9 @@ function stateFor(
         ? ({ keyA: options.keyA, keyB: options.keyB } as unknown as DeviceState['keyTable'])
         : null,
     keyWhiteningK: profile.cipher.whiteningK,
+    deviceKeySlot: null,
+    storeKey: { name: 'Key B', key: options.keyB ?? null, programmed: false },
+    appKeysBlock: null,
     canFlash: true,
     flashBlockedBy: [],
     plainChain: false,
@@ -571,7 +574,12 @@ describe('prepareSlotFlash into an empty bank stages the same bytes as into a us
     view.setUint32(0, FOOTER_TAG, true);
     view.setUint32(4, 0x5000, true);
     const footer = parseFooter(footerRaw, 0)!;
-    const withFooter = usedBank('a', { footer });
+    /* The booted bank decrypts under the store key (Key B) and carries the application's pair. */
+    const appPlain = new Uint8Array(0x5000).fill(0x33);
+    appPlain.set(KEY_A, 0x4000);
+    appPlain.set(KEY_B, 0x4020);
+    const bootedA = { keyName: 'Key B', plain: appPlain, bootable: true } as const;
+    const withFooter = usedBank('a', { footer, ...bootedA });
     const keys = { keyA: KEY_A, keyB: KEY_B };
 
     const intoEmpty = prepareSlotFlash(
@@ -593,7 +601,7 @@ describe('prepareSlotFlash into an empty bank stages the same bytes as into a us
 
     /* With no bank on the camera holding a footer, it is built blank rather than refused. */
     const alone = prepareSlotFlash(
-      reportOf(modern4x, '4.8.1.9', [usedBank('a'), emptyBank('b'), usedBank('r')], keys),
+      reportOf(modern4x, '4.8.1.9', [usedBank('a', bootedA), emptyBank('b'), usedBank('r')], keys),
       'b',
       input,
     );

@@ -347,6 +347,14 @@ export interface DeviceState {
   readonly canFlash: boolean;
   /** Why `canFlash` is false, for a UI that has to explain the greyed-out button. */
   readonly flashBlockedBy: readonly string[];
+  /**
+   * The entry of `flashBlockedBy` that says the running application does not carry the
+   * bootloader's key pair (`runningApplicationKeyBlock`), or null. The slot page derives its
+   * upload keys from the booted bank and the running application instead (slots/write-keys.ts),
+   * so it must tell this one reason apart from the others. Optional: states built elsewhere
+   * (fixtures) read as null.
+   */
+  readonly appKeysBlock?: string | null;
 }
 
 export function slotByKey(state: DeviceState, key: SlotKey): SlotState | null {

@@ -9,7 +9,13 @@
 
 import { useState, type ReactElement } from 'react';
 import { CircleStop, Layers, ScanSearch, Send, ShieldAlert } from 'lucide-react';
-import { hexUp, type SlotInputKind, type SlotKey, type SlotsReport } from '@seek-fw/core';
+import {
+  derivedKeyLine,
+  hexUp,
+  type SlotInputKind,
+  type SlotKey,
+  type SlotsReport,
+} from '@seek-fw/core';
 import { KeyValue, type KeyValueRow } from '@/components/KeyValue';
 import { Prose } from '@/components/Prose';
 import { RunPanel } from '@/components/RunPanel';
@@ -17,6 +23,7 @@ import { Section } from '@/components/Section';
 import { SlotFlashPreview } from '@/components/SlotFlashPreview';
 import { SlotTable } from '@/components/SlotTable';
 import { SlotWriteConfirm } from '@/components/SlotWriteConfirm';
+import { SlotWriteKeys, writeKeysVerdictOf } from '@/components/SlotWriteKeys';
 import { Alert } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -206,6 +213,7 @@ export function SlotsView({ slots, connected, busy }: SlotsViewProps): ReactElem
         {report !== null && (
           <>
             <KeyValue rows={summary} />
+            <SlotWriteKeys verdict={writeKeysVerdictOf(report)} />
             <SlotTable
               report={report}
               connected={connected}
@@ -261,6 +269,11 @@ export function SlotsView({ slots, connected, busy }: SlotsViewProps): ReactElem
             risk={writeRisk(pending.report, pending.key)}
             twoStream={pending.plan.staging === 'two-stream'}
             targetEmpty={pending.plan.targetEmpty === true}
+            keyLine={
+              pending.plan.derivedFrom
+                ? `The image is written under ${derivedKeyLine(pending.plan.derivedFrom, `bank ${pending.plan.derivedFrom.bank.toUpperCase()}`)}. Every other bank is written the same way.`
+                : null
+            }
             onCancel={() => {
               setConfirming(false);
             }}
@@ -294,14 +307,14 @@ export function SlotsView({ slots, connected, busy }: SlotsViewProps): ReactElem
             recovery, and the 2014 bootloader rejects its word sum at banks A and B, so those two
             refuse it. It is staged folded through two keystreams, and the camera stores the plain
             image with one header word (0x238) set so the running app accepts it. Writing R asks for
-            the extra confirmation like any recovery write.
-            An <strong>empty</strong> bank (its header window reads as all 0xFF, as on many 2014
-            cameras&apos; bank B) is a state, not a fault. It dumps as the raw 64 KiB of 0xFF with
-            nothing to decrypt, and it is written exactly like any other bank; the plan and the
-            confirmation say that no firmware is overwritten. When another bank holds a decrypted
-            image, <strong>Use the booted bank&apos;s image</strong> prepares a copy of the firmware
-            the camera runs now, so a second slot with the same firmware exists. You still review
-            the plan and confirm.
+            the extra confirmation like any recovery write. An <strong>empty</strong> bank (its
+            header window reads as all 0xFF, as on many 2014 cameras&apos; bank B) is a state, not a
+            fault. It dumps as the raw 64 KiB of 0xFF with nothing to decrypt, and it is written
+            exactly like any other bank; the plan and the confirmation say that no firmware is
+            overwritten. When another bank holds a decrypted image,{' '}
+            <strong>Use the booted bank&apos;s image</strong> prepares a copy of the firmware the
+            camera runs now, so a second slot with the same firmware exists. You still review the
+            plan and confirm.
           </p>
           <p>
             A write erases one 64 KiB bank and programs it. The bootloader at{' '}

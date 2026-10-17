@@ -1097,6 +1097,7 @@ export async function readDeviceInfo(
     plainChain,
     canFlash: blocked.length === 0,
     flashBlockedBy: blocked,
+    appKeysBlock: keysBlock,
   };
 
   reporter.progress(

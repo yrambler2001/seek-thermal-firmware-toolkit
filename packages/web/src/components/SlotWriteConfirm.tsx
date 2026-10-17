@@ -35,6 +35,8 @@ export interface SlotWriteConfirmProps {
   readonly twoStream?: boolean;
   /** The bank holds no image: the write overwrites no firmware. */
   readonly targetEmpty?: boolean;
+  /** The key the image is written under and the bank it was derived from, when there is one. */
+  readonly keyLine?: string | null;
   readonly onConfirm: (acknowledged: boolean) => void;
   readonly onCancel: () => void;
 }
@@ -47,6 +49,7 @@ export function SlotWriteConfirm({
   risk,
   twoStream = false,
   targetEmpty = false,
+  keyLine,
   onConfirm,
   onCancel,
 }: SlotWriteConfirmProps): ReactElement {
@@ -119,6 +122,7 @@ export function SlotWriteConfirm({
               plain image with one header word (0x238) set so the running app accepts it.
             </span>
           )}
+          {keyLine && <span className="block">{keyLine}</span>}
           <span className="block">
             No reset is sent. Unplug and replug the camera afterwards for the bank to take effect.
           </span>
