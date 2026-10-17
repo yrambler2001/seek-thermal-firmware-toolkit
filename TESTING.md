@@ -6176,13 +6176,13 @@ changed build string means the bootloader took the bank.
 **The corpus (modern line, 257 tests).** 204 pass, 3 gap (pinned with their reasons), 0 fail. Against
 the previous run:
 
-| Row                                               | Before                                                           | Now                                                                                                                                                                                                                                                  |
-| ------------------------------------------------- | ---------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Mosaic 10.9.1.31 dump, image on its dump: flash B | gap (not writable: the application lacks the bootloader's Key A) | pass (read-back decrypts; booted by the bootloader: sec. above)                                                                                                                                                                                      |
-| Compact FF 4.16.1.7 chimera: flash B              | gap (not writable)                                               | gap, the derivation's refusal: a checking build, the booted key is neither of its keys (pinned `notWritable`)                                                                                                                                        |
-| Compact FF 4.16.1.7 chimera: raw R                | gap (chimera refusal)                                            | gap, unchanged (pinned `chimeraRawRefused`)                                                                                                                                                                                                          |
-| Compact PRO 4.9.1.15 dump: flash B                | gap (B's own image holds neither of the bootloader's keys)       | gap, reason now precise: B's image carries neither this camera's pair nor a decoded application pair, so the page cannot locate its keys to retarget it. The 2016-line keys are not in the candidate table (a decision for the owner, not made here) |
-| every other row                                   | pass                                                             | pass, bytes identical to what they sent                                                                                                                                                                                                              |
+| Row                                               | Before                                                           | Now                                                                                                                                                                                                               |
+| ------------------------------------------------- | ---------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Mosaic 10.9.1.31 dump, image on its dump: flash B | gap (not writable: the application lacks the bootloader's Key A) | pass (read-back decrypts; booted by the bootloader: sec. above)                                                                                                                                                   |
+| Compact FF 4.16.1.7 chimera: flash B              | gap (not writable)                                               | gap, the derivation's refusal: a checking build, the booted key is neither of its keys (pinned `notWritable`)                                                                                                     |
+| Compact FF 4.16.1.7 chimera: raw R                | gap (chimera refusal)                                            | gap, unchanged (pinned `chimeraRawRefused`)                                                                                                                                                                       |
+| Compact PRO 4.9.1.15 dump: flash B                | gap (B's own image holds neither of the bootloader's keys)       | gap, reason now precise: B's image carries neither this camera's pair nor a decoded application pair, so the page cannot locate its keys to retarget it. Which pair it carries was not identified in this session |
+| every other row                                   | pass                                                             | pass, bytes identical to what they sent                                                                                                                                                                           |
 
 **The 2016 line.** The staging does not read the target bank. `buildSlotKeystreamPayload` takes the
 stage key from the image's own key block 0 (`stageKeyBlockOf`, found by value), as
@@ -6210,7 +6210,8 @@ them.
    with the checking-build reason. If the page sends anyway, record the device's status.
 5. Compact PRO 4.9.1.15: the page should refuse B at the retarget step, with the reason above.
 
-**Open.** The 2016-line pairs (`KEY_PAIRS.cp103` / `cp1032ff`) are not in the modern candidate table,
-so a 2016 image held in a modern camera's bank cannot be retargeted. Adding them would be a decision
-about writing 2016 images into 4.x banks, and is not made here. The derivation's file-name rule is
-unchanged for named files.
+**Open.** Whether the image in the PRO 4.9.1.15 bank B can be retargeted depends on which key pair it
+carries, and this session did not identify that pair. A pair from the 2016 line (`KEY_PAIRS` in
+`preservation/patch.ts`) would not be in the modern candidate table; adding one would be a decision
+about writing 2016 images into 4.x banks, and is not made here. The file-name rule is unchanged for
+named files.
