@@ -40,6 +40,7 @@ import {
 import {
   carriesFFKeyPair,
   describeDifference,
+  FF_PLATFORM_BOOTLOADER,
   isFF1308Subject,
   predictedFFStored,
 } from './ff-form.js';
@@ -925,6 +926,28 @@ async function runFF1308(
     return;
   }
   r.notes.push(`FF: image ${image.name}, ${String(image.bytes.length)} B, the page's decrypted R`);
+
+  /* The bank rule follows the camera's bootloader (core ff-platform.ts). On the FF platform's
+   * own bootloader (2.0.2.3) the page refuses the FF image for all three banks: nothing is written,
+   * and the boot proof is not run (TESTING 42.12 measured the page's form by hand, not by this flow). */
+  const bootloader = (await rig.camera.runningInfo())?.bootloaderVersion ?? null;
+  if (bootloader === FF_PLATFORM_BOOTLOADER) {
+    r.notes.push(
+      `FF: bootloader ${FF_PLATFORM_BOOTLOADER} (the FF platform): the page must refuse the FF image for every bank`,
+    );
+    for (const letter of ['b', 'a', 'r'] as const) {
+      await refuseBank(rig, reading, letter, image, r);
+    }
+    log(
+      `${r.label}: the FF image is refused for B, A and R: ` +
+        `${writeResultOf(r, 'b').state}, ${writeResultOf(r, 'a').state}, ${writeResultOf(r, 'r').state}`,
+    );
+    r.notes.push('FF: nothing written on this bootloader, so no boot proof is run (TESTING 42.12)');
+    return;
+  }
+  r.notes.push(
+    `FF: bootloader ${bootloader ?? 'not reported'}: the 2014 rule (A and B refused, R written)`,
+  );
 
   for (const letter of ['b', 'a'] as const) {
     await refuseBank(rig, reading, letter, image, r);

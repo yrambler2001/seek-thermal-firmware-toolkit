@@ -23,6 +23,12 @@ import {
 } from '../../../packages/core/src/preservation/patch.js';
 import type { BenchSubject } from './types.js';
 
+/**
+ * The FF platform's bootloader (2.0.2.3): on it the page refuses the FF image for every bank, and the
+ * page's form booted from no bank alone (TESTING 42.12). The core rule is the source of truth.
+ */
+export { FF_PLATFORM_BOOTLOADER } from '../../../packages/core/src/slots/ff-platform.js';
+
 /** One bank, as the page dumps and writes it. */
 export const FF_BANK_BYTES = 0x10000;
 

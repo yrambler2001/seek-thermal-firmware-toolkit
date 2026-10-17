@@ -124,10 +124,11 @@ export function SlotWriteConfirm({
           </span>
           {twoStream && (
             <span className="block" id="slot-write-confirm-ff">
-              This is the 1.3.0.8 FF (16 Hz) image. The camera boots it only from the recovery bank:
-              the 2014 bootloader rejects its word sum at banks A and B, so recovery is the one bank
-              that takes it. It is staged folded through two keystreams, and the camera stores the
-              plain image with one header word (0x238) set so the running app accepts it.
+              This is the 1.3.0.8 FF (16 Hz) image. On the 2014 bootloader (0.9.0.0) the camera
+              boots it only from the recovery bank: that bootloader rejects its word sum at banks A
+              and B, so recovery is the one bank that takes it. It is staged folded through two
+              keystreams, and the camera stores the plain image with one header word (0x238) set so
+              the running app accepts it.
             </span>
           )}
           {keyLine && <span className="block">{keyLine}</span>}

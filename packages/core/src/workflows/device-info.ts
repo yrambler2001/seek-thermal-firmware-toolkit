@@ -46,6 +46,7 @@ import { WINDOW_SIZE } from '../protocol/ops.js';
 import type { SeekDevice } from '../protocol/client.js';
 import { wordSum32 } from '../image/bank.js';
 import { locateFFKeys } from '../preservation/patch.js';
+import { LEGACY_2014_BOOTLOADER } from '../slots/ff-platform.js';
 /* The stale-descriptor predicate, shared with the preservation pipeline's
  * boot-config check rather than re-worded: a spent reader serves the same
  * shape into any window. `preservation/windows.ts` imports nothing from
@@ -327,12 +328,19 @@ function storedPlain(slot: AnalysedSlot): boolean {
 }
 
 /**
- * Is this bank the 1.3.0.8 FF (16 Hz) image in recovery R? Its stored word sum is not 0 and
- * it carries the FF key pair, so the 2014 bootloader takes no bank with it and recovery runs
- * it only when A and B hold nothing the bootloader takes (TESTING.md 42.10: steps 4, 2c and 7
- * ran it from R with A and B empty; steps 6a and 6c passed over the same form at A and B).
+ * Is this bank the 1.3.0.8 FF (16 Hz) image in recovery R, on the 2014 bootloader? Its stored word
+ * sum is not 0 and it carries the FF key pair, so the 2014 bootloader takes no bank with it and
+ * recovery runs it only when A and B hold nothing the bootloader takes (TESTING.md 42.10: steps 4,
+ * 2c and 7 ran it from R with A and B empty; steps 6a and 6c passed over the same form at A and B).
+ * On the FF platform's bootloader (2.0.2.3) that was not measured for this form: the bank is not
+ * labelled recovery-only there (42.12).
  */
-function ffFormInRecovery(key: SlotKey, slot: AnalysedSlot): boolean {
+function ffFormInRecovery(
+  key: SlotKey,
+  slot: AnalysedSlot,
+  bootloaderVersion: string | null,
+): boolean {
+  if (bootloaderVersion !== LEGACY_2014_BOOTLOADER) return false;
   if (key !== 'r' || !slot.present || slot.raw === null || slot.header === null) return false;
   const image = slot.raw.subarray(0, slot.header.length);
   return wordSum32(image, image.length) !== 0 && locateFFKeys(image) !== null;
@@ -708,7 +716,7 @@ export async function readDeviceInfo(
       ? /* the chain's own model: see the verdict below */ 'bootable'
       : identity.bootable && footerPasses
         ? 'bootable'
-        : ffFormInRecovery(descriptor.key, slot)
+        : ffFormInRecovery(descriptor.key, slot, bootloaderVersion)
           ? /* recovery runs it when A and B hold nothing the bootloader takes: not a skipped slot */
             'recovery-only'
           : slot.present && slot.accepts && footerPasses && keyTable === null

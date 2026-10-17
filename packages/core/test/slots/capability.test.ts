@@ -385,10 +385,11 @@ describe('the bank addresses agree with each image\u2019s own decoded switch', (
 /* ---- what the notes must say -------------------------------------------- */
 
 describe('the facts a person is shown with the plan', () => {
-  it('says the 1.3.0.8-FF build boots only from recovery, on the 1.3.0.8 plan', () => {
+  it('says the 1.3.0.8-FF image takes recovery only on the 2014 bootloader, and is refused on 2.0.2.3', () => {
     const plan = buildSlotPlan(legacyAuth, '1.3.0.8');
     expect(plan.notes.join('\n')).toMatch(/1\.3\.0\.8-FF/);
-    expect(plan.notes.join('\n')).toMatch(/ONLY from recovery/);
+    expect(plan.notes.join('\n')).toMatch(/2014 bootloader \(0\.9\.0\.0\)/);
+    expect(plan.notes.join('\n')).toMatch(/2\.0\.2\.3/);
     expect(plan.notes.join('\n')).toMatch(/0xFFFF/);
   });
 

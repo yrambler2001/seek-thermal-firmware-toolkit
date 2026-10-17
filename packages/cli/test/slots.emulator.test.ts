@@ -667,7 +667,7 @@ describe.skipIf(!available)(
           build: { supported: true },
         });
         const notes = (list?.json?.notes as string[] | undefined) ?? [];
-        expect(notes.join('\n')).toMatch(/writes the FF image to bank R\s+only/);
+        expect(notes.join('\n')).toMatch(/writes it to R only \(TESTING\.md 42\.10\)/);
         const slots = (list?.json?.slots as Json[] | undefined) ?? [];
         expect(slots.map((slot) => slot.bank)).toEqual(['a', 'b', 'r']);
         for (const slot of slots) expect(slot.staging, String(slot.bank)).toBe('plain');

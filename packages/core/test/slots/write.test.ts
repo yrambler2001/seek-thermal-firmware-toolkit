@@ -121,6 +121,7 @@ function stateFor(
     canFlash?: boolean;
     keyA?: Uint8Array | null;
     keyB?: Uint8Array | null;
+    bootloaderVersion?: string | null;
   } = {},
 ): DeviceState {
   const slots = options.slots ?? [];
@@ -130,6 +131,7 @@ function stateFor(
   const keyB = options.keyB === undefined ? null : options.keyB;
   return {
     version: options.version === undefined ? '4.8.1.9' : options.version,
+    bootloaderVersion: options.bootloaderVersion ?? '0.9.0.0',
     serial: options.serial === undefined ? 'TESTSERIAL' : options.serial,
     profile,
     slots,
@@ -913,6 +915,19 @@ describe('the 1.3.0.8 FF image on the slot writer', () => {
     expect(shaRow?.after).toBe(sha256Sync(out.expectedPlain!));
   });
 
+  it('on the FF platform bootloader (2.0.2.3) every bank refuses it, R included, before anything is built', () => {
+    const ffPlatform = buildSlotPlan(legacy, '1.3.0.8');
+    const report = reportFor(
+      stateFor(legacy, { version: '1.3.0.8', slots, bootloaderVersion: '2.0.2.3' }),
+      ffPlatform,
+    );
+    for (const key of ['a', 'b', 'r'] as const) {
+      expect(() => prepareSlotFlash(report, key, input(ffImage())), `bank ${key}`).toThrow(
+        /2\.0\.2\.3/,
+      );
+    }
+  });
+
   it('says what it does: two keystreams, the solved adjust word, the stored word sum, recovery only', () => {
     const out = prepareSlotFlash(reportOn(), 'r', input(ffImage()));
     const text = out.warnings.join('\n');
@@ -924,7 +939,11 @@ describe('the 1.3.0.8 FF image on the slot writer', () => {
     /* Recovery's own warning and the plan notes are still there. */
     expect(out.warnings.some((w) => w.includes('Recovery bank R: writing it needs'))).toBe(true);
     expect(
-      out.warnings.some((w) => w.startsWith('Note:') && w.includes('ONLY from recovery')),
+      out.warnings.some(
+        (w) =>
+          w.startsWith('Note:') &&
+          w.includes('On the 2014 bootloader (0.9.0.0) the FF build boots only from recovery'),
+      ),
     ).toBe(true);
   });
 
@@ -1060,8 +1079,9 @@ describe('the 1.3.0.8 notes say the FF image goes to recovery only', () => {
   it('the plan note and the bank notes state it, on the 1.3.0.8 plan and not on 1.3.0.0', () => {
     const plan = buildSlotPlan(legacy, '1.3.0.8');
     const planText = plan.notes.join('\n');
-    expect(planText).toMatch(/refuses it for A and B/);
-    expect(planText).toMatch(/bank R\s+only/);
+    expect(planText).toMatch(/writes it to R only \(TESTING\.md 42\.10\)/);
+    expect(planText).toMatch(/2\.0\.2\.3/);
+    expect(planText).toMatch(/refuses it for every\s+bank/);
     expect(planText).not.toMatch(/does not produce/);
     const byKey = Object.fromEntries(plan.slots.map((s) => [s.key, s.notes.join('\n')]));
     expect(byKey.a).toMatch(/FF \(16 Hz\) image is refused here/);

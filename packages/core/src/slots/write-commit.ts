@@ -42,8 +42,13 @@ const PROGRESS_MASK = 0x7ff;
  *    sent. Returned before the image is decrypted or anything is erased.
  *  - UNSUPPORTED 0x50000: the image did not decrypt under the camera's keys, or
  *    the data type is one this build refuses. Returned before erase.
- *  - BAD_IMAGE_KEYS 0x70100 (nano and Compact XR revisions only): the key probe
- *    after the re-key refused the image. Returned before erase.
+ *  - BAD_IMAGE_KEYS 0x70100: an acceptance gate refused the image. It is returned
+ *    from several sites, all before anything is erased, and it is NOT only the
+ *    nano / Compact XR revisions: the 1.3.0.8 8 Hz build returns it from a plain
+ *    word-sum gate (no re-key on that path); the 1.3.0.8 FF (16 Hz) build returns
+ *    it from a keystream-decrypted sum gate that runs BEFORE its re-key; the nano
+ *    and nano200 variants add a key probe after the re-key that returns the same
+ *    code. Sites read from the FW-V1 firmware sources (TESTING.md 42.10, 42.12).
  *  - WRONG_FW_OP 0x0003_02xx: no bank upgrade was armed, so the commit did
  *    nothing. Returned before the image is looked at.
  *  - FLASH_ERASE_FAILED 0x0004_00SS: the erase of the bank's block failed. The

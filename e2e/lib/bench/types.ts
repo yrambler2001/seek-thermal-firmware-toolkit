@@ -151,3 +151,11 @@ export const BENCH_FLASH_BASE = 0x14000000;
  * `JlinkBench.writeBank` accepts (the bootloader and the boot-config block are never banks).
  */
 export const CHAIN_2014_BANKS: readonly number[] = [0x14050000, 0x14060000, 0x14070000];
+
+/**
+ * The 64 KiB banks `JlinkBench.writeBank` accepts: the 2014 chain's three, plus 0x14030000. On the
+ * 1.3.0.8 FF platform (bootloader 2.0.2.3) the dump holds a copy of the FF image at 0x14030000 as
+ * well as at 0x14050000 and 0x14070000, and 0x14060000 is erased (TESTING 42.12). Still never the
+ * bootloader (0x14000000..) or the boot-config block (0x14010000).
+ */
+export const WRITABLE_BANKS: readonly number[] = [0x14030000, ...CHAIN_2014_BANKS];

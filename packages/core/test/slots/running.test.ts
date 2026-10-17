@@ -140,11 +140,13 @@ function emptyBank(key: SlotKey): SlotState {
 
 function stateWith(
   slots: readonly SlotState[],
-  options: { cfg0?: number | null; version?: string | null } = {},
+  options: { cfg0?: number | null; version?: string | null; bootloaderVersion?: string } = {},
 ): DeviceState {
   const byKey = new Map(slots.map((s) => [s.key, s]));
   return {
     version: options.version === undefined ? '1.3.0.8' : options.version,
+    /* The 2014 bootloader, which the 8 Hz and FF 1.3.0.8 builds boot on (42.10). */
+    bootloaderVersion: options.bootloaderVersion ?? '0.9.0.0',
     cfg0: options.cfg0 === undefined ? 0 : options.cfg0,
     byKey,
     slots,
@@ -276,6 +278,7 @@ function writerState(slots: readonly SlotState[], cfg0: number | null = 0): Devi
   const byKey = new Map(slots.map((s) => [s.key, s]));
   return {
     version: '1.3.0.8',
+    bootloaderVersion: '0.9.0.0',
     serial: 'TESTSERIAL',
     cfg0,
     profile: legacy,

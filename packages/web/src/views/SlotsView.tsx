@@ -308,15 +308,17 @@ export function SlotsView({ slots, connected, busy }: SlotsViewProps): ReactElem
           <p>
             A Compact on 1.3.0.8 can be the 8 Hz build or the 16 Hz FF build, and both report the
             same version, so the page tells them apart by the image you pick. The 8 Hz image goes to
-            any bank. The FF image goes to the recovery bank R only: the camera boots it from
-            recovery, and the 2014 bootloader rejects its word sum at banks A and B, so those two
-            refuse it. It is staged folded through two keystreams, and the camera stores the plain
-            image with one header word (0x238) set so the running app accepts it. Writing R asks for
-            the extra confirmation like any recovery write. An <strong>empty</strong> bank (its
-            header window reads as all 0xFF, as on many 2014 cameras&apos; bank B) is a state, not a
-            fault. It dumps as the raw 64 KiB of 0xFF with nothing to decrypt, and it is written
-            exactly like any other bank; the plan and the confirmation say that no firmware is
-            overwritten. When another bank holds a decrypted image,{' '}
+            any bank. Which banks the FF image may take depends on the camera's bootloader. On the
+            2014 bootloader (0.9.0.0) it goes to the recovery bank R only: the 2014 bootloader
+            rejects its word sum at banks A and B. On the FF platform's own bootloader (2.0.2.3) the
+            page refuses it for every bank, because no bank booted the page's form alone (TESTING.md
+            42.10 and 42.12). It is staged folded through two keystreams, and the camera stores the
+            plain image with one header word (0x238) set so the running app accepts it. Writing R
+            asks for the extra confirmation like any recovery write. An <strong>empty</strong> bank
+            (its header window reads as all 0xFF, as on many 2014 cameras&apos; bank B) is a state,
+            not a fault. It dumps as the raw 64 KiB of 0xFF with nothing to decrypt, and it is
+            written exactly like any other bank; the plan and the confirmation say that no firmware
+            is overwritten. When another bank holds a decrypted image,{' '}
             <strong>Use the booted bank&apos;s image</strong> prepares a copy of the firmware the
             camera runs now, so a second slot with the same firmware exists. You still review the
             plan and confirm.

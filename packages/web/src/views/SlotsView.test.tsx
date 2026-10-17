@@ -385,8 +385,9 @@ describe('SlotsView', () => {
     expect(rows[2]?.textContent).toContain('Takes the 1.3.0.8 FF (16 Hz) image too');
     expect(rows[2]?.textContent).toContain('the only bank that does');
     /* The plan's own note states the rule, and the page explains it once more in words. */
-    expect(container.textContent).toContain('writes the FF image to bank R only');
-    expect(container.textContent).toContain('The FF image goes to the recovery bank R only');
+    expect(container.textContent).toContain('it goes to the recovery bank R only');
+    expect(container.textContent).toContain('the page writes it to R only');
+    expect(container.textContent).toContain('On the FF platform');
     /* The flash controls on every bank are on: the image decides, not the version. */
     expect(buttonByText(rows[2] as HTMLElement, 'Flash decrypted image…').disabled).toBe(false);
     unmount();

@@ -41,7 +41,7 @@ import type { WriteApproval } from '../supervised-write.js';
 import {
   BENCH_FLASH_BASE,
   BENCH_FLASH_BYTES,
-  CHAIN_2014_BANKS,
+  WRITABLE_BANKS,
   type BootSlot,
   type JlinkBench,
 } from './types.js';
@@ -541,9 +541,9 @@ export function createJlinkBench(options: JlinkBenchOptions): JlinkBench {
     },
 
     async writeBank(address: number, file: string): Promise<void> {
-      if (!CHAIN_2014_BANKS.includes(address)) {
+      if (!WRITABLE_BANKS.includes(address)) {
         throw new Error(
-          `writeBank: only the 2014-chain banks (${CHAIN_2014_BANKS.map(hex).join(', ')}) are written here, not ${hex(address)}`,
+          `writeBank: only the bank ranges (${WRITABLE_BANKS.map(hex).join(', ')}) are written here, not ${hex(address)}`,
         );
       }
       const payload = path.resolve(file);

@@ -44,7 +44,7 @@ import type {
 import {
   BENCH_FLASH_BASE,
   BENCH_FLASH_BYTES,
-  CHAIN_2014_BANKS,
+  WRITABLE_BANKS,
   type BenchCamera,
   type BenchSubject,
   type BootSlot,
@@ -230,13 +230,18 @@ function isBlank(bytes: Uint8Array): boolean {
  */
 export type FakeFfFault = 'stored' | 'accepted';
 
+/** The FF subject's bootloader in the fake: the 2014 one (0.9.0.0) or the FF platform's (2.0.2.3). */
+export type FakeBootloader = '0.9.0.0' | '2.0.2.3';
+
 /** The fake rig over one subject list. Each call builds a fresh, empty bench. */
 export function createFakeRig(options: {
   readonly subjects: readonly BenchSubject[];
   readonly failure: FakeFailure | null;
   readonly ffFault?: FakeFfFault | null;
+  readonly ffBootloader?: FakeBootloader;
 }): BenchRig {
   const ffFault = options.ffFault ?? null;
+  const ffBootloader: FakeBootloader = options.ffBootloader ?? '0.9.0.0';
   let flash = new Uint8Array(BENCH_FLASH_BYTES).fill(0xff);
   let current = -1;
   let running: string | null = null;
@@ -286,7 +291,7 @@ export function createFakeRig(options: {
     },
     async writeBank(address: number, file: string): Promise<void> {
       const bytes = new Uint8Array(readFileSync(file));
-      if (!CHAIN_2014_BANKS.includes(address) || bytes.length !== BANK_BYTES) {
+      if (!WRITABLE_BANKS.includes(address) || bytes.length !== BANK_BYTES) {
         throw new Error(
           `fake: writeBank of 0x${address.toString(16)} (${String(bytes.length)} B) refused`,
         );
@@ -342,13 +347,15 @@ export function createFakeRig(options: {
       /* The fake camera holds nothing across a power cycle but its flash. */
     },
     async runningInfo(): Promise<RunningInfo | null> {
-      if (running === null) return null;
+      /* A camera that boots nothing still reports its bootloader (as `seek-fw info` does), so the FF
+       * subject's bootloader is known before any boot; any other subject with nothing running is null. */
+      if (running === null && !ff()) return null;
       return {
         product: 'Fake Compact',
         serial: null,
         firmwareVersion: subject()?.version ?? null,
         buildString: running,
-        bootloaderVersion: null,
+        bootloaderVersion: ff() ? ffBootloader : null,
       };
     },
   };
@@ -434,6 +441,19 @@ export function createFakeRig(options: {
       },
       async refuse(letter: BankLetter, image: PageImage): Promise<PageRefusal> {
         if (!ff()) throw new Error('fake: only the FF image is refused at the picker');
+        /* On the FF platform's bootloader the page refuses every bank (TESTING 42.12). */
+        if (ffBootloader === '2.0.2.3') {
+          if (ffFault === 'accepted') {
+            throw new Error(`fake: the picker took the FF image for ${letter}, it was not refused`);
+          }
+          return {
+            status: 'Rejected — see the log above.',
+            reason:
+              `this is the 1.3.0.8 FF (16 Hz) image (${image.name}); the bootloader 2.0.2.3 does not ` +
+              `boot the page's form from any bank, so bank ${letter.toUpperCase()} is refused. ` +
+              'Nothing was written.',
+          };
+        }
         if (letter === 'r') throw new Error('fake: the page takes the FF image for R');
         if (ffFault === 'accepted') {
           throw new Error(`fake: the picker took the FF image for ${letter}, it was not refused`);

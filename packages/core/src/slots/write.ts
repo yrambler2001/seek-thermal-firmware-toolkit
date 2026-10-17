@@ -56,7 +56,6 @@ import {
   buildPlainPayload,
   buildSlotKeystreamPayload,
   compareRows,
-  ffBankRefusal,
   foldedFFPayload,
   plainChainBuildOf,
   predictRawPlain,
@@ -67,6 +66,7 @@ import {
 import { FF_1308_VERSION } from './capability-family.js';
 import { slotContentOf } from './inspect.js';
 import { runningApplicationOf, type RunningApplication } from './running.js';
+import { ffWriteRefusal } from './ff-platform.js';
 import { readBackBank, stageAndCommit } from './write-commit.js';
 import { compareReadBack } from './write-verify.js';
 
@@ -280,7 +280,10 @@ export function prepareSlotFlash(
      * it and it folds to an image carrying the FF key pair. Sent as given all the same; this
      * only decides what the bank is said to hold, and which bank may take it. */
     const folded = entry.staging === 'plain' ? foldedFFPayload(payload) : null;
-    if (folded !== null && key !== 'r') throw ffBankRefusal(key);
+    if (folded !== null) {
+      const refusal = ffWriteRefusal(state, key);
+      if (refusal !== null) throw refusal;
+    }
     /* What the bank will hold depends on the form the device decodes the bytes
      * with. The 2014 plain chain programs them as sent (the FF build, the image they
      * fold to), so there the stored bytes are predicted; the encrypting forms
@@ -500,7 +503,9 @@ function stageImage(
   }
   /* The 2014 chain holds two builds under one version string; the image says which. */
   if (plainChainBuildOf(input.bytes) === 'ff-1308') {
-    if (key !== 'r') throw ffBankRefusal(key);
+    /* The bank rule comes from the camera's bootloader (ff-platform.ts), not from the image. */
+    const bankRefusal = ffWriteRefusal(report.state, key);
+    if (bankRefusal !== null) throw bankRefusal;
     const version = report.state.version;
     if (version !== FF_1308_VERSION) {
       throw slotRefused(
@@ -589,12 +594,11 @@ function assertPlanIsCurrent(report: SlotsReport, plan: SlotFlashPlan, entry: Sl
       `the payload is ${hex(plan.payload.length)} B, outside the ${entry.name} bank`,
     );
   }
-  /* The FF build's staged form lands only in recovery. A plan for another bank was edited. */
-  if (
-    (plan.staging === 'two-stream' || plan.storedForm === 'two-stream-fold') &&
-    plan.key !== 'r'
-  ) {
-    throw ffBankRefusal(plan.key);
+  /* The FF build's staged form goes only where the camera's bootloader allows it. A plan for
+   * a bank it does not allow (or one edited after the check) is refused here. */
+  if (plan.staging === 'two-stream' || plan.storedForm === 'two-stream-fold') {
+    const refusal = ffWriteRefusal(report.state, plan.key);
+    if (refusal !== null) throw refusal;
   }
 }
 

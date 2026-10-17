@@ -852,11 +852,11 @@ describe('writeBank: one 2014-chain bank, by loadbin and verifybin, then a halte
     expect(calls.some((call) => (call.script ?? '').includes('dump-spifi'))).toBe(false);
   });
 
-  it('refuses an address that is not a 2014 bank (bootloader, boot config, modern slots), before any session', async () => {
+  it('refuses an address that is not a bank range (bootloader, boot config, past the banks), before any session', async () => {
     const { exec, calls } = fakeExec(() => OK);
-    for (const address of [0x14000000, 0x14010000, 0x14030000, 0x14080000]) {
+    for (const address of [0x14000000, 0x14010000, 0x14020000, 0x14080000]) {
       await expect(bench(exec).writeBank(address, BANK_FILE)).rejects.toThrow(
-        /only the 2014-chain banks/,
+        /only the bank ranges/,
       );
     }
     expect(calls).toHaveLength(0);
@@ -1564,6 +1564,57 @@ describe('the FF path, on the fake rig', () => {
     );
     /* Nothing was flashed on this rig: the boot-config word is still blank, and stays so. */
     expect(await rig.jlink.readFlash(0x14010000, 4)).toEqual(new Uint8Array([255, 255, 255, 255]));
+  });
+});
+
+describe('the FF path on the FF platform bootloader (2.0.2.3), on the fake rig (TESTING 42.12)', () => {
+  let dir = '';
+  beforeAll(() => {
+    dir = mkdtempSync(path.join(tmpdir(), 'seek-ff-platform-test-'));
+  });
+  afterAll(() => {
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('refuses the FF image for B, A and R, writes nothing, and runs no boot proof', async () => {
+    const subjects = fakeFfSubjects(path.join(dir, 'refused'));
+    const rig = createFakeRig({ subjects, failure: null, ffBootloader: '2.0.2.3' });
+    const result = await runSubject(rig, subjectAt(subjects, 0), () => undefined, false);
+    expect(result.failures).toEqual([]);
+    expect(result.slotWrites.map((write) => [write.bank, write.state])).toEqual([
+      ['b', 'refused'],
+      ['a', 'refused'],
+      ['r', 'refused'],
+    ]);
+    expect(result.bootProof).toBe('not-run');
+    expect(result.notes.join('\n')).toMatch(/bootloader 2\.0\.2\.3 \(the FF platform\)/);
+    expect(result.notes.join('\n')).toMatch(/nothing written on this bootloader/);
+  });
+
+  it('a page that takes the FF image for R on this bootloader fails the run', async () => {
+    const subjects = fakeFfSubjects(path.join(dir, 'accepted'));
+    const rig = createFakeRig({
+      subjects,
+      failure: null,
+      ffFault: 'accepted',
+      ffBootloader: '2.0.2.3',
+    });
+    const result = await runSubject(rig, subjectAt(subjects, 0), () => undefined, false);
+    expect(result.slotWrites.find((write) => write.bank === 'r')?.state).toBe('failed');
+    expect(result.failures.join(' ')).toMatch(/refuse R: fake: the picker took the FF image/);
+  });
+
+  it('writeBank takes the FF platform bank at 0x14030000, and refuses the bootloader and the boot-config block', async () => {
+    const subjects = fakeFfSubjects(path.join(dir, 'banks'));
+    const rig = createFakeRig({ subjects, failure: null, ffBootloader: '2.0.2.3' });
+    const file = path.join(dir, 'bank-30000.bin');
+    writeFileSync(file, Buffer.alloc(0x10000, 0x5a));
+    await rig.jlink.writeBank(0x14030000, file);
+    expect(await rig.jlink.readFlash(0x14030000, 4)).toEqual(
+      new Uint8Array([0x5a, 0x5a, 0x5a, 0x5a]),
+    );
+    await expect(rig.jlink.writeBank(0x14000000, file)).rejects.toThrow(/fake: writeBank/);
+    await expect(rig.jlink.writeBank(0x14010000, file)).rejects.toThrow(/fake: writeBank/);
   });
 });
 

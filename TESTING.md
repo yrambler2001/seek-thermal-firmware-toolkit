@@ -6579,3 +6579,73 @@ page's two-stream payload (not sent: raw writes are unchanged). Any cfg[0] other
 bank B that holds a stored-sum-0 image alone is taken (42.10 measured A only). The first FF write
 to R on a camera running the 8 Hz build, which the page now refuses, is still to be run with the
 J-Link route the refusal names.
+
+### 42.12 The FF platform (bootloader 2.0.2.3): the page's writes are accepted, and no bank boots them (2026-10-17)
+
+**Setup (measured).** The bench camera (PIR206, original 1.3.0.0, serial `101310HSNEA2`) was flashed whole
+with the 1.3.0.8 FF launchable copy (`full_dump_launchable.bin`, sha256 `1095d108…`). It then reported
+1.3.0.8 "Jan  6 2017", bootloader **2.0.2.3** "Jul  5 2018", serial `2229A0YZ7E28` (the donor's). Its
+boot-config block (0x14010000) is the donor's, cfg[0] = 0; every boot below was taken with cfg[0] = 0 unless
+stated. The dump holds the FF image at 0x14030000, 0x14050000 and 0x14070000, with 0x14060000 erased. The
+decrypted image (`seek-fw decrypt`) is plain with word sum 0xFFFF and the FF key pair, and its build string
+sits at 0xBF56 (`Jan  6 2017`). Bank R of that dump is the image the camera runs from when it boots alone.
+
+**Writes (measured).** The write path is the core's (`seek-fw slots flash`, `--acknowledge-risk --yes
+--no-rescue-dump`). Two local refusals were bypassed for this run only, in an uncommitted edit that is now
+reverted: `ffBankRefusal` at the staging step and at the plan check (A and B). Each image was the FF
+image with its build string's last digit set to the bank's letter, so the bank names itself: `201B`,
+`201A`, `201R`. Each bank read back as the page predicted, and the J-Link's halted read matched that too.
+
+| Bank (address)      | Commit status | Page read-back sha256 | J-Link re-read sha256 | Bench `predictedFFStored` sha256 | Boots alone, cfg[0] = 0                             |
+| ------------------- | ------------- | --------------------- | --------------------- | -------------------------------- | --------------------------------------------------- |
+| B (0x14060000)      | 0x0000        | `6d954048…fb1f2f`     | `6d954048…fb1f2f`     | `6d954048…fb1f2f`                | no: the camera did not enumerate                    |
+| A (0x14050000)      | 0x0000        | `af7df662…99feb0`     | `af7df662…99feb0`     | `af7df662…99feb0`                | no: the camera did not enumerate                    |
+| R (0x14070000)      | 0x0000        | `c92ce642…4458af8ff`  | `c92ce642…4458af8ff`  | `c92ce642…4458af8ff`             | no; with cfg[0] = 2 also no (not enumerated in 40 s) |
+
+The app accepted all three writes, so the FF application's acceptance is measured for A, B and R on this
+platform. The stored bytes are the plain stamped image (word 0x238 solved, sum about 0x4856…), as the
+prediction says. Boot alone, one bank at a time: the other banks, and 0x14030000, erased over the J-Link
+(bank ranges only); the boot-config block was read before and after (sha `9f5e302d…`, cfg[0] 0, unchanged).
+
+**The bootloader's own form (measured).** The original R bank of the dump, which the camera boots alone with
+cfg[0] = 0 (sha `32af77ed…`, word 0x238 = 0, stored sum about 0x9266…), is not the page's form. It differs
+from the page's stored bytes in 49,050 of its first 49,308 bytes, and neither `X XOR ks0 XOR ksD` nor the
+two-stream staged form of the plain image gives it back. So on this bootloader the form that boots is the
+factory's encrypted one, and the form the FF application stores for the page is a plain image that does not
+boot. The prediction is right about what the bank holds; it is not right about what the bootloader accepts.
+
+**What the page does now (core `slots/ff-platform.ts`).** The FF image's bank rule follows the camera's
+bootloader, which the page reads from `GetFirmwareInfo` selector 1:
+
+- `0.9.0.0` (the 2014 bootloader, 42.10): R only, as before.
+- `2.0.2.3` (the FF platform, this section): every bank refused, with this measurement as the reason.
+- anything else, or no bootloader reported: every bank refused (conservative).
+
+The `recovery-only` label for an FF image in R is given only on 0.9.0.0 (`device-info.ts`), and the plan
+notes, the per-bank notes, the confirm dialog and the SlotsView text say which rule applies. The running
+application walk (`runningApplicationOf`) is unchanged: on this camera it reports the 8 Hz build (its 2014
+model reads the FF bank as plain), so the bootloader rule, not the walk, decides here. `write-commit.ts`
+now says correctly that 0x70100 is returned from several acceptance gates, not only nano and XR.
+
+**Boot tests that were not clean (recorded, not measured as results).**
+
+- *The 0x14030000 control.* The original R bytes written alone at 0x14030000 (A erased, B erased, cfg[0] 0)
+  read back as `0d3da45d…`, not `32af77ed…`, and the camera then ran "Jan  6 2017" from a bank this run
+  could not name. The halted reads after that returned the same 64 KiB block for several banks, the SPIFI
+  read artefact of 42.4. So whether 0x14030000 is the A bank of this bootloader is NOT established.
+- *Restore.* After the boot tests the whole flash was restored from the verified original (halted sha256
+  `40447c7e…eb72`); the camera runs 1.3.0.0 "Oct 21 2014" on bootloader 0.9.0.0 again.
+
+**Not measured.** Whether the page's form boots when another bank holds an image (A present and rejected, R
+as the fallback); whether an unsolved-word plain image boots; whether any form the page can produce boots
+on 2.0.2.3; the 8 Hz application on 2.0.2.3; cfg[0] values other than 0 and 2 (cfg[0] = 1 for B was not tried);
+the bank address question above. The bench flow (`spec-flow.ts`) now refuses the FF image for B, A and R on
+2.0.2.3 and runs no boot proof there; the per-bank boot tests of this section were run by hand from a scratch
+driver on the bench library (not committed).
+
+**Bench library.** `WRITABLE_BANKS` (adds 0x14030000 to the 2014 chain's three; still never the bootloader or
+the boot-config block) in `types.ts` and `jlink.ts`; `FF_PLATFORM_BOOTLOADER` in `ff-form.ts`; the FF flow in
+`spec-flow.ts` branches on the camera's reported bootloader; the fake rig takes `ffBootloader` and reports the
+bootloader for the FF subject before any boot. Tests in `bench-lib.e2e.ts`: the 2.0.2.3 refusals (B, A, R:
+nothing written, no boot proof), a page that takes the FF image for R on that bootloader (failed), and
+`writeBank` for 0x14030000 with the bootloader and boot-config addresses refused.
