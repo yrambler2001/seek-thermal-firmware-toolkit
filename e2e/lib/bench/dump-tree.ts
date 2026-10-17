@@ -177,9 +177,17 @@ function isOwnOriginal(row: IndexRow, own: { version: string; ff: boolean }): bo
   );
 }
 
+/**
+ * Whether a row's version or folder contains one of the `only` texts. The text may be a
+ * comma-separated list ('1.0.3.0,4.9.1.15'): a row is kept when any item matches.
+ */
 function matchesOnly(row: IndexRow, only: string | undefined): boolean {
-  if (only === undefined || only === '') return true;
-  return row.version.includes(only) || row.folder.includes(only);
+  if (only === undefined || only.trim() === '') return true;
+  const items = only
+    .split(',')
+    .map((item) => item.trim())
+    .filter((item) => item !== '');
+  return items.some((item) => row.version.includes(item) || row.folder.includes(item));
 }
 
 /** The file exists, is exactly one dump, and hashes to what the index says. */

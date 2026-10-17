@@ -309,6 +309,14 @@ describe('listBenchSubjects: the fixture tree', () => {
     expect(only.map((subject) => subject.folder)).toEqual(['2019.03.14-09.18.41-4.9.1.15']);
   });
 
+  it('keeps the rows any item of a comma-separated `only` names, in tree order', () => {
+    const only = listBenchSubjects({ root: MAIN_ROOT, only: ' 4.9 , 1.3.0.0 ' });
+    expect(only.map((subject) => subject.folder)).toEqual([
+      '2019.03.14-09.18.41-4.9.1.15',
+      '2014.10.21-14.58.29-1.3.0.0',
+    ]);
+  });
+
   it('refuses a tree whose board text does not name the own original', () => {
     const root = path.join(scratch, 'no-own-original');
     writeTree(root, 'Compact on board 297', [OWN_ROW]);
