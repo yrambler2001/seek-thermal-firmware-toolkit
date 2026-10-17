@@ -33,10 +33,11 @@ export const SLOT_BYTES = 0x10000;
  * the camera to end up with a bootable image in the bank. It differs by
  * generation, and the page must say which one it is building.
  *
- *  - 'key-a-ciphertext'        bank image + 0xFF pad + "CODE" footer, encrypted
- *                              under the camera's KEY A. The device decrypts it
- *                              and re-encrypts it under the store key itself
- *                              (`fw_validate_decrypt_program`). The 2017+ line.
+ *  - 'key-a-ciphertext'        bank image + 0xFF pad + "CODE" footer. The image is XORed
+ *                              with the keystreams that make the device's own two passes
+ *                              (its Key A, then its store key: `fw_validate_decrypt_program`)
+ *                              store it under the key the booted bank holds, derived from
+ *                              the camera (`write-keys.ts`). The 2017+ line.
  *  - 'slot-keystream-ciphertext' plain image XOR the stage key's keystream (key
  *                              block 0 of the image). The 2016 Compact PRO line;
  *                              measured on a real camera: the device re-encrypts
@@ -46,6 +47,16 @@ export const SLOT_BYTES = 0x10000;
  *                              chain, no cipher, no footer.
  */
 export type StagingForm = 'key-a-ciphertext' | 'slot-keystream-ciphertext' | 'plain';
+
+/**
+ * The key a derived write stores under, the booted bank it was derived from, and the key that bank
+ * holds (null when the bootloader's store key is not the one the bank holds).
+ */
+export interface DerivedKey {
+  readonly bank: SlotKey;
+  readonly key: string;
+  readonly holds: string | null;
+}
 
 /** What committing to this slot does besides programming the bank. */
 export type CommitEffect =
@@ -145,6 +156,11 @@ export interface SlotFlashPlan {
    * so plans built before it still type-check; an absent field reads as null.
    */
   readonly expectedPlain?: Uint8Array | null;
+  /**
+   * The booted bank and the key it holds, when this bank is written under a key derived from the
+   * camera (`write-keys.ts`); null for raw bytes and for the forms that take no derived key.
+   */
+  readonly derivedFrom?: DerivedKey | null;
   /** Human-readable rows: field, what the slot has now, what it will have. */
   readonly compare: readonly { field: string; before: string; after: string }[];
   /** Things to say loudly (writing the booted slot, writing recovery, a raw payload). */
