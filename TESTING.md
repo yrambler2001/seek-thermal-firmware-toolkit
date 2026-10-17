@@ -6402,3 +6402,69 @@ carries, and this session did not identify that pair. A pair from the 2016 line 
 `preservation/patch.ts`) would not be in the modern candidate table; adding one would be a decision
 about writing 2016 images into 4.x banks, and is not made here. The file-name rule is unchanged for
 named files.
+
+### 42.9 The bench, run on hardware (2026-10-17)
+
+Bench: the Compact board (PIR206, original 1.3.0.0), J-Link on switch channel 1, camera on channel 2.
+Each step below was run through `e2e/slots-bench.e2e.ts` (`SEEK_BENCH_SLOT_BOOT=1` for the boot
+proofs, `SEEK_BENCH_ONLY` for the subject, `SEEK_BENCH_PROBE` for the probes of sec. 42.9.2) or
+through `seek-fw slots` against the camera. Nothing outside the named banks was written.
+
+**Results**
+
+| Step          | Subject                                                 | What the camera did                                                                                                                                                                                                                                                                             | Result                                                                                  |
+| ------------- | ------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| T1 regression | Compact 0.9.1.0                                         | every write verified; boot test B, A, R each "booted-alone" ("Oct 2 201B/A/R")                                                                                                                                                                                                                  | pass (after the matcher fix below; the first run failed on the matcher, not the camera) |
+| T1            | Compact 4.8.1.9                                         | writes B, A, R ok; boot test B, A, R each "booted-alone"                                                                                                                                                                                                                                        | pass                                                                                    |
+| T1            | Compact Pro 4.9.2.0                                     | writes B, A, R ok; boot test B, A, R each "booted-alone"                                                                                                                                                                                                                                        | pass                                                                                    |
+| T1            | Mosaic 2.27.1.33 FF                                     | writes B, A, R ok; boot test B, A, R each "booted-alone" ("Dec 10 201B/A/R")                                                                                                                                                                                                                    | pass                                                                                    |
+| T2            | Compact 1.3.0.8 FF (launchable copy, sha256 `1095d108`) | flash verified; enumerated after 1163 ms; B and A refused at the picker; R written, read back as the predicted stored form, equal to the J-Link read                                                                                                                                            | refusals and R write pass; **boot proof fails** (below)                                 |
+| T3            | Mosaic 10.9.1.31 std                                    | derived B and R written through the page; cfg[0]=1 boots "Nov 19 201B"; cfg[0]=2 boots "Nov 19 201R"; cfg[0] restored to the saved block after each                                                                                                                                             | pass; A never written                                                                   |
+| T4            | Compact 4.16.1.7 FF                                     | the page refuses bank B's own decrypted image: "Rejected — see the log above."; logged: the upload is checked under the application's own keys and the key the writes use is neither its Key A nor its store key, so the camera would refuse it with 0x50000 before erasing                     | pass; nothing sent                                                                      |
+| T4            | Compact Pro 4.9.1.15                                    | the page refuses bank B's own decrypted image (named `seek-slot-B-v1.0.3.2-decrypted-…`, 51,728 B): "Rejected — see the log above."; logged: the file's name carries no key pair, and neither this camera's pair nor a decoded application pair occurs in the image exactly once                | pass; nothing sent                                                                      |
+| T5            | Compact 1.2.0.0 (blank B)                               | page lists B "empty"; dump B: 65,536 B of 0xFF, "empty, nothing to decrypt"; B filled from the booted bank A; read back and verified; boot test B alone "Oct 13 201B"                                                                                                                           | pass                                                                                    |
+| T5 CLI        | Compact 1.2.0.0                                         | `slots list`: B "empty", writable; `slots dump b`: raw 0xFF (`71189f7f`); `slots dump a`: decrypted `38a9036a`; `slots flash b <decrypted A> --yes`: commit status 0x0000, read-back matches (stored `230cc7a6`); B dump after a replug matches; with bank A erased, B alone runs "Oct 13 201B" | pass                                                                                    |
+| T6            | the camera                                              | flash restored to the baseline (halted read sha256 `40447c7e…eb72`); `seek-fw info`: PIR206 (the bench camera), firmware 1.3.0.0 "Oct 21 2014"; both switch channels on                                                                                                                         | pass                                                                                    |
+
+**T2: what the real FF app did, and why the boot proof fails.** The FF launchable copy boots bank A
+(`cfg[0] = 0`, the value the flashed image holds). Setting `cfg[0] = 2` (recovery) through FW-V1's
+`set-boot`, from the flashed image, verified after a power cycle, left the camera reporting build
+"Jan 6 2017" (bootloader 2.0.2.3), the same string as with `cfg[0] = 0`. The R bank held the
+patched plain image (build "Jan 6 2018" at offset 0xBF56, plain because the page writes the
+decrypted form), and after the patched write and a reset the camera still reported "Jan 6 2017".
+A power-cycled halted read showed SRAM holding "Jan 6 2017" written by that boot, and R's copy
+holding "2018" was never loaded. So on this camera the R image was not the one that ran under
+`cfg[0] = 2`. Which bank the locked 2014 line boots is not established here: `seek-fw info` says its
+bootloader's `select_boot_slot()` has not been reconstructed, so `cfg[0]` may not select recovery on
+this line at all. The bank R write itself is sound (sec. 42.6); the boot is the open item.
+
+**Bench-side findings, fixed in the bench (not the page or core):**
+
+- The matcher for the Dump's file name did not know an empty bank's raw dump, `seek-slot-B-empty-raw-<sha8>.bin`
+  (sec. 42.8). `rawDumpNamePattern` and `decryptedDumpNamePattern` (`e2e/lib/slots-page.ts`) now do.
+- A refusal at the picker needs the banks read in that window first; the refusal opens a window and
+  reads the slots before it picks (`refuseBank`).
+- A halted read straight after a page write is not reliable (sec. 42.4): it returned erased bytes for
+  the boot-config block and bank A, and the "changed over the run" check reported false changes. The
+  boot-config check and the end-of-run comparison now run after a power cycle (`setBootSlotVerified`).
+- A derived write's read-back carries the camera's own key pair where the image held the application's
+  (the page's retarget, sec. 42.7): 32 bytes at the pair's offsets, the adjust word as before. The
+  comparison accepts exactly that, where the read-back holds the pair its own file name gives
+  (`sameAsWrittenUpToKeyPair`), and nothing else may differ.
+
+**Code for the bench:** `e2e/lib/bench/ff-form.ts` (the FF subject and its predicted stored form),
+`spec-flow.ts` (the FF path, the probes `refuse-b`, `empty-b`, `derived`, and the boot-config helper),
+`spec-page.ts` and `spec-rig.ts` (the page's `refuse`, `fill`, and the dump's status), `spec-fakes.ts`
+and `bench-lib.e2e.ts` (the fake rig and its tests: 88 pass, 2 more with the corpus tree),
+`jlink.ts` and `types.ts` (`setBootSlot` through FW-V1's `set-boot`), `slots-page.ts` (the dump names,
+the fill button), and `slots-bench.e2e.ts` (`SEEK_BENCH_PROBE`).
+
+#### 42.9.2 The probes
+
+`SEEK_BENCH_PROBE` runs one probe on each subject in place of its full flow:
+
+- `refuse-b`: bank B's own decrypted image is offered at the picker; the page must refuse it, with no
+  request sent and every region of the part unchanged.
+- `empty-b`: the empty bank as a user does it (list, dump, fill from the booted bank, the B-alone boot test).
+- `derived`: B and then R each take a build-string-marked image through the page, each is booted with its
+  own `cfg[0]`, and `cfg[0]` is restored to the saved block. A is never written.
