@@ -1,139 +1,183 @@
 /* ==================================================================== *
- * Which application the camera RUNS, on the 2014 plaintext chain.
+ * Which application the camera RUNS, on the 1.3.0.8 build: the 8 Hz plain build or the
+ * 16 Hz FF build. Both report the one version string 1.3.0.8, and the FF image is staged in
+ * a form only the FF build accepts (ff-form.ts), so the page needs the answer before it sends.
  *
- * The 1.3.0.8 8 Hz build and its 16 Hz FF build report one version string, and the
- * 8 Hz application refuses the FF staged payload at commit (TESTING.md 42.10). So a
- * write of the FF image needs the application that is running, and the camera's boot
- * record cannot give it on this line: `state.boot` is the active-slot word's pair, and
- * recovery R runs when A and B hold nothing the bootloader takes, which that word does
- * not show.
- *
- * The decision follows the bootloader instead. The 2014 bootloader takes a bank only
- * when its stored word sum is 0 (`bootloaderFailures` in write-image.ts). It boots A if
- * A is taken, else B if B is, else recovery R, which runs whatever it holds (TESTING.md
- * 42.10, steps 4, 5, 6a to 6c and 7). That order was measured with cfg[0] = 0, the
- * value on the bench camera and in the corpus donor, so any other cfg[0] is not decided
- * here: the answer is unknown, and the page says so.
+ * THE CAMERA ANSWERS, bank by bank. GetFirmwareInfo selectors 6, 7 and 8 return one byte each:
+ * whether the application that answers takes the bank at 0x14050000 (A), 0x14060000 (B) and
+ * 0x14070000 (R). Each build's check is in its own source:
+ *   8 Hz  image_sum_ok (compact_8hz_1_3_0_8/src/rpc_cmds.c cases 6/7/8, src/crypto.c): the
+ *         magic at 0x200, a length under 0x10000, and the PLAIN word sum over the header length is 0.
+ *   16 Hz image_sum_ok_r32k (compact_ff_16hz_1_3_0_8/src/rpc_cmds.c cases 6/7/8, src/crypto.c,
+ *         the device-seeded walk): the same guards, and the word sum of the bank, each word XOR
+ *         the Key B keystream outside the header window 0x200..0x23F, is 0xFFFF.
+ * The page computes each build's three bytes from the bank bytes it read. The camera's three
+ * bytes decide: they must equal exactly one build's. Otherwise the build is unknown, and the FF
+ * write needs the user's own word (write.ts). TESTING.md 42.12 has the measured bytes.
  * ==================================================================== */
 
-import { hex } from '../bytes.js';
+import { viewOf } from '../bytes.js';
 import { wordSum32 } from '../image/bank.js';
+import { HEADER_OFFSET, IMAGE_MAGIC, LENGTH_OFFSET } from '../image/header.js';
 import type { FirmwareProfile, SlotKey } from '../profiles/types.js';
-import type { DeviceState, SlotState } from '../workflows/types.js';
-import { classifyBuild } from './capability-family.js';
-import { plainChainBuildOf, type PlainChainBuild } from './write-image.js';
+import { keystream, keyWordsOf, KEY_PAIRS, xorWindowVerbatim } from '../preservation/patch.js';
+import type { BankVerdicts, DeviceState, SlotState } from '../workflows/types.js';
+import { classifyBuild, FF_1308_VERSION } from './capability-family.js';
+import { FF_ACCEPT_SUM } from './ff-form.js';
 
-/** The cfg[0] value every measurement of this boot order was taken under (TESTING.md 42.10). */
-export const MEASURED_CFG0 = 0;
+/** The camera's answer for one bank, from a page-side prediction: 1 accepts, 0 refuses. */
+export type Verdict = 0 | 1;
 
-const BANK_NAME: Readonly<Record<SlotKey, string>> = {
-  a: 'slot A',
-  b: 'slot B',
-  r: 'recovery bank R',
-};
-
-export interface RunningApplication {
-  /** The bank the camera runs, or null when the analysis cannot say which. */
-  readonly bank: SlotKey | null;
-  /**
-   * The build that bank holds: 'plain' for the 8 Hz 1.3.0.8 image (any image whose stored
-   * word sum is 0), 'ff-1308' for the 16 Hz FF build. Null when it cannot be told.
-   */
-  readonly build: PlainChainBuild | null;
-  /** What was decided and why, as a clause a sentence can carry. */
-  readonly why: string;
-}
-
-function unknownRun(why: string): RunningApplication {
-  return { bank: null, build: null, why };
-}
-
-/** A present bank's image: the bytes its header length covers. Null when the read holds none. */
-function imageOf(slot: SlotState | undefined): Uint8Array | null {
-  if (slot === undefined || !slot.present || slot.raw === null || slot.header === null) return null;
-  return slot.raw.subarray(0, slot.header.length);
-}
-
-/** The version a bank's cleartext header reports. */
-function versionOf(slot: SlotState): string | null {
-  return slot.header?.versionStr ?? slot.plainHeader?.versionStr ?? null;
+/** The header length a bank's image declares, when the bank holds one, else null. */
+function declaredLength(bank: Uint8Array): number | null {
+  if (bank.length < HEADER_OFFSET + 4 + 4) return null;
+  const dv = viewOf(bank);
+  if (dv.getUint32(HEADER_OFFSET, true) !== IMAGE_MAGIC) return null;
+  const length = dv.getUint32(LENGTH_OFFSET, true);
+  return length < 0x10000 ? length : null;
 }
 
 /**
- * The application the camera runs, from the banks the analysis read. Pure; nothing is
- * sent. Unknown (never a guess) when a bank the order depends on was not read, when a
- * taken bank reports another version than the camera, when cfg[0] is not the measured
- * one, or when the image in R cannot be told apart.
+ * The 8 Hz build's answer for a bank (`image_sum_ok`): the magic, a length under 64 KiB, and
+ * the plain word sum over the header length is 0. Null when the bank cannot be walked.
+ */
+export function plainBankVerdict(bank: Uint8Array): Verdict | null {
+  const length = declaredLength(bank);
+  if (length === null) return bank.length < HEADER_OFFSET + 8 ? null : 0;
+  const words = length >>> 2;
+  if (words * 4 > bank.length) return null;
+  return wordSum32(bank, words * 4) === 0 ? 1 : 0;
+}
+
+/**
+ * The 16 Hz FF build's answer for a bank (`image_sum_ok_r32k`, the device-seeded walk): the same
+ * guards, and the word sum of (word XOR the Key B keystream, header window verbatim) is 0xFFFF.
+ * Null when the bank cannot be walked.
+ */
+export function ffBankVerdict(bank: Uint8Array): Verdict | null {
+  const length = declaredLength(bank);
+  if (length === null) return bank.length < HEADER_OFFSET + 8 ? null : 0;
+  const words = length >>> 2;
+  if (words * 4 > bank.length) return null;
+  const walked = xorWindowVerbatim(
+    bank.subarray(0, words * 4),
+    keystream(keyWordsOf(KEY_PAIRS.ff1308.block1), words),
+  );
+  return wordSum32(walked, words * 4) === FF_ACCEPT_SUM ? 1 : 0;
+}
+
+export interface RunningApplication {
+  /**
+   * The build the camera runs: 'plain' (the 8 Hz 1.3.0.8 build), 'ff-1308' (the 16 Hz FF build),
+   * or null when the camera's bytes do not decide it.
+   */
+  readonly build: 'plain' | 'ff-1308' | null;
+  /** What decided it, as a sentence the page and the CLI can carry. */
+  readonly why: string;
+  /** The camera's own answers for A, B and R (selectors 6, 7, 8), or null when not read. */
+  readonly camera: BankVerdicts | null;
+  /** Each build's predicted answers from the bank bytes the page read, or null where a bank was not read. */
+  readonly predicted: { readonly plain: BankVerdicts | null; readonly ff: BankVerdicts | null };
+}
+
+const KEYS: readonly SlotKey[] = ['a', 'b', 'r'];
+
+/**
+ * The bytes a bank's answer is computed from. An erased bank read clean (`blank`) keeps only its header
+ * window on the read, which is all 0xFF: both builds refuse it, so that window is the whole answer.
+ */
+function bankBytesOf(slot: SlotState): Uint8Array | null {
+  if (slot.raw) return slot.raw;
+  if (slot.blank === true && !slot.unread) return new Uint8Array(HEADER_OFFSET + 8).fill(0xff);
+  return null;
+}
+
+/** One build's three answers from the page's bank reads, or null when a bank the answer needs was not read. */
+function predicted(
+  state: DeviceState,
+  verdict: (bank: Uint8Array) => Verdict | null,
+): BankVerdicts | null {
+  const out: Record<SlotKey, Verdict | null> = { a: null, b: null, r: null };
+  for (const key of KEYS) {
+    const slot = state.byKey.get(key);
+    const bytes = slot === undefined || slot.unread ? null : bankBytesOf(slot);
+    if (bytes === null) return null;
+    const answer = verdict(bytes);
+    if (answer === null) return null;
+    out[key] = answer;
+  }
+  return out;
+}
+
+function sameAnswers(a: BankVerdicts, b: BankVerdicts): boolean {
+  return a.a === b.a && a.b === b.b && a.r === b.r;
+}
+
+function triple(v: BankVerdicts | null): string {
+  if (v === null) return 'not known';
+  return `A ${String(v.a)}, B ${String(v.b)}, R ${String(v.r)}`;
+}
+
+/**
+ * The application the camera runs, from its own per-bank answers. Pure; nothing is sent. Unknown
+ * (never a guess) when the camera did not answer the selectors, a bank was not read, or the two
+ * builds would answer the same bytes for these banks.
  */
 export function runningApplicationOf(state: DeviceState): RunningApplication {
-  if (state.version === null) {
-    return unknownRun('the camera does not say which firmware it runs');
-  }
-  if (typeof state.cfg0 !== 'number') {
-    return unknownRun('cfg[0] was not read, and the boot order was measured with cfg[0] 0 only');
-  }
-  if (state.cfg0 !== MEASURED_CFG0) {
-    return unknownRun(
-      `cfg[0] is ${hex(state.cfg0)}, and the boot order was measured with cfg[0] 0 only`,
+  const predictions = {
+    plain: predicted(state, plainBankVerdict),
+    ff: predicted(state, ffBankVerdict),
+  };
+  const camera = state.bankVerdicts ?? null;
+  const unknown = (why: string): RunningApplication => ({
+    build: null,
+    why,
+    camera,
+    predicted: predictions,
+  });
+  if (state.version !== FF_1308_VERSION) {
+    return unknown(
+      `the camera reports ${state.version ?? 'no version'}, and only ${FF_1308_VERSION} has two builds`,
     );
   }
-
-  for (const key of ['a', 'b'] as const) {
-    const slot = state.byKey.get(key);
-    if (slot === undefined || slot.unread) {
-      return unknownRun(
-        `${BANK_NAME[key]} was not read, so whether the bootloader takes it is not known`,
-      );
-    }
-    const image = imageOf(slot);
-    if (image === null || wordSum32(image, image.length) !== 0) continue;
-    const version = versionOf(slot);
-    if (version !== state.version) {
-      return unknownRun(
-        `${BANK_NAME[key]} holds an image with word sum 0 that reports ${version ?? 'no version'}, ` +
-          `but the camera reports ${state.version}`,
-      );
-    }
+  if (camera === null || camera.a === null || camera.b === null || camera.r === null) {
+    return unknown('the camera did not answer the bank verdicts (GetFirmwareInfo selectors 6, 7, 8)');
+  }
+  if (predictions.plain === null || predictions.ff === null) {
+    return unknown('a bank the verdicts depend on was not read, so the answers cannot be predicted');
+  }
+  const plainMatch = sameAnswers(camera, predictions.plain);
+  const ffMatch = sameAnswers(camera, predictions.ff);
+  const answers = `the camera answers ${triple(camera)}`;
+  if (plainMatch && !ffMatch) {
     return {
-      bank: key,
       build: 'plain',
-      why: `${BANK_NAME[key]} is the first bank the 2014 bootloader takes (its stored word sum is 0)`,
+      why: `${answers}, which is what the 8 Hz 1.3.0.8 build answers for these banks (${triple(predictions.plain)})`,
+      camera,
+      predicted: predictions,
     };
   }
-
-  const recovery = state.byKey.get('r');
-  if (recovery === undefined || recovery.unread) {
-    return unknownRun(
-      'recovery bank R was not read, and A and B hold nothing the bootloader takes',
+  if (ffMatch && !plainMatch) {
+    return {
+      build: 'ff-1308',
+      why: `${answers}, which is what the 16 Hz FF 1.3.0.8 build answers for these banks (${triple(predictions.ff)})`,
+      camera,
+      predicted: predictions,
+    };
+  }
+  if (plainMatch && ffMatch) {
+    return unknown(
+      `${answers}, and both builds answer exactly that for these banks, so the banks do not tell them apart`,
     );
   }
-  const image = imageOf(recovery);
-  if (image === null) {
-    return unknownRun('neither A nor B holds an image the bootloader takes, and R holds none');
-  }
-  const version = versionOf(recovery);
-  if (version !== state.version) {
-    return unknownRun(
-      `recovery bank R holds an image that reports ${version ?? 'no version'}, ` +
-        `but the camera reports ${state.version}`,
-    );
-  }
-  let build: PlainChainBuild;
-  try {
-    build = plainChainBuildOf(image);
-  } catch {
-    return unknownRun('recovery bank R holds an image this page cannot tell apart');
-  }
-  return {
-    bank: 'r',
-    build,
-    why: 'neither A nor B holds an image the 2014 bootloader takes, so recovery R runs the image it holds',
-  };
+  return unknown(
+    `${answers}, which matches neither build (8 Hz: ${triple(predictions.plain)}; 16 Hz FF: ${triple(predictions.ff)})`,
+  );
 }
 
 /**
  * Whether this build is on the 2014 plaintext chain, where the page's booted bank comes from
- * the camera's active-slot word and recovery R can run instead (`runningApplicationOf`).
+ * the camera's active-slot word and recovery R can run instead (device-info.ts `chainReplay`).
  */
 export function onPlaintextChain(profile: FirmwareProfile, version: string | null): boolean {
   return classifyBuild(profile, version).family === 'locked-plain';

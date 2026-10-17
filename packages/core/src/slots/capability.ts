@@ -32,7 +32,7 @@
  *   modern          2.x/4.x/10.x/42.x/44.x  key-a-ciphertext    dump yes, flash yes
  *   locked-plain    0.8.0.0 .. 1.3.0.8 8 Hz  plain               dump yes, flash yes
  *                   (1.3.0.8 shares its string with the FF build: the writer tells them apart
- *                   on the image, and stages FF in its own form for bank R only)
+ *                   on the image, and stages FF in its own vendor form, for A, B and R)
  *   locked-2016     Compact PRO 1.0.3.0/1.0.3.2  slot-keystream  dump yes, flash yes
  *   unverified-locked other 0.x/1.x          none                dump yes, flash no
  *   pre-0.8 / unidentified                   none                dump no, flash no

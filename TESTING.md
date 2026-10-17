@@ -6160,6 +6160,8 @@ All 12 subjects tested pass, every bank booting alone (36 of 36 bank boots):
 
 ### 42.6 Compact 1.3.0.8 FF on the slots page (2026-10-17)
 
+**Superseded (sec. 42.12).** The two-stream form, the solved word 0x238 and the R-only rule below are no longer what the page sends: the FF image is staged as the vendor app stages it and goes to A, B or R.
+
 The refusal recorded in 41.2, 42.1 and 42.4 is replaced by a write: the page and `seek-fw slots flash`
 now write the 16 Hz FF image to the recovery bank R, and refuse it for A and B.
 
@@ -6540,6 +6542,8 @@ reconstructed), so the evidence is the running build string and the banks that h
 
 ### 42.11 What the page does with the FF image now (2026-10-17)
 
+**Superseded in part (sec. 42.12).** The R-only and the 8 Hz refusal rules are replaced: the running build is now read from the camera's own per-bank answers (selectors 6, 7, 8), and an undecided camera needs the person's word. The labels below stand where they do not concern the form.
+
 The page takes its decisions on the 2014 chain from the banks, not from the camera's boot record
 (sec. 42.10 measured that it is not one on this line). Nothing here was run on the bench; the
 checks are unit and emulator tests.
@@ -6579,3 +6583,110 @@ page's two-stream payload (not sent: raw writes are unchanged). Any cfg[0] other
 bank B that holds a stored-sum-0 image alone is taken (42.10 measured A only). The first FF write
 to R on a camera running the 8 Hz build, which the page now refuses, is still to be run with the
 J-Link route the refusal names.
+
+### 42.12 The vendor's own staged form, to A, B and R; the running build from the camera's own answers (2026-10-18)
+
+The page's 1.3.0.8 FF write (42.6, 42.10, 42.11) is replaced. The FF image is now staged the way the vendor
+app stages it, goes to A, B or R, and the build the camera runs comes from the camera's own answers, not from
+the bootloader's boot order. The bench run below is the first hardware run of the new form. What it does not
+show is stated under "Not measured".
+
+**What the vendor image proved (measured on the host, no hardware).** The vendor file
+`firmware_extracted/32K_43X0_1.3.0.8_COMPACT-16HZ_Public.bin` (49,308 B, sha256 `fd9da63b…`) is the corpus
+FF image (sha256 `b97ced91…`) with the words outside the header window 0x200..0x23F XORed with the xorshift128
+stream of key block 0 (Key A, `5d798479…`), used raw (no 0x13579BDF whitening): 12,311 of 12,311 words, and the
+16 header words verbatim. Key block 1 (`b5541579…`) matches nothing in the vendor file. Its word sum is 0xFFFF
+(the FF app's gate on the staged bytes, sum(staged XOR Key A), is therefore 0xFFFF). The FF app re-keys the staged
+bytes with key block 1 and programs the result (FW-V1 `compact_ff_16hz_1_3_0_8` `cmd_CompleteMemoryUpgrade`,
+type 0 and types 7 to 9), so the bank keeps the image XOR Key B: predicted sha `fdc8be40…`, 12,327 of 12,327 words
+(`scratchpad/ff/verify.mjs`, an independent re-derivation of the keystream). The page's previous payload (the
+two-stream form with word 0x238 solved to `0x485562E8`) differs from the vendor file in 12,312 words.
+
+**The form the page sends now** (`packages/core/src/slots/ff-form.ts`). `stageFFVendor` returns the staged
+payload (image XOR Key A, header verbatim, no word solved), the stamped image, and the stored bank (image XOR
+Key B). It refuses an image whose word sum is not 0xFFFF, whose key pair is not found exactly once per half, or
+that is over the 0xE000 staging buffer. The stored name is `key-b-ciphertext` (`StoredForm`); the staged name is
+`key-a-keystream` (`PlanStaging`). `write-verify.ts` compares the read-back byte for byte with the stored bank.
+A raw payload that is the vendor form (`ffPlainOfStaged`) is recognised and predicted the same way.
+
+**Bank addresses** (the 1.3.0.8 FF build's own code, not the modern layout): A 0x14050000 (mode 7), B 0x14060000
+(mode 8), R 0x14070000 (mode 9). Source: `compact_8hz_1_3_0_8` and `compact_ff_16hz_1_3_0_8` `rpc_cmds.c`,
+`cmd_GetFirmwareInfo` cases 6 to 8 (`0x14050000/0x14060000/0x14070000`) and the window switch of
+`cmd_BeginFirmwareUpgrade` (modes 7, 8, 9). The bootloader's choice of boot bank is not used for any decision.
+
+**Writes use the direct modes 7, 8 and 9 only.** Mode 0 (the upgrade flow) and the image-select record at
+0x14010000 are never written. The page's own checks (`writeWindowOf`, `flashSlot`) enforce it.
+
+**How the build is decided (`packages/core/src/slots/running.ts`).** GetFirmwareInfo selectors 6, 7 and 8
+return one byte each, for A, B and R. The page reads them on 1.3.0.8 only (`readBankVerdicts` in
+`workflows/device-info.ts`). Setting the selector (`SetFirmwareInfoFeatures`, wire 0x55) latches it in RAM, and
+the GetFirmwareInfo read returns the byte and clears it. Nothing is armed and nothing is written (FW-V1
+`cmd_SetFirmwareInfoFeatures` latches `info_index` only; the getter returns one byte, `bootloader_info = 1`).
+Each build's predicted byte, for a bank the page read:
+
+- 8 Hz (`image_sum_ok`, `compact_8hz_1_3_0_8`): the magic at 0x200, a length under 0x10000, and the PLAIN word
+  sum over the header length is 0.
+- 16 Hz (`image_sum_ok_r32k` at 0x10080671, disassembled in the FF image: `BL 0x1008085C`, the device-seeded walk
+  whose keystream is key block 1 from the pool word 0x100023C0 through `prng_seed_device_or_key` at 0x10080748):
+  the same guards, and the sum of (word XOR Key B, header window verbatim) is 0xFFFF.
+
+The camera's three bytes must equal exactly one build's three predictions. If both equal them, or neither does,
+the build is not decided (`null`), and the FF write is refused unless the person says the camera runs the 16 Hz
+build (`--running-16hz`; the page's box). A wrong choice is refused by the camera with 0x00070100 before anything
+is programmed (the 8 Hz build's plain word-sum gate, `cmd_CompleteMemoryUpgrade` case 9).
+
+The predicted bytes for each bank content (host, `scratchpad/ff/verdicts.mjs`; 8 Hz and 16 Hz columns):
+
+| bank content | 8 Hz | 16 Hz |
+| --- | --- | --- |
+| 8 Hz plain image (sum 0) | 1 | 0 |
+| FF image as the J-Link loads it (plain, sum 0xFFFF) | 0 | 0 |
+| FF stored form, image XOR Key B (the vendor write) | 0 | 1 |
+| the earlier page's stored form (plain, word 0x238 solved) | 0 | 1 |
+| erased bank | 0 | 0 |
+
+Two consequences. A plain FF image in a bank is answered 0 by both builds, so the FF-in-R state of 42.10 cannot be
+told apart by the answers (step 2 below). And once one bank holds the FF stored form, the answers name the build.
+
+**The bench (run 2026-10-18, `e2e/ff-vendor.e2e.ts`, `e2e/lib/bench/ff-vendor-run.ts`).** Platform: the whole flash
+is the 1.3.0.8 8 Hz dump (sha256 `afa9800f…`); the FF app (plain image, `b97ced91…`, padded to a bank) is loaded
+into R by the J-Link (`writeBank`), A and B are erased and verified erased, and the camera is power-cycled, so the
+FF app runs from R. The writes are the core's own `seek-fw slots flash` (the same write path the page runs, as in
+42.10; the Electron page was not driven). Every halted read is the J-Link's own. The restore point is checked
+first, and the original 4 MiB is written back and verified at the end.
+
+| step | what happened | result |
+| --- | --- | --- |
+| restore point | halted read of the whole flash, sha256 `40447c7e…eb72` | the original; `1.3.0.0 Oct 21 2014` |
+| 8 Hz platform | the 8 Hz dump flashed, verified halted, power cycle | 1.3.0.8, answers A 1, B 0, R 1: build `plain` (predicted 1,0,1 for 8 Hz; 0,0,0 for 16 Hz) |
+| FF-in-R platform | FF plain loaded into R, A and B erased (verified), power cycle | answers A 0, B 0, R 0: build not decided (both predict 0,0,0 for this state, as the table above says) |
+| write A (mode 7) | `slots flash a <FF> --acknowledge-risk --yes --running-16hz --json` | exit 0, commit status 0x0000, verified; the J-Link read equals the prediction, sha `0e5d8355…` (the stored form) |
+| write B (mode 8) | the same, bank B | exit 0, commit 0x0000, verified; J-Link equals the prediction |
+| write R (mode 9) | the same, bank R | exit 0, commit 0x0000, verified; J-Link equals the prediction |
+| after the three writes | the FF app still running from RAM; answers read | A 1, B 1, R 1: build `ff-1308` (predicted 1,1,1 for 16 Hz; 0,0,0 for 8 Hz) |
+| boot after the writes | power cycle | the camera did not come back on USB within 60 s. Expected: the bootloader passes A and B (stored word sum not 0) and runs R unchecked, and R holds the encrypted form (no boot; recorded as observed, not a failure) |
+| staged payload | the bench's prediction of the staged payload (`predictedFFVendorPayload`) | sha256 `fd9da63b…`, byte-equal to the vendor file (checked by the run: `vendor file true`) |
+| restore | whole flash written back from the original, verified halted, power cycle | `1.3.0.0 Oct 21 2014`; the flash is the original `40447c7e…` |
+
+Operational notes. The first attempt stopped at the halted verify after the 8 Hz platform flash ("the CPU could not
+be halted twice", the first halted read after a flash, 42.4). The restore that followed was carried out, and a
+recovery run read the flash back as the original (`40447c7e…`) before the second attempt. The second attempt added a
+channel-2 power cycle before a halted read that fails (`haltedRead`, `verifyWithRetry`); it passed. A worktree's
+default switch directory resolves inside `.claude/`, so `SEEK_E2E_SWITCH_DIR` must name `usb-port-switch-rp2040`.
+
+**The expected no-boot, and why.** No genuine bootloader for this build is in the corpus, so the boot of a written
+bank is not measured, and the page does not claim it. On the 2014 bootloader, A and B holding the stored form are
+passed over (their stored word sum is not 0). Recovery R runs its bank unchecked, and the 0.9.0.0 bootloader does
+not decrypt it (42.10), so the encrypted stored form in R is not run. The earlier plain form did boot from R (42.10),
+which is why the plan's UNTESTED note says that form and this one behave differently. The camera was not expected to
+boot, and after the R write it did not come back on the bus.
+
+**Not measured.** The boot of any vendor-form bank. The page's own Electron write (the checkbox and the picker):
+it is unit-tested (`SlotsView.test.tsx`, `useSlotsPanel.test.tsx`) and the write path is the same core code the CLI
+run used. Whether the camera's answers were the basis of the B and R writes: the answers were 1,0,0 after A (the
+FF build's own), which the core reads as the camera's own word (inferred from the answers; the run did not record
+the plan's basis line). The 8 Hz build's refusal of a vendor payload on hardware (not sent: no 8 Hz write was made).
+The old plain form's boot (42.10 is not re-run).
+
+**Software changes** (branch `worktree-agent-a306c35298066fd96`, not pushed): the vendor-form and camera-answer
+commit (`da7af17`), and the follow-up commits recorded in the report.

@@ -40,6 +40,7 @@ import {
   xorWindowVerbatim,
 } from '../../src/preservation/patch.js';
 import { sha256Sync } from '../../src/slots/write-sha.js';
+import { stageFFVendor } from '../../src/slots/ff-form.js';
 import {
   SLOT_BYTES,
   type SlotFlashPlan,
@@ -855,7 +856,9 @@ describe('flashSlot gates', () => {
 });
 
 /* ==================================================================== *
- * The 1.3.0.8 FF (16 Hz) image: two-stream staging, bank R only
+ * The 1.3.0.8 FF (16 Hz) image: the vendor staged form, to A, B or R (TESTING.md 42.12).
+ * The running build is the user's word here (no bank bytes are read in these fixtures);
+ * the camera's own answers that decide it are tested in running.test.ts.
  * ==================================================================== */
 
 describe('the 1.3.0.8 FF image on the slot writer', () => {
@@ -864,19 +867,22 @@ describe('the 1.3.0.8 FF image on the slot writer', () => {
   const slots = (['a', 'b', 'r'] as const).map((k) =>
     slotState({ key: k, present: true, accepts: true }),
   );
+  const asRunning16 = { running16Hz: true };
 
-  /** A synthetic FF image: the real key pair once each, the adjust word free. */
+  /** A synthetic FF image: the real key pair once each, word 142 solved to a plain sum of 0xFFFF. */
   function ffImage(): Uint8Array {
     const out = imageOf(0x6000, 71);
     out.set(hexToBytes(KEY_PAIRS.ff1308.block0), 0x3000);
     out.set(hexToBytes(KEY_PAIRS.ff1308.block1), 0x3100);
-    new DataView(out.buffer).setUint32(FF_OFFSET, 0, true);
+    const dv = new DataView(out.buffer);
+    dv.setUint32(FF_OFFSET, 0, true);
+    dv.setUint32(FF_OFFSET, (0xffff - wordSum32(out, out.length)) >>> 0, true);
     return out;
   }
 
-  function reportOn(booted: SlotKey | null = null, version = '1.3.0.8'): SlotsReport {
+  function reportOn(version = '1.3.0.8'): SlotsReport {
     return reportFor(
-      stateFor(legacy, { version, slots, booted }),
+      stateFor(legacy, { version, slots, booted: null }),
       version === '1.3.0.8' ? plan : buildSlotPlan(legacy, version),
     );
   }
@@ -887,104 +893,82 @@ describe('the 1.3.0.8 FF image on the slot writer', () => {
     fileName: 'ff.bin',
   });
 
-  it('is staged in the two-stream form for recovery R, with the stored bytes predicted', () => {
-    const out = prepareSlotFlash(reportOn(), 'r', input(ffImage()));
-    expect(out.staging).toBe('two-stream');
-    expect(out.storedForm).toBe('two-stream-fold');
-    expect(out.key).toBe('r');
-    expect(out.payload.length).toBe(0x6000);
-    /* The wire payload is the image XOR ks0 XOR ksD (header verbatim), its collapsed gate 0xFFFF. */
-    const ks0 = keystream(keyWordsOf(KEY_PAIRS.ff1308.block0), 0x6000 >>> 2);
-    const ksD = keystream(keyWordsOf(KEY_PAIRS.ff1308.block1), 0x6000 >>> 2);
-    expect(wordSum32(xorWindowVerbatim(out.payload, ks0), 0x6000)).toBe(0xffff);
-    /* What the bank holds is the plain image the payload folds to, then erased. */
-    expect(out.expectedPlain).not.toBeNull();
-    expect(
-      equalBytes(xorWindowVerbatim(xorWindowVerbatim(out.payload, ks0), ksD), out.expectedPlain!),
-    ).toBe(true);
-    expect(out.expectedStored?.length).toBe(SLOT_BYTES);
-    expect(equalBytes(out.expectedStored!.subarray(0, 0x6000), out.expectedPlain!)).toBe(true);
-    expect(out.expectedStored![0x6000]).toBe(0xff);
-    expect(equalBytes(out.payload, out.expectedPlain!)).toBe(false);
-    expect(out.sum16).toBe(transferSum16(out.payload));
-    /* The compare rows speak of the stored image (a sha of the image, not of the payload). */
-    const shaRow = out.compare.find((r) => r.field.startsWith('SHA-256'));
-    expect(shaRow?.field).toBe('SHA-256 of the image');
-    expect(shaRow?.after).toBe(sha256Sync(out.expectedPlain!));
-  });
-
-  it('says what it does: two keystreams, the solved adjust word, the stored word sum, recovery only', () => {
-    const out = prepareSlotFlash(reportOn(), 'r', input(ffImage()));
-    const text = out.warnings.join('\n');
-    expect(text).toMatch(/1\.3\.0\.8 FF \(16 Hz\) image/);
-    expect(text).toMatch(/XOR two keystreams/);
-    expect(text).toMatch(/header word at 0x238 is set to 0x[0-9A-F]+/);
-    expect(text).toMatch(/collapsed word sum is 0xFFFF/);
-    expect(text).toMatch(/only the recovery bank R takes it/);
-    /* Recovery's own warning and the plan notes are still there. */
-    expect(out.warnings.some((w) => w.includes('Recovery bank R: writing it needs'))).toBe(true);
-    expect(
-      out.warnings.some((w) => w.startsWith('Note:') && w.includes('ONLY from recovery')),
-    ).toBe(true);
-  });
-
-  it('banks A and B refuse the FF image before anything is built, naming recovery', () => {
-    for (const key of ['a', 'b'] as const) {
-      const error = refusalOf(() => prepareSlotFlash(reportOn(), key, input(ffImage())));
-      expect(error.code).toBe('slots/refused');
-      expect(error.message).toContain('the 0xFFFF sentinel');
-      expect(error.message).toContain('recovery bank R');
-      expect(error.message).toContain(`not to bank ${key.toUpperCase()}`);
+  it('is staged in the vendor form for A, B and R alike, with the stored bytes predicted', () => {
+    const image = ffImage();
+    const staged = stageFFVendor(image);
+    for (const key of ['a', 'b', 'r'] as const) {
+      const out = prepareSlotFlash(reportOn(), key, input(image), asRunning16);
+      expect(out.staging).toBe('key-a-keystream');
+      expect(out.storedForm).toBe('key-b-ciphertext');
+      expect(out.ffRunning).toBe('user');
+      expect(out.key).toBe(key);
+      expect(equalBytes(out.payload, staged.staged)).toBe(true);
+      expect(out.expectedStored?.length).toBe(SLOT_BYTES);
+      expect(equalBytes(out.expectedStored!.subarray(0, 0x6000), staged.stored)).toBe(true);
+      expect(out.expectedStored![0x6000]).toBe(0xff);
+      expect(equalBytes(out.expectedPlain!, image)).toBe(true);
     }
   });
 
-  it('the 8 Hz image is unchanged: plain staging into A, B and R alike', () => {
+  it('the payload is the image XOR Key A, and the app’s gate on it, sum(payload XOR Key A), is 0xFFFF', () => {
+    const out = prepareSlotFlash(reportOn(), 'r', input(ffImage()), asRunning16);
+    const ks0 = keystream(keyWordsOf(KEY_PAIRS.ff1308.block0), 0x6000 >>> 2);
+    expect(wordSum32(xorWindowVerbatim(out.payload, ks0), 0x6000)).toBe(0xffff);
+    expect(out.payload.length).toBe(0x6000);
+    expect(out.sum16).toBe(transferSum16(out.payload));
+  });
+
+  it('says what it does: Key A, Key B, that the boot is untested, and that the user said the 16 Hz build', () => {
+    const out = prepareSlotFlash(reportOn(), 'a', input(ffImage()), asRunning16);
+    const text = out.warnings.join('\n');
+    expect(text).toMatch(/1\.3\.0\.8 FF \(16 Hz\) image/);
+    expect(text).toMatch(/block 0 \(Key A\)/);
+    expect(text).toMatch(/under Key B/);
+    expect(text).toMatch(/UNTESTED/);
+    expect(text).toMatch(/0\.9\.0\.0 bootloader the old plain form booted from/);
+    expect(text).toMatch(/You said it runs the 16 Hz build/);
+  });
+
+  it('the 8 Hz image is unchanged: plain staging into A, B and R alike, with no running question', () => {
     const eight = imageOf(0x6000, 72);
     for (const key of ['a', 'b', 'r'] as const) {
       const out = prepareSlotFlash(reportOn(), key, input(eight));
       expect(out.staging).toBe('plain');
       expect(out.storedForm).toBeUndefined();
+      expect(out.ffRunning).toBeUndefined();
       expect(wordSum32(out.payload, out.payload.length)).toBe(0);
     }
   });
 
   it('an FF image is only staged for a camera that reports 1.3.0.8', () => {
     const error = refusalOf(() =>
-      prepareSlotFlash(reportOn(null, '1.3.0.0'), 'r', input(ffImage())),
+      prepareSlotFlash(reportOn('1.3.0.0'), 'r', input(ffImage()), asRunning16),
     );
     expect(error.code).toBe('slots/refused');
     expect(error.message).toContain('this camera reports 1.3.0.0');
   });
 
-  it('a previously written FF bank is staged again to the same bytes (the solve is idempotent)', () => {
-    const first = prepareSlotFlash(reportOn(), 'r', input(ffImage()));
-    const second = prepareSlotFlash(reportOn(), 'r', input(first.expectedPlain!));
+  it('a previously written FF bank is staged again to the same bytes', () => {
+    const first = prepareSlotFlash(reportOn(), 'b', input(ffImage()), asRunning16);
+    const second = prepareSlotFlash(reportOn(), 'b', input(first.expectedPlain!), asRunning16);
     expect(equalBytes(second.payload, first.payload)).toBe(true);
     expect(equalBytes(second.expectedStored!, first.expectedStored!)).toBe(true);
   });
 
-  it('raw: the FF staged payload is sent as given, and the bank is predicted as the image it folds to', () => {
-    const staged = prepareSlotFlash(reportOn(), 'r', input(ffImage()));
-    const raw = prepareSlotFlash(reportOn(), 'r', input(staged.payload, 'raw'));
+  it('raw: the vendor payload is sent as given, and the bank is predicted as the Key B image it holds', () => {
+    const staged = prepareSlotFlash(reportOn(), 'a', input(ffImage()), asRunning16);
+    const raw = prepareSlotFlash(reportOn(), 'a', input(staged.payload, 'raw'), asRunning16);
     expect(raw.staging).toBe('verbatim');
     expect(equalBytes(raw.payload, staged.payload)).toBe(true);
-    expect(raw.storedForm).toBe('two-stream-fold');
+    expect(raw.storedForm).toBe('key-b-ciphertext');
     expect(equalBytes(raw.expectedPlain!, staged.expectedPlain!)).toBe(true);
     expect(equalBytes(raw.expectedStored!, staged.expectedStored!)).toBe(true);
-    expect(raw.warnings.some((w) => w.includes('1.3.0.8 FF staged form'))).toBe(true);
+    expect(raw.warnings.some((w) => w.includes('vendor'))).toBe(true);
     /* No 2014 sum-0 complaint: the FF form is judged by its own gate. */
     expect(raw.warnings.some((w) => w.includes('the 2014 bootloader needs 0'))).toBe(false);
   });
 
-  it('raw: the FF staged payload is refused for A and B, a non-FF payload is not', () => {
-    const staged = prepareSlotFlash(reportOn(), 'r', input(ffImage()));
-    for (const key of ['a', 'b'] as const) {
-      const error = refusalOf(() =>
-        prepareSlotFlash(reportOn(), key, input(staged.payload, 'raw')),
-      );
-      expect(error.code).toBe('slots/refused');
-      expect(error.message).toContain('recovery bank R');
-    }
+  it('raw: a plain (non-FF) payload is still judged by the 2014 chain', () => {
     const other = prepareSlotFlash(reportOn(), 'a', input(imageOf(0x6000, 73), 'raw'));
     expect(other.storedForm).toBeUndefined();
     expect(other.warnings.some((w) => w.includes('the 2014 bootloader needs 0'))).toBe(true);
@@ -993,30 +977,35 @@ describe('the 1.3.0.8 FF image on the slot writer', () => {
   describe('flashSlot', () => {
     const ack = { acknowledgeRisk: true };
 
-    function readyPlan(): { report: SlotsReport; flash: SlotFlashPlan } {
+    function readyPlan(key: SlotKey): { report: SlotsReport; flash: SlotFlashPlan } {
       const report = reportOn();
-      return { report, flash: prepareSlotFlash(report, 'r', input(ffImage())) };
+      return { report, flash: prepareSlotFlash(report, key, input(ffImage()), asRunning16) };
     }
 
-    it('writes recovery R: arm mode 9, stage the two-stream payload, commit its sum, read back', async () => {
-      const { report, flash } = readyPlan();
-      const rec = recordingDevice(flash.expectedStored!);
-      const result = await flashSlot(ctxFor(rec.device, legacy), report, flash, ack);
-      const ops = sends(rec.calls);
-      expect(ops[0]).toBe('arm');
-      expect(rec.calls[0]?.arg).toBe(9);
-      const staged = rec.calls.filter((c) => c.op === 'stage').map((c) => c.arg as number);
-      expect(staged.reduce((a, b) => a + b, 0)).toBe(flash.payload.length);
-      expect(rec.calls.find((c) => c.op === 'commit')?.arg).toBe(flash.sum16);
-      expect(result.commitStatus).toBe(0);
-      expect(result.verified).toBe(true);
-      expect(result.notes.join('\n')).toMatch(
-        /holds the plain image the two-stream payload folds to/,
-      );
-    });
+    it.each([
+      ['a', 7],
+      ['b', 8],
+      ['r', 9],
+    ] as const)(
+      'writes bank %s: arm mode %i, stage the vendor payload, commit its sum, read back the Key B image',
+      async (key, mode) => {
+        const { report, flash } = readyPlan(key);
+        const rec = recordingDevice(flash.expectedStored!);
+        const result = await flashSlot(ctxFor(rec.device, legacy), report, flash, ack);
+        const ops = sends(rec.calls);
+        expect(ops[0]).toBe('arm');
+        expect(rec.calls[0]?.arg).toBe(mode);
+        const staged = rec.calls.filter((c) => c.op === 'stage').map((c) => c.arg as number);
+        expect(staged.reduce((a, b) => a + b, 0)).toBe(flash.payload.length);
+        expect(rec.calls.find((c) => c.op === 'commit')?.arg).toBe(flash.sum16);
+        expect(result.commitStatus).toBe(0);
+        expect(result.verified).toBe(true);
+        expect(result.notes.join('\n')).toMatch(/holds the image XOR Key B that the FF build stores/);
+      },
+    );
 
-    it('needs acknowledgeRisk like every recovery write, and sends nothing without it', async () => {
-      const { report, flash } = readyPlan();
+    it('needs acknowledgeRisk for recovery R, like every recovery write, and sends nothing without it', async () => {
+      const { report, flash } = readyPlan('r');
       const rec = recordingDevice();
       await expect(
         flashSlot(ctxFor(rec.device, legacy), report, flash, { acknowledgeRisk: false }),
@@ -1024,9 +1013,9 @@ describe('the 1.3.0.8 FF image on the slot writer', () => {
       expect(sends(rec.calls)).toEqual([]);
     });
 
-    it('a bank that holds the staged bytes instead of the folded image is NOT verified', async () => {
-      const { report, flash } = readyPlan();
-      /* A camera that stored the payload as sent (no fold) would leave these bytes. */
+    it('a bank that holds the payload as sent instead of the Key B image is NOT verified', async () => {
+      const { report, flash } = readyPlan('b');
+      /* A camera that stored the payload as sent (no re-key) would leave these bytes. */
       const asSent = new Uint8Array(SLOT_BYTES).fill(0xff);
       asSent.set(flash.payload, 0);
       const result = await flashSlot(
@@ -1037,36 +1026,34 @@ describe('the 1.3.0.8 FF image on the slot writer', () => {
       );
       expect(result.verified).toBe(false);
       expect(result.notes.join('\n')).toMatch(
-        /does NOT match the plain image the two-stream payload folds to/,
+        /does NOT match the image XOR Key B that the FF build stores/,
       );
     });
 
-    it('a plan retargeted at A or B is refused with nothing sent', async () => {
-      const { report, flash } = readyPlan();
-      for (const key of ['a', 'b'] as const) {
-        const entry = report.plan.slots.find((s) => s.key === key)!;
-        const rec = recordingDevice();
-        const moved: SlotFlashPlan = { ...flash, key, address: entry.address };
-        await expect(
-          flashSlot(ctxFor(rec.device, legacy), report, moved, { acknowledgeRisk: true }),
-        ).rejects.toThrow(/recovery bank R/);
-        expect(sends(rec.calls)).toEqual([]);
-      }
+    it('a plan retargeted at another bank address is refused with nothing sent', async () => {
+      const { report, flash } = readyPlan('a');
+      const entry = report.plan.slots.find((s) => s.key === 'r')!;
+      const rec = recordingDevice();
+      const moved: SlotFlashPlan = { ...flash, key: 'r', address: entry.address + 0x10000 };
+      await expect(
+        flashSlot(ctxFor(rec.device, legacy), report, moved, { acknowledgeRisk: true }),
+      ).rejects.toThrow(/the plan targets/);
+      expect(sends(rec.calls)).toEqual([]);
     });
   });
 });
 
-describe('the 1.3.0.8 notes say the FF image goes to recovery only', () => {
+describe('the 1.3.0.8 notes say the FF image goes to A, B and R in its vendor form', () => {
   it('the plan note and the bank notes state it, on the 1.3.0.8 plan and not on 1.3.0.0', () => {
     const plan = buildSlotPlan(legacy, '1.3.0.8');
     const planText = plan.notes.join('\n');
-    expect(planText).toMatch(/refuses it for A and B/);
-    expect(planText).toMatch(/bank R\s+only/);
-    expect(planText).not.toMatch(/does not produce/);
+    expect(planText).toMatch(/UNTESTED/);
+    expect(planText).toMatch(/Key B/);
+    expect(planText).not.toMatch(/refuses it for A and B/);
     const byKey = Object.fromEntries(plan.slots.map((s) => [s.key, s.notes.join('\n')]));
-    expect(byKey.a).toMatch(/FF \(16 Hz\) image is refused here/);
-    expect(byKey.b).toMatch(/FF \(16 Hz\) image is refused here/);
-    expect(byKey.r).toMatch(/Takes the 1\.3\.0\.8 FF \(16 Hz\) image/);
+    expect(byKey.a).toMatch(/vendor form, stored under Key B/);
+    expect(byKey.b).toMatch(/vendor form, stored under Key B/);
+    expect(byKey.r).toMatch(/vendor form, stored under Key B/);
     const old = buildSlotPlan(legacy, '1.3.0.0');
     expect(old.slots.map((s) => s.notes.join('\n')).join('\n')).not.toMatch(/FF \(16 Hz\)/);
   });

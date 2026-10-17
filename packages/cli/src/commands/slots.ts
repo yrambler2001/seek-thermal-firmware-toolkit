@@ -52,6 +52,7 @@ import {
   type FlashSlotResult,
   type Reporter,
   type SlotFlashInput,
+  type PrepareSlotFlashOptions,
   type SlotFlashPlan,
   type SlotInputKind,
   type SlotKey,
@@ -80,7 +81,12 @@ import {
 export interface SlotOps {
   inspect(ctx: WorkflowContext): Promise<SlotsReport>;
   dump(ctx: WorkflowContext, report: SlotsReport, key: SlotKey): Promise<DumpedSlot>;
-  prepare(report: SlotsReport, key: SlotKey, input: SlotFlashInput): SlotFlashPlan;
+  prepare(
+    report: SlotsReport,
+    key: SlotKey,
+    input: SlotFlashInput,
+    options?: PrepareSlotFlashOptions,
+  ): SlotFlashPlan;
   flash(
     ctx: WorkflowContext,
     report: SlotsReport,
@@ -116,6 +122,7 @@ const NO_SLOT_FLAGS: SlotFlags = {
   acknowledgeRisk: false,
   verify: true,
   dryRun: false,
+  running16Hz: false,
 };
 
 export function parseBank(text: string): SlotKey {
@@ -141,6 +148,7 @@ function refuseFlashOnlyFlags(flags: SlotFlags, subcommand: string): void {
   if (flags.acknowledgeRisk) given.push('--acknowledge-risk');
   if (!flags.verify) given.push('--no-verify');
   if (flags.dryRun) given.push('--dry-run');
+  if (flags.running16Hz) given.push('--running-16hz');
   if (given.length > 0) {
     const verb = given.length === 1 ? 'applies' : 'apply';
     throw new UsageError(
@@ -331,15 +339,20 @@ function versionOf(view: SlotView): string | null {
   return state?.plainHeader?.versionStr ?? state?.header?.versionStr ?? null;
 }
 
-/** What the analysis can say about the application the camera runs, on the 2014 plaintext chain. */
+/**
+ * What the camera's own per-bank answers say about the build it runs, on 1.3.0.8 (running.ts).
+ * Unknown says so, and says what an FF write then needs.
+ */
 function runningNote(report: SlotsReport): string {
   const run = runningApplicationOf(report.state);
-  if (run.bank === null || run.build === null) {
-    return `the running application is not known: ${run.why}`;
+  if (run.build === null) {
+    return (
+      `the running build is not known: ${run.why}. A 1.3.0.8 FF (16 Hz) image is refused unless ` +
+      'you pass --running-16hz to say the camera runs the 16 Hz build'
+    );
   }
-  const image =
-    run.build === 'ff-1308' ? 'the 16 Hz FF 1.3.0.8 image' : 'a plain image (stored word sum 0)';
-  return `the camera runs ${image} from bank ${bankName(run.bank)}: ${run.why}`;
+  const build = run.build === 'ff-1308' ? 'the 16 Hz FF 1.3.0.8 build' : 'the 8 Hz 1.3.0.8 build';
+  return `the camera runs ${build}: ${run.why}`;
 }
 
 function bootableText(view: SlotView): string {
@@ -477,9 +490,7 @@ export function listLines(report: SlotsReport, color: boolean): string[] {
   lines.push(table(operationRows));
 
   const notes: string[] = [...report.plan.notes];
-  if (onPlaintextChain(report.state.profile, report.state.version)) {
-    notes.push(runningNote(report));
-  }
+  if (report.state.version === '1.3.0.8') notes.push(runningNote(report));
   for (const view of report.slots) {
     const bank = bankName(view.entry.key);
     for (const note of view.entry.notes) notes.push(`${bank}: ${note}`);
@@ -555,11 +566,18 @@ export function flashPlanLines(
 ): string[] {
   const lines: string[] = [''];
   const kind =
-    plan.kind === 'plain'
-      ? plan.staging === 'two-stream'
-        ? 'decrypted image, folded through the 1.3.0.8 FF two keystreams on the way in (the camera stores the plain image)'
-        : 'decrypted image, encrypted for this bank on the way in'
-      : 'raw bytes, sent verbatim';
+    plan.staging === 'key-a-keystream' || plan.storedForm === 'key-b-ciphertext'
+      ? 'decrypted 1.3.0.8 FF image, staged as the vendor app stages it (the image XOR Key A on the way in; ' +
+        'the camera stores it under Key B)'
+      : plan.kind === 'plain'
+        ? 'decrypted image, encrypted for this bank on the way in'
+        : 'raw bytes, sent verbatim';
+  const runningBasis =
+    plan.ffRunning === 'camera'
+      ? "the camera's own answers say it runs the 16 Hz FF build"
+      : plan.ffRunning === 'user'
+        ? 'your word (--running-16hz): the camera\'s answers did not decide the build'
+        : null;
   const chunks = Math.ceil(plan.payload.length / 64);
 
   lines.push(heading('Slot flash plan', color));
@@ -571,6 +589,7 @@ export function flashPlanLines(
         : []),
       ['  image', `${fileName} — ${kind}`],
       ['  staging', plan.staging],
+      ...(runningBasis === null ? [] : [['  running build', runningBasis]]),
       ...(plan.derivedFrom
         ? [['  key', derivedKeyLine(plan.derivedFrom, `bank ${bankName(plan.derivedFrom.bank)}`)]]
         : []),
@@ -800,7 +819,12 @@ async function flashAction(
      * booted or recovery bank without the acknowledgement. */
     refuse(flashRefusal(report, key, kind, acknowledgeRisk));
 
-    const plan = ops.prepare(report, key, { kind, bytes, fileName });
+    const plan = ops.prepare(
+      report,
+      key,
+      { kind, bytes, fileName },
+      { running16Hz: ctx.slotFlags?.running16Hz ?? false },
+    );
     const expectedSha256 =
       plan.expectedStored === null ? null : await sha256hex(plan.expectedStored);
 

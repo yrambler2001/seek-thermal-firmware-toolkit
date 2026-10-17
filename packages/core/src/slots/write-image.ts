@@ -19,10 +19,10 @@
  *                                key; nothing is read from the target bank);
  *   'plain'                      the image, stamped so its stored word sum is
  *                                0 (the 2014 plaintext chain);
- *   'two-stream'                 the 1.3.0.8 FF image on the 2014 chain: the image
- *                                XOR ks0 XOR ksD, its adjust word solved so the
- *                                collapsed gate sums to 0xFFFF (`buildFFPayload`,
- *                                built by preservation/patch.ts). Recovery only.
+ *   'key-a-keystream'            the 1.3.0.8 FF image on the 2014 chain, as the vendor app
+ *                                stages it: the image XOR the key block 0 keystream, header
+ *                                window verbatim (`buildFFPayload`, built by ff-form.ts). The
+ *                                camera stores it under Key B. Written to A, B or R.
  * ==================================================================== */
 
 import { bytesToHex, equalBytes, findAll, hex, hexToBytes, hexUp, viewOf } from '../bytes.js';
@@ -57,8 +57,6 @@ import {
   type ImageHeader,
 } from '../image/header.js';
 import {
-  ffFoldedFormOf,
-  ffStagedFormOf,
   KEY_PAIRS,
   keystream,
   keyWordsOf,
@@ -66,8 +64,9 @@ import {
   xorWindowVerbatim,
 } from '../preservation/patch.js';
 import { APPLICATION_KEY_PAIRS } from './application-pairs.js';
+import { ffPlainOfStaged, stageFFVendor } from './ff-form.js';
 import type { CipherProfile } from '../profiles/types.js';
-import type { SlotKey, StagingForm } from './types.js';
+import type { StagingForm } from './types.js';
 import { sha256Sync } from './write-sha.js';
 
 /** Every refusal of this page is one code, so a front end can tell "nothing was sent" apart. */
@@ -295,8 +294,9 @@ export function stageKeyBlockOf(image: Uint8Array): string {
  * programs exactly these bytes.
  *
  * Why not the bank's own recovered keystream: the emulated Compact PRO 1.0.3.0
- * refused a payload staged with the recovered state ("Invalid image", 0x70100)
- * and erased nothing. The bank holds key block 1 (plain ^ ks(block 1)), while the
+ * refused a payload staged with the recovered state with 0x70100, the acceptance
+ * gate's refusal before any erase (`write-commit.ts`, the status table; that code
+ * is not a nano or Compact XR code alone) and erased nothing. The bank holds key block 1 (plain ^ ks(block 1)), while the
  * staging the device accepts is key block 0.
  */
 export function buildSlotKeystreamPayload(image: Uint8Array, cipher: CipherProfile): StagedBytes {
@@ -340,17 +340,6 @@ export function plainChainBuildOf(image: Uint8Array): PlainChainBuild {
   return 'plain';
 }
 
-/** The refusal for an FF image aimed at a bank the 2014 bootloader would reject it in. */
-export function ffBankRefusal(key: SlotKey): SeekError {
-  return slotRefused(
-    'this is the 1.3.0.8 FF (16 Hz) image, whose word sum is the 0xFFFF sentinel and not the 0 ' +
-      'the 2014 bootloader needs at banks A and B; the camera boots it only from the recovery ' +
-      `bank R (unchecked). It can be written to R only, not to bank ${key.toUpperCase()}. ` +
-      'Nothing was written.',
-    { key },
-  );
-}
-
 /**
  * The 2014 plaintext chain's form: the image itself, length-stamped, the stored
  * word sum balanced to 0, and the chain's own three acceptance checks. The FF
@@ -360,8 +349,8 @@ export function ffBankRefusal(key: SlotKey): SeekError {
 export function buildPlainPayload(image: Uint8Array, cipher: CipherProfile): StagedBytes {
   if (plainChainBuildOf(image) === 'ff-1308') {
     throw slotRefused(
-      'this is the 1.3.0.8 FF (16 Hz) image, which is staged in its own two-stream form, not as ' +
-        'a plain image. Nothing was written.',
+      'this is the 1.3.0.8 FF (16 Hz) image, which is staged in its own Key A form (ff-form.ts), ' +
+        'not as a plain image. Nothing was written.',
     );
   }
   try {
@@ -374,63 +363,37 @@ export function buildPlainPayload(image: Uint8Array, cipher: CipherProfile): Sta
   }
 }
 
-/** The FF image, staged: the payload, the stamped image the bank will hold, and the adjust word. */
+/** The FF image, staged: the payload, the stamped image, and the bytes the camera keeps (Key B). */
 export interface FFStagedBytes extends StagedBytes {
-  /** The adjust word (0x238) as solved, and as stored. */
-  readonly rebalanceWord: number;
-  /** What the image held at 0x238 before. */
-  readonly heldWord: number;
-  /** The stored word sum of the stamped image (the collapsed gate is 0xFFFF, not this). */
-  readonly storedWordSum: number;
+  /** The bank bytes after the camera's re-key: the stamped image XOR Key B, header verbatim. */
+  readonly stored: Uint8Array;
 }
 
 /**
- * The 1.3.0.8 FF image in the form the camera accepts: the header length stamped, the
- * adjust word at 0x238 solved so the staged form's collapsed word sum is 0xFFFF, and the
- * image folded through ks0 and ksD. The fold and the solve are `ffStagedFormOf` in
- * preservation/patch.ts (the staged form that pipeline commits on the emulator); this adds
- * only the stage-size guard of the chain's descriptor.
+ * The 1.3.0.8 FF image in the vendor's staged form (ff-form.ts `stageFFVendor`): the header
+ * length stamped, the payload the image XOR Key A with the header window verbatim, and the
+ * bank the camera keeps the image XOR Key B. Nothing is solved and no word is changed, so the
+ * payload is the vendor app's own bytes for this image.
  *
- * `payload` is what goes through SetFeaturedFirmwareData; `stamped` is what the bank holds
- * afterwards (the camera folds the payload back to it), so a read-back is compared with
- * `stamped`, not with `payload`.
+ * `payload` is what goes through SetFeaturedFirmwareData; `stored` is what the bank holds
+ * afterwards, so the read-back is compared with `stored`, not with `payload`.
  */
 export function buildFFPayload(image: Uint8Array): FFStagedBytes {
   try {
-    if (image.length > PLAIN_CHAIN_STAGE_MAX) {
-      throw slotRefused(
-        `image is ${String(image.length)} B; the upgrade descriptor's staging buffer holds ` +
-          `${hexUp(PLAIN_CHAIN_STAGE_MAX)} B (0x20002000 + 0xE000), so the stream would stop ` +
-          'part-way and the commit would program a truncated image',
-      );
-    }
-    /* The header length is the length of the file, as `setAcceptSum` stamps it. */
-    const sized = image.slice();
-    const dv = viewOf(sized);
-    if (dv.getUint32(LENGTH_OFFSET, true) !== sized.length) {
-      dv.setUint32(LENGTH_OFFSET, sized.length >>> 0, true);
-    }
-    const staged = ffStagedFormOf(sized);
-    return {
-      payload: staged.staged,
-      stamped: staged.stamped,
-      rebalanceWord: staged.rebalanceWord,
-      heldWord: staged.heldWord,
-      storedWordSum: staged.storedWordSum,
-    };
+    const staged = stageFFVendor(image);
+    return { payload: staged.staged, stamped: staged.stamped, stored: staged.stored };
   } catch (error) {
     throw asSlotRefusal(error);
   }
 }
 
 /**
- * The plain image a RAW payload folds to when it is the FF staged form, else null: both
- * of the app's accepts would pass it and the image it folds to carries the 1.3.0.8-FF key
- * pair (`ffFoldedFormOf`). The page sends raw bytes as given; this only lets it say what
- * the bank will hold.
+ * The plain image a RAW payload is, when it is the vendor's FF staged form, else null: its
+ * image XOR Key A has the word sum 0xFFFF and carries the 1.3.0.8-FF key pair (`ffPlainOfStaged`).
+ * The page sends raw bytes as given; this only lets it say what the bank will hold.
  */
 export function foldedFFPayload(payload: Uint8Array): Uint8Array | null {
-  return ffFoldedFormOf(payload);
+  return ffPlainOfStaged(payload);
 }
 
 /* ---- what the bootloader will check, stated without refusing ----------- */

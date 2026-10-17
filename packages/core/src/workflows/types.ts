@@ -220,6 +220,13 @@ export interface DecryptResult {
  * ever tries the store key and Key A. A slot can therefore be perfect and still
  * be skipped at boot.
  */
+/** The camera's per-bank answers (GetFirmwareInfo selectors 6, 7, 8): 1 accepts, 0 refuses, null not read. */
+export interface BankVerdicts {
+  readonly a: number | null;
+  readonly b: number | null;
+  readonly r: number | null;
+}
+
 export interface SlotState {
   readonly key: SlotKey;
   readonly name: string;
@@ -296,6 +303,13 @@ export interface DeviceState {
   readonly usbSpeed: string | null;
   /** roots[2]: the word `fw_update_slot_address()` reads. 0 means slot B. */
   readonly activeSlotWord: number | null;
+  /**
+   * The camera's own answers for banks A, B and R (GetFirmwareInfo selectors 6, 7, 8), read on
+   * 1.3.0.8 only: 1 when the application that answers takes the bank, 0 when it refuses it, null
+   * when not read. `runningApplicationOf` (slots/running.ts) decides the 8 Hz or 16 Hz build from it.
+   * Optional so a state built before the field existed reads as not read.
+   */
+  readonly bankVerdicts?: BankVerdicts | null;
   readonly serial: string | null;
 
   readonly cfg0: number | null;

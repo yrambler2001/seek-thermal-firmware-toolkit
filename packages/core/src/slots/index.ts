@@ -7,8 +7,16 @@ export {
   type InspectSlotsOptions,
 } from './inspect.js';
 export { dumpSlot } from './dump.js';
-export { prepareSlotFlash, flashSlot } from './write.js';
-export { onPlaintextChain, runningApplicationOf, type RunningApplication } from './running.js';
+export { prepareSlotFlash, flashSlot, type PrepareSlotFlashOptions } from './write.js';
+export {
+  ffBankVerdict,
+  onPlaintextChain,
+  plainBankVerdict,
+  runningApplicationOf,
+  type RunningApplication,
+  type Verdict,
+} from './running.js';
+export { ffKeyBPlainOf, ffPlainOfStaged, stageFFVendor, FF_ACCEPT_SUM } from './ff-form.js';
 export {
   derivedKeyLine,
   deriveWriteKeys,

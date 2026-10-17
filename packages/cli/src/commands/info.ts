@@ -57,6 +57,24 @@ function slotJson(slot: SlotState): Record<string, unknown> {
 }
 
 /** The whole analysis as JSON. No Uint8Arrays, no Maps — this must stringify. */
+/** The 1.3.0.8 running-build answer for --json: null on any other build. */
+function runningJson(state: DeviceState): Record<string, unknown> | null {
+  if (state.version !== '1.3.0.8') return null;
+  const run = runningApplicationOf(state);
+  const answer = (value: number | null | undefined): number | null => value ?? null;
+  return {
+    build: run.build,
+    why: run.why,
+    camera: state.bankVerdicts === undefined || state.bankVerdicts === null
+      ? null
+      : { a: answer(state.bankVerdicts.a), b: answer(state.bankVerdicts.b), r: answer(state.bankVerdicts.r) },
+    predicted: {
+      plain: run.predicted.plain,
+      ff: run.predicted.ff,
+    },
+  };
+}
+
 export function stateJson(state: DeviceState): Record<string, unknown> {
   return {
     readAt: state.readAt,
@@ -107,6 +125,8 @@ export function stateJson(state: DeviceState): Record<string, unknown> {
       perDeviceKey: state.deviceKeySlot === null ? null : bytesToHex(state.deviceKeySlot),
     },
     slots: state.slots.map(slotJson),
+    /* 1.3.0.8 only: the camera's own per-bank answers (GetFirmwareInfo selectors 6, 7, 8) and what they decide. */
+    running: runningJson(state),
     familyOk: state.familyOk,
     plainChain: state.plainChain,
     canFlash: state.canFlash,
@@ -272,14 +292,23 @@ function bootableCell(slot: SlotState): string {
   return yesNo(slot.bootable);
 }
 
-/** The running row, on the 2014 plaintext chain only: the application the banks say the camera runs. */
+/**
+ * The running row, on 1.3.0.8 only (the two builds that share the version): the build the camera's
+ * own per-bank answers name (selectors 6, 7, 8; slots/running.ts), or 'not known' with the reason.
+ */
 function runningRows(state: DeviceState): [string, string][] {
-  if (!onPlaintextChain(state.profile, state.version)) return [];
+  if (state.version !== '1.3.0.8') return [];
   const run = runningApplicationOf(state);
-  if (run.bank === null || run.build === null) return [['running', `not known: ${run.why}`]];
-  const image =
-    run.build === 'ff-1308' ? 'the 16 Hz FF 1.3.0.8 image' : 'a plain image (stored word sum 0)';
-  return [['running', `${slotName(state, run.bank)} holds ${image}: ${run.why}`]];
+  if (run.build === null) {
+    return [
+      [
+        'running',
+        `not known: ${run.why}. A 16 Hz FF image needs --running-16hz to say the camera runs that build`,
+      ],
+    ];
+  }
+  const build = run.build === 'ff-1308' ? 'the 16 Hz FF 1.3.0.8 build' : 'the 8 Hz 1.3.0.8 build';
+  return [['running', `${build}: ${run.why}`]];
 }
 
 /**

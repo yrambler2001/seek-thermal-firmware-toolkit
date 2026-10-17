@@ -13,12 +13,11 @@
  *     reaches the camera;
  *   - the image flashed into the non-booted bank commits with status 0 and reads back
  *     as that image; the same into recovery R, acknowledged; a RAW payload into R
- *     reads back as sent. The 1.3.0.8 FF image (word sum 0xFFFF) is the exception on A and B:
- *     the writer refuses it there before anything is sent, because the 2014 bootloader rejects
- *     its sum. Into R it commits with status 0 in the two-stream staged form and reads back as
- *     the plain image with its adjust word solved; its staged payload sent raw does the same;
- *     and R's original stored bytes sent raw are rejected by the camera (0x00070100) before
- *     any erase, leaving R as the FF write made it;
+ *     reads back as sent. The 1.3.0.8 FF image (word sum 0xFFFF) goes to A, B and R in its
+ *     vendor form (the image XOR Key A, stored under Key B, TESTING.md 42.12): each commits with
+ *     status 0 and reads back as the image XOR Key B; its staged payload sent raw does the same;
+ *     and R's original stored bytes sent raw are rejected by the camera (0x00070100) before any
+ *     erase, leaving R as the FF write made it;
  *   - the boot-config block (and the bootloader, where the build exposes it) reads
  *     back unchanged after every write;
  *   - ResetDevice is never sent, and the write path never arms subcommand 0.
@@ -144,17 +143,6 @@ function wrote(w: WriteRow | undefined): boolean {
   return w?.error === null && w.commitStatus === 0 && w.decrypts !== false;
 }
 
-/** Whether the page refused `w` before sending anything, for the FF image's own reason (R only). */
-function refusedFF(w: WriteRow | undefined): boolean {
-  const error = w?.error ?? '';
-  return (
-    w?.code === 'slots/refused' &&
-    w.requests === 0 &&
-    error.includes('the 0xFFFF sentinel') &&
-    error.includes('recovery bank R')
-  );
-}
-
 /** The camera rejected the FF build's plain stored bytes as a payload, and R was left as the FF write made it. */
 function rejectedFFRaw(w: WriteRow | undefined): boolean {
   return w?.code === 'flash/commit' && w.deviceCode === 0x70100 && w.bankAfterError === 'unchanged';
@@ -172,9 +160,9 @@ function passed(run: LockedRun): boolean {
   if (run.writes.length !== (isFFImage(s) ? 4 : 3)) return false;
   const [nonBooted, recovery, raw, rejected] = run.writes;
   if (isFFImage(s)) {
-    /* A and B refuse it; R takes it, verified by the writer, accepted by the app's collapsed gate;
-     * its staged payload sent raw does the same; and the plain stored bytes are rejected. */
-    if (!refusedFF(nonBooted) || !wrote(recovery)) return false;
+    /* A, B and R take it in its vendor form, verified by the writer; its staged payload sent raw does
+     * the same; and the plain stored bytes are rejected. */
+    if (!wrote(nonBooted) || !wrote(recovery)) return false;
     if (recovery?.verified !== true || recovery.accepts !== true) return false;
     if (raw?.commitStatus !== 0 || raw.verified !== true) return false;
     if (raw.identical !== true || raw.tailErased !== true || raw.decrypts !== true) return false;
@@ -326,7 +314,7 @@ describe.skipIf(!available)(
               expect(run.ffPrepare, 'the FF image was prepared').not.toBeNull();
               expect(run.ffPrepare?.refused, 'the page refused the FF image').toBe(true);
               expect(run.ffPrepare?.message).toContain(
-                'the camera runs the 8 Hz 1.3.0.8 application: slot A is the first bank the 2014 bootloader takes',
+                'the camera runs the 8 Hz 1.3.0.8 application: the camera answers',
               );
               expect(run.ffPrepare?.message).toContain('0x00070100');
               expect(run.ffPrepare?.sent, 'requests sent while preparing').toBe(0);
@@ -430,30 +418,31 @@ describe.skipIf(!available)(
         });
 
         if (ffImage) {
-          it('refuses the 1.3.0.8-FF image (word sum 0xFFFF) for the non-booted bank, before sending anything, and says only R takes it', () => {
+          it('writes the 1.3.0.8-FF image into the non-booted bank in its vendor form: commit status 0, the bank holds the image XOR Key B, the writer verifies it', () => {
             const nb = run.writes[0];
-            expect(nb?.code, nb?.error ?? 'the non-booted write ran').toBe('slots/refused');
-            expect(nb?.requests, 'requests for the refused non-booted write').toBe(0);
-            expect(nb?.error).toContain('the 0xFFFF sentinel');
-            expect(nb?.error).toContain('recovery bank R');
+            expect(nb?.error, nb?.notes.join('\n')).toBeNull();
+            expect(nb?.commitStatus).toBe(0);
+            expect(nb?.identical, 'the stored bytes are the image XOR Key B, not the payload').toBe(true);
+            expect(nb?.verified, 'the writer compares the stored bytes').toBe(true);
+            expect(nb?.accepts, 'the stored image passes the FF app’s Key B gate').toBe(true);
           });
 
           it('the booted-bank refusal is taken on R, the only bank the FF image goes to: it names the acknowledgement and sends nothing', () => {
             expect(run.refusal?.key).toBe('r');
           });
 
-          it('writes the FF image into recovery R, acknowledged: commit status 0, the bank holds the plain image with its adjust word solved, and the writer verifies it', () => {
+          it('writes the FF image into recovery R, acknowledged: commit status 0, the bank holds the image XOR Key B, and the writer verifies it', () => {
             const w = writeOf(run, 'plain image -> R');
             expect(w?.error, w?.notes.join('\n')).toBeNull();
             expect(w?.commitStatus).toBe(0);
             expect(w?.requests, 'the payload was staged and committed').toBeGreaterThan(0);
             expect(w?.decrypts, w?.notes.join('\n')).toBe(true);
-            /* The stored image passes the app's collapsed gate: it can be staged again. */
+            /* The stored image passes the app's Key B gate: it can be staged again. */
             expect(w?.accepts).toBe(true);
             expect(w?.verified, 'the writer compares the stored bytes').toBe(true);
           });
 
-          it('sends the staged payload as RAW bytes into R: commit status 0; the bank holds the image it folds to, the tail erased, the writer verifies it', () => {
+          it('sends the staged payload as RAW bytes into R: commit status 0; the bank holds the image XOR Key B, the tail erased, the writer verifies it', () => {
             const w = writeOf(run, 'raw staged');
             expect(w?.error, w?.notes.join('\n')).toBeNull();
             expect(w?.commitStatus).toBe(0);

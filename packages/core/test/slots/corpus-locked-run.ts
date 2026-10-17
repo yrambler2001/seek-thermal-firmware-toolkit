@@ -32,13 +32,7 @@ import { recoverKeyInfo } from '../../src/crypto/recover.js';
 import { SeekError, errorMessage } from '../../src/errors.js';
 import { silentReporter } from '../../src/events.js';
 import { wordSum32 } from '../../src/image/bank.js';
-import {
-  KEY_PAIRS,
-  keystream,
-  keyWordsOf,
-  REBALANCE_WORD_OFFSET,
-  xorWindowVerbatim,
-} from '../../src/preservation/patch.js';
+import { KEY_PAIRS, keystream, keyWordsOf, xorWindowVerbatim } from '../../src/preservation/patch.js';
 import { SeekDevice } from '../../src/protocol/client.js';
 import { WebUsbTransport } from '../../src/protocol/webusb.js';
 import { detectProfile } from '../../src/profiles/registry.js';
@@ -47,7 +41,11 @@ import { buildSlotPlan } from '../../src/slots/capability.js';
 import { classifyBuild } from '../../src/slots/capability-family.js';
 import { dumpSlot } from '../../src/slots/dump.js';
 import { inspectSlots } from '../../src/slots/inspect.js';
-import { flashSlot, prepareSlotFlash } from '../../src/slots/write.js';
+import { ffKeyBPlainOf } from '../../src/slots/ff-form.js';
+import { flashSlot, prepareSlotFlash, type PrepareSlotFlashOptions } from '../../src/slots/write.js';
+
+/** The FF image is prepared on the person's word that the camera runs the 16 Hz build (TESTING.md 42.12). */
+const FF_PREPARE_OPTIONS: PrepareSlotFlashOptions = { running16Hz: true };
 import type {
   DumpedSlot,
   FlashSlotResult,
@@ -267,20 +265,14 @@ export function recordTransport(transport: WebUsbTransport, sent: Sent[]): void 
 }
 
 /**
- * The image the 1.3.0.8 FF write leaves in its bank, worked out here from the corpus image and the
- * key pair, NOT by the writer's builder: the image with the adjust word at 0x238 set to
- * 0xFFFF - sum(image ^ ksD) (word 0x238 taken as 0, header window verbatim), the one word the
- * app's collapsed acceptance needs. The camera stores the plain image, so this is the bank's content.
+ * The bank the 1.3.0.8 FF write leaves, worked out here from the corpus image and the key pair, NOT
+ * by the writer's builder: the image XOR the Key B keystream, header window verbatim (TESTING.md 42.12).
+ * The FF app re-keys the vendor payload this way and programs the result.
  */
 export function expectedFFStored(image: Uint8Array): Uint8Array {
   const words = image.length >>> 2;
   const ksD = keystream(keyWordsOf(KEY_PAIRS.ff1308.block1), words);
-  const out = image.slice();
-  const view = viewOf(out);
-  view.setUint32(REBALANCE_WORD_OFFSET, 0, true);
-  const base = wordSum32(xorWindowVerbatim(out, ksD), out.length);
-  view.setUint32(REBALANCE_WORD_OFFSET, (0xffff - base) >>> 0, true);
-  return out;
+  return xorWindowVerbatim(image, ksD);
 }
 
 /**
@@ -301,10 +293,9 @@ export function decryptedReadBack(
     const plain = after.slice(0, length);
     return { plain, accepts: wordSum32(plain, length) === 0 };
   }
-  if (staging === 'two-stream') {
-    const plain = after.slice(0, length);
-    const ksD = keystream(keyWordsOf(KEY_PAIRS.ff1308.block1), length >>> 2);
-    return { plain, accepts: wordSum32(xorWindowVerbatim(plain, ksD), length) === 0xffff };
+  if (staging === 'key-a-keystream') {
+    const plain = ffKeyBPlainOf(after.slice(0, length)) ?? after.slice(0, length);
+    return { plain, accepts: wordSum32(plain, length) === 0xffff };
   }
   const view = viewOf(after);
   const recovered = recoverKeyInfo(view, 0, length, state.profile.cipher);
@@ -343,6 +334,7 @@ async function writeStep(
   staging: PlanStaging,
   before: Uint8Array | null,
   sent: Sent[],
+  options: PrepareSlotFlashOptions = {},
 ): Promise<WriteRow> {
   const row: WriteRow = {
     step,
@@ -364,7 +356,7 @@ async function writeStep(
   };
   const mark = sent.length;
   try {
-    const plan: SlotFlashPlan = prepareSlotFlash(report, key, input);
+    const plan: SlotFlashPlan = prepareSlotFlash(report, key, input, options);
     row.notes.push(...plan.warnings.filter((w) => !w.startsWith('Note:')));
     const result: FlashSlotResult = await flashSlot(ctx, report, plan, { acknowledgeRisk });
     row.commitStatus = result.commitStatus;
@@ -374,10 +366,17 @@ async function writeStep(
     if (after === null) {
       row.error = 'the bank was not read back';
     } else {
-      if (input.kind === 'raw') {
+      /* The bank's stored bytes are compared for every raw write, and for the FF image written decrypted (the
+       * vendor form stores the image under Key B, so the bank is checked as those bytes, not as the image). */
+      if (input.kind === 'raw' || staging === 'key-a-keystream') {
         /* The bank starts with the bytes the plan says it will hold. Where the camera programs the
          * payload as sent that is the payload; the FF build stores the image the payload folds to. */
-        const stored = plan.expectedStored?.subarray(0, plan.payload.length) ?? plan.payload;
+        /* The FF build stores the image XOR Key B: that is worked out here from the plain image, not taken
+         * from the writer's plan. Every other form is the writer's own prediction (the plain chain's payload). */
+        const stored =
+          staging === 'key-a-keystream' && image !== null
+            ? expectedFFStored(image).subarray(0, plan.payload.length)
+            : (plan.expectedStored?.subarray(0, plan.payload.length) ?? plan.payload);
         row.identical = equalBytes(after.subarray(0, plan.payload.length), stored);
         row.tailErased = isErased(after.subarray(plan.payload.length));
       }
@@ -582,7 +581,12 @@ export async function runLockedFirmware(
       if (ffFile !== null) {
         const before = sent.length;
         try {
-          prepareSlotFlash(report, 'r', { kind: 'plain', bytes: ffFile, fileName: 'ff.bin' });
+          prepareSlotFlash(
+            report,
+            'r',
+            { kind: 'plain', bytes: ffFile, fileName: 'ff.bin' },
+            FF_PREPARE_OPTIONS,
+          );
           run.ffPrepare = { refused: false, message: null, sent: sent.length - before };
         } catch (error) {
           run.ffPrepare = {
@@ -629,8 +633,12 @@ export async function runLockedFirmware(
       /* The 1.3.0.8 FF image goes to R only and leaves the plain image with its adjust word solved
        * (computed here, not by the writer's builder); every other image is left as it was written. */
       const ffImage = isFFImage(subject);
-      const expectedImage: Uint8Array = ffImage ? expectedFFStored(image) : image;
-      const writeStaging: PlanStaging = ffImage ? 'two-stream' : subject.staging;
+      const storedFF: Uint8Array | null = ffImage ? expectedFFStored(image) : null;
+      const expectedImage: Uint8Array = image;
+      const writeStaging: PlanStaging = ffImage ? 'key-a-keystream' : subject.staging;
+      /* The 1.3.0.8 FF image is staged on the person's word about the build when the camera's own answers
+       * cannot say (TESTING.md 42.12); every other image takes no such choice. */
+      const ffOptions: PrepareSlotFlashOptions = ffImage ? FF_PREPARE_OPTIONS : {};
 
       /* ---- 3. the booted bank, without acknowledgeRisk ----
        * The FF image has no bank but R to go to, so the acknowledgement is asked of R. */
@@ -641,11 +649,12 @@ export async function runLockedFirmware(
         const mark = sent.length;
         const refusal: RefusalRow = { key: refusalKey, code: null, message: null, requests: 0 };
         try {
-          const planBooted = prepareSlotFlash(report, refusalKey, {
-            kind: 'plain',
-            bytes: image,
-            fileName: 'image.bin',
-          });
+          const planBooted = prepareSlotFlash(
+            report,
+            refusalKey,
+            { kind: 'plain', bytes: image, fileName: 'image.bin' },
+            ffOptions,
+          );
           await flashSlot(ctx, report, planBooted, { acknowledgeRisk: false });
           run.refusal = {
             ...refusal,
@@ -681,6 +690,7 @@ export async function runLockedFirmware(
         writeStaging,
         state.byKey.get(nonBooted)?.raw ?? null,
         sent,
+        ffOptions,
       );
       run.writes.push(plainNB);
       await blockStep(`after plain -> ${nonBooted.toUpperCase()}`);
@@ -697,6 +707,7 @@ export async function runLockedFirmware(
         writeStaging,
         state.byKey.get('r')?.raw ?? null,
         sent,
+        ffOptions,
       );
       run.writes.push(plainR);
       await blockStep('after plain -> R');
@@ -706,11 +717,12 @@ export async function runLockedFirmware(
        * or the FF build's two-stream form (what the camera folds back to the plain image). */
       let staged: Uint8Array | null = null;
       try {
-        staged = prepareSlotFlash(report, 'r', {
-          kind: 'plain',
-          bytes: image,
-          fileName: 'image.bin',
-        }).payload;
+        staged = prepareSlotFlash(
+          report,
+          'r',
+          { kind: 'plain', bytes: image, fileName: 'image.bin' },
+          ffOptions,
+        ).payload;
       } catch (error) {
         run.setup = run.setup ?? `no staged payload for the raw step: ${reasonOf(error)}`;
       }
@@ -726,6 +738,7 @@ export async function runLockedFirmware(
           writeStaging,
           null,
           sent,
+          ffOptions,
         );
         run.writes.push(rawR);
         await blockStep('after raw -> R');
@@ -749,8 +762,9 @@ export async function runLockedFirmware(
             true,
             null,
             writeStaging,
-            expectedImage,
+            storedFF,
             sent,
+            ffOptions,
           );
           run.writes.push(rawR);
           await blockStep('after raw -> R');

@@ -49,7 +49,8 @@ export type SlotFamily =
 /**
  * The version string the 1.3.0.8 8 Hz build and its 16 Hz FF build share. The plan
  * cannot tell them apart; the write decides on the image itself (write-image.ts
- * `plainChainBuildOf`), and stages the FF image in its own form, for recovery only.
+ * `plainChainBuildOf`), and the camera's own answers decide which build runs
+ * (running.ts). The FF image is staged in its own vendor form (ff-form.ts).
  */
 export const FF_1308_VERSION = '1.3.0.8';
 
@@ -58,7 +59,7 @@ export const FF_1308_VERSION = '1.3.0.8';
  * plain (patch.ts: 0.8.0.0, 0.9.0.2 .. 0.10.0.0, the 1.0.0.0 / 1.2.0.0 / 1.3.0.0
  * trio, and the 1.3.0.8 8 Hz build). 1.3.0.8 is listed for its 8 Hz build; its
  * 16 Hz FF build shares the string and is NOT staged plain: the writer stages it
- * in the two-stream form, for bank R only (see capability-notes.ts).
+ * in its vendor form (ff-form.ts; see capability-notes.ts).
  */
 export const PLAIN_CHAIN_VERSIONS: ReadonlySet<string> = new Set([
   '0.8.0.0',

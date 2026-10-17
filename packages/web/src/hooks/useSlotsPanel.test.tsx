@@ -348,11 +348,11 @@ describe('useSlotsPanel: writing a bank', () => {
 
   it('prepares the 1.3.0.8 FF image for recovery, asks for the acknowledgement, and writes it with one', async () => {
     const { backend, mocks } = makeBackend();
-    /* The core builds this plan for the FF image: the two-stream staging, the folded image stored. */
+    /* The core builds this plan for the FF image: the vendor staging, the Key B image stored. */
     mocks.prepare.mockImplementation((_report: unknown, key: SlotKey) => ({
       ...preparedSlot(key, 'plain', new Uint8Array(16)),
-      staging: 'two-stream',
-      storedForm: 'two-stream-fold',
+      staging: 'key-a-keystream',
+      storedForm: 'key-b-ciphertext',
       expectedStored: new Uint8Array(0x10000),
     }));
     const { result, unmount } = setup(backend);
@@ -363,8 +363,8 @@ describe('useSlotsPanel: writing a bank', () => {
       await result.current.panel.pickFile('r', 'plain', file('ff.bin', new Uint8Array(16)));
     });
     expect(result.current.panel.pending?.key).toBe('r');
-    expect(result.current.panel.pending?.plan.staging).toBe('two-stream');
-    expect(lineIncludes(result.current.panel.reporter.lines, 'staging two-stream')).toBe(false);
+    expect(result.current.panel.pending?.plan.staging).toBe('key-a-keystream');
+    expect(lineIncludes(result.current.panel.reporter.lines, 'staging key-a-keystream')).toBe(false);
 
     await act(async () => {
       await result.current.panel.write(false);
@@ -377,7 +377,7 @@ describe('useSlotsPanel: writing a bank', () => {
     });
     expect(mocks.flash).toHaveBeenCalledTimes(1);
     expect(mocks.flash.mock.calls[0]?.[3]).toEqual({ verify: true, acknowledgeRisk: true });
-    expect(lineIncludes(result.current.panel.reporter.lines, 'staging two-stream')).toBe(true);
+    expect(lineIncludes(result.current.panel.reporter.lines, 'staging key-a-keystream')).toBe(true);
     unmount();
   });
 

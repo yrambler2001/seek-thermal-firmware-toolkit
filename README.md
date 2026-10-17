@@ -718,14 +718,14 @@ seek-fw slots flash r prepared.bin --raw --acknowledge-risk   # raw staged bytes
   re-encrypts it under its own store key), under the image's block-0 key stream on the 2016 Compact
   PRO (the camera re-encrypts it into the bank's key), plain on the 2014 plaintext chain.
 - **Compact 1.3.0.8: two builds, one version string.** The 8 Hz build and the 16 Hz FF build report the
-  same version, so the page tells them apart by the **image**: a stored word sum of 0 is the 8 Hz plain
-  chain; an image carrying the FF key pair is the FF build. The FF image goes to the **recovery bank R
-  only** (the 2014 bootloader rejects its word sum at A and B and boots recovery unchecked), and A and B
-  refuse it. It is staged as the image XOR two keystreams (`xor-ks0-ksD`, built by the same code the
-  preserve pipeline commits with) with the header word at `0x238` solved so the app's collapsed sum is
-  `0xFFFF`; the camera folds that back and stores the plain image, so the stored bank differs from the
-  file in that one word. Emulator-proven (`TESTING.md` §42.6); a write to R on a real camera is still to
-  be run.
+  same version. The image tells the page what it is (a stored word sum of 0 is the 8 Hz plain chain; an
+  image carrying the FF key pair is the FF build), and the **camera** says which build runs: GetFirmwareInfo
+  selectors 6, 7 and 8 answer, bank by bank, whether the running application takes the bank. The FF image
+  is staged the way the vendor app stages it, the image XOR Key A with the header verbatim, and the camera
+  stores it under Key B. It goes to A, B or R. A camera whose answers cannot tell the two builds apart is
+  refused unless you say it runs the 16 Hz build (`--running-16hz` on the CLI). The stored form is not
+  known to boot: no genuine bootloader for this build is in the corpus, so the boot is untested
+  (`TESTING.md` §42.11 and §42.12).
 - **Flash raw bytes.** The bytes you give go through the staging stream as they are. Whether they
   boot is the camera's business, and the plan says what the bootloader's checks make of them.
 - **Writes arm bank 7/8/9 and nothing else.** They program that bank and leave the boot config

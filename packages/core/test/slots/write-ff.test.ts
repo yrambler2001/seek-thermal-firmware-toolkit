@@ -1,21 +1,23 @@
 /* ==================================================================== *
- * The slot writer's FF staging, with no camera: the 1.3.0.8 FF (16 Hz) image
- * on the 2014 chain is staged as image XOR ks0 XOR ksD with its adjust word
- * solved, for the recovery bank only.
+ * The slot writer's FF staging, with no camera: the 1.3.0.8 FF (16 Hz) image on the 2014
+ * chain, in the form the vendor app stages it (ff-form.ts; TESTING.md 42.12).
  *
- * TWO POPULATIONS, the split the preservation tests use:
- *  - SYNTHETIC images, which run everywhere: a deterministic fill, the REAL
- *    1.3.0.8-FF key pair planted once each, and a header. They carry what the
- *    builder reads and nothing else.
- *  - THE CORPUS FF IMAGE, when the emulator directory (SEEK_EMU_DIR, or FW-V1
- *    beside this repository) carries it. The differential test pins the new
- *    builder to preservation's own `stagedFormOf`, byte for byte: the
- *    preservation pipeline is what commits this form on the emulator, so a
- *    builder that equals it sends the bytes that pipeline sends.
+ *   staged payload = image XOR key block 0 (Key A), header window 0x200..0x23F verbatim
+ *   stored bank    = image XOR key block 1 (Key B), header window verbatim
+ *
+ * TWO POPULATIONS:
+ *  - SYNTHETIC images, which run everywhere: a deterministic fill, the real 1.3.0.8-FF key
+ *    pair planted once each, and word 142 solved so the plain word sum is 0xFFFF (the sum the
+ *    FF app accepts). They carry what the builder reads and nothing else.
+ *  - THE CORPUS FF IMAGE, when the emulator directory (SEEK_EMU_DIR, or FW-V1 beside this
+ *    repository) carries it. Its staged payload is pinned by a committed sha256: the vendor
+ *    app's own file, 32K_43X0_1.3.0.8_COMPACT-16HZ_Public.bin (sha256 fd9da63b...). When that
+ *    file is also given (SEEK_VENDOR_FF_IMAGE), the payload is compared with it byte for byte.
  * ==================================================================== */
 
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
+import { createHash } from 'node:crypto';
 
 import { describe, expect, it } from 'vitest';
 
@@ -23,31 +25,16 @@ import { equalBytes, hexToBytes } from '../../src/bytes.js';
 import { SeekError } from '../../src/errors.js';
 import { wordSum32 } from '../../src/image/bank.js';
 import { IMAGE_MAGIC, LENGTH_OFFSET } from '../../src/image/header.js';
-import {
-  KEY_PAIRS,
-  REBALANCE_WORD_OFFSET,
-  buildV1Patch,
-  ffFoldedFormOf,
-  keyWordsOf,
-  keystream,
-  locateFFKeys,
-  stagedAcceptanceSum,
-  stagedFormOf,
-  wordSum,
-  xorWindowVerbatim,
-} from '../../src/preservation/patch.js';
-import { getProfile } from '../../src/profiles/registry.js';
-import {
-  buildFFPayload,
-  buildPlainPayload,
-  foldedFFPayload,
-  plainChainBuildOf,
-} from '../../src/slots/write-image.js';
+import { KEY_PAIRS, keyWordsOf, keystream, xorWindowVerbatim } from '../../src/preservation/patch.js';
+import { ffKeyBPlainOf, ffPlainOfStaged, stageFFVendor } from '../../src/slots/ff-form.js';
+import { buildFFPayload, plainChainBuildOf } from '../../src/slots/write-image.js';
 import { emulatorDir } from '../emulator/harness.js';
 
-const legacy = getProfile('legacy-auth');
-
 /* ---- fixtures ------------------------------------------------------------ */
+
+const H_LO = 0x80;
+const H_HI = 0x8f;
+const ADJUST = 142;
 
 function prng(seed: number): () => number {
   let s = seed >>> 0 || 1;
@@ -61,7 +48,7 @@ function prng(seed: number): () => number {
   };
 }
 
-/** A decrypted-looking image carrying the FF key pair once each, with word 142 free (0). */
+/** A synthetic 1.3.0.8 FF image: the key pair once each, magic and length, and word 142 solved to a plain sum of 0xFFFF. */
 function ffImageOf(length: number, seed: number): Uint8Array {
   const next = prng(seed);
   const out = new Uint8Array(length);
@@ -71,13 +58,14 @@ function ffImageOf(length: number, seed: number): Uint8Array {
   dv.setUint32(4, 0x10000101, true);
   dv.setUint32(0x200, IMAGE_MAGIC, true);
   dv.setUint32(LENGTH_OFFSET, length, true);
-  dv.setUint32(REBALANCE_WORD_OFFSET, 0, true);
   out.set(hexToBytes(KEY_PAIRS.ff1308.block0), 0x3000);
   out.set(hexToBytes(KEY_PAIRS.ff1308.block1), 0x3100);
+  dv.setUint32(ADJUST * 4, 0, true);
+  dv.setUint32(ADJUST * 4, (0xffff - wordSum32(out, length)) >>> 0, true);
   return out;
 }
 
-/** The same fill, no key pair: what an 8 Hz or foreign image looks like to the builder. */
+/** The same fill with no key pair: what an 8 Hz or foreign image looks like to the FF builder. */
 function plainImageOf(length: number, seed: number): Uint8Array {
   const out = ffImageOf(length, seed);
   out.fill(0x5a, 0x3000, 0x3010);
@@ -85,13 +73,10 @@ function plainImageOf(length: number, seed: number): Uint8Array {
   return out;
 }
 
-const ksOf = (block: string, bytes: number): Uint32Array =>
-  keystream(keyWordsOf(block), bytes >>> 2);
+const ksOf = (block: string, words: number): Uint32Array => keystream(keyWordsOf(block), words);
 
-/* ---- the corpus image ------------------------------------------------------ */
-
+/** The corpus FF image, when the emulator directory carries it. */
 const EMU = emulatorDir();
-
 function corpusFF(): Uint8Array | null {
   if (EMU === null) return null;
   const file = path.join(
@@ -105,212 +90,176 @@ function corpusFF(): Uint8Array | null {
   );
   return existsSync(file) ? new Uint8Array(readFileSync(file)) : null;
 }
-
 const CORPUS_FF = corpusFF();
 
+/** The vendor app's own staged file, when it is given: compared byte for byte with the builder. */
+function vendorFile(): Uint8Array | null {
+  const file = process.env.SEEK_VENDOR_FF_IMAGE;
+  return file !== undefined && file !== '' && existsSync(file)
+    ? new Uint8Array(readFileSync(file))
+    : null;
+}
+
+const sha256 = (bytes: Uint8Array): string => createHash('sha256').update(bytes).digest('hex');
+
 /* ==================================================================== *
- * which build an image is
+ * the staged form, on synthetic images
  * ==================================================================== */
 
-describe('plainChainBuildOf decides on the image itself', () => {
-  it('a stored word sum of 0 is the plain chain, with or without the FF key pair', () => {
-    const balanced = plainImageOf(0x6000, 1);
-    new DataView(balanced.buffer).setUint32(
-      REBALANCE_WORD_OFFSET,
-      (0 - wordSum32(balanced, balanced.length)) >>> 0,
-      true,
-    );
-    expect(wordSum32(balanced, balanced.length)).toBe(0);
-    expect(plainChainBuildOf(balanced)).toBe('plain');
+describe('stageFFVendor: the vendor staged form (synthetic FF image)', () => {
+  const image = ffImageOf(0x4000, 7);
+
+  it('the payload is the image XOR key block 0 outside the header window, verbatim inside it', () => {
+    const { staged } = stageFFVendor(image);
+    const ks0 = ksOf(KEY_PAIRS.ff1308.block0, image.length >> 2);
+    const expected = xorWindowVerbatim(image, ks0);
+    expect(equalBytes(staged, expected)).toBe(true);
+    const dv = new DataView(staged.buffer, staged.byteOffset, staged.byteLength);
+    const src = new DataView(image.buffer, image.byteOffset, image.byteLength);
+    for (let w = H_LO; w <= H_HI; w++) expect(dv.getUint32(w * 4, true)).toBe(src.getUint32(w * 4, true));
   });
 
-  it('an image carrying the FF key pair is the FF build, whatever its word sum', () => {
-    const factory = ffImageOf(0x6000, 2);
-    /* As built: the adjust word makes the file sum 0xFFFF. */
-    new DataView(factory.buffer).setUint32(
-      REBALANCE_WORD_OFFSET,
-      (0xffff - wordSum32(factory, factory.length)) >>> 0,
-      true,
-    );
-    expect(wordSum32(factory, factory.length)).toBe(0xffff);
-    expect(plainChainBuildOf(factory)).toBe('ff-1308');
-    /* A bank this page wrote carries the sum 0xFFFF plus its solved word, and is still FF. */
-    expect(plainChainBuildOf(buildFFPayload(factory).stamped)).toBe('ff-1308');
-    /* Any other sum with the pair is FF too: an edited FF image is solved again. */
-    expect(plainChainBuildOf(ffImageOf(0x6000, 3))).toBe('ff-1308');
+  it('the stored bank is the image XOR key block 1 outside the header window, verbatim inside it', () => {
+    const { stored } = stageFFVendor(image);
+    const ksD = ksOf(KEY_PAIRS.ff1308.block1, image.length >> 2);
+    expect(equalBytes(stored, xorWindowVerbatim(image, ksD))).toBe(true);
   });
 
-  it('a word sum of 0xFFFF without the key pair is refused, not staged as plain', () => {
-    const image = plainImageOf(0x6000, 4);
-    new DataView(image.buffer).setUint32(
-      REBALANCE_WORD_OFFSET,
-      (0xffff - wordSum32(image, image.length)) >>> 0,
-      true,
-    );
+  it('the camera re-keys the payload to the stored bank: payload XOR key block 0 XOR key block 1 outside the window', () => {
+    const { staged, stored } = stageFFVendor(image);
+    const words = image.length >> 2;
+    const ks0 = ksOf(KEY_PAIRS.ff1308.block0, words);
+    const ksD = ksOf(KEY_PAIRS.ff1308.block1, words);
+    const rekeyed = xorWindowVerbatim(xorWindowVerbatim(staged, ks0), ksD);
+    expect(equalBytes(rekeyed, stored)).toBe(true);
+  });
+
+  it('the app’s gate on the payload is sum(payload XOR Key A) == 0xFFFF, which the image’s own sum is', () => {
+    const { staged } = stageFFVendor(image);
+    const ks0 = ksOf(KEY_PAIRS.ff1308.block0, image.length >> 2);
+    expect(wordSum32(xorWindowVerbatim(staged, ks0), image.length)).toBe(0xffff);
     expect(wordSum32(image, image.length)).toBe(0xffff);
-    let error: unknown;
-    try {
-      plainChainBuildOf(image);
-    } catch (e) {
-      error = e;
-    }
-    expect(error).toBeInstanceOf(SeekError);
-    expect((error as SeekError).code).toBe('slots/refused');
-    expect((error as SeekError).message).toContain('1.3.0.8-FF key pair');
   });
 
-  it('any other image is the plain chain, and the plain builder stamps it to a word sum of 0', () => {
-    const image = plainImageOf(0x6000, 5);
-    expect(plainChainBuildOf(image)).toBe('plain');
-    const built = buildPlainPayload(image, legacy.cipher);
-    expect(wordSum32(built.payload, built.payload.length)).toBe(0);
-  });
-
-  it('the plain builder will not stage the FF image as a plain image', () => {
-    expect(() => buildPlainPayload(ffImageOf(0x6000, 6), legacy.cipher)).toThrow(
-      /own two-stream form/,
-    );
-  });
-});
-
-/* ==================================================================== *
- * the staged form
- * ==================================================================== */
-
-describe('buildFFPayload (synthetic FF image)', () => {
-  const image = ffImageOf(0x6000, 7);
-  const built = buildFFPayload(image);
-  const ks0 = ksOf(KEY_PAIRS.ff1308.block0, image.length);
-  const ksD = ksOf(KEY_PAIRS.ff1308.block1, image.length);
-
-  it('the payload is the stamped image XOR ks0 XOR ksD, header window verbatim', () => {
-    expect(built.payload.length).toBe(image.length);
-    expect(
-      equalBytes(built.payload, xorWindowVerbatim(xorWindowVerbatim(built.stamped, ks0), ksD)),
-    ).toBe(true);
-    /* Words 128..143 (0x200..0x23F) pass verbatim, so the header reads in clear. */
-    expect(
-      equalBytes(built.payload.subarray(0x200, 0x240), built.stamped.subarray(0x200, 0x240)),
-    ).toBe(true);
-  });
-
-  it('the app’s collapsed gate sum(staged ^ ks0) is 0xFFFF', () => {
-    expect(wordSum(xorWindowVerbatim(built.payload, ks0))).toBe(0xffff);
-  });
-
-  it('the stamped image differs from the input in the adjust word only, and the camera’s fold returns it', () => {
-    const diffs: number[] = [];
-    for (let i = 0; i < image.length; i++) if (image[i] !== built.stamped[i]) diffs.push(i);
-    expect(diffs.every((i) => i >= 0x238 && i < 0x23c)).toBe(true);
-    expect(new DataView(built.stamped.buffer).getUint32(REBALANCE_WORD_OFFSET, true)).toBe(
-      built.rebalanceWord,
-    );
-    expect(built.heldWord).toBe(0);
-    expect(built.storedWordSum).toBe(wordSum32(built.stamped, built.stamped.length));
-    /* Folding the payload back is exactly the stamped image. */
-    expect(equalBytes(ffFoldedFormOf(built.payload)!, built.stamped)).toBe(true);
-    expect(equalBytes(foldedFFPayload(built.payload)!, built.stamped)).toBe(true);
-  });
-
-  it('solving is idempotent: a stamped image stages to the same bytes', () => {
-    const again = buildFFPayload(built.stamped);
-    expect(equalBytes(again.payload, built.payload)).toBe(true);
-    expect(equalBytes(again.stamped, built.stamped)).toBe(true);
-    expect(again.heldWord).toBe(built.rebalanceWord);
-  });
-
-  it('whatever word 142 held is overwritten, and the gate still holds', () => {
-    const busy = image.slice();
-    new DataView(busy.buffer).setUint32(REBALANCE_WORD_OFFSET, 0xdeadbeef, true);
-    const out = buildFFPayload(busy);
-    expect(out.heldWord).toBe(0xdeadbeef);
-    expect(equalBytes(out.payload, built.payload)).toBe(true);
+  it('no word is solved: the stamped image differs from the input only in the stamped length', () => {
+    const { stamped } = stageFFVendor(image);
+    expect(equalBytes(stamped, image)).toBe(true);
   });
 
   it('the header length is stamped to the file length', () => {
-    const wrong = image.slice();
-    new DataView(wrong.buffer).setUint32(LENGTH_OFFSET, 0x1234, true);
-    const out = buildFFPayload(wrong);
-    expect(new DataView(out.stamped.buffer).getUint32(LENGTH_OFFSET, true)).toBe(image.length);
+    const copy = image.slice();
+    new DataView(copy.buffer).setUint32(LENGTH_OFFSET, 0x1234, true);
+    const { stamped } = stageFFVendor(copy);
+    expect(new DataView(stamped.buffer).getUint32(LENGTH_OFFSET, true)).toBe(image.length);
   });
 
-  it('an image over the descriptor stage (0xE000) is refused', () => {
-    expect(() => buildFFPayload(ffImageOf(0xe004, 8))).toThrow(/staging buffer/);
+  it('the builder round trips: the payload unstages to the image, and the stored bank decodes to it', () => {
+    const { staged, stored } = stageFFVendor(image);
+    expect(equalBytes(ffPlainOfStaged(staged) ?? new Uint8Array(), image)).toBe(true);
+    expect(equalBytes(ffKeyBPlainOf(stored) ?? new Uint8Array(), image)).toBe(true);
   });
 
-  it('an image without the key pair is refused by the builder itself', () => {
-    expect(() => buildFFPayload(plainImageOf(0x6000, 9))).toThrow(/1\.3\.0\.8-FF key pair/);
+  it('the plain image in the clear is not taken for a Key B bank, nor the old plain form for a staged payload', () => {
+    expect(ffKeyBPlainOf(image)).toBeNull();
+    expect(ffPlainOfStaged(image)).toBeNull();
   });
 
-  it('a payload that is not an FF staged form folds to nothing', () => {
-    const noise = new Uint8Array(0x6000);
-    const next = prng(11);
-    for (let i = 0; i < noise.length; i++) noise[i] = next();
-    expect(foldedFFPayload(noise)).toBeNull();
-    /* The right sum is not enough: the fold must carry the FF key pair. */
-    const plain = plainImageOf(0x6000, 12);
-    const k0 = ksOf(KEY_PAIRS.ff1308.block0, plain.length);
-    const forged = xorWindowVerbatim(plain, k0);
-    const forgedView = new DataView(forged.buffer);
-    const gate = wordSum(xorWindowVerbatim(forged, k0));
-    forgedView.setUint32(
-      REBALANCE_WORD_OFFSET,
-      (forgedView.getUint32(REBALANCE_WORD_OFFSET, true) + (0xffff - gate)) >>> 0,
-      true,
-    );
-    expect(wordSum(xorWindowVerbatim(forged, k0))).toBe(0xffff);
-    expect(foldedFFPayload(forged)).toBeNull();
-    expect(foldedFFPayload(new Uint8Array(8))).toBeNull();
+  it('buildFFPayload (the writer) returns the same payload, stamped image and stored bytes', () => {
+    const built = buildFFPayload(image);
+    const staged = stageFFVendor(image);
+    expect(equalBytes(built.payload, staged.staged)).toBe(true);
+    expect(equalBytes(built.stamped, staged.stamped)).toBe(true);
+    expect(equalBytes(built.stored, staged.stored)).toBe(true);
+  });
+});
+
+describe('stageFFVendor refuses what the camera would refuse', () => {
+  it('an image whose word sum is not 0xFFFF is refused, with nothing built', () => {
+    const image = ffImageOf(0x4000, 9);
+    new DataView(image.buffer).setUint32(ADJUST * 4, 0, true);
+    expect(() => stageFFVendor(image)).toThrow(SeekError);
+  });
+
+  it('an image without the 1.3.0.8-FF key pair (each half once) is refused', () => {
+    expect(() => stageFFVendor(plainImageOf(0x4000, 11))).toThrow(SeekError);
+  });
+
+  it('an image over the descriptor staging buffer (0xE000) is refused', () => {
+    expect(() => stageFFVendor(ffImageOf(0xe004, 13))).toThrow(SeekError);
+  });
+
+  it('an image that is not a whole number of words is refused', () => {
+    expect(() => stageFFVendor(ffImageOf(0x4000, 15).subarray(0, 0x1002))).toThrow(SeekError);
+  });
+});
+
+describe('plainChainBuildOf decides on the image itself', () => {
+  it('a stored word sum of 0 is the plain chain, with or without the FF key pair', () => {
+    const image = plainImageOf(0x4000, 21);
+    new DataView(image.buffer).setUint32(ADJUST * 4, 0, true);
+    new DataView(image.buffer).setUint32(ADJUST * 4, (0 - wordSum32(image, image.length)) >>> 0, true);
+    expect(wordSum32(image, image.length)).toBe(0);
+    expect(plainChainBuildOf(image)).toBe('plain');
+  });
+
+  it('an image carrying the FF key pair is the FF build, whatever its word sum', () => {
+    const image = ffImageOf(0x4000, 23);
+    expect(plainChainBuildOf(image)).toBe('ff-1308');
+    new DataView(image.buffer).setUint32(ADJUST * 4, 0, true);
+    expect(plainChainBuildOf(image)).toBe('ff-1308');
+  });
+
+  it('a word sum of 0xFFFF without the key pair is refused, not staged as plain', () => {
+    const image = plainImageOf(0x4000, 25);
+    const dv = new DataView(image.buffer);
+    dv.setUint32(ADJUST * 4, 0, true);
+    dv.setUint32(ADJUST * 4, (0xffff - wordSum32(image, image.length)) >>> 0, true);
+    expect(wordSum32(image, image.length)).toBe(0xffff);
+    expect(() => plainChainBuildOf(image)).toThrow(SeekError);
   });
 });
 
 /* ==================================================================== *
- * differential: preservation's own staging of the corpus image
+ * the corpus image: the vendor form, pinned by committed hashes
  * ==================================================================== */
 
-describe.skipIf(CORPUS_FF === null)(
-  'buildFFPayload against preservation stagedFormOf (corpus)',
-  () => {
-    const image = CORPUS_FF ?? new Uint8Array(0);
+/** The vendor app's file, 32K_43X0_1.3.0.8_COMPACT-16HZ_Public.bin: 49,308 B, sha256 fd9da63b... */
+const VENDOR_SHA256 = 'fd9da63b22c9b03ef1b93ef1c62e27128c90c40b04780c726064f14aeb99d133';
+/** The plain corpus image (the decrypted bank of the Compact FF Jan 6 2017 dump): sha256 b97ced91... */
+const PLAIN_SHA256 = 'b97ced91fff9f0949a02f35fceab697634cc109a0fe2a2fbbfe6ccfadb7d4d16';
+/** The bank the camera keeps from it: the plain image XOR key block 1, header verbatim: sha256 fdc8be40... */
+const STORED_SHA256 = 'fdc8be406ea5387b65cf32b20463eb28a1168e7a54a2c47cbb575a9c4c5d318d';
 
-    it('the corpus FF image is the factory FF image: sum 0xFFFF, the key pair once each, word 142 free', () => {
-      expect(wordSum32(image, image.length)).toBe(0xffff);
-      expect(locateFFKeys(image)).not.toBeNull();
-      expect(
-        new DataView(image.buffer, image.byteOffset).getUint32(REBALANCE_WORD_OFFSET, true),
-      ).toBe(0);
-      expect(plainChainBuildOf(image)).toBe('ff-1308');
-    });
+describe.skipIf(CORPUS_FF === null)('the corpus FF image, staged as the vendor app stages it', () => {
+  const plain = CORPUS_FF ?? new Uint8Array();
 
-    it('the staged payload of the image equals stagedFormOf of the same stamped image, byte for byte', () => {
-      const patch = buildV1Patch(image);
-      expect(patch.buildId).toBe('compact-1.3.0.8-ff');
-      expect(patch.stagedForm).toBe('xor-ks0-ksD');
-      const built = buildFFPayload(image);
-      expect(equalBytes(built.payload, stagedFormOf(patch, built.stamped))).toBe(true);
-      expect(stagedAcceptanceSum(patch, built.payload)).toBe(0xffff);
-    });
+  it('the corpus image is the plain image the page committed: sha256 b97ced91…', () => {
+    expect(sha256(plain)).toBe(PLAIN_SHA256);
+  });
 
-    it('the payload of the preservation’s PATCHED image is the very bytes its commit step stages', () => {
-      /* steps.ts runCommitStep sends stagedFormOf(patch, patch.patched). The slots builder, given
-       * that patched image, solves the same word (the solve is on the image it is given, word 142
-       * zeroed), stamps the same image and stages the same bytes. */
-      const patch = buildV1Patch(image);
-      const built = buildFFPayload(patch.patched);
-      expect(built.rebalanceWord).toBe(patch.rebalanceWord);
-      expect(equalBytes(built.stamped, patch.patched)).toBe(true);
-      expect(equalBytes(built.payload, stagedFormOf(patch, patch.patched))).toBe(true);
-    });
+  it('the staged payload is the vendor app’s file: sha256 fd9da63b…', () => {
+    const { staged } = stageFFVendor(plain);
+    expect(sha256(staged)).toBe(VENDOR_SHA256);
+    const file = vendorFile();
+    if (file !== null) expect(equalBytes(staged, file)).toBe(true);
+  });
 
-    it('the unpatched image’s solved word is 0xFFFF minus sum(image ^ ksD) with word 142 zero', () => {
-      const built = buildFFPayload(image);
-      const ksD = ksOf(KEY_PAIRS.ff1308.block1, image.length);
-      const base = wordSum(xorWindowVerbatim(image, ksD));
-      expect(built.rebalanceWord).toBe((0xffff - base) >>> 0);
-      /* The factory image carries 0xB7AB9D17 there (TESTING.md 26.4), so it cannot be staged as is. */
-      expect(base).toBe(0xb7ab9d17);
-      /* Its raw sum was 0xFFFF with the word free, so the stored sum is 0xFFFF plus the solved word. */
-      expect(built.storedWordSum).toBe((0xffff + built.rebalanceWord) >>> 0);
-    });
-  },
-);
+  it('the stored bank the camera keeps is the plain image XOR Key B: sha256 fdc8be40…', () => {
+    const { stored } = stageFFVendor(plain);
+    expect(sha256(stored)).toBe(STORED_SHA256);
+    expect(equalBytes(ffKeyBPlainOf(stored) ?? new Uint8Array(), plain)).toBe(true);
+  });
+
+  it('the payload the vendor file holds unstages to the plain image', () => {
+    const { staged } = stageFFVendor(plain);
+    expect(equalBytes(ffPlainOfStaged(staged) ?? new Uint8Array(), plain)).toBe(true);
+  });
+
+  it('the page’s old two-stream payload is not the vendor form (it differs in every word outside the window)', () => {
+    const { staged } = stageFFVendor(plain);
+    const ks0 = ksOf(KEY_PAIRS.ff1308.block0, plain.length >> 2);
+    const ksD = ksOf(KEY_PAIRS.ff1308.block1, plain.length >> 2);
+    const twoStream = xorWindowVerbatim(xorWindowVerbatim(plain, ks0), ksD);
+    expect(equalBytes(staged, twoStream)).toBe(false);
+  });
+});

@@ -75,7 +75,7 @@ const SUPPORTED: Support = { supported: true };
 const UNSUPPORTED = (reason: string): Support => ({ supported: false, reason });
 
 const ADDRESS: Record<SlotKey, number> = { a: 0x14050000, b: 0x14060000, r: 0x14070000 };
-const NO_FLAGS = { raw: false, acknowledgeRisk: false, verify: true, dryRun: false } as const;
+const NO_FLAGS = { raw: false, acknowledgeRisk: false, verify: true, dryRun: false, running16Hz: false } as const;
 
 function slotEntry(key: SlotKey, overrides: Partial<SlotEntry> = {}): SlotEntry {
   return {
@@ -415,7 +415,7 @@ describe('parseSlotsArgs', () => {
   });
 
   it('flashes a raw payload when --raw is given, and a decrypted image otherwise', () => {
-    const raw = { raw: true, acknowledgeRisk: false, verify: true, dryRun: false };
+    const raw = { raw: true, acknowledgeRisk: false, verify: true, dryRun: false, running16Hz: false };
     expect(parseSlotsArgs(['flash', 'b', 'x.bin'], raw)).toMatchObject({ kind: 'raw' });
     expect(parseSlotsArgs(['flash', 'b', 'x.bin'], NO_FLAGS)).toMatchObject({ kind: 'plain' });
   });
@@ -436,9 +436,9 @@ describe('parseSlotsArgs', () => {
   });
 
   it.each([
-    [['list'], { raw: true, acknowledgeRisk: false, verify: true, dryRun: false }],
-    [['list'], { raw: false, acknowledgeRisk: true, verify: true, dryRun: false }],
-    [['dump', 'a'], { raw: false, acknowledgeRisk: false, verify: false, dryRun: false }],
+    [['list'], { raw: true, acknowledgeRisk: false, verify: true, dryRun: false, running16Hz: false }],
+    [['list'], { raw: false, acknowledgeRisk: true, verify: true, dryRun: false, running16Hz: false }],
+    [['dump', 'a'], { raw: false, acknowledgeRisk: false, verify: false, dryRun: false, running16Hz: false }],
   ])('refuses the flash-only flags on %j', (args, flags) => {
     expect(() => parseSlotsArgs(args, flags)).toThrow(/applies only to 'slots flash'/);
   });
@@ -466,7 +466,7 @@ describe('parseCli for slots', () => {
       command: 'slots',
       file: null,
       args: ['flash', 'r', 'image.bin'],
-      slotFlags: { raw: true, acknowledgeRisk: true, verify: false, dryRun: false },
+      slotFlags: { raw: true, acknowledgeRisk: true, verify: false, dryRun: false, running16Hz: false },
     });
     if (parsed.kind !== 'run') throw new Error('expected a run');
     expect(parsed.options.yes).toBe(true);
@@ -480,6 +480,7 @@ describe('parseCli for slots', () => {
       acknowledgeRisk: false,
       verify: true,
       dryRun: false,
+      running16Hz: false,
     });
     expect(parsed.args).toEqual(['list']);
   });
@@ -680,22 +681,23 @@ describe('the flash plan and read-back', () => {
     expect(text).toContain('not predicted');
   });
 
-  it('says the 1.3.0.8 FF image is folded through two keystreams, and what the bank will hold', () => {
+  it('says the 1.3.0.8 FF image is staged as the vendor app stages it, stored under Key B, and who said the build', () => {
     const plan: SlotFlashPlan = {
       ...fakePlan('r', 'plain', new Uint8Array(0x6000)),
-      staging: 'two-stream',
-      storedForm: 'two-stream-fold',
+      staging: 'key-a-keystream',
+      storedForm: 'key-b-ciphertext',
       expectedStored: new Uint8Array(0x10000),
-      warnings: ['the FF image goes to recovery R only'],
+      ffRunning: 'user',
+      warnings: ['UNTESTED: the boot of the written bank is not measured'],
     };
     const text = flashPlanLines(plan, 'ff.bin', 'feedface', false).join('\n');
-    expect(text).toMatch(/staging\s+two-stream/);
-    expect(text).toContain(
-      'ff.bin — decrypted image, folded through the 1.3.0.8 FF two keystreams on the way in (the camera stores the plain image)',
-    );
+    expect(text).toMatch(/staging\s+key-a-keystream/);
+    expect(text).toContain('the image XOR Key A on the way in');
+    expect(text).toContain('the camera stores it under Key B');
+    expect(text).toMatch(/running build\s+your word \(--running-16hz\)/);
     expect(text).not.toContain('encrypted for this bank');
     expect(text).toContain('sha256 feedface');
-    expect(text).toContain('! the FF image goes to recovery R only');
+    expect(text).toContain('! UNTESTED: the boot of the written bank is not measured');
   });
 
   it('asks which bank is written, and says when the camera boots it now', () => {
@@ -852,15 +854,15 @@ describe('slots command', () => {
     expect(result).toMatchObject({ action: 'flash', written: true, verified: true, kind: 'plain' });
   });
 
-  it('writes the 1.3.0.8 FF image to recovery R with --acknowledge-risk: the two-stream plan is shown and reported', async () => {
+  it('writes the 1.3.0.8 FF image to recovery R with --acknowledge-risk: the vendor-form plan is shown and reported', async () => {
     const { ops, log } = fakeOps(reportOf({ booted: 'a' }));
     const ff: SlotOps = {
       ...ops,
       prepare: (report, key, input) => ({
         ...ops.prepare(report, key, input),
-        staging: 'two-stream',
-        storedForm: 'two-stream-fold',
-        warnings: ['the FF image goes to recovery R only'],
+        staging: 'key-a-keystream',
+        storedForm: 'key-b-ciphertext',
+        warnings: ['UNTESTED: the boot of the written bank is not measured'],
       }),
     };
     await writeFile(join(temp.path, 'ff.bin'), new Uint8Array(0x100).fill(7));
@@ -881,12 +883,12 @@ describe('slots command', () => {
     );
 
     expect(log.flashed).toEqual([{ key: 'r', options: { verify: true, acknowledgeRisk: true } }]);
-    expect(test.stdout.text).toMatch(/staging\s+two-stream/);
-    expect(test.stdout.text).toContain('! the FF image goes to recovery R only');
+    expect(test.stdout.text).toMatch(/staging\s+key-a-keystream/);
+    expect(test.stdout.text).toContain('! UNTESTED: the boot of the written bank is not measured');
     expect(result).toMatchObject({
       action: 'flash',
       bank: 'r',
-      staging: 'two-stream',
+      staging: 'key-a-keystream',
       written: true,
       verified: true,
     });
@@ -1077,7 +1079,7 @@ describe('slots through run()', () => {
 
   it('--dry-run is refused on list and dump, and on flash it prints the plan and sends no write', () => {
     expect(() =>
-      parseSlotsArgs(['list'], { raw: false, acknowledgeRisk: false, verify: true, dryRun: true }),
+      parseSlotsArgs(['list'], { raw: false, acknowledgeRisk: false, verify: true, dryRun: true, running16Hz: false }),
     ).toThrow(/--dry-run/);
   });
 });
@@ -1476,7 +1478,7 @@ describe('the 2014 plaintext chain', () => {
     expect(bootRisk(modern, view(modern, 'a'))).toContain('boots now');
   });
 
-  it('lists an FF image in R as recovery only, and says what the running application is', () => {
+  it('lists an FF image in R as recovery only, and says what the running build is', () => {
     const locked = onLockedPlain(reportOf({ booted: 'a' }));
     const slots = locked.slots.map((v) =>
       v.entry.key === 'r' && v.state !== null
@@ -1485,6 +1487,6 @@ describe('the 2014 plaintext chain', () => {
     );
     const text = listLines({ ...locked, slots }, false).join('\n');
     expect(text).toMatch(/R\s+0x14070000.*recovery only/);
-    expect(text).toContain('the running application is not known');
+    expect(text).toContain('the running build is not known');
   });
 });

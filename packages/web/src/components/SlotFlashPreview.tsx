@@ -34,8 +34,8 @@ const STAGING_TEXT: Readonly<Record<SlotFlashPlan['staging'], string>> = {
   'slot-keystream-ciphertext':
     "encrypted under the image's own stage key (key block 0); the camera stores it under the bank's own key",
   plain: 'plaintext, no cipher',
-  'two-stream':
-    'the 1.3.0.8 FF image folded through two keystreams — the camera stores the plain image, not these bytes',
+  'key-a-keystream':
+    'the 1.3.0.8 FF image as the vendor app stages it (XOR Key A) — the camera stores it under Key B, not these bytes',
   verbatim: 'verbatim — the bytes exactly as given',
 };
 
@@ -43,8 +43,8 @@ const STAGING_TEXT: Readonly<Record<SlotFlashPlan['staging'], string>> = {
 function storedText(plan: SlotFlashPlan): string {
   if (plan.expectedStored === null) return 'not predicted — the read-back is the check';
   const size = `${plan.expectedStored.length.toLocaleString()} B predicted`;
-  return plan.storedForm === 'two-stream-fold'
-    ? `${size} — the plain image the payload folds to, not the payload itself`
+  return plan.storedForm === 'key-b-ciphertext'
+    ? `${size} — the image XOR Key B, not the payload itself`
     : size;
 }
 
@@ -90,8 +90,8 @@ export function SlotFlashPreview({
     [
       'Read as',
       kind === 'plain'
-        ? plan.staging === 'two-stream'
-          ? "a decrypted image — folded through the FF build's two keystreams before it is staged"
+        ? plan.staging === 'key-a-keystream'
+          ? 'a decrypted 1.3.0.8 FF image — staged as the vendor app stages it (XOR Key A) before it is sent'
           : 'a decrypted image — encrypted for this bank before it is staged'
         : 'raw bytes — staged exactly as given',
     ],

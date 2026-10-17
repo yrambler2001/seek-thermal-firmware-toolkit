@@ -30,6 +30,7 @@ import { LENGTH_OFFSET } from '../../../packages/core/src/image/header.js';
 import { viewOf } from '../../../packages/core/src/bytes.js';
 import { KEY_PAIRS } from '../../../packages/core/src/preservation/patch.js';
 import { ffImageLength, isFF1308Subject, predictedFFStored, FF_VERSION } from './ff-form.js';
+import { ffBankVerdict, plainBankVerdict } from '../../../packages/core/src/slots/running.js';
 import type {
   BankLetter,
   BankView,
@@ -51,6 +52,7 @@ import {
   type JlinkBench,
   type PatchedBuildString,
   type RunningInfo,
+  type SlotFlashRun,
 } from './types.js';
 
 /** One bank, the unit the page dumps and writes. */
@@ -341,6 +343,44 @@ export function createFakeRig(options: {
     async powerCycle(): Promise<void> {
       /* The fake camera holds nothing across a power cycle but its flash. */
     },
+    async infoJson(): Promise<Record<string, unknown> | null> {
+      if (running === null) return null;
+      /* The camera's own answers, computed from the fake's flash with the same checks the apps run. */
+      const answers = (['a', 'b', 'r'] as const).map((letter) => {
+        const offset = LAYOUT[letter] - BENCH_FLASH_BASE;
+        return ffBankVerdict(flash.subarray(offset, offset + BANK_BYTES));
+      });
+      const plain = (['a', 'b', 'r'] as const).map((letter) => {
+        const offset = LAYOUT[letter] - BENCH_FLASH_BASE;
+        return plainBankVerdict(flash.subarray(offset, offset + BANK_BYTES));
+      });
+      return {
+        firmware: { version: subject()?.version ?? null, build: running },
+        running: {
+          camera: { a: answers[0] ?? null, b: answers[1] ?? null, r: answers[2] ?? null },
+          predicted: { plain, ff: answers },
+        },
+      };
+    },
+
+    async slotFlash(bank, file, options): Promise<SlotFlashRun> {
+      /* The fake's write is the CLI's: the FF image lands as the predicted stored form, anything else
+       * is refused before a byte is sent. The bank is named by the page's own letter. */
+      const image = new Uint8Array(readFileSync(file));
+      const isFf = ffImageLength(image) !== null && image.length <= BANK_BYTES && predictedFFStored(image).length === BANK_BYTES;
+      if (!isFf || !options.running16Hz) {
+        return { code: 1, result: { written: false }, stdout: '', stderr: 'refused (fake)' };
+      }
+      const offset = LAYOUT[bank] - BENCH_FLASH_BASE;
+      flash.set(predictedFFStored(image), offset);
+      return {
+        code: 0,
+        result: { action: 'flash', bank, written: true, verified: true, commitStatus: 0 },
+        stdout: '',
+        stderr: '',
+      };
+    },
+
     async runningInfo(): Promise<RunningInfo | null> {
       if (running === null) return null;
       return {

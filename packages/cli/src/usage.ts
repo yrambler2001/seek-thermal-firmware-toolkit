@@ -247,6 +247,10 @@ not banks and are never written.
                          is sent
   --no-verify            flash: skip the read-back after the commit
   --dry-run              flash: print the plan and send nothing to the bank
+  --running-16hz         flash: say the camera runs the 16 Hz FF 1.3.0.8 build;
+                         used only when its own answers cannot say which build
+                         runs. A wrong choice is refused by the camera (0x70100)
+                         before anything is programmed
   --yes                  flash: skip the confirmation (required when stdin is
                          not a tty)
 

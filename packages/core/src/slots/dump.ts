@@ -14,6 +14,7 @@ import type { SeekDevice } from '../protocol/client.js';
 import type { WindowEntry } from '../profiles/types.js';
 import { readRunningFirmware } from '../workflows/capability.js';
 import { blankSlotCapture, staleDescriptorCapture } from '../workflows/device-info.js';
+import { ffKeyBPlainOf } from './ff-form.js';
 import { DEFAULT_DUMP_OPTIONS, type WorkflowContext } from '../workflows/types.js';
 import type { DumpedSlot, SlotKey, SlotsReport } from './types.js';
 
@@ -187,9 +188,17 @@ export async function dumpSlot(
       notes.push('not decrypted: the read was short, so the image may be incomplete');
     } else {
       const cipher = report.state.profile.cipher;
+      /* The 1.3.0.8 FF image under Key B (ff-form.ts): decoded with its own keystream, not recovered. */
+      const keyB = ffKeyBPlainOf(raw);
       const view = viewOf(raw);
       const recovered = recoverKeyInfo(view, 0, header.length, cipher);
-      if (!recovered.sane) {
+      if (keyB !== null) {
+        plain = keyB;
+        notes.push(
+          `decrypted ${String(keyB.length)} B under Key B: the 1.3.0.8 FF image, stored as the image ` +
+            'XOR its key block 1 keystream with the header window verbatim (TESTING.md 42.12)',
+        );
+      } else if (!recovered.sane) {
         notes.push(
           'key not recovered: the image decrypts to a reset vector that is not a Cortex-M ' +
             `entry (confidence ${recovered.confidence})`,

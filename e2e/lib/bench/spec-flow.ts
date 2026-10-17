@@ -35,14 +35,9 @@ import {
   BENCH_FLASH_BYTES,
   type BenchSubject,
   type BootSlot,
-  type RunningInfo,
 } from './types.js';
-import {
-  carriesFFKeyPair,
-  describeDifference,
-  isFF1308Subject,
-  predictedFFStored,
-} from './ff-form.js';
+import { describeDifference, isFF1308Subject } from './ff-form.js';
+import { ffVendorFilesFromEnv, runFfVendor } from './ff-vendor-run.js';
 import type {
   BankLetter,
   BankView,
@@ -823,14 +818,6 @@ function writeResultOf(r: SubjectResult, letter: BankLetter): SlotWriteResult {
   return found;
 }
 
-/** What the camera says it runs, in one line, for the run log and the notes. */
-function describeRunning(info: RunningInfo | null): string {
-  if (info === null) return 'no report';
-  return (
-    `product ${info.product ?? '?'}, firmware ${info.firmwareVersion ?? '?'}, ` +
-    `build "${info.buildString ?? '?'}", bootloader ${info.bootloaderVersion ?? '?'}`
-  );
-}
 
 /**
  * One bank the page must refuse at its picker (the FF image into A or B, TESTING 42.6). The
@@ -879,211 +866,47 @@ async function refuseBank(
 }
 
 /**
- * The 1.3.0.8 FF (16 Hz) subject (TESTING 42.6), in place of the three-bank write:
- *   - the banks are read as for any subject, and the page's decrypted R is the FF image;
- *   - the image is refused at the picker for A and for B, with nothing sent;
- *   - the image is written to R alone, through the page with the risk tick: the read-back must be
- *     the PREDICTED stored form (`predictedFFStored`, not the page's own builder), and the J-Link
- *     must read the same bytes back from R;
- *   - the boot proof: the FF app's own build string is patched (same length) in the image, written
- *     to R alone, the CPU reset; the camera, which boots FF only from recovery, must run the patched
- *     string. What the FF app reports at each step is recorded.
- * Every region other than R reads back unchanged from the first read to the end.
+ * The 1.3.0.8 FF (16 Hz) subject (TESTING 42.12), in place of the page's three-bank write: the vendor-form
+ * run (`ff-vendor-run.ts`). The platform, the restore point and the FF image come from the environment
+ * (`ffVendorFilesFromEnv`); the Electron page is not driven, and the CLI runs the same core write path the
+ * page runs. The subject records each bank's write, the answers the camera gave, and the boot as observed.
  */
-async function runFF1308(
-  rig: BenchRig,
-  subject: BenchSubject,
-  bytes: Uint8Array,
-  r: SubjectResult,
-  log: (line: string) => void,
-): Promise<void> {
-  const reading = await attempt(r, 'page read', () => readPage(rig, subject, bytes, r, true));
-  if (reading === null) {
-    r.notes.push('FF steps not run: the page read failed');
+async function runFF1308(rig: BenchRig, r: SubjectResult, log: (line: string) => void): Promise<void> {
+  const files = ffVendorFilesFromEnv(process.env, ffScratchDir());
+  if (typeof files === 'string') {
+    r.notes.push(`FF steps not run: ${files}`);
     return;
   }
-  log(
-    `${r.label}: page identified=${String(r.pageIdentified)}, banks match J-Link=${String(r.banksMatch)}`,
-  );
-  const booted = reading.read.banks.find((bank) => bank.booted)?.letter ?? null;
-  r.notes.push(
-    `FF: the page names ${booted === null ? 'no booted bank' : `bank ${UPPER[booted]}`} as booted`,
-  );
-  const start = await snapshot(rig, reading.addresses);
-
-  const image = reading.images.get('r') ?? null;
-  if (image === null) {
-    r.failures.push(
-      'FF: the page holds no decrypted image of bank R, so there is nothing to write',
+  const report = await runFfVendor({ jlink: rig.jlink, camera: rig.camera, log }, files);
+  for (const write of report.writes) {
+    const result = writeResultOf(r, write.bank);
+    result.state = write.problems.length === 0 ? 'passed' : 'failed';
+    r.notes.push(
+      `FF write ${UPPER[write.bank]}: CLI exit ${String(write.cliCode)}, commit ` +
+        `${write.commitStatus === null ? 'none' : hex(write.commitStatus)}, verified ${String(write.cliVerified)}; ` +
+        `J-Link read ${write.matchesPrediction ? 'equals' : 'differs from'} the prediction`,
     );
-    return;
-  }
-  if (!carriesFFKeyPair(image.bytes)) {
-    r.failures.push(
-      `FF: the page's image of R (${image.name}) does not carry the 1.3.0.8-FF key pair`,
-    );
-    return;
-  }
-  r.notes.push(`FF: image ${image.name}, ${String(image.bytes.length)} B, the page's decrypted R`);
-
-  for (const letter of ['b', 'a'] as const) {
-    await refuseBank(rig, reading, letter, image, r);
-  }
-  log(
-    `${r.label}: A and B refuse the FF image: ` +
-      `${writeResultOf(r, 'a').state}, ${writeResultOf(r, 'b').state}`,
-  );
-
-  /* R: the one write. The page's read-back is checked against the prediction, then the J-Link. */
-  const rWrite = writeResultOf(r, 'r');
-  let first: WriteOutcome;
-  try {
-    first = await writeBank(rig, reading, 'r', image, predictedFFStored(image.bytes));
-  } catch (error) {
-    rWrite.state = 'failed';
-    r.failures.push(`write R: ${messageOf(error)}`);
-    r.notes.push('boot proof not run: the R write did not complete');
-    return;
-  }
-  rWrite.sameAsBefore = first.sameAsBefore;
-  if (first.problems.length > 0) {
-    rWrite.state = 'failed';
-    for (const problem of first.problems) r.failures.push(`write R: ${problem}`);
-    r.notes.push('boot proof not run: the R write did not check out');
-    return;
-  }
-  rWrite.state = 'passed';
-  log(`${r.label}: bank R written with the FF image, read back as predicted`);
-
-  /* The boot. The flashed image has cfg[0] = 0 (slot A), so the FF image in R runs only once
-   * cfg[0] names recovery (2). That is set through FW-V1's set-boot, from the flashed image, and
-   * put back after the proof whatever the proof found (the restore is in the finally). */
-  const cfgBefore = bootSlotOf(await readBootWord(rig));
-  if (cfgBefore === null) {
-    r.bootProof = 'failed';
-    r.failures.push('boot: cfg[0] is neither slot A, B nor recovery, so the boot cannot be set');
-    return;
   }
   r.notes.push(
-    `boot config: cfg[0]=${String(cfgBefore)} (${SLOT_NAME[cfgBefore]}) as the flashed image has it`,
+    `FF platform: 8 Hz answers ${JSON.stringify(report.answers8Hz?.camera ?? null)}; ` +
+      `FF-in-R answers ${JSON.stringify(report.answersFfInR?.camera ?? null)}; ` +
+      `after the writes ${JSON.stringify(report.answersAfterWrites?.camera ?? null)}`,
   );
-  let changed = false;
-  try {
-    if (cfgBefore !== RECOVERY_SLOT) {
-      changed = true;
-      await setBootSlotVerified(rig, RECOVERY_SLOT, subject.file);
-      r.notes.push(
-        `boot config: cfg[0] set to ${String(RECOVERY_SLOT)} (${SLOT_NAME[RECOVERY_SLOT]}), block verified`,
-      );
-    }
-    await ffBootProof(rig, reading, image, r, log);
-  } catch (error) {
-    r.bootProof = 'failed';
-    r.failures.push(`boot: ${messageOf(error)}`);
-  } finally {
-    if (changed) {
-      const restored = await attempt(r, 'boot config restore', async () => {
-        await setBootSlotVerified(rig, cfgBefore, subject.file);
-        r.notes.push(
-          `boot config: cfg[0] restored to ${String(cfgBefore)} (${SLOT_NAME[cfgBefore]}), block verified`,
-        );
-        await rig.jlink.resetCpu();
-        if ((await rig.camera.waitForReboot(RESET_DROP_MS, ENUMERATE_MS)) === null) {
-          throw new Error(rebootFailure(RESET_DROP_MS, ENUMERATE_MS));
-        }
-        r.notes.push(
-          `FF app after the restore and a reset: ${describeRunning(await rig.camera.runningInfo())}`,
-        );
-      });
-      if (restored === null) r.bootProof = 'failed';
-    }
-  }
-
-  /* Only R may have changed over the whole FF path: boot config included, once it is restored.
-   * The end state is read after a power cycle, as the start was (the halted reads after a page
-   * write are not reliable, TESTING 42.4). */
-  await rig.camera.powerCycle();
-  if ((await rig.camera.waitForEnumeration(ENUMERATE_MS)) === null) {
-    r.failures.push('FF: the camera did not come back on USB after the last power cycle');
-    r.bootProof = 'failed';
-    return;
-  }
-  for (const region of regionsChanged(start, await snapshot(rig, reading.addresses), 'bank-r')) {
-    r.failures.push(`FF: ${region} changed over the FF steps (only R may change)`);
-    r.bootProof = 'failed';
-  }
+  r.notes.push(
+    report.bootAfterWrites === null
+      ? 'FF boot after the writes: no boot (expected: the vendor form is not run by the bootloader)'
+      : `FF boot after the writes: the camera came back as ${String(report.bootAfterWrites.version)}`,
+  );
+  r.notes.push(
+    `FF staged payload sha256 ${report.stagedSha256}, vendor file match ${String(report.stagedMatchesVendor)}`,
+  );
+  r.notes.push(`FF restore: ${report.restored ? 'the original 1.3.0.0 runs again' : `NOT restored (${String(report.restoredVersion)})`}`);
+  for (const failure of report.failures) r.failures.push(`FF: ${failure}`);
 }
 
-/** The boot test of the FF image in R, with cfg[0] already set to recovery (`runFF1308`). */
-async function ffBootProof(
-  rig: BenchRig,
-  reading: Reading,
-  image: PageImage,
-  r: SubjectResult,
-  log: (line: string) => void,
-): Promise<void> {
-  /* What the FF app reports once R is the boot slot, with the image as sent. */
-  await rig.jlink.resetCpu();
-  if ((await rig.camera.waitForReboot(RESET_DROP_MS, ENUMERATE_MS)) === null) {
-    r.failures.push(`boot: ${rebootFailure(RESET_DROP_MS, ENUMERATE_MS)}`);
-    r.bootProof = 'failed';
-    return;
-  }
-  const asSent = await rig.camera.runningInfo();
-  r.notes.push(`FF app booted from R with the image as sent: ${describeRunning(asSent)}`);
-
-  /* The proof: the same image with its build string patched, written to R alone, then a reset. */
-  const running = asSent?.buildString ?? null;
-  if (running === null) {
-    r.bootProof = 'failed';
-    r.failures.push(
-      'boot: the camera reports no build string for the FF app, so there is none to patch',
-    );
-    return;
-  }
-  const patched = rig.patch(image.bytes, running);
-  if (patched === null) {
-    r.bootProof = 'failed';
-    r.failures.push(`boot: the build string "${running}" is not in the FF image`);
-    return;
-  }
-  r.notes.push(
-    `boot proof: build string ${patched.from} -> ${patched.to} at ${String(patched.offsets.length)} offset(s), R alone`,
-  );
-  const failuresBefore = r.failures.length;
-  const patchedImage: PageImage = { name: image.name, bytes: patched.patched };
-  const second = await writeBank(
-    rig,
-    reading,
-    'r',
-    patchedImage,
-    predictedFFStored(patched.patched),
-  );
-  for (const problem of second.problems) r.failures.push(`boot write R: ${problem}`);
-  if (second.problems.length > 0) {
-    r.bootProof = 'failed';
-    return;
-  }
-  await rig.jlink.resetCpu();
-  if ((await rig.camera.waitForReboot(RESET_DROP_MS, ENUMERATE_MS)) === null) {
-    r.failures.push(`boot: ${rebootFailure(RESET_DROP_MS, ENUMERATE_MS)}`);
-    r.bootProof = 'failed';
-    return;
-  }
-  const back = await rig.camera.runningInfo();
-  r.notes.push(`FF app after the patched R and a reset: ${describeRunning(back)}`);
-  const buildBack = back?.buildString ?? null;
-  if (buildBack === null) {
-    r.failures.push('boot: the camera did not report the build it runs');
-  } else if (!buildBack.includes(patched.to)) {
-    r.failures.push(`boot: the camera runs "${buildBack}", not the patched "${patched.to}"`);
-  }
-  const flashR = await readFlash(rig, reading.addresses.r, BANK_BYTES);
-  if (sha256(flashR) !== sha256(second.raw)) {
-    r.failures.push("boot: bank R after the reset is not the page's read-back");
-  }
-  r.bootProof = r.failures.length === failuresBefore ? 'passed' : 'failed';
-  log(`${r.label}: boot proof ${r.bootProof}`);
+/** The scratch directory the FF run writes its padded bank into. */
+function ffScratchDir(): string {
+  return process.env.SEEK_BENCH_FF_SCRATCH ?? path.join(tmpdir(), 'seek-ff-vendor');
 }
 
 /** One bank's erase, checked: the bank must read back all 0xFF. */
@@ -1622,10 +1445,10 @@ export async function runSubject(
   if (isFF1308Subject(subject)) {
     if (slotBoot) {
       r.notes.push(
-        'per-bank boot tests not run on the FF build: it writes R alone (its boot proof is the FF one)',
+        'per-bank boot tests not run on the FF build: the vendor-form run writes A, B and R and records the boot as observed',
       );
     }
-    await attempt(r, 'FF', () => runFF1308(rig, subject, bytes, r, log));
+    await attempt(r, 'FF', () => runFF1308(rig, r, log));
     return r;
   }
 

@@ -54,23 +54,30 @@ export type StagingForm = 'key-a-ciphertext' | 'slot-keystream-ciphertext' | 'pl
  * `StagingForm`; a plan adds two cases a bank cannot name in advance:
  *
  *  - 'verbatim'    raw bytes, sent exactly as given;
- *  - 'two-stream'  the 1.3.0.8 FF (16 Hz) image on the 2014 chain: the image XOR the
- *                  keystream of key block 0 XOR the keystream of key block 1
- *                  (preservation/patch.ts `xor-ks0-ksD`), with its adjust word solved
- *                  so the app's collapsed acceptance sum is 0xFFFF. The camera folds
- *                  it back and stores the plain image, so the payload is not the stored
- *                  bytes. It exists because the plan cannot tell the 8 Hz build from the
- *                  FF build (one version string): the IMAGE decides, at write time.
+ *  - 'key-a-keystream'  the 1.3.0.8 FF (16 Hz) image on the 2014 chain, as the vendor app
+ *                  stages it: the image XOR the keystream of key block 0 (Key A), header
+ *                  window verbatim (ff-form.ts). The camera re-keys it with key block 1 and
+ *                  stores the image under Key B, so the payload is not the stored bytes.
+ *                  The plan cannot tell the 8 Hz build from the FF build (one version
+ *                  string): the IMAGE decides, at write time.
  */
-export type PlanStaging = StagingForm | 'verbatim' | 'two-stream';
+export type PlanStaging = StagingForm | 'verbatim' | 'key-a-keystream';
 
 /**
  * How the bank's stored bytes relate to the payload when the plan predicts them:
- * 'as-sent' (the 2014 plain chain programs the payload) or 'two-stream-fold' (the
- * 1.3.0.8 FF build folds the payload through its two key streams and programs the
- * image it folds to).
+ * 'as-sent' (the 2014 plain chain programs the payload) or 'key-b-ciphertext' (the
+ * 1.3.0.8 FF build re-keys the payload with key block 1 and stores the image under
+ * Key B: the stored bank is the image XOR Key B, header window verbatim).
  */
-export type StoredForm = 'as-sent' | 'two-stream-fold';
+export type StoredForm = 'as-sent' | 'key-b-ciphertext';
+
+/**
+ * How the page knows the camera runs the 16 Hz FF build, for an FF image's plan. 'camera': the
+ * camera's own per-bank answers say so (running.ts). 'user': the answers could not decide, and
+ * the person said the camera runs the 16 Hz build (a wrong choice is refused by the camera with
+ * 0x00070100 before anything is programmed, TESTING.md 42.10). Null for an image that is not FF.
+ */
+export type FFRunningBasis = 'camera' | 'user' | null;
 
 /**
  * The key a derived write stores under, the booted bank it was derived from, and the key that bank
@@ -205,12 +212,14 @@ export interface SlotFlashPlan {
   readonly expectedStored: Uint8Array | null;
   /**
    * How `expectedStored` relates to `payload`: absent or 'as-sent' when the device programs
-   * the payload as sent, 'two-stream-fold' when it stores the image the payload folds to
-   * (the 1.3.0.8 FF build, whose payload is `expectedStored` XOR two keystreams). Only the
-   * wording of the read-back verdict reads it; the comparison is the same byte compare.
-   * Optional so plans built before it still type-check.
+   * the payload as sent, 'key-b-ciphertext' when it re-keys the payload with key block 1 and
+   * stores the image under Key B (the 1.3.0.8 FF build). Only the wording of the read-back
+   * verdict reads it; the comparison is the same byte compare. Optional so plans built before
+   * it still type-check.
    */
   readonly storedForm?: StoredForm;
+  /** For an FF image's plan: how the running build was decided (see FFRunningBasis). */
+  readonly ffRunning?: FFRunningBasis;
   /**
    * The plain image the bank must decrypt to after the write: the image as its
    * staging builder stamped and balanced it (length, acceptance adjust word, key
