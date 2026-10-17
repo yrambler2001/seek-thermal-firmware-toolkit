@@ -89,6 +89,11 @@ interface Scenario {
   readonly offsets: Readonly<Record<SlotKey, number>>;
   /** The banks the scenario expects to read as empty before anything is written. */
   readonly empty: readonly SlotKey[];
+  /**
+   * Banks that read cleanly, are not erased, and are not an image (their header magic is gone):
+   * 'foreign', which is not 'empty'. Everything else is expected to be an image.
+   */
+  readonly foreign?: readonly SlotKey[];
   /** The camera names a booted bank (then a write to a non-booted application bank needs no tick). */
   readonly bootedNamed: boolean;
   /** The bank the empty write targets, and the bank whose image is written into it. */
@@ -152,6 +157,24 @@ const SCENARIOS: readonly Scenario[] = [
     bootedNamed: false,
     target: 'b',
     source: 'a',
+  },
+  {
+    /* A REAL camera's dump, not an erased one. This Compact PRO FF has its bank A erased (all
+     * 65,536 bytes 0xFF), bank B's image with the header magic at 0x200 wiped to 0xFFFFFFFF (so B
+     * is 'foreign', not 'empty': its header window is not all 0xFF), and recovery R intact.
+     * Nothing is erased here; the emulator boots the dump as it is. */
+    label: 'Compact PRO FF 1.0.3.0 (corpus dump 1C1AB1CBC8A3): A erased and B magic-less as dumped',
+    entryId: 'compact_pro/2016.07.06-17.05.32-1.0.3.0-FF/1C1AB1CBC8A3/dump',
+    version: '1.0.3.0',
+    staging: 'slot-keystream-ciphertext',
+    jedec: SPANSION_4MB_JEDEC,
+    erase: [],
+    offsets: LOCKED_OFFSETS,
+    empty: ['a'],
+    foreign: ['b'],
+    bootedNamed: false,
+    target: 'a',
+    source: 'r',
   },
 ];
 
@@ -467,10 +490,14 @@ describe.skipIf(!available)('an empty bank on the emulated cameras', () => {
         }
       });
 
-      it('reports exactly the erased banks as empty, and the others as images', () => {
+      it('reports exactly the erased banks as empty, the magic-less ones as foreign, and the others as images', () => {
         for (const key of ['a', 'b', 'r'] as const) {
           expect(run.contents?.[key], `bank ${key}`).toBe(
-            scenario.empty.includes(key) ? 'empty' : 'image',
+            scenario.empty.includes(key)
+              ? 'empty'
+              : scenario.foreign?.includes(key) === true
+                ? 'foreign'
+                : 'image',
           );
         }
       });

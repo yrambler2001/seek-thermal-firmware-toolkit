@@ -6107,3 +6107,104 @@ after the run.
   differential test against `stagedFormOf` plus the emulator corpus and a bench write to R.
 - **What the boot proof does and does not show.** It writes the same patched image to every bank, then
   resets, so it proves the camera boots one of the banks, not that each bank boots on its own.
+
+### 42.8 Empty banks (2026-10-17)
+
+The 2014 plain chain has a real bank B (Compact 0.8.0.0 .. 1.3.0.8 8 Hz: A/B/R at `0x14050000` /
+`0x14060000` / `0x14070000`), and many dumps of that line carry it blank. The bench run reported that an
+EMPTY bank B is a real slot: the page wrote bank A's image into an all-0xFF bank B, read it back, and B
+booted alone (that run records its own measurements; they are not repeated or re-measured here). The
+product therefore treats an empty bank as a state, not an error, on every family it can write.
+
+**What "empty" means.** The bank's image-header window (the first `0x240` bytes: the cleartext header
+at `0x200` plus its `0x40`) reads as all `0xFF`, on a read that completed cleanly. It is a fact about
+what the bank holds, so it is not the same thing as any of its neighbours:
+
+| `SlotView.content` | What it is                                                                                             |
+| ------------------ | ------------------------------------------------------------------------------------------------------ |
+| `image`            | a firmware image header was read                                                                       |
+| `empty`            | the header window is all `0xFF`: no image starts here                                                  |
+| `foreign`          | read cleanly, not erased, not an image header this page recognises (a wiped magic, junk, a short read) |
+| `unread`           | no window on this build, the read failed, or every window served blank (a spent reader)                |
+
+`dumpSlot` is stricter, because it has the whole bank: `DumpedSlot.empty` is true only when all
+65,536 bytes of a COMPLETE read are `0xFF`. A short read is never empty (the gap is padded with `0xFF`,
+so the padded bytes say nothing); a header window erased over a bank that still holds other bytes is
+reported as an erased header with N later non-`0xFF` bytes, not as empty.
+
+**Behaviour per family** (`buildSlotPlan`, `SlotEntry.emptyBank`; the same for A, B and R):
+
+| Family                                | Empty bank writable | Why, in one line                                                                                                                 | Evidence                                                                                                                   |
+| ------------------------------------- | ------------------- | -------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `locked-plain` (2014 chain)           | yes                 | the image bytes are staged as they are, no key; the commit erases the block first                                                | the bench run (real camera); emulator (the donors' erased B in every plain corpus row, and B and R erased in the new file) |
+| `modern` (Key A)                      | yes                 | the payload is keyed by the camera's Key A from the analysis, not from the bank; the footer is borrowed from a bank that has one | emulator (Compact 4.8.2.1 with B erased); not yet on a real camera                                                         |
+| `locked-2016` (Compact PRO 1.0.3.x)   | yes                 | the stage key is key block 0 of the IMAGE's own pair; the device re-keys and erases without reading the target                   | emulator (1.0.3.0 with B erased; a real PRO FF dump whose A is erased); not yet on a real camera                           |
+| `unverified-locked` (other 0.x / 1.x) | no                  | no staging form was measured, so nothing is written to a used bank either                                                        | the plan                                                                                                                   |
+| older than 0.8.0.0, unidentified      | no                  | nothing is read or written on the build                                                                                          | the plan                                                                                                                   |
+
+The plan's verdict is the flash verdict for the bank, and `prepareSlotFlash` checks it for an empty
+target, so a family ever marked otherwise is refused with its own reason before a payload is built.
+The acknowledgement rules do NOT change: an empty bank still needs the risk tick where the camera names
+no booted bank (0.8.0.0, the 2016 line, the FF build), and an empty recovery bank R still needs it.
+
+**The 2016 keystream note was stale.** `LOCKED_2016_STAGING_NOTE` said the keystream "is recovered from
+a readable copy of THIS bank, so a bank that cannot be read cannot be written in this form". The code
+never did that: `buildSlotKeystreamPayload` stages with `stageKeyBlockOf(image)` (key block 0 of the
+IMAGE's own pair, found by value) and `keystream(keyWordsOf(block0))`; the bank's own keystream appears
+only in the read-back check, recovered from the read-back itself. The firmware agrees: the commit
+(`fw_validate_decrypt_program`: decrypt under Key A / block 0, re-key under Key B / block 1, erase,
+program, verify) reads nothing from the target. The note, the recovery-bank note, the header comment of
+`write-image.ts` and the preview's staging text now say so, and `empty-bank.test.ts` pins that the same
+image stages the SAME bytes into a used and an empty bank on all three forms.
+
+**What the page and the CLI do.**
+
+- `inspectSlots` names an erased bank `empty` (no decryption, no error, one plain line in the run log);
+  `slots list` and the page say `empty`, with "nothing to boot" instead of a bootability verdict and the
+  plan's reason that it can be written.
+- Dump returns the raw 64 KiB of `0xFF` (`slot-b-empty-<sha8>.bin`, `seek-slot-B-empty-raw-<sha8>.bin`),
+  no decrypted file, and says "empty, nothing to decrypt".
+- Flash, decrypted or raw, plans, confirms, writes and reads back exactly like a used bank; the plan and
+  the confirmation say the target is empty and nothing is overwritten (`SlotFlashPlan.targetEmpty`).
+- The page offers "Use the booted bank's image" on an empty bank when another bank holds an image the
+  read already decrypted: the booted bank's, else a bank the bootloader can key, else the first bank that
+  holds one ("Use slot A's image" when the camera names no booted bank). It prepares that image as a
+  picked file would be, labelled in the plan and the log, and sends nothing until the same confirmation.
+  On the CLI the same is `slots dump <source>`, then `slots flash <empty> <the -decrypted file>`, and
+  `slots list` prints that line under the empty bank.
+
+**Tests** (run the emulator files one at a time; `SEEK_EMU_DIR=<FW-V1>/emu`, from the package):
+
+| Layer                            | Test                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| -------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Plan, join, dump, payloads, send | `core/test/slots/empty-bank.test.ts` (30), `capability.test.ts` (the verdict for every corpus version), `workflows.test.ts` (`SlotState.blank`; a spent reader's blanks are not blank)                                                                                                                                                                                                                                                                                                                                                                                                        |
+| Emulator, core                   | `core/test/slots/empty-bank.emulator.test.ts`: five boots. Compact 1.3.0.0 with B and R erased (inspect; dump B and R; write A's image into B: commit 0, verified, decrypts to the image; R still empty and byte-identical; a raw payload into the empty R reads back as sent). Compact 0.8.0.0 (no booted bank named: the tick is still required for an empty B). Compact 4.8.2.1 with B erased. Compact PRO 1.0.3.0 with B erased. The real PRO FF dump `1C1AB1CBC8A3`, whose bank A is erased and whose B has lost its magic (A `empty`, B `foreign`, R `image`; R's image written into A) |
+| Emulator, corpus-locked          | `core/test/slots/corpus-locked.emulator.test.ts` asserts that the 2014 donors' erased B is `empty` in the analysis and in its dump, on every plain-chain row that has an image to write                                                                                                                                                                                                                                                                                                                                                                                                       |
+| CLI                              | `cli/test/slots.test.ts` (20 new, over fakes) and `cli/test/slots-empty.emulator.test.ts` (Compact 1.3.0.0 end to end: list, dump B, dump A, dry run, write, redump, the booted-bank refusal)                                                                                                                                                                                                                                                                                                                                                                                                 |
+| Web                              | `useSlotsPanel.test.tsx` (dump, fill from the booted bank, the tick, refusals, `bankImageSource`, the gate), `SlotsView.test.tsx`, `SlotWriteConfirm.test.tsx`; the browser spec `e2e/slots-view.e2e.ts` expects the empty bank's row (not run here)                                                                                                                                                                                                                                                                                                                                          |
+
+Which corpus dumps are empty, counted from the vendored full dumps (65,536 of 65,536 bytes `0xFF`):
+Compact 1.3.0.0 (`101310HSNEA2`) has bank B empty; Compact PRO FF 1.0.3.0 (`1C1AB1CBC8A3`) has bank A
+empty and B's magic wiped; none of the other 14 full dumps has an empty bank. The 2014 image-only
+entries are spliced onto the 1.3.0.0 donor, so each of those boots with an empty B too.
+
+**Known limits.**
+
+- `inspectSlots` reads only the header window of a bank it finds blank (reading 64 KiB more per bank
+  would cost 1,024 asks), so `empty` there means "no image starts here". The dump is the whole-bank check.
+- `foreign` also covers a short read and a header that parses but is out of range; the reason is shown.
+- `readDeviceInfo` still logs its existing warning for an erased bank ("no image header (magic
+  0xFFFFFFFF)", pinned by `workflows.test.ts`); the slots reader adds the plain line saying it is empty.
+- The 2016 emulator rows run on the Spansion part the other 2016 rows use (`--jedec 010215`); the
+  Compact PRO boards' own chip was never read.
+
+**To validate on hardware** (none of the code in this subsection was run on a camera):
+
+1. A real Compact PRO 1.0.3.x with an erased bank (the real dump above shows such cameras exist): write the
+   booted bank's image into it through the page, read it back, power cycle, and see that it boots alone.
+2. A real 4.x camera (Compact 4.8.x) with bank B erased by SWD: the same, through the page and through
+   `seek-fw slots flash b`. This is the first evidence for the Key A line on an erased bank, and for mode 8.
+3. The 2014 chain with a blank R: write R through the page (tick required), reset, and confirm the camera
+   still boots from A and that R then boots alone.
+4. The page's "Use the booted bank's image" button in a real browser on the 2014 chain (the bench's flow),
+   and the 1.3.0.8 FF image as the source: it must be refused with the FF message before anything is sent.

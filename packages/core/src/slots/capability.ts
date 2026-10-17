@@ -22,6 +22,11 @@
  *          the family's staging form) or from bytes already in that form
  *          (flashRaw). Both are the same arm and commit; they differ only in
  *          who does the encoding.
+ *   emptyBank  whether a bank that holds no image (its header window reads as
+ *          all 0xFF) may be written, and why. It follows the flash verdict,
+ *          because no staging form reads the target bank: the payload comes
+ *          from the image and the camera's own keys, and the commit erases
+ *          the block first. An empty bank is a state, not an error.
  *
  * THE FAMILIES AND WHAT EACH PROVES (see capability-family.ts for the reasons):
  *   modern          2.x/4.x/10.x/42.x/44.x  key-a-ciphertext    dump yes, flash yes

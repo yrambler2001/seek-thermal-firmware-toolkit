@@ -732,6 +732,12 @@ seek-fw slots flash r prepared.bin --raw --acknowledge-risk   # raw staged bytes
   test checks every corpus build against it.
 - **Read-back.** After a commit the bank is read again and its decrypted image compared with the
   image that was meant to be written.
+- **Empty banks.** A bank whose image-header window reads as all `0xFF` (many 2014 cameras' bank B)
+  is listed as `empty`, not as an error: it dumps as the raw 64 KiB of `0xFF` with nothing to
+  decrypt, and it is written, confirmed and read back like any other bank, the plan saying nothing
+  is overwritten. On the page, **Use the booted bank's image** fills an empty bank with the
+  firmware the camera already runs, so a second slot with the same firmware exists. The risk
+  acknowledgement rules do not change (`TESTING.md` §42.8).
 
 What has been run: the whole path on the emulator for every build from 0.8.0.0 in the corpus
 (`TESTING.md` §41); on a **real** camera (a Compact PRO 1.0.3.0 on a Compact board), a dump of all three banks
