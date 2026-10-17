@@ -42,14 +42,27 @@ import {
   type JlinkBench,
   wordAt,
 } from './lib/bench/index.js';
-import { createFakeRig, fakeSubjects } from './lib/bench/spec-fakes.js';
+import { createFakeRig, fakeFfSubjects, fakeSubjects } from './lib/bench/spec-fakes.js';
+import {
+  describeDifference,
+  ffImageLength,
+  isFF1308Subject,
+  predictedFFStored,
+} from './lib/bench/ff-form.js';
+import { decryptedDumpNamePattern, rawDumpNamePattern } from './lib/slots-page.js';
+import { buildFFPayload } from '../packages/core/src/slots/write-image.js';
 import {
   ADJUST_OFFSET,
   ERASED_FOR_BOOT,
+  applicationPairAt,
   fallbackSource,
+  keyPairNamedBy,
+  runProbe,
   runSubject,
   sameAsWritten,
+  sameAsWrittenUpToKeyPair,
 } from './lib/bench/spec-flow.js';
+import { APPLICATION_KEY_PAIRS } from '../packages/core/src/slots/application-pairs.js';
 import type { WriteApproval } from './lib/supervised-write.js';
 
 const APPROVED: WriteApproval = { approved: true, dry: false, reason: 'test' };
@@ -1341,5 +1354,267 @@ describe('the blank-bank fallback source and the bank erase', () => {
     /* 'Oct 21 2014' starts at 6 (after the 'xx ' the test puts before it), so its last character is at 16. */
     expect(String.fromCharCode(marked?.patched[16] ?? 0)).toBe('B');
     expect(patchBuildString(bytes, 'Oct 21 2014', '-')).toBeNull();
+  });
+});
+
+describe('the slots page names its dumps (empty banks included, TESTING 42.8)', () => {
+  it('matches a version-named raw dump and the empty bank raw dump, per bank', () => {
+    expect(rawDumpNamePattern('b').test('seek-slot-B-v0.9.1.0-raw-8881f545.bin')).toBe(true);
+    expect(rawDumpNamePattern('b').test('seek-slot-B-empty-raw-71189f7f.bin')).toBe(true);
+    expect(rawDumpNamePattern('b').test('seek-slot-A-empty-raw-71189f7f.bin')).toBe(false);
+    expect(rawDumpNamePattern('r').test('seek-slot-R-v1.3.0.8-raw-0a1b2c3d.bin')).toBe(true);
+    expect(rawDumpNamePattern('b').test('seek-slot-B-v0.9.1.0-decrypted-f0ff04d5.bin')).toBe(false);
+  });
+
+  it('matches a decrypted dump with or without its key pair, and never an empty bank', () => {
+    const keys = `-KeyA-${'a'.repeat(32)}-KeyB-${'b'.repeat(32)}`;
+    expect(decryptedDumpNamePattern('a').test('seek-slot-A-v4.8.1.9-decrypted-2c5eedec.bin')).toBe(
+      true,
+    );
+    expect(
+      decryptedDumpNamePattern('a').test(`seek-slot-A-v4.8.1.9-decrypted-2c5eedec${keys}.bin`),
+    ).toBe(true);
+    expect(decryptedDumpNamePattern('b').test('seek-slot-B-empty-raw-71189f7f.bin')).toBe(false);
+  });
+});
+
+describe('the 1.3.0.8 FF build: its subject, its prediction, its differences', () => {
+  it('is the FF build of 1.3.0.8, not the 8 Hz build or another FF version', () => {
+    expect(isFF1308Subject({ version: '1.3.0.8', variant: 'ff' })).toBe(true);
+    expect(isFF1308Subject({ version: '1.3.0.8', variant: 'std' })).toBe(false);
+    expect(isFF1308Subject({ version: '1.3.0.0', variant: 'ff' })).toBe(false);
+  });
+
+  it('predicts the stored bank the way the core builds it: the image, length stamped, adjust word solved', () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'seek-ff-form-'));
+    try {
+      const [subject] = fakeFfSubjects(dir);
+      if (subject === undefined) throw new Error('no FF fixture');
+      const flash = new Uint8Array(readFileSync(subject.file));
+      const bank = flash.subarray(0x14070000 - BENCH_FLASH_BASE, 0x14080000 - BENCH_FLASH_BASE);
+      const length = ffImageLength(bank);
+      expect(length).toBe(0xc000);
+      const image = bank.slice(0, length ?? 0);
+      const predicted = predictedFFStored(image);
+      expect(predicted.length).toBe(0x10000);
+      /* The core's own builder, on the same image (the test imports the module; the package does not export it). */
+      const built = buildFFPayload(image);
+      expect(predicted.subarray(0, built.stamped.length)).toEqual(built.stamped);
+      expect(predicted.subarray(built.stamped.length).every((byte) => byte === 0xff)).toBe(true);
+      /* The camera changes the adjust word and nothing else of the image. */
+      const changed: number[] = [];
+      for (let at = 0; at < image.length; at++) if (predicted[at] !== image[at]) changed.push(at);
+      expect(changed.every((at) => at >= ADJUST_OFFSET && at < ADJUST_OFFSET + 4)).toBe(true);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('describes a difference by its count and first byte, and says when two byte arrays are identical', () => {
+    const a = new Uint8Array([1, 2, 3, 4]);
+    expect(describeDifference(a, new Uint8Array([1, 2, 3, 4]))).toBe('identical');
+    expect(describeDifference(a, new Uint8Array([1, 9, 3, 8]))).toBe(
+      '2 byte(s) differ, first at 0x000001',
+    );
+    expect(describeDifference(a, new Uint8Array([1]))).toBe('4 B, not 1 B');
+  });
+});
+
+describe('the FF path, on the fake rig', () => {
+  let dir = '';
+  beforeAll(() => {
+    dir = mkdtempSync(path.join(tmpdir(), 'seek-ff-flow-test-'));
+  });
+  afterAll(() => {
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('refuses the FF image at A and B with nothing sent, writes R as predicted, and boots the patched R', async () => {
+    const subjects = fakeFfSubjects(path.join(dir, 'happy'));
+    const rig = createFakeRig({ subjects, failure: null });
+    const result = await runSubject(rig, subjectAt(subjects, 0), () => undefined, false);
+    expect(result.failures).toEqual([]);
+    expect(result.flashVerified).toBe(true);
+    expect(result.slotWrites.map((write) => [write.bank, write.state])).toEqual([
+      ['b', 'refused'],
+      ['a', 'refused'],
+      ['r', 'passed'],
+    ]);
+    expect(result.bootProof).toBe('passed');
+    /* The flashed dump boots A; the proof sets cfg[0]=2, boots R, and puts cfg[0] back to 0. */
+    expect(result.notes.join('\n')).toMatch(/boot config: cfg\[0\]=0 \(slot A\)/);
+    expect(result.notes.join('\n')).toMatch(/cfg\[0\] set to 2 \(recovery bank R\)/);
+    expect(result.notes.join('\n')).toMatch(
+      /FF app after the patched R and a reset: .*BUILD:BBBBBB/,
+    );
+    expect(result.notes.join('\n')).toMatch(/cfg\[0\] restored to 0 \(slot A\)/);
+    expect(await rig.jlink.readFlash(0x14010000, 4)).toEqual(new Uint8Array([0, 0, 0, 0]));
+  });
+
+  it('fails the R write when the camera keeps the image as sent instead of the predicted form', async () => {
+    const subjects = fakeFfSubjects(path.join(dir, 'stored'));
+    const rig = createFakeRig({ subjects, failure: null, ffFault: 'stored' });
+    const result = await runSubject(rig, subjectAt(subjects, 0), () => undefined, false);
+    expect(result.slotWrites.find((write) => write.bank === 'r')?.state).toBe('failed');
+    expect(result.failures.join(' ')).toMatch(/not the predicted stored form/);
+    expect(result.bootProof).toBe('not-run');
+  });
+
+  it('fails the run when the page takes the FF image at a bank it must refuse', async () => {
+    const subjects = fakeFfSubjects(path.join(dir, 'accepted'));
+    const rig = createFakeRig({ subjects, failure: null, ffFault: 'accepted' });
+    const result = await runSubject(rig, subjectAt(subjects, 0), () => undefined, false);
+    expect(result.slotWrites.find((write) => write.bank === 'b')?.state).toBe('failed');
+    expect(result.slotWrites.find((write) => write.bank === 'a')?.state).toBe('failed');
+    expect(result.failures.join(' ')).toMatch(/refuse B: fake: the picker took the FF image/);
+  });
+
+  it('restores cfg[0] to slot A even when the boot proof fails (the camera runs the wrong string)', async () => {
+    const subjects = fakeFfSubjects(path.join(dir, 'boot-fault'));
+    const rig = createFakeRig({ subjects, failure: { subject: 0, step: 'boot' } });
+    const result = await runSubject(rig, subjectAt(subjects, 0), () => undefined, false);
+    expect(result.bootProof).toBe('failed');
+    expect(result.failures.join(' ')).toMatch(/the camera runs ".*BROKE.*", not the patched/);
+    expect(result.notes.join('\n')).toMatch(/cfg\[0\] restored to 0 \(slot A\)/);
+    expect(await rig.jlink.readFlash(0x14010000, 4)).toEqual(new Uint8Array([0, 0, 0, 0]));
+  });
+
+  it('a set-boot to a slot that is not A, B or R is refused before anything is written', async () => {
+    const subjects = fakeFfSubjects(path.join(dir, 'bad-slot'));
+    const rig = createFakeRig({ subjects, failure: null });
+    await expect(rig.jlink.setBootSlot(3 as never, subjects[0]?.file ?? '')).rejects.toThrow(
+      /cfg\[0\] 3/,
+    );
+    /* Nothing was flashed on this rig: the boot-config word is still blank, and stays so. */
+    expect(await rig.jlink.readFlash(0x14010000, 4)).toEqual(new Uint8Array([255, 255, 255, 255]));
+  });
+});
+
+describe('the probes, on the fake rig (SEEK_BENCH_PROBE)', () => {
+  let dir = '';
+  beforeAll(() => {
+    dir = mkdtempSync(path.join(tmpdir(), 'seek-probe-test-'));
+  });
+  afterAll(() => {
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('empty-b: the empty bank is listed, dumped, filled from the booted bank, and B alone boots', async () => {
+    const subjects = fakeSubjects(path.join(dir, 'empty'), { blankB: true });
+    const rig = createFakeRig({ subjects, failure: null });
+    const result = await runProbe(rig, subjectAt(subjects, 1), 'empty-b', () => undefined);
+    expect(result.failures).toEqual([]);
+    expect(result.notes.join('\n')).toMatch(/bank B is listed "empty"/);
+    expect(result.notes.join('\n')).toMatch(/dump B: ".*empty, nothing to decrypt.*"/);
+    expect(result.slotWrites.find((write) => write.bank === 'b')?.state).toBe('passed');
+    expect(result.slotBoot.find((test) => test.bank === 'b')?.state).toBe('booted-alone');
+    expect(result.bootProof).toBe('passed');
+  });
+
+  it('empty-b: a bank that is not empty is a failure of the probe, not a fill', async () => {
+    const subjects = fakeSubjects(path.join(dir, 'full'));
+    const rig = createFakeRig({ subjects, failure: null });
+    const result = await runProbe(rig, subjectAt(subjects, 0), 'empty-b', () => undefined);
+    expect(result.failures.join(' ')).toMatch(/bank B is listed .*, not empty/);
+    expect(result.slotWrites.find((write) => write.bank === 'b')?.state).toBe('not-run');
+  });
+
+  it('refuse-b: a bank the page decrypts nothing of is skipped, and nothing is sent', async () => {
+    const subjects = fakeSubjects(path.join(dir, 'refuse'), { blankB: true });
+    const rig = createFakeRig({ subjects, failure: null });
+    const result = await runProbe(rig, subjectAt(subjects, 1), 'refuse-b', () => undefined);
+    expect(result.failures).toEqual([]);
+    expect(result.slotWrites.find((write) => write.bank === 'b')?.state).toBe('skipped');
+    expect(result.notes.join('\n')).toMatch(/decrypts no image of its own/);
+  });
+});
+
+describe('the read-back of a modern write: the camera key pair may replace the application pair (42.7)', () => {
+  /* A 64 KiB image holding the Mosaic 10.9.1.31 application pair at 0x8000 (key A) and 0x8010 (key B). */
+  const pair = APPLICATION_KEY_PAIRS.find((candidate) =>
+    candidate.builds.includes('Mosaic 10.9.1.31'),
+  );
+  if (pair === undefined) throw new Error('no Mosaic 10.9.1.31 pair in the core table');
+  const written = (): Uint8Array => {
+    const image = new Uint8Array(0x10000);
+    for (let at = 0; at < image.length; at++) image[at] = (at * 37 + 11) & 0xff;
+    image.set(Buffer.from(pair.keyA, 'hex'), 0x8000);
+    image.set(Buffer.from(pair.keyB, 'hex'), 0x8010);
+    return image;
+  };
+  const CAMERA_A = '874dfcf676d51af58f356d972663a592';
+  const CAMERA_B = 'b23b0d202adb4713eb799f87a29e279f';
+  /* The read-back: the same image with the camera's pair in place, and the adjust word moved. */
+  const readBack = (): Uint8Array => {
+    const bytes = written();
+    bytes.set(Buffer.from(CAMERA_A, 'hex'), 0x8000);
+    bytes.set(Buffer.from(CAMERA_B, 'hex'), 0x8010);
+    bytes.set([1, 2, 3, 4], ADJUST_OFFSET);
+    return bytes;
+  };
+  const named = { keyA: CAMERA_A, keyB: CAMERA_B };
+
+  it('finds the application pair by value, each half once', () => {
+    expect(applicationPairAt(written())).toEqual({ at0: 0x8000, at1: 0x8010 });
+    expect(applicationPairAt(new Uint8Array(0x10000))).toBeNull();
+  });
+
+  it('accepts the camera pair the read-back names, with the adjust word moved, and nothing else changed', () => {
+    expect(sameAsWrittenUpToKeyPair(readBack(), written(), named)).toBe(true);
+  });
+
+  it('refuses a read-back that changes any other byte, a key the name does not give, or no name at all', () => {
+    const tampered = readBack();
+    tampered[0x1234] = (tampered[0x1234] ?? 0) ^ 0xff;
+    expect(sameAsWrittenUpToKeyPair(tampered, written(), named)).toBe(false);
+    const wrongKey = readBack();
+    wrongKey[0x8000] = (wrongKey[0x8000] ?? 0) ^ 0x01;
+    expect(sameAsWrittenUpToKeyPair(wrongKey, written(), named)).toBe(false);
+    expect(sameAsWrittenUpToKeyPair(readBack(), written(), null)).toBe(false);
+  });
+
+  it('reads the pair from a decrypted file name', () => {
+    expect(
+      keyPairNamedBy(
+        `seek-slot-B-v10.9.1.31-decrypted-c6c5719a-KeyA-${CAMERA_A}-KeyB-${CAMERA_B}.bin`,
+      ),
+    ).toEqual(named);
+    expect(keyPairNamedBy('seek-slot-B-v10.9.1.31-decrypted-c6c5719a.bin')).toBeNull();
+  });
+});
+
+describe('the derived probe, on the fake rig (TESTING 42.7)', () => {
+  let dir = '';
+  beforeAll(() => {
+    dir = mkdtempSync(path.join(tmpdir(), 'seek-derived-test-'));
+  });
+  afterAll(() => {
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('derives B and R, boots each with its own cfg[0], restores cfg[0] exactly, and leaves A alone', async () => {
+    const [base] = fakeSubjects(path.join(dir, 'derived'));
+    if (base === undefined) throw new Error('no fake subject');
+    /* The flashed dump boots slot A: cfg[0] = 0 in its boot-config block. */
+    const bytes = new Uint8Array(readFileSync(base.file));
+    bytes.set(Buffer.from([0, 0, 0, 0]), 0x10000);
+    writeFileSync(base.file, bytes);
+    const subject = { ...base, sha256: sha256(bytes) };
+    const rig = createFakeRig({ subjects: [subject], failure: null });
+    const result = await runProbe(rig, subject, 'derived', () => undefined);
+    expect(result.failures).toEqual([]);
+    expect(result.slotWrites.map((write) => [write.bank, write.state])).toEqual([
+      ['b', 'passed'],
+      ['a', 'not-run'],
+      ['r', 'passed'],
+    ]);
+    const notes = result.notes.join('\n');
+    expect(notes).toMatch(/derived B: cfg\[0\]=1 \(slot B\), the camera runs "BUILD:ZBZZZZ"/);
+    expect(notes).toMatch(
+      /derived R: cfg\[0\]=2 \(recovery bank R\), the camera runs "BUILD:ZRZZZZ"/,
+    );
+    expect(notes.match(/cfg\[0\] restored to 0, block as saved/g)).toHaveLength(2);
+    expect(result.bootProof).toBe('passed');
+    expect(await rig.jlink.readFlash(0x14010000, 4)).toEqual(new Uint8Array([0, 0, 0, 0]));
   });
 });

@@ -40,7 +40,13 @@ import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { say } from './lib/browser.js';
-import { runSubject, subjectLabel, type SubjectResult } from './lib/bench/spec-flow.js';
+import {
+  runProbe,
+  runSubject,
+  subjectLabel,
+  type BenchProbe,
+  type SubjectResult,
+} from './lib/bench/spec-flow.js';
 import { createFakeRig, fakeSubjects, type FakeFailure } from './lib/bench/spec-fakes.js';
 import { createRealRig } from './lib/bench/spec-page.js';
 import {
@@ -75,6 +81,20 @@ function failureFromEnv(): FakeFailure | null {
   }
   return { subject: Number(match[1]), step: match[2] as FakeFailure['step'] };
 }
+
+/**
+ * SEEK_BENCH_PROBE names one probe to run on each subject in place of its full flow:
+ *   refuse-b  bank B's own decrypted image is offered at the picker (the page must refuse it)
+ *   empty-b   the empty bank as a user does it: list, dump, fill from the booted bank, boot B alone
+ * Unset, the full flow runs.
+ */
+function probeFromEnv(): BenchProbe | null {
+  const raw = process.env.SEEK_BENCH_PROBE ?? '';
+  if (raw === '') return null;
+  if (raw === 'refuse-b' || raw === 'empty-b' || raw === 'derived') return raw;
+  throw new Error(`SEEK_BENCH_PROBE=${raw}: use refuse-b, empty-b or derived`);
+}
+const PROBE = probeFromEnv();
 
 /* The plan is built inside the gate, and only when the gate asks for it: a run
  * that is not approved and not a dry run never reads the tree. */
@@ -142,12 +162,15 @@ describe.skipIf(!runnable)('the slots bench', () => {
       it(
         'flashes it, checks the page and the J-Link, writes both banks, and proves the boot',
         async () => {
+          const log = (line: string): void => {
+            say(line);
+          };
           const result =
             rig === null
               ? missingRig(subject)
-              : await runSubject(rig, subject, (line) => {
-                  say(line);
-                });
+              : PROBE === null
+                ? await runSubject(rig, subject, log)
+                : await runProbe(rig, subject, PROBE, log);
           results.push(result);
           /* The run's log is the only place a failure's cause shows before the run ends. */
           for (const note of result.notes) say(`${result.label}: note: ${note}`);

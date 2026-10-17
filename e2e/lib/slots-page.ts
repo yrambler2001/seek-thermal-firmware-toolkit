@@ -161,6 +161,25 @@ async function rowHandle(page: Page, letter: BankLetter): Promise<ElementHandle>
 }
 
 /**
+ * The name the page saves a bank's RAW dump under. A bank with an image is named by its
+ * version (`seek-slot-B-v0.9.1.0-raw-<sha8>.bin`); an empty bank has no version, so it is
+ * named by its state (`seek-slot-B-empty-raw-<sha8>.bin`, TESTING 42.8).
+ */
+export function rawDumpNamePattern(letter: BankLetter): RegExp {
+  return new RegExp(`^seek-slot-${letter.toUpperCase()}-(?:v.+|empty)-raw-[0-9a-f]{8}\\.bin$`);
+}
+
+/**
+ * The name the page saves a bank's DECRYPTED dump under, when a recovered key opens it. An
+ * empty bank has none: there is nothing in it to decrypt.
+ */
+export function decryptedDumpNamePattern(letter: BankLetter): RegExp {
+  return new RegExp(
+    `^seek-slot-${letter.toUpperCase()}-v.+-decrypted-[0-9a-f]{8}(-KeyA-[0-9a-f]{32}-KeyB-[0-9a-f]{32})?\\.bin$`,
+  );
+}
+
+/**
  * Presses one bank's Dump and returns the file(s) it saved: the raw 64 KiB, and
  * the decrypted image when a recovered key opens the bank (null when none does).
  */
@@ -183,22 +202,49 @@ export async function dumpBank(
     /^(Dumped slot|Failed|Cancelled)/,
     20 * 60_000,
   );
+  const rawPattern = rawDumpNamePattern(letter);
+  const decryptedPattern = decryptedDumpNamePattern(letter);
   const raw = await downloads.waitFor(
-    (file) => new RegExp(`^seek-slot-${name}-v.+-raw-[0-9a-f]{8}\\.bin$`).test(file),
+    (file) => rawPattern.test(file),
     60_000,
     `the raw dump of slot ${name}`,
   );
   const decrypted = await downloads
-    .waitFor(
-      (file) =>
-        new RegExp(
-          `^seek-slot-${name}-v.+-decrypted-[0-9a-f]{8}(-KeyA-[0-9a-f]{32}-KeyB-[0-9a-f]{32})?\\.bin$`,
-        ).test(file),
-      5_000,
-      `the decrypted dump of slot ${name}`,
-    )
+    .waitFor((file) => decryptedPattern.test(file), 5_000, `the decrypted dump of slot ${name}`)
     .catch((): null => null);
   return { raw, decrypted, status };
+}
+
+/**
+ * Presses a bank row's own "Use … image" button (the empty bank's fill, from the booted bank or
+ * another bank that holds an image) and waits for the plan to be prepared: "Ready — review the
+ * plan" or "Rejected — …". Returns the button's label and the status line.
+ */
+export async function fillFromBank(
+  w: Wizard,
+  page: Page,
+  letter: BankLetter,
+): Promise<{ readonly label: string; readonly status: string }> {
+  const row = await rowOf(page, letter);
+  const button = row.buttons.find((candidate) => candidate.label.startsWith('Use '));
+  if (button === undefined) {
+    throw new Error(
+      `bank ${letter.toUpperCase()} offers no "Use … image" button (its buttons: ${row.buttons
+        .map((candidate) => candidate.label)
+        .join(', ')})`,
+    );
+  }
+  const handle = await rowHandle(page, letter);
+  const moved = await w.watchStatus(SLOTS_STATUS);
+  await w.click(handle, button.label);
+  await moved();
+  await page.waitForFunction(
+    (sel: string) =>
+      /^(Ready|Rejected)/.test(document.querySelector<HTMLElement>(sel)?.innerText ?? ''),
+    { timeout: 60_000, polling: 250 },
+    SLOTS_STATUS,
+  );
+  return { label: button.label, status: await w.text(SLOTS_STATUS) };
 }
 
 /**

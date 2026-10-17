@@ -30,6 +30,8 @@ export interface BankView {
   readonly version: string | null;
   /** The row says "booted now". */
   readonly booted: boolean;
+  /** The Firmware cell as the page shows it ("1.2.0.0", or "empty", or why the bank was not read). */
+  readonly firmware: string;
 }
 
 export interface PageRead {
@@ -42,6 +44,8 @@ export interface PageRead {
 
 /** A file the page saved from a Dump. */
 export interface PageDump {
+  /** The status line the dump ended on ("Dumped slot B ..."). */
+  readonly status: string;
   readonly raw: Uint8Array;
   readonly rawName: string;
   /** The decrypted image, when a recovered key opens the bank; null when none does. */
@@ -64,16 +68,37 @@ export interface PageWrite {
   readonly outcome: string | null;
 }
 
+/** What the page said when it refused an image at its picker (nothing was sent). */
+export interface PageRefusal {
+  /** The status line ("Rejected — see the log above."). */
+  readonly status: string;
+  /** The reason the page logged for the refusal ("cannot use this file: ..."), or null when it logged none. */
+  readonly reason: string | null;
+}
+
 /** One Electron window on the slots page, connected to the camera. */
 export interface BenchPage {
   readSlots(): Promise<PageRead>;
   dump(letter: BankLetter): Promise<PageDump>;
+  /**
+   * Picks `image` for `letter` and expects the page to REFUSE it at the picker: the status is
+   * "Rejected", and no write is offered or sent. Throws when the page takes the image instead
+   * (it reports "Ready", so the caller must not confirm it; the window is closed).
+   */
+  refuse(letter: BankLetter, image: PageImage): Promise<PageRefusal>;
   /**
    * Picks `image` for `letter`, confirms the write, and returns the page's
    * verdict. Throws when the page does not reach "Written", or when its
    * acknowledgement prompt is not what `acknowledge` expects (nothing is sent).
    */
   write(letter: BankLetter, image: PageImage, acknowledge: boolean): Promise<PageWrite>;
+  /**
+   * Presses the bank's own "Use the booted bank's image" (or "Use Bank X's image") button, confirms
+   * the write, and returns the page's verdict, as `write` does. The image is the page's own: the
+   * caller checks the read-back against the image it expects the page to have used. Throws when the
+   * row offers no such button, or when the page does not reach "Written".
+   */
+  fill(letter: BankLetter, acknowledge: boolean): Promise<PageWrite>;
   /** Every request the write guard refused in this window, and every REFUSED line. */
   refusals(): Promise<string[]>;
   close(): Promise<void>;

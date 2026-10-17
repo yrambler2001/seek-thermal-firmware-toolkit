@@ -56,6 +56,7 @@ const STATE_WORD: Readonly<Record<StepState, string>> = {
   failed: 'FAILED',
   skipped: 'skipped',
   'not-run': 'not run',
+  refused: 'refused by the page',
 };
 
 function writesCell(writes: readonly SlotWriteResult[]): string {

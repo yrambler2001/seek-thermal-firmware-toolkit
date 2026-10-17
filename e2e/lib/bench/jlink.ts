@@ -37,7 +37,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 
 import type { WriteApproval } from '../supervised-write.js';
-import { BENCH_FLASH_BASE, BENCH_FLASH_BYTES, type JlinkBench } from './types.js';
+import { BENCH_FLASH_BASE, BENCH_FLASH_BYTES, type BootSlot, type JlinkBench } from './types.js';
 
 /** The FW-V1 target directory the recipe runs in (TESTING.md 41.5). */
 export const DEFAULT_TARGET = 'compact_8hz_1_3_0_8';
@@ -101,7 +101,7 @@ const ERASE_TOLERATED = /Failed to erase sectors|Erase returned with error code 
 const JLINK_ERROR = /\*{3,} Error/;
 
 /** The runner's commands this module may run, and nothing else (never `dump-spifi-4m`). */
-type RunnerCommand = 'erase-spifi-range' | 'flash-factory-4m';
+type RunnerCommand = 'erase-spifi-range' | 'flash-factory-4m' | 'set-boot';
 
 export const DRY_RUN_READ = 'dry-run: no hardware access';
 
@@ -531,6 +531,43 @@ export function createJlinkBench(options: JlinkBenchOptions): JlinkBench {
           );
         }
       });
+    },
+
+    async setBootSlot(slot: BootSlot, template: string): Promise<void> {
+      /* The type says 0..2; a caller that ignores it is still refused here, before any write. */
+      const asNumber: number = slot;
+      if (asNumber !== 0 && asNumber !== 1 && asNumber !== 2) {
+        throw new Error(
+          `setBootSlot: cfg[0] is 0 (slot A), 1 (slot B) or 2 (recovery), not ${String(asNumber)}`,
+        );
+      }
+      if (!existsSync(template)) throw new Error(`setBootSlot: no template at ${template}`);
+      if (statSync(template).size !== BENCH_FLASH_BYTES) {
+        throw new Error(`setBootSlot: the template ${template} is not the 4 MiB flash`);
+      }
+      if (dry) {
+        log(
+          `[dry-run] would run: node tools/jlink/jlink-runner.js set-boot in ${targetDir} ` +
+            `(BOOT_SLOT=${String(slot)}, BOOT_CFG_TEMPLATE=${template}, JLINK_SERIAL=${serial})`,
+        );
+        return;
+      }
+      await withScratch(async (dir) => {
+        const jlinkExe = writeShim(dir);
+        const set = await runRunner('set-boot', {
+          BOOT_SLOT: String(slot),
+          BOOT_CFG_TEMPLATE: template,
+          JLINKEXE: jlinkExe,
+        });
+        if (set.code !== 0) {
+          throw new Error(
+            `set-boot ${String(slot)} failed (exit ${String(set.code)}): ${tail(set)}`,
+          );
+        }
+      });
+      /* No read-back here: a halted read straight after a page write is not reliable on this
+       * part (the SPIFI controller, TESTING 42.4). The caller compares the block after a power
+       * cycle, when the reads are, with `bootBlockOf`. */
     },
 
     readFlash(address: number, length: number): Promise<Uint8Array> {

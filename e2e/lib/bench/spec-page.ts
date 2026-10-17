@@ -33,6 +33,7 @@ import {
   confirmEnabled,
   confirmWrite,
   dumpBank,
+  fillFromBank,
   openWriteConfirm,
   outcomeAlert,
   pickImage,
@@ -52,6 +53,7 @@ import type {
   PageDump,
   PageImage,
   PageRead,
+  PageRefusal,
   PageWrite,
 } from './spec-rig.js';
 
@@ -110,6 +112,7 @@ function bankView(row: BankRowView): BankView {
     address: Number.parseInt(row.address, 16),
     version,
     booted: row.booted,
+    firmware: row.firmware,
   };
 }
 
@@ -152,6 +155,42 @@ export function checkChooserEntry(chooserName: string): string {
 
 function windowOf(target: TargetHandle, scratchDir: string): BenchPage {
   const picked = path.join(scratchDir, 'picked');
+
+  /* The prepared plan is confirmed: the extra tick only where the page asks for it, and the page's
+   * own verdict back. Shared by the picker's write and the bank's own fill. */
+  async function confirmPrepared(name: string, acknowledge: boolean): Promise<PageWrite> {
+    await openWriteConfirm(target.wizard, target.page, name);
+    const ackShown = (await target.page.$(ACK_BOX)) !== null;
+    if (ackShown !== acknowledge) {
+      await target.wizard.click(CONFIRM_DIALOG, 'Cancel');
+      throw new Error(
+        `the page ${ackShown ? 'asks' : 'does not ask'} for the acknowledgement on ${name}; ` +
+          `the plan expected it ${acknowledge ? 'to' : 'not to'}`,
+      );
+    }
+    if (ackShown && (await confirmEnabled(target.wizard, name))) {
+      throw new Error(`${name}: Yes is on before the acknowledgement is ticked`);
+    }
+    const status = await confirmWrite(target.wizard, target.page, name, ackShown);
+    if (!status.startsWith('Written. ')) {
+      throw new Error(
+        `the write ended "${status}"\n${await target.wizard.logTail('slotsrun', 25)}`,
+      );
+    }
+    return { status, ackShown, outcome: (await outcomeAlert(target.page)) ?? null };
+  }
+
+  /* Every budget back to zero: nothing is staged or committed outside a write. */
+  async function shutGuard(): Promise<void> {
+    await setGuard(target.page, {
+      allowReset: false,
+      resetBudget: null,
+      stageBudget: 0,
+      commitBudget: 0,
+      commitSum16: null,
+    }).catch(() => undefined);
+  }
+
   return {
     async readSlots(): Promise<PageRead> {
       const status = await readSlots(target.wizard, target.page);
@@ -171,11 +210,36 @@ function windowOf(target: TargetHandle, scratchDir: string): BenchPage {
     async dump(letter: BankLetter): Promise<PageDump> {
       const saved = await dumpBank(target.wizard, target.page, target.downloads, letter);
       return {
+        status: saved.status,
         raw: saved.raw.bytes,
         rawName: saved.raw.name,
         decrypted: saved.decrypted?.bytes ?? null,
         decryptedName: saved.decrypted?.name ?? null,
       };
+    },
+
+    async refuse(letter: BankLetter, image: PageImage): Promise<PageRefusal> {
+      const name = (await rowOf(target.page, letter)).name;
+      const file = writeScratch(picked, image);
+      /* Every budget is zero: a refused image must not reach the stage or the commit. */
+      await setGuard(target.page, {
+        allowReset: false,
+        resetBudget: null,
+        stageBudget: 0,
+        commitBudget: 0,
+        commitSum16: null,
+      });
+      const status = await pickImage(target.wizard, target.page, letter, 'plain', file);
+      if (!status.startsWith('Rejected')) {
+        throw new Error(
+          `${name}: the picker took the image ("${status}"); it was not refused, so nothing is confirmed`,
+        );
+      }
+      const log = await target.wizard.logTail('slotsrun', 60);
+      const reasons = [...log.matchAll(/cannot use this file: (.+)$/gm)].map(
+        (match) => match[1] ?? '',
+      );
+      return { status, reason: reasons.at(-1) ?? null };
     },
 
     async write(letter: BankLetter, image: PageImage, acknowledge: boolean): Promise<PageWrite> {
@@ -195,33 +259,32 @@ function windowOf(target: TargetHandle, scratchDir: string): BenchPage {
             `the picker answered "${status}"\n${await target.wizard.logTail('slotsrun', 25)}`,
           );
         }
-        await openWriteConfirm(target.wizard, target.page, name);
-        const ackShown = (await target.page.$(ACK_BOX)) !== null;
-        if (ackShown !== acknowledge) {
-          await target.wizard.click(CONFIRM_DIALOG, 'Cancel');
-          throw new Error(
-            `the page ${ackShown ? 'asks' : 'does not ask'} for the acknowledgement on ${name}; ` +
-              `the plan expected it ${acknowledge ? 'to' : 'not to'}`,
-          );
-        }
-        if (ackShown && (await confirmEnabled(target.wizard, name))) {
-          throw new Error(`${name}: Yes is on before the acknowledgement is ticked`);
-        }
-        const status2 = await confirmWrite(target.wizard, target.page, name, ackShown);
-        if (!status2.startsWith('Written. ')) {
-          throw new Error(
-            `the write ended "${status2}"\n${await target.wizard.logTail('slotsrun', 25)}`,
-          );
-        }
-        return { status: status2, ackShown, outcome: (await outcomeAlert(target.page)) ?? null };
+        return await confirmPrepared(name, acknowledge);
       } finally {
-        await setGuard(target.page, {
-          allowReset: false,
-          resetBudget: null,
-          stageBudget: 0,
-          commitBudget: 0,
-          commitSum16: null,
-        }).catch(() => undefined);
+        await shutGuard();
+      }
+    },
+
+    async fill(letter: BankLetter, acknowledge: boolean): Promise<PageWrite> {
+      const name = (await rowOf(target.page, letter)).name;
+      /* The fill's stage is the booted bank's image: at most one bank long. */
+      await setGuard(target.page, {
+        allowReset: false,
+        resetBudget: null,
+        stageBudget: stagesFor(BANK_LENGTH),
+        commitBudget: 1,
+        commitSum16: null,
+      });
+      try {
+        const { label, status } = await fillFromBank(target.wizard, target.page, letter);
+        if (!status.startsWith('Ready — ')) {
+          throw new Error(
+            `"${label}" answered "${status}"\n${await target.wizard.logTail('slotsrun', 25)}`,
+          );
+        }
+        return await confirmPrepared(name, acknowledge);
+      } finally {
+        await shutGuard();
       }
     },
 

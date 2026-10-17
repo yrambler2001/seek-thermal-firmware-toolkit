@@ -78,7 +78,17 @@ export interface JlinkBench {
   eraseRange(address: number, length: number): Promise<void>;
   /** Reset the CPU over SWD (`r` then `g`) so the camera boots what is in flash. */
   resetCpu(): Promise<void>;
+  /**
+   * Sets the boot preference cfg[0] (0 slot A, 1 slot B, 2 recovery) through FW-V1's own `set-boot`.
+   * The 64 KiB boot-config block is the template's own, with only cfg[0] changed: `template` must be
+   * this unit's flash as it was flashed (the 4 MiB file). This does not read the block back: the
+   * caller checks it after a power cycle (spec-flow `setBootSlotVerified`).
+   */
+  setBootSlot(slot: BootSlot, template: string): Promise<void>;
 }
+
+/** The boot preference cfg[0]: 0 slot A, 1 slot B, 2 recovery bank R. */
+export type BootSlot = 0 | 1 | 2;
 
 /** The camera side: USB presence, power, and the running firmware. */
 export interface BenchCamera {
