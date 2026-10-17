@@ -234,6 +234,13 @@ export interface SlotState {
   /** Why the slot holds no usable image, when it does not. */
   readonly reason: string | null;
   /**
+   * The bank's image-header window read as all 0xFF: an erased bank, which holds
+   * no image and is not an error (a stock camera carries one). Set only on a clean
+   * read; a window every bank served blank is a spent reader and is `unread`, not
+   * blank. Optional so a state built before the field existed reads as false.
+   */
+  readonly blank?: boolean;
+  /**
    * The slot was NOT READ — the window would not arm, the transfer died, or
    * the running firmware's plan has no window for it so nothing was armed —
    * as opposed to a window that read back cleanly and simply holds no image.

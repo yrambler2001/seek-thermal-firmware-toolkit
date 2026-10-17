@@ -706,6 +706,7 @@ export async function readDeviceInfo(
       address: descriptor.address,
       present: slot.present,
       reason: slot.reason,
+      blank: slot.blank === true && slot.unread !== true,
       unread: slot.unread === true,
       header: slot.header,
       raw: slot.raw,

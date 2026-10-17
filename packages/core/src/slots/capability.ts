@@ -22,6 +22,11 @@
  *          the family's staging form) or from bytes already in that form
  *          (flashRaw). Both are the same arm and commit; they differ only in
  *          who does the encoding.
+ *   emptyBank  whether a bank that holds no image (its header window reads as
+ *          all 0xFF) may be written, and why. It follows the flash verdict,
+ *          because no staging form reads the target bank: the payload comes
+ *          from the image and the camera's own keys, and the commit erases
+ *          the block first. An empty bank is a state, not an error.
  *
  * THE FAMILIES AND WHAT EACH PROVES (see capability-family.ts for the reasons):
  *   modern          2.x/4.x/10.x/42.x/44.x  key-a-ciphertext    dump yes, flash yes
@@ -54,8 +59,14 @@ import {
   stagingFor,
   type SlotFamily,
 } from './capability-family.js';
-import { bankNotes, planNotes, profileFlashNote } from './capability-notes.js';
-import { SLOT_BYTES, type CommitEffect, type SlotEntry, type SlotPlan } from './types.js';
+import { bankNotes, emptyBankWhy, planNotes, profileFlashNote } from './capability-notes.js';
+import {
+  SLOT_BYTES,
+  type CommitEffect,
+  type EmptyBankPolicy,
+  type SlotEntry,
+  type SlotPlan,
+} from './types.js';
 
 /**
  * Committing a 7/8/9 arm programs the named bank and nothing else. Measured in
@@ -93,6 +104,7 @@ function refusedPlan(
     flashRaw: unsupported(refusal),
     staging: null,
     commitEffect: COMMIT_EFFECT,
+    emptyBank: { writable: unsupported(refusal), why: refusal },
     notes: [],
   }));
   return {
@@ -193,6 +205,24 @@ function flashSupport(
   return gate.supported ? SUPPORTED : gate;
 }
 
+/**
+ * What an empty bank means for a write. It follows the flash verdict exactly: a
+ * bank that can be written from an image can be written while empty, because no
+ * family's staging reads the target bank. A family that cannot be written at all
+ * says the same reason it says for a used bank.
+ */
+function emptyBankPolicy(family: SlotFamily, flash: Support): EmptyBankPolicy {
+  if (!flash.supported) return { writable: flash, why: flash.reason };
+  const why = emptyBankWhy(family);
+  if (why === null) {
+    return {
+      writable: unsupported('this build has no staging form, so an empty bank is not written'),
+      why: 'this build has no staging form, so an empty bank is not written',
+    };
+  }
+  return { writable: SUPPORTED, why };
+}
+
 function supportedEntry(
   profile: FirmwareProfile,
   family: SlotFamily,
@@ -217,6 +247,7 @@ function supportedEntry(
     flashRaw: flash,
     staging: stagingFor(family),
     commitEffect: COMMIT_EFFECT,
+    emptyBank: emptyBankPolicy(family, flash),
     notes: bankNotes(family, key, versionText),
   };
 }

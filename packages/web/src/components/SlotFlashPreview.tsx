@@ -31,7 +31,8 @@ const CHUNK = 64;
 
 const STAGING_TEXT: Readonly<Record<SlotFlashPlan['staging'], string>> = {
   'key-a-ciphertext': "encrypted under Key A, the key this camera's bootloader reads",
-  'slot-keystream-ciphertext': 'encrypted under the keystream this bank already carries',
+  'slot-keystream-ciphertext':
+    "encrypted under the image's own stage key (key block 0); the camera stores it under the bank's own key",
   plain: 'plaintext, no cipher',
   'two-stream':
     'the 1.3.0.8 FF image folded through two keystreams — the camera stores the plain image, not these bytes',
@@ -54,6 +55,10 @@ export interface SlotFlashPreviewProps {
   readonly kind: SlotInputKind;
   readonly plan: SlotFlashPlan;
   readonly busy: boolean;
+  /** The bank holds no image (its header window reads as all 0xFF): the write overwrites no firmware. */
+  readonly targetEmpty?: boolean;
+  /** Where the image came from when it is not a picked file, e.g. the booted bank's image. */
+  readonly source?: string | null;
   readonly onWrite: () => void;
   readonly onDiscard: () => void;
 }
@@ -65,12 +70,23 @@ export function SlotFlashPreview({
   kind,
   plan,
   busy,
+  targetEmpty = false,
+  source = null,
   onWrite,
   onDiscard,
 }: SlotFlashPreviewProps): ReactElement {
   const chunks = Math.ceil(plan.payload.length / CHUNK);
   const rows: readonly KeyValueRow[] = [
     ['File', fileName],
+    ...(source === null ? [] : [['Image taken from', source] satisfies KeyValueRow]),
+    ...(targetEmpty
+      ? [
+          [
+            'Target',
+            `${slotName} is empty: it holds no image, so this write overwrites no firmware`,
+          ] satisfies KeyValueRow,
+        ]
+      : []),
     [
       'Read as',
       kind === 'plain'

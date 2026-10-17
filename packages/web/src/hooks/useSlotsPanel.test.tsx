@@ -28,8 +28,11 @@ import { downloadBytes } from '../lib/download';
 import { DEFAULT_OPTIONS_FORM } from '../lib/options';
 import type { ActingProfile } from '../lib/identify';
 import {
+  SLOT_PLAIN,
   actingProfile,
+  dumpedEmptySlot,
   dumpedSlot,
+  emptySlotView,
   flashedSlot,
   preparedSlot,
   slotEntry,
@@ -41,6 +44,7 @@ import { fakeCamera, fakeDeviceState } from '../test-fixtures';
 import { renderHook } from '../test-helpers';
 import type { DeviceHandle } from './useDevice';
 import {
+  bankImageSource,
   needsRiskAck,
   slotActionGate,
   slotDumpFileName,
@@ -563,5 +567,355 @@ describe('slot helpers', () => {
         busy: true,
       }),
     ).toEqual({ enabled: false, reason: 'raw staging is not offered on this build' });
+  });
+});
+
+/* ==================================================================== *
+ * An empty bank
+ * ==================================================================== */
+
+/** A backend whose prepare says the target was empty, as core's does for an erased bank. */
+function emptyBackend(report: SlotsReport): ReturnType<typeof makeBackend> {
+  const made = makeBackend({ report });
+  made.mocks.prepare.mockImplementation(
+    (_report: unknown, key: SlotKey, input: { kind: SlotInputKind; bytes: Uint8Array }) =>
+      preparedSlot(key, input.kind, input.bytes, true),
+  );
+  made.mocks.dump.mockImplementation((_ctx: unknown, _report: unknown, key: SlotKey) =>
+    Promise.resolve(
+      report.slots.find((v) => v.entry.key === key)?.content === 'empty'
+        ? dumpedEmptySlot(key)
+        : dumpedSlot(key),
+    ),
+  );
+  return made;
+}
+
+describe('useSlotsPanel: dumping an empty bank', () => {
+  it('saves the raw 64 KiB of 0xFF under a name that says empty, and no decrypted file', async () => {
+    const { backend, mocks } = emptyBackend(slotReport(base, null, ['b']));
+    const { result, unmount } = setup(backend);
+    await act(async () => {
+      await result.current.panel.readSlots();
+    });
+
+    await act(async () => {
+      await result.current.panel.dump('b');
+    });
+
+    expect(mocks.dump).toHaveBeenCalledTimes(1);
+    expect(downloadBytes).toHaveBeenCalledTimes(1);
+    const [bytes, name] = vi.mocked(downloadBytes).mock.calls[0] ?? [];
+    expect(name).toBe('seek-slot-B-empty-raw-ffffffff.bin');
+    expect(bytes).toHaveLength(0x10000);
+    const lines = result.current.panel.reporter.lines;
+    expect(lineIncludes(lines, 'slot B is empty — nothing to decrypt')).toBe(true);
+    expect(lineIncludes(lines, 'no decrypted image')).toBe(false);
+    expect(lineIncludes(lines, 'no key this page recovered')).toBe(false);
+    unmount();
+  });
+
+  it('still saves both files for a bank that holds an image', async () => {
+    const { backend } = emptyBackend(slotReport(base, null, ['b']));
+    const { result, unmount } = setup(backend);
+    await act(async () => {
+      await result.current.panel.readSlots();
+    });
+
+    await act(async () => {
+      await result.current.panel.dump('a');
+    });
+    expect(downloadBytes).toHaveBeenCalledTimes(2);
+    unmount();
+  });
+});
+
+describe('useSlotsPanel: filling an empty bank with the booted bank’s image', () => {
+  it('prepares bank A’s decrypted image into the empty B, says where it came from, and sends nothing', async () => {
+    const report = slotReport(base, null, ['b']);
+    const { backend, mocks } = emptyBackend(report);
+    const { result, unmount } = setup(backend);
+    await act(async () => {
+      await result.current.panel.readSlots();
+    });
+
+    await act(async () => {
+      await result.current.panel.fillWithBankImage('b');
+    });
+
+    expect(mocks.prepare).toHaveBeenCalledTimes(1);
+    const [, key, input] = mocks.prepare.mock.calls[0] as [
+      unknown,
+      SlotKey,
+      { kind: SlotInputKind; bytes: Uint8Array; fileName: string },
+    ];
+    expect(key).toBe('b');
+    expect(input.kind).toBe('plain');
+    /* The bytes are bank A's decrypted image from the read already made. */
+    expect(input.bytes).toBe(SLOT_PLAIN);
+    expect(input.fileName).toMatch(/^seek-slot-A-v4\.9\.1\.5-decrypted-eeeeeeee.*\.bin$/);
+    const pending = result.current.panel.pending;
+    expect(pending?.key).toBe('b');
+    expect(pending?.kind).toBe('plain');
+    expect(pending?.source).toBe('slot A, the bank the camera boots now (4.9.1.5)');
+    expect(pending?.plan.targetEmpty).toBe(true);
+    expect(mocks.flash).not.toHaveBeenCalled();
+    expect(mocks.dump).not.toHaveBeenCalled();
+    expect(lineIncludes(result.current.panel.reporter.lines, 'image taken from slot A')).toBe(true);
+    unmount();
+  });
+
+  it('writes it after the confirmation like any file, and the outcome says the bank was empty', async () => {
+    const { backend, mocks } = emptyBackend(slotReport(base, null, ['b']));
+    const { result, unmount } = setup(backend);
+    await act(async () => {
+      await result.current.panel.readSlots();
+    });
+    await act(async () => {
+      await result.current.panel.fillWithBankImage('b');
+    });
+
+    await act(async () => {
+      await result.current.panel.write(false);
+    });
+
+    expect(mocks.flash).toHaveBeenCalledTimes(1);
+    expect(mocks.flash.mock.calls[0]?.[3]).toEqual({ verify: true, acknowledgeRisk: false });
+    expect(result.current.panel.outcome).toMatchObject({ key: 'b', targetEmpty: true });
+    expect(
+      lineIncludes(result.current.panel.reporter.lines, '(an empty bank: nothing is overwritten)'),
+    ).toBe(true);
+    unmount();
+  });
+
+  it('keeps the acknowledgement rule: with no booted bank named, the write is refused without the tick', async () => {
+    const report = slotReport({ ...base, boot: null }, null, ['b']);
+    const { backend, mocks } = emptyBackend(report);
+    const { result, unmount } = setup(backend);
+    await act(async () => {
+      await result.current.panel.readSlots();
+    });
+    await act(async () => {
+      await result.current.panel.fillWithBankImage('b');
+    });
+
+    await act(async () => {
+      await result.current.panel.write(false);
+    });
+    expect(mocks.flash).not.toHaveBeenCalled();
+    expect(lineIncludes(result.current.panel.reporter.lines, 'risk acknowledgement')).toBe(true);
+
+    await act(async () => {
+      await result.current.panel.write(true);
+    });
+    expect(mocks.flash).toHaveBeenCalledTimes(1);
+    unmount();
+  });
+
+  it('refuses a bank that is not empty, and prepares nothing', async () => {
+    const { backend, mocks } = emptyBackend(slotReport(base, null, ['b']));
+    const { result, unmount } = setup(backend);
+    await act(async () => {
+      await result.current.panel.readSlots();
+    });
+
+    await act(async () => {
+      await result.current.panel.fillWithBankImage('r');
+    });
+
+    expect(mocks.prepare).not.toHaveBeenCalled();
+    expect(result.current.panel.pending).toBeNull();
+    expect(lineIncludes(result.current.panel.reporter.lines, 'is not empty')).toBe(true);
+    unmount();
+  });
+
+  it('says so when no other bank holds a decrypted image, and prepares nothing', async () => {
+    const { backend, mocks } = emptyBackend(slotReport(base, null, ['a', 'b', 'r']));
+    const { result, unmount } = setup(backend);
+    await act(async () => {
+      await result.current.panel.readSlots();
+    });
+
+    await act(async () => {
+      await result.current.panel.fillWithBankImage('b');
+    });
+
+    expect(mocks.prepare).not.toHaveBeenCalled();
+    expect(
+      lineIncludes(
+        result.current.panel.reporter.lines,
+        'no other bank holds a decrypted image to copy',
+      ),
+    ).toBe(true);
+    unmount();
+  });
+
+  it('does nothing before the banks were read', async () => {
+    const { backend, mocks } = emptyBackend(slotReport(base, null, ['b']));
+    const { result, unmount } = setup(backend);
+
+    await act(async () => {
+      await result.current.panel.fillWithBankImage('b');
+    });
+
+    expect(mocks.prepare).not.toHaveBeenCalled();
+    expect(lineIncludes(result.current.panel.reporter.lines, 'read the slots first')).toBe(true);
+    unmount();
+  });
+
+  it('shows core’s own refusal when the image cannot be written (nothing hidden behind the button)', async () => {
+    const { backend, mocks } = emptyBackend(slotReport(base, null, ['b']));
+    mocks.prepare.mockImplementation(() => {
+      throw new SeekError('slots/refused', 'this is the 16 Hz FF image (word sum 0xFFFF)');
+    });
+    const { result, unmount } = setup(backend);
+    await act(async () => {
+      await result.current.panel.readSlots();
+    });
+
+    await act(async () => {
+      await result.current.panel.fillWithBankImage('b');
+    });
+
+    expect(result.current.panel.pending).toBeNull();
+    expect(lineIncludes(result.current.panel.reporter.lines, '16 Hz FF image')).toBe(true);
+    unmount();
+  });
+});
+
+describe('bankImageSource', () => {
+  const holdsKeys = (): { plain: Uint8Array; table: { keyA: Uint8Array; keyB: Uint8Array } } => {
+    const keyA = new Uint8Array(16).fill(0x11);
+    const keyB = new Uint8Array(16).fill(0x22);
+    const plain = new Uint8Array(256).fill(0x5a);
+    plain.set(keyA, 32);
+    plain.set(keyB, 96);
+    return { plain, table: { keyA, keyB } };
+  };
+
+  it('prefers the bank the camera boots, never the target, and says it is booted', () => {
+    const report = slotReport(base, null, ['b']);
+    const source = bankImageSource(report, 'b');
+    expect(source).toMatchObject({ key: 'a', name: 'slot A', version: '4.9.1.5', booted: true });
+    expect(source?.bytes).toBe(SLOT_PLAIN);
+    expect(source?.fileName).toBe('seek-slot-A-v4.9.1.5-decrypted-eeeeeeee.bin');
+    /* The target is never its own source. */
+    expect(bankImageSource(report, 'a')?.key).not.toBe('a');
+  });
+
+  it('falls back to a bank the bootloader can key, then to any bank holding an image', () => {
+    const report = slotReport({ ...base, boot: null }, null, ['b']);
+    const unnamed: SlotsReport = {
+      ...report,
+      slots: report.slots.map((candidate) => ({ ...candidate, active: false })),
+    };
+    const first = bankImageSource(unnamed, 'b');
+    expect(first).toMatchObject({ key: 'a', booted: false });
+
+    const notBootable: SlotsReport = {
+      ...unnamed,
+      slots: unnamed.slots.map((candidate) =>
+        candidate.entry.key === 'r' && candidate.state !== null
+          ? { ...candidate, state: { ...candidate.state, bootable: true } }
+          : candidate.entry.key === 'a' && candidate.state !== null
+            ? { ...candidate, state: { ...candidate.state, bootable: false } }
+            : candidate,
+      ),
+    };
+    expect(bankImageSource(notBootable, 'b')?.key).toBe('r');
+    const noneBootable: SlotsReport = {
+      ...notBootable,
+      slots: notBootable.slots.map((candidate) =>
+        candidate.state === null
+          ? candidate
+          : { ...candidate, state: { ...candidate.state, bootable: false } },
+      ),
+    };
+    expect(bankImageSource(noneBootable, 'b')?.key).toBe('a');
+  });
+
+  it('is null when no other bank holds a decrypted image', () => {
+    expect(bankImageSource(slotReport(base, null, ['a', 'b', 'r']), 'b')).toBeNull();
+    const undecrypted = slotReport(base, null, ['b']);
+    const stripped: SlotsReport = {
+      ...undecrypted,
+      slots: undecrypted.slots.map((candidate) =>
+        candidate.state === null || candidate.content !== 'image'
+          ? candidate
+          : { ...candidate, state: { ...candidate.state, plain: null } },
+      ),
+    };
+    expect(bankImageSource(stripped, 'b')).toBeNull();
+    /* An unread bank is no source either. */
+    expect(bankImageSource(slotReport(base, 'a', ['b']), 'b')?.key).toBe('r');
+  });
+
+  it('names the image with the camera key pair when the image holds both keys, as a dump does', () => {
+    const { plain, table } = holdsKeys();
+    const report = slotReport(
+      { ...base, keyTable: { ...table, offset: 0, matchA: true, matchB: true } },
+      null,
+      ['b'],
+    );
+    const withPlain: SlotsReport = {
+      ...report,
+      slots: report.slots.map((candidate) =>
+        candidate.state === null || candidate.content !== 'image'
+          ? candidate
+          : { ...candidate, state: { ...candidate.state, plain } },
+      ),
+    };
+    const source = bankImageSource(withPlain, 'b');
+    expect(source?.fileName).toBe(
+      `seek-slot-A-v4.9.1.5-decrypted-eeeeeeee-KeyA-${'11'.repeat(16)}-KeyB-${'22'.repeat(16)}.bin`,
+    );
+  });
+});
+
+describe('slot helpers: empty banks', () => {
+  it('names an empty dump by what it is, and only the raw file carries the word', () => {
+    expect(slotDumpFileName('b', null, 'raw', 'ff'.repeat(32), null, true)).toBe(
+      'seek-slot-B-empty-raw-ffffffff.bin',
+    );
+    /* A bank that holds an image is named as before. */
+    expect(slotDumpFileName('b', '4.9.1.5', 'raw', 'ab'.repeat(32), null, false)).toBe(
+      'seek-slot-B-v4.9.1.5-raw-abababab.bin',
+    );
+  });
+
+  it('turns the flash actions off for an empty bank the plan says cannot be written, with the plan’s reason', () => {
+    const empty = emptySlotView(base, 'b');
+    const unwritable = slotEntry('b', {
+      emptyBank: {
+        writable: { supported: false, reason: 'no staging form for an empty bank' },
+        why: 'x',
+      },
+    });
+    const gate = (action: 'dump' | 'flash-plain' | 'flash-raw') =>
+      slotActionGate({
+        entry: unwritable,
+        view: { ...empty, entry: unwritable },
+        action,
+        connected: true,
+        busy: false,
+      });
+    expect(gate('flash-plain')).toEqual({
+      enabled: false,
+      reason:
+        'This bank is empty and cannot be written on this build: no staging form for an empty bank',
+    });
+    expect(gate('flash-raw').enabled).toBe(false);
+    /* A dump is a read and stays allowed. */
+    expect(gate('dump').enabled).toBe(true);
+    /* The same bank under a plan that allows it is writable. */
+    expect(
+      slotActionGate({
+        entry: slotEntry('b'),
+        view: empty,
+        action: 'flash-plain',
+        connected: true,
+        busy: false,
+      }),
+    ).toEqual({ enabled: true, reason: null });
   });
 });

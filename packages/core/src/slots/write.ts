@@ -61,6 +61,7 @@ import {
   type StagedBytes,
 } from './write-image.js';
 import { FF_1308_VERSION } from './capability-family.js';
+import { slotContentOf } from './inspect.js';
 import { readBackBank, stageAndCommit } from './write-commit.js';
 import { compareReadBack } from './write-verify.js';
 
@@ -208,6 +209,17 @@ export function prepareSlotFlash(
     throw slotRefused(
       `slot ${entry.name} was not read (${unreadWhy(report, key)}), so nothing can be written ` +
         'on the strength of it',
+    );
+  }
+  /* AN EMPTY BANK IS WRITABLE where the plan says so. Nothing below reads the target
+   * bank's own content to build a payload (the stage key is the image's, or the
+   * camera's Key A; the plain chain needs none), so an erased bank is written exactly
+   * like a used one. The plan's verdict is checked here so that a family it ever marks
+   * otherwise is refused with its own reason, before anything is built. */
+  const targetEmpty = slotContentOf(slot) === 'empty';
+  if (targetEmpty && !entry.emptyBank.writable.supported) {
+    throw slotRefused(
+      `${entry.name} is empty and cannot be written on this build: ${entry.emptyBank.writable.reason}`,
     );
   }
   if (input.bytes.length === 0) throw slotRefused('the input is empty');
@@ -365,6 +377,7 @@ export function prepareSlotFlash(
     ...(body.storedForm === undefined ? {} : { storedForm: body.storedForm }),
     expectedPlain: body.expectedPlain,
     compare,
+    targetEmpty,
     warnings,
     serial: state.serial,
     firmwareVersion: state.version,

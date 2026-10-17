@@ -251,6 +251,7 @@ describe.each(corpusCases)('buildSlotPlan %s under %s', (version, profileId) => 
         expectUnsupportedSupport(slot.dump);
         expectUnsupportedSupport(slot.flashPlain);
         expectUnsupportedSupport(slot.flashRaw);
+        expectUnsupportedSupport(slot.emptyBank.writable);
       }
     });
     return;
@@ -291,6 +292,22 @@ describe.each(corpusCases)('buildSlotPlan %s under %s', (version, profileId) => 
       } else {
         expectUnsupportedSupport(slot.flashPlain);
         expectUnsupportedSupport(slot.flashRaw);
+      }
+    }
+  });
+
+  it(`${expected.writable ? 'can' : 'cannot'} be written while EMPTY, and says why in a sentence`, () => {
+    for (const slot of plan.slots) {
+      expect(slot.emptyBank.why.length, `bank ${slot.key}`).toBeGreaterThan(40);
+      if (expected.writable) {
+        /* No staging form reads the target bank, so empty follows the flash verdict. */
+        expect(slot.emptyBank.writable).toEqual(slot.flashPlain);
+        expect(slot.emptyBank.writable.supported).toBe(true);
+      } else {
+        expectUnsupportedSupport(slot.emptyBank.writable);
+        expect(slot.emptyBank.why).toBe(
+          slot.emptyBank.writable.supported ? '' : slot.emptyBank.writable.reason,
+        );
       }
     }
   });
@@ -451,6 +468,7 @@ describe('refusals name their reason and touch nothing', () => {
         expectUnsupportedSupport(slot.dump);
         expectUnsupportedSupport(slot.flashPlain);
         expectUnsupportedSupport(slot.flashRaw);
+        expectUnsupportedSupport(slot.emptyBank.writable);
       }
     });
   }

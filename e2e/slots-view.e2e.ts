@@ -293,26 +293,31 @@ for (const subject of SUPPORTED) {
           expect(rows.map((row) => row.name)).toEqual(['Bank A', 'Bank B', 'Recovery bank R']);
           for (const row of rows) {
             expect(row.address, `${row.name} address`).toBe(subject.layout[row.letter]);
-            if (row.firmware.startsWith(subject.version)) {
+            const holdsImage = row.firmware.startsWith(subject.version);
+            if (holdsImage) {
               expect(versionCell(row), `${row.name} firmware`).toBe(subject.version);
               expect(row.keyName, `${row.name} key`).not.toBe('—');
             } else {
               /* An empty bank (the bench's B) is shown as such, not as a version. */
               say(`${row.name} holds no image: ${row.firmware}`);
               expect(row.booted, `${row.name}: only an empty bank may hold no image`).toBe(false);
+              expect(row.firmware, `${row.name} is named empty`).toMatch(/^empty\b/);
             }
             expect(row.bootable, `${row.name} bootability`).toMatch(
-              /bootable|not bootable|unknown/,
+              /bootable|not bootable|unknown|nothing to boot/,
             );
             if (row.firmware.startsWith(subject.version)) {
               expect(row.sha256, `${row.name} sha256`).toMatch(/^[0-9a-f]{64}$/);
             }
             /* Per-op support: a read bank can be dumped and both flash actions are offered. */
             const labels = row.buttons.map((button) => button.label);
+            /* An empty bank is also offered the running firmware's own image (the booted bank
+             * holds one on every build this spec reads). */
             expect(labels, `${row.name} actions`).toEqual([
               'Dump',
               'Flash decrypted image…',
               'Flash raw bytes…',
+              ...(holdsImage ? [] : ["Use the booted bank's image"]),
             ]);
             for (const button of row.buttons) {
               expect(button.enabled, `${row.name}: ${button.label}`).toBe(true);

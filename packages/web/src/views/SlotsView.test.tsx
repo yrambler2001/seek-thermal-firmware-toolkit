@@ -18,6 +18,7 @@ import { fakeDeviceState } from '../test-fixtures';
 import { render, renderHook, buttonByText } from '../test-helpers';
 import {
   UNSUPPORTED_REASON,
+  emptySlotView,
   flashedSlot,
   preparedSlot,
   slotEntry,
@@ -66,6 +67,7 @@ function panel(over: Partial<SlotsPanelApi> = {}): SlotsPanelApi {
     readSlots: () => Promise.resolve(),
     dump: vi.fn((_key: SlotKey) => Promise.resolve()),
     pickFile: vi.fn((_key: SlotKey, _kind, _file: File) => Promise.resolve()),
+    fillWithBankImage: vi.fn((_key: SlotKey) => Promise.resolve()),
     write: vi.fn((_acknowledged: boolean) => Promise.resolve()),
     discardPending: vi.fn(),
     cancel: vi.fn(),
@@ -199,6 +201,7 @@ describe('SlotsView', () => {
         fileName: 'fw_decrypted.bin',
         plan: preparedSlot('a', 'plain', bytes),
         report,
+        source: null,
       },
     });
     const { container, unmount } = view(api);
@@ -235,6 +238,7 @@ describe('SlotsView', () => {
         key: 'r',
         kind: 'plain',
         fileName: 'ff.bin',
+        source: null,
         plan: {
           ...preparedSlot('r', 'plain', new Uint8Array(0x6000)),
           staging: 'two-stream',
@@ -290,6 +294,7 @@ describe('SlotsView', () => {
         key: 'r',
         kind: 'raw',
         fileName: 'raw.bin',
+        source: null,
         plan: preparedSlot('r', 'raw', new Uint8Array(16)),
         report,
       },
@@ -335,6 +340,7 @@ describe('SlotsView', () => {
         fileName: 'raw.bin',
         plan: preparedSlot('b', 'raw', new Uint8Array(16)),
         report,
+        source: null,
       },
     });
     const { container, unmount } = view(api);
@@ -480,6 +486,227 @@ describe('the slot page in the app shell', () => {
     for (const control of controls) {
       expect(container.querySelector(`label[for="${control.id}"]`), control.id).toBeTruthy();
     }
+    unmount();
+  });
+});
+
+/* ==================================================================== *
+ * An empty bank: a state, not a fault
+ * ==================================================================== */
+
+describe('SlotsView: an empty bank', () => {
+  it('shows it as empty, says nothing is decrypted from it and that it can be written, and keeps every action', () => {
+    const { container, unmount } = view(
+      panel({ plan: slotPlan(true), report: slotReport(base, null, ['b']) }),
+    );
+
+    const row = bankRows(container)[1] as HTMLElement;
+    expect(row.textContent).toContain('empty');
+    expect(row.textContent).toContain('header window reads as all 0xFF');
+    expect(row.textContent).toContain('writing it overwrites no firmware');
+    expect(row.textContent).toContain('Can be written. an empty bank is written like a used one');
+    /* Nothing to boot, and no verdict on an image that is not there. */
+    expect(row.textContent).toContain('nothing to boot');
+    expect(row.textContent).not.toContain('not bootable');
+    /* Dump and both flashes are available: an empty bank is not an error state. */
+    expect(buttonByText(row, 'Dump').disabled).toBe(false);
+    expect(buttonByText(row, 'Flash decrypted image…').disabled).toBe(false);
+    expect(buttonByText(row, 'Flash raw bytes…').disabled).toBe(false);
+    /* A bank that holds an image is shown as before. */
+    expect(bankRows(container)[0]?.textContent).toContain('4.9.1.5');
+    expect(bankRows(container)[0]?.textContent).not.toContain('header window reads as all 0xFF');
+    unmount();
+  });
+
+  it('says an empty bank cannot be written where the plan says so, and greys the flash actions with that reason', () => {
+    const report = slotReport(base, null, ['b']);
+    const unwritable: SlotsReport = {
+      ...report,
+      slots: report.slots.map((candidate) =>
+        candidate.entry.key === 'b'
+          ? emptySlotView(base, 'b', {
+              entry: slotEntry('b', {
+                emptyBank: {
+                  writable: { supported: false, reason: 'no staging form for an empty bank' },
+                  why: 'no staging form for an empty bank',
+                },
+              }),
+            })
+          : candidate,
+      ),
+    };
+    const { container, unmount } = view(panel({ plan: slotPlan(true), report: unwritable }));
+
+    const row = bankRows(container)[1] as HTMLElement;
+    expect(row.textContent).toContain(
+      'Cannot be written on this build: no staging form for an empty bank',
+    );
+    expect(buttonByText(row, 'Flash decrypted image…').disabled).toBe(true);
+    expect(buttonByText(row, 'Flash raw bytes…').disabled).toBe(true);
+    expect(row.textContent).toContain('This bank is empty and cannot be written on this build');
+    /* A dump is a read and stays allowed. */
+    expect(buttonByText(row, 'Dump').disabled).toBe(false);
+    unmount();
+  });
+
+  it('offers "Use the booted bank\'s image" on the empty bank only, labelled, and prepares it on click', () => {
+    const api = panel({ plan: slotPlan(true), report: slotReport(base, null, ['b']) });
+    const { container, unmount } = view(api);
+
+    const rows = bankRows(container);
+    expect(buttonsIn(rows[0] as HTMLElement)).not.toContain("Use the booted bank's image");
+    expect(buttonsIn(rows[2] as HTMLElement)).not.toContain("Use the booted bank's image");
+    const row = rows[1] as HTMLElement;
+    const button = buttonByText(row, "Use the booted bank's image");
+    expect(button.disabled).toBe(false);
+    /* Labelled: where the image comes from, that it is the bank the camera boots, and that nothing is sent yet. */
+    expect(row.textContent).toContain(
+      'Copies the firmware slot A holds (4.9.1.5) into this empty bank',
+    );
+    expect(row.textContent).toContain('a second slot with the same firmware');
+    expect(row.textContent).toContain('That is the bank the camera boots now.');
+    expect(row.textContent).toContain('You review the plan before anything is sent.');
+
+    act(() => {
+      button.click();
+    });
+    expect(api.fillWithBankImage).toHaveBeenCalledWith('b');
+    expect(api.write).not.toHaveBeenCalled();
+    unmount();
+  });
+
+  it('names the first bank that holds an image when the camera names no booted bank', () => {
+    const report = slotReport({ ...base, boot: null }, null, ['b']);
+    const unnamed: SlotsReport = {
+      ...report,
+      slots: report.slots.map((candidate) => ({ ...candidate, active: false })),
+    };
+    const { container, unmount } = view(panel({ plan: slotPlan(true), report: unnamed }));
+
+    const row = bankRows(container)[1] as HTMLElement;
+    expect(buttonsIn(row)).toContain("Use slot A's image");
+    expect(buttonsIn(row)).not.toContain("Use the booted bank's image");
+    expect(row.textContent).toContain('The camera does not say which bank it boots');
+    /* Every bank needs the tick then, an empty one too, and the button says so. */
+    expect(row.textContent).toContain(
+      'The camera does not name its booted bank: writing it asks for an extra confirmation.',
+    );
+    unmount();
+  });
+
+  it('offers no image source when no other bank holds a decrypted image', () => {
+    const all = slotReport(base, null, ['a', 'b', 'r']);
+    const { container, unmount } = view(panel({ plan: slotPlan(true), report: all }));
+    for (const row of bankRows(container)) {
+      expect(buttonsIn(row).some((text) => text.startsWith('Use '))).toBe(false);
+    }
+    unmount();
+  });
+
+  it('greys the source button out with the reason when the camera is not connected', () => {
+    const { container, unmount } = view(
+      panel({ plan: slotPlan(true), report: slotReport(base, null, ['b']) }),
+      false,
+    );
+    const row = bankRows(container)[1] as HTMLElement;
+    expect(buttonByText(row, "Use the booted bank's image").disabled).toBe(true);
+    expect(row.textContent).toContain('Connect the camera first.');
+    unmount();
+  });
+
+  it('shows the prepared write into an empty bank as such, with where the image came from', () => {
+    const report = slotReport(base, null, ['b']);
+    const api = panel({
+      plan: slotPlan(true),
+      report,
+      pending: {
+        key: 'b',
+        kind: 'plain',
+        fileName: 'seek-slot-A-v4.9.1.5-decrypted-eeeeeeee.bin',
+        plan: preparedSlot('b', 'plain', new Uint8Array(0x10000), true),
+        report,
+        source: 'slot A, the bank the camera boots now (4.9.1.5)',
+      },
+    });
+    const { container, unmount } = view(api);
+
+    expect(container.textContent).toContain('Prepared for slot B at 0x14060000');
+    expect(container.textContent).toContain('Image taken from');
+    expect(container.textContent).toContain('slot A, the bank the camera boots now (4.9.1.5)');
+    expect(container.textContent).toContain(
+      'slot B is empty: it holds no image, so this write overwrites no firmware',
+    );
+
+    act(() => {
+      buttonByText(container, 'Write to slot B…').click();
+    });
+    expect(dialog()?.textContent).toContain(
+      'slot B is empty: it holds no image, so no firmware is overwritten.',
+    );
+    /* Slot A is booted and B is not, so no tick is asked for: the rule is the one for a used bank. */
+    expect(document.body.querySelector('#slot-write-ack')).toBeNull();
+    act(() => {
+      buttonByText(document.body, 'Yes — write to slot B').click();
+    });
+    expect(api.write).toHaveBeenCalledWith(false);
+    unmount();
+  });
+
+  it('a write into an empty bank still asks for the tick where the camera names no booted bank', () => {
+    const report = slotReport({ ...base, boot: null }, null, ['b']);
+    const api = panel({
+      plan: slotPlan(true),
+      report,
+      pending: {
+        key: 'b',
+        kind: 'plain',
+        fileName: 'image.bin',
+        plan: preparedSlot('b', 'plain', new Uint8Array(0x10000), true),
+        report,
+        source: null,
+      },
+    });
+    const { container, unmount } = view(api);
+
+    act(() => {
+      buttonByText(container, 'Write to slot B…').click();
+    });
+    expect(dialog()?.textContent).toContain('slot B is empty');
+    expect(buttonByText(document.body, 'Yes — write to slot B').disabled).toBe(true);
+    act(() => {
+      document.body.querySelector<HTMLInputElement>('#slot-write-ack')?.click();
+    });
+    act(() => {
+      buttonByText(document.body, 'Yes — write to slot B').click();
+    });
+    expect(api.write).toHaveBeenCalledWith(true);
+    unmount();
+  });
+
+  it('says after a commit that the bank was empty, so no firmware was overwritten', () => {
+    const { container, unmount } = view(
+      panel({
+        plan: slotPlan(true),
+        report: slotReport(base),
+        outcome: {
+          key: 'b',
+          fileName: 'fw.bin',
+          result: flashedSlot('b', true),
+          targetEmpty: true,
+        },
+      }),
+    );
+    expect(container.textContent).toContain(
+      'Slot B was empty before this write, so no firmware was overwritten.',
+    );
+    expect(container.textContent).toContain('NOW UNPLUG AND REPLUG THE CAMERA.');
+    unmount();
+  });
+
+  it('explains empty banks and the one-click source in "What these buttons do"', () => {
+    const { container, unmount } = view(panel({ plan: slotPlan(true), report: slotReport(base) }));
+    expect(container.textContent).toContain('An empty bank');
+    expect(container.textContent).toContain("Use the booted bank's image");
     unmount();
   });
 });

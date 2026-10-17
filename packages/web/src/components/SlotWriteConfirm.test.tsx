@@ -11,7 +11,9 @@ import { SlotWriteConfirm, type SlotWriteConfirmProps } from './SlotWriteConfirm
 import { buttonByText, render } from '../test-helpers';
 
 function setup(
-  overrides: Partial<Pick<SlotWriteConfirmProps, 'risk' | 'open' | 'twoStream'>> = {},
+  overrides: Partial<
+    Pick<SlotWriteConfirmProps, 'risk' | 'open' | 'twoStream' | 'targetEmpty'>
+  > = {},
 ): ReturnType<typeof render> & {
   onConfirm: ReturnType<typeof vi.fn>;
   onCancel: ReturnType<typeof vi.fn>;
@@ -26,6 +28,7 @@ function setup(
       slotAddress="0x14060000"
       risk={overrides.risk ?? { booted: false, recovery: false, bootUnnamed: false }}
       {...(overrides.twoStream === undefined ? {} : { twoStream: overrides.twoStream })}
+      targetEmpty={overrides.targetEmpty ?? false}
       onConfirm={onConfirm}
       onCancel={onCancel}
     />,
@@ -59,6 +62,51 @@ describe('SlotWriteConfirm', () => {
       'If the image does not run, the camera cannot be recovered over USB — only with SWD/J-Link or an SPI programmer.',
     );
     expect(node.textContent).toContain('No reset is sent.');
+    unmount();
+  });
+
+  it('says an empty bank holds no image, so no firmware is overwritten, and that the block is still erased and programmed', () => {
+    const { unmount } = setup({ targetEmpty: true });
+    const node = dialog();
+    expect(node.textContent).toContain(
+      'slot B is empty: it holds no image, so no firmware is overwritten.',
+    );
+    expect(node.textContent).toContain(
+      "The write still erases the 64 KiB block of the camera's flash at slot B (already blank) and programs it.",
+    );
+    /* The rest of the words are the same. */
+    expect(node.textContent).toContain('No reset is sent.');
+    expect(node.textContent).toContain('only with SWD/J-Link or an SPI programmer.');
+    unmount();
+  });
+
+  it('says nothing about emptiness for a bank that holds an image', () => {
+    const { unmount } = setup({ targetEmpty: false });
+    expect(dialog().textContent).not.toContain('is empty');
+    unmount();
+  });
+
+  it('an empty bank gets no exemption from the tick: recovery, or an unnamed boot, still needs it', () => {
+    const recovery = setup({
+      targetEmpty: true,
+      risk: { booted: false, recovery: true, bootUnnamed: false },
+    });
+    expect(checkbox()).not.toBeNull();
+    expect(buttonByText(document.body, 'Yes — write to slot B').disabled).toBe(true);
+    recovery.unmount();
+
+    const { onConfirm, unmount } = setup({
+      targetEmpty: true,
+      risk: { booted: false, recovery: false, bootUnnamed: true },
+    });
+    expect(checkbox()).not.toBeNull();
+    act(() => {
+      checkbox()?.click();
+    });
+    act(() => {
+      buttonByText(document.body, 'Yes — write to slot B').click();
+    });
+    expect(onConfirm).toHaveBeenCalledWith(true);
     unmount();
   });
 

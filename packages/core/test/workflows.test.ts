@@ -1210,6 +1210,8 @@ describe('readDeviceInfo', () => {
     );
     for (const slot of state.slots) {
       expect(slot.unread, slot.name).toBe(true);
+      /* a spent reader's blank capture is unread, never an empty bank */
+      expect(slot.blank, slot.name).toBe(false);
     }
     for (const slot of state.slots) {
       expect(slot.reason ?? '', slot.name).toContain('power-cycle');
@@ -1246,6 +1248,11 @@ describe('readDeviceInfo', () => {
     expect(bankB?.present).toBe(false);
     expect(bankB?.unread).toBe(false);
     expect(bankB?.reason ?? '').toBe('no image header (magic 0xFFFFFFFF)');
+    /* ...and it is named for what it is: an erased bank (`blank`), which the slots
+     * page reports as empty. The stale bank beside it is not blank, it is unread. */
+    expect(bankB?.blank).toBe(true);
+    expect(bankA?.blank).toBe(false);
+    expect(state.byKey.get('r')?.blank).toBe(false);
 
     /* the readable bank scored, and it is the ONLY sum — the stale capture's
      * header-shaped tail contributed nothing */

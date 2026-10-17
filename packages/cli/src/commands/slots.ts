@@ -13,7 +13,12 @@
  *   - a bank whose read failed is refused, because nothing may be written on the strength of it;
  *   - the bank the camera boots now, and the recovery bank R, are refused unless the person says
  *     --acknowledge-risk. A camera that reports NO booted bank is treated the same way: the bank
- *     might be the one it boots, and the refusal says so;
+ *     might be the one it boots, and the refusal says so. An EMPTY bank is not exempt from this
+ *     (the rule is about which bank the camera boots, not about what the bank holds);
+ *   - an EMPTY bank (its header window reads as all 0xFF) is a state, not an error: `list` calls it
+ *     empty, `dump` returns the raw 64 KiB of 0xFF and says there is nothing to decrypt, and a flash
+ *     into it is planned, confirmed and read back like any other, the plan saying nothing is
+ *     overwritten;
  *   - the plan is printed and the person is asked, unless --yes; without a terminal and without
  *     --yes there is nobody to ask, so the command refuses.
  *
@@ -276,6 +281,12 @@ export function flashRefusal(
       hint: NOTHING_SENT,
     };
   }
+  if (view.content === 'empty' && !view.entry.emptyBank.writable.supported) {
+    return {
+      message: `bank ${bank} is empty and cannot be written on this build: ${view.entry.emptyBank.writable.reason}`,
+      hint: NOTHING_SENT,
+    };
+  }
   const risk = bootRisk(report, view);
   if (risk !== null && !acknowledgeRisk) {
     return {
@@ -312,9 +323,17 @@ function versionOf(view: SlotView): string | null {
 
 function bootableText(view: SlotView): string {
   const state = view.state;
-  if (state === null) return '-';
+  /* An empty bank has nothing to boot; "no" would read as a verdict on an image. */
+  if (state === null || view.content === 'empty') return '-';
   if (state.bootability === 'unknown') return 'unknown';
   return state.bootable ? 'yes' : 'no';
+}
+
+/** What the version column says: the image's version, or what the bank is when it holds none. */
+function versionText(view: SlotView): string {
+  if (view.content === 'empty') return 'empty';
+  if (view.content === 'foreign') return 'no image';
+  return versionOf(view) ?? '-';
 }
 
 function slotRow(view: SlotView): string[] {
@@ -325,12 +344,45 @@ function slotRow(view: SlotView): string[] {
     bankName(view.entry.key),
     hexUp(view.entry.address),
     view.active ? 'yes' : 'no',
-    versionOf(view) ?? '-',
+    versionText(view),
     header === null ? '-' : `${String(header.length)} B`,
     state?.keyName ?? '-',
     bootableText(view),
     sha256 === null ? '-' : sha256.slice(0, 16),
   ];
+}
+
+/**
+ * The bank whose decrypted image is the natural source for an empty bank: the one the camera
+ * boots when it holds an image, else the first bank that does. Null when no bank holds one.
+ * `slots dump <source>` writes that image as the `-decrypted` file `slots flash` takes.
+ */
+export function imageSourceFor(report: SlotsReport, target: SlotKey): SlotView | null {
+  const holds = (view: SlotView): boolean =>
+    view.entry.key !== target && view.content === 'image' && view.state?.plain != null;
+  return (
+    report.slots.find((view) => view.active && holds(view)) ??
+    report.slots.find((view) => holds(view)) ??
+    null
+  );
+}
+
+/** The sentence `list` prints for an empty bank: what it is, that it can be written, and how to fill it. */
+export function emptyBankNote(report: SlotsReport, view: SlotView): string {
+  const bank = bankName(view.entry.key);
+  const writable = view.entry.emptyBank.writable;
+  const head =
+    `${bank}: empty — its header window reads as all 0xFF, so it holds no image (nothing is ` +
+    'overwritten by a write, and nothing is decrypted from it).';
+  if (!writable.supported) return `${head} It cannot be written on this build: ${writable.reason}`;
+  const source = imageSourceFor(report, view.entry.key);
+  const how =
+    source === null
+      ? ''
+      : ` To give it the firmware bank ${bankName(source.entry.key)} holds: ` +
+        `\`seek-fw slots dump ${source.entry.key}\`, then ` +
+        `\`seek-fw slots flash ${view.entry.key} <the -decrypted file>\`.`;
+  return `${head} It can be written. ${view.entry.emptyBank.why}${how}`;
 }
 
 /** The `slots list` report: the camera, its banks, what each bank can take, and why not. */
@@ -377,6 +429,7 @@ export function listLines(report: SlotsReport, color: boolean): string[] {
     const bank = bankName(view.entry.key);
     for (const note of view.entry.notes) notes.push(`${bank}: ${note}`);
     if (view.unreadReason !== null) notes.push(`${bank}: not read — ${view.unreadReason}`);
+    if (view.content === 'empty') notes.push(emptyBankNote(report, view));
   }
   if (notes.length > 0) {
     lines.push('', heading('Notes', color));
@@ -393,6 +446,8 @@ function slotJson(view: SlotView): Record<string, unknown> {
     name: view.entry.name,
     address: hexUp(view.entry.address),
     active: view.active,
+    content: view.content,
+    empty: view.content === 'empty',
     version: versionOf(view),
     imageBytes: state?.header?.length ?? null,
     bankBytes: view.entry.length,
@@ -403,6 +458,7 @@ function slotJson(view: SlotView): Record<string, unknown> {
     unreadReason: view.unreadReason,
     staging: view.entry.staging,
     commitEffect: view.entry.commitEffect,
+    emptyBank: view.entry.emptyBank,
     notes: [...view.entry.notes],
     operations: {
       dump: view.entry.dump,
@@ -449,6 +505,9 @@ export function flashPlanLines(
   lines.push(
     table([
       ['  bank', `${bankName(plan.key)} (${hexUp(plan.address)})`],
+      ...(plan.targetEmpty === true
+        ? [['  target', 'empty — the bank holds no image, so nothing is overwritten']]
+        : []),
       ['  image', `${fileName} — ${kind}`],
       ['  staging', plan.staging],
       ['  payload', `${String(plan.payload.length)} B in ${String(chunks)} chunk(s) of 64 B`],
@@ -480,7 +539,12 @@ export function flashPlanLines(
 /** The yes/no question. It says which bank, and whether the camera boots it now. */
 export function flashQuestion(report: SlotsReport, plan: SlotFlashPlan, fileName: string): string {
   const view = findView(report, plan.key);
-  const booted = view?.active === true ? ' (the bank the camera boots now)' : '';
+  const booted =
+    view?.active === true
+      ? ' (the bank the camera boots now)'
+      : plan.targetEmpty === true
+        ? ' (empty — nothing is overwritten)'
+        : '';
   const product = report.state.description.productName ?? 'this camera';
   const serial = plan.serial === null ? '' : ` (${plan.serial})`;
   return `Write ${fileName} to bank ${bankName(plan.key)}${booted} on ${product}${serial}? [y/N] `;
@@ -542,7 +606,9 @@ export function dumpArtifacts(
   dumped: DumpedSlot,
   keys: { readonly keyA: Uint8Array; readonly keyB: Uint8Array } | null = null,
 ): Artifact[] {
-  const stem = `slot-${dumped.key}-${safeVersion(version)}-${dumped.sha256.slice(0, 8)}`;
+  /* An empty bank has no version to name it by; it says what it is instead. */
+  const label = dumped.empty ? 'empty' : safeVersion(version);
+  const stem = `slot-${dumped.key}-${label}-${dumped.sha256.slice(0, 8)}`;
   const artifacts: Artifact[] = [{ name: `${stem}.bin`, data: dumped.raw }];
   if (dumped.plain !== null) {
     const suffix =
@@ -607,10 +673,13 @@ async function dumpAction(ctx: CommandContext, ops: SlotOps, key: SlotKey): Prom
 
     if (ctx.human) {
       ctx.out(
-        `bank ${bankName(key)}: stored image sha256 ${dumped.sha256}` +
-          (dumped.plain === null
-            ? '; no decrypted image (no key recovered for it)'
-            : `; decrypted image sha256 ${dumped.plainSha256 ?? '(unknown)'}`),
+        dumped.empty
+          ? `bank ${bankName(key)}: empty, nothing to decrypt — the stored bank is the raw ` +
+              `${String(dumped.raw.length)} B of 0xFF, sha256 ${dumped.sha256}`
+          : `bank ${bankName(key)}: stored image sha256 ${dumped.sha256}` +
+              (dumped.plain === null
+                ? '; no decrypted image (no key recovered for it)'
+                : `; decrypted image sha256 ${dumped.plainSha256 ?? '(unknown)'}`),
       );
       for (const note of dumped.notes) ctx.out(`  · ${note}`);
     }
@@ -621,6 +690,7 @@ async function dumpAction(ctx: CommandContext, ops: SlotOps, key: SlotKey): Prom
       address: hexUp(view.entry.address),
       version,
       sha256: dumped.sha256,
+      empty: dumped.empty,
       plainSha256: dumped.plainSha256,
       decrypted: dumped.plain !== null,
       notes: [...dumped.notes],
@@ -685,6 +755,7 @@ async function flashAction(
         staging: plan.staging,
         payloadBytes: plan.payload.length,
         sum16: hexUp(plan.sum16, 4),
+        targetEmpty: plan.targetEmpty === true,
         expectedSha256,
         notes: [],
         warnings: [...plan.warnings],
@@ -731,6 +802,7 @@ async function flashAction(
       sum16: hexUp(plan.sum16, 4),
       commitStatus: result.commitStatus,
       verified: result.verified,
+      targetEmpty: plan.targetEmpty === true,
       expectedSha256,
       storedSha256,
       notes: [...result.notes],

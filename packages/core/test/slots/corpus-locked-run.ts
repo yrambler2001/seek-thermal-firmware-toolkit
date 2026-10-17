@@ -99,6 +99,8 @@ export interface DumpRow {
   plainLength: number | null;
   /** Every byte of the bank is 0xFF (the bank holds nothing). */
   erased: boolean | null;
+  /** `dumpSlot` reported the bank as empty (a complete read of all 0xFF, nothing decrypted). */
+  empty: boolean | null;
   /**
    * The bank holds the vendored corpus image (image-only entries; a prefix match). On the 2014
    * plaintext chain the image is stored verbatim, so this compares the stored bytes ('stored');
@@ -185,6 +187,8 @@ export interface LockedRun {
   /** Facts about the run the matrix prints: where the image came from, what raw payload was sent. */
   notes: string[];
   inspected: Record<SlotKey, boolean> | null;
+  /** What the analysis says each bank holds ('empty' for an erased bank). */
+  contents: Record<SlotKey, string> | null;
   /** The bank the emulator boots the image from, for the step list. */
   dumps: DumpRow[];
   refusal: RefusalRow | null;
@@ -224,6 +228,7 @@ export function blankLockedRun(subject: LockedSubject, entryId: string): LockedR
     blockedBy: [],
     notes: [],
     inspected: null,
+    contents: null,
     dumps: [],
     refusal: null,
     nonBooted: null,
@@ -428,6 +433,7 @@ async function dumpStep(
     identical: null,
     plainLength: null,
     erased: null,
+    empty: null,
     matchesVendored: null,
     matchedAs: null,
     notes: [],
@@ -441,6 +447,7 @@ async function dumpStep(
       row.identical = equalBytes(dumped.raw, truth.subarray(at, at + BANK_BYTES));
     }
     row.erased = dumped.raw.every((b) => b === 0xff);
+    row.empty = dumped.empty;
     if (dumped.plain !== null) row.plainLength = dumped.plain.length;
     if (imageOnly && vendored !== null) {
       /* The 2014 chain stores the image itself. Its stored bytes are compared as they are: the
@@ -549,6 +556,9 @@ export async function runLockedFirmware(
         b: state.byKey.get('b') !== undefined && state.byKey.get('b')?.unread === false,
         r: state.byKey.get('r') !== undefined && state.byKey.get('r')?.unread === false,
       };
+      run.contents = Object.fromEntries(
+        report.slots.map((v) => [v.entry.key, v.content]),
+      ) as Record<SlotKey, string>;
       const profile = state.profile;
       const version = firmware.version;
 

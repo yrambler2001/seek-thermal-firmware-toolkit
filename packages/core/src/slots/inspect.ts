@@ -3,9 +3,9 @@ import { hex } from '../bytes.js';
 import { SeekError } from '../errors.js';
 import { readRunningFirmware, type RunningFirmware } from '../workflows/capability.js';
 import { profileToRereadUnder, readDeviceInfo } from '../workflows/device-info.js';
-import type { DeviceState, WorkflowContext } from '../workflows/types.js';
+import type { DeviceState, SlotState, WorkflowContext } from '../workflows/types.js';
 import { buildSlotPlan } from './capability.js';
-import type { SlotEntry, SlotPlan, SlotsReport, SlotView } from './types.js';
+import type { SlotContent, SlotEntry, SlotPlan, SlotsReport, SlotView } from './types.js';
 
 /** The build the caller already read: what `readRunningFirmware` or an identify probe returns. */
 export type InspectFirmware = Pick<RunningFirmware, 'version'>;
@@ -103,7 +103,31 @@ export async function inspectSlots(
     );
   }
 
-  return { state, plan: finalPlan, slots: joinSlotViews(finalPlan, state) };
+  const slots = joinSlotViews(finalPlan, state);
+  /* An empty bank is a state, not a fault: said once, plainly, in the run log (the
+   * analysis' own line for it is a warning, which reads like a problem). */
+  for (const view of slots) {
+    if (view.content === 'empty') {
+      ctx.reporter.log(
+        `${view.entry.name} is empty: its header window reads as all 0xFF, so it holds no image ` +
+          `and nothing is decrypted. ${view.entry.emptyBank.writable.supported ? 'It can be written.' : view.entry.emptyBank.why}`,
+        'ok',
+      );
+    }
+  }
+  return { state, plan: finalPlan, slots };
+}
+
+/**
+ * What one bank holds, from its analysis. 'empty' is an erased bank (the header
+ * window read as all 0xFF on a clean read); it is not 'foreign', which is a bank
+ * that holds bytes this page does not recognise as an image, and it is not
+ * 'unread', which is a bank the read never got a clean answer from.
+ */
+export function slotContentOf(state: SlotState | null): SlotContent {
+  if (state === null) return 'unread';
+  if (state.present) return 'image';
+  return state.blank === true ? 'empty' : 'foreign';
 }
 
 /**
@@ -113,7 +137,8 @@ export async function inspectSlots(
  * on this build, when the analysis has no entry for it, or when the read did not
  * complete. `unreadReason` says which, in the words the analysis used. A slot
  * that was read and holds no image is NOT unread: it has a `state` with
- * `present: false`, which is a different fact and is shown as one.
+ * `present: false`, which is a different fact and is shown as one, and `content`
+ * names it: 'empty' for an erased bank, 'foreign' for bytes that are not an image.
  */
 export function joinSlotViews(
   plan: SlotPlan,
@@ -128,6 +153,7 @@ export function joinSlotViews(
         unreadReason:
           `${entry.name} at ${hex(entry.address, 8)} is not readable on this build: its selector ` +
           'table has no window there, so nothing was armed for it',
+        content: 'unread',
         active,
       };
     }
@@ -137,6 +163,7 @@ export function joinSlotViews(
         entry,
         state: null,
         unreadReason: `${entry.name} is missing from the camera analysis`,
+        content: 'unread',
         active,
       };
     }
@@ -145,9 +172,10 @@ export function joinSlotViews(
         entry,
         state: null,
         unreadReason: found.reason ?? `${entry.name} was not read`,
+        content: 'unread',
         active,
       };
     }
-    return { entry, state: found, unreadReason: null, active };
+    return { entry, state: found, unreadReason: null, content: slotContentOf(found), active };
   });
 }

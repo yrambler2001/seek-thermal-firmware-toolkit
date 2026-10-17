@@ -152,8 +152,25 @@ export async function dumpSlot(
 
   let plain: Uint8Array | null = null;
   const head = raw.subarray(0, HEADER_OFFSET + HEADER_SIZE);
-  if (blankSlotCapture(head)) {
-    notes.push('erased: the header window is all 0xFF, so the bank holds no image');
+  /* EMPTY IS A WHOLE-BANK FACT, and only a COMPLETE read can state it: a short read
+   * is padded with 0xFF here (`gapFill`), so an all-0xFF `raw` after a short read
+   * says nothing about the bank. An empty bank is dumped as the raw 64 KiB of 0xFF
+   * and is not decrypted, because there is nothing in it to decrypt. */
+  const complete = data.length >= bankLength;
+  const empty = complete && raw.every((byte) => byte === 0xff);
+  if (empty) {
+    notes.push(
+      `empty, nothing to decrypt: all ${String(raw.length)} B of ${entry.name} read as 0xFF (an ` +
+        'erased bank). The raw dump is those bytes; there is no decrypted image',
+    );
+  } else if (blankSlotCapture(head)) {
+    const later = raw.subarray(head.length).reduce((n, byte) => n + (byte === 0xff ? 0 : 1), 0);
+    notes.push(
+      later === 0
+        ? 'erased: the header window is all 0xFF, so the bank holds no image'
+        : `erased header: the header window is all 0xFF, so no image starts here, but ${String(later)} later ` +
+            'byte(s) are not 0xFF; nothing is decrypted',
+    );
   } else {
     const header = parseImageHeader(raw);
     if (header?.magic !== IMAGE_MAGIC) {
@@ -211,6 +228,7 @@ export async function dumpSlot(
     address: entry.address,
     raw,
     sha256: await sha256hex(raw),
+    empty,
     plain,
     plainSha256: plain === null ? null : await sha256hex(plain),
     notes,

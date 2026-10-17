@@ -33,6 +33,8 @@ export interface SlotWriteConfirmProps {
    * the recovery bank only, so the dialog says why, in words, above the tick.
    */
   readonly twoStream?: boolean;
+  /** The bank holds no image: the write overwrites no firmware. */
+  readonly targetEmpty?: boolean;
   readonly onConfirm: (acknowledged: boolean) => void;
   readonly onCancel: () => void;
 }
@@ -44,6 +46,7 @@ export function SlotWriteConfirm({
   slotAddress,
   risk,
   twoStream = false,
+  targetEmpty = false,
   onConfirm,
   onCancel,
 }: SlotWriteConfirmProps): ReactElement {
@@ -98,8 +101,15 @@ export function SlotWriteConfirm({
         )}
 
         <AlertDialogDescription id="slot-write-confirm-what" className="space-y-2">
+          {targetEmpty && (
+            <span className="block font-medium">
+              {`${slotName} is empty: it holds no image, so no firmware is overwritten.`}
+            </span>
+          )}
           <span className="block">
-            {`This erases a 64 KiB block of the camera's flash and programs it at ${slotName}.`}
+            {targetEmpty
+              ? `The write still erases the 64 KiB block of the camera's flash at ${slotName} (already blank) and programs it.`
+              : `This erases a 64 KiB block of the camera's flash and programs it at ${slotName}.`}
           </span>
           {twoStream && (
             <span className="block" id="slot-write-confirm-ff">
