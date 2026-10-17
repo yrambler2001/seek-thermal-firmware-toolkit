@@ -19,7 +19,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
-import { CAMERA_WRITE_GUARD, DEVICE_INFO_GUARD, checkCameraName } from '../camera-flow.js';
+import { CAMERA_WRITE_GUARD, DEVICE_INFO_GUARD } from '../camera-flow.js';
 import { setGuard } from '../electron-camera.js';
 import { HEADED } from '../spec.js';
 import { cameraBusyReason } from '../preflight.js';
@@ -129,13 +129,25 @@ export async function openBenchPage(scratchDir: string): Promise<BenchPage> {
   });
   try {
     await target.wizard.route('#/slots');
-    checkCameraName(await target.wizard.connect());
+    checkChooserEntry(await target.wizard.connect());
     if (!(await guardInstalled(target))) throw new Error('the write guard is not in the page');
     return windowOf(target, scratchDir);
   } catch (error) {
     await target.close().catch(() => undefined);
     throw error;
   }
+}
+
+/**
+ * The chooser's entry must be a Seek camera (vendor 0x289D), whatever its product name:
+ * the matrix covers every family, and each names itself differently (PIR206, CompactXR,
+ * Nano200 ...). The main process refuses any other device.
+ */
+export function checkChooserEntry(chooserName: string): string {
+  if (!/\(289d:[0-9a-f]{4}\)$/i.test(chooserName)) {
+    throw new Error(`the chooser picked "${chooserName}", not a Seek camera (vendor 0x289D)`);
+  }
+  return chooserName;
 }
 
 function windowOf(target: TargetHandle, scratchDir: string): BenchPage {
