@@ -48,18 +48,24 @@ function matchesAt(image: Uint8Array, at: number, needle: Uint8Array): boolean {
  * `plainImage` with `buildString` changed in place, in a copy. Null when the
  * string is empty, is not printable ASCII, has no letter or digit to change, or
  * does not occur in the image at all.
+ *
+ * `mark`, when given, is the one character the last letter or digit becomes (the
+ * per-bank boot test writes B, A or R there, so each bank's image names itself).
+ * It must be one letter or digit. Without it the character moves to the next one.
  */
 export function patchBuildString(
   plainImage: Uint8Array,
   buildString: string,
+  mark?: string,
 ): PatchedBuildString | null {
   if (!PRINTABLE_ASCII.test(buildString)) return null;
   const at = lastAlnumIndex(buildString);
   if (at < 0) return null;
+  if (mark !== undefined && !/^[A-Za-z0-9]$/.test(mark)) return null;
 
   const needle = new Uint8Array(buildString.length);
   for (let i = 0; i < buildString.length; i++) needle[i] = buildString.charCodeAt(i);
-  const changed = nextChar(buildString.charAt(at));
+  const changed = mark ?? nextChar(buildString.charAt(at));
   const changedByte = changed.charCodeAt(0);
 
   const patched = plainImage.slice();

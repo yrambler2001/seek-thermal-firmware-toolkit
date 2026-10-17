@@ -54,9 +54,8 @@ const LAYOUT: Readonly<Record<BankLetter, number>> = {
   b: 0x14060000,
   r: 0x14070000,
 };
-/** The build string's marker in bank B, 0x100 into the bank. */
+/** The build string's marker, 0x100 into each bank. */
 const MARKER = 'BUILD:';
-const MARKER_AT = LAYOUT.b - BENCH_FLASH_BASE + 0x100;
 /** The fake's two subjects: the versions they report. */
 const FAKE_VERSIONS = ['1.3.0.0', '1.1.0.0'] as const;
 
@@ -74,16 +73,29 @@ function fakeFlash(seed: number): Uint8Array {
     out[i] = state >>> 24;
   }
   const marker = new TextEncoder().encode(`${MARKER}AAAAAA`);
-  out.set(marker, MARKER_AT);
+  /* Every bank carries the build string at 0x100 into it, as a real image's banks do. */
+  for (const letter of ['a', 'b', 'r'] as const) {
+    out.set(marker, LAYOUT[letter] - BENCH_FLASH_BASE + 0x100);
+  }
   return out;
 }
 
-/** Two fake subjects, written into `dir` as 4 MiB files the flow reads like the real ones. */
-export function fakeSubjects(dir: string): BenchSubject[] {
+/**
+ * Two fake subjects, written into `dir` as 4 MiB files the flow reads like the real ones.
+ * `blankB` makes the second one's bank B blank (0xFF), as the 2014 dumps' B is.
+ */
+export function fakeSubjects(
+  dir: string,
+  options: { readonly blankB?: boolean } = {},
+): BenchSubject[] {
   mkdirSync(dir, { recursive: true });
   return FAKE_VERSIONS.map((version, index) => {
     const file = path.join(dir, `fake-${String(index + 1)}.bin`);
     const bytes = fakeFlash(index + 1);
+    if (options.blankB === true && index === 1) {
+      const offset = LAYOUT.b - BENCH_FLASH_BASE;
+      bytes.fill(0xff, offset, offset + BANK_BYTES);
+    }
     writeFileSync(file, bytes);
     return {
       camera: 'Compact',
@@ -121,11 +133,20 @@ function findBytes(
 
 const MARKER_BYTES = new TextEncoder().encode(MARKER);
 
-/** The build string in bank B's marker, or null when there is none. */
-function buildAt(flash: Uint8Array): string | null {
-  const at = findBytes(flash, MARKER_BYTES, MARKER_AT, MARKER_AT + 0x40);
-  if (at < 0) return null;
-  return new TextDecoder().decode(flash.subarray(at, at + MARKER_BYTES.length + 6));
+/**
+ * The build string the fake camera runs: the marker in the first non-blank bank of
+ * B, A, R (the fake's boot order), or null when all three are blank.
+ */
+function bootedBuild(flash: Uint8Array): string | null {
+  for (const letter of ['b', 'a', 'r'] as const) {
+    const offset = LAYOUT[letter] - BENCH_FLASH_BASE;
+    const bank = flash.subarray(offset, offset + BANK_BYTES);
+    if (isBlank(bank)) continue;
+    const at = findBytes(bank, MARKER_BYTES, 0x100, 0x140);
+    if (at < 0) return null;
+    return new TextDecoder().decode(bank.subarray(at, at + MARKER_BYTES.length + 6));
+  }
+  return null;
 }
 
 function isBlank(bytes: Uint8Array): boolean {
@@ -154,10 +175,19 @@ export function createFakeRig(options: {
   const jlink: JlinkBench = {
     async flashFull(file: string): Promise<void> {
       const index = options.subjects.findIndex((candidate) => candidate.file === file);
-      if (index < 0) throw new Error('fake: the file is not one of the fake subjects');
+      /* A subject's file starts that subject; any other 4 MiB file is a restore of the bench's state. */
+      if (index >= 0) {
+        current = index;
+        haltArmed = failsAt('halt');
+      }
       flash = new Uint8Array(readFileSync(file));
-      current = index;
-      haltArmed = failsAt('halt');
+    },
+    async eraseRange(address: number, length: number): Promise<void> {
+      const offset = address - BENCH_FLASH_BASE;
+      if (length !== BANK_BYTES || offset < 0 || offset + length > flash.length) {
+        throw new Error('fake: eraseRange outside one bank');
+      }
+      flash.fill(0xff, offset, offset + length);
     },
     async readFlash(address: number, length: number): Promise<Uint8Array> {
       const offset = address - BENCH_FLASH_BASE;
@@ -175,7 +205,7 @@ export function createFakeRig(options: {
       if (got !== sha) throw new Error(`the flash reads back as ${got}, not the dump ${sha}`);
     },
     async resetCpu(): Promise<void> {
-      running = failsAt('boot') ? `${MARKER}BROKE!` : buildAt(flash);
+      running = failsAt('boot') ? `${MARKER}BROKE!` : bootedBuild(flash);
     },
   };
 
@@ -207,9 +237,14 @@ export function createFakeRig(options: {
     },
   };
 
-  const patch = (image: Uint8Array, _buildString: string): PatchedBuildString | null => {
+  const patch = (
+    image: Uint8Array,
+    _buildString: string,
+    mark?: string,
+  ): PatchedBuildString | null => {
     const from = 'AAAAAA';
-    const to = 'BBBBBB';
+    /* The per-bank mark: Z, the bank's letter, then Z's, so each bank's string is its own. */
+    const to = mark === undefined ? 'BBBBBB' : `Z${mark}ZZZZ`;
     const at = findBytes(image, new TextEncoder().encode(`${MARKER}${from}`));
     if (at < 0) return null;
     const patched = new Uint8Array(image);

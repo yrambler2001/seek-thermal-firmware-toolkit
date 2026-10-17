@@ -48,6 +48,8 @@ export const LEGACY_TARGET = 'compact_32k_1_3_0_8';
 
 /** The SWD speed and interface the recipe uses (kilohertz for `-speed`). */
 const INTERFACE = 'SWD';
+/** One SPIFI bank (and one erase sector group) as the bench erases it. */
+const BANK_BYTES = 0x10000;
 const SPEED_KHZ = '4000';
 const DEFAULT_DEVICE = 'LPC4330_M4';
 /**
@@ -493,6 +495,39 @@ export function createJlinkBench(options: JlinkBenchOptions): JlinkBench {
         if (flashed.code !== 0) {
           log(
             `flash-factory-4m exited ${String(flashed.code)}: ${tail(flashed)} (the read-back decides)`,
+          );
+        }
+      });
+    },
+
+    async eraseRange(address: number, length: number): Promise<void> {
+      if (length !== BANK_BYTES || address % BANK_BYTES !== 0 || address < BENCH_FLASH_BASE) {
+        throw new Error(
+          `eraseRange: only one 64 KiB bank, 64 KiB-aligned, in the flash (got ${hex(address)}+${hex(length)})`,
+        );
+      }
+      if (address + length > BENCH_FLASH_BASE + BENCH_FLASH_BYTES) {
+        throw new Error(`eraseRange: ${hex(address)}+${hex(length)} is past the end of the flash`);
+      }
+      const erase = { ERASE_ADDR: hex(address), ERASE_LEN: hex(length) };
+      if (dry) {
+        log(
+          `[dry-run] would run: node tools/jlink/jlink-runner.js erase-spifi-range in ${targetDir} ` +
+            `(ERASE_ADDR=${erase.ERASE_ADDR} ERASE_LEN=${erase.ERASE_LEN}, JLINK_SERIAL=${serial})`,
+        );
+        return;
+      }
+      await withScratch(async (dir) => {
+        const jlinkExe = writeShim(dir);
+        const erased = await runRunner('erase-spifi-range', { ...erase, JLINKEXE: jlinkExe });
+        if (erased.code !== 0) {
+          if (!ERASE_TOLERATED.test(`${erased.stdout}\n${erased.stderr}`)) {
+            throw new Error(
+              `erase-spifi-range ${erase.ERASE_ADDR} failed (exit ${String(erased.code)}): ${tail(erased)}`,
+            );
+          }
+          log(
+            `erase-spifi-range ${erase.ERASE_ADDR} reported error -5 (exit ${String(erased.code)}): tolerated; the read decides`,
           );
         }
       });

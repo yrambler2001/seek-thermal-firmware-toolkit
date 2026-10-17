@@ -70,6 +70,12 @@ export interface JlinkBench {
   readFlash(address: number, length: number): Promise<Uint8Array>;
   /** Read all 0x400000 bytes back and require sha256 equal to `sha256` (throws, naming both). */
   verifyFull(sha256: string): Promise<void>;
+  /**
+   * Erase one 64 KiB bank (`erase-spifi-range` over just that range, the runner's own erase).
+   * Only a 64 KiB, 64 KiB-aligned range inside the flash is accepted, so a bootloader or boot
+   * config block cannot be named by mistake. The caller checks the result with a read.
+   */
+  eraseRange(address: number, length: number): Promise<void>;
   /** Reset the CPU over SWD (`r` then `g`) so the camera boots what is in flash. */
   resetCpu(): Promise<void>;
 }

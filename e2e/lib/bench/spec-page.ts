@@ -251,7 +251,8 @@ export function createRealRig(approval: WriteApproval, scratchRoot: string): Pro
     kind: 'real',
     jlink,
     camera,
-    patch: (image: Uint8Array, buildString: string) => patchBuildString(image, buildString),
+    patch: (image: Uint8Array, buildString: string, mark?: string) =>
+      patchBuildString(image, buildString, mark),
     openPage: () => {
       windows += 1;
       return openBenchPage(path.join(scratchRoot, `window-${String(windows)}`));

@@ -180,6 +180,7 @@ function missingRig(subject: BenchSubject): SubjectResult {
     banksMatch: false,
     slotWrites: [],
     bootProof: 'not-run',
+    slotBoot: [],
     notes: [],
     failures: ['the bench rig did not open (see the beforeAll error)'],
   };

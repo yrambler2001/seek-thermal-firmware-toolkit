@@ -23,7 +23,8 @@
  * banks are still written. The next subject's full flash puts the camera back.
  */
 
-import { readFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
 
 import { buildSlotPlan, listProfiles } from '@seek-fw/core';
@@ -96,6 +97,26 @@ export interface SlotWriteResult {
   readonly notes: string[];
 }
 
+/**
+ * One bank's own boot test (SEEK_BENCH_SLOT_BOOT=1): the bank holds the patched image, the
+ * other banks it names are erased, the camera is reset. What it ran is the result.
+ *   booted-alone  the camera ran this bank's build string
+ *   did-not-boot  the camera did not come back on the bus after the reset
+ *   ran-other     the camera came back and ran something else (the string is in `running`)
+ */
+export type SlotBootState =
+  'booted-alone' | 'did-not-boot' | 'ran-other' | 'skipped' | 'failed' | 'not-run';
+
+export interface SlotBootResult {
+  readonly bank: BankLetter;
+  state: SlotBootState;
+  /** The build string the camera reported after the reset, or null. */
+  running: string | null;
+  /** The banks erased for this test (the other banks; B keeps R as the safety net). */
+  readonly erased: BankLetter[];
+  readonly notes: string[];
+}
+
 export interface SubjectResult {
   readonly label: string;
   readonly file: string;
@@ -107,8 +128,41 @@ export interface SubjectResult {
   banksMatch: boolean;
   readonly slotWrites: SlotWriteResult[];
   bootProof: StepState;
+  /** The per-bank boot tests, when SEEK_BENCH_SLOT_BOOT=1 (empty otherwise). */
+  readonly slotBoot: SlotBootResult[];
   readonly notes: string[];
   readonly failures: string[];
+}
+
+/** Whether the per-bank boot proof and the blank-bank fallback run (SEEK_BENCH_SLOT_BOOT=1). */
+export function slotBootEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+  return env.SEEK_BENCH_SLOT_BOOT === '1';
+}
+
+/** The banks each bank's own boot test erases. B keeps R intact as the safety net. */
+export const ERASED_FOR_BOOT: Readonly<Record<BankLetter, readonly BankLetter[]>> = {
+  b: ['a'],
+  a: ['b', 'r'],
+  r: ['b', 'a'],
+};
+
+/**
+ * The image a bank with none of its own is written with: the booted bank's own image, else
+ * A's, else R's, else B's, never the target's. Null when no other bank has an image.
+ */
+export function fallbackSource(
+  images: ReadonlyMap<BankLetter, PageImage | null>,
+  target: BankLetter | null,
+  booted: BankLetter | null,
+): { readonly letter: BankLetter; readonly image: PageImage } | null {
+  const order: BankLetter[] = booted === null ? [] : [booted];
+  order.push('a', 'r', 'b');
+  for (const letter of order) {
+    if (letter === target) continue;
+    const image = images.get(letter) ?? null;
+    if (image !== null) return { letter, image };
+  }
+  return null;
 }
 
 /** A subject's name for the logs and the matrix. Never a personal path. */
@@ -255,6 +309,7 @@ async function readWindow(
   rig: BenchRig,
   subject: BenchSubject,
   r: SubjectResult,
+  slotBoot: boolean,
 ): Promise<{ readonly read: PageRead; readonly dumps: ReadonlyMap<BankLetter, PageDump> }> {
   const page = await rig.openPage();
   try {
@@ -290,17 +345,29 @@ async function readWindow(
           `bank ${UPPER[bank.letter]}: holds no readable image (the page shows no version)`,
         );
       } else if (bank.version !== subject.version) {
-        r.failures.push(
-          `page: bank ${UPPER[bank.letter]} reports ${bank.version}, the subject is ${subject.version}`,
-        );
+        /* Under the boot test, a bank holding another build is replaced with the image of a
+         * bank that holds the running build (readPage), so it is a note, not a failure. */
+        if (slotBoot) {
+          r.notes.push(
+            `bank ${UPPER[bank.letter]} holds ${bank.version}, not the running ${subject.version}: ` +
+              'it has no image of its own for this build',
+          );
+        } else {
+          r.failures.push(
+            `page: bank ${UPPER[bank.letter]} reports ${bank.version}, the subject is ${subject.version}`,
+          );
+        }
       }
     }
     const booted = read.banks.filter((bank) => bank.booted).length;
+    const versionsMatch = read.banks.every(
+      (bank) => bank.version === null || bank.version === subject.version,
+    );
     r.pageIdentified =
       layout !== undefined &&
       read.runningBuild === subject.version &&
       booted === 1 &&
-      read.banks.every((bank) => bank.version === null || bank.version === subject.version);
+      (slotBoot || versionsMatch);
 
     const dumps = new Map<BankLetter, PageDump>();
     for (const bank of read.banks) dumps.set(bank.letter, await page.dump(bank.letter));
@@ -323,8 +390,9 @@ async function readPage(
   subject: BenchSubject,
   bytes: Uint8Array,
   r: SubjectResult,
+  slotBoot: boolean,
 ): Promise<Reading> {
-  const { read, dumps } = await readWindow(rig, subject, r);
+  const { read, dumps } = await readWindow(rig, subject, r, slotBoot);
   const addresses: Record<BankLetter, number> = {
     a: addressOf(read.banks, 'a'),
     b: addressOf(read.banks, 'b'),
@@ -362,6 +430,13 @@ async function readPage(
       images.set(bank.letter, null);
       r.notes.push(
         `bank ${name}: the page cannot decrypt it, so there is no image of its own to write`,
+      );
+    } else if (slotBoot && bank.version !== null && bank.version !== subject.version) {
+      /* A stale image (another build) is no image of this build: the boot test writes the
+       * running build's image there instead. The stale bytes are still checked above. */
+      images.set(bank.letter, null);
+      r.notes.push(
+        `bank ${name}: its image is ${bank.version}, not the running ${subject.version}`,
       );
     } else {
       images.set(bank.letter, { name: dump.decryptedName, bytes: dump.decrypted });
@@ -564,11 +639,146 @@ async function bootProof(rig: BenchRig, reading: Reading, r: SubjectResult): Pro
   r.bootProof = r.failures.length === failuresBefore ? 'passed' : 'failed';
 }
 
+/** One bank's erase, checked: the bank must read back all 0xFF. */
+async function eraseBank(rig: BenchRig, address: number): Promise<void> {
+  await rig.jlink.eraseRange(address, BANK_BYTES);
+  const left = await readFlash(rig, address, BANK_BYTES);
+  if (!left.every((byte) => byte === 0xff)) {
+    throw new Error(`the bank at ${hex(address)} is not erased after its erase`);
+  }
+}
+
+/**
+ * The per-bank boot proof (SEEK_BENCH_SLOT_BOOT=1). For each bank that was written (B, A, R):
+ * the bank takes the source image with its build string marked with that bank's letter, the
+ * banks it names in ERASED_FOR_BOOT are erased, the CPU is reset, and the camera's running
+ * build string says whether that bank booted alone. Then the state the subject was in after
+ * its writes is flashed back (the whole part, read back), so the next bank starts from it.
+ *
+ * A camera that does not come back is a result (did-not-boot), recorded and recovered through
+ * the whole-flash path. Only a flow error (a write, an erase, the restore) is a failure.
+ */
+async function slotBootProof(
+  rig: BenchRig,
+  reading: Reading,
+  r: SubjectResult,
+  written: ReadonlySet<BankLetter>,
+  log: (line: string) => void,
+): Promise<void> {
+  const booted = reading.read.banks.find((bank) => bank.booted)?.letter ?? null;
+  const source = fallbackSource(reading.images, null, booted);
+  const running = (await rig.camera.runningInfo())?.buildString ?? null;
+  if (source === null || running === null) {
+    r.bootProof = 'skipped';
+    r.notes.push(
+      `slot boot skipped: ${source === null ? 'no decrypted image to patch' : 'the camera reports no build string'}`,
+    );
+    return;
+  }
+  const dir = mkdtempSync(path.join(tmpdir(), 'seek-slot-boot-'));
+  try {
+    /* The state after the writes: the whole part, read back, is what each test restores. */
+    const state = await readFlash(rig, BENCH_FLASH_BASE, BENCH_FLASH_BYTES);
+    const stateSha = sha256(state);
+    const stateFile = path.join(dir, 'state.bin');
+    writeFileSync(stateFile, state);
+    r.notes.push(
+      `slot boot: source image ${source.image.name} (bank ${UPPER[source.letter]}), build "${running}", ` +
+        `state ${short(stateSha)} restored after each bank`,
+    );
+
+    for (const letter of WRITE_ORDER) {
+      const name = UPPER[letter];
+      const result: SlotBootResult = {
+        bank: letter,
+        state: 'not-run',
+        running: null,
+        erased: [...ERASED_FOR_BOOT[letter]],
+        notes: [],
+      };
+      r.slotBoot.push(result);
+      if (!written.has(letter)) {
+        result.state = 'skipped';
+        result.notes.push('the bank was not written in this run');
+        continue;
+      }
+      const marked = rig.patch(source.image.bytes, running, name);
+      if (marked === null) {
+        result.state = 'skipped';
+        result.notes.push('patchBuildString found no build string in the source image');
+        continue;
+      }
+
+      /* The bank takes the marked image through the page, then the other banks it names are erased. */
+      const outcome = await writeBank(rig, reading, letter, {
+        name: `${source.image.name} (boot test ${name})`,
+        bytes: marked.patched,
+      });
+      if (outcome.problems.length > 0) {
+        result.state = 'failed';
+        for (const problem of outcome.problems) {
+          r.failures.push(`slot boot write ${name}: ${problem}`);
+        }
+        r.bootProof = 'failed';
+        return;
+      }
+      try {
+        for (const other of ERASED_FOR_BOOT[letter]) {
+          await eraseBank(rig, reading.addresses[other]);
+        }
+      } catch (error) {
+        result.state = 'failed';
+        r.failures.push(`slot boot erase for ${name}: ${messageOf(error)}`);
+        r.bootProof = 'failed';
+        return;
+      }
+
+      await rig.jlink.resetCpu();
+      const back = await rig.camera.waitForReboot(RESET_DROP_MS, ENUMERATE_MS);
+      if (back === null) {
+        result.state = 'did-not-boot';
+        result.notes.push(rebootFailure(RESET_DROP_MS, ENUMERATE_MS));
+      } else {
+        result.running = (await rig.camera.runningInfo())?.buildString ?? null;
+        if (result.running?.includes(marked.to) === true) {
+          result.state = 'booted-alone';
+        } else {
+          result.state = 'ran-other';
+          result.notes.push(
+            result.running === null
+              ? 'the camera came back and reported no build string'
+              : `the camera ran "${result.running}", not "${marked.to}"`,
+          );
+        }
+      }
+      log(
+        `${r.label}: boot test ${name}: ${result.state}${result.running ? ` ("${result.running}")` : ''}`,
+      );
+
+      /* Back to the state after the writes, read back against its sha, before the next bank. */
+      await rig.jlink.flashFull(stateFile);
+      await verifyFlash(rig, stateSha, r);
+      await rig.jlink.resetCpu();
+      if ((await rig.camera.waitForReboot(RESET_DROP_MS, ENUMERATE_MS)) === null) {
+        r.failures.push(
+          `slot boot restore after ${name}: ${rebootFailure(RESET_DROP_MS, ENUMERATE_MS)}`,
+        );
+        r.bootProof = 'failed';
+        return;
+      }
+    }
+    r.bootProof = 'passed';
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
 /** Runs the whole flow for one subject. Never throws: every failure lands in the result. */
 export async function runSubject(
   rig: BenchRig,
   subject: BenchSubject,
   log: (line: string) => void,
+  slotBoot: boolean = slotBootEnabled(),
 ): Promise<SubjectResult> {
   const r: SubjectResult = {
     label: subjectLabel(subject),
@@ -586,10 +796,13 @@ export async function runSubject(
       notes: [],
     })),
     bootProof: 'not-run',
+    slotBoot: [],
     notes: [],
     failures: [],
   };
-  log(`${r.label}: ${r.file} (${short(subject.sha256)}), ${subject.fileKind}`);
+  log(
+    `${r.label}: ${r.file} (${short(subject.sha256)}), ${subject.fileKind}${slotBoot ? ', slot boot tests on' : ''}`,
+  );
 
   /* Nothing touches the bench until the file is the one the tree indexed. */
   const bytes = await attempt(r, 'file', () => {
@@ -631,7 +844,7 @@ export async function runSubject(
   log(`${r.label}: enumerated after ${String(enumerated)} ms`);
 
   /* Step 2: the page and the J-Link agree on the banks and their dumps. */
-  const reading = await attempt(r, 'page read', () => readPage(rig, subject, bytes, r));
+  const reading = await attempt(r, 'page read', () => readPage(rig, subject, bytes, r, slotBoot));
   if (reading === null) {
     r.notes.push('steps 3-4 not run: the page read failed');
     return r;
@@ -642,9 +855,20 @@ export async function runSubject(
 
   /* Step 3: the bank's own decrypted image into B, then A, then R. A write that
    * was sent and did not check out ends the writes, and the boot proof. */
+  const booted = reading.read.banks.find((bank) => bank.booted)?.letter ?? null;
   for (const result of r.slotWrites) {
     const name = UPPER[result.bank];
-    const image = reading.images.get(result.bank) ?? null;
+    let image = reading.images.get(result.bank) ?? null;
+    let from: BankLetter | null = null;
+    if (image === null && slotBoot) {
+      /* Under the boot test a bank with no image of its own (blank, undecryptable, or another
+       * build) takes the booted bank's image, so every bank holds a bootable image of this build. */
+      const source = fallbackSource(reading.images, result.bank, booted);
+      if (source !== null) {
+        image = { name: source.image.name, bytes: source.image.bytes };
+        from = source.letter;
+      }
+    }
     if (image === null) {
       /* An empty bank (or one the page cannot decrypt) has no image of its own to write.
        * That is recorded, not failed: the boot proof writes all three banks anyway. */
@@ -670,10 +894,23 @@ export async function runSubject(
       break;
     }
     result.state = 'passed';
+    if (from !== null) {
+      result.notes.push(`written with bank ${UPPER[from]}'s image (it had no image of its own)`);
+    }
     log(`${r.label}: bank ${name} written, verified, and read back`);
   }
   if (r.slotWrites.some((result) => result.state === 'failed' || result.state === 'not-run')) {
     r.notes.push('boot proof not run: a slot write did not pass');
+    return r;
+  }
+
+  if (slotBoot) {
+    /* The per-bank boot tests: each written bank alone, the others it names erased. */
+    const written = new Set(
+      r.slotWrites.filter((result) => result.state === 'passed').map((result) => result.bank),
+    );
+    const proof = await attempt(r, 'slot boot', () => slotBootProof(rig, reading, r, written, log));
+    if (proof === null) r.bootProof = 'failed';
     return r;
   }
 
