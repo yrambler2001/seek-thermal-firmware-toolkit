@@ -6115,6 +6115,49 @@ after the run.
 - **What the boot proof does and does not show.** It writes the same patched image to every bank, then
   resets, so it proves the camera boots one of the banks, not that each bank boots on its own.
 
+### 42.5 Each bank boots on its own, and bank B is a real slot on the 2014 chain (2026-10-17)
+
+`SEEK_BENCH_SLOT_BOOT=1` (off by default) adds a per-bank boot proof to the bench. For every bank X
+the page wrote, X alone receives an image whose build string is marked with the bank's letter
+(`...B`, `...A`, `...R`), the other banks' 64 KiB are erased over the J-Link (only the bank ranges,
+never the bootloader or boot-config), the CPU is reset, and the camera-reported build string must
+be X's. A bank whose dump has no image of its own (a blank bank B, or a bank holding another
+version) takes the booted bank's image through the page, with the normal checks. After each bank
+the state is restored.
+
+All 12 subjects tested pass, every bank booting alone (36 of 36 bank boots):
+
+| Subject                                    | Page identified | Writes B / A / R | Boot proof | B / A / R alone |
+| ------------------------------------------ | --------------- | ---------------- | ---------- | --------------- |
+| Compact 0.8.0.0                            | no (1)          | ok / ok / ok     | ok         | yes / yes / yes |
+| Compact 0.9.0.2, 0.9.1.0, 1.0.0.0, 1.2.0.0 | yes             | ok / ok / ok     | ok         | yes / yes / yes |
+| Compact 1.3.0.8 std                        | yes             | ok / ok / ok     | ok         | yes / yes / yes |
+| Compact 1.3.0.0 (the bench camera's own)   | yes             | ok / ok / ok     | ok         | yes / yes / yes |
+| Compact 4.8.1.9                            | yes             | ok / ok / ok     | ok         | yes / yes / yes |
+| Compact Pro 4.9.1.15 (2)                   | yes             | ok / ok / ok     | ok         | yes / yes / yes |
+| Compact Pro 4.9.2.0                        | yes             | ok / ok / ok     | ok         | yes / yes / yes |
+| Mosaic 2.27.1.33 FF                        | yes             | ok / ok / ok     | ok         | yes / yes / yes |
+| Nano 300 44.27.3.10                        | yes             | ok / ok / ok     | ok         | yes / yes / yes |
+
+1. The camera names no booted bank on this build, so the page's identification check does not apply;
+   the writes and boots pass.
+2. The dump's own bank B holds a stale 1.0.3.2 image. The bench rule: a bank whose image is another
+   version counts as having none of its own, so B takes A's 4.9.1.15 image. B booted alone.
+
+- **Bank B is a real slot on the 2014 chain.** The B test erases A and keeps R as the safety net, and
+  the camera ran B's marked build on every 2014-chain subject above (0.8.0.0 through 1.3.0.8 std and
+  the original 1.3.0.0). The boot record (cfg[0]) was not read during the run, so the mechanism by
+  which the bootloader chooses B when A is blank is not established here.
+- **Not covered:** Compact 1.3.0.8 FF, 4.16.1.7 FF, 4.8.1.7, Mosaic 10.9.1.31 and the Compact Pro
+  1.0.3.x images were not run through the per-bank proof (earlier runs refused or could not read
+  them; see 42.1 and 42.4).
+- **Key tables behind the Mosaic 10.9.1.31 and 4.16.1.7 refusals** (read-only, from the dump
+  files): the genuine Mosaic 10.9.1.31 bootloader pair (Key A `874dfcf6…`, Key B `b23b0d20…`) differs
+  from the pair its application embeds (`f32ad771…` / `997ed6e5…`, another family's bootloader pair);
+  the reconstructed Compact 4.16.1.7 FF shares its bootloader pair (`4631c41e…` / `e5eeacc9…`) with
+  the whole Compact 4.x family, and its application embeds none of the corpus pairs, so its own pair
+  is unknown. The control, Compact 4.8.1.9, embeds exactly the bootloader pair and is accepted.
+
 ### 42.6 Compact 1.3.0.8 FF on the slots page (2026-10-17)
 
 The refusal recorded in 41.2, 42.1 and 42.4 is replaced by a write: the page and `seek-fw slots flash`
