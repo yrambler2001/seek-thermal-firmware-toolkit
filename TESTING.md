@@ -5905,7 +5905,7 @@ arms bank 7/8/9 and commits, so it programs that bank and leaves the boot config
 | Reader                        | `test/slots/inspect.test.ts` (join, refusals before any bank read, one version read), `dump.emulator.test.ts` (12 firmwares, banks byte-identical to the emulator's flash)               |
 | Writer                        | `write.test.ts`, `verify.test.ts` (verification by decryption for every staging form, against a fake that programs verbatim or re-encrypts), `write-commit.test.ts` (status classes)     |
 | Every modern-line firmware    | `test/slots/corpus-modern.emulator.test.ts`: 23 entries, 257 tests; `packages/cli/test/slots.emulator.test.ts`: the CLI end to end on two firmwares                                      |
-| Every locked-line firmware    | `test/slots/corpus-locked.emulator.test.ts`: 18 firmwares (0.8.0.0 .. 1.3.0.8, FF, Compact PRO 1.0.3.0 / 1.0.3.2), 251 tests                                                             |
+| Every locked-line firmware    | `test/slots/corpus-locked.emulator.test.ts`: 18 firmwares (0.8.0.0 .. 1.3.0.8, FF, Compact PRO 1.0.3.0 / 1.0.3.2), 255 tests                                                             |
 | The page in a browser         | `e2e/slots-view.e2e.ts` (`npx vitest run --config e2e/vitest.config.ts slots-view.e2e`): 12 tests on emulated 4.8.2.1 and 1.3.0.0, and the refusals on 0.5.1.3 / 0.7.0.7                 |
 
 Run the emulator ones with `SEEK_EMU_DIR=<FW-V1>/emu npx vitest run <file>` (they skip loudly
@@ -6104,6 +6104,49 @@ after the run.
   form; supporting it needs that staging builder (the `xor-ks0-ksD` form of `stagedFormOf` in
   `preservation/patch.ts`, both key blocks located by value), the rebalance-word solve so the
   collapsed gate sums to `0xFFFF`, a recovery-only route (bank R) with the risk acknowledgement, and a
-  differential test against `stagedFormOf` plus the emulator corpus and a bench write to R.
+  differential test against `stagedFormOf` plus the emulator corpus and a bench write to R. The first
+  four are done in 42.6; the bench write to R is still to run.
 - **What the boot proof does and does not show.** It writes the same patched image to every bank, then
   resets, so it proves the camera boots one of the banks, not that each bank boots on its own.
+
+### 42.6 Compact 1.3.0.8 FF on the slots page (2026-10-17)
+
+The refusal recorded in 41.2, 42.1 and 42.4 is replaced by a write: the page and `seek-fw slots flash`
+now write the 16 Hz FF image to the recovery bank R, and refuse it for A and B.
+
+- **The image decides, not the version.** The 8 Hz and the 16 Hz FF builds report `1.3.0.8`, so the plan
+  cannot tell them apart. At write time a stored word sum of 0 is the 8 Hz plain chain (unchanged, into
+  A, B or R), and an image carrying the 1.3.0.8-FF key pair (each half once) is the FF build, whatever
+  its sum: a bank this page wrote has sum 0xFFFF plus its solved word and is still recognised. A sum of
+  0xFFFF with no such pair is refused. The FF staging is only built for a camera that reports 1.3.0.8.
+- **What is sent.** The image XOR the key-block-0 keystream XOR the key-block-1 keystream, header
+  window (0x200..0x23F) verbatim: `xor-ks0-ksD`, from `ffStagedFormOf` in `preservation/patch.ts`,
+  which shares one fold with `stagedFormOf`. Word 142 (0x238) is solved so the app's collapsed gate
+  sum(staged ^ ks0) is 0xFFFF, whatever that word held (so the solve is idempotent). On the corpus
+  image (49,308 B, sum 0xFFFF, word 142 free, sum(image ^ ksD) = `0xB7AB9D17`, 26.4) the word becomes
+  `0x485562E8`; the preserve pipeline's `0x485523E8` is the same solve on the widened image.
+- **What is stored.** The camera folds the payload back and programs the plain image: the bank is the
+  file with those four bytes changed, then erased (stored sum `0x485662E7`, not 0xFFFF; R is booted
+  unchecked). The plan predicts these bytes (`expectedStored`, `storedForm: 'two-stream-fold'`), so the
+  read-back is a byte comparison, in its own words (`write-verify.ts` `storedAs`).
+- **Why only R.** The 2014 bootloader accepts a stored sum of 0 at A and B and rejects this build's, and
+  boots recovery unchecked (`compact-1.3.0.8-ff`, route `recovery-only`, README). `prepareSlotFlash`
+  refuses A and B before building anything, `flashSlot` refuses a plan retargeted at them, and a raw
+  payload that is recognisably the FF staged form (both accepts pass, and it folds to an image with the
+  FF key pair) is refused for A and B the same way. R keeps its acknowledgement.
+- **Emulator evidence** (the 2014 plaintext donor `101310HSNEA2/dump` with the Spansion part `010215`,
+  the boot the preservation suite uses for this build; on the manifest's default boot, the 4.8.2.1 donor
+  and the default Winbond part, the same payload stopped at the erase stage with `0x00040007`):
+  - `corpus-locked.emulator.test.ts`, FF row (16 tests): the image into the non-booted bank is refused
+    with no request sent; into R it commits with status 0, the writer verifies it, and the read-back is the
+    image with word 142 solved, worked out in the test from the key pair (`expectedFFStored`), not by the
+    writer; the staged payload sent raw does the same; R's original stored bytes sent raw are rejected by
+    the camera with `0x00070100` after the whole stage and before any erase, leaving R as the FF write made it.
+  - `packages/cli/test/slots.emulator.test.ts`, FF block: `slots flash b` refused, `slots flash r` refused
+    without `--acknowledge-risk`, the dry run prints the two-stream plan with no write opcode, the write
+    commits and verifies, and `slots dump r` returns exactly the predicted bank.
+  - `test/slots/write-ff.test.ts`: the builder against `stagedFormOf` on the corpus image, byte for byte,
+    and against the exact bytes `runCommitStep` stages for the patched image.
+- **Not yet run: a write to R on a real camera.** The bench should check that the FF-patched R commits
+  with status 0 and reads back as predicted, that the camera enumerates after a power cycle and reports
+  1.3.0.8, and what happens when the image replaces the bank the running FF app boots from.

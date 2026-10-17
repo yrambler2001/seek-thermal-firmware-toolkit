@@ -439,7 +439,9 @@ export function flashPlanLines(
   const lines: string[] = [''];
   const kind =
     plan.kind === 'plain'
-      ? 'decrypted image, encrypted for this bank on the way in'
+      ? plan.staging === 'two-stream'
+        ? 'decrypted image, folded through the 1.3.0.8 FF two keystreams on the way in (the camera stores the plain image)'
+        : 'decrypted image, encrypted for this bank on the way in'
       : 'raw bytes, sent verbatim';
   const chunks = Math.ceil(plan.payload.length / 64);
 

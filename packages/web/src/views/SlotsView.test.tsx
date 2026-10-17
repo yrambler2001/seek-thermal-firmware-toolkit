@@ -25,6 +25,7 @@ import {
   slotReport,
   slotView,
 } from '../test-slots';
+import { buildSlotPlan, getProfile } from '@seek-fw/core';
 import type { DeviceState, SlotKey, SlotsReport } from '@seek-fw/core';
 import { SlotsView } from './SlotsView';
 
@@ -222,6 +223,104 @@ describe('SlotsView', () => {
       buttonByText(document.body, 'Yes — write to slot A').click();
     });
     expect(api.write).toHaveBeenCalledWith(true);
+    unmount();
+  });
+
+  it('shows the 1.3.0.8 FF image as writable to recovery R: its staging in words, what is stored, and why only R', () => {
+    const report = slotReport(base);
+    const api = panel({
+      plan: slotPlan(true),
+      report,
+      pending: {
+        key: 'r',
+        kind: 'plain',
+        fileName: 'ff.bin',
+        plan: {
+          ...preparedSlot('r', 'plain', new Uint8Array(0x6000)),
+          staging: 'two-stream',
+          storedForm: 'two-stream-fold',
+          expectedStored: new Uint8Array(0x10000),
+          warnings: [
+            'This is the 1.3.0.8 FF (16 Hz) image. It is staged as the image XOR two keystreams.',
+            'The 2014 bootloader rejects this build at banks A and B, so only the recovery bank R takes it.',
+          ],
+        },
+        report,
+      },
+    });
+    const { container, unmount } = view(api);
+
+    expect(container.textContent).toContain('Prepared for recovery R at 0x14070000');
+    expect(container.textContent).toContain(
+      "a decrypted image — folded through the FF build's two keystreams before it is staged",
+    );
+    expect(container.textContent).toContain(
+      'the 1.3.0.8 FF image folded through two keystreams — the camera stores the plain image, not these bytes',
+    );
+    expect(container.textContent).toContain(
+      '65,536 B predicted — the plain image the payload folds to, not the payload itself',
+    );
+    expect(container.textContent).toContain('only the recovery bank R takes it');
+
+    act(() => {
+      buttonByText(container, 'Write to recovery R…').click();
+    });
+    const node = dialog();
+    expect(node).not.toBeNull();
+    expect(node?.textContent).toContain('This is the 1.3.0.8 FF (16 Hz) image.');
+    expect(node?.textContent).toContain('rejects its word sum at banks A and B');
+    /* Recovery's own tick still stands in the way of the write. */
+    expect(buttonByText(document.body, 'Yes — write to recovery R').disabled).toBe(true);
+    act(() => {
+      document.body.querySelector<HTMLInputElement>('#slot-write-ack')?.click();
+    });
+    act(() => {
+      buttonByText(document.body, 'Yes — write to recovery R').click();
+    });
+    expect(api.write).toHaveBeenCalledWith(true);
+    unmount();
+  });
+
+  it('does not explain the FF image in the dialog of any other prepared write', () => {
+    const report = slotReport(base);
+    const api = panel({
+      plan: slotPlan(true),
+      report,
+      pending: {
+        key: 'r',
+        kind: 'raw',
+        fileName: 'raw.bin',
+        plan: preparedSlot('r', 'raw', new Uint8Array(16)),
+        report,
+      },
+    });
+    const { container, unmount } = view(api);
+    act(() => {
+      buttonByText(container, 'Write to recovery R…').click();
+    });
+    expect(dialog()?.textContent).not.toContain('1.3.0.8 FF');
+    unmount();
+  });
+
+  it('on a 1.3.0.8 plan, says beside each bank where the FF image goes, and explains the two builds', () => {
+    const realPlan = buildSlotPlan(getProfile('legacy-auth'), '1.3.0.8');
+    const report: SlotsReport = {
+      ...slotReport(base),
+      plan: realPlan,
+      slots: realPlan.slots.map((entry) => slotView(base, entry.key, { entry })),
+    };
+    const { container, unmount } = view(panel({ plan: realPlan, report }));
+
+    const rows = bankRows(container);
+    expect(rows[0]?.textContent).toContain('FF (16 Hz) image is refused here');
+    expect(rows[1]?.textContent).toContain('FF (16 Hz) image is refused here');
+    expect(rows[2]?.textContent).toContain('Takes the 1.3.0.8 FF (16 Hz) image too');
+    expect(rows[2]?.textContent).toContain('the only bank that does');
+    /* The plan's own note states the rule, and the page explains it once more in words. */
+    expect(container.textContent).toContain('writes the FF image to bank R only');
+    expect(container.textContent).toContain('The FF image goes to the recovery bank R only');
+    /* The flash controls on every bank are on: the image decides, not the version. */
+    expect(buttonByText(rows[2] as HTMLElement, 'Flash decrypted image…').disabled).toBe(false);
     unmount();
   });
 

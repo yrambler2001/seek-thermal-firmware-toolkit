@@ -56,6 +56,7 @@ import {
   scratchFile,
   URB_TIMEOUT_MS,
 } from '../../core/test/emulator/suite.js';
+import { expectedFFStored } from '../../core/test/slots/corpus-locked-run.js';
 import { NodeUsbBackend, type BackendOptions } from '../src/backend.js';
 import { run } from '../src/cli.js';
 import { EXIT_FAILED, EXIT_OK } from '../src/errors.js';
@@ -502,3 +503,271 @@ describe.skipIf(!available)('seek-fw slots, through the CLI, on the emulated cam
 function sha256Hex(bytes: Uint8Array): string {
   return createHash('sha256').update(bytes).digest('hex');
 }
+
+/* ====================================================================
+ * THE 1.3.0.8 FF (16 Hz) IMAGE, through the CLI: `slots flash r <ff image>`.
+ *
+ * The 2014 bootloader rejects the FF image's word sum at banks A and B and boots recovery
+ * unchecked, so the image goes to R only, staged as the image XOR two keystreams. The camera
+ * folds that back and stores the plain image with its adjust word (0x238) solved. One emulator
+ * boot (the 2014 plaintext donor, the Spansion part its commit needs; the corpus-locked suite's
+ * FF row and the preservation suite's FF row use the same), then this sequence:
+ *
+ *   slots list --json                                  the camera and its banks, the FF note
+ *   slots flash b <ff> --acknowledge-risk --yes        refused for bank B before any byte is sent
+ *   slots flash r <ff> --yes                           refused: recovery needs --acknowledge-risk
+ *   slots flash r <ff> --acknowledge-risk --dry-run    the plan (two-stream), no write opcode
+ *   slots flash r <ff> --acknowledge-risk --yes        the write, read back, verified
+ *   slots dump r --out <dir>                           the bank after the write
+ *
+ * What the bank must hold is worked out in corpus-locked-run.ts (`expectedFFStored`), from the
+ * image and the key pair, not by the writer's own builder. Emulator only: no hardware.
+ * ==================================================================== */
+
+const FF_ENTRY_ID =
+  'compact/2017.01.06-11.17.29-1.3.0.8-FF/no-serial/32k_43x0_1.3.0.8_compact-16hz_public_-_compact_ff_jan_6_2017_11-17-29_99.28_gabiz_ro_firmware';
+/** The 2014 plaintext donor and the Spansion part the FF commit runs on (preservation families suite). */
+const FF_DONOR = '101310HSNEA2/dump';
+const FF_JEDEC = '010215';
+
+interface FFSequence {
+  setup: string | null;
+  defect: string | null;
+  image: Uint8Array | null;
+  list: CliRun | null;
+  refusedBankB: CliRun | null;
+  refusedNoAck: CliRun | null;
+  dryRun: CliRun | null;
+  flash: CliRun | null;
+  dump: CliRun | null;
+  /** The bank-R file the dump wrote after the write. */
+  stored: Uint8Array | null;
+}
+
+async function ffSequence(entry: ManifestEntry): Promise<FFSequence> {
+  const seq: FFSequence = {
+    setup: null,
+    defect: null,
+    image: null,
+    list: null,
+    refusedBankB: null,
+    refusedNoAck: null,
+    dryRun: null,
+    flash: null,
+    dump: null,
+    stored: null,
+  };
+  const row = new RowEmulators(entry.id);
+  const out = await tempDir();
+  const files = await tempDir();
+  try {
+    const vendored = (entry as ManifestEntry & { vendored_path?: string }).vendored_path;
+    if (vendored === undefined) {
+      seq.setup = 'the manifest entry names no vendored image';
+      return seq;
+    }
+    const imagePath = path.join(EMU_DIR!, vendored);
+    seq.image = new Uint8Array(readFileSync(imagePath));
+    /* The file under a plain name: the plain chain needs no key pair in it. */
+    const ffFile = path.join(files.path, 'ff-1.3.0.8.bin');
+    copyFileSync(imagePath, ffFile);
+
+    const emu = await row.start(EMU_DIR!, {
+      entryId: entry.id,
+      readyTimeoutMs: BOOT_TIMEOUT_MS,
+      jedec: FF_JEDEC,
+      donor: FF_DONOR,
+    });
+    await row.guard(emu, async () => {
+      const usbip = await emu.attach({ urbTimeoutMs: URB_TIMEOUT_MS });
+      const device = await nodeUsbOverUsbIp(usbip);
+
+      seq.list = await cli(['slots', 'list'], device, emu);
+      seq.refusedBankB = await cli(
+        ['slots', 'flash', 'b', ffFile, '--acknowledge-risk', '--yes'],
+        device,
+        emu,
+      );
+      seq.refusedNoAck = await cli(['slots', 'flash', 'r', ffFile, '--yes'], device, emu);
+      seq.dryRun = await cli(
+        ['slots', 'flash', 'r', ffFile, '--acknowledge-risk', '--dry-run'],
+        device,
+        emu,
+      );
+      seq.flash = await cli(
+        ['slots', 'flash', 'r', ffFile, '--acknowledge-risk', '--yes'],
+        device,
+        emu,
+      );
+      seq.dump = await cli(['slots', 'dump', 'r', '--out', out.path], device, emu);
+      const written = (seq.dump.json?.output as { files?: string[] } | undefined)?.files ?? [];
+      seq.stored =
+        readOrNull(
+          written.find((file) => {
+            const name = path.basename(file);
+            return /^slot-r-.*\.bin$/.test(name) && !name.includes('-decrypted');
+          }) ?? null,
+        ) ?? null;
+    });
+    await row.assertDelivery();
+  } catch (error) {
+    seq.defect = error instanceof Error ? error.message : String(error);
+  } finally {
+    await row.finish();
+    await out.cleanup();
+    await files.cleanup();
+  }
+  return seq;
+}
+
+describe.skipIf(!available)(
+  'seek-fw slots flash r <1.3.0.8 FF image>, through the CLI, on the emulated camera',
+  () => {
+    const entry = ENTRIES.find((e) => e.id === FF_ENTRY_ID) ?? null;
+
+    describe.skipIf(entry === null)('Compact 1.3.0.8-FF (16 Hz), 2014 donor', () => {
+      const seq: { current: FFSequence } = {
+        current: {
+          setup: null,
+          defect: null,
+          image: null,
+          list: null,
+          refusedBankB: null,
+          refusedNoAck: null,
+          dryRun: null,
+          flash: null,
+          dump: null,
+          stored: null,
+        },
+      };
+
+      beforeAll(async () => {
+        if (entry === null) return;
+        seq.current = await ffSequence(entry);
+      }, TIMEOUT_MS);
+
+      /** The bank the write must leave: the stamped image, then erased. */
+      function expectedBank(): Uint8Array {
+        const image = seq.current.image ?? new Uint8Array();
+        const bank = new Uint8Array(BANK_BYTES).fill(0xff);
+        bank.set(expectedFFStored(image), 0);
+        return bank;
+      }
+
+      it('slots list --json: 1.3.0.8 on legacy-auth, three banks, and the FF image is said to go to R only', () => {
+        const list = seq.current.list;
+        expect(list?.code, list?.stderr ?? seq.current.setup ?? '').toBe(EXIT_OK);
+        expect(list?.json).toMatchObject({
+          command: 'slots',
+          ok: true,
+          action: 'list',
+          firmware: '1.3.0.8',
+          profile: 'legacy-auth',
+          build: { supported: true },
+        });
+        const notes = (list?.json?.notes as string[] | undefined) ?? [];
+        expect(notes.join('\n')).toMatch(/writes the FF image to bank R\s+only/);
+        const slots = (list?.json?.slots as Json[] | undefined) ?? [];
+        expect(slots.map((slot) => slot.bank)).toEqual(['a', 'b', 'r']);
+        for (const slot of slots) expect(slot.staging, String(slot.bank)).toBe('plain');
+      });
+
+      it('slots flash b <ff> --acknowledge-risk --yes: refused with exit 1 before any byte is sent, naming recovery R', () => {
+        const refusal = seq.current.refusedBankB;
+        expect(refusal?.code).toBe(EXIT_FAILED);
+        expect(refusal?.json).toMatchObject({
+          command: 'slots',
+          ok: false,
+          error: { code: 'slots/refused' },
+        });
+        const message = String((refusal?.json?.error as Json | undefined)?.message);
+        expect(message).toContain('recovery bank R');
+        expect(message).toContain('not to bank B');
+        expect(sentOf(refusal?.sent ?? new Map(), STAGE_OP), 'SetFeaturedFirmwareData sent').toBe(
+          0,
+        );
+        expect(sentOf(refusal?.sent ?? new Map(), COMMIT_OP), 'CompleteMemoryUpgrade sent').toBe(0);
+      });
+
+      it('slots flash r <ff> --yes: refused without --acknowledge-risk, nothing sent', () => {
+        const refusal = seq.current.refusedNoAck;
+        expect(refusal?.code).toBe(EXIT_FAILED);
+        expect(refusal?.json).toMatchObject({
+          command: 'slots',
+          ok: false,
+          error: { code: 'slots/refused' },
+        });
+        expect(String((refusal?.json?.error as Json | undefined)?.message)).toMatch(
+          /bank R is the recovery bank/,
+        );
+        expect(sentOf(refusal?.sent ?? new Map(), STAGE_OP)).toBe(0);
+        expect(sentOf(refusal?.sent ?? new Map(), COMMIT_OP)).toBe(0);
+      });
+
+      it('slots flash r <ff> --acknowledge-risk --dry-run: exit 0, the two-stream plan, the image it will leave, no write opcode', () => {
+        const dry = seq.current.dryRun;
+        expect(dry?.code, dry?.stderr).toBe(EXIT_OK);
+        expect(dry?.json).toMatchObject({
+          command: 'slots',
+          ok: true,
+          action: 'flash',
+          bank: 'r',
+          address: '0x14070000',
+          kind: 'plain',
+          staging: 'two-stream',
+          written: false,
+          dryRun: true,
+        });
+        /* The payload is the staged image: the file's length, and not the bank's. */
+        expect(dry?.json?.payloadBytes).toBe(seq.current.image?.length);
+        /* The plan says the bank will hold the solved image, then erased, by its digest. */
+        expect(dry?.json?.expectedSha256).toBe(sha256Hex(expectedBank()));
+        const warnings = (dry?.json?.warnings as string[] | undefined) ?? [];
+        expect(warnings.join('\n')).toMatch(/XOR two keystreams/);
+        expect(warnings.join('\n')).toMatch(/header word at 0x238 is set to 0x[0-9A-F]+/);
+        for (const opcode of [STAGE_OP, COMMIT_OP, RESET_OP]) {
+          expect(sentOf(dry?.sent ?? new Map(), opcode), `opcode ${String(opcode)}`).toBe(0);
+        }
+      });
+
+      it('slots flash r <ff> --acknowledge-risk --yes: exit 0, committed, and the read-back is the solved image', () => {
+        const flash = seq.current.flash;
+        expect(flash?.code, flash?.stderr).toBe(EXIT_OK);
+        expect(flash?.json).toMatchObject({
+          command: 'slots',
+          ok: true,
+          action: 'flash',
+          bank: 'r',
+          staging: 'two-stream',
+          written: true,
+          commitStatus: 0,
+          verified: true,
+        });
+        expect(flash?.json?.storedSha256).toBe(sha256Hex(expectedBank()));
+        expect(flash?.json?.storedSha256).toBe(flash?.json?.expectedSha256);
+        expect(sentOf(flash?.sent ?? new Map(), STAGE_OP)).toBeGreaterThan(0);
+        expect(sentOf(flash?.sent ?? new Map(), COMMIT_OP)).toBe(1);
+        expect(sentOf(flash?.sent ?? new Map(), RESET_OP), 'ResetDevice is never sent').toBe(0);
+      });
+
+      it('slots dump r afterwards: the stored bank is the solved image (the file differs from the FF image in the adjust word only), then erased', () => {
+        const dump = seq.current.dump;
+        expect(dump?.code, dump?.stderr).toBe(EXIT_OK);
+        const stored = seq.current.stored;
+        expect(stored, 'the stored-bank file of bank R').not.toBeNull();
+        expect(Buffer.compare(Buffer.from(stored ?? []), Buffer.from(expectedBank()))).toBe(0);
+        expect(dump?.json?.sha256).toBe(sha256Hex(stored ?? new Uint8Array()));
+        const image = seq.current.image ?? new Uint8Array();
+        const changed: number[] = [];
+        for (let i = 0; i < image.length; i++) if (stored?.[i] !== image[i]) changed.push(i);
+        expect(changed.length).toBeGreaterThan(0);
+        expect(changed.every((at) => at >= 0x238 && at < 0x23c)).toBe(true);
+      });
+
+      it('the run had no setup failure and no instrument defect', () => {
+        expect(seq.current.setup).toBeNull();
+        expect(seq.current.defect).toBeNull();
+      });
+    });
+  },
+);

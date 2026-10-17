@@ -342,6 +342,68 @@ describe('useSlotsPanel: writing a bank', () => {
     unmount();
   });
 
+  it('prepares the 1.3.0.8 FF image for recovery, asks for the acknowledgement, and writes it with one', async () => {
+    const { backend, mocks } = makeBackend();
+    /* The core builds this plan for the FF image: the two-stream staging, the folded image stored. */
+    mocks.prepare.mockImplementation((_report: unknown, key: SlotKey) => ({
+      ...preparedSlot(key, 'plain', new Uint8Array(16)),
+      staging: 'two-stream',
+      storedForm: 'two-stream-fold',
+      expectedStored: new Uint8Array(0x10000),
+    }));
+    const { result, unmount } = setup(backend);
+    await act(async () => {
+      await result.current.panel.readSlots();
+    });
+    await act(async () => {
+      await result.current.panel.pickFile('r', 'plain', file('ff.bin', new Uint8Array(16)));
+    });
+    expect(result.current.panel.pending?.key).toBe('r');
+    expect(result.current.panel.pending?.plan.staging).toBe('two-stream');
+    expect(lineIncludes(result.current.panel.reporter.lines, 'staging two-stream')).toBe(false);
+
+    await act(async () => {
+      await result.current.panel.write(false);
+    });
+    expect(mocks.flash).not.toHaveBeenCalled();
+    expect(lineIncludes(result.current.panel.reporter.lines, 'risk acknowledgement')).toBe(true);
+
+    await act(async () => {
+      await result.current.panel.write(true);
+    });
+    expect(mocks.flash).toHaveBeenCalledTimes(1);
+    expect(mocks.flash.mock.calls[0]?.[3]).toEqual({ verify: true, acknowledgeRisk: true });
+    expect(lineIncludes(result.current.panel.reporter.lines, 'staging two-stream')).toBe(true);
+    unmount();
+  });
+
+  it('shows the core refusal of the FF image for bank A and prepares nothing', async () => {
+    const { backend, mocks } = makeBackend();
+    mocks.prepare.mockImplementation(() => {
+      throw new SeekError(
+        'slots/refused',
+        'this is the 1.3.0.8 FF (16 Hz) image: it can be written to R only, not to bank A. Nothing was written.',
+      );
+    });
+    const { result, unmount } = setup(backend);
+    await act(async () => {
+      await result.current.panel.readSlots();
+    });
+    await act(async () => {
+      await result.current.panel.pickFile('a', 'plain', file('ff.bin', new Uint8Array(16)));
+    });
+    expect(result.current.panel.pending).toBeNull();
+    expect(
+      lineIncludes(
+        result.current.panel.reporter.lines,
+        'cannot use this file: this is the 1.3.0.8 FF',
+      ),
+    ).toBe(true);
+    expect(lineIncludes(result.current.panel.reporter.lines, 'R only, not to bank A')).toBe(true);
+    expect(mocks.flash).not.toHaveBeenCalled();
+    unmount();
+  });
+
   it('drops a prepared write when the camera changes, so it cannot reach another unit', async () => {
     const { backend, mocks } = makeBackend();
     const { result, rerender, state, unmount } = setup(backend);

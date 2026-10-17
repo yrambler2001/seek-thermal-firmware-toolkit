@@ -10,9 +10,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SlotWriteConfirm, type SlotWriteConfirmProps } from './SlotWriteConfirm';
 import { buttonByText, render } from '../test-helpers';
 
-function setup(overrides: Partial<Pick<SlotWriteConfirmProps, 'risk' | 'open'>> = {}): ReturnType<
-  typeof render
-> & {
+function setup(
+  overrides: Partial<Pick<SlotWriteConfirmProps, 'risk' | 'open' | 'twoStream'>> = {},
+): ReturnType<typeof render> & {
   onConfirm: ReturnType<typeof vi.fn>;
   onCancel: ReturnType<typeof vi.fn>;
 } {
@@ -25,6 +25,7 @@ function setup(overrides: Partial<Pick<SlotWriteConfirmProps, 'risk' | 'open'>> 
       slotName="slot B"
       slotAddress="0x14060000"
       risk={overrides.risk ?? { booted: false, recovery: false, bootUnnamed: false }}
+      {...(overrides.twoStream === undefined ? {} : { twoStream: overrides.twoStream })}
       onConfirm={onConfirm}
       onCancel={onCancel}
     />,
@@ -141,6 +142,35 @@ describe('SlotWriteConfirm', () => {
     expect(dialog().textContent).toContain('the last-resort copy the bootloader falls back to');
     expect(checkbox()).not.toBeNull();
     expect(buttonByText(document.body, 'Yes — write to slot B').disabled).toBe(true);
+    unmount();
+  });
+
+  it('says why only recovery takes the 1.3.0.8 FF image, and still asks for the recovery tick', () => {
+    const { onConfirm, unmount } = setup({
+      risk: { booted: false, recovery: true, bootUnnamed: false },
+      twoStream: true,
+    });
+    const text = dialog().textContent;
+    expect(text).toContain('This is the 1.3.0.8 FF (16 Hz) image.');
+    expect(text).toContain('boots it only from the recovery bank');
+    expect(text).toContain('rejects its word sum at banks A and B');
+    expect(text).toContain('two keystreams');
+    expect(text).toContain('header word (0x238)');
+    expect(checkbox()).not.toBeNull();
+    expect(buttonByText(document.body, 'Yes — write to slot B').disabled).toBe(true);
+    act(() => {
+      checkbox()?.click();
+    });
+    act(() => {
+      buttonByText(document.body, 'Yes — write to slot B').click();
+    });
+    expect(onConfirm).toHaveBeenCalledWith(true);
+    unmount();
+  });
+
+  it('keeps the FF explanation out of every other write', () => {
+    const { unmount } = setup({ risk: { booted: false, recovery: true, bootUnnamed: false } });
+    expect(dialog().textContent).not.toContain('1.3.0.8 FF');
     unmount();
   });
 

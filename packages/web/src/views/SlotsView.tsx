@@ -250,6 +250,7 @@ export function SlotsView({ slots, connected, busy }: SlotsViewProps): ReactElem
             slotName={pendingView.entry.name}
             slotAddress={hexUp(pendingView.entry.address)}
             risk={writeRisk(pending.report, pending.key)}
+            twoStream={pending.plan.staging === 'two-stream'}
             onCancel={() => {
               setConfirming(false);
             }}
@@ -275,6 +276,15 @@ export function SlotsView({ slots, connected, busy }: SlotsViewProps): ReactElem
             bank&apos;s firmware needs before it is staged, and shows the plan.{' '}
             <strong>Flash raw bytes</strong> stages the file exactly as given. Neither sends
             anything until you confirm.
+          </p>
+          <p>
+            A Compact on 1.3.0.8 can be the 8 Hz build or the 16 Hz FF build, and both report the
+            same version, so the page tells them apart by the image you pick. The 8 Hz image goes to
+            any bank. The FF image goes to the recovery bank R only: the camera boots it from
+            recovery, and the 2014 bootloader rejects its word sum at banks A and B, so those two
+            refuse it. It is staged folded through two keystreams, and the camera stores the plain
+            image with one header word (0x238) set so the running app accepts it. Writing R asks for
+            the extra confirmation like any recovery write.
           </p>
           <p>
             A write erases one 64 KiB bank and programs it. The bootloader at{' '}

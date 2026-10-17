@@ -28,6 +28,11 @@ export interface SlotWriteConfirmProps {
   readonly slotName: string;
   readonly slotAddress: string;
   readonly risk: WriteRisk;
+  /**
+   * The write is the 1.3.0.8 FF (16 Hz) image in its two-stream staged form. That image goes to
+   * the recovery bank only, so the dialog says why, in words, above the tick.
+   */
+  readonly twoStream?: boolean;
   readonly onConfirm: (acknowledged: boolean) => void;
   readonly onCancel: () => void;
 }
@@ -38,6 +43,7 @@ export function SlotWriteConfirm({
   slotName,
   slotAddress,
   risk,
+  twoStream = false,
   onConfirm,
   onCancel,
 }: SlotWriteConfirmProps): ReactElement {
@@ -95,6 +101,14 @@ export function SlotWriteConfirm({
           <span className="block">
             {`This erases a 64 KiB block of the camera's flash and programs it at ${slotName}.`}
           </span>
+          {twoStream && (
+            <span className="block" id="slot-write-confirm-ff">
+              This is the 1.3.0.8 FF (16 Hz) image. The camera boots it only from the recovery bank:
+              the 2014 bootloader rejects its word sum at banks A and B, so recovery is the one bank
+              that takes it. It is staged folded through two keystreams, and the camera stores the
+              plain image with one header word (0x238) set so the running app accepts it.
+            </span>
+          )}
           <span className="block">
             No reset is sent. Unplug and replug the camera afterwards for the bank to take effect.
           </span>

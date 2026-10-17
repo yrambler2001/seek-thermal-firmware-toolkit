@@ -13,6 +13,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   keyFilenameSuffix,
+  SeekError,
   type DeviceState,
   type DumpedSlot,
   type FlashSlotOptions,
@@ -581,6 +582,24 @@ describe('the flash plan and read-back', () => {
     expect(text).toContain('not predicted');
   });
 
+  it('says the 1.3.0.8 FF image is folded through two keystreams, and what the bank will hold', () => {
+    const plan: SlotFlashPlan = {
+      ...fakePlan('r', 'plain', new Uint8Array(0x6000)),
+      staging: 'two-stream',
+      storedForm: 'two-stream-fold',
+      expectedStored: new Uint8Array(0x10000),
+      warnings: ['the FF image goes to recovery R only'],
+    };
+    const text = flashPlanLines(plan, 'ff.bin', 'feedface', false).join('\n');
+    expect(text).toMatch(/staging\s+two-stream/);
+    expect(text).toContain(
+      'ff.bin — decrypted image, folded through the 1.3.0.8 FF two keystreams on the way in (the camera stores the plain image)',
+    );
+    expect(text).not.toContain('encrypted for this bank');
+    expect(text).toContain('sha256 feedface');
+    expect(text).toContain('! the FF image goes to recovery R only');
+  });
+
   it('asks which bank is written, and says when the camera boots it now', () => {
     const plan = fakePlan('a', 'plain', new Uint8Array(4));
     expect(flashQuestion(report, plan, 'image.bin')).toBe(
@@ -733,6 +752,82 @@ describe('slots command', () => {
     expect(log.prepared[0]).toMatchObject({ key: 'a', kind: 'plain', fileName: 'image.bin' });
     expect(test.stdout.text.indexOf('Slot flash plan')).toBeGreaterThanOrEqual(0);
     expect(result).toMatchObject({ action: 'flash', written: true, verified: true, kind: 'plain' });
+  });
+
+  it('writes the 1.3.0.8 FF image to recovery R with --acknowledge-risk: the two-stream plan is shown and reported', async () => {
+    const { ops, log } = fakeOps(reportOf({ booted: 'a' }));
+    const ff: SlotOps = {
+      ...ops,
+      prepare: (report, key, input) => ({
+        ...ops.prepare(report, key, input),
+        staging: 'two-stream',
+        storedForm: 'two-stream-fold',
+        warnings: ['the FF image goes to recovery R only'],
+      }),
+    };
+    await writeFile(join(temp.path, 'ff.bin'), new Uint8Array(0x100).fill(7));
+    const test = cameraIo();
+    const result = await slotsCommandWith(ff)(
+      contextFor(
+        [
+          'slots',
+          'flash',
+          'r',
+          join(temp.path, 'ff.bin'),
+          '--yes',
+          '--acknowledge-risk',
+          '--no-probe',
+        ],
+        test,
+      ),
+    );
+
+    expect(log.flashed).toEqual([{ key: 'r', options: { verify: true, acknowledgeRisk: true } }]);
+    expect(test.stdout.text).toMatch(/staging\s+two-stream/);
+    expect(test.stdout.text).toContain('! the FF image goes to recovery R only');
+    expect(result).toMatchObject({
+      action: 'flash',
+      bank: 'r',
+      staging: 'two-stream',
+      written: true,
+      verified: true,
+    });
+  });
+
+  it('without --acknowledge-risk the FF image is not written to recovery R, and nothing is prepared', async () => {
+    const { ops, log } = fakeOps(reportOf({ booted: 'a' }));
+    await writeFile(join(temp.path, 'ff.bin'), new Uint8Array(0x100).fill(7));
+    const test = cameraIo();
+    await expect(
+      slotsCommandWith(ops)(
+        contextFor(['slots', 'flash', 'r', join(temp.path, 'ff.bin'), '--yes', '--no-probe'], test),
+      ),
+    ).rejects.toThrow(/bank R is the recovery bank/);
+    expect(log.prepared).toEqual([]);
+    expect(log.flashed).toEqual([]);
+  });
+
+  it('shows the core refusal of the FF image for bank B (recovery only), and writes nothing', async () => {
+    const { ops, log } = fakeOps(reportOf({ booted: 'a' }));
+    const refusing: SlotOps = {
+      ...ops,
+      prepare: () => {
+        throw new SeekError(
+          'slots/refused',
+          'this is the 1.3.0.8 FF (16 Hz) image: it can be written to R only, not to bank B. Nothing was written.',
+        );
+      },
+    };
+    await writeFile(join(temp.path, 'ff.bin'), new Uint8Array(0x100).fill(7));
+    const test = cameraIo();
+    const error = await slotsCommandWith(refusing)(
+      contextFor(['slots', 'flash', 'b', join(temp.path, 'ff.bin'), '--yes', '--no-probe'], test),
+    ).catch((caught: unknown) => caught);
+    expect(error).toBeInstanceOf(SeekError);
+    expect((error as SeekError).code).toBe('slots/refused');
+    expect((error as SeekError).message).toContain('R only, not to bank B');
+    expect(log.flashed).toEqual([]);
+    expect(test.stdout.text).not.toContain('Slot flash plan');
   });
 
   it('asks before writing, and writes nothing when the answer is no', async () => {
