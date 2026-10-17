@@ -642,7 +642,16 @@ async function bootProof(rig: BenchRig, reading: Reading, r: SubjectResult): Pro
 /** One bank's erase, checked: the bank must read back all 0xFF. */
 async function eraseBank(rig: BenchRig, address: number): Promise<void> {
   await rig.jlink.eraseRange(address, BANK_BYTES);
-  const left = await readFlash(rig, address, BANK_BYTES);
+  /* The first halt after a flash or an erase can fail (TESTING 42.2): a power cycle clears it,
+   * as verifyFlash does, so the check reads after one rather than failing the run. */
+  let left: Uint8Array;
+  try {
+    left = await rig.jlink.readFlash(address, BANK_BYTES);
+  } catch (error) {
+    if (!isHaltFailure(error)) throw error;
+    await rig.camera.powerCycle();
+    left = await rig.jlink.readFlash(address, BANK_BYTES);
+  }
   if (!left.every((byte) => byte === 0xff)) {
     throw new Error(`the bank at ${hex(address)} is not erased after its erase`);
   }
@@ -678,7 +687,14 @@ async function slotBootProof(
   const dir = mkdtempSync(path.join(tmpdir(), 'seek-slot-boot-'));
   try {
     /* The state after the writes: the whole part, read back, is what each test restores. */
-    const state = await readFlash(rig, BENCH_FLASH_BASE, BENCH_FLASH_BYTES);
+    let state: Uint8Array;
+    try {
+      state = await readFlash(rig, BENCH_FLASH_BASE, BENCH_FLASH_BYTES);
+    } catch (error) {
+      if (!isHaltFailure(error)) throw error;
+      await rig.camera.powerCycle();
+      state = await readFlash(rig, BENCH_FLASH_BASE, BENCH_FLASH_BYTES);
+    }
     const stateSha = sha256(state);
     const stateFile = path.join(dir, 'state.bin');
     writeFileSync(stateFile, state);
