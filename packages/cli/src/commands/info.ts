@@ -13,7 +13,9 @@ import {
   bytesToHex,
   hex,
   hexUp,
+  onPlaintextChain,
   readDeviceInfo,
+  runningApplicationOf,
   type DeviceState,
   type FirmwareProfile,
   type SlotState,
@@ -168,7 +170,8 @@ export function renderState(ctx: CommandContext, state: DeviceState): void {
         ? '(unreadable)'
         : `${hexUp(state.cfg0)} — ${state.profile.boot.describeCfg0(state.cfg0)}`,
     ],
-    ['booted', state.boot === null ? '(not replayed)' : slotName(state, state.boot.booted)],
+    ['booted', bootedText(state)],
+    ...runningRows(state),
     [
       'upgrade target',
       state.boot === null
@@ -207,7 +210,7 @@ export function renderState(ctx: CommandContext, state: DeviceState): void {
         slot.present ? yesNo(slot.accepts) : '—',
         /* "n/a" where the bootloader reads no footer: a missing one is not a fault there */
         slot.present ? (state.profile.boot.checksFooter ? yesNo(slot.footerOk) : 'n/a') : '—',
-        slot.present ? (slot.bootability === 'unknown' ? 'unknown' : yesNo(slot.bootable)) : '—',
+        slot.present ? bootableCell(slot) : '—',
         slot.sha256 === null ? '—' : slot.sha256.slice(0, 16),
       ]),
       ['slot', 'address', 'version', 'size', 'key', 'accepts', 'footer', 'bootable', 'sha256'],
@@ -247,6 +250,36 @@ function storeKeyText(state: DeviceState): string {
 
 function slotName(state: DeviceState, key: string): string {
   return state.slots.find((slot) => slot.key === key)?.name ?? key;
+}
+
+/**
+ * The booted row. On the 2014 plaintext chain the bank is named from the camera's active-slot word,
+ * which is not a boot record: recovery R runs when A and B hold nothing the bootloader takes
+ * (TESTING.md 42.10), so the row does not present the name as authoritative there.
+ */
+function bootedText(state: DeviceState): string {
+  if (state.boot === null) return '(not replayed)';
+  const name = slotName(state, state.boot.booted);
+  return onPlaintextChain(state.profile, state.version)
+    ? `${name} (named by the active-slot word; not a boot record on this line)`
+    : name;
+}
+
+/** The bootable cell: an FF image in recovery is a recovery-only image, not a verdict of 'no'. */
+function bootableCell(slot: SlotState): string {
+  if (slot.bootability === 'unknown') return 'unknown';
+  if (slot.bootability === 'recovery-only') return 'recovery only';
+  return yesNo(slot.bootable);
+}
+
+/** The running row, on the 2014 plaintext chain only: the application the banks say the camera runs. */
+function runningRows(state: DeviceState): [string, string][] {
+  if (!onPlaintextChain(state.profile, state.version)) return [];
+  const run = runningApplicationOf(state);
+  if (run.bank === null || run.build === null) return [['running', `not known: ${run.why}`]];
+  const image =
+    run.build === 'ff-1308' ? 'the 16 Hz FF 1.3.0.8 image' : 'a plain image (stored word sum 0)';
+  return [['running', `${slotName(state, run.bank)} holds ${image}: ${run.why}`]];
 }
 
 /**

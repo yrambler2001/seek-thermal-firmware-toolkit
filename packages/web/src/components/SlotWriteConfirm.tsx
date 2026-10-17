@@ -33,6 +33,11 @@ export interface SlotWriteConfirmProps {
    * the recovery bank only, so the dialog says why, in words, above the tick.
    */
   readonly twoStream?: boolean;
+  /**
+   * The booted bank is named by the camera's active-slot word, on the 2014 plaintext chain, where
+   * recovery R can run instead (TESTING.md 42.10): the dialog says "named", not "boots now".
+   */
+  readonly namedByWord?: boolean;
   /** The bank holds no image: the write overwrites no firmware. */
   readonly targetEmpty?: boolean;
   /** The key the image is written under and the bank it was derived from, when there is one. */
@@ -48,6 +53,7 @@ export function SlotWriteConfirm({
   slotAddress,
   risk,
   twoStream = false,
+  namedByWord = false,
   targetEmpty = false,
   keyLine,
   onConfirm,
@@ -89,7 +95,9 @@ export function SlotWriteConfirm({
 
         {risk.booted && (
           <p className="rounded-md border border-destructive/40 bg-destructive/8 px-3 py-2 text-[0.85rem] font-medium text-destructive">
-            {`${slotName} is the bank this camera boots now. Writing it replaces the firmware the camera is running now. If the new image does not run, the camera may not boot at all.`}
+            {namedByWord
+              ? `${slotName} is the bank the camera's active-slot word names as booted. On this line recovery R can run instead, so it may not be the bank that runs. If the new image does not run, the camera may not boot at all.`
+              : `${slotName} is the bank this camera boots now. Writing it replaces the firmware the camera is running now. If the new image does not run, the camera may not boot at all.`}
           </p>
         )}
         {risk.recovery && (
@@ -146,7 +154,9 @@ export function SlotWriteConfirm({
             />
             <span>
               {risk.booted
-                ? 'I understand this is the bank the camera boots now, and that a bad image can leave the camera unbootable.'
+                ? namedByWord
+                  ? 'I understand the active-slot word names this bank as booted, and that a bad image can leave the camera unbootable.'
+                  : 'I understand this is the bank the camera boots now, and that a bad image can leave the camera unbootable.'
                 : risk.recovery
                   ? 'I understand this is the recovery bank, and that a bad image leaves the camera without a last-resort copy.'
                   : 'I understand the camera does not say which bank it boots, so this one is treated as the booted one, and that a bad image can leave the camera unbootable.'}

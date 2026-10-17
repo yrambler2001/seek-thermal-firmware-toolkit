@@ -44,6 +44,8 @@ import {
 } from '../image/header.js';
 import { WINDOW_SIZE } from '../protocol/ops.js';
 import type { SeekDevice } from '../protocol/client.js';
+import { wordSum32 } from '../image/bank.js';
+import { locateFFKeys } from '../preservation/patch.js';
 /* The stale-descriptor predicate, shared with the preservation pipeline's
  * boot-config check rather than re-worded: a spent reader serves the same
  * shape into any window. `preservation/windows.ts` imports nothing from
@@ -322,6 +324,18 @@ function storedPlain(slot: AnalysedSlot): boolean {
     sameState(slot.recovered.state, IDENTITY_STATE) &&
     slot.recovered.checksum === 0
   );
+}
+
+/**
+ * Is this bank the 1.3.0.8 FF (16 Hz) image in recovery R? Its stored word sum is not 0 and
+ * it carries the FF key pair, so the 2014 bootloader takes no bank with it and recovery runs
+ * it only when A and B hold nothing the bootloader takes (TESTING.md 42.10: steps 4, 2c and 7
+ * ran it from R with A and B empty; steps 6a and 6c passed over the same form at A and B).
+ */
+function ffFormInRecovery(key: SlotKey, slot: AnalysedSlot): boolean {
+  if (key !== 'r' || !slot.present || slot.raw === null || slot.header === null) return false;
+  const image = slot.raw.subarray(0, slot.header.length);
+  return wordSum32(image, image.length) !== 0 && locateFFKeys(image) !== null;
 }
 
 /**
@@ -694,9 +708,12 @@ export async function readDeviceInfo(
       ? /* the chain's own model: see the verdict below */ 'bootable'
       : identity.bootable && footerPasses
         ? 'bootable'
-        : slot.present && slot.accepts && footerPasses && keyTable === null
-          ? /* everything but the key checks out, and the key cannot be named */ 'unknown'
-          : 'not-bootable';
+        : ffFormInRecovery(descriptor.key, slot)
+          ? /* recovery runs it when A and B hold nothing the bootloader takes: not a skipped slot */
+            'recovery-only'
+          : slot.present && slot.accepts && footerPasses && keyTable === null
+            ? /* everything but the key checks out, and the key cannot be named */ 'unknown'
+            : 'not-bootable';
     const bootable = bootability === 'bootable';
 
     const state: SlotState = {
@@ -750,12 +767,18 @@ export async function readDeviceInfo(
           : bootability === 'unknown'
             ? "bootable unknown: the bootloader's key table was not read, so the keys it tries " +
               'cannot be named'
-            : 'NOT bootable';
+            : bootability === 'recovery-only'
+              ? 'recovery only: R runs when A and B hold nothing the bootloader takes'
+              : 'NOT bootable';
       reporter.log(
         `${descriptor.name}: firmware ${slot.plainHeader?.versionStr ?? '?'}, ` +
           `${String(slot.header?.length ?? 0)} B, ${identity.name ?? 'unknown key'}, ` +
           `acceptance ${slot.accepts ? 'ok' : 'FAILS'}, ${footer} -> ${verdict}`,
-        bootable ? 'ok' : bootability === 'unknown' ? 'detail' : 'warn',
+        bootable
+          ? 'ok'
+          : bootability === 'unknown' || bootability === 'recovery-only'
+            ? 'detail'
+            : 'warn',
       );
       if (bootability === 'not-bootable' && slot.accepts && footerPasses) {
         reporter.log(

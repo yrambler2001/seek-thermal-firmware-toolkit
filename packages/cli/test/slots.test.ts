@@ -12,6 +12,7 @@ import { readFile, readdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
+  getProfile,
   keyFilenameSuffix,
   SeekError,
   type DeviceState,
@@ -1436,5 +1437,54 @@ describe('the write keys, derived from the booted bank', () => {
     } as SlotFlashPlan;
     const text = flashPlanLines(plan, 'image.bin', null, false).join('\n');
     expect(text).toContain('Key B, derived from the booted bank A');
+  });
+});
+
+/* ==================================================================== *
+ * The 2014 plaintext chain: the booted bank is the active-slot word's, and recovery R can run
+ * ==================================================================== */
+
+/** The same report on the 2014 plaintext chain (1.3.0.8 under legacy-auth), with each read bank in the analysis. */
+function onLockedPlain(report: SlotsReport): SlotsReport {
+  const byKey = new Map(
+    report.slots.flatMap((v) => (v.state === null ? [] : [[v.entry.key, v.state] as const])),
+  );
+  return {
+    ...report,
+    state: {
+      ...report.state,
+      profile: getProfile('legacy-auth'),
+      version: '1.3.0.8',
+      cfg0: 0,
+      byKey,
+    },
+  };
+}
+
+describe('the 2014 plaintext chain', () => {
+  it('names the booted bank by the active-slot word in its risk words, and keeps "boots now" elsewhere', () => {
+    const locked = onLockedPlain(reportOf({ booted: 'a' }));
+    expect(bootRisk(locked, view(locked, 'a'))).toContain(
+      "the bank the camera's active-slot word names as booted",
+    );
+    expect(bootRisk(locked, view(locked, 'a'))).not.toContain('boots now');
+    expect(flashRefusal(locked, 'a', 'plain', false)?.message).toContain(
+      'active-slot word names as booted',
+    );
+
+    const modern = reportOf({ booted: 'a' });
+    expect(bootRisk(modern, view(modern, 'a'))).toContain('boots now');
+  });
+
+  it('lists an FF image in R as recovery only, and says what the running application is', () => {
+    const locked = onLockedPlain(reportOf({ booted: 'a' }));
+    const slots = locked.slots.map((v) =>
+      v.entry.key === 'r' && v.state !== null
+        ? { ...v, state: { ...v.state, bootability: 'recovery-only' as const, bootable: false } }
+        : v,
+    );
+    const text = listLines({ ...locked, slots }, false).join('\n');
+    expect(text).toMatch(/R\s+0x14070000.*recovery only/);
+    expect(text).toContain('the running application is not known');
   });
 });

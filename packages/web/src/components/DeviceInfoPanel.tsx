@@ -9,6 +9,7 @@ import type { ReactElement } from 'react';
 import { HardDrive, KeyRound, Microchip } from 'lucide-react';
 import {
   bootedSlot,
+  onPlaintextChain,
   bytesToHex,
   hexUp,
   targetSlot,
@@ -40,6 +41,15 @@ function perDeviceKey(state: DeviceState): string | null {
 function verdict(slot: SlotState, checksFooter: boolean): ReactElement {
   if (slot.bootable) {
     return <span className="text-ok">the bootloader can boot this</span>;
+  }
+  /* An FF image in recovery is not a skipped slot: R runs it when A and B hold nothing the bootloader takes. */
+  if (slot.bootability === 'recovery-only') {
+    return (
+      <span className="text-warn">
+        recovery only — R boots when A and B are empty or fail the bootloader&apos;s checks;
+        measured 42.10
+      </span>
+    );
   }
   if (!slot.accepts) {
     return (
@@ -93,7 +103,11 @@ export function DeviceInfoPanel({ state }: DeviceInfoPanelProps): ReactElement {
     ['Serial', state.serial],
     ['USB link', state.usbSpeed],
     ['Boot config', cfg0Text],
-    ['Booted from', booted?.name ?? null],
+    /* On the 2014 plaintext chain the name is the active-slot word's, not a boot record (TESTING.md 42.10). */
+    [
+      onPlaintextChain(state.profile, state.version) ? 'Named booted' : 'Booted from',
+      booted?.name ?? null,
+    ],
     ['Upgrade target', target === null ? null : `${target.name} at ${hexUp(target.address)}`],
     ['Per-device key', perDeviceKey(state)],
   ];

@@ -22,6 +22,7 @@ import {
   emptySlotView,
   flashedSlot,
   preparedSlot,
+  readSlotState,
   slotEntry,
   slotPlan,
   slotReport,
@@ -201,6 +202,52 @@ describe('SlotsView', () => {
     expect(rows[1]?.textContent).not.toContain('extra confirmation');
     expect(rows[2]?.textContent).toContain(
       'Recovery bank: writing it asks for an extra confirmation.',
+    );
+    unmount();
+  });
+
+  it('labels an FF image in recovery R as recovery only, not as a skipped slot', () => {
+    const ffInR = slotView(base, 'r', {
+      state: readSlotState(base, 'r', {
+        bootable: false,
+        bootability: 'recovery-only',
+        accepts: false,
+        keyName: null,
+      }),
+      active: false,
+    });
+    const report: SlotsReport = {
+      state: base,
+      plan: slotPlan(true),
+      slots: [slotView(base, 'a'), slotView(base, 'b', { active: false }), ffInR],
+    };
+    const { container, unmount } = view(panel({ plan: slotPlan(true), report }));
+
+    const row = bankRows(container)[2] as HTMLElement;
+    expect(row.textContent).toContain(
+      "recovery only — R boots when A and B are empty or fail the bootloader's checks; measured 42.10",
+    );
+    expect(row.textContent).not.toContain('skipped at boot');
+    expect(row.textContent).not.toContain('not bootable');
+    unmount();
+  });
+
+  it('says the booted bank is named by the active-slot word on the 2014 plaintext chain', () => {
+    const locked = {
+      ...base,
+      version: '1.3.0.8',
+      profile: getProfile('legacy-auth'),
+    } as DeviceState;
+    const { container, unmount } = view(
+      panel({ plan: slotPlan(true), report: slotReport(locked) }),
+    );
+
+    const rows = bankRows(container);
+    expect(rows[0]?.textContent).toContain('named booted');
+    expect(rows[0]?.textContent).not.toContain('booted now');
+    expect(rows[1]?.textContent).toContain('not named booted');
+    expect(rows[0]?.textContent).toContain(
+      'Named booted by the active-slot word: writing it asks for an extra confirmation.',
     );
     unmount();
   });

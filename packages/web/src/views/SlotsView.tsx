@@ -12,6 +12,7 @@ import { CircleStop, Layers, ScanSearch, Send, ShieldAlert } from 'lucide-react'
 import {
   derivedKeyLine,
   hexUp,
+  onPlaintextChain,
   type SlotInputKind,
   type SlotKey,
   type SlotsReport,
@@ -268,6 +269,10 @@ export function SlotsView({ slots, connected, busy }: SlotsViewProps): ReactElem
             slotAddress={hexUp(pendingView.entry.address)}
             risk={writeRisk(pending.report, pending.key)}
             twoStream={pending.plan.staging === 'two-stream'}
+            namedByWord={onPlaintextChain(
+              pending.report.state.profile,
+              pending.report.state.version,
+            )}
             targetEmpty={pending.plan.targetEmpty === true}
             keyLine={
               pending.plan.derivedFrom

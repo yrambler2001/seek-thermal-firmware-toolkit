@@ -189,11 +189,18 @@ export interface LockedRun {
   inspected: Record<SlotKey, boolean> | null;
   /** What the analysis says each bank holds ('empty' for an erased bank). */
   contents: Record<SlotKey, string> | null;
+  /** The analysis' own bootability label for each bank, as the page and the CLI show it (null when unread). */
+  bootability: Record<SlotKey, string | null> | null;
   /** The bank the emulator boots the image from, for the step list. */
   dumps: DumpRow[];
   refusal: RefusalRow | null;
   /** The non-booted bank the plain and raw steps wrote. */
   nonBooted: SlotKey | null;
+  /**
+   * The 1.3.0.8 FF image, prepared for R on this camera and never sent: whether the page refused
+   * it, why, and how many requests the preparation sent (none). Null where it was not prepared.
+   */
+  ffPrepare: { refused: boolean; message: string | null; sent: number } | null;
   writes: WriteRow[];
   blocks: BlockRow[];
   cfgReadable: boolean;
@@ -229,9 +236,11 @@ export function blankLockedRun(subject: LockedSubject, entryId: string): LockedR
     notes: [],
     inspected: null,
     contents: null,
+    bootability: null,
     dumps: [],
     refusal: null,
     nonBooted: null,
+    ffPrepare: null,
     writes: [],
     blocks: [],
     cfgReadable: false,
@@ -479,6 +488,8 @@ export async function runLockedFirmware(
   row: RowEmulators,
   truthPath: string,
   run: LockedRun,
+  /** The 1.3.0.8 FF image, when this run should say whether the page would prepare it for R. */
+  ffFile: Uint8Array | null = null,
 ): Promise<void> {
   if (EMU_DIR === null) throw new Error('corpus-locked: no emulator directory');
   const imageOnly = entry.kind === 'image-only';
@@ -556,11 +567,31 @@ export async function runLockedFirmware(
         b: state.byKey.get('b') !== undefined && state.byKey.get('b')?.unread === false,
         r: state.byKey.get('r') !== undefined && state.byKey.get('r')?.unread === false,
       };
+      run.bootability = Object.fromEntries(
+        report.slots.map((v) => [v.entry.key, v.state?.bootability ?? null]),
+      ) as Record<SlotKey, string | null>;
       run.contents = Object.fromEntries(
         report.slots.map((v) => [v.entry.key, v.content]),
       ) as Record<SlotKey, string>;
       const profile = state.profile;
       const version = firmware.version;
+
+      /* ---- the FF image for R, prepared on this camera and not sent ----
+       * Prepare is pure: whatever the page decides about the 16 Hz image on this camera's running
+       * build is decided here, with the request count taken around it (it must not move). */
+      if (ffFile !== null) {
+        const before = sent.length;
+        try {
+          prepareSlotFlash(report, 'r', { kind: 'plain', bytes: ffFile, fileName: 'ff.bin' });
+          run.ffPrepare = { refused: false, message: null, sent: sent.length - before };
+        } catch (error) {
+          run.ffPrepare = {
+            refused: true,
+            message: reasonOf(error),
+            sent: sent.length - before,
+          };
+        }
+      }
 
       /* The block bytes as the camera serves them before any write: the baseline every later read is compared with. */
       const baseline = await readBlocks(device, profile, version);

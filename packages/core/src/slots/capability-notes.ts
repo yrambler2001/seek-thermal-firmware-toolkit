@@ -20,7 +20,20 @@ export const FF_1308_NOTE =
   'only, and refuses it for A and B. It is staged as the image XOR ks0 XOR ksD (patch.ts ' +
   'xor-ks0-ksD) with the header word at 0x238 solved so the collapsed sum is 0xFFFF; the camera ' +
   'folds that back and stores the plain image, so the stored bank differs from the file in that ' +
-  'one word. Measured on the emulator (TESTING.md 42.6); a bench write to R is still to come.';
+  'one word. Measured on the emulator (TESTING.md 42.6) and on the bench (42.10): the 8 Hz application ' +
+  'refuses this payload at commit, so the page refuses the write while the camera runs the 8 Hz build, ' +
+  'and the FF build takes it.';
+
+/**
+ * What the booted bank means on the 2014 plaintext chain. The page names one from the camera's
+ * active-slot word (device-info.ts, `chainReplay`), and that word is not the boot record: recovery
+ * R runs whenever A and B hold nothing the bootloader takes (TESTING.md 42.10).
+ */
+const LOCKED_BOOT_WORD_NOTE =
+  'Where the page names a booted bank on this line, it comes from the camera’s active-slot word, not ' +
+  'from a boot record: an upgrade writes the other bank. Recovery R runs whenever A and B hold nothing ' +
+  'the 2014 bootloader takes (a stored word sum of 0), whatever R holds, so the bank the word names is ' +
+  'not always the one that runs (TESTING.md 42.10).';
 
 /** Compact Pro 1.0.3.2: the EP0 limit that keeps a whole-part dump from running. */
 export const EP0_1032_NOTE =
@@ -155,6 +168,7 @@ export function planNotes(family: SlotFamily, version: FirmwareVersion): string[
       break;
     case 'locked-plain':
       notes.push(TOKEN_NOTE);
+      notes.push(LOCKED_BOOT_WORD_NOTE);
       if (text === '0.8.0.0') {
         notes.push(
           '0.8.0.0: mode 2 (0x14000000) is a crash hazard on this build, an armed read walks off ' +
@@ -192,7 +206,7 @@ export function planNotes(family: SlotFamily, version: FirmwareVersion): string[
 const FF_1308_BANK_NOTES: Readonly<Record<SlotKey, string>> = {
   a: 'The 1.3.0.8 FF (16 Hz) image is refused here: the 2014 bootloader rejects its word sum at A, so it can be written to recovery R only. The 8 Hz image is written normally.',
   b: 'The 1.3.0.8 FF (16 Hz) image is refused here: the 2014 bootloader rejects its word sum at B, so it can be written to recovery R only. The 8 Hz image is written normally.',
-  r: 'Takes the 1.3.0.8 FF (16 Hz) image too, in its own two-stream staged form (the only bank that does): the camera boots FF from here, unchecked. The 8 Hz image is written as plain.',
+  r: 'Takes the 1.3.0.8 FF (16 Hz) image too, in its own two-stream staged form (the only bank that does). The camera runs the FF image from here only when A and B hold nothing the bootloader takes, and it refuses the FF payload while it runs the 8 Hz build (TESTING.md 42.10). The 8 Hz image is written as plain.',
 };
 
 /** Facts about one bank, shown beside it. `version` is the build's version string, when it is known. */

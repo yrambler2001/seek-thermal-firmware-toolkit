@@ -271,8 +271,12 @@ export interface SlotState {
    * named, because its key table was not read or not confirmed (a 2016 part
    * refuses the bootloader block on every channel). `bootable` stays false
    * then: nothing acts on a slot the read cannot vouch for.
+   *
+   * 'recovery-only': the 1.3.0.8 FF (16 Hz) image in recovery R on the 2014 line. The bootloader
+   * takes no bank whose stored word sum is not 0, so R runs it only when A and B hold nothing the
+   * bootloader takes (TESTING.md 42.10). It is not a skipped slot, and `bootable` stays false.
    */
-  readonly bootability: 'bootable' | 'not-bootable' | 'unknown';
+  readonly bootability: 'bootable' | 'not-bootable' | 'unknown' | 'recovery-only';
 }
 
 export interface DeviceState {

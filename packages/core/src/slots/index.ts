@@ -8,6 +8,7 @@ export {
 } from './inspect.js';
 export { dumpSlot } from './dump.js';
 export { prepareSlotFlash, flashSlot } from './write.js';
+export { onPlaintextChain, runningApplicationOf, type RunningApplication } from './running.js';
 export {
   derivedKeyLine,
   deriveWriteKeys,

@@ -96,6 +96,12 @@ if (!available) announceSkip('the slot workflows on every locked-line corpus fir
 
 const ENTRIES: readonly CorpusEntry[] = corpusEntries();
 
+/* The 16 Hz FF image as the corpus holds it: prepared for R on every 1.3.0.8 camera below, so the
+ * page's verdict on it is checked against the build each camera runs (TESTING.md 42.10). */
+const FF_1308_SUBJECT = LOCKED_SUBJECTS.find((s) => s.version === '1.3.0.8' && s.variant === 'ff');
+const FF_1308_ENTRY = FF_1308_SUBJECT === undefined ? null : entryFor(FF_1308_SUBJECT, ENTRIES);
+const FF_1308_BYTES = FF_1308_ENTRY === null ? null : vendoredBytes(FF_1308_ENTRY);
+
 /* The matrix: every run's record, printed once at the end. A run lists itself only once it
  * has started, so a filtered run prints what it ran. */
 const runs: LockedRun[] = [];
@@ -261,7 +267,14 @@ describe.skipIf(!available)(
           runs.push(run);
           const truthPath = scratchFile(`corpus-locked_${entry.id.replace(/[^\w.-]+/g, '_')}.bin`);
           try {
-            await runLockedFirmware(subject, entry, row, truthPath, run);
+            await runLockedFirmware(
+              subject,
+              entry,
+              row,
+              truthPath,
+              run,
+              subject.version === '1.3.0.8' ? FF_1308_BYTES : null,
+            );
           } catch (error) {
             run.setup = run.setup ?? reasonOf(error);
           }
@@ -292,6 +305,34 @@ describe.skipIf(!available)(
           expect(run.inspectError).toBeNull();
           expect(run.inspected).toEqual({ a: true, b: true, r: true });
         });
+
+        if (subject.version === '1.3.0.8') {
+          /* The FF image is prepared for R on this camera, and nothing is sent. Its verdict follows the
+           * build the camera runs: the 8 Hz build refuses it, the FF build takes it (TESTING.md 42.10). */
+          if (ffImage) {
+            it('prepares the FF image for R on the FF build, unrefused, and sends nothing', () => {
+              expect(run.ffPrepare, 'the FF image was prepared').not.toBeNull();
+              expect(run.ffPrepare?.refused, run.ffPrepare?.message ?? '').toBe(false);
+              expect(run.ffPrepare?.sent, 'requests sent while preparing').toBe(0);
+            });
+            it('labels the FF image in R recovery only, and does not call the FF image in A bootable', () => {
+              expect(run.bootability?.r).toBe('recovery-only');
+              /* A reads 'unknown' on this emulator donor: the plain chain has no key table, and the
+               * image's checksum passes acceptance. The label is not changed here (see the report). */
+              expect(run.bootability?.a).not.toBe('bootable');
+            });
+          } else {
+            it('refuses the FF image for R before anything is sent, because the 8 Hz build runs', () => {
+              expect(run.ffPrepare, 'the FF image was prepared').not.toBeNull();
+              expect(run.ffPrepare?.refused, 'the page refused the FF image').toBe(true);
+              expect(run.ffPrepare?.message).toContain(
+                'the camera runs the 8 Hz 1.3.0.8 application: slot A is the first bank the 2014 bootloader takes',
+              );
+              expect(run.ffPrepare?.message).toContain('0x00070100');
+              expect(run.ffPrepare?.sent, 'requests sent while preparing').toBe(0);
+            });
+          }
+        }
 
         if (named) {
           it('names the booted bank from the active-slot word', () => {

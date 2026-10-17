@@ -13,6 +13,7 @@ import { Copy, Download, FileUp } from 'lucide-react';
 import {
   SLOT_BYTES,
   hexUp,
+  onPlaintextChain,
   type SlotInputKind,
   type SlotKey,
   type SlotView,
@@ -65,14 +66,27 @@ function bootability(view: SlotView): ReactNode {
   if (state.bootability === 'not-bootable') {
     return <span className="text-destructive">not bootable — skipped at boot</span>;
   }
+  if (state.bootability === 'recovery-only') {
+    return (
+      <span className="text-warn">
+        recovery only — R boots when A and B are empty or fail the bootloader&apos;s checks;
+        measured 42.10
+      </span>
+    );
+  }
   return <span>unknown — the bootloader&apos;s key table was not read</span>;
 }
 
-function riskNote(risk: WriteRisk): string | null {
+/**
+ * The words for the booted bank. On the 2014 plaintext chain the camera's active-slot word names
+ * it, and that is not a boot record: recovery R can run instead (TESTING.md 42.10).
+ */
+function riskNote(risk: WriteRisk, byWord: boolean): string | null {
+  const booted = byWord ? 'Named booted by the active-slot word' : 'Booted now';
   if (risk.booted && risk.recovery) {
-    return 'Booted now, and recovery: writing it asks for an extra confirmation.';
+    return `${booted}, and recovery: writing it asks for an extra confirmation.`;
   }
-  if (risk.booted) return 'Booted now: writing it asks for an extra confirmation.';
+  if (risk.booted) return `${booted}: writing it asks for an extra confirmation.`;
   if (risk.recovery) return 'Recovery bank: writing it asks for an extra confirmation.';
   if (risk.bootUnnamed) {
     return 'The camera does not name its booted bank: writing it asks for an extra confirmation.';
@@ -81,10 +95,12 @@ function riskNote(risk: WriteRisk): string | null {
 }
 
 /** What the "use the booted bank's image" button does, in words, with the extra confirmation it will ask for. */
-function fillNote(source: BankImageSource, risk: string | null): string {
+function fillNote(source: BankImageSource, risk: string | null, byWord: boolean): string {
   const version = source.version === null ? '' : ` (${source.version})`;
   const which = source.booted
-    ? 'That is the bank the camera boots now.'
+    ? byWord
+      ? 'That is the bank the active-slot word names as booted.'
+      : 'That is the bank the camera boots now.'
     : 'The camera does not say which bank it boots; this is the first bank that holds an image.';
   return [
     `Copies the firmware ${source.name} holds${version} into this empty bank, so the camera has a second slot with the same firmware.`,
@@ -125,6 +141,8 @@ export function SlotTable({
   onPickFile,
   onFillWithBankImage,
 }: SlotTableProps): ReactElement {
+  /* On the 2014 plaintext chain the booted bank is the camera's active-slot word, so the words say "named". */
+  const byWord = onPlaintextChain(report.state.profile, report.state.version);
   return (
     <Table>
       <TableCaption>
@@ -152,7 +170,7 @@ export function SlotTable({
           const dumpGate = gate('dump');
           const plainGate = gate('flash-plain');
           const rawGate = gate('flash-raw');
-          const note = riskNote(risk);
+          const note = riskNote(risk, byWord);
           const version = slotVersion(report, key);
           const empty = view.content === 'empty';
           /* An empty bank can be filled with the firmware the camera already runs, when another
@@ -168,9 +186,9 @@ export function SlotTable({
                 </span>
                 <span className="mt-1 block">
                   {view.active ? (
-                    <Badge tone="ok">booted now</Badge>
+                    <Badge tone="ok">{byWord ? 'named booted' : 'booted now'}</Badge>
                   ) : (
-                    <Badge tone="neutral">not booted</Badge>
+                    <Badge tone="neutral">{byWord ? 'not named booted' : 'not booted'}</Badge>
                   )}
                 </span>
                 {entry.notes.map((text) => (
@@ -276,7 +294,7 @@ export function SlotTable({
                   </Action>
 
                   {source !== null && (
-                    <Action reason={plainGate.reason} note={fillNote(source, note)}>
+                    <Action reason={plainGate.reason} note={fillNote(source, note, byWord)}>
                       <Button
                         variant="outline"
                         disabled={!plainGate.enabled}

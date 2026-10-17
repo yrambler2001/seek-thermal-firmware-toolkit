@@ -6537,3 +6537,45 @@ The steps above were driven from a scratch script on the bench library, which is
 the same core write path. cfg[0] = 2 was not needed and was not set. Bank B with a plain image was not
 tested. The CLI does not expose the bootloader's boot selection (its `select_boot_slot()` is not
 reconstructed), so the evidence is the running build string and the banks that held an image.
+
+### 42.11 What the page does with the FF image now (2026-10-17)
+
+The page takes its decisions on the 2014 chain from the banks, not from the camera's boot record
+(sec. 42.10 measured that it is not one on this line). Nothing here was run on the bench; the
+checks are unit and emulator tests.
+
+- **Refused before anything is sent, while the 8 Hz build runs.** `prepareSlotFlash` refuses the
+  1.3.0.8 FF (16 Hz) image for R when `runningApplicationOf` (`slots/running.ts`) says the camera
+  runs the 8 Hz build. The message says so, quotes 0x00070100, and says the first FF image must reach
+  R by another route, such as the J-Link. The dry run and the page's plan both show it, since both
+  come from the same call. The rule is the 2014 bootloader's: a bank is taken only with a stored word
+  sum of 0; A is tried, then B, then R, which runs whatever it holds. It was measured with cfg[0] = 0
+  (the bench camera and the corpus donor both hold 0), so any other cfg[0], an unread bank A or B, a
+  bank reporting another version, or an R image the writer cannot classify gives an unknown answer.
+  Unknown is a warning in the plan, not a refusal, and the warning says what the 8 Hz build would do.
+  The FF build's own run is unchanged. Raw payloads are not checked against the running build.
+- **Labels.** An FF image in R on the 2014 line is `bootability: 'recovery-only'`: the page says
+  "recovery only — R boots when A and B are empty or fail the bootloader's checks; measured 42.10",
+  the CLI's bootable column says "recovery only", and the device panel says the same. It is not
+  "not bootable — skipped at boot". `bootable` stays false for R. The FF form at A and B keeps the
+  label the reader already gave it, which was not changed here: "not bootable" on the bench (42.10
+  steps 6a and 6c), and "unknown" on the emulator's FF row, where the plain chain has no key table and
+  the image's checksum passes acceptance (`corpus-locked.emulator.test.ts`).
+- **The booted bank on the 2014 line.** The name comes from the active-slot word (`chainReplay`).
+  The plan notes say so, the page reads "named booted" and "not named booted", the risk notes and
+  the confirm dialog say "named by the active-slot word", the device panel reads "Named booted", and
+  the CLI `info` Boot row says "not a boot record on this line", with a `running` row that gives
+  the bank and the build the analysis decided. Other lines keep their wording.
+- **Tests.** `packages/core/test/slots/running.test.ts` (the walk, its unknown cases, and the
+  prepare refusal, the unrefused FF run, the unknown warning and a raw FF payload left alone);
+  `corpus-locked.emulator.test.ts` (on every 1.3.0.8 camera the FF image is prepared for R and
+  nothing is sent: the 8 Hz row is refused with the running-build text, the FF row is not
+  refused); `packages/cli/test/slots.test.ts` and `packages/web/src/views/SlotsView.test.tsx`
+  (the wording). `corpus-locked.emulator.test.ts` on the 2014 donor has cfg[0] = 0 and A, R
+  holding the image, as the 8 Hz row needs.
+
+**Not measured.** Whether the 8 Hz application refuses a raw FF-staged payload the way it refuses the
+page's two-stream payload (not sent: raw writes are unchanged). Any cfg[0] other than 0. Whether a
+bank B that holds a stored-sum-0 image alone is taken (42.10 measured A only). The first FF write
+to R on a camera running the 8 Hz build, which the page now refuses, is still to be run with the
+J-Link route the refusal names.

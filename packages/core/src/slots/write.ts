@@ -13,6 +13,8 @@
  *     checks it before the first byte is sent);
  *   - write the 1.3.0.8 FF (16 Hz) image anywhere but the recovery bank R: the 2014
  *     bootloader rejects its sum at A and B (`stageImage`, and `flashSlot` again on the plan);
+ *   - write the 1.3.0.8 FF (16 Hz) image while the camera runs the 8 Hz build, which refuses
+ *     its payload at commit (`stageImage`, from `runningApplicationOf`);
  *   - write a plan whose camera, firmware or address no longer match the
  *     analysis it is checked against (`flashSlot`).
  *
@@ -21,6 +23,7 @@
  * ==================================================================== */
 
 import { hexUp, sha256hex, hex } from '../bytes.js';
+import type { SeekError } from '../errors.js';
 import { transferSum16 } from '../image/bank.js';
 import { FOOTER_TAG } from '../image/header.js';
 import type { CipherProfile, WindowEntry } from '../profiles/types.js';
@@ -63,6 +66,7 @@ import {
 } from './write-image.js';
 import { FF_1308_VERSION } from './capability-family.js';
 import { slotContentOf } from './inspect.js';
+import { runningApplicationOf, type RunningApplication } from './running.js';
 import { readBackBank, stageAndCommit } from './write-commit.js';
 import { compareReadBack } from './write-verify.js';
 
@@ -188,6 +192,31 @@ function ffStagingWarnings(args: {
       'Recovery is booted unchecked, so that does not stop it booting.',
     'The 2014 bootloader rejects this build at banks A and B, so only the recovery bank R takes it.',
   ];
+}
+
+/**
+ * The refusal for the FF image while the camera runs the 8 Hz application. That application
+ * refuses the FF payload at commit with 0x00070100 and leaves the bank as it was (measured on the
+ * bench, TESTING.md 42.10), so nothing is sent: the FF image must reach R by another route first.
+ */
+function ffRunningRefusal(running: RunningApplication): SeekError {
+  return slotRefused(
+    'this is the 1.3.0.8 FF (16 Hz) image, but the camera runs the 8 Hz 1.3.0.8 application: ' +
+      `${running.why}. The 8 Hz application refuses the FF staged payload at commit with 0x00070100, ` +
+      'before it programs anything, and leaves the bank unchanged (measured on the bench, TESTING.md ' +
+      '42.10). Nothing was sent. The first FF image has to reach recovery bank R by another route, ' +
+      'such as the J-Link.',
+    { bank: running.bank },
+  );
+}
+
+/** The warning when the running application cannot be told: the write is not refused, and the consequence is said. */
+function ffRunningUnknownWarning(running: RunningApplication): string {
+  return (
+    `The camera's running application could not be told (${running.why}). If it is the 8 Hz ` +
+    '1.3.0.8 build, it refuses this FF payload at commit with 0x00070100 and leaves the bank ' +
+    'unchanged (TESTING.md 42.10). This page does not refuse the write on that account.'
+  );
 }
 
 /**
@@ -481,7 +510,13 @@ function stageImage(
         { version },
       );
     }
+    /* The application that runs decides whether the camera takes this payload at all: the 8 Hz
+     * build refuses it at commit, so a camera running it is refused here, before anything is sent. */
+    const running = runningApplicationOf(report.state);
+    if (running.build === 'plain') throw ffRunningRefusal(running);
     const ff = buildFFPayload(input.bytes);
+    const warnings = ffStagingWarnings(ff);
+    if (running.build === null) warnings.push(ffRunningUnknownWarning(running));
     return {
       staged: ff,
       keyAfter: 'none (plaintext chain, staged in the FF two-stream form)',
@@ -491,7 +526,7 @@ function stageImage(
       rekeyRisk: false,
       staging: 'two-stream',
       storedForm: 'two-stream-fold',
-      warnings: ffStagingWarnings(ff),
+      warnings,
     };
   }
   const staged = buildPlainPayload(input.bytes, cipher);

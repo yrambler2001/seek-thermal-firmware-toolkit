@@ -40,7 +40,9 @@ import {
   hexUp,
   inspectSlots,
   keyFilenameSuffix,
+  onPlaintextChain,
   prepareSlotFlash,
+  runningApplicationOf,
   sha256hex,
   slotWriteRefusal,
   withLevelMap,
@@ -250,6 +252,11 @@ export function bootRisk(report: SlotsReport, view: SlotView): string | null {
     return 'bank R is the recovery bank; a bad write there can leave the camera with no image it can boot';
   }
   if (view.active) {
+    /* On the 2014 plaintext chain the named bank comes from the active-slot word, which is not a
+     * boot record: recovery R can run instead (TESTING.md 42.10), so the words say so. */
+    if (onPlaintextChain(report.state.profile, report.state.version)) {
+      return `bank ${bank} is the bank the camera's active-slot word names as booted; a bad write there can stop the camera booting`;
+    }
     return `bank ${bank} is the bank the camera boots now; a bad write there can stop the camera booting`;
   }
   if (!report.slots.some((other) => other.active)) {
@@ -324,11 +331,24 @@ function versionOf(view: SlotView): string | null {
   return state?.plainHeader?.versionStr ?? state?.header?.versionStr ?? null;
 }
 
+/** What the analysis can say about the application the camera runs, on the 2014 plaintext chain. */
+function runningNote(report: SlotsReport): string {
+  const run = runningApplicationOf(report.state);
+  if (run.bank === null || run.build === null) {
+    return `the running application is not known: ${run.why}`;
+  }
+  const image =
+    run.build === 'ff-1308' ? 'the 16 Hz FF 1.3.0.8 image' : 'a plain image (stored word sum 0)';
+  return `the camera runs ${image} from bank ${bankName(run.bank)}: ${run.why}`;
+}
+
 function bootableText(view: SlotView): string {
   const state = view.state;
   /* An empty bank has nothing to boot; "no" would read as a verdict on an image. */
   if (state === null || view.content === 'empty') return '-';
   if (state.bootability === 'unknown') return 'unknown';
+  /* An FF image in R runs only when A and B hold nothing the bootloader takes (TESTING.md 42.10). */
+  if (state.bootability === 'recovery-only') return 'recovery only';
   return state.bootable ? 'yes' : 'no';
 }
 
@@ -457,6 +477,9 @@ export function listLines(report: SlotsReport, color: boolean): string[] {
   lines.push(table(operationRows));
 
   const notes: string[] = [...report.plan.notes];
+  if (onPlaintextChain(report.state.profile, report.state.version)) {
+    notes.push(runningNote(report));
+  }
   for (const view of report.slots) {
     const bank = bankName(view.entry.key);
     for (const note of view.entry.notes) notes.push(`${bank}: ${note}`);
