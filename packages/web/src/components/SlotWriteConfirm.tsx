@@ -28,6 +28,8 @@ export interface SlotWriteConfirmProps {
   readonly slotName: string;
   readonly slotAddress: string;
   readonly risk: WriteRisk;
+  /** The key the image is written under and the bank it was derived from, when there is one. */
+  readonly keyLine?: string | null;
   readonly onConfirm: (acknowledged: boolean) => void;
   readonly onCancel: () => void;
 }
@@ -38,6 +40,7 @@ export function SlotWriteConfirm({
   slotName,
   slotAddress,
   risk,
+  keyLine,
   onConfirm,
   onCancel,
 }: SlotWriteConfirmProps): ReactElement {
@@ -95,6 +98,7 @@ export function SlotWriteConfirm({
           <span className="block">
             {`This erases a 64 KiB block of the camera's flash and programs it at ${slotName}.`}
           </span>
+          {keyLine && <span className="block">{keyLine}</span>}
           <span className="block">
             No reset is sent. Unplug and replug the camera afterwards for the bank to take effect.
           </span>

@@ -83,9 +83,6 @@ const PINNED_GAPS: Readonly<Record<string, Partial<Record<CheckName, string>>>> 
   },
   /* Bank B of the Compact PRO 4.9.1.15 dump holds an image with neither of the camera's keys. */
   'Compact PRO 4.9.1.15 dump': { 'flash-b': REASON.bImageForeignKeys },
-  /* The Mosaic 10.9.1.31 dump, and its image on that dump: the camera is not writable from here. */
-  'Mosaic 10.9.1.31 dump': { 'flash-b': REASON.notWritable },
-  'Mosaic 10.9.1.31 image (on its dump)': { 'flash-b': REASON.notWritable },
 };
 
 /** What each lane recorded, by matrix row. Filled by the lanes, read by the checks. */

@@ -137,10 +137,32 @@ function stateFor(
     boot: booted === null ? null : { booted, target: booted === 'a' ? 'b' : 'a' },
     keyTable: keyA && keyB ? ({ keyA, keyB } as unknown as DeviceState['keyTable']) : null,
     keyWhiteningK: profile.cipher.whiteningK,
+    /* The store key of a camera without a per-device key is its Key B (storeKeyOf). */
+    storeKey: { name: 'Key B', key: keyB, programmed: false },
+    deviceKeySlot: null,
     canFlash: options.canFlash ?? true,
-    flashBlockedBy: [],
+    flashBlockedBy: (options.canFlash ?? true) ? [] : ['this camera cannot be flashed (fixture)'],
     plainChain: false,
   } as unknown as DeviceState;
+}
+
+/**
+ * The booted bank A of a camera with a Key A / Key B table: it decrypts under the store key (Key B)
+ * and carries the application's own pair, planted as a dump would hold it (`write-keys.ts`).
+ */
+function bootedWithApp(): SlotState {
+  const plain = imageOf(0x4800, 9);
+  plain.set(KEY_A, 0x4000);
+  plain.set(KEY_B, 0x4020);
+  return slotState({
+    key: 'a',
+    present: true,
+    accepts: true,
+    plain,
+    keyName: 'Key B',
+    bootable: true,
+    bootability: 'bootable',
+  });
 }
 
 const KEY_A = Uint8Array.from({ length: 16 }, (_, i) => 0xa0 + i);
@@ -358,14 +380,14 @@ describe('prepareSlotFlash refuses before it builds anything', () => {
     ).toThrow(/multiple of 4/);
   });
 
-  it('key-a staging needs the camera Key A, and a file name that names its keys', () => {
+  it('key-a staging needs the booted bank read under a key, and a file that carries its keys', () => {
     const slot = slotState({ key: 'b', present: true, accepts: true });
-    const noKeys = reportFor(stateFor(modern, { version, slots: [slot] }), plan);
+    const noKeys = reportFor(stateFor(modern, { version, slots: [slot, bootedWithApp()] }), plan);
     expect(() =>
       prepareSlotFlash(noKeys, 'b', { kind: 'plain', bytes: image, fileName: 'x.bin' }),
-    ).toThrow(/does not name this camera's Key A/);
+    ).toThrow(/key table does not carry that key|decrypts under no key the bootloader tries/);
     const withKeys = reportFor(
-      stateFor(modern, { version, slots: [slot], keyA: KEY_A, keyB: KEY_B }),
+      stateFor(modern, { version, slots: [slot, bootedWithApp()], keyA: KEY_A, keyB: KEY_B }),
       plan,
     );
     const error = refusalOf(() =>
@@ -502,7 +524,12 @@ describe('prepareSlotFlash builds each staging form', () => {
     const plan = buildSlotPlan(modern, '4.8.1.9');
     const slot = slotState({ key: 'b', present: true, accepts: true });
     const report = reportFor(
-      stateFor(modern, { version: '4.8.1.9', slots: [slot], keyA: KEY_A, keyB: KEY_B }),
+      stateFor(modern, {
+        version: '4.8.1.9',
+        slots: [slot, bootedWithApp()],
+        keyA: KEY_A,
+        keyB: KEY_B,
+      }),
       plan,
     );
     const image = imageOf(0x5000, 5);

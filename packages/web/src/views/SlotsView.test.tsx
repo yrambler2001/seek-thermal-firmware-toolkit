@@ -15,6 +15,7 @@ import { useReporter, type ReporterHandle } from '../hooks/useReporter';
 import type { SlotsPanelApi } from '../hooks/useSlotsPanel';
 import { App } from '../App';
 import { fakeDeviceState } from '../test-fixtures';
+import { writeKeysVerdictOf } from '../components/SlotWriteKeys';
 import { render, renderHook, buttonByText } from '../test-helpers';
 import {
   UNSUPPORTED_REASON,
@@ -101,6 +102,21 @@ describe('SlotsView', () => {
     expect(buttonsIn(container)).not.toContain('Dump');
     expect(buttonsIn(container).some((text) => text.startsWith('Flash'))).toBe(false);
     expect(buttonsIn(container)).toContain('Read slots');
+    unmount();
+  });
+
+  it('states the keys the writes use: the booted bank’s key, or the measured refusal, from core', () => {
+    const report = slotReport(base);
+    const verdict = writeKeysVerdictOf(report);
+    const { container, unmount } = view(panel({ plan: slotPlan(true), report }));
+    const text = container.textContent;
+    if (verdict.refusal !== null) {
+      expect(text).toContain('No bank of this camera can be written from here.');
+      expect(text).toContain(verdict.refusal);
+    } else {
+      expect(text).toContain('Keys for the writes');
+      expect(text).toContain(`derived from the booted bank ${verdict.bootedName ?? ''}`);
+    }
     unmount();
   });
 

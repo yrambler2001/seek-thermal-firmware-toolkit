@@ -10,8 +10,9 @@
  *
  * The three staging forms (see types.ts):
  *   'key-a-ciphertext'           the image, retargeted to this camera's keys,
- *                                stamped, padded and footered, then encrypted
- *                                under Key A (`buildBankPayload`);
+ *                                stamped, padded and footered, then XORed with
+ *                                the keystreams `write-keys.ts` derives, so the
+ *                                device's own passes store it under the derived key;
  *   'slot-keystream-ciphertext'  the image, stamped so its decrypted word sum
  *                                is the acceptance target, XORed with the
  *                                keystream the bank already carries;
@@ -51,6 +52,7 @@ import {
   type ImageHeader,
 } from '../image/header.js';
 import { KEY_PAIRS, keystream, keyWordsOf, xorWindowVerbatim } from '../preservation/patch.js';
+import { APPLICATION_KEY_PAIRS } from './application-pairs.js';
 import type { CipherProfile } from '../profiles/types.js';
 import type { StagingForm } from './types.js';
 import { sha256Sync } from './write-sha.js';
@@ -117,6 +119,26 @@ export function assertImageShape(bytes: Uint8Array): void {
 }
 
 /**
+ * The key pair an unnamed image was built for, found BY VALUE: this camera's own pair
+ * first, then each decoded application pair (`application-pairs.ts`). The first pair
+ * whose two halves each occur exactly once in the image is the image's own. Null when
+ * none does, so the file is still refused.
+ */
+export function locateOwnKeyPair(bytes: Uint8Array, mine: KeyPair): KeyPair | null {
+  const candidates: KeyPair[] = [
+    mine,
+    ...APPLICATION_KEY_PAIRS.map((pair) => ({
+      keyA: hexToBytes(pair.keyA),
+      keyB: hexToBytes(pair.keyB),
+    })),
+  ];
+  for (const candidate of candidates) {
+    if (findEmbeddedKeyTable(bytes, candidate.keyA, candidate.keyB) !== null) return candidate;
+  }
+  return null;
+}
+
+/**
  * Retarget the image's own Key A / Key B to this camera's pair, exactly as
  * `prepareImage` does. The keys the image carries are named by its file name
  * (the dump view puts them there); without that name nothing says which pair
@@ -125,19 +147,21 @@ export function assertImageShape(bytes: Uint8Array): void {
  */
 export function retargetImageKeys(bytes: Uint8Array, fileName: string, mine: KeyPair): Uint8Array {
   const named = parseKeyFilenameSuffix(fileName);
-  if (named === null) {
+  const own = named ?? locateOwnKeyPair(bytes, mine);
+  if (own === null) {
     throw slotRefused(
-      "this file's name does not carry its key pair, so there is no telling which keys the " +
+      "this file's name does not carry its key pair, and neither this camera's pair nor a decoded " +
+        'application pair occurs in the image exactly once, so there is no telling which keys the ' +
         'image was built for. Decrypted files come out named with the keys they contain.',
     );
   }
-  const at = findEmbeddedKeyTable(bytes, named.keyA, named.keyB);
+  const at = findEmbeddedKeyTable(bytes, own.keyA, own.keyB);
   if (at === null) {
     throw slotRefused(
-      `the filename claims Key A ${bytesToHex(named.keyA)} and Key B ${bytesToHex(named.keyB)}, ` +
-        `but ${describeKeyTableMismatch(bytes, named.keyA, named.keyB)}. Both keys must be ` +
+      `the filename claims Key A ${bytesToHex(own.keyA)} and Key B ${bytesToHex(own.keyB)}, ` +
+        `but ${describeKeyTableMismatch(bytes, own.keyA, own.keyB)}. Both keys must be ` +
         'present, exactly once each.',
-      { keyA: bytesToHex(named.keyA), keyB: bytesToHex(named.keyB) },
+      { keyA: bytesToHex(own.keyA), keyB: bytesToHex(own.keyB) },
     );
   }
   for (const offset of [at.offsetA, at.offsetB]) {
@@ -158,7 +182,7 @@ export function retargetImageKeys(bytes: Uint8Array, fileName: string, mine: Key
         `${hexUp(at.offsetB)} — they must be two distinct 16-byte values`,
     );
   }
-  const alreadyMine = equalBytes(named.keyA, mine.keyA) && equalBytes(named.keyB, mine.keyB);
+  const alreadyMine = equalBytes(own.keyA, mine.keyA) && equalBytes(own.keyB, mine.keyB);
   let image = bytes;
   if (!alreadyMine) {
     image = bytes.slice();
@@ -184,23 +208,40 @@ export interface StagedBytes {
   readonly stamped: Uint8Array;
 }
 
-/** Key A ciphertext for one bank: stamped, footered and padded (`buildBankPayload`). */
+/**
+ * The upload for one modern-line bank: the stamped image XORed with each mask's
+ * keystream in turn (`write-keys.ts` says which masks, and why), then padded and
+ * footered as `buildBankPayload` does. With one mask this is exactly
+ * `buildBankPayload(image, mask)`: the byte-identical form every passing row sends.
+ * The footer and the pad are never XORed: the device does not transform them.
+ */
 export function buildKeyAPayload(
   image: Uint8Array,
-  keyA: Uint8Array,
+  masks: readonly Uint8Array[],
   footerTemplate: Uint8Array | null,
   profile: { readonly cipher: CipherProfile; readonly memory: { readonly windowSize: number } },
 ): StagedBytes {
+  const [first, ...rest] = masks;
+  if (first === undefined) throw slotRefused('no key to encrypt the image under');
   try {
     const built = buildBankPayload(
       image,
-      keyA,
+      first,
       footerTemplate,
       profile.cipher,
       profile.memory.windowSize,
     );
-    assertBankPayload(built.payload);
-    return { payload: built.payload, stamped: built.image };
+    let payload: Uint8Array = built.payload;
+    if (rest.length > 0) {
+      let body: Uint8Array = built.payload.slice(0, built.length);
+      for (const mask of rest) {
+        body = cryptBytes(body, stateFromKey(mask, profile.cipher.whiteningK), profile.cipher);
+      }
+      payload = built.payload.slice();
+      payload.set(body, 0);
+    }
+    assertBankPayload(payload);
+    return { payload, stamped: built.image };
   } catch (error) {
     throw asSlotRefusal(error);
   }

@@ -39,6 +39,7 @@ import {
   type SlotsReport,
   type StagingForm,
 } from './types.js';
+import { deriveWriteKeys, slotWriteRefusal, uploadLandsUnder } from './write-keys.js';
 import {
   assertImageShape,
   bankImageOf,
@@ -130,6 +131,9 @@ function ackNeeded(report: SlotsReport, key: SlotKey): string | null {
   return null;
 }
 
+/** Where a derived-key write takes its key from: the booted bank, and the key's name. */
+type DerivedFrom = NonNullable<SlotFlashPlan['derivedFrom']>;
+
 /* ==================================================================== *
  * prepareSlotFlash
  * ==================================================================== */
@@ -144,6 +148,8 @@ interface Body {
   readonly expectedPlain: Uint8Array | null;
   readonly staging: StagingForm | 'verbatim';
   readonly keyAfter: string;
+  /** The booted bank and the key it holds, when this bank is written under a derived key. */
+  readonly derivedFrom: DerivedFrom | null;
   /**
    * The exact bank bytes, only where the device programs exactly what it is sent
    * (the 2014 plain chain). The encrypting forms re-encrypt, so this is null there.
@@ -209,6 +215,7 @@ export function prepareSlotFlash(
           : predictRawPlain(entry.staging, payload, { keyA: state.keyTable?.keyA ?? null }, cipher),
       staging: 'verbatim',
       keyAfter: 'as given (raw)',
+      derivedFrom: null,
       expectedStored: entry.staging === 'plain' ? bankImageOf(payload, bankBytes) : null,
     };
     warnings.push(
@@ -262,6 +269,7 @@ export function prepareSlotFlash(
       expectedPlain: staged.staged.stamped,
       staging: entry.staging,
       keyAfter: staged.keyAfter,
+      derivedFrom: staged.derivedFrom,
       expectedStored: staged.expectedStored(bankBytes),
     };
     if (staged.rekeyRisk) {
@@ -306,6 +314,7 @@ export function prepareSlotFlash(
     sum16: transferSum16(body.payload),
     expectedStored: body.expectedStored,
     expectedPlain: body.expectedPlain,
+    derivedFrom: body.derivedFrom,
     compare,
     warnings,
     serial: state.serial,
@@ -317,6 +326,7 @@ export function prepareSlotFlash(
 interface StagedImage {
   readonly staged: StagedBytes;
   readonly keyAfter: string;
+  readonly derivedFrom: DerivedFrom | null;
   /** The bank-sized bytes the bank will hold, when they are predictable. */
   expectedStored(bankBytes: number): Uint8Array | null;
   readonly rekeyRisk: boolean;
@@ -331,29 +341,36 @@ function stageImage(
 ): StagedImage {
   if (staging === 'key-a-ciphertext') {
     const { state } = report;
-    if (!state.canFlash) {
-      throw slotRefused(
-        `this camera cannot be written from here: ${state.flashBlockedBy.length > 0 ? state.flashBlockedBy.join('; ') : 'read the device info first'}`,
-        { blockedBy: state.flashBlockedBy },
-      );
+    const refusal = slotWriteRefusal(state);
+    if (refusal !== null) {
+      throw slotRefused(refusal, { blockedBy: state.flashBlockedBy });
     }
     const keyTable = state.keyTable;
     if (keyTable === null) {
       throw slotRefused(
-        "the analysis does not name this camera's Key A, so the bank cannot be encrypted for it",
+        "the analysis does not name this camera's bootloader key table, so the image cannot be retargeted to it",
       );
+    }
+    const keys = deriveWriteKeys(state);
+    if (keys.refusal !== null || keys.atRest === null || keys.booted === null) {
+      throw slotRefused(keys.refusal ?? 'the upload keys could not be derived');
     }
     const mine = retargetImageKeys(input.bytes, input.fileName, keyTable);
     const staged = buildKeyAPayload(
       mine,
-      keyTable.keyA,
+      keys.masks.map((mask) => mask.key),
       footerTemplateFor(report, slot),
       state.profile,
     );
+    /* The device's own two passes, run on these bytes, must leave the image under
+     * the booted bank's key; a mismatch is a bug in the derivation, never sent. */
+    const landed = uploadLandsUnder(keys, state.profile.cipher, staged.stamped, staged.payload);
+    if (landed !== null) throw slotRefused(landed);
     return {
       staged,
-      keyAfter: "this camera's Key A",
-      /* The device decrypts with Key A and re-encrypts under its store key, so
+      keyAfter: keys.atRest.name,
+      derivedFrom: { bank: keys.booted, key: keys.atRest.name, holds: keys.bootedKeyName },
+      /* The device decrypts with the application's keys and re-encrypts under its store key, so
        * the bytes it keeps are not the bytes it was sent: nothing to predict. */
       expectedStored: () => null,
       rekeyRisk: slot.present && slot.accepts && slot.footerOk && !slot.bootable,
@@ -364,6 +381,7 @@ function stageImage(
     return {
       staged,
       keyAfter: 'the stage key (key block 0 of the image)',
+      derivedFrom: null,
       /* The 2016 device decrypts with the stage key and stores the image under its
        * own store key (key block 1 of the pair), so the staged bytes are not what
        * the bank keeps. Measured on the Compact PRO 1.0.3.0: a bank written with its
@@ -377,6 +395,7 @@ function stageImage(
   return {
     staged,
     keyAfter: 'none (plaintext chain)',
+    derivedFrom: null,
     expectedStored: (bankBytes) => bankImageOf(staged.payload, bankBytes),
     rekeyRisk: false,
   };
@@ -455,11 +474,13 @@ export async function flashSlot(
       key: plan.key,
     });
   }
-  if (plan.staging === 'key-a-ciphertext' && !report.state.canFlash) {
-    throw slotRefused(
-      'the analysis says this camera cannot be written from here. Nothing was written.',
-      { blockedBy: report.state.flashBlockedBy },
-    );
+  if (plan.staging === 'key-a-ciphertext') {
+    const refusal = slotWriteRefusal(report.state);
+    if (refusal !== null) {
+      throw slotRefused(`${refusal}. Nothing was written.`, {
+        blockedBy: report.state.flashBlockedBy,
+      });
+    }
   }
 
   const { reporter } = ctx;

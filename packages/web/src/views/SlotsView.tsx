@@ -9,7 +9,13 @@
 
 import { useState, type ReactElement } from 'react';
 import { CircleStop, Layers, ScanSearch, Send, ShieldAlert } from 'lucide-react';
-import { hexUp, type SlotInputKind, type SlotKey, type SlotsReport } from '@seek-fw/core';
+import {
+  derivedKeyLine,
+  hexUp,
+  type SlotInputKind,
+  type SlotKey,
+  type SlotsReport,
+} from '@seek-fw/core';
 import { KeyValue, type KeyValueRow } from '@/components/KeyValue';
 import { Prose } from '@/components/Prose';
 import { RunPanel } from '@/components/RunPanel';
@@ -17,6 +23,7 @@ import { Section } from '@/components/Section';
 import { SlotFlashPreview } from '@/components/SlotFlashPreview';
 import { SlotTable } from '@/components/SlotTable';
 import { SlotWriteConfirm } from '@/components/SlotWriteConfirm';
+import { SlotWriteKeys, writeKeysVerdictOf } from '@/components/SlotWriteKeys';
 import { Alert } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -203,6 +210,7 @@ export function SlotsView({ slots, connected, busy }: SlotsViewProps): ReactElem
         {report !== null && (
           <>
             <KeyValue rows={summary} />
+            <SlotWriteKeys verdict={writeKeysVerdictOf(report)} />
             <SlotTable
               report={report}
               connected={connected}
@@ -250,6 +258,11 @@ export function SlotsView({ slots, connected, busy }: SlotsViewProps): ReactElem
             slotName={pendingView.entry.name}
             slotAddress={hexUp(pendingView.entry.address)}
             risk={writeRisk(pending.report, pending.key)}
+            keyLine={
+              pending.plan.derivedFrom
+                ? `The image is written under ${derivedKeyLine(pending.plan.derivedFrom, `bank ${pending.plan.derivedFrom.bank.toUpperCase()}`)}. Every other bank is written the same way.`
+                : null
+            }
             onCancel={() => {
               setConfirming(false);
             }}

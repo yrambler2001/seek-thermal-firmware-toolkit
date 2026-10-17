@@ -200,3 +200,39 @@ describe('SlotWriteConfirm', () => {
     unmount();
   });
 });
+
+describe('the key line of the confirmation', () => {
+  it('says which key the image is written under, and from which booted bank, when the plan is derived', () => {
+    const handle = render(
+      <SlotWriteConfirm
+        open
+        fileName="fw_decrypted.bin"
+        slotName="slot B"
+        slotAddress="0x14050000"
+        risk={{ booted: false, recovery: false, bootUnnamed: false }}
+        keyLine="The image is written under Key B, derived from the booted bank A. Every other bank is written the same way."
+        onConfirm={vi.fn()}
+        onCancel={vi.fn()}
+      />,
+    );
+    expect(dialog().textContent).toContain('derived from the booted bank A');
+    expect(dialog().textContent).toContain('Every other bank is written the same way.');
+    handle.unmount();
+  });
+
+  it('says nothing about a key when the plan carries none', () => {
+    const handle = render(
+      <SlotWriteConfirm
+        open
+        fileName="raw.bin"
+        slotName="slot B"
+        slotAddress="0x14050000"
+        risk={{ booted: false, recovery: false, bootUnnamed: false }}
+        onConfirm={vi.fn()}
+        onCancel={vi.fn()}
+      />,
+    );
+    expect(dialog().textContent).not.toContain('derived from the booted bank');
+    handle.unmount();
+  });
+});

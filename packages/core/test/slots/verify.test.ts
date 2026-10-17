@@ -135,10 +135,29 @@ function stateFor(
         ? null
         : ({ keyA: keys.keyA, keyB: keys.keyB } as unknown as DeviceState['keyTable']),
     keyWhiteningK: profile.cipher.whiteningK,
+    /* The store key of a camera without a per-device key is its Key B (storeKeyOf). */
+    storeKey: { name: 'Key B', key: keys?.keyB ?? null, programmed: false },
+    deviceKeySlot: null,
     canFlash: true,
     flashBlockedBy: [],
     plainChain: false,
   } as unknown as DeviceState;
+}
+
+/** The booted bank A of a Key A camera: under the store key (Key B), carrying the application's own pair. */
+function bootedWithApp(): SlotState {
+  const plain = vectorImageOf(0x5000, 6);
+  plain.set(KEY_A, 0x4000);
+  plain.set(KEY_B, 0x4020);
+  return slotState({
+    key: 'a',
+    present: true,
+    accepts: true,
+    plain,
+    keyName: 'Key B',
+    bootable: true,
+    bootability: 'bootable',
+  });
 }
 
 function concat(parts: readonly Uint8Array[]): Uint8Array {
@@ -306,7 +325,7 @@ function setupFor(form: Form, imageLength = 0x6000): Setup {
     const state = stateFor(
       profile,
       version,
-      [slotState({ key: 'b', present: true, accepts: true })],
+      [slotState({ key: 'b', present: true, accepts: true }), bootedWithApp()],
       {
         keyA: KEY_A,
         keyB: KEY_B,

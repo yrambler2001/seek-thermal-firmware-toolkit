@@ -5930,6 +5930,8 @@ without it). `SEEK_EMU_MODERN_ONLY=<label fragment>` narrows the modern corpus r
   not the bootloader's; the Compact PRO 4.9.1.15 dump's bank B holds neither of the camera's
   keys; the FF 4.16.1.7 chimera refuses raw bytes with `0x00050000`). Raw writes still work on the
   ones that cannot be written plain.
+  (sec.42.7 changes two of these: the Mosaic 10.9.1.31 uploads are now derived from the camera,
+  and the FF 4.16.1.7 and PRO 4.9.1.15 rows keep their gaps for the reasons recorded there.)
 - **The 1.3.0.8 FF (16 Hz) build** is refused for a plain image (its staged form folds two key
   streams this page does not build), and the camera itself refuses a raw payload with
   `0x00070100` after the whole stage, before erasing anything.
@@ -6053,6 +6055,10 @@ The three "by design" rows are the page's refusals working; they are scored as f
 the suite expects a write. The two 4.x rows are a bench limit, not a slots result: no slot step was
 reached.
 
+**Superseded in part (sec.42.7).** The Mosaic 10.9.1.31 refusal above is no longer the page's
+answer: its upload keys are derived from the camera, and the emulator boots a bank written so. The
+hardware run of that row is still to be done. The other two refusals stand.
+
 ### 42.2 What the bench found and fixed
 
 - **A page bug** (`packages/web`): when the camera does not name its booted bank (0.8.0.0 and the
@@ -6107,3 +6113,104 @@ after the run.
   differential test against `stagedFormOf` plus the emulator corpus and a bench write to R.
 - **What the boot proof does and does not show.** It writes the same patched image to every bank, then
   resets, so it proves the camera boots one of the banks, not that each bank boots on its own.
+
+### 42.7 Keys derived from the booted slot (2026-10-17)
+
+**What changed.** The slots page used to encrypt an upload under the bootloader's Key A and refuse
+whenever the running application did not carry that key (`runningApplicationKeyBlock`). It now
+derives the keys from the camera: the booted bank, and the running application's own pair. The
+derivation is pure (`packages/core/src/slots/write-keys.ts`); the page, the CLI and the writer all
+ask `slotWriteRefusal` / `deriveWriteKeys`. The classic flash gate (`canFlash`, `flash.ts`) is
+unchanged: it still refuses Mosaic 10.9.1.31, because its upload is still encrypted under the
+bootloader's Key A.
+
+**The model, checked against the decoded firmware.** On the modern line the application's upload
+path (FW-V1 `targets/mosaic_18hz_10_9_1_31/src/update.c`, `fw_validate_decrypt_program`) XORs the
+staged bytes with the keystream of its Key A, then with the keystream of its store key (the
+per-device key when one is programmed, else its own Key B), and programs the result. Both passes are
+the same self-inverse cipher, so the bank receives `upload XOR KS(appA) XOR KS(store)` and nothing
+else. The bootloader accepts a bank only if it decrypts under one of the keys it tries: its store key
+or its Key A. The earlier model ("the store key must equal the key the bootloader accepts") is
+therefore too strict: the host can pre-XOR the upload with the application's two keystreams, so the
+bank lands under any key the bootloader accepts. Two details the owner's model did not have:
+
+- **Which key.** Two keys are candidates: the bootloader's store key (when the application's store
+  key is the same key, the upload is the image under the application's Key A alone, the form every
+  passing row has always sent), and the booted bank's own key (when it is not). The booted bank's key
+  is read from the bank, by the bootloader's own identity test (`identifyKey`). On the 4.8, 4.9 and
+  4.18 banks the booted bank holds Key A and the store key is Key B: both are accepted, and the page
+  keeps writing the store key there (byte-identical, see below).
+- **Which builds check.** Six decoded builds run `image_try_keys` on the staged image in
+  `fw_validate_decrypt_program` (4.8.1.7, 4.8.1.9, 4.8.2.1 XR, 4.16.1.7 FF, Nano 200, Nano 300); five
+  do not (4.9.1.15, 4.9.2.0, 4.18.2.0, 10.9.1.31, 2.27.1.33). On a checking build the composite is
+  accepted only when the key written is the application's store key or its Key A (for Key A the
+  staged image decrypts under Key A, and the stored bank under Key A after the second pass, so both
+  checks pass). An unlisted build counts as checking. `UNCHECKED_UPLOAD_BUILDS` in `write-keys.ts`
+  holds the five.
+
+**What is located, and how.** The application's Key A and store key are found by value in the booted
+bank's decrypted image: the bootloader's own pair first, then the decoded application pairs of the
+modern line (`application-pairs.ts`, from the FW-V1 `data_unattributed.c` files). A pair counts only if
+both halves occur exactly once. A decrypted file that carries no key name is retargeted the same way
+(`locateOwnKeyPair`); a file that names its pair still goes by the name.
+
+**The byte-identity requirement.** Every row that passed before sends the same bytes now. The corpus
+runner records, per row, whether the B upload is byte-identical to the form it sent before
+(`B upload:` in the matrix detail): 19 rows are, and the two Mosaic 10.9.1.31 rows are not (they are
+the composite, below).
+
+**Evidence on the emulator.**
+
+| Check                                                                                                                                | Result                                                                                                                                                                                                                                               |
+| ------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Mosaic 10.9.1.31, B written with the derived upload (commit 0; read-back decrypts under the bootloader's Key A to the stamped image) | the real bootloader boots it: with cfg[0] = 1 the camera reports the bank's patched build string (`accept.emulator.test.ts`)                                                                                                                         |
+| Mosaic 10.9.1.31, R written the same way, cfg[0] = 2                                                                                 | booted, same patched string                                                                                                                                                                                                                          |
+| Mosaic 10.9.1.31, CONTROL: the form the page sent before (the image under the bootloader's Key A alone)                              | commit 0; the bank reads as "unknown key" and the camera boots its original bank A (the original build string), as sec.21.2 and 42.4 recorded                                                                                                        |
+| Compact 4.8.2.1, B and R written by the page (identical bytes)                                                                       | booted, patched string                                                                                                                                                                                                                               |
+| Compact FF 4.16.1.7 (chimera on 4.8.2.1), B                                                                                          | the derivation refuses before anything is sent (a checking build; the booted key is neither its Key A nor its store key). Measured before the rule existed: the device refused the composite with 0x50000 before erasing, and the bank was unchanged |
+
+Method note: cfg[0] is set in a copy of the emulator's own flash (`--flash`) and the camera is booted
+from it; the page never writes the boot configuration. The emulator runs the real bootloader, so a
+changed build string means the bootloader took the bank.
+
+**The corpus (modern line, 257 tests).** 204 pass, 3 gap (pinned with their reasons), 0 fail. Against
+the previous run:
+
+| Row                                               | Before                                                           | Now                                                                                                                                                                                                                                                  |
+| ------------------------------------------------- | ---------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Mosaic 10.9.1.31 dump, image on its dump: flash B | gap (not writable: the application lacks the bootloader's Key A) | pass (read-back decrypts; booted by the bootloader: sec. above)                                                                                                                                                                                      |
+| Compact FF 4.16.1.7 chimera: flash B              | gap (not writable)                                               | gap, the derivation's refusal: a checking build, the booted key is neither of its keys (pinned `notWritable`)                                                                                                                                        |
+| Compact FF 4.16.1.7 chimera: raw R                | gap (chimera refusal)                                            | gap, unchanged (pinned `chimeraRawRefused`)                                                                                                                                                                                                          |
+| Compact PRO 4.9.1.15 dump: flash B                | gap (B's own image holds neither of the bootloader's keys)       | gap, reason now precise: B's image carries neither this camera's pair nor a decoded application pair, so the page cannot locate its keys to retarget it. The 2016-line keys are not in the candidate table (a decision for the owner, not made here) |
+| every other row                                   | pass                                                             | pass, bytes identical to what they sent                                                                                                                                                                                                              |
+
+**The 2016 line.** The staging does not read the target bank. `buildSlotKeystreamPayload` takes the
+stage key from the image's own key block 0 (`stageKeyBlockOf`, found by value), as
+`preservation/patch.ts` does (`keystream(keyWordsOf(block0))`). The note `LOCKED_2016_STAGING_NOTE`
+said the keystream comes from a readable copy of the target bank; that was stale. It now says the stage
+key comes from the image alone, and that the write is checked by reading the bank back, which needs
+the bank to be readable. A unit test pins the payload as independent of the target bank. The 2016
+corpus (`corpus-locked.emulator.test.ts`) still passes, 251 of 251.
+
+**Changes to the shared contract** (`slots/types.ts`): `SlotFlashPlan.derivedFrom` and `DerivedKey`
+are added (the key a write uses, the booted bank, and the key that bank holds). The web and CLI show
+them.
+
+**What the orchestrator must validate on the bench (not run here).**
+
+1. Mosaic 10.9.1.31, standard: B (non-booted) written with the derived upload. Expect commit 0 and a
+   read-back that decrypts to the stamped image. Then check acceptance the way the emulator does: the
+   page never sets cfg[0], so a J-Link edit of the boot configuration (cfg[0] at 0x14010000 = 1 prefers
+   B, 2 prefers R) and a reset are needed to boot the written bank. A changed build string is the proof.
+   Do not write A this way without the recovery procedure of 42.4 in hand: A is the bank it boots.
+2. Mosaic 10.9.1.31, the R write (acknowledged): same method, cfg[0] = 2.
+3. Compact 4.8.1.9 / 4.8.2.1 / PRO 4.9.2.0 / PRO FF 4.18.2.0: uploads are byte-identical to before, so
+   no change is expected; the slot bench (42.1) should pass as it did.
+4. Compact FF 4.16.1.7 (standard, not the chimera): the page should refuse before anything is sent,
+   with the checking-build reason. If the page sends anyway, record the device's status.
+5. Compact PRO 4.9.1.15: the page should refuse B at the retarget step, with the reason above.
+
+**Open.** The 2016-line pairs (`KEY_PAIRS.cp103` / `cp1032ff`) are not in the modern candidate table,
+so a 2016 image held in a modern camera's bank cannot be retargeted. Adding them would be a decision
+about writing 2016 images into 4.x banks, and is not made here. The derivation's file-name rule is
+unchanged for named files.

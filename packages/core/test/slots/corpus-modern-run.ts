@@ -45,7 +45,6 @@ import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 
 import { equalBytes, hexUp } from '../../src/bytes.js';
-import { findEmbeddedKeyTable, keyFilenameSuffix } from '../../src/crypto/keys.js';
 import { SeekError } from '../../src/errors.js';
 import { silentReporter } from '../../src/events.js';
 import { detectProfile, getProfile } from '../../src/profiles/registry.js';
@@ -57,6 +56,10 @@ import { buildSlotPlan } from '../../src/slots/capability.js';
 import { dumpSlot } from '../../src/slots/dump.js';
 import { inspectSlots } from '../../src/slots/inspect.js';
 import { flashSlot, prepareSlotFlash } from '../../src/slots/write.js';
+import { deriveWriteKeys, gateWithoutAppKeys } from '../../src/slots/write-keys.js';
+import { locateOwnKeyPair, retargetImageKeys } from '../../src/slots/write-image.js';
+import { buildBankPayload, setAcceptSum } from '../../src/image/bank.js';
+import { FOOTER_SIZE, footerOffsetFor } from '../../src/image/header.js';
 import type { DumpedSlot, SlotFlashPlan, SlotKey, SlotsReport } from '../../src/slots/types.js';
 import { evidenceFromChannelProbe, probeSelectorChannel } from '../../src/workflows/capability.js';
 import type { WorkflowContext } from '../../src/workflows/types.js';
@@ -172,15 +175,14 @@ function notReached(why: string): Verdict {
  * exactly and a changed one is red.
  */
 export const REASON = {
-  /** core's state.canFlash is false: the camera's own keys say a Key A staged write would be refused. */
+  /** The upload keys cannot be derived from this camera (write-keys.ts), so the page refuses before anything is sent. */
   notWritable:
-    "the camera is not writable from here (state.canFlash is false): the running application's " +
-    "built-in Key A is not the bootloader's Key A, so a Key A staged write is refused before anything is sent",
-  /** Bank B's own image holds neither of the camera's keys, and the file name has no other pair to carry. */
+    "the upload keys cannot be derived from this camera (write-keys.ts: the booted bank's key, and the " +
+    "running application's own pair, are both read from the camera): the page refuses before anything is sent",
+  /** Bank B's own image carries no key pair the page knows, so the page cannot retarget it. */
   bImageForeignKeys:
-    "bank B's own decrypted image holds neither of this camera's Key A or Key B, and a decrypted file's " +
-    'name can only carry the pair its image holds, which the page does not derive from the image: the write ' +
-    'is refused rather than guessed',
+    "bank B's own decrypted image carries neither this camera's pair nor any decoded application pair, " +
+    'each half exactly once, so the page cannot locate its keys to retarget it and refuses rather than guesses',
   /** A chimera's raw write into R is refused by the device (0x00050000, UNSUPPORTED), on a camera whose keys are not writable from here. */
   chimeraRawRefused:
     "a chimera (the image on its donor bootloader): the device refuses R's commit of bank A's raw bytes " +
@@ -458,10 +460,13 @@ async function probedProfile(device: SeekDevice): Promise<FirmwareProfile> {
   return detectProfile(evidenceFromChannelProbe(await probeSelectorChannel(device))).best.profile;
 }
 
-/** The image file name a decrypted image is retargeted under: the camera's own key pair. */
-function imageFileName(report: SlotsReport): string {
-  const table = report.state.keyTable;
-  return table === null ? 'image.bin' : `image${keyFilenameSuffix(table.keyA, table.keyB)}.bin`;
+/**
+ * The file name a decrypted image is given. Unnamed on purpose: the page locates the image's own
+ * key pair by value (`locateOwnKeyPair`), so this is the case a decrypted file from the decrypt
+ * tool is, when the tool named nothing. A name that carries the pair works the same way.
+ */
+function imageFileName(_report: SlotsReport): string {
+  return 'image.bin';
 }
 
 /** The bank the camera boots, or null when it names none. */
@@ -799,7 +804,7 @@ async function checkRefusal(
    * every Key A staged write, see checkFlashB), the bank's raw bytes, verbatim: they reach
    * the acknowledgement gate without the key-state refusal in front of it. The form used is
    * reported, so the verdict says which gate was exercised. */
-  const writable = report.state.canFlash;
+  const writable = writeRefusalOf(report) === null;
   const form = writable
     ? 'its decrypted image'
     : 'its raw bytes (the camera is not writable from here)';
@@ -840,8 +845,36 @@ async function checkRefusal(
   }
 }
 
-/** Bytes as lowercase hex, for a message a person reads. */
-const hexOf = (bytes: Uint8Array): string => Buffer.from(bytes).toString('hex');
+/**
+ * Whether the upload the page builds is byte-identical to the form every passing row sends (the image
+ * under the bootloader's Key A), or the composite that lands the image under the booted bank's key.
+ */
+function uploadFormNote(report: SlotsReport, plain: Uint8Array, payload: Uint8Array): string {
+  const keyTable = report.state.keyTable;
+  if (keyTable === null) return 'no bootloader key table to compare with';
+  try {
+    const retargeted = retargetImageKeys(plain, imageFileName(report), keyTable);
+    const stamped = setAcceptSum(retargeted, report.state.profile.cipher).image;
+    const foff = footerOffsetFor(stamped.length);
+    const footer = payload.slice(foff, foff + FOOTER_SIZE);
+    const legacy = buildBankPayload(
+      retargeted,
+      keyTable.keyA,
+      footer,
+      report.state.profile.cipher,
+    ).payload;
+    return equalBytes(legacy, payload)
+      ? 'byte-identical to the image under the bootloader’s Key A (the form every passing row sends)'
+      : 'different from the image under the bootloader’s Key A: the composite that lands the image under the booted bank’s key';
+  } catch (error) {
+    return `not compared: ${reasonOf(error)}`;
+  }
+}
+
+/** Why the page cannot write this camera's modern-line banks, or null (the slot page's own gate). */
+function writeRefusalOf(report: SlotsReport): string | null {
+  return gateWithoutAppKeys(report.state) ?? deriveWriteKeys(report.state).refusal;
+}
 
 async function checkFlashB(
   ctx: WorkflowContext,
@@ -859,24 +892,18 @@ async function checkFlashB(
   /* A Key A staged write is refused before anything is sent when the camera's own keys say
    * the bootloader would refuse the result (state.canFlash). That is the product's verdict on
    * this camera, read from its own dump, and it is recorded as the gap it is. */
-  if (!report.state.canFlash) {
-    return gap(
-      REASON.notWritable,
-      `B: refused before anything is sent: ${report.state.flashBlockedBy.join('; ')}`,
-    );
+  const refusal = writeRefusalOf(report);
+  if (refusal !== null) {
+    return gap(REASON.notWritable, `B: refused before anything is sent: ${refusal}`);
   }
   /* A decrypted file's name must carry the pair its image holds, and the write retargets the
    * image to this camera's pair. Where the image holds neither of this camera's keys, the page
    * has no name it can give the file without guessing, and refuses. Measured on the image. */
   const keyTable = report.state.keyTable;
-  if (
-    keyTable !== null &&
-    findEmbeddedKeyTable(before.plain, keyTable.keyA, keyTable.keyB) === null
-  ) {
+  if (keyTable !== null && locateOwnKeyPair(before.plain, keyTable) === null) {
     return gap(
       REASON.bImageForeignKeys,
-      `B: ${String(before.plain.length)} B image, sha ${sha256(before.plain).slice(0, 16)}; this camera's Key A ` +
-        `${hexOf(keyTable.keyA)}, Key B ${hexOf(keyTable.keyB)}; bank B reads as ` +
+      `B: ${String(before.plain.length)} B image, sha ${sha256(before.plain).slice(0, 16)}; bank B reads as ` +
         `'${report.state.byKey.get('b')?.keyName ?? 'unknown'}'`,
     );
   }
@@ -891,14 +918,19 @@ async function checkFlashB(
       fileName: imageFileName(report),
     });
     notes.push(...plan.warnings.filter((w) => !w.startsWith('Note: ')).map((w) => `B plan: ${w}`));
+    notes.push(`B upload: ${uploadFormNote(report, before.plain, plan.payload)}`);
     const result = await flashSlot(ctx, report, plan, { acknowledgeRisk });
     const back = await dumpSlot(ctx, report, 'b');
     if (back.plain === null) {
       return fail(`the read-back of B holds no decrypted image: ${back.notes.join('; ')}`);
     }
-    if (!equalBytes(back.plain, before.plain)) {
+    /* What B must decrypt to is the image the plan stamped (retargeted to this camera's pair, where
+     * the image carried another pair); for an image that already carries this camera's pair that is
+     * the image itself. */
+    const want = plan.expectedPlain ?? before.plain;
+    if (!equalBytes(back.plain, want)) {
       return fail(
-        `the read-back of B decrypts to a different image: ${describeDiff(before.plain, back.plain)}`,
+        `the read-back of B decrypts to a different image: ${describeDiff(want, back.plain)}`,
       );
     }
     if (result.after !== null && !equalBytes(result.after, back.raw)) {
@@ -969,7 +1001,7 @@ async function checkRawR(
     /* On a chimera the image's own keys are not the bootloader's, which is the state the camera
      * reports as not writable. The refusal is then a measurement on the emulated chimera, not
      * on a camera of this build, and it is recorded as the gap it is. */
-    if (chimera && !report.state.canFlash) {
+    if (chimera && report.state.appKeysBlock != null) {
       return gap(REASON.chimeraRawRefused, refusal);
     }
     return fail(refusal);

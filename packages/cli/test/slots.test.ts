@@ -45,6 +45,7 @@ import {
   readBackLines,
   safeVersion,
   slotsCommandWith,
+  writeKeyLines,
   type SlotOps,
 } from '../src/commands/slots.js';
 import { TerminalReporter } from '../src/reporter.js';
@@ -99,8 +100,20 @@ function headerFake(version: string, length: number): ImageHeader {
  * The fakes below are typed as a Pick of the real type and then narrowed. Only the fields the
  * slot command reads are built, so the rest of DeviceState / SlotState is not invented here.
  */
+/* The fields the write-key derivation reads: no booted bank is named, so it refuses, with the reason. */
 function deviceStateFake(serial: string | null = 'SN-1'): DeviceState {
-  const partial: Pick<DeviceState, 'description' | 'serial'> = {
+  const partial: Pick<
+    DeviceState,
+    | 'description'
+    | 'serial'
+    | 'boot'
+    | 'byKey'
+    | 'slots'
+    | 'flashBlockedBy'
+    | 'storeKey'
+    | 'deviceKeySlot'
+    | 'keyTable'
+  > = {
     description: {
       vendorId: 0x289d,
       productId: 0x0001,
@@ -109,6 +122,13 @@ function deviceStateFake(serial: string | null = 'SN-1'): DeviceState {
       serialNumber: serial,
     },
     serial,
+    boot: null,
+    byKey: new Map(),
+    slots: [],
+    flashBlockedBy: [],
+    storeKey: { name: 'Key B', key: null, programmed: false },
+    deviceKeySlot: null,
+    keyTable: null,
   };
   return partial as DeviceState;
 }
@@ -886,5 +906,60 @@ describe('slots through run()', () => {
     expect(() =>
       parseSlotsArgs(['list'], { raw: false, acknowledgeRisk: false, verify: true, dryRun: true }),
     ).toThrow(/--dry-run/);
+  });
+});
+
+/* ---- the keys every bank is written under, derived from the booted bank ---- */
+
+const KEY_A_BYTES = Uint8Array.from({ length: 16 }, (_, i) => 0xa0 + i);
+const KEY_B_BYTES = Uint8Array.from({ length: 16 }, (_, i) => 0xb0 + i);
+
+/** A camera whose booted bank A decrypts under its store key (Key B) and carries the application's pair. */
+function derivableReport(): SlotsReport {
+  const plain = new Uint8Array(0x5000).fill(0x33);
+  plain.set(KEY_A_BYTES, 0x4000);
+  plain.set(KEY_B_BYTES, 0x4020);
+  const bootedSlot = {
+    ...slotStateFake('a', true),
+    plain,
+    keyName: 'Key B',
+    bootable: true,
+    bootability: 'bootable',
+  } as SlotState;
+  const base = reportOf();
+  const state = {
+    ...base.state,
+    boot: { booted: 'a', target: 'b' },
+    byKey: new Map([['a', bootedSlot]]),
+    slots: [bootedSlot],
+    keyTable: { keyA: KEY_A_BYTES, keyB: KEY_B_BYTES, offset: 0, matchA: true, matchB: true },
+    storeKey: { name: 'Key B', key: KEY_B_BYTES, programmed: false },
+    deviceKeySlot: null,
+  } as unknown as DeviceState;
+  return { ...base, state };
+}
+
+describe('the write keys, derived from the booted bank', () => {
+  it('the list says which key the booted bank holds, and that every bank is written the same way', () => {
+    const text = writeKeyLines(derivableReport(), false).join('\n');
+    expect(text).toContain('A holds Key B');
+    expect(text).toContain(
+      'Key B, derived from the booted bank A; every bank is written the same way',
+    );
+  });
+
+  it('a camera the derivation refuses says why, in the list', () => {
+    const text = writeKeyLines(reportOf(), false).join('\n');
+    expect(text).toContain('refused');
+    expect(text).toContain('could not be named');
+  });
+
+  it('the flash plan names the key and the bank it was derived from', () => {
+    const plan = {
+      ...fakePlan('b', 'plain', new Uint8Array(0x100)),
+      derivedFrom: { bank: 'a' as const, key: 'Key B' },
+    } as SlotFlashPlan;
+    const text = flashPlanLines(plan, 'image.bin', null, false).join('\n');
+    expect(text).toContain('Key B, derived from the booted bank A');
   });
 });
