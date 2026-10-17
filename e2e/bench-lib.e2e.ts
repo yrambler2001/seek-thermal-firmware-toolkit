@@ -826,6 +826,83 @@ describe('readFlash: a refused window goes to the SPIFI memory-mode re-init, the
   });
 });
 
+describe('writeBank: one 2014-chain bank, by loadbin and verifybin, then a halted read-back', () => {
+  const BANK_R = 0x14070000;
+  const BANK_FILE = path.join(scratch, 'bank-r.bin');
+  const BANK_BYTES_FILLED = Buffer.alloc(0x10000, 0x3c);
+  beforeAll(() => {
+    writeFileSync(BANK_FILE, BANK_BYTES_FILLED);
+  });
+
+  it('loads the file into R in one session, then reads the bank back halted and requires the same bytes', async () => {
+    let sessions = 0;
+    const { exec, calls } = fakeExec((call) => {
+      sessions += 1;
+      if (sessions === 1) return { code: 0, stdout: 'Verify successful.', stderr: '' };
+      saveBinFor(call.script, BANK_BYTES_FILLED);
+      return OK;
+    });
+    await bench(exec).writeBank(BANK_R, BANK_FILE);
+    expect(calls).toHaveLength(2);
+    expect(calls[0]?.script).toBe(
+      `loadbin "${BANK_FILE}", 0x14070000\nverifybin "${BANK_FILE}", 0x14070000\nq\n`,
+    );
+    const out = /savebin "([^"]+)"/.exec(calls[1]?.script ?? '')?.[1] ?? '';
+    expect(calls[1]?.script).toBe(`h\nsavebin "${out}", 0x14070000, 0x10000\ng\nq\n`);
+    expect(calls.some((call) => (call.script ?? '').includes('dump-spifi'))).toBe(false);
+  });
+
+  it('refuses an address that is not a 2014 bank (bootloader, boot config, modern slots), before any session', async () => {
+    const { exec, calls } = fakeExec(() => OK);
+    for (const address of [0x14000000, 0x14010000, 0x14030000, 0x14080000]) {
+      await expect(bench(exec).writeBank(address, BANK_FILE)).rejects.toThrow(
+        /only the 2014-chain banks/,
+      );
+    }
+    expect(calls).toHaveLength(0);
+  });
+
+  it('refuses a file that is not one 64 KiB bank, before any session', async () => {
+    const { exec, calls } = fakeExec(() => OK);
+    const small = path.join(scratch, 'bank-small.bin');
+    writeFileSync(small, Buffer.alloc(0x8000, 0x3c));
+    await expect(bench(exec).writeBank(BANK_R, small)).rejects.toThrow(/not one 64 KiB bank/);
+    expect(calls).toHaveLength(0);
+  });
+
+  it('a verify that does not pass is an error, and the read-back is not reached', async () => {
+    const { exec, calls } = fakeExec(() => ({ code: 0, stdout: 'Verify failed', stderr: '' }));
+    await expect(bench(exec).writeBank(BANK_R, BANK_FILE)).rejects.toThrow(/did not verify/);
+    expect(calls).toHaveLength(1);
+  });
+
+  it('a read-back that holds other bytes is refused, naming both hashes', async () => {
+    let sessions = 0;
+    const { exec } = fakeExec((call) => {
+      sessions += 1;
+      if (sessions === 1) return { code: 0, stdout: 'Verify successful.', stderr: '' };
+      saveBinFor(call.script, Buffer.alloc(0x10000, 0x11));
+      return OK;
+    });
+    await expect(bench(exec).writeBank(BANK_R, BANK_FILE)).rejects.toThrow(
+      /does not hold the file: read-back sha256/,
+    );
+  });
+
+  it('a dry run logs the load and the read-back, and runs nothing', async () => {
+    const lines: string[] = [];
+    const { exec, calls } = fakeExec(() => OK);
+    await bench(exec, {
+      gate: DRY,
+      log: (line) => {
+        lines.push(line);
+      },
+    }).writeBank(BANK_R, BANK_FILE);
+    expect(calls).toHaveLength(0);
+    expect(lines.join('\n')).toMatch(/\[dry-run\].*loadbin/);
+  });
+});
+
 describe('the dry run', () => {
   it('logs what each mutating call would run, runs nothing, and rejects the reads', async () => {
     const lines: string[] = [];

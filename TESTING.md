@@ -6196,9 +6196,9 @@ now write the 16 Hz FF image to the recovery bank R, and refuse it for A and B.
     commits and verifies, and `slots dump r` returns exactly the predicted bank.
   - `test/slots/write-ff.test.ts`: the builder against `stagedFormOf` on the corpus image, byte for byte,
     and against the exact bytes `runCommitStep` stages for the patched image.
-- **Not yet run: a write to R on a real camera.** The bench should check that the FF-patched R commits
-  with status 0 and reads back as predicted, that the camera enumerates after a power cycle and reports
-  1.3.0.8, and what happens when the image replaces the bank the running FF app boots from.
+- **Run on the bench (sec. 42.10).** From the 8 Hz 1.3.0.8 app the camera refuses the FF payload at
+  commit (status 0x00070100, bank R unchanged). From the FF app the commit is accepted, reads back as
+  predicted, and the camera boots from R on the 0.9.0.0 bootloader.
 
 ### 42.8 Empty banks (2026-10-17)
 
@@ -6436,7 +6436,8 @@ A power-cycled halted read showed SRAM holding "Jan 6 2017" written by that boot
 holding "2018" was never loaded. So on this camera the R image was not the one that ran under
 `cfg[0] = 2`. Which bank the locked 2014 line boots is not established here: `seek-fw info` says its
 bootloader's `select_boot_slot()` has not been reconstructed, so `cfg[0]` may not select recovery on
-this line at all. The bank R write itself is sound (sec. 42.6); the boot is the open item.
+this line at all. The bank R write itself is sound (sec. 42.6). The boot question is answered in sec.
+42.10, on the bench's own 0.9.0.0 bootloader: the FF image in R boots.
 
 **Bench-side findings, fixed in the bench (not the page or core):**
 
@@ -6468,3 +6469,71 @@ the fill button), and `slots-bench.e2e.ts` (`SEEK_BENCH_PROBE`).
 - `empty-b`: the empty bank as a user does it (list, dump, fill from the booted bank, the B-alone boot test).
 - `derived`: B and then R each take a build-string-marked image through the page, each is booted with its
   own `cfg[0]`, and `cfg[0]` is restored to the saved block. A is never written.
+
+### 42.10 The FF image in recovery R boots on the 2014 bootloader; the page's write is refused by the 8 Hz build (2026-10-17)
+
+Sec. 42.9 (T2) left the boot open. The FF launchable copy it booted carries a later bootloader (2.0.2.3,
+from its donor), so that test could not say what the bench camera's own 0.9.0.0 bootloader does with R.
+This subsection asks the question on that bootloader.
+
+**Platform.** The bench camera's own bootloader (0.9.0.0, borrowed from the 1.3.0.0 original) with the
+1.3.0.8 8 Hz app in A and R: the whole-part dump `Compact/2017.01.06-11.16.17-1.3.0.8` (sha256
+`afa9800f…`), which enumerates on this board as PIR206 and reports 1.3.0.8 "Jan 6 2017". The FF image is
+the FF launchable's bank R, decrypted (`seek-fw decrypt`), with its build string patched in place (`Jan
+6 2017` to `Jan  6 2018`, one byte, same length). cfg[0] stays 0 throughout: the boot-config block was
+read before and after each erase, and was unchanged.
+
+| #   | Step                                                                                                                                                           | What the camera reported                                                                                                                                                                                                          |
+| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0   | Halted read of the whole flash: sha256 `40447c7e…`, the original                                                                                               | PIR206, 1.3.0.0 "Oct 21 2014", bootloader 0.9.0.0, booted A                                                                                                                                                                       |
+| 1   | Whole flash = 1.3.0.8 std (sha `afa9800f…`), halted read-back equal, power cycle                                                                               | 1.3.0.8 "Jan 6 2017", bootloader 0.9.0.0; A and R 1.3.0.8, B empty                                                                                                                                                                |
+| 2a  | `seek-fw slots flash r <FF 2018> --acknowledge-risk --yes`, run by the 8 Hz app                                                                                | Dry run accepted. Commit refused: `CompleteMemoryUpgrade returned 0x00070100 (the image keys were refused after the re-key)`, "refused before programming; the bank is unchanged". After a power cycle R still held the std image |
+| 2b  | Bank R loaded with the page's stored form of the FF 2018 image (`predictedFFStored`, sha `3dc7a185…`) by the J-Link (`loadbin`, `verifybin`), read back halted | the FF 2018 stored bytes in R                                                                                                                                                                                                     |
+| 3   | A and B erased, one 64 KiB bank each, over the J-Link; the boot-config block and R read before and after                                                       | A and B all 0xFF; R and the boot-config block unchanged; cfg[0] 0                                                                                                                                                                 |
+| 4   | Power cycle, channel 2                                                                                                                                         | 1.3.0.8 "Jan 6 2018", bootloader 0.9.0.0. Only R held an image, and R ran                                                                                                                                                         |
+| 2c  | With the FF app running from R, the same write through the CLI (the page's core): the FF 2019 image                                                            | Commit status 0x0000; the CLI's read-back matched (sha `225429cc…`). After a power cycle: 1.3.0.8 "Jan 6 2019"; the halted read of R equals the prediction                                                                        |
+| 5   | Control: whole std 1.3.0.8 again, then the 8 Hz plain 2018 image into R through the 8 Hz app, A and B erased, power cycle                                      | The plain write committed (status 0x0000) and read back as sent. The camera boots R: "Jan 6 2018", bootloader 0.9.0.0. The stored adjust word at 0x238 is 0xFFFFFFFF, the plain chain's own balance (the file's sum is 1)         |
+| 6a  | Sentinel: A = FF 2019 stored form, B empty, R = plain 2018                                                                                                     | Runs R ("Jan 6 2018"). The page lists A "not-bootable"                                                                                                                                                                            |
+| 6b  | Sentinel control: A = the std plain bank A (sum 0), B empty, R = plain 2018                                                                                    | Runs A ("Jan 6 2017"), bootable                                                                                                                                                                                                   |
+| 6c  | Sentinel, B: A empty, B = FF 2019 stored form, R = plain 2018                                                                                                  | Runs R ("Jan 6 2018"). The page lists B "not-bootable"                                                                                                                                                                            |
+| 7   | Repeat of 2b to 4 from the restored original (its boot-config block is byte-identical to step 3's): R = FF 2018 stored, A and B erased                         | Runs R: "Jan 6 2018", 1.3.0.8, bootloader 0.9.0.0                                                                                                                                                                                 |
+| 8   | Restore: the whole flash = the original, halted sha256 `40447c7e…`                                                                                             | PIR206, 1.3.0.0 "Oct 21 2014", bootloader 0.9.0.0, booted A; both switch channels on                                                                                                                                              |
+
+**Verdict.**
+
+- **Yes, the FF image in R boots from recovery on the 0.9.0.0 bootloader.** It runs when A and B hold
+  nothing the bootloader accepts, with cfg[0] = 0 (step 4, repeated in step 7). The page's own FF write,
+  made by the FF app, boots from R as well (step 2c, then the power cycle: "Jan 6 2019").
+- **No, the page does not write it from the camera it stages for.** A 1.3.0.8 camera running the 8 Hz app
+  refuses the FF payload at commit (0x00070100) before programming, and the bank is unchanged (step 2a).
+  The FF build runs only from R here (A and B reject its form), so once it is there the page can rewrite
+  R, but the first FF image reaches R by another route (the J-Link, in this run). The dry run does not
+  warn about this.
+- **The page's labels are wrong for this image.** The slots list says "not-bootable" for the FF image in R
+  although the camera runs it (steps 4, 2c, 7). The CLI's `booted` field is not a reliable indicator on
+  this line: it read "b" when R ran (steps 5, 6a, 6c) and null when the FF image ran. The build string that
+  runs, and which banks hold an image, are the evidence used here.
+
+**The 0xFFFF sentinel (steps 5 and 6).** The FF theory predicted that a plain image in R would not run by the
+same route. It does run: with A and B empty, recovery runs whatever R holds, plain or FF. So the sentinel
+is not what lets R run. It is what makes the bootloader skip A and B: the FF form in A (6a) and in B (6c)
+is passed over and the bootloader falls through to R, and the plain sum-0 image in A boots A (6b). The
+FF note's claim that the 2014 bootloader rejects FF at A and B holds on this camera (A and B tested).
+
+**Timing (USB, switch channel 2 only).** Power-off to the camera gone from USB: 26 to 447 ms. Power-on
+to the camera on USB: 371 to 790 ms (the switch's `on` reply to the first `ioreg` check that sees VID
+0x289D; the checks are about 0.1 to 0.2 s apart). The first halted read after most flashes failed once
+and a channel-2 power cycle cleared it, as in sec. 42.4.
+
+**Bench change.** `JlinkBench.writeBank(address, file)` (`e2e/lib/bench/jlink.ts`, `types.ts` with
+`CHAIN_2014_BANKS`, `spec-fakes.ts`): one 64 KiB bank of the 2014 chain (A, B or R), loaded by the J-Link's
+`loadbin` and `verifybin` in one session, then read back halted, which must equal the file. It exists
+because FW-V1's `flash-region` and `flash-bank` refuse any write at a slot base unless the image carries a
+"CODE" footer, and the 2014-chain images checked here (the 1.3.0.8 std and FF banks) have none. Six unit
+tests with the fake rig in `bench-lib.e2e.ts`.
+The steps above were driven from a scratch script on the bench library, which is not committed.
+
+**Not done.** The Electron page was not driven: the writes went through `seek-fw slots flash`, which runs
+the same core write path. cfg[0] = 2 was not needed and was not set. Bank B with a plain image was not
+tested. The CLI does not expose the bootloader's boot selection (its `select_boot_slot()` is not
+reconstructed), so the evidence is the running build string and the banks that held an image.

@@ -76,6 +76,13 @@ export interface JlinkBench {
    * config block cannot be named by mistake. The caller checks the result with a read.
    */
   eraseRange(address: number, length: number): Promise<void>;
+  /**
+   * Writes one 64 KiB bank of the 2014 chain (A, B or recovery R, `CHAIN_2014_BANKS`) from a
+   * 64 KiB file, with the J-Link's own `loadbin` and `verifybin` in one session, then reads the
+   * bank back halted and requires the same bytes. Nothing else is writable: the bootloader and the
+   * boot-config block are refused by address. The bank's image is written as the file gives it.
+   */
+  writeBank(address: number, file: string): Promise<void>;
   /** Reset the CPU over SWD (`r` then `g`) so the camera boots what is in flash. */
   resetCpu(): Promise<void>;
   /**
@@ -139,3 +146,8 @@ export interface PatchedBuildString {
  */
 export const BENCH_FLASH_BYTES = 0x400000;
 export const BENCH_FLASH_BASE = 0x14000000;
+/**
+ * The three 64 KiB banks of the 2014 chain: A, B and recovery R. The only addresses
+ * `JlinkBench.writeBank` accepts (the bootloader and the boot-config block are never banks).
+ */
+export const CHAIN_2014_BANKS: readonly number[] = [0x14050000, 0x14060000, 0x14070000];

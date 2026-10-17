@@ -2,12 +2,13 @@
  * The J-Link side of the bench: erase and flash the whole 4 MiB through FW-V1's
  * own jlink-runner, read the whole flash back halted, reset the CPU.
  *
- * WHAT IT MAY RUN. Exactly three things, all built here:
- *   - `node tools/jlink/jlink-runner.js erase-spifi-range` and `... flash-factory-4m`
- *     in <SEEK_E2E_FWV1_DIR>/targets/<target> (the runner's own commands; this is
+ * WHAT IT MAY RUN. Exactly these, all built here:
+ *   - `node tools/jlink/jlink-runner.js erase-spifi-range`, `... flash-factory-4m` and
+ *     `... set-boot` in <SEEK_E2E_FWV1_DIR>/targets/<target> (the runner's own commands; this is
  *     what the target's `make jlink-run` rule runs, which not every target keeps);
- *   - one `JLinkExe` session per read (`h`, `savebin`, `g`, `q`) and one per reset
- *     (`r`, `g`, `q`), each a command file in a scratch directory.
+ *   - one `JLinkExe` session per read (`h`, `savebin`, `g`, `q`), one per reset (`r`, `g`,
+ *     `q`) and one per 2014-chain bank write (`loadbin`, `verifybin`, `q`, for A, B or R
+ *     only), each a command file in a scratch directory.
  * It never runs `dump-spifi-4m`: that overwrites the unit's original dump in
  * FW-V1, and no command line this module builds can name it (a unit test proves it).
  *
@@ -37,7 +38,13 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 
 import type { WriteApproval } from '../supervised-write.js';
-import { BENCH_FLASH_BASE, BENCH_FLASH_BYTES, type BootSlot, type JlinkBench } from './types.js';
+import {
+  BENCH_FLASH_BASE,
+  BENCH_FLASH_BYTES,
+  CHAIN_2014_BANKS,
+  type BootSlot,
+  type JlinkBench,
+} from './types.js';
 
 /** The FW-V1 target directory the recipe runs in (TESTING.md 41.5). */
 export const DEFAULT_TARGET = 'compact_8hz_1_3_0_8';
@@ -531,6 +538,51 @@ export function createJlinkBench(options: JlinkBenchOptions): JlinkBench {
           );
         }
       });
+    },
+
+    async writeBank(address: number, file: string): Promise<void> {
+      if (!CHAIN_2014_BANKS.includes(address)) {
+        throw new Error(
+          `writeBank: only the 2014-chain banks (${CHAIN_2014_BANKS.map(hex).join(', ')}) are written here, not ${hex(address)}`,
+        );
+      }
+      const payload = path.resolve(file);
+      if (!existsSync(payload)) throw new Error(`writeBank: no file at ${payload}`);
+      const size = statSync(payload).size;
+      if (size !== BANK_BYTES) {
+        throw new Error(
+          `writeBank: ${payload} is ${hex(size)} bytes, not one 64 KiB bank (${hex(BANK_BYTES)})`,
+        );
+      }
+      if (dry) {
+        log(
+          `[dry-run] would load ${payload} at ${hex(address)} (${hex(BANK_BYTES)} B) with J-Link loadbin and verifybin, then read it back halted`,
+        );
+        return;
+      }
+      await withScratch(async (dir) => {
+        const result = await session(dir, 'load-bank', [
+          `loadbin "${payload}", ${hex(address)}`,
+          `verifybin "${payload}", ${hex(address)}`,
+          'q',
+        ]);
+        const text = `${result.stdout}\n${result.stderr}`;
+        if (result.code !== 0 || JLINK_ERROR.test(text) || !text.includes('Verify successful')) {
+          throw new Error(
+            `loadbin of ${hex(address)} did not verify (exit ${String(result.code)}): ${tail(result)}`,
+          );
+        }
+      });
+      /* SUCCESS IS THE READ-BACK, as for the whole flash: the verify above is not trusted alone. */
+      const back = await readHalted(address, BANK_BYTES);
+      const want = sha256Of(new Uint8Array(readFileSync(payload)));
+      const got = sha256Of(back);
+      if (got !== want) {
+        throw new Error(
+          `the bank at ${hex(address)} does not hold the file: read-back sha256 ${got}, expected ${want}`,
+        );
+      }
+      log(`bank ${hex(address)} written and read back halted: sha256 ${got}`);
     },
 
     async setBootSlot(slot: BootSlot, template: string): Promise<void> {

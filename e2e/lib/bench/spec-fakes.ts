@@ -44,6 +44,7 @@ import type {
 import {
   BENCH_FLASH_BASE,
   BENCH_FLASH_BYTES,
+  CHAIN_2014_BANKS,
   type BenchCamera,
   type BenchSubject,
   type BootSlot,
@@ -282,6 +283,15 @@ export function createFakeRig(options: {
         throw new Error('fake: eraseRange outside one bank');
       }
       flash.fill(0xff, offset, offset + length);
+    },
+    async writeBank(address: number, file: string): Promise<void> {
+      const bytes = new Uint8Array(readFileSync(file));
+      if (!CHAIN_2014_BANKS.includes(address) || bytes.length !== BANK_BYTES) {
+        throw new Error(
+          `fake: writeBank of 0x${address.toString(16)} (${String(bytes.length)} B) refused`,
+        );
+      }
+      flash.set(bytes, address - BENCH_FLASH_BASE);
     },
     async readFlash(address: number, length: number): Promise<Uint8Array> {
       const offset = address - BENCH_FLASH_BASE;
