@@ -33,8 +33,19 @@ const STAGING_TEXT: Readonly<Record<SlotFlashPlan['staging'], string>> = {
   'key-a-ciphertext': "encrypted under Key A, the key this camera's bootloader reads",
   'slot-keystream-ciphertext': 'encrypted under the keystream this bank already carries',
   plain: 'plaintext, no cipher',
+  'two-stream':
+    'the 1.3.0.8 FF image folded through two keystreams — the camera stores the plain image, not these bytes',
   verbatim: 'verbatim — the bytes exactly as given',
 };
+
+/** What the Stored afterwards row says, by what the plan predicts and how it relates to the payload. */
+function storedText(plan: SlotFlashPlan): string {
+  if (plan.expectedStored === null) return 'not predicted — the read-back is the check';
+  const size = `${plan.expectedStored.length.toLocaleString()} B predicted`;
+  return plan.storedForm === 'two-stream-fold'
+    ? `${size} — the plain image the payload folds to, not the payload itself`
+    : size;
+}
 
 export interface SlotFlashPreviewProps {
   readonly slotName: string;
@@ -63,7 +74,9 @@ export function SlotFlashPreview({
     [
       'Read as',
       kind === 'plain'
-        ? 'a decrypted image — encrypted for this bank before it is staged'
+        ? plan.staging === 'two-stream'
+          ? "a decrypted image — folded through the FF build's two keystreams before it is staged"
+          : 'a decrypted image — encrypted for this bank before it is staged'
         : 'raw bytes — staged exactly as given',
     ],
     ['Staging', STAGING_TEXT[plan.staging]],
@@ -74,12 +87,7 @@ export function SlotFlashPreview({
       } of up to ${String(CHUNK)} B`,
     ],
     ['Transfer checksum', hexUp(plan.sum16, 4)],
-    [
-      'Stored afterwards',
-      plan.expectedStored === null
-        ? 'not predicted — the read-back is the check'
-        : `${plan.expectedStored.length.toLocaleString()} B predicted`,
-    ],
+    ['Stored afterwards', storedText(plan)],
   ];
 
   return (

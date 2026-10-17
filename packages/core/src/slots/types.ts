@@ -47,6 +47,29 @@ export const SLOT_BYTES = 0x10000;
  */
 export type StagingForm = 'key-a-ciphertext' | 'slot-keystream-ciphertext' | 'plain';
 
+/**
+ * What a prepared write actually stages with. A bank's `SlotEntry.staging` is a
+ * `StagingForm`; a plan adds two cases a bank cannot name in advance:
+ *
+ *  - 'verbatim'    raw bytes, sent exactly as given;
+ *  - 'two-stream'  the 1.3.0.8 FF (16 Hz) image on the 2014 chain: the image XOR the
+ *                  keystream of key block 0 XOR the keystream of key block 1
+ *                  (preservation/patch.ts `xor-ks0-ksD`), with its adjust word solved
+ *                  so the app's collapsed acceptance sum is 0xFFFF. The camera folds
+ *                  it back and stores the plain image, so the payload is not the stored
+ *                  bytes. It exists because the plan cannot tell the 8 Hz build from the
+ *                  FF build (one version string): the IMAGE decides, at write time.
+ */
+export type PlanStaging = StagingForm | 'verbatim' | 'two-stream';
+
+/**
+ * How the bank's stored bytes relate to the payload when the plan predicts them:
+ * 'as-sent' (the 2014 plain chain programs the payload) or 'two-stream-fold' (the
+ * 1.3.0.8 FF build folds the payload through its two key streams and programs the
+ * image it folds to).
+ */
+export type StoredForm = 'as-sent' | 'two-stream-fold';
+
 /** What committing to this slot does besides programming the bank. */
 export type CommitEffect =
   /** Arming 7/8/9 and committing programs the bank and nothing else. */
@@ -129,12 +152,20 @@ export interface SlotFlashPlan {
   readonly key: SlotKey;
   readonly address: number;
   readonly kind: SlotInputKind;
-  readonly staging: StagingForm | 'verbatim';
+  readonly staging: PlanStaging;
   /** The bytes that will go through 0x50, in 64-byte chunks. */
   readonly payload: Uint8Array;
   readonly sum16: number;
   /** What the slot will hold afterwards, when it can be predicted (else null). */
   readonly expectedStored: Uint8Array | null;
+  /**
+   * How `expectedStored` relates to `payload`: absent or 'as-sent' when the device programs
+   * the payload as sent, 'two-stream-fold' when it stores the image the payload folds to
+   * (the 1.3.0.8 FF build, whose payload is `expectedStored` XOR two keystreams). Only the
+   * wording of the read-back verdict reads it; the comparison is the same byte compare.
+   * Optional so plans built before it still type-check.
+   */
+  readonly storedForm?: StoredForm;
   /**
    * The plain image the bank must decrypt to after the write: the image as its
    * staging builder stamped and balanced it (length, acceptance adjust word, key
