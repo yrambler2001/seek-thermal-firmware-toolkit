@@ -385,11 +385,11 @@ describe('the bank addresses agree with each image\u2019s own decoded switch', (
 /* ---- what the notes must say -------------------------------------------- */
 
 describe('the facts a person is shown with the plan', () => {
-  it('says the 1.3.0.8-FF build boots only from recovery, on the 1.3.0.8 plan', () => {
+  it('says the 1.3.0.8-FF build is stored under Key B, and that its boot is untested, on the 1.3.0.8 plan', () => {
     const plan = buildSlotPlan(legacyAuth, '1.3.0.8');
     expect(plan.notes.join('\n')).toMatch(/1\.3\.0\.8-FF/);
-    expect(plan.notes.join('\n')).toMatch(/ONLY from recovery/);
-    expect(plan.notes.join('\n')).toMatch(/0xFFFF/);
+    expect(plan.notes.join('\n')).toMatch(/UNTESTED/);
+    expect(plan.notes.join('\n')).toMatch(/Key B/);
   });
 
   it('gives the 1.0.3.2 EP0 limit on the 1.0.3.2 plan, and says a whole-part drain is refused', () => {

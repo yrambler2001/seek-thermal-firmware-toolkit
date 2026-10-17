@@ -32,13 +32,7 @@ import { recoverKeyInfo } from '../../src/crypto/recover.js';
 import { SeekError, errorMessage } from '../../src/errors.js';
 import { silentReporter } from '../../src/events.js';
 import { wordSum32 } from '../../src/image/bank.js';
-import {
-  KEY_PAIRS,
-  keystream,
-  keyWordsOf,
-  REBALANCE_WORD_OFFSET,
-  xorWindowVerbatim,
-} from '../../src/preservation/patch.js';
+import { KEY_PAIRS, keystream, keyWordsOf, xorWindowVerbatim } from '../../src/preservation/patch.js';
 import { SeekDevice } from '../../src/protocol/client.js';
 import { WebUsbTransport } from '../../src/protocol/webusb.js';
 import { detectProfile } from '../../src/profiles/registry.js';
@@ -47,6 +41,7 @@ import { buildSlotPlan } from '../../src/slots/capability.js';
 import { classifyBuild } from '../../src/slots/capability-family.js';
 import { dumpSlot } from '../../src/slots/dump.js';
 import { inspectSlots } from '../../src/slots/inspect.js';
+import { ffKeyBPlainOf } from '../../src/slots/ff-form.js';
 import { flashSlot, prepareSlotFlash } from '../../src/slots/write.js';
 import type {
   DumpedSlot,
@@ -267,20 +262,14 @@ export function recordTransport(transport: WebUsbTransport, sent: Sent[]): void 
 }
 
 /**
- * The image the 1.3.0.8 FF write leaves in its bank, worked out here from the corpus image and the
- * key pair, NOT by the writer's builder: the image with the adjust word at 0x238 set to
- * 0xFFFF - sum(image ^ ksD) (word 0x238 taken as 0, header window verbatim), the one word the
- * app's collapsed acceptance needs. The camera stores the plain image, so this is the bank's content.
+ * The bank the 1.3.0.8 FF write leaves, worked out here from the corpus image and the key pair, NOT
+ * by the writer's builder: the image XOR the Key B keystream, header window verbatim (TESTING.md 42.12).
+ * The FF app re-keys the vendor payload this way and programs the result.
  */
 export function expectedFFStored(image: Uint8Array): Uint8Array {
   const words = image.length >>> 2;
   const ksD = keystream(keyWordsOf(KEY_PAIRS.ff1308.block1), words);
-  const out = image.slice();
-  const view = viewOf(out);
-  view.setUint32(REBALANCE_WORD_OFFSET, 0, true);
-  const base = wordSum32(xorWindowVerbatim(out, ksD), out.length);
-  view.setUint32(REBALANCE_WORD_OFFSET, (0xffff - base) >>> 0, true);
-  return out;
+  return xorWindowVerbatim(image, ksD);
 }
 
 /**
@@ -301,10 +290,9 @@ export function decryptedReadBack(
     const plain = after.slice(0, length);
     return { plain, accepts: wordSum32(plain, length) === 0 };
   }
-  if (staging === 'two-stream') {
-    const plain = after.slice(0, length);
-    const ksD = keystream(keyWordsOf(KEY_PAIRS.ff1308.block1), length >>> 2);
-    return { plain, accepts: wordSum32(xorWindowVerbatim(plain, ksD), length) === 0xffff };
+  if (staging === 'key-a-keystream') {
+    const plain = ffKeyBPlainOf(after.slice(0, length)) ?? after.slice(0, length);
+    return { plain, accepts: wordSum32(plain, length) === 0xffff };
   }
   const view = viewOf(after);
   const recovered = recoverKeyInfo(view, 0, length, state.profile.cipher);
@@ -630,7 +618,7 @@ export async function runLockedFirmware(
        * (computed here, not by the writer's builder); every other image is left as it was written. */
       const ffImage = isFFImage(subject);
       const expectedImage: Uint8Array = ffImage ? expectedFFStored(image) : image;
-      const writeStaging: PlanStaging = ffImage ? 'two-stream' : subject.staging;
+      const writeStaging: PlanStaging = ffImage ? 'key-a-keystream' : subject.staging;
 
       /* ---- 3. the booted bank, without acknowledgeRisk ----
        * The FF image has no bank but R to go to, so the acknowledgement is asked of R. */

@@ -30,6 +30,7 @@ import {
   inspectSlots,
   keyFilenameSuffix,
   prepareSlotFlash,
+  type PrepareSlotFlashOptions,
   type KeyPair,
   type DumpedSlot,
   type FirmwareProfile,
@@ -86,7 +87,12 @@ export interface SlotsBackend {
   readonly inspect: (ctx: WorkflowContext, firmware?: InspectFirmware) => Promise<SlotsReport>;
   readonly dump: (ctx: WorkflowContext, report: SlotsReport, key: SlotKey) => Promise<DumpedSlot>;
   /** Pure: builds the payload and sends nothing. */
-  readonly prepare: (report: SlotsReport, key: SlotKey, input: SlotFlashInput) => SlotFlashPlan;
+  readonly prepare: (
+    report: SlotsReport,
+    key: SlotKey,
+    input: SlotFlashInput,
+    options?: PrepareSlotFlashOptions,
+  ) => SlotFlashPlan;
   readonly flash: (
     ctx: WorkflowContext,
     report: SlotsReport,
@@ -100,7 +106,7 @@ export const CORE_SLOTS_BACKEND: SlotsBackend = {
   plan: (profile, firmwareVersion) => buildSlotPlan(profile, firmwareVersion),
   inspect: (ctx, firmware) => inspectSlots(ctx, firmware === undefined ? {} : { firmware }),
   dump: (ctx, report, key) => dumpSlot(ctx, report, key),
-  prepare: (report, key, input) => prepareSlotFlash(report, key, input),
+  prepare: (report, key, input, options) => prepareSlotFlash(report, key, input, options),
   flash: (ctx, report, plan, options) => flashSlot(ctx, report, plan, options),
 };
 
@@ -348,6 +354,12 @@ export interface SlotsPanelApi {
   readonly refusal: Refusal | null;
   readonly pending: PendingSlotFlash | null;
   readonly outcome: SlotFlashOutcome | null;
+  /**
+   * The person says the camera runs the 16 Hz FF 1.3.0.8 build. Used only when the camera's own
+   * answers cannot say which build runs; it applies to the next image prepared.
+   */
+  readonly running16Hz: boolean;
+  setRunning16Hz: (value: boolean) => void;
   readonly reading: boolean;
   readonly writing: boolean;
   readSlots: () => Promise<void>;
@@ -376,6 +388,7 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
   const [refusal, setRefusal] = useState<Refusal | null>(null);
   const [pending, setPending] = useState<PendingSlotFlash | null>(null);
   const [outcome, setOutcome] = useState<SlotFlashOutcome | null>(null);
+  const [running16Hz, setRunning16Hz] = useState(false);
 
   /* A running task reads these, not the render's copy: it captures its inputs
    * when it starts, and a state value captured then is stale by the time a
@@ -634,11 +647,12 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
             const input = await load(current);
             log(`${input.fileName} — ${input.bytes.length.toLocaleString()} bytes`, 'detail');
             if (input.source !== null) log(`image taken from ${input.source}`, 'detail');
-            const prepared = backend.prepare(current, key, {
-              kind,
-              bytes: input.bytes,
-              fileName: input.fileName,
-            });
+            const prepared = backend.prepare(
+              current,
+              key,
+              { kind, bytes: input.bytes, fileName: input.fileName },
+              { running16Hz },
+            );
             setCurrentPending({
               key,
               kind,
@@ -668,7 +682,7 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
         log(`another operation is running — wait for it, then ${retry}`, 'warn');
       }
     },
-    [backend, flush, log, reset, runner, setCurrentPending, setStatus],
+    [backend, flush, log, reset, runner, setCurrentPending, setStatus, running16Hz],
   );
 
   const pickFile = useCallback(
@@ -845,6 +859,8 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
       refusal,
       pending,
       outcome,
+      running16Hz,
+      setRunning16Hz,
       reading: runner.active === SLOTS_READ_PANEL_ID,
       writing: runner.active === SLOTS_FLASH_PANEL_ID,
       readSlots,
@@ -862,6 +878,7 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
       refusal,
       pending,
       outcome,
+      running16Hz,
       runner.active,
       readSlots,
       dump,

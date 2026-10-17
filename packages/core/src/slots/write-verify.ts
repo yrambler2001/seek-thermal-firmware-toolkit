@@ -8,10 +8,9 @@
  * bank keeps are not the bytes that were sent, and nothing about them can be
  * predicted from the plan. The 2014 plain chain stores plain, so there the stored
  * bytes are compared: exactly what was sent, except on the 1.3.0.8 FF build, whose
- * staged payload is the image XOR two keystreams and which stores the image the
- * payload folds to (`storedAs: 'two-stream-fold'`, measured on the emulator). The
- * plan predicts those bytes too, so the compare is the same byte comparison with
- * its own words.
+ * staged payload is the image XOR Key A and which stores the image XOR Key B
+ * (`storedAs: 'key-b-ciphertext'`, ff-form.ts). The plan predicts those bytes too,
+ * so the compare is the same byte comparison with its own words.
  *
  * What survives every form is the IMAGE the bank decrypts to. So the check
  * reads the bank back, recovers its keystream from the read-back ITSELF (the
@@ -43,10 +42,10 @@ export interface ReadBackExpectation {
   readonly plain: Uint8Array | null;
   /**
    * How `stored` relates to what was sent. 'as-sent' (the default) is the plain chain
-   * programming the payload; 'two-stream-fold' is the FF build programming the image its
-   * payload folds to. Only the words of the verdict differ.
+   * programming the payload; 'key-b-ciphertext' is the FF build re-keying the payload and
+   * storing the image under Key B. Only the words of the verdict differ.
    */
-  readonly storedAs?: 'as-sent' | 'two-stream-fold';
+  readonly storedAs?: 'as-sent' | 'key-b-ciphertext';
 }
 
 /** The first offset at which two equal-length or longer arrays differ, or -1. */
@@ -72,10 +71,10 @@ export function compareReadBack(
 ): ReadBackVerdict {
   if (expected.stored !== null) {
     const stored = expected.stored;
-    /* The FF build stores the image its payload folds to, not the payload: say so. */
-    const folded = expected.storedAs === 'two-stream-fold';
+    /* The FF build stores the image under Key B, not the payload: say so. */
+    const folded = expected.storedAs === 'key-b-ciphertext';
     const predicted = folded
-      ? 'the plain image the two-stream payload folds to'
+      ? 'the image XOR Key B that the FF build stores'
       : 'the bytes the plan predicted';
     if (after.length !== stored.length) {
       return {
@@ -91,8 +90,8 @@ export function compareReadBack(
         verified: true,
         notes: [
           folded
-            ? 'the bank holds the plain image the two-stream payload folds to (the FF build stores ' +
-              'the image, not the staged bytes), and the rest of the bank is erased'
+            ? 'the bank holds the image XOR Key B that the FF build stores (not the staged bytes), ' +
+              'and the rest of the bank is erased'
             : 'the bank matches the bytes the plan predicted (the 2014 plain chain programs exactly ' +
               'what it is sent)',
         ],

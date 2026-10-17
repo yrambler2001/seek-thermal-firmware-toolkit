@@ -69,8 +69,8 @@ function bootability(view: SlotView): ReactNode {
   if (state.bootability === 'recovery-only') {
     return (
       <span className="text-warn">
-        recovery only — R boots when A and B are empty or fail the bootloader&apos;s checks;
-        measured 42.10
+        recovery only — R runs when A and B hold nothing the bootloader takes (measured for the
+        plain form, 42.10); the FF form&apos;s boot is untested (42.12)
       </span>
     );
   }

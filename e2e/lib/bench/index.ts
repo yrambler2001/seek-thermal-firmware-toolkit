@@ -8,3 +8,4 @@ export * from './dump-tree.js';
 export * from './jlink.js';
 export * from './bench-camera.js';
 export * from './build-string.js';
+export * from './ff-vendor-run.js';

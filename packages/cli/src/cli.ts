@@ -95,6 +95,11 @@ export interface SlotFlags {
   readonly verify: boolean;
   /** `--dry-run`: build and print the flash plan, send nothing to the bank. */
   readonly dryRun: boolean;
+  /**
+   * `--running-16hz`: say the camera runs the 16 Hz FF 1.3.0.8 build. Read only when the camera's own
+   * answers cannot say which build it runs; a wrong choice is refused by the camera before programming.
+   */
+  readonly running16Hz: boolean;
 }
 
 export type ParsedCli =
@@ -187,6 +192,7 @@ export function parseCli(argv: readonly string[]): ParsedCli {
         'acknowledge-risk': { type: 'boolean', default: false },
         verify: { type: 'boolean', default: true },
         'dry-run': { type: 'boolean', default: false },
+        'running-16hz': { type: 'boolean', default: false },
         help: { type: 'boolean', short: 'h', default: false },
         version: { type: 'boolean', short: 'V', default: false },
       },
@@ -280,6 +286,7 @@ export function parseCli(argv: readonly string[]): ParsedCli {
       acknowledgeRisk: values['acknowledge-risk'],
       verify: values.verify,
       dryRun: values['dry-run'],
+      running16Hz: values['running-16hz'],
     },
     options,
   };

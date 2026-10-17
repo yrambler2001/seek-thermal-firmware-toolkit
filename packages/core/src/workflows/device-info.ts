@@ -24,6 +24,7 @@ import {
   identifyKey,
   pickKeyTable,
   storeKeyOf,
+  type KeyIdentity,
   type PickedKeyTable,
   type StoreKey,
 } from '../crypto/keys.js';
@@ -46,6 +47,8 @@ import { WINDOW_SIZE } from '../protocol/ops.js';
 import type { SeekDevice } from '../protocol/client.js';
 import { wordSum32 } from '../image/bank.js';
 import { locateFFKeys } from '../preservation/patch.js';
+import { FF_1308_VERSION } from '../slots/capability-family.js';
+import { ffKeyBPlainOf } from '../slots/ff-form.js';
 /* The stale-descriptor predicate, shared with the preservation pipeline's
  * boot-config check rather than re-worded: a spent reader serves the same
  * shape into any window. `preservation/windows.ts` imports nothing from
@@ -66,6 +69,7 @@ import type {
 import {
   entryForAddress,
   resolveDumpOptions,
+  type BankVerdicts,
   type DeviceState,
   type DumpOptions,
   type SlotState,
@@ -260,6 +264,8 @@ interface AnalysedSlot extends RawSlot {
   readonly accepts: boolean;
   readonly footerOk: boolean;
   readonly sha256: string | null;
+  /** The bank holds the 1.3.0.8 FF image under Key B (ff-form.ts): `plain` is that image, decoded. */
+  readonly ffKeyB?: boolean;
 }
 
 /**
@@ -277,6 +283,21 @@ async function analyseSlot(slot: RawSlot, profile: FirmwareProfile): Promise<Ana
       accepts: false,
       footerOk: false,
       sha256: null,
+    };
+  }
+  /* The 1.3.0.8 FF image under Key B (ff-form.ts): its keystream is the image's own key block 1, which
+   * the solve below does not reach (its header window is verbatim, so the solve reads it wrongly). */
+  const keyB = ffKeyBPlainOf(slot.raw);
+  if (keyB !== null) {
+    return {
+      ...slot,
+      recovered: null,
+      plain: keyB,
+      plainHeader: parseImageHeader(keyB),
+      accepts: false,
+      footerOk: false,
+      sha256: await sha256hex(keyB),
+      ffKeyB: true,
     };
   }
   const view = viewOf(slot.raw);
@@ -335,7 +356,34 @@ function storedPlain(slot: AnalysedSlot): boolean {
 function ffFormInRecovery(key: SlotKey, slot: AnalysedSlot): boolean {
   if (key !== 'r' || !slot.present || slot.raw === null || slot.header === null) return false;
   const image = slot.raw.subarray(0, slot.header.length);
-  return wordSum32(image, image.length) !== 0 && locateFFKeys(image) !== null;
+  return (
+    wordSum32(image, image.length) !== 0 && (slot.ffKeyB === true || locateFFKeys(image) !== null)
+  );
+}
+
+/**
+ * The camera's own per-bank answers on 1.3.0.8: GetFirmwareInfo selectors 6, 7, 8, one byte each,
+ * 1 when the application that answers takes the bank at 0x14050000 / 0x14060000 / 0x14070000.
+ * SetFirmwareInfoFeatures latches the selector and the GetFirmwareInfo read returns the byte and
+ * clears it; nothing is armed and nothing is written (FW-V1 compact_8hz and compact_ff_16hz
+ * cmd_GetFirmwareInfo cases 6 to 8, TESTING.md 42.12). Read only on 1.3.0.8, where two builds share the
+ * version string.
+ */
+async function readBankVerdicts(device: SeekDevice, reporter: WorkflowContext['reporter']): Promise<BankVerdicts> {
+  const answerOf = async (selector: number, label: string): Promise<number | null> => {
+    const got = await device.tryFwInfo(selector, 1, label);
+    return got !== null && got.length >= 1 ? (got[0] ?? null) : null;
+  };
+  const verdicts: BankVerdicts = {
+    a: await answerOf(6, 'bank A verdict'),
+    b: await answerOf(7, 'bank B verdict'),
+    r: await answerOf(8, 'bank R verdict'),
+  };
+  reporter.log(
+    `  bank verdicts (selectors 6, 7, 8): A ${String(verdicts.a)}, B ${String(verdicts.b)}, R ${String(verdicts.r)}`,
+    'detail',
+  );
+  return verdicts;
 }
 
 /**
@@ -599,6 +647,9 @@ export async function readDeviceInfo(
     analysed.push(await analyseSlot(read, profile));
   }
   reporter.progress(1, 1, 'Analysing ...');
+  /* The camera's own answers for A, B and R, where two builds share the version (see readBankVerdicts). */
+  const bankVerdicts: BankVerdicts | null =
+    version === FF_1308_VERSION ? await readBankVerdicts(device, reporter) : null;
 
   /* ---- the spent-reader verdict over the whole read ------------------- */
   /* One blank capture is an erased bank. Blank or stale captures at EVERY slot
@@ -693,12 +744,16 @@ export async function readDeviceInfo(
     if (descriptor === undefined || slot === undefined) continue;
     byKeyAnalysed.set(descriptor.key, slot);
 
-    const identity = identifyKey(
-      { state: slot.recovered?.state ?? null, accepts: slot.accepts },
-      keyTable,
-      storeKey,
-      keyWhiteningK,
-    );
+    /* The FF image under Key B is named by the key it is stored under (ff-form.ts), not by a recovered state. */
+    const identity: KeyIdentity =
+      slot.ffKeyB === true
+        ? { name: 'Key B', bootable: false }
+        : identifyKey(
+            { state: slot.recovered?.state ?? null, accepts: slot.accepts },
+            keyTable,
+            storeKey,
+            keyWhiteningK,
+          );
     /* THE FOOTER IS THE BOOTLOADER'S QUESTION, NOT EVERY ONE'S. This used to
      * require a "CODE" footer of every slot, and so called a 2016 part's
      * running bank "NOT bootable": that bootloader checks none, and the bank
@@ -1103,6 +1158,7 @@ export async function readDeviceInfo(
     platform,
     usbSpeed,
     activeSlotWord,
+    bankVerdicts,
     serial,
     cfg0,
     cfgSlots,

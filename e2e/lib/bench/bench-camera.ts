@@ -16,13 +16,15 @@ import { REPO_ROOT } from '../browser.js';
 import { Rp2040PowerSwitch, seekCamerasOnBus, type PowerSwitch } from '../power-switch.js';
 import type { WriteApproval } from '../supervised-write.js';
 import { runCommand, type Exec } from './jlink.js';
-import type { BenchCamera, RunningInfo } from './types.js';
+import type { BenchCamera, RunningInfo, SlotFlashRun } from './types.js';
 
 /** The switch channel the camera is on. The only one the bench may toggle. */
 const CAMERA_CHANNEL = 2;
 
 /** How long `info --json` may take (it reads the camera over USB). */
 const INFO_TIMEOUT_MS = 180_000;
+/** One CLI slot write reads the banks, stages 48 KiB in 64-byte chunks, commits and reads back. */
+const SLOT_FLASH_TIMEOUT_MS = 600_000;
 
 /** The default poll interval for `waitForEnumeration`. */
 const DEFAULT_POLL_MS = 500;
@@ -206,6 +208,42 @@ export function createBenchCamera(options: BenchCameraOptions): BenchCamera {
       } catch {
         return null;
       }
+    },
+
+    async infoJson(): Promise<Record<string, unknown> | null> {
+      try {
+        const result = await runCli(process.execPath, [cliPath, 'info', '--json'], {
+          cwd: REPO_ROOT,
+          timeoutMs: INFO_TIMEOUT_MS,
+        });
+        if (result.code !== 0) return null;
+        const parsed: unknown = JSON.parse(result.stdout);
+        return isRecord(parsed) ? parsed : null;
+      } catch {
+        return null;
+      }
+    },
+
+    async slotFlash(bank, file, options): Promise<SlotFlashRun> {
+      const args = [cliPath, 'slots', 'flash', bank, file, '--yes', '--json'];
+      if (options.acknowledgeRisk) args.push('--acknowledge-risk');
+      if (options.running16Hz) args.push('--running-16hz');
+      if (dry) {
+        log(`[dry-run] would run: seek-fw slots flash ${bank} ${path.basename(file)} ${args.slice(5).join(' ')}`);
+        return { code: 0, result: null, stdout: '', stderr: '' };
+      }
+      const result = await runCli(process.execPath, args, {
+        cwd: REPO_ROOT,
+        timeoutMs: SLOT_FLASH_TIMEOUT_MS,
+      });
+      let document: Record<string, unknown> | null = null;
+      try {
+        const parsed: unknown = JSON.parse(result.stdout);
+        document = isRecord(parsed) ? parsed : null;
+      } catch {
+        document = null;
+      }
+      return { code: result.code, result: document, stdout: result.stdout, stderr: result.stderr };
     },
   };
 }

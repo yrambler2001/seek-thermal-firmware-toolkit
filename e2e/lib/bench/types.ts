@@ -113,6 +113,31 @@ export interface BenchCamera {
   powerCycle(offMs?: number): Promise<void>;
   /** What `seek-fw info --json` says is running, or null when it cannot be read. */
   runningInfo(): Promise<RunningInfo | null>;
+  /**
+   * The whole `seek-fw info --json` document, or null. On 1.3.0.8 it carries `running`: the camera's
+   * own per-bank answers (selectors 6, 7, 8) and the build they decide (packages/cli info.ts).
+   */
+  infoJson(): Promise<Record<string, unknown> | null>;
+  /**
+   * `seek-fw slots flash <bank> <file> --yes [--acknowledge-risk] [--running-16hz] --json`: the CLI's
+   * own write, through the core path the page uses. Nothing is written in a dry run.
+   */
+  slotFlash(bank: 'a' | 'b' | 'r', file: string, options: SlotFlashOptions): Promise<SlotFlashRun>;
+}
+
+/** The flags a bench slot write passes to the CLI. */
+export interface SlotFlashOptions {
+  readonly acknowledgeRisk: boolean;
+  /** `--running-16hz`: the person says the camera runs the 16 Hz FF build (used only when the answers cannot say). */
+  readonly running16Hz: boolean;
+}
+
+/** One CLI slot write: its exit code, its one JSON document (null when none), and its streams. */
+export interface SlotFlashRun {
+  readonly code: number;
+  readonly result: Record<string, unknown> | null;
+  readonly stdout: string;
+  readonly stderr: string;
 }
 
 export interface RunningInfo {

@@ -42,15 +42,25 @@ import {
   type JlinkBench,
   wordAt,
 } from './lib/bench/index.js';
-import { createFakeRig, fakeFfSubjects, fakeSubjects } from './lib/bench/spec-fakes.js';
+import { createFakeRig, fakeSubjects } from './lib/bench/spec-fakes.js';
 import {
   describeDifference,
-  ffImageLength,
   isFF1308Subject,
   predictedFFStored,
 } from './lib/bench/ff-form.js';
 import { decryptedDumpNamePattern, rawDumpNamePattern } from './lib/slots-page.js';
-import { buildFFPayload } from '../packages/core/src/slots/write-image.js';
+import { KEY_PAIRS, locateFFKeys } from '../packages/core/src/preservation/patch.js';
+import { ffBankVerdict, plainBankVerdict } from '../packages/core/src/slots/running.js';
+import {
+  FF_BANK_ADDRESS,
+  ORIGINAL_SHA256,
+  ffVendorFilesFromEnv,
+  runFfVendor,
+  type FfVendorBench,
+  type FfVendorFiles,
+} from './lib/bench/ff-vendor-run.js';
+import { predictedFFVendorPayload, vendorGateSum } from './lib/bench/ff-form.js';
+import type { BenchCamera, SlotFlashRun } from './lib/bench/types.js';
 import {
   ADJUST_OFFSET,
   ERASED_FOR_BOOT,
@@ -1455,36 +1465,31 @@ describe('the slots page names its dumps (empty banks included, TESTING 42.8)', 
   });
 });
 
-describe('the 1.3.0.8 FF build: its subject, its prediction, its differences', () => {
+describe('the 1.3.0.8 FF build: its subject, its predictions, its differences', () => {
   it('is the FF build of 1.3.0.8, not the 8 Hz build or another FF version', () => {
     expect(isFF1308Subject({ version: '1.3.0.8', variant: 'ff' })).toBe(true);
     expect(isFF1308Subject({ version: '1.3.0.8', variant: 'std' })).toBe(false);
     expect(isFF1308Subject({ version: '1.3.0.0', variant: 'ff' })).toBe(false);
   });
 
-  it('predicts the stored bank the way the core builds it: the image, length stamped, adjust word solved', () => {
-    const dir = mkdtempSync(path.join(tmpdir(), 'seek-ff-form-'));
-    try {
-      const [subject] = fakeFfSubjects(dir);
-      if (subject === undefined) throw new Error('no FF fixture');
-      const flash = new Uint8Array(readFileSync(subject.file));
-      const bank = flash.subarray(0x14070000 - BENCH_FLASH_BASE, 0x14080000 - BENCH_FLASH_BASE);
-      const length = ffImageLength(bank);
-      expect(length).toBe(0xc000);
-      const image = bank.slice(0, length ?? 0);
-      const predicted = predictedFFStored(image);
-      expect(predicted.length).toBe(0x10000);
-      /* The core's own builder, on the same image (the test imports the module; the package does not export it). */
-      const built = buildFFPayload(image);
-      expect(predicted.subarray(0, built.stamped.length)).toEqual(built.stamped);
-      expect(predicted.subarray(built.stamped.length).every((byte) => byte === 0xff)).toBe(true);
-      /* The camera changes the adjust word and nothing else of the image. */
-      const changed: number[] = [];
-      for (let at = 0; at < image.length; at++) if (predicted[at] !== image[at]) changed.push(at);
-      expect(changed.every((at) => at >= ADJUST_OFFSET && at < ADJUST_OFFSET + 4)).toBe(true);
-    } finally {
-      rmSync(dir, { recursive: true, force: true });
+  it('predicts the stored bank as the image XOR Key B, header verbatim, and the payload as the image XOR Key A', () => {
+    const image = ffTestImage(0xc000, 5);
+    const stored = predictedFFStored(image);
+    const payload = predictedFFVendorPayload(image);
+    expect(stored.length).toBe(0x10000);
+    expect(payload.length).toBe(0x10000);
+    expect(stored.subarray(image.length).every((byte) => byte === 0xff)).toBe(true);
+    /* The header window is verbatim in both; everything else is XORed with its own key block. */
+    for (let at = 0; at < image.length; at++) {
+      const inWindow = at >= 0x200 && at <= 0x23f;
+      if (inWindow) {
+        expect(stored[at]).toBe(image[at]);
+        expect(payload[at]).toBe(image[at]);
+      }
     }
+    expect(stored.subarray(0x240, image.length)).not.toEqual(image.subarray(0x240, image.length));
+    /* The app's gate on the payload is sum(payload XOR Key A) == 0xFFFF for an image that sums to 0xFFFF. */
+    expect(vendorGateSum(image)).toBe(0xffff);
   });
 
   it('describes a difference by its count and first byte, and says when two byte arrays are identical', () => {
@@ -1497,75 +1502,271 @@ describe('the 1.3.0.8 FF build: its subject, its prediction, its differences', (
   });
 });
 
-describe('the FF path, on the fake rig', () => {
-  let dir = '';
-  beforeAll(() => {
-    dir = mkdtempSync(path.join(tmpdir(), 'seek-ff-flow-test-'));
-  });
-  afterAll(() => {
-    rmSync(dir, { recursive: true, force: true });
-  });
-
-  it('refuses the FF image at A and B with nothing sent, writes R as predicted, and boots the patched R', async () => {
-    const subjects = fakeFfSubjects(path.join(dir, 'happy'));
-    const rig = createFakeRig({ subjects, failure: null });
-    const result = await runSubject(rig, subjectAt(subjects, 0), () => undefined, false);
-    expect(result.failures).toEqual([]);
-    expect(result.flashVerified).toBe(true);
-    expect(result.slotWrites.map((write) => [write.bank, write.state])).toEqual([
-      ['b', 'refused'],
-      ['a', 'refused'],
-      ['r', 'passed'],
+describe('the FF vendor-form run, on a fake J-Link and camera', () => {
+  it('writes A, B and R with the vendor form, each read back as predicted, then restores the original', async () => {
+    const fake = fakeVendorBench({});
+    const report = await runFfVendor(fake.bench, fake.files);
+    expect(report.failures).toEqual([]);
+    expect(report.restoreOk).toBe(true);
+    expect(report.restored).toBe(true);
+    expect(report.platformOk).toBe(true);
+    expect(report.writes.map((write) => [write.bank, write.matchesPrediction])).toEqual([
+      ['a', true],
+      ['b', true],
+      ['r', true],
     ]);
-    expect(result.bootProof).toBe('passed');
-    /* The flashed dump boots A; the proof sets cfg[0]=2, boots R, and puts cfg[0] back to 0. */
-    expect(result.notes.join('\n')).toMatch(/boot config: cfg\[0\]=0 \(slot A\)/);
-    expect(result.notes.join('\n')).toMatch(/cfg\[0\] set to 2 \(recovery bank R\)/);
-    expect(result.notes.join('\n')).toMatch(
-      /FF app after the patched R and a reset: .*BUILD:BBBBBB/,
-    );
-    expect(result.notes.join('\n')).toMatch(/cfg\[0\] restored to 0 \(slot A\)/);
-    expect(await rig.jlink.readFlash(0x14010000, 4)).toEqual(new Uint8Array([0, 0, 0, 0]));
+    expect(report.answersAfterWrites?.camera).toEqual({ a: 1, b: 1, r: 1 });
+    expect(report.answersAfterWrites?.build).toBe('ff-1308');
+    expect(report.restored).toBe(true);
+    expect(fake.flash).toEqual(fake.original);
   });
 
-  it('fails the R write when the camera keeps the image as sent instead of the predicted form', async () => {
-    const subjects = fakeFfSubjects(path.join(dir, 'stored'));
-    const rig = createFakeRig({ subjects, failure: null, ffFault: 'stored' });
-    const result = await runSubject(rig, subjectAt(subjects, 0), () => undefined, false);
-    expect(result.slotWrites.find((write) => write.bank === 'r')?.state).toBe('failed');
-    expect(result.failures.join(' ')).toMatch(/not the predicted stored form/);
-    expect(result.bootProof).toBe('not-run');
+  it('reads the 8 Hz platform as A 1, B 0, R 1 (the 8 Hz build), and the FF-in-R platform as all 0 and not decided', async () => {
+    const fake = fakeVendorBench({});
+    const report = await runFfVendor(fake.bench, fake.files);
+    expect(report.answers8Hz?.camera).toEqual({ a: 1, b: 0, r: 1 });
+    expect(report.answers8Hz?.build).toBe('plain');
+    expect(report.answersFfInR?.camera).toEqual({ a: 0, b: 0, r: 0 });
+    expect(report.answersFfInR?.build).toBeNull();
+    expect(report.answersFfInR?.why).toMatch(/tell the builds apart/);
   });
 
-  it('fails the run when the page takes the FF image at a bank it must refuse', async () => {
-    const subjects = fakeFfSubjects(path.join(dir, 'accepted'));
-    const rig = createFakeRig({ subjects, failure: null, ffFault: 'accepted' });
-    const result = await runSubject(rig, subjectAt(subjects, 0), () => undefined, false);
-    expect(result.slotWrites.find((write) => write.bank === 'b')?.state).toBe('failed');
-    expect(result.slotWrites.find((write) => write.bank === 'a')?.state).toBe('failed');
-    expect(result.failures.join(' ')).toMatch(/refuse B: fake: the picker took the FF image/);
+  it('a write the camera stores as sent is a failed check, not a boot claim, and the run still restores', async () => {
+    const fake = fakeVendorBench({ storeAsSentAt: 'b' });
+    const report = await runFfVendor(fake.bench, fake.files);
+    const write = report.writes.find((w) => w.bank === 'b');
+    expect(write?.matchesPrediction).toBe(false);
+    expect(report.failures.join(' ')).toMatch(/write B: the J-Link read .* is not the prediction/);
+    expect(report.restored).toBe(true);
+    expect(fake.flash).toEqual(fake.original);
   });
 
-  it('restores cfg[0] to slot A even when the boot proof fails (the camera runs the wrong string)', async () => {
-    const subjects = fakeFfSubjects(path.join(dir, 'boot-fault'));
-    const rig = createFakeRig({ subjects, failure: { subject: 0, step: 'boot' } });
-    const result = await runSubject(rig, subjectAt(subjects, 0), () => undefined, false);
-    expect(result.bootProof).toBe('failed');
-    expect(result.failures.join(' ')).toMatch(/the camera runs ".*BROKE.*", not the patched/);
-    expect(result.notes.join('\n')).toMatch(/cfg\[0\] restored to 0 \(slot A\)/);
-    expect(await rig.jlink.readFlash(0x14010000, 4)).toEqual(new Uint8Array([0, 0, 0, 0]));
+  it('a restore point that is not the original refuses the run before anything is written', async () => {
+    const fake = fakeVendorBench({});
+    const wrong = { ...fake.files, restoreSha256: '0'.repeat(64) };
+    await expect(runFfVendor(fake.bench, wrong)).rejects.toThrow(/restore file/);
+    expect(fake.calls.filter((call) => call.startsWith('flashFull') || call.startsWith('writeBank'))).toEqual([]);
   });
 
-  it('a set-boot to a slot that is not A, B or R is refused before anything is written', async () => {
-    const subjects = fakeFfSubjects(path.join(dir, 'bad-slot'));
-    const rig = createFakeRig({ subjects, failure: null });
-    await expect(rig.jlink.setBootSlot(3 as never, subjects[0]?.file ?? '')).rejects.toThrow(
-      /cfg\[0\] 3/,
-    );
-    /* Nothing was flashed on this rig: the boot-config word is still blank, and stays so. */
-    expect(await rig.jlink.readFlash(0x14010000, 4)).toEqual(new Uint8Array([255, 255, 255, 255]));
+  it('a failure in the middle still puts the original flash back', async () => {
+    const fake = fakeVendorBench({ throwAt: 'b' });
+    await expect(runFfVendor(fake.bench, fake.files)).rejects.toThrow(/CLI fault at B/);
+    expect(fake.flash).toEqual(fake.original);
+  });
+
+  it('names the missing environment variables, and pads the plain image to one bank', () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'seek-ff-env-'));
+    try {
+      const missing = ffVendorFilesFromEnv({}, dir);
+      expect(typeof missing).toBe('string');
+      expect(missing as string).toMatch(/SEEK_BENCH_FF_RESTORE, SEEK_BENCH_FF_PLATFORM, SEEK_BENCH_FF_PLAIN/);
+      const image = ffTestImage(0xc000, 9);
+      const plainFile = path.join(dir, 'plain.bin');
+      writeFileSync(plainFile, image);
+      const files = ffVendorFilesFromEnv(
+        { SEEK_BENCH_FF_RESTORE: plainFile, SEEK_BENCH_FF_PLATFORM: plainFile, SEEK_BENCH_FF_PLAIN: plainFile },
+        dir,
+      );
+      if (typeof files === 'string') throw new Error(files);
+      expect(files.restoreSha256).toBe(ORIGINAL_SHA256);
+      expect(readFileSync(files.plainFfBankFile).length).toBe(0x10000);
+      expect(readFileSync(files.plainFfBankFile).subarray(0xc000).every((byte) => byte === 0xff)).toBe(true);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('the address of each bank is the 2014 chain’s own (A 0x14050000, B 0x14060000, R 0x14070000)', () => {
+    expect(FF_BANK_ADDRESS).toEqual({ a: 0x14050000, b: 0x14060000, r: 0x14070000 });
   });
 });
+
+/** A synthetic 1.3.0.8 FF image: magic, length, the key pair once each, word 142 solved to a plain sum of 0xFFFF. */
+function ffTestImage(length: number, seed: number): Uint8Array {
+  const out = new Uint8Array(length);
+  let s = seed >>> 0 || 1;
+  for (let i = 0; i < length; i++) {
+    s ^= s << 13;
+    s >>>= 0;
+    s ^= s >>> 17;
+    s ^= s << 5;
+    s >>>= 0;
+    out[i] = s & 0xff;
+  }
+  const view = new DataView(out.buffer);
+  view.setUint32(0, 0x10001000, true);
+  view.setUint32(4, 0x10000101, true);
+  view.setUint32(0x200, 0xa1b2c3d4, true);
+  view.setUint32(0x204, length, true);
+  out.set(Buffer.from(KEY_PAIRS.ff1308.block0, 'hex'), 0x4000);
+  out.set(Buffer.from(KEY_PAIRS.ff1308.block1, 'hex'), 0x5000);
+  view.setUint32(0x238, 0, true);
+  let sum = 0;
+  for (let at = 0; at < length; at += 4) sum = (sum + view.getUint32(at, true)) >>> 0;
+  view.setUint32(0x238, (0xffff - sum) >>> 0, true);
+  return out;
+}
+
+/**
+ * A J-Link and a camera with the same checks the apps run. The flash is a 4 MiB array; the camera's
+ * answers come from the banks through the core's own verdicts; a power cycle boots R, and the build
+ * is the FF app when R holds the FF image, else the 8 Hz build. `storeAsSentAt` makes one bank keep the
+ * payload as sent; `throwAt` makes the CLI write to one bank throw.
+ */
+function fakeVendorBench(options: { storeAsSentAt?: 'a' | 'b' | 'r'; throwAt?: 'a' | 'b' | 'r' }): {
+  bench: FfVendorBench;
+  files: FfVendorFiles;
+  flash: Uint8Array;
+  original: Uint8Array;
+  calls: string[];
+} {
+  const dir = mkdtempSync(path.join(tmpdir(), 'seek-ff-fake-'));
+  const base = 0x14000000;
+  const size = 0x400000;
+  const original = new Uint8Array(size).fill(0xff);
+  /* The original: A holds an 8 Hz plain image, R the same, B is erased (the 1.3.0.8 platform's own shape). */
+  const plainEight = ffTestImage(0xc000, 21);
+  plainEight.set(new Uint8Array(0x10).fill(0), 0x4000);
+  plainEight.set(new Uint8Array(0x10).fill(0), 0x5000);
+  const view = new DataView(plainEight.buffer);
+  view.setUint32(0x238, 0, true);
+  let eightSum = 0;
+  for (let at = 0; at < 0xc000; at += 4) eightSum = (eightSum + view.getUint32(at, true)) >>> 0;
+  view.setUint32(0x238, (0 - eightSum) >>> 0, true);
+  original.set(plainEight, 0x50000);
+  original.set(plainEight, 0x70000);
+  const restoreFile = path.join(dir, 'restore.bin');
+  writeFileSync(restoreFile, original);
+  const platform = original.slice();
+  platform[0x100] = 0x5a;
+  const platformFile = path.join(dir, 'platform.bin');
+  writeFileSync(platformFile, platform);
+  const plainFf = ffTestImage(0xc000, 31);
+  const plainFfFile = path.join(dir, 'ff-plain.bin');
+  writeFileSync(plainFfFile, plainFf);
+  const plainFfBankFile = path.join(dir, 'ff-plain-bank.bin');
+  const padded = new Uint8Array(0x10000).fill(0xff);
+  padded.set(plainFf, 0);
+  writeFileSync(plainFfBankFile, padded);
+
+  const flash = new Uint8Array(size).fill(0xff);
+  flash.set(original);
+  const calls: string[] = [];
+  let on = true;
+  let build: 'plain' | 'ff' = 'plain';
+  /* The restore image is the 1.3.0.0 original; the platform and anything else is the 1.3.0.8 build. */
+  let version = '1.3.0.8';
+  const bankOf = (letter: 'a' | 'b' | 'r'): Uint8Array => {
+    const at = FF_BANK_ADDRESS[letter] - base;
+    return flash.subarray(at, at + 0x10000);
+  };
+  const answers = (which: 'plain' | 'ff'): (number | null)[] =>
+    (['a', 'b', 'r'] as const).map((letter) =>
+      which === 'plain' ? plainBankVerdict(bankOf(letter)) : ffBankVerdict(bankOf(letter)),
+    );
+  const bootBuild = (): 'plain' | 'ff' => {
+    const r = bankOf('r');
+    return locateFFKeys(r.subarray(0, 0xc000)) !== null ? 'ff' : 'plain';
+  };
+
+  const jlink: JlinkBench = {
+    flashFull(file: string): Promise<void> {
+      calls.push('flashFull');
+      flash.set(readFileSync(file));
+      version = file === restoreFile ? '1.3.0.0' : '1.3.0.8';
+      return Promise.resolve();
+    },
+    readFlash(address: number, length: number): Promise<Uint8Array> {
+      calls.push('readFlash');
+      const at = address - base;
+      return Promise.resolve(flash.slice(at, at + length));
+    },
+    verifyFull(sha: string): Promise<void> {
+      calls.push('verifyFull');
+      if (sha256(flash) !== sha) return Promise.reject(new Error('verify: the flash is not the file'));
+      return Promise.resolve();
+    },
+    eraseRange(address: number, length: number): Promise<void> {
+      calls.push('eraseRange');
+      const at = address - base;
+      flash.fill(0xff, at, at + length);
+      return Promise.resolve();
+    },
+    writeBank(address: number, file: string): Promise<void> {
+      calls.push('writeBank');
+      const at = address - base;
+      flash.set(readFileSync(file).subarray(0, 0x10000), at);
+      return Promise.resolve();
+    },
+    resetCpu: () => Promise.resolve(),
+    setBootSlot: () => Promise.resolve(),
+  } as unknown as JlinkBench;
+
+  const camera: BenchCamera = {
+    present: () => on,
+    waitForEnumeration: () => Promise.resolve(on ? 1 : null),
+    waitForReboot: () => Promise.resolve(on ? 1 : null),
+    powerCycle(): Promise<void> {
+      calls.push('powerCycle');
+      build = bootBuild();
+      on = true;
+      return Promise.resolve();
+    },
+    runningInfo: () => Promise.resolve(null),
+    infoJson(): Promise<Record<string, unknown> | null> {
+      calls.push('infoJson');
+      if (!on) return Promise.resolve(null);
+      const plain = answers('plain');
+      const ff = answers('ff');
+      const camera = answers(build);
+      const same = (a: (number | null)[], b: (number | null)[]): boolean => a.every((v, i) => v === b[i]);
+      const decided =
+        same(camera, plain) && !same(camera, ff) ? 'plain' : same(camera, ff) && !same(camera, plain) ? 'ff-1308' : null;
+      return Promise.resolve({
+        firmware: { version, build: build === 'ff' ? 'Jan 6 2017 (FF)' : 'Jan 6 2017' },
+        running: {
+          build: decided,
+          why: decided === null ? 'the banks do not tell the builds apart' : `the camera answers ${camera.join(', ')}`,
+          camera: { a: camera[0], b: camera[1], r: camera[2] },
+          predicted: { plain, ff },
+        },
+      });
+    },
+    slotFlash(bank: 'a' | 'b' | 'r', file: string): Promise<SlotFlashRun> {
+      calls.push(`slotFlash ${bank}`);
+      if (options.throwAt === bank) return Promise.reject(new Error(`CLI fault at ${bank.toUpperCase()}`));
+      if (build !== 'ff') return Promise.resolve({ code: 1, result: { written: false }, stdout: '', stderr: 'refused' });
+      const image = new Uint8Array(readFileSync(file));
+      const stored = options.storeAsSentAt === bank ? new Uint8Array(0x10000).fill(0xff) : predictedFFStored(image);
+      if (options.storeAsSentAt === bank) stored.set(image, 0);
+      flash.set(stored, FF_BANK_ADDRESS[bank] - base);
+      return Promise.resolve({
+        code: 0,
+        result: { written: true, verified: true, commitStatus: 0 },
+        stdout: '',
+        stderr: '',
+      });
+    },
+  } as unknown as BenchCamera;
+
+  const files: FfVendorFiles = {
+    restoreFile,
+    restoreSha256: sha256(original),
+    platformFile,
+    platformSha256: sha256(platform),
+    plainFfFile,
+    plainFfSha256: sha256(plainFf),
+    plainFfBankFile,
+    vendorFile: null,
+  };
+  return {
+    bench: { jlink, camera, log: () => undefined },
+    files,
+    flash,
+    original,
+    calls,
+  };
+}
 
 describe('the probes, on the fake rig (SEEK_BENCH_PROBE)', () => {
   let dir = '';

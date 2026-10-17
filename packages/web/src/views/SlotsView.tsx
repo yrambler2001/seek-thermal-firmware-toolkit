@@ -215,6 +215,21 @@ export function SlotsView({ slots, connected, busy }: SlotsViewProps): ReactElem
           <>
             <KeyValue rows={summary} />
             <SlotWriteKeys verdict={writeKeysVerdictOf(report)} />
+            {report.state.version === '1.3.0.8' && (
+              <label className="flex items-start gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  className="mt-1"
+                  checked={slots.running16Hz}
+                  onChange={(event) => slots.setRunning16Hz(event.target.checked)}
+                />
+                <span>
+                  This camera runs the 16 Hz build. It is used only for the 1.3.0.8 FF image, and only
+                  when the camera&apos;s own answers cannot say which build it runs. If the choice is
+                  wrong, the camera refuses the image with 0x00070100 before it programs anything.
+                </span>
+              </label>
+            )}
             <SlotTable
               report={report}
               connected={connected}
@@ -268,7 +283,7 @@ export function SlotsView({ slots, connected, busy }: SlotsViewProps): ReactElem
             slotName={pendingView.entry.name}
             slotAddress={hexUp(pendingView.entry.address)}
             risk={writeRisk(pending.report, pending.key)}
-            twoStream={pending.plan.staging === 'two-stream'}
+            ffImage={pending.plan.staging === 'key-a-keystream'}
             namedByWord={onPlaintextChain(
               pending.report.state.profile,
               pending.report.state.version,
@@ -307,12 +322,14 @@ export function SlotsView({ slots, connected, busy }: SlotsViewProps): ReactElem
           </p>
           <p>
             A Compact on 1.3.0.8 can be the 8 Hz build or the 16 Hz FF build, and both report the
-            same version, so the page tells them apart by the image you pick. The 8 Hz image goes to
-            any bank. The FF image goes to the recovery bank R only: the camera boots it from
-            recovery, and the 2014 bootloader rejects its word sum at banks A and B, so those two
-            refuse it. It is staged folded through two keystreams, and the camera stores the plain
-            image with one header word (0x238) set so the running app accepts it. Writing R asks for
-            the extra confirmation like any recovery write. An <strong>empty</strong> bank (its
+            same version. The camera tells them apart itself: its own answer for each bank says
+            whether the application that answers takes it, and each build predicts its answers. The
+            8 Hz image goes to any bank. The FF image is staged the way the vendor app stages it (the
+            image XOR Key A), and the camera stores it under Key B, to any bank. The page refuses it
+            while the camera runs the 8 Hz build, and when the camera&apos;s answers cannot say which
+            build runs, it refuses unless you tick the 16 Hz box above. Whether the FF image boots is
+            UNTESTED: no genuine bootloader for this build is in the corpus. Writing R asks for the
+            extra confirmation like any recovery write. An <strong>empty</strong> bank (its
             header window reads as all 0xFF, as on many 2014 cameras&apos; bank B) is a state, not a
             fault. It dumps as the raw 64 KiB of 0xFF with nothing to decrypt, and it is written
             exactly like any other bank; the plan and the confirmation say that no firmware is

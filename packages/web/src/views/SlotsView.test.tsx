@@ -73,6 +73,8 @@ function panel(over: Partial<SlotsPanelApi> = {}): SlotsPanelApi {
     write: vi.fn((_acknowledged: boolean) => Promise.resolve()),
     discardPending: vi.fn(),
     cancel: vi.fn(),
+    running16Hz: false,
+    setRunning16Hz: vi.fn(),
     ...over,
   };
 }
@@ -225,7 +227,7 @@ describe('SlotsView', () => {
 
     const row = bankRows(container)[2] as HTMLElement;
     expect(row.textContent).toContain(
-      "recovery only — R boots when A and B are empty or fail the bootloader's checks; measured 42.10",
+      "recovery only — R runs when A and B hold nothing the bootloader takes (measured for the plain form, 42.10); the FF form's boot is untested (42.12)",
     );
     expect(row.textContent).not.toContain('skipped at boot');
     expect(row.textContent).not.toContain('not bootable');
@@ -304,12 +306,12 @@ describe('SlotsView', () => {
         source: null,
         plan: {
           ...preparedSlot('r', 'plain', new Uint8Array(0x6000)),
-          staging: 'two-stream',
-          storedForm: 'two-stream-fold',
+          staging: 'key-a-keystream',
+          storedForm: 'key-b-ciphertext',
           expectedStored: new Uint8Array(0x10000),
           warnings: [
-            'This is the 1.3.0.8 FF (16 Hz) image. It is staged as the image XOR two keystreams.',
-            'The 2014 bootloader rejects this build at banks A and B, so only the recovery bank R takes it.',
+            'This is the 1.3.0.8 FF (16 Hz) image. It is staged as the vendor app stages it (XOR Key A).',
+            'UNTESTED: no genuine bootloader for this build is in the corpus, so the boot is not measured.',
           ],
         },
         report,
@@ -319,23 +321,24 @@ describe('SlotsView', () => {
 
     expect(container.textContent).toContain('Prepared for recovery R at 0x14070000');
     expect(container.textContent).toContain(
-      "a decrypted image — folded through the FF build's two keystreams before it is staged",
+      'a decrypted 1.3.0.8 FF image — staged as the vendor app stages it (XOR Key A) before it is sent',
     );
     expect(container.textContent).toContain(
-      'the 1.3.0.8 FF image folded through two keystreams — the camera stores the plain image, not these bytes',
+      'the 1.3.0.8 FF image as the vendor app stages it (XOR Key A) — the camera stores it under Key B, not these bytes',
     );
     expect(container.textContent).toContain(
-      '65,536 B predicted — the plain image the payload folds to, not the payload itself',
+      '65,536 B predicted — the image XOR Key B, not the payload itself',
     );
-    expect(container.textContent).toContain('only the recovery bank R takes it');
+    expect(container.textContent).toContain('UNTESTED: no genuine bootloader');
 
     act(() => {
       buttonByText(container, 'Write to recovery R…').click();
     });
     const node = dialog();
     expect(node).not.toBeNull();
-    expect(node?.textContent).toContain('This is the 1.3.0.8 FF (16 Hz) image.');
-    expect(node?.textContent).toContain('rejects its word sum at banks A and B');
+    expect(node?.textContent).toContain('This is the 1.3.0.8 FF (16 Hz) image,');
+    expect(node?.textContent).toContain('the camera stores it under Key B');
+    expect(node?.textContent).toContain('UNTESTED');
     /* Recovery's own tick still stands in the way of the write. */
     expect(buttonByText(document.body, 'Yes — write to recovery R').disabled).toBe(true);
     act(() => {
@@ -380,13 +383,12 @@ describe('SlotsView', () => {
     const { container, unmount } = view(panel({ plan: realPlan, report }));
 
     const rows = bankRows(container);
-    expect(rows[0]?.textContent).toContain('FF (16 Hz) image is refused here');
-    expect(rows[1]?.textContent).toContain('FF (16 Hz) image is refused here');
-    expect(rows[2]?.textContent).toContain('Takes the 1.3.0.8 FF (16 Hz) image too');
-    expect(rows[2]?.textContent).toContain('the only bank that does');
+    expect(rows[0]?.textContent).toContain('goes here in its vendor form, stored under Key B');
+    expect(rows[1]?.textContent).toContain('goes here in its vendor form, stored under Key B');
+    expect(rows[2]?.textContent).toContain('goes here in its vendor form, stored under Key B');
     /* The plan's own note states the rule, and the page explains it once more in words. */
-    expect(container.textContent).toContain('writes the FF image to bank R only');
-    expect(container.textContent).toContain('The FF image goes to the recovery bank R only');
+    expect(container.textContent).toContain('UNTESTED');
+    expect(container.textContent).toContain('The camera tells them apart itself');
     /* The flash controls on every bank are on: the image decides, not the version. */
     expect(buttonByText(rows[2] as HTMLElement, 'Flash decrypted image…').disabled).toBe(false);
     unmount();

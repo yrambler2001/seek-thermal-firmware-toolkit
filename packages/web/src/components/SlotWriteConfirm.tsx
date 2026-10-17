@@ -29,10 +29,10 @@ export interface SlotWriteConfirmProps {
   readonly slotAddress: string;
   readonly risk: WriteRisk;
   /**
-   * The write is the 1.3.0.8 FF (16 Hz) image in its two-stream staged form. That image goes to
-   * the recovery bank only, so the dialog says why, in words, above the tick.
+   * The write is the 1.3.0.8 FF (16 Hz) image, staged as the vendor app stages it and stored under
+   * Key B. Whether the written bank boots is untested, so the dialog says so, above the tick.
    */
-  readonly twoStream?: boolean;
+  readonly ffImage?: boolean;
   /**
    * The booted bank is named by the camera's active-slot word, on the 2014 plaintext chain, where
    * recovery R can run instead (TESTING.md 42.10): the dialog says "named", not "boots now".
@@ -52,7 +52,7 @@ export function SlotWriteConfirm({
   slotName,
   slotAddress,
   risk,
-  twoStream = false,
+  ffImage = false,
   namedByWord = false,
   targetEmpty = false,
   keyLine,
@@ -122,12 +122,12 @@ export function SlotWriteConfirm({
               ? `The write still erases the 64 KiB block of the camera's flash at ${slotName} (already blank) and programs it.`
               : `This erases a 64 KiB block of the camera's flash and programs it at ${slotName}.`}
           </span>
-          {twoStream && (
+          {ffImage && (
             <span className="block" id="slot-write-confirm-ff">
-              This is the 1.3.0.8 FF (16 Hz) image. The camera boots it only from the recovery bank:
-              the 2014 bootloader rejects its word sum at banks A and B, so recovery is the one bank
-              that takes it. It is staged folded through two keystreams, and the camera stores the
-              plain image with one header word (0x238) set so the running app accepts it.
+              This is the 1.3.0.8 FF (16 Hz) image, staged the way the vendor app stages it: the image
+              XOR Key A, and the camera stores it under Key B. Whether the written bank boots is
+              UNTESTED: no genuine bootloader for this build is in the corpus, and on the earlier
+              0.9.0.0 bootloader the plain form booted from recovery R while this form will not.
             </span>
           )}
           {keyLine && <span className="block">{keyLine}</span>}
