@@ -62,6 +62,9 @@ function riskNote(risk: WriteRisk): string | null {
   }
   if (risk.booted) return 'Booted now: writing it asks for an extra confirmation.';
   if (risk.recovery) return 'Recovery bank: writing it asks for an extra confirmation.';
+  if (risk.bootUnnamed) {
+    return 'The camera does not name its booted bank: writing it asks for an extra confirmation.';
+  }
   return null;
 }
 

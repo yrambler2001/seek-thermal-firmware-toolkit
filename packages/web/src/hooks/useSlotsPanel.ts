@@ -108,21 +108,29 @@ export const CORE_SLOTS_BACKEND: SlotsBackend = {
 
 /**
  * Why writing a bank needs an explicit acknowledgement: it is the bank the
- * camera boots now, or it is recovery. Either one is a bank whose loss the
- * camera cannot route around, so the page asks for the extra tick.
+ * camera boots now, or it is recovery, or the camera does not say which bank it
+ * boots (then every bank counts as the booted one: the core refuses the write
+ * without the acknowledgement, `write.ts` ackNeeded). Each one is a bank whose
+ * loss the camera cannot route around, so the page asks for the extra tick.
  */
 export interface WriteRisk {
   readonly booted: boolean;
   readonly recovery: boolean;
+  /** The camera names no booted bank, so this bank is treated as the booted one. */
+  readonly bootUnnamed: boolean;
 }
 
 export function writeRisk(report: SlotsReport, key: SlotKey): WriteRisk {
   const view = report.slots.find((candidate) => candidate.entry.key === key);
-  return { booted: view?.active === true, recovery: key === 'r' };
+  return {
+    booted: view?.active === true,
+    recovery: key === 'r',
+    bootUnnamed: report.state.boot === null,
+  };
 }
 
 export function needsRiskAck(risk: WriteRisk): boolean {
-  return risk.booted || risk.recovery;
+  return risk.booted || risk.recovery || risk.bootUnnamed;
 }
 
 /** The three things a bank row can do. */

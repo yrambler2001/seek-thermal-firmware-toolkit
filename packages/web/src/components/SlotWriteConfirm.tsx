@@ -20,7 +20,7 @@ import {
   AlertDialogFooter,
   AlertDialogTitle,
 } from './ui/alert-dialog';
-import type { WriteRisk } from '@/hooks/useSlotsPanel';
+import { needsRiskAck, type WriteRisk } from '@/hooks/useSlotsPanel';
 
 export interface SlotWriteConfirmProps {
   readonly open: boolean;
@@ -46,7 +46,7 @@ export function SlotWriteConfirm({
    * close would report itself as a cancel too, and the caller would be told
    * both things happened. */
   const confirmed = useRef(false);
-  const needsAck = risk.booted || risk.recovery;
+  const needsAck = needsRiskAck(risk);
   /* Off until the tick is in, when the write needs one. */
   const confirmable = !needsAck || acknowledged;
 
@@ -85,6 +85,11 @@ export function SlotWriteConfirm({
             {`${slotName} is the recovery bank, the last-resort copy the bootloader falls back to. Writing it leaves the camera without that copy until it is restored.`}
           </p>
         )}
+        {!risk.booted && !risk.recovery && risk.bootUnnamed && (
+          <p className="rounded-md border border-destructive/40 bg-destructive/8 px-3 py-2 text-[0.85rem] font-medium text-destructive">
+            {`The camera does not say which bank it boots, so ${slotName} is treated as the bank it boots now. Writing it can replace the firmware the camera is running.`}
+          </p>
+        )}
 
         <AlertDialogDescription id="slot-write-confirm-what" className="space-y-2">
           <span className="block">
@@ -114,7 +119,9 @@ export function SlotWriteConfirm({
             <span>
               {risk.booted
                 ? 'I understand this is the bank the camera boots now, and that a bad image can leave the camera unbootable.'
-                : 'I understand this is the recovery bank, and that a bad image leaves the camera without a last-resort copy.'}
+                : risk.recovery
+                  ? 'I understand this is the recovery bank, and that a bad image leaves the camera without a last-resort copy.'
+                  : 'I understand the camera does not say which bank it boots, so this one is treated as the booted one, and that a bad image can leave the camera unbootable.'}
             </span>
           </label>
         )}

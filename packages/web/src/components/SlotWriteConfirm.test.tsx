@@ -24,7 +24,7 @@ function setup(overrides: Partial<Pick<SlotWriteConfirmProps, 'risk' | 'open'>> 
       fileName="fw_decrypted.bin"
       slotName="slot B"
       slotAddress="0x14060000"
-      risk={overrides.risk ?? { booted: false, recovery: false }}
+      risk={overrides.risk ?? { booted: false, recovery: false, bootUnnamed: false }}
       onConfirm={onConfirm}
       onCancel={onCancel}
     />,
@@ -98,8 +98,28 @@ describe('SlotWriteConfirm', () => {
     second.unmount();
   });
 
+  it('asks for the tick when the camera names no booted bank, and says why', () => {
+    const { onConfirm, unmount } = setup({
+      risk: { booted: false, recovery: false, bootUnnamed: true },
+    });
+    expect(checkbox()).not.toBeNull();
+    expect(dialog().textContent).toContain('does not say which bank it boots');
+    expect(buttonByText(document.body, 'Yes — write to slot B').disabled).toBe(true);
+
+    act(() => {
+      checkbox()?.click();
+    });
+    act(() => {
+      buttonByText(document.body, 'Yes — write to slot B').click();
+    });
+    expect(onConfirm).toHaveBeenCalledWith(true);
+    unmount();
+  });
+
   it('keeps the confirm off until the booted-bank checkbox is ticked', () => {
-    const { onConfirm, unmount } = setup({ risk: { booted: true, recovery: false } });
+    const { onConfirm, unmount } = setup({
+      risk: { booted: true, recovery: false, bootUnnamed: false },
+    });
     const confirm = buttonByText(document.body, 'Yes — write to slot B');
     expect(confirm.disabled).toBe(true);
     expect(dialog().textContent).toContain('slot B is the bank this camera boots now.');
@@ -117,7 +137,7 @@ describe('SlotWriteConfirm', () => {
   });
 
   it('asks the same tick for the recovery bank, with its own words', () => {
-    const { unmount } = setup({ risk: { booted: false, recovery: true } });
+    const { unmount } = setup({ risk: { booted: false, recovery: true, bootUnnamed: false } });
     expect(dialog().textContent).toContain('the last-resort copy the bootloader falls back to');
     expect(checkbox()).not.toBeNull();
     expect(buttonByText(document.body, 'Yes — write to slot B').disabled).toBe(true);
@@ -145,7 +165,7 @@ describe('SlotWriteConfirm', () => {
             fileName="fw_decrypted.bin"
             slotName="slot B"
             slotAddress="0x14060000"
-            risk={{ booted: true, recovery: false }}
+            risk={{ booted: true, recovery: false, bootUnnamed: false }}
             onConfirm={(acknowledged) => {
               onConfirm(acknowledged);
               setOpen(false);

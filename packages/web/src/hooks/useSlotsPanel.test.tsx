@@ -409,11 +409,23 @@ describe('useSlotsPanel: writing a bank', () => {
 describe('slot helpers', () => {
   it('derives the risk of a write from the active bank and from recovery', () => {
     const report = slotReport(base);
-    expect(writeRisk(report, 'a')).toEqual({ booted: true, recovery: false });
-    expect(writeRisk(report, 'b')).toEqual({ booted: false, recovery: false });
-    expect(writeRisk(report, 'r')).toEqual({ booted: false, recovery: true });
+    expect(writeRisk(report, 'a')).toEqual({ booted: true, recovery: false, bootUnnamed: false });
+    expect(writeRisk(report, 'b')).toEqual({ booted: false, recovery: false, bootUnnamed: false });
+    expect(writeRisk(report, 'r')).toEqual({ booted: false, recovery: true, bootUnnamed: false });
     expect(needsRiskAck(writeRisk(report, 'b'))).toBe(false);
     expect(needsRiskAck(writeRisk(report, 'a'))).toBe(true);
+  });
+
+  it('asks for the acknowledgement on every bank when the camera names no booted bank', () => {
+    /* The core refuses such a write without acknowledgeRisk (write.ts ackNeeded), so the
+     * page must offer the tick for each bank, not only the one it would call booted. */
+    const report = slotReport({ ...base, boot: null });
+    for (const key of ['a', 'b', 'r'] as const) {
+      const risk = writeRisk(report, key);
+      expect(risk.bootUnnamed).toBe(true);
+      expect(needsRiskAck(risk)).toBe(true);
+    }
+    expect(writeRisk(report, 'b')).toEqual({ booted: false, recovery: false, bootUnnamed: true });
   });
 
   it('names a dump by slot, version and a short hash, with the version made file-safe', () => {
