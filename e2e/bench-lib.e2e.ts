@@ -42,7 +42,14 @@ import {
   type JlinkBench,
   wordAt,
 } from './lib/bench/index.js';
-import { ADJUST_OFFSET, sameAsWritten } from './lib/bench/spec-flow.js';
+import { createFakeRig, fakeSubjects } from './lib/bench/spec-fakes.js';
+import {
+  ADJUST_OFFSET,
+  ERASED_FOR_BOOT,
+  fallbackSource,
+  runSubject,
+  sameAsWritten,
+} from './lib/bench/spec-flow.js';
 import type { WriteApproval } from './lib/supervised-write.js';
 
 const APPROVED: WriteApproval = { approved: true, dry: false, reason: 'test' };
@@ -1223,5 +1230,116 @@ describe('sameAsWritten: the page may rebalance only the adjust word', () => {
     expect(sameAsWritten(flipped(written, ADJUST_OFFSET + 4), written)).toBe(false);
     expect(sameAsWritten(flipped(written, ADJUST_OFFSET - 1), written)).toBe(false);
     expect(sameAsWritten(written.subarray(1), written)).toBe(false);
+  });
+});
+
+/** The fake subject at `index`; a missing one fails the test by name. */
+function subjectAt(subjects: readonly BenchSubject[], index: number): BenchSubject {
+  const subject = subjects.at(index);
+  if (subject === undefined) throw new Error(`no fake subject ${String(index)}`);
+  return subject;
+}
+
+describe('the per-bank boot tests (SEEK_BENCH_SLOT_BOOT=1), on the fake rig', () => {
+  let dir = '';
+  beforeAll(() => {
+    dir = mkdtempSync(path.join(tmpdir(), 'seek-slot-boot-test-'));
+  });
+  afterAll(() => {
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('writes each bank alone with its own marked build, and each boots alone', async () => {
+    const subjects = fakeSubjects(path.join(dir, 'full'));
+    const rig = createFakeRig({ subjects, failure: null });
+    const result = await runSubject(rig, subjectAt(subjects, 0), () => undefined, true);
+    expect(result.failures).toEqual([]);
+    expect(result.bootProof).toBe('passed');
+    expect(result.slotBoot.map((test) => [test.bank, test.state])).toEqual([
+      ['b', 'booted-alone'],
+      ['a', 'booted-alone'],
+      ['r', 'booted-alone'],
+    ]);
+    expect(result.slotBoot.map((test) => test.erased)).toEqual([['a'], ['b', 'r'], ['b', 'a']]);
+    expect(result.slotBoot[0]?.running).toContain('ZBZZZZ');
+    expect(result.slotBoot[1]?.running).toContain('ZAZZZZ');
+    expect(result.slotBoot[2]?.running).toContain('ZRZZZZ');
+  });
+
+  it('a blank bank B is written with the booted image (A) and then boots alone', async () => {
+    const subjects = fakeSubjects(path.join(dir, 'blank'), { blankB: true });
+    const rig = createFakeRig({ subjects, failure: null });
+    const result = await runSubject(rig, subjectAt(subjects, 1), () => undefined, true);
+    expect(result.failures).toEqual([]);
+    expect(result.slotWrites.map((write) => write.state)).toEqual(['passed', 'passed', 'passed']);
+    expect(result.slotWrites[0]?.notes.join(' ')).toMatch(/written with bank A's image/);
+    expect(result.slotBoot.map((test) => test.state)).toEqual([
+      'booted-alone',
+      'booted-alone',
+      'booted-alone',
+    ]);
+  });
+
+  it('without the flag, the run is the standard one: no per-bank tests, the boot proof runs', async () => {
+    const subjects = fakeSubjects(path.join(dir, 'standard'));
+    const rig = createFakeRig({ subjects, failure: null });
+    const result = await runSubject(rig, subjectAt(subjects, 0), () => undefined, false);
+    expect(result.slotBoot).toEqual([]);
+    expect(result.failures).toEqual([]);
+    expect(result.bootProof).toBe('passed');
+  });
+});
+
+describe('the blank-bank fallback source and the bank erase', () => {
+  const image = (name: string): { name: string; bytes: Uint8Array } => ({
+    name,
+    bytes: new Uint8Array([1]),
+  });
+
+  it('takes the booted bank first, then A, then R, then B, and never the target', () => {
+    const images = new Map<'a' | 'b' | 'r', ReturnType<typeof image> | null>([
+      ['a', image('a.bin')],
+      ['b', null],
+      ['r', image('r.bin')],
+    ]);
+    expect(fallbackSource(images, 'b', 'r')?.letter).toBe('r');
+    expect(fallbackSource(images, 'b', null)?.letter).toBe('a');
+    expect(fallbackSource(images, 'b', 'b')?.letter).toBe('a');
+    expect(fallbackSource(images, 'a', 'a')?.letter).toBe('r');
+    expect(fallbackSource(new Map(), 'b', 'a')).toBeNull();
+  });
+
+  it('erases B alone for A, and keeps R for B', () => {
+    expect(ERASED_FOR_BOOT.b).toEqual(['a']);
+    expect(ERASED_FOR_BOOT.a).toEqual(['b', 'r']);
+    expect(ERASED_FOR_BOOT.r).toEqual(['b', 'a']);
+  });
+
+  it('eraseRange runs the runner over one bank only, and refuses anything else', async () => {
+    const { exec, calls } = fakeExec(() => OK);
+    await bench(exec).eraseRange(0x14050000, 0x10000);
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toMatchObject({
+      command: 'node',
+      args: ['tools/jlink/jlink-runner.js', 'erase-spifi-range'],
+      cwd: TARGET_DIR,
+    });
+    expect(calls[0]?.env.ERASE_ADDR).toBe('0x14050000');
+    expect(calls[0]?.env.ERASE_LEN).toBe('0x10000');
+    await expect(bench(exec).eraseRange(0x14000000, 0x400000)).rejects.toThrow(/only one 64 KiB/);
+    await expect(bench(exec).eraseRange(0x14050100, 0x10000)).rejects.toThrow(/aligned/);
+    await expect(bench(exec).eraseRange(0x14000000, 0x10000)).resolves.toBeUndefined();
+    expect(calls).toHaveLength(2);
+  });
+
+  it('patchBuildString with a mark makes the last character that letter', () => {
+    const text = new TextEncoder().encode('xx Oct 21 2014 yy');
+    const bytes = new Uint8Array(40).fill(0xff);
+    bytes.set(text, 3);
+    const marked = patchBuildString(bytes, 'Oct 21 2014', 'B');
+    expect(marked?.to).toBe('Oct 21 201B');
+    /* 'Oct 21 2014' starts at 6 (after the 'xx ' the test puts before it), so its last character is at 16. */
+    expect(String.fromCharCode(marked?.patched[16] ?? 0)).toBe('B');
+    expect(patchBuildString(bytes, 'Oct 21 2014', '-')).toBeNull();
   });
 });

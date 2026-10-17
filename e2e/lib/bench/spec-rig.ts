@@ -83,7 +83,12 @@ export interface BenchRig {
   readonly kind: 'real' | 'fake';
   readonly jlink: JlinkBench;
   readonly camera: BenchCamera;
-  readonly patch: (image: Uint8Array, buildString: string) => PatchedBuildString | null;
+  /** Changes the build string in a copy of `image` (`mark`: the one character it becomes, see patchBuildString). */
+  readonly patch: (
+    image: Uint8Array,
+    buildString: string,
+    mark?: string,
+  ) => PatchedBuildString | null;
   openPage(): Promise<BenchPage>;
 }
 

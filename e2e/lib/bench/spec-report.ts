@@ -10,6 +10,7 @@ import path from 'node:path';
 
 import {
   subjectLabel,
+  type SlotBootResult,
   type SlotWriteResult,
   type StepState,
   type SubjectResult,
@@ -59,6 +60,44 @@ const STATE_WORD: Readonly<Record<StepState, string>> = {
 
 function writesCell(writes: readonly SlotWriteResult[]): string {
   return writes.map((write) => `${write.bank.toUpperCase()} ${STATE_WORD[write.state]}`).join(', ');
+}
+
+const SLOT_BOOT_WORD: Readonly<Record<SlotBootResult['state'], string>> = {
+  'booted-alone': 'yes',
+  'did-not-boot': 'no (no enumeration)',
+  'ran-other': 'no (ran another image)',
+  skipped: 'skipped',
+  failed: 'FAILED',
+  'not-run': 'not run',
+};
+
+/** One bank's boot-alone cell: the verdict, and what the camera reported running. */
+function slotBootCell(result: SlotBootResult | undefined): string {
+  if (result === undefined) return 'not run';
+  const verdict = SLOT_BOOT_WORD[result.state];
+  return result.running === null ? verdict : `${verdict}: "${result.running}"`;
+}
+
+/** The per-bank boot tests as a markdown table (empty when the run had none). */
+export function slotBootMarkdown(results: readonly SubjectResult[]): string[] {
+  const ran = results.filter((r) => r.slotBoot.length > 0);
+  if (ran.length === 0) return [];
+  const cell = (text: string): string => text.replace(/\|/g, '\\|').replace(/\n/g, ' ');
+  const rows = ran.map((r) => {
+    const bank = (letter: SlotBootResult['bank']): string =>
+      cell(slotBootCell(r.slotBoot.find((result) => result.bank === letter)));
+    return [r.label, bank('b'), bank('a'), bank('r')];
+  });
+  const header = ['Subject', 'B boots alone', 'A boots alone', 'R boots alone'];
+  return [
+    '',
+    '## Per-bank boot tests (SEEK_BENCH_SLOT_BOOT=1)',
+    '',
+    `| ${header.join(' | ')} |`,
+    `| ${header.map(() => '---').join(' | ')} |`,
+    ...rows.map((row) => `| ${row.join(' | ')} |`),
+    '',
+  ];
 }
 
 /** One stdout line per subject: the matrix's columns, in order. */
@@ -123,6 +162,7 @@ export function matrixMarkdown(results: readonly SubjectResult[], meta: RunMeta)
     table[0] ?? '',
     separator,
     ...table.slice(1),
+    ...slotBootMarkdown(results),
     ...left,
     '',
   ].join('\n');
