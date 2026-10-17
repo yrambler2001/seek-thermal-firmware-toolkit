@@ -324,6 +324,17 @@ describe.skipIf(!available)(
             ).toBe(true);
             expect(byKey.b?.erased, 'bank B is erased on the donor').toBe(true);
           });
+
+          /* An erased bank is a state of its own: the analysis calls it empty (not unread, not
+           * foreign), and its dump says so and decrypts nothing. */
+          it('names the erased bank B as empty in the analysis and in its dump; A and R are images', () => {
+            expect(run.contents).toEqual({ a: 'image', b: 'empty', r: 'image' });
+            const byKey = Object.fromEntries(run.dumps.map((d) => [d.key, d]));
+            expect(byKey.b?.empty, 'dumpSlot calls the erased bank empty').toBe(true);
+            expect(byKey.b?.plainLength, 'nothing is decrypted from it').toBeNull();
+            expect(byKey.a?.empty).toBe(false);
+            expect(byKey.r?.empty).toBe(false);
+          });
         } else if (!ffImage && subject.staging !== 'plain' && entry?.kind === 'image-only') {
           it('each bank holds the corpus image, keystream-stored and decrypted to it', () => {
             for (const d of run.dumps) {
@@ -337,6 +348,8 @@ describe.skipIf(!available)(
           it('the native dump holds an image in each bank that decrypts (B erased on the 2014 line)', () => {
             const byKey = Object.fromEntries(run.dumps.map((d) => [d.key, d]));
             if (subject.staging === 'plain') {
+              expect(run.contents?.b, 'the analysis calls bank B empty').toBe('empty');
+              expect(byKey.b?.empty, 'dumpSlot calls bank B empty').toBe(true);
               expect(byKey.b?.erased, 'bank B is erased').toBe(true);
               expect(byKey.a?.erased, 'bank A holds the image').toBe(false);
               expect(byKey.r?.erased, 'bank R holds the image').toBe(false);
