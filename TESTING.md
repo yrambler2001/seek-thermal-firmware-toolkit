@@ -6010,3 +6010,68 @@ was restored to exactly that, read-back verified.
 
 This is what the slots page's "bootable" column cannot say on its own: a bank that reads back
 correctly is not the same as an image the board runs. These rows are.
+
+## 42. The slots bench: every supported corpus dump, flashed whole, then both slots through the page (2026-10-17)
+
+`npm run e2e:slots:bench` (spec `e2e/slots-bench.e2e.ts`, library `e2e/lib/bench/`) walks the 28
+supported subjects of the by-camera dump tree (`SEEK_FULL_DUMPS_BY_CAMERA`; Compact images from 0.8.0.0
+up, plus the Pro, XR, Mosaic and Nano dumps, using the launchable copy where the primary does not
+launch). It needs a real bench and is never run in CI or by `e2e:all`. For each subject, in order:
+
+1. **Flash** the 4 MiB dump over SWD through the FW-V1 `jlink-runner`, prove it with a halted read-back
+   whose sha256 equals the dump's, and reset the CPU (a power cycle on switch channel 2 clears the
+   first failed halt; the reset counts only once the camera has left the bus and come back).
+2. **Electron** opens the slots page against the real camera over WebUSB, reads the banks, and checks
+   them byte for byte against the J-Link's read of the same flash.
+3. **Writes** each bank the capability plan allows through the page (the risk tick only where the page
+   asks for it), compares the page's decrypted read-back with the staged image, and re-reads the
+   flash over the J-Link.
+4. **Boot proof**: the camera-reported build string is patched (same length) in the decrypted image,
+   written into the banks, the camera is reset, and `seek-fw info` must show the patched string.
+
+Then it moves to the next dump. The bench is a Compact board (PIR206, original 1.3.0.0). The run was one
+full pass (86 min) and two reruns of the failing subjects after the fixes below.
+
+### 42.1 Matrix (final, after the fixes)
+
+23 of 28 subjects pass all four steps. "B skipped" means the dump has no image for bank B (the
+1.3.0.0-era layouts), which is recorded as skipped, not failed.
+
+| Group                                | Subjects                                                                                                                                                                                                                                                                          | Result |
+| ------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
+| Compact 2014 chain (A and R)         | 0.8.0.0, 0.9.0.2, 0.9.0.6, 0.9.0.7, 0.9.1.0, 0.10.0.0, 1.0.0.0, 1.2.0.0, 1.3.0.0, 1.3.0.8 std                                                                                                                                                                                     | pass   |
+| Compact 4.x (B, A, R)                | 4.8.1.9, 4.8.2.1                                                                                                                                                                                                                                                                  | pass   |
+| Compact Pro 2016 chain               | 1.0.3.0 std and FF, 1.0.3.2 std, FF and FF-FF                                                                                                                                                                                                                                     | pass   |
+| Compact Pro 4.x                      | 4.9.2.0, 4.18.2.0 FF                                                                                                                                                                                                                                                              | pass   |
+| XR, Mosaic, Nano                     | XR 4.8.2.1, Mosaic 2.27.1.33 FF, Nano 200 42.32.3.10, Nano 300 44.27.3.10                                                                                                                                                                                                         | pass   |
+| **Compact 1.3.0.8 FF**               | by design: the page refuses the 16 Hz FF image (it boots only from recovery and its staged form is the two-stream one the page does not produce); nothing is written                                                                                                              | fail   |
+| **Mosaic 10.9.1.31 std**             | by design: the running application does not carry this camera's Key A, so the bootloader would refuse the slot; nothing is written                                                                                                                                                | fail   |
+| **Compact Pro 4.9.1.15 std**         | the tree's dump holds a 1.0.3.2 image in bank B, bank B's decrypted file has no key pair in its name, so the page refuses to write it back; the page and the J-Link agree                                                                                                         | fail   |
+| **Compact 4.8.1.7 std, 4.16.1.7 FF** | the flash is written and verifies (runner: "Verify successful"), the camera enumerates and stays up for 90 s, but every halted SWD read fails ("Could not read memory", even 4 KiB at 0x14000000), so the read-back cannot prove the flash. The firmware-side cause was not found | fail   |
+
+The three "by design" rows are the page's refusals working; they are scored as failures only because
+the suite expects a write. The two 4.x rows are a bench limit, not a slots result: no slot step was
+reached.
+
+### 42.2 What the bench found and fixed
+
+- **A page bug** (`packages/web`): when the camera does not name its booted bank (0.8.0.0 and the
+  Compact Pro 1.0.3.x images), the core requires the risk acknowledgement on every bank, but the page
+  offered the tick only on the bank the camera named, so those writes were refused with no way to
+  confirm. The page now offers the tick on every bank in that case. Unit tests added.
+- **Bench bugs**: the reset raced the camera's still being on the bus (the page was read from a camera
+  that had not rebooted); the power cycle returned before USB was back (the J-Link then could not
+  connect); the chooser name check was PIR206-only (failed XR and Nano 200 before any write); the
+  read-back compare ignored the page's adjust-word stamp on a patched image; an empty bank B was
+  recorded as a failure and skipped the boot proof. The J-Link sessions now run with `-NoGui 1` so no
+  flash-download window opens.
+- **Operational notes**: the first halt after every flash fails twice (about 20 s each) and a channel-2
+  power cycle clears it. Killing the vitest run leaves its Electron window holding the camera lock; the
+  next run needs it killed. Every passing subject leaves patched build strings in all three banks, so
+  the run's end state is not byte-original.
+
+### 42.3 The camera afterwards
+
+The camera was restored to its original (Compact 1.3.0.0, flash sha256 `40447c7e…`) with the runner's
+`erase-spifi-range` and `flash-factory-4m`, and a halted read-back of the whole part matched, before and
+after the run.
