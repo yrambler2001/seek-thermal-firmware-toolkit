@@ -160,6 +160,18 @@ export const FPS_PATCHES: readonly FpsPatch[] = FPS_PATCH_TABLE.map((source) => 
   gate: gateOf(source),
 }));
 
+/**
+ * The rate an entry was MEASURED to publish at on the bench, where that differs from the table's target
+ * (TESTING.md 42.20, mean of three runs of the frame counter, whole fps; the byte edits are the table's and
+ * are not changed). The offer names this rate: the page's button, its note and its confirmation, and the CLI's
+ * plan, all read the plan's toHz. 1.3.0.8's 32 Hz entry publishes 26 fps; its 16 Hz entry 14 fps (not offered:
+ * the offer takes the highest target of an image's entries). Entries not listed run at their target.
+ */
+export const FPS_MEASURED_HZ: ReadonlyMap<string, number> = new Map([
+  ['compact_32k-1.3.0.8-to32', 26],
+  ['compact_32k-1.3.0.8-to16', 14],
+]);
+
 /** The corpus builds that already run at a target rate, by the SHA-256 of the decrypted image. */
 export const FPS_KNOWN_BUILDS: ReadonlyMap<string, { readonly name: string; readonly hz: number }> =
   new Map(Object.entries(FPS_KNOWN_RATE).map(([sha, value]) => [sha, value] as const));
@@ -326,6 +338,7 @@ export type FpsPlan =
       readonly status: 'offer';
       readonly patch: FpsPatch;
       readonly fromHz: number;
+      /** The rate the page names: the bench-measured rate (FPS_MEASURED_HZ) where one is recorded, else the target. */
       readonly toHz: number;
       /** The bytes the patch changes (the edit bytes that differ). */
       readonly sites: readonly FpsSite[];
@@ -384,7 +397,7 @@ export function planFpsPatch(image: Uint8Array, cameraVersion: string | null): F
       status: 'offer',
       patch: entry,
       fromHz: entry.fromHz,
-      toHz: entry.targetHz,
+      toHz: FPS_MEASURED_HZ.get(entry.id) ?? entry.targetHz,
       sites,
       sumWord: { offset: FPS_ADJUST_OFFSET, before: adjust },
     };
@@ -392,10 +405,11 @@ export function planFpsPatch(image: Uint8Array, cameraVersion: string | null): F
   if (identity.patchedEntries.length > 0) {
     const entry = identity.patchedEntries[0];
     if (entry === undefined) throw new Error('unreachable: patched entries are not empty');
+    const hz = FPS_MEASURED_HZ.get(entry.id) ?? entry.targetHz;
     return {
       status: 'patched',
-      reason: `already patched: this image runs at ${String(entry.targetHz)} Hz (${entry.id}), so no patch is offered`,
-      hz: entry.targetHz,
+      reason: `already patched: this image runs at ${String(hz)} Hz (${entry.id}), so no patch is offered`,
+      hz,
     };
   }
   if (identity.known !== null) {

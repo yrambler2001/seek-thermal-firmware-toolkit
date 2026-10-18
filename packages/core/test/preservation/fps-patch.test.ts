@@ -13,6 +13,8 @@ import { SeekError } from '../../src/errors.js';
 import { IMAGE_MAGIC } from '../../src/image/header.js';
 import { wordSum32 } from '../../src/image/bank.js';
 import {
+  FPS_MEASURED_HZ,
+  FPS_PATCHES,
   applyFpsPatch,
   fpsExpectedChanges,
   fpsImageLength,
@@ -173,5 +175,22 @@ describe('applying a patch: the edits, the acceptance sum, the output', () => {
     expect(() => verifyFpsPatchedImage(stock, moved, patch)).toThrow(
       /acceptance sum moved|not the documented ones/,
     );
+  });
+});
+
+describe('the rate the page names (the bench-measured rate, FPS_MEASURED_HZ)', () => {
+  it('names a rate only for entries of the table, and the 1.3.0.8 entries at the rates the bench measured', () => {
+    for (const id of FPS_MEASURED_HZ.keys()) {
+      expect(
+        FPS_PATCHES.some((p) => p.id === id),
+        id,
+      ).toBe(true);
+    }
+    // TESTING.md 42.20: the 32 Hz entry publishes 26 fps and the 16 Hz entry 14 fps in IP mode 9.
+    expect(FPS_MEASURED_HZ.get('compact_32k-1.3.0.8-to32')).toBe(26);
+    expect(FPS_MEASURED_HZ.get('compact_32k-1.3.0.8-to16')).toBe(14);
+    // An entry the bench did not change keeps its target: 1.2.0.0 and 1.3.0.0 measured 16 Hz (mode 6).
+    expect(FPS_MEASURED_HZ.has('compact_32k-1.2.0.0-to16')).toBe(false);
+    expect(FPS_MEASURED_HZ.has('compact_32k-1.3.0.0-to16')).toBe(false);
   });
 });
