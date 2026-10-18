@@ -462,6 +462,9 @@ export interface StartOptions {
   /** `--flash <path>` — boot this 4 MiB part image instead of the vendored one.
    *  Mutually exclusive with `entryId` by the emulator's own rules. */
   readonly flashOverride?: string;
+  /** `true` attaches the SGPIO sensor feed, so the camera can stream frames (the frame-rate checker
+   *  needs it). Omitted or false: `--no-sensor`, the core suites' boot, unchanged. */
+  readonly sensor?: boolean;
 }
 
 /** How long a SIGTERM'd emulator gets to join its threads and print its ledger. A
@@ -861,7 +864,7 @@ export class Emulator {
        * producing nothing is still a camera as far as its flash is concerned,
        * and the emulator's own frame-path limits are recorded in FW-V1's
        * docs/EMULATOR_CORPUS.md rather than papered over here. */
-      '--no-sensor',
+      ...(options.sensor === true ? [] : (['--no-sensor'] as const)),
       /* THE CAMERA'S CLOCK. The device-time side channel: every reply comes with the
        * emulated camera's time, and the emulated host gives a transfer up where the
        * transport's own deadline says (device-clock.ts, TESTING.md sec.19). */

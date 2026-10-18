@@ -1,0 +1,173 @@
+/* The command line: its parsing (main.swift's flags) and the info and stream commands over a fake camera. */
+import { describe, expect, it } from 'vitest';
+
+import { SEEK_MODE } from './camera.js';
+import { parseArgs, runSeekFps, type CameraSession } from './cli.js';
+import { FakeCamera, compactFrame } from './fake-camera.js';
+import { seekLink } from './link.js';
+
+type Parsed = Extract<ReturnType<typeof parseArgs>, { ok: true }>['args'];
+
+function parsed(argv: string[]): Parsed {
+  const result = parseArgs(argv);
+  if (!result.ok) throw new Error(`expected a parse, got: ${result.message}`);
+  return result.args;
+}
+
+function failure(argv: string[]): string {
+  const result = parseArgs(argv);
+  if (result.ok) throw new Error(`expected a refusal for ${argv.join(' ')}`);
+  return result.message;
+}
+
+describe('parseArgs (the Swift main.swift flags)', () => {
+  it('--fps with --camera is the fps command, five seconds, in Normal mode', () => {
+    const a = parsed(['--fps', '--camera']);
+    expect(a.command).toBe('fps');
+    expect(a.seconds).toBe(5);
+    expect(a.mode).toBe(SEEK_MODE.normal);
+    expect(a.camera).toBe(true);
+  });
+
+  it('stream takes -n seconds; --fps overrides it to five', () => {
+    expect(parsed(['stream', '-n', '2', '--camera']).seconds).toBe(2);
+    expect(parsed(['stream', '--camera']).seconds).toBe(5);
+    expect(parsed(['-n', '9', '--fps', '--camera']).seconds).toBe(5);
+  });
+
+  it('maps --mode normal|fast|raw to IP modes 8, 3, 0', () => {
+    expect(parsed(['info', '--camera', '--mode', 'normal']).mode).toBe(8);
+    expect(parsed(['info', '--camera', '--mode', 'fast']).mode).toBe(3);
+    expect(parsed(['info', '--camera', '--mode', 'raw']).mode).toBe(0);
+    expect(failure(['info', '--camera', '--mode', 'other'])).toMatch(/normal\|fast\|raw/);
+  });
+
+  it('--no-hifps, --no-opzero and --no-pro-init turn their option off', () => {
+    const a = parsed(['info', '--camera', '--no-hifps', '--no-opzero', '--no-pro-init']);
+    expect(a.options.hiFPS).toBe(false);
+    expect(a.options.startupOpZero).toBe(false);
+    expect(a.options.compactProInit).toBe(false);
+    const d = parsed(['info', '--camera']);
+    expect(d.options.hiFPS && d.options.startupOpZero && d.options.compactProInit).toBe(true);
+  });
+
+  it('--raw-min and --raw-max set the raw range, clamped to 16 bits', () => {
+    const a = parsed(['info', '--camera', '--raw-min', '1200', '--raw-max', '70000']);
+    expect(a.options.rawMin).toBe(1200);
+    expect(a.options.rawMax).toBe(0xffff);
+  });
+
+  it('records the press actions in order', () => {
+    const a = parsed(['info', '--camera', '--nuc', '--shutter-open']);
+    expect(a.actions).toEqual(['nuc', 'shutter-open']);
+  });
+
+  it('refuses a command with no source: the bus is opened only with --camera or --emulator', () => {
+    expect(failure(['info'])).toMatch(/no camera source/);
+    expect(failure(['--fps'])).toMatch(/no camera source/);
+    expect(parsed(['info', '--emulator', 'corpus-entry']).emulatorEntry).toBe('corpus-entry');
+  });
+
+  it('refuses snapshot and deadpixels (the image renderer is not ported) and unknown words', () => {
+    expect(failure(['snapshot', 'a.png', '--camera'])).toMatch(/not part of this port/);
+    expect(failure(['deadpixels', 'a.png', '--camera'])).toMatch(/not part of this port/);
+    expect(failure(['frobnicate', '--camera'])).toMatch(/unknown command/);
+    expect(failure(['info', '--camera', '--bogus'])).toMatch(/unknown option/);
+  });
+
+  it('-h asks for the usage', () => {
+    expect(parsed(['-h']).help).toBe(true);
+  });
+});
+
+/** A session over a fake camera, which the command closes. */
+function sessionOver(fake: FakeCamera): CameraSession {
+  const link = seekLink({ control: fake, bulk: fake, api: 'fake camera' });
+  return { link, clock: () => performance.now() / 1000, release: () => link.close() };
+}
+
+function capture(): {
+  out: string[];
+  err: string[];
+  io: { out(l: string): void; err(l: string): void };
+} {
+  const out: string[] = [];
+  const err: string[] = [];
+  return { out, err, io: { out: (l) => out.push(l), err: (l) => err.push(l) } };
+}
+
+describe('runSeekFps over a fake camera', () => {
+  it('info prints the model, firmware, serial and geometry, and exits 0', async () => {
+    const fake = new FakeCamera({
+      productId: 0x0010,
+      serialNumber: '1013CE098ACA',
+      firmwareHeads: [[1, 3, 0, 0, 0, 0, 0, 0]],
+    });
+    const io = capture();
+    const code = await runSeekFps(
+      ['info', '--camera'],
+      () => Promise.resolve(sessionOver(fake)),
+      io.io,
+    );
+    expect(code).toBe(0);
+    expect(io.err).toEqual([]);
+    expect(io.out[0]).toBe('Seek Compact, firmware 1.3.0.0, serial 1013CE098ACA, 206x156');
+  });
+
+  it('stream -n 1 prints one status line for the second, with frames and frozen pairs', async () => {
+    const fake = new FakeCamera({
+      productId: 0x0010,
+      serialNumber: 'SN',
+      firmwareHeads: [[1, 3, 0, 0, 0, 0, 0, 0]],
+      frames: Array.from({ length: 4 }, () => compactFrame(3, 5000)),
+      endless: true,
+    });
+    const io = capture();
+    const code = await runSeekFps(
+      ['stream', '-n', '1', '--camera'],
+      () => Promise.resolve(sessionOver(fake)),
+      io.io,
+    );
+    expect(code).toBe(0);
+    expect(io.out[0]).toMatch(/^Seek Compact, firmware 1\.3\.0\.0, serial SN, 206x156$/);
+    expect(io.out[1]).toMatch(
+      /^t=1s frames=\d+ status=3 min=5000 max=5000 avg=\d+ devTemp=4660 frameCnt=7 frozenPairs=\d+ changed=\d+%$/,
+    );
+  });
+
+  it('a refusal to connect is reported on stderr with exit 1', async () => {
+    const fake = new FakeCamera({ productId: 0x0010, firmwareHeads: [[1, 3, 0, 0, 0, 0, 0, 0]] });
+    const io = capture();
+    const code = await runSeekFps(
+      ['info', '--camera'],
+      () => Promise.reject(new Error('no Seek Thermal camera found')),
+      io.io,
+    );
+    expect(code).toBe(1);
+    expect(io.err[0]).toBe('seek: no Seek Thermal camera found');
+    expect(fake.opened).toBe(false);
+  });
+
+  it('a parse error is reported and nothing is opened', async () => {
+    const io = capture();
+    let opened = false;
+    const code = await runSeekFps(
+      ['info'],
+      () => {
+        opened = true;
+        return Promise.reject(new Error('should not open'));
+      },
+      io.io,
+    );
+    expect(code).toBe(1);
+    expect(opened).toBe(false);
+    expect(io.err[0]).toMatch(/no camera source/);
+  });
+
+  it('with no arguments it prints the usage and exits 1', async () => {
+    const io = capture();
+    const code = await runSeekFps([], () => Promise.reject(new Error('should not open')), io.io);
+    expect(code).toBe(1);
+    expect(io.out[0]).toMatch(/^seek-fps - /);
+  });
+});

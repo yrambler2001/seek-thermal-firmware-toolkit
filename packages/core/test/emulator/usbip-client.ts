@@ -21,9 +21,9 @@
  * real instructions; it has NOT been through libusb, a kernel USB stack, or
  * silicon.
  *
- * Only control transfers are implemented, because that is all the dump and the
- * RPC surface use. A bulk transfer would need the same submit path with a
- * different endpoint; it is deliberately absent rather than stubbed.
+ * Control transfers are the dump and the RPC surface. Bulk IN is implemented for the
+ * frame stream only (`bulkIn`, endpoint 1 = 0x81, what the FW-V1 server answers in
+ * seekemu/usbip.py `_bulk`); bulk OUT is deliberately absent rather than stubbed.
  * ==================================================================== */
 
 import { Buffer } from 'node:buffer';
@@ -510,6 +510,32 @@ export class UsbIpSession {
           `control ${String(setup.bRequest)} failed, status ${String(status)}`,
           status,
         );
+      }
+      return new Uint8Array(payload);
+    } catch (error) {
+      if (error instanceof UsbIpTimeout) {
+        const u = this.unlink(seq);
+        void this.settle(u, 5000).catch(() => undefined);
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * One bulk IN on endpoint NUMBER `ep` (the frame stream is 1, address 0x81). The reply may be shorter than
+   * `length`; the caller reads again for the rest, as a host does. A client-side deadline
+   * cancels the URB exactly as `controlTransfer` does.
+   */
+  async bulkIn(ep: number, length: number, timeoutMs: number): Promise<Uint8Array> {
+    if (this.stopped) throw new UsbIpError('the USB/IP session has ended');
+    const seq = this.submit(ep, true, null, Buffer.alloc(0), length);
+    try {
+      const { status, payload } = await this.settle(seq, timeoutMs);
+      if (status !== 0) {
+        if (status === -32 || status === -9) {
+          throw new UsbIpStall(`bulk IN ${String(ep)} stalled (status ${String(status)})`);
+        }
+        throw new UsbIpError(`bulk IN ${String(ep)} failed, status ${String(status)}`, status);
       }
       return new Uint8Array(payload);
     } catch (error) {

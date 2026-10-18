@@ -851,4 +851,26 @@ export class UsbIpWebUsbDevice implements WebUsbDevice {
       throw error;
     }
   }
+
+  /**
+   * WebUSB's bulk IN on `endpointNumber` (1 is 0x81, the frame stream), with the shape of the
+   * `usb` package's `transferIn`. The reply may be shorter than `length`. Unlike the control
+   * path this takes no device-time deadline: the emulator's host gives up only control
+   * transfers at a deadline (seekemu/usbip.py `_control`), so a bulk read is bounded by the
+   * per-URB wall-clock timeout, and a caller that stops reading waits at most that long.
+   * The caller's own deadline is not passed in: the read is bounded by the device's URB timeout, so a
+   * frame read on the emulator can outlive the 3 s a node-usb read gives up at.
+   */
+  async transferIn(endpointNumber: number, length: number): Promise<WebUsbInTransferResult> {
+    throwIfGone(this.gone, 'transferIn');
+    this.assertConfigured('transferIn');
+    try {
+      /* USB/IP takes the endpoint NUMBER (1), with the direction carried apart: 0x81 is not an endpoint there. */
+      const data = await this.session.bulkIn(endpointNumber, length, this.timeoutMs);
+      return { status: 'ok', data: new DataView(data.buffer, data.byteOffset, data.byteLength) };
+    } catch (error) {
+      if (error instanceof UsbIpStall) return { status: 'stall' };
+      throw error;
+    }
+  }
 }
