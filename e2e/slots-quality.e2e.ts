@@ -8,8 +8,8 @@
  *   - Compact 1.3.0.0 (the 2014 plain chain; bank B is empty on the dump): every bank's flash
  *     controls are on, no camera-wide banner, Make 16 FPS on A and R, and the empty B says why it
  *     has no frame-rate patch;
- *   - Compact 4.8.2.1 (the modern Key A line): every bank's flash controls on, no banner, and no
- *     frame-rate offer, with the reason in words under each bank;
+ *   - Compact 4.8.2.1 (the modern Key A line): every bank's flash controls on, no banner, and
+ *     Make 16 FPS on the banks that hold the image (TESTING.md 42.23);
  *   - Compact PRO 1.0.3.0 (the 2016 keystream line): every bank's flash controls on, and NO banner
  *     (the false "cannot be written" banner this page used to show on this line is the regression).
  * A row the table says is writable must show its flash controls enabled with no refusal; a row the

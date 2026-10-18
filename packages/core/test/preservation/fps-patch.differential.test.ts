@@ -90,7 +90,7 @@ function entryNamed(id: string): FpsPatch {
 describe('the table against the Python table (no corpus needed)', () => {
   it('has the same entries as fps_patch.py, and the same stock and patched hashes', () => {
     expect(new Set(FPS_PATCHES.map((patch) => patch.id))).toEqual(PYTHON_IDS);
-    expect(FPS_PATCHES).toHaveLength(14);
+    expect(FPS_PATCHES).toHaveLength(15);
     for (const image of FIXTURE.images) {
       for (const output of image.outputs) {
         if (output.outputSha256 === undefined) continue;
@@ -102,7 +102,7 @@ describe('the table against the Python table (no corpus needed)', () => {
     }
   });
 
-  it('enables exactly the stage-one (plain 2014 chain) and stage-two (Key A, 4.8.1.x) entries, and records a reason for every other', () => {
+  it('enables exactly the stage-one (plain 2014 chain) and stage-two (Key A, 4.8.x) entries, and records a reason for every other', () => {
     expect([...FPS_STAGE_ONE_IDS].sort()).toEqual([
       'compact_32k-1.2.0.0-to16',
       'compact_32k-1.3.0.0-to16',
@@ -114,6 +114,7 @@ describe('the table against the Python table (no corpus needed)', () => {
       'compact_32k-4.8.1.7-to32',
       'compact_32k-4.8.1.9-to16',
       'compact_32k-4.8.1.9-to32',
+      'compact_32k-4.8.2.1-to16',
     ]);
     for (const entry of FPS_PATCHES) {
       if (FPS_STAGE_ONE_IDS.has(entry.id) || FPS_STAGE_TWO_IDS.has(entry.id)) {
@@ -206,7 +207,7 @@ corpusDescribe('the table against the Python tool, over the corpus (SEEK_FPS_COR
         compared++;
       }
     }
-    expect(compared).toBe(14);
+    expect(compared).toBe(15);
   });
 
   it.skipIf(!FPS_OFFER_WITHHELD)(
