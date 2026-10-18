@@ -95,7 +95,7 @@ export interface FpsPatch {
  * motion, inferred). The owner re-enabled the offer, with no warning, on 2026-10-18. The switch stays so a later
  * finding can turn the offer off again.
  */
-export const FPS_OFFER_WITHHELD: boolean = false;
+export const FPS_OFFER_WITHHELD = false as boolean;
 
 const WITHHELD_REASON =
   'withheld after the bench run (TESTING.md 42.14): on the physical camera the patch did not raise ' +
