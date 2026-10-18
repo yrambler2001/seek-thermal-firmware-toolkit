@@ -19,6 +19,7 @@
 
 import { readdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { OP } from '@seek-fw/core';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   FLASH_SIZE,
@@ -811,4 +812,100 @@ describe('preserve — resume from a run the drain killed', () => {
       expect(after.stdout.text).toMatch(/CHANGED\s+preserve_patch_plain_patched\.bin/);
     },
   );
+});
+
+describe('preserve — the read-only first step, and the zip of a run', () => {
+  it(
+    '--backup-only stops after the backup: checkpointed, and nothing is written to the camera',
+    { timeout: 180_000 },
+    async () => {
+      const camera = v1Camera(syntheticPlain());
+      const asBooted = new Uint8Array(camera.flash);
+      const test = testIo({ backend: backendOf(camera) });
+      const code = await run(
+        ['preserve', '--backup-only', '--out', runDir(), '--yes', '--json'],
+        test.io,
+        signal(),
+      );
+      expect(code).toBe(EXIT_OK);
+
+      const state = await loadState();
+      expect(state.steps.backup?.status).toBe('done');
+      expect(state.steps.patch).toBeUndefined();
+      expect(state.nextStep).toBe('patch');
+      await expect(readFile(join(runDir(), PRESERVE_PATCHED_FILE))).rejects.toThrow();
+
+      const sent = new Set(camera.calls.map((call) => call.op));
+      expect(sent.has(OP.SET_FEATURED_FIRMWARE_DATA)).toBe(false);
+      expect(sent.has(OP.COMPLETE_MEMORY_UPGRADE)).toBe(false);
+      expect(await sha256hex(camera.flash)).toBe(await sha256hex(asBooted));
+
+      expect(JSON.parse(test.stdout.text)).toMatchObject({
+        backupOnly: true,
+        run: { nextStep: 'patch' },
+        output: { zip: null },
+      });
+      expect(test.stderr.text).toContain('stopping after backup');
+    },
+  );
+
+  it(
+    '--zip writes the run file: preserve_run.json and the backup checkpoints, and no later step',
+    { timeout: 180_000 },
+    async () => {
+      const camera = v1Camera(syntheticPlain());
+      const zip = join(dir, 'backup.zip');
+      const test = testIo({ backend: backendOf(camera) });
+      const code = await run(
+        ['preserve', '--backup-only', '--out', runDir(), '--zip', zip, '--yes'],
+        test.io,
+        signal(),
+      );
+      expect(code).toBe(EXIT_OK);
+
+      const bytes = await readFile(zip);
+      expect(bytes.subarray(0, 2).toString()).toBe('PK');
+      const text = bytes.toString('latin1');
+      expect(text).toContain(PRESERVE_RUN_STATE_FILE);
+      expect(text).toContain(PRESERVE_BACKUP_FILE);
+      expect(text).toContain('manifest.json');
+      expect(text).not.toContain(PRESERVE_PATCHED_FILE);
+      expect(test.stdout.text).toContain(`wrote ${zip}`);
+    },
+  );
+
+  it('--backup-only refuses a --from-step past the backup, before the run is read', async () => {
+    const test = testIo({ backend: backendOf(v1Camera(syntheticPlain())) });
+    const code = await run(
+      ['preserve', '--backup-only', '--resume', runDir(), '--from-step', 'commit', '--yes'],
+      test.io,
+      signal(),
+    );
+    expect(code).toBe(EXIT_USAGE);
+    expect(test.stderr.text).toContain('--backup-only runs the first step only');
+  });
+
+  it('--print-state takes neither --backup-only nor --zip: neither writes a run', async () => {
+    const test = testIo();
+    expect(
+      await run(['preserve', '--print-state', runDir(), '--backup-only'], test.io, signal()),
+    ).toBe(EXIT_USAGE);
+    expect(
+      await run(
+        ['preserve', '--print-state', runDir(), '--zip', join(dir, 'x.zip')],
+        test.io,
+        signal(),
+      ),
+    ).toBe(EXIT_USAGE);
+  });
+
+  it('--backup-only asks before it opens the camera, and reads nothing when the answer is no', async () => {
+    const camera = v1Camera(syntheticPlain());
+    const test = testIo({ backend: backendOf(camera), stdinIsTty: true, answer: false });
+    expect(await run(['preserve', '--backup-only', '--out', runDir()], test.io, signal())).toBe(
+      EXIT_FAILED,
+    );
+    expect(test.questions[0]).toContain('Nothing is written to the camera');
+    expect(camera.calls).toHaveLength(0);
+  });
 });

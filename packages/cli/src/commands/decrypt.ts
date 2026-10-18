@@ -1,15 +1,19 @@
 /**
- * `seek-fw decrypt <file>` — the offline path.
+ * `seek-fw decrypt file <dump>` and `seek-fw decrypt slot <file>` — the offline path.
  *
- * Touches no device, needs no USB permission and loads no native addon: the
+ * Both touch no device, need no USB permission and load no native addon: the
  * key comes out of the ciphertext by cryptanalysis, so a dump from an SPI
  * programmer or a J-Link decrypts exactly as well as one this tool read.
  *
- * Profile detection is core's `detectProfileForDump`, reached by simply not
- * naming a profile: offline there is no device evidence, so the file's own
- * slots — where they sit, what acceptance sum each decrypts to, what version
- * each header declares — are what decides. `--profile` overrides it, and
- * either way the choice is printed and written into the manifest.
+ *   file   a whole dump. Core's `decryptDump` scans it for every image slot and
+ *          writes the per-slot images, reports and key log, as `dump` does.
+ *   slot   one 64 KiB bank, as a slot read stores it. Core's `decryptSlotFile`
+ *          decides what the file holds; this file writes the plain image and a
+ *          report of the key's identity, size and sha256.
+ *
+ * Profile detection is core's, reached by simply not naming a profile: offline
+ * there is no device evidence, so the file's own images decide. `--profile`
+ * overrides it, and either way the choice is printed and written into the report.
  */
 
 import { basename } from 'node:path';
@@ -17,16 +21,19 @@ import { readFile } from 'node:fs/promises';
 import {
   buildOfflineDecryptManifest,
   decryptDump,
+  decryptSlotFile,
   getProfile,
   hexUp,
   makeOfflineDecryptReadme,
   manifestToJson,
   profileInfoOf,
   sha256hex,
+  slotFileReport,
   utf8,
   type Artifact,
   type DecryptOptions,
   type FirmwareProfile,
+  type SlotFileDecryption,
 } from '@seek-fw/core';
 import type { CommandContext, CommandResult } from '../cli.js';
 import { CliError } from '../errors.js';
@@ -36,10 +43,7 @@ function stemOf(fileName: string): string {
   return fileName.replace(/\.[^./\\]+$/, '');
 }
 
-export async function decryptCommand(ctx: CommandContext): Promise<CommandResult> {
-  const path = ctx.file;
-  if (path === null) throw new CliError('decrypt needs a file argument', { code: 'cli/usage' });
-
+async function readInput(path: string): Promise<Uint8Array> {
   let bytes: Uint8Array;
   try {
     const buffer = await readFile(path);
@@ -51,6 +55,30 @@ export async function decryptCommand(ctx: CommandContext): Promise<CommandResult
     );
   }
   if (bytes.length === 0) throw new CliError(`${path} is empty`, { code: 'cli/no-input' });
+  return bytes;
+}
+
+export async function decryptCommand(ctx: CommandContext): Promise<CommandResult> {
+  const [form, path] = ctx.args ?? [];
+  if (path === undefined) {
+    throw new CliError(
+      'decrypt needs a form and a file: decrypt file <dump> | decrypt slot <file>',
+      {
+        code: 'cli/usage',
+      },
+    );
+  }
+  if (form === 'slot') return decryptSlotCommand(ctx, path);
+  if (form === 'file') return decryptFileCommand(ctx, path);
+  throw new CliError(`decrypt takes 'file' or 'slot', got '${form ?? ''}'`, { code: 'cli/usage' });
+}
+
+/* ==================================================================== *
+ * decrypt file
+ * ==================================================================== */
+
+async function decryptFileCommand(ctx: CommandContext, path: string): Promise<CommandResult> {
+  const bytes = await readInput(path);
 
   const fileName = basename(path);
   const startedAt = new Date().toISOString();
@@ -160,4 +188,104 @@ export async function decryptCommand(ctx: CommandContext): Promise<CommandResult
     output: { directory: written.directory, zip: written.zip, files: written.files },
     manifest,
   };
+}
+
+/* ==================================================================== *
+ * decrypt slot
+ * ==================================================================== */
+
+/** The one-line statement of what a slot decrypt found, for the terminal. */
+function statusLine(result: SlotFileDecryption): string {
+  switch (result.status) {
+    case 'decrypted':
+      return 'decrypted';
+    case 'empty':
+      return 'empty — an erased bank, nothing to decrypt';
+    case 'no-image':
+      return 'no firmware image in this bank';
+    case 'bad-header':
+      return 'the image header is out of range; not decrypted';
+    case 'not-decrypted':
+      return 'an image header, but its key does not recover; not decrypted';
+  }
+}
+
+function keyLine(result: SlotFileDecryption): string {
+  const key = result.key;
+  if (key === null) return '(none)';
+  if (key.method === 'stored-plain') return 'none — stored plain (the 2014 plaintext chain)';
+  if (key.method === 'ff-key-b') return 'FF 1.3.0.8 Key B';
+  const name = key.named ?? 'a key this build does not name';
+  return `${name} (K=${hexUp(key.whiteningK ?? 0)}, key ${key.key ?? '(none)'})`;
+}
+
+async function decryptSlotCommand(ctx: CommandContext, path: string): Promise<CommandResult> {
+  const bytes = await readInput(path);
+  const fileName = basename(path);
+  const stem = stemOf(fileName);
+
+  const forced = ctx.options.profile === null ? null : getProfile(ctx.options.profile);
+  if (forced !== null) ctx.reporter.log(`profile ${forced.id} (--profile)`, 'detail');
+  const result = await decryptSlotFile(bytes, forced === null ? {} : { profile: forced });
+
+  /* The report is written whatever the outcome: for a bank that holds no image it is the
+   * only record of why. */
+  if (result.plain !== null) {
+    ctx.reporter.artifact({ name: `${stem}-decrypted.bin`, data: result.plain });
+  }
+  ctx.reporter.artifact({
+    name: `${stem}-report.txt`,
+    data: utf8(slotFileReport(result, fileName)),
+  });
+  const written = await writeRun(ctx, 'decrypt-slot', uniqueArtifacts(ctx.reporter.artifacts));
+
+  if (ctx.human) {
+    ctx.out('');
+    ctx.out(
+      table([
+        ['  bank', statusLine(result)],
+        [
+          '  profile',
+          `${result.profile.id} — ${result.profile.name} (${
+            result.profile.detected ? 'detected from the bank' : 'given by --profile'
+          })`,
+        ],
+        ['  key', keyLine(result)],
+        ['  file', `${fileName} (${String(result.size)} B), sha256 ${result.sha256}`],
+        [
+          '  decrypted',
+          result.plain === null
+            ? '(no image)'
+            : `${String(result.plain.length)} B, sha256 ${result.plainSha256 ?? '(none)'}`,
+        ],
+      ]),
+    );
+  }
+
+  const output = { directory: written.directory, zip: written.zip, files: written.files };
+  const summary = {
+    source: { file: fileName, size: result.size, sha256: result.sha256 },
+    status: result.status,
+    profile: result.profile,
+    header: result.header,
+    key: result.key,
+    decrypted: result.plain !== null,
+    plainSha256: result.plainSha256,
+    notes: [...result.notes],
+    output,
+  };
+
+  /* A bank that holds no image, or whose key does not recover, has nothing to show a script
+   * but the report, so it fails the run. The report is written first, as above. */
+  if (
+    result.status === 'no-image' ||
+    result.status === 'bad-header' ||
+    result.status === 'not-decrypted'
+  ) {
+    throw new CliError(`${fileName}: ${statusLine(result)}`, {
+      code: 'decrypt/no-image',
+      hint: `The report is ${written.directory === null ? 'in the zip' : `in ${written.directory}`}.`,
+    });
+  }
+  return summary;
 }

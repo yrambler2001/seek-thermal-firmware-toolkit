@@ -366,7 +366,6 @@ function contextFor(argv: readonly string[], test: TestIo): CommandContext {
   });
   return {
     options: parsed.options,
-    file: parsed.file,
     args: parsed.args,
     slotFlags: parsed.slotFlags,
     reporter,
@@ -489,7 +488,6 @@ describe('parseCli for slots', () => {
     expect(parsed).toMatchObject({
       kind: 'run',
       command: 'slots',
-      file: null,
       args: ['flash', 'r', 'image.bin'],
       slotFlags: {
         raw: true,
@@ -524,11 +522,11 @@ describe('parseCli for slots', () => {
     expect(parsed.options.out).toBe('somewhere');
   });
 
-  it('still refuses extra positionals and missing files on the other commands', () => {
+  it('still refuses extra positionals on the other commands, and the removed flash command', () => {
     expect(() => parseCli(['info', 'extra'])).toThrow(/unexpected argument 'extra'/);
     expect(() => parseCli(['dump', 'extra'])).toThrow(/unexpected argument 'extra'/);
-    expect(() => parseCli(['decrypt'])).toThrow(/needs a file argument/);
-    expect(() => parseCli(['flash'])).toThrow(/needs a file argument/);
+    expect(() => parseCli(['decrypt'])).toThrow(/decrypt needs a form/);
+    expect(() => parseCli(['flash', 'image.bin'])).toThrow(/unknown command 'flash'/);
   });
 });
 
@@ -985,6 +983,24 @@ describe('slots command', () => {
       contextFor(['slots', 'flash', 'b', join(temp.path, 'image.bin'), '--no-probe'], test),
     );
     expect(log.flashed).toEqual([{ key: 'b', options: { verify: true, acknowledgeRisk: false } }]);
+  });
+
+  it('shows the plan even under --quiet, because it is about to be confirmed', async () => {
+    const { ops, log } = fakeOps(reportOf({ booted: 'a' }));
+    await writeFile(join(temp.path, 'image.bin'), new Uint8Array(64).fill(1));
+    const test = cameraIo({ stdinIsTty: true, answer: false });
+    await expect(
+      slotsCommandWith(ops)(
+        contextFor(
+          ['slots', 'flash', 'b', join(temp.path, 'image.bin'), '--no-probe', '--quiet'],
+          test,
+        ),
+      ),
+    ).rejects.toThrow(/aborted at the confirmation prompt/);
+    expect(test.questions).toHaveLength(1);
+    expect(test.stdout.text).toContain('Slot flash plan');
+    expect(test.stdout.text).toContain('transfer checksum');
+    expect(log.flashed).toEqual([]);
   });
 
   it('refuses to flash without a terminal and without --yes, before the camera is touched', async () => {

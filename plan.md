@@ -26,7 +26,7 @@ Tabs: Info | Dump & decrypt 0.x/1.x 2014/2016 | Dump & decrypt 4.x/Nano | Decryp
 - [ ] Decide from the build table and tests whether 2016 and 1.3.0.8 FF run in the Preserve flow. If yes they stay there; if one behaves like v4 it gets a select on the v4 page.
 - [ ] Decrypt tab: "Decrypt a dump you already have" moves here; new "Decrypt a firmware slot" takes 64 KiB of one slot from a file, no camera.
 - [ ] "Firmware & flashing" page removed; device info moves to the slots page. Routes, header, titles, tests, docs follow.
-- [ ] CLI follows the same shape: `info`, `preserve`, `dump`, `decrypt file|slot`, `slots`; old names removed, usage, README and tests rewritten.
+- [x] CLI follows the same shape: `info`, `preserve`, `dump`, `decrypt file|slot`, `slots`; old names removed, usage, README and tests rewritten (TESTING.md 42.16).
 
 ## 3. Slots page quality
 - [ ] Wording, empty and refused states, row actions, the device info panel's place.
@@ -52,3 +52,4 @@ Tabs: Info | Dump & decrypt 0.x/1.x 2014/2016 | Dump & decrypt 4.x/Nano | Decryp
 - 04:10 plan written; FPS merged and enabled.
 - 04:15 three agents launched from 72c705f: shutter + Compact measurer (bench), web restructure, CLI restructure; check cron every 10 min.
 - 04:20 added item 3b (Electron tests for the other pages, emulator and real camera).
+- 04:35 CLI restructured on this branch: `info` (--devices, --profiles), `preserve` (--backup-only, --zip), `dump` (v4 only, --all-selectors), `decrypt file|slot` (new slot form, core decryptSlotFile), `slots`; `flash`, `sweep`, `devices`, `profiles` removed with no alias. TESTING.md 42.16 lists what `flash` did that `slots flash` does not.

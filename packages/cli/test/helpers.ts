@@ -61,6 +61,9 @@ export const KEY_B = Uint8Array.from([
 
 export const IMAGE_LENGTH = 0x1000;
 
+/** One firmware bank, as a slot read stores it: 64 KiB. */
+export const SLOT_LENGTH = 0x10000;
+
 /**
  * A plaintext firmware image the cryptanalytic recovery can actually solve:
  * the four reserved vectors it treats as known plaintext are zero, word 13

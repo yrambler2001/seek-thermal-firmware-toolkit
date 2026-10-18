@@ -12,9 +12,9 @@ runs entirely on your machine, and the CLI talks to the camera directly.
 
 ```sh
 npm ci && npm run build
-node packages/cli/dist/bin.js dump --out ./my-camera   # whole flash + decrypted images
-node packages/cli/dist/bin.js info                     # what is this camera running?
-node packages/cli/dist/bin.js decrypt flash_4m.bin     # works with no camera attached
+node packages/cli/dist/bin.js dump --out ./my-camera        # whole flash + decrypted images (4.x and Nano)
+node packages/cli/dist/bin.js info                          # what is this camera running?
+node packages/cli/dist/bin.js decrypt file flash_4m.bin     # works with no camera attached
 ```
 
 ## What it does
@@ -72,37 +72,43 @@ To get a `seek-fw` on your `PATH`, link it once with
 `npm link --workspace @seek-fw/cli`. The examples below use `seek-fw` for
 brevity; substitute `node packages/cli/dist/bin.js` if you have not linked it.
 
-| Command                  | What it does                                                             |
-| ------------------------ | ------------------------------------------------------------------------ |
-| `seek-fw devices`        | list connected Seek cameras                                              |
-| `seek-fw info`           | firmware version, slots, key table, boot config, detected profile        |
-| `seek-fw dump`           | read the whole 4 MiB flash and decrypt it                                |
-| `seek-fw sweep`          | probe every `BeginFirmwareUpgrade` selector and report what each exposes |
-| `seek-fw decrypt <file>` | decrypt a dump or image you already have — no camera needed              |
-| `seek-fw flash <image>`  | write a decrypted image to the camera                                    |
-| `seek-fw slots ...`      | list, dump or flash one firmware bank (A, B or recovery)                 |
-| `seek-fw profiles`       | list the supported firmware families                                     |
+The commands are the web app's tabs, one each:
+
+| Command                       | Tab                              | What it does                                                                                                            |
+| ----------------------------- | -------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `seek-fw info`                | Info                             | firmware version, identity, slots, key table, boot config; `--devices` lists the cameras, `--profiles` the families     |
+| `seek-fw preserve`            | Dump & decrypt 0.x/1.x 2014/2016 | the six-step preservation run; `--backup-only` is its read-only first step, `--zip <file>` saves the run as one archive |
+| `seek-fw dump`                | Dump & decrypt 4.x/Nano          | read the whole 4 MiB flash and decrypt it; `--all-selectors` probes every selector instead                              |
+| `seek-fw decrypt file <dump>` | Decrypt File/Slot                | decrypt a dump you already have — no camera needed                                                                      |
+| `seek-fw decrypt slot <file>` | Decrypt File/Slot                | decrypt one 64 KiB firmware bank from a file — no camera needed                                                         |
+| `seek-fw slots ...`           | Work with firmware slots         | list, dump, write or raise the frame rate of one bank (A, B or R)                                                       |
+
+The old names are gone, with no alias: `devices` is `info --devices`, `profiles` is `info --profiles`,
+`sweep` is `dump --all-selectors`, and `flash` is `slots flash`. A flag a command does not take is a
+usage error (`seek-fw dump --profile …` is refused, because the 4.x dump chooses its family from the
+camera). Run `seek-fw <command> --help` for each command's options.
 
 Common options:
 
 ```
 --out <dir>          write files to a directory (default)
 --zip <file>         write a single archive instead
---profile <id>       force a firmware profile instead of detecting one
---chunk <n>          control-IN request size (default 64)
+--profile <id>       info, decrypt and slots: act under a family named by hand
+--chunk <n>          control-IN request size, at most 64 (default 64)
 --gap-fill <byte>    fill byte for unreachable blocks (default 0xff)
 --retries <n>        per-window retry count (default 2)
 --retry-delay <ms>   pause between window retries (default 500)
 --recipient <r>      interface | device | auto (default auto)
 --serial <id>        pick one camera when several are attached
---no-decrypt         dump the flash but skip the decryption stage
+--no-decrypt         dump: dump the flash but skip the decryption stage
 --json               machine-readable output on stdout
 --quiet, --verbose, --no-color
 ```
 
-`seek-fw flash` additionally takes `--yes` to skip the confirmation prompt and `--no-rescue-dump` to
-skip the full-flash backup taken before writing. Skipping that backup is not recommended: if the
-image does not boot, the dump is the only way back.
+`seek-fw slots flash` writes one bank. It shows the plan and asks first unless `--yes` is given. It
+takes no full-flash backup before it writes, so take `seek-fw dump` or `seek-fw slots dump <bank>`
+first when the bank matters. TESTING.md 42.16 lists what the removed whole-image `flash` did that
+`slots flash` does not.
 
 On Linux the CLI needs permission to talk to the device — see [the udev rule](#linux-udev-rule)
 below, which applies to both the CLI and the browser.

@@ -1,17 +1,28 @@
 /**
  * Argument parsing and command dispatch.
  *
- * Parsing is `node:util`'s `parseArgs` and nothing else — a CLI with seven
- * commands and fifteen flags does not need a framework. `parseCli` is pure and
- * exported so the tests can assert the whole flag surface without running
- * anything; `run` owns the process-shaped parts: streams, the abort signal and
- * the exit code.
+ * Parsing is `node:util`'s `parseArgs` and nothing else — a CLI with five
+ * commands and a couple of dozen flags does not need a framework. `parseCli` is
+ * pure and exported so the tests can assert the whole flag surface without
+ * running anything; `run` owns the process-shaped parts: streams, the abort
+ * signal and the exit code.
+ *
+ * The commands mirror the web app's tabs, one each:
+ *
+ *   info        Info
+ *   preserve    Dump & decrypt 0.x/1.x 2014/2016
+ *   dump        Dump & decrypt 4.x/Nano
+ *   decrypt     Decrypt File/Slot   (decrypt file <dump> | decrypt slot <file>)
+ *   slots       Work with firmware slots
+ *
+ * A flag that a command does not use is refused for that command, not ignored:
+ * `seek-fw dump --profile x` is a usage error, because a flag that silently does
+ * nothing is how a person ends up believing they chose a family they did not.
  */
 
 import { parseArgs } from 'node:util';
 import {
   getProfile,
-  listProfiles,
   type ProfileId,
   type RecipientPreference,
   type UsbBackend,
@@ -29,13 +40,9 @@ import {
 import { TerminalReporter } from './reporter.js';
 import type { Sink } from './sink.js';
 import { isCommandName, usageFor, type CommandName } from './usage.js';
-import { devicesCommand } from './commands/devices.js';
-import { profilesCommand } from './commands/profiles.js';
 import { infoCommand } from './commands/info.js';
 import { dumpCommand } from './commands/dump.js';
-import { sweepCommand } from './commands/sweep.js';
 import { decryptCommand } from './commands/decrypt.js';
-import { flashCommand } from './commands/flash.js';
 import { preserveCommand } from './commands/preserve.js';
 import { slotsCommand } from './commands/slots.js';
 
@@ -46,6 +53,7 @@ import { slotsCommand } from './commands/slots.js';
 export interface GlobalOptions {
   readonly out: string | null;
   readonly zip: string | null;
+  /** `--profile <id>`: a family named by hand. Read by `info`, `decrypt` and `slots`. */
   readonly profile: ProfileId | null;
   /**
    * Ask the camera which protocol it speaks before choosing a profile.
@@ -72,19 +80,28 @@ export interface GlobalOptions {
   /** False when `--no-color` was passed. The environment is consulted later. */
   readonly colorFlag: boolean;
   readonly yes: boolean;
-  readonly rescueDump: boolean;
-  /* ---- preserve only; every other command ignores them ------------------- */
+  /* ---- info only -------------------------------------------------------- */
+  /** `--devices`: list the connected cameras and open none. */
+  readonly devices: boolean;
+  /** `--profiles`: list the firmware families this build knows and open no camera. */
+  readonly profiles: boolean;
+  /* ---- dump only -------------------------------------------------------- */
+  /** `--all-selectors`: probe every BeginFirmwareUpgrade selector instead of reading the map. */
+  readonly allSelectors: boolean;
+  /* ---- preserve only ---------------------------------------------------- */
   /** `--resume <dir>`: continue the run whose state lives in that directory. */
   readonly resume: string | null;
   /** `--from-step <id>`: with --resume, start at a chosen step. */
   readonly fromStep: string | null;
   /** `--print-state <dir>`: print a run's state and next step; touch no device. */
   readonly printState: string | null;
+  /** `--backup-only`: run the read-only first step and stop. Nothing is written to the camera. */
+  readonly backupOnly: boolean;
 }
 
 /**
- * The flags only `slots flash` reads. Parsed for every command, read by none but
- * `slots`, the same way the preserve-only options are.
+ * The flags only `slots` reads. Parsed for every command, read by none but `slots`, the same way
+ * the preserve-only options are.
  */
 export interface SlotFlags {
   /** `--raw`: the file is prepared bytes, sent verbatim, not a decrypted image. */
@@ -114,9 +131,10 @@ export type ParsedCli =
   | {
       readonly kind: 'run';
       readonly command: CommandName;
-      /** The single positional `decrypt` and `flash` take. */
-      readonly file: string | null;
-      /** Every positional after the command word. Only `slots` takes more than `file`. */
+      /**
+       * Every positional after the command word. `decrypt` reads its form (`file` or `slot`) and
+       * its path from here; `slots` reads its subcommand, bank and file. The others take none.
+       */
       readonly args: readonly string[];
       readonly slotFlags: SlotFlags;
       readonly options: GlobalOptions;
@@ -124,8 +142,45 @@ export type ParsedCli =
 
 const RECIPIENTS: readonly RecipientPreference[] = ['interface', 'device', 'auto'];
 
-/** Commands that take exactly one file argument. */
-const FILE_COMMANDS: ReadonlySet<CommandName> = new Set<CommandName>(['decrypt', 'flash']);
+/**
+ * Which commands each flag belongs to. A flag not listed for a command is refused there.
+ * `--json`, `--quiet`, `--verbose`, `--no-color`, `--help` and `--version` are on every command and
+ * so are not listed.
+ */
+const FLAG_COMMANDS: Readonly<Record<string, readonly CommandName[]>> = {
+  out: ['preserve', 'dump', 'decrypt', 'slots'],
+  zip: ['preserve', 'dump', 'decrypt', 'slots'],
+  profile: ['info', 'decrypt', 'slots'],
+  probe: ['info', 'dump', 'slots'],
+  chunk: ['info', 'preserve', 'dump'],
+  'gap-fill': ['info', 'dump'],
+  retries: ['info', 'dump'],
+  'retry-delay': ['info', 'dump'],
+  recipient: ['info', 'preserve', 'dump', 'slots'],
+  serial: ['info', 'preserve', 'dump', 'slots'],
+  decrypt: ['dump'],
+  yes: ['preserve', 'slots'],
+  devices: ['info'],
+  profiles: ['info'],
+  'all-selectors': ['dump'],
+  resume: ['preserve'],
+  'from-step': ['preserve'],
+  'print-state': ['preserve'],
+  'backup-only': ['preserve'],
+  raw: ['slots'],
+  'acknowledge-risk': ['slots'],
+  verify: ['slots'],
+  'dry-run': ['slots'],
+  'running-16hz': ['slots'],
+  write: ['slots'],
+  'dump-dir': ['slots'],
+};
+
+/** The commands that take no positional argument at all. */
+const NO_POSITIONALS: ReadonlySet<CommandName> = new Set<CommandName>(['info', 'dump', 'preserve']);
+
+/** The forms `decrypt` takes. */
+const DECRYPT_FORMS: readonly string[] = ['file', 'slot'];
 
 function parseInteger(name: string, text: string): number {
   if (!/^(0[xX][0-9a-fA-F]+|[0-9]+)$/.test(text.trim())) {
@@ -149,10 +204,26 @@ function validProfileId(id: string): ProfileId {
   try {
     return getProfile(id).id;
   } catch {
-    const known = listProfiles()
-      .map((profile) => profile.id)
-      .join(', ');
-    throw new UsageError(`unknown profile '${id}'`, `known profiles: ${known}`);
+    throw new UsageError(`unknown profile '${id}'`, 'Run `seek-fw info --profiles` for the list.');
+  }
+}
+
+/**
+ * Refuses a flag the command does not use. Reads the flag names from argv itself, because
+ * `parseArgs` cannot say which options were typed and which took their default.
+ */
+function refuseFlagsOutOfScope(command: CommandName, argv: readonly string[]): void {
+  for (const token of argv) {
+    if (token === '--') break;
+    if (!token.startsWith('--')) continue;
+    const typed = token.slice(2).split('=')[0] ?? '';
+    const base = typed.startsWith('no-') ? typed.slice(3) : typed;
+    const owners = FLAG_COMMANDS[base];
+    if (owners === undefined || owners.includes(command)) continue;
+    throw new UsageError(
+      `--${typed} does not apply to '${command}'`,
+      `Run \`seek-fw ${command} --help\` for the options '${command}' takes.`,
+    );
   }
 }
 
@@ -187,11 +258,14 @@ export function parseCli(argv: readonly string[]): ParsedCli {
         verbose: { type: 'boolean', default: false },
         color: { type: 'boolean', default: true },
         yes: { type: 'boolean', default: false },
-        'rescue-dump': { type: 'boolean', default: true },
         probe: { type: 'boolean', default: true },
+        devices: { type: 'boolean', default: false },
+        profiles: { type: 'boolean', default: false },
+        'all-selectors': { type: 'boolean', default: false },
         resume: { type: 'string' },
         'from-step': { type: 'string' },
         'print-state': { type: 'string' },
+        'backup-only': { type: 'boolean', default: false },
         raw: { type: 'boolean', default: false },
         'acknowledge-risk': { type: 'boolean', default: false },
         verify: { type: 'boolean', default: true },
@@ -222,18 +296,32 @@ export function parseCli(argv: readonly string[]): ParsedCli {
   }
   if (values.help) return { kind: 'help', command: commandWord, json: values.json };
 
-  const takesFile = FILE_COMMANDS.has(commandWord);
-  /* `slots` takes a subcommand, a bank and a file, and its own parser (commands/slots.ts)
-   * counts them and says what each one is for, so the count is not checked here. */
-  const takesArgs = commandWord === 'slots';
-  /* `preserve` takes NO positional at all: the image always derives from the
-   * camera itself, and `--resume`/`--print-state` need nothing else. */
-  if (!takesArgs && takesFile && rest.length === 0) {
-    throw new UsageError(`${commandWord} needs a file argument`);
+  refuseFlagsOutOfScope(commandWord, argv);
+
+  if (NO_POSITIONALS.has(commandWord) && rest.length > 0) {
+    throw new UsageError(`unexpected argument '${rest[0] ?? ''}' after '${commandWord}'`);
   }
-  if (!takesArgs && rest.length > (takesFile ? 1 : 0)) {
-    const extra = rest[takesFile ? 1 : 0] ?? '';
-    throw new UsageError(`unexpected argument '${extra}' after '${commandWord}'`);
+  if (commandWord === 'decrypt') {
+    const [form, path, ...extra] = rest;
+    if (form === undefined) {
+      throw new UsageError(
+        'decrypt needs a form: file or slot',
+        'seek-fw decrypt file <dump>  |  seek-fw decrypt slot <64 KiB bank file>',
+      );
+    }
+    if (!DECRYPT_FORMS.includes(form)) {
+      throw new UsageError(
+        `decrypt takes 'file' or 'slot', got '${form}'`,
+        `seek-fw decrypt file ${form}  decrypts a dump; seek-fw decrypt slot ${form}  decrypts one bank.`,
+      );
+    }
+    if (path === undefined) throw new UsageError(`decrypt ${form} needs a file argument`);
+    if (extra.length > 0) {
+      throw new UsageError(`unexpected argument '${extra[0] ?? ''}' after 'decrypt ${form}'`);
+    }
+  }
+  if (commandWord === 'info' && values.devices && values.profiles) {
+    throw new UsageError('--devices and --profiles each list something; pass one of them');
   }
 
   const recipient = values.recipient ?? 'auto';
@@ -268,14 +356,17 @@ export function parseCli(argv: readonly string[]): ParsedCli {
     quiet: values.quiet,
     verbose: values.verbose,
     probe: values.probe,
-    /* `--no-color`, `--no-rescue-dump` and `--no-probe` come through parseArgs'
-     * own negation support, so each arrives here already resolved. */
+    /* `--no-color` and `--no-probe` come through parseArgs' own negation support, so each arrives
+     * here already resolved. */
     colorFlag: values.color,
     yes: values.yes,
-    rescueDump: values['rescue-dump'],
+    devices: values.devices,
+    profiles: values.profiles,
+    allSelectors: values['all-selectors'],
     resume: values.resume ?? null,
     fromStep: values['from-step'] ?? null,
     printState: values['print-state'] ?? null,
+    backupOnly: values['backup-only'],
   };
 
   if (options.quiet && options.verbose) {
@@ -285,7 +376,6 @@ export function parseCli(argv: readonly string[]): ParsedCli {
   return {
     kind: 'run',
     command: commandWord,
-    file: takesFile ? (rest[0] ?? null) : null,
     args: rest,
     slotFlags: {
       raw: values.raw,
@@ -325,11 +415,10 @@ export interface Io {
 
 export interface CommandContext {
   readonly options: GlobalOptions;
-  /** The positional file, for `decrypt` and `flash`. */
-  readonly file: string | null;
   /**
-   * Every positional after the command word. Optional, because only `slots` reads it and a
-   * context built by hand for any other command need not carry it.
+   * Every positional after the command word: `decrypt`'s form and path, `slots`' subcommand,
+   * bank and file. Optional, so a context built by hand for a command that takes none need not
+   * carry it.
    */
   readonly args?: readonly string[];
   /** The `slots` flags. Optional for the same reason; absent means none was given. */
@@ -359,14 +448,10 @@ export type CommandResult = Record<string, unknown>;
 export type Command = (ctx: CommandContext) => Promise<CommandResult>;
 
 const COMMANDS: Record<CommandName, Command> = {
-  devices: devicesCommand,
-  profiles: profilesCommand,
   info: infoCommand,
-  dump: dumpCommand,
-  sweep: sweepCommand,
-  decrypt: decryptCommand,
-  flash: flashCommand,
   preserve: preserveCommand,
+  dump: dumpCommand,
+  decrypt: decryptCommand,
   slots: slotsCommand,
 };
 
@@ -433,7 +518,7 @@ export async function run(argv: readonly string[], io: Io, signal: AbortSignal):
     return EXIT_OK;
   }
 
-  const { options, command, file, args, slotFlags } = parsed;
+  const { options, command, args, slotFlags } = parsed;
   const logSink = options.json ? io.stderr : io.stdout;
   const color = shouldColor({
     noColorFlag: !options.colorFlag,
@@ -450,7 +535,6 @@ export async function run(argv: readonly string[], io: Io, signal: AbortSignal):
 
   const ctx: CommandContext = {
     options,
-    file,
     args,
     slotFlags,
     reporter,

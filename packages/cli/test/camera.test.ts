@@ -42,10 +42,10 @@ function signal(): AbortSignal {
   return new AbortController().signal;
 }
 
-describe('seek-fw devices', () => {
+describe('seek-fw info --devices', () => {
   it('says so, and exits 0, when nothing is attached', async () => {
     const { io, stdout } = testIo({ backend: fixedBackend([]) });
-    const code = await run(['devices'], io, signal());
+    const code = await run(['info', '--devices'], io, signal());
     expect(code).toBe(EXIT_OK);
     expect(stdout.text).toContain('no Seek camera found');
     /* The Linux hint, because an attached camera can be invisible there. */
@@ -55,7 +55,7 @@ describe('seek-fw devices', () => {
   it('lists what it found', async () => {
     const camera = cameraWithFlash(synthetic.flash);
     const { io, stdout } = testIo({ backend: fixedBackend([camera]) });
-    const code = await run(['devices'], io, signal());
+    const code = await run(['info', '--devices'], io, signal());
     expect(code).toBe(EXIT_OK);
     expect(stdout.text).toContain('0x289d');
     expect(stdout.text).toContain('Seek Thermal Compact PRO');
@@ -64,9 +64,9 @@ describe('seek-fw devices', () => {
   it('describes them as JSON', async () => {
     const camera = cameraWithFlash(synthetic.flash);
     const { io, stdout } = testIo({ backend: fixedBackend([camera]) });
-    await run(['devices', '--json'], io, signal());
+    await run(['info', '--devices', '--json'], io, signal());
     expect(JSON.parse(stdout.text)).toMatchObject({
-      command: 'devices',
+      command: 'info',
       ok: true,
       count: 1,
       devices: [{ vendorId: '0x289d', productName: 'Seek Thermal Compact PRO' }],
@@ -86,6 +86,10 @@ describe('seek-fw info', () => {
     expect(stdout.text).toContain('Key A');
     /* Detection, from evidence the read itself produced. */
     expect(stdout.text).toContain('modern-4x');
+    /* The tab map, so the Info command says what each tab does. */
+    expect(stdout.text).toContain('Tabs');
+    expect(stdout.text).toContain('Dump & decrypt 4.x/Nano');
+    expect(stdout.text).toContain('seek-fw decrypt file|slot');
   });
 
   it('is read-only: no write opcode is ever sent', async () => {
@@ -111,6 +115,11 @@ describe('seek-fw info', () => {
     };
     expect(parsed.ok).toBe(true);
     expect(parsed.keys.keyA).toBe('f32ad7715c0e9942ab13776008c431de');
+    expect(JSON.parse(stdout.text)).toMatchObject({
+      tabs: expect.arrayContaining([
+        expect.objectContaining({ command: 'seek-fw slots' }),
+      ]) as unknown,
+    });
     expect(parsed.boot).toMatchObject({ booted: 'a', upgradeTarget: 'b' });
     expect(parsed.slots[0]).toMatchObject({ accepts: true, bootable: true });
     expect(parsed.canFlash).toBe(true);
@@ -181,17 +190,28 @@ describe('seek-fw info on a 2016 Compact PRO (1.0.3.0)', () => {
 });
 
 describe('seek-fw dump on a 2016 Compact PRO (1.0.3.0)', () => {
-  it('decrypts under the detected profile and says the read acted under another', async () => {
+  /* The 4.x and Nano command does not read the 0.x/1.x 2014–2017 line: that camera's flow is
+   * `seek-fw preserve` (its tab). Refused before any read, and nothing is written. */
+  it('refuses the camera, names the flow that reads it, and writes nothing', async () => {
     const camera = compactPro1030Camera();
-    const { io } = testIo({ backend: fixedBackend([camera]) });
-    expect(await run(['dump', '--out', dir], io, signal())).toBe(EXIT_OK);
-    const report = await readFile(join(dir, 'decrypted', 'decryption_report.txt'), 'utf8');
-    expect(report).toContain(
-      'Profile   : 2016 Compact Pro [compact-2016] (detected from this dump and the camera; ' +
-        'the read acted under legacy-auth)',
-    );
-    expect(report).toContain('[VERIFIED(profile)]');
-    expect(report).not.toContain('unknown profile');
+    const out = join(dir, 'refused');
+    const { io, stderr } = testIo({ backend: fixedBackend([camera]) });
+    expect(await run(['dump', '--out', out], io, signal())).toBe(EXIT_FAILED);
+    expect(stderr.text).toContain('0.x/1.x 2014–2017 line');
+    expect(stderr.text).toContain('nothing was dumped');
+    expect(stderr.text).toContain('seek-fw preserve');
+    await expect(readdir(out)).rejects.toThrow();
+    for (const call of camera.calls) {
+      expect(READ_ONLY_OPS.has(call.op as never), `opcode ${String(call.op)}`).toBe(true);
+    }
+  });
+
+  it('still says what the camera answers as, under info', async () => {
+    const { io, stdout } = testIo({ backend: fixedBackend([compactPro1030Camera()]) });
+    expect(await run(['info', '--json'], io, signal())).toBe(EXIT_OK);
+    expect(JSON.parse(stdout.text)).toMatchObject({
+      profile: { detected: { id: 'compact-2016' } },
+    });
   });
 });
 
@@ -285,12 +305,16 @@ describe('seek-fw dump', () => {
   });
 });
 
-describe('seek-fw sweep', () => {
+describe('seek-fw dump --all-selectors', () => {
   it('probes every selector and reports what answered', async () => {
     const camera = cameraWithFlash(synthetic.flash);
     const out = join(dir, 'sweep');
     const { io, stdout } = testIo({ backend: fixedBackend([camera]) });
-    const code = await run(['sweep', '--out', out, '--chunk', '65536'], io, signal());
+    const code = await run(
+      ['dump', '--all-selectors', '--out', out, '--chunk', '65536'],
+      io,
+      signal(),
+    );
 
     expect(code).toBe(EXIT_OK);
     const files = await readdir(out);
@@ -308,15 +332,15 @@ describe('a camera that does not report its firmware version', () => {
   for (const argv of [
     ['dump'],
     ['dump', '--no-probe'],
-    ['dump', '--profile', 'legacy-auth'],
-    ['sweep'],
+    ['dump', '--all-selectors'],
     ['info'],
     ['info', '--profile', 'modern-4x'],
   ]) {
     it(`refuses \`seek-fw ${argv.join(' ')}\` and arms nothing`, async () => {
       const camera = cameraWithFlash(synthetic.flash, { fwInfo: new Map() });
       const { io, stderr } = testIo({ backend: fixedBackend([camera]) });
-      const code = await run([...argv, '--out', join(dir, 'never')], io, signal());
+      const writes = argv[0] === 'dump' ? ['--out', join(dir, 'never')] : [];
+      const code = await run([...argv, ...writes], io, signal());
 
       expect(code).toBe(EXIT_FAILED);
       expect(stderr.text).toContain('did not report its firmware version');

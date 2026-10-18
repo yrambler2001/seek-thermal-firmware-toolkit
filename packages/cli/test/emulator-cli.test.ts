@@ -3,7 +3,7 @@
  * own shim - on an emulated camera.
  *
  * WHY (TESTING.md sec.21.1). On 2026-09-28 the bench Compact 1.3.0.0
- * (101310HSNEA2) made `seek-fw devices`, `info` and `dump` exit 1 with
+ * (101310HSNEA2) made `seek-fw info --devices`, `info` and `dump` exit 1 with
  * "getString error: invalid descriptor" before a single vendor request (FW-V1
  * Phase 53). Every emulator row passed at the time, because every row drove
  * the transport through the harness's WebUSB adapter, which reports a string
@@ -102,7 +102,7 @@ describe.skipIf(!available)(
             expect(device.manufacturerName).toBe('Seek Thermal');
 
             /* ---- devices ---- */
-            const devices = await cli(['devices'], device);
+            const devices = await cli(['info', '--devices'], device);
             expect(devices.code, devices.stderr).toBe(EXIT_OK);
             expect(devices.json.devices).toEqual([
               {

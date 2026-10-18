@@ -5,13 +5,14 @@
  * up, not that a fixture was copied correctly.
  */
 
+import { createHash } from 'node:crypto';
 import { readFile, readdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { bytesToHex } from '@seek-fw/core';
 import { run } from '../src/cli.js';
 import { EXIT_FAILED, EXIT_OK } from '../src/errors.js';
-import { KEY_A, KEY_B, buildSyntheticFlash, tempDir, testIo } from './helpers.js';
+import { KEY_A, KEY_B, SLOT_LENGTH, buildSyntheticFlash, tempDir, testIo } from './helpers.js';
 
 let dir = '';
 let cleanup: () => Promise<void> = (): Promise<void> => Promise.resolve();
@@ -35,11 +36,11 @@ function signal(): AbortSignal {
   return new AbortController().signal;
 }
 
-describe('seek-fw decrypt', () => {
+describe('seek-fw decrypt file', () => {
   it('decrypts a dump with no camera attached', async () => {
     const out = join(dir, 'out');
     const { io, stdout, stderr } = testIo();
-    const code = await run(['decrypt', dumpPath, '--out', out], io, signal());
+    const code = await run(['decrypt', 'file', dumpPath, '--out', out], io, signal());
 
     expect(code).toBe(EXIT_OK);
     /* Human output on stdout, progress on stderr, nothing that looks like a
@@ -86,7 +87,7 @@ describe('seek-fw decrypt', () => {
   it('emits one JSON document on stdout and keeps logs on stderr', async () => {
     const { io, stdout, stderr } = testIo();
     const code = await run(
-      ['decrypt', dumpPath, '--out', join(dir, 'json-out'), '--json', '--verbose'],
+      ['decrypt', 'file', dumpPath, '--out', join(dir, 'json-out'), '--json', '--verbose'],
       io,
       signal(),
     );
@@ -110,7 +111,11 @@ describe('seek-fw decrypt', () => {
 
   it('--quiet leaves stdout empty in human mode', async () => {
     const { io, stdout, stderr } = testIo();
-    const code = await run(['decrypt', dumpPath, '--out', join(dir, 'q'), '--quiet'], io, signal());
+    const code = await run(
+      ['decrypt', 'file', dumpPath, '--out', join(dir, 'q'), '--quiet'],
+      io,
+      signal(),
+    );
     expect(code).toBe(EXIT_OK);
     expect(stdout.text).toBe('');
     expect(stderr.text).toBe('');
@@ -120,7 +125,7 @@ describe('seek-fw decrypt', () => {
     const zip = join(dir, 'archive.zip');
     const { io } = testIo();
     const code = await run(
-      ['decrypt', dumpPath, '--zip', zip, '--profile', 'compact-2016'],
+      ['decrypt', 'file', dumpPath, '--zip', zip, '--profile', 'compact-2016'],
       io,
       signal(),
     );
@@ -132,19 +137,139 @@ describe('seek-fw decrypt', () => {
 
   it('reports a missing file as a failure, not a crash', async () => {
     const { io, stderr } = testIo();
-    const code = await run(['decrypt', join(dir, 'nope.bin')], io, signal());
+    const code = await run(['decrypt', 'file', join(dir, 'nope.bin')], io, signal());
     expect(code).toBe(EXIT_FAILED);
     expect(stderr.text).toContain('could not read');
   });
 
   it('reports the failure as JSON under --json', async () => {
     const { io, stdout } = testIo();
-    const code = await run(['decrypt', join(dir, 'nope.bin'), '--json'], io, signal());
+    const code = await run(['decrypt', 'file', join(dir, 'nope.bin'), '--json'], io, signal());
     expect(code).toBe(EXIT_FAILED);
     expect(JSON.parse(stdout.text)).toMatchObject({
       command: 'decrypt',
       ok: false,
       error: { code: 'cli/no-input' },
     });
+  });
+});
+
+/* ==================================================================== *
+ * decrypt slot: one 64 KiB bank from a file, no camera
+ * ==================================================================== */
+
+describe('seek-fw decrypt slot', () => {
+  let bank: Uint8Array;
+  let bankPath = '';
+
+  beforeEach(async () => {
+    const synthetic = buildSyntheticFlash();
+    const slotOffset = synthetic.slotOffset;
+    bank = synthetic.flash.slice(slotOffset, slotOffset + SLOT_LENGTH);
+    bankPath = join(dir, 'slot-a.bin');
+    await writeFile(bankPath, bank);
+  });
+
+  const sha256 = (bytes: Uint8Array): string => createHash('sha256').update(bytes).digest('hex');
+
+  it('decrypts one bank with no camera, and writes the plain image and a report', async () => {
+    const out = join(dir, 'slot-out');
+    const { io, stdout, stderr } = testIo();
+    const code = await run(['decrypt', 'slot', bankPath, '--out', out], io, signal());
+
+    expect(code).toBe(EXIT_OK);
+    expect(stderr.text).not.toContain('error');
+    expect((await readdir(out)).sort()).toEqual(['slot-a-decrypted.bin', 'slot-a-report.txt']);
+
+    const decrypted = new Uint8Array(await readFile(join(out, 'slot-a-decrypted.bin')));
+    expect(decrypted).toEqual(plain);
+
+    const report = await readFile(join(out, 'slot-a-report.txt'), 'utf8');
+    expect(report).toContain(`sha256      : ${sha256(bank)}`);
+    expect(report).toContain(`sha256 ${sha256(decrypted)}`);
+    expect(report).toContain(`key         : ${bytesToHex(KEY_A)}`);
+    /* KEY_A is the bootloader's test pair, not one of the application pairs this build names. */
+    expect(report).toContain('no name: it matches no application key pair this build knows');
+    expect(stdout.text).toContain('decrypted');
+    expect(stdout.text).toContain('wrote');
+  });
+
+  it('emits one JSON document with the key, the sizes and the digests', async () => {
+    const { io, stdout, stderr } = testIo();
+    const code = await run(
+      ['decrypt', 'slot', bankPath, '--out', join(dir, 'slot-json'), '--json'],
+      io,
+      signal(),
+    );
+    expect(code).toBe(EXIT_OK);
+    expect(stderr.text).toBe('');
+    const document = JSON.parse(stdout.text) as Record<string, unknown>;
+    expect(document).toMatchObject({
+      command: 'decrypt',
+      ok: true,
+      status: 'decrypted',
+      decrypted: true,
+      source: { file: 'slot-a.bin', size: SLOT_LENGTH, sha256: sha256(bank) },
+      profile: { id: 'modern-4x', detected: true },
+      key: { method: 'cryptanalytic', key: bytesToHex(KEY_A), named: null },
+      header: { version: '4.9.5.0' },
+    });
+    expect(document).toHaveProperty('plainSha256', sha256(plain));
+  });
+
+  it('names the family the caller gave, and says it was not detected', async () => {
+    const { io, stdout } = testIo();
+    const code = await run(
+      ['decrypt', 'slot', bankPath, '--profile', 'modern-4x', '--json', '--out', join(dir, 'p')],
+      io,
+      signal(),
+    );
+    expect(code).toBe(EXIT_OK);
+    expect(JSON.parse(stdout.text)).toMatchObject({
+      profile: { id: 'modern-4x', detected: false },
+    });
+  });
+
+  it('refuses a file that is not exactly one 64 KiB bank, and writes nothing', async () => {
+    const short = join(dir, 'short.bin');
+    await writeFile(short, bank.subarray(0, SLOT_LENGTH / 2));
+    const { io, stdout, stderr } = testIo();
+    const code = await run(['decrypt', 'slot', short, '--json'], io, signal());
+    expect(code).toBe(EXIT_FAILED);
+    expect(JSON.parse(stdout.text)).toMatchObject({
+      command: 'decrypt',
+      ok: false,
+      error: { code: 'slots/refused' },
+    });
+    expect(stderr.text).toContain('a firmware bank is 65536 B (64 KiB); this file is 32768 B');
+  });
+
+  it('calls an erased bank empty, writes the report, and exits 0', async () => {
+    const erased = join(dir, 'erased.bin');
+    await writeFile(erased, new Uint8Array(SLOT_LENGTH).fill(0xff));
+    const out = join(dir, 'erased-out');
+    const { io, stdout } = testIo();
+    const code = await run(['decrypt', 'slot', erased, '--out', out], io, signal());
+    expect(code).toBe(EXIT_OK);
+    expect(stdout.text).toContain('empty');
+    expect((await readdir(out)).sort()).toEqual(['erased-report.txt']);
+  });
+
+  it('writes the report for a bank that holds no image, and exits 1', async () => {
+    const blank = join(dir, 'blank.bin');
+    await writeFile(blank, new Uint8Array(SLOT_LENGTH));
+    const out = join(dir, 'blank-out');
+    const { io } = testIo();
+    const code = await run(['decrypt', 'slot', blank, '--out', out], io, signal());
+    expect(code).toBe(EXIT_FAILED);
+    const report = await readFile(join(out, 'blank-report.txt'), 'utf8');
+    expect(report).toContain('no firmware image in this bank');
+  });
+
+  it('reports a missing file as a failure, not a crash', async () => {
+    const { io, stderr } = testIo();
+    const code = await run(['decrypt', 'slot', join(dir, 'nope.bin')], io, signal());
+    expect(code).toBe(EXIT_FAILED);
+    expect(stderr.text).toContain('could not read');
   });
 });

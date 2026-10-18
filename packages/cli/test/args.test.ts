@@ -1,10 +1,9 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_DUMP_OPTIONS } from '@seek-fw/core';
-import { parseCli, run } from '../src/cli.js';
-import { EXIT_OK, EXIT_USAGE, UsageError } from '../src/errors.js';
-import { MAIN_USAGE } from '../src/usage.js';
-import { testIo } from './helpers.js';
+import { parseCli } from '../src/cli.js';
+import { UsageError, EXIT_USAGE } from '../src/errors.js';
+import { usageFor } from '../src/usage.js';
 
 function runOptions(argv: readonly string[]) {
   const parsed = parseCli(argv);
@@ -25,7 +24,7 @@ describe('parseCli', () => {
   it('defaults every option that was not given', () => {
     const parsed = runOptions(['dump']);
     expect(parsed.command).toBe('dump');
-    expect(parsed.file).toBeNull();
+    expect(parsed.args).toEqual([]);
     expect(parsed.options).toEqual({
       out: null,
       zip: null,
@@ -42,11 +41,14 @@ describe('parseCli', () => {
       colorFlag: true,
       decrypt: true,
       yes: false,
-      rescueDump: true,
       probe: true,
+      devices: false,
+      profiles: false,
+      allSelectors: false,
       resume: null,
       fromStep: null,
       printState: null,
+      backupOnly: false,
     });
   });
 
@@ -55,15 +57,14 @@ describe('parseCli', () => {
     expect(runOptions(['dump', '--no-probe']).options.probe).toBe(false);
   });
 
-  it('accepts the whole documented flag surface', () => {
+  it('accepts the whole documented flag surface of dump, without a family pick', () => {
     const parsed = runOptions([
       'dump',
       '--out',
       'out-dir',
       '--zip',
       'out.zip',
-      '--profile',
-      'modern-4x',
+      '--all-selectors',
       '--chunk',
       '256',
       '--gap-fill',
@@ -76,6 +77,7 @@ describe('parseCli', () => {
       'device',
       '--serial',
       'ABC123',
+      '--no-decrypt',
       '--json',
       '--quiet',
       '--no-color',
@@ -83,24 +85,50 @@ describe('parseCli', () => {
     expect(parsed.options).toMatchObject({
       out: 'out-dir',
       zip: 'out.zip',
-      profile: 'modern-4x',
+      allSelectors: true,
       chunk: 256,
       gapFill: 0,
       retries: 5,
       retryDelayMs: 1500,
       recipient: 'device',
       serial: 'ABC123',
+      decrypt: false,
       json: true,
       quiet: true,
       colorFlag: false,
     });
   });
 
-  it('takes the flash-only flags', () => {
-    const parsed = runOptions(['flash', 'image.bin', '--yes', '--no-rescue-dump']);
-    expect(parsed.file).toBe('image.bin');
-    expect(parsed.options.yes).toBe(true);
-    expect(parsed.options.rescueDump).toBe(false);
+  it('takes --profile on the commands that still name a family, and nowhere else', () => {
+    expect(runOptions(['info', '--profile', 'modern-4x']).options.profile).toBe('modern-4x');
+    expect(
+      runOptions(['decrypt', 'file', 'a.bin', '--profile', 'compact-2016']).options.profile,
+    ).toBe('compact-2016');
+    expect(runOptions(['slots', 'list', '--profile', 'modern-4x']).options.profile).toBe(
+      'modern-4x',
+    );
+  });
+
+  it('takes the preserve options, the backup-only step and the zip', () => {
+    const parsed = runOptions(['preserve', '--backup-only', '--zip', 'run.zip', '--out', 'run']);
+    expect(parsed.options).toMatchObject({ backupOnly: true, zip: 'run.zip', out: 'run' });
+    expect(
+      runOptions(['preserve', '--resume', 'run', '--from-step', 'drain']).options,
+    ).toMatchObject({
+      resume: 'run',
+      fromStep: 'drain',
+    });
+    expect(runOptions(['preserve', '--print-state', 'run']).options.printState).toBe('run');
+  });
+
+  it('reads the info listings', () => {
+    expect(runOptions(['info', '--devices']).options.devices).toBe(true);
+    expect(runOptions(['info', '--profiles']).options.profiles).toBe(true);
+  });
+
+  it('reads the decrypt form and its file, and no others', () => {
+    expect(runOptions(['decrypt', 'file', 'flash.bin']).args).toEqual(['file', 'flash.bin']);
+    expect(runOptions(['decrypt', 'slot', 'slot-a.bin']).args).toEqual(['slot', 'slot-a.bin']);
   });
 
   it('parses hex and decimal numbers', () => {
@@ -117,6 +145,14 @@ describe('parseCli', () => {
     expect(parseCli(['--version'])).toEqual({ kind: 'version', json: false });
   });
 
+  it('answers --help even when the command line names a flag the command does not take', () => {
+    expect(parseCli(['dump', '--profile', 'modern-4x', '--help'])).toEqual({
+      kind: 'help',
+      command: 'dump',
+      json: false,
+    });
+  });
+
   it('carries --json through to help and version', () => {
     expect(parseCli(['--help', '--json'])).toEqual({ kind: 'help', command: null, json: true });
     expect(parseCli(['dump', '--help', '--json'])).toEqual({
@@ -128,14 +164,12 @@ describe('parseCli', () => {
   });
 
   it.each([
-    [['bogus'], /unknown command/],
+    [['bogus'], /unknown command 'bogus'/],
     [[], /no command/],
     [['dump', '--nope'], /Unknown option/],
-    [['decrypt'], /needs a file/],
-    [['flash'], /needs a file/],
-    [['dump', 'extra'], /unexpected argument/],
-    [['decrypt', 'a.bin', 'b.bin'], /unexpected argument/],
-    [['dump', '--profile', 'nope'], /unknown profile/],
+    [['dump', 'extra'], /unexpected argument 'extra' after 'dump'/],
+    [['info', 'extra'], /unexpected argument 'extra' after 'info'/],
+    [['preserve', 'run'], /unexpected argument 'run' after 'preserve'/],
     [['dump', '--recipient', 'sideways'], /--recipient must be one of/],
     [['dump', '--chunk', 'lots'], /--chunk expects a number/],
     [['dump', '--chunk', '0'], /--chunk must be between/],
@@ -144,6 +178,8 @@ describe('parseCli', () => {
     [['dump', '--retries=-1'], /--retries expects a number/],
     [['dump', '--retry-delay', '1.5'], /--retry-delay expects a number/],
     [['dump', '--quiet', '--verbose'], /contradict/],
+    [['info', '--profile', 'nope'], /unknown profile 'nope'/],
+    [['info', '--devices', '--profiles'], /--devices and --profiles each list something/],
   ])('rejects %j', (argv, message) => {
     expect(() => parseCli(argv)).toThrow(UsageError);
     expect(() => parseCli(argv)).toThrow(message);
@@ -151,75 +187,96 @@ describe('parseCli', () => {
 
   it('names the known profiles when --profile is wrong', () => {
     try {
-      parseCli(['dump', '--profile', 'nope']);
+      parseCli(['info', '--profile', 'nope']);
       expect.unreachable('should have thrown');
     } catch (error) {
       expect(error).toBeInstanceOf(UsageError);
-      expect((error as UsageError).hint).toContain('modern-4x');
+      expect((error as UsageError).hint).toContain('info --profiles');
       expect((error as UsageError).exitCode).toBe(EXIT_USAGE);
     }
   });
 });
 
-describe('run', () => {
-  it('exits 2 and prints usage on stderr for a bad command line', async () => {
-    const { io, stdout, stderr } = testIo();
-    const code = await run(['bogus'], io, new AbortController().signal);
-    expect(code).toBe(EXIT_USAGE);
-    expect(stdout.text).toBe('');
-    expect(stderr.text).toContain('seek-fw <command> [options]');
-    expect(stderr.text).toContain("error: unknown command 'bogus'");
+/* ==================================================================== *
+ * The removed names and the old forms are refused, not translated.
+ * ==================================================================== */
+
+describe('removed command names and old forms', () => {
+  it.each(['flash', 'sweep', 'devices', 'profiles'])(
+    "rejects the removed command '%s' as unknown, with exit 2",
+    (name) => {
+      expect(() => parseCli([name])).toThrow(UsageError);
+      expect(() => parseCli([name])).toThrow(`unknown command '${name}'`);
+    },
+  );
+
+  it('rejects `decrypt <file>` without the form word, and says what to write instead', () => {
+    expect(() => parseCli(['decrypt', 'flash_4m.bin'])).toThrow(
+      "decrypt takes 'file' or 'slot', got 'flash_4m.bin'",
+    );
+    try {
+      parseCli(['decrypt', 'flash_4m.bin']);
+      expect.unreachable('should have thrown');
+    } catch (error) {
+      expect((error as UsageError).hint).toContain('seek-fw decrypt file flash_4m.bin');
+    }
   });
 
-  it('prints help on stdout and exits 0', async () => {
-    const { io, stdout, stderr } = testIo();
-    const code = await run(['--help'], io, new AbortController().signal);
-    expect(code).toBe(EXIT_OK);
-    expect(stdout.text).toContain('seek-fw — dump, decrypt and reflash');
-    expect(stderr.text).toBe('');
+  it('rejects `decrypt file` and `decrypt slot` with no path, and with a second path', () => {
+    expect(() => parseCli(['decrypt'])).toThrow(/decrypt needs a form/);
+    expect(() => parseCli(['decrypt', 'file'])).toThrow(/decrypt file needs a file argument/);
+    expect(() => parseCli(['decrypt', 'slot'])).toThrow(/decrypt slot needs a file argument/);
+    expect(() => parseCli(['decrypt', 'file', 'a.bin', 'b.bin'])).toThrow(
+      "unexpected argument 'b.bin' after 'decrypt file'",
+    );
   });
 
-  it('prints per-command help', async () => {
-    const { io, stdout } = testIo();
-    await run(['flash', '--help'], io, new AbortController().signal);
-    expect(stdout.text).toContain('seek-fw flash — write a decrypted image');
-    expect(stdout.text).toContain('--no-rescue-dump');
+  it('rejects a flag on a command that does not take it, and says which command does', () => {
+    expect(() => parseCli(['dump', '--profile', 'modern-4x'])).toThrow(
+      "--profile does not apply to 'dump'",
+    );
+    expect(() => parseCli(['dump', '--devices'])).toThrow("--devices does not apply to 'dump'");
+    expect(() => parseCli(['dump', '--backup-only'])).toThrow(
+      "--backup-only does not apply to 'dump'",
+    );
+    expect(() => parseCli(['info', '--out', 'x'])).toThrow("--out does not apply to 'info'");
+    expect(() => parseCli(['info', '--all-selectors'])).toThrow(
+      "--all-selectors does not apply to 'info'",
+    );
+    expect(() => parseCli(['decrypt', 'file', 'a.bin', '--serial', 'X'])).toThrow(
+      "--serial does not apply to 'decrypt'",
+    );
+    expect(() => parseCli(['preserve', '--no-decrypt'])).toThrow(
+      "--no-decrypt does not apply to 'preserve'",
+    );
+    expect(() => parseCli(['dump', '--no-verify'])).toThrow("--no-verify does not apply to 'dump'");
+    expect(() => parseCli(['slots', 'list', '--chunk', '64'])).toThrow(
+      "--chunk does not apply to 'slots'",
+    );
   });
 
-  it('prints the version on stdout', async () => {
-    const { io, stdout } = testIo();
-    const code = await run(['--version'], io, new AbortController().signal);
-    expect(code).toBe(EXIT_OK);
-    expect(stdout.text).toBe('2.0.0-test\n');
+  it('refuses a refused flag with exit 2 and the help hint', () => {
+    try {
+      parseCli(['dump', '--profile', 'modern-4x']);
+      expect.unreachable('should have thrown');
+    } catch (error) {
+      expect(error).toBeInstanceOf(UsageError);
+      expect((error as UsageError).exitCode).toBe(EXIT_USAGE);
+      expect((error as UsageError).hint).toContain('seek-fw dump --help');
+    }
   });
 
-  /* The contract: under --json stdout is ONE JSON document, with no exception
-   * for the two paths that used to print prose. `seek-fw ... --json | jq` has
-   * to be safe to write without knowing which flags the caller passed. */
-  it('makes --help a JSON document under --json', async () => {
-    const { io, stdout, stderr } = testIo();
-    const code = await run(['flash', '--help', '--json'], io, new AbortController().signal);
-    expect(code).toBe(EXIT_OK);
-    expect(JSON.parse(stdout.text)).toEqual({
-      command: 'flash',
-      ok: true,
-      help: expect.stringContaining('--no-rescue-dump') as unknown,
-    });
-    expect(stderr.text).toBe('');
-  });
-
-  it('makes --version a JSON document under --json', async () => {
-    const { io, stdout } = testIo();
-    const code = await run(['--version', '--json'], io, new AbortController().signal);
-    expect(code).toBe(EXIT_OK);
-    expect(JSON.parse(stdout.text)).toEqual({ command: null, ok: true, version: '2.0.0-test' });
+  it('accepts a flag that names its own command, including --no- forms', () => {
+    expect(() => parseCli(['dump', '--no-probe', '--all-selectors'])).not.toThrow();
+    expect(() => parseCli(['slots', 'flash', 'b', 'image.bin', '--no-verify'])).not.toThrow();
+    expect(() => parseCli(['preserve', '--backup-only', '--zip', 'r.zip'])).not.toThrow();
   });
 });
 
 /**
- * The help text spells the dump defaults out for a reader; core owns them. A
- * copy that drifts is worse than no documentation at all, so it is pinned
- * against the values themselves rather than against another copy of them.
+ * The help text spells the defaults out for a reader; core owns them. A copy that drifts is worse
+ * than no documentation at all, so it is pinned against the values themselves rather than against
+ * another copy of them.
  */
 describe('documented defaults', () => {
   function documentedDefault(flag: string, text: string): number {
@@ -230,17 +287,18 @@ describe('documented defaults', () => {
     return Number(match[1]);
   }
 
-  it("match core's DEFAULT_DUMP_OPTIONS", () => {
-    expect(documentedDefault('chunk', MAIN_USAGE)).toBe(DEFAULT_DUMP_OPTIONS.chunk);
-    expect(documentedDefault('gap-fill', MAIN_USAGE)).toBe(DEFAULT_DUMP_OPTIONS.gapFill);
-    expect(documentedDefault('retries', MAIN_USAGE)).toBe(DEFAULT_DUMP_OPTIONS.retries);
-    expect(documentedDefault('retry-delay', MAIN_USAGE)).toBe(DEFAULT_DUMP_OPTIONS.retryDelayMs);
+  it("match core's DEFAULT_DUMP_OPTIONS in the help of dump", () => {
+    const text = usageFor('dump');
+    expect(documentedDefault('chunk', text)).toBe(DEFAULT_DUMP_OPTIONS.chunk);
+    expect(documentedDefault('gap-fill', text)).toBe(DEFAULT_DUMP_OPTIONS.gapFill);
+    expect(documentedDefault('retries', text)).toBe(DEFAULT_DUMP_OPTIONS.retries);
+    expect(documentedDefault('retry-delay', text)).toBe(DEFAULT_DUMP_OPTIONS.retryDelayMs);
   });
 
   it('the README is not a third copy that can drift', () => {
-    /* The same four numbers are written out a third time, for people who never
-     * run --help. An audit found the README had already drifted on other
-     * points; this is the cheap way to stop it drifting on these. */
+    /* The same four numbers are written out a third time, for people who never run --help. An
+     * audit found the README had already drifted on other points; this is the cheap way to stop it
+     * drifting on these. */
     const readme = readFileSync(new URL('../../../README.md', import.meta.url), 'utf8');
     expect(documentedDefault('chunk', readme)).toBe(DEFAULT_DUMP_OPTIONS.chunk);
     expect(documentedDefault('gap-fill', readme)).toBe(DEFAULT_DUMP_OPTIONS.gapFill);
