@@ -26,11 +26,16 @@ import {
   errorMessage,
   findEmbeddedKeyTable,
   flashSlot,
+  fpsPlanOfBank,
   hexUp,
   inspectSlots,
   keyFilenameSuffix,
+  patchBankFps,
   prepareSlotFlash,
   type PrepareSlotFlashOptions,
+  type FpsPatchResult,
+  type FpsPlan,
+  type FpsPreDump,
   type KeyPair,
   type DumpedSlot,
   type FirmwareProfile,
@@ -52,6 +57,7 @@ import {
 } from '@seek-fw/core';
 import { reportInUseElsewhere } from '../lib/camera-lock';
 import { downloadBytes } from '../lib/download';
+import { saveFpsDumpInBrowser } from '../lib/fps-save';
 import { logHint } from '../lib/hints';
 import { chooseActingProfile, refusalOf, type ActingProfile, type Refusal } from '../lib/identify';
 import {
@@ -68,12 +74,28 @@ export const SLOTS_READ_PANEL_ID = 'slots-read';
 export const SLOTS_DUMP_PANEL_ID = 'slots-dump';
 export const SLOTS_PREPARE_PANEL_ID = 'slots-prepare';
 export const SLOTS_FLASH_PANEL_ID = 'slots-flash';
+export const SLOTS_FPS_PANEL_ID = 'slots-fps';
 
 /**
  * Everything the page asks of the slot workflows, so a test can answer each
  * question without a camera. The defaults are core's own functions.
  */
 export interface SlotsBackend {
+  /** The frame-rate plan for one bank, from its own image. Pure. Core's by default. */
+  readonly fpsPlan?: (report: SlotsReport, key: SlotKey) => FpsPlan;
+  /** Patches one bank (core `patchBankFps`). Core's by default. */
+  readonly patchFps?: (
+    ctx: WorkflowContext,
+    report: SlotsReport,
+    key: SlotKey,
+    options: {
+      readonly acknowledgeRisk: boolean;
+      readonly verify?: boolean;
+      readonly saveDump: (dump: FpsPreDump) => Promise<boolean>;
+    },
+  ) => Promise<FpsPatchResult>;
+  /** Saves the pre-patch dump in the browser. Resolves true only once it is saved. */
+  readonly saveDump?: (dump: FpsPreDump) => Promise<boolean>;
   /** Asks the camera which build it runs and which family to act under. Read-only. */
   readonly identify: (
     device: SeekDevice,
@@ -108,6 +130,9 @@ export const CORE_SLOTS_BACKEND: SlotsBackend = {
   dump: (ctx, report, key) => dumpSlot(ctx, report, key),
   prepare: (report, key, input, options) => prepareSlotFlash(report, key, input, options),
   flash: (ctx, report, plan, options) => flashSlot(ctx, report, plan, options),
+  fpsPlan: (report, key) => fpsPlanOfBank(report, key),
+  patchFps: (ctx, report, key, options) => patchBankFps(ctx, report, key, options),
+  saveDump: (dump) => saveFpsDumpInBrowser(dump),
 };
 
 /* ---- pure helpers, exported for the tests ----------------------------- */
@@ -354,6 +379,15 @@ export interface SlotsPanelApi {
   readonly refusal: Refusal | null;
   readonly pending: PendingSlotFlash | null;
   readonly outcome: SlotFlashOutcome | null;
+  /** The last frame-rate patch, kept on screen until the next run starts. */
+  readonly fpsOutcome: FpsPatchResult | null;
+  /**
+   * The frame-rate plan for one bank, from the bank's own image in the last read. Pure: nothing is
+   * sent. Refused (with the reason) when there is no read.
+   */
+  readonly planFps: (key: SlotKey) => FpsPlan;
+  /** Patches one bank: saves its dump first, then writes the patched image and reads it back. */
+  readonly patchFps: (key: SlotKey, acknowledged: boolean) => Promise<void>;
   /**
    * The person says the camera runs the 16 Hz FF 1.3.0.8 build. Used only when the camera's own
    * answers cannot say which build runs; it applies to the next image prepared.
@@ -388,6 +422,7 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
   const [refusal, setRefusal] = useState<Refusal | null>(null);
   const [pending, setPending] = useState<PendingSlotFlash | null>(null);
   const [outcome, setOutcome] = useState<SlotFlashOutcome | null>(null);
+  const [fpsOutcome, setFpsOutcome] = useState<FpsPatchResult | null>(null);
   const [running16Hz, setRunning16Hz] = useState(false);
 
   /* A running task reads these, not the render's copy: it captures its inputs
@@ -426,6 +461,7 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
     setPlan(null);
     setRefusal(null);
     setOutcome(null);
+    setFpsOutcome(null);
     setStatus(
       device.device === null
         ? 'Device disconnected — read the slots again.'
@@ -442,6 +478,7 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
       setPlan(null);
       setRefusal(null);
       setOutcome(null);
+      setFpsOutcome(null);
       onOptionsFailure(null);
       let transport: ReturnType<DeviceHandle['makeTransport']> | null = null;
       try {
@@ -841,6 +878,106 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
     [backend, device, flush, form, forgetReport, log, reset, runner, setStatus, workflow],
   );
 
+  /* ---- frame-rate patch ---------------------------------------------- */
+
+  const planFps = useCallback(
+    (key: SlotKey): FpsPlan => {
+      if (report === null) {
+        return {
+          status: 'refused',
+          reason: 'read the slots first — the patch is planned from the bank’s own image',
+        };
+      }
+      return (backend.fpsPlan ?? fpsPlanOfBank)(report, key);
+    },
+    [backend, report],
+  );
+
+  /**
+   * Patches one bank. The core saves the bank's dump first (`saveDump`) and refuses the write if that did
+   * not happen; then it writes the patched image through the page's own plain-chain path and reads it back.
+   * Like `write`, a failure after the analysis is used drops the report: the bank may have changed.
+   */
+  const patchFps = useCallback(
+    async (key: SlotKey, acknowledged: boolean): Promise<void> => {
+      const name = key.toUpperCase();
+      const result = await runner.start(SLOTS_FPS_PANEL_ID, async (signal) => {
+        reset(`Patching slot ${name} ...`);
+        setFpsOutcome(null);
+        const current = reportRef.current;
+        let transport: ReturnType<DeviceHandle['makeTransport']> | null = null;
+        let used = false;
+        try {
+          if (current === null) {
+            throw new SeekError(
+              'slots/refused',
+              'read the slots first — the patch is planned from the bank the analysis read',
+            );
+          }
+          const risk = writeRisk(current, key);
+          if (needsRiskAck(risk) && !acknowledged) {
+            throw new SeekError(
+              'slots/refused',
+              `slot ${name} needs the risk acknowledgement before it can be patched. Nothing was written.`,
+            );
+          }
+          const options = readOptions(form);
+          transport = device.makeTransport({
+            recipient: options.recipient,
+            onWarning: (message) => {
+              workflow.log(message, 'warn');
+            },
+          });
+          const client = new SeekDevice(transport, { reporter: workflow, signal });
+          await transport.open();
+          used = true;
+          const patch = backend.patchFps ?? patchBankFps;
+          const save = backend.saveDump ?? saveFpsDumpInBrowser;
+          const done = await patch(contextOf(current, client, workflow, signal), current, key, {
+            acknowledgeRisk: acknowledged,
+            verify: true,
+            saveDump: save,
+          });
+          setFpsOutcome(done);
+          log(
+            `slot ${name}: patched from ${String(done.fromHz)} Hz to ${String(done.toHz)} Hz ` +
+              `(${done.patch.id}); the dump was saved first as ${done.pre.rawName} and ${done.pre.plainName}`,
+            'ok',
+          );
+          for (const note of done.notes) log(note, 'detail');
+          log('NOW UNPLUG AND REPLUG THE CAMERA.', 'warn');
+          workflow.progress(
+            1,
+            1,
+            done.readBack.ok === false
+              ? 'Patched, but the read-back does not differ only as planned — see the result.'
+              : 'Patched. Unplug and replug, then read the slots again.',
+          );
+        } catch (error) {
+          if (error instanceof CancelledError) {
+            log(`cancelled: ${error.message}`, 'warn');
+            setStatus(
+              used
+                ? 'Cancelled — the bank may be partly written. Read it before relying on it.'
+                : 'Cancelled — nothing was written.',
+            );
+          } else {
+            log(`ERROR: ${errorMessage(error)}`, 'error');
+            logHint(log, error);
+            setStatus('Failed — see the log above.');
+          }
+        } finally {
+          /* Once the camera was used the analysis is no longer a picture of the bank: read again. */
+          if (used) forgetReport();
+          if (transport !== null) await transport.close();
+          flush();
+        }
+      });
+      if (result === 'in-use-elsewhere') reportInUseElsewhere({ log, setStatus });
+    },
+    [backend, device, flush, form, forgetReport, log, reset, runner, setStatus, workflow],
+  );
+
   const cancel = useCallback((): void => {
     runner.cancel();
     setStatus('Cancelling ...');
@@ -859,10 +996,13 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
       refusal,
       pending,
       outcome,
+      fpsOutcome,
+      planFps,
+      patchFps,
       running16Hz,
       setRunning16Hz,
       reading: runner.active === SLOTS_READ_PANEL_ID,
-      writing: runner.active === SLOTS_FLASH_PANEL_ID,
+      writing: runner.active === SLOTS_FLASH_PANEL_ID || runner.active === SLOTS_FPS_PANEL_ID,
       readSlots,
       dump,
       pickFile,
@@ -878,6 +1018,9 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
       refusal,
       pending,
       outcome,
+      fpsOutcome,
+      planFps,
+      patchFps,
       running16Hz,
       runner.active,
       readSlots,

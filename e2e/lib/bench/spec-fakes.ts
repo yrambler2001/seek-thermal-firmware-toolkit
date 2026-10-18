@@ -367,7 +367,10 @@ export function createFakeRig(options: {
       /* The fake's write is the CLI's: the FF image lands as the predicted stored form, anything else
        * is refused before a byte is sent. The bank is named by the page's own letter. */
       const image = new Uint8Array(readFileSync(file));
-      const isFf = ffImageLength(image) !== null && image.length <= BANK_BYTES && predictedFFStored(image).length === BANK_BYTES;
+      const isFf =
+        ffImageLength(image) !== null &&
+        image.length <= BANK_BYTES &&
+        predictedFFStored(image).length === BANK_BYTES;
       if (!isFf || !options.running16Hz) {
         return { code: 1, result: { written: false }, stdout: '', stderr: 'refused (fake)' };
       }
@@ -425,6 +428,8 @@ export function createFakeRig(options: {
 
   const openPage = (): Promise<BenchPage> => {
     const page: BenchPage = {
+      /* The fake page's keys verdict is always "writable" (the fake camera is not refused by its keys). */
+      banner: () => Promise.resolve(null),
       async readSlots(): Promise<PageRead> {
         const version = subject()?.version ?? null;
         /* The FF build boots from recovery; every other fake boots B. */

@@ -24,6 +24,7 @@ import {
   type SlotView,
   type SlotsReport,
 } from '@seek-fw/core';
+import type { FpsPatchResult, FpsPlan, FpsPreDump } from '@seek-fw/core';
 import { downloadBytes } from '../lib/download';
 import { DEFAULT_OPTIONS_FORM } from '../lib/options';
 import type { ActingProfile } from '../lib/identify';
@@ -364,7 +365,9 @@ describe('useSlotsPanel: writing a bank', () => {
     });
     expect(result.current.panel.pending?.key).toBe('r');
     expect(result.current.panel.pending?.plan.staging).toBe('key-a-keystream');
-    expect(lineIncludes(result.current.panel.reporter.lines, 'staging key-a-keystream')).toBe(false);
+    expect(lineIncludes(result.current.panel.reporter.lines, 'staging key-a-keystream')).toBe(
+      false,
+    );
 
     await act(async () => {
       await result.current.panel.write(false);
@@ -917,5 +920,131 @@ describe('slot helpers: empty banks', () => {
         busy: false,
       }),
     ).toEqual({ enabled: true, reason: null });
+  });
+});
+
+/* ---- the frame-rate patch --------------------------------------------- */
+
+function fpsPreDumpOf(key: SlotKey): FpsPreDump {
+  return {
+    key,
+    bank: `slot ${key.toUpperCase()}`,
+    version: '1.3.0.0',
+    address: 0x14050000,
+    raw: new Uint8Array(0x10000).fill(0x11),
+    rawSha256: 'aa',
+    rawName: `seek-slot-${key.toUpperCase()}-v1.3.0.0-before-fps-patch-raw-aa.bin`,
+    plain: new Uint8Array(0xbaa8).fill(0x22),
+    plainSha256: 'bb',
+    plainName: `seek-slot-${key.toUpperCase()}-v1.3.0.0-before-fps-patch-decrypted-bb.bin`,
+  };
+}
+
+function fpsResultOf(key: SlotKey): FpsPatchResult {
+  return {
+    key,
+    patch: { id: 'compact_32k-1.3.0.0-to16' },
+    fromHz: 8,
+    toHz: 16,
+    pre: fpsPreDumpOf(key),
+    changed: [0xb964, 0x238],
+    written: { verified: true, commitStatus: 0, after: null, notes: [] },
+    readBack: { checked: true, ok: true, differing: [0xb964, 0x238], missing: [], unexpected: [] },
+    notes: [],
+  } as unknown as FpsPatchResult;
+}
+
+describe('useSlotsPanel: the frame-rate patch', () => {
+  it('plans from the bank the analysis read, and refuses before there is one', async () => {
+    const fpsPlan = vi.fn((): FpsPlan => ({ status: 'refused', reason: 'stage two: not yet' }));
+    const { backend } = makeBackend();
+    const { result } = setup({ ...backend, fpsPlan });
+    expect(result.current.panel.planFps('a')).toMatchObject({ status: 'refused' });
+    expect(fpsPlan).not.toHaveBeenCalled();
+    await act(async () => {
+      await result.current.panel.readSlots();
+    });
+    expect(result.current.panel.planFps('a')).toMatchObject({
+      status: 'refused',
+      reason: 'stage two: not yet',
+    });
+    expect(fpsPlan).toHaveBeenCalledTimes(1);
+  });
+
+  it('saves the bank first, then writes the patch, and keeps the outcome until the next run', async () => {
+    const order: string[] = [];
+    const saveDump = vi.fn(() => {
+      order.push('saved');
+      return Promise.resolve(true);
+    });
+    const patchFps = vi.fn(
+      async (
+        _ctx: unknown,
+        _report: unknown,
+        key: SlotKey,
+        options: { saveDump: (dump: FpsPreDump) => Promise<boolean> },
+      ) => {
+        order.push('patch');
+        expect(await options.saveDump(fpsPreDumpOf(key))).toBe(true);
+        order.push('written');
+        return fpsResultOf(key);
+      },
+    );
+    const { backend } = makeBackend();
+    const { result } = setup({ ...backend, saveDump, patchFps });
+    await act(async () => {
+      await result.current.panel.readSlots();
+    });
+    await act(async () => {
+      await result.current.panel.patchFps('b', false);
+    });
+    expect(order).toEqual(['patch', 'saved', 'written']);
+    expect(result.current.panel.fpsOutcome?.key).toBe('b');
+    expect(result.current.panel.writing).toBe(false);
+  });
+
+  it('a dump that was not saved refuses the patch: no outcome, and the run says so', async () => {
+    const saveDump = vi.fn(() => Promise.resolve(false));
+    const patchFps = vi.fn(
+      async (
+        _ctx: unknown,
+        _report: unknown,
+        key: SlotKey,
+        options: { saveDump: (dump: FpsPreDump) => Promise<boolean> },
+      ) => {
+        if (!(await options.saveDump(fpsPreDumpOf(key)))) {
+          throw new SeekError(
+            'slots/refused',
+            'The pre-patch dump of slot B was not saved, so the patch was not written.',
+          );
+        }
+        return fpsResultOf(key);
+      },
+    );
+    const { backend } = makeBackend();
+    const { result } = setup({ ...backend, saveDump, patchFps });
+    await act(async () => {
+      await result.current.panel.readSlots();
+    });
+    await act(async () => {
+      await result.current.panel.patchFps('b', false);
+    });
+    expect(saveDump).toHaveBeenCalledTimes(1);
+    expect(result.current.panel.fpsOutcome).toBeNull();
+    expect(lineIncludes(result.current.panel.reporter.lines, 'was not saved')).toBe(true);
+  });
+
+  it('asks for the risk tick on the booted bank before anything is run', async () => {
+    const patchFps = vi.fn(() => Promise.resolve(fpsResultOf('a')));
+    const { backend } = makeBackend();
+    const { result } = setup({ ...backend, patchFps });
+    await act(async () => {
+      await result.current.panel.readSlots();
+    });
+    await act(async () => {
+      await result.current.panel.patchFps('a', false);
+    });
+    expect(patchFps).not.toHaveBeenCalled();
+    expect(result.current.panel.fpsOutcome).toBeNull();
   });
 });

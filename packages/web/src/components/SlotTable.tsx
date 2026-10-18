@@ -9,11 +9,12 @@
  */
 
 import type { ReactElement, ReactNode } from 'react';
-import { Copy, Download, FileUp } from 'lucide-react';
+import { Copy, Download, FileUp, Gauge } from 'lucide-react';
 import {
   SLOT_BYTES,
   hexUp,
   onPlaintextChain,
+  type FpsPlan,
   type SlotInputKind,
   type SlotKey,
   type SlotView,
@@ -52,6 +53,29 @@ export interface SlotTableProps {
   readonly onPickFile: (key: SlotKey, kind: SlotInputKind, file: File) => void;
   /** Prepare a write of the running firmware's own image into an empty bank. */
   readonly onFillWithBankImage: (key: SlotKey) => void;
+  /** The frame-rate plan of one bank, from its own image in the read. Pure. */
+  readonly planFps: (key: SlotKey) => FpsPlan;
+  /** Opens the confirmation for the frame-rate patch of one bank. Nothing is sent by it. */
+  readonly onPatchFps: (key: SlotKey) => void;
+}
+
+/** What the frame-rate row action says when it is on: the rate change, and that it is untested. */
+function fpsNote(plan: Extract<FpsPlan, { status: 'offer' }>): string {
+  return (
+    `Raises this bank from ${String(plan.fromHz)} Hz to ${String(plan.toHz)} Hz by editing its bytes. ` +
+    'The bank is saved in full before anything is written, and the saved decrypted file is the only way back. ' +
+    'UNTESTED on hardware: the rate is measured in the emulator only.'
+  );
+}
+
+/**
+ * Why a bank offers no frame-rate patch, in the page's words, or null when there is nothing to say (no
+ * image to patch, or a build the page does not support, which has its own banner). The words never say a
+ * write "cannot be written": that banner belongs to the keys verdict alone.
+ */
+function fpsOffNote(view: SlotView, plan: FpsPlan, supported: boolean): string | null {
+  if (!supported || view.content !== 'image' || plan.status === 'offer') return null;
+  return `Frame-rate patch not offered: ${plan.reason}`;
 }
 
 function bootability(view: SlotView): ReactNode {
@@ -140,6 +164,8 @@ export function SlotTable({
   onDump,
   onPickFile,
   onFillWithBankImage,
+  planFps,
+  onPatchFps,
 }: SlotTableProps): ReactElement {
   /* On the 2014 plaintext chain the booted bank is the camera's active-slot word, so the words say "named". */
   const byWord = onPlaintextChain(report.state.profile, report.state.version);
@@ -176,6 +202,9 @@ export function SlotTable({
           /* An empty bank can be filled with the firmware the camera already runs, when another
            * bank holds a decrypted image of it. */
           const source = empty ? bankImageSource(report, key) : null;
+          /* The frame-rate patch belongs to this row: its own image decides the entry, or the reason none. */
+          const fps = planFps(key);
+          const supported = report.plan.supportedBuild.supported;
 
           return (
             <TableRow key={key}>
@@ -310,6 +339,27 @@ export function SlotTable({
                           : `Use ${source.name}'s image`}
                       </Button>
                     </Action>
+                  )}
+
+                  {fps.status === 'offer' ? (
+                    <Action reason={plainGate.reason} note={fpsNote(fps)}>
+                      <Button
+                        variant="outline"
+                        disabled={!plainGate.enabled}
+                        onClick={() => {
+                          onPatchFps(key);
+                        }}
+                      >
+                        <Gauge />
+                        {`Make ${String(fps.toHz)} FPS`}
+                      </Button>
+                    </Action>
+                  ) : (
+                    fpsOffNote(view, fps, supported) !== null && (
+                      <span className="block text-[0.75rem] leading-snug text-muted-foreground">
+                        {fpsOffNote(view, fps, supported)}
+                      </span>
+                    )
                   )}
                 </div>
               </TableCell>

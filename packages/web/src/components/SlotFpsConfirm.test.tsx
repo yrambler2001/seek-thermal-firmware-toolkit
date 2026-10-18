@@ -1,0 +1,114 @@
+/**
+ * The frame-rate patch's confirmation: what it says (the bank, the rate change, that the rate is untested,
+ * that the saved dump is the only way back, and how the save works in this browser), and that a bank the
+ * camera boots now, or recovery, needs the same tick a write needs before the confirm can be pressed.
+ */
+
+import { act } from 'react';
+import { describe, expect, it, vi } from 'vitest';
+import { SlotFpsConfirm, type FpsOffer, type SlotFpsConfirmProps } from './SlotFpsConfirm';
+import { buttonByText, render } from '../test-helpers';
+
+const OFFER = {
+  status: 'offer',
+  patch: { id: 'compact_32k-1.3.0.0-to16' },
+  fromHz: 8,
+  toHz: 16,
+  sites: [{ offset: 0xb964, before: 0x24, after: 0x22 }],
+  sumWord: { offset: 0x238, before: 0 },
+} as unknown as FpsOffer;
+
+const FREE = { booted: false, recovery: false, bootUnnamed: false };
+
+function setup(overrides: Partial<SlotFpsConfirmProps> = {}): ReturnType<typeof render> & {
+  onConfirm: ReturnType<typeof vi.fn>;
+  onCancel: ReturnType<typeof vi.fn>;
+} {
+  const onConfirm = vi.fn();
+  const onCancel = vi.fn();
+  const handle = render(
+    <SlotFpsConfirm
+      open
+      slotName="slot B"
+      offer={OFFER}
+      version="1.3.0.0"
+      risk={FREE}
+      saveMode="download"
+      onConfirm={onConfirm}
+      onCancel={onCancel}
+      {...overrides}
+    />,
+  );
+  return { ...handle, onConfirm, onCancel };
+}
+
+function dialog(): HTMLElement {
+  const node = document.body.querySelector<HTMLElement>('[role="alertdialog"]');
+  if (node === null) throw new Error('the confirmation is not open');
+  return node;
+}
+
+describe('the frame-rate patch confirmation', () => {
+  it('says the bank, the build, the rate change, and that the rate is untested on hardware', () => {
+    const { unmount } = setup();
+    const text = dialog().textContent;
+    expect(text).toContain('Make slot B run at 16 FPS?');
+    expect(text).toContain('holds firmware 1.3.0.0');
+    expect(text).toContain('makes its image run at 16 Hz instead of 8 Hz');
+    expect(text).toContain('1 byte(s) of the image');
+    expect(text).toContain('UNTESTED on hardware');
+    unmount();
+  });
+
+  it('says the saved decrypted file is the only way back, with no restore button', () => {
+    const { unmount } = setup();
+    expect(dialog().textContent).toContain('The saved decrypted file is the only way back');
+    expect(dialog().textContent).toContain('There is no restore button');
+    unmount();
+  });
+
+  it('says that this browser cannot confirm a download reached the disk, when it only downloads', () => {
+    const { unmount } = setup({ saveMode: 'download' });
+    expect(dialog().textContent).toContain('cannot confirm that the files reached the disk');
+    unmount();
+  });
+
+  it('says the write waits for both files, when the browser lets the person choose each place', () => {
+    const { unmount } = setup({ saveMode: 'picker' });
+    expect(dialog().textContent).toContain('the write starts only after both are on disk');
+    unmount();
+  });
+
+  it('asks for the tick on the bank the camera boots, and the confirm stays off until it is ticked', () => {
+    const { onConfirm, unmount } = setup({ risk: { ...FREE, booted: true } });
+    const box = document.body.querySelector<HTMLInputElement>('#slot-fps-ack');
+    expect(box).not.toBeNull();
+    expect(buttonByText(document.body, 'Yes — patch slot B').disabled).toBe(true);
+    act(() => {
+      box?.click();
+    });
+    act(() => {
+      buttonByText(document.body, 'Yes — patch slot B').click();
+    });
+    expect(onConfirm).toHaveBeenCalledWith(true);
+    unmount();
+  });
+
+  it('confirms a free bank without the tick, and cancels without sending anything', () => {
+    const free = setup();
+    expect(document.body.querySelector('#slot-fps-ack')).toBeNull();
+    act(() => {
+      buttonByText(document.body, 'Yes — patch slot B').click();
+    });
+    expect(free.onConfirm).toHaveBeenCalledWith(false);
+    free.unmount();
+
+    const cancelled = setup();
+    act(() => {
+      buttonByText(document.body, 'Cancel').click();
+    });
+    expect(cancelled.onCancel).toHaveBeenCalled();
+    expect(cancelled.onConfirm).not.toHaveBeenCalled();
+    cancelled.unmount();
+  });
+});

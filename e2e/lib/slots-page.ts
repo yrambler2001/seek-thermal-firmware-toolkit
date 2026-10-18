@@ -91,6 +91,27 @@ export async function rowOf(page: Page, letter: BankLetter): Promise<BankRowView
 }
 
 /** The summary the page shows above the table, as label → value (lower-cased labels). */
+/** The keys verdict's banner heading, as the page shows it (web SlotWriteKeys.tsx). */
+export const WRITE_BANNER_HEADING = 'No bank of this camera can be written from here.';
+
+/**
+ * The page's "cannot be written" banner as it is shown (its heading and the reason under it), or null when
+ * the page shows none. The page shows the banner only when core's `writeBannerOf` names a reason.
+ */
+export async function writeBanner(page: Page): Promise<string | null> {
+  return page.evaluate((heading: string) => {
+    const text = document.body.innerText;
+    const at = text.indexOf(heading);
+    if (at < 0) return null;
+    return text
+      .slice(at, at + 600)
+      .split('\n')
+      .filter((line) => line.trim() !== '')
+      .slice(0, 2)
+      .join(' ');
+  }, WRITE_BANNER_HEADING);
+}
+
 export async function summaryRows(page: Page): Promise<Record<string, string>> {
   return page.evaluate((sel: string) => {
     const out: Record<string, string> = {};

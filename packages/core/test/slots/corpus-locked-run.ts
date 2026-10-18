@@ -32,7 +32,12 @@ import { recoverKeyInfo } from '../../src/crypto/recover.js';
 import { SeekError, errorMessage } from '../../src/errors.js';
 import { silentReporter } from '../../src/events.js';
 import { wordSum32 } from '../../src/image/bank.js';
-import { KEY_PAIRS, keystream, keyWordsOf, xorWindowVerbatim } from '../../src/preservation/patch.js';
+import {
+  KEY_PAIRS,
+  keystream,
+  keyWordsOf,
+  xorWindowVerbatim,
+} from '../../src/preservation/patch.js';
 import { SeekDevice } from '../../src/protocol/client.js';
 import { WebUsbTransport } from '../../src/protocol/webusb.js';
 import { detectProfile } from '../../src/profiles/registry.js';
@@ -42,8 +47,12 @@ import { classifyBuild } from '../../src/slots/capability-family.js';
 import { dumpSlot } from '../../src/slots/dump.js';
 import { inspectSlots } from '../../src/slots/inspect.js';
 import { ffKeyBPlainOf } from '../../src/slots/ff-form.js';
-import { flashSlot, prepareSlotFlash, type PrepareSlotFlashOptions } from '../../src/slots/write.js';
-import { slotWriteRefusal } from '../../src/slots/write-keys.js';
+import {
+  flashSlot,
+  prepareSlotFlash,
+  type PrepareSlotFlashOptions,
+} from '../../src/slots/write.js';
+import { slotWriteRefusal, writeBannerOf } from '../../src/slots/write-keys.js';
 
 /** The FF image is prepared on the person's word that the camera runs the 16 Hz build (TESTING.md 42.12). */
 const FF_PREPARE_OPTIONS: PrepareSlotFlashOptions = { running16Hz: true };
@@ -192,6 +201,10 @@ export interface LockedRun {
   bootability: Record<SlotKey, string | null> | null;
   /** The write verdict the slots page and the CLI show (`slotWriteRefusal`): null when a bank may be written. */
   writeKeysRefusal: string | null;
+  /** The text of the page's "cannot be written" banner (`writeBannerOf`): null when the page shows none. */
+  bannerRefusal: string | null;
+  /** Whether the build's plan lets some bank take a decrypted image (the page's write is allowed). */
+  planAllowsWrite: boolean | null;
   /** The bank the emulator boots the image from, for the step list. */
   dumps: DumpRow[];
   refusal: RefusalRow | null;
@@ -239,6 +252,8 @@ export function blankLockedRun(subject: LockedSubject, entryId: string): LockedR
     contents: null,
     bootability: null,
     writeKeysRefusal: null,
+    bannerRefusal: null,
+    planAllowsWrite: null,
     dumps: [],
     refusal: null,
     nonBooted: null,
@@ -566,6 +581,9 @@ export async function runLockedFirmware(
       run.booted = state.boot?.booted ?? null;
       run.blockedBy = [...state.flashBlockedBy];
       run.writeKeysRefusal = slotWriteRefusal(state);
+      run.bannerRefusal = writeBannerOf(state);
+      run.planAllowsWrite =
+        plan.supportedBuild.supported && plan.slots.some((s) => s.flashPlain.supported);
       run.inspected = {
         a: state.byKey.get('a') !== undefined && state.byKey.get('a')?.unread === false,
         b: state.byKey.get('b') !== undefined && state.byKey.get('b')?.unread === false,

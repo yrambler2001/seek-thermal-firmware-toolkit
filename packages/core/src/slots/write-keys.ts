@@ -134,6 +134,20 @@ export function slotWriteRefusal(state: DeviceState): string | null {
 }
 
 /**
+ * The text of the page's "No bank of this camera can be written from here" banner, or null when the page
+ * shows none. The one definition: the page reads it, and the tests and the bench assert the CLI's JSON
+ * `writeKeys.refused` against it, so the two cannot disagree.
+ */
+export function writeBannerOf(state: DeviceState): string | null {
+  const refusal = slotWriteRefusal(state);
+  if (refusal !== null) return refusal;
+  const keys = deriveWriteKeys(state);
+  return !keys.plainChain && keys.atRest === null
+    ? (keys.refusal ?? 'the keys could not be derived')
+    : null;
+}
+
+/**
  * The sentence that says which key a derived write stores under, and from which booted bank it was
  * derived (the CLI and the page both show it). `bankLabel` is how the caller names the bank.
  */

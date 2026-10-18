@@ -29,7 +29,7 @@ import {
   slotView,
 } from '../test-slots';
 import { buildSlotPlan, getProfile } from '@seek-fw/core';
-import type { DeviceState, SlotKey, SlotsReport } from '@seek-fw/core';
+import type { DeviceState, FpsPatchResult, FpsPlan, SlotKey, SlotsReport } from '@seek-fw/core';
 import { SlotsView } from './SlotsView';
 
 let base: DeviceState;
@@ -75,6 +75,9 @@ function panel(over: Partial<SlotsPanelApi> = {}): SlotsPanelApi {
     cancel: vi.fn(),
     running16Hz: false,
     setRunning16Hz: vi.fn(),
+    fpsOutcome: null,
+    planFps: vi.fn((): FpsPlan => ({ status: 'refused', reason: 'no read yet' })),
+    patchFps: vi.fn((_key: SlotKey, _acknowledged: boolean) => Promise.resolve()),
     ...over,
   };
 }
@@ -812,6 +815,100 @@ describe('SlotsView: an empty bank', () => {
     const { container, unmount } = view(panel({ plan: slotPlan(true), report: slotReport(base) }));
     expect(container.textContent).toContain('An empty bank');
     expect(container.textContent).toContain("Use the booted bank's image");
+    unmount();
+  });
+});
+
+describe('SlotsView: the frame-rate row action', () => {
+  function offer(toHz: number): FpsPlan {
+    return {
+      status: 'offer',
+      patch: { id: `compact_32k-test-to${String(toHz)}` },
+      fromHz: 8,
+      toHz,
+      sites: [{ offset: 0xb964, before: 0x24, after: 0x22 }],
+      sumWord: { offset: 0x238, before: 0 },
+    } as unknown as FpsPlan;
+  }
+
+  it('offers Make 32 FPS on a bank whose own image the table patches, and opens the confirmation for it', () => {
+    const planFps = vi.fn((): FpsPlan => offer(32));
+    const { container, unmount } = view(
+      panel({ plan: slotPlan(true), report: slotReport(base), planFps }),
+    );
+    const rows = bankRows(container);
+    expect(buttonsIn(rows[1] as HTMLElement)).toContain('Make 32 FPS');
+    act(() => {
+      buttonByText(rows[1] as HTMLElement, 'Make 32 FPS').click();
+    });
+    expect(dialog()?.textContent).toContain('Make slot B run at 32 FPS?');
+    unmount();
+  });
+
+  it('hides the button and says why when the image is in no table entry, without the banner words', () => {
+    const planFps = vi.fn((): FpsPlan => ({
+      status: 'refused',
+      reason: 'this image is not in the frame-rate patch table',
+    }));
+    const { container, unmount } = view(
+      panel({ plan: slotPlan(true), report: slotReport(base), planFps }),
+    );
+    const rows = bankRows(container);
+    expect(buttonsIn(rows[0] as HTMLElement).some((text) => text.startsWith('Make '))).toBe(false);
+    const text = rows[0]?.textContent ?? '';
+    expect(text).toContain(
+      'Frame-rate patch not offered: this image is not in the frame-rate patch table',
+    );
+    expect(text).not.toContain('cannot be written');
+    unmount();
+  });
+
+  it('confirms an unbooted bank without a tick, and hands the patch to the page action', () => {
+    const patchFps = vi.fn((_key: SlotKey, _acknowledged: boolean) => Promise.resolve());
+    const { container, unmount } = view(
+      panel({
+        plan: slotPlan(true),
+        report: slotReport(base),
+        planFps: vi.fn(() => offer(32)),
+        patchFps,
+      }),
+    );
+    act(() => {
+      buttonByText(bankRows(container)[1] as HTMLElement, 'Make 32 FPS').click();
+    });
+    act(() => {
+      buttonByText(document.body, 'Yes — patch slot B').click();
+    });
+    expect(patchFps).toHaveBeenCalledWith('b', false);
+    unmount();
+  });
+
+  it('keeps the outcome of a patch on screen: the rate, the read-back, the saved files, and the way back', () => {
+    const outcome = {
+      key: 'a',
+      patch: { id: 'compact_32k-1.3.0.0-to16' },
+      fromHz: 8,
+      toHz: 16,
+      pre: { rawName: 'raw.bin', plainName: 'plain.bin' },
+      changed: [0xb964, 0x238],
+      written: { verified: true },
+      readBack: {
+        checked: true,
+        ok: true,
+        differing: [0xb964, 0x238],
+        missing: [],
+        unexpected: [],
+      },
+    } as unknown as FpsPatchResult;
+    const { container, unmount } = view(
+      panel({ plan: slotPlan(true), report: slotReport(base), fpsOutcome: outcome }),
+    );
+    const text = container.textContent;
+    expect(text).toContain('patched from 8 Hz to 16 Hz');
+    expect(text).toContain('differs from the saved dump only at the 2 planned byte(s)');
+    expect(text).toContain('raw.bin and plain.bin');
+    expect(text).toContain('UNTESTED on hardware');
+    expect(text).toContain('The saved decrypted file is the only way back');
     unmount();
   });
 });
