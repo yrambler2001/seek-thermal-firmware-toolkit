@@ -63,7 +63,7 @@ export async function bankRows(page: Page): Promise<BankRowView[]> {
       return {
         name: headerLines[0] ?? '',
         address: headerLines[1] ?? '',
-        booted: (header?.innerText ?? '').includes('booted now'),
+        booted: /(?<!not )(named booted|booted now)/.test(header?.innerText ?? ''),
         firmware: cellText(1),
         keyName: cellText(3),
         bootable: cellText(4),
