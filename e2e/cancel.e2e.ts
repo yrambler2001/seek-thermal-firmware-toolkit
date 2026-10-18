@@ -30,7 +30,7 @@ targetSpec({ title: 'cancel mid-read', slug: 'cancel' }, (ctx) => {
   it('cancels Dump & decrypt mid-read, then a clean re-run returns the whole part', async () => {
     const t = ctx.target();
     const w = t.wizard;
-    await w.route('#/');
+    await w.route('#/v4');
     await w.startDump('dump', 'Start dump');
     /* A few windows in (the bar past 10 %), so the cancel lands mid-sweep. */
     const at = await waitForProgress(t.page, 'dump', 10, 5 * 60_000);

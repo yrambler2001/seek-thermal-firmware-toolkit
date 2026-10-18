@@ -146,7 +146,7 @@ targetSpec({ title: 'a second window is kept off the camera', slug: 'second' }, 
       expect(window1, 'window 1 is still reading').not.toMatch(/^(Done|Failed|Cancelled|Refused)/);
       await refusedIn(w2, scope, label, panel);
     };
-    await w2.wizard.route('#/');
+    await w2.wizard.route('#/v4');
     const connect = 'section[aria-labelledby="connect-heading"]';
     await tryInWindow2('section[aria-labelledby="dump-heading"]', 'Start dump', 'dump');
     await tryInWindow2(connect, 'Test connection', 'dump');

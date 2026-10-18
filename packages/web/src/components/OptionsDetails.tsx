@@ -3,7 +3,7 @@
  * and the same explanatory paragraph as the original's `<details class="opts">`.
  */
 
-import type { ReactElement } from 'react';
+import type { ReactElement, ReactNode } from 'react';
 import { SlidersHorizontal } from 'lucide-react';
 import { Prose } from './Prose';
 import { Disclosure } from './ui/disclosure';
@@ -17,6 +17,11 @@ export interface OptionsDetailsProps {
   /** The field the last validation failure named, so it can be marked invalid. */
   readonly invalidField: OptionField | null;
   readonly errorMessage: string | null;
+  /**
+   * Run controls that belong to the read as a whole and are not a setting (the
+   * 4.x/Nano tab's "Dump all selectors"). They sit inside the spoiler, under the fields.
+   */
+  readonly actions?: ReactNode;
 }
 
 export function OptionsDetails({
@@ -25,6 +30,7 @@ export function OptionsDetails({
   disabled,
   invalidField,
   errorMessage,
+  actions,
 }: OptionsDetailsProps): ReactElement {
   const invalid = (field: OptionField): boolean => invalidField === field;
   const describedBy = errorMessage === null ? undefined : 'opt-error';
@@ -133,6 +139,12 @@ export function OptionsDetails({
           </Select>
         </Field>
       </div>
+
+      {actions !== undefined && (
+        <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-border/70 pt-3">
+          {actions}
+        </div>
+      )}
 
       {errorMessage !== null && (
         <p

@@ -1,24 +1,23 @@
 /**
- * One render test per view: the controls are on the page, they are real
- * controls, and the single destructive one stays shut until all four of its
- * preconditions hold.
+ * One render test per tab view: the controls are on the page, they are real
+ * controls, and what each one says about the camera is what the page knows.
  *
- * The gate is not stubbed here. `canWriteNow` — the same function the app
- * wires up — decides `canWrite` for each row of the matrix, so this walks the
- * gate through the rendered button rather than around it.
+ * The views are rendered from stubs of their hook APIs, so each test states the
+ * state it wants and nothing else. The hooks themselves are tested in hooks/.
  */
 
-import { act } from 'react';
-import { afterEach, describe, expect, it } from 'vitest';
-import { DumpView } from './DumpView';
-import { FlashView } from './FlashView';
-import { canWriteNow, type FlashPanelApi, type PreparedImage } from '@/hooks/useFlashPanel';
+import { describe, expect, it } from 'vitest';
+import { DecryptView } from './DecryptView';
+import { InfoView } from './InfoView';
+import { V4View } from './V4View';
 import type { DumpPanelApi } from '@/hooks/useDumpPanel';
+import type { InfoPanelApi, InfoReading } from '@/hooks/useInfoPanel';
 import type { OfflineDecryptApi } from '@/hooks/useOfflineDecrypt';
+import type { SlotFileApi } from '@/hooks/useSlotFileDecrypt';
 import { useReporter, type ReporterHandle } from '@/hooks/useReporter';
 import { DEFAULT_OPTIONS_FORM } from '@/lib/options';
-import { detectProfile, getProfile, type DeviceState } from '@seek-fw/core';
-import { fakeDeviceState, fakePreparedFlash } from '@/test-fixtures';
+import { detectProfile, getProfile, identityGate, type ImageHeader } from '@seek-fw/core';
+import type { SlotFileDecryption } from '@seek-fw/core';
 import { buttonByText, render, renderHook } from '@/test-helpers';
 
 function reporters(count: number): readonly ReporterHandle[] {
@@ -39,6 +38,16 @@ function dumpStub(
   };
 }
 
+function infoStub(reporter: ReporterHandle, result: InfoReading | null = null): InfoPanelApi {
+  return {
+    reporter,
+    reading: false,
+    result,
+    read: () => Promise.resolve(),
+    cancel: () => undefined,
+  };
+}
+
 function offlineStub(reporter: ReporterHandle): OfflineDecryptApi {
   return {
     reporter,
@@ -49,63 +58,26 @@ function offlineStub(reporter: ReporterHandle): OfflineDecryptApi {
   };
 }
 
-interface Scenario {
-  readonly connected: boolean;
-  readonly busy: boolean;
-  readonly state: DeviceState | null;
-  readonly prepared: PreparedImage | null;
-}
-
-function flashStub(scenario: Scenario, pair: readonly ReporterHandle[]): FlashPanelApi {
+function slotFileStub(overrides: Partial<SlotFileApi> = {}): SlotFileApi {
   return {
-    infoReporter: pair[0]!,
-    flashReporter: pair[1]!,
-    deviceState: scenario.state,
+    busy: false,
+    file: null,
+    result: null,
     refusal: null,
-    prepared: scenario.prepared,
-    readingInfo: false,
-    writing: false,
-    canWrite: canWriteNow({
-      hasDevice: scenario.connected,
-      busy: scenario.busy,
-      hasImage: scenario.prepared !== null,
-      state: scenario.state,
-    }),
-    readInfo: () => Promise.resolve(),
-    pickImage: () => Promise.resolve(),
-    write: () => Promise.resolve(),
-    cancelInfo: () => undefined,
-    cancelWrite: () => undefined,
+    inputSha256: null,
+    readError: null,
+    downloadName: null,
+    decrypt: () => Promise.resolve(),
+    download: () => undefined,
+    ...overrides,
   };
 }
 
-function renderFlash(scenario: Scenario) {
-  const pair = reporters(2);
+function renderV4(dump: DumpPanelApi, connected = false) {
   return render(
-    <FlashView
-      flash={flashStub(scenario, pair)}
-      connected={scenario.connected}
-      busy={scenario.busy}
-      profileChoice="auto"
-      onProfileChoice={() => undefined}
-    />,
-  );
-}
-
-afterEach(() => {
-  for (const node of document.body.querySelectorAll('[role="alertdialog"]')) node.remove();
-});
-
-function renderDump(dump: DumpPanelApi, manual?: DumpPanelApi) {
-  const [b, c] = reporters(2);
-  return render(
-    <DumpView
+    <V4View
       dump={dump}
-      manual={manual ?? dumpStub(b!)}
-      manualProfile="legacy-auth"
-      onManualProfile={() => undefined}
-      offline={offlineStub(c!)}
-      connected={false}
+      connected={connected}
       busy={false}
       options={DEFAULT_OPTIONS_FORM}
       onOptionsChange={() => undefined}
@@ -115,24 +87,16 @@ function renderDump(dump: DumpPanelApi, manual?: DumpPanelApi) {
   );
 }
 
-describe('DumpView', () => {
-  it('puts every read control and the read options on the page', () => {
+describe('V4View', () => {
+  it('puts Start dump on the page, and Dump all selectors inside Options', () => {
     const [a] = reporters(1);
-    const { container, unmount } = renderDump(dumpStub(a!));
+    const { container, unmount } = renderV4(dumpStub(a!));
 
-    for (const label of [
-      'Start dump',
-      'Dump all selectors (0x00–0xFF)',
-      'Dump as this family',
-      'Choose dump file…',
-    ]) {
-      expect(buttonByText(container, label), label).toBeTruthy();
-    }
-
-    /* Device work is shut without a device; the offline decryptor never is. */
     expect(buttonByText(container, 'Start dump').disabled).toBe(true);
-    expect(buttonByText(container, 'Dump as this family').disabled).toBe(true);
-    expect(buttonByText(container, 'Choose dump file…').disabled).toBe(false);
+    const sweep = buttonByText(container, 'Dump all selectors (0x00–0xFF)');
+    expect(sweep.disabled).toBe(true);
+    const spoiler = sweep.closest('details');
+    expect(spoiler?.querySelector('summary')?.textContent).toContain('Options');
 
     for (const id of [
       'optChunk',
@@ -141,160 +105,257 @@ describe('DumpView', () => {
       'optRetryDelay',
       'optRecipient',
       'optDecrypt',
-      'manualProfile',
     ]) {
       expect(container.querySelector(`#${id}`), id).toBeTruthy();
       expect(container.querySelector(`label[for="${id}"]`), `label for ${id}`).toBeTruthy();
     }
-
-    /* Three runs, three consoles. */
-    expect(container.querySelectorAll('[role="progressbar"]').length).toBe(3);
-    /* Nothing here writes, so nothing here is destructive. */
-    expect(container.querySelector('[role="alertdialog"]')).toBeNull();
-    /* Nothing has been asked yet, so nothing is claimed about the camera. */
+    /* One run, one console. */
+    expect(container.querySelectorAll('[role="progressbar"]').length).toBe(1);
+    /* Nothing is asked yet, so nothing is claimed about the camera. */
     expect(container.textContent).not.toContain('Detected camera');
     expect(container.querySelector('[role="alert"]')).toBeNull();
     unmount();
   });
 
+  it('has no family selector and no hand-picked dump', () => {
+    const [a] = reporters(1);
+    const { container, unmount } = renderV4(dumpStub(a!), true);
+    expect(container.querySelector('#manualProfile')).toBeNull();
+    expect(container.textContent).not.toContain('Dump as this family');
+    expect(container.textContent).not.toContain('Choose the firmware family yourself');
+    unmount();
+  });
+
   it('puts a refusal in front of the user, with the reason and what to do', () => {
     const [a] = reporters(1);
-    const { container, unmount } = renderDump(
+    const { container, unmount } = renderV4(
       dumpStub(a!, {
         acting: null,
         refusal: {
-          code: 'device/version-unknown',
+          code: 'profile/unsupported',
           message:
-            'refusing to dump: the camera did not report its firmware version (GetFirmwareInfo ' +
-            'did not answer (control IN 0x4e -> stall))',
-          hint: 'Nothing that could change the camera was sent.',
+            'The camera looks like Legacy locked firmware (legacy-auth), not a 4.x/Nano camera, ' +
+            'and this tab reads only 4.x/Nano. Nothing was read.',
+          hint: 'Nothing was read or written.',
         },
       }),
     );
     const alert = container.querySelector('[role="alert"]');
-    expect(alert?.textContent).toContain(
-      'Not read: the camera did not say which firmware it runs.',
-    );
-    expect(alert?.textContent).toContain('refusing to dump: the camera did not report');
-    expect(alert?.textContent).toContain('Nothing that could change the camera was sent.');
+    expect(alert?.textContent).toContain('Not read: this camera cannot be read this way.');
+    expect(alert?.textContent).toContain('not a 4.x/Nano camera');
+    expect(alert?.textContent).toContain('Nothing was read or written.');
     unmount();
   });
 
   it('shows what the camera said it is once it has been asked', () => {
     const [a] = reporters(1);
     const detection = detectProfile({
-      firmwareVersion: '1.0.3.0',
-      plainSelectorWorks: false,
-      plainSelectorRefused: true,
-      authSelectorWorks: true,
+      firmwareVersion: '4.18.2.0',
+      plainSelectorRefused: false,
     });
-    const { container, unmount } = renderDump(
+    const { container, unmount } = renderV4(
       dumpStub(a!, {
         refusal: null,
         acting: {
-          profile: getProfile('legacy-auth'),
+          profile: getProfile('modern-4x'),
           detection,
-          firmwareVersion: '1.0.3.0',
-          buildString: 'Jul  6 2016 17:04:49',
-          forced: false,
+          firmwareVersion: '4.18.2.0',
+          buildString: 'Feb 13 2020',
         },
       }),
+      true,
     );
     expect(container.textContent).toContain('Detected camera');
-    expect(container.textContent).toContain('1.0.3.0');
-    expect(container.textContent).toContain(getProfile('legacy-auth').name);
+    expect(container.textContent).toContain('4.18.2.0');
+    expect(container.textContent).toContain(getProfile('modern-4x').name);
     unmount();
   });
 });
 
-describe('FlashView', () => {
-  it('puts the read, pick and write controls on the page', () => {
-    const { container, unmount } = renderFlash({
-      connected: true,
-      busy: false,
-      state: null,
-      prepared: null,
-    });
+describe('InfoView', () => {
+  it('reads the version only with a camera, and says so without one', () => {
+    const [a] = reporters(1);
+    const off = render(<InfoView info={infoStub(a!)} connected={false} busy={false} />);
+    expect(buttonByText(off.container, 'Read firmware version').disabled).toBe(true);
+    expect(off.container.textContent).toContain('Connect the camera above first');
+    off.unmount();
 
-    expect(buttonByText(container, 'Read device info')).toBeTruthy();
-    expect(buttonByText(container, 'Choose plaintext image…')).toBeTruthy();
-    expect(buttonByText(container, 'Write to camera')).toBeTruthy();
-    expect(container.querySelector('#optDumpFirst')).toBeTruthy();
-    expect(container.querySelector('label[for="optDumpFirst"]')).toBeTruthy();
-    expect(container.querySelector('#profileChoice')).toBeTruthy();
-    expect(container.querySelector('label[for="profileChoice"]')).toBeTruthy();
+    const on = render(<InfoView info={infoStub(a!)} connected busy={false} />);
+    expect(buttonByText(on.container, 'Read firmware version').disabled).toBe(false);
+    expect(buttonByText(on.container, 'Cancel').disabled).toBe(true);
+    on.unmount();
+  });
+
+  it('names the line and the tab for a 4.x camera', () => {
+    const [a] = reporters(1);
+    const { container, unmount } = render(
+      <InfoView
+        info={infoStub(a!, {
+          version: '4.18.2.0',
+          buildString: 'Feb 13 2020',
+          gate: identityGate({ version: '4.18.2.0', buildString: 'Feb 13 2020', note: '' }),
+        })}
+        connected
+        busy={false}
+      />,
+    );
+    const panel = container.textContent;
+    expect(panel).toContain('What the camera reports');
+    expect(panel).toContain('4.18.2.0');
+    expect(panel).toContain('4.x / Nano');
+    expect(panel).toContain('Dump & decrypt 4.x/Nano');
+    expect(container.querySelector('a[href="#/v4"]')).toBeTruthy();
     unmount();
   });
 
-  it('keeps the write control shut until a camera is read AND an image is prepared', async () => {
-    const state = await fakeDeviceState();
-    const flashable = { ...state, canFlash: true } as DeviceState;
-    const prepared: PreparedImage = { prep: fakePreparedFlash(), sha256: 'a'.repeat(64) };
-
-    const rows: readonly (Scenario & { readonly want: boolean })[] = [
-      { connected: false, busy: false, state: null, prepared: null, want: false },
-      { connected: true, busy: false, state: null, prepared: null, want: false },
-      { connected: true, busy: false, state: flashable, prepared: null, want: false },
-      { connected: true, busy: false, state: null, prepared, want: false },
-      { connected: false, busy: false, state: flashable, prepared, want: false },
-      { connected: true, busy: true, state: flashable, prepared, want: false },
-      { connected: true, busy: false, state, prepared, want: false },
-      { connected: true, busy: false, state: flashable, prepared, want: true },
-    ];
-
-    for (const row of rows) {
-      const { container, unmount } = renderFlash(row);
-      const button = buttonByText(container, 'Write to camera');
-      expect(
-        button.disabled,
-        JSON.stringify({ ...row, state: row.state !== null, prepared: row.prepared !== null }),
-      ).toBe(!row.want);
-      /* Nothing is confirmed just by rendering. */
-      expect(document.body.querySelector('[role="alertdialog"]')).toBeNull();
-      unmount();
-    }
-  }, 30_000);
-
-  it('only ever reaches a write through the confirmation modal', async () => {
-    const state = await fakeDeviceState();
-    const flashable = { ...state, canFlash: true } as DeviceState;
-    const prepared: PreparedImage = { prep: fakePreparedFlash(), sha256: 'a'.repeat(64) };
-
-    const { container, unmount } = renderFlash({
-      connected: true,
-      busy: false,
-      state: flashable,
-      prepared,
-    });
-
-    expect(document.body.querySelector('[role="alertdialog"]')).toBeNull();
-    act(() => {
-      buttonByText(container, 'Write to camera').click();
-    });
-
-    const dialog = document.body.querySelector('[role="alertdialog"]');
-    expect(dialog).toBeTruthy();
-    expect(dialog?.textContent).toContain('Write ');
-
-    /* Escape backs all the way out again. */
-    act(() => {
-      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
-    });
-    expect(document.body.querySelector('[role="alertdialog"]')).toBeNull();
+  it('names the 0.x/1.x tab for a 2016 camera', () => {
+    const [a] = reporters(1);
+    const { container, unmount } = render(
+      <InfoView
+        info={infoStub(a!, {
+          version: '1.0.3.0',
+          buildString: 'Jul  6 2016 17:04:49',
+          gate: identityGate({ version: '1.0.3.0', buildString: null, note: '' }),
+        })}
+        connected
+        busy={false}
+      />,
+    );
+    expect(container.textContent).toContain('0.x / 1.x: the 2014 and 2016 cameras');
+    expect(container.querySelector('a[href="#/preserve"]')).toBeTruthy();
     unmount();
-  }, 30_000);
+  });
 
-  it('opens nothing when there is no prepared image to confirm', () => {
-    const { container, unmount } = renderFlash({
-      connected: true,
-      busy: false,
-      state: null,
-      prepared: null,
-    });
-    act(() => {
-      buttonByText(container, 'Write to camera').click();
-    });
-    expect(document.body.querySelector('[role="alertdialog"]')).toBeNull();
+  it('says what no tab will do, for a build older than 0.8.0.0', () => {
+    const [a] = reporters(1);
+    const { container, unmount } = render(
+      <InfoView
+        info={infoStub(a!, {
+          version: '0.3.0.1',
+          buildString: null,
+          gate: identityGate({ version: '0.3.0.1', buildString: null, note: '' }),
+        })}
+        connected
+        busy={false}
+      />,
+    );
+    expect(container.textContent).toContain('No tab reads this build.');
+    expect(container.textContent).toContain('0.3.0.1');
+    unmount();
+  });
+
+  it('says so when the camera did not report a version', () => {
+    const [a] = reporters(1);
+    const { container, unmount } = render(
+      <InfoView
+        info={infoStub(a!, {
+          version: null,
+          buildString: null,
+          gate: identityGate({ version: null, buildString: null, note: 'no answer' }),
+        })}
+        connected
+        busy={false}
+      />,
+    );
+    expect(container.textContent).toContain('The camera did not report its firmware version.');
+    unmount();
+  });
+});
+
+describe('DecryptView', () => {
+  function renderDecrypt(slotFile: SlotFileApi, busy = false) {
+    const [a] = reporters(1);
+    return render(<DecryptView offline={offlineStub(a!)} slotFile={slotFile} busy={busy} />);
+  }
+
+  it('offers both file pickers with no camera, and no camera control at all', () => {
+    const { container, unmount } = renderDecrypt(slotFileStub());
+    expect(buttonByText(container, 'Choose dump file…').disabled).toBe(false);
+    expect(buttonByText(container, 'Choose slot file…').disabled).toBe(false);
+    expect(container.textContent).not.toContain('Read firmware version');
+    expect(container.textContent).not.toContain('Connect device');
+    unmount();
+  });
+
+  it('holds the pickers while a camera run is busy', () => {
+    const { container, unmount } = renderDecrypt(slotFileStub(), true);
+    expect(buttonByText(container, 'Choose slot file…').disabled).toBe(true);
+    unmount();
+  });
+
+  it('shows a refusal with its reason, and nothing to download', () => {
+    const { container, unmount } = renderDecrypt(
+      slotFileStub({
+        file: { name: 'short.bin', size: 100 },
+        refusal: 'a firmware bank is 65536 B (64 KiB); this file is 100 B',
+        inputSha256: 'c'.repeat(64),
+      }),
+    );
+    expect(container.textContent).toContain('Not decrypted: short.bin is not a firmware slot');
+    expect(container.textContent).toContain('this file is 100 B');
+    expect(container.textContent).not.toContain('Download');
+    unmount();
+  });
+
+  it('shows an erased bank as empty, not as a failure', () => {
+    const { container, unmount } = renderDecrypt(
+      slotFileStub({
+        file: { name: 'bank-B.bin', size: 65536 },
+        result: {
+          status: 'empty',
+          notes: ['empty, nothing to decrypt: all 65536 B read as 0xFF (an erased bank)'],
+        } as unknown as SlotFileDecryption,
+      }),
+    );
+    expect(container.querySelector('[role="alert"]')).toBeNull();
+    expect(container.textContent).toContain('bank-B.bin is an erased bank.');
+    unmount();
+  });
+
+  it('shows the decrypted image with its key, size and SHA-256, and offers the download', () => {
+    const decrypted = {
+      status: 'decrypted',
+      plain: new Uint8Array(0x8000),
+      plainSha256: 'd'.repeat(64),
+      header: { version: '4.18.2.0' },
+      profile: { id: 'modern', name: 'Compact Pro 4.x', detected: true },
+      key: {
+        method: 'cryptanalytic',
+        key: '00112233445566778899aabbccddeeff',
+        whiteningK: 0x13579bdf,
+        whiteningEvidence: 'plaintext',
+        acceptanceSum: 0xffff,
+        matchesProfile: true,
+        named: null,
+      },
+      notes: ['decrypted 32768 B under the key solved from this bank'],
+    } as unknown as SlotFileDecryption;
+    const { container, unmount } = renderDecrypt(
+      slotFileStub({
+        file: { name: 'bank-A.bin', size: 65536 },
+        result: decrypted,
+        inputSha256: 'e'.repeat(64),
+        downloadName: 'bank-A_decrypted.bin',
+      }),
+    );
+    const text = container.textContent;
+    expect(text).toContain('Decrypted firmware slot');
+    expect(text).toContain('00112233445566778899aabbccddeeff');
+    expect(text).toContain('0x13579bdf');
+    expect(text).toContain('32,768 B');
+    expect(text).toContain('d'.repeat(64));
+    expect(text).toContain('e'.repeat(64));
+    expect(text).toContain('0x0000ffff');
+    expect(text).toContain('Compact Pro 4.x');
+    expect(buttonByText(container, 'Download bank-A_decrypted.bin')).toBeTruthy();
+    unmount();
+  });
+
+  it('says a read failure is not a refusal', () => {
+    const { container, unmount } = renderDecrypt(
+      slotFileStub({ file: { name: 'gone.bin', size: 0 }, readError: 'NotReadableError' }),
+    );
+    expect(container.textContent).toContain('The file could not be read.');
     unmount();
   });
 });

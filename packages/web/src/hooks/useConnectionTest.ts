@@ -16,6 +16,15 @@ import type { Route } from '../lib/routing';
 
 export const TEST_PANEL_ID = 'test';
 
+/** What the page suggests once the transport works, per tab. */
+const READY_LINE: Readonly<Record<Route, string>> = {
+  info: 'transport works — press "Read firmware version" to see what this camera is running',
+  preserve: 'transport works — run a step in the preserve wizard when you are ready',
+  v4: 'transport works — ready to dump',
+  decrypt: 'transport works — this tab does not need the camera',
+  slots: 'transport works — press "Read slots" to see the three firmware banks',
+};
+
 export interface ConnectionTestParams {
   readonly runner: Runner;
   readonly device: DeviceHandle;
@@ -58,16 +67,7 @@ export function useConnectionTest(params: ConnectionTestParams): ConnectionTestA
             `GetErrorCode -> ${code === null ? 'no data' : hex(code)}`,
           code ? 'warn' : 'ok',
         );
-        reporter.log(
-          route === 'flash'
-            ? 'transport works — press "Read device info" to see what this camera is running'
-            : route === 'preserve'
-              ? 'transport works — run a step in the preserve wizard when you are ready'
-              : route === 'slots'
-                ? 'transport works — press "Read slots" to see the three firmware banks'
-                : 'transport works — ready to dump',
-          'ok',
-        );
+        reporter.log(READY_LINE[route], 'ok');
       } catch (error) {
         /* The likeliest failure here is a claim the browser cannot make,
          * and that one is fixed off the page — by a udev rule, by Zadig, or

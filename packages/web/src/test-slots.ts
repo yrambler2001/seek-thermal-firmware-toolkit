@@ -8,6 +8,7 @@
  */
 
 import {
+  detectProfile,
   getProfile,
   type DeviceState,
   type DumpedSlot,
@@ -204,10 +205,9 @@ export function slotReport(
 export function actingProfile(): ActingProfile {
   return {
     profile: getProfile('modern-4x'),
-    detection: null,
+    detection: detectProfile({ firmwareVersion: '0.8.0.0' }),
     firmwareVersion: '0.8.0.0',
     buildString: null,
-    forced: false,
   };
 }
 

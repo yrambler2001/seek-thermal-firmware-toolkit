@@ -100,8 +100,8 @@ const SEEK_HINTS: Partial<Record<SeekErrorCode, string>> = {
     'smaller chunk (64 is the value that works everywhere).',
   'usb/stalled':
     'The camera rejected the request. This usually means the firmware does not implement it — ' +
-    'if detection picked the wrong family, name the family by hand ("Choose the firmware ' +
-    'family yourself" on the dump page, the profile menu on the flash page).',
+    'the camera is asked which family it is before anything is read, so a family that keeps ' +
+    'refusing is the one the camera answers with — check the firmware version on the Info tab.',
   'usb/not-open':
     'Another program or a system driver is holding the camera. Close it, or set recipient to ' +
     '"device" in the read options, which does not need the interface claimed.',
@@ -110,8 +110,8 @@ const SEEK_HINTS: Partial<Record<SeekErrorCode, string>> = {
     'The camera would not leave imaging mode. Unplug it, wait for it to power down fully, and ' +
     'plug it back in.',
   'device/window':
-    'The selector map this profile uses did not match the camera. Run "Dump all selectors" to ' +
-    'see what the camera actually exposes.',
+    'The selector map this profile uses did not match the camera. On the 4.x/Nano tab, open ' +
+    'Options and run "Dump all selectors" to see what the camera actually exposes.',
   'device/version-unknown':
     'Nothing that could change the camera was sent. Unplug it, let it finish starting up, plug ' +
     'it back in and try again; a camera that reports its firmware version is read normally.',
@@ -125,8 +125,9 @@ const SEEK_HINTS: Partial<Record<SeekErrorCode, string>> = {
     'The commit was rejected. The camera checks the transfer checksum before it erases ' +
     'anything, so a rejected commit leaves the flash untouched.',
   'profile/unsupported':
-    'The firmware family chosen for this camera does not support that. Leave the family on ' +
-    'auto so the camera is asked, or pick one that does.',
+    'Nothing was read or written. Each tab covers one firmware line: 0.x and 1.x cameras go to ' +
+    '"Dump & decrypt 0.x/1.x 2014/2016", 4.x and Nano cameras to "Dump & decrypt 4.x/Nano". The ' +
+    'Info tab says which line the camera is on.',
 };
 
 /**
@@ -139,8 +140,7 @@ const SEEK_HINTS: Partial<Record<SeekErrorCode, string>> = {
 export const FIRMWARE_TOO_OLD_HINT =
   'No firmware family can read this build over USB: its firmware has no command that serves ' +
   'flash, so nothing that could be misread was sent to it. A dump taken with an SPI programmer ' +
-  'or over SWD/J-Link can still be decrypted on this page, under "Decrypt a dump you already ' +
-  'have".';
+  'or over SWD/J-Link can still be decrypted on this page, under "Decrypt File/Slot".';
 
 function isFirmwareTooOld(error: SeekError): boolean {
   return error.code === 'profile/unsupported' && typeof error.detail?.firmwareVersion === 'string';

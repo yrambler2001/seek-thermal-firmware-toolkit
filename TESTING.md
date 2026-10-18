@@ -7046,3 +7046,53 @@ Kept in the move: the plan printed before the question (also under `--quiet`), t
 - Core's `dumpSlot` (`slots/dump.ts`) keeps its own copy of the decrypt steps beside `decryptSlotFile`. The two should become one function; that waits for the reader's owner.
 - Older sections of this file keep the old command names. They are records of what ran then.
 
+### 42.17 The web app's five tabs: the 4.x page is v4-only, the 2016 and FF builds stay on the 0.x/1.x tab, and a slot file decrypts with no camera (2026-10-18)
+
+The web app is restructured into five tabs, in this order, with these routes. Nothing else is routed, and no old hash is redirected.
+
+| Tab (label) | Route | What it is |
+| --- | --- | --- |
+| Info | `#/` | Reads the firmware version (`readRunningFirmware`, read-only) and says which tab covers the camera. It writes nothing. |
+| Dump & decrypt 0.x/1.x 2014/2016 | `#/preserve` | The Preserve wizard, renamed. Its flow is unchanged, its first step still reads and saves the zip. |
+| Dump & decrypt 4.x/Nano | `#/v4` | The dump page, v4 only. No family selector, no "Dump as this family", no hand-picked panel. "Dump all selectors" moved into the Options spoiler. |
+| Decrypt File/Slot | `#/decrypt` | "Decrypt a dump you already have" (the offline decrypt, moved), and the new "Decrypt a firmware slot". It uses no camera: no Connect panel and no USB banner on this tab. |
+| Work with firmware slots | `#/slots` | The slots page, renamed. Its device info (running firmware, profile, boot config, keys) comes from the same read as its bank table. |
+
+Removed: the "Firmware & flashing" page (`FlashView`, `useFlashPanel`, its test, `#/flash`, its nav entry and title, `e2e/flash-view.e2e.ts`, the `e2e:flash` script), and the components only it used (`ProfilePanel`, `Readiness`, `FlashPreview`, `WriteConfirm`, `FLASH_OPCODES`). `DumpView` is `V4View`. `DeviceInfoPanel` no longer lists the three banks: `SlotTable` on the same page already does, so the device info keeps the running firmware, the keys and the "skipped slot" alert.
+
+**The 4.x/Nano tab runs one family.** `useDumpPanel` takes `profileId: 'modern-4x'`. The camera is still asked which family it is (`identifyCamera`). A camera the answer places under another family is refused before any dump read, with the reason and the tab that covers it (`notThisFamily`). A camera that gives no version, or a build older than 0.8.0.0, is refused as before. The hand-picked path and the `forced` flag are gone from `lib/identify.ts`.
+
+**The decision: the 2016 and FF builds stay on the 0.x/1.x tab.** The owner's rule was: if the 2016 Compact PRO line (1.0.3.x) or the 1.3.0.8 FF build does not work in the Preserve flow, and behaves like v4, give the 4.x page a firmware-type select for it. Neither condition holds, so no select was added.
+
+*They work in the Preserve flow.*
+- The build table (`packages/core/src/preservation/patch.ts`, `BUILD_PATCH_PROFILES`) has a derived, byte-checked patch for each: `compact-pro-1.0.3.0` (family `compact-2016`), `compact-pro-1.0.3.2` 9 Hz and 18 Hz FF, and `compact-1.3.0.8-ff` (family `v1-2014-ff`, recovery route only). Their `detect` hooks read image properties, not the version string alone.
+- The Preserve pipeline is green on the emulator for both (TESTING.md 26.5). The 1.0.3.0 build on its native 2016 dump went through backup, patch, commit, drain, restore and verify, with the delivered dump equal to the as-booted part. The 1.3.0.8 FF went through backup, patch, commit (status 0x0) and the whole-part drain on the recovery route; its restore is refused by design, because the FF app's commit cannot round-trip the factory image (26.4).
+- On the bench camera (PIR324, Compact PRO 1.0.3.0 on a Compact board), Preserve step 02 completed read-only: no reset, no pick, the run file written (TESTING.md 38.6). The probe identified the camera as `compact-2016` at 0.98 (37.4).
+
+*They do not behave like v4.*
+- The 2016 Compact PRO's selector map is `legacy-auth`'s (the locked 2014–2017 protocol with a different cipher), not the 4.x map. On the three 2016 parts and the four 1.0.3.x images, 25 of the 4.x map's 63 selectors answer and 38 are refused: the six protected banks and every selector above `0x141FFFFF` (`compact-2016.ts`). A 4.x dump of one of these would return gaps for those banks.
+- The 1.3.0.8 FF is on the 2014 chain, whose version line (`1.x`) `modern-4x` scores as the legacy line (`LEGACY_MAJORS`, `modern-4x.ts`).
+
+So both stay on `#/preserve`. The 4.x tab refuses them and names that tab, and the Info tab says where each camera goes. The Info tab's text carries the same decision.
+
+**Decrypt a firmware slot, with no camera.** `decryptSlotFile` (`packages/core/src/slots/decrypt-file.ts`) takes one 64 KiB bank and does what `dumpSlot` does with a bank it has read: the 1.3.0.8 FF image under Key B first (`ffKeyBPlainOf`), otherwise the key solved from the bank's own ciphertext (`recoverKeyInfo`, no key search) and the image decrypted under it (`decryptImage`). The key form is named by `resolveWhitening`. The plaintext does not depend on the cipher profile (the state alone decrypts; every family shares the clear header window), so the file is not assigned a family to decrypt it. The family is named from the acceptance sum the image produces, and a sum no family accepts is reported, not hidden. A file that is not 65,536 bytes, holds no image header, has an out-of-range header length, or whose key recovers to a reset vector no Cortex-M core can start from is refused with the reason. An all-0xFF file is reported as an erased bank.
+
+**Tests.**
+- Core, `packages/core/test/slots/decrypt-file.test.ts`: 10 tests. The round trip on a synthetic bank built with `cryptImage` (a planted modern key, acceptance 0xFFFF, family named); a bank whose sum no family accepts (profile-default key form); a stored-plain bank (2014 chain, no key); the refusals (not 64 KiB, erased, no header, length out of range, reset vector not a Cortex-M entry). Two corpus cases read a 64 KiB slice of a real whole-flash dump, and run only when `SEEK_FULL_DUMPS_BY_CAMERA` names the corpus (they ran here): the Nano 42.32.3.10 dump, each bank it holds decrypted to a 4.x image accepted at 0xFFFF; the Compact PRO 1.0.3.0 dump, its banks decrypted under the 2016 cipher with a decrypted word sum of 0.
+- Web, `hooks/useSlotFileDecrypt.test.tsx`: a bank built in the test is decrypted with no camera, with the key, size and SHA-256 and the download name; a refusal and an erased bank leave nothing to download; the latest pick wins over an earlier one that finishes last.
+- Web, `render-smoke.test.tsx`: the 4.x tab (no family select, Dump all selectors inside Options, a refusal shown with its reason); the Info tab (disabled without a camera, the line and tab for a 4.x and a 2016 camera, a build below 0.8.0.0, no version); the Decrypt tab (both pickers open with no camera, a refusal with its reason, an erased bank as a warning, the decrypted panel with the key, size, SHA-256 and download, a read failure).
+- Web, `App.test.tsx`: the five tabs in order with their labels, the current one marked, old and unknown hashes landing on Info, the Connect panel shared by the camera tabs and absent on the Decrypt tab, the Options spoiler holding "Dump all selectors".
+- Web, `hooks/useInfoPanel.test.tsx`: the version read sends only identity reads (no arm, no window read); a version-less camera and a 0.3.0.1 camera are reported, not armed.
+- Web, `hooks/useDumpPanel.test.tsx`: a locked 2016 camera is refused on the 4.x tab before any dump read, for Start dump and for Dump all selectors; the version gate still refuses a versionless camera and a 0.3.0.1 build.
+- Web, `views/SlotsView.test.tsx`: the device info appears after a read beside the bank table, with one table on the page; it is absent before a read.
+- Web, `a11y-parity.test.tsx`: the floors per tab, the labels, the ids; the device info panel is not a second table.
+- Web, `safety-copy.test.tsx`: the 4.x tab's read-only promises, the slots tab's write warning, the support banner's new pointer to Decrypt File/Slot.
+
+Run here (targeted, no camera, no emulator): `npx vitest run --project web` 29 files, 326 tests passed (before this change: 28 files, 302). Core, `test/slots/decrypt-file.test.ts` with the corpus set, and the non-emulator slot and crypto unit files: 13 files, 652 passed, 6 skipped (the corpus-only cases in those files). `tsc --noEmit` for core, cli, the web app and node projects, the tools project and e2e: all clean. ESLint and Prettier on every changed file: clean.
+
+**Not done, and why.**
+- The e2e specs were updated (routes, the Options spoiler, the slots summary's new labels, the removed flash spec and script) and typechecked, but not run: they need the emulator and Chrome, or the bench. `e2e/lib/bench/spec-page.ts` got the one-line label change for the slots summary; the bench agent should know it.
+- The docs bundle (`docs/`, served by Pages) was not rebuilt. The previous feature commits did not rebuild it either: the bundle is rebuilt in its own `docs:` commit when the owner wants it published. So `docs/` still shows the old tabs, and `e2e:offline` serves that bundle.
+- Nothing here was run against the real camera. The Info tab's read and the slots page's device info are the existing identity reads, unchanged on the wire.
+- Two pieces of copy left with their components: the re-key warning on the flash page's prepared write (`FlashPreview`), and the flash page's opcode table. The slots page keeps its own write warning, which the safety test now pins.
+- CLI: the `info`, `preserve`, `dump`, `decrypt file|slot`, `slots` shape is the other agent's. Nothing in `packages/cli` was edited here.

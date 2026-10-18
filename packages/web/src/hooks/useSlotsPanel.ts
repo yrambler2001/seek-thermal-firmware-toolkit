@@ -124,7 +124,7 @@ export interface SlotsBackend {
 }
 
 export const CORE_SLOTS_BACKEND: SlotsBackend = {
-  identify: (device, log) => chooseActingProfile(device, 'auto', 'read the device info', log),
+  identify: (device, log) => chooseActingProfile(device, 'read the device info', log),
   plan: (profile, firmwareVersion) => buildSlotPlan(profile, firmwareVersion),
   inspect: (ctx, firmware) => inspectSlots(ctx, firmware === undefined ? {} : { firmware }),
   dump: (ctx, report, key) => dumpSlot(ctx, report, key),

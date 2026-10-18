@@ -21,12 +21,12 @@ Finding (TESTING.md 42.15, corrects 42.14): in IP mode 6 (the camera's boot mode
 
 ## 2. Restructure the pages and the CLI (no compatibility layer)
 Tabs: Info | Dump & decrypt 0.x/1.x 2014/2016 | Dump & decrypt 4.x/Nano | Decrypt File/Slot | Work with firmware slots.
-- [ ] Info tab: reads the firmware version, says what each tab does.
-- [ ] Preserve page renamed to "Dump & decrypt 0.x/1.x 2014/2016", otherwise unchanged (its first step already reads and saves a zip).
-- [ ] Dump page becomes "Dump & decrypt 4.x/Nano", v4 only: the firmware-family selector is removed; "Dump all selectors" moves into the options spoiler.
-- [ ] Decide from the build table and tests whether 2016 and 1.3.0.8 FF run in the Preserve flow. If yes they stay there; if one behaves like v4 it gets a select on the v4 page.
-- [ ] Decrypt tab: "Decrypt a dump you already have" moves here; new "Decrypt a firmware slot" takes 64 KiB of one slot from a file, no camera.
-- [ ] "Firmware & flashing" page removed; device info moves to the slots page. Routes, header, titles, tests, docs follow.
+- [x] Info tab: reads the firmware version, says what each tab does (TESTING.md 42.17).
+- [x] Preserve page renamed to "Dump & decrypt 0.x/1.x 2014/2016", otherwise unchanged (its first step already reads and saves a zip).
+- [x] Dump page becomes "Dump & decrypt 4.x/Nano", v4 only: the firmware-family selector is removed; "Dump all selectors" moves into the options spoiler.
+- [x] Decide from the build table and tests whether 2016 and 1.3.0.8 FF run in the Preserve flow. If yes they stay there; if one behaves like v4 it gets a select on the v4 page.
+- [x] Decrypt tab: "Decrypt a dump you already have" moves here; new "Decrypt a firmware slot" takes 64 KiB of one slot from a file, no camera.
+- [x] "Firmware & flashing" page removed; device info moves to the slots page. Routes, header, titles, tests, docs follow.
 - [x] CLI follows the same shape: `info`, `preserve`, `dump`, `decrypt file|slot`, `slots`; old names removed, usage, README and tests rewritten (TESTING.md 42.16).
 
 ## 3. Slots page quality
@@ -57,3 +57,4 @@ Tabs: Info | Dump & decrypt 0.x/1.x 2014/2016 | Dump & decrypt 4.x/Nano | Decryp
 - 04:42 CLI branch merged; emulator-cli test now takes the read-only 2014 dump through `preserve --backup-only` and checks that `dump` refuses the camera (emulator-cli, slots.emulator, giveup, slots-empty: 34/34).
 - 04:50 42.15: the Compact measurer (e2e/lib/bench/compact-fps) and the frame-rate findings. 1.3.0.0 16 Hz patch measured at 16.00 fps in mode 6 after a power cycle (42.14's 8.29 was pre-restart). Stock mode 6: 8.11 fps, a close and an open stroke per frame (inferred). Vendor SDK mode 8: unaffected by the patch, 6.4 fps thermal with calibration frames about once a second. Candidate C1 (no shutter command, bench only): 32.14 fps, picture not judged. Bank A restored to stock, halted sha = baseline, switch 1=on 2=on. The owner has to decide the offer (42.15 open item a).
 - 04:55 shutter/measurer branch merged. Owner's standing decision stands (offer on, no warning); finding recorded in TESTING.md 42.15 for the morning. Next: bench-measure the 1.2.0.0 and 1.3.0.8 entries (their labels 16 and 32 are unmeasured).
+- 04:43 web restructure (branch worktree-agent-ae06de44936493a52): five tabs; the 4.x tab is v4-only; 2016 and 1.3.0.8 FF stay on the 0.x/1.x tab (no firmware select added); Decrypt File/Slot decrypts a slot file with no camera; Firmware & flashing removed. Section 2 CLI item and the docs bundle are not done here (TESTING.md 42.17).

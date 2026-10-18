@@ -1,10 +1,10 @@
 /**
  * What the camera said it is before a run, or why the run was refused.
  *
- * Shown above the transcript because both are answers the user acts on: a
- * detection that looks wrong is the cue for the hand-picked family, and a
- * refusal — no version, or a build with no read command — is the end of the
- * run, with the reason in the toolkit's own words and what to do next.
+ * Shown above the transcript because both are answers the user acts on: what
+ * family the camera was found to be, and a refusal — no version, a build with
+ * no read command, or a family this tab does not read — which ends the run,
+ * with the reason in the toolkit's own words and what to do next.
  */
 
 import type { ReactElement } from 'react';
@@ -39,32 +39,19 @@ export function CameraIdentity({ acting, refusal }: CameraIdentityProps): ReactE
   if (acting === null) return null;
   return (
     <Panel>
-      <PanelTitle icon={<ScanSearch />}>
-        {acting.forced ? 'Firmware family, chosen by hand' : 'Detected camera'}
-      </PanelTitle>
-      {acting.detection === null ? (
-        <KeyValue
-          rows={[
-            ['Acting as', `${acting.profile.name} (${acting.profile.id})`],
-            ['Summary', acting.profile.summary],
-          ]}
-        />
-      ) : (
-        <>
-          <KeyValue
-            className="mb-2"
-            rows={[
-              [
-                'Firmware',
-                acting.firmwareVersion === null
-                  ? null
-                  : `${acting.firmwareVersion}${acting.buildString ? `  ${acting.buildString}` : ''}`,
-              ],
-            ]}
-          />
-          <DetectionBox detection={acting.detection} />
-        </>
-      )}
+      <PanelTitle icon={<ScanSearch />}>Detected camera</PanelTitle>
+      <KeyValue
+        className="mb-2"
+        rows={[
+          [
+            'Firmware',
+            acting.firmwareVersion === null
+              ? null
+              : `${acting.firmwareVersion}${acting.buildString ? `  ${acting.buildString}` : ''}`,
+          ],
+        ]}
+      />
+      <DetectionBox detection={acting.detection} />
     </Panel>
   );
 }

@@ -24,7 +24,6 @@ import { renderHook } from '../test-helpers';
 import { deferred, installLocks, removeLocks } from '../test-locks';
 import { IN_USE_ELSEWHERE_LOG, IN_USE_ELSEWHERE_STATUS, withCameraLock } from '../lib/camera-lock';
 import { FIRMWARE_TOO_OLD_HINT, permissionHint } from '../lib/hints';
-import type { ProfileChoice } from '../lib/identify';
 import { DEFAULT_OPTIONS_FORM, type OptionsFailure } from '../lib/options';
 import { scriptedCamera, type CameraCall } from '../test-fixtures';
 import { useDumpPanel, type DumpMode } from './useDumpPanel';
@@ -119,7 +118,7 @@ const failures: (OptionsFailure | null)[] = [];
 function useHarness(
   camera: WebUsbDevice,
   overrides: Partial<typeof DEFAULT_OPTIONS_FORM> = {},
-  choice: ProfileChoice = 'auto',
+  profileId = 'modern-4x',
 ) {
   const runner = useRunner();
   const panel = useDumpPanel({
@@ -128,7 +127,7 @@ function useHarness(
     device: deviceHandle(camera),
     /* One control-IN per window keeps the fake protocol chatter down. */
     form: { ...DEFAULT_OPTIONS_FORM, chunk: String(WINDOW_SIZE), ...overrides },
-    choice,
+    profileId,
     dirPrefix: 'seek_flash4m_',
     sweepPrefix: 'seek_selectors_',
     onOptionsFailure: (failure) => failures.push(failure),
@@ -375,8 +374,8 @@ function expectOnlySafeReads(calls: readonly CameraCall[], what: string): void {
   expect(calls.some((call) => call.request === OP.BEGIN_FIRMWARE_UPGRADE)).toBe(false);
 }
 
-async function run(camera: WebUsbDevice, choice: ProfileChoice = 'auto', mode: DumpMode = 'dump') {
-  const handle = renderHook(() => useHarness(camera, {}, choice));
+async function run(camera: WebUsbDevice, profileId = 'modern-4x', mode: DumpMode = 'dump') {
+  const handle = renderHook(() => useHarness(camera, {}, profileId));
   await act(async () => {
     await handle.result.current.panel.start(mode);
   });
@@ -390,10 +389,9 @@ describe('useDumpPanel detects the camera instead of asking', () => {
 
     expect(result.current.panel.refusal).toBeNull();
     const acting = result.current.panel.acting;
-    expect(acting?.forced).toBe(false);
     expect(acting?.profile.id).toBe('modern-4x');
     expect(acting?.firmwareVersion).toBe('4.18.2.0');
-    expect(acting?.detection?.best.profile.id).toBe('modern-4x');
+    expect(acting?.detection.best.profile.id).toBe('modern-4x');
 
     /* The first request is the version read, and it is the only thing sent
      * before the camera named its build. */
@@ -415,31 +413,6 @@ describe('useDumpPanel detects the camera instead of asking', () => {
     unmount();
   }, 30_000);
 
-  it('dumps a locked 2016 camera under legacy-auth, token and all, without being told', async () => {
-    /* What "Dump legacy firmware" used to be for. The camera refuses the plain
-     * arm of a protected bank and accepts the token, and that settles it. */
-    const { camera, calls } = scriptedCamera({ version: [1, 0, 3, 0], legacy: true });
-    const { result, unmount } = await run(camera);
-
-    expect(result.current.panel.refusal).toBeNull();
-    expect(result.current.panel.acting?.profile.id).toBe('legacy-auth');
-    expect(result.current.panel.acting?.forced).toBe(false);
-
-    /* The dump armed the protected banks with the 18-byte token form: 3, 5, 6,
-     * 7, 8 and 9 on 1.0.3.0's own table (TESTING.md sec.10.1). */
-    const tokenArms = new Set(
-      calls
-        .filter((call) => call.request === OP.BEGIN_FIRMWARE_UPGRADE && call.length === 18)
-        .map((call) => call.data?.[0]),
-    );
-    for (const subcmd of [3, 5, 6, 7, 8, 9]) expect(tokenArms.has(subcmd), hex(subcmd)).toBe(true);
-    expect(downloads).toHaveLength(1);
-    const manifest = downloads[0]?.artifacts.find((file) => file.name === 'manifest.json');
-    if (manifest === undefined) throw new Error('no manifest');
-    expect(new TextDecoder().decode(manifest.data)).toContain('legacy-auth');
-    unmount();
-  }, 30_000);
-
   it('says why, and reads nothing, when the camera does not report its version', async () => {
     const { camera, calls } = scriptedCamera({ version: null });
     const { result, unmount } = await run(camera);
@@ -454,7 +427,7 @@ describe('useDumpPanel detects the camera instead of asking', () => {
       'Refused — nothing was read. See the message above the log.',
     );
     expect(downloads).toHaveLength(0);
-    expectOnlySafeReads(calls, 'auto dump of a versionless camera');
+    expectOnlySafeReads(calls, 'dump of a versionless camera');
     unmount();
   });
 
@@ -475,52 +448,62 @@ describe('useDumpPanel detects the camera instead of asking', () => {
 
   it('refuses the sweep the same way', async () => {
     const { camera, calls } = scriptedCamera({ version: null });
-    const { result, unmount } = await run(camera, 'auto', 'sweep');
+    const { result, unmount } = await run(camera, 'modern-4x', 'sweep');
     expect(result.current.panel.refusal?.message).toContain('refusing to sweep');
-    expectOnlySafeReads(calls, 'auto sweep of a versionless camera');
+    expectOnlySafeReads(calls, 'sweep of a versionless camera');
     unmount();
   });
 });
 
-describe('a family picked by hand still goes through the identity gate', () => {
-  it('skips the questions and nothing else: the version is read before the first arm', async () => {
-    const { camera, calls } = scriptedCamera({ version: [4, 18, 2, 0] });
-    const { result, unmount } = await run(camera, 'modern-4x');
+describe('the 4.x/Nano tab reads only its own family', () => {
+  it('refuses a locked 2016 camera before any dump read, and names the tab that covers it', async () => {
+    const { camera, calls } = scriptedCamera({ version: [1, 0, 3, 0], legacy: true });
+    const { result, unmount } = await run(camera);
 
-    expect(result.current.panel.acting?.forced).toBe(true);
-    expect(result.current.panel.acting?.detection).toBeNull();
-    expect(calls[0]?.request).toBe(OP.GET_FIRMWARE_INFO);
-    /* No probe: the 18-byte capability arm of subcommand 5 was never sent. */
+    const refusal = result.current.panel.refusal;
+    expect(refusal?.code).toBe('profile/unsupported');
+    expect(refusal?.message).toContain('not a 4.x/Nano camera');
+    expect(refusal?.message).toContain('Dump & decrypt 0.x/1.x 2014/2016');
+    expect(refusal?.message).toContain('Nothing was read');
+    /* The camera was asked, and the answer was another family. */
+    expect(result.current.panel.reporter.lines.map((line) => line.text)).toContain(
+      'detected Legacy locked firmware (legacy-auth), confidence 0.98',
+    );
+    expect(downloads).toHaveLength(0);
+    /* The probe reads one window of its own; no dump follows it. */
     expect(
-      calls.some((call) => call.request === OP.BEGIN_FIRMWARE_UPGRADE && call.length === 18),
-    ).toBe(false);
-    expect(downloads).toHaveLength(1);
+      calls.filter((call) => call.request === OP.GET_FEATURED_FIRMWARE_DATA).length,
+    ).toBeLessThanOrEqual(2);
     unmount();
   }, 30_000);
 
-  it('cannot dump a camera that does not report its version, whichever family', async () => {
-    for (const choice of ['legacy-auth', 'modern-4x', 'compact-2016', 'generic'] as const) {
-      downloads.length = 0;
-      const { camera, calls } = scriptedCamera({ version: null });
-      const { result, unmount } = await run(camera, choice);
-      expect(result.current.panel.refusal?.code, choice).toBe('device/version-unknown');
-      expect(downloads, choice).toHaveLength(0);
-      expectOnlySafeReads(calls, `${choice} on a versionless camera`);
-      unmount();
-    }
+  it('refuses the sweep the same way', async () => {
+    const { camera, calls } = scriptedCamera({ version: [1, 0, 3, 0], legacy: true });
+    const { result, unmount } = await run(camera, 'modern-4x', 'sweep');
+    expect(result.current.panel.refusal?.code).toBe('profile/unsupported');
+    expect(result.current.panel.refusal?.message).toContain('not a 4.x/Nano camera');
+    expect(downloads).toHaveLength(0);
+    expect(
+      calls.filter((call) => call.request === OP.GET_FEATURED_FIRMWARE_DATA).length,
+    ).toBeLessThanOrEqual(2);
+    unmount();
+  }, 30_000);
+
+  it('cannot dump a camera that does not report its version', async () => {
+    const { camera, calls } = scriptedCamera({ version: null });
+    const { result, unmount } = await run(camera);
+    expect(result.current.panel.refusal?.code).toBe('device/version-unknown');
+    expect(downloads).toHaveLength(0);
+    expectOnlySafeReads(calls, 'the 4.x/Nano tab on a versionless camera');
+    unmount();
   });
 
-  it('cannot send an arm to 0.3.0.1, whichever family', async () => {
-    for (const choice of ['legacy-auth', 'modern-4x', 'generic'] as const) {
-      const { camera, calls } = scriptedCamera({ version: [0, 3, 0, 1], legacy: true });
-      const { result, unmount } = await run(camera, choice);
-      expect(result.current.panel.refusal?.code, choice).toBe('profile/unsupported');
-      expect(result.current.panel.refusal?.message, choice).toContain('predates');
-      expect(
-        calls.map((call) => call.request),
-        choice,
-      ).toEqual([OP.GET_FIRMWARE_INFO, OP.GET_FIRMWARE_INFO]);
-      unmount();
-    }
+  it('cannot send an arm to 0.3.0.1', async () => {
+    const { camera, calls } = scriptedCamera({ version: [0, 3, 0, 1], legacy: true });
+    const { result, unmount } = await run(camera);
+    expect(result.current.panel.refusal?.code).toBe('profile/unsupported');
+    expect(result.current.panel.refusal?.message).toContain('predates');
+    expect(calls.map((call) => call.request)).toEqual([OP.GET_FIRMWARE_INFO, OP.GET_FIRMWARE_INFO]);
+    unmount();
   });
 });

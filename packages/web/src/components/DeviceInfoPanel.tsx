@@ -1,12 +1,15 @@
 /**
- * What the camera is running. A direct port of the original's
- * `renderDeviceInfo` and `renderBootWarning`, with the slot list as a real
- * `<table>` with header cells rather than a grid of `<td>`s — and, below
- * 48rem, as one card per slot without losing those header cells.
+ * The device info the slots page shows once it has read the camera: what the
+ * camera is running, its boot config and upgrade target, the keys it holds, and
+ * the slots the bootloader provably skips.
+ *
+ * It does NOT list the three banks. The slot table on the same page (`SlotTable`)
+ * already shows each bank's firmware, size, key, bootability and SHA-256, so
+ * repeating them here would only put two copies of one fact on the screen.
  */
 
 import type { ReactElement } from 'react';
-import { HardDrive, KeyRound, Microchip } from 'lucide-react';
+import { KeyRound, Microchip } from 'lucide-react';
 import {
   bootedSlot,
   onPlaintextChain,
@@ -20,16 +23,6 @@ import { KeyValue, type KeyValueRow } from './KeyValue';
 import { Panel, PanelTitle } from './Panel';
 import { Prose } from './Prose';
 import { Alert } from './ui/alert';
-import {
-  Table,
-  TableBody,
-  TableCaption,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-  TableRowHeader,
-} from './ui/table';
 
 function perDeviceKey(state: DeviceState): string | null {
   const slot = state.deviceKeySlot;
@@ -38,40 +31,16 @@ function perDeviceKey(state: DeviceState): string | null {
   return blank ? 'not programmed — the camera falls back to Key B' : bytesToHex(slot);
 }
 
-function verdict(slot: SlotState, checksFooter: boolean): ReactElement {
-  if (slot.bootable) {
-    return <span className="text-ok">the bootloader can boot this</span>;
-  }
-  /* An FF image in recovery is not a skipped slot: R runs it when A and B hold nothing the bootloader takes. */
-  if (slot.bootability === 'recovery-only') {
-    return (
-      <span className="text-warn">
-        recovery only — R runs when A and B hold nothing the bootloader takes (measured for the
-        plain form, 42.10); the FF form&apos;s boot is untested (42.12)
-      </span>
-    );
-  }
-  if (!slot.accepts) {
-    return (
-      <span className="text-destructive">
-        {`fails the acceptance sum (${
-          slot.recovered === null ? 'unknown' : hexUp(slot.recovered.checksum)
-        })`}
-      </span>
-    );
-  }
-  /* Only where the bootloader reads one: a 2016 part's has none and needs none. */
-  if (checksFooter && !slot.footerOk) {
-    return <span className="text-destructive">no valid CODE footer</span>;
-  }
-  if (slot.bootability === 'unknown') {
-    return (
-      <span>
-        passes acceptance; whether the bootloader can key it is unknown — its key table was not read
-      </span>
-    );
-  }
-  return <span className="text-destructive">key unknown to the bootloader — skipped at boot</span>;
+/** Slots the bootloader provably skips: everything checks out but the key it tries. */
+function orphanSlots(state: DeviceState): readonly SlotState[] {
+  const checksFooter = state.profile.boot.checksFooter;
+  return state.slots.filter(
+    (slot) =>
+      slot.present &&
+      slot.accepts &&
+      (slot.footerOk || !checksFooter) &&
+      slot.bootability === 'not-bootable',
+  );
 }
 
 export interface DeviceInfoPanelProps {
@@ -97,6 +66,7 @@ export function DeviceInfoPanel({ state }: DeviceInfoPanelProps): ReactElement {
 
   const running: readonly KeyValueRow[] = [
     ['Version', state.version],
+    ['Profile', state.profile.name],
     ['Build', state.buildString],
     ['Bootloader', bootloader],
     ['Platform', state.platform],
@@ -112,16 +82,7 @@ export function DeviceInfoPanel({ state }: DeviceInfoPanelProps): ReactElement {
     ['Per-device key', perDeviceKey(state)],
   ];
 
-  /* Slots the bootloader provably skips: everything checks out but the key it
-   * tries. A slot whose keys could not be named at all is not one of them. */
-  const checksFooter = state.profile.boot.checksFooter;
-  const orphans = state.slots.filter(
-    (slot) =>
-      slot.present &&
-      slot.accepts &&
-      (slot.footerOk || !checksFooter) &&
-      slot.bootability === 'not-bootable',
-  );
+  const orphans = orphanSlots(state);
   const targetIsOrphan = target !== null && orphans.includes(target);
 
   return (
@@ -146,103 +107,41 @@ export function DeviceInfoPanel({ state }: DeviceInfoPanelProps): ReactElement {
               Confirmed by matching a slot&apos;s keystream state, recovered from the ciphertext
               itself. Key&nbsp;A is what an upload has to be encrypted with.
             </p>
+            <p>
+              Each slot was decrypted in the browser by solving for its keystream from its own
+              known-zero reset vectors. Decrypting is not the same as booting: the bootloader only
+              ever tries {state.storeKey.name} and Key A, so a slot written under any other key
+              checksums perfectly and is still skipped. Nothing was written.
+            </p>
           </Prose>
         </Panel>
       )}
 
-      <Panel>
-        <PanelTitle icon={<HardDrive />}>Firmware slots</PanelTitle>
-        <Table>
-          <TableCaption>
-            Each firmware slot on this camera, as read and decrypted in the browser
-          </TableCaption>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Slot</TableHead>
-              <TableHead>Version</TableHead>
-              <TableHead>Size</TableHead>
-              <TableHead>Encryption</TableHead>
-              <TableHead>SHA-256 of plaintext</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {state.slots.map((slot) => (
-              <TableRow key={slot.key}>
-                <TableRowHeader className="whitespace-nowrap">
-                  <span className="block">{slot.name}</span>
-                  <span className="block font-mono text-[0.75rem] font-normal text-muted-foreground">
-                    {hexUp(slot.address)}
-                  </span>
-                </TableRowHeader>
-                {slot.present && slot.plainHeader !== null && slot.header !== null ? (
-                  <>
-                    <TableCell label="Version">
-                      {slot.plainHeader.versionStr}
-                      <span className="block text-[0.75rem] text-muted-foreground">
-                        {`image ${hexUp(slot.header.imageId)}`}
-                      </span>
-                    </TableCell>
-                    <TableCell label="Size">
-                      {`${String(slot.header.length)} B`}
-                      <span className="block text-[0.75rem] text-muted-foreground">
-                        {slot.footer?.model ?? ''}
-                      </span>
-                    </TableCell>
-                    <TableCell label="Encryption">
-                      {slot.keyName ?? (slot.plain === null ? 'unknown' : 'none (plaintext)')}
-                      <span className="block text-[0.75rem]">{verdict(slot, checksFooter)}</span>
-                    </TableCell>
-                    <TableCell label="SHA-256 of plaintext">
-                      <span className="font-mono text-[0.75rem] text-muted-foreground">
-                        {slot.sha256 === null ? '' : `${slot.sha256.slice(0, 16)}…`}
-                      </span>
-                    </TableCell>
-                  </>
-                ) : (
-                  <TableCell colSpan={4}>
-                    <span className="text-warn">{slot.reason ?? 'not readable'}</span>
-                  </TableCell>
-                )}
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-
-        <Prose className="mt-3">
+      {orphans.length > 0 && (
+        <Alert tone="err">
           <p>
-            Each slot was decrypted in the browser by solving for its keystream from its own
-            known-zero reset vectors. Decrypting is not the same as booting: the bootloader only
-            ever tries {state.storeKey.name} and Key A, so a slot written under any other key
-            checksums perfectly and is still skipped. Nothing was written.
+            <strong>
+              {`${orphans.map((slot) => slot.name).join(' and ')}${
+                orphans.length > 1 ? ' hold' : ' holds'
+              } a valid firmware image encrypted with a key this camera's bootloader does not know.`}
+            </strong>{' '}
+            The image is intact and its checksum is correct, but <code>image_try_keys()</code> only
+            tries {state.storeKey.name} and Key A, so the bootloader skips{' '}
+            {orphans.length > 1 ? 'them' : 'it'} and boots something else.
           </p>
-        </Prose>
-
-        {orphans.length > 0 && (
-          <Alert tone="err" className="mt-3">
+          {targetIsOrphan && (
             <p>
+              That is the slot an upgrade writes. The application running on this camera re-encrypts
+              with that unknown key, so{' '}
               <strong>
-                {`${orphans.map((slot) => slot.name).join(' and ')}${
-                  orphans.length > 1 ? ' hold' : ' holds'
-                } a valid firmware image encrypted with a key this camera's bootloader does not know.`}
+                flashing through this page will produce another slot the bootloader cannot boot
               </strong>{' '}
-              The image is intact and its checksum is correct, but <code>image_try_keys()</code>{' '}
-              only tries {state.storeKey.name} and Key A, so the bootloader skips{' '}
-              {orphans.length > 1 ? 'them' : 'it'} and boots something else.
+              — the camera will carry on running {booted?.name ?? 'the other slot'}. Writing the
+              slot directly with an SPI programmer or over SWD/J-Link is the way round it.
             </p>
-            {targetIsOrphan && (
-              <p>
-                That is the slot an upgrade writes. The application running on this camera
-                re-encrypts with that unknown key, so{' '}
-                <strong>
-                  flashing through this page will produce another slot the bootloader cannot boot
-                </strong>{' '}
-                — the camera will carry on running {booted?.name ?? 'the other slot'}. Writing the
-                slot directly with an SPI programmer or over SWD/J-Link is the way round it.
-              </p>
-            )}
-          </Alert>
-        )}
-      </Panel>
+          )}
+        </Alert>
+      )}
     </>
   );
 }

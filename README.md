@@ -5,7 +5,7 @@ flash a new plaintext image back — **from a browser over WebUSB, or from the c
 
 **→ [Open the web tool](https://yrambler2001.github.io/seek-thermal-firmware-dump/)**
 &nbsp;·&nbsp;
-**[Firmware and flashing](https://yrambler2001.github.io/seek-thermal-firmware-dump/#/flash)**
+**[Firmware slots](https://yrambler2001.github.io/seek-thermal-firmware-dump/#/slots)**
 
 No drivers on macOS or Linux, no SDK, no J-Link. Nothing is uploaded anywhere: the browser build
 runs entirely on your machine, and the CLI talks to the camera directly.
@@ -50,7 +50,19 @@ iOS.
 Nothing to install — [open the page](https://yrambler2001.github.io/seek-thermal-firmware-dump/).
 WebUSB needs Chrome, Edge, or another Chromium browser on Windows, macOS, Linux or Android.
 
-The **Preserve (stepwise)** view runs the [v1 preservation pipeline](#the-v1-full-flash-preservation-pipeline)
+The page has five tabs, in this order. Each one is a real URL.
+
+| Tab                              | Hash         | For                                                                                           | Writes to the camera?                  |
+| -------------------------------- | ------------ | --------------------------------------------------------------------------------------------- | -------------------------------------- |
+| Info                             | `#/`         | any camera: reads the firmware version and says which tab covers it                           | no                                     |
+| Dump & decrypt 0.x/1.x 2014/2016 | `#/preserve` | 0.x and 1.x cameras: the 2014 builds, the 2016 Compact PRO (1.0.3.x) and the 1.3.0.8 FF build | yes, two guided steps, each asks first |
+| Dump & decrypt 4.x/Nano          | `#/v4`       | 4.x, Nano and Mosaic cameras: a read-only dump of the whole flash, decrypted                  | no                                     |
+| Decrypt File/Slot                | `#/decrypt`  | nothing: a dump file you have, or one 64 KiB firmware slot. No camera is used                 | no                                     |
+| Work with firmware slots         | `#/slots`    | 0.8.0.0 and newer: read, dump or write one bank (A, B or R)                                   | yes, one bank at a time, asks first    |
+
+Old hashes (`#/dump`, `#/flash`) are not redirected: they open the Info tab.
+
+The **Dump & decrypt 0.x/1.x 2014/2016** tab (`#/preserve`) runs the [v1 preservation pipeline](#the-v1-full-flash-preservation-pipeline)
 one step at a time: six gated steps (backup → patch → commit → drain → restore → verify), each
 with its own progress bar and log, and a downloadable run file rebuilt after every completed step.
 The run file is the run's only memory — the page keeps no browser storage — so a run can be
@@ -134,10 +146,10 @@ if that build can be read at all — a plain 2-byte arm of a bank the locked lin
 18-byte authenticated arm of the same bank, and a read of a bank that is open on every line. Those
 answers separate the families directly, where a USB product string or an acceptance sum only
 correlates with them. The web app has no "modern" and "legacy" buttons any more: it asks, and
-says why when it will not read a camera. `--profile <id>`, or the web app's hand-picked family,
-overrides detection and skips the probe — but not the version check: the run still reads the
-version first and refuses a camera that does not report it, or runs a build older than 0.8.0.0,
-whatever family was named.
+says why when it will not read a camera. `--profile <id>` overrides detection and skips the probe —
+but not the version check: the run still reads the version first and refuses a camera that does not
+report it, or runs a build older than 0.8.0.0, whatever family was named. The web app names no
+family by hand: its 4.x/Nano tab reads only the modern family and refuses any other.
 
 **`legacy-auth` and `compact-2016` share every selector, so the probe cannot tell them apart; the
 slots can.** A 2016 Compact PRO (1.0.3.x) is read under `legacy-auth`, by design, and the read is
@@ -146,7 +158,7 @@ adds what only the slots say: a bank under a real xorshift128 keystream that dec
 sum of 0 is the 2016 cipher, and rules `legacy-auth` out; a bank stored plain (the 2014 chain,
 whose stored words sum to 0) rules `compact-2016` out. The version line (1.0.3.x is the Compact
 PRO's) and the bootloader's (1.2.0.0 on the 2016 part, 0.9.0.0 on the 2014 Compact) corroborate.
-`seek-fw info` and the Flash view's "Read device info" then redo the analysis under the detected
+`seek-fw info` and the slots page's "Read slots" then redo the analysis under the detected
 family, and a dump decrypts its slots under it, saying in the report which profile the read acted
 under. Neither family's flashing changes: `compact-2016` stays read-only.
 
@@ -432,7 +444,7 @@ plaintext), `preserve_dump_postwrite.bin` (the part as patched), `preserve_dump_
 (the delivered image — the camera's original content) and `preserve_run.json` (per-step records
 with sha256 of everything).
 
-In the browser, the **Preserve (stepwise)** view drives the same checkpoint-step API one step at a
+In the browser, the **Dump & decrypt 0.x/1.x 2014/2016** tab drives the same checkpoint-step API one step at a
 time; the run there is self-sourced exactly as the CLI's is — the image comes from the camera's
 active slot, never from a file the person picked — and each completed step re-issues a
 downloadable run file, named start, save time and step reached
@@ -523,7 +535,7 @@ different address.
 
 That redundancy is also why a camera whose `0x14060000` reads back as `0xff` is fine: the bootable
 firmware still exists in the other slots. The dump view writes nothing to the device in any case — the
-gap affects only the file you download, and the flash view never touches that block either.
+gap affects only the file you download, and the 4.x/Nano tab never touches that block either.
 
 If you do want a strictly complete byte-for-byte image — to diff flash against a reference, say —
 read it over SWD/J-Link or with an SPI programmer.
@@ -534,13 +546,14 @@ There is a second view at **[`#flash`](https://yrambler2001.github.io/seek-therm
 shows what firmware the camera is running, and writes a new **plaintext** firmware image to it through
 the camera's own upgrade path.
 
-The default page is unchanged and still read-only. The write view is a separate URL with its own
-command vocabulary, and nothing on the dump page can reach it.
+The 4.x/Nano tab is read-only. Writes live on the **Work with firmware slots** tab (`#/slots`), which
+has its own command vocabulary and asks before every write; nothing on the 4.x/Nano tab can reach it.
 
 ### What it shows
 
-**Read device info** asks the camera what it is, then reads all three firmware slots and decrypts them
-locally:
+**Read slots** (on the **Work with firmware slots** tab) asks the camera what it is, then reads all three
+firmware slots and decrypts them locally. The device info above the bank table comes from the same
+read:
 
 |                            |                                                                                                                                                                                    |
 | -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -983,7 +996,7 @@ the two shas come from the table. Every other spec's emulator target boots the s
   `0x238` held by an edit Preserve does not know (`the rebalance word at 0x00000238 is not
 free`). The board-patched Compact PRO 1.0.3.0 on the bench part is a known edit and passes. The
   tests that need the run file skip and say why.
-- **They will not** start step 03 or 04, confirm a write, or open the Flash view. Three guards stop
+- **They will not** start step 03 or 04, or confirm a write. Three guards stop
   it independently. The script refuses those buttons. The page refuses the flash-write requests
   before they leave it: on real WebUSB a guard loaded before any app code locks
   `USBDevice.prototype`'s transfer methods to a whitelist of reads, operation mode 0, the read
@@ -1029,7 +1042,7 @@ on the camera, only through the write gate below (`SEEK_E2E_WRITE=i-understand`)
 ```sh
 npm run e2e                # every unattended test (emulator + camera read-only); skips camera cleanly if none
 npm run e2e:gate           # the camera write gate and the write guard's budgets (no browser, no device)
-npm run e2e:dump           # sweep mode, the hand-picked family, and an offline decrypt (SEEK_E2E_DUMP_FILE)
+npm run e2e:dump           # sweep mode and an offline decrypt (SEEK_E2E_DUMP_FILE)
 npm run e2e:cancel         # cancel Dump & decrypt (and step 02) mid-read, then read again
 npm run e2e:soak           # N Dump & decrypt runs (SEEK_E2E_SOAK_N, default 10) — identical sha, with timings
 npm run e2e:offline        # the hosted docs/ bundle, run with the network cut after it loads
@@ -1039,7 +1052,6 @@ npm run e2e:forget         # Forget device -> revoke -> getDevices() empty -> co
 npm run e2e:second         # a second window while the first reads: refused with the message, sends nothing
 npm run e2e:phone          # 375x812 screenshots of each state, light and dark, overflow asserted
 npm run e2e:unplug         # power cut mid-dump -> clean error -> power back -> re-pick -> read again
-npm run e2e:flash          # the Flash view: reads, then (emulator only) flashes the camera's own image and boots it
 npm run e2e:write          # Preserve 02->03->04 against the camera's expectation row, gated on the camera
 ```
 
@@ -1060,7 +1072,6 @@ camera; without it they default to the emulator. Each test picks a sensible defa
 | `e2e:forget`     | read-only                                           | read-only                           |
 | `e2e:second`     | window 2 refused while window 1 dumps, then dumps   | read-only (window 2 sends nothing)  |
 | `e2e:unplug`     | read-only                                           | read-only; rp2040 switch cuts power |
-| `e2e:flash`      | reads; writes its own image and boots it            | read-only (Read device info only)   |
 | `e2e:write`      | writes 02–04                                        | writes 02–04 with `SEEK_E2E_WRITE`  |
 | `e2e:phone`      | n/a (no device)                                     | n/a (no device)                     |
 
@@ -1070,13 +1081,6 @@ request a guard refused fails the test. The camera's guard used to refuse those 
 the step carried on as if the camera had rebooted, and nothing failed. The image a dump must come
 back as is the emulator's known part, or on the camera the one `SEEK_E2E_CAMERA_SHA` names, or
 else the first whole image the test read.
-
-`e2e:flash` on the camera opens the Flash view and presses "Read device info", nothing else. That
-read sends two RAM selectors the dump never does (SetFirmwareInfoFeatures and the device-id
-SetRamDataFeatures, which `seek-fw info` sends too), so its write guard is the read-only one plus
-exactly those two, by payload shape; the image picker, the write and its confirmation are refused
-by the UI guard. It checks the version shown against the one the camera answered, and that a slot
-passes acceptance under the profile the read settled on.
 
 #### Writing the real camera
 

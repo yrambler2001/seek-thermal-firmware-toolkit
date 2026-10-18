@@ -37,8 +37,8 @@ export interface SupportStatus {
 
 /** The original's `offlineStillWorks`, appended to every failure banner. */
 export const OFFLINE_STILL_WORKS =
-  'You can still use **Decrypt a dump you already have** below — that runs entirely on a file ' +
-  'you pick and needs no USB access.';
+  'You can still use the **Decrypt File/Slot** tab — that runs entirely on a file you pick and ' +
+  'needs no USB access.';
 
 /** The original's iOS/iPadOS sniff, including the iPadOS-13+ desktop-UA case. */
 export function isIosDevice(env: BrowserEnvironment): boolean {

@@ -208,7 +208,7 @@ function windowOf(target: TargetHandle, scratchDir: string): BenchPage {
       return {
         status,
         banks: (await bankRows(target.page)).map(bankView),
-        runningBuild: summary['running build'] ?? null,
+        runningBuild: summary.version ?? null,
       };
     },
 

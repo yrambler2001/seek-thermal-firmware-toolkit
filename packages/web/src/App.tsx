@@ -1,14 +1,14 @@
 /**
- * The shell: the masthead, the support banner, the two-view nav and the
- * Connect panel that both views share — then whichever view the hash selects.
+ * The shell: the masthead, the support banner, the five-tab nav and the Connect
+ * panel that the camera tabs share — then whichever tab the hash selects.
  *
- * All the state that outlives a view lives here (the device, the run lock, the
- * options form, the firmware-profile choices), so switching tabs mid-run does
- * not disturb anything.
+ * All the state that outlives a tab lives here (the device, the run lock, the
+ * options form), so switching tabs mid-run does not disturb anything. The
+ * Decrypt File/Slot tab uses no camera, so it shows neither the Connect panel
+ * nor the USB support banner.
  */
 
 import { useCallback, useMemo, useState, type ReactElement } from 'react';
-import type { ProfileId } from '@seek-fw/core';
 import { AppHeader } from './components/AppHeader';
 import { ConnectSection } from './components/ConnectSection';
 import { Prose } from './components/Prose';
@@ -16,20 +16,21 @@ import { SupportBanner } from './components/SupportBanner';
 import { useConnectionTest } from './hooks/useConnectionTest';
 import { useDevice } from './hooks/useDevice';
 import { useDumpPanel } from './hooks/useDumpPanel';
-import { useFlashPanel } from './hooks/useFlashPanel';
+import { useInfoPanel } from './hooks/useInfoPanel';
 import { useOfflineDecrypt } from './hooks/useOfflineDecrypt';
 import { usePreservePanel } from './hooks/usePreservePanel';
 import { useRunner } from './hooks/useRunner';
+import { useSlotFileDecrypt } from './hooks/useSlotFileDecrypt';
 import { useSlotsPanel } from './hooks/useSlotsPanel';
 import { reportInUseElsewhere, withCameraLock } from './lib/camera-lock';
-import type { ProfileChoice } from './lib/identify';
 import { DEFAULT_OPTIONS_FORM, type OptionsFailure, type OptionsForm } from './lib/options';
 import { useRoute } from './lib/routing';
 import { detectSupport, readBrowserEnvironment, type SupportStatus } from './lib/support';
-import { DumpView } from './views/DumpView';
-import { FlashView } from './views/FlashView';
+import { DecryptView } from './views/DecryptView';
+import { InfoView } from './views/InfoView';
 import { PreserveView } from './views/PreserveView';
 import { SlotsView } from './views/SlotsView';
+import { V4View } from './views/V4View';
 
 export interface AppProps {
   /** Injectable so the render tests can drive every environment. */
@@ -44,48 +45,23 @@ export function App({ support }: AppProps = {}): ReactElement {
   const runner = useRunner();
   const [options, setOptions] = useState<OptionsForm>(DEFAULT_OPTIONS_FORM);
   const [optionsFailure, setOptionsFailure] = useState<OptionsFailure | null>(null);
-  const [profileChoice, setProfileChoice] = useState<ProfileChoice>('auto');
-  /* The dump view's expert override. It starts on the legacy family because
-   * that is what the page's old "Dump legacy firmware" button forced, and it
-   * is only ever used when someone presses its own button. */
-  const [manualProfile, setManualProfile] = useState<ProfileId>('legacy-auth');
 
   const onOptionsFailure = useCallback((failure: OptionsFailure | null): void => {
     setOptionsFailure(failure);
   }, []);
 
-  /* The camera is asked which family it is; nobody picks. */
+  const info = useInfoPanel({ runner, device, form: options });
+
+  /* The 4.x/Nano tab: the camera is asked which family it is, and this tab reads
+   * only the modern family. There is no other family to pick. */
   const dump = useDumpPanel({
     id: 'dump',
     runner,
     device,
     form: options,
-    choice: 'auto',
+    profileId: 'modern-4x',
     dirPrefix: 'seek_flash4m_',
     sweepPrefix: 'seek_selectors_',
-    onOptionsFailure,
-  });
-
-  /* The same runs under a family picked by hand — which still read and check
-   * the firmware version before anything is armed. */
-  const manual = useDumpPanel({
-    id: 'manual',
-    runner,
-    device,
-    form: options,
-    choice: manualProfile,
-    dirPrefix: `seek_flash4m_${manualProfile}_`,
-    sweepPrefix: `seek_selectors_${manualProfile}_`,
-    onOptionsFailure,
-  });
-
-  const offline = useOfflineDecrypt({ id: 'offline', runner });
-
-  const flash = useFlashPanel({
-    runner,
-    device,
-    form: options,
-    profileChoice,
     onOptionsFailure,
   });
 
@@ -93,17 +69,21 @@ export function App({ support }: AppProps = {}): ReactElement {
 
   const slots = useSlotsPanel({ runner, device, form: options, onOptionsFailure });
 
+  const offline = useOfflineDecrypt({ id: 'offline', runner });
+  const slotFile = useSlotFileDecrypt();
+
   /* The original routed the Connect panel's own log lines into whichever
-   * view's main panel was showing. Same rule — on the wizard, the step that
-   * is running, since that is where a mid-run Connect pick belongs. */
+   * tab's main panel was showing. Same rule — on the wizard, the step that is
+   * running, since that is where a mid-run Connect pick belongs. The Decrypt tab
+   * has no Connect panel, so it never receives one. */
   const viewReporter =
-    route === 'flash'
-      ? flash.infoReporter
-      : route === 'preserve'
-        ? preserve.phaseReporters[preserve.activePhase ?? 'read-build']
-        : route === 'slots'
-          ? slots.reporter
-          : dump.reporter;
+    route === 'preserve'
+      ? preserve.phaseReporters[preserve.activePhase ?? 'read-build']
+      : route === 'slots'
+        ? slots.reporter
+        : route === 'v4'
+          ? dump.reporter
+          : info.reporter;
   const { testing, test } = useConnectionTest({
     runner,
     device,
@@ -141,71 +121,85 @@ export function App({ support }: AppProps = {}): ReactElement {
     });
   }, [device, viewReporter]);
 
+  const usesCamera = route !== 'decrypt';
+
   return (
     <div className="min-h-dvh bg-background">
       <AppHeader route={route} connected={device.device !== null} canUseUsb={status.canUseUsb} />
 
       <main className="mx-auto w-full max-w-[64rem] space-y-4 px-4 pt-5 pb-20 sm:px-6">
         <Prose className="max-w-[62ch]">
-          {route === 'dump' ? (
+          {route === 'v4' ? (
             <p>
-              Reads the 4&nbsp;MiB SPIFI flash of a Seek Thermal camera over WebUSB and decrypts any
-              firmware images it finds. Everything runs locally in your browser — nothing is
-              uploaded anywhere. <strong>Read-only:</strong> this view issues no flash write, erase,
-              upload, commit, or reset command.
+              Makes a read-only copy of the 4&nbsp;MiB SPI flash of a <strong>4.x or Nano</strong>{' '}
+              camera over WebUSB and decrypts any firmware images it finds. Everything runs locally
+              in your browser — nothing is uploaded anywhere. <strong>Read-only:</strong> this tab
+              issues no flash write, erase, upload, commit, or reset command. A camera on another
+              firmware line is refused before anything is read.
+            </p>
+          ) : route === 'preserve' ? (
+            <p>
+              For <strong>0.x and 1.x</strong> cameras (the 2014 and 2016 builds). Makes a{' '}
+              <strong>complete</strong> copy of the camera&apos;s 4&nbsp;MiB flash — including the
+              parts a normal dump cannot reach — and then puts the camera back exactly as it was. It
+              backs up what it can read, briefly patches the firmware so the rest can be read, dumps
+              everything, restores the original and checks it. Everything runs locally in your
+              browser. <strong>Two of the steps write to flash</strong>, and each asks you first.
+            </p>
+          ) : route === 'decrypt' ? (
+            <p>
+              Decrypts firmware you already have, on this computer: a whole flash dump, or one
+              64&nbsp;KiB firmware slot. <strong>No camera is used</strong>, so this works with
+              nothing plugged in, and in browsers that have no USB access. The file is read here and
+              never uploaded.
             </p>
           ) : route === 'slots' ? (
             <p>
               Reads the camera&apos;s three firmware banks — A, B and the recovery bank R — and
-              shows what each holds, which one the camera boots, and what this build can do with it.
-              Everything runs locally in your browser. <strong>This view writes to flash:</strong>{' '}
-              it can flash one bank from a decrypted image or from raw bytes, and asks before every
-              write.
-            </p>
-          ) : route === 'flash' ? (
-            <p>
-              Shows what firmware the camera is running right now, and writes a new{' '}
-              <em>plaintext</em> firmware image to it over WebUSB using the camera&apos;s own
-              upgrade path. Everything runs locally in your browser.{' '}
-              <strong>This view writes to flash.</strong> A bad image can leave the camera
-              unbootable, and the bootloader has no USB — recovery would need SWD/J-Link or an SPI
-              programmer.
+              shows what each holds, which one the camera boots, and what this build can do with it,
+              with the device&apos;s running firmware and keys beside them. Everything runs locally
+              in your browser. <strong>This tab writes to flash:</strong> it can flash one bank from
+              a decrypted image or from raw bytes, and asks before every write.
             </p>
           ) : (
             <p>
-              Makes a <strong>complete</strong> copy of the camera&apos;s 4&nbsp;MiB flash —
-              including the parts a normal dump cannot reach — and then puts the camera back exactly
-              as it was. It backs up what it can read, briefly patches the firmware so the rest can
-              be read, dumps everything, restores the original and checks it. Everything runs
-              locally in your browser. <strong>Two of the steps write to flash</strong>, and each
-              asks you first.
+              Reads the firmware version of the connected camera and tells you which of the other
+              tabs covers it. It also says, in plain words, what each tab is for.{' '}
+              <strong>Nothing is written to the camera on this tab.</strong>
             </p>
           )}
         </Prose>
 
-        <SupportBanner status={status} />
+        {usesCamera && <SupportBanner status={status} />}
 
-        <ConnectSection
-          description={device.description}
-          connected={device.device !== null}
-          canUseUsb={status.canUseUsb}
-          canForget={device.canForgetDevice}
-          busy={runner.busy}
-          testing={testing}
-          onConnect={onConnect}
-          onTest={() => {
-            void test();
-          }}
-          onForget={onForget}
-        />
+        {usesCamera && (
+          <ConnectSection
+            description={device.description}
+            connected={device.device !== null}
+            canUseUsb={status.canUseUsb}
+            canForget={device.canForgetDevice}
+            busy={runner.busy}
+            testing={testing}
+            onConnect={onConnect}
+            onTest={() => {
+              void test();
+            }}
+            onForget={onForget}
+          />
+        )}
 
-        {route === 'dump' ? (
-          <DumpView
+        {route === 'info' ? (
+          <InfoView info={info} connected={device.device !== null} busy={runner.busy} />
+        ) : route === 'preserve' ? (
+          <PreserveView
+            preserve={preserve}
+            connected={device.device !== null}
+            busy={runner.busy}
+            onConnect={onConnect}
+          />
+        ) : route === 'v4' ? (
+          <V4View
             dump={dump}
-            manual={manual}
-            manualProfile={manualProfile}
-            onManualProfile={setManualProfile}
-            offline={offline}
             connected={device.device !== null}
             busy={runner.busy}
             options={options}
@@ -213,23 +207,10 @@ export function App({ support }: AppProps = {}): ReactElement {
             optionsInvalidField={optionsFailure?.field ?? null}
             optionsErrorMessage={optionsFailure?.message ?? null}
           />
-        ) : route === 'flash' ? (
-          <FlashView
-            flash={flash}
-            connected={device.device !== null}
-            busy={runner.busy}
-            profileChoice={profileChoice}
-            onProfileChoice={setProfileChoice}
-          />
-        ) : route === 'slots' ? (
-          <SlotsView slots={slots} connected={device.device !== null} busy={runner.busy} />
+        ) : route === 'decrypt' ? (
+          <DecryptView offline={offline} slotFile={slotFile} busy={runner.busy} />
         ) : (
-          <PreserveView
-            preserve={preserve}
-            connected={device.device !== null}
-            busy={runner.busy}
-            onConnect={onConnect}
-          />
+          <SlotsView slots={slots} connected={device.device !== null} busy={runner.busy} />
         )}
       </main>
     </div>

@@ -73,21 +73,6 @@ export const READ_ONLY_CAMERA: UiGuard = {
 };
 
 /**
- * The Flash view's read on the real camera: the route and "Read device info",
- * nothing that writes. Every label that picks an image, writes, confirms, or
- * starts a Preserve phase is refused, as in `READ_ONLY_CAMERA`.
- */
-export const FLASH_VIEW_READ_ONLY: UiGuard = {
-  name: 'Flash view, read-only (real camera)',
-  allowClick: (label) =>
-    !/write to|choose plaintext image|yes —|patch & dump|restore & verify|jump past|skip the commit|i replugged it|read & build/i.test(
-      label,
-    ),
-  allowRoute: () => true,
-  allowPhase: () => false,
-};
-
-/**
  * The camera write run's second half, after its gate: Preserve steps 03
  * and 04, their write confirmation and the "Your turn" picks. Nothing else
  * that writes: the Flash view, its image picker, its write and its
@@ -310,7 +295,7 @@ export class Wizard {
 
   /* ---- Dump & decrypt ------------------------------------------------------ */
 
-  /** The "Dump" section's auto-family run, the common case. */
+  /** The 4.x/Nano tab's "Start dump", the common case. */
   async dumpAndDecrypt(timeoutMs: number): Promise<DumpRun> {
     return this.runDump({
       panel: 'dump',
@@ -328,7 +313,7 @@ export class Wizard {
     readonly timeoutMs: number;
   }): Promise<DumpRun> {
     const t0 = Date.now();
-    await this.route('#/');
+    await this.route('#/v4');
     const statusSel = `#${options.panel}-status`;
     await this.startDump(options.panel, options.button);
     let lastReport = 0;
@@ -361,7 +346,7 @@ export class Wizard {
 
   /** Clicks a dump/sweep start button and waits until the run has taken over its status line. */
   async startDump(panel: string, button: string): Promise<void> {
-    const section = `section[aria-labelledby="${panel === 'manual' ? 'manual' : 'dump'}-heading"]`;
+    const section = 'section[aria-labelledby="dump-heading"]';
     const started = await this.watchStatus(`#${panel}-status`);
     await this.click(section, button);
     await started();
@@ -403,10 +388,10 @@ export class Wizard {
     await dialog.accept([filePath]);
   }
 
-  /** Offline "Decrypt a dump you already have": pick `filePath`, wait, collect the zip. */
+  /** Offline "Decrypt a dump you already have" on the Decrypt File/Slot tab: pick `filePath`, wait, collect the zip. */
   async offlineDecrypt(filePath: string, timeoutMs = 5 * 60_000): Promise<DumpRun> {
     const t0 = Date.now();
-    await this.route('#/');
+    await this.route('#/decrypt');
     await this.pickFile(
       () => this.click('section[aria-labelledby="offline-heading"]', 'Choose dump file…'),
       filePath,
@@ -427,9 +412,14 @@ export class Wizard {
     return { ms: Date.now() - t0, archive, entries: readZip(archive.bytes), status };
   }
 
-  /** The manual "firmware family" select. `value` is a profile id. */
-  async selectManualProfile(value: string): Promise<void> {
-    await this.page.select('#manualProfile', value);
+  /** Opens the Options spoiler of the 4.x/Nano tab, where "Dump all selectors" lives. */
+  async openOptions(): Promise<void> {
+    await this.page.evaluate(() => {
+      const spoiler = [...document.querySelectorAll('details')].find((d) =>
+        (d.querySelector('summary')?.textContent ?? '').includes('Options'),
+      );
+      if (spoiler !== undefined) spoiler.open = true;
+    });
   }
 
   /** Loads a run file into the Preserve page and waits for the resume line. */
