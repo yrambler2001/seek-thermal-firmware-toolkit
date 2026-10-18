@@ -230,8 +230,8 @@ corpusDescribe('the table against the Python tool, over the corpus (SEEK_FPS_COR
   it.skipIf(FPS_OFFER_WITHHELD)(
     'offers the stage-one builds at their top rate, refuses the stage-two builds, and refuses a camera on another build',
     () => {
-      // The rate the page names: the table's target, except where the bench measured another (FPS_MEASURED_HZ;
-      // 1.3.0.8's 32 Hz entry publishes 26 fps, TESTING.md 42.20).
+      // The rate the page names: the table's target, except where the bench measured another (FPS_MEASURED_HZ,
+      // which is empty: the 1.3.0.8 32 Hz entry is the unmeasured plain-copy form and names its target).
       for (const image of FIXTURE.images.filter((candidate) => candidate.pythonState === 'stock')) {
         const bytes = findByHash(image.length, image.inputSha256, image.length);
         if (bytes === null) continue;

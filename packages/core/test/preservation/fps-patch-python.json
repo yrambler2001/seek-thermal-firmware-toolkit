@@ -11,7 +11,7 @@
      "patch": "compact_32k-4.8.1.7-to32",
      "target": 32,
      "version": "4.8.1.7",
-     "outputSha256": "d31e52d340e462e684dbc714b03c2712580f380b209dcea233a23c34a45ddfc1",
+     "outputSha256": "51c6f0d57c89d4cadd2a2d46c0ac0f22ddb21570d0f01f80b0748fd1fb4314e0",
      "changed": [
       568,
       569,
@@ -72,7 +72,7 @@
      "patch": "compact_32k-1.3.0.8-to32",
      "target": 32,
      "version": "1.3.0.8",
-     "outputSha256": "ee8c7f0e09d81b916e1ffeb2807108db34c60b29a277ec8651da22f836fd80eb",
+     "outputSha256": "5313f107b81d99a1ac033fbfe9ecda9bd3664d2f669237876ffac1e3a01377a4",
      "changed": [
       568,
       569,
@@ -104,7 +104,7 @@
      "patch": "compact_32k-4.8.1.9-to32",
      "target": 32,
      "version": "4.8.1.9",
-     "outputSha256": "73586516366fde7bfaa27a8b01414632265db6f5ea00138c4fb23e2097e40d88",
+     "outputSha256": "14e259603487af8b8db1769b144b8fcc41ec09fc8965f835becdb296bb42e495",
      "changed": [
       568,
       569,
@@ -197,7 +197,7 @@
      "patch": "compact_32k-4.16.1.7-FF-to32",
      "target": 32,
      "version": "4.16.1.7-FF",
-     "outputSha256": "5d896b208092a8778d839c54ee86ea8aac846a9cd44cdff24c554541e6315bd4",
+     "outputSha256": "aec5364181696416e33d75cb8fb64277998ba81d9b5e4823daba1a479588b9e6",
      "changed": [
       568,
       569,
@@ -249,7 +249,7 @@
      "patch": "compact_32k-1.3.0.8-FF-to32",
      "target": 32,
      "version": "1.3.0.8-FF",
-     "outputSha256": "8e2ffdf6918fa5e88871981b6c443229c05c25ad0d4b7a04b07769aecd35d7e1",
+     "outputSha256": "bf99816f8bd36a5af33f2bb9196cf9088d9bb58f5d9a45472d40e351d34d677f",
      "changed": [
       568,
       569,
@@ -568,7 +568,7 @@
    "pythonState": "stock",
    "storedPlain": true,
    "patch": "compact_32k-1.3.0.8-to32",
-   "outputSha256": "ee8c7f0e09d81b916e1ffeb2807108db34c60b29a277ec8651da22f836fd80eb",
+   "outputSha256": "5313f107b81d99a1ac033fbfe9ecda9bd3664d2f669237876ffac1e3a01377a4",
    "changed": [
     568,
     569,
@@ -597,7 +597,7 @@
    "pythonState": "stock",
    "storedPlain": true,
    "patch": "compact_32k-1.3.0.8-to32",
-   "outputSha256": "ee8c7f0e09d81b916e1ffeb2807108db34c60b29a277ec8651da22f836fd80eb",
+   "outputSha256": "5313f107b81d99a1ac033fbfe9ecda9bd3664d2f669237876ffac1e3a01377a4",
    "changed": [
     568,
     569,

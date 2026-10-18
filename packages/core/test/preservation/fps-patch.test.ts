@@ -190,8 +190,10 @@ describe('the rate the page names (the bench-measured rate, FPS_MEASURED_HZ)', (
         id,
       ).toBe(true);
     }
-    // TESTING.md 42.20: the 1.3.0.8 32 Hz entry publishes 26 fps in IP mode 9.
-    expect(FPS_MEASURED_HZ.get('compact_32k-1.3.0.8-to32')).toBe(26);
+    // The 1.3.0.8 32 Hz entry is the plain-copy form, which has no camera measurement, so it names its target (32 Hz).
+    // (Its earlier op 5 form published 26 fps, TESTING.md 42.20; that figure is not this entry's.)
+    expect(FPS_MEASURED_HZ.has('compact_32k-1.3.0.8-to32')).toBe(false);
+    expect(FPS_PATCHES.find((p) => p.id === 'compact_32k-1.3.0.8-to32')?.targetHz).toBe(32);
     // An entry the bench did not change keeps its target: the 1.3.0.0 mode-8 entry measured 32 Hz.
     expect(FPS_MEASURED_HZ.has('compact_32k-1.3.0.0-to32')).toBe(false);
   });

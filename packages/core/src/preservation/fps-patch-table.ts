@@ -148,48 +148,74 @@ export const FPS_PATCH_TABLE: readonly FpsPatchSource[] = [
     },
   },
   {
-    // compact_32k-1.3.0.8-to32. 32 Hz, one step per capture: block 13 is 13 25 23 (line op 5 with the
-    // delivery bit, header type 3). The stock op 8 (fill of the saturated pixels from the fourth capture)
-    // is dropped, so this is not the frozen block that dropped op 5 (withdrawn: its picture did not
-    // change). Emulator (80-frame boot): the even steady frames are the 1.3.0.8-FF frames one for one
-    // (frame 2j = FF frame j, 31 of 31); the odd frames are the captures the FF build does not deliver, and
-    // no two steady frames are equal. OPEN: the sensor runs CMD mode 3 on every capture (the stock and FF
-    // builds alternate 3 and 0; the emulator does not model the sensor's response to the mode); the
-    // saturation fill is gone (the feed has no saturated pixel, so the emulator cannot show it); 32 Hz on a
-    // real Compact is unproven; a long stream leaves 32 Hz (see docs/FPS_PATCH_LONG_STREAM.md and the
-    // long-run check of fps_patch_tests.py).
+    // compact_32k-1.3.0.8-to32. 32 Hz, one capture per published frame, in the Normal stream (mode 8; mode
+    // 9 runs the same program, and the emulator streams mode 9). Stock block 13 is seed (op 5, sel 3),
+    // accumulate (op 6, sel 3) twice, mean of three (op 7, sel 3), then the fill (op 8, sel 1, delivery):
+    // the picture is the mean of three captures, refilled from the fourth where a seed marked a sample over
+    // the sensor ceiling (15000). The one step is op 3 with the delivery bit, a plain copy of the capture
+    // (frame_line_op_3, image.c:1111: no read of the destination, no rescale, no marker), on the seeds
+    // selection 0x13, so every capture runs the sensor mode the stock average runs (CMD mode 3,
+    // app_init.c:1547-1557). The earlier one-step form 13 25 23 (op 5) is replaced: frame_line_op_5
+    // (image.c:1149-1170) writes 0xFFFF over every sample above 15000 and nothing refills it, so a scene
+    // over the ceiling shows 0xFFFF holes. Emulator, recorded feed (the sensor is substituted; 40 frames):
+    // stock 8.000 Hz; the copy 32.258 Hz median (32.195 mean), 0 frozen pairs, 26 steady frames, 87.9 % of
+    // body halfwords change between frames (stock 89.1 %), mean 6,768.1 (stock 6,785.5), spread 2,083.2
+    // (stock 2,087.7), and 13 of 13 even steady frames equal the 1.3.0.8-FF steady frames. Emulator, bright
+    // feed (a block of pixels over the ceiling, 33 % of the body): stock mean 9,713.3, spread 4,555.3, 33.3
+    // % over the ceiling, 0 dead; the copy mean 9,702.2, spread 4,561.5, 33.3 % over, 0 dead; the earlier
+    // op 5 form mean 26,284.7 with 33.3 % dead (0xFFFF). The terminator selection 0x11 (CMD mode 0) copy
+    // gives the same picture in the emulator, which does not model the sensor mode; it is not used. NOT
+    // MEASURED ON A CAMERA: the earlier op 5 form published 26 fps on the Compact 1.3.0.8 (TESTING.md
+    // 42.20); the copy form has no camera measurement. OPEN: the copy runs CMD mode 3 on every capture
+    // (stock: 3 for the seeds, 0 for the fill), and a long stream may leave 32 Hz
+    // (docs/FPS_PATCH_LONG_STREAM.md).
     id: 'compact_32k-1.3.0.8-to32',
     family: 'compact_32k',
     version: '1.3.0.8',
     fromHz: 8,
     targetHz: 32,
     stockSha256: '2969d0df5bfeac74b88e6ee608ee8b2657fecf2e0234e9ce2731add2408f3d1c',
-    patchedSha256: 'ee8c7f0e09d81b916e1ffeb2807108db34c60b29a277ec8651da22f836fd80eb',
+    patchedSha256: '5313f107b81d99a1ac033fbfe9ecda9bd3664d2f669237876ffac1e3a01377a4',
     length: 49128,
     edits: [
       // block 13 header count 04 -> 01: the self-loop block runs one step instead of four, so every capture
       // is published
       { offset: 0xb750, before: '04', after: '01' },
-      // its steps (3 bytes each): op 5 | op 6 | op 7 | op 8 with the delivery bit -> one step 13 25 23, op
-      // 5 on the same source selection as the stock block with the delivery bit (0x20) set in the op byte
-      // and header type 3; the other steps are zeroed
-      { offset: 0xb754, before: '130520130620130720112823', after: '132523000000000000000000' },
+      // its steps (3 bytes each: source selection, op, header): the four stock steps 13 05 20 | 13 06 20 |
+      // 13 07 20 | 11 28 23 become one step 13 23 23 and zeros. 13 is the stock seeds' selection
+      // (line-sourced, CMD mode 3, the mode of the captures the stock average is made of). 23 is op 3 with
+      // the delivery bit 0x20: frame_line_op_3 (image.c:1111) is a plain copy of the line, with no read of
+      // the destination and no rescale. Header 23 (type 3, gpio 1) is stock.
+      { offset: 0xb754, before: '130520130620130720112823', after: '132323000000000000000000' },
     ],
     row: {
       label:
-        'mode-8 capture program, block 13 (header 04 0d 0d 00), reduced to one step: op 5 with the delivery bit',
+        'mode-8 capture program, block 13 (header 04 0d 0d 00), reduced to one step: a plain copy with the delivery bit (op 3)',
       offset: 0xb750,
       length: 52,
     },
     sibling: null,
   },
   {
-    // compact_32k-4.8.1.7-to32. 32 Hz, one step per capture: block 13 is 11 25 23 (line op 5 on sel 1 with
-    // the delivery bit). The stock op 8 fill is dropped. Emulator (80-frame boot): the even steady frames
-    // are the 4.16.1.7-FF frames one for one (frame 2j = FF frame j, 29 of 29); the odd frames are the
-    // captures the FF build does not deliver. OPEN: the one step runs sel 1 on every capture (the FF
-    // publishing step is sel 0, whose CMD mode is not decoded for 4.8); the saturation fill is gone and
-    // cannot be seen on this feed; 32 Hz on a real Compact is unproven; a long stream leaves 32 Hz
+    // compact_32k-4.8.1.7-to32. 32 Hz, one capture per published frame, Normal stream (mode 8; mode 9 runs
+    // the same program). Stock block 13 is seed (op 5, sel 1), accumulate (op 6, sel 1) twice, mean of
+    // three (op 7, sel 1), then the fill (op 8, sel 0, delivery). The one step is op 1 with the delivery
+    // bit, frame_chunk_copy (frame_chunk_ops_target.c:669), a plain copy of the chunk with no read of the
+    // destination and no rescale, on the seeds selection 0x11 (the sel the stock seeds use). The earlier
+    // one-step form 11 25 23 (op 5) is replaced: frame_chunk_seed (line_handler[5],
+    // frame_chunk_ops_target.c:171) writes 0xFFFF over every sample above 15000 and nothing refills it, so
+    // a scene over the ceiling shows 0xFFFF holes. Emulator, recorded feed (sensor substituted; 80 frames):
+    // stock 8.065 Hz (8.249 mean), 0 frozen pairs; the copy 32.258 Hz median (32.183 mean), 59 steady
+    // frames, 0 frozen pairs, 87.9 % of body halfwords change (stock 89.0 %), mean 6,784.6 (stock 6,786.5),
+    // spread 2,087.5 (stock 2,088.0), and 29 of 29 even steady frames equal the 4.16.1.7-FF steady frames.
+    // Emulator, bright feed (a block over the ceiling, 33 % of the body): stock mean 9,714.0, spread
+    // 4,554.8, 33.3 % over the ceiling, 0 dead; the copy mean 9,712.7, spread 4,555.5, 33.3 % over, 0 dead;
+    // the earlier op 5 form mean 26,295.4 with 33.3 % dead (0xFFFF). The terminator selection 0x10 (sel 0)
+    // was tried as the copy selection (10 21 23): on this table its source is not the line; the picture
+    // froze (58 of 58 pairs equal, mean 18,901.3, 41.7 % over the ceiling) with or without the bright
+    // block, so it is rejected. OPEN: the copy runs one CMD mode on every capture (the seeds mode, which
+    // the stock average is made of; the fill mode is not used); the emulator does not model the sensor
+    // mode; 32 Hz on a real Compact is unproven; a long stream may leave 32 Hz
     // (docs/FPS_PATCH_LONG_STREAM.md).
     id: 'compact_32k-4.8.1.7-to32',
     family: 'compact_32k',
@@ -197,48 +223,61 @@ export const FPS_PATCH_TABLE: readonly FpsPatchSource[] = [
     fromHz: 8,
     targetHz: 32,
     stockSha256: '04d9e1559d63463cf6c0c29ddc21f64af093bc3fe4d4e769ba41d4d8b0798419',
-    patchedSha256: 'd31e52d340e462e684dbc714b03c2712580f380b209dcea233a23c34a45ddfc1',
+    patchedSha256: '51c6f0d57c89d4cadd2a2d46c0ac0f22ddb21570d0f01f80b0748fd1fb4314e0',
     length: 49888,
     edits: [
       // block 13 header count 04 -> 01: the self-loop block runs one step instead of four, so every capture
       // is published
       { offset: 0x976e, before: '04', after: '01' },
-      // its steps (3 bytes each): op 5 | op 6 | op 7 | op 8 with the delivery bit -> one step 11 25 23, op
-      // 5 on source selection 1 as the stock block, with the delivery bit (0x20) set in the op byte and
-      // header type 3; the other steps are zeroed
-      { offset: 0x9772, before: '110520110620110720102823', after: '112523000000000000000000' },
+      // its steps (3 bytes each: source selection, op, header): the four stock steps 11 05 20 | 11 06 20 |
+      // 11 07 20 | 10 28 23 become one step 11 21 23 and zeros. 11 is the stock seeds' selection
+      // (line-sourced, sel 1: the CMD mode the stock seeds run in, frame_step_gpio_apply). 21 is op 1 with
+      // the delivery bit 0x20: frame_chunk_copy (frame_chunk_ops_target.c:669) is the plain copy of the
+      // chunk (mem_copy_flashaware, no read of the destination, no rescale). Header 23 is stock.
+      { offset: 0x9772, before: '110520110620110720102823', after: '112123000000000000000000' },
     ],
     row: {
       label:
-        'steady self-loop block (header 04 0d 0d 00), reduced to one step: op 5 with the delivery bit',
+        'steady self-loop block (header 04 0d 0d 00), reduced to one step: a plain copy with the delivery bit (op 1)',
       offset: 0x976e,
       length: 52,
     },
     sibling: null,
   },
   {
-    // compact_32k-4.8.1.9-to32. 32 Hz, one step per capture: 11 25 23, the same block as the 4.8.1.7 patch.
-    // Emulator (80-frame boot): the even steady frames are the 4.16.1.7-FF frames one for one (29 of 29),
-    // and the frames equal those of the 4.8.1.7 patch (59 of 59). The same OPEN points as 4.8.1.7 apply.
+    // compact_32k-4.8.1.9-to32. 32 Hz, one capture per published frame, Normal stream (mode 8; mode 9 runs
+    // the same program). The block is the 4.8.1.7 block (the same bytes and the same handler table), so the
+    // one step is op 1 with the delivery bit on the seeds selection 0x11 (see the 4.8.1.7 entry for the op
+    // semantics and why the terminator selection is not used). The earlier one-step form 11 25 23 (op 5) is
+    // replaced: it writes 0xFFFF over every sample above 15000. Emulator, recorded feed (sensor
+    // substituted; 80 frames): stock 8.065 Hz (8.244 mean); the copy 32.258 Hz median (32.168 mean), 59
+    // steady frames, 0 frozen pairs, 87.9 % of body halfwords change (stock 89.0 %), mean 6,784.6 (stock
+    // 6,786.5), spread 2,087.5 (stock 2,088.0), and 29 of 29 even steady frames equal the 4.16.1.7-FF
+    // steady frames. Emulator, bright feed (a block over the ceiling): stock mean 9,714.0 with 33.3 % over
+    // the ceiling and 0 dead; the copy mean 9,712.7, spread 4,555.5, 33.3 % over, 0 dead; the earlier op 5
+    // form 33.3 % dead (0xFFFF). The terminator selection copy (10 21 23) froze the picture, as on 4.8.1.7
+    // (58 of 58 pairs equal, mean 18,861.7). NOT MEASURED ON A CAMERA. OPEN: the same as 4.8.1.7 (the
+    // sensor mode and a long stream).
     id: 'compact_32k-4.8.1.9-to32',
     family: 'compact_32k',
     version: '4.8.1.9',
     fromHz: 8,
     targetHz: 32,
     stockSha256: '2c5eedec97ba168b5defba3b5065c0d50e058102725c577a33ff29d270c3cdd5',
-    patchedSha256: '73586516366fde7bfaa27a8b01414632265db6f5ea00138c4fb23e2097e40d88',
+    patchedSha256: '14e259603487af8b8db1769b144b8fcc41ec09fc8965f835becdb296bb42e495',
     length: 48800,
     edits: [
       // block 13 header count 04 -> 01: one step instead of four, every capture is published (as the
       // 4.8.1.7 patch)
       { offset: 0x95a6, before: '04', after: '01' },
-      // its steps: the four steps (op 5 | 6 | 7 | 8 with the delivery bit) -> the one step 11 25 23, as the
-      // 4.8.1.7 patch
-      { offset: 0x95aa, before: '110520110620110720102823', after: '112523000000000000000000' },
+      // its steps (3 bytes each): the four stock steps 11 05 20 | 11 06 20 | 11 07 20 | 10 28 23 become one
+      // step 11 21 23 and zeros, the same bytes as the 4.8.1.7 patch: 11 is the seeds' selection, 21 is op
+      // 1 (frame_chunk_copy) with the delivery bit, 23 the stock header (type 3, gpio 1)
+      { offset: 0x95aa, before: '110520110620110720102823', after: '112123000000000000000000' },
     ],
     row: {
       label:
-        'steady self-loop block (header 04 0d 0d 00), reduced to one step: op 5 with the delivery bit',
+        'steady self-loop block (header 04 0d 0d 00), reduced to one step: a plain copy with the delivery bit (op 1)',
       offset: 0x95a6,
       length: 52,
     },
@@ -282,57 +321,75 @@ export const FPS_PATCH_TABLE: readonly FpsPatchSource[] = [
     sibling: null,
   },
   {
-    // compact_32k-1.3.0.8-FF-to32. 32 Hz from the FF build, one step per capture: 13 25 23 (the FF block 13
-    // keeps its op 5 and gives up its op 8 step). The FF image differs from the 8 Hz 1.3.0.8 image
-    // elsewhere as well (reset vector 0x100806b1, not 0x1008066d; 180 bytes longer); of the 16 blocks of
-    // its program only block 13 differs. Emulator (80-frame boot): the even steady frames are the FF
-    // build's own frames one for one (31 of 31). The same OPEN points as the stock 1.3.0.8 32 Hz patch
-    // apply.
+    // compact_32k-1.3.0.8-FF-to32. 32 Hz from the FF build, one capture per published frame: the one step
+    // is the copy of the seeds (op 3 with the delivery bit, selection 0x13), the same form as the 8 Hz
+    // 1.3.0.8 entry. The earlier form 13 25 23 (op 5) is replaced: it writes 0xFFFF over every sample above
+    // 15000 (frame_line_op_5, image.c:1149). The FF image differs from the 8 Hz 1.3.0.8 image elsewhere as
+    // well (reset vector 0x100806b1, not 0x1008066d; 180 bytes longer); of the 16 blocks of its program
+    // only block 13 differs. Emulator, recorded feed (80 frames): stock 16.129 Hz, the copy 32.258 Hz
+    // median (32.196 mean), 0 frozen pairs, 87.9 % of body halfwords change (stock 88.2 %), mean 6,781.5
+    // (stock 6,781.2), spread 2,086.7 (stock 2,086.6), and 31 of 31 even steady frames equal the FF build's
+    // own steady frames. Emulator, bright feed (a block over the ceiling): stock mean 9,710.7, 33.3 % over,
+    // 0 dead; the copy mean 9,710.7, spread 4,556.5, 33.3 % over, 0 dead; the earlier op 5 form 33.3 % dead
+    // (0xFFFF). NOT MEASURED ON A CAMERA. The same OPEN points as the stock 1.3.0.8 32 Hz patch apply (the
+    // sensor mode, a long stream).
     id: 'compact_32k-1.3.0.8-FF-to32',
     family: 'compact_32k',
     version: '1.3.0.8-FF',
     fromHz: 16,
     targetHz: 32,
     stockSha256: 'b97ced91fff9f0949a02f35fceab697634cc109a0fe2a2fbbfe6ccfadb7d4d16',
-    patchedSha256: '8e2ffdf6918fa5e88871981b6c443229c05c25ad0d4b7a04b07769aecd35d7e1',
+    patchedSha256: 'bf99816f8bd36a5af33f2bb9196cf9088d9bb58f5d9a45472d40e351d34d677f',
     length: 49308,
     edits: [
       // the 16 Hz FF block 13 @ image +0xB804 (header 02 0d 0d 00, 2 steps): count 02 -> 01
       { offset: 0xb804, before: '02', after: '01' },
-      // its steps @ +0xB808..+0xB80D: 13 05 20 | 11 28 23 -> 13 25 23 | 00 00 00 (op 5 with the delivery
-      // bit; the FF build's op 8 fill goes)
-      { offset: 0xb808, before: '130520112823', after: '132523000000' },
+      // its steps @ +0xB808..+0xB80D: 13 05 20 | 11 28 23 -> 13 23 23 | 00 00 00. 13 is the FF seeds'
+      // selection (the seed's CMD mode 3); 23 is op 3 with the delivery bit, frame_line_op_3
+      // (image.c:1111), a plain copy of the line (the FF build's op 8 fill goes); header 23 (type 3, gpio
+      // 1) is stock.
+      { offset: 0xb808, before: '130520112823', after: '132323000000' },
     ],
     row: {
       label:
-        '16 Hz FF block 13 (header 02 0d 0d 00, 2 steps), reduced to one step: op 5 with the delivery bit',
+        '16 Hz FF block 13 (header 02 0d 0d 00, 2 steps), reduced to one step: a plain copy with the delivery bit (op 3)',
       offset: 0xb804,
       length: 52,
     },
     sibling: null,
   },
   {
-    // compact_32k-4.16.1.7-FF-to32. 32 Hz from the FF build, one step per capture: 11 25 23 (the FF block
-    // 13 keeps its op 5 on sel 1 and gives up its op 8 step). Of the 16 blocks of its program only block 13
-    // differs from the 4.8 8 Hz program. Emulator (80-frame boot): the even steady frames are the FF
-    // build's own frames one for one (29 of 29). The same OPEN points as 4.8.1.7 apply.
+    // compact_32k-4.16.1.7-FF-to32. 32 Hz from the FF build, one capture per published frame: the one step
+    // is the copy of the seeds (op 1 with the delivery bit, selection 0x11), the same form as the 4.8.1.7
+    // entry. The earlier form 11 25 23 (op 5) is replaced: it writes 0xFFFF over every sample above 15000
+    // (frame_chunk_seed, frame_chunk_ops_target.c:171). Of the 16 blocks of its program only block 13
+    // differs from the 4.8 8 Hz program. Emulator, recorded feed (80 frames): stock 16.129 Hz, the copy
+    // 32.258 Hz median (32.183 mean), 0 frozen pairs, 87.9 % of body halfwords change (stock 88.2 %), mean
+    // 6,784.6 (stock 6,784.4), spread 2,087.5 (stock 2,087.4), and 29 of 29 even steady frames equal the FF
+    // build's own steady frames. Emulator, bright feed (a block over the ceiling): stock mean 9,712.8, 33.3
+    // % over, 0 dead; the copy mean 9,712.7, spread 4,555.5, 33.3 % over, 0 dead; the earlier op 5 form
+    // 33.3 % dead (0xFFFF). The terminator selection copy (10 21 23) froze the picture (0 of 29 even frames
+    // equal the FF frames; 58 of 58 pairs equal, mean 18,845.5). NOT MEASURED ON A CAMERA. The same OPEN
+    // points as 4.8.1.7 apply.
     id: 'compact_32k-4.16.1.7-FF-to32',
     family: 'compact_32k',
     version: '4.16.1.7-FF',
     fromHz: 16,
     targetHz: 32,
     stockSha256: 'b1016ea14f2e830fb3691afbd60cd679035c7700a99c777a8a3c276e034f6ca1',
-    patchedSha256: '5d896b208092a8778d839c54ee86ea8aac846a9cd44cdff24c554541e6315bd4',
+    patchedSha256: 'aec5364181696416e33d75cb8fb64277998ba81d9b5e4823daba1a479588b9e6',
     length: 49896,
     edits: [
       // the 16 Hz FF block 13 @ image +0x9776 (header 02 0d 0d 00, 2 steps): count 02 -> 01
       { offset: 0x9776, before: '02', after: '01' },
-      // its steps @ +0x977A..+0x977F: 11 05 20 | 10 28 23 -> 11 25 23 | 00 00 00
-      { offset: 0x977a, before: '110520102823', after: '112523000000' },
+      // its steps @ +0x977A..+0x977F: 11 05 20 | 10 28 23 -> 11 21 23 | 00 00 00. 11 is the FF seeds'
+      // selection (sel 1); 21 is op 1 with the delivery bit, frame_chunk_copy
+      // (frame_chunk_ops_target.c:669), the plain copy of the chunk; header 23 (type 3, gpio 1) is stock.
+      { offset: 0x977a, before: '110520102823', after: '112123000000' },
     ],
     row: {
       label:
-        '16 Hz FF block 13 of the 4.16 program (header 02 0d 0d 00, 2 steps), reduced to one step: op 5 with the delivery bit',
+        '16 Hz FF block 13 of the 4.16 program (header 02 0d 0d 00, 2 steps), reduced to one step: a plain copy with the delivery bit (op 1)',
       offset: 0x9776,
       length: 52,
     },
@@ -424,6 +481,26 @@ export const FPS_KNOWN_RATE: Readonly<
   },
   d91284c65a5dfde608e1c221b66a7ada487f3d42e6f49f01d09c2c7d643b59a9: {
     name: 'compact-1.3.0.0-mode8-32hz',
+    hz: 32,
+  },
+  ee8c7f0e09d81b916e1ffeb2807108db34c60b29a277ec8651da22f836fd80eb: {
+    name: 'compact-1.3.0.8-to32-op5',
+    hz: 32,
+  },
+  '8e2ffdf6918fa5e88871981b6c443229c05c25ad0d4b7a04b07769aecd35d7e1': {
+    name: 'compact-1.3.0.8-FF-to32-op5',
+    hz: 32,
+  },
+  d31e52d340e462e684dbc714b03c2712580f380b209dcea233a23c34a45ddfc1: {
+    name: 'compact-4.8.1.7-to32-op5',
+    hz: 32,
+  },
+  '73586516366fde7bfaa27a8b01414632265db6f5ea00138c4fb23e2097e40d88': {
+    name: 'compact-4.8.1.9-to32-op5',
+    hz: 32,
+  },
+  '5d896b208092a8778d839c54ee86ea8aac846a9cd44cdff24c554541e6315bd4': {
+    name: 'compact-4.16.1.7-FF-to32-op5',
     hz: 32,
   },
 };
