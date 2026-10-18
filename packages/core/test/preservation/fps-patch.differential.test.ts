@@ -201,7 +201,7 @@ corpusDescribe('the table against the Python tool, over the corpus (SEEK_FPS_COR
     expect(compared).toBe(14);
   });
 
-  it('withholds every stage-one offer after the bench run, and refuses the stage-two builds too', () => {
+  it.skipIf(!FPS_OFFER_WITHHELD)('withholds every stage-one offer after the bench run, and refuses the stage-two builds too', () => {
     for (const image of FIXTURE.images.filter((candidate) => candidate.pythonState === 'stock')) {
       const bytes = findByHash(image.length, image.inputSha256, image.length);
       if (bytes === null) continue;

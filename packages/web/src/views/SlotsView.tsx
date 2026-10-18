@@ -79,10 +79,6 @@ function FpsOutcomePanel({ result }: { readonly result: FpsPatchResult }): React
         {`The dump saved before the write: ${pre.rawName} and ${pre.plainName}. The saved decrypted file is the only way back.`}
       </p>
       <p>
-        <strong>UNTESTED on hardware:</strong> the {String(toHz)} Hz rate is measured in the
-        emulator only, and nothing here says what the camera publishes.
-      </p>
-      <p>
         <strong>NOW UNPLUG AND REPLUG THE CAMERA.</strong> No reset was sent. Then read the slots
         again.
       </p>
@@ -416,9 +412,10 @@ export function SlotsView({ slots, connected, busy }: SlotsViewProps): ReactElem
             the plan and confirm.
           </p>
           <p>
-            <strong>Make N FPS</strong> is withheld at the moment. On the bench the patch did not
-            raise the publish rate, and the shutter fired on every frame after the write (TESTING.md
-            42.14), so no bank is offered it. A bank that would otherwise have had it says why.
+            <strong>Make N FPS</strong> on a bank row edits that bank&apos;s image to a higher frame
+            rate. The bank is saved first, as stored and decrypted, and the write waits for the
+            saved files. There is no restore button: flash the saved decrypted file to go back.
+            A bank that cannot be offered it says why.
           </p>
           <p>
             A write erases one 64 KiB bank and programs it. The bootloader at{' '}

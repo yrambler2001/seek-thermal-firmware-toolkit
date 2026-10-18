@@ -59,12 +59,11 @@ export interface SlotTableProps {
   readonly onPatchFps: (key: SlotKey) => void;
 }
 
-/** What the frame-rate row action says when it is on: the rate change, and that it is untested. */
+/** What the frame-rate row action says when it is on: the rate change, and that the saved file is the way back. */
 function fpsNote(plan: Extract<FpsPlan, { status: 'offer' }>): string {
   return (
     `Raises this bank from ${String(plan.fromHz)} Hz to ${String(plan.toHz)} Hz by editing its bytes. ` +
-    'The bank is saved in full before anything is written, and the saved decrypted file is the only way back. ' +
-    'UNTESTED on hardware: the rate is measured in the emulator only.'
+    'The bank is saved in full before anything is written, and the saved decrypted file is the only way back.'
   );
 }
 

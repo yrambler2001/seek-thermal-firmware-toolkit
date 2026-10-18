@@ -1690,7 +1690,7 @@ describe('patch-fps', () => {
     expect(log.flashed).toEqual([]);
     const text = test.stdout.text + test.stderr.text;
     expect(text).toContain('Frame-rate patch plan');
-    expect(text).toContain('UNTESTED on hardware');
+    expect(text).not.toContain('UNTESTED on hardware');
     expect(text).toContain('dry run: nothing was saved and nothing was written');
   });
 

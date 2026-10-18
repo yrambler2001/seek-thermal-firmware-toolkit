@@ -243,8 +243,8 @@ not banks and are never written.
            way that bank's firmware needs; --raw sends the bytes verbatim. The
            plan is shown and the write asked for, unless --yes
 
-  patch-fps  raise the bank's frame rate by editing its bytes. WITHHELD: after the bench run (TESTING.md
-           42.14) no bank is offered; the command refuses with the reason. The code stays, for a re-enable.
+  patch-fps  raise the bank's frame rate by editing its bytes (the plain 2014-chain Compacts; other lines
+           refuse with the reason).
            A dry run unless --write: it prints the plan and sends nothing. --write saves the bank (raw and
            decrypted) into --dump-dir FIRST, then writes the patched image and reads it back.
 

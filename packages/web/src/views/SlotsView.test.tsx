@@ -907,7 +907,7 @@ describe('SlotsView: the frame-rate row action', () => {
     expect(text).toContain('patched from 8 Hz to 16 Hz');
     expect(text).toContain('differs from the saved dump only at the 2 planned byte(s)');
     expect(text).toContain('raw.bin and plain.bin');
-    expect(text).toContain('UNTESTED on hardware');
+    expect(text).not.toContain('UNTESTED on hardware');
     expect(text).toContain('The saved decrypted file is the only way back');
     unmount();
   });

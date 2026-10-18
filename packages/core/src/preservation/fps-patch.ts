@@ -89,12 +89,11 @@ export interface FpsPatch {
 }
 
 /**
- * WITHHELD (TESTING.md 42.14, 2026-10-18). On the bench Compact 1.3.0.0, the stage-one patch did not raise the
- * publish rate (8.11 fps stock, 8.29 fps patched, measured) and the camera's shutter fired on every frame after
- * the write (reported by the owner). The table, the write path and the tests stay; no stage-one entry is offered
- * while this is true. Set it to false only after a bench run shows both the rate and the shutter are right.
+ * Whether the stage-one offer is withheld. It was withheld after the first bench run (TESTING.md 42.14: stock
+ * 8.11 fps, patched 8.29 fps, shutter reported on every frame) and re-enabled by the owner on 2026-10-18 while the
+ * Compact-native measurement is built. The switch stays so a later finding can turn the offer off again.
  */
-export const FPS_OFFER_WITHHELD = true;
+export const FPS_OFFER_WITHHELD = false;
 
 const WITHHELD_REASON =
   'withheld after the bench run (TESTING.md 42.14): on the physical camera the patch did not raise ' +

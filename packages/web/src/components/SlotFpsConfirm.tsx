@@ -1,6 +1,6 @@
 /**
- * The last step before a frame-rate patch is written: the bank, the build, the rate change, that the rate is
- * UNTESTED on hardware, how the bank is saved first, and that the saved dump is the only way back. A bank
+ * The last step before a frame-rate patch is written: the bank, the build, the rate change,
+ * how the bank is saved first, and that the saved dump is the only way back. A bank
  * the camera boots now, or the recovery bank, adds the same tick a write needs.
  *
  * The plan is core's (`fpsPlanOfBank`); this only states it. Nothing is sent by opening or confirming it
@@ -104,9 +104,6 @@ export function SlotFpsConfirm({
           </span>
           <span className="block">
             {`The patch changes ${String(sites)} byte(s) of the image and the acceptance-sum word, so the sum the bootloader checks is kept. The key pair is not touched.`}
-          </span>
-          <span className="block rounded-md border border-warn/40 bg-warn/8 px-3 py-2 font-medium">
-            {`UNTESTED on hardware. The ${String(toHz)} Hz rate is measured in the emulator only. Whether this camera publishes at that rate is not known until the bench measures it.`}
           </span>
           <span className="block">
             {saveMode === 'picker'

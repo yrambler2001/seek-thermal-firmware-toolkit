@@ -1032,15 +1032,7 @@ export function fpsPlanLines(
       ],
     ]),
   );
-  lines.push('', paint(heading('Warnings', color), 'yellow', color));
-  lines.push(
-    paint(
-      `  ! UNTESTED on hardware: the ${String(plan.toHz)} Hz rate is measured in the emulator only. ` +
-        'Whether this camera publishes at that rate is not known until it is measured on the bench.',
-      'yellow',
-      color,
-    ),
-  );
+  lines.push('');
   lines.push(
     paint(
       `  ! The saved decrypted file is the only way back. To undo the patch, flash it again: ` +

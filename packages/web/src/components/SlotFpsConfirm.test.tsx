@@ -56,7 +56,7 @@ describe('the frame-rate patch confirmation', () => {
     expect(text).toContain('holds firmware 1.3.0.0');
     expect(text).toContain('makes its image run at 16 Hz instead of 8 Hz');
     expect(text).toContain('1 byte(s) of the image');
-    expect(text).toContain('UNTESTED on hardware');
+    expect(text).not.toContain('UNTESTED on hardware');
     unmount();
   });
 
