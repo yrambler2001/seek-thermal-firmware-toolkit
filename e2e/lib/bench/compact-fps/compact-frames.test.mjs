@@ -104,6 +104,33 @@ describe('the frame geometry, derived from the frame size', () => {
     const buf = Buffer.alloc(64);
     expect(frameBytesFromMarkers(buf, [])).toBeNull();
   });
+
+  it('does not overflow the stack on a noisy stream with more distinct spacings than a spread call takes', () => {
+    // 6000 markers at random even offsets over 64 MB, each carrying its own sequence number as the index.
+    // Pairs up to 64 markers apart pass the index test (about 384k pairs), and their spacings are spread
+    // over several hundred thousand values, so the spacing map has more keys than a spread call accepts
+    // (about 1e5 arguments): the old Math.max(...) over the spacing counts threw "Maximum call stack size
+    // exceeded" on a stream like this.
+    let seed = 2463534242; // xorshift32: an LCG here loses precision in doubles and its spacings collide
+    const rand = () => {
+      seed ^= seed << 13;
+      seed >>>= 0;
+      seed ^= seed >>> 17;
+      seed ^= seed << 5;
+      seed >>>= 0;
+      return seed;
+    };
+    const buf = Buffer.alloc(64 << 20);
+    const offsets = new Set();
+    while (offsets.size < 6000) offsets.add((rand() % (buf.length / 2)) * 2);
+    const sorted = [...offsets].sort((a, b) => a - b);
+    sorted.forEach((p, k) => buf.writeUInt16LE(k + 1, p + 2));
+    for (const p of sorted) buf.writeUInt16LE(FRAME_MARKER, p);
+    const d = frameBytesFromMarkers(buf, sorted);
+    expect(d).not.toBeNull();
+    expect(Number.isInteger(d.bytes)).toBe(true);
+    expect(d.of).toBeGreaterThan(100000);
+  });
 });
 
 describe('one frame, parsed', () => {
