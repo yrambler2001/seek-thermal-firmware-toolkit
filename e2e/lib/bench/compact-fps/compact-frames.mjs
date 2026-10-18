@@ -93,8 +93,16 @@ export function frameBytesFromMarkers(buffer, markerOffsets) {
     }
   }
   if (!spacing.size) return null;
-  const top = Math.max(...spacing.values());
-  const bytes = Math.min(...[...spacing].filter(([, c]) => 2 * c >= top).map(([d]) => d));
+  // Plain loops, not Math.max(...) / Math.min(...): a noisy stream can give more distinct
+  // spacings than a spread call accepts (about 1e5 arguments), and the run then dies with
+  // "Maximum call stack size exceeded" (seen on the bench, 1.2.0.0 at 16 Hz, runs 2 and 3).
+  // Plain loops, not Math.max(...) / Math.min(...): a noisy stream can give more distinct
+  // spacings than a spread call accepts (about 1e5 arguments), and the run then dies with
+  // "Maximum call stack size exceeded" (seen on the bench, 1.2.0.0 at 16 Hz, runs 2 and 3).
+  let top = 0;
+  for (const c of spacing.values()) if (c > top) top = c;
+  let bytes = Infinity;
+  for (const [d, c] of spacing) if (2 * c >= top && d < bytes) bytes = d;
   return { bytes, agree: spacing.get(bytes), of };
 }
 

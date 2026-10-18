@@ -3,7 +3,8 @@
  * 1.2.0.0, 1.3.0.0 (the native dump) and 1.3.0.8 8 Hz (the chimera on the 2014 donor).
  *
  * FOR EACH FIRMWARE, one boot of the stock flash, then a second boot of the patched flash:
- *   1. the analysis offers the patch on bank A, at the build's top rate (16 Hz; 32 Hz for 1.3.0.8);
+ *   1. the analysis offers the patch on bank A, at the build's top rate (16 Hz; 26 Hz for 1.3.0.8, the
+ *      bench-measured rate of its 32 Hz entry, FPS_MEASURED_HZ);
  *   2. THE SAVE GATE: a save that does not happen refuses the write, and no SetFeaturedFirmwareData
  *      (0x50) or CompleteMemoryUpgrade (0x51) is sent;
  *   3. the patch: the pre-patch dump is handed to the save FIRST, holding bank A exactly as the
@@ -79,7 +80,8 @@ const sha = (bytes: Uint8Array): string => createHash('sha256').update(bytes).di
 const STAGE_ONE: readonly { readonly label: string; readonly top: number }[] = [
   { label: 'Compact 1.2.0.0', top: 16 },
   { label: 'Compact 1.3.0.0 (native dump)', top: 16 },
-  { label: 'Compact 1.3.0.8 (8 Hz)', top: 32 },
+  // The page's rate for the 32 Hz entry is the bench-measured 26 (FPS_MEASURED_HZ, TESTING.md 42.20).
+  { label: 'Compact 1.3.0.8 (8 Hz)', top: 26 },
 ];
 
 function subjectNamed(label: string): LockedSubject {
