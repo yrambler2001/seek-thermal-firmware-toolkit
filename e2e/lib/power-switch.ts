@@ -30,14 +30,34 @@ import path from 'node:path';
 
 import { REPO_ROOT, say } from './browser.js';
 
-/** The rp2040 switch project, overridable; the default is the sibling checkout. */
+/**
+ * The checkout the bench's files sit beside. A git worktree lives under `<checkout>/.claude/worktrees/<name>`,
+ * so its own root is not the checkout whose siblings hold the switch project: the checkout is the part above.
+ */
+export function mainCheckoutRoot(root: string = REPO_ROOT): string {
+  const marker = `${path.sep}.claude${path.sep}worktrees${path.sep}`;
+  const at = root.indexOf(marker);
+  return at < 0 ? root : root.slice(0, at);
+}
+
+/**
+ * The rp2040 switch project, overridable (SEEK_E2E_SWITCH_DIR); the default is the sibling of the
+ * main checkout (`<main checkout>/../../usb-port-switch-rp2040`), the same from a worktree.
+ */
 export function switchProjectDir(): string {
   return (
-    process.env.SEEK_E2E_SWITCH_DIR ?? path.resolve(REPO_ROOT, '..', '..', 'usb-port-switch-rp2040')
+    process.env.SEEK_E2E_SWITCH_DIR ??
+    path.resolve(mainCheckoutRoot(), '..', '..', 'usb-port-switch-rp2040')
   );
 }
 
 function run(dir: string, args: readonly string[], timeoutMs = 8000): Promise<string> {
+  /* A missing directory makes execFile fail with ENOENT on `node`, which names no path: say which one. */
+  if (!existsSync(path.join(dir, 'switch.js'))) {
+    return Promise.reject(
+      new Error(`no switch.js under ${dir} (set SEEK_E2E_SWITCH_DIR to the rp2040 switch project)`),
+    );
+  }
   return new Promise((resolve, reject) => {
     execFile(
       process.execPath,

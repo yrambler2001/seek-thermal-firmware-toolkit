@@ -4,7 +4,12 @@
  * (macOS shows a claim as an interface user client under the device), neither
  * the CLI nor the user's own hardware probe running, and no other e2e run on
  * the camera (its Electron, or the cross-process lock below). Read-only: it
- * asks `ioreg` and `pgrep`, never the camera.
+ * asks `ioreg` and `ps`, never the camera.
+ *
+ * A process counts as a camera client only when its executable is node, Electron
+ * or a J-Link tool (`CLIENT_EXECUTABLE`), and never this run's own process or its
+ * ancestors. A shell, grep or ps that merely names the CLI in its arguments is not
+ * a holder (agent C's finding E, TESTING.md 42.20 §5).
  */
 
 import { execFileSync } from 'node:child_process';
@@ -83,36 +88,88 @@ function takeCameraLock(): string | null {
   return `could not take the camera lock ${CAMERA_LOCK}`;
 }
 
+/** One process from `ps -axww -o pid=,ppid=,command=`. */
+export interface ProcessRow {
+  readonly pid: number;
+  readonly ppid: number;
+  /** The full command line, as the process was started. */
+  readonly command: string;
+}
+
+/** `ps -axww -o pid=,ppid=,command=` output as rows; lines that are not rows are dropped. */
+export function parsePsRows(text: string): ProcessRow[] {
+  const rows: ProcessRow[] = [];
+  for (const line of text.split('\n')) {
+    const match = /^\s*(\d+)\s+(\d+)\s+(.+?)\s*$/.exec(line);
+    if (match === null) continue;
+    rows.push({ pid: Number(match[1]), ppid: Number(match[2]), command: match[3] ?? '' });
+  }
+  return rows;
+}
+
+/**
+ * The programs that can hold the camera: node (the CLI, vitest and its workers, the
+ * e2e Electron tools), Electron itself, and the J-Link tools. Matched on the executable
+ * (the first word of the command line, its directory optional), so a shell, `ps`,
+ * `pgrep`, `grep` or an editor that merely names one of these in its arguments is
+ * never a holder.
+ */
+const CLIENT_EXECUTABLE = /^(?:\S*\/)?(?:node|electron|vitest|jlink[\w-]*|JLink[\w-]*)(?:\s|$)/i;
+
+/**
+ * The pids this process runs under: its own pid and each ancestor, walked up from the
+ * process table (`rows`), so they are excluded whatever their command line says.
+ */
+export function ancestorsOf(rows: readonly ProcessRow[], self: number): Set<number> {
+  const parent = new Map(rows.map((row) => [row.pid, row.ppid] as const));
+  const mine = new Set<number>([self]);
+  let pid = parent.get(self) ?? NaN;
+  for (let depth = 0; depth < 64 && Number.isInteger(pid) && pid > 0; depth++) {
+    if (mine.has(pid)) break;
+    mine.add(pid);
+    pid = parent.get(pid) ?? NaN;
+  }
+  return mine;
+}
+
+/**
+ * The processes that are real camera clients for `pattern` (matched against the whole
+ * command line): a client executable, not this run's own process or its ancestors, whose
+ * command line names the pattern. Returned as `pid command`, cut to 120 characters.
+ */
+export function cameraClientsIn(
+  rows: readonly ProcessRow[],
+  pattern: RegExp,
+  self: number = process.pid,
+): string[] {
+  const mine = ancestorsOf(rows, self);
+  return rows
+    .filter((row) => !mine.has(row.pid))
+    .filter((row) => CLIENT_EXECUTABLE.test(row.command) && pattern.test(row.command))
+    .map((row) => `${String(row.pid)} ${row.command.slice(0, 120)}`);
+}
+
+/** The process table, read with ps (read-only). Throws when ps cannot answer. */
+function processTable(): ProcessRow[] {
+  return parsePsRows(
+    execFileSync('ps', ['-axww', '-o', 'pid=,ppid=,command='], {
+      encoding: 'utf8',
+      maxBuffer: 64 * 1024 * 1024,
+    }),
+  );
+}
+
 /** Another e2e run's browser on the real camera (Electron), or a camera spec running. */
 function otherCameraRun(): string | null {
-  let running: string;
+  let rows: ProcessRow[];
   try {
-    running = execFileSync(
-      'pgrep',
-      ['-fl', String.raw`e2e/electron/main\.mjs|camera(-bridge|-restart)?\.e2e`],
-      { encoding: 'utf8' },
-    );
-  } catch {
-    return null; /* pgrep exits 1 when nothing matches */
+    rows = processTable();
+  } catch (error) {
+    /* Fail closed: a run that cannot see the process table does not know the camera is free. */
+    return `could not list the processes (ps): ${error instanceof Error ? error.message : String(error)}`;
   }
-  /* This run's own processes (npm exec -> vitest -> its worker) are not "another". */
-  const mine = new Set<string>([String(process.pid)]);
-  let pid = process.ppid;
-  for (let depth = 0; depth < 12 && pid > 1; depth++) {
-    mine.add(String(pid));
-    try {
-      pid = Number(execFileSync('ps', ['-o', 'ppid=', '-p', String(pid)], { encoding: 'utf8' }));
-    } catch {
-      break;
-    }
-  }
-  const others = running
-    .split('\n')
-    .filter((line) => line.trim() !== '' && !line.includes('pgrep'))
-    .filter((line) => !mine.has(line.trim().split(/\s+/)[0] ?? ''));
-  return others.length === 0
-    ? null
-    : `another e2e run is on the camera: ${others.map((l) => l.slice(0, 120)).join('; ')}`;
+  const others = cameraClientsIn(rows, /e2e\/electron\/main\.mjs|camera(-bridge|-restart)?\.e2e/);
+  return others.length === 0 ? null : `another e2e run is on the camera: ${others.join('; ')}`;
 }
 
 /** The camera as macOS enumerated it: its own USB descriptors, cached by the OS. */
@@ -195,17 +252,13 @@ export function cameraBusyReason(): string | null {
     }
   }
   if (holders.length > 0) return `the camera's interface is held by ${holders.join(', ')}`;
-  let running = '';
+  let rows: ProcessRow[];
   try {
-    running = execFileSync('pgrep', ['-fl', 'real-camera-probe|seek-fw|packages/cli/dist/bin.js'], {
-      encoding: 'utf8',
-    });
-  } catch {
-    /* pgrep exits 1 when nothing matches */
+    rows = processTable();
+  } catch (error) {
+    return `could not list the processes (ps): ${error instanceof Error ? error.message : String(error)}`;
   }
-  const others = running
-    .split('\n')
-    .filter((line) => line.trim() !== '' && !line.includes('pgrep'));
+  const others = cameraClientsIn(rows, /real-camera-probe|seek-fw|packages\/cli\/dist\/bin\.js/);
   if (others.length > 0) return `another camera client is running: ${others.join('; ')}`;
   return otherCameraRun() ?? takeCameraLock();
 }
