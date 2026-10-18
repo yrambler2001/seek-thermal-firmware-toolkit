@@ -14,6 +14,7 @@ import { IMAGE_MAGIC } from '../../src/image/header.js';
 import { wordSum32 } from '../../src/image/bank.js';
 import {
   FPS_MEASURED_HZ,
+  FPS_NO_PATCH_4821_REASON,
   FPS_OFFER_WITHHELD,
   FPS_PATCHES,
   FPS_STAGE_ONE_IDS,
@@ -222,6 +223,17 @@ describe('the stages: which entries are offered (pinned, so a change is delibera
       expect(patch.gate.enabled, patch.id).toBe(offered);
       if (offered) expect(patch.gate.reason, patch.id).toBeNull();
       else expect(patch.gate.reason ?? '', patch.id).toMatch(/^stage two: /);
+    }
+  });
+});
+
+describe('the build with no patch (Compact 4.8.2.1)', () => {
+  it('says why it has no patch, not that the image is missing from the table', () => {
+    const plan = planFpsPatch(syntheticImage(8), '4.8.2.1');
+    expect(plan.status).toBe('refused');
+    if (plan.status === 'refused') {
+      expect(plan.reason).toBe(FPS_NO_PATCH_4821_REASON);
+      expect(plan.reason).toMatch(/68-byte command pages/);
     }
   });
 });

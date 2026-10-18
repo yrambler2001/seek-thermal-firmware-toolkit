@@ -435,6 +435,9 @@ export function planFpsPatch(image: Uint8Array, cameraVersion: string | null): F
       hz: identity.known.hz,
     };
   }
+  if (cameraVersion === FPS_NO_PATCH_4821_VERSION) {
+    return { status: 'refused', reason: FPS_NO_PATCH_4821_REASON };
+  }
   return {
     status: 'refused',
     reason:
@@ -443,6 +446,16 @@ export function planFpsPatch(image: Uint8Array, cameraVersion: string | null): F
       '4.16.1.7 FF builds and the Compact PRO 1.0.3.x and 4.9.x builds; no other build has an entry',
   };
 }
+
+/** The build the frame-rate patch was not derived for (the Compact XR and Compact 4.8.2.1 image, one image). */
+export const FPS_NO_PATCH_4821_VERSION = '4.8.2.1';
+
+/** Why that build has no patch: its command pages are not the 52-byte blocks the 4.8.1.x patch edits (TESTING.md 42.22). */
+export const FPS_NO_PATCH_4821_REASON =
+  'the Compact 4.8.2.1 build (and the Compact XR 4.8.2.1, the same image) runs 68-byte command ' +
+  'pages (include/fw_types.h cmd_page_t), not the 52-byte capture blocks the 4.8.1.x patches edit, ' +
+  'and the steady page and its delivery rule were not identified, so no frame-rate patch is made ' +
+  'for it (TESTING.md 42.22)';
 
 function refused(message: string): SeekError {
   return new SeekError('slots/refused', message);
