@@ -7380,3 +7380,66 @@ Notes: the camera's state after the pages bench and the CLI test was read again 
 - The web suite was not re-run in this session; it was last run at 42.19 (332 of 332).
 
 **6. The camera, afterwards.** The matrix's last row (the original) leaves the camera patched by its boot proof. It was put back with the FW-V1 runner (`erase-spifi-range`, then `flash-factory-4m` with the baseline image, each after a channel-2 power cycle; the flash verify printed "Verify successful"), and its halted read was `40447c7e…eb72`. After the pages bench and the CLI test, a channel-2 power cycle and a read-only halted dump (`dump-spifi-4m-halted`) gave the same sha, `40447c7e…eb72`. Both switch channels are on (`OK 1=on 2=on`). No background job of this agent is running.
+
+### 42.22 Stage two for the 4.x Compact (Key A), the 4.8.2.1 build's refusal, and a bench run the camera did not allow (2026-10-18)
+
+**Summary.** The frame-rate patch is now offered on the Compact 4.8.1.7 and 4.8.1.9 builds, whose banks are staged under the camera's Key A (stage two, `5aeefef`). The write goes through the writer for that line, and its read-back is checked on the image the bank decrypts to. This is **checked on the emulator only**: the 4.8.1.7 and 4.8.1.9 chimeras pass the offer, the save gate, the patch and the boot of the patched flash. The Compact 4.8.2.1 image has **no patch**: its command pages are a different format and the steady page is not identified in the source (no candidate derived, `1c250e2` says why). **The bench proof did not run.** The camera has not enumerated on USB or answered SWD since about 18:00 CEST (section 4). No hardware number in this section is new. Every frame rate below is from 42.15 to 42.21, unchanged.
+
+**Tags.** [measured] was read here, on the emulator or from a command's output; [source] was read off a file, with the file named; [inferred] follows from those and was not measured.
+
+**1. Stage two (code, `5aeefef`).**
+- `preservation/fps-patch.ts`: `FPS_STAGE_TWO_IDS` is `compact_32k-4.8.1.7-to16`, `-to32`, `compact_32k-4.8.1.9-to16`, `-to32`, pinned by a test in both the unit file and the differential file. The offer (`FPS_OFFER_WITHHELD = false`) enables them with the stage one entries. The planner offers the table's highest target for an image, so the page shows "Make 32 FPS" on these two builds; the 16 Hz entries are reached only through the table [source]. Compact PRO 4.9 stays gated, with the reason rewritten: its frame rate has not been measured on the bench (the bench camera is a Compact board and the PRO frame needs the PRO measurer) [inferred from the measurer's frame size, `compact-fps` header].
+- `slots/fps-patch.ts` (`patchBankFps`): the order is now plan, patch, prepare, save, write, read-back. The prepare step is `prepareSlotFlash` on the patched image, the call "Flash decrypted image" makes. It refuses unless (a) the staging is `plain` or `key-a-ciphertext`, (b) on plain, the payload is the patched image, and (c) the image the writer predicts (`expectedPlain`) is the patched image, so a key-pair retarget or a moved acceptance sum is refused before anything is saved. The camera-wide refusal is applied by `prepareSlotFlash` and again by `flashSlot`, as before.
+- The read-back: plain keeps the byte compare (`checkReadBack`). Key A uses `checkReadBackDecrypted`: the read-back's own keystream is recovered (the solve the writer's verification uses), the image is decrypted, and the bytes that differ from the stock image must be exactly the planned ones (the edit sites and the sum word).
+- `FpsPatchResult.patched` carries the image written, so the emulator test can compare the booted bank with it.
+- `e2e/lib/slots-expectations.ts`: the 4.8.1.7 (std) and 4.8.1.9 rows now expect `fps: offer, toHz 32`. That is the table's top target, not a bench rate; it changes to the measured rate when section 4 is run.
+- CLI: the `patch-fps` usage names both stages and says the Key A read-back is the decrypted image. Its JSON and text are otherwise unchanged.
+
+**2. Tests (run on this worktree, measured).**
+
+| suite | result |
+| --- | --- |
+| core unit: `preservation/fps-patch.test.ts`, `slots/fps-patch.test.ts`, `slots/fps-patch-sites.test.ts` (after the last change) | 26 of 26 |
+| differential, with `SEEK_FPS_CORPUS` (the corpus roots, `/tmp` not used) | 8 pass, 1 skipped (the no-corpus case); the Python's patched hashes and changed offsets match for every entry, stage two included |
+| differential, without the corpus | 3 pass, 6 skipped |
+| emulator, stage one: `slots/fps-patch.emulator.test.ts` (1.2.0.0, 1.3.0.0, 1.3.0.8) | 3 of 3 (44 s) |
+| emulator, stage two: `slots/fps-patch.stage-two.emulator.test.ts` (4.8.1.7, 4.8.1.9 chimeras on the 4.8.2.1 donor) | 2 of 2 (31 s) |
+| emulator, page verdicts: `slots/page-expectations.emulator.test.ts` (all 26 subjects) | 184 of 184 (173 s); the 4.8.1.9 bank A offer is 32 Hz as the table says |
+| CLI: `packages/cli/test/slots.test.ts` | 100 of 100 |
+| web: `useSlotsPanel`, `SlotFpsConfirm`, `fps-save` | 51 of 51 |
+| typecheck: core, cli, web app, e2e | clean |
+| eslint and prettier on the changed files | clean |
+
+What the stage-two emulator test pins, for each of the two builds: the offer is on bank A at 32 Hz; a save that does not happen refuses the write and no `SetFeaturedFirmwareData` (0x50) or `CompleteMemoryUpgrade` (0x51) is sent; the pre-patch save holds bank A as the emulator served it; the commit status is 0; the writer's own read-back verifies; the decrypted read-back differs from the stock image at exactly the planned bytes; `ResetDevice` (0x59) is never sent; and after the patched flash is booted on its own, bank A decrypts to the patched image and the analysis says it is already patched. The stage-one suite is unchanged in code and still passes.
+
+**3. Compact 4.8.2.1 (and the Compact XR 4.8.2.1, one image): no patch.**
+- [source] `FW-V1/targets/compact_xr_8hz_4_8_2_1/include/fw_types.h`, lines 202 to 288: the command page is 68 bytes: `n_substeps`, `next_line`, `alt_line`, `reload`, and 16 substeps of four bytes (`param`, `chunk_op`, `type`, `gpio`). `chunk_op`'s low seven bits index a 23-entry handler table, and bit 7 marks a substep that completes the line. The comment records that six of the thirty pages (12, 15, 26, 27, 28, 29) carry no completing substep, and that "the steady page and its delivery rule" were not identified.
+- [source] The 4.8.1.x patch edits a 52-byte block (count, first, next, reset, then 3-byte steps) whose delivery bit is on its last step (`FW-V1/docs/FPS_PATCH_LINE_STEPS.md` 1.1, 1.5). That layout is not the 68-byte page.
+- [inferred] A 4.8.2.1 patch would need the steady page and its link rule first. With it missing, no candidate edit can be justified, and no candidate could be measured here (section 4).
+- The page now says this (`FPS_NO_PATCH_4821_REASON`, `1c250e2`), in place of "not in the frame-rate patch table". The table has no entry for the build, and none was added.
+
+**4. The bench run: not done (the camera did not respond).**
+
+What was tried, in order, on 2026-10-18 (times CEST):
+- Switch at the start: `OK 1=on 2=on`.
+- 18:14: `dump-spifi-4m-halted`. The J-Link connected (`O.K.`, VTref 3.33 V) and then failed: "Failed to attach to CPU. Trying connect under reset", "Could not connect to the target device". (The runner's own output; the earlier `spifi_14000000_4m_halted.bin` in `jlink_dumps` was a stale copy from 17:12 and was removed before the retries, so no hash in this section comes from it.)
+- Retries after: channel 1 cycled (3 s off); channel 2 cycled (3 s off, then 12 s); channel 2 off for 20 s, on, and 20 s more; channel 2 off for 4 s (to see VTref, which read 3.34 V with channel 2 off, so it does not show whether the camera is powered). Each retry: "Could not connect".
+- `flash-factory-4m-2` with `F4M2_DRY=1` (read-only plan): six patient reads over about two minutes, all failed: "Cannot read the part (a boot-looping firmware blocks memory reads?) and no F4M2_ASSUME file - nothing written." Exit 3.
+- USB, at every point above (`ioreg -p IOUSB`, up to 30 s after power-on): no device with vendor 0x289D. The RP2040 switch and the J-Link are enumerated.
+- Nothing else on this machine held the J-Link or the camera (`ps`, checked at 18:25).
+- Last verified state: `jlink_dumps/flash_factory_4m_2_2026-10-18T15-40-11-703Z.log` (agent D's baseline restore, 17:40 CEST) ends "DONE: the part reads back byte-identical to the image (40447c7e…eb72)", and the 17:12 halted read was the same sha. Nothing in this session wrote to the flash, so the baseline was last verified at 17:40, and the camera has not answered since about 18:00.
+- The cause is not known from this session. The owner should check the camera's own cable and power (channel 2) before any bench work: the switch cuts VBUS only, so the USB data path is unchanged and the camera is not enumerating.
+
+What the bench proof needs, once the camera enumerates and answers SWD (not run):
+1. Flash the 4.8.1.9 dump whole: `FACTORY_IMAGE=<.../2018.10.11-16.36.37-4.8.1.9/full_dump_reconstructed.bin> node tools/jlink/jlink-runner.js flash-factory-4m-2` from `FW-V1/targets/compact_8hz_1_3_0_0`. Cycle channel 2 and read the stock rate with `e2e/lib/bench/compact-fps/compact-fps.mjs --seconds 20 --store`.
+2. `node packages/cli/dist/bin.js slots patch-fps a` (dry run), then `--write --dump-dir <new folder> --acknowledge-risk --yes`. Cycle channel 2 and measure. Check the two saved dumps (raw equals the flashed bank A; decrypted equals the stock image) and the halted read against the planned bytes.
+3. Count the frames in the stored stream that repeat the previous frame's body (the freeze check of `FPS_PATCH_LINE_STEPS.md` section 3), and record the frame-type histogram as 42.15 does.
+4. Restore with `flash-factory-4m-2` from `bench-run/baseline-4m.bin`, then a halted read: `40447c7e…eb72`.
+5. The page's "Make 32 FPS" through Electron: **not written.** No spec in the tree drives that button (`e2e/slots-bench.e2e.ts` runs the matrix, not the frame-rate button). This section does not claim it.
+
+**5. Open.**
+- The bench proof of stage two (the rate, the picture, and the label: 32 is the table's target until it is measured) and the Electron run of the button.
+- Compact PRO 4.9: no frame-rate measurement on the bench, so it stays gated (section 1).
+- Compact 4.8.2.1: no patch (section 3). A patch would need the steady page identified in the source first.
+- The camera: not reachable from this session (section 4).
+- Unchanged from 42.15: the owner's decision on the per-frame shutter in mode 6.
