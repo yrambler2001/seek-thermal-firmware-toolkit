@@ -168,7 +168,15 @@ describe.skipIf(!REAL)('the CLI on the bench camera (1.3.0.0, real USB)', () => 
     'preserve --backup-only saves a zip whose windows are byte runs of the halted flash',
     () => {
       const zip = path.join(dir, 'backup.zip');
-      const run = cli(['preserve', '--backup-only', '--zip', zip]);
+      const run = cli([
+        'preserve',
+        '--backup-only',
+        '--yes',
+        '--out',
+        path.join(dir, 'preserve-run'),
+        '--zip',
+        zip,
+      ]);
       expect(run.status, run.out).toBe(0);
       expect(existsSync(zip), 'the run file is written').toBe(true);
       const listing = spawnSync('unzip', ['-Z1', zip], { encoding: 'utf8' })
@@ -177,8 +185,23 @@ describe.skipIf(!REAL)('the CLI on the bench camera (1.3.0.0, real USB)', () => 
       const big = listing.filter((name) => name.endsWith('.bin'));
       expect(big.length, `binary entries in ${listing.join(', ')}`).toBeGreaterThan(0);
       for (const name of big) {
+        /* The built patched image is not a read; the decrypted files are not flash bytes. */
+        if (/patched|decrypted/.test(name)) continue;
         const bytes = spawnSync('unzip', ['-p', zip, name], { maxBuffer: 64 << 20 }).stdout;
         if (bytes.length < 4096) continue;
+        if (name.endsWith('preserve_backup_windows.bin')) {
+          /* The 4 MiB backup equals the flash except the bootloader window's first 12 KiB, which it
+           * leaves erased (TESTING.md 42.20, measured on the bench). */
+          expect(bytes.length, 'the backup is the whole flash').toBe(flash.length);
+          for (let at = 0; at < flash.length; at++) {
+            if (bytes[at] === flash[at]) continue;
+            expect(
+              at < 0x3000 && bytes[at] === 0xff,
+              `backup byte ${at.toString(16)} differs`,
+            ).toBe(true);
+          }
+          continue;
+        }
         expect(Buffer.from(flash).includes(bytes), `${name} is a run of the flash`).toBe(true);
       }
     },
@@ -190,9 +213,9 @@ describe.skipIf(!REAL)('the CLI on the bench camera (1.3.0.0, real USB)', () => 
     () => {
       const slot = path.join(dir, 'slot-A.bin');
       writeFileSync(slot, bankOf(flash, 'a'));
-      const run = cli(['decrypt', 'slot', slot]);
+      const run = cli(['decrypt', 'slot', slot, '--out', path.join(dir, 'decrypt')]);
       expect(run.status, run.out).toBe(0);
-      const decrypted = onlyFile(dir, /-decrypted\.bin$/);
+      const decrypted = onlyFile(path.join(dir, 'decrypt'), /-decrypted\.bin$/);
       const bank = bankOf(flash, 'a');
       const length = new DataView(bank.buffer, bank.byteOffset, bank.byteLength).getUint32(
         HEADER_LENGTH_OFFSET,
@@ -206,9 +229,9 @@ describe.skipIf(!REAL)('the CLI on the bench camera (1.3.0.0, real USB)', () => 
 
       const short = path.join(dir, 'slot-short.bin');
       writeFileSync(short, bank.subarray(0, 1000));
-      const refused = cli(['decrypt', 'slot', short]);
+      const refused = cli(['decrypt', 'slot', short, '--out', path.join(dir, 'decrypt-refused')]);
       expect(refused.status, refused.out).not.toBe(0);
-      expect(refused.out).toMatch(/slots\/refused|65,?536|64 KiB/);
+      expect(refused.out).toMatch(/65,?536|64 KiB/);
     },
     CLI_TIMEOUT_MS,
   );
@@ -231,7 +254,7 @@ describe.skipIf(!REAL)('the CLI on the bench camera (1.3.0.0, real USB)', () => 
         const out = path.join(dir, `dump-${letter}`);
         const run = cli(['slots', 'dump', letter, '--out', out]);
         expect(run.status, run.out).toBe(0);
-        const raw = onlyFile(out, /^slot-[ABR]-.*\.bin$/);
+        const raw = onlyFile(out, new RegExp(`^slot-${letter}-(?!.*decrypted)`));
         expect(
           sameBytes(readFileSync(raw), bankOf(flash, letter)),
           `dump ${letter} is the halted bank`,
@@ -248,12 +271,14 @@ describe.skipIf(!REAL)('the CLI on the bench camera (1.3.0.0, real USB)', () => 
       writeFileSync(bad, new Uint8Array(1000));
       const run = cli(['slots', 'flash', 'a', bad, '--yes', '--acknowledge-risk']);
       expect(run.status, run.out).not.toBe(0);
-      expect(run.out).toMatch(/refus|cannot use|not a firmware|65,?536|64 KiB/i);
+      /* The page's own wording for this file: it is not a decrypted image, so nothing is staged. */
+      expect(run.out).toMatch(/no image header|decrypted Seek firmware image/i);
+      expect(run.out, 'nothing was written').not.toMatch(/writing|committed|streamed/i);
       const out = path.join(dir, 'dump-a-after-refusal');
       expect(cli(['slots', 'dump', 'a', '--out', out]).status).toBe(0);
-      expect(sameBytes(readFileSync(onlyFile(out, /^slot-A-.*\.bin$/)), bankOf(flash, 'a'))).toBe(
-        true,
-      );
+      expect(
+        sameBytes(readFileSync(onlyFile(out, /^slot-a-(?!.*decrypted)/)), bankOf(flash, 'a')),
+      ).toBe(true);
     },
     CLI_TIMEOUT_MS,
   );
@@ -261,14 +286,14 @@ describe.skipIf(!REAL)('the CLI on the bench camera (1.3.0.0, real USB)', () => 
   it(
     'one allowed write: the decrypted image into bank B (not booted, no acknowledgement), read back, no "cannot be written" text',
     () => {
-      const decrypted = onlyFile(dir, /-decrypted\.bin$/);
+      const decrypted = onlyFile(path.join(dir, 'decrypt'), /-decrypted\.bin$/);
       const run = cli(['slots', 'flash', 'b', decrypted, '--yes']);
       expect(run.status, run.out).toBe(0);
       expect(run.out).not.toMatch(/cannot be written/);
       expect(run.out).toMatch(/read-back|matches/);
       const out = path.join(dir, 'dump-b-after-write');
       expect(cli(['slots', 'dump', 'b', '--out', out]).status).toBe(0);
-      const after = readFileSync(onlyFile(out, /^slot-B-.*\.bin$/));
+      const after = readFileSync(onlyFile(out, /^slot-b-(?!.*decrypted)/));
       const image = readFileSync(decrypted);
       expect(sameBytes(after.subarray(0, image.length), image), 'bank B holds the image').toBe(
         true,
