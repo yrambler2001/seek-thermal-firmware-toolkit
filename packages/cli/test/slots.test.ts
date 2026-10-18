@@ -1650,6 +1650,7 @@ function writtenResult(pre: FpsPreDump): FpsPatchResult {
     fromHz: 8,
     toHz: 16,
     pre,
+    patched: pre.plain,
     changed: [0xb964, 0x238],
     plan: fakePlan('a', 'plain', pre.plain),
     written: { key: 'a', commitStatus: 0, verified: true, after: pre.raw, notes: [] },

@@ -18,10 +18,15 @@
  * and its 16 Hz FF build share one version string, and only the image tells them apart.
  * The camera's version is checked against the entry as a second, refusing, check.
  *
- * STAGE ONE. Only the plain 2014 chain is offered on this stage: the Compact builds whose
- * banks are stored as plain bytes (1.2.0.0, 1.3.0.0 and the 8 Hz 1.3.0.8). Every other
- * entry stays in the table with its gate recorded as "stage two: ...", so it can be
- * switched on after its own staging check. See `gateOf`.
+ * THE STAGES. Each offered entry has been staged on its own line, and only then is it
+ * offered (see `gateOf`):
+ *   - stage one: the 2014 plain chain, whose banks are stored as plain bytes (the Compact
+ *     1.2.0.0, 1.3.0.0 and the 8 Hz 1.3.0.8). The write is byte-exact on the read-back.
+ *   - stage two: the 4.x Compact line (4.8.1.7, 4.8.1.9), whose banks are staged under the
+ *     camera's Key A and stored under the bank's own key. The write is checked on the read-back
+ *     DECRYPTED, against the patched image (slots/fps-patch.ts).
+ * Every other entry stays in the table with its gate recorded as "stage two: ...", so it can
+ * be switched on after its own staging check.
  *
  * REFUSES, FAIL CLOSED: an image that is not a stock image of a table entry; an edit
  * site whose old bytes are not there; a patched image whose changed bytes are not the
@@ -109,9 +114,21 @@ export const FPS_STAGE_ONE_IDS: ReadonlySet<string> = new Set([
   'compact_32k-1.3.0.8-to32',
 ]);
 
-/** Why an entry outside stage one is not offered yet. Null for a stage-one entry. */
+/**
+ * The stage-two entries: the 4.x Compact line, staged under the camera's Key A and stored under the
+ * bank's own key (the device re-keys the upload in fw_validate_decrypt_program). Pinned by a test.
+ * Their write is checked on the read-back decrypted (slots/fps-patch.ts, TESTING.md 42.22).
+ */
+export const FPS_STAGE_TWO_IDS: ReadonlySet<string> = new Set([
+  'compact_32k-4.8.1.7-to16',
+  'compact_32k-4.8.1.7-to32',
+  'compact_32k-4.8.1.9-to16',
+  'compact_32k-4.8.1.9-to32',
+]);
+
+/** Why an entry outside stages one and two is not offered yet. Null for an offered entry. */
 function gateOf(source: FpsPatchSource): FpsGate {
-  if (FPS_STAGE_ONE_IDS.has(source.id)) {
+  if (FPS_STAGE_ONE_IDS.has(source.id) || FPS_STAGE_TWO_IDS.has(source.id)) {
     return FPS_OFFER_WITHHELD
       ? { enabled: false, reason: WITHHELD_REASON }
       : { enabled: true, reason: null };
@@ -123,9 +140,9 @@ function gateOf(source: FpsPatchSource): FpsGate {
       'plain bytes, so its staging check is not done and the page does not offer this patch yet';
   } else if (source.family === 'compact_pro') {
     why =
-      'stage two: the Compact PRO 4.x line stages its banks under Key A (the device re-keys the ' +
-      'upload in fw_validate_decrypt_program), so its staging check is not done and the page does ' +
-      'not offer this patch yet';
+      'stage two: the Compact PRO 4.9.x line stages its banks under Key A like the 4.8 Compact, ' +
+      'but its frame rate has not been measured on the bench (the bench camera is a Compact board, ' +
+      'and the PRO frame needs the PRO measurer), so the page does not offer this patch yet';
   } else if (source.version.endsWith('-FF')) {
     why =
       'stage two: the 16 Hz FF build is staged as the vendor app stages it (the image XOR Key A, ' +
@@ -133,9 +150,8 @@ function gateOf(source: FpsPatchSource): FpsGate {
       'not offer this patch yet';
   } else {
     why =
-      'stage two: the 4.x line stages its banks under Key A (the device re-keys the upload in ' +
-      'fw_validate_decrypt_program), so its staging check is not done and the page does not offer ' +
-      'this patch yet';
+      'stage two: this entry is not in the stage-two set, so its staging check is not done and the ' +
+      'page does not offer this patch yet';
   }
   return { enabled: false, reason: why };
 }
@@ -419,6 +435,9 @@ export function planFpsPatch(image: Uint8Array, cameraVersion: string | null): F
       hz: identity.known.hz,
     };
   }
+  if (cameraVersion === FPS_NO_PATCH_4821_VERSION) {
+    return { status: 'refused', reason: FPS_NO_PATCH_4821_REASON };
+  }
   return {
     status: 'refused',
     reason:
@@ -427,6 +446,16 @@ export function planFpsPatch(image: Uint8Array, cameraVersion: string | null): F
       '4.16.1.7 FF builds and the Compact PRO 1.0.3.x and 4.9.x builds; no other build has an entry',
   };
 }
+
+/** The build the frame-rate patch was not derived for (the Compact XR and Compact 4.8.2.1 image, one image). */
+export const FPS_NO_PATCH_4821_VERSION = '4.8.2.1';
+
+/** Why that build has no patch: its command pages are not the 52-byte blocks the 4.8.1.x patch edits (TESTING.md 42.22). */
+export const FPS_NO_PATCH_4821_REASON =
+  'the Compact 4.8.2.1 build (and the Compact XR 4.8.2.1, the same image) runs 68-byte command ' +
+  'pages (include/fw_types.h cmd_page_t), not the 52-byte capture blocks the 4.8.1.x patches edit, ' +
+  'and the steady page and its delivery rule were not identified, so no frame-rate patch is made ' +
+  'for it (TESTING.md 42.22)';
 
 function refused(message: string): SeekError {
   return new SeekError('slots/refused', message);

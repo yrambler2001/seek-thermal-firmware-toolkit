@@ -239,11 +239,12 @@ not banks and are never written.
            way that bank's firmware needs; --raw sends the bytes verbatim. The
            plan is shown and the write asked for, unless --yes. It writes the bank
            you name and does not repoint the camera's boot choice
-  patch-fps  raise the bank's frame rate by editing its bytes (the plain 2014-chain
-           Compacts; other lines refuse with the reason). A dry run unless --write:
-           it prints the plan and sends nothing. --write saves the bank (raw and
-           decrypted) into --dump-dir FIRST, then writes the patched image and reads
-           it back.
+  patch-fps  raise the bank's frame rate by editing its bytes (the Compact 1.2.0.0, 1.3.0.0
+           and 1.3.0.8 builds on the plain 2014 chain, and the Compact 4.8.1.7 and 4.8.1.9
+           builds under Key A; other lines refuse with the reason). A dry run unless
+           --write: it prints the plan and sends nothing. --write saves the bank (raw and
+           decrypted) into --dump-dir FIRST, then writes the patched image and reads it
+           back (on Key A, the read-back is checked as the decrypted image).
 
   --dump-dir <dir>       patch-fps: the folder the pre-patch dump is saved into (required with
                          --write; an existing dump there is never replaced)

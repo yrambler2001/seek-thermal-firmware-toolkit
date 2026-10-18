@@ -199,9 +199,9 @@ export const SLOTS_SUBJECTS: readonly SlotsSubject[] = [
     version: '4.8.1.9',
     emulator: 'Compact 4.8.1.9 image (on 4.8.2.1)',
     banks: ALL_WRITABLE,
-    fps: NO_FPS_TABLE,
+    fps: { offer: true, toHz: 32 },
     banner: 'none',
-    source: '42.1 (pass), 42.5',
+    source: '42.1 (pass), 42.5; frame-rate stage two (Key A), 32 Hz table entry (TESTING.md 42.22)',
   },
   {
     name: 'Compact 4.8.2.1',
@@ -219,9 +219,10 @@ export const SLOTS_SUBJECTS: readonly SlotsSubject[] = [
     version: '4.8.1.7',
     emulator: null,
     banks: ALL_WRITABLE,
-    fps: NO_FPS_TABLE,
+    fps: { offer: true, toHz: 32 },
     banner: 'none',
-    source: '42.4 (slot steps pass after the SPIFI read-back fix; no emulator entry)',
+    source:
+      '42.4 (slot steps pass after the SPIFI read-back fix; no emulator entry); frame-rate stage two (Key A), 32 Hz table entry (TESTING.md 42.22)',
   },
   {
     name: 'Compact 4.16.1.7 (FF)',

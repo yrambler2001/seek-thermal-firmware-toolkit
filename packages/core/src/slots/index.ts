@@ -42,6 +42,7 @@ export {
 export { APPLICATION_KEY_PAIRS, type ApplicationKeyPair } from './application-pairs.js';
 export {
   checkReadBack,
+  checkReadBackDecrypted,
   fpsPlanOfBank,
   fpsPreDumpNames,
   patchBankFps,

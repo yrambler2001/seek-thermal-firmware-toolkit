@@ -24,7 +24,9 @@ import {
   FPS_KNOWN_BUILDS,
   FPS_PATCHES,
   FPS_OFFER_WITHHELD,
+  FPS_MEASURED_HZ,
   FPS_STAGE_ONE_IDS,
+  FPS_STAGE_TWO_IDS,
   applyFpsPatch,
   fpsImageLength,
   identifyFpsImage,
@@ -100,15 +102,21 @@ describe('the table against the Python table (no corpus needed)', () => {
     }
   });
 
-  it('enables exactly the plain 2014 chain on stage one, and records a stage-two reason for every other entry', () => {
+  it('enables exactly the stage-one (plain 2014 chain) and stage-two (Key A, 4.8.1.x) entries, and records a reason for every other', () => {
     expect([...FPS_STAGE_ONE_IDS].sort()).toEqual([
       'compact_32k-1.2.0.0-to16',
       'compact_32k-1.3.0.0-to16',
       'compact_32k-1.3.0.8-to16',
       'compact_32k-1.3.0.8-to32',
     ]);
+    expect([...FPS_STAGE_TWO_IDS].sort()).toEqual([
+      'compact_32k-4.8.1.7-to16',
+      'compact_32k-4.8.1.7-to32',
+      'compact_32k-4.8.1.9-to16',
+      'compact_32k-4.8.1.9-to32',
+    ]);
     for (const entry of FPS_PATCHES) {
-      if (FPS_STAGE_ONE_IDS.has(entry.id)) {
+      if (FPS_STAGE_ONE_IDS.has(entry.id) || FPS_STAGE_TWO_IDS.has(entry.id)) {
         expect(entry.gate.enabled).toBe(!FPS_OFFER_WITHHELD);
         if (FPS_OFFER_WITHHELD) expect(entry.gate.reason).toMatch(/withheld after the bench run/);
         else expect(entry.gate.reason).toBeNull();
@@ -201,34 +209,32 @@ corpusDescribe('the table against the Python tool, over the corpus (SEEK_FPS_COR
     expect(compared).toBe(14);
   });
 
-  it.skipIf(!FPS_OFFER_WITHHELD)('withholds every stage-one offer after the bench run, and refuses the stage-two builds too', () => {
-    for (const image of FIXTURE.images.filter((candidate) => candidate.pythonState === 'stock')) {
-      const bytes = findByHash(image.length, image.inputSha256, image.length);
-      if (bytes === null) continue;
-      const stock = bytes.subarray(0, image.length);
-      const top = [...image.outputs].sort((a, b) => (b.target ?? 0) - (a.target ?? 0))[0];
-      if (top === undefined) continue;
-      const entry = entryNamed(top.patch);
-      const plan = planFpsPatch(stock, entry.version.replace(/-FF$/, ''));
-      expect(plan.status, entry.id).toBe('refused');
-      if (plan.status === 'refused') {
-        expect(plan.reason, entry.id).toMatch(
-          FPS_STAGE_ONE_IDS.has(entry.id) ? /withheld after the bench run/ : /^stage two: /,
-        );
+  it.skipIf(!FPS_OFFER_WITHHELD)(
+    'withholds every stage-one offer after the bench run, and refuses the stage-two builds too',
+    () => {
+      for (const image of FIXTURE.images.filter((candidate) => candidate.pythonState === 'stock')) {
+        const bytes = findByHash(image.length, image.inputSha256, image.length);
+        if (bytes === null) continue;
+        const stock = bytes.subarray(0, image.length);
+        const top = [...image.outputs].sort((a, b) => (b.target ?? 0) - (a.target ?? 0))[0];
+        if (top === undefined) continue;
+        const entry = entryNamed(top.patch);
+        const plan = planFpsPatch(stock, entry.version.replace(/-FF$/, ''));
+        expect(plan.status, entry.id).toBe('refused');
+        if (plan.status === 'refused') {
+          expect(plan.reason, entry.id).toMatch(
+            FPS_STAGE_ONE_IDS.has(entry.id) ? /withheld after the bench run/ : /^stage two: /,
+          );
+        }
       }
-    }
-  });
+    },
+  );
 
   it.skipIf(FPS_OFFER_WITHHELD)(
     'offers the stage-one builds at their top rate, refuses the stage-two builds, and refuses a camera on another build',
     () => {
       // The rate the page names: the table's target, except where the bench measured another (FPS_MEASURED_HZ;
       // 1.3.0.8's 32 Hz entry publishes 26 fps, TESTING.md 42.20).
-      const stageOne: Record<string, number> = {
-        '1.2.0.0': 16,
-        '1.3.0.0': 16,
-        '1.3.0.8': 26,
-      };
       for (const image of FIXTURE.images.filter((candidate) => candidate.pythonState === 'stock')) {
         const bytes = findByHash(image.length, image.inputSha256, image.length);
         if (bytes === null) continue;
@@ -238,10 +244,10 @@ corpusDescribe('the table against the Python tool, over the corpus (SEEK_FPS_COR
         const entry = entryNamed(top.patch);
         const build = entry.version.replace(/-FF$/, '');
         const plan = planFpsPatch(stock, build);
-        if (FPS_STAGE_ONE_IDS.has(entry.id)) {
+        if (FPS_STAGE_ONE_IDS.has(entry.id) || FPS_STAGE_TWO_IDS.has(entry.id)) {
           expect(plan.status, entry.id).toBe('offer');
           if (plan.status === 'offer') {
-            expect(plan.toHz, entry.id).toBe(stageOne[build]);
+            expect(plan.toHz, entry.id).toBe(FPS_MEASURED_HZ.get(entry.id) ?? entry.targetHz);
             expect(plan.sites.length).toBeGreaterThan(0);
           }
           const other = planFpsPatch(stock, '9.9.9.9');
