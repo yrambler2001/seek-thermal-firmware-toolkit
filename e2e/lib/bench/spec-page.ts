@@ -19,6 +19,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
+import { say } from '../browser.js';
 import { CAMERA_WRITE_GUARD, DEVICE_INFO_GUARD } from '../camera-flow.js';
 import { setGuard } from '../electron-camera.js';
 import { HEADED } from '../spec.js';
@@ -118,12 +119,24 @@ function bankView(row: BankRowView): BankView {
 }
 
 /**
+ * One line of the worker's retained heap around a window's life (after a collection when the run exposes
+ * `gc`): the window's own growth is read from these lines (TESTING.md 42.21, the retained-heap finding).
+ */
+function windowHeap(when: string): void {
+  const gc = (globalThis as { gc?: () => void }).gc;
+  if (gc !== undefined) gc();
+  const mb = (n: number): string => String(Math.round(n / 2 ** 20));
+  say(`heap window ${when}: heapUsed ${mb(process.memoryUsage().heapUsed)} MB`);
+}
+
+/**
  * Opens one Electron window on the slots page and connects it to the camera.
  * Throws when the chooser or the guard is not as expected; the window is closed
  * before the error goes out.
  */
 export async function openBenchPage(scratchDir: string): Promise<BenchPage> {
   mkdirSync(scratchDir, { recursive: true });
+  windowHeap('open');
   const target = await openTarget('camera', {
     scratchDir,
     source: 'dev',
@@ -135,6 +148,7 @@ export async function openBenchPage(scratchDir: string): Promise<BenchPage> {
     await target.wizard.route('#/slots');
     checkChooserEntry(await target.wizard.connect());
     if (!(await guardInstalled(target))) throw new Error('the write guard is not in the page');
+    windowHeap('connected');
     return windowOf(target, scratchDir);
   } catch (error) {
     await target.close().catch(() => undefined);
@@ -299,6 +313,7 @@ function windowOf(target: TargetHandle, scratchDir: string): BenchPage {
 
     async close(): Promise<void> {
       await target.close();
+      windowHeap('closed');
     },
   };
 }
