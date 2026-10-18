@@ -1,6 +1,7 @@
 /* ====================================================================
- * The frame-rate patch on the two plain 2014-chain Compacts that have one (stage one), in the emulator:
- * 1.3.0.0 (the native dump) and 1.3.0.8 8 Hz (the chimera on the 2014 donor).
+ * The frame-rate patch on the plain 2014-chain Compacts that have one (stage one), in the emulator: 1.3.0.0 (the
+ * native dump), 1.3.0.8 8 Hz (the chimera on the 2014 donor), and the 0.8.0.0 to 1.2.0.0 builds whose 32 Hz entries
+ * were added with the mode-8 block edit (the write path only: the emulator streams mode 6, so no rate is measured here).
  *
  * FOR EACH FIRMWARE, one boot of the stock flash, then a second boot of the patched flash:
  *   1. the analysis offers the patch on bank A, at the build's top rate (32 Hz for both: 1.3.0.8's 32 Hz entry is the
@@ -81,6 +82,15 @@ const STAGE_ONE: readonly { readonly label: string; readonly top: number }[] = [
   { label: 'Compact 1.3.0.0 (native dump)', top: 32 },
   // The page's rate for the 32 Hz entry is its target: the plain-copy form has no camera measurement (FPS_MEASURED_HZ is empty).
   { label: 'Compact 1.3.0.8 (8 Hz)', top: 32 },
+  // The 2014-chain builds added with the 32 Hz entries of 0.8.0.0 to 1.2.0.0: offered at their table rate, unmeasured.
+  { label: 'Compact 0.8.0.0', top: 32 },
+  { label: 'Compact 0.9.0.2', top: 32 },
+  { label: 'Compact 0.9.0.6', top: 32 },
+  { label: 'Compact 0.9.0.7', top: 32 },
+  { label: 'Compact 0.9.1.0', top: 32 },
+  { label: 'Compact 0.10.0.0', top: 32 },
+  { label: 'Compact 1.0.0.0', top: 32 },
+  { label: 'Compact 1.2.0.0', top: 32 },
 ];
 
 function subjectNamed(label: string): LockedSubject {

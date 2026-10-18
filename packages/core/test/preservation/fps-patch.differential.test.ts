@@ -90,7 +90,7 @@ function entryNamed(id: string): FpsPatch {
 describe('the table against the Python table (no corpus needed)', () => {
   it('has the same entries as fps_patch.py, and the same stock and patched hashes', () => {
     expect(new Set(FPS_PATCHES.map((patch) => patch.id))).toEqual(PYTHON_IDS);
-    expect(FPS_PATCHES).toHaveLength(11);
+    expect(FPS_PATCHES).toHaveLength(20);
     for (const image of FIXTURE.images) {
       for (const output of image.outputs) {
         if (output.outputSha256 === undefined) continue;
@@ -104,6 +104,14 @@ describe('the table against the Python table (no corpus needed)', () => {
 
   it('enables exactly the stage-one (plain 2014 chain) and stage-two (Key A, 4.8.x) entries, and records a reason for every other', () => {
     expect([...FPS_STAGE_ONE_IDS].sort()).toEqual([
+      'compact_32k-0.10.0.0-to32',
+      'compact_32k-0.8.0.0-to32',
+      'compact_32k-0.9.0.2-to32',
+      'compact_32k-0.9.0.6-to32',
+      'compact_32k-0.9.0.7-to32',
+      'compact_32k-0.9.1.0-to32',
+      'compact_32k-1.0.0.0-to32',
+      'compact_32k-1.2.0.0-to32',
       'compact_32k-1.3.0.0-to32',
       'compact_32k-1.3.0.8-to32',
     ]);
@@ -119,7 +127,9 @@ describe('the table against the Python table (no corpus needed)', () => {
         else expect(entry.gate.reason).toBeNull();
       } else {
         expect(entry.gate.enabled).toBe(false);
-        expect(entry.gate.reason).toMatch(/^stage two: /);
+        expect(entry.gate.reason).toMatch(
+          entry.id === 'compact_32k-0.7.0.8-to32' ? /older than 0\.8\.0\.0/ : /^stage two: /,
+        );
       }
     }
   });
@@ -203,7 +213,7 @@ corpusDescribe('the table against the Python tool, over the corpus (SEEK_FPS_COR
         compared++;
       }
     }
-    expect(compared).toBe(11);
+    expect(compared).toBe(20);
   });
 
   it.skipIf(!FPS_OFFER_WITHHELD)(
@@ -255,7 +265,10 @@ corpusDescribe('the table against the Python tool, over the corpus (SEEK_FPS_COR
           expect(planFpsPatch(patched, build).status, `${entry.id} patched`).toBe('patched');
         } else {
           expect(plan.status, entry.id).toBe('refused');
-          if (plan.status === 'refused') expect(plan.reason, entry.id).toMatch(/^stage two: /);
+          if (plan.status === 'refused')
+            expect(plan.reason, entry.id).toMatch(
+              entry.id === 'compact_32k-0.7.0.8-to32' ? /older than 0\.8\.0\.0/ : /^stage two: /,
+            );
         }
       }
     },

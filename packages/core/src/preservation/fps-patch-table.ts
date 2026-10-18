@@ -321,6 +321,395 @@ export const FPS_PATCH_TABLE: readonly FpsPatchSource[] = [
     sibling: null,
   },
   {
+    // compact_32k-0.7.0.8-to32. 32 Hz in the Normal stream (IP mode 8), one capture per published frame, no
+    // mean. Layout: 14-byte blocks with 3-bit header fields and a 2-bit sel (style a, frame_prog_r32k.h of
+    // this build). The mode-8 program is the array at file 0xB4DC (7 blocks; frame_data.c:64; the mode
+    // table frame_data.c:127-137 gives mode 8 the array, whose record pointer 0x10001F64 is the array SRAM
+    // address and agrees with the image under C = 0x0FFF6A88). The source initializer, encoded in this
+    // layout, equals the image in all 7 blocks. Block 4 is the steady self-loop: first = next = 4, four
+    // steps op 4, op 5, op 5, op 6 with the publish bit on the fourth. The frame-sequence limit moves it on
+    // (app_init.c:978: FRAME_FLAG_E == 4 in mode 8 sets prog[4].first = 5). The operator table has ten
+    // entries and no frame_line_op_2 (frame_data.c:52-54), so the stock ops 4, 5, 6 are frame_line_op_5
+    // (scale by four above the level), _6 and _7, and the copy is table index 1, frame_line_op_1
+    // (image.c:284): a word copy of the 832-halfword line with no read of the destination and no scale.
+    // Index 2 (frame_line_op_3, image.c:307) remaps the first 206 samples of each row through a gain table
+    // and index 3 (frame_line_op_4, image.c:328) copies 105 halfwords per 208 and zeroes the rest, so an op
+    // 3 copy (the 1.3.0.0 shape) would not be a copy here. SetIPMode accepts 8 (rpc_cmds.c:1042-1058, mask
+    // 0x1F9) and writes the cell the dispatcher reads (0x10005384). Slots: 0.7.0.8 is older than 0.8.0.0,
+    // so the slots code refuses it (capability-family.ts FIRST_SUPPORTED_VERSION); the entry stays in the
+    // table and is not offered. Not run on the emulator or a camera.
+    id: 'compact_32k-0.7.0.8-to32',
+    family: 'compact_32k',
+    version: '0.7.0.8',
+    fromHz: 8,
+    targetHz: 32,
+    stockSha256: '6bac46abf3023d02cf0ba8a43bfbebdd7a85c77ffbedbab08d53e2f297a3e1ea',
+    patchedSha256: '8b0f4781e056eb35f75b05e75357d74effb92e435742cea8604ecb522a05936b',
+    length: 46616,
+    edits: [
+      // block 4 of the mode-8 program (14-byte blocks with 3-bit header fields; the self-loop at image
+      // +0xB514, first = next = 4, publish on its fourth step), header byte 0 (count | first << 3): 24 ->
+      // 21, count 4 -> 1, first 4 kept, so the block runs one step and every capture is published.
+      { offset: 0xb514, before: '24', after: '21' },
+      // its four steps at +0xB516 (2 bytes each, style a: sel (2 bits) | active << 2 | op << 3 | push << 7,
+      // then hdr | gpio << 4): op 4 | op 5 | op 5 | op 6 with the publish bit (25 10 2d 10 2d 10 b5 13)
+      // become one copy, operator 1 (frame_line_op_1, image.c:284: a word copy of the 832-halfword line, no
+      // read of the destination, no scale), with sel 1 and active as stock, the publish bit, header id 3
+      // and gpio 1: 8d 13; the stock steps after it are zeroed (00 x 6). Operator 3 is NOT the copy in this
+      // build: index 2 is frame_line_op_3, a gain- table remap (image.c:307), and index 3 is
+      // frame_line_op_4, a 105-halfword copy with zero fill.
+      { offset: 0xb516, before: '25102d102d10b513', after: '8d13000000000000' },
+    ],
+    row: {
+      label:
+        'mode-8 capture program block 4 (14-byte blocks, the steady self-loop), reduced to one step: a plain copy with the publish bit',
+      offset: 0xb514,
+      length: 14,
+    },
+    sibling: null,
+  },
+  {
+    // compact_32k-0.8.0.0-to32. 32 Hz in the Normal stream (IP mode 8), one capture per published frame, no
+    // mean. Layout: 14-byte blocks with the 1.3.0.0 step bits (style b, frame_prog_r32k.h of this build).
+    // The mode-8 program is the array at file 0xb6f0 (10 blocks; frame_data.c:63; the mode table
+    // frame_data.c:139 gives mode 8 the array). The source initializer, encoded in this layout, equals the
+    // image at that offset in all 10 blocks, so the array is located by its bytes. Block 6 is the steady
+    // self-loop: first = next = 6, four steps op 5, op 6, op 6, op 7 with the publish bit on the fourth.
+    // The frame-sequence limit moves it on (app_init.c:966: FRAME_FLAG_E == 6 in mode 8 sets prog[6].first
+    // = 7). The operator table is the identity (frame_data.c:51-54), so the copy is operator 3, and
+    // frame_line_op_3 (image.c:343) is a row copy dst[i] = src[i] over the 832-halfword line: no read of
+    // the destination, no scale. SetIPMode accepts 8 (rpc_cmds.c:1042-1050, mask 0x1F9) and writes the cell
+    // the dispatcher reads (g_stream_format_r32k = fsm_mode_gate_r32k = 0x10005384). Slots: on the plain
+    // 2014 chain (capability-family.ts PLAIN_CHAIN_VERSIONS), so the page can write it. Not run on the
+    // emulator or a camera.
+    id: 'compact_32k-0.8.0.0-to32',
+    family: 'compact_32k',
+    version: '0.8.0.0',
+    fromHz: 8,
+    targetHz: 32,
+    stockSha256: '9f5d9006f8bce9539e3f913ab5aad55e7ca6bc84e55839d1fe8d48c1c7463836',
+    patchedSha256: '9b2c6f89a8f1dd4af056669bc38cf83c657d44a49e1c8bce57c6d85fed611c73',
+    length: 47188,
+    edits: [
+      // block 6 of the mode-8 program (14-byte blocks; the self-loop at image +0xb744), header byte 0
+      // (count | first << 4): 64 -> 61, count 4 -> 1 with first 6 kept, so the block runs one step and
+      // every capture is published.
+      { offset: 0xb744, before: '64', after: '61' },
+      // its four steps at image +0xb746 (2 bytes each: sel | active << 3 | op << 4, then push | hdr << 1 |
+      // gpio << 5): op 5 | op 6 | op 6 | op 7 with the publish bit (59 20 69 20 69 20 79 27) become one
+      // copy, op 3 with the publish bit, header id 3, gpio 1 and sel 1 as the stock publish step (39 27), a
+      // plain copy so the scale is the stock scale; the stock steps after it are zeroed (00 x 6), as the
+      // 1.3.0.0 entry does.
+      { offset: 0xb746, before: '5920692069207927', after: '3927000000000000' },
+    ],
+    row: {
+      label:
+        'mode-8 capture program block 6 (14-byte blocks, the steady self-loop), reduced to one step: a plain copy with the publish bit',
+      offset: 0xb744,
+      length: 14,
+    },
+    sibling: null,
+  },
+  {
+    // compact_32k-0.9.0.2-to32. 32 Hz in the Normal stream (IP mode 8), one capture per published frame, no
+    // mean. Layout: 14-byte blocks with the 1.3.0.0 step bits (style b, frame_prog_r32k.h of this build).
+    // The mode-8 program is the array at file 0xb794 (11 blocks; frame_data.c:61; the mode table
+    // frame_data.c:138 gives mode 8 the array). The source initializer, encoded in this layout, equals the
+    // image at that offset in all 11 blocks, so the array is located by its bytes. Block 7 is the steady
+    // self-loop: first = next = 7, four steps op 5, op 6, op 6, op 7 with the publish bit on the fourth.
+    // The frame-sequence limit moves it on (app_init.c:966: FRAME_FLAG_E == 7 in mode 8 sets prog[7].first
+    // = 8). The operator table is the identity (frame_data.c:50-53), so the copy is operator 3, and
+    // frame_line_op_3 (image.c:343) is a row copy dst[i] = src[i] over the 832-halfword line: no read of
+    // the destination, no scale. SetIPMode accepts 8 (rpc_cmds.c:1032-1040, mask 0x1F9) and writes the cell
+    // the dispatcher reads (g_stream_format_r32k = fsm_mode_gate_r32k = 0x10005384). Slots: on the plain
+    // 2014 chain (capability-family.ts PLAIN_CHAIN_VERSIONS), so the page can write it. Emulator
+    // (emu/fps_patch_tests.py, 2026-10-19): the boot sets the mode gate to 6 (the harness sends no
+    // SetIPMode), so the patched image streams at the stock 8.065 Hz; the mode-8 edit is not exercised, and
+    // that run says nothing about Normal mode.
+    id: 'compact_32k-0.9.0.2-to32',
+    family: 'compact_32k',
+    version: '0.9.0.2',
+    fromHz: 8,
+    targetHz: 32,
+    stockSha256: '3c597b72f5f4081d5f76e9348cc0d6a1d46a13453a2ca9c5005b117930df57d8',
+    patchedSha256: 'e41610e30bfee1fa6ca862eccc7c5fe8773f05cd958b190a9e22de09c7ac7eb8',
+    length: 47368,
+    edits: [
+      // block 7 of the mode-8 program (14-byte blocks; the self-loop at image +0xb7f6), header byte 0
+      // (count | first << 4): 74 -> 71, count 4 -> 1 with first 7 kept, so the block runs one step and
+      // every capture is published.
+      { offset: 0xb7f6, before: '74', after: '71' },
+      // its four steps at image +0xb7f8 (2 bytes each: sel | active << 3 | op << 4, then push | hdr << 1 |
+      // gpio << 5): op 5 | op 6 | op 6 | op 7 with the publish bit (59 20 69 20 69 20 79 27) become one
+      // copy, op 3 with the publish bit, header id 3, gpio 1 and sel 1 as the stock publish step (39 27), a
+      // plain copy so the scale is the stock scale; the stock steps after it are zeroed (00 x 6), as the
+      // 1.3.0.0 entry does.
+      { offset: 0xb7f8, before: '5920692069207927', after: '3927000000000000' },
+    ],
+    row: {
+      label:
+        'mode-8 capture program block 7 (14-byte blocks, the steady self-loop), reduced to one step: a plain copy with the publish bit',
+      offset: 0xb7f6,
+      length: 14,
+    },
+    sibling: null,
+  },
+  {
+    // compact_32k-0.9.0.6-to32. 32 Hz in the Normal stream (IP mode 8), one capture per published frame, no
+    // mean. Layout: 14-byte blocks with the 1.3.0.0 step bits (style b, frame_prog_r32k.h of this build).
+    // The mode-8 program is the array at file 0xb6b0 (11 blocks; frame_data.c:61; the mode table
+    // frame_data.c:138 gives mode 8 the array). The source initializer, encoded in this layout, equals the
+    // image at that offset in all 11 blocks, so the array is located by its bytes. Block 7 is the steady
+    // self-loop: first = next = 7, four steps op 5, op 6, op 6, op 7 with the publish bit on the fourth.
+    // The frame-sequence limit moves it on (app_init.c:966: FRAME_FLAG_E == 7 in mode 8 sets prog[7].first
+    // = 8). The operator table is the identity (frame_data.c:50-53), so the copy is operator 3, and
+    // frame_line_op_3 (image.c:343) is a row copy dst[i] = src[i] over the 832-halfword line: no read of
+    // the destination, no scale. SetIPMode accepts 8 (rpc_cmds.c:1032-1040, mask 0x1F9) and writes the cell
+    // the dispatcher reads (g_stream_format_r32k = fsm_mode_gate_r32k = 0x10005384). Slots: on the plain
+    // 2014 chain (capability-family.ts PLAIN_CHAIN_VERSIONS), so the page can write it. Not run on the
+    // emulator or a camera.
+    id: 'compact_32k-0.9.0.6-to32',
+    family: 'compact_32k',
+    version: '0.9.0.6',
+    fromHz: 8,
+    targetHz: 32,
+    stockSha256: 'c07c3c3f913415bbfe3aed926a8fda94dd91ea2b8fbb023a02c1b958d26abdab',
+    patchedSha256: '54d383ad72882075f21963689fa7c69debb1359f5c7254a02b203e5ee12152ea',
+    length: 47156,
+    edits: [
+      // block 7 of the mode-8 program (14-byte blocks; the self-loop at image +0xb712), header byte 0
+      // (count | first << 4): 74 -> 71, count 4 -> 1 with first 7 kept, so the block runs one step and
+      // every capture is published.
+      { offset: 0xb712, before: '74', after: '71' },
+      // its four steps at image +0xb714 (2 bytes each: sel | active << 3 | op << 4, then push | hdr << 1 |
+      // gpio << 5): op 5 | op 6 | op 6 | op 7 with the publish bit (59 20 69 20 69 20 79 27) become one
+      // copy, op 3 with the publish bit, header id 3, gpio 1 and sel 1 as the stock publish step (39 27), a
+      // plain copy so the scale is the stock scale; the stock steps after it are zeroed (00 x 6), as the
+      // 1.3.0.0 entry does.
+      { offset: 0xb714, before: '5920692069207927', after: '3927000000000000' },
+    ],
+    row: {
+      label:
+        'mode-8 capture program block 7 (14-byte blocks, the steady self-loop), reduced to one step: a plain copy with the publish bit',
+      offset: 0xb712,
+      length: 14,
+    },
+    sibling: null,
+  },
+  {
+    // compact_32k-0.9.0.7-to32. 32 Hz in the Normal stream (IP mode 8), one capture per published frame, no
+    // mean. Layout: 14-byte blocks with the 1.3.0.0 step bits (style b, frame_prog_r32k.h of this build).
+    // The mode-8 program is the array at file 0xb784 (11 blocks; frame_data.c:61; the mode table
+    // frame_data.c:138 gives mode 8 the array). The source initializer, encoded in this layout, equals the
+    // image at that offset in all 11 blocks, so the array is located by its bytes. Block 7 is the steady
+    // self-loop: first = next = 7, four steps op 5, op 6, op 6, op 7 with the publish bit on the fourth.
+    // The frame-sequence limit moves it on (app_init.c:966: FRAME_FLAG_E == 7 in mode 8 sets prog[7].first
+    // = 8). The operator table is the identity (frame_data.c:50-53), so the copy is operator 3, and
+    // frame_line_op_3 (image.c:350) is a row copy dst[i] = src[i] over the 832-halfword line: no read of
+    // the destination, no scale. SetIPMode accepts 8 (rpc_cmds.c:1028-1036, mask 0x1F9) and writes the cell
+    // the dispatcher reads (g_stream_format_r32k = fsm_mode_gate_r32k = 0x10005384). Slots: on the plain
+    // 2014 chain (capability-family.ts PLAIN_CHAIN_VERSIONS), so the page can write it. Not run on the
+    // emulator or a camera.
+    id: 'compact_32k-0.9.0.7-to32',
+    family: 'compact_32k',
+    version: '0.9.0.7',
+    fromHz: 8,
+    targetHz: 32,
+    stockSha256: 'f3ecc810260a1ddf96e25bf9f9d0c405d8bce9975ef47497f6f2e7c4da020182',
+    patchedSha256: '1ad41e1e06f339cfeea264fda4d6b34db7f96e9b6380c8b115eb38253606cc32',
+    length: 47352,
+    edits: [
+      // block 7 of the mode-8 program (14-byte blocks; the self-loop at image +0xb7e6), header byte 0
+      // (count | first << 4): 74 -> 71, count 4 -> 1 with first 7 kept, so the block runs one step and
+      // every capture is published.
+      { offset: 0xb7e6, before: '74', after: '71' },
+      // its four steps at image +0xb7e8 (2 bytes each: sel | active << 3 | op << 4, then push | hdr << 1 |
+      // gpio << 5): op 5 | op 6 | op 6 | op 7 with the publish bit (59 20 69 20 69 20 79 27) become one
+      // copy, op 3 with the publish bit, header id 3, gpio 1 and sel 1 as the stock publish step (39 27), a
+      // plain copy so the scale is the stock scale; the stock steps after it are zeroed (00 x 6), as the
+      // 1.3.0.0 entry does.
+      { offset: 0xb7e8, before: '5920692069207927', after: '3927000000000000' },
+    ],
+    row: {
+      label:
+        'mode-8 capture program block 7 (14-byte blocks, the steady self-loop), reduced to one step: a plain copy with the publish bit',
+      offset: 0xb7e6,
+      length: 14,
+    },
+    sibling: null,
+  },
+  {
+    // compact_32k-0.9.1.0-to32. 32 Hz in the Normal stream (IP mode 8), one capture per published frame, no
+    // mean. Layout: 14-byte blocks with the 1.3.0.0 step bits (style b, frame_prog_r32k.h of this build).
+    // The mode-8 program is the array at file 0xb794 (11 blocks; frame_data.c:61; the mode table
+    // frame_data.c:138 gives mode 8 the array). The source initializer, encoded in this layout, equals the
+    // image at that offset in all 11 blocks, so the array is located by its bytes. Block 7 is the steady
+    // self-loop: first = next = 7, four steps op 5, op 6, op 6, op 7 with the publish bit on the fourth.
+    // The frame-sequence limit moves it on (app_init.c:966: FRAME_FLAG_E == 7 in mode 8 sets prog[7].first
+    // = 8). The operator table is the identity (frame_data.c:50-53), so the copy is operator 3, and
+    // frame_line_op_3 (image.c:343) is a row copy dst[i] = src[i] over the 832-halfword line: no read of
+    // the destination, no scale. SetIPMode accepts 8 (rpc_cmds.c:1032-1040, mask 0x1F9) and writes the cell
+    // the dispatcher reads (g_stream_format_r32k = fsm_mode_gate_r32k = 0x10005384). Slots: on the plain
+    // 2014 chain (capability-family.ts PLAIN_CHAIN_VERSIONS), so the page can write it. Not run on the
+    // emulator or a camera.
+    id: 'compact_32k-0.9.1.0-to32',
+    family: 'compact_32k',
+    version: '0.9.1.0',
+    fromHz: 8,
+    targetHz: 32,
+    stockSha256: 'f0ff04d53111b858c17affefd64dee2fa12d3320f14b6ca3260581f49917a62d',
+    patchedSha256: '1814e5acf445c2e4d33aad565881e844baa0d7634794695c0981b8552dd5c53d',
+    length: 47368,
+    edits: [
+      // block 7 of the mode-8 program (14-byte blocks; the self-loop at image +0xb7f6), header byte 0
+      // (count | first << 4): 74 -> 71, count 4 -> 1 with first 7 kept, so the block runs one step and
+      // every capture is published.
+      { offset: 0xb7f6, before: '74', after: '71' },
+      // its four steps at image +0xb7f8 (2 bytes each: sel | active << 3 | op << 4, then push | hdr << 1 |
+      // gpio << 5): op 5 | op 6 | op 6 | op 7 with the publish bit (59 20 69 20 69 20 79 27) become one
+      // copy, op 3 with the publish bit, header id 3, gpio 1 and sel 1 as the stock publish step (39 27), a
+      // plain copy so the scale is the stock scale; the stock steps after it are zeroed (00 x 6), as the
+      // 1.3.0.0 entry does.
+      { offset: 0xb7f8, before: '5920692069207927', after: '3927000000000000' },
+    ],
+    row: {
+      label:
+        'mode-8 capture program block 7 (14-byte blocks, the steady self-loop), reduced to one step: a plain copy with the publish bit',
+      offset: 0xb7f6,
+      length: 14,
+    },
+    sibling: null,
+  },
+  {
+    // compact_32k-0.10.0.0-to32. 32 Hz in the Normal stream (IP mode 8), one capture per published frame,
+    // no mean. Layout: 14-byte blocks with the 1.3.0.0 step bits (style b, frame_prog_r32k.h of this
+    // build). The mode-8 program is the array at file 0xb794 (11 blocks; frame_data.c:61; the mode table
+    // frame_data.c:138 gives mode 8 the array). The source initializer, encoded in this layout, equals the
+    // image at that offset in all 11 blocks, so the array is located by its bytes. Block 7 is the steady
+    // self-loop: first = next = 7, four steps op 5, op 6, op 6, op 7 with the publish bit on the fourth.
+    // The frame-sequence limit moves it on (app_init.c:966: FRAME_FLAG_E == 7 in mode 8 sets prog[7].first
+    // = 8). The operator table is the identity (frame_data.c:50-53), so the copy is operator 3, and
+    // frame_line_op_3 (image.c:343) is a row copy dst[i] = src[i] over the 832-halfword line: no read of
+    // the destination, no scale. SetIPMode accepts 8 (rpc_cmds.c:1032-1040, mask 0x1F9) and writes the cell
+    // the dispatcher reads (g_stream_format_r32k = fsm_mode_gate_r32k = 0x10005384). Slots: on the plain
+    // 2014 chain (capability-family.ts PLAIN_CHAIN_VERSIONS), so the page can write it. Not run on the
+    // emulator or a camera.
+    id: 'compact_32k-0.10.0.0-to32',
+    family: 'compact_32k',
+    version: '0.10.0.0',
+    fromHz: 8,
+    targetHz: 32,
+    stockSha256: '68b314052b80d40f0b28dd8c91f3530a9c1bdba5585f4f2c02b4fe98ba69d988',
+    patchedSha256: 'efd72e1ca423f5697b74885aa1863f3f935c42d4553ba1f62397394bc0becd65',
+    length: 47368,
+    edits: [
+      // block 7 of the mode-8 program (14-byte blocks; the self-loop at image +0xb7f6), header byte 0
+      // (count | first << 4): 74 -> 71, count 4 -> 1 with first 7 kept, so the block runs one step and
+      // every capture is published.
+      { offset: 0xb7f6, before: '74', after: '71' },
+      // its four steps at image +0xb7f8 (2 bytes each: sel | active << 3 | op << 4, then push | hdr << 1 |
+      // gpio << 5): op 5 | op 6 | op 6 | op 7 with the publish bit (59 20 69 20 69 20 79 27) become one
+      // copy, op 3 with the publish bit, header id 3, gpio 1 and sel 1 as the stock publish step (39 27), a
+      // plain copy so the scale is the stock scale; the stock steps after it are zeroed (00 x 6), as the
+      // 1.3.0.0 entry does.
+      { offset: 0xb7f8, before: '5920692069207927', after: '3927000000000000' },
+    ],
+    row: {
+      label:
+        'mode-8 capture program block 7 (14-byte blocks, the steady self-loop), reduced to one step: a plain copy with the publish bit',
+      offset: 0xb7f6,
+      length: 14,
+    },
+    sibling: null,
+  },
+  {
+    // compact_32k-1.0.0.0-to32. 32 Hz in the Normal stream (IP mode 8), one capture per published frame, no
+    // mean. Layout: 14-byte blocks with the 1.3.0.0 step bits (style b, frame_prog_r32k.h of this build).
+    // The mode-8 program is the array at file 0xb784 (11 blocks; frame_data.c:61; the mode table
+    // frame_data.c:138 gives mode 8 the array). The source initializer, encoded in this layout, equals the
+    // image at that offset in all 11 blocks, so the array is located by its bytes. Block 7 is the steady
+    // self-loop: first = next = 7, four steps op 5, op 6, op 6, op 7 with the publish bit on the fourth.
+    // The frame-sequence limit moves it on (app_init.c:966: FRAME_FLAG_E == 7 in mode 8 sets prog[7].first
+    // = 8). The operator table is the identity (frame_data.c:50-53), so the copy is operator 3, and
+    // frame_line_op_3 (image.c:350) is a row copy dst[i] = src[i] over the 832-halfword line: no read of
+    // the destination, no scale. SetIPMode accepts 8 (rpc_cmds.c:1028-1036, mask 0x1F9) and writes the cell
+    // the dispatcher reads (g_stream_format_r32k = fsm_mode_gate_r32k = 0x10005384). Slots: on the plain
+    // 2014 chain (capability-family.ts PLAIN_CHAIN_VERSIONS), so the page can write it. Not run on the
+    // emulator or a camera.
+    id: 'compact_32k-1.0.0.0-to32',
+    family: 'compact_32k',
+    version: '1.0.0.0',
+    fromHz: 8,
+    targetHz: 32,
+    stockSha256: '30f8737b511dcc4ae8aa950615c88d70b4625ee0b704cf22f2de4e651bd97fe3',
+    patchedSha256: 'd55ccb473dea99dd4e5d9507ae4920113b1fdcbaf769dabf9f9e57c8d40ef391',
+    length: 47352,
+    edits: [
+      // block 7 of the mode-8 program (14-byte blocks; the self-loop at image +0xb7e6), header byte 0
+      // (count | first << 4): 74 -> 71, count 4 -> 1 with first 7 kept, so the block runs one step and
+      // every capture is published.
+      { offset: 0xb7e6, before: '74', after: '71' },
+      // its four steps at image +0xb7e8 (2 bytes each: sel | active << 3 | op << 4, then push | hdr << 1 |
+      // gpio << 5): op 5 | op 6 | op 6 | op 7 with the publish bit (59 20 69 20 69 20 79 27) become one
+      // copy, op 3 with the publish bit, header id 3, gpio 1 and sel 1 as the stock publish step (39 27), a
+      // plain copy so the scale is the stock scale; the stock steps after it are zeroed (00 x 6), as the
+      // 1.3.0.0 entry does.
+      { offset: 0xb7e8, before: '5920692069207927', after: '3927000000000000' },
+    ],
+    row: {
+      label:
+        'mode-8 capture program block 7 (14-byte blocks, the steady self-loop), reduced to one step: a plain copy with the publish bit',
+      offset: 0xb7e6,
+      length: 14,
+    },
+    sibling: null,
+  },
+  {
+    // compact_32k-1.2.0.0-to32. 32 Hz in the Normal stream (IP mode 8), one capture per published frame, no
+    // mean. The 1.2.0.0 image has the 1.3.0.0 layout (34-byte blocks, 2-byte steps, operator table
+    // identity: frame_data.c:50-53). Its mode table is at file 0xB740: the mode-8 record at 0xB780 is
+    // (0x10001F90, 11), and its other program records (modes 0, 3, 4, 5, 6) map onto the 1.3.0.0 program
+    // offsets 0xB9CA, 0xBA0E, 0xB9EC, 0xB986 and 0xB920 under the one constant C = 0x0FFF6808, so this
+    // build maps its own SRAM to the image (its source comment, 0x10001FB4, is the 1.3.0.0 address). The
+    // mode-8 array (12 blocks, the source initializer encoded in this layout) is at file 0xB788 in full.
+    // The steady block 8 is first = next = 8 with four steps op 5, op 6, op 6, op 7 and the publish bit on
+    // the last, and the frame-sequence limit moves it on (app_init.c:977: FRAME_FLAG_E == 8 in mode 8 sets
+    // prog[8].first = 9). The copy is operator 3, frame_line_op_3 (image.c:350), a plain row copy.
+    // SetIPMode accepts 8 (rpc_cmds.c:1028-1036, mask 0x1F9). Slots: on the plain 2014 chain
+    // (PLAIN_CHAIN_VERSIONS). The earlier 16 Hz patch of this build was removed (TESTING.md 42.26); this 32
+    // Hz entry is the 1.3.0.0 mode-8 edit at the same bytes. Emulator (emu/fps_patch_tests.py, 2026-10-19):
+    // the boot sets the mode gate to 6 (the harness sends no SetIPMode), so the patched image streams at
+    // the stock 8.065 Hz; the mode-8 edit is not exercised, and that run says nothing about Normal mode.
+    id: 'compact_32k-1.2.0.0-to32',
+    family: 'compact_32k',
+    version: '1.2.0.0',
+    fromHz: 8,
+    targetHz: 32,
+    stockSha256: '38a9036ae44b9fcaca31a7432257f4aa2cf71d7715a964f1c4b9553dfabfea01',
+    patchedSha256: '547d0e853af87068ace1936b443af06b59636d9ac560db24e38dbff4d8001c90',
+    length: 47768,
+    edits: [
+      // block 8 of the mode-8 program (34-byte blocks; the self-loop at image +0xB898, first = next = 8;
+      // the mode-8 record in this image is (0x10001F90, 11) at file 0xB780, so the array is at file 0xB788
+      // under C = 0x0FFF6808), header byte 0 (count | first << 4): 84 -> 81, count 4 -> 1, first 8 kept, so
+      // the block runs one step.
+      { offset: 0xb898, before: '84', after: '81' },
+      // its steps at +0xB89A (2 bytes each: sel | active << 3 | op << 4, then push | hdr << 1 | gpio << 5):
+      // op 5 | op 6 | op 6 | op 7 with the publish bit (59 20 69 20 69 20 79 27) become one copy, operator
+      // 3 (frame_line_op_3, image.c:350: a row copy, no read of the destination, no scale) with the publish
+      // bit, header id 3, gpio 1 and sel 1 as the stock publish step (39 27); the stock steps after it are
+      // zeroed (00 x 6), the 1.3.0.0 edit.
+      { offset: 0xb89a, before: '5920692069207927', after: '3927000000000000' },
+    ],
+    row: {
+      label:
+        'mode-8 capture program block 8 (the steady self-loop, 34-byte blocks); one copy with the delivery bit per capture',
+      offset: 0xb898,
+      length: 34,
+    },
+    sibling: null,
+  },
+  {
     // compact_32k-1.3.0.8-FF-to32. 32 Hz from the FF build, one capture per published frame: the one step
     // is the copy of the seeds (op 3 with the delivery bit, selection 0x13), the same form as the 8 Hz
     // 1.3.0.8 entry. The earlier form 13 25 23 (op 5) is replaced: it writes 0xFFFF over every sample above
@@ -507,10 +896,10 @@ export const FPS_KNOWN_RATE: Readonly<
 
 /** What the Python tool does NOT patch, and why (NOT_PATCHED), kept for the record. */
 export const FPS_NOT_PATCHED_NOTES: readonly string[] = [
-  'Compact 32K 0.3.0.1, 0.7.0.7, 0.7.0.8, 0.8.0.0, 0.9.0.2, 0.9.0.6, 0.9.0.7, 0.9.1.0, 0.10.0.0, 1.0.0.0 at 8 Hz (and 0.5.x, 0.6.0.4, which the framerate suite cannot stream): no patch. Their images carry none of the steady-record byte patterns this tool knows (the 52-byte and 34-byte capture blocks, the PRO 1.0.3.0 row 14 and the PRO 4.9 row 20; see emu/README.md). Their record layout is not decoded.',
+  'Compact 32K 0.5.0.2, 0.5.1.0, 0.5.1.3, 0.6.0.4 and 0.7.0.7 at 8 Hz: no patch. Their capture programs are built at run time by the firmware (a .bss block written by code, cmd_block_fields_publish and the PB writer), so the image holds no program bytes to edit; a patch would change the builder code, which is not surveyed. 0.5.x and 0.6.0.4 are also not streamed by the framerate suite.',
+  'Compact 32K 0.3.0.1 at 8 Hz: no patch. Its mode-8 program was not located in the image: no pointer word to its table and no copy of the 1.0.3.0 row-14 bytes. Not established (docs/FPS_PATCH_ALL_FIRMWARES.md section 5.16).',
   'Compact 4.8.2.1 image f96ac57eda75 is in the table as compact_32k-4.8.2.1-to32 (page 13 reduced to one copy with LAST, one capture per frame; measured on the XR, offered). The Compact 4.8.2.1 image is also the Compact XR 4.8.2.1 image.',
-  'Compact 32K 1.2.0.0: no patch. Its former 16 Hz patch (mode-6 block 2) was removed with every other 16 Hz patch, and its mode-8 steady block (the one 1.3.0.0 is patched through) was not read or measured.',
-  'No 16 Hz patch exists any more (1.2.0.0, 1.3.0.0, 1.3.0.8, 4.8.1.7, 4.8.1.9, 4.8.2.1 had one, each also reachable as a 32 Hz patch except 1.2.0.0): the 32 Hz patches replace them. The 16 Hz FF builds are stock 16 Hz images, not patches. The 1.3.0.0 mode-6 one-step form (op 3 and the idle steps removed, op 9 kept alone) alternates: each frame is the difference of the previous output and a capture, so the body mean swings about 6,900 halfwords per frame (emulator: mean from -340 to +7,197). A correlated double sample needs a reference copy in the same frame, and no one-step block has one. 1.3.0.0 reaches 32 Hz in the Normal stream through its mode-8 steady block instead (compact_32k-1.3.0.0-to32).',
+  'No 16 Hz patch exists any more (1.2.0.0, 1.3.0.0, 1.3.0.8, 4.8.1.7, 4.8.1.9, 4.8.2.1 had one, each also reachable as a 32 Hz patch, 1.2.0.0 included): the 32 Hz patches replace them. The 16 Hz FF builds are stock 16 Hz images, not patches. The 1.3.0.0 mode-6 one-step form (op 3 and the idle steps removed, op 9 kept alone) alternates: each frame is the difference of the previous output and a capture, so the body mean swings about 6,900 halfwords per frame (emulator: mean from -340 to +7,197). A correlated double sample needs a reference copy in the same frame, and no one-step block has one. 1.3.0.0 reaches 32 Hz in the Normal stream through its mode-8 steady block instead (compact_32k-1.3.0.0-to32).',
   'Earlier 32K 32 Hz blocks that dropped op 5 (1.3.0.8, 4.8.1.7, 4.8.1.9, and the FF 1.3.0.8 and 4.16.1.7 ids): withdrawn. Op 5 starts the frame and clears the mask that op 8 reads, so the picture froze (emulator: 56 to 58 of 58 to 61 steady pairs with zero changed halfwords). Replaced by the one-step block that keeps op 5 with the delivery bit.',
   'Mosaic 10.9.1.31: already an 18 Hz image (FRAME_RATE, emu/README.md LABEL_DECISIONS); not a 9 Hz target.',
   'Nano 200 42.32.3.10 already publishes every capture (32 Hz); Mosaic FF and Nano 300 are not 9 Hz targets.',

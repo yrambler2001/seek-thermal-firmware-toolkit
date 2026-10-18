@@ -20,8 +20,9 @@
  *
  * THE STAGES. Each offered entry has been staged on its own line, and only then is it
  * offered (see `gateOf`):
- *   - stage one: the 2014 plain chain, whose banks are stored as plain bytes (the Compact
- *     1.3.0.0 and the 8 Hz 1.3.0.8). The write is byte-exact on the read-back.
+ *   - stage one: the 2014 plain chain, whose banks are stored as plain bytes (the Compact 0.8.0.0
+ *     to 1.3.0.8, 8 Hz). The write is byte-exact on the read-back. Entries of 0.8.0.0 and later that the
+ *     slots code writes plain are offered on the same terms as the measured ones (the owner's decision).
  *   - stage two: the 4.x Compact line (4.8.1.7, 4.8.1.9, 4.8.2.1), whose banks are staged under the
  *     camera's Key A and stored under the bank's own key. The write is checked on the read-back
  *     DECRYPTED, against the patched image (slots/fps-patch.ts).
@@ -106,8 +107,20 @@ const WITHHELD_REASON =
   'withheld after the bench run (TESTING.md 42.14): on the physical camera the patch did not raise ' +
   'the publish rate, and the shutter fired on every frame after the write';
 
-/** The stage-one entries: the plain 2014 chain. Pinned by a test, so a change is deliberate. */
+/**
+ * The stage-one entries: the plain 2014 chain, the builds slots/capability-family.ts stages plain (PLAIN_CHAIN_VERSIONS,
+ * 0.8.0.0 to 1.3.0.8). 0.7.0.8 has an entry too, but the slots code refuses it (older than 0.8.0.0), so it is not here.
+ * Pinned by a test, so a change is deliberate.
+ */
 export const FPS_STAGE_ONE_IDS: ReadonlySet<string> = new Set([
+  'compact_32k-0.8.0.0-to32',
+  'compact_32k-0.9.0.2-to32',
+  'compact_32k-0.9.0.6-to32',
+  'compact_32k-0.9.0.7-to32',
+  'compact_32k-0.9.1.0-to32',
+  'compact_32k-0.10.0.0-to32',
+  'compact_32k-1.0.0.0-to32',
+  'compact_32k-1.2.0.0-to32',
   'compact_32k-1.3.0.0-to32',
   'compact_32k-1.3.0.8-to32',
 ]);
@@ -123,12 +136,33 @@ export const FPS_STAGE_TWO_IDS: ReadonlySet<string> = new Set([
   'compact_32k-4.8.2.1-to32',
 ]);
 
+/** True when a dotted build version is older than `than` (an FF suffix is ignored). */
+function versionBefore(version: string, than: string): boolean {
+  const a = version.replace(/-FF$/, '').split('.').map(Number);
+  const b = than.split('.').map(Number);
+  for (let i = 0; i < Math.max(a.length, b.length); i++) {
+    const x = a[i] ?? 0;
+    const y = b[i] ?? 0;
+    if (x !== y) return x < y;
+  }
+  return false;
+}
+
 /** Why an entry outside stages one and two is not offered yet. Null for an offered entry. */
 function gateOf(source: FpsPatchSource): FpsGate {
   if (FPS_STAGE_ONE_IDS.has(source.id) || FPS_STAGE_TWO_IDS.has(source.id)) {
     return FPS_OFFER_WITHHELD
       ? { enabled: false, reason: WITHHELD_REASON }
       : { enabled: true, reason: null };
+  }
+  if (versionBefore(source.version, '0.8.0.0')) {
+    return {
+      enabled: false,
+      reason:
+        `firmware ${source.version} is older than 0.8.0.0: its RPC table has no read handler for ` +
+        'GetFeaturedFirmwareData, the only command a bank is read with, so the slots code refuses the ' +
+        'build and the page does not offer this patch (slots/capability-family.ts FIRST_SUPPORTED_VERSION)',
+    };
   }
   let why: string;
   if (source.family === 'compact_pro' && source.version.startsWith('1.0.3.')) {
@@ -438,8 +472,8 @@ export function planFpsPatch(image: Uint8Array, cameraVersion: string | null): F
     status: 'refused',
     reason:
       'this image is not in the frame-rate patch table, so no frame-rate patch is made for this build. ' +
-      'The table names the Compact 1.3.0.0, 1.3.0.8 (8 Hz and 16 Hz FF), 4.8.1.7, 4.8.1.9, 4.8.2.1 and ' +
-      '4.16.1.7 FF builds and the Compact PRO 1.0.3.x and 4.9.x builds; no other build has an entry',
+      'The table names the Compact 0.7.0.8 to 1.3.0.8 (8 Hz; 0.7.0.8 is refused by the slots code), 1.3.0.8 (16 Hz FF), ' +
+      '4.8.1.7, 4.8.1.9, 4.8.2.1 and 4.16.1.7 FF builds and the Compact PRO 1.0.3.x and 4.9.x builds; no other build has an entry',
   };
 }
 

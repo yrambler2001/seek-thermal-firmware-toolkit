@@ -202,6 +202,14 @@ describe('the rate the page names (the bench-measured rate, FPS_MEASURED_HZ)', (
 describe('the stages: which entries are offered (pinned, so a change is deliberate)', () => {
   it('offers exactly the stage-one (plain 2014 chain) and stage-two (Key A, 4.8.x) sets', () => {
     expect([...FPS_STAGE_ONE_IDS].sort()).toEqual([
+      'compact_32k-0.10.0.0-to32',
+      'compact_32k-0.8.0.0-to32',
+      'compact_32k-0.9.0.2-to32',
+      'compact_32k-0.9.0.6-to32',
+      'compact_32k-0.9.0.7-to32',
+      'compact_32k-0.9.1.0-to32',
+      'compact_32k-1.0.0.0-to32',
+      'compact_32k-1.2.0.0-to32',
       'compact_32k-1.3.0.0-to32',
       'compact_32k-1.3.0.8-to32',
     ]);
@@ -219,6 +227,8 @@ describe('the stages: which entries are offered (pinned, so a change is delibera
       const offered = FPS_STAGE_ONE_IDS.has(patch.id) || FPS_STAGE_TWO_IDS.has(patch.id);
       expect(patch.gate.enabled, patch.id).toBe(offered);
       if (offered) expect(patch.gate.reason, patch.id).toBeNull();
+      else if (patch.id === 'compact_32k-0.7.0.8-to32')
+        expect(patch.gate.reason ?? '', patch.id).toMatch(/older than 0\.8\.0\.0/);
       else expect(patch.gate.reason ?? '', patch.id).toMatch(/^stage two: /);
     }
   });

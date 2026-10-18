@@ -83,9 +83,10 @@ export const SLOTS_SUBJECTS: readonly SlotsSubject[] = [
     version: '0.8.0.0',
     emulator: 'Compact 0.8.0.0',
     banks: ALL_WRITABLE,
-    fps: NO_FPS_TABLE,
+    fps: { offer: true, toHz: 32 },
     banner: 'none',
-    source: '42.1 (pass); 42.2 (the camera names no booted bank: every bank takes the tick)',
+    source:
+      '42.1 (pass); 42.2 (the camera names no booted bank: every bank takes the tick); 32 Hz table entry, stage one, offered unmeasured (owner decision); not measured on a camera',
   },
   {
     name: 'Compact 0.9.0.2',
@@ -93,9 +94,10 @@ export const SLOTS_SUBJECTS: readonly SlotsSubject[] = [
     version: '0.9.0.2',
     emulator: 'Compact 0.9.0.2',
     banks: ALL_WRITABLE,
-    fps: NO_FPS_TABLE,
+    fps: { offer: true, toHz: 32 },
     banner: 'none',
-    source: '42.1 (pass), 42.5',
+    source:
+      '42.1 (pass), 42.5; 32 Hz table entry, stage one, offered unmeasured (owner decision); not measured on a camera',
   },
   {
     name: 'Compact 0.9.0.6',
@@ -103,9 +105,10 @@ export const SLOTS_SUBJECTS: readonly SlotsSubject[] = [
     version: '0.9.0.6',
     emulator: 'Compact 0.9.0.6',
     banks: ALL_WRITABLE,
-    fps: NO_FPS_TABLE,
+    fps: { offer: true, toHz: 32 },
     banner: 'none',
-    source: '42.1 (pass)',
+    source:
+      '42.1 (pass); 32 Hz table entry, stage one, offered unmeasured (owner decision); not measured on a camera',
   },
   {
     name: 'Compact 0.9.0.7',
@@ -113,9 +116,10 @@ export const SLOTS_SUBJECTS: readonly SlotsSubject[] = [
     version: '0.9.0.7',
     emulator: 'Compact 0.9.0.7',
     banks: ALL_WRITABLE,
-    fps: NO_FPS_TABLE,
+    fps: { offer: true, toHz: 32 },
     banner: 'none',
-    source: '42.1 (pass)',
+    source:
+      '42.1 (pass); 32 Hz table entry, stage one, offered unmeasured (owner decision); not measured on a camera',
   },
   {
     name: 'Compact 0.9.1.0',
@@ -123,9 +127,10 @@ export const SLOTS_SUBJECTS: readonly SlotsSubject[] = [
     version: '0.9.1.0',
     emulator: 'Compact 0.9.1.0',
     banks: ALL_WRITABLE,
-    fps: NO_FPS_TABLE,
+    fps: { offer: true, toHz: 32 },
     banner: 'none',
-    source: '42.1 (pass), 42.5',
+    source:
+      '42.1 (pass), 42.5; 32 Hz table entry, stage one, offered unmeasured (owner decision); not measured on a camera',
   },
   {
     name: 'Compact 0.10.0.0',
@@ -133,9 +138,10 @@ export const SLOTS_SUBJECTS: readonly SlotsSubject[] = [
     version: '0.10.0.0',
     emulator: 'Compact 0.10.0.0',
     banks: ALL_WRITABLE,
-    fps: NO_FPS_TABLE,
+    fps: { offer: true, toHz: 32 },
     banner: 'none',
-    source: '42.1 (pass)',
+    source:
+      '42.1 (pass); 32 Hz table entry, stage one, offered unmeasured (owner decision); not measured on a camera',
   },
   {
     name: 'Compact 1.0.0.0',
@@ -143,9 +149,10 @@ export const SLOTS_SUBJECTS: readonly SlotsSubject[] = [
     version: '1.0.0.0',
     emulator: 'Compact 1.0.0.0',
     banks: ALL_WRITABLE,
-    fps: NO_FPS_TABLE,
+    fps: { offer: true, toHz: 32 },
     banner: 'none',
-    source: '42.1 (pass), 42.5',
+    source:
+      '42.1 (pass), 42.5; 32 Hz table entry, stage one, offered unmeasured (owner decision); not measured on a camera',
   },
   {
     name: 'Compact 1.2.0.0',
@@ -153,9 +160,10 @@ export const SLOTS_SUBJECTS: readonly SlotsSubject[] = [
     version: '1.2.0.0',
     emulator: 'Compact 1.2.0.0',
     banks: ALL_WRITABLE,
-    fps: NO_FPS_TABLE,
+    fps: { offer: true, toHz: 32 },
     banner: 'none',
-    source: '42.1 (pass), 42.5; its 16 Hz patch was removed (42.26), no frame-rate offer',
+    source:
+      '42.1 (pass), 42.5; its 16 Hz patch was removed (42.26); 32 Hz table entry, stage one, not measured on a camera',
   },
   {
     name: 'Compact 1.3.0.0',
