@@ -54,7 +54,7 @@
 
 import { bytesToHex, equalBytes, findAll, hexToBytes, hexUp } from '../bytes.js';
 import { cryptBytes } from '../crypto/cipher.js';
-import { findEmbeddedKeyTable, stateFromKey } from '../crypto/keys.js';
+import { findEmbeddedKeyTable, stateFromKey, UNNAMED_KEY } from '../crypto/keys.js';
 import type { CipherProfile, SlotKey } from '../profiles/types.js';
 import type { DerivedKey } from './types.js';
 import type { DeviceState } from '../workflows/types.js';
@@ -83,6 +83,12 @@ export interface ApplicationKeys {
 export interface WriteKeys {
   /** Why no bank can be written from this camera, stated with the measurement; null when derived. */
   readonly refusal: string | null;
+  /**
+   * The 2014 plaintext chain: every bank is stored plain, so there is no key to derive. An upload is
+   * the image as it is (staging 'plain'), and `atRest`, `application`, `store` and `masks` are null or
+   * empty. A null `atRest` with `plainChain` false is a refusal, never this.
+   */
+  readonly plainChain: boolean;
   /** The booted bank the at-rest key was read from, or null. */
   readonly booted: SlotKey | null;
   /** The key the booted bank decrypts under, by the bootloader's name for it ("Key A"), or null. */
@@ -116,12 +122,15 @@ export function checksUploadUnderOwnKeys(version: string | null): boolean {
 }
 
 /**
- * Why a bank of this camera cannot be written under the derived keys, or null when it can. The page's
- * own gate minus the one reason it replaces, then the derivation. The slot page, the CLI and the writer
- * all ask this one question, so they cannot disagree about it.
+ * Why a bank of this camera cannot be written, or null when it can. The page's own gate minus the one
+ * reason it replaces, then the derivation of the upload keys. The 2014 plaintext chain has no upload
+ * keys to derive (every bank is stored plain), so only the gate applies there. The slot page, the CLI
+ * and the writer all ask this one question, so they cannot disagree about it.
  */
 export function slotWriteRefusal(state: DeviceState): string | null {
-  return gateWithoutAppKeys(state) ?? deriveWriteKeys(state).refusal;
+  const gate = gateWithoutAppKeys(state);
+  if (gate !== null) return gate;
+  return state.plainChain ? null : deriveWriteKeys(state).refusal;
 }
 
 /**
@@ -175,6 +184,7 @@ export function deriveWriteKeys(state: DeviceState): WriteKeys {
   const evidence: string[] = [];
   const refused = (refusal: string): WriteKeys => ({
     refusal,
+    plainChain: false,
     booted: null,
     bootedKeyName: null,
     atRest: null,
@@ -183,6 +193,25 @@ export function deriveWriteKeys(state: DeviceState): WriteKeys {
     masks: [],
     evidence,
   });
+
+  /* The 2014 plaintext chain: no bank is keyed, so there is no key to read from the booted bank and no
+   * application pair to locate. Nothing is refused for a key it does not have (TESTING.md 42.13). */
+  if (state.plainChain) {
+    return {
+      refusal: null,
+      plainChain: true,
+      booted: state.boot?.booted ?? null,
+      bootedKeyName: null,
+      atRest: null,
+      application: null,
+      store: null,
+      masks: [],
+      evidence: [
+        'the 2014 plaintext chain: every bank is stored plain, so no upload key is derived; ' +
+          'the upload is the image as it is',
+      ],
+    };
+  }
 
   const boot = state.boot;
   if (boot === null) {
@@ -198,8 +227,9 @@ export function deriveWriteKeys(state: DeviceState): WriteKeys {
     );
   }
 
-  /* The booted bank: the bootloader accepts it under the key its identity names (identifyKey). */
-  const bootedKeyName = booted.keyName;
+  /* The booted bank: the bootloader accepts it under the key its identity names (identifyKey). The
+   * placeholder UNNAMED_KEY is no key the bootloader tries, so it names none. */
+  const bootedKeyName = booted.keyName === UNNAMED_KEY ? null : booted.keyName;
   if (!booted.bootable || bootedKeyName === null) {
     return refused(
       `the booted ${bootedName} decrypts under no key the bootloader tries (its Key A, or its store ` +
@@ -348,13 +378,15 @@ export function deriveWriteKeys(state: DeviceState): WriteKeys {
   for (const other of state.slots) {
     if (other.key === boot.booted || other.unread || other.plain === null) continue;
     evidence.push(
-      `bank ${other.key.toUpperCase()} decrypts under ${other.keyName ?? 'no key this page knows'}; ` +
+      `bank ${other.key.toUpperCase()} decrypts under ` +
+        `${other.keyName === null || other.keyName === UNNAMED_KEY ? 'no key this page knows' : other.keyName}; ` +
         `it is written under ${atRest.name} by the same rule, and read back to check`,
     );
   }
 
   return {
     refusal: null,
+    plainChain: false,
     booted: boot.booted,
     bootedKeyName,
     atRest,

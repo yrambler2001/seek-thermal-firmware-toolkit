@@ -12,6 +12,7 @@ import { render } from '../test-helpers';
 /** The store key is written, and the booted bank holds Key A, which the bootloader accepts too. */
 const STORE: WriteKeysVerdict = {
   refusal: null,
+  plainChain: false,
   bootedName: 'slot A',
   keyName: 'Key B',
   bootedKeyName: 'Key A',
@@ -24,6 +25,7 @@ const STORE: WriteKeysVerdict = {
 /** The booted bank's own key is written. */
 const SAME: WriteKeysVerdict = {
   refusal: null,
+  plainChain: false,
   bootedName: 'slot A',
   keyName: 'Key A',
   bootedKeyName: 'Key A',
@@ -33,10 +35,21 @@ const SAME: WriteKeysVerdict = {
 const REFUSED: WriteKeysVerdict = {
   refusal:
     'the running application (bank A, firmware 4.16.1.7) checks an upload under its own keys before it programs it',
+  plainChain: false,
   bootedName: 'slot A',
   keyName: null,
   bootedKeyName: 'Key A',
   evidence: [],
+};
+
+/** The 2014 plaintext chain: every bank is stored plain, so there is no key to derive and no refusal. */
+const PLAIN: WriteKeysVerdict = {
+  refusal: null,
+  plainChain: true,
+  bootedName: 'slot A',
+  keyName: null,
+  bootedKeyName: null,
+  evidence: ['the 2014 plaintext chain: every bank is stored plain, so no upload key is derived'],
 };
 
 describe('SlotWriteKeys', () => {
@@ -68,6 +81,20 @@ describe('SlotWriteKeys', () => {
     expect(text).toContain('No bank of this camera can be written from here.');
     expect(text).toContain('checks an upload under its own keys before it programs it');
     expect(text).not.toContain('derived from the booted');
+    unmount();
+  });
+
+  it('shows the 2014 plaintext chain as stored plain, with no refusal and no derived key', () => {
+    const { container, unmount } = render(<SlotWriteKeys verdict={PLAIN} />);
+    const text = container.textContent;
+    expect(text).toContain('Keys for the writes');
+    expect(text).toContain(
+      'the 2014 plaintext chain: every bank is stored plain, so none holds a key',
+    );
+    expect(text).toContain('the image as it is, with no key, to any bank');
+    expect(text).not.toContain('No bank of this camera can be written');
+    expect(text).not.toContain('derived from the booted');
+    expect(text).not.toContain('unknown key');
     unmount();
   });
 

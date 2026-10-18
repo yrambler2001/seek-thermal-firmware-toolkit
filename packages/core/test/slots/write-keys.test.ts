@@ -10,13 +10,14 @@ import { equalBytes, hexToBytes } from '../../src/bytes.js';
 import { cryptBytes } from '../../src/crypto/cipher.js';
 import { keyFilenameSuffix, stateFromKey, type PickedKeyTable } from '../../src/crypto/keys.js';
 import { buildBankPayload, setAcceptSum } from '../../src/image/bank.js';
-import { IMAGE_MAGIC, LENGTH_OFFSET } from '../../src/image/header.js';
+import { IMAGE_MAGIC, LENGTH_OFFSET, parseImageHeader } from '../../src/image/header.js';
 import { getProfile } from '../../src/profiles/registry.js';
 import type { SlotKey } from '../../src/profiles/types.js';
 import type { DeviceState, SlotState } from '../../src/workflows/types.js';
 import { APPLICATION_KEY_PAIRS } from '../../src/slots/application-pairs.js';
 import {
   buildKeyAPayload,
+  compareRows,
   retargetImageKeys,
   locateOwnKeyPair,
 } from '../../src/slots/write-image.js';
@@ -25,6 +26,7 @@ import {
   checksUploadUnderOwnKeys,
   deriveWriteKeys,
   gateWithoutAppKeys,
+  slotWriteRefusal,
   uploadLandsUnder,
   type KeyRef,
   type WriteKeys,
@@ -455,5 +457,105 @@ describe('the 2016 staging note says what staging needs', () => {
     const note = bankNotes('locked-2016', 'a').join(' ');
     expect(note).not.toMatch(/recovered from a readable copy of THIS bank/);
     expect(note).toMatch(/Nothing is read from the target bank to stage it/);
+  });
+});
+
+/* ==================================================================== *
+ * The 2014 plaintext chain (TESTING.md 42.13). The bench Compact PIR206, 1.3.0.0 "Oct 21 2014",
+ * as the analysis read it (the serial omitted): banks A and R hold the image stored plain, the
+ * identity keystream and word sum 0; B is erased; no key table is read; the store key is Key B,
+ * not programmed. Its banks name no key: identifyKey gives the plain identity keystream the
+ * placeholder name, and the chain's own verdict makes the banks bootable. The page said "No bank of
+ * this camera can be written from here" for it, from the key derivation, which has no key to read.
+ * ==================================================================== */
+
+/** The bench camera's read, minus its serial: what `deriveWriteKeys` and `slotWriteRefusal` see. */
+function plainChainCamera(overrides: Partial<DeviceState> = {}): DeviceState {
+  const plain = new Uint8Array(47768).fill(0x11);
+  const bootedSlot = slot({
+    key: 'a',
+    present: true,
+    plain,
+    plainHeader: null,
+    keyName: null,
+    bootable: true,
+    bootability: 'bootable',
+  });
+  const erased = slot({ key: 'b', present: false, blank: true, plain: null, keyName: null });
+  const recovery = slot({
+    key: 'r',
+    present: true,
+    plain,
+    plainHeader: null,
+    keyName: null,
+    bootable: true,
+    bootability: 'bootable',
+  });
+  const slots = [bootedSlot, erased, recovery];
+  return {
+    version: '1.3.0.0',
+    serial: null,
+    profile: getProfile('legacy-auth'),
+    slots,
+    byKey: new Map(slots.map((s) => [s.key, s])),
+    boot: { booted: 'a', target: 'b' },
+    keyTable: null,
+    keyTableCandidates: 0,
+    keyWhiteningK: 0,
+    storeKey: { name: 'Key B', key: null, programmed: false },
+    deviceKeySlot: null,
+    canFlash: true,
+    flashBlockedBy: [],
+    appKeysBlock: null,
+    plainChain: true,
+    cfg0: 0,
+    ...overrides,
+  } as unknown as DeviceState;
+}
+
+describe('the 2014 plaintext chain: no key is derived, so no bank is refused for one', () => {
+  it('derives no upload key, and the write verdict is open', () => {
+    const state = plainChainCamera();
+    const keys = deriveWriteKeys(state);
+    expect(keys.refusal).toBeNull();
+    expect(keys.plainChain).toBe(true);
+    expect(keys.atRest).toBeNull();
+    expect(keys.masks).toEqual([]);
+    expect(slotWriteRefusal(state)).toBeNull();
+  });
+
+  it('the compare table shows a bank with an image and no key as stored plain, and an empty bank as no image', () => {
+    const plainKeyRow = compareRows(
+      { header: parseImageHeader(imageWith([])), sha256: null, keyName: null },
+      { plain: null, storedPredicted: false, keyName: 'none (plaintext)' },
+    ).find((r) => r.field === 'Key');
+    expect(plainKeyRow?.before).toBe('none (plaintext)');
+    const emptyKeyRow = compareRows(
+      { header: null, sha256: null, keyName: null },
+      { plain: null, storedPredicted: false, keyName: 'none (plaintext)' },
+    ).find((r) => r.field === 'Key');
+    expect(emptyKeyRow?.before).toBe('(no image)');
+  });
+
+  it('says nothing of the placeholder: the verdict names no key the chain does not have', () => {
+    expect(JSON.stringify(deriveWriteKeys(plainChainCamera()))).not.toContain('unknown key');
+  });
+
+  it('still applies the page gate: a real blocking reason refuses the writes', () => {
+    const state = plainChainCamera({
+      flashBlockedBy: ['the camera reports a build this page does not write'],
+      canFlash: false,
+    });
+    expect(slotWriteRefusal(state)).toContain(
+      'the camera reports a build this page does not write',
+    );
+  });
+});
+
+describe('the placeholder name is not a key on a keyed camera either', () => {
+  it('a booted bank that is bootable under the placeholder is refused for the key it lacks, without naming the placeholder', () => {
+    const refusal = refusalOf(camera({ bootedBootable: true, bootedKey: 'unknown key' }));
+    expect(refusal).toMatch(/decrypts under no key the bootloader tries/);
+    expect(refusal).not.toMatch(/unknown key/);
   });
 });

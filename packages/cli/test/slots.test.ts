@@ -1489,4 +1489,49 @@ describe('the 2014 plaintext chain', () => {
     expect(text).toMatch(/R\s+0x14070000.*recovery only/);
     expect(text).toContain('the running build is not known');
   });
+
+  /* The bench Compact PIR206 (1.3.0.0, 2014 chain): its banks hold no key, so the write keys are not
+   * refused, and the list says the banks are plain (TESTING.md 42.13). */
+  function plainChainBench(): SlotsReport {
+    const base = onLockedPlain(reportOf({ booted: 'a' }));
+    const state = {
+      ...base.state,
+      version: '1.3.0.0',
+      plainChain: true,
+      keyTable: null,
+      deviceKeySlot: null,
+      storeKey: { name: 'Key B', key: null, programmed: false },
+    } as unknown as DeviceState;
+    const slots = base.slots.map((v) =>
+      v.state !== null && v.entry.key !== 'b'
+        ? {
+            ...v,
+            state: {
+              ...v.state,
+              keyName: null,
+              plain: new Uint8Array(0x100),
+              bootable: true,
+              bootability: 'bootable' as const,
+            },
+          }
+        : v,
+    );
+    return { ...base, state, slots };
+  }
+
+  it('the write keys on the plaintext chain are not refused, and no key is derived for them', () => {
+    const bench = plainChainBench();
+    const text = writeKeyLines(bench, false).join('\n');
+    expect(text).not.toContain('refused');
+    expect(text).not.toContain('No bank');
+    expect(text).toContain('every bank is stored plain, so none holds a key');
+    expect(text).not.toContain('derived from the booted bank');
+    expect(listResult(bench).writeKeys).toMatchObject({ refused: null, plainChain: true });
+  });
+
+  it('the list shows a plain bank as stored plain, not under a key nobody knows', () => {
+    const text = listLines(plainChainBench(), false).join('\n');
+    expect(text).toContain('none (plaintext)');
+    expect(text).not.toContain('unknown key');
+  });
 });

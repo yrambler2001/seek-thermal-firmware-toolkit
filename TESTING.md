@@ -6690,3 +6690,67 @@ The old plain form's boot (42.10 is not re-run).
 
 **Software changes** (branch `worktree-agent-a306c35298066fd96`, not pushed): the vendor-form and camera-answer
 commit (`da7af17`), and the follow-up commits recorded in the report.
+
+### 42.13 The 2014 plaintext chain was refused "no bank can be written" by the upload-key derivation (2026-10-18)
+
+**What the owner saw.** On the bench camera (Compact PIR206, serial `101310HSNEA2`, 1.3.0.0 "Oct 21 2014", bootloader
+0.9.0.0, whole-flash sha256 `40447c7e…eb72`, unchanged) the slots page said "No bank of this camera can be written from
+here" and "the booted bank A decrypts under unknown key, but this camera's key table does not carry that key, so it
+cannot be written under it".
+
+**What the analysis reads (measured, `seek-fw slots list --json` and the captured DeviceState, read only).** Version
+1.3.0.0, profile `legacy-auth`, `plainChain` true, boot `{booted: a, target: b}`, no key table, store key Key B not
+programmed, `flashBlockedBy` empty, `appKeysBlock` null. Bank A holds the image plain (47,768 B, identity keystream,
+stored word sum 0), named `unknown key`, `bootable` true. Bank B is erased. Bank R holds the same image as A. The
+CLI's `writeKeys.refused` carries the owner's sentence word for word.
+
+**The cause (measured, then read from the code).** `identifyKey` names a keystream that matches no known key
+`unknown key`: a placeholder, not a key. A plain bank's identity keystream matches none, so the bank is named with the
+placeholder, and the chain's own verdict then makes it bootable. `deriveWriteKeys` (`slots/write-keys.ts`) read that
+name as a key, found no key table entry for it, and refused with the placeholder in the text. The 2014 chain has no
+upload key to derive, so the derivation had no business running. The page heading, the CLI's `refused` line and the
+JSON `refused` all come from `slotWriteRefusal`, which is that derivation. The write path does not call it for plain
+banks (`stageImage`'s plain staging and `flashSlot`'s gate check only the encrypted staging), so the refusal was a
+false claim on the screen and in the JSON, not a block on the write (inferred from the code; sec. 42.5 wrote A, B and
+R on this camera).
+
+**When it started (measured: a read-only `slots list --json` at each commit, the worktree detached and rebuilt).** The
+refusal first appears at `3b486d2` ("derive the upload keys from the booted bank and the running application", the
+commit that added `write-keys.ts` and the page heading), and is present at every commit from there to `2fcaf8e`. At its
+parent `59b1fc7` the JSON has no `writeKeys` field at all. The placeholder state (`keyName: "unknown key"`, `bootable`,
+`plainChain`) is already there at `59b1fc7`, so the regression is the derivation's reading of that state, introduced by
+`3b486d2`. The 42.5 and 42.9 bench runs were at commits that carry the heading, so the bench drove the picker and did
+not look at the heading.
+
+**The fix.**
+- `write-keys.ts`: on the plaintext chain (`state.plainChain`) `deriveWriteKeys` returns a keyless result
+  (`plainChain: true`, no refusal, no `atRest`), and `slotWriteRefusal` is the page gate alone. The placeholder is never
+  read as a key (`UNNAMED_KEY`, `crypto/keys.ts`).
+- `device-info.ts`: a plain bank's `keyName` is null, not the placeholder. The Key column and `info` show `none (plaintext)`
+  (`compareRows` does too, for the write diff).
+- Web: `SlotWriteKeys` shows the chain as stored plain, not as an alert. The Key cell and the device info panel say
+  `none (plaintext)`.
+- CLI: `slots list` says the chain is stored plain instead of `refused`; the JSON `writeKeys` gains `plainChain`.
+- The modern line is unchanged: `plainChain` is false there, so the derivation (Mosaic 10.9.1.31, 4.16.1.7 FF,
+  Pro 4.9.1.15) runs as before.
+
+**Regression tests.**
+- Emulator corpus (`corpus-locked.emulator.test.ts`, every plain-chain row, via the new `LockedRun.writeKeysRefusal`):
+  before the fix, Compact 1.3.0.0 (native dump) failed the new check with the owner's sentence, word for word; after, it passes.
+  The check is the page gate alone: a row whose page gate names a reason (Compact 0.8.0.0, 1.3.0.8 FF) keeps that reason,
+  and no key-derivation sentence appears on any row of the chain.
+- Core unit (`write-keys.test.ts`): the bench camera's read with the serial removed. No refusal, no derived key, the page
+  gate still refuses a real blocking reason, a keyed camera with the placeholder is refused without naming it, and
+  `compareRows` shows a plain bank as `none (plaintext)` and an empty bank as `(no image)`.
+- Core real read (`plain-chain-flash.test.ts`): the analysis names no key for banks A and R, and `slotWriteRefusal` is null.
+- CLI (`slots.test.ts`): the write keys are not refused on the chain, and the list shows `none (plaintext)`.
+- Web (`SlotWriteKeys.test.tsx`, `SlotsView.test.tsx`): the chain's verdict is shown as stored plain, with no
+  "No bank" heading, and A, B and R rows are still offered.
+
+**Results (after the fix).** Core unit, the slot files and the plaintext-chain flash test: 11 files, 609 pass, 6 skipped
+(the count before the change, plus the new tests). Web slot files: 6 files, 108 pass. CLI `slots.test.ts`: 90 pass.
+Emulator: `corpus-locked.emulator.test.ts`, every row: 281 pass; CLI `slots.emulator` and `slots-empty.emulator`: 30 pass;
+`corpus-modern` and `accept` (the Mosaic 10.9.1.31 and 4.16.1.7 composites, the refusals): 263 pass, unchanged. `tsc` clean for core, cli, web (app and node) and e2e; eslint clean on the changed files.
+
+**Not measured.** No write was sent to the camera in this run (the owner asked for read-only use). The page's own
+Electron write on this camera after the fix is not run; the write path it uses is unchanged for plain staging.

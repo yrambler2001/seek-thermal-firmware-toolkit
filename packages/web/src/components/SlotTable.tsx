@@ -240,7 +240,9 @@ export function SlotTable({
                 )}
               </TableCell>
 
-              <TableCell label="Key">{state?.keyName ?? '—'}</TableCell>
+              <TableCell label="Key">
+                {state?.keyName ?? (state?.plain == null ? '—' : 'none (plaintext)')}
+              </TableCell>
 
               <TableCell label="Bootable">{bootability(view)}</TableCell>
 

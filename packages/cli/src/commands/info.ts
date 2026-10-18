@@ -226,7 +226,7 @@ export function renderState(ctx: CommandContext, state: DeviceState): void {
         hexUp(slot.address),
         slot.present ? (slot.plainHeader?.versionStr ?? slot.header?.versionStr ?? '?') : '—',
         slot.header === null ? '—' : `${String(slot.header.length)} B`,
-        slot.keyName ?? '—',
+        slot.keyName ?? (slot.plain === null ? '—' : 'none (plaintext)'),
         slot.present ? yesNo(slot.accepts) : '—',
         /* "n/a" where the bootloader reads no footer: a missing one is not a fault there */
         slot.present ? (state.profile.boot.checksFooter ? yesNo(slot.footerOk) : 'n/a') : '—',

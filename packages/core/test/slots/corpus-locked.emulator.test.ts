@@ -294,6 +294,20 @@ describe.skipIf(!available)(
           expect(run.inspected).toEqual({ a: true, b: true, r: true });
         });
 
+        if (subject.staging === 'plain') {
+          /* The 2014 plaintext chain stores every bank plain, so there is no key to derive an upload
+           * under. The page must not say that no bank can be written (TESTING.md 42.13). */
+          it('the write verdict is the page gate alone: no upload key is derived on the chain, so no bank is refused for a key', () => {
+            expect(run.analysisProfile, 'the analysis ran').not.toBeNull();
+            /* A refusal the page gives is its own reason (the build, the selector, the key table); the key
+             * derivation's sentences never appear on this chain. */
+            expect(run.writeKeysRefusal ?? '', 'the verdict names a key').not.toMatch(
+              /decrypts under|does not carry that key|carries none of the key pairs|checks an upload under|could not be named/,
+            );
+            if (run.blockedBy.length === 0) expect(run.writeKeysRefusal).toBeNull();
+          });
+        }
+
         if (subject.version === '1.3.0.8') {
           /* The FF image is prepared for R on this camera, and nothing is sent. Its verdict follows the
            * build the camera runs: the 8 Hz build refuses it, the FF build takes it (TESTING.md 42.10). */
