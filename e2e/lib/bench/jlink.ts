@@ -49,6 +49,17 @@ import {
 /** The FW-V1 target directory the recipe runs in (TESTING.md 41.5). */
 export const DEFAULT_TARGET = 'compact_8hz_1_3_0_8';
 /** The same target's name before FW-V1 renamed its targets (product, delivered rate, version). */
+/** True when the target's runner has `flash-factory-4m-2` (which then also disables `flash-factory-4m`). */
+function runnerHasFlash4m2(targetDir: string): boolean {
+  try {
+    return readFileSync(path.join(targetDir, 'tools/jlink/jlink-runner.js'), 'utf8').includes(
+      "'flash-factory-4m-2'",
+    );
+  } catch {
+    return false;
+  }
+}
+
 /** The runner script, relative to the target directory. */
 export const RUNNER_SCRIPT = 'tools/jlink/jlink-runner.js';
 export const LEGACY_TARGET = 'compact_32k_1_3_0_8';
@@ -108,7 +119,7 @@ const ERASE_TOLERATED = /Failed to erase sectors|Erase returned with error code 
 const JLINK_ERROR = /\*{3,} Error/;
 
 /** The runner's commands this module may run, and nothing else (never `dump-spifi-4m`). */
-type RunnerCommand = 'erase-spifi-range' | 'flash-factory-4m' | 'set-boot';
+type RunnerCommand = 'erase-spifi-range' | 'flash-factory-4m' | 'flash-factory-4m-2' | 'set-boot';
 
 export const DRY_RUN_READ = 'dry-run: no hardware access';
 
@@ -495,13 +506,17 @@ export function createJlinkBench(options: JlinkBenchOptions): JlinkBench {
               'recipe says; the read-back decides',
           );
         }
-        const flashed = await runRunner('flash-factory-4m', {
+        /* Targets that carry flash-factory-4m-2 disable flash-factory-4m (it exits 2 and says so). */
+        const flashCommand: RunnerCommand = runnerHasFlash4m2(targetDir)
+          ? 'flash-factory-4m-2'
+          : 'flash-factory-4m';
+        const flashed = await runRunner(flashCommand, {
           FACTORY_IMAGE: image,
           JLINKEXE: jlinkExe,
         });
         if (flashed.code !== 0) {
           log(
-            `flash-factory-4m exited ${String(flashed.code)}: ${tail(flashed)} (the read-back decides)`,
+            `${flashCommand} exited ${String(flashed.code)}: ${tail(flashed)} (the read-back decides)`,
           );
         }
       });

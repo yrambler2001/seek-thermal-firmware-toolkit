@@ -133,10 +133,12 @@ describe.skipIf(!REAL)('the CLI on the bench camera (1.3.0.0, real USB)', () => 
 
   afterAll(() => {
     if (!REAL) return;
-    /* Restore: erase the range (a failed erase writes nothing), flash the baseline, verify it halted. */
-    runner('erase-spifi-range', { ERASE_ADDR: '0x14000000', ERASE_LEN: '0x400000' });
-    const flashed = runner('flash-factory-4m', { FACTORY_IMAGE: BASELINE_FILE });
-    expect(flashed.out, 'the baseline is written back').toMatch(/Verify successful/);
+    /* Restore: flash-factory-4m-2 diffs the part against the baseline, writes the differing blocks
+     * and re-reads the whole part (`flash-factory-4m` is disabled in this target). Then verify halted. */
+    const flashed = runner('flash-factory-4m-2', { FACTORY_IMAGE: BASELINE_FILE });
+    expect(flashed.out, 'the baseline is written back').toMatch(
+      /DONE: the part reads back byte-identical/,
+    );
     expect(sha256(haltedWholeFlash()), 'the restored flash is the baseline').toBe(BASELINE_SHA);
     spawnSync(process.execPath, [path.join(SWITCH_DIR, 'switch.js'), 'cycle', '2', '3000']);
     rmSync(dir, { recursive: true, force: true });
