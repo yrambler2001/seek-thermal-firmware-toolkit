@@ -7144,3 +7144,93 @@ Run here (targeted, no camera, no emulator): `npx vitest run --project web` 29 f
 **Not run here.** The real bench camera (`e2e/lib/bench` is the bench agent's); the real-camera versions of these pages; the whole vitest suite (targeted files only, as the brief says); the emulator-backed core suites other than the ones listed (the core pipeline emulator tests need `SEEK_EMU_DIR` and were not run for this change); the docs bundle was not rebuilt.
 
 **Commit.** See the commit on `worktree-agent-a1e044e0448116f64`; the plan's Log has the entry.
+
+### 42.20 The bench on the merged branch: the frame-rate map measured, the pages and the CLI on the real camera, and the 28-subject slots matrix (2026-10-18)
+
+**Summary.** On hardware (PIR206 Compact, serial 101310HSNEA2, 1.3.0.0 original): the two unmeasured frame-rate map entries were measured (1.2.0.0 16 Hz; 1.3.0.8 32 Hz and 16 Hz), and the 1.3.0.8 32 Hz label was corrected to what the bench measured (26 fps). The Info, 0.x/1.x, 4.x/Nano and Decrypt File/Slot pages and the slots page were driven on the real camera through Electron (`e2e/pages-bench.e2e.ts`, 9 of 9), and the CLI through the same flows (`packages/cli/test/real-camera-pages.test.ts`, 8 of 8). The slots bench ran the 28 supported Compact-tree subjects on the merged branch: 19 pass, 8 fail (page refusals and known gaps), 1 not run. The camera is restored to the baseline: a halted whole-flash read is `40447c7e…eb72`, and both switch channels are on.
+
+**1. Frame rate, measured (`e2e/lib/bench/compact-fps`, 20 s runs; `slots patch-fps` for the page's own entry).**
+
+| build | IP mode read | entry | stock (3 runs) | patched (3 runs) | label before | after |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1.2.0.0 | 6 | `compact_32k-1.2.0.0-to16` (the only entry) | 8.11, 8.11, 8.11 fps | 15.97, 16.10, 16.10 fps | 16 | 16 (correct) |
+| 1.3.0.8 8 Hz | 9 | `compact_32k-1.3.0.8-to32` (the page's offer: its highest target) | 7.82, 7.81, 7.82 fps | 26.72, 26.23, 26.11 fps (thermal frames 26.3, 25.8, 25.7) | 32 | 26 (`FPS_MEASURED_HZ`) |
+| 1.3.0.8 8 Hz | 9 | `compact_32k-1.3.0.8-to16` (not offered: the offer takes an image's highest target) | as above | 14.13, 14.14, 14.11 fps (thermal 13.2) | not shown | recorded as 14 |
+
+- The two 1.3.0.8 patches share the same stock bank and differ only in their bytes. The 32 Hz patch was written with `seek-fw slots patch-fps a --write` (16 planned bytes read back). The 16 Hz patch was built from the saved stock bank with the table's own `applyFpsPatch` and written with `seek-fw slots flash a`, which is the same core write path; its read-back matched the table's patched hash. This entry is measured, not reachable from the page or the CLI.
+- 1.2.0.0's 16 Hz run 1 (15.97) ran before the measurer fix below; runs 2 and 3 (16.10) ran after it. The first attempt at runs 2 and 3 died on the stack overflow, not on the camera.
+- Every run was restored to the baseline with the FW-V1 runner, and each restore was verified halted.
+
+**2. The pages on the real camera (`e2e/pages-bench.e2e.ts`, `npm run e2e:pages:bench`, `SEEK_E2E_WRITE=i-understand`).** 9 of 9 pass (run on the merged branch, dea19c4, with the spec as committed in 5e1a933; the later change 2ad2096 touches only the slots bench's bank-row reader).
+
+- Part 0: the halted whole-flash read is the baseline before anything is sent.
+- Info: reads firmware 1.3.0.0 and names the 0.x/1.x tab. The page sends identity reads only (`in 0x4e x2`).
+- 0.x/1.x, first step (Read & build, read-only): the run zip's backup is the 4 MiB flash, except the finding in section 5 (A); the bank capture is a byte run of the flash; the plain image is bank A's own image. No `out 0x50`, `0x51`, `0x55` or `0x5a` is sent. Observed on the wire: `in 0x35 x64, in 0x3d x64, in 0x4e x1, in 0x4f x32800, out 0x52 x64`, and no restart ask.
+- 4.x/Nano: refused on the version, before any dump read, with "Nothing was read" and the 0.x/1.x tab named (agent A's `lineRefusal`). Its wire is a subset of Info's identity reads.
+- Decrypt File/Slot: decrypts a 64 KiB slot file of the halted bank A with no camera traffic (the wire is empty). The decrypted image's SHA-256 is the image in the bank; a 1,000-byte file is refused with the reason.
+- Slots page: Read slots reads 3 of 3 with running build 1.3.0.0; Dump A and R equal the halted flash (sha256 5cbbdd0f), Dump B equals it too (empty bank, 71189f7f). A refused 1,000-byte image is DENIED with the page's refusal ("Rejected", a reason), and the guard's refusal list is empty. One allowed write: the decrypted image of A into B (not booted, so no acknowledgement); no write banner before or after; the page reads B back, and the J-Link's halted read of B equals it. The baseline is restored by the J-Link and verified halted, then the camera is power-cycled.
+
+**3. The CLI on the real camera (`packages/cli/test/real-camera-pages.test.ts`, `SEEK_REAL_CAMERA=1`).** 8 of 8 pass (second run; the first run had three test-side command-shape errors, fixed in 5e1a933).
+
+- `info` names 1.3.0.0 and the 0.x/1.x tab. `dump` refuses this camera before it reads, and points at `preserve`.
+- `preserve --backup-only --yes --zip` writes a zip whose backup equals the flash except the same gap (section 5, A).
+- `decrypt slot` decrypts the halted bank A without a camera, and refuses a 1,000-byte file (`a firmware bank is 65536 B (64 KiB); this file is 1000 B`).
+- `slots list` shows A booted, 1.3.0.0. `slots dump a, b, r` equal the halted flash.
+- A refused write (`slots flash a` with a 1,000-byte file, `--yes --acknowledge-risk`) is refused with "no image header … must be a decrypted Seek firmware image"; nothing is written, and bank A is unchanged.
+- One allowed write (`slots flash b` with the decrypted image, `--yes`) reads back; the text has no "cannot be written"; `slots dump b` holds the image.
+
+**4. The slots bench, 28 supported subjects (`npm run e2e:slots:bench`, `SEEK_BENCH_CAMERA=Compact`, HEAD 2ad2096).** The seven 0.3.0.1 to 0.7.0.8 dumps are below the 0.8.0.0 floor and are not tried.
+
+| subject | result | note |
+| --- | --- | --- |
+| Compact 0.8.0.0 std | FAIL | page refuses the writes: "the 2014 plaintext chain's write is decoded only for builds whose own mode-0 row is fw_update_slot_address() — 0.8.0.0 is not one of them" (42.1: pass) |
+| Compact 0.9.0.2 std | pass | |
+| Compact 0.9.0.6 std | pass | |
+| Compact 0.9.0.7 std | pass | |
+| Compact 0.9.1.0 std | pass | |
+| Compact 0.10.0.0 std | pass | |
+| Compact 1.0.0.0 std | pass | |
+| Compact 1.2.0.0 std | pass | |
+| Compact 1.3.0.8 FF | NOT RUN | needs `SEEK_BENCH_FF_RESTORE`, `SEEK_BENCH_FF_PLATFORM`, `SEEK_BENCH_FF_PLAIN` |
+| Compact 1.3.0.8 std | pass | |
+| Compact 4.8.1.7 std | pass | |
+| Compact 4.8.1.9 std | pass | |
+| Compact 4.8.2.1 std | pass | |
+| Compact 4.16.1.7 FF | FAIL | bank B refused: the running application checks an upload under its own keys (the 42.4 gap, unchanged) |
+| Compact Pro 1.0.3.0 std | FAIL | page refuses: "this camera's key table could not be confirmed; the write path on this line is implemented only for the 2014 plaintext chain" (42.1: pass) |
+| Compact Pro 1.0.3.0 FF | FAIL | same refusal (42.1: pass) |
+| Compact Pro 1.0.3.2 std | FAIL | same refusal (42.1: pass) |
+| Compact Pro 1.0.3.2 FF | FAIL | same refusal (42.1: pass) |
+| Compact Pro 1.0.3.2 FF-FF | FAIL | same refusal (42.1: pass) |
+| Compact Pro 4.9.1.15 std | FAIL | bank B holds 1.0.3.2; refused (the 42.1 gap, unchanged) |
+| Compact Pro 4.9.2.0 std | pass | |
+| Compact Pro 4.18.2.0 FF | pass | |
+| Compact XR 4.8.2.1 std | pass | |
+| Mosaic 320x240 2.27.1.33 FF | pass | |
+| Mosaic 320x240 10.9.1.31 std | pass | |
+| Nano 200 42.32.3.10 std | pass | |
+| Nano 300 44.27.3.10 std | pass | |
+| Compact 1.3.0.0 std (the original, last) | pass | ends with the camera's own image patched, so the restore below is needed |
+
+Totals: 19 pass, 8 fail, 1 not run (of 28). 42.1 had 24 of 28. Six subjects that passed in 42.1 (0.8.0.0 and the five Compact Pro 1.0.3.x images) are now refused by the page's write gate; section 5 (B) records them. The cause was not located here. The slots code has not changed since 719a8c2 on this branch (checked on the diff: only the FPS label and the Preserve line gate changed), so the change, if it is one, is older than this branch's merge base.
+
+**5. Defects found, what was done, and what is not fixed.**
+
+Fixed and tested:
+1. The frame-size derivation overflowed the stack on a noisy 1.2.0.0 16 Hz stream (`Maximum call stack size exceeded`, bench runs 2 and 3). Plain loops replace the spread calls; a regression test (a synthetic stream with about 240k distinct spacings) fails on the old code and passes on the new (c738fcb).
+2. The offer labelled 1.3.0.8's 32 Hz entry "Make 32 FPS", and the bench measured 26 fps. The byte edits are unchanged. `FPS_MEASURED_HZ` names the measured rate for the entries the bench measured differently, and the offer's `toHz` (the button, its note, the confirmation and the CLI plan) takes it. The unit test pins the map; the differential and emulator expectations are 26 for 1.3.0.8. Mutation check: a map value of 25 fails both the unit and the differential test (f62de77).
+3. The bench's bank-row reader looked only for "booted now"; the 2014 chain's badge reads "named booted". Every 2014 subject read "page identified: no" and expected a tick the page did not ask for. The reader accepts both badges and not "not named booted" (2ad2096). This was a bench-side bug; the page was right.
+4. Operational: the camera drops off the bus, or fails its first halted read, after a whole-flash write. The restore paths now power-cycle channel 2 before each halted read (`restoreBaseline`, `verifyHalted`, 5e1a933).
+
+Not fixed; findings for the owner:
+- (A) The 0.x/1.x backup on this unit is erased (0xFF) where the flash holds bootloader code: 11,268 bytes differ from the halted flash, all in 0x14000000 to 0x14002CFF, and every other byte is equal. The README says the backup covers "every region the stock plan can read", so the bootloader's first window is outside that plan on this build, and a restore from this backup would lack those bytes. Pinned by the pages and CLI tests (the gap is the only allowed difference); changing it is a decision for the owner.
+- (B) Six subjects that passed in 42.1 are refused by the page's write gate now (0.8.0.0; Compact Pro 1.0.3.0 std and FF, 1.0.3.2 std, FF and FF-FF). The refusals are the page's own text. Not changed here: the slots page is agent B's area, and the owner decides which refusal is right.
+- (C) After a successful write the slots page clears its bank table until "Read slots" is pressed. The bench reads again before it dumps. Whether the table should stay is a page decision.
+- (D) The vitest worker of the slots matrix ran out of heap (4 GB) at subject 17 of 28 in the second run (`JavaScript heap out of memory`), and the Electron child of that worker was left running and held the camera (stopped here). The third run ran with a 16 GB heap and completed. The growth is in the bench harness and is not located.
+- (E) The preflight's "another camera client" check reads other processes' command lines. Any shell whose command text contains the repo path counts as a camera holder. That made three rows of the first matrix run invalid (0.9.1.0 bank R and three Compact Pro 1.0.3.2 rows), because this session's own status commands were running during the matrix. Those rows are not in the table above. Other agents' runs in other worktrees are affected the same way.
+
+**6. What is inferred, and what is not measured.**
+- The 1.3.0.8 16 Hz entry is not reachable from the page or the CLI (the offer takes an image's highest target). Its rate is measured here by writing the table's own bytes with the CLI's write path.
+- The 1.3.0.8 build reads IP mode 9 at boot (`GetIPMode`, read only). The 1.2.0.0 and 1.3.0.0 builds read mode 6 (42.15).
+- Rates are the count of complete frames over 20 s in one boot; thermal-only rates are given where they differ.
+- Not measured here: the FF 1.3.0.8 slot steps (the matrix row is not run), the Compact Pro 1.0.3.x write path (refused by the page), and whether the 0.x/1.x backup gap affects a restore (not tried).
