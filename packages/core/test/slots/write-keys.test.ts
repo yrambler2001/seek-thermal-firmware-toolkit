@@ -13,6 +13,7 @@ import { buildBankPayload, setAcceptSum } from '../../src/image/bank.js';
 import { IMAGE_MAGIC, LENGTH_OFFSET, parseImageHeader } from '../../src/image/header.js';
 import { getProfile } from '../../src/profiles/registry.js';
 import type { SlotKey } from '../../src/profiles/types.js';
+import { unreadSlotBlock } from '../../src/workflows/device-info.js';
 import type { DeviceState, SlotState } from '../../src/workflows/types.js';
 import { APPLICATION_KEY_PAIRS } from '../../src/slots/application-pairs.js';
 import {
@@ -27,7 +28,9 @@ import {
   deriveWriteKeys,
   gateWithoutAppKeys,
   slotWriteRefusal,
+  stagesUnderCameraKey,
   uploadLandsUnder,
+  writeBannerOf,
   type KeyRef,
   type WriteKeys,
 } from '../../src/slots/write-keys.js';
@@ -92,6 +95,7 @@ interface CameraOptions {
   readonly deviceKey?: Uint8Array | null;
   readonly appKeysBlock?: string | null;
   readonly flashBlockedBy?: readonly string[];
+  readonly classicWriterBlockedBy?: readonly string[];
 }
 
 /** A DeviceState carrying what the derivation reads, and nothing else. */
@@ -129,6 +133,7 @@ function camera(options: CameraOptions = {}): DeviceState {
         : { name: 'per-device key', key: deviceKey, programmed: true },
     canFlash: (options.flashBlockedBy ?? []).length === 0,
     flashBlockedBy: options.flashBlockedBy ?? [],
+    classicWriterBlockedBy: options.classicWriterBlockedBy ?? [],
     appKeysBlock: options.appKeysBlock ?? null,
     plainChain: false,
   } as unknown as DeviceState;
@@ -512,6 +517,99 @@ function plainChainCamera(overrides: Partial<DeviceState> = {}): DeviceState {
     ...overrides,
   } as unknown as DeviceState;
 }
+
+describe('the page gate is camera-wide only: a bank the read could not read, or the upgrade target, refuses no other bank', () => {
+  /** The 2014 chain camera with bank B unread: its reason as the flash gate records it. */
+  function withUnreadB(): DeviceState {
+    const base = plainChainCamera();
+    const unreadB = slot({
+      key: 'b',
+      name: 'slot B',
+      present: false,
+      unread: true,
+      reason: 'the window would not arm',
+      plain: null,
+    });
+    const slots = [...base.slots.filter((s) => s.key !== 'b'), unreadB];
+    return {
+      ...base,
+      slots,
+      byKey: new Map(slots.map((s) => [s.key, s])),
+      flashBlockedBy: [unreadSlotBlock(unreadB)],
+    };
+  }
+
+  it('a bank the read could not read does not put the banner on the camera: A and R stay writable', () => {
+    const state = withUnreadB();
+    expect(state.flashBlockedBy).toEqual(['slot B could not be read (the window would not arm)']);
+    expect(gateWithoutAppKeys(state)).toBeNull();
+    expect(slotWriteRefusal(state)).toBeNull();
+  });
+
+  it('the upgrade target that cannot be predicted does not refuse the slot page: the bank is named by the acknowledgement', () => {
+    const reason = 'the slot an upgrade would write could not be determined';
+    const state = plainChainCamera({
+      boot: null,
+      flashBlockedBy: [reason],
+      upgradeBlockedBy: [reason],
+      canFlash: false,
+    });
+    expect(gateWithoutAppKeys(state)).toBeNull();
+    expect(slotWriteRefusal(state)).toBeNull();
+  });
+
+  it('a reason the upgrade flow does not own still refuses the camera, even beside an upgrade reason', () => {
+    const reason = 'the slot an upgrade would write could not be determined';
+    const state = plainChainCamera({
+      boot: null,
+      flashBlockedBy: [reason, 'the camera reports a build this page does not write'],
+      upgradeBlockedBy: [reason],
+      canFlash: false,
+    });
+    expect(gateWithoutAppKeys(state)).toMatch(
+      /the camera reports a build this page does not write/,
+    );
+    expect(gateWithoutAppKeys(state)).not.toMatch(/an upgrade would write/);
+  });
+
+  it('the classic writer’s key-table and 2014-only reasons do not refuse the 2016 line, which stages from its own image', () => {
+    const reasons = [
+      "this camera's key table could not be confirmed",
+      'the write path on this line is implemented only for the 2014 plaintext chain',
+      '2016 Compact Pro does not support flashing: the classic write path has nothing for its banks',
+    ];
+    const state = plainChainCamera({
+      version: '1.0.3.0',
+      plainChain: false,
+      flashBlockedBy: reasons,
+      classicWriterBlockedBy: reasons,
+      canFlash: false,
+    });
+    expect(stagesUnderCameraKey(state)).toBe(false);
+    expect(gateWithoutAppKeys(state)).toBeNull();
+    expect(slotWriteRefusal(state)).toBeNull();
+    expect(writeBannerOf(state)).toBeNull();
+  });
+
+  it('the same two reasons still refuse a camera whose writes are sent under its own key (Key A staging)', () => {
+    const reasons = [
+      "this camera's key table could not be confirmed",
+      'the write path on this line is implemented only for the 2014 plaintext chain',
+    ];
+    const state = camera({ flashBlockedBy: reasons, classicWriterBlockedBy: reasons });
+    expect(stagesUnderCameraKey(state)).toBe(true);
+    expect(slotWriteRefusal(state)).toMatch(/key table could not be confirmed/);
+    expect(writeBannerOf(state)).toMatch(/key table could not be confirmed/);
+  });
+
+  it('a camera whose whole read failed still refuses every bank, and says so', () => {
+    const state = plainChainCamera({
+      flashBlockedBy: ['this camera could not be read'],
+      canFlash: false,
+    });
+    expect(slotWriteRefusal(state)).toMatch(/this camera could not be read/);
+  });
+});
 
 describe('the 2014 plaintext chain: no key is derived, so no bank is refused for one', () => {
   it('derives no upload key, and the write verdict is open', () => {

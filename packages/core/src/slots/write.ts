@@ -29,6 +29,7 @@ import type { CipherProfile, WindowEntry } from '../profiles/types.js';
 import {
   isCancelled,
   slotByKey,
+  type DeviceState,
   type SlotState,
   type WorkflowContext,
 } from '../workflows/types.js';
@@ -41,13 +42,19 @@ import {
   type SlotEntry,
   type SlotFlashInput,
   type SlotFlashPlan,
+  type SlotInputKind,
   type SlotKey,
   type SlotsReport,
   type StagingForm,
   type StoredForm,
 } from './types.js';
 import { ffKeyBStoredOf } from './ff-form.js';
-import { deriveWriteKeys, slotWriteRefusal, uploadLandsUnder } from './write-keys.js';
+import {
+  deriveWriteKeys,
+  gateWithoutAppKeys,
+  slotWriteRefusal,
+  uploadLandsUnder,
+} from './write-keys.js';
 import {
   assertImageShape,
   bankImageOf,
@@ -227,9 +234,7 @@ function ffStagingWarnings(args: {
       '(TESTING.md 42.12). The page does not claim the camera boots it.',
   ];
   if (basis === 'camera') {
-    warnings.push(
-      `The camera's own answers say it runs the 16 Hz FF build: ${running.why}.`,
-    );
+    warnings.push(`The camera's own answers say it runs the 16 Hz FF build: ${running.why}.`);
   } else {
     warnings.push(
       `The camera's own answers did not say which build it runs (${running.why}). You said it runs ` +
@@ -325,6 +330,7 @@ export function prepareSlotFlash(
         { length: input.bytes.length, bank: bankBytes },
       );
     }
+    refuseOnCameraWide(state, input.kind);
     const payload = input.bytes.slice();
     /* The 1.3.0.8 FF build's staged form is told by its bytes: both of the app's accepts pass
      * it and it folds to an image carrying the FF key pair. Sent as given all the same; this
@@ -408,6 +414,7 @@ export function prepareSlotFlash(
         `image is ${String(input.bytes.length)} B, longer than the ${entry.name} bank (${hex(bankBytes)} B)`,
       );
     }
+    refuseOnCameraWide(state, input.kind);
     const staged = stageImage(report, slot, entry.staging, input, cipher, options);
     body = {
       payload: staged.staged.payload,
@@ -491,6 +498,19 @@ interface StagedImage {
   readonly warnings?: readonly string[];
   /** For an FF image: how the running build was decided. */
   readonly ffRunning?: FFRunningBasis;
+}
+
+/**
+ * The camera-wide refusal, raised before a payload is built or sent. A decrypted image is staged under the
+ * camera's keys where the line uses them, so it is refused for everything the page's banner names
+ * (`slotWriteRefusal`: the gate and the upload-key derivation). A raw payload is sent as given: no key of this
+ * write builds it, so only the camera's blocking reasons (the gate) refuse it. The page refuses no less than
+ * the writer, and the CLI and the frame-rate patch refuse what the page refuses.
+ */
+function refuseOnCameraWide(state: DeviceState, kind: SlotInputKind): void {
+  const refusal = kind === 'raw' ? gateWithoutAppKeys(state) : slotWriteRefusal(state);
+  if (refusal !== null)
+    throw slotRefused(`${refusal}. Nothing was written.`, { blockedBy: state.flashBlockedBy });
 }
 
 function stageImage(
@@ -664,13 +684,14 @@ export async function flashSlot(
       key: plan.key,
     });
   }
-  if (plan.staging === 'key-a-ciphertext') {
-    const refusal = slotWriteRefusal(report.state);
-    if (refusal !== null) {
-      throw slotRefused(`${refusal}. Nothing was written.`, {
-        blockedBy: report.state.flashBlockedBy,
-      });
-    }
+  /* The camera-wide refusal the page's banner shows (`slotWriteRefusal`) binds every staging, so the
+   * writer sends nothing the page refuses. On the lines that stage under their own image it names only
+   * the camera's real blocking reasons (the classic writer's reasons are excluded there). */
+  const refusal = slotWriteRefusal(report.state);
+  if (refusal !== null) {
+    throw slotRefused(`${refusal}. Nothing was written.`, {
+      blockedBy: report.state.flashBlockedBy,
+    });
   }
 
   const { reporter } = ctx;

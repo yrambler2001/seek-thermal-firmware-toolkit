@@ -189,6 +189,12 @@ export function slotActionGate(args: {
   readonly action: SlotAction;
   readonly connected: boolean;
   readonly busy: boolean;
+  /**
+   * The camera-wide refusal the page's banner shows (core's `writeBannerOf`), or null. A write that the
+   * banner refuses is off on every bank, so the row's control must be off too: a row that offers an action
+   * the banner says cannot be written is a contradiction on the page.
+   */
+  readonly cameraRefusal?: string | null;
 }): ActionGate {
   const support = slotActionSupport(args.entry, args.action);
   if (!support.supported) return { enabled: false, reason: support.reason };
@@ -197,6 +203,13 @@ export function slotActionGate(args: {
     return { enabled: false, reason: 'Another operation is running — wait for it to finish.' };
   }
   if (args.view === null) return { enabled: false, reason: 'Read the slots first.' };
+  if (args.action !== 'dump' && (args.cameraRefusal ?? null) !== null) {
+    return {
+      enabled: false,
+      reason:
+        'This camera cannot be written from here, for the reason in the banner above. Nothing is sent.',
+    };
+  }
   if (args.action !== 'dump' && args.view.state === null) {
     return {
       enabled: false,

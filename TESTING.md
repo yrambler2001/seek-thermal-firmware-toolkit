@@ -7144,3 +7144,61 @@ Run here (targeted, no camera, no emulator): `npx vitest run --project web` 29 f
 **Not run here.** The real bench camera (`e2e/lib/bench` is the bench agent's); the real-camera versions of these pages; the whole vitest suite (targeted files only, as the brief says); the emulator-backed core suites other than the ones listed (the core pipeline emulator tests need `SEEK_EMU_DIR` and were not run for this change); the docs bundle was not rebuilt.
 
 **Commit.** See the commit on `worktree-agent-a1e044e0448116f64`; the plan's Log has the entry.
+
+### 42.19 The slots page: one verdict table, the camera-wide banner agrees with the row controls, and the writer refuses what the page refuses (2026-10-18)
+
+**What was checked.** The page's verdict for each of the 28 subjects of the matrix in 42.1, written down once in `e2e/lib/slots-expectations.ts`. Per subject: the verdict for each bank (writable, or refused with the reason the page gives), the camera-wide banner, the frame-rate row action, and where the page refuses a bank's own image written back, that refusal. The table is read by:
+
+- `packages/core/test/slots/page-expectations.emulator.test.ts`: boots each of the 26 subjects that have an emulator entry (the two others, Compact 4.8.1.7 std and Compact PRO 1.0.3.2 FF-FF, are bench-only and listed with their source). Per row it checks the build, the banner, each bank's write verdict (`prepareSlotFlash` of the booted bank's decrypted image; pure, nothing is sent), the frame-rate offer on every bank that holds an image (and a reason on every bank that does not), the own-image refusal where the table names it, and that a write to the booted bank without the acknowledgement is refused with the request ledger unchanged.
+- `e2e/slots-quality.e2e.ts` (`npm run e2e:slots:quality`): Chrome on three emulated cameras (Compact 1.3.0.0, 4.8.2.1, PRO 1.0.3.0). Banner, flash controls, Make N FPS, and the empty bank's reason in its row.
+- `packages/web/src/views/SlotsView.verdicts.test.tsx` and `SlotsView.test.tsx`: row controls against the banner, the keys panel per line, the frame-rate reason on an empty bank, and the device info's bank names.
+- `packages/cli/test/slots.test.ts`: the 2016 keystream line's list and JSON.
+- Core unit: `write-keys.test.ts`, `camera-refusal.test.ts` (the writer refuses on the camera-wide reason before a payload is built), `fps-patch-sites.test.ts` (the patch refuses when the stock bytes are not at its edit sites, naming the site, and changes no byte).
+
+**Results (measured, on the merged branch, `SEEK_EMU_DIR` set where marked).**
+
+| Suite | Result |
+| --- | --- |
+| core `page-expectations.emulator` (new, 26 subjects) | 184 of 184 pass |
+| core `corpus-locked.emulator` / `corpus-modern.emulator` | 299 of 299 / 257 of 257 pass |
+| core `accept` / `write` / `empty-bank` / `fps-patch` / `dump` emulator | 6, 49, 40, 3 and 12 pass, all of them |
+| CLI `slots.emulator` / `slots-empty.emulator` | 23 of 23 / 7 of 7 pass |
+| core unit (`test/slots`, `test/workflows`, FPS and line-gate preservation, the three new unit files) | 661 pass, 475 skipped (the emulator files, run above with `SEEK_EMU_DIR`) |
+| web (30 files) | 332 of 332 pass |
+| CLI `slots.test.ts` | 100 of 100 pass |
+| Chrome `slots-view.e2e` (existing; 1.3.0.0 bench and 4.8.2.1 subjects, plus the two refusals below 0.8.0.0) | 12 of 12 pass |
+| Chrome `slots-quality.e2e` (new, three cameras) | 12 of 12 pass |
+| typecheck: core, cli, web app, web node, tools, e2e | clean |
+
+The page-expectations table test went red before the fixes below: its first run was 173 pass and 10 fail (the banner on seven rows: 0.8.0.0, 1.3.0.8 FF, 4.16.1.7 FF and the four 2016 rows; two bank verdicts on 4.16.1.7 FF; and the 4.9.1.15 own-image case). It reached 184 of 184 after the fixes.
+
+**Defects found and fixed.**
+
+1. The banner said "No bank of this camera can be written from here" on the 2016 keystream line (Compact PRO 1.0.3.0 and 1.0.3.2, std and FF) and on the 1.3.0.8 FF build, while every bank was writable and the writes are proven on the emulator (corpus-locked). The reasons were the classic writer's (its key table, its 2014-only line, its profile's flash capability). The slot page stages those lines by their own form, so those reasons no longer refuse them (`stagesUnderCameraKey`, `classicWriterBlockedBy`).
+2. The banner said no bank could be written while the flash controls of every row stayed enabled (Compact 4.16.1.7 FF, where the upload-key derivation refuses every bank). The row controls now take the camera-wide refusal; Dump stays on (`slotActionGate`, `cameraRefusal`).
+3. A bank the read could not read put the camera-wide banner over banks A and R, which were writable. A bank's own read failure is per bank and no longer refuses the camera (`unreadSlotBlock`).
+4. The upgrade-target reasons (no predictable target, mode-0 chain, no upgrade selector) refused the slot page as a whole, though the page writes the bank it names through that bank's own window and handles an unnamed boot with the acknowledgement. They are kept out of the page gate (`upgradeBlockedBy`) and remain in the classic gate.
+5. The writer did not apply the camera-wide refusal on the plain, 2016 and FF stagings, so the CLI and the frame-rate patch could write what the page refused. `prepareSlotFlash` now refuses on it before a payload is built: a decrypted image on the refusal of the page (gate and derivation), a raw payload on the gate alone (a raw payload is sent as given, so the derivation does not build it).
+6. An empty or unread bank offered no frame-rate patch and said nothing. It now says the plan's reason ("bank B has no decrypted image to patch (it is empty)").
+7. The keys panel on the 2016 and FF lines said the write is "derived from the booted bank". It now says the image is written under the key pair it carries and the camera's keys are not used.
+8. The frame-rate refusal text said the table names "0.x" builds. It names none; the text now lists the builds the table holds.
+9. The device info said "Booted from slot B" and the table said "Bank B" for the same bank. The device info now uses the table's names; "Upgrade target" is labelled "(its own upgrade)", because the page does not write it.
+10. The Chrome spec `slots-view.e2e.ts` had expectations that predated the page's current copy (named-booted wording on the 2014 chain, the Make 16 FPS row action on 1.3.0.0, the decrypted read-back verdict on the Key A line, the "Not identified" refusal for a camera with no usable version, and the dialog wording). Its header named an npm script that does not exist. Both are corrected, and the spec's booted-bank reader accepts the header badge ("named booted") and not "not named booted".
+
+**Table corrections made from the first measured run.** Two rows were written from the notes and disagreed with the page once measured, and were corrected to the page's verdict: Compact 4.16.1.7 FF refuses all three banks (the application checks an upload under its own keys, and the derived key is neither of its pair, as the emulator's pinned gap already recorded), not only bank B; and Compact PRO 4.9.1.15 bank B accepts a picked image (the bench's rule, 42.5), while writing B back from its own image is refused. The owner should read both as the table's current record, not as a new decision.
+
+**Mutation checks.** Removing the classic-writer exclusion (`gateWithoutAppKeys` with no exclusion) makes `write-keys.test.ts` (1 test) and `slots.test.ts` (1 test) fail; restoring it passes. The page's first run, before the fixes, failed 10 rows (listed above).
+
+**Not run, not measured, or inferred.**
+
+- The real camera. The bench (agent C) may read the same table; nothing here touched the camera or the J-Link.
+- Chrome covers three cameras. Compact 1.3.0.8 FF and Compact 4.16.1.7 FF are image-only entries that need a donor boot, which the Chrome spec does not make; they are covered by the emulator table test.
+- The table does not cover the raw path and "Use the booted bank's image" as rows. They are covered by `corpus-locked`/`corpus-modern` (raw writes) and `empty-bank` (fill from the booted image), and their gating is the same `slotActionGate` as the other flash controls.
+- The own-image refusal is checked in core (`prepareSlotFlash`), not through the page.
+- The 16 Hz FF box and the camera's own answers (42.12) are covered by the existing unit suites, not by new ones here.
+- Inferred: the 2016 and FF lines do not need the classic writer's reasons. That follows from the code (the write path reads no camera key on those stagings) and from the emulator's proven writes on those lines; the owner should confirm it.
+- The raw path is refused on the gate but not on the upload-key derivation, which sends nothing in a raw write; the page is stricter (its raw control is off when the banner shows). This is recorded in `write.ts`.
+- `packages/core/src/preservation/fps-patch.ts` has a lint error (`FPS_OFFER_WITHHELD` in a ternary, no-unnecessary-condition). It is at HEAD and was not changed here.
+- The docs bundle (`docs/`) was not rebuilt.
+
+**Commit.** The slots-page work is commit `91581c5`, the spec fix `cff1e83`, and the merge of `refactor/all-firmware-profiles` (agent A's work) `5682c26`; this section and the plan's tick and Log line are in the commit that follows.

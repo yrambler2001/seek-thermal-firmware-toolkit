@@ -1589,6 +1589,32 @@ describe('the 2014 plaintext chain', () => {
     expect(text).toContain('none (plaintext)');
     expect(text).not.toContain('unknown key');
   });
+
+  /* The 2016 keystream line stages each image under the key pair it carries (TESTING.md 42.19): the classic
+   * writer's reasons (its key table, its 2014-only line, its profile flash capability) do not refuse it. The
+   * list and the JSON must agree with the page: no refusal, and no derived key claimed. */
+  it('the 2016 keystream line is not refused for the classic writer’s reasons, and the list claims no derived key', () => {
+    const base = onLockedPlain(reportOf({ booted: 'a' }));
+    const reasons = [
+      "this camera's key table could not be confirmed",
+      'the write path on this line is implemented only for the 2014 plaintext chain',
+      '2016 Compact Pro does not support flashing: the classic write path has nothing for its banks',
+    ];
+    const state = {
+      ...base.state,
+      version: '1.0.3.0',
+      plainChain: false,
+      keyTable: null,
+      flashBlockedBy: reasons,
+      classicWriterBlockedBy: reasons,
+      canFlash: false,
+    } as unknown as DeviceState;
+    const report: SlotsReport = { ...base, state };
+    expect(listResult(report).writeKeys).toMatchObject({ refused: null });
+    const text = writeKeyLines(report, false).join('\n');
+    expect(text).not.toContain('cannot be written');
+    expect(text).not.toContain('derived from the booted bank');
+  });
 });
 
 /* ==================================================================== *

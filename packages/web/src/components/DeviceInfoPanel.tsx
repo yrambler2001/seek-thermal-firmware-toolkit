@@ -24,6 +24,14 @@ import { Panel, PanelTitle } from './Panel';
 import { Prose } from './Prose';
 import { Alert } from './ui/alert';
 
+/**
+ * A bank's name as the slot table says it ("Bank A", "Recovery bank R"). The device info names a bank
+ * "slot A"; the same bank must carry the same name on the same page (TESTING.md 42.19).
+ */
+function bankLabel(slot: SlotState): string {
+  return slot.key === 'r' ? 'Recovery bank R' : `Bank ${slot.key.toUpperCase()}`;
+}
+
 function perDeviceKey(state: DeviceState): string | null {
   const slot = state.deviceKeySlot;
   if (slot === null) return null;
@@ -76,9 +84,13 @@ export function DeviceInfoPanel({ state }: DeviceInfoPanelProps): ReactElement {
     /* On the 2014 plaintext chain the name is the active-slot word's, not a boot record (TESTING.md 42.10). */
     [
       onPlaintextChain(state.profile, state.version) ? 'Named booted' : 'Booted from',
-      booted?.name ?? null,
+      booted === null ? null : bankLabel(booted),
     ],
-    ['Upgrade target', target === null ? null : `${target.name} at ${hexUp(target.address)}`],
+    /* The camera's own upgrade choice. This page writes the bank it is given, not this one. */
+    [
+      'Upgrade target (its own upgrade)',
+      target === null ? null : `${bankLabel(target)} at ${hexUp(target.address)}`,
+    ],
     ['Per-device key', perDeviceKey(state)],
   ];
 
@@ -121,7 +133,7 @@ export function DeviceInfoPanel({ state }: DeviceInfoPanelProps): ReactElement {
         <Alert tone="err">
           <p>
             <strong>
-              {`${orphans.map((slot) => slot.name).join(' and ')}${
+              {`${orphans.map(bankLabel).join(' and ')}${
                 orphans.length > 1 ? ' hold' : ' holds'
               } a valid firmware image encrypted with a key this camera's bootloader does not know.`}
             </strong>{' '}
@@ -136,8 +148,9 @@ export function DeviceInfoPanel({ state }: DeviceInfoPanelProps): ReactElement {
               <strong>
                 flashing through this page will produce another slot the bootloader cannot boot
               </strong>{' '}
-              — the camera will carry on running {booted?.name ?? 'the other slot'}. Writing the
-              slot directly with an SPI programmer or over SWD/J-Link is the way round it.
+              — the camera will carry on running{' '}
+              {booted === null ? 'the other bank' : bankLabel(booted)}. Writing the slot directly
+              with an SPI programmer or over SWD/J-Link is the way round it.
             </p>
           )}
         </Alert>

@@ -14,6 +14,7 @@ import {
   SLOT_BYTES,
   hexUp,
   onPlaintextChain,
+  writeBannerOf,
   type FpsPlan,
   type SlotInputKind,
   type SlotKey,
@@ -68,12 +69,13 @@ function fpsNote(plan: Extract<FpsPlan, { status: 'offer' }>): string {
 }
 
 /**
- * Why a bank offers no frame-rate patch, in the page's words, or null when there is nothing to say (no
- * image to patch, or a build the page does not support, which has its own banner). The words never say a
- * write "cannot be written": that banner belongs to the keys verdict alone.
+ * Why a bank offers no frame-rate patch, in the page's words, or null when there is nothing to say (a
+ * build the page does not support, which has its own banner, or an offer). Every bank that is not offered
+ * says why, an empty and an unread bank included: the plan's reason names the empty bank or the read that
+ * failed. The words never say a write "cannot be written": that banner belongs to the keys verdict alone.
  */
-function fpsOffNote(view: SlotView, plan: FpsPlan, supported: boolean): string | null {
-  if (!supported || view.content !== 'image' || plan.status === 'offer') return null;
+export function fpsOffNote(plan: FpsPlan, supported: boolean): string | null {
+  if (!supported || plan.status === 'offer') return null;
   return `Frame-rate patch not offered: ${plan.reason}`;
 }
 
@@ -168,6 +170,8 @@ export function SlotTable({
 }: SlotTableProps): ReactElement {
   /* On the 2014 plaintext chain the booted bank is the camera's active-slot word, so the words say "named". */
   const byWord = onPlaintextChain(report.state.profile, report.state.version);
+  /* The camera-wide refusal the banner shows, if any: it turns every flash control off (see slotActionGate). */
+  const cameraRefusal = writeBannerOf(report.state);
   return (
     <Table>
       <TableCaption>
@@ -191,7 +195,7 @@ export function SlotTable({
           const key = entry.key;
           const risk = writeRisk(report, key);
           const gate = (action: 'dump' | 'flash-plain' | 'flash-raw') =>
-            slotActionGate({ entry, view, action, connected, busy });
+            slotActionGate({ entry, view, action, connected, busy, cameraRefusal });
           const dumpGate = gate('dump');
           const plainGate = gate('flash-plain');
           const rawGate = gate('flash-raw');
@@ -354,9 +358,9 @@ export function SlotTable({
                       </Button>
                     </Action>
                   ) : (
-                    fpsOffNote(view, fps, supported) !== null && (
+                    fpsOffNote(fps, supported) !== null && (
                       <span className="block text-[0.75rem] leading-snug text-muted-foreground">
-                        {fpsOffNote(view, fps, supported)}
+                        {fpsOffNote(fps, supported)}
                       </span>
                     )
                   )}

@@ -1,6 +1,6 @@
 /* ==================================================================== *
- * The Firmware slots page, in Chrome, on emulated cameras — `npm run
- * e2e:slots` (`vitest run --config e2e/vitest.config.ts slots-view.e2e`).
+ * The Firmware slots page, in Chrome, on emulated cameras. Run it with
+ * `npx vitest run --config e2e/vitest.config.ts slots-view.e2e` (there is no npm script for it).
  *
  * EMULATOR ONLY. This spec refuses to run with SEEK_E2E_TARGET=camera: the
  * slots page can write a bank, and every bank write here goes to an emulated
@@ -58,7 +58,6 @@ import {
   pickImage,
   preparedView,
   readSlots,
-  rowOf,
   slotsAlerts,
   snap,
   summaryRows,
@@ -107,6 +106,8 @@ interface SupportedCase {
    * dumping the bank back and comparing the decrypted bytes instead.
    */
   readonly comparesReadBack: boolean;
+  /** The frame-rate row action this build offers on a bank that holds an image (its rate), if any. */
+  readonly makeFps?: number;
 }
 
 interface OutOfScopeCase {
@@ -150,6 +151,7 @@ const SUPPORTED: readonly SupportedCase[] = [
     version: '1.3.0.0',
     layout: LEGACY_LAYOUT,
     comparesReadBack: true,
+    makeFps: 16,
   },
 ];
 
@@ -212,11 +214,32 @@ function versionCell(row: BankRowView): string {
   return row.firmware.split(' ')[0] ?? '';
 }
 
-/** The verdict the page must show for a write on this build (see `comparesReadBack`). */
+/**
+ * The verdict the page must show for a write on this build (see `comparesReadBack`). On the Key A line the
+ * page compares the bank's decrypted read-back with the image it staged (core's write-verify wording: "the
+ * bank decrypts to the expected image"), not the raw bytes, which the device re-encrypts.
+ */
 function verdictFor(subject: SupportedCase): string {
   return subject.comparesReadBack
     ? 'the bank reads back as written.'
-    : 'the read-back was taken but not compared';
+    : 'the bank decrypts to the expected image';
+}
+
+/**
+ * The bank table's rows. On the 2014 plain chain the page names the booted bank "named booted" (its
+ * active-slot word, not a boot record: TESTING.md 42.10), so the row is booted for this spec too.
+ */
+async function rowsOf(page: Parameters<typeof bankRows>[0]): Promise<BankRowView[]> {
+  const rows = await bankRows(page);
+  const named = await page.$$eval(SLOTS_TABLE_ROWS, (trs) =>
+    /* The booted bank's badge is the line "named booted"; every other bank's is "not named booted". */
+    trs.map((tr) =>
+      (tr.querySelector('th')?.innerText ?? '')
+        .split('\n')
+        .some((line) => line.trim() === 'named booted'),
+    ),
+  );
+  return rows.map((row, index) => ({ ...row, booted: row.booted || (named[index] ?? false) }));
 }
 
 /**
@@ -289,7 +312,7 @@ for (const subject of SUPPORTED) {
           say(`slots: ${status}`);
           expect(status, await w.logTail('slotsrun')).toMatch(/^Read\. 3\/3 banks read/);
 
-          const rows = await bankRows(t.page);
+          const rows = await rowsOf(t.page);
           expect(rows.map((row) => row.name)).toEqual(['Bank A', 'Bank B', 'Recovery bank R']);
           for (const row of rows) {
             expect(row.address, `${row.name} address`).toBe(subject.layout[row.letter]);
@@ -318,6 +341,9 @@ for (const subject of SUPPORTED) {
               'Flash decrypted image…',
               'Flash raw bytes…',
               ...(holdsImage ? [] : ["Use the booted bank's image"]),
+              ...(holdsImage && subject.makeFps !== undefined
+                ? [`Make ${String(subject.makeFps)} FPS`]
+                : []),
             ]);
             for (const button of row.buttons) {
               expect(button.enabled, `${row.name}: ${button.label}`).toBe(true);
@@ -360,7 +386,8 @@ for (const subject of SUPPORTED) {
           if (emu === null) throw new Error('the emulator target has no bus');
           for (const letter of ['a', 'b', 'r'] as const) {
             const name = letter.toUpperCase();
-            const row = await rowOf(t.page, letter);
+            const row = (await rowsOf(t.page)).find((candidate) => candidate.letter === letter);
+            if (row === undefined) throw new Error(`the bank table has no row for ${name}`);
             expect(
               row.buttons.find((button) => button.label === 'Dump')?.enabled,
               `${name} Dump`,
@@ -406,7 +433,7 @@ for (const subject of SUPPORTED) {
           if (bootedPlain === null) throw new Error('the dump test gave no booted image');
           const plain: Uint8Array = bootedPlain;
           await readSlots(w, t.page);
-          const target = targetOf(await bankRows(t.page));
+          const target = targetOf(await rowsOf(t.page));
           const name = target.name;
           const image = writeScratch(scratch, bootedNameOf(), plain);
 
@@ -474,14 +501,15 @@ for (const subject of SUPPORTED) {
           if (bootedPlain === null) throw new Error('the dump test gave no booted image');
           const plain: Uint8Array = bootedPlain;
           await readSlots(w, t.page);
-          const rows = await bankRows(t.page);
+          const rows = await rowsOf(t.page);
           const booted = bootedOf(rows);
           const recovery = rows.find((row) => row.letter === 'r');
           if (recovery === undefined) throw new Error('the table has no recovery row');
 
           /* The note under each flash action says why it asks for more. */
-          expect(booted.actionsText).toContain(
-            'Booted now: writing it asks for an extra confirmation.',
+          /* "Named booted by the active-slot word" on the 2014 plain chain (TESTING.md 42.10), "Booted now" elsewhere. */
+          expect(booted.actionsText).toMatch(
+            /(Booted now|Named booted by the active-slot word): writing it asks for an extra confirmation\./,
           );
           expect(recovery.actionsText).toContain(
             'Recovery bank: writing it asks for an extra confirmation.',
@@ -508,7 +536,7 @@ for (const subject of SUPPORTED) {
               (el) => (el as HTMLElement).innerText,
             );
             expect(alertText, `${name}: the dialog says why`).toMatch(
-              row.letter === 'r' ? /recovery bank/ : /boots now/,
+              row.letter === 'r' ? /recovery bank/ : /boots now|active-slot word names/,
             );
             await t.page.click(ACK_BOX);
             expect(await confirmEnabled(w, name), `${name}: Yes is on once ticked`).toBe(true);
@@ -571,7 +599,7 @@ for (const subject of SUPPORTED) {
           await expectWrittenImage(t, 'r', plain);
           const status3 = await readSlots(w, t.page);
           expect(status3).toMatch(/^Read\. 3\/3/);
-          const rows = await bankRows(t.page);
+          const rows = await rowsOf(t.page);
           expect(rows.map((row) => row.name)).toEqual(['Bank A', 'Bank B', 'Recovery bank R']);
           expect(await refusalsOf(t)).toEqual([]);
         },
@@ -618,7 +646,13 @@ for (const subject of OUT_OF_SCOPE) {
           expect(status).toMatch(/^Refused/);
 
           const alerts = await slotsAlerts(t.page);
-          const refusal = alerts.find((text) => text.includes('Refused — nothing was armed'));
+          /* A build below 0.8.0.0 is "Refused — nothing was armed"; a camera with no usable version is
+           * "Not identified: this page cannot tell which build the camera runs" (SlotsView RefusalAlert). */
+          const refusal = alerts.find(
+            (text) =>
+              text.includes('Refused — nothing was armed') ||
+              text.includes('Not identified: this page cannot tell which build'),
+          );
           expect(refusal, `the refusal is shown: ${alerts.join(' || ')}`).toBeDefined();
           if (subject.reason === 'predates') {
             expect(refusal ?? '').toContain(`firmware ${subject.version}`);
@@ -626,7 +660,7 @@ for (const subject of OUT_OF_SCOPE) {
           } else {
             /* The page cannot name a build that never answers its version: say so, and
              * pin that it does not guess one. */
-            expect(refusal ?? '').toContain('did not report its firmware version');
+            expect(refusal ?? '').toContain('no usable firmware version');
             expect(refusal ?? '').not.toContain(subject.version);
           }
           say(

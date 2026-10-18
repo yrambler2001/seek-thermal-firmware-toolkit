@@ -408,8 +408,9 @@ export function planFpsPatch(image: Uint8Array, cameraVersion: string | null): F
   return {
     status: 'refused',
     reason:
-      'this image is not in the frame-rate patch table (the stock builds the table names are the ' +
-      'Compact 8 Hz 0.x to 1.3.x and 4.8.x images, the 16 Hz FF builds, and the Compact PRO 9 Hz images)',
+      'this image is not in the frame-rate patch table, so no frame-rate patch is made for this build. ' +
+      'The table names the Compact 1.2.0.0, 1.3.0.0, 1.3.0.8 (8 Hz and 16 Hz FF), 4.8.1.7, 4.8.1.9 and ' +
+      '4.16.1.7 FF builds and the Compact PRO 1.0.3.x and 4.9.x builds; no other build has an entry',
   };
 }
 
