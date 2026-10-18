@@ -213,6 +213,7 @@ describe('the stages: which entries are offered (pinned, so a change is delibera
       'compact_32k-4.8.1.9-to16',
       'compact_32k-4.8.1.9-to32',
       'compact_32k-4.8.2.1-to16',
+      'compact_32k-4.8.2.1-to32',
     ]);
     for (const id of FPS_STAGE_ONE_IDS) expect(FPS_STAGE_TWO_IDS.has(id), id).toBe(false);
   });

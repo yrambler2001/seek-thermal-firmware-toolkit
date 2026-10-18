@@ -125,6 +125,7 @@ export const FPS_STAGE_TWO_IDS: ReadonlySet<string> = new Set([
   'compact_32k-4.8.1.9-to16',
   'compact_32k-4.8.1.9-to32',
   'compact_32k-4.8.2.1-to16',
+  'compact_32k-4.8.2.1-to32',
 ]);
 
 /** Why an entry outside stages one and two is not offered yet. Null for an offered entry. */

@@ -53,9 +53,9 @@ const CONFIRM_LABEL = 'Yes — patch Bank A';
 const BANK_BYTES = 0x10000;
 const CHUNK_BYTES = 64;
 const CHUNK_SLACK = 64;
-/** The stock 4.8.2.1 image: its length, and the bytes the 16 Hz patch changes (the dialog's count). */
+/** The stock 4.8.2.1 image: its length, and the bytes the 32 Hz patch changes (the dialog's count, TESTING.md 42.24). */
 const IMAGE_BYTES = 42680;
-const PATCH_BYTES = 11;
+const PATCH_BYTES = 13;
 
 if (MODE !== 'i-understand' && MODE !== 'dry-run') {
   process.stderr.write(
@@ -116,7 +116,7 @@ describe.skipIf(MODE !== 'i-understand' && MODE !== 'dry-run')(
       const approval = await approveWrite('camera', () =>
         Promise.resolve({
           describe:
-            'Make 16 FPS on bank A: the page saves bank A as stored and decrypted, then writes the patched image (one 64 KiB bank) and reads it back. No reset.',
+            'Make 32 FPS on bank A: the page saves bank A as stored and decrypted, then writes the patched image (one 64 KiB bank) and reads it back. No reset.',
         }),
       );
       if (MODE === 'i-understand' && !approval.approved) {
@@ -154,7 +154,7 @@ describe.skipIf(MODE !== 'i-understand' && MODE !== 'dry-run')(
       }
     });
 
-    it('offers "Make 16 FPS" on bank A and states the plan in its dialog', async () => {
+    it('offers "Make 32 FPS" on bank A and states the plan in its dialog', async () => {
       const handle = live();
       const rows = await bankRows(handle.page);
       const a = rows.find((row) => row.letter === 'a');
@@ -164,7 +164,7 @@ describe.skipIf(MODE !== 'i-understand' && MODE !== 'dry-run')(
       expect(
         fps.map((button) => button.label),
         'the frame-rate offer on bank A',
-      ).toEqual(['Make 16 FPS']);
+      ).toEqual(['Make 32 FPS']);
       expect(fps[0]?.enabled, 'the offer is on').toBe(true);
       await snap(handle.page, SHOT_DIR, 'fps-bench-before');
 
@@ -176,9 +176,11 @@ describe.skipIf(MODE !== 'i-understand' && MODE !== 'dry-run')(
         (element) => (element as HTMLElement).innerText,
       );
       say(`dialog: ${dialog.replace(/\s+/g, ' ').slice(0, 700)}`);
-      expect(dialog, 'the dialog names the rate change').toContain('16 Hz instead of 8 Hz');
+      expect(dialog, 'the dialog names the rate change').toContain('32 Hz instead of 8 Hz');
       expect(dialog, 'the dialog names the build').toContain('holds firmware 4.8.2.1');
-      expect(dialog, 'the dialog names the bytes').toContain(`changes ${String(PATCH_BYTES)} byte(s)`);
+      expect(dialog, 'the dialog names the bytes').toContain(
+        `changes ${String(PATCH_BYTES)} byte(s)`,
+      );
       await snap(handle.page, SHOT_DIR, 'fps-bench-dialog');
       if (MODE === 'dry-run') {
         await handle.wizard.click(CONFIRM_DIALOG, 'Cancel');

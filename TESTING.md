@@ -7573,3 +7573,144 @@ window for `0x14060000..0x1406FFFF` (it is filled with 0xFF and recorded as a ga
   the factory form needs the raw upload described in section 6.
 - The J-Link could not attach to the target from this session (section 4). A halted read is still the strongest check of the
   restore; the owner may want to look at the probe's target cable.
+
+### 42.24 The Compact XR 4.8.2.1 at 32 Hz: one capture per published frame, measured on the XR, and offered (2026-10-18)
+
+**Summary.** `compact_32k-4.8.2.1-to32` makes the steady command page publish every capture as it is delivered: page 13 is one
+substep, a copy with LAST, where stock has four captures (seed, accumulate, accumulate, mean4) and 16 Hz has two (seed, mean2).
+Measured on the owner's Compact XR 4.8.2.1 (serial `1E2A50YZ7628`, IP mode 9): steady interval 31.07 to 31.25 ms (32.0 to 32.2 Hz,
+stock 124.3 ms, 16 Hz 62.1 ms), one capture per published frame, no frozen pairs, and a picture that matches stock (same level,
+same spread, same render). Six runs: three written with the raw bank path, three with the app's own `seek-fw slots patch-fps`.
+The page now offers "Make 32 FPS" on the 4.8.2.1 image (the highest target; the 16 Hz entry stays in the table). A first form
+that copied with param 0x20 published an over-range picture and was rejected (section 6). The unit is restored: bank A is the
+factory Key A form, the whole flash is byte-identical to the owner's dump in a USB re-dump and in a halted J-Link read, and both
+switch channels are on.
+
+**Tags.** [measured] was read on the camera, the emulator or a file; [source] was read off the firmware file named; [inferred]
+follows from those and was not measured.
+
+**1. The source (what a one-substep page does).**
+- [source] `FW-V1/targets/compact_xr_8hz_4_8_2_1/docs/batch_reports/BATCH_227_report.md` 2.4 and 2.5 (the reconstructed ISR
+  walker, the reviewed decode): per DMA chunk the ISR runs `g_frame_dispatch_block.line_handler[chunk_op & 0x7F]` on the
+  current substep, only when `param & 0x20` is set; the source is chosen by `param & 0x1F` (0 to 4: the current line buffer).
+- [source] The same report 2.5: when the substep's bit 7 (LAST) is set, the ISR calls `stream_push_chunk()`; the substep cursor
+  advances once per capture; at the end of the page `page_index = next_line` and `substep = reload`. The `header_sent == 0`
+  case with LAST resets the cursor to 0 (a no-op for a one-substep page).
+- [source] One-substep pages are valid: `g_telemetry_rows` pages 0 to 10 are one-substep pages, each with LAST (for example page 0,
+  `{0x26, 0x81, 0x04, 0x02}`: `frame_chunk_copy`, LAST), and mode 4's one page is one step (`include/fw_types.h`, `src/data_unattributed.c`).
+- [source] `frame_chunk_copy` (slot 1, `src/frame_chunk_ops_target.c` 642) is one `mem_copy_flashaware` of one chunk (0x680 bytes).
+  It reads no destination, so nothing carries from one capture to the next. The 1.3.0.8 and 4.8.1.x 32 Hz blocks froze because
+  an op read state that only a dropped op writes, and the 1.3.0.0 one-step form alternated because op 9 subtracts the previous
+  output (`docs/FPS_PATCH_LINE_STEPS.md` sections 3 and 4). Copy has neither dependency.
+- [source + measured] The substep cursor moves on once per capture: the walker advances it on the second half of each capture
+  (batch 227 2.5), and the stock 4-substep page publishes every 4 captures (42.23 item 4: 104 to 111 captures per frame).
+- [source] Stock page 13 (68 bytes at image `0x90F2`): `04 0d 0d 00 | 23 07 00 01 | 23 08 00 01 | 23 08 00 01 | 20 8a 03 01 | 00 x48`.
+  The count is 4, the next and alt pages are 13 (a self-loop), gpio 1 on every substep.
+
+**2. The candidate (the bytes).** Two forms were built. Both: count `04 -> 01` at `0x90F2`; the substeps at `0x90F6..0x9105`
+become one substep and zeros; the acceptance-sum word at `0x0238` moves as the patcher computes it (`0x239..0x23B` change).
+- Form 1 (rejected): substep `20 81 03 01` (copy, LAST, param 0x20, the terminator's source selection). Patched image
+  `d6cea626...`, 17 changed bytes (14 image, 3 sum).
+- Form 2 (offered): substep `23 81 03 01` (copy, LAST, param 0x23, as the stock seed and accumulates). Patched image
+  `d64d91b0fa87f699c32c255b2365db3e9308c6d783b0c95b48ab31f9624c10d5` (42,680 bytes), 16 changed bytes (13 image, 3 sum). The
+  page's dialog counts the 13 image bytes. Gpio 1 as stock: the blade is not commanded per frame in steady state [inferred from
+  the gpio codes, as 42.23].
+- The table: `FW-V1/emu/fps_patch.py` `compact_32k-4.8.2.1-to32` (evidence in the comment); `packages/core/src/preservation/fps-patch-table.ts`
+  (the port, same edits and hashes); the differential fixture `fps-patch-python.json` gains the 32 Hz output of the 4.8.2.1 image.
+
+**3. Emulator (FW-V1, `fps_patch_tests.py --only compact-4.8.2.1`, `fps_patch_unit_tests.py`).**
+- Stock 8.065 Hz, form 2 32.258 Hz (ratio 4.000, 0.000 %), not frozen, no alternation, bytes as the table. Form 1 also 32.258 Hz.
+- The target band (0.5 %) is not applicable here: the emulator reads stock 8 Hz as 8.065, so 32 Hz nominal reads 32.26 (+0.8 %), the
+  same offset the 16 Hz row shows (16.129). The test runs with no `--expect`; the 1 % ratio is the check.
+- `fps_patch_unit_tests.py`: 67 of 67 (the 4.8.2.1 16 and 32 Hz patches each land on their own sha256; the step lists are pinned).
+- The emulator does not model the sensor (EMULATOR.md 31.2), so the picture was judged on the bench only.
+
+**4. The unit: the J-Link and the halted read (before any write).**
+- The J-Link attached this time, after one channel 1 cycle (`switch.js cycle 1 3000`): `jlink-runner.js mcu-check` identified a
+  Cortex-M4 (`E000ED00 = 410FC241`). 42.23 could not attach; this session could. [measured]
+- `dump-spifi-4m-halted` (halted, whole 4 MiB, 0x14000000): byte-identical to the owner's dump (sha256 `fb1cb1f5…`, 0 differing
+  bytes, including the 0x14060000 block, which is 0xFF in both). Kept as `xr-halted-G1.bin`. [measured]
+- `seek-fw dump` (USB, read-only): identical to the owner's dump (0 bytes differ). Kept as `usb-dump-G0/`. [measured]
+- Info before: slot A booted, Key A, bootable; slot B and R the same image; bank A raw `0476541b…`.
+
+**5. Bench measurements (Compact XR 4.8.2.1, IP mode 9, `e2e/lib/bench/compact-fps`, 20 s each; `alive.py`, `png.py`).**
+
+| run | image in bank A | fps, all frames | thermal (type 3) fps | steady interval | captures per frame (deltas: count) | frozen pairs | body mean (median) | halfwords changed per frame (median) |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| stock 1 / 2 / 3 | stock `f96ac` | 8.06 / 8.09 / 8.04 | 6.32 / 6.34 / 6.29 | 124.3 ms | 4: 106 / 109 / 104 | 0 | 5,674 (run 1) | 30,029 (run 1) |
+| form 1, raw, 1 run | 32 Hz, param 0x20 | 25.88 | 25.11 | 31.1 ms | 1: 478 | 0 | 15,577 (99.99 % of pixels over the 0x3A98 ceiling) | 5,155 |
+| form 2, raw 1 / 2 / 3 | 32 Hz (`d64d91b0`) | 26.08 / 25.68 / 25.68 | 25.32 / 24.90 / 24.90 | 31.07 to 31.08 ms | 1: 486 / 470 / 471 | 0 | 5,655 / 5,625 / 5,586 | 29,617 / 29,604 / 29,601 |
+| form 2, app (`patch-fps`) 1 / 2 / 3 | 32 Hz (`d64d91b0`) | 25.19 / 25.24 / 24.68 | 24.81 / 24.93 / 24.00 | 31.11 / 31.12 / 31.25 ms | 1: 448 / 453 / 423 | 0 | 5,665 / 5,634 / 5,606 | 29,618 / 29,590 / 29,587 |
+| 16 Hz (42.23, for comparison) | 16 Hz (`6a94a`) | 14.10 / 14.17 / 14.10 | 12.4 to 12.8 (20 s window) | 62.1 to 62.2 ms | 2 | 0 | 4.0k to 4.5k | 29k to 31k |
+
+- The rate: the steady interval halves exactly from 16 Hz (62.1 ms to 31.1 ms); the all-frame rate is 25 against 14 on the 16 Hz
+  patch. The gap to 32 is the calibration stretch (about 0.5 s every 2 s, types 1, 6, 20 and others), which is the same in every run
+  and is not patched. The owner's "Make 32 FPS" names the steady rate, as "Make 16 FPS" did for 42.23.
+- The picture [measured]: every consecutive thermal pair differs (about 29.6k of 32,448 halfwords change; stock about 30.0k). The
+  body mean and its spread match stock in the same session (5.6k to 5.7k). The value quantiles of a mid frame match
+  (median 5,747 against stock 5,767; 90 % 6,212 against 6,233; no value over the ceiling in either). The two renders
+  (`png.py`, frame 40) look alike: a flat-field noise texture.
+  A warm object in view was not tried (the bench asks nothing of the owner); the frame data is the check.
+- Capture index: the capture rate is 32.19 captures per second [measured, as stock]; one capture per published frame in the steady
+  run. The calibration stretch shows 2, 3, 5 and 6 captures between frames, as in stock.
+
+**6. The first form (rejected), and why it is not the same picture.** Form 1 published a picture whose samples are about 15,577,
+99.99 % over the sensor ceiling (0x3A98), against stock's 5,700. It had the rate, the frames differed and nothing froze, so the rate
+alone was not enough: the picture was not stock. The reading [inferred, consistent with form 2 measuring stock-like]: the stock output
+is effectively the capture of the param 0x23 steps, because the terminator's capture (param 0x20) is over the ceiling, so the seed
+writes the dead marker and the accumulator stays dead; mean4 then writes the raw 0x23 capture. Form 1 made every capture the
+over-range one. Form 2 makes every capture a 0x23 capture, the same picture as stock's output. This is the only change between the
+two forms.
+
+**7. Writes and restore (every write read back).**
+- Raw path, form 2: `seek-fw slots flash a <bankA-32b.bin> --raw --acknowledge-risk --yes`. Committed 0x0000; read-back matched
+  the staged image (`155095…` for form 1, `9c1be42d…` for form 2). After a power cycle: A active, decrypted `d64d91b0`, Key B.
+- App path, form 2: `seek-fw slots patch-fps a --write --dump-dir <folder> --acknowledge-risk --yes` (the dry run first: "rate
+  8 Hz -> 32 Hz; 13 byte(s) of the decrypted image change; the acceptance-sum word moves"). The pre-patch dump was saved first.
+  Committed 0x0000; "read-back: bank A differs from the saved dump only at the 16 planned byte(s), the sites and the sum word".
+  After a power cycle: A active, `d64d91b0`, Key B.
+- Restore after each (the 42.23 §6 method, twice): a raw upload of the original raw bank (`0476541b…`) leaves the bank at the
+  Key B form (`013962a9…`, decrypted to the stock image); a second raw upload of that form gives back the original raw bytes
+  (`0476541b…`), Key A. Both restores were read back, power-cycled and checked with `slots list` (A active, Key A, `f96ac`).
+- Final check (after the last restore and a power cycle): the USB dump (`seek-fw dump`) is byte-identical to the owner's dump
+  (`fb1cb1f5…`, all 4 MiB including the gap); the halted J-Link read (`dump-spifi-4m-halted`) is byte-identical too. Both
+  switch channels on; no background job.
+
+**8. The page (the offer, on the camera; the write leg not run).**
+- `e2e/fps-bench.e2e.ts` with `SEEK_E2E_TARGET=camera SEEK_E2E_WRITE=dry-run` on the restored stock unit: the page offers "Make 32 FPS"
+  on bank A (the only offer on A), and the dialog reads "Make Bank A run at 32 FPS? ... Bank A holds firmware 4.8.2.1, and this
+  makes its image run at 32 Hz instead of 8 Hz ...". The plan was cancelled; nothing was saved or written. [measured]
+- The page's write leg (`SEEK_E2E_WRITE=i-understand`) was not run: the write itself went through the app's own path above, which
+  is the same core writer the page calls (`applyFpsPatch`, the read-back check). The page write is the one leg not driven on the camera.
+
+**9. Code and tests (this branch, FW-V1 `main`).**
+- FW-V1 (local commits on `main`, not pushed): `f2f2eedb7` (form 1), `e145d4ab7` (form 2, replaces the 0x20 bytes), `000c982af`
+  (the measured evidence in the comment), and the NOT_PATCHED text. `emu/fps_patch.py`, `emu/fps_patch_tests.py`
+  (`compact-4.8.2.1@32`), `emu/fps_patch_unit_tests.py`.
+- `packages/core/src/preservation/fps-patch-table.ts`: the `compact_32k-4.8.2.1-to32` entry (port of the Python, same hashes and
+  edits), the 4.8.2.1 note. `fps-patch.ts`: `FPS_STAGE_TWO_IDS` adds it. No `FPS_MEASURED_HZ` entry: the measured steady rate is
+  32.2 Hz, the table's 32 (the 42.23 convention for 16 Hz).
+- `packages/core/test/preservation/fps-patch-python.json`: the 32 Hz output of the 4.8.2.1 image (16 changed offsets).
+  `fps-patch.differential.test.ts` (16 entries, the stage-two list), `fps-patch.test.ts` (the stage-two list).
+- `e2e/lib/slots-expectations.ts`: the Compact 4.8.2.1 and Compact XR 4.8.2.1 rows offer `toHz: 32`. `e2e/fps-bench.e2e.ts`: the
+  page spec now expects "Make 32 FPS", "32 Hz instead of 8 Hz" and 13 bytes. `e2e/slots-quality.e2e.ts`: its comment.
+- Tests run (measured): core targeted (`fps-patch.test.ts`, `fps-patch.differential.test.ts`, `slots/fps-patch.test.ts`,
+  `slots/fps-patch-sites.test.ts`, `slots/capability.test.ts`): 397 pass, 7 skipped (the corpus and the emulator manifest are not
+  set here). Core emulator (`SEEK_EMU_DIR` set): `slots/page-expectations.emulator.test.ts` and `slots/capability.test.ts`: 552
+  pass, 1 skipped (the 4.8.2.1 rows offer 32). CLI `slots.test.ts`, web `SlotFpsConfirm.test.tsx` and `useSlotsPanel.test.tsx`:
+  145 pass. `tsc --noEmit` for core and e2e: clean. ESLint on the changed files: clean. Prettier: the fps-bench spec reformatted.
+  Not run: the whole vitest suite (the camera and slow emulator suites, see the test hazards note).
+
+**10. Not done, and why.**
+- A warm object in view (the bench asks nothing of the owner); IP mode 8 (the bench never sets a mode); the page's write leg.
+- The calibration stretch is not patched: the all-frame rate (about 25) stays below the steady rate (32).
+- An image already patched at 16 Hz reads "already patched" on the page, not an offer for 32 Hz: the offer is taken from the stock
+  image only (the same as the 4.8.1.x entries).
+
+**11. For the owner.**
+- The XR and the Compact 4.8.2.1 now offer "Make 32 FPS". The steady rate is 32 (31.1 ms between published frames). Averaged over
+  a 20 s window the thermal rate is about 25 fps (stock about 6.3), because the calibration stretch is unchanged.
+- The write leaves bank A reading **Key B** (the store-key form), as the 16 Hz write did; it boots. The factory Key A form is
+  restored by the two raw uploads in section 7.
+- Each published frame is one capture now. The blade is not commanded differently (gpio 1, as stock), so the shutter cadence is
+  unchanged [inferred].
