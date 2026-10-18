@@ -1361,6 +1361,25 @@ const NO_MATCH_GUIDANCE =
   'instead.';
 
 /**
+ * The 0.x and 1.x line only: this run's builds are the 2014 and 2016 cameras.
+ * A 4.x, Nano or Mosaic build (its version starts at 2 or more) is read by the
+ * 4.x/Nano flow, and this run refuses it after the version read and before any
+ * window is armed or read. Null when the version says 0.x or 1.x, or says
+ * nothing (the caller's own gates decide that).
+ */
+export function outsideLineRefusal(version: string | null): string | null {
+  const match = /^\s*(\d+)\./.exec(version ?? '');
+  if (match === null) return null;
+  const major = Number.parseInt(match[1] ?? '', 10);
+  if (major <= 1) return null;
+  return (
+    `firmware ${version ?? ''} is not a 0.x or 1.x build, and this run covers only the 2014 and ` +
+    '2016 builds. Nothing was read beyond the version. For this camera use Dump & decrypt 4.x/Nano ' +
+    '(seek-fw dump).'
+  );
+}
+
+/**
  * The measured refusal for the generation the widening route explicitly does
  * NOT reach: the 2014 Compact builds OLDER than 0.7.0.7 (0.3.0.1, 0.5.0.2,
  * 0.5.1.0, 0.5.1.3, 0.6.0.4). FW-V1 doc 36 sec. 36.7 investigated that

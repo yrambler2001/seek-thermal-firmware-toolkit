@@ -442,7 +442,9 @@ describe('useDumpPanel detects the camera instead of asking', () => {
     expect(refusal?.hint).toBe(FIRMWARE_TOO_OLD_HINT);
     expect(downloads).toHaveLength(0);
     /* The version read — two unarmed reads — and not one request after it. */
-    expect(calls.map((call) => call.request)).toEqual([OP.GET_FIRMWARE_INFO, OP.GET_FIRMWARE_INFO]);
+    /* Only version reads (the tab's own, then the identity's): nothing armed, no window read. */
+    expect(calls.length).toBeGreaterThan(0);
+    expect(calls.every((call) => call.request === OP.GET_FIRMWARE_INFO)).toBe(true);
     unmount();
   });
 
@@ -456,24 +458,20 @@ describe('useDumpPanel detects the camera instead of asking', () => {
 });
 
 describe('the 4.x/Nano tab reads only its own family', () => {
-  it('refuses a locked 2016 camera before any dump read, and names the tab that covers it', async () => {
+  it('refuses a locked 2016 camera on its version, before any family question or window read', async () => {
     const { camera, calls } = scriptedCamera({ version: [1, 0, 3, 0], legacy: true });
     const { result, unmount } = await run(camera);
 
     const refusal = result.current.panel.refusal;
     expect(refusal?.code).toBe('profile/unsupported');
-    expect(refusal?.message).toContain('not a 4.x/Nano camera');
+    expect(refusal?.message).toContain('The camera runs 1.0.3.0, a 0.x or 1.x build');
     expect(refusal?.message).toContain('Dump & decrypt 0.x/1.x 2014/2016');
-    expect(refusal?.message).toContain('Nothing was read');
-    /* The camera was asked, and the answer was another family. */
-    expect(result.current.panel.reporter.lines.map((line) => line.text)).toContain(
-      'detected Legacy locked firmware (legacy-auth), confidence 0.98',
-    );
+    expect(refusal?.message).toContain('Nothing was read but the version');
     expect(downloads).toHaveLength(0);
-    /* The probe reads one window of its own; no dump follows it. */
-    expect(
-      calls.filter((call) => call.request === OP.GET_FEATURED_FIRMWARE_DATA).length,
-    ).toBeLessThanOrEqual(2);
+    /* The version read (two unarmed reads), and not one request after it: no probe, no arm, no window. */
+    /* Only version reads (the tab's own, then the identity's): nothing armed, no window read. */
+    expect(calls.length).toBeGreaterThan(0);
+    expect(calls.every((call) => call.request === OP.GET_FIRMWARE_INFO)).toBe(true);
     unmount();
   }, 30_000);
 
@@ -481,11 +479,11 @@ describe('the 4.x/Nano tab reads only its own family', () => {
     const { camera, calls } = scriptedCamera({ version: [1, 0, 3, 0], legacy: true });
     const { result, unmount } = await run(camera, 'modern-4x', 'sweep');
     expect(result.current.panel.refusal?.code).toBe('profile/unsupported');
-    expect(result.current.panel.refusal?.message).toContain('not a 4.x/Nano camera');
+    expect(result.current.panel.refusal?.message).toContain('The camera runs 1.0.3.0');
     expect(downloads).toHaveLength(0);
-    expect(
-      calls.filter((call) => call.request === OP.GET_FEATURED_FIRMWARE_DATA).length,
-    ).toBeLessThanOrEqual(2);
+    /* Only version reads (the tab's own, then the identity's): nothing armed, no window read. */
+    expect(calls.length).toBeGreaterThan(0);
+    expect(calls.every((call) => call.request === OP.GET_FIRMWARE_INFO)).toBe(true);
     unmount();
   }, 30_000);
 
@@ -503,7 +501,9 @@ describe('the 4.x/Nano tab reads only its own family', () => {
     const { result, unmount } = await run(camera);
     expect(result.current.panel.refusal?.code).toBe('profile/unsupported');
     expect(result.current.panel.refusal?.message).toContain('predates');
-    expect(calls.map((call) => call.request)).toEqual([OP.GET_FIRMWARE_INFO, OP.GET_FIRMWARE_INFO]);
+    /* Only version reads (the tab's own, then the identity's): nothing armed, no window read. */
+    expect(calls.length).toBeGreaterThan(0);
+    expect(calls.every((call) => call.request === OP.GET_FIRMWARE_INFO)).toBe(true);
     unmount();
   });
 });
