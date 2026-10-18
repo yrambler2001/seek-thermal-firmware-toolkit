@@ -58,7 +58,6 @@ import {
   pickImage,
   preparedView,
   readSlots,
-  rowOf,
   slotsAlerts,
   snap,
   summaryRows,
@@ -387,7 +386,8 @@ for (const subject of SUPPORTED) {
           if (emu === null) throw new Error('the emulator target has no bus');
           for (const letter of ['a', 'b', 'r'] as const) {
             const name = letter.toUpperCase();
-            const row = await rowOf(t.page, letter);
+            const row = (await rowsOf(t.page)).find((candidate) => candidate.letter === letter);
+            if (row === undefined) throw new Error(`the bank table has no row for ${name}`);
             expect(
               row.buttons.find((button) => button.label === 'Dump')?.enabled,
               `${name} Dump`,
@@ -507,8 +507,9 @@ for (const subject of SUPPORTED) {
           if (recovery === undefined) throw new Error('the table has no recovery row');
 
           /* The note under each flash action says why it asks for more. */
-          expect(booted.actionsText).toContain(
-            'Booted now: writing it asks for an extra confirmation.',
+          /* "Named booted by the active-slot word" on the 2014 plain chain (TESTING.md 42.10), "Booted now" elsewhere. */
+          expect(booted.actionsText).toMatch(
+            /(Booted now|Named booted by the active-slot word): writing it asks for an extra confirmation\./,
           );
           expect(recovery.actionsText).toContain(
             'Recovery bank: writing it asks for an extra confirmation.',
@@ -535,7 +536,7 @@ for (const subject of SUPPORTED) {
               (el) => (el as HTMLElement).innerText,
             );
             expect(alertText, `${name}: the dialog says why`).toMatch(
-              row.letter === 'r' ? /recovery bank/ : /boots now/,
+              row.letter === 'r' ? /recovery bank/ : /boots now|active-slot word names/,
             );
             await t.page.click(ACK_BOX);
             expect(await confirmEnabled(w, name), `${name}: Yes is on once ticked`).toBe(true);
