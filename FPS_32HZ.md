@@ -1,10 +1,26 @@
 # Making the Seek Compact and Compact XR run at 32 fps
 
 What was done to get a Compact (1.3.0.0) and a Compact XR (4.8.2.1) from 8 fps to about 32 fps, how it is applied, how it was
-measured, and what can still go wrong. Everything here was measured on the owner's cameras unless it says *source* or *inferred*.
+measured, and what can still go wrong. Everything here was measured on the owner's cameras unless it says _source_ or _inferred_.
 
 Related records: `TESTING.md` sections 42.23 (4.8.2.1 at 16 Hz), 42.24 (4.8.2.1 at 32 Hz), 42.25 (1.3.0.0 at 32 Hz);
 FW-V1 `emu/fps_patch.py` (the patch table, the source of truth) and `docs/FPS_PATCH_LINE_STEPS.md`.
+
+## 0. Processing modes (what "mode" means here)
+
+"Mode" is the value sent with `SET_IMAGE_PROCESSING_MODE` (62). In the 2014-chain firmware it indexes `frame_mode_table_r32k`, one capture
+program per mode (`FW-V1/targets/compact_8hz_1_3_0_0/src/frame_data.c`). On the 1.3.0.0:
+
+| mode | stream                                                                                                                             | steady block                                     | stock rate   |
+| ---- | ---------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------ | ------------ |
+| 0    | Raw: average of four captures, no shutter handling                                                                                 | 4 steps (op 5, 6, 6, 7), gpio 6                  | 8 fps        |
+| 3    | Hi FPS: the app's "Init Hi FPS"                                                                                                    | 1 step (op 3 copy, publish)                      | about 32 fps |
+| 6    | shutter-managed, correlated double sample (op 9 = difference of two captures); modes 5, 6 and 8 refuse some commands while running | 4 steps: idle, op 3 copy, idle, op 9 + publish   | 8 fps        |
+| 8    | Normal: the camera's own shutter and calibration                                                                                   | 4 steps (op 5, 6, 6, 7 + publish), block 8 of 12 | 8 fps        |
+
+The macOS app and CLI send 8 (Normal), 3 (FastRaw) or 0 (Raw); they never use mode 6. The removed 16 Hz patch edited mode 6, which is why a
+patched 1.3.0.0 still read 8 fps in Normal mode. On the 4.8.2.1 the app's Pro init forces mode 8 and the patch (command page 13) works there.
+For the other builds it has not been established which mode their patched block belongs to (`TESTING.md` 42.26 onwards).
 
 ## 1. The idea
 
@@ -17,14 +33,14 @@ Consequences, by design:
 
 - The rate is the capture rate (about 32 Hz, 31 ms between frames), not the 8 Hz of the stock picture.
 - There is **no averaging**, so the picture is noisier than stock. Level and spread match stock.
-- The calibration/shutter stretch (about 0.5 s every ~2 s) is not patched, so the *average* over several seconds is lower
-  (about 23 to 26 fps); the *median* frame rate is about 32.
+- The calibration/shutter stretch (about 0.5 s every ~2 s) is not patched, so the _average_ over several seconds is lower
+  (about 23 to 26 fps); the _median_ frame rate is about 32.
 - Only the byte edits below change. The acceptance-sum word at image `+0x238` is moved by the same amount so the 32-bit word
   sum the bootloader checks stays the same.
 
 ## 2. The Compact XR / Compact 4.8.2.1 (PID 0x0010, "Compact XR")
 
-**Where.** The 4.8.2.1 firmware keeps its capture program as 68-byte *command pages* (a count, next/alt links, a reload byte,
+**Where.** The 4.8.2.1 firmware keeps its capture program as 68-byte _command pages_ (a count, next/alt links, a reload byte,
 then 16 four-byte substeps `param, chunk_op, type, gpio`; bit 7 of `chunk_op` is the line-completing LAST). The steady page is
 page 13, a self-loop (next = alt = 13), at image offset `0x90F2`.
 
@@ -33,9 +49,9 @@ that is seed, accumulate, accumulate, mean4 with LAST.
 
 **The patch** (13 image bytes + the 3 changed bytes of the sum word, table entry `compact_32k-4.8.2.1-to32`):
 
-| image offset | stock | patched |
-|---|---|---|
-| `0x90F2` | `04` | `01` (one substep) |
+| image offset       | stock                                             | patched                       |
+| ------------------ | ------------------------------------------------- | ----------------------------- |
+| `0x90F2`           | `04`                                              | `01` (one substep)            |
 | `0x90F6 .. 0x9105` | `23 07 00 01 23 08 00 01 23 08 00 01 20 8a 03 01` | `23 81 03 01` + 12 zero bytes |
 
 The new substep is `frame_chunk_copy` (copy one chunk, no read of the destination), LAST, `param 0x23` (the same source
@@ -43,18 +59,18 @@ selection as the stock seed and accumulates), type 3, gpio 1.
 
 **Why `0x23`.** The first candidate used `param 0x20` (the terminator's source selection). It also ran at 31 ms, but its pictures
 sat above the sensor ceiling (mean ~15,600, 99.99 % of pixels over, against stock ~5,700) and was rejected. `0x23` gives the stock
-picture. *Inferred:* stock's output effectively comes from the `0x23` captures.
+picture. _Inferred:_ stock's output effectively comes from the `0x23` captures.
 
 **Why one copy step and not the accumulators.** The accumulating slots read the destination; one-step forms built from them froze or
 alternated on the other lines (1.3.0.8, 4.8.1.x). A copy reads nothing, so nothing carries from one capture to the next.
 
 **Measured on the XR (serial 1E2A50YZ7628, IP mode 9 and the app's Normal stream):**
 
-| image | steady interval | fps (all frames) | median | picture |
-|---|---|---|---|---|
-| stock | 124 ms | 8.0 to 8.1 | 8.0 | stock |
-| 16 Hz (the removed `...-to16`, for comparison) | 62 ms | 14.1 | ~16 | alive |
-| **32 Hz (`...-to32`)** | **31 ms** | **24.7 to 26.1** | **32.2** | alive, 0 frozen pairs |
+| image                                          | steady interval | fps (all frames) | median   | picture               |
+| ---------------------------------------------- | --------------- | ---------------- | -------- | --------------------- |
+| stock                                          | 124 ms          | 8.0 to 8.1       | 8.0      | stock                 |
+| 16 Hz (the removed `...-to16`, for comparison) | 62 ms           | 14.1             | ~16      | alive                 |
+| **32 Hz (`...-to32`)**                         | **31 ms**       | **24.7 to 26.1** | **32.2** | alive, 0 frozen pairs |
 
 Applied three ways with the same result: a raw bank write, `seek-fw slots patch-fps a --write`, and the page's own
 "Make 32 FPS" button (driven by `e2e/fps-bench.e2e.ts`).
@@ -64,7 +80,7 @@ Applied three ways with the same result: a raw bank write, `seek-fw slots patch-
 The 1.3.0.0 firmware has one capture program **per sensor mode** (`frame_mode_table_r32k`, `src/frame_data.c`), each a list of
 34-byte blocks (2-byte header `count|first, next|reset`, then 2-byte steps `sel|active<<3|op<<4, push|hdr<<1|gpio<<5`).
 
-- Mode 6 (the stream the earlier "16 Hz" patch edited) and **mode 8** (the processed *Normal* stream the macOS app uses until
+- Mode 6 (the stream the earlier "16 Hz" patch edited) and **mode 8** (the processed _Normal_ stream the macOS app uses until
   "Init Hi FPS" switches to mode 3) are different programs. The 16 Hz patch only changed mode 6, so a patched camera still read
   **8 fps in Normal mode**.
 - Mode 3 (what "Init Hi FPS" selects) is already one block of one step, `STEP(1,1,3,1,3,6)`, i.e. every capture published: about
@@ -78,7 +94,7 @@ patched  81 08 | 39 27 | 00 00 | 00 00 | 00 00     op 3 copy + publish (hdr 3, g
 ```
 
 Op 5 and op 6 multiply the samples at or above a level by 4 and op 7 averages in that quarter-scale domain, quartering the
-over-level samples, so a plain copy (op 3) has the stock scale. *Source:* `targets/compact_8hz_1_3_0_0/src/image.c`.
+over-level samples, so a plain copy (op 3) has the stock scale. _Source:_ `targets/compact_8hz_1_3_0_0/src/image.c`.
 
 **One table entry**, `compact_32k-1.3.0.0-to32`: stock `862717a8...` to `ef90c94a...` (13 changed bytes: 9 image bytes and the
 sum word). The bench measurement below was made on an image that also carried the old mode-6 16 Hz edit (`d91284c6...`); that edit
@@ -123,14 +139,14 @@ each second; `seek stream` also prints frozen pairs and the share of pixels that
 A patched bank only helps if the camera **boots** it. On the 2014 chain the bootloader reads the boot-config word at
 `0x14010000` (`boot_select_image`, bootloader `src/image.c`):
 
-| word | boots first |
-|---|---|
-| `0` or `0xFFFFFFFF` | slot A (`0x14050000`), then B, then recovery |
-| `1` | slot B, then A, then recovery |
+| word                    | boots first                                             |
+| ----------------------- | ------------------------------------------------------- |
+| `0` or `0xFFFFFFFF`     | slot A (`0x14050000`), then B, then recovery            |
+| `1`                     | slot B, then A, then recovery                           |
 | anything else, e.g. `2` | **recovery R** (`0x14070000`), if its checksum is valid |
 
 The firmware leaves a warm-boot magic (`0xAA55FF01` / `0xAA55FF02`) before a soft reset; the bootloader then writes `2` into the
-word and boots recovery (*source*). The owner's patched 1.3.0.0 later ran at 8 fps for exactly this reason: a whole-flash J-Link
+word and boots recovery (_source_). The owner's patched 1.3.0.0 later ran at 8 fps for exactly this reason: a whole-flash J-Link
 dump showed the word at `2`, A and B holding the 32 Hz patch, and R still stock. The event that flipped the word was not observed.
 A user dump of another 1.3.0.0 (`221A10H6HQC1`) shows the same state.
 
@@ -153,3 +169,16 @@ All 8 to 16 Hz patches (1.2.0.0, 1.3.0.0, 1.3.0.8, 4.8.1.7, 4.8.1.9, 4.8.2.1) an
 the table, the page, the CLI (`--to 16` is not a choice) and the tests (`TESTING.md` 42.26). Each of those builds except 1.2.0.0 keeps
 its 32 Hz patch; 1.2.0.0 has no patch now. A camera that still carries an old 16 Hz image is read as an unknown image: restore the
 stock image first, then press "Make 32 FPS".
+
+## 9. Maintaining the patch table
+
+`FW-V1/emu/fps_patch.py` is the source of truth. `packages/core/src/preservation/fps-patch-table.ts` is generated from it:
+
+```sh
+/Users/yrambler2001/things/a.noindex/seek/FW-V1/emu/.venv/bin/python scripts/gen-fps-table.py
+npx prettier --write packages/core/src/preservation/fps-patch-table.ts
+```
+
+Each entry's evidence becomes a plain-text comment, and the `#` comment lines above each `Edit(` in `fps_patch.py` become the explanation above that byte edit in the
+TypeScript. Write that explanation for every new edit (the script says when one is missing). The differential test
+(`packages/core/test/preservation/fps-patch.differential.test.ts`, run with `SEEK_FPS_CORPUS`) checks the generated table against the Python output byte for byte.
