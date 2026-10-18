@@ -19,12 +19,16 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
  * words, hold the verdict at "writable" unless a test sets `cameraVerdict.held` (the banner tests do).
  */
 const cameraVerdict = vi.hoisted(() => ({ held: null as string | null | undefined }));
+/* The boot warning core makes from a report (boot-choice.ts). Left unset, the real one runs; a test sets it. */
+const bootWarning = vi.hoisted((): { value: unknown } => ({ value: undefined }));
 vi.mock('@seek-fw/core', async (importOriginal) => {
   const actual = await importOriginal<typeof CoreModule>();
   return {
     ...actual,
     writeBannerOf: (state: Parameters<typeof actual.writeBannerOf>[0]) =>
       cameraVerdict.held === undefined ? actual.writeBannerOf(state) : cameraVerdict.held,
+    fpsBootWarningOf: (...args: Parameters<typeof actual.fpsBootWarningOf>) =>
+      bootWarning.value === undefined ? actual.fpsBootWarningOf(...args) : bootWarning.value,
   };
 });
 import { detectSupport, type BrowserEnvironment } from '../lib/support';
@@ -58,6 +62,7 @@ beforeAll(async () => {
 afterEach(() => {
   window.location.hash = '';
   cameraVerdict.held = null;
+  bootWarning.value = undefined;
 });
 
 const READY = detectSupport({
@@ -861,6 +866,34 @@ describe('SlotsView: the frame-rate row action', () => {
       buttonByText(rows[1] as HTMLElement, 'Make 32 FPS').click();
     });
     expect(dialog()?.textContent).toContain('Make slot B run at 32 FPS?');
+    unmount();
+  });
+
+  it('says on the page which bank runs when a patched bank will not run, and the dialog names the fix', () => {
+    bootWarning.value = {
+      runs: 'r',
+      word: 2,
+      idle: ['a'],
+      paragraphs: [
+        'The camera boots recovery R. The boot-config word is 2, so the bootloader tries recovery R first.',
+        'Slot A holds a frame-rate patch, but it does not run, so the patch does not take effect.',
+        'Patch recovery R too (the bank that runs): that is what makes the frame-rate patch take effect.',
+      ],
+    };
+    const planFps = vi.fn((): FpsPlan => offer(32));
+    const { container, unmount } = view(
+      panel({ plan: slotPlan(true), report: slotReport(base), planFps }),
+    );
+    expect(container.textContent).toContain('The camera boots recovery R.');
+    expect(container.textContent).toContain('Patch recovery R too (the bank that runs)');
+    act(() => {
+      buttonByText(bankRows(container)[1] as HTMLElement, 'Make 32 FPS').click();
+    });
+    const open = dialog();
+    if (open === null) throw new Error('the confirmation is not open');
+    expect(open.textContent).toContain('Patch recovery R too (the bank that runs)');
+    /* The warning states; the confirmation is not gated by it. */
+    expect(buttonByText(open, 'Yes — patch slot B').disabled).toBe(false);
     unmount();
   });
 

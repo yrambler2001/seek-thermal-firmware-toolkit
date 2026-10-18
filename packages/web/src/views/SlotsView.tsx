@@ -7,10 +7,11 @@
  * write, shows exactly what it would do, and asks before it sends a byte.
  */
 
-import { useState, type ReactElement } from 'react';
+import { useMemo, useState, type ReactElement } from 'react';
 import { CircleStop, Layers, ScanSearch, Send, ShieldAlert } from 'lucide-react';
 import {
   derivedKeyLine,
+  fpsBootWarningOf,
   hexUp,
   onPlaintextChain,
   type FpsPatchResult,
@@ -164,6 +165,14 @@ export function SlotsView({ slots, connected, busy }: SlotsViewProps): ReactElem
   const fpsPlan = fpsKey === null ? null : slots.planFps(fpsKey);
   const fpsOffer: FpsOffer | null = fpsPlan !== null && fpsPlan.status === 'offer' ? fpsPlan : null;
   const fpsView = fpsKey === null || report === null ? null : viewOf(report, fpsKey);
+  /* The boot warning on the page: a patched bank the camera does not run. Core decides it (boot-choice.ts). */
+  const bootWarning = useMemo(() => (report === null ? null : fpsBootWarningOf(report)), [report]);
+  /* The same warning for the bank the person is about to patch, which then counts as holding the patch. */
+  const dialogBootWarning = useMemo(
+    () =>
+      report === null || fpsKey === null ? null : fpsBootWarningOf(report, { target: fpsKey }),
+    [report, fpsKey],
+  );
   const unsupported =
     plan !== null && !plan.supportedBuild.supported ? plan.supportedBuild.reason : null;
   const pendingView = pending === null ? null : viewOf(pending.report, pending.key);
@@ -263,6 +272,13 @@ export function SlotsView({ slots, connected, busy }: SlotsViewProps): ReactElem
                 </span>
               </label>
             )}
+            {bootWarning !== null && (
+              <Alert tone="warn">
+                {bootWarning.paragraphs.map((paragraph) => (
+                  <p key={paragraph}>{paragraph}</p>
+                ))}
+              </Alert>
+            )}
             <SlotTable
               report={report}
               connected={connected}
@@ -356,6 +372,7 @@ export function SlotsView({ slots, connected, busy }: SlotsViewProps): ReactElem
             namedByWord={
               report === null ? false : onPlaintextChain(report.state.profile, report.state.version)
             }
+            bootWarning={dialogBootWarning}
             saveMode={fpsSaveMode()}
             onConfirm={(acknowledged) => {
               const key = fpsKey;

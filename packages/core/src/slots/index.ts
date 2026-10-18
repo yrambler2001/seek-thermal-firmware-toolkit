@@ -1,6 +1,18 @@
 export * from './types.js';
 export { buildSlotPlan } from './capability.js';
 export {
+  bankWordsOf,
+  bootChoiceOf,
+  bootWordRuleOf,
+  fpsBootWarningOf,
+  fpsPatchHeldBy,
+  reportedBootedOf,
+  type BootChoice,
+  type FpsBootOptions,
+  type FpsBootWarning,
+  type PatchHeld,
+} from './boot-choice.js';
+export {
   inspectSlots,
   slotContentOf,
   type InspectFirmware,

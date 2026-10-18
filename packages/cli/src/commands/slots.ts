@@ -32,11 +32,15 @@
 import { mkdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { basename, join } from 'node:path';
 import {
+  bankWordsOf,
+  bootChoiceOf,
+  bootWordRuleOf,
   derivedKeyLine,
   deriveWriteKeys,
   dumpSlot,
   findEmbeddedKeyTable,
   flashSlot,
+  fpsBootWarningOf,
   fpsPlanOfBank,
   hexUp,
   inspectSlots,
@@ -53,6 +57,7 @@ import {
   type DumpedSlot,
   type FlashSlotOptions,
   type FlashSlotResult,
+  type FpsBootWarning,
   type FpsPatchOptions,
   type FpsPatchResult,
   type FpsPlan,
@@ -513,7 +518,67 @@ export function writeKeyLines(report: SlotsReport, color: boolean): string[] {
   return lines;
 }
 
-export function listLines(report: SlotsReport, color: boolean): string[] {
+/**
+ * The boot choice of the 2014 plaintext chain, as `list` shows it: the boot-config word, the bank the next
+ * start runs, what the camera reports it entered at its last start, and the frame-rate warning when a
+ * patched bank would not run (core's `fpsBootWarningOf`, the same text the page shows). Empty on any other
+ * line, whose boot word is not read this way.
+ */
+export function bootLines(
+  report: SlotsReport,
+  color: boolean,
+  warning: FpsBootWarning | null,
+): string[] {
+  if (!report.state.plainChain) return [];
+  const choice = bootChoiceOf(report.state);
+  const lines: string[] = ['', heading('Boot', color)];
+  const lastStart =
+    report.state.activeSlotWord === null
+      ? 'not read'
+      : choice.reportedBooted === null
+        ? `the camera reports ${String(report.state.activeSlotWord)}, which names no bank`
+        : `the camera reports it entered ${bankWordsOf(choice.reportedBooted)} (active-slot word ${String(report.state.activeSlotWord)})`;
+  lines.push(
+    table([
+      [
+        '  boot-config word',
+        choice.word === null
+          ? '(not read)'
+          : `${hexUp(choice.word)} — ${bootWordRuleOf(choice.word)}`,
+      ],
+      ['  next start runs', choice.runs === null ? 'not known' : bankWordsOf(choice.runs)],
+      ['  last start', lastStart],
+    ]),
+  );
+  lines.push(`  · ${choice.why}.`);
+  if (warning !== null) {
+    lines.push('');
+    for (const paragraph of warning.paragraphs) {
+      lines.push(paint(`  ! ${paragraph}`, 'yellow', color));
+    }
+  }
+  return lines;
+}
+
+/** The boot choice as `--json` carries it, or null on a line that is not the 2014 plaintext chain. */
+function bootJsonOf(state: SlotsReport['state']): Record<string, unknown> | null {
+  if (!state.plainChain) return null;
+  const choice = bootChoiceOf(state);
+  return {
+    word: choice.word === null ? null : hexUp(choice.word),
+    rule: choice.word === null ? null : bootWordRuleOf(choice.word),
+    runs: choice.runs,
+    reportedBooted: choice.reportedBooted,
+    activeSlotWord: state.activeSlotWord === null ? null : hexUp(state.activeSlotWord),
+    why: choice.why,
+  };
+}
+
+export function listLines(
+  report: SlotsReport,
+  color: boolean,
+  bootWarning: FpsBootWarning | null = fpsBootWarningOf(report),
+): string[] {
   const build = report.plan.supportedBuild;
   const lines: string[] = [];
 
@@ -527,6 +592,8 @@ export function listLines(report: SlotsReport, color: boolean): string[] {
       ['  build', build.supported ? 'supported' : `not supported: ${build.reason}`],
     ]),
   );
+
+  lines.push(...bootLines(report, color, bootWarning));
 
   lines.push('', heading('Banks', color));
   lines.push(
@@ -601,8 +668,12 @@ function slotJson(view: SlotView): Record<string, unknown> {
 /** The `--json` document for `slots list`. Every value must stringify. */
 export function listResult(report: SlotsReport): CommandResult {
   const keys = deriveWriteKeys(report.state);
+  const bootWarning = fpsBootWarningOf(report);
   return {
     action: 'list',
+    boot: bootJsonOf(report.state),
+    /* The same paragraphs `list` prints under Boot, or null when no patched bank would fail to run. */
+    fpsBootWarning: bootWarning === null ? null : [...bootWarning.paragraphs],
     writeKeys: {
       /* The same text the page's banner shows (core's writeBannerOf), or null when the page shows none. */
       refused: writeBannerOf(report.state),
@@ -1009,6 +1080,7 @@ export function fpsPlanLines(
   version: string | null,
   color: boolean,
   dumpDir: string | null,
+  bootWarning: FpsBootWarning | null = null,
 ): string[] {
   const bank = bankName(key);
   const lines: string[] = [''];
@@ -1032,6 +1104,12 @@ export function fpsPlanLines(
       ],
     ]),
   );
+  if (bootWarning !== null) {
+    lines.push('');
+    for (const paragraph of bootWarning.paragraphs) {
+      lines.push(paint(`  ! ${paragraph}`, 'yellow', color));
+    }
+  }
   lines.push('');
   lines.push(
     paint(
@@ -1119,8 +1197,12 @@ async function patchFpsAction(
       });
     }
     const version = report.state.version;
+    /* The warning is about the bank being patched: it counts as holding the patch once written. */
+    const bootWarning = fpsBootWarningOf(report, { target: key });
     ctx.reporter.write(
-      fpsPlanLines(key, plan, view.entry.address, version, ctx.color, dumpDir).join('\n'),
+      fpsPlanLines(key, plan, view.entry.address, version, ctx.color, dumpDir, bootWarning).join(
+        '\n',
+      ),
     );
 
     /* The dry run stops here: the plan is the whole output and nothing is saved or sent. */
@@ -1135,6 +1217,7 @@ async function patchFpsAction(
         address: hexUp(view.entry.address),
         version,
         ...fpsPlanJson(plan),
+        bootWarning: bootWarning === null ? null : [...bootWarning.paragraphs],
         written: false,
         dryRun: true,
         notes: [],
@@ -1207,6 +1290,7 @@ async function patchFpsAction(
       address: hexUp(view.entry.address),
       version,
       ...fpsPlanJson(plan),
+      bootWarning: bootWarning === null ? null : [...bootWarning.paragraphs],
       written: true,
       dryRun: false,
       saved: { directory: dumpDir, rawName: result.pre.rawName, plainName: result.pre.plainName },

@@ -24,14 +24,17 @@ export const FF_1308_NOTE =
 
 /**
  * What the booted bank means on the 2014 plaintext chain. The page names one from the camera's
- * active-slot word (device-info.ts, `chainReplay`), and that word is not the boot record: recovery
- * R runs whenever A and B hold nothing the bootloader takes (TESTING.md 42.10).
+ * active-slot word (device-info.ts, `chainReplay`): the bank the bootloader entered at the last start,
+ * which the bootloader writes at every start (0 slot A, 1 slot B, 2 recovery R). The NEXT start is set by
+ * the boot-config word, and recovery R runs whenever A and B hold nothing the bootloader takes
+ * (TESTING.md 42.10; boot-choice.ts).
  */
 const LOCKED_BOOT_WORD_NOTE =
-  'Where the page names a booted bank on this line, it comes from the camera’s active-slot word, not ' +
-  'from a boot record: an upgrade writes the other bank. Recovery R runs whenever A and B hold nothing ' +
-  'the 2014 bootloader takes (a stored word sum of 0), whatever R holds, so the bank the word names is ' +
-  'not always the one that runs (TESTING.md 42.10).';
+  'Where the page names a booted bank on this line, it is the bank the camera entered at its last start, ' +
+  'as the active-slot word records it (0 slot A, 1 slot B, 2 recovery R). The next start is set by the ' +
+  'boot-config word: 0 or 1 choose A or B first, any other value recovery R first. Recovery R runs ' +
+  'whenever A and B hold nothing the 2014 bootloader takes (a stored word sum of 0), whatever R holds ' +
+  '(TESTING.md 42.10).';
 
 /** Compact Pro 1.0.3.2: the EP0 limit that keeps a whole-part dump from running. */
 export const EP0_1032_NOTE =

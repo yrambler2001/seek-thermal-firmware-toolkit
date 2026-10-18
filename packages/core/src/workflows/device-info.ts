@@ -898,11 +898,13 @@ export async function readDeviceInfo(
     } else {
       /* fw_update_slot_address(): active_slot 0 -> slot B, anything else ->
        * slot A — the same mapping the modern replay trusts the word for. The
-       * BOOTED slot is the other one of the pair (a recovery record boots the
-       * recovery bank, but the upgrade still writes the A/B bank the word
-       * names). */
+       * BOOTED slot is the one the word records: the bootloader writes it at
+       * every start (bootloader startup.c, handoff->slot: 0 slot A, 1 slot B,
+       * 2 recovery R). A recovery start is not "the other A/B bank", so 2 is
+       * not read as slot B. */
       const target: SlotKey = activeSlotWord === 0 ? 'b' : 'a';
-      prediction = { booted: target === 'a' ? 'b' : 'a', target };
+      const booted: SlotKey = activeSlotWord === 2 ? 'r' : activeSlotWord === 0 ? 'a' : 'b';
+      prediction = { booted, target };
       chainReplay = true;
       updateTargetSubcmd = 0;
       reporter.log('');

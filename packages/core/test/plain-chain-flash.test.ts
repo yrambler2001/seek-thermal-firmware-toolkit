@@ -105,10 +105,10 @@ function rootsBlock(activeSlot: number): Uint8Array {
 
 /** The 28-byte boot-config record as the dump holds it: cfg[0] blank (the
  *  bootloader's fixed A -> B -> recovery order boots A), then the slot table. */
-function bootConfigBlock(): Uint8Array {
+function bootConfigBlock(cfg0 = 0): Uint8Array {
   const out = new Uint8Array(0x120).fill(0xff);
   const dv = viewOf(out);
-  dv.setUint32(0, 0, true);
+  dv.setUint32(0, cfg0, true);
   dv.setUint32(4, 0x14050000, true);
   dv.setUint32(8, 0x14060000, true);
   dv.setUint32(12, 0x14070000, true);
@@ -145,7 +145,9 @@ export function plainImage2014(): Uint8Array {
  * recovery bank; slot B stays erased, as on the real dump. With `plain: false`
  * the same image sits under a real keystream instead — the 1.0.3.x form.
  */
-function camera2014(options: { plain?: boolean } = {}): FakeCamera {
+function camera2014(
+  options: { plain?: boolean; cfg0?: number; activeSlot?: number } = {},
+): FakeCamera {
   const flash = new Uint8Array(4 * 1024 * 1024).fill(0xff);
   const image = plainImage2014();
   if (options.plain !== false) {
@@ -155,7 +157,7 @@ function camera2014(options: { plain?: boolean } = {}): FakeCamera {
     const key = stateFromKey(new Uint8Array(16).fill(0x5a), 0);
     flash.set(cryptBytes(image, key, legacyAuth.cipher), SLOT_A_OFFSET);
   }
-  flash.set(bootConfigBlock(), 0x10000);
+  flash.set(bootConfigBlock(options.cfg0 ?? 0), 0x10000);
   return fakeCamera({
     flash,
     windows: legacyWindows(),
@@ -163,7 +165,7 @@ function camera2014(options: { plain?: boolean } = {}): FakeCamera {
     authToken: OLD_FW_UNLOCK_TOKEN,
     fwInfo: new Map([
       [0, buildBlock()],
-      [10, rootsBlock(0)],
+      [10, rootsBlock(options.activeSlot ?? 0)],
     ]),
   });
 }
@@ -376,4 +378,28 @@ describe('the 2014 plaintext chain on the normal flash path', () => {
       );
     },
   );
+});
+
+describe('the 2014 plaintext chain: the boot-config word and the active-slot word', () => {
+  it('reads cfg[0] and the active-slot word over USB, and names the bank the word says the camera entered', async () => {
+    /* word 2: the bootloader started recovery R, which writes 2 into the active-slot word too. The
+     * boot-config word is what the NEXT start uses; both are read with requests the analysis already sends. */
+    const state = await readDeviceInfo(
+      await contextFor(camera2014({ cfg0: 2, activeSlot: 2 }), collectingReporter()),
+      { chunk: 4096 },
+    );
+    expect(state.cfg0).toBe(2);
+    expect(state.activeSlotWord).toBe(2);
+    expect(state.plainChain).toBe(true);
+    expect(state.boot).toEqual({ booted: 'r', target: 'a' });
+  });
+
+  it('keeps the booted slot A and the target B when the active-slot word is 0', async () => {
+    const state = await readDeviceInfo(
+      await contextFor(camera2014({ cfg0: 0, activeSlot: 0 }), collectingReporter()),
+      { chunk: 4096 },
+    );
+    expect(state.cfg0).toBe(0);
+    expect(state.boot).toEqual({ booted: 'a', target: 'b' });
+  });
 });

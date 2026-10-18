@@ -49,6 +49,31 @@ function dialog(): HTMLElement {
 }
 
 describe('the frame-rate patch confirmation', () => {
+  it('states the boot warning beside the confirmation, and does not gate the confirmation by it', () => {
+    const { unmount } = setup({
+      bootWarning: {
+        runs: 'r',
+        word: 2,
+        idle: ['a'],
+        paragraphs: [
+          'The camera boots recovery R. The boot-config word is 2, so the bootloader tries recovery R first.',
+          'Patch recovery R too (the bank that runs): that is what makes the frame-rate patch take effect.',
+        ],
+      },
+    });
+    const text = dialog().textContent;
+    expect(text).toContain('The camera boots recovery R.');
+    expect(text).toContain('Patch recovery R too (the bank that runs)');
+    expect(buttonByText(dialog(), 'Yes — patch slot B').disabled).toBe(false);
+    unmount();
+  });
+
+  it('says nothing about a boot when no warning is given', () => {
+    const { unmount } = setup();
+    expect(dialog().textContent).not.toContain('The camera boots');
+    unmount();
+  });
+
   it('says the bank, the build, the rate change, and that the rate is untested on hardware', () => {
     const { unmount } = setup();
     const text = dialog().textContent;

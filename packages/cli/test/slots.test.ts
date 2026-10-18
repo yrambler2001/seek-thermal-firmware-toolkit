@@ -12,6 +12,7 @@ import { readFile, readdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
+  fpsBootWarningOf,
   getProfile,
   keyFilenameSuffix,
   SeekError,
@@ -36,6 +37,7 @@ import {
 import { parseCli, run, type CommandContext } from '../src/cli.js';
 import { CliError, EXIT_FAILED, EXIT_OK, EXIT_USAGE, UsageError } from '../src/errors.js';
 import {
+  bootLines,
   bootRisk,
   dumpArtifacts,
   dumpRefusal,
@@ -44,6 +46,7 @@ import {
   flashPlanLines,
   flashQuestion,
   flashRefusal,
+  fpsPlanLines,
   imageSourceFor,
   listLines,
   listResult,
@@ -1844,5 +1847,147 @@ describe('patch-fps', () => {
     for (const bank of list.slots as readonly { readonly patch: { readonly status: string } }[]) {
       expect(bank.patch.status).toBe('refused');
     }
+  });
+});
+
+/* ==================================================================== *
+ * The boot word and the frame-rate warning on the 2014 plaintext chain (boot-choice.ts)
+ * ==================================================================== */
+
+/** A 64 KiB bank as the analysis holds it: the bootloader accepts it (word sum 0) or refuses it (sum 1). */
+function bankRaw(accepted: boolean): Uint8Array {
+  const bank = new Uint8Array(0x10000);
+  const dv = new DataView(bank.buffer);
+  dv.setUint32(0x200, 0xa1b2c3d4, true);
+  dv.setUint32(0x204, 0x4000, true);
+  for (let i = 0x240; i < 0x4000; i += 4) dv.setUint32(i, (0x69000000 + i) >>> 0, true);
+  let sum = 0;
+  for (let i = 0; i < 0x4000; i += 4) {
+    if (i !== 0x238) sum = (sum + dv.getUint32(i, true)) >>> 0;
+  }
+  dv.setUint32(0x238, accepted ? (0 - sum) >>> 0 : (((0 - sum) >>> 0) + 1) >>> 0, true);
+  return bank;
+}
+
+/**
+ * The 2014 plaintext chain as the analysis would report it: the boot-config word and the active-slot word,
+ * each bank's stored bytes (refused where `refused` names it), and the banks in `patched` holding a marker
+ * the test's seam reads as a frame-rate patch.
+ */
+function chainReport(options: {
+  readonly cfg0: number | null;
+  readonly activeSlotWord?: number | null;
+  readonly refused?: readonly SlotKey[];
+  readonly patched?: readonly SlotKey[];
+}): {
+  readonly report: SlotsReport;
+  readonly heldBy: (plain: Uint8Array | null) => { hz: number; what: string } | null;
+} {
+  const base = reportOf({ booted: 'a' });
+  const patchedImages = new Set<Uint8Array>();
+  const byKey = new Map<SlotKey, SlotState>();
+  const slots = base.slots.map((view): SlotView => {
+    const key = view.entry.key;
+    const plain = options.patched?.includes(key) === true ? new Uint8Array(8) : null;
+    if (plain !== null) patchedImages.add(plain);
+    const state = {
+      ...(view.state ?? {}),
+      key,
+      raw: bankRaw(options.refused?.includes(key) !== true),
+      blank: false,
+      unread: false,
+      plain,
+    } as unknown as SlotState;
+    byKey.set(key, state);
+    return { ...view, state, content: 'image' };
+  });
+  const state = {
+    ...base.state,
+    profile: getProfile('legacy-auth'),
+    plainChain: true,
+    version: '1.3.0.0',
+    cfg0: options.cfg0,
+    activeSlotWord: options.activeSlotWord ?? null,
+    byKey,
+  } as unknown as DeviceState;
+  const heldBy = (plain: Uint8Array | null) =>
+    plain !== null && patchedImages.has(plain) ? { hz: 32, what: 'marker' } : null;
+  return { report: { ...base, state, slots }, heldBy };
+}
+
+describe('the boot word and the frame-rate warning', () => {
+  it('shows the boot word, the bank the next start runs, and what the camera reports, on the 2014 chain', () => {
+    const { report } = chainReport({ cfg0: 2, activeSlotWord: 2 });
+    const text = listLines(report, false, null).join('\n');
+    expect(text).toContain('Boot');
+    expect(text).toMatch(/boot-config word\s+0x00000002 — recovery R first, then A, then B/);
+    expect(text).toMatch(/next start runs\s+recovery R/);
+    expect(text).toContain('the camera reports it entered recovery R (active-slot word 2)');
+    expect(text).toContain(
+      '· the boot-config word is 2, so the bootloader tries recovery R first, and it holds an image the bootloader accepts.',
+    );
+  });
+
+  it('prints the frame-rate warning under Boot, in the words core gives the page', () => {
+    const { report, heldBy } = chainReport({ cfg0: 2, activeSlotWord: 2, patched: ['a'] });
+    const warning = fpsBootWarningOf(report, { heldBy, patchBlock: () => null });
+    const text = listLines(report, false, warning).join('\n');
+    expect(text).toContain('! The camera boots recovery R.');
+    expect(text).toContain(
+      '! Slot A holds a frame-rate patch, but it does not run, so the patch does not take effect.',
+    );
+    expect(text).toContain(
+      '! Patch recovery R too (the bank that runs): that is what makes the frame-rate patch take effect.',
+    );
+  });
+
+  it('prints no boot section on a line that is not the 2014 plaintext chain', () => {
+    const plain = reportOf({ booted: 'a' });
+    expect(listLines(plain, false, null).join('\n')).not.toContain('boot-config word');
+    expect(bootLines(plain, false, null)).toEqual([]);
+  });
+
+  it('carries the boot choice in the list JSON, and no warning when nothing patched would fail to run', () => {
+    const { report } = chainReport({ cfg0: 2, activeSlotWord: 2 });
+    const list = listResult(report);
+    expect(list.boot).toMatchObject({
+      word: '0x00000002',
+      rule: 'recovery R first, then A, then B',
+      runs: 'r',
+      reportedBooted: 'r',
+      activeSlotWord: '0x00000002',
+    });
+    expect(list.fpsBootWarning).toBeNull();
+  });
+
+  it('puts the warning in the patch-fps plan as "!" lines, and keeps the saved-file line', () => {
+    const { report, heldBy } = chainReport({ cfg0: 2, activeSlotWord: 2 });
+    const warning = fpsBootWarningOf(report, { heldBy, patchBlock: () => null, target: 'a' });
+    const text = fpsPlanLines('a', offerOf(), 0x14050000, '1.3.0.0', false, null, warning).join(
+      '\n',
+    );
+    expect(text).toContain(
+      '! Patching slot A would not make it run, because the camera boots recovery R instead.',
+    );
+    expect(text).toContain('! Patch recovery R too (the bank that runs)');
+    expect(text).toContain('The saved decrypted file is the only way back.');
+  });
+
+  it('patch-fps dry run: the JSON names the warning for the bank being patched', async () => {
+    const { report } = chainReport({ cfg0: 2, activeSlotWord: 2 });
+    const { ops } = fakeOps(report);
+    const withPatch: SlotOps = { ...ops, fpsPlan: () => offerOf() };
+    const test = cameraIo();
+    const result = await slotsCommandWith(withPatch)(
+      contextFor(['slots', 'patch-fps', 'a', '--no-probe'], test),
+    );
+    expect(result).toMatchObject({ action: 'patch-fps', dryRun: true, written: false });
+    const bootWarning = (result as { readonly bootWarning: readonly string[] | null }).bootWarning;
+    expect(bootWarning?.[0]).toBe(
+      'The camera boots recovery R. The boot-config word is 2, so the bootloader tries recovery R first, and it holds an image the bootloader accepts.',
+    );
+    expect(bootWarning?.[1]).toBe(
+      'Patching slot A would not make it run, because the camera boots recovery R instead.',
+    );
   });
 });

@@ -9,7 +9,7 @@
 
 import { useRef, useState, type ReactElement } from 'react';
 import { Gauge } from 'lucide-react';
-import type { FpsPlan } from '@seek-fw/core';
+import type { FpsBootWarning, FpsPlan } from '@seek-fw/core';
 import { Checkbox } from './ui/field';
 import {
   AlertDialog,
@@ -35,6 +35,11 @@ export interface SlotFpsConfirmProps {
   readonly risk: WriteRisk;
   /** Named by the active-slot word on the 2014 chain (the words differ; see SlotWriteConfirm). */
   readonly namedByWord?: boolean;
+  /**
+   * The boot warning for this bank (core's fpsBootWarningOf): the bank the camera runs, and that a patch in
+   * this bank would not run. Null, or left out, when the patch takes effect. It states; it does not gate.
+   */
+  readonly bootWarning?: FpsBootWarning | null;
   /** How this browser saves the dump: a chosen place per file, or two downloads. */
   readonly saveMode: FpsSaveMode;
   readonly onConfirm: (acknowledged: boolean) => void;
@@ -48,6 +53,7 @@ export function SlotFpsConfirm({
   version,
   risk,
   namedByWord = false,
+  bootWarning = null,
   saveMode,
   onConfirm,
   onCancel,
@@ -96,6 +102,16 @@ export function SlotFpsConfirm({
           <p className="rounded-md border border-destructive/40 bg-destructive/8 px-3 py-2 text-[0.85rem] font-medium text-destructive">
             {`${slotName} is the recovery bank, the last-resort copy the bootloader falls back to.`}
           </p>
+        )}
+
+        {bootWarning !== null && (
+          <div className="space-y-1.5 rounded-md border border-warn/40 bg-warn/8 px-3 py-2 text-[0.85rem] text-foreground">
+            {bootWarning.paragraphs.map((paragraph) => (
+              <p key={paragraph} className="m-0">
+                {paragraph}
+              </p>
+            ))}
+          </div>
         )}
 
         <AlertDialogDescription id="slot-fps-confirm-what" className="space-y-2">
