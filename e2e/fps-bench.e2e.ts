@@ -13,6 +13,7 @@
  *     reset is sent; the camera is not power-cycled here.
  * Without SEEK_E2E_WRITE the file skips and says why.
  *
+ * SEEK_E2E_FPS_BUILD=1.3.0.0 runs it on a Compact 1.3.0.0 (default 4.8.2.1, the Compact XR).
  * The operator restores bank A and power-cycles the camera afterwards (TESTING.md 42.23).
  * ==================================================================== */
 
@@ -53,9 +54,23 @@ const CONFIRM_LABEL = 'Yes — patch Bank A';
 const BANK_BYTES = 0x10000;
 const CHUNK_BYTES = 64;
 const CHUNK_SLACK = 64;
-/** The stock 4.8.2.1 image: its length, and the bytes the 32 Hz patch changes (the dialog's count, TESTING.md 42.24). */
-const IMAGE_BYTES = 42680;
-const PATCH_BYTES = 13;
+/**
+ * The build the camera runs, which fixes the image length and the number of bytes the offered patch changes (the
+ * dialog's count). 4.8.2.1 (the Compact XR, TESTING.md 42.24): the stock image, 13 bytes. 1.3.0.0 (TESTING.md 42.25):
+ * the page's offer from the image that already carries the 16 Hz patch (the mode-8 edit alone, 9 bytes); SEEK_E2E_FPS_PATCH_BYTES
+ * says another count (17 from the stock image, whose mode-6 16 Hz edit rides along).
+ */
+const BUILD = process.env.SEEK_E2E_FPS_BUILD ?? '4.8.2.1';
+const BUILDS: Readonly<Record<string, { readonly image: number; readonly patch: number }>> = {
+  '4.8.2.1': { image: 42680, patch: 13 },
+  '1.3.0.0': { image: 47768, patch: 9 },
+};
+const BUILD_FACTS = BUILDS[BUILD];
+if (BUILD_FACTS === undefined) {
+  throw new Error(`fps-bench.e2e knows the builds ${Object.keys(BUILDS).join(', ')}, not ${BUILD}`);
+}
+const IMAGE_BYTES = BUILD_FACTS.image;
+const PATCH_BYTES = Number(process.env.SEEK_E2E_FPS_PATCH_BYTES ?? BUILD_FACTS.patch);
 
 if (MODE !== 'i-understand' && MODE !== 'dry-run') {
   process.stderr.write(
@@ -159,7 +174,7 @@ describe.skipIf(MODE !== 'i-understand' && MODE !== 'dry-run')(
       const rows = await bankRows(handle.page);
       const a = rows.find((row) => row.letter === 'a');
       expect(a, 'bank A row').toBeDefined();
-      expect(a?.firmware, 'bank A holds 4.8.2.1').toContain('4.8.2.1');
+      expect(a?.firmware, `bank A holds ${BUILD}`).toContain(BUILD);
       const fps = a?.buttons.filter((button) => button.label.startsWith('Make ')) ?? [];
       expect(
         fps.map((button) => button.label),
@@ -177,7 +192,7 @@ describe.skipIf(MODE !== 'i-understand' && MODE !== 'dry-run')(
       );
       say(`dialog: ${dialog.replace(/\s+/g, ' ').slice(0, 700)}`);
       expect(dialog, 'the dialog names the rate change').toContain('32 Hz instead of 8 Hz');
-      expect(dialog, 'the dialog names the build').toContain('holds firmware 4.8.2.1');
+      expect(dialog, 'the dialog names the build').toContain(`holds firmware ${BUILD}`);
       expect(dialog, 'the dialog names the bytes').toContain(
         `changes ${String(PATCH_BYTES)} byte(s)`,
       );
@@ -264,7 +279,7 @@ describe.skipIf(MODE !== 'i-understand' && MODE !== 'dry-run')(
           'the bank A decrypted dump, saved before the patch',
         );
         expect(raw.bytes.length, 'the raw dump is the whole bank').toBe(BANK_BYTES);
-        expect(decrypted.bytes.length, 'the decrypted dump is the 4.8.2.1 image').toBe(IMAGE_BYTES);
+        expect(decrypted.bytes.length, `the decrypted dump is the ${BUILD} image`).toBe(IMAGE_BYTES);
         await snap(handle.page, SHOT_DIR, 'fps-bench-after');
         say(`saved before the patch: ${raw.path} ; ${decrypted.path}`);
       },

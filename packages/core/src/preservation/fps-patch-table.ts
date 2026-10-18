@@ -401,6 +401,56 @@ export const FPS_PATCH_TABLE: readonly FpsPatchSource[] = [
     sibling: null,
   },
   {
+    // compact_32k-1.3.0.0-to32. Python PATCHES entry, emu/fps_patch.py. 32 Hz in the Normal stream (IP mode 8): the
+    // mode-8 capture program's block 8 (the steady self-loop) goes from op 5, 6, 6, 7 (mean of four, publish on the
+    // fourth capture) to one op-3 copy with the delivery bit; the mode-6 16 Hz edit is carried too. Measured on a
+    // Compact 1.3.0.0 (serial 1013CE098ACA): Normal mode 32.2 fps median, 0 frozen pairs.
+    id: 'compact_32k-1.3.0.0-to32',
+    family: 'compact_32k',
+    version: '1.3.0.0',
+    fromHz: 8,
+    targetHz: 32,
+    stockSha256: '862717a8a605021def7858ac0c04ad4aa1abe23d357d6c2417699939137f481c',
+    patchedSha256: 'd91284c65a5dfde608e1c221b66a7ada487f3d42e6f49f01d09c2c7d643b59a9',
+    length: 47768,
+    edits: [
+      { offset: 0xb964, before: '24', after: '22' },
+      { offset: 0xb966, before: '0140396001009927', after: '3960992700000000' },
+      { offset: 0xb898, before: '84', after: '81' },
+      { offset: 0xb89a, before: '5920692069207927', after: '3927000000000000' },
+    ],
+    row: {
+      label:
+        'mode-8 capture program block 8 (the steady self-loop, 34-byte blocks) and mode-6 block 2, one copy with the delivery bit per capture in mode 8',
+      offset: 0xb898,
+      length: 238,
+    },
+    sibling: null,
+  },
+  {
+    // compact_32k-1.3.0.0-to32-from16. Python PATCHES entry, emu/fps_patch.py. The 1.3.0.0 image that already carries the
+    // 16 Hz patch, taken to the same final image as compact_32k-1.3.0.0-to32 by the mode-8 edit alone.
+    id: 'compact_32k-1.3.0.0-to32-from16',
+    family: 'compact_32k',
+    version: '1.3.0.0',
+    fromHz: 8,
+    targetHz: 32,
+    stockSha256: '0ede6768f57acdfa65c19bdb3f62973789a43b28db24d7fbc4bc60fddde90692',
+    patchedSha256: 'd91284c65a5dfde608e1c221b66a7ada487f3d42e6f49f01d09c2c7d643b59a9',
+    length: 47768,
+    edits: [
+      { offset: 0xb898, before: '84', after: '81' },
+      { offset: 0xb89a, before: '5920692069207927', after: '3927000000000000' },
+    ],
+    row: {
+      label:
+        'mode-8 capture program block 8 (the steady self-loop, 34-byte blocks); one copy with the delivery bit per capture',
+      offset: 0xb898,
+      length: 34,
+    },
+    sibling: null,
+  },
+  {
     // compact_32k-1.2.0.0-to16. Python PATCHES entry, emu/fps_patch.py. Evidence:
     // // T h e   s a m e   3 4 - b y t e   b l o c k   a s   1 . 3 . 0 . 0   ( i d e n t i c a l   b y t
     // // e s   a t   + 0 x B 9 6 4 :   2 4   0 2 ,   0 1   4 0   3 9   6 0   0 1   0 0   9 9   2 7 ) ,
@@ -586,7 +636,7 @@ export const FPS_KNOWN_RATE: Readonly<
 export const FPS_NOT_PATCHED_NOTES: readonly string[] = [
   'Compact 32K 0.3.0.1, 0.7.0.7, 0.7.0.8, 0.8.0.0, 0.9.0.2, 0.9.0.6, 0.9.0.7, 0.9.1.0, 0.10.0.0, 1.0.0.0 at 8 Hz (and 0.5.x, 0.6.0.4, which the framerate suite cannot stream): no patch. Their images carry none of the steady-record byte patterns this tool knows (the 52-byte and 34-byte capture blocks, the PRO 1.0.3.0 row 14 and the PRO 4.9 row 20; see emu/README.md). Their record layout is not decoded.',
   'Compact 4.8.2.1 image f96ac57eda75 (the Compact 4.8.2.1 dump and the Compact XR 4.8.2.1 dump, one image) is in the table as compact_32k-4.8.2.1-to16 (two captures per frame) and compact_32k-4.8.2.1-to32 (one copy with LAST, one capture per frame; the page offers the highest).',
-  'Compact 32K 1.3.0.0 and 1.2.0.0 at 32 Hz: no patch. Its one-step block (op 3 and the idle steps removed, op 9 kept alone) alternates: each frame is the difference of the previous output and a capture, so the body mean swings about 6,900 halfwords per frame (emulator, 1.3.0.0 and 1.2.0.0: mean from -340 to +7,197). A correlated double sample needs a reference copy in the same frame, and no one-step block has one.',
+  'Compact 32K 1.3.0.0 and 1.2.0.0 at 32 Hz through the mode-6 block: no patch. Its one-step block (op 3 and the idle steps removed, op 9 kept alone) alternates: each frame is the difference of the previous output and a capture, so the body mean swings about 6,900 halfwords per frame (emulator, 1.3.0.0 and 1.2.0.0: mean from -340 to +7,197). A correlated double sample needs a reference copy in the same frame, and no one-step block has one. (1.3.0.0 reaches 32 Hz in the Normal stream through its mode-8 steady block instead, compact_32k-1.3.0.0-to32; 1.2.0.0 has no such patch yet.)',
   'Earlier 32K 32 Hz blocks that dropped op 5 (1.3.0.8, 4.8.1.7, 4.8.1.9, and the FF 1.3.0.8 and 4.16.1.7 ids): withdrawn. Op 5 starts the frame and clears the mask that op 8 reads, so the picture froze (emulator: 56 to 58 of 58 to 61 steady pairs with zero changed halfwords). Replaced by the one-step block that keeps op 5 with the delivery bit.',
   'Mosaic 10.9.1.31: already an 18 Hz image (FRAME_RATE, emu/README.md LABEL_DECISIONS); not a 9 Hz target.',
   'Nano 200 42.32.3.10 already publishes every capture (32 Hz); Mosaic FF and Nano 300 are not 9 Hz targets.',

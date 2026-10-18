@@ -7714,3 +7714,59 @@ two forms.
   restored by the two raw uploads in section 7.
 - Each published frame is one capture now. The blade is not commanded differently (gpio 1, as stock), so the shutter cadence is
   unchanged [inferred].
+
+### 42.25 The Compact 1.3.0.0 at 32 Hz in the Normal stream (IP mode 8), measured on a 1.3.0.0 Compact, written by the page, and offered (2026-10-18)
+
+**Summary.** The 1.3.0.0 16 Hz patch edits the mode-6 capture program only. The Seek Thermal macOS app and CLI (`tv-jc/macos`) stream
+IP mode 8 (Normal) until "Init Hi FPS" switches to mode 3 after the first shutter frame, so with Hi FPS off a patched 1.3.0.0 still read
+8 fps (the owner's report). `compact_32k-1.3.0.0-to32` edits the mode-8 steady block as well: block 8 (the steady self-loop,
+image `+0xB898`, 34-byte blocks, first = next = 8, header id 3, gpio 1) goes from the four steps op 5, 6, 6, 7 (publish on the fourth
+capture) to one op-3 copy with the delivery bit (`39 27`). Measured on a Compact 1.3.0.0 (PIR206, serial `1013CE098ACA`), power-cycled
+after the write: Normal mode steady 32.2 fps median, 0 frozen pairs, about 94 % of pixels change between consecutive frames, level
+about 5,900 with a spread of about 430 counts. The page offers "Make 32 FPS" on the 1.3.0.0 image, from the stock image and from the image
+that already carries the 16 Hz patch, and its own write was driven on the camera.
+
+**Tags.** [measured] was read on the camera, the emulator or a file; [source] was read off the firmware file named; [inferred] follows from
+those and was not measured.
+
+**1. The source.**
+- [source] `FW-V1/targets/compact_8hz_1_3_0_0/src/frame_data.c`: `frame_mode_table_r32k` has one capture program per sensor mode; mode 8 has
+  12 blocks. Block 8 is `{4, first 8, next 8, steps: STEP(1,1,5,0,0,1), STEP(1,1,6,0,0,1), STEP(1,1,6,0,0,1), STEP(1,1,7,1,3,1)}`
+  (sel, active, op, push, hdr, gpio), the only block that loops on itself with header id 3, the usable frame of the processed stream.
+- [source] `src/image.c`: op 5 copies the line, multiplying samples at or above the level by 4; op 6 accumulates; op 7 averages in the quarter-scale
+  domain and quarters the over-level samples; op 3 copies the line. So a copy has the stock scale and carries no averaging.
+- [source] Mode 3 is one block of one step, `STEP(1,1,3,1,3,6)` (op 3 with the delivery bit): every capture is published. That is what
+  "Init Hi FPS" selects, and it already gives ~32 fps on the stock firmware. [measured: default settings run 32.0 to 32.3 fps median]
+- [source] `include/frame_prog_r32k.h`: the 2-byte step is `sel | active << 3 | op << 4`, then `push | hdr << 1 | gpio << 5`; `39 27` is
+  sel 1, active, op 3, push, hdr 3, gpio 1.
+
+**2. The edit (bytes).** Image `+0xB898` count `04 -> 01`; `+0xB89A..+0xB8A1` `59 20 69 20 69 20 79 27 -> 39 27 00 00 00 00 00 00`; the
+acceptance-sum word moves as the patcher computes it. Two table entries (`fps_patch.py`, `fps-patch-table.ts`, same hashes):
+`compact_32k-1.3.0.0-to32` (stock `862717a8…` to `d91284c6…`: the mode-6 16 Hz edit plus this edit, 21 changed bytes) and
+`compact_32k-1.3.0.0-to32-from16` (the 16 Hz image `0ede6768…` to the same `d91284c6…`, 13 changed bytes: 9 image bytes and the sum word).
+Both are stage one (the plain 2014 chain); 1.2.0.0 has the same mode-6 block but no mode-8 patch yet (its mode-8 block was not read).
+
+**3. Bench (the bench camera was not used; the owner's 1.3.0.0 unit, bank A written and restored from saved dumps).**
+- [measured] Hand-written candidate first (`slots flash a <image>`, read-back equal to the staged image): Normal mode median 32.2 fps
+  (31.85 to 32.29 per second), mean 18 to 33 per second (the calibration stretch is not patched), 0 frozen pairs, 94 % of pixels change per frame.
+  Hi FPS 32 fps as stock.
+- [measured] Before that, with the 16 Hz image: Normal (no Hi FPS) 8.0 fps, Hi FPS about 16 to 32 depending on the run. The unit measured 16 fps in the Hi
+  FPS modes right after one power cycle and 32 fps in every run after the next; the cause of that difference is not found.
+- [measured] The page's own write: bank A restored to the 16 Hz image, then `SEEK_E2E_TARGET=camera SEEK_E2E_WRITE=i-understand SEEK_E2E_FPS_BUILD=1.3.0.0
+  npm run e2e:fps:bench` (the spec now takes the build from `SEEK_E2E_FPS_BUILD`): the dialog read "Make Bank A run at 32 FPS ... 32 Hz instead of 8 Hz ...
+  changes 9 byte(s)", the page saved bank A raw (65,536 B) and decrypted (47,768 B), wrote the patched bank, and the read-back differed from the
+  saved dump only at the 13 planned bytes. After a power cycle (switch channel 2): Normal mode median 32.2 fps, default settings 32.2 fps
+  mean, 0 frozen pairs. The unit is left on this image.
+- [measured] The Pro init is never used on 1.3.0.0: the new app applies "Compact: use Pro init (new FW)" only on firmware 4.x and newer
+  (it stalls at request 0x55 on 1.3.0.0).
+
+**4. Tests (measured).** FW-V1 `fps_patch_unit_tests.py` 68 of 68 (the 1.3.0.0 dump takes the 32 Hz patch in both slots; the 16 Hz image goes to the same
+32 Hz image by the mode-8 edit alone; 1.2.0.0 has no 32 Hz patch). Core `preservation/fps-patch.test.ts`, `fps-patch.differential.test.ts` (with
+`SEEK_FPS_CORPUS`: the TypeScript equals the Python for the new entry on the image and on nine corpus dump banks, and the 16 Hz image reaches the same hash),
+`slots/fps-patch.test.ts`, `slots/page-expectations.emulator.test.ts` (the 1.3.0.0 row now expects 32), and the emulator flow `slots/fps-patch.emulator.test.ts`
+for 1.3.0.0 (offer 32 Hz, save gate, write, read-back, boot of the patched flash). Web 332 of 332, CLI `slots.test.ts` 100 of 100. The emulator streams
+mode 6 only, so it has no rate or picture test for the mode-8 edit; the rate and the picture are the bench's.
+
+**5. What is not established.** The mode-8 edit's effect on the shutter/NUC sequence (blocks 0 to 7, 9 to 11 are unchanged, and the camera ran its shutter
+cycle normally in the measurements); 1.2.0.0 and the other 2014-chain builds; the picture's noise against stock (the averaging is gone by design: the
+picture is the single-capture picture, as at 32 Hz on the 4.8.2.1, 42.24); the cause of the 16-versus-32 Hi FPS difference above.

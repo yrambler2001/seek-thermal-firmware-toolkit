@@ -110,6 +110,8 @@ const WITHHELD_REASON =
 export const FPS_STAGE_ONE_IDS: ReadonlySet<string> = new Set([
   'compact_32k-1.2.0.0-to16',
   'compact_32k-1.3.0.0-to16',
+  'compact_32k-1.3.0.0-to32',
+  'compact_32k-1.3.0.0-to32-from16',
   'compact_32k-1.3.0.8-to16',
   'compact_32k-1.3.0.8-to32',
 ]);
