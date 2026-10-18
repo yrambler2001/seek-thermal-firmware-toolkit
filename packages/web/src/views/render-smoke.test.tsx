@@ -16,7 +16,7 @@ import type { OfflineDecryptApi } from '@/hooks/useOfflineDecrypt';
 import type { SlotFileApi } from '@/hooks/useSlotFileDecrypt';
 import { useReporter, type ReporterHandle } from '@/hooks/useReporter';
 import { DEFAULT_OPTIONS_FORM } from '@/lib/options';
-import { detectProfile, getProfile, identityGate, type ImageHeader } from '@seek-fw/core';
+import { detectProfile, getProfile, identityGate } from '@seek-fw/core';
 import type { SlotFileDecryption } from '@seek-fw/core';
 import { buttonByText, render, renderHook } from '@/test-helpers';
 

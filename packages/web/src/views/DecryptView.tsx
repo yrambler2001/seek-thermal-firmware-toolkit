@@ -45,7 +45,7 @@ function keyRows(result: SlotFileDecryption): readonly KeyValueRow[] {
   }
   if (key.method === 'ff-key-b') {
     return [
-      ['Key', `${key.named ?? 'Key B of the 1.3.0.8 FF pair'}`],
+      ['Key', key.named ?? 'Key B of the 1.3.0.8 FF pair'],
       ['Stored as', 'the image XOR the Key B keystream, header window verbatim'],
     ];
   }
