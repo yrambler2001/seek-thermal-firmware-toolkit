@@ -13,6 +13,7 @@ import { render } from '../test-helpers';
 const STORE: WriteKeysVerdict = {
   refusal: null,
   plainChain: false,
+  underCameraKey: true,
   bootedName: 'slot A',
   keyName: 'Key B',
   bootedKeyName: 'Key A',
@@ -26,6 +27,7 @@ const STORE: WriteKeysVerdict = {
 const SAME: WriteKeysVerdict = {
   refusal: null,
   plainChain: false,
+  underCameraKey: true,
   bootedName: 'slot A',
   keyName: 'Key A',
   bootedKeyName: 'Key A',
@@ -36,6 +38,7 @@ const REFUSED: WriteKeysVerdict = {
   refusal:
     'the running application (bank A, firmware 4.16.1.7) checks an upload under its own keys before it programs it',
   plainChain: false,
+  underCameraKey: true,
   bootedName: 'slot A',
   keyName: null,
   bootedKeyName: 'Key A',
@@ -46,6 +49,7 @@ const REFUSED: WriteKeysVerdict = {
 const PLAIN: WriteKeysVerdict = {
   refusal: null,
   plainChain: true,
+  underCameraKey: false,
   bootedName: 'slot A',
   keyName: null,
   bootedKeyName: null,

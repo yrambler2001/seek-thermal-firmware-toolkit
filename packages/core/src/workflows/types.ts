@@ -369,6 +369,20 @@ export interface DeviceState {
   /** Why `canFlash` is false, for a UI that has to explain the greyed-out button. */
   readonly flashBlockedBy: readonly string[];
   /**
+   * The part of `flashBlockedBy` that only the classic upgrade flow needs: which bank an upgrade
+   * (selector 0) would write, and the window that upgrade would arm. The slot page writes the bank it
+   * names through that bank's own window, so it does not refuse the camera for these (see
+   * `gateWithoutAppKeys`). Optional: states built elsewhere (fixtures) read as none.
+   */
+  readonly upgradeBlockedBy?: readonly string[];
+  /**
+   * The part of `flashBlockedBy` that only the classic writer needs: the key table it stages under, and
+   * its 2014-only line statement. The slot page keeps them for the key-A line (whose derivation reads the
+   * same table) and drops them on the 2016 keystream line and the 1.3.0.8 FF build, which stage from their
+   * own images (see `gateWithoutAppKeys`). Optional: states built elsewhere read as none.
+   */
+  readonly classicWriterBlockedBy?: readonly string[];
+  /**
    * The entry of `flashBlockedBy` that says the running application does not carry the
    * bootloader's key pair (`runningApplicationKeyBlock`), or null. The slot page derives its
    * upload keys from the booted bank and the running application instead (slots/write-keys.ts),

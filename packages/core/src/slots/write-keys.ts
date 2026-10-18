@@ -57,8 +57,10 @@ import { cryptBytes } from '../crypto/cipher.js';
 import { findEmbeddedKeyTable, stateFromKey, UNNAMED_KEY } from '../crypto/keys.js';
 import type { CipherProfile, SlotKey } from '../profiles/types.js';
 import type { DerivedKey } from './types.js';
+import { unreadSlotBlock } from '../workflows/device-info.js';
 import type { DeviceState } from '../workflows/types.js';
 import { APPLICATION_KEY_PAIRS } from './application-pairs.js';
+import { classifyBuild, stagingFor } from './capability-family.js';
 
 /** A named key and its 16 bytes. */
 export interface KeyRef {
@@ -122,15 +124,29 @@ export function checksUploadUnderOwnKeys(version: string | null): boolean {
 }
 
 /**
- * Why a bank of this camera cannot be written, or null when it can. The page's own gate minus the one
- * reason it replaces, then the derivation of the upload keys. The 2014 plaintext chain has no upload
- * keys to derive (every bank is stored plain), so only the gate applies there. The slot page, the CLI
- * and the writer all ask this one question, so they cannot disagree about it.
+ * Whether this build's slot writes are sent under keys the camera holds: the Key A staging, the modern
+ * line. Only those writes read the camera's key table and the upload-key derivation, so only those can be
+ * refused for the camera as a whole. The 2014 plaintext chain (plain staging), the 2016 keystream line
+ * (its own key pair, found in the image) and the 1.3.0.8 FF build (its vendor form) stage from their own
+ * images: the write path sends them whatever the camera's key table says, so a camera-wide reason such as
+ * "the key table could not be confirmed" or "the write path is implemented only for the 2014 chain" is a
+ * false banner on them (it is the classic `flash` gate's wording, not the slot page's).
+ */
+export function stagesUnderCameraKey(state: DeviceState): boolean {
+  return stagingFor(classifyBuild(state.profile, state.version).family) === 'key-a-ciphertext';
+}
+
+/**
+ * Why a bank of this camera cannot be written, or null when it can. On a build whose writes are sent under
+ * the camera's keys (`stagesUnderCameraKey`): the page's own gate minus the one reason it replaces, then the
+ * derivation of the upload keys. On the other builds no camera-wide reason applies, and the bank's own
+ * refusal (the plan, an unread or an empty bank) is the page's answer. The slot page, the CLI and the writer
+ * all ask this one question, so they cannot disagree about it.
  */
 export function slotWriteRefusal(state: DeviceState): string | null {
   const gate = gateWithoutAppKeys(state);
   if (gate !== null) return gate;
-  return state.plainChain ? null : deriveWriteKeys(state).refusal;
+  return stagesUnderCameraKey(state) && !state.plainChain ? deriveWriteKeys(state).refusal : null;
 }
 
 /**
@@ -141,10 +157,9 @@ export function slotWriteRefusal(state: DeviceState): string | null {
 export function writeBannerOf(state: DeviceState): string | null {
   const refusal = slotWriteRefusal(state);
   if (refusal !== null) return refusal;
+  if (!stagesUnderCameraKey(state) || state.plainChain) return null;
   const keys = deriveWriteKeys(state);
-  return !keys.plainChain && keys.atRest === null
-    ? (keys.refusal ?? 'the keys could not be derived')
-    : null;
+  return keys.atRest === null ? (keys.refusal ?? 'the keys could not be derived') : null;
 }
 
 /**
@@ -181,11 +196,33 @@ function keyBytesNamed(state: DeviceState, name: string): Uint8Array | null {
 }
 
 /**
- * The page's own flash gate, minus the one reason this module replaces (the
- * running application lacks the bootloader's pair). Null when nothing else refuses.
+ * The page's own flash gate, for the camera as a whole: the flash gate's reasons minus the three that
+ * are not about the camera as a whole.
+ *   - the running application lacks the bootloader's pair (this module replaces it, `appKeysBlock`);
+ *   - a bank the read could not read: the bank's row says so and its write is refused by name, so the
+ *     other banks are still writable and the banner must not say none is;
+ *   - the upgrade flow's reasons (`upgradeBlockedBy`: which bank an upgrade would write). The page writes
+ *     the bank it names through that bank's own window, and an unnamed boot is handled by the
+ *     acknowledgement, so the upgrade's target does not refuse a write;
+ *   - on a build that does not stage under the camera's key (`stagesUnderCameraKey`), the classic writer's
+ *     own reasons (`classicWriterBlockedBy`: the key table, the 2014-only line).
+ * Null when nothing else refuses. Every other reason still refuses the whole camera, and says which.
  */
 export function gateWithoutAppKeys(state: DeviceState): string | null {
-  const others = state.flashBlockedBy.filter((why) => why !== (state.appKeysBlock ?? null));
+  const unread = new Set(state.slots.filter((slot) => slot.unread).map(unreadSlotBlock));
+  const upgrade = new Set(state.upgradeBlockedBy ?? []);
+  /* The classic writer's own reasons refuse only the lines that write under the camera's key; the 2016 and
+   * FF lines do not stage under it, so they never see those reasons. */
+  const classic = stagesUnderCameraKey(state)
+    ? new Set<string>()
+    : new Set(state.classicWriterBlockedBy ?? []);
+  const others = state.flashBlockedBy.filter(
+    (why) =>
+      why !== (state.appKeysBlock ?? null) &&
+      !unread.has(why) &&
+      !upgrade.has(why) &&
+      !classic.has(why),
+  );
   if (others.length === 0) return null;
   return `this camera cannot be written from here: ${others.join('; ')}`;
 }

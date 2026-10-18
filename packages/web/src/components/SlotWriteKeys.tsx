@@ -8,7 +8,13 @@
 
 import type { ReactElement } from 'react';
 import { KeyRound } from 'lucide-react';
-import { derivedKeyLine, deriveWriteKeys, writeBannerOf, type SlotsReport } from '@seek-fw/core';
+import {
+  derivedKeyLine,
+  deriveWriteKeys,
+  stagesUnderCameraKey,
+  writeBannerOf,
+  type SlotsReport,
+} from '@seek-fw/core';
 import { KeyValue } from './KeyValue';
 import { Panel, PanelTitle } from './Panel';
 import { Prose } from './Prose';
@@ -19,6 +25,11 @@ export interface WriteKeysVerdict {
   readonly refusal: string | null;
   /** The 2014 plaintext chain: every bank is stored plain, so no upload key is derived (not a refusal). */
   readonly plainChain: boolean;
+  /**
+   * Whether this build's writes are sent under the camera's own key (the modern Key A line). False on the 2016
+   * keystream line and the 1.3.0.8 FF build, which stage each image under the key pair it carries.
+   */
+  readonly underCameraKey: boolean;
   /** The booted bank's name, as the page shows it ("slot A"), or null when none is named. */
   readonly bootedName: string | null;
   /** The key every bank is written under (e.g. "Key B"). */
@@ -41,6 +52,7 @@ export function writeKeysVerdictOf(report: SlotsReport): WriteKeysVerdict {
     /* The banner's text is core's (writeBannerOf): the same words the CLI's JSON carries. */
     refusal: writeBannerOf(report.state),
     plainChain: keys.plainChain,
+    underCameraKey: stagesUnderCameraKey(report.state),
     bootedName: booted,
     keyName: keys.atRest?.name ?? null,
     bootedKeyName: keys.bootedKeyName,
@@ -82,6 +94,25 @@ export function SlotWriteKeys({ verdict }: SlotWriteKeysProps): ReactElement {
             </ul>
           </Prose>
         )}
+      </Panel>
+    );
+  }
+  if (!verdict.underCameraKey) {
+    /* The 2016 keystream line and the 1.3.0.8 FF build: the camera's key is not used, so the derivation's
+     * evidence (which describes the booted bank's key) is not shown: it would describe a write this build
+     * does not make. */
+    return (
+      <Panel className="mt-3">
+        <PanelTitle icon={<KeyRound />}>Keys for the writes</PanelTitle>
+        <KeyValue
+          rows={[
+            ['Chain', 'this build stages each image under the key pair the image carries'],
+            [
+              'Written as',
+              'the image under its own key pair, found in the image, to any bank; the camera’s keys are not used',
+            ],
+          ]}
+        />
       </Panel>
     );
   }

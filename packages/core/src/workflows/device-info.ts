@@ -370,7 +370,10 @@ function ffFormInRecovery(key: SlotKey, slot: AnalysedSlot): boolean {
  * cmd_GetFirmwareInfo cases 6 to 8, TESTING.md 42.12). Read only on 1.3.0.8, where two builds share the
  * version string.
  */
-async function readBankVerdicts(device: SeekDevice, reporter: WorkflowContext['reporter']): Promise<BankVerdicts> {
+async function readBankVerdicts(
+  device: SeekDevice,
+  reporter: WorkflowContext['reporter'],
+): Promise<BankVerdicts> {
   const answerOf = async (selector: number, label: string): Promise<number | null> => {
     const got = await device.tryFwInfo(selector, 1, label);
     return got !== null && got.length >= 1 ? (got[0] ?? null) : null;
@@ -1056,11 +1059,17 @@ export async function readDeviceInfo(
 
   /* ---- the flash gate ------------------------------------------------ */
   const blocked: string[] = [];
+  /* The reasons only the classic writer needs: its key table, and its 2014-only line. A key-A line's
+   * writes are checked by the upload-key derivation (write-keys.ts); a 2016 or FF write stages from its
+   * own image, so neither reason applies to it. Kept apart as `classicWriterBlockedBy`. */
+  const classicWriter: string[] = [];
   /* The key table and the acceptance sum are the cipher chain's questions. On
    * the 2014 plaintext chain nothing is encrypted — the arm, the staging and
    * the commit read no key and sum no decrypted words — so the chain's own
    * measurements (identity keystream, stored word sum 0) stand in for both. */
-  if (!keyTable && !plainChain) blocked.push("this camera's key table could not be confirmed");
+  if (!keyTable && !plainChain) {
+    classicWriter.push("this camera's key table could not be confirmed");
+  }
   if (!familyOk && !plainChain) {
     blocked.push(
       `no slot decrypts to ${profile.name}'s ${hexUp(profile.cipher.acceptanceSum)} acceptance sum`,
@@ -1071,14 +1080,22 @@ export async function readDeviceInfo(
    * chains and the builds whose mode 0 is not the upgrade target — is told
    * exactly that, rather than being waved through a cipher-shaped staging. */
   if (!plainChain && plan.selectors.some((row) => row.channel === 'auth')) {
-    blocked.push(
+    classicWriter.push(
       'the write path on this line is implemented only for the 2014 plaintext chain — banks ' +
         'stored plain, word sum 0, no key material — and no bank this read opened is stored ' +
         'that way',
     );
   }
-  blocked.push(...chainBlocked);
-  if (prediction === null) blocked.push('the slot an upgrade would write could not be determined');
+  blocked.push(...classicWriter);
+  /* The reasons that only the classic upgrade flow (`flash`, selector 0) needs: which bank an
+   * upgrade would write. The slot page writes the bank it names, through that bank's own window,
+   * and treats an unnamed boot with the acknowledgement (`writeRisk.bootUnnamed`), so these reach
+   * `blocked` for the classic gate and are kept apart as `upgradeBlockedBy` for the slot page. */
+  const upgradeOnly: string[] = [];
+  upgradeOnly.push(...chainBlocked);
+  if (prediction === null) {
+    upgradeOnly.push('the slot an upgrade would write could not be determined');
+  }
   if (keysBlock !== null) blocked.push(keysBlock);
   /* The original threw out of readDeviceInfo the moment any slot's window
    * refused to arm, so a partial picture could never reach the write path at
@@ -1087,24 +1104,27 @@ export async function readDeviceInfo(
    * one an upgrade overwrites, and `confirmUpgradeTarget` cannot match a
    * window against bytes it does not have. */
   for (const slot of slots) {
-    if (slot.unread) {
-      blocked.push(`${slot.name} could not be read (${slot.reason ?? 'unknown error'})`);
-    }
+    if (slot.unread) blocked.push(unreadSlotBlock(slot));
   }
   const flashSupport = profile.capabilities.flash;
   if (!flashSupport.supported) {
-    blocked.push(`${profile.name} does not support flashing: ${flashSupport.reason}`);
+    /* The classic writer's own capability (its staging forms). The slot page stages a line by its own
+     * form (slots/write-keys.ts, capability-family.ts), so this reason refuses the classic flow only. */
+    const reason = `${profile.name} does not support flashing: ${flashSupport.reason}`;
+    blocked.push(reason);
+    classicWriter.push(reason);
   }
   /* A profile that writes through a selector this build's table does not have
    * has no window to write, and `writeFirmware` would refuse on the state
    * anyway; saying so here keeps the button honest. A profile that names no
    * selector at all is already blocked by its capability, or by the write. */
   if (profile.boot.updateTargetSubcmd >= 0 && updateTargetSubcmd === null) {
-    blocked.push(
+    upgradeOnly.push(
       `there is no upgrade-target selector ${hex(profile.boot.updateTargetSubcmd)} in this ` +
         `firmware's own table (${plan.table}), so there is no window to write`,
     );
   }
+  blocked.push(...upgradeOnly);
   if (keyWhiteningK !== profile.cipher.whiteningK) {
     blocked.push(
       `this camera's key table resolves under K=${hexUp(keyWhiteningK)} but ${profile.name} ` +
@@ -1179,6 +1199,8 @@ export async function readDeviceInfo(
     plainChain,
     canFlash: blocked.length === 0,
     flashBlockedBy: blocked,
+    upgradeBlockedBy: upgradeOnly,
+    classicWriterBlockedBy: classicWriter,
     appKeysBlock: keysBlock,
   };
 
@@ -1267,6 +1289,14 @@ export function profileToRereadUnder(state: DeviceState, forced: boolean): Firmw
     a.clearWords[0] !== b.clearWords[0] ||
     a.clearWords[1] !== b.clearWords[1];
   return differs ? best : null;
+}
+
+/**
+ * The flash-gate reason for a bank the read could not read. It names one bank: the slot page refuses
+ * that bank (its row says "Not read", and `prepareSlotFlash` refuses it) and no other.
+ */
+export function unreadSlotBlock(slot: SlotState): string {
+  return `${slot.name} could not be read (${slot.reason ?? 'unknown error'})`;
 }
 
 /** The slot the camera booted from, when the boot policy could name one. */

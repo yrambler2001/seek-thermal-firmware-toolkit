@@ -8,8 +8,25 @@
  * and the phone layout keep the accessibility the other views have.
  */
 
+import type * as CoreModule from '@seek-fw/core';
 import { act } from 'react';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+
+/*
+ * The camera-wide verdict (core's `writeBannerOf`, which the banner and every row's flash controls read) is
+ * tested in core and in SlotsView.verdicts.test.tsx. The fake camera this file reads is one the key derivation
+ * refuses (its booted bank decrypts under no key), so these tests, which are about one row's own controls and
+ * words, hold the verdict at "writable" unless a test sets `cameraVerdict.held` (the banner tests do).
+ */
+const cameraVerdict = vi.hoisted(() => ({ held: null as string | null | undefined }));
+vi.mock('@seek-fw/core', async (importOriginal) => {
+  const actual = await importOriginal<typeof CoreModule>();
+  return {
+    ...actual,
+    writeBannerOf: (state: Parameters<typeof actual.writeBannerOf>[0]) =>
+      cameraVerdict.held === undefined ? actual.writeBannerOf(state) : cameraVerdict.held,
+  };
+});
 import { detectSupport, type BrowserEnvironment } from '../lib/support';
 import { useReporter, type ReporterHandle } from '../hooks/useReporter';
 import type { SlotsPanelApi } from '../hooks/useSlotsPanel';
@@ -40,6 +57,7 @@ beforeAll(async () => {
 
 afterEach(() => {
   window.location.hash = '';
+  cameraVerdict.held = null;
 });
 
 const READY = detectSupport({
@@ -115,6 +133,7 @@ describe('SlotsView', () => {
   });
 
   it('states the keys the writes use: the booted bank’s key, or the measured refusal, from core', () => {
+    cameraVerdict.held = undefined;
     const report = slotReport(base);
     const verdict = writeKeysVerdictOf(report);
     const { container, unmount } = view(panel({ plan: slotPlan(true), report }));
@@ -927,7 +946,7 @@ describe('SlotsView: the device info on this page', () => {
     expect(text).toContain(base.version);
     expect(text).toContain('Profile');
     expect(text).toContain('Booted from');
-    expect(text).toContain('Upgrade target');
+    expect(text).toContain('Upgrade target (its own upgrade)');
 
     /* Exactly one bank table, and it is SlotTable's: the device info adds no second one. */
     expect(container.querySelectorAll('table')).toHaveLength(1);

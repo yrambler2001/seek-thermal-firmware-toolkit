@@ -32,6 +32,7 @@ export {
   deriveWriteKeys,
   gateWithoutAppKeys,
   slotWriteRefusal,
+  stagesUnderCameraKey,
   writeBannerOf,
   uploadLandsUnder,
   type ApplicationKeys,
