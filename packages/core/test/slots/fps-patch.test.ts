@@ -15,6 +15,7 @@ import { getProfile } from '../../src/profiles/registry.js';
 import { buildSlotPlan } from '../../src/slots/capability.js';
 import {
   checkReadBack,
+  checkReadBackDecrypted,
   fpsPlanOfBank,
   fpsPreDumpNames,
   patchBankFps,
@@ -203,5 +204,27 @@ describe('the names the pre-patch dump is saved under', () => {
       'seek-slot-R-vunknown-before-fps-patch-raw-aa.bin',
     );
     expect(fpsPreDumpNames('b', '1.3.0.8 FF/x', 'aa', 'bb').raw).toMatch(/-v1\.3\.0\.8-FF-x-/);
+  });
+});
+
+describe('the read-back of a Key A bank, judged on its decrypted image', () => {
+  it('says it did not check when there is no read-back', () => {
+    expect(checkReadBackDecrypted(plainImage(0x800, 5), null, [0x238], legacy.cipher)).toEqual({
+      checked: false,
+      differing: [],
+      missing: [],
+      unexpected: [],
+      ok: null,
+    });
+  });
+
+  it('refuses a read-back too short to hold the image it is judged on', () => {
+    const check = checkReadBackDecrypted(
+      plainImage(0x800, 6),
+      new Uint8Array(0x400),
+      [0x238],
+      legacy.cipher,
+    );
+    expect(check).toMatchObject({ checked: true, ok: false, missing: [0x238] });
   });
 });
