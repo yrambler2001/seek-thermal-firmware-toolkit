@@ -89,9 +89,11 @@ export interface FpsPatch {
 }
 
 /**
- * Whether the stage-one offer is withheld. It was withheld after the first bench run (TESTING.md 42.14: stock
- * 8.11 fps, patched 8.29 fps, shutter reported on every frame) and re-enabled by the owner on 2026-10-18 while the
- * Compact-native measurement is built. The switch stays so a later finding can turn the offer off again.
+ * Whether the stage-one offer is withheld. It was withheld after the first bench run (TESTING.md 42.14), whose
+ * 8.29 fps reading was taken before the written image ran. 42.15 corrects it: the 1.3.0.0 patch gives 16.00 fps in
+ * IP mode 6 after a power cycle; the per-frame shutter is stock mode-6 behaviour (the patch doubles the blade's
+ * motion, inferred). The owner re-enabled the offer, with no warning, on 2026-10-18. The switch stays so a later
+ * finding can turn the offer off again.
  */
 export const FPS_OFFER_WITHHELD = false;
 

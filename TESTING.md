@@ -6837,7 +6837,12 @@ reached the disk; the dialog says which one applies. There is no restore control
 The bank R copy was never written. The frame-rate measurement is the stream recorder's manifest rate (complete frames over
 the span); it reproduced the stock 8 Hz, so the method is taken as sound for this camera.
 
-**What the hardware shows (inferred from the rows above).** The edit does not raise the publish rate on the physical camera
+**Correction (42.15, measured): this paragraph is wrong.** The 8.29 fps row was read before the written patch ran. A bank write
+takes effect at the next power-up; with the stock image still running the rate stays 8 Hz. After a power cycle the 16 Hz patch
+publishes at 16.00 fps (mode 6). The "shutter every frame" it describes is, from the source, the stock mode-6 behaviour too
+(inferred; 42.15 items 4-5). See 42.15.
+
+**What the hardware shows (inferred from the rows above; superseded by 42.15).** The edit does not raise the publish rate on the physical camera
 (8.11 to 8.29 fps), and the shutter fires on every frame. The table's 16 Hz claim, measured only in the emulator, is therefore
 wrong for this camera. The Python's OPEN item for this block said the shutter sequence changes from 2,3,0,1 to 3,1, which the
 emulator does not model; the bench shows the consequence. The byte-level write itself is exact (the 12-byte diff).
@@ -6853,6 +6858,144 @@ only after a bench run shows the publish rate and the shutter are right; the emu
 (`slots/fps-patch.emulator.test.ts`, 3 of 3 before the withholding) is skipped while it is true and runs again when it is false.
 The owner should confirm this. (2) The button label for 1.2.0.0 and 1.3.0.0 would have said 16 Hz, not 32 Hz, because the
 table has no 32 Hz entry for them.
+
+### 42.15 The Compact's frame rate, measured: the 16 Hz patch works in IP mode 6, the per-frame shutter is a mode-6 property, and the vendor SDK streams in mode 8 (2026-10-18)
+
+**The correction first.** 42.14 read the patch as ineffective (8.29 fps) and the shutter as firing on every frame after the
+write. Both readings were wrong about the camera: the 8.29 fps run took place before the written patch ran (a bank write takes
+effect at the next power-up, and the CLI says so). With the patched image running the rate is 16.00 fps. The per-frame shutter
+is, from the source, the stock mode-6 behaviour, and the patch doubles it (inferred; items 4-5 below). Tags below: **[measured]** was read off the bench or the recorded
+frames; **[source]** was read off the firmware, the SDK or the tables, with the file and line; **[inferred]** follows from those and
+was not measured.
+
+**What was built** (`e2e/lib/bench/compact-fps/`; no app code changed):
+- `compact-frames.mjs`: the parser and statistics, no USB. Frame size, row width, frame type, capture index, mean.
+- `compact-fps.mjs`: the camera runner, on the `usb` 3.x package with the WebUSB-shaped calls the CLI wraps
+  (`packages/cli/src/node-usb.ts`). It sends GetFirmwareInfo, GetChipID, GetOperationMode, GetIPMode and GetErrorCode (IN),
+  SetOperationMode 0 and 1 (stream stop and start, runtime state only) and ImageData(n), one credit per frame. `ALLOWED_OUT`
+  refuses any other OUT request in the process. It does not set the IP mode (SetIPMode is never sent), touches no flash and
+  resets nothing. `--store` keeps stream and records; `--analyze DIR` re-reads them with no camera.
+- `compact-frames.test.mjs` with `vitest.config.mjs` (run `npx vitest run --config e2e/lib/bench/compact-fps/vitest.config.mjs`):
+  18 of 18 pass. The fixture `fixtures/stock-raw-2s` (16 raw frames of the stock camera, IP mode 6, gzipped, 700 KB) is the
+  recorded input; the rest are synthetic frames (random pixels, noise markers, known types and indices). eslint clean.
+- Packages are untouched. `packages/core` and `packages/cli` were built (dist, ignored) to run the CLI on the bench.
+
+**How each number is obtained.**
+- Frame size **66560 B** [measured]: the header marker 0x04B1 (`src/app_init.c:904`) recurs at this spacing, with each pair
+  checked against the capture index (header halfword 1, `app_init.c:932`); on stock run 1 the 66560 spacing is the one shared by
+  the most index-consistent pairs (162 of 2473 such pairs, against 163 frames). A bare marker scan is
+  not enough: pixel values equal to 1201 occur in the body, so pairs must also step the index forward. The frame is also
+  `0x680` header bytes (`stream_push_chunk`, `app_init.c:~470-500`) plus 156 rows, which is 66560 bytes.
+- Row width **208** [derived]: the one value in 128..320 that makes the header (0x680 bytes) and the whole frame whole rows.
+  A picture-based width was tried first and rejected: the vertical-neighbour score put its minima at 204 and 219, and the
+  body is a CDS difference (noise-dominated), so the 208-wide render is a fixed texture, not an image. The firmware's own pool
+  row is 208 halfwords (`app_init.c:570`).
+- Frame type **halfword 10 of body row 0** (byte 0x694 of a raw frame, byte 20 of the body) [source + measured]: the firmware
+  stores the publishing step's `hdr` there (`app_init.c:668`, `pool[0x14/2] = hdr`). The field is correct: the stock frame
+  types are 4 and 1 at boot and 3 on every steady frame, and the old recorder (`stream_compact.mjs`, `w10`) read the same word.
+  The PRO measurer (`measure_fps.py`) reads halfword 2 (the ramp average, `app_init.c:672`) and 342 x 260 frames: wrong here.
+- Capture index **header halfword 1** [source + measured]: it advances once per sensor capture (`stream_session._24`), so the
+  spacing of published frames in captures does not depend on how the host reads them. Stock: 4 per frame at 32.19 captures/s,
+  the 31.06 ms sensor period of EMULATOR.md 31.13.
+
+**Source side (step 1).**
+1. **What a step does.** `frame_line_dispatch` (`app_init.c:580-733`) and `frame_capture_step` (`app_init.c:808-900`) run the
+   program. Each capture runs one step: `sensor_gpio_control(gpio)` (`app_init.c:848, 883`), and a publishing step (push bit)
+   sends the frame with its `hdr` as the type. A block with a publishing step and no chunk pending restarts at step 0
+   (`app_init.c:689-699`), so a block's cycle always starts at its first step.
+2. **The 1.3.0.0 steady block** (`include/frame_prog_r32k.h:19-34` bitfields; `docs/FPS_PATCH_LINE_STEPS.md` 1.2, 1.5; decoded
+   from the stock image at `0xB964`): stock = idle (gpio 2), op 3 copy (gpio 3), idle (gpio 0), op 9 publish type 3 (gpio 1).
+   The 16 Hz patch keeps op 3 (gpio 3) and op 9 (gpio 1, publish) and drops the two idle steps (gpio 2 and 0). The header goes
+   from `24 02` to `22 02` (`fps_patch.py:300-324`).
+3. **What the gpio codes do.** `sensor_gpio_control` (`src/gpio.c:360-420`) accepts 0..4; 5..7 are "do not touch" (`gpio.c:368`,
+   `include/sequencer.h:99-105`). Codes 0 and 1 drive one polarity of the H-bridge, 2 and 3 the other (`gpio.c:381-387`). The
+   names in `include/sequencer.h:453-459` are 0 open stroke, 1 hold open, 2 close stroke, 3 hold closed, 4 coast. Those names are
+   documented for the PRO sequencer; the 1.3.0.0 routine is the same function (`gpio.c:353-360`). **[inferred for the 32K]**
+4. **Stock shutter cadence.** Per 4 captures (one published frame): a close stroke (2), a hold, an open stroke (0), a hold. So
+   the blade cycles once per published frame, at 8 Hz. **[inferred from 3]**
+5. **Patched shutter cadence.** Holds only, and the drive reverses at every capture (3, then 1). The blade reverses 32 times a
+   second instead of 16: twice as often. **[inferred from 3]** This is what the owner hears as faster.
+6. **Why the blade cycles per frame at all.** The correlated double sample takes its reference with the blade closed (op 3 at
+   gpio 3) and the sample with the blade open (op 9 at gpio 1). Op 9 writes its result over the reference (`d[i] = s[i] - d[i]`,
+   `docs/FPS_PATCH_LINE_STEPS.md` 1.4). No operator keeps a reference, so every published frame needs a fresh closed-blade
+   reference, and the blade must close once per frame. **[inferred]** At 16 Hz that is every 62 ms.
+7. **The mode the vendor SDK uses.** `seekusb_device_open` sends `seekusb_device_set_ipmode(dev, 8)`
+   (`Seek_Thermal_SDK_4.4.2.20/src/transport_usb/seekusb_device_ssp.c:217-222`; the request is `seekusb_device.c:173-177`).
+   The camera boots in mode 6 (measured, `GetIPMode` = `0600`). **[source; the phone app is not in this repo, so whether the phone
+   uses this path is inferred from the phone's behaviour, not read]**
+8. **Shutter-free publish paths exist in mode 6.** Blocks 5, 6 and 7 publish type 3 with gpio 6 on every step: block 5 is an
+   accumulate (op 5, op 6, op 6, op 7), block 7 is one copy (op 3) (`docs/FPS_PATCH_LINE_STEPS.md` 1.5, decoded from the
+   stock image at `0xB9CA` and `0xBA0E`). Their role in the chain was not traced. **[source]**
+
+**Measured (PIR206, 101310HSNEA2, 1.3.0.0; switch ch1 on, camera power-cycled between states; every row a 20 s window of raw credits).**
+
+| run | IP mode | image in the camera | fps (all) | thermal fps | captures per published frame (index step: count) | non-thermal frames | body mean (median) |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| stock, run 1 | 6 | stock (`862717a8`) | 8.11 | 8.05 | 4: 160, 2: 1 (boot), 1: 1 (boot) | 2 (types 4, 1: boot) | -750 |
+| stock, run 2 | 6 | stock | 8.11 | 8.05 | 4: 160 (same boot) | 2 (boot) | -906 |
+| stock, run 3 | 6 | stock | 8.11 | 8.05 | 4: 160 (same boot) | 2 (boot) | -1010 |
+| patched, run 1 | 6 | 16 Hz (`compact_32k-1.3.0.0-to16`) | 16.00 | 16.00 | 2: 313, 3: 5 | 2 (boot) | -89 |
+| patched, run 2 | 6 | 16 Hz | 15.85 | 15.84 | 2: 304, 3: 11 | 2 (boot) | -91 |
+| patched, run 3 | 6 | 16 Hz | 15.95 | 15.94 | 2: 310, 3: 7 | 2 (boot) | -101 |
+| patched, survey | 6 | 16 Hz, written again | 16.00 | 16.00 | 2: 313, 3: 5 | 2 (boot) | -102 |
+| stock image written back, **no** power cycle | 6 | 16 Hz still running | 15.97 | 15.97 | 2: 312, 3: 6 | 2 (boot) | -93 |
+| stock, after the power cycle | 6 | stock | 8.11 | 8.05 | 4: 160 | 2 (boot) | -866 |
+| stock, mode 8 (survey, 20 s) | 8 | stock | 7.42 | 6.43 | 4: 108, 5: 17, 6: 18, 13: 1, 1: 4 | 25 (types 1 x10, 6 x9, 4, 5, 7, 8, 9, 10) | 5516 |
+| patched bank A, mode 8 (survey, 20 s) | 8 | 16 Hz (mode 6 edit) | 7.50 | 6.51 | 4: 116, 5: 11, 6: 18, 13: 1 | 25 (same types) | 5500 |
+| candidate C1, mode 6 (bench only) | 6 | block 2 = one step, gpio 6 | 32.14 | 32.19 | 1: 640, 2: 1 (boot) | 2 (boot) | 4870 (median step 0.7) |
+| stock, final check | 6 | stock | 8.11 | 8.05 | 4: 160 | 2 (boot) | -807 |
+
+Each run stored its stream; the summary and the frame records are in the scratchpad (not committed). The halted whole-flash
+read was `40447c7e6da5cbc8…eb72` before the first write, after the first restore, after the second restore and at the end:
+the baseline each time. Bank A was written six times (patch, stock, patch, stock, candidate, stock), and each write was read
+back and matched its staged bytes. The bank R copy was never written. One restore attempt found no camera on the bus and wrote
+nothing.
+
+**Answers.**
+
+- **Does the 1.3.0.0 16 Hz patch raise the rate?** Yes, in IP mode 6, once the patched image runs: 8.11 to 16.00 fps, two
+  captures per published frame (measured). In mode 8, the vendor SDK's mode, it does nothing: 7.42 and 7.50 fps before and after.
+- **Does the shutter fire on every frame on stock?** In mode 6, yes [inferred from the source, item 4]: the stock publish cadence
+  (4 captures, 124 ms) is one close and one open stroke per frame. It is not a misreading of the frame type: every steady frame
+  is type 3 on stock and on the patch, so the type field cannot show shutter events, and it is read from the right word.
+  In mode 8 it is different: 25 calibration or shutter frames in 20 s (types 1, 4 to 10), about one a second, with image frames
+  between them. That is consistent with the phone sounding fine.
+- **Why the patched shutter is faster.** Two captures per frame, so the blade reverses at every capture (item 5): 32 reversals
+  a second, against 16 on stock [inferred]. That is the faster sound the owner heard.
+- **What the frame type field shows.** The types in the table: 3 for steady frames, 4 and 1 at boot, and 5 to 10 in mode 8 at
+  calibration. Every steady mode-6 frame is type 3, so the field does not mark the blade's moves in mode 6 [measured].
+- **Mode 8 and the phone.** The SDK opens the camera in mode 8 (item 7), while the camera boots in mode 6 and our harness did not
+  set a mode. So the bench shows the mode-6 shutter; a phone following the SDK would show the mode-8 pattern. The 16 Hz patch is
+  in the mode-6 program, so the phone is not affected by it. [inferred for the phone]
+
+**Candidate C1 (bench only, not in the app).** Block 2 of mode 6 cut to one step, the copy of block 7 (`39 c7`, op 3 publishing
+with gpio 6: no shutter command), self-loop header `21 02`, acceptance sum rebalanced: 32.14 fps, 640 type-3 frames, one publish
+per capture [measured]. The blade is not commanded [source: gpio 6 is "do not touch"]; its position was not measured. Limits: the
+bench scene is almost uniform and the picture was not judged (the render looks like the stock texture); there is no correlated
+double sample, so the fixed pattern and drift are not removed [inferred; not measured]. A check that needs a person: a warm hand
+in front of the lens shows whether the blade still closes.
+
+**The button.** The label is `Make ${toHz} FPS` (`packages/web/src/components/SlotTable.tsx:353`), with `toHz` the highest map
+target for the bank's image (`packages/core/src/preservation/fps-patch.ts:352`). So: 1.3.0.0 reads "Make 16 FPS" (true in
+mode 6, measured; not in mode 8); 1.2.0.0 reads 16 (no 32 Hz entry; not measured); 1.3.0.8 reads "Make 32 FPS" (the 32 Hz
+entry is not measured). The owner's expected 32 Hz for the Compact family holds only for 1.3.0.8, and that entry is untested.
+`FPS_OFFER_WITHHELD` is false, so the button stays enabled, as the owner decided. Its doc comment and `WITHHELD_REASON` still
+describe the 42.14 reading; they are out of date and were left as they are for the owner to decide.
+
+**Decisions taken while the owner was asleep, and the user's later note.** (1) The tool reads only: IP mode is read, never set;
+the survey that set mode 8 was a scratch script, not committed. (2) Row width is derived from whole rows, not the picture (above).
+(3) The fixture is 16 frames of stock run 1 (no new camera time). (4) No change to `packages/core`, the offer, or the table. The
+user then wrote that the shutter should be fixed and that it is fine on the phone; this section answers both, and the fix is a
+decision the owner has to make (below). No app code was changed.
+
+**Open, for the owner.** (a) The per-frame shutter in mode 6 is stock behaviour, and the 16 Hz offer doubles it. Options:
+withdraw the 1.3.0.0 offer (`FPS_OFFER_WITHHELD`); keep it and say in the button text that it changes mode 6 only and doubles
+the blade's rate; or test candidate C1 with a warm object in view and judge the picture. (b) Which mode does the phone app set? The
+SDK sets 8; the app is not in this repo. (c) 1.2.0.0 and the 1.3.0.8 entries (16 and 32 Hz) are not measured, and no bench unit
+for them is set up. (d) The stale comment on `FPS_OFFER_WITHHELD` (above).
+
+**Checks run.** `npx vitest run --config e2e/lib/bench/compact-fps/vitest.config.mjs`: 18 of 18. `npx eslint e2e/lib/bench/compact-fps/`:
+clean. No TypeScript changed, so no `tsc` run; `packages/core` and `packages/cli` were built to drive the bench CLI.
 
 ### 42.16 The CLI follows the web's tabs; `flash` is gone, and the whole-image write and its rescue dump went with it (2026-10-18)
 
