@@ -4,7 +4,6 @@
  *
  *  - "Dump all selectors" (sweep mode): probes every selector and saves what
  *    each returns. Slow; only when SEEK_E2E_SWEEP=1.
- *  - the hand-picked firmware family: pick a profile, dump under it.
  *  - "Decrypt a dump you already have": an offline decrypt of a file named by
  *    SEEK_E2E_DUMP_FILE (skipped when unset). Its decrypted slots are checked
  *    against the camera's own dump (same input bytes -> same plaintext).
@@ -15,7 +14,7 @@ import { existsSync } from 'node:fs';
 import { expect, it } from 'vitest';
 
 import { say } from './lib/browser.js';
-import { names, sha256 } from './lib/checks.js';
+import { sha256 } from './lib/checks.js';
 import { targetSpec } from './lib/spec.js';
 import { checkImage } from './lib/target-tools.js';
 
@@ -39,31 +38,10 @@ targetSpec({ title: 'Dump & decrypt — variants', slug: 'dump-variants' }, (ctx
     await ctx.target().wizard.connect();
   });
 
-  it('the hand-picked legacy family dumps and decrypts', async () => {
-    const w = ctx.target().wizard;
-    await w.route('#/');
-    await w.selectManualProfile('legacy-auth');
-    const run = await w.runDump({
-      panel: 'manual',
-      button: 'Dump as this family',
-      archive: /^seek_flash4m_legacy-auth_.+\.zip$/,
-      timeoutMs: 20 * 60_000,
-    });
-    expect(run.status).toMatch(/^Done — /);
-    const dir = names(run.entries)[0]?.split('/')[0] ?? '';
-    expect(dir).toMatch(/^seek_flash4m_legacy-auth_/);
-    expect(decryptedSlots(run.entries).size).toBeGreaterThanOrEqual(1);
-    /* The same windows as an auto-family dump, so the same image. */
-    const image = run.entries.find((e) => /^[^/]+\/flash_4m_usb[^/]*\.bin$/.test(e.name));
-    checkImage(
-      ctx.target(),
-      sha256(image?.data ?? new Uint8Array(0)),
-      "the hand-picked family's dump",
-    );
-  });
-
   it.skipIf(!RUN_SWEEP)('sweep mode probes every selector and saves what answers', async () => {
     const w = ctx.target().wizard;
+    await w.route('#/v4');
+    await w.openOptions();
     const run = await w.runDump({
       panel: 'dump',
       button: 'Dump all selectors (0x00–0xFF)',

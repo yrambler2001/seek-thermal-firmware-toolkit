@@ -18,7 +18,7 @@ import {
   type SlotKey,
   type SlotsReport,
 } from '@seek-fw/core';
-import { KeyValue, type KeyValueRow } from '@/components/KeyValue';
+import { DeviceInfoPanel } from '@/components/DeviceInfoPanel';
 import { Prose } from '@/components/Prose';
 import { RunPanel } from '@/components/RunPanel';
 import { Section } from '@/components/Section';
@@ -166,24 +166,14 @@ export function SlotsView({ slots, connected, busy }: SlotsViewProps): ReactElem
   const fpsView = fpsKey === null || report === null ? null : viewOf(report, fpsKey);
   const unsupported =
     plan !== null && !plan.supportedBuild.supported ? plan.supportedBuild.reason : null;
-  const active = report === null ? null : (report.slots.find((view) => view.active) ?? null);
   const pendingView = pending === null ? null : viewOf(pending.report, pending.key);
-
-  const summary: readonly KeyValueRow[] =
-    report === null
-      ? []
-      : [
-          ['Running build', report.state.version],
-          ['Profile', report.state.profile.name],
-          ['Booted now', active?.entry.name ?? 'none the bootloader can name'],
-        ];
 
   return (
     <>
       <Section
         id="slots"
         step="2"
-        title="Firmware slots"
+        title="Work with firmware slots"
         icon={<Layers />}
         aside={
           <Badge tone="err">
@@ -191,7 +181,7 @@ export function SlotsView({ slots, connected, busy }: SlotsViewProps): ReactElem
             Writes to flash
           </Badge>
         }
-        description="Reads the camera's three firmware banks — A, B and the recovery bank R — and shows what each holds. Reading and dumping change nothing. A flash button asks before any byte is sent."
+        description="Read slots asks the camera what it runs and reads its three firmware banks — A, B and the recovery bank R — and shows what each holds. Reading and dumping change nothing. A flash button asks before any byte is sent."
       >
         <Alert tone="err">
           <p>
@@ -253,7 +243,7 @@ export function SlotsView({ slots, connected, busy }: SlotsViewProps): ReactElem
 
         {report !== null && (
           <>
-            <KeyValue rows={summary} />
+            <DeviceInfoPanel state={report.state} />
             <SlotWriteKeys verdict={writeKeysVerdictOf(report)} />
             {report.state.version === '1.3.0.8' && (
               <label className="flex items-start gap-2 text-sm">
@@ -261,7 +251,9 @@ export function SlotsView({ slots, connected, busy }: SlotsViewProps): ReactElem
                   type="checkbox"
                   className="mt-1"
                   checked={slots.running16Hz}
-                  onChange={(event) => slots.setRunning16Hz(event.target.checked)}
+                  onChange={(event) => {
+                    slots.setRunning16Hz(event.target.checked);
+                  }}
                 />
                 <span>
                   This camera runs the 16 Hz build. It is used only for the 1.3.0.8 FF image, and
@@ -414,8 +406,8 @@ export function SlotsView({ slots, connected, busy }: SlotsViewProps): ReactElem
           <p>
             <strong>Make N FPS</strong> on a bank row edits that bank&apos;s image to a higher frame
             rate. The bank is saved first, as stored and decrypted, and the write waits for the
-            saved files. There is no restore button: flash the saved decrypted file to go back.
-            A bank that cannot be offered it says why.
+            saved files. There is no restore button: flash the saved decrypted file to go back. A
+            bank that cannot be offered it says why.
           </p>
           <p>
             A write erases one 64 KiB bank and programs it. The bootloader at{' '}

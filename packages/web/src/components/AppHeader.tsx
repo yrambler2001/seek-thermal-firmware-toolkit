@@ -1,14 +1,14 @@
 /**
- * The masthead and the view switch.
+ * The masthead and the tab switch.
  *
- * The two views are real URLs (`#/` and `#/flash`), so the switch is two real
- * links carrying `aria-current="page"` — not a tab widget that would make the
- * flash view unlinkable.
+ * The five tabs are real URLs (`#/`, `#/preserve`, `#/v4`, `#/decrypt`,
+ * `#/slots`), so the switch is five real links carrying `aria-current="page"` —
+ * not a tab widget, which would make a tab impossible to link to.
  */
 
 import type { ReactElement } from 'react';
-import { Archive, FlameKindling, Layers, Radar, Thermometer } from 'lucide-react';
-import { ROUTE_HREF, type Route } from '@/lib/routing';
+import { Archive, FileKey2, Info, Layers, Radar, Thermometer } from 'lucide-react';
+import { ROUTE_HREF, ROUTE_LABEL, ROUTES, type Route } from '@/lib/routing';
 import { cn } from '@/lib/utils';
 
 export interface AppHeaderProps {
@@ -19,37 +19,27 @@ export interface AppHeaderProps {
 
 interface NavItem {
   readonly route: Route;
-  readonly label: string;
   readonly icon: ReactElement;
+  /** The tab writes to the camera, so it reads as the flasher it is. */
   readonly danger: boolean;
 }
 
-const NAV: readonly NavItem[] = [
-  { route: 'dump', label: 'Dump & decrypt', icon: <Radar className="size-4" />, danger: false },
-  {
-    route: 'flash',
-    label: 'Firmware & flashing',
-    icon: <FlameKindling className="size-4" />,
-    danger: true,
-  },
-  {
-    route: 'preserve',
-    label: 'Preserve (stepwise)',
-    icon: <Archive className="size-4" />,
-    /* It writes too, but as a guided run that asks before each write and
-     * puts the camera back — it should read like the dump view, not like
-     * the one-shot flasher. */
-    danger: false,
-  },
-  {
-    route: 'slots',
-    label: 'Firmware slots',
-    icon: <Layers className="size-4" />,
-    /* It writes one bank at a time, from a decrypted image or raw bytes, and
-     * each write asks first — so it reads like the flasher it is. */
-    danger: true,
-  },
-];
+const ICONS: Readonly<Record<Route, ReactElement>> = {
+  info: <Info className="size-4" />,
+  preserve: <Archive className="size-4" />,
+  v4: <Radar className="size-4" />,
+  decrypt: <FileKey2 className="size-4" />,
+  slots: <Layers className="size-4" />,
+};
+
+/* Only the slots tab writes without a guided run: its writes ask first, one bank
+ * at a time. The 0.x/1.x tab writes too, but as a guided run that asks before
+ * each write and puts the camera back, so it reads like the dump tabs. */
+const NAV: readonly NavItem[] = ROUTES.map((route) => ({
+  route,
+  icon: ICONS[route],
+  danger: route === 'slots',
+}));
 
 export function AppHeader({ route, connected, canUseUsb }: AppHeaderProps): ReactElement {
   return (
@@ -59,7 +49,7 @@ export function AppHeader({ route, connected, canUseUsb }: AppHeaderProps): Reac
         aria-hidden="true"
         className={cn(
           'absolute inset-x-0 top-0 h-0.5',
-          route === 'flash' || route === 'slots' ? 'bg-destructive' : 'bg-primary/70',
+          route === 'slots' ? 'bg-destructive' : 'bg-primary/70',
         )}
       />
       <div className="mx-auto w-full max-w-[64rem] px-4 pt-5 pb-0 sm:px-6">
@@ -85,7 +75,7 @@ export function AppHeader({ route, connected, canUseUsb }: AppHeaderProps): Reac
           </span>
         </div>
 
-        <nav aria-label="Views" className="-mb-px flex flex-wrap gap-1 pt-4">
+        <nav aria-label="Tabs" className="-mb-px flex flex-wrap gap-1 pt-4">
           {NAV.map((item) => {
             const current = route === item.route;
             return (
@@ -105,7 +95,7 @@ export function AppHeader({ route, connected, canUseUsb }: AppHeaderProps): Reac
                 <span aria-hidden="true" className="[&_svg]:size-4">
                   {item.icon}
                 </span>
-                {item.label}
+                {ROUTE_LABEL[item.route]}
               </a>
             );
           })}

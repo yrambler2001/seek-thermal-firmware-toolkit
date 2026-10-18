@@ -1,4 +1,4 @@
-/** The "Opcode / Name / Dir / Why it is used" table, shared by both views. */
+/** The "Opcode / Name / Dir / Why it is used" table, for the 4.x/Nano tab's read-only guarantee. */
 
 import type { ReactElement } from 'react';
 import {
@@ -97,43 +97,5 @@ export const READ_ONLY_OPCODES: readonly OpcodeRow[] = [
     name: 'BeginFirmwareUpgrade',
     dir: 'OUT',
     why: 'volatile read-window selector only — it selects which 64 KiB block the next reads return, and writes nothing',
-  },
-];
-
-/**
- * What the flash view adds, verbatim from the original. `GetFirmwareInfo` is
- * also in the dump's vocabulary now — the dump reads the running version with
- * it — and is listed here as well for the records only this view reads.
- */
-export const FLASH_OPCODES: readonly OpcodeRow[] = [
-  {
-    opcode: '0x4e',
-    name: 'GetFirmwareInfo',
-    dir: 'IN',
-    why: 'running version, bootloader string, platform, USB speed, boot-config state',
-  },
-  {
-    opcode: '0x55',
-    name: 'SetFirmwareInfoFeatures',
-    dir: 'OUT',
-    why: 'selects which of the above to return — a selector register, writes no flash',
-  },
-  {
-    opcode: '0x5a',
-    name: 'SetRamDataFeatures',
-    dir: 'OUT',
-    why: 'arms the 248-byte RAM device-id block so the serial can be read',
-  },
-  {
-    opcode: '0x50',
-    name: 'SetFeaturedFirmwareData',
-    dir: 'OUT',
-    why: "streams the payload into the camera's RAM staging buffer, 64 B at a time",
-  },
-  {
-    opcode: '0x51',
-    name: 'CompleteMemoryUpgrade',
-    dir: 'OUT',
-    why: 'the commit — the only command here that erases or programs flash',
   },
 ];

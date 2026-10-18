@@ -179,7 +179,7 @@ export const CAMERA_WRITE_GUARD: WriteGuardConfig = {
 /**
  * The guard as a script for Electron's preload. The default is the strict
  * read-only guard. `deviceInfo` is that guard plus the Flash view's read
- * (`DEVICE_INFO_GUARD`): still read-only, for `flash-view.e2e.ts` on the
+ * (`DEVICE_INFO_GUARD`): still read-only, for the device-info read on the
  * camera. `lifted` is ONLY for a camera write run that has passed the
  * gate (`supervised-write.ts`): `CAMERA_WRITE_GUARD`, whose writes and
  * resets stay shut until the test opens a phase with its row's budgets. The

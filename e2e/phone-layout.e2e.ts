@@ -168,7 +168,7 @@ describe.skipIf(unavailable !== null)('phone-width layout (375x812)', () => {
         expect(overflow.titleClipped, `${name} (${theme}) title is clipped`).toBe(false);
       };
 
-      await page.goto(`${srv.url}#/`, { waitUntil: 'networkidle0' });
+      await page.goto(`${srv.url}#/v4`, { waitUntil: 'networkidle0' });
       await shoot('01-dump');
       await page.goto(`${srv.url}#/preserve`, { waitUntil: 'networkidle0' });
       await shoot('02-preserve-start');

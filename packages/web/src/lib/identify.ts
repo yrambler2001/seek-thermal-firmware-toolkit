@@ -1,26 +1,20 @@
 /**
- * Which firmware family a run acts under: asked of the camera, or named by
- * hand by someone who knows better.
+ * Which firmware family a run acts under: asked of the camera, every time.
  *
- * The page used to ask the USER — a "Start dump" that always meant the
- * post-2018 map, a separate "Dump legacy firmware" for the 2014-2017 line, and
- * a profile menu on the flash view whose "auto" read under `modern-4x` without
- * asking anything. Core can answer that itself now: `identifyCamera` reads the
- * version, and only when that build can be read at all asks the three channel
- * questions and ranks the answers, and `planForDevice` then picks that build's
- * own selector table. This module is the page's one way in to that.
+ * Nobody picks the family on this page any more. Core answers it itself now:
+ * `identifyCamera` reads the version, and only when that build can be read at
+ * all asks the three channel questions and ranks the answers. This module is the
+ * page's one way in to that. A tab that is for one line of cameras (the 4.x/Nano
+ * tab) checks the answer against its own family after this returns, so the
+ * camera is still asked and the page still refuses what it does not cover.
  *
- * A HAND-PICKED FAMILY IS NOT A WAY AROUND THE SAFETY CHECK. It skips the
- * probe, exactly as the CLI's `--profile` does, and nothing else: the run it
- * starts — `runDump`, `runSweep` or `readDeviceInfo` — reads the version first
- * through `planForDevice` and applies `identityGate` before its first arm, so a
- * camera that does not name its build, or one older than 0.8.0.0, is refused
- * whichever family was chosen. There is no code path here that reaches a
- * workflow without going through that.
+ * DETECTION DOES NOT PERMIT. The run that follows still goes through
+ * `planForDevice`, which reads the version again and applies `identityGate`
+ * before its first arm, so a camera that does not name its build, or one older
+ * than 0.8.0.0, is refused whatever the ranking says.
  */
 
 import {
-  getProfile,
   identifyCamera,
   identityRefusal,
   isSeekError,
@@ -28,55 +22,35 @@ import {
   type FirmwareProfile,
   type LogLevel,
   type PlannedOperation,
-  type ProfileId,
   type SeekDevice,
   type SeekErrorCode,
 } from '@seek-fw/core';
 import { hintFor } from './hints';
 
-/** 'auto' asks the camera; a profile id names the family by hand. */
-export type ProfileChoice = ProfileId | 'auto';
-
-/** What a run acts under, and how that was decided. */
+/** What a run acts under, and what the camera said to decide it. */
 export interface ActingProfile {
   readonly profile: FirmwareProfile;
-  /** The ranking, when the camera was asked; null when the family was named by hand. */
-  readonly detection: DetectionResult | null;
-  /** The version the probe read, when the camera was asked. */
+  /** The ranking the camera's answers produced. */
+  readonly detection: DetectionResult;
+  /** The version the probe read. */
   readonly firmwareVersion: string | null;
   /** The build date string that came with it. */
   readonly buildString: string | null;
-  /** True when the family was named by hand rather than detected. */
-  readonly forced: boolean;
 }
 
 type Log = (text: string, level: LogLevel) => void;
 
 /**
- * Asks the camera which family it is (`choice === 'auto'`), or takes the
- * hand-picked one.
- *
- * When the camera is asked and its identity gate stays shut — no version came
- * back, or the build predates the dump protocol — this throws the same
- * `SeekError` `planForDevice` would have thrown one step later, so the refusal
- * the user reads names the reason and nothing is armed either way.
+ * Asks the camera which family it is. When its identity gate stays shut — no
+ * version came back, or the build predates the dump protocol — this throws the
+ * same `SeekError` `planForDevice` would have thrown one step later, so the
+ * refusal the user reads names the reason and nothing is armed either way.
  */
 export async function chooseActingProfile(
   device: SeekDevice,
-  choice: ProfileChoice,
   operation: PlannedOperation,
   log: Log,
 ): Promise<ActingProfile> {
-  if (choice !== 'auto') {
-    const profile = getProfile(choice);
-    log(
-      `acting under ${profile.name} (${profile.id}), chosen by hand — the camera's firmware ` +
-        'version is still read and checked before anything is armed',
-      'warn',
-    );
-    return { profile, detection: null, firmwareVersion: null, buildString: null, forced: true };
-  }
-
   log('asking the camera which firmware it runs ...', 'detail');
   const identification = await identifyCamera(device);
   for (const note of identification.probe.notes) log(`  ${note}`, 'detail');
@@ -96,7 +70,6 @@ export async function chooseActingProfile(
     detection,
     firmwareVersion: probe.firmwareVersion,
     buildString: probe.buildString,
-    forced: false,
   };
 }
 
@@ -110,9 +83,9 @@ export interface Refusal {
 
 /**
  * The refusals worth more than a log line: the camera would not say which
- * build it runs, or the build (or the family picked for it) cannot do what was
- * asked. Anything else — a USB failure, a cancel — is not a refusal and stays
- * in the transcript, as it always has.
+ * build it runs, or the build (or the tab's family) cannot do what was asked.
+ * Anything else — a USB failure, a cancel — is not a refusal and stays in the
+ * transcript, as it always has.
  */
 export function refusalOf(error: unknown, userAgent?: string): Refusal | null {
   if (!isSeekError(error)) return null;

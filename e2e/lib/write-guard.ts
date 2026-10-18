@@ -72,7 +72,7 @@ export interface WriteGuardConfig {
    */
   readonly seededVersion?: string | null;
   /**
-   * The two RAM selectors the Flash view's "Read device info" sends, let out
+   * The two RAM selectors the device-info read sends (Read slots, Read firmware version), let out
    * only when set: `firmwareInfo` (SetFirmwareInfoFeatures) with a u16 record
    * selector, `ramData` (SetRamDataFeatures) for the device-id block alone
    * (case 0, a 6-byte payload). Neither touches flash — the CLI's `info`

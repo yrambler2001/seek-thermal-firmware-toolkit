@@ -19,7 +19,7 @@
  * offers step 03 with no red alarm, and STOPS.
  *
  * WHAT IT WILL NOT DO, and what stops it: it never starts step 03 or 04, never
- * confirms a write, never opens the Flash view (`READ_ONLY_CAMERA`, the UI
+ * confirms a write, never opens the slots page's write (`READ_ONLY_CAMERA`, the UI
  * guard); the page refuses the flash-write requests before they leave it; and
  * `CameraBus` forwards only a whitelist of reads, mode 0, the window arm (after
  * the version is known) and — during step 02 only — the plain reset. A

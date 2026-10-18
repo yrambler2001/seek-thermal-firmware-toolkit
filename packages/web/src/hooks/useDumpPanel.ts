@@ -1,16 +1,14 @@
 /**
- * The read-only runs: "Start dump" and "Dump all selectors".
+ * The read-only runs: "Start dump" and "Dump all selectors", for one line of
+ * cameras. The 4.x/Nano tab is the only user, and it runs under the modern
+ * family (`modern-4x`), always.
  *
- * The camera says which family it is. A run with `choice: 'auto'` asks it
- * first (`chooseActingProfile` → core's `identifyCamera`: the version, then —
- * only when that build can be read — one plain arm, one token arm and one read)
- * and dumps under the family that answers point to, with that build's own
- * selector table (`planForDevice`). The original page had the user pick
- * instead: `runDump` for the post-2018 map and `runOldDump` for the locked
- * 2014-2017 line, as two buttons. A panel with a hand-picked `choice` is the
- * expert override; it skips the questions and nothing else — the workflow
- * still reads the version and refuses a camera that does not name its build or
- * predates the dump protocol, whichever family was picked.
+ * The camera is still asked which family it is (`chooseActingProfile` → core's
+ * `identifyCamera`: the version, then — only when that build can be read — one
+ * plain arm, one token arm and one read). A camera whose answer is some other
+ * family is REFUSED before anything is read, with the reason and the tab that
+ * does cover it. There is no way to pick a family by hand: the page's one
+ * family is the one it reads, and the version gate still applies on top.
  *
  * A REFUSAL IS SHOWN, NOT JUST LOGGED. "The camera would not say which build it
  * runs" and "this build has no read command" are answers the user has to act
@@ -28,22 +26,18 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   CancelledError,
   SeekDevice,
+  SeekError,
   errorMessage,
   isoStamp,
   runDump,
   runSweep,
+  type ProfileId,
   type WorkflowContext,
 } from '@seek-fw/core';
 import { reportInUseElsewhere } from '../lib/camera-lock';
 import { downloadArchive, mib } from '../lib/download';
 import { logHint } from '../lib/hints';
-import {
-  chooseActingProfile,
-  refusalOf,
-  type ActingProfile,
-  type ProfileChoice,
-  type Refusal,
-} from '../lib/identify';
+import { chooseActingProfile, refusalOf, type ActingProfile, type Refusal } from '../lib/identify';
 import {
   asOptionsFailure,
   readOptions,
@@ -62,8 +56,11 @@ export interface DumpPanelParams {
   readonly runner: Runner;
   readonly device: DeviceHandle;
   readonly form: OptionsForm;
-  /** 'auto' asks the camera; a profile id is the expert override. */
-  readonly choice: ProfileChoice;
+  /**
+   * The one family this panel reads. A camera the probe places under another
+   * family is refused before anything is read.
+   */
+  readonly profileId: ProfileId;
   /** `seek_flash4m_`, as the original named the archive. */
   readonly dirPrefix: string;
   readonly sweepPrefix: string;
@@ -81,11 +78,29 @@ export interface DumpPanelApi {
   cancel: () => void;
 }
 
+/**
+ * The refusal for a camera that the probe places under another family. Nothing
+ * has been read at this point, so it is a statement about the camera, and it
+ * names the tab that does cover it.
+ */
+function notThisFamily(id: string, name: string): SeekError {
+  const what =
+    id === 'generic'
+      ? 'The camera did not match the 4.x/Nano family, and this tab reads only that family.'
+      : `The camera looks like ${name} (${id}), not a 4.x/Nano camera, and this tab reads only 4.x/Nano.`;
+  return new SeekError(
+    'profile/unsupported',
+    `${what} Nothing was read. For a 0.x or 1.x camera (2014 or 2016 builds), use ` +
+      '"Dump & decrypt 0.x/1.x 2014/2016".',
+    { detail: { profile: id } },
+  );
+}
+
 /** The original's cancel copy for these panels. */
 const CANCELLING = 'Cancelling — will save whatever has been read so far ...';
 
 export function useDumpPanel(params: DumpPanelParams): DumpPanelApi {
-  const { id, runner, device, form, choice, dirPrefix, sweepPrefix, onOptionsFailure } = params;
+  const { id, runner, device, form, profileId, dirPrefix, sweepPrefix, onOptionsFailure } = params;
   const reporter = useReporter('Idle.');
   const running = runner.active === id;
   const [acting, setActing] = useState<ActingProfile | null>(null);
@@ -119,10 +134,12 @@ export function useDumpPanel(params: DumpPanelParams): DumpPanelApi {
 
       try {
         await transport.open();
-        const chosen = await chooseActingProfile(client, choice, mode, (text, level) => {
+        const chosen = await chooseActingProfile(client, mode, (text, level) => {
           reporter.reporter.log(text, level);
         });
         setActing(chosen);
+        if (chosen.profile.id !== profileId)
+          throw notThisFamily(chosen.profile.id, chosen.profile.name);
         const ctx: WorkflowContext = {
           device: client,
           profile: chosen.profile,
@@ -181,7 +198,7 @@ export function useDumpPanel(params: DumpPanelParams): DumpPanelApi {
         await transport.close();
       }
     },
-    [choice, device, dirPrefix, form, reporter, sweepPrefix],
+    [device, dirPrefix, form, profileId, reporter, sweepPrefix],
   );
 
   const start = useCallback(

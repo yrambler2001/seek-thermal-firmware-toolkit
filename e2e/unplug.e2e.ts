@@ -124,7 +124,7 @@ targetSpec({ title: 'unplug / replug mid-read', slug: 'unplug' }, (ctx) => {
     }
 
     const w = t.wizard;
-    await w.route('#/');
+    await w.route('#/v4');
     await w.startDump('dump', 'Start dump');
     await waitForProgress(t.page, 'dump', 10);
     /* Nothing but the read-only dump is running, under the page's write guard. */

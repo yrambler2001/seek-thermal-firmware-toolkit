@@ -326,9 +326,10 @@ for (const subject of SUPPORTED) {
           expect(rows.filter((row) => row.booted)).toHaveLength(1);
           const booted = bootedOf(rows);
           const summary = await summaryRows(t.page);
-          expect(summary['running build']).toBe(subject.version);
+          expect(summary.version).toBe(subject.version);
           expect(summary.profile, 'the profile the build reads under').not.toBe('');
-          expect(summary['booted now']).toBe(booted.name);
+          /* "Booted from" on the post-2014 chain, "Named booted" on the 2014 plaintext one. */
+          expect(summary['booted from'] ?? summary['named booted']).toBe(booted.name);
           say(
             `rows: ${rows.map((row) => `${row.name} ${row.address}${row.booted ? ' (booted)' : ''} key=${row.keyName} ${row.bootable}`).join(' | ')}`,
           );

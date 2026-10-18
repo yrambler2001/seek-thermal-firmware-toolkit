@@ -20,12 +20,12 @@ Finding on the bench: stock 8.11 fps, patched 8.29 fps, owner heard the shutter 
 
 ## 2. Restructure the pages and the CLI (no compatibility layer)
 Tabs: Info | Dump & decrypt 0.x/1.x 2014/2016 | Dump & decrypt 4.x/Nano | Decrypt File/Slot | Work with firmware slots.
-- [ ] Info tab: reads the firmware version, says what each tab does.
-- [ ] Preserve page renamed to "Dump & decrypt 0.x/1.x 2014/2016", otherwise unchanged (its first step already reads and saves a zip).
-- [ ] Dump page becomes "Dump & decrypt 4.x/Nano", v4 only: the firmware-family selector is removed; "Dump all selectors" moves into the options spoiler.
-- [ ] Decide from the build table and tests whether 2016 and 1.3.0.8 FF run in the Preserve flow. If yes they stay there; if one behaves like v4 it gets a select on the v4 page.
-- [ ] Decrypt tab: "Decrypt a dump you already have" moves here; new "Decrypt a firmware slot" takes 64 KiB of one slot from a file, no camera.
-- [ ] "Firmware & flashing" page removed; device info moves to the slots page. Routes, header, titles, tests, docs follow.
+- [x] Info tab: reads the firmware version, says what each tab does (TESTING.md 42.17).
+- [x] Preserve page renamed to "Dump & decrypt 0.x/1.x 2014/2016", otherwise unchanged (its first step already reads and saves a zip).
+- [x] Dump page becomes "Dump & decrypt 4.x/Nano", v4 only: the firmware-family selector is removed; "Dump all selectors" moves into the options spoiler.
+- [x] Decide from the build table and tests whether 2016 and 1.3.0.8 FF run in the Preserve flow. If yes they stay there; if one behaves like v4 it gets a select on the v4 page.
+- [x] Decrypt tab: "Decrypt a dump you already have" moves here; new "Decrypt a firmware slot" takes 64 KiB of one slot from a file, no camera.
+- [x] "Firmware & flashing" page removed; device info moves to the slots page. Routes, header, titles, tests, docs follow.
 - [ ] CLI follows the same shape: `info`, `preserve`, `dump`, `decrypt file|slot`, `slots`; old names removed, usage, README and tests rewritten.
 
 ## 3. Slots page quality
@@ -42,3 +42,4 @@ Tabs: Info | Dump & decrypt 0.x/1.x 2014/2016 | Dump & decrypt 4.x/Nano | Decryp
 
 ## Log
 - 04:10 plan written; FPS merged and enabled.
+- 04:43 web restructure (branch worktree-agent-ae06de44936493a52): five tabs; the 4.x tab is v4-only; 2016 and 1.3.0.8 FF stay on the 0.x/1.x tab (no firmware select added); Decrypt File/Slot decrypts a slot file with no camera; Firmware & flashing removed. Section 2 CLI item and the docs bundle are not done here (TESTING.md 42.17).

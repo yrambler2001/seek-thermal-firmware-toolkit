@@ -92,7 +92,7 @@ describe('hintFor', () => {
       { detail: { firmwareVersion: '0.3.0.1', capability: 'dump', profile: 'modern-4x' } },
     );
     expect(hintFor(tooOld, MAC)).toBe(FIRMWARE_TOO_OLD_HINT);
-    expect(hintFor(tooOld, MAC)).toContain('Decrypt a dump you already have');
+    expect(hintFor(tooOld, MAC)).toContain('Decrypt File/Slot');
 
     /* A family that cannot do the job is a different refusal, with a remedy. */
     const capability = new SeekError(
@@ -100,7 +100,7 @@ describe('hintFor', () => {
       'Early Compact (pre-0.8) does not support dump: …',
       { detail: { profile: 'compact-2014', capability: 'dump', reason: '…' } },
     );
-    expect(hintFor(capability, MAC)).toContain('Leave the family on auto');
+    expect(hintFor(capability, MAC)).toContain('Dump & decrypt 0.x/1.x 2014/2016');
   });
 
   it('turns the CLI resume remedy of a power-cycle refusal into the wizard’s own', () => {

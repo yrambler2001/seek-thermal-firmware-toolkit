@@ -41,3 +41,12 @@ export {
   type FpsPreDump,
   type FpsReadBackCheck,
 } from './fps-patch.js';
+export {
+  decryptSlotFile,
+  type DecryptedSlotFile,
+  type SlotFileEmpty,
+  type SlotFileKey,
+  type SlotFileKeyMethod,
+  type SlotFileRefused,
+  type SlotFileResult,
+} from './decrypt-file.js';

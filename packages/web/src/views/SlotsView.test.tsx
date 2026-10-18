@@ -573,9 +573,9 @@ describe('the slot page in the app shell', () => {
     const { container, unmount } = render(<App support={READY} />);
 
     const current = container.querySelector('[aria-current="page"]');
-    expect(current?.textContent).toBe('Firmware slots');
+    expect(current?.textContent).toBe('Work with firmware slots');
     expect(buttonByText(container, 'Read slots').disabled).toBe(true);
-    expect(document.title).toBe('Seek Thermal Firmware — Firmware slots (WebUSB)');
+    expect(document.title).toBe('Seek Thermal Firmware — Work with firmware slots (WebUSB)');
     unmount();
   });
 
@@ -909,6 +909,38 @@ describe('SlotsView: the frame-rate row action', () => {
     expect(text).toContain('raw.bin and plain.bin');
     expect(text).not.toContain('UNTESTED on hardware');
     expect(text).toContain('The saved decrypted file is the only way back');
+    unmount();
+  });
+});
+
+describe('SlotsView: the device info on this page', () => {
+  it('shows what the camera runs once it has been read, and does not repeat the bank table', () => {
+    const report = slotReport(base);
+    const { container, unmount } = view(panel({ plan: slotPlan(true), report }));
+
+    /* The device info: what the camera runs, its boot config and its keys. */
+    const runningHeading = [...container.querySelectorAll('h3, h2, h4, span, div')].find(
+      (node) => node.textContent.trim() === 'Running firmware',
+    );
+    expect(runningHeading, 'Running firmware heading').toBeTruthy();
+    const text = container.textContent;
+    expect(text).toContain(base.version);
+    expect(text).toContain('Profile');
+    expect(text).toContain('Booted from');
+    expect(text).toContain('Upgrade target');
+
+    /* Exactly one bank table, and it is SlotTable's: the device info adds no second one. */
+    expect(container.querySelectorAll('table')).toHaveLength(1);
+    expect(container.querySelector('table')?.querySelector('caption')?.textContent).toContain(
+      'Each firmware bank on this camera',
+    );
+    unmount();
+  });
+
+  it('is not shown before the camera has been read', () => {
+    const { container, unmount } = view(panel({ plan: null, report: null }));
+    expect(container.textContent).not.toContain('Running firmware');
+    expect(container.textContent).toContain('Press Read slots.');
     unmount();
   });
 });

@@ -1,35 +1,49 @@
 /**
- * Four views, selected by the URL hash — the same shape the original page had,
- * with `#/`, `#/flash`, `#/preserve` and `#/slots` as the canonical forms. The
- * original's `#dump` and `#flash` still resolve, because links to them exist in
- * the wild.
+ * The five tabs, selected by the URL hash. Each is a real URL, so a tab can be
+ * linked and reloaded. Nothing else is routed: an old or unknown hash (`#/dump`,
+ * `#/flash`, anything) lands on the Info tab, with no redirect and no alias.
  */
 
 import { useEffect, useState } from 'react';
 
-export type Route = 'dump' | 'flash' | 'preserve' | 'slots';
+export type Route = 'info' | 'preserve' | 'v4' | 'decrypt' | 'slots';
 
 export const ROUTE_HREF: Readonly<Record<Route, string>> = {
-  dump: '#/',
-  flash: '#/flash',
+  info: '#/',
   preserve: '#/preserve',
+  v4: '#/v4',
+  decrypt: '#/decrypt',
   slots: '#/slots',
 };
 
-/** Page titles, carried over from the original's `applyView()`. */
+/** The tab labels, as the nav shows them. */
+export const ROUTE_LABEL: Readonly<Record<Route, string>> = {
+  info: 'Info',
+  preserve: 'Dump & decrypt 0.x/1.x 2014/2016',
+  v4: 'Dump & decrypt 4.x/Nano',
+  decrypt: 'Decrypt File/Slot',
+  slots: 'Work with firmware slots',
+};
+
+/** The tabs in nav order. */
+export const ROUTES: readonly Route[] = ['info', 'preserve', 'v4', 'decrypt', 'slots'];
+
+/** Page titles, one per tab. */
 export const ROUTE_TITLE: Readonly<Record<Route, string>> = {
-  dump: 'Seek Thermal Firmware Dump (WebUSB)',
-  flash: 'Seek Thermal Firmware & Flashing (WebUSB)',
-  preserve: 'Seek Thermal Firmware — Preserve (WebUSB)',
-  slots: 'Seek Thermal Firmware — Firmware slots (WebUSB)',
+  info: 'Seek Thermal Firmware — Info (WebUSB)',
+  preserve: 'Seek Thermal Firmware — Dump & decrypt 0.x/1.x 2014/2016 (WebUSB)',
+  v4: 'Seek Thermal Firmware — Dump & decrypt 4.x/Nano (WebUSB)',
+  decrypt: 'Seek Thermal Firmware — Decrypt File/Slot (WebUSB)',
+  slots: 'Seek Thermal Firmware — Work with firmware slots (WebUSB)',
 };
 
 export function parseRoute(hash: string): Route {
   const cleaned = hash.replace(/^#/, '').replace(/^\//, '').replace(/\/$/, '').toLowerCase();
-  if (cleaned === 'flash') return 'flash';
   if (cleaned === 'preserve') return 'preserve';
+  if (cleaned === 'v4') return 'v4';
+  if (cleaned === 'decrypt') return 'decrypt';
   if (cleaned === 'slots') return 'slots';
-  return 'dump';
+  return 'info';
 }
 
 export function currentRoute(): Route {

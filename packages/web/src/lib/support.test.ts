@@ -30,7 +30,7 @@ function env(overrides: Partial<BrowserEnvironment> = {}): BrowserEnvironment {
 /** Every branch must keep the offline decryptor, which needs no USB at all. */
 function assertOfflineSurvives(paragraphs: readonly string[]): void {
   expect(paragraphs).toContain(OFFLINE_STILL_WORKS);
-  expect(plainText(OFFLINE_STILL_WORKS)).toContain('Decrypt a dump you already have');
+  expect(plainText(OFFLINE_STILL_WORKS)).toContain('Decrypt File/Slot');
 }
 
 describe('detectSupport', () => {

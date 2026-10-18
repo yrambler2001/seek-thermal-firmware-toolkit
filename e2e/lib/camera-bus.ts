@@ -22,7 +22,7 @@
  *
  * Everything else — above all 0x50 SetFeaturedFirmwareData and 0x51
  * CompleteMemoryUpgrade, the only two requests that change flash, and the 0x55
- * / 0x5A selectors only the flash view uses — is refused unsent.
+ * / 0x5A selectors only the device-info read uses — is refused unsent.
  *
  * A reboot is the camera's own: it leaves the bus and re-enumerates, node-usb
  * reports both, and the bridge turns them into what Chrome would show the
