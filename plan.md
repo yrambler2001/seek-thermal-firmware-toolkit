@@ -12,7 +12,7 @@ Done work is in `TESTING.md` (sections 42.x; the latest is 42.26) and `FPS_32HZ.
 
 ## 1. Frame rate: consistent patches for every 8 Hz / 9 Hz firmware (next, for a Haiku agent)
 
-Full brief: `PROMPT_FPS_ALL_FIRMWARES.md` (repo root). Principle: similar firmwares get a similar patch, modelled on 1.3.0.0 (mode-8 steady block, `+0xB898`) and 4.8.2.1 (command page 13, `+0x90F2`): the steady block of the stream the vendor app uses becomes one copy step with the publish bit; the Compact PRO builds go to 18 fps.
+Orchestration brief for Claude after a compaction: `BRIEF_FOR_CLAUDE_ORCHESTRATOR.md`; the task text the Haiku agents work from: `PROMPT_FPS_ALL_FIRMWARES.md` (both at the repo root). Principle: similar firmwares get a similar patch, modelled on 1.3.0.0 (mode-8 steady block, `+0xB898`) and 4.8.2.1 (command page 13, `+0x90F2`): the steady block of the stream the vendor app uses becomes one copy step with the publish bit; the Compact PRO builds go to 18 fps.
 
 - [ ] Survey every reconstructed 8 Hz and 9 Hz target in `FW-V1/targets` (the 0.x builds, 1.0.0.0, 1.2.0.0, 1.3.0.8, 4.8.1.7, 4.8.1.9, the XR 4.8.2.1, the four Compact PRO 9 Hz builds): layout, mode table, the steady block of each stream mode; write `FW-V1/docs/FPS_PATCH_ALL_FIRMWARES.md`.
 - [ ] Establish which mode the existing 1.3.0.8, 4.8.1.7, 4.8.1.9 and Compact PRO patches edit. If it is not the Normal (mode 8) steady block, add the mode-8 edit: a patch that edits a mode nobody measures gives no gain in the app (as the removed mode-6 patch did).
