@@ -32,6 +32,14 @@ Tabs: Info | Dump & decrypt 0.x/1.x 2014/2016 | Dump & decrypt 4.x/Nano | Decryp
 - [ ] Wording, empty and refused states, row actions, the device info panel's place.
 - [ ] Tests that expect success and tests that expect a denial, on the emulator (core, CLI, web) and on the real camera through the CLI and Electron, with banner assertions (no "cannot be written" banner whenever the plan allows a write).
 
+## 3b. Quality of the other pages (Electron tests on the emulator and on the real camera)
+- [ ] Info, Dump & decrypt 0.x/1.x 2014/2016, Dump & decrypt 4.x/Nano and Decrypt File/Slot each get Electron tests, a pass set and a denial set per page:
+  - emulator: the page drives a corpus camera and the expected result appears (dump zip, decrypted output, version read), plus the refusals (wrong camera line for the tab, unreadable or foreign slot file, no camera where one is needed).
+  - real bench camera (Compact 1.3.0.0): the same flows through the page, camera restored to baseline afterwards.
+  - banner/text assertions as for the slots page (no wrong refusal banner when the flow is allowed).
+- [ ] The same flows through the CLI commands, so both entrances are covered.
+- [ ] Findings from these tests are fixed in the pages, then the matrix is re-run.
+
 ## 4. Verification
 - [ ] Full Electron bench matrix (28 subjects) on the final HEAD, after each stage that changes the page or the plan.
 - [ ] Targeted vitest suites, typechecks for core/cli/web/e2e, docs bundle (`npm run build:docs`).
@@ -43,3 +51,4 @@ Tabs: Info | Dump & decrypt 0.x/1.x 2014/2016 | Dump & decrypt 4.x/Nano | Decryp
 ## Log
 - 04:10 plan written; FPS merged and enabled.
 - 04:15 three agents launched from 72c705f: shutter + Compact measurer (bench), web restructure, CLI restructure; check cron every 10 min.
+- 04:20 added item 3b (Electron tests for the other pages, emulator and real camera).
