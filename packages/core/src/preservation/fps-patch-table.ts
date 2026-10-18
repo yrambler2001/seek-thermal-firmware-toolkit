@@ -327,24 +327,30 @@ export const FPS_PATCH_TABLE: readonly FpsPatchSource[] = [
     // table frame_data.c:127-137 gives mode 8 the array, whose record pointer 0x10001F64 is the array SRAM
     // address and agrees with the image under C = 0x0FFF6A88). The source initializer, encoded in this
     // layout, equals the image in all 7 blocks. Block 4 is the steady self-loop: first = next = 4, four
-    // steps op 4, op 5, op 5, op 6 with the publish bit on the fourth. The frame-sequence limit moves it on
-    // (app_init.c:978: FRAME_FLAG_E == 4 in mode 8 sets prog[4].first = 5). The operator table has ten
-    // entries and no frame_line_op_2 (frame_data.c:52-54), so the stock ops 4, 5, 6 are frame_line_op_5
-    // (scale by four above the level), _6 and _7, and the copy is table index 1, frame_line_op_1
-    // (image.c:284): a word copy of the 832-halfword line with no read of the destination and no scale.
-    // Index 2 (frame_line_op_3, image.c:307) remaps the first 206 samples of each row through a gain table
-    // and index 3 (frame_line_op_4, image.c:328) copies 105 halfwords per 208 and zeroes the rest, so an op
-    // 3 copy (the 1.3.0.0 shape) would not be a copy here. SetIPMode accepts 8 (rpc_cmds.c:1042-1058, mask
-    // 0x1F9) and writes the cell the dispatcher reads (0x10005384). Slots: 0.7.0.8 is older than 0.8.0.0,
-    // so the slots code refuses it (capability-family.ts FIRST_SUPPORTED_VERSION); the entry stays in the
-    // table and is not offered. Not run on the emulator or a camera.
+    // steps (table indices 4, 5, 5, 6), publish on the fourth. The frame-sequence limit moves it on
+    // (app_init.c:978: FRAME_FLAG_E == 4 in mode 8 sets prog[4].first = 5). What the stock steps do to a
+    // sample: op 5 (frame_line_op_5, image.c:368) copies the line and multiplies each sample at or above
+    // the level 0x3C00 by four; op 6 (image.c:389) accumulates into the destination; op 7 (image.c:420)
+    // averages the four captures in the quarter-scale domain and maps every result through
+    // frame_gain_table_r32k (the halfword table at 0x10010000, which app_init.c:1296-1305 copies from flash
+    // 0x141A0000 when that flash starts zero, and fills with the identity ramp otherwise). frame_line_op_3
+    // (image.c:307) maps the first 206 samples of each 208-sample row through the same table and copies the
+    // last two: one capture through it is the stock transform without the four-capture average. The stock
+    // Hi FPS block (mode 3, frame_prog_mode3_r32k, frame_data.c) is table index 2 with the publish bit, the
+    // stock single-capture picture. Rejected by measurement: the earlier entry (op 1, a plain word copy,
+    // image 8b0f4781, no table) and the op 5 copy (index 4, same header, image 0a43308c): both +12 % level
+    // and about 5x the spread of stock. MEASURED on a Compact 0.7.0.8 (PIR206, serial 1013CE098ACA), booted
+    // from bank B (word 1), power-cycled, against stock in the same session: Normal mode median 32.18 to
+    // 32.21 fps over five seconds (stock 8.05), 0 frozen pairs, 92 % of pixels changed (stock 91 to 92),
+    // level 5,693 (stock 5,716), spread 33.5 (stock 34.3), range 209 (stock 207). Not run on the emulator
+    // (it streams mode 6 only).
     id: 'compact_32k-0.7.0.8-to32',
     family: 'compact_32k',
     version: '0.7.0.8',
     fromHz: 8,
     targetHz: 32,
     stockSha256: '6bac46abf3023d02cf0ba8a43bfbebdd7a85c77ffbedbab08d53e2f297a3e1ea',
-    patchedSha256: '8b0f4781e056eb35f75b05e75357d74effb92e435742cea8604ecb522a05936b',
+    patchedSha256: 'c519427649dd4d7f962bc1412ed1fb085a21195404910607ea27f7bce2e83c8e',
     length: 46616,
     edits: [
       // block 4 of the mode-8 program (14-byte blocks with 3-bit header fields; the self-loop at image
@@ -352,17 +358,16 @@ export const FPS_PATCH_TABLE: readonly FpsPatchSource[] = [
       // 21, count 4 -> 1, first 4 kept, so the block runs one step and every capture is published.
       { offset: 0xb514, before: '24', after: '21' },
       // its four steps at +0xB516 (2 bytes each, style a: sel (2 bits) | active << 2 | op << 3 | push << 7,
-      // then hdr | gpio << 4): op 4 | op 5 | op 5 | op 6 with the publish bit (25 10 2d 10 2d 10 b5 13)
-      // become one copy, operator 1 (frame_line_op_1, image.c:284: a word copy of the 832-halfword line, no
-      // read of the destination, no scale), with sel 1 and active as stock, the publish bit, header id 3
-      // and gpio 1: 8d 13; the stock steps after it are zeroed (00 x 6). Operator 3 is NOT the copy in this
-      // build: index 2 is frame_line_op_3, a gain- table remap (image.c:307), and index 3 is
-      // frame_line_op_4, a 105-halfword copy with zero fill.
-      { offset: 0xb516, before: '25102d102d10b513', after: '8d13000000000000' },
+      // then hdr | gpio << 4). The stock steps are table indices 4, 5, 5, 6 (frame_line_op_5, _6, _6, _7;
+      // the table has no frame_line_op_2, frame_data.c:52-54): 25 10 2d 10 2d 10 b5 13. They become one
+      // step, table index 2 = frame_line_op_3 (image.c:307), the gain-table remap of one capture, with sel
+      // 1 and active as stock, the publish bit, header id 3 and gpio 1: 95 13. The stock steps after it are
+      // zeroed (00 x 6).
+      { offset: 0xb516, before: '25102d102d10b513', after: '9513000000000000' },
     ],
     row: {
       label:
-        'mode-8 capture program block 4 (14-byte blocks, the steady self-loop), reduced to one step: a plain copy with the publish bit',
+        'mode-8 capture program block 4 (14-byte blocks, the steady self-loop), reduced to one step: frame_line_op_3 (the gain-table remap of one capture) with the publish bit',
       offset: 0xb514,
       length: 14,
     },
@@ -901,6 +906,7 @@ export const FPS_NOT_PATCHED_NOTES: readonly string[] = [
   'Compact 4.8.2.1 image f96ac57eda75 is in the table as compact_32k-4.8.2.1-to32 (page 13 reduced to one copy with LAST, one capture per frame; measured on the XR, offered). The Compact 4.8.2.1 image is also the Compact XR 4.8.2.1 image.',
   'No 16 Hz patch exists any more (1.2.0.0, 1.3.0.0, 1.3.0.8, 4.8.1.7, 4.8.1.9, 4.8.2.1 had one, each also reachable as a 32 Hz patch, 1.2.0.0 included): the 32 Hz patches replace them. The 16 Hz FF builds are stock 16 Hz images, not patches. The 1.3.0.0 mode-6 one-step form (op 3 and the idle steps removed, op 9 kept alone) alternates: each frame is the difference of the previous output and a capture, so the body mean swings about 6,900 halfwords per frame (emulator: mean from -340 to +7,197). A correlated double sample needs a reference copy in the same frame, and no one-step block has one. 1.3.0.0 reaches 32 Hz in the Normal stream through its mode-8 steady block instead (compact_32k-1.3.0.0-to32).',
   'Earlier 32K 32 Hz blocks that dropped op 5 (1.3.0.8, 4.8.1.7, 4.8.1.9, and the FF 1.3.0.8 and 4.16.1.7 ids): withdrawn. Op 5 starts the frame and clears the mask that op 8 reads, so the picture froze (emulator: 56 to 58 of 58 to 61 steady pairs with zero changed halfwords). Replaced by the one-step block that keeps op 5 with the delivery bit.',
+  'Compact 0.7.0.8 image 8b0f4781 (the 32 Hz entry as first written: operator 1, a plain word copy with no gain table): it runs at 32 Hz but its picture does not match stock (level +12 %, spread about 5x, measured on the bench) and it is not recognised here. A camera that carries it is an unknown image: restore the stock image first, then press Make 32 FPS.',
   'Mosaic 10.9.1.31: already an 18 Hz image (FRAME_RATE, emu/README.md LABEL_DECISIONS); not a 9 Hz target.',
   'Nano 200 42.32.3.10 already publishes every capture (32 Hz); Mosaic FF and Nano 300 are not 9 Hz targets.',
 ];

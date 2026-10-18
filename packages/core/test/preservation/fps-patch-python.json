@@ -284,7 +284,7 @@
      "patch": "compact_32k-0.7.0.8-to32",
      "target": 32,
      "version": "0.7.0.8",
-     "outputSha256": "8b0f4781e056eb35f75b05e75357d74effb92e435742cea8604ecb522a05936b",
+     "outputSha256": "c519427649dd4d7f962bc1412ed1fb085a21195404910607ea27f7bce2e83c8e",
      "changed": [
       568,
       569,
@@ -1161,7 +1161,7 @@
    "storedPlain": true,
    "pythonAction": "patch applies",
    "patch": "compact_32k-0.7.0.8-to32",
-   "outputSha256": "8b0f4781e056eb35f75b05e75357d74effb92e435742cea8604ecb522a05936b",
+   "outputSha256": "c519427649dd4d7f962bc1412ed1fb085a21195404910607ea27f7bce2e83c8e",
    "changed": [
     568,
     569,
@@ -1187,7 +1187,7 @@
    "storedPlain": true,
    "pythonAction": "patch applies",
    "patch": "compact_32k-0.7.0.8-to32",
-   "outputSha256": "8b0f4781e056eb35f75b05e75357d74effb92e435742cea8604ecb522a05936b",
+   "outputSha256": "c519427649dd4d7f962bc1412ed1fb085a21195404910607ea27f7bce2e83c8e",
    "changed": [
     568,
     569,
