@@ -173,9 +173,10 @@ export const SLOTS_SUBJECTS: readonly SlotsSubject[] = [
     version: '1.3.0.8',
     emulator: 'Compact 1.3.0.8 (8 Hz)',
     banks: ALL_WRITABLE,
-    fps: { offer: true, toHz: 32 },
+    fps: { offer: true, toHz: 26 },
     banner: 'none',
-    source: '42.1 (pass), 42.5; frame-rate stage one, the 8 Hz build to 32 Hz',
+    source:
+      '42.1 (pass), 42.5; frame-rate stage one, the 8 Hz build, table target 32 Hz, bench-measured 26 Hz (42.20)',
   },
 
   /* ---- Compact 1.3.0.8 FF (the 16 Hz build, vendor form) ----------------------------- */
