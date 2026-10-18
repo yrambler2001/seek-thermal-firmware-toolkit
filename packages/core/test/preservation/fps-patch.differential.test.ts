@@ -90,7 +90,7 @@ function entryNamed(id: string): FpsPatch {
 describe('the table against the Python table (no corpus needed)', () => {
   it('has the same entries as fps_patch.py, and the same stock and patched hashes', () => {
     expect(new Set(FPS_PATCHES.map((patch) => patch.id))).toEqual(PYTHON_IDS);
-    expect(FPS_PATCHES).toHaveLength(15);
+    expect(FPS_PATCHES).toHaveLength(16);
     for (const image of FIXTURE.images) {
       for (const output of image.outputs) {
         if (output.outputSha256 === undefined) continue;
@@ -115,6 +115,7 @@ describe('the table against the Python table (no corpus needed)', () => {
       'compact_32k-4.8.1.9-to16',
       'compact_32k-4.8.1.9-to32',
       'compact_32k-4.8.2.1-to16',
+      'compact_32k-4.8.2.1-to32',
     ]);
     for (const entry of FPS_PATCHES) {
       if (FPS_STAGE_ONE_IDS.has(entry.id) || FPS_STAGE_TWO_IDS.has(entry.id)) {

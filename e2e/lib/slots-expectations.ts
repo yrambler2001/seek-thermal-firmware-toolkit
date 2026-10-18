@@ -209,10 +209,10 @@ export const SLOTS_SUBJECTS: readonly SlotsSubject[] = [
     version: '4.8.2.1',
     emulator: 'Compact 4.8.2.1 dump',
     banks: ALL_WRITABLE,
-    fps: { offer: true, toHz: 16 },
+    fps: { offer: true, toHz: 32 },
     banner: 'none',
     source:
-      '42.1 (pass); the slots-view spec (modern Key A); frame-rate stage two (Key A), 16 Hz table entry (TESTING.md 42.23)',
+      '42.1 (pass); the slots-view spec (modern Key A); frame-rate stage two (Key A), 32 Hz table entry, the highest for this image (TESTING.md 42.24; 16 Hz entry 42.23)',
   },
   {
     name: 'Compact 4.8.1.7 (std)',
@@ -335,10 +335,10 @@ export const SLOTS_SUBJECTS: readonly SlotsSubject[] = [
     version: '4.8.2.1',
     emulator: 'Compact XR 4.8.2.1 dump',
     banks: ALL_WRITABLE,
-    fps: { offer: true, toHz: 16 },
+    fps: { offer: true, toHz: 32 },
     banner: 'none',
     source:
-      '42.1 (pass); frame-rate stage two (Key A), 16 Hz table entry, measured on the Compact XR 4.8.2.1 (TESTING.md 42.23)',
+      '42.1 (pass); frame-rate stage two (Key A), 32 Hz table entry, the highest for this image, measured on the Compact XR 4.8.2.1 (TESTING.md 42.24; 16 Hz entry 42.23)',
   },
   {
     name: 'Mosaic 10.9.1.31 (std)',
