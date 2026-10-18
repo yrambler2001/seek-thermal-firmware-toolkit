@@ -7383,7 +7383,7 @@ Notes: the camera's state after the pages bench and the CLI test was read again 
 
 ### 42.22 Stage two for the 4.x Compact (Key A), the 4.8.2.1 build's refusal, and a bench run the camera did not allow (2026-10-18)
 
-**Summary.** The frame-rate patch is now offered on the Compact 4.8.1.7 and 4.8.1.9 builds, whose banks are staged under the camera's Key A (stage two, `5aeefef`). The write goes through the writer for that line, and its read-back is checked on the image the bank decrypts to. This is **checked on the emulator only**: the 4.8.1.7 and 4.8.1.9 chimeras pass the offer, the save gate, the patch and the boot of the patched flash. The Compact 4.8.2.1 image has **no patch**: its command pages are a different format and the steady page is not identified in the source (no candidate derived, `1c250e2` says why). **The bench proof did not run.** The camera has not enumerated on USB or answered SWD since about 18:00 CEST (section 4). No hardware number in this section is new. Every frame rate below is from 42.15 to 42.21, unchanged.
+**Summary.** The frame-rate patch is now offered on the Compact 4.8.1.7 and 4.8.1.9 builds, whose banks are staged under the camera's Key A (stage two, `5aeefef`). The write goes through the writer for that line, and its read-back is checked on the image the bank decrypts to. This is **checked on the emulator only**: the 4.8.1.7 and 4.8.1.9 chimeras pass the offer, the save gate, the patch and the boot of the patched flash. The Compact 4.8.2.1 image had **no patch** when this was written (its command pages are a different format; `1c250e2` says why). **Superseded by 42.23:** the 4.8.2.1 image now has a 16 Hz patch (page 13), measured on the XR unit and offered. **The bench proof did not run.** The camera has not enumerated on USB or answered SWD since about 18:00 CEST (section 4). No hardware number in this section is new. Every frame rate below is from 42.15 to 42.21, unchanged.
 
 **Tags.** [measured] was read here, on the emulator or from a command's output; [source] was read off a file, with the file named; [inferred] follows from those and was not measured.
 
@@ -7443,3 +7443,133 @@ What the bench proof needs, once the camera enumerates and answers SWD (not run)
 - Compact 4.8.2.1: no patch (section 3). A patch would need the steady page identified in the source first.
 - The camera: not reachable from this session (section 4).
 - Unchanged from 42.15: the owner's decision on the per-frame shutter in mode 6.
+
+### 42.23 The Compact 4.8.2.1 and Compact XR 4.8.2.1 frame-rate patch: 16 Hz, measured on the XR unit, and offered (2026-10-18)
+
+**Summary.** The 4.8.2.1 image (`f96ac57eda75`, the Compact dump and the Compact XR dump, one image) now has a frame-rate patch,
+`compact_32k-4.8.2.1-to16`: 8 Hz to 16 Hz, by changing the steady command page 13 from four captures per published frame to two.
+It is in the stage-two set (Key A write path), so the page offers "Make 16 FPS" on the Compact 4.8.2.1 and Compact XR 4.8.2.1 image
+banks. Measured on the owner's Compact XR 4.8.2.1 (serial `1E2A50YZ7628`, IP mode 9, the mode the camera boots in): stock 8.02 to
+8.10 fps, patched 14.10 to 14.17 fps over all frames and a steady thermal interval of 62.1 to 62.2 ms (16.1 Hz). The page button was
+driven once on the camera and the unit was restored; the restored flash matches the owner's dump. The 32 Hz form is not built.
+
+**Tags.** [measured] was read on the camera, the emulator or a command's output; [source] was read off a file, named; [inferred]
+follows from those and was not measured.
+
+**1. The steady page (source, then measured).**
+- [source] `FW-V1/targets/compact_xr_8hz_4_8_2_1/include/fw_types.h` 202-288 (`cmd_page_t`, 68 bytes, `cmd_substep_t` 4 bytes:
+  `param`, `chunk_op`, `type`, `gpio`; bit 7 of `chunk_op` completes the line). `src/data_unattributed.c` 390-525 (the thirty
+  pages; `g_mode_framecfg` in `src/tu016_stream_data.c`: modes 8 and 9 both point at the thirty pages, mode 4 at one other page).
+  `src/frame_chunk_ops_target.c` 1576-1642 (the 23 handlers: slot 7 seed, 8 accumulate, 9 mean2, 10 mean4, and the others).
+- [source] Page 13 is `{n 4, next 13, alt 13}`: seed (slot 7, `23 07 00 01`), accumulate (slot 8, `23 08 00 01`) twice, then the
+  terminator mean4 (slot 10, `20 8a 03 01`, LAST, type 3, gpio 1). The file offset of page 13 is 0x90F2 (the image base is 0x10000000).
+- [measured] Stock, IP mode 9 (`GetIPMode` = `0900`): 4 captures per published type-3 frame (104 to 111 of about 120 frames per
+  run), 124.3 ms interval, a calibration stretch of about 0.5 s every 2 s (types 1, 6, 20 and a few others), 0 frozen pairs.
+- [source] Slot 9 (`frame_chunk_mean2`, `(s + acc + 1) >> 1`) is selected by no stock substep (batch 216 in the source). Its
+  arithmetic is read from its body. The candidate is the first program that runs it.
+
+**2. The candidate (the bytes).** Page 13 `04 0d 0d 00 | 23 07 00 01 | 23 08 00 01 | 23 08 00 01 | 20 8a 03 01 | 00 x48` becomes
+`02 0d 0d 00 | 23 07 00 01 | 20 89 03 01 | 00 x56`: the count 04 to 02, the second substep to the mean2 terminator (`20 89 03 01`),
+and the two dropped substeps zeroed. Eleven image bytes change (`0x90F2`, `0x90FA..0x9105` where they differ), plus the
+acceptance-sum word at `0x0238`, which moves so the 32-bit word sum over the header length stays `0xFFFF`. The patched image
+`6a94a44d10b27f466e16f37d4e15dd23b7bce931c40b20737d59ef42e375bb02` (42,680 bytes). Gpio 1 on every substep, as stock: the blade is
+not commanded per frame in steady state, so the change is the sample count only [inferred from the gpio code].
+
+**3. Emulator (FW-V1, `framerate.py` and `fps_patch_tests.py`).** Stock `compact/2020.02.26-11.23.26-4.8.2.1/2229A0YZ7E28/dump`, 60
+frames: 8.06 Hz (median 124.0 ms). Candidate: 16.13 Hz (median 62.0 ms), 0 frozen pairs, 26.7k to 28.6k halfwords change per frame.
+`fps_patch_tests.py --only compact-4.8.2.1@16`: PASS (stock 8.065 baseline, patched 16.129, ratio error 0.000 %, bytes and content
+ok). `fps_patch_unit_tests.py`: 67 of 67 (the 68-byte page is now read by the step helpers; the 4.8.2.1 expectation is pinned).
+
+**4. The unit: what was done, the bench evidence.** The halted whole-flash read the brief asks for failed on this unit: the J-Link connected (`O.K.`, VTref 3.33 V) and then
+said "Failed to attach to CPU. Trying connect under reset" and "Could not connect to the target device" on every attempt:
+`dump-spifi-4m-halted` (before any cycle, and again after a channel 2 cycle), then channel 1 cycled and `mcu-check` at 4000,
+1000 and 100 kHz, then a channel 2 power cycle with a six-try `mcu-check` loop right after boot. The USB path answered throughout. So the
+reads below are USB reads (the owner's `seek-fw` CLI, read-only EP0 transfers), not halted SWD reads. Limits: the USB dump has no
+window for `0x14060000..0x1406FFFF` (it is filled with 0xFF and recorded as a gap); that block is 0xFF in the owner's dump too.
+
+- Before any write: `seek-fw dump` (`usb-dump-1`) returned 4 MiB whose sha256 is `fb1cb1f5127177276d00b6d017386e76349dee2ff7c48c34f2190564d51a6c9f`,
+  the owner's dump exactly (0 differing bytes). Kept as `xr-before.bin`; the owner's file is kept as `owner-dump.bin`, both in
+  `.claude/jobs/82174575/tmp/xr-unit/`. Bank A (`0x14030000`) raw: `0476541b8e13ef2b54b17f3a012017c185b1a0eaf1efaa31fc7d18bd4f3266a9`.
+  Info before: booted slot A, Key A, bootable; slots B and R the same image.
+- Frame geometry on this unit [measured]: frame 66560 B = a 1664 B header (0x680) plus 156 rows of 208 halfwords; the same as the
+  PIR206 geometry in 42.15. The header holds the capture index (halfword 1) and the type (halfword 10 of body row 0).
+
+**5. Bench measurements (Compact XR 4.8.2.1, IP mode 9, `e2e/lib/bench/compact-fps`, 20 s each; `alive.py`, `gaps.py`).**
+
+| run | image in bank A | fps, all frames | thermal (type 3) frames | thermal interval median | captures per frame | frozen pairs |
+| --- | --- | --- | --- | --- | --- | --- |
+| stock 1 / 2 / 3 | stock (`f96ac`) | 8.02 / 8.06 / 8.10 | 120 / 120 / 121 | 124.3 ms | 4: 104 to 111 | 0 |
+| candidate, CLI write 1 / 2 / 3 | 16 Hz (`6a94a`) | 14.10 / 14.17 / 14.10 | 241 / 242 / 241 | 62.1 to 62.2 ms | 2: 228 to 232 | 0 |
+| candidate, app (CLI) write, run 1 | 16 Hz | 14.17 | 242 | 62.1 ms | 2 | 0 |
+| candidate, page (Electron) write, run 1 | 16 Hz | 13.77 | 234 | 62.2 ms | 2 | 0 |
+
+- Picture alive: every consecutive thermal pair differs (about 29k to 31k of 32,448 halfwords change per frame, stock and patched alike),
+  the body mean is 4.0k to 4.5k in both, and the two renders look alike (a flat-field gradient with noise). A warm object in view
+  was not tried.
+- The rate. The steady interval halves exactly (124.3 to 62.2 ms). The all-frame and per-second figures are lower than 16 because
+  the camera's calibration stretch (about 0.5 s every 2 s: 9 to 10 gaps in 19 s, the same in stock and patched) takes about a quarter
+  of the wall time. Averaged over a 20 s window the thermal rate is 6.3 fps on stock and 12.4 to 12.8 fps on the patch. This is
+  the owner's call to word; the page says "Make 16 FPS", which is the steady rate.
+- Mode 8 (the vendor SDK's mode) was not measured: the bench never sets an IP mode. The 4.8.2.1 mode table gives modes 8 and 9 the
+  same thirty pages, so the patch applies to both [inferred].
+
+**6. Writes and restore (the bank path only; every write read back).**
+- CLI, raw: `slots flash a <patched raw bank> --raw --acknowledge-risk --yes`. Read-back matched the staged image. Booted, decrypted
+  to `6a94a44d`. A raw upload is not stored as given: the camera stores `upload XOR KS(Key A) XOR KS(Key B)` (`write-keys.ts`), so
+  after a raw write the bank reads as **Key B**. The first restore (the stock raw bank) left slot A on Key B as well.
+- Restored to the factory form with a second raw upload: the Key-B form of the stock image (the bank the first restore left) gives
+  back the original bytes, because the stored result is `upload XOR KS(A) XOR KS(B)`. Its read-back sha is `0476541b`, the original.
+- CLI, the app's own path: `slots patch-fps a --write --dump-dir <folder> --acknowledge-risk --yes`. The dry run named the build,
+  the rate change, 11 image bytes and the sum word. The pre-patch dump was saved first (raw and decrypted). The read-back differed
+  from the saved dump only at the 14 planned bytes. The app's writes store Key B (the store-key form, which the planner calls the
+  key the bank is "not touched" on; it is still bootable). This is the app's normal output for this camera, not a fault, but the
+  bank's key label changes from A to B.
+- Page (the new spec `e2e/fps-bench.e2e.ts`, `npm run e2e:fps:bench`): the dry run read the slots, found "Make 16 FPS" on bank A
+  (the only offer on A), and opened the dialog ("Make Bank A run at 16 FPS? ... holds firmware 4.8.2.1 ... 16 Hz instead of 8 Hz ...
+  changes 11 byte(s)"). The write run ticked the acknowledgement, pressed "Yes — patch Bank A", saved both dumps as two downloads
+  (the spec hides the File System Access picker so the page takes the download path), wrote, and read back: "Patched. Unplug and
+  replug, then read the slots again.", "read-back differs from the saved dump only at the 14 planned byte(s)". The saved raw dump is
+  `seek-slot-A-v4.8.2.1-before-fps-patch-raw-0476541b.bin` (the original bytes) and the decrypted `…-decrypted-f96ac57e.bin`.
+  No reset was sent. The write budget was opened for one stage run and one commit, then shut.
+- Final restore: the CLI raw upload above (Key A, original bytes). Booted slot A, Key A, `f96ac`. A full USB dump is byte-identical
+  to the owner's dump (`fb1cb1f5…`, all readable windows; the `0x14060000` gap is 0xFF in both).
+- The camera: both switch channels on; the USB and the J-Link state are as found (the J-Link still cannot attach to the target).
+
+**7. Code and tests (this branch).**
+- `packages/core/src/preservation/fps-patch-table.ts`: `compact_32k-4.8.2.1-to16` (the port of the Python entry; the evidence in the
+  comment is the summary of this section). `fps-patch.ts`: `FPS_STAGE_TWO_IDS` adds it; `FPS_NO_PATCH_4821_REASON` now says the refusal
+  is for a 4.8.2.1 image that is not the stock one. No `FPS_MEASURED_HZ` entry: the measured steady rate is 16.1 Hz, the table's 16.
+- `packages/core/test/preservation/fps-patch-python.json`: the 4.8.2.1 image case (the patcher's own output, 14 changed bytes). The
+  differential test: 15 entries, 15 outputs, the stage-two list. The unit test for the 4.8.2.1 refusal now names a non-stock image.
+- `e2e/lib/slots-expectations.ts`: the Compact 4.8.2.1 and Compact XR 4.8.2.1 rows offer `toHz: 16`. `e2e/slots-quality.e2e.ts`:
+  its comment. `packages/cli/src/usage.ts`: the patch-fps text names 4.8.2.1.
+- `e2e/fps-bench.e2e.ts` (new) and `package.json` `e2e:fps:bench`: the page proof above (dry run and write, gated by
+  `SEEK_E2E_WRITE` as the other camera specs are).
+- Tests run (measured): core `preservation/fps-patch.test.ts`, `fps-patch.differential.test.ts` (with `SEEK_FPS_CORPUS`), `slots/fps-patch.test.ts`,
+  `slots/fps-patch-sites.test.ts`, `slots/capability.test.ts`: 401 pass, 2 skipped, 1 failing for an environment reason (the
+  differential's bank case needs the 1.3.0.8 dump `afa9800f8969`, which is not under the corpus roots on this machine; the 4.8.2.1
+  case passes). Core emulator `slots/page-expectations.emulator.test.ts`: 184 of 184 (the 4.8.2.1 rows offer 16). CLI
+  `slots.test.ts` and web `useSlotsPanel` and `SlotFpsConfirm`: 145 of 145. `tsc --noEmit` for core, cli and e2e: clean; eslint on the
+  changed e2e files: clean. Not run: the full suite (the camera and the slow emulator suites; see the test hazards note).
+- FW-V1 (outside this repo, uncommitted in the `main` checkout; the owner's call to commit): `emu/fps_patch.py` (the entry and the
+  NOT_PATCHED text), `emu/fps_patch_unit_tests.py` (the 68-byte step helpers, the 4.8.2.1 expectation, the refusal test),
+  `emu/fps_patch_tests.py` (`compact-4.8.2.1@16`).
+
+**8. Not done, and why.**
+- The halted whole-flash sha check (the brief's restore rule): not possible, the J-Link did not attach. The USB dump equality is
+  the check used; the one unread window `0x14060000..0x1406FFFF` is 0xFF in the owner's dump and in every USB dump.
+- 32 Hz: a one-step form (seed with LAST) would be the analogue of the 4.8.1.x 32 Hz entries. Not built or measured on this build.
+  The brief's target was about double, so 16 is what is offered.
+- IP mode 8 and a warm object in view: not measured.
+- The stage-two emulator test (`fps-patch.stage-two.emulator.test.ts`) covers the 4.8.1.x chimeras only; a 4.8.2.1 subject with
+  the full dump as its own donor was not added. The page-level proof is the bench spec above, not an emulator run.
+- The `docs/` bundle: rebuilt at the end in its own commit, because the offer changed.
+
+**9. For the owner.**
+- The XR and the Compact 4.8.2.1 now offer "Make 16 FPS". The rate you will see is 16 in the steady stream and about 12.5 averaged,
+  because the calibration stretch is not patched. Stock is 8 and about 6.3.
+- Writing the patch (through the page or the CLI) leaves bank A reading **Key B** (the store-key form), not the factory Key A. It
+  boots. The planner's text "the key pair is not touched" is literally true of the key pair but the bank's label changes. Restoring
+  the factory form needs the raw upload described in section 6.
+- The J-Link could not attach to the target from this session (section 4). A halted read is still the strongest check of the
+  restore; the owner may want to look at the probe's target cable.

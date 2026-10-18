@@ -22,7 +22,7 @@
  * offered (see `gateOf`):
  *   - stage one: the 2014 plain chain, whose banks are stored as plain bytes (the Compact
  *     1.2.0.0, 1.3.0.0 and the 8 Hz 1.3.0.8). The write is byte-exact on the read-back.
- *   - stage two: the 4.x Compact line (4.8.1.7, 4.8.1.9), whose banks are staged under the
+ *   - stage two: the 4.x Compact line (4.8.1.7, 4.8.1.9, 4.8.2.1), whose banks are staged under the
  *     camera's Key A and stored under the bank's own key. The write is checked on the read-back
  *     DECRYPTED, against the patched image (slots/fps-patch.ts).
  * Every other entry stays in the table with its gate recorded as "stage two: ...", so it can
@@ -124,6 +124,7 @@ export const FPS_STAGE_TWO_IDS: ReadonlySet<string> = new Set([
   'compact_32k-4.8.1.7-to32',
   'compact_32k-4.8.1.9-to16',
   'compact_32k-4.8.1.9-to32',
+  'compact_32k-4.8.2.1-to16',
 ]);
 
 /** Why an entry outside stages one and two is not offered yet. Null for an offered entry. */
@@ -442,20 +443,22 @@ export function planFpsPatch(image: Uint8Array, cameraVersion: string | null): F
     status: 'refused',
     reason:
       'this image is not in the frame-rate patch table, so no frame-rate patch is made for this build. ' +
-      'The table names the Compact 1.2.0.0, 1.3.0.0, 1.3.0.8 (8 Hz and 16 Hz FF), 4.8.1.7, 4.8.1.9 and ' +
+      'The table names the Compact 1.2.0.0, 1.3.0.0, 1.3.0.8 (8 Hz and 16 Hz FF), 4.8.1.7, 4.8.1.9, 4.8.2.1 and ' +
       '4.16.1.7 FF builds and the Compact PRO 1.0.3.x and 4.9.x builds; no other build has an entry',
   };
 }
 
-/** The build the frame-rate patch was not derived for (the Compact XR and Compact 4.8.2.1 image, one image). */
+/** The build of the Compact 4.8.2.1 / Compact XR 4.8.2.1 image (one image, f96ac57eda75). */
 export const FPS_NO_PATCH_4821_VERSION = '4.8.2.1';
 
-/** Why that build has no patch: its command pages are not the 52-byte blocks the 4.8.1.x patch edits (TESTING.md 42.22). */
+/**
+ * Why an image that claims the 4.8.2.1 build but is not the stock image the table names is refused: the table patches
+ * the stock image's steady command page (68-byte pages, include/fw_types.h cmd_page_t) and no other 4.8.2.1 image.
+ */
 export const FPS_NO_PATCH_4821_REASON =
-  'the Compact 4.8.2.1 build (and the Compact XR 4.8.2.1, the same image) runs 68-byte command ' +
-  'pages (include/fw_types.h cmd_page_t), not the 52-byte capture blocks the 4.8.1.x patches edit, ' +
-  'and the steady page and its delivery rule were not identified, so no frame-rate patch is made ' +
-  'for it (TESTING.md 42.22)';
+  'this image reports the Compact 4.8.2.1 build (or the Compact XR 4.8.2.1, the same build) but is not the stock ' +
+  'image the frame-rate patch was written for (f96ac57eda75: its 68-byte command pages, steady page 13), so no ' +
+  'frame-rate patch is made for it (TESTING.md 42.23)';
 
 function refused(message: string): SeekError {
   return new SeekError('slots/refused', message);

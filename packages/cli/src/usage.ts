@@ -240,8 +240,8 @@ not banks and are never written.
            plan is shown and the write asked for, unless --yes. It writes the bank
            you name and does not repoint the camera's boot choice
   patch-fps  raise the bank's frame rate by editing its bytes (the Compact 1.2.0.0, 1.3.0.0
-           and 1.3.0.8 builds on the plain 2014 chain, and the Compact 4.8.1.7 and 4.8.1.9
-           builds under Key A; other lines refuse with the reason). A dry run unless
+           and 1.3.0.8 builds on the plain 2014 chain, and the Compact 4.8.1.7, 4.8.1.9 and
+           4.8.2.1 (the Compact XR 4.8.2.1 too) builds under Key A; other lines refuse with the reason). A dry run unless
            --write: it prints the plan and sends nothing. --write saves the bank (raw and
            decrypted) into --dump-dir FIRST, then writes the patched image and reads it
            back (on Key A, the read-back is checked as the decrypted image).

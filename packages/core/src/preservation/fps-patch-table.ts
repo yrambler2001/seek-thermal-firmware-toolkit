@@ -491,6 +491,32 @@ export const FPS_PATCH_TABLE: readonly FpsPatchSource[] = [
     },
     sibling: null,
   },
+  {
+    // compact_32k-4.8.2.1-to16. Python PATCHES entry, emu/fps_patch.py. Evidence: stock steady command page 13
+    // (68 bytes, n_substeps 4 -> 2) keeps seed (slot 7) and makes the terminator mean2 (slot 9, (s + acc + 1) >> 1,
+    // LAST, type 3, gpio 1) in place of mean4 after two accumulates. Measured on the Compact XR 4.8.2.1 (IP mode 9):
+    // stock 8.02 to 8.10 fps, patched 16.1 Hz steady (thermal interval 62.1 to 62.2 ms), 0 frozen pairs.
+    // Emulator: stock 8.06 Hz, patched 16.13 Hz. The calibration stretch is unchanged and not patched.
+    id: 'compact_32k-4.8.2.1-to16',
+    family: 'compact_32k',
+    version: '4.8.2.1',
+    fromHz: 8,
+    targetHz: 16,
+    stockSha256: 'f96ac57eda75bca22791acc3ed21c80bde96c1f538f0ddd2aea6ffe447752882',
+    patchedSha256: '6a94a44d10b27f466e16f37d4e15dd23b7bce931c40b20737d59ef42e375bb02',
+    length: 42680,
+    edits: [
+      { offset: 0x90f2, before: '04', after: '02' },
+      { offset: 0x90fa, before: '2308000123080001208a0301', after: '208903010000000000000000' },
+    ],
+    row: {
+      label:
+        'steady self-loop command page 13 of the 68-byte frame program (n_substeps 4 -> 2, next = alt = 13; 4 captures per published type-3 frame in stock)',
+      offset: 0x90f2,
+      length: 68,
+    },
+    sibling: null,
+  },
 ];
 
 /** The corpus builds that already run at a target rate: recognised, reported, never patched (KNOWN_RATE). */
@@ -526,7 +552,7 @@ export const FPS_KNOWN_RATE: Readonly<
 /** What the Python tool does NOT patch, and why (NOT_PATCHED), kept for the record. */
 export const FPS_NOT_PATCHED_NOTES: readonly string[] = [
   'Compact 32K 0.3.0.1, 0.7.0.7, 0.7.0.8, 0.8.0.0, 0.9.0.2, 0.9.0.6, 0.9.0.7, 0.9.1.0, 0.10.0.0, 1.0.0.0 at 8 Hz (and 0.5.x, 0.6.0.4, which the framerate suite cannot stream): no patch. Their images carry none of the steady-record byte patterns this tool knows (the 52-byte and 34-byte capture blocks, the PRO 1.0.3.0 row 14 and the PRO 4.9 row 20; see emu/README.md). Their record layout is not decoded.',
-  'Compact XR 4.8.2.1 and the Compact 4.8.2.1 dump (both hold the one image f96ac57eda75): no patch. It runs 68-byte command pages (include/fw_types.h cmd_page_t; 30 pages for modes 8 and 9); the steady page and its delivery rule were not identified.',
+  'Compact 4.8.2.1 image f96ac57eda75 (the Compact 4.8.2.1 dump and the Compact XR 4.8.2.1 dump, one image) is in the table as compact_32k-4.8.2.1-to16 (steady page 13 of its 68-byte command pages). Its 32 Hz one-step form is not built.',
   'Compact 32K 1.3.0.0 and 1.2.0.0 at 32 Hz: no patch. Its one-step block (op 3 and the idle steps removed, op 9 kept alone) alternates: each frame is the difference of the previous output and a capture, so the body mean swings about 6,900 halfwords per frame (emulator, 1.3.0.0 and 1.2.0.0: mean from -340 to +7,197). A correlated double sample needs a reference copy in the same frame, and no one-step block has one.',
   'Earlier 32K 32 Hz blocks that dropped op 5 (1.3.0.8, 4.8.1.7, 4.8.1.9, and the FF 1.3.0.8 and 4.16.1.7 ids): withdrawn. Op 5 starts the frame and clears the mask that op 8 reads, so the picture froze (emulator: 56 to 58 of 58 to 61 steady pairs with zero changed halfwords). Replaced by the one-step block that keeps op 5 with the delivery bit.',
   'Mosaic 10.9.1.31: already an 18 Hz image (FRAME_RATE, emu/README.md LABEL_DECISIONS); not a 9 Hz target.',

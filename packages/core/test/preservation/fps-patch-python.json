@@ -373,6 +373,36 @@
     }
    ],
    "known": null
+  },
+  {
+   "inputSha256": "f96ac57eda75bca22791acc3ed21c80bde96c1f538f0ddd2aea6ffe447752882",
+   "length": 42680,
+   "pythonState": "stock",
+   "known": null,
+   "outputs": [
+    {
+     "patch": "compact_32k-4.8.2.1-to16",
+     "target": 16,
+     "version": "4.8.2.1",
+     "outputSha256": "6a94a44d10b27f466e16f37d4e15dd23b7bce931c40b20737d59ef42e375bb02",
+     "changed": [
+      569,
+      570,
+      571,
+      37106,
+      37114,
+      37115,
+      37116,
+      37118,
+      37119,
+      37121,
+      37122,
+      37123,
+      37124,
+      37125
+     ]
+    }
+   ]
   }
  ],
  "banks": [

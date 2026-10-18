@@ -200,7 +200,7 @@ describe('the rate the page names (the bench-measured rate, FPS_MEASURED_HZ)', (
 });
 
 describe('the stages: which entries are offered (pinned, so a change is deliberate)', () => {
-  it('offers exactly the stage-one (plain 2014 chain) and stage-two (Key A, 4.8.1.x) sets', () => {
+  it('offers exactly the stage-one (plain 2014 chain) and stage-two (Key A, 4.8.x) sets', () => {
     expect([...FPS_STAGE_ONE_IDS].sort()).toEqual([
       'compact_32k-1.2.0.0-to16',
       'compact_32k-1.3.0.0-to16',
@@ -212,6 +212,7 @@ describe('the stages: which entries are offered (pinned, so a change is delibera
       'compact_32k-4.8.1.7-to32',
       'compact_32k-4.8.1.9-to16',
       'compact_32k-4.8.1.9-to32',
+      'compact_32k-4.8.2.1-to16',
     ]);
     for (const id of FPS_STAGE_ONE_IDS) expect(FPS_STAGE_TWO_IDS.has(id), id).toBe(false);
   });
@@ -227,8 +228,8 @@ describe('the stages: which entries are offered (pinned, so a change is delibera
   });
 });
 
-describe('the build with no patch (Compact 4.8.2.1)', () => {
-  it('says why it has no patch, not that the image is missing from the table', () => {
+describe('a Compact 4.8.2.1 image that is not the stock one', () => {
+  it('is refused with the reason, not with the generic "not in the table" message', () => {
     const plan = planFpsPatch(syntheticImage(8), '4.8.2.1');
     expect(plan.status).toBe('refused');
     if (plan.status === 'refused') {
