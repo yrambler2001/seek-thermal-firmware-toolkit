@@ -6853,3 +6853,53 @@ only after a bench run shows the publish rate and the shutter are right; the emu
 (`slots/fps-patch.emulator.test.ts`, 3 of 3 before the withholding) is skipped while it is true and runs again when it is false.
 The owner should confirm this. (2) The button label for 1.2.0.0 and 1.3.0.0 would have said 16 Hz, not 32 Hz, because the
 table has no 32 Hz entry for them.
+
+### 42.16 The CLI follows the web's tabs; `flash` is gone, and the whole-image write and its rescue dump went with it (2026-10-18)
+
+**The surface.** One command per tab, in the web app's order:
+
+| Command | Tab | What it does |
+| --- | --- | --- |
+| `seek-fw info` | Info | reads the camera as before. `--devices` lists the connected cameras and opens none; `--profiles` lists the families and opens no camera. The human report ends with the tab map, and `--json` carries it as `tabs`. |
+| `seek-fw preserve` | Dump & decrypt 0.x/1.x 2014/2016 | the six-step run. `--backup-only` runs the read-only first step (the backup) and stops before the patch, so nothing that writes is sent. `--zip <file>` writes the run file: `preserve_run.json` and every checkpoint the run has produced, the shape the web's run file has. Both work on a full run too. |
+| `seek-fw dump` | Dump & decrypt 4.x/Nano | no family pick: `--profile` is a usage error here, and the camera's answers choose the family. A camera of the 0.x/1.x 2014–2017 line (`legacy-auth`, `compact-2016`, `compact-2014`) is refused before anything is read, with a pointer to `preserve`. `--all-selectors` is the old `sweep`. |
+| `seek-fw decrypt file <dump>` | Decrypt File/Slot | the old `decrypt <file>`. The form word is required now. |
+| `seek-fw decrypt slot <file>` | Decrypt File/Slot | new. One 64 KiB bank, no camera: `<stem>-decrypted.bin` when an image decrypts, and `<stem>-report.txt` always (the key's identity, the image's version, the sizes and sha256 values, the notes). An erased bank is reported as empty and exits 0. A bank with no image, or whose key does not recover, writes the report and exits 1. A file that is not exactly 64 KiB is refused (`slots/refused`, exit 1). The logic is core's `decryptSlotFile` and `slotFileReport` (`packages/core/src/slots/decrypt-file.ts`), exported from core for the web's counterpart. |
+| `seek-fw slots ...` | Work with firmware slots | unchanged. It now takes the write `flash` did, as `slots flash <a\|b\|r> <file>`. |
+
+**Removed, with no alias:** `flash`, `sweep`, `devices` and `profiles`. Each is `unknown command` with exit 2. `decrypt <file>` without `file` or `slot` is refused with exit 2 and the new form in the hint.
+
+**Refused, not ignored:** a flag the command does not take is a usage error with exit 2 and the command's help hint (`--profile` on `dump`, `--out` on `info`, `--chunk` on `slots`, `--backup-only` on anything but `preserve`, `--no-verify` on `dump`, and so on). Before this section such a flag was parsed and dropped. The table is `FLAG_COMMANDS` in `packages/cli/src/cli.ts`. `--help` is answered whatever else is on the line.
+
+**What the removed `flash` did that `slots flash` does not.** Recorded here and not re-added:
+
+1. **The boot choice (the one that matters).** `flash` armed selector 0, the upgrade target. Its commit rewrote `cfg[0]` to point at the bank it had just written, so the image it wrote was the one the camera booted after a reset. `slots` never arms selector 0 (`slots/write.ts`), and its commit effect is `bank-only` (`CommitEffect` in `slots/types.ts`). A bank written with `slots flash` is booted only if the camera already boots that bank. Flashing an image so that it runs after the next start is not something the CLI can now do.
+2. **The rescue dump.** `flash` read the whole 4 MiB flash after the confirmation and before the write, and refused the write when that read did not come back complete (`--no-rescue-dump` skipped it). `slots flash` takes no backup. The bank's previous content survives only if the person ran `slots dump <bank>` first. The test "writes nothing when a window of the rescue dump did not come back" went with it.
+3. **The target the bootloader names.** `flash` wrote to the slot the bootloader reported as the upgrade target. `slots flash` writes the bank it is given. The plan shows that bank and the camera's booted bank, and a write to the booted bank or to R needs `--acknowledge-risk`.
+
+Kept in the move: the plan printed before the question (also under `--quiet`), the refusal without a terminal and without `--yes`, the read-back, and the refusal of a build the slot page does not cover. Not a loss: `slots flash` accepts a decrypted image whose name carries no key pair, because the pair is found in the image by value (`slots.emulator.test.ts`, the bare-name case). `flash` refused that name.
+
+**The decisions** (the owner was asleep; each is easy to reverse):
+
+- `devices` and `profiles` are parts of `info`, not commands. Neither opens a camera.
+- `dump` reads the 4.x line only. Refusing the locked line is the tab boundary: that line's flow is `preserve`, and reading it through `dump` would have been a second path with no tab. A camera that names no family (`generic`) is still read with the 4.x map, as before.
+- `preserve --backup-only` is the existing backup step, stopped before the next one. It is not a new step, and the same gates run.
+- `--profile` stays on `info`, `decrypt` and `slots`, where it names a family for a read or an analysis. Only `dump` lost it.
+- Error codes are unchanged. `flash/refused` is core's code namespace, which the web also reads, so the CLI keeps using it in `preserve` and `slots`.
+
+**Tests (targeted; no camera, no bench, no J-Link).**
+
+- Core `test/slots/decrypt-file.test.ts`: 11 of 11.
+- CLI, with the emulator-free unit files: `args` 40, `errors`, `decrypt` 13 (the 6 existing file cases and 7 for `slot`), `camera` 21, `surface` 25 (new: the five tabs in order, the removed names and the old `decrypt` form refused, the flags refused per command, the listings without a camera, the exit codes), `slots` 99, `node-usb`, `output`, `reporter`, `interrupt`. Ten files, all green.
+- CLI `preserve` 22 of 22: the 17 existing, and 5 new for `--backup-only` (nothing sent that writes, `--from-step` past the backup refused, `--print-state` with either new flag refused, the prompt before the camera is opened) and `--zip` (the run file holds `preserve_run.json` and the backup checkpoints, and no later step).
+- Not run here: the emulator suites (`emulator-cli`, `emulator-host-giveup`, `slots.emulator`, `slots-empty.emulator`). They skip without `FW-V1/emu`, which is not in this worktree. They were edited for the new commands and are unverified: `emulator-host-giveup` now drives `slots flash b`, and `emulator-cli` runs `info --devices`.
+- `flash.test.ts` was deleted. Its refusals and its plan cases are in `slots.test.ts`, with the plan under `--quiet` added.
+- Typecheck: `tsc --noEmit` clean for core and the CLI. `eslint` clean on the changed files. `prettier` clean on the changed files and the README.
+
+**Left, and not mine to change:**
+
+- The web. The `#flash` page and the README section "Firmware and flashing" still describe the page the web agent is removing. `packages/web/src/lib/hints.ts` names `seek-fw profiles` in a comment. The e2e page specs were not touched.
+- The e2e bench (`e2e/lib/bench`) calls `seek-fw info --json` and `seek-fw slots flash`, both still valid. Nothing there names a removed command.
+- Core's `dumpSlot` (`slots/dump.ts`) keeps its own copy of the decrypt steps beside `decryptSlotFile`. The two should become one function; that waits for the reader's owner.
+- Older sections of this file keep the old command names. They are records of what ran then.
+

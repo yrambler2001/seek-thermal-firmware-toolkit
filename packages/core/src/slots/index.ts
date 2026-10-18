@@ -7,6 +7,16 @@ export {
   type InspectSlotsOptions,
 } from './inspect.js';
 export { dumpSlot } from './dump.js';
+export {
+  decryptSlotFile,
+  slotFileReport,
+  type DecryptSlotFileOptions,
+  type SlotFileDecryption,
+  type SlotFileHeader,
+  type SlotFileKey,
+  type SlotFileKeyMethod,
+  type SlotFileStatus,
+} from './decrypt-file.js';
 export { prepareSlotFlash, flashSlot, type PrepareSlotFlashOptions } from './write.js';
 export {
   ffBankVerdict,

@@ -9,24 +9,24 @@
 import { describe, expect, it } from 'vitest';
 import { parseCli, type CommandContext } from '../src/cli.js';
 import { decryptCommand } from '../src/commands/decrypt.js';
-import { flashCommand } from '../src/commands/flash.js';
+import { slotsCommand } from '../src/commands/slots.js';
 import { CliError, EXIT_FAILED, EXIT_USAGE, UsageError, describeError } from '../src/errors.js';
 import { TerminalReporter } from '../src/reporter.js';
 import { MemorySink } from '../src/sink.js';
 import { testIo } from './helpers.js';
 
 /**
- * A context with no positional file. Argument parsing rejects that first today,
- * so this is the only way to reach the guard the commands still carry.
+ * A context with no positional arguments. Argument parsing rejects that first today, so this is
+ * the only way to reach the guard the commands still carry.
  */
-function contextWithoutFile(): CommandContext {
-  const parsed = parseCli(['decrypt', 'unused.bin']);
+function contextWithoutArguments(): CommandContext {
+  const parsed = parseCli(['decrypt', 'file', 'unused.bin']);
   if (parsed.kind !== 'run') throw new Error(`expected a run, got ${parsed.kind}`);
   const sink = new MemorySink();
   const { io } = testIo();
   return {
     options: parsed.options,
-    file: null,
+    args: [],
     reporter: new TerminalReporter({
       log: sink,
       progress: sink,
@@ -74,12 +74,12 @@ describe('CliError', () => {
 
 describe('the commands that raise cli/usage themselves', () => {
   it('ask for exit 2, not exit 1', async () => {
-    const fromDecrypt = await refusal(decryptCommand(contextWithoutFile()));
+    const fromDecrypt = await refusal(decryptCommand(contextWithoutArguments()));
     expect(fromDecrypt.code).toBe('cli/usage');
     expect(fromDecrypt.exitCode).toBe(EXIT_USAGE);
 
-    const fromFlash = await refusal(flashCommand(contextWithoutFile()));
-    expect(fromFlash.code).toBe('cli/usage');
-    expect(fromFlash.exitCode).toBe(EXIT_USAGE);
+    const fromSlots = await refusal(slotsCommand(contextWithoutArguments()));
+    expect(fromSlots.code).toBe('cli/usage');
+    expect(fromSlots.exitCode).toBe(EXIT_USAGE);
   });
 });

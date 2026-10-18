@@ -489,7 +489,7 @@ describe('the CLI transport: a string the device cannot produce', () => {
     expect(() => transport?.description).toThrow('something else entirely');
   });
 
-  it('lets `seek-fw devices` list the camera instead of exiting 1', async () => {
+  it('lets `seek-fw info --devices` list the camera instead of exiting 1', async () => {
     const { run } = await import('../src/cli.js');
     const { testIo } = await import('./helpers.js');
     const { device } = withThrowingString('serialNumber', 'getString error: invalid descriptor');
@@ -497,7 +497,7 @@ describe('the CLI transport: a string the device cannot produce', () => {
       backend: (options) =>
         new NodeUsbBackend({ ...options, enumerate: () => Promise.resolve([device]) }),
     });
-    const code = await run(['devices', '--json'], io, new AbortController().signal);
+    const code = await run(['info', '--devices', '--json'], io, new AbortController().signal);
     expect(code, stderr.text).toBe(0);
     expect(JSON.parse(stdout.text)).toMatchObject({
       ok: true,

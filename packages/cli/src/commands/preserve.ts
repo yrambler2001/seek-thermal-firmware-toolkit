@@ -54,6 +54,7 @@ import {
   isPreserveStepId,
   recordStepFailure,
   runPreserveStep,
+  type Artifact,
   type PreserveArtifactLoader,
   type PreserveRunState,
   type PreserveStepId,
@@ -64,9 +65,11 @@ import { CliError } from '../errors.js';
 import {
   artifactInventory,
   loadRunState,
+  runStatePath,
   saveRunState,
   writeRunArtifact,
 } from '../preserve-store.js';
+import { resolveArtifactPath, writeOutputs, type WrittenOutput } from '../output.js';
 import { openSession, type Session } from './shared.js';
 
 /** The artifacts land here when --out is not given. */
@@ -203,8 +206,26 @@ async function readImageOrNull(path: string): Promise<Uint8Array | null> {
 }
 
 export async function preserveCommand(ctx: CommandContext): Promise<CommandResult> {
-  if (ctx.options.printState !== null)
+  if (ctx.options.printState !== null) {
+    if (ctx.options.backupOnly || ctx.options.zip !== null) {
+      throw new CliError(
+        '--print-state touches no camera and writes no run, so it takes neither --backup-only nor --zip',
+        { code: 'cli/usage' },
+      );
+    }
     return printStateCommand(ctx, resolve(ctx.options.printState));
+  }
+
+  if (
+    ctx.options.backupOnly &&
+    ctx.options.fromStep !== null &&
+    ctx.options.fromStep !== 'backup'
+  ) {
+    throw new CliError(
+      `--backup-only runs the first step only; --from-step ${ctx.options.fromStep} names a later one`,
+      { code: 'cli/usage' },
+    );
+  }
 
   if (ctx.options.resume !== null && ctx.options.out !== null) {
     throw new CliError(
@@ -272,13 +293,18 @@ async function freshCommand(ctx: CommandContext, outDir: string): Promise<Comman
   say('                     interrupted write there has no bootable fallback (an SPI');
   say('                     programmer is the only way back).');
   say(`  interrupted?       seek-fw preserve --resume ${outDir}`);
+  if (ctx.options.backupOnly) {
+    say('  stop after         the backup: read-only, nothing is written to the camera');
+  }
   say('');
 
   if (!ctx.options.yes) {
     const confirmed = await ctx.io.confirm(
-      'Back this camera up (read-only), derive the patch from its own flash, and show the ' +
-        'plan before anything is written? The commit afterwards WILL write the active boot ' +
-        'slot. [y/N] ',
+      ctx.options.backupOnly
+        ? 'Back this camera up (read-only)? Nothing is written to the camera. [y/N] '
+        : 'Back this camera up (read-only), derive the patch from its own flash, and show the ' +
+            'plan before anything is written? The commit afterwards WILL write the active boot ' +
+            'slot. [y/N] ',
     );
     if (!confirmed) {
       throw new CliError('aborted at the confirmation prompt — nothing was written', {
@@ -302,9 +328,10 @@ async function freshCommand(ctx: CommandContext, outDir: string): Promise<Comman
   await saveRunState(outDir, created.state);
   const finalState = await runSteps(ctx, outDir, created.state, {
     onPlanReady: (state) => confirmDerivedPlan(ctx, outDir, state),
+    ...(ctx.options.backupOnly ? { stopAfter: 'backup' as const } : {}),
   });
 
-  return runResult(ctx, outDir, finalState);
+  return finishRun(ctx, outDir, finalState);
 }
 
 /** The detailed plan, printed from the state the backup and patch steps
@@ -426,7 +453,7 @@ async function resumeCommand(ctx: CommandContext, runDir: string): Promise<Comma
 
   if (state.nextStep === 'done') {
     ctx.reporter.log(`run ${state.runId} is already done — nothing to resume`, 'warn');
-    return runResult(ctx, runDir, state);
+    return finishRun(ctx, runDir, state);
   }
   let start: PreserveStepId = state.nextStep;
   if (fromStep !== null) start = fromStep;
@@ -479,9 +506,12 @@ async function resumeCommand(ctx: CommandContext, runDir: string): Promise<Comma
     /* An explicit --from-step is the one loud way a jump past an incomplete
      * write step is granted; core relaxes only the ordering gates, never the
      * file gates, and the wire-side pre-checks stay in the steps. */
-    { allowJump: fromStep !== null },
+    {
+      allowJump: fromStep !== null,
+      ...(ctx.options.backupOnly ? { stopAfter: 'backup' as const } : {}),
+    },
   );
-  return runResult(ctx, runDir, finalState);
+  return finishRun(ctx, runDir, finalState);
 }
 
 /* ==================================================================== *
@@ -503,6 +533,8 @@ async function runSteps(
   initialState: PreserveRunState,
   options: {
     readonly allowJump?: boolean;
+    /** `--backup-only`: the run stops before any step after this one. Nothing after it is started. */
+    readonly stopAfter?: PreserveStepId;
     /** Called once, after the step that first records the patch summary —
      *  the first moment the derived plan exists (and still before anything
      *  write-shaped runs). */
@@ -549,6 +581,16 @@ async function runSteps(
   let planned = false;
   while (state.nextStep !== 'done') {
     const step: PreserveStepId = state.nextStep;
+    if (
+      options.stopAfter !== undefined &&
+      PRESERVE_STEP_IDS.indexOf(step) > PRESERVE_STEP_IDS.indexOf(options.stopAfter)
+    ) {
+      ctx.reporter.log(
+        `--backup-only: stopping after ${options.stopAfter}; ${step} and the steps after it are not run`,
+        'info',
+      );
+      break;
+    }
     ctx.reporter.log(`— ${step} —`, 'info');
     /* THE RETRY GATE: a failed backup re-runs only past the power-cycle
      * acknowledgement — core refuses it otherwise (describeStepGate), and the
@@ -613,7 +655,46 @@ async function runSteps(
  * the results
  * ==================================================================== */
 
-function runResult(ctx: CommandContext, runDir: string, state: PreserveRunState): CommandResult {
+/**
+ * The zip of a run: `preserve_run.json` and every checkpoint file the run has produced, read back
+ * from the run directory and checked against the record. The same shape the web app saves as its
+ * run file, so a zip from either front end holds the same files. Null without `--zip`.
+ */
+async function writeRunZip(
+  ctx: CommandContext,
+  runDir: string,
+  state: PreserveRunState,
+): Promise<WrittenOutput | null> {
+  if (ctx.options.zip === null) return null;
+  const artifacts: Artifact[] = [
+    { name: PRESERVE_RUN_STATE_FILE, data: await readFile(runStatePath(runDir)) },
+  ];
+  for (const entry of await artifactInventory(runDir, state)) {
+    if (!entry.present) continue;
+    artifacts.push({
+      name: entry.name,
+      data: await readFile(resolveArtifactPath(runDir, entry.name)),
+    });
+  }
+  return writeOutputs({ directory: null, zip: ctx.options.zip }, artifacts);
+}
+
+/** The end of every run that reaches the user: the zip if one was asked for, then the result. */
+async function finishRun(
+  ctx: CommandContext,
+  runDir: string,
+  state: PreserveRunState,
+): Promise<CommandResult> {
+  const zip = await writeRunZip(ctx, runDir, state);
+  return runResult(ctx, runDir, state, { backupOnly: ctx.options.backupOnly, zip });
+}
+
+function runResult(
+  ctx: CommandContext,
+  runDir: string,
+  state: PreserveRunState,
+  extra: { readonly backupOnly: boolean; readonly zip: WrittenOutput | null },
+): CommandResult {
   const stepIds = PRESERVE_STEP_IDS.filter((id) => state.steps[id] !== undefined);
   if (ctx.human) {
     for (const id of stepIds) {
@@ -623,6 +704,12 @@ function runResult(ctx: CommandContext, runDir: string, state: PreserveRunState)
     }
     ctx.out(`run ${state.runId}: next step ${state.nextStep}`);
     ctx.out(`run directory: ${runDir}`);
+    if (extra.backupOnly) {
+      ctx.out(
+        'backup only: the run stopped after the read-only backup; nothing was written to the camera',
+      );
+    }
+    if (extra.zip !== null) ctx.out(`wrote ${extra.zip.zip ?? ''} (${String(extra.zip.bytes)} B)`);
   }
   return {
     image: {
@@ -654,7 +741,12 @@ function runResult(ctx: CommandContext, runDir: string, state: PreserveRunState)
       rawDump: state.rawDumpSha256 ?? null,
       deliveredDump: state.deliveredSha256 ?? null,
     },
-    output: { directory: runDir, record: `${runDir}/${PRESERVE_RUN_STATE_FILE}` },
+    output: {
+      directory: runDir,
+      record: `${runDir}/${PRESERVE_RUN_STATE_FILE}`,
+      zip: extra.zip?.zip ?? null,
+    },
+    backupOnly: extra.backupOnly,
   };
 }
 

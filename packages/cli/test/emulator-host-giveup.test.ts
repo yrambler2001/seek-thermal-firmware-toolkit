@@ -222,7 +222,7 @@ describe.skipIf(!available)("the real hosts' give-up on emulated cameras (sec.22
   );
 
   it(
-    "the CLI's info and flash through node-usb finish inside nusb's give-up (Compact XR 4.8.2.1)",
+    "the CLI's info and slots flash through node-usb finish inside nusb's give-up (Compact XR 4.8.2.1)",
     { timeout: TIMEOUT_MS },
     async () => {
       const row = new RowEmulators(XR);
@@ -263,7 +263,7 @@ describe.skipIf(!available)("the real hosts' give-up on emulated cameras (sec.22
             });
           for (const argv of [
             ['info', '--json'],
-            ['flash', image, '--yes', '--no-rescue-dump', '--out', out.path, '--json'],
+            ['slots', 'flash', 'b', image, '--yes', '--acknowledge-risk', '--json'],
           ]) {
             const { io, stderr } = testIo({ backend });
             const code = await run(argv, io, new AbortController().signal);

@@ -13,15 +13,20 @@ import {
   bytesToHex,
   hex,
   hexUp,
+  listProfiles,
   onPlaintextChain,
   readDeviceInfo,
   runningApplicationOf,
+  type CapabilityName,
   type DeviceState,
   type FirmwareProfile,
   type SlotState,
 } from '@seek-fw/core';
+import { summarizeDevice } from '../backend.js';
 import type { CommandContext, CommandResult } from '../cli.js';
+import { permissionHint } from '../errors.js';
 import {
+  backendFor,
   betterProfile,
   chooseProfileByProbe,
   cipherDiffers,
@@ -65,9 +70,14 @@ function runningJson(state: DeviceState): Record<string, unknown> | null {
   return {
     build: run.build,
     why: run.why,
-    camera: state.bankVerdicts === undefined || state.bankVerdicts === null
-      ? null
-      : { a: answer(state.bankVerdicts.a), b: answer(state.bankVerdicts.b), r: answer(state.bankVerdicts.r) },
+    camera:
+      state.bankVerdicts === undefined || state.bankVerdicts === null
+        ? null
+        : {
+            a: answer(state.bankVerdicts.a),
+            b: answer(state.bankVerdicts.b),
+            r: answer(state.bankVerdicts.r),
+          },
     predicted: {
       plain: run.predicted.plain,
       ff: run.predicted.ff,
@@ -241,11 +251,11 @@ export function renderState(ctx: CommandContext, state: DeviceState): void {
   }
 
   ctx.out('');
-  ctx.out(heading('Flashing', ctx.color));
+  ctx.out(heading('Writing', ctx.color));
   if (state.canFlash) {
-    ctx.out('  available — `seek-fw flash <image>` can write this camera');
+    ctx.out('  available — `seek-fw slots flash <a|b|r> <file>` can write a bank of this camera');
   } else {
-    ctx.out('  not available:');
+    ctx.out('  not available for a whole-image write:');
     for (const reason of state.flashBlockedBy) ctx.out(`    · ${reason}`);
   }
   ctx.out('');
@@ -315,20 +325,9 @@ function runningRows(state: DeviceState): [string, string][] {
  * Reads the device analysis, re-reading under a confidently detected profile
  * when that would change what the numbers mean.
  */
-export interface AnalyseOptions {
-  /**
-   * Re-read whenever detection names a different family, not only when its
-   * cipher differs. `flash` needs this: the capability gate is a property of
-   * the profile's identity, so acting under `generic` on a camera the evidence
-   * says is `modern-4x` would refuse a write that is in fact supported.
-   */
-  readonly rereadOnAnyBetter?: boolean;
-}
-
 export async function analyseCamera(
   ctx: CommandContext,
   session: Session,
-  analyseOptions: AnalyseOptions = {},
 ): Promise<{ readonly state: DeviceState; readonly profile: FirmwareProfile }> {
   /* ASKED, NOT GUESSED — and here the guess had a cost beyond a label. This
    * read arms the boot-config bank, which on the locked 2014-2017 line is
@@ -348,10 +347,7 @@ export async function analyseCamera(
   );
 
   const better = betterProfile(state.profile, state.detection, choice.forced);
-  const mustReread =
-    better !== null &&
-    (analyseOptions.rereadOnAnyBetter === true || cipherDiffers(state.profile, better));
-  if (better !== null && mustReread) {
+  if (better !== null && cipherDiffers(state.profile, better)) {
     ctx.reporter.log(
       `the evidence identifies this camera as ${better.id} (${better.name})` +
         (cipherDiffers(state.profile, better)
@@ -371,12 +367,180 @@ export async function analyseCamera(
   return { state, profile: state.profile };
 }
 
+/**
+ * The tabs of the web app, in the order the page shows them, with the command that
+ * does each one. `info` prints them after the camera report, and `--json` carries them
+ * as `tabs`, so the map of the tool is one place and not a guess at each front end.
+ */
+export const TABS: readonly {
+  readonly tab: string;
+  readonly command: string;
+  readonly does: string;
+}[] = [
+  {
+    tab: 'Info',
+    command: 'seek-fw info',
+    does: "the camera's firmware version, identity, boot state and slots (--devices, --profiles)",
+  },
+  {
+    tab: 'Dump & decrypt 0.x/1.x 2014/2016',
+    command: 'seek-fw preserve',
+    does: 'the six-step preservation run; --backup-only saves the read-only backup as a zip',
+  },
+  {
+    tab: 'Dump & decrypt 4.x/Nano',
+    command: 'seek-fw dump',
+    does: 'read the whole flash and decrypt it; --all-selectors probes every selector',
+  },
+  {
+    tab: 'Decrypt File/Slot',
+    command: 'seek-fw decrypt file|slot',
+    does: 'decrypt a dump, or one 64 KiB bank, from a file with no camera',
+  },
+  {
+    tab: 'Work with firmware slots',
+    command: 'seek-fw slots',
+    does: 'list, dump, write or raise the frame rate of one bank (A, B or R)',
+  },
+];
+
+function renderTabs(ctx: CommandContext): void {
+  ctx.out('');
+  ctx.out(heading('Tabs', ctx.color));
+  ctx.out(table(TABS.map((row) => [`  ${row.tab}`, row.command, row.does])));
+}
+
+/** `info --devices`: the cameras this host can see. Opens none. */
+async function devicesListing(ctx: CommandContext): Promise<CommandResult> {
+  const backend = backendFor(ctx, { recipient: ctx.options.recipient });
+  const transports = await backend.listDevices();
+  const devices = transports.map((transport) => summarizeDevice(transport));
+
+  if (ctx.human) {
+    if (devices.length === 0) {
+      ctx.out('no Seek camera found');
+      if (ctx.io.platform === 'linux' || ctx.io.platform === 'win32') {
+        ctx.out('');
+        ctx.out(permissionHint(ctx.io.platform));
+      }
+    } else {
+      ctx.out(
+        table(
+          devices.map((device) => [
+            device.vendorId,
+            device.productId,
+            device.productName ?? '(no product string)',
+            device.manufacturerName ?? '',
+            device.serialNumber ?? '',
+          ]),
+          ['vendor', 'product', 'name', 'manufacturer', 'serial'],
+        ),
+      );
+    }
+  }
+
+  return { count: devices.length, devices };
+}
+
+/* ---- `info --profiles`: the families this build knows, from the registry ---- */
+
+interface CapabilityInfo {
+  readonly supported: boolean;
+  readonly reason: string | null;
+}
+
+interface ProfileInfo {
+  readonly id: string;
+  readonly name: string;
+  readonly summary: string;
+  readonly cipher: {
+    readonly whiteningK: string;
+    readonly acceptanceSum: string;
+    readonly clearWords: readonly number[];
+  };
+  readonly capabilities: Readonly<Record<string, CapabilityInfo>>;
+  readonly sweepRange: readonly number[];
+  readonly windows: number;
+}
+
+const FAMILY_CAPABILITIES: readonly CapabilityName[] = [
+  'dump',
+  'sweep',
+  'decrypt',
+  'deviceInfo',
+  'flash',
+];
+
+function describeProfile(profile: FirmwareProfile): ProfileInfo {
+  const capabilities: Record<string, CapabilityInfo> = {};
+  for (const name of FAMILY_CAPABILITIES) {
+    const support = profile.capabilities[name];
+    capabilities[name] = support.supported
+      ? { supported: true, reason: null }
+      : { supported: false, reason: support.reason };
+  }
+  return {
+    id: profile.id,
+    name: profile.name,
+    summary: profile.summary,
+    cipher: {
+      whiteningK: hexUp(profile.cipher.whiteningK),
+      acceptanceSum: hexUp(profile.cipher.acceptanceSum),
+      clearWords: [...profile.cipher.clearWords],
+    },
+    capabilities,
+    sweepRange: [...profile.sweepRange],
+    windows: profile.windowMap().length,
+  };
+}
+
+/** `info --profiles`: the registry, read rather than hard-coded, so a family added to core shows here. */
+function profilesListing(ctx: CommandContext): CommandResult {
+  const profiles = listProfiles().map(describeProfile);
+
+  if (ctx.human) {
+    ctx.out(
+      table(
+        profiles.map((profile) => [
+          profile.id,
+          profile.name,
+          ...FAMILY_CAPABILITIES.map((name) =>
+            profile.capabilities[name]?.supported === true ? 'yes' : 'no',
+          ),
+          profile.cipher.whiteningK,
+          profile.cipher.acceptanceSum,
+        ]),
+        ['id', 'name', ...FAMILY_CAPABILITIES, 'K', 'sum'],
+      ),
+    );
+    ctx.out('');
+    for (const profile of profiles) {
+      ctx.out(`${profile.id}: ${profile.summary}`);
+      for (const name of FAMILY_CAPABILITIES) {
+        const capability = profile.capabilities[name];
+        if (capability !== undefined && !capability.supported && capability.reason !== null) {
+          ctx.out(`  ${name} refused: ${capability.reason}`);
+        }
+      }
+      ctx.out('');
+    }
+  }
+
+  return { profiles };
+}
+
 export async function infoCommand(ctx: CommandContext): Promise<CommandResult> {
+  if (ctx.options.devices) return devicesListing(ctx);
+  if (ctx.options.profiles) return profilesListing(ctx);
+
   const session = await openSession(ctx);
   try {
     const { state } = await analyseCamera(ctx, session);
-    if (ctx.human) renderState(ctx, state);
-    return stateJson(state);
+    if (ctx.human) {
+      renderState(ctx, state);
+      renderTabs(ctx);
+    }
+    return { ...stateJson(state), tabs: TABS };
   } finally {
     await session.close();
   }

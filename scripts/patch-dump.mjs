@@ -29,7 +29,7 @@
  * The slot cipher is a word-wise XOR with an xorshift128 keystream that does
  * not depend on the plaintext, so the same keystream re-encrypts a patched
  * image. core's `recoverState` solves it from the slot itself, the same
- * no-key-search path `seek-fw decrypt` uses. The bootloader accepts a slot by
+ * no-key-search path `seek-fw decrypt file` uses. The bootloader accepts a slot by
  * the 32-bit word sum of its decrypted image. The free adjust word at +0x238
  * sits in the cleartext header and is retuned so that sum does not move. The
  * "CODE" footer carries no image checksum, and the length does not change, so
@@ -192,7 +192,7 @@ function main() {
     const enc = cryptImage(nv, 0, length, state, cipher);
     output.set(enc, base);
 
-    /* Read it back the way the bootloader and `seek-fw decrypt` would. */
+    /* Read it back the way the bootloader and `seek-fw decrypt file` would. */
     const outView = viewOf(output);
     const again = recoverState(outView, base);
     if (!again.every((word, i) => word === state[i])) fail(`${where}: the keystream moved`);

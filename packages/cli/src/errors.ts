@@ -91,7 +91,7 @@ const SEEK_HINTS: Partial<Record<SeekErrorCode, string>> = {
     'smaller --chunk (64 is the value that works everywhere).',
   'usb/stalled':
     'The camera rejected the request. This usually means the firmware does not implement it — ' +
-    'check `seek-fw profiles` and try --profile with the family your camera belongs to.',
+    'check `seek-fw info --profiles` and try --profile with the family your camera belongs to.',
   'usb/not-open':
     'Another program or a system driver is holding the camera. Close it, or try ' +
     '--recipient device, which does not need the interface claimed.',
@@ -100,8 +100,8 @@ const SEEK_HINTS: Partial<Record<SeekErrorCode, string>> = {
     'The camera would not leave imaging mode. Unplug it, wait for it to power down fully, ' +
     'and plug it back in.',
   'device/window':
-    'The selector map this profile uses did not match the camera. Try `seek-fw sweep` to see ' +
-    'what the camera actually exposes.',
+    'The selector map this profile uses did not match the camera. Try `seek-fw dump --all-selectors` ' +
+    'to see what the camera actually exposes.',
   'device/version-unknown':
     'Nothing that could change the camera was sent. Unplug it, let it finish starting up, plug ' +
     'it back in and run the command again; a camera that answers GetFirmwareInfo is read ' +
@@ -110,14 +110,14 @@ const SEEK_HINTS: Partial<Record<SeekErrorCode, string>> = {
   'image/unsupported': 'This image cannot be packaged for the camera as it is.',
   'image/key-table':
     'The image does not carry the key pair its filename claims. Use the decrypted file exactly ' +
-    'as `seek-fw dump` wrote it, name and all.',
+    'as `seek-fw decrypt` or `seek-fw slots dump` wrote it, name and all.',
   'flash/refused': 'Nothing was written to the camera.',
   'flash/commit':
     'The commit was rejected. The camera checks the transfer checksum before it erases ' +
     'anything, so a rejected commit leaves the flash untouched.',
   'profile/unsupported':
     'Override detection with --profile <id> only if you know which family the camera is; ' +
-    '`seek-fw profiles` lists them.',
+    '`seek-fw info --profiles` lists them.',
 };
 
 /** `retryDelayMs` -> `retry-delay`: core's field names as this CLI spells them. */
