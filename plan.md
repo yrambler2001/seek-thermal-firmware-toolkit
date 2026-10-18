@@ -12,11 +12,12 @@ Status marks: [ ] open, [~] running, [x] done.
 - [x] Stage-one FPS map, flow, button, CLI `slots patch-fps` merged (a568e50); offer re-enabled and the "untested" warnings removed on the owner's word.
 
 ## 1. Frame rate: the shutter and the measurer
-Finding on the bench: stock 8.11 fps, patched 8.29 fps, owner heard the shutter fires every frame. `measure_fps.py` was built for the PRO (PID 0x0011, 342x260) and never validated on the Compact (PID 0x0010).
-- [ ] Source side: read `FW-V1/targets/compact_8hz_1_3_0_0` (and `_1_3_0_8`, `compact_pro_9hz_*`) to find what drives the shutter and the frame period, and what `fps_patch.py` really changes.
-- [ ] A Compact-native capture tool in this repo (rate, frame-type histogram, shutter frames), validated on stock first.
-- [ ] Re-measure stock and patched on the bench; settle what the patch does; report the rate per build (1.2.0.0 and 1.3.0.0 only have a 16 Hz entry in the Python).
-- [ ] Button label shows the map's real rate. TESTING.md section and this plan updated.
+Finding (TESTING.md 42.15, corrects 42.14): in IP mode 6 (the camera's boot mode) stock publishes 8.11 fps and the 1.3.0.0 16 Hz patch publishes 16.00 fps once the patched image runs. The 8.29 fps of 42.14 was read before the written image ran. The vendor SDK opens the camera in IP mode 8, which the patch does not touch. The per-frame shutter is a mode-6 property, stock and patched; the patch doubles it. The owner has to choose what to do about the shutter (42.15, open item a).
+- [x] Source side: `fps_patch.py`, the 1.3.0.0 sources (frame dispatch, `sensor_gpio_control`, the block table), the SDK's mode-8 open. Evidence in TESTING.md 42.15 items 1-8.
+- [x] Compact-native capture tool: `e2e/lib/bench/compact-fps/` (frame size, row width, type histogram, capture index, thermal-only rate); 18 unit tests on a recorded fixture; validated on stock (3 runs, 8.11 fps).
+- [~] Re-measured on the bench for 1.3.0.0 only (mode 6 stock, patched, restored; mode 8 stock and patched). 1.2.0.0 and 1.3.0.8 are not on the bench.
+- [~] Button label: `Make ${toHz} FPS` reads the map's highest target (1.3.0.0 "16", 1.3.0.8 "32"; 1.2.0.0 "16"). The 16 Hz claim is true in mode 6, not mode 8. The offer is enabled as the owner decided; whether to withdraw or relabel it is the owner's decision (42.15 open items).
+- [x] TESTING.md 42.15 added; 42.14 carries a correction pointer; this plan updated.
 
 ## 2. Restructure the pages and the CLI (no compatibility layer)
 Tabs: Info | Dump & decrypt 0.x/1.x 2014/2016 | Dump & decrypt 4.x/Nano | Decrypt File/Slot | Work with firmware slots.
@@ -42,3 +43,4 @@ Tabs: Info | Dump & decrypt 0.x/1.x 2014/2016 | Dump & decrypt 4.x/Nano | Decryp
 
 ## Log
 - 04:10 plan written; FPS merged and enabled.
+- 04:50 42.15: the Compact measurer (e2e/lib/bench/compact-fps) and the frame-rate findings. 1.3.0.0 16 Hz patch measured at 16.00 fps in mode 6 after a power cycle (42.14's 8.29 was pre-restart). Stock mode 6: 8.11 fps, a close and an open stroke per frame (inferred). Vendor SDK mode 8: unaffected by the patch, 6.4 fps thermal with calibration frames about once a second. Candidate C1 (no shutter command, bench only): 32.14 fps, picture not judged. Bank A restored to stock, halted sha = baseline, switch 1=on 2=on. The owner has to decide the offer (42.15 open item a).

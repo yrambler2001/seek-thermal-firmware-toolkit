@@ -1,0 +1,198 @@
+{
+ "raw": true,
+ "creditBytes": 66560,
+ "frames": [
+  {
+   "n": 1,
+   "offset": 0,
+   "bytes": 66560,
+   "tCredit": 16.791,
+   "tFirst": 39.208,
+   "tDone": 69.134,
+   "errors": []
+  },
+  {
+   "n": 2,
+   "offset": 66560,
+   "bytes": 66560,
+   "tCredit": 69.165,
+   "tFirst": 70.273,
+   "tDone": 100.214,
+   "errors": []
+  },
+  {
+   "n": 3,
+   "offset": 133120,
+   "bytes": 66560,
+   "tCredit": 100.229,
+   "tFirst": 132.579,
+   "tDone": 162.39,
+   "errors": []
+  },
+  {
+   "n": 4,
+   "offset": 199680,
+   "bytes": 66560,
+   "tCredit": 162.407,
+   "tFirst": 256.811,
+   "tDone": 286.899,
+   "errors": []
+  },
+  {
+   "n": 5,
+   "offset": 266240,
+   "bytes": 66560,
+   "tCredit": 286.972,
+   "tFirst": 384.011,
+   "tDone": 411.166,
+   "errors": []
+  },
+  {
+   "n": 6,
+   "offset": 332800,
+   "bytes": 66560,
+   "tCredit": 411.218,
+   "tFirst": 505.519,
+   "tDone": 535.908,
+   "errors": []
+  },
+  {
+   "n": 7,
+   "offset": 399360,
+   "bytes": 66560,
+   "tCredit": 536.044,
+   "tFirst": 629.805,
+   "tDone": 659.454,
+   "errors": []
+  },
+  {
+   "n": 8,
+   "offset": 465920,
+   "bytes": 66560,
+   "tCredit": 659.526,
+   "tFirst": 756.317,
+   "tDone": 786.547,
+   "errors": []
+  },
+  {
+   "n": 9,
+   "offset": 532480,
+   "bytes": 66560,
+   "tCredit": 786.623,
+   "tFirst": 878.628,
+   "tDone": 908.05,
+   "errors": []
+  },
+  {
+   "n": 10,
+   "offset": 599040,
+   "bytes": 66560,
+   "tCredit": 908.1,
+   "tFirst": 1002.609,
+   "tDone": 1032.305,
+   "errors": []
+  },
+  {
+   "n": 11,
+   "offset": 665600,
+   "bytes": 66560,
+   "tCredit": 1032.372,
+   "tFirst": 1126.732,
+   "tDone": 1156.731,
+   "errors": []
+  },
+  {
+   "n": 12,
+   "offset": 732160,
+   "bytes": 66560,
+   "tCredit": 1156.789,
+   "tFirst": 1250.88,
+   "tDone": 1281.562,
+   "errors": []
+  },
+  {
+   "n": 13,
+   "offset": 798720,
+   "bytes": 66560,
+   "tCredit": 1281.611,
+   "tFirst": 1375.427,
+   "tDone": 1405.419,
+   "errors": []
+  },
+  {
+   "n": 14,
+   "offset": 865280,
+   "bytes": 66560,
+   "tCredit": 1405.544,
+   "tFirst": 1501.932,
+   "tDone": 1529.502,
+   "errors": []
+  },
+  {
+   "n": 15,
+   "offset": 931840,
+   "bytes": 66560,
+   "tCredit": 1529.607,
+   "tFirst": 1623.666,
+   "tDone": 1653.511,
+   "errors": []
+  },
+  {
+   "n": 16,
+   "offset": 998400,
+   "bytes": 66560,
+   "tCredit": 1653.566,
+   "tFirst": 1748.04,
+   "tDone": 1777.801,
+   "errors": []
+  }
+ ],
+ "source": "stock 1.3.0.0 bench run 1 (IP mode 6), first 16 frames; recorded by compact-fps.mjs in raw credits",
+ "init": [
+  {
+   "name": "GetFirmwareInfo",
+   "ms": 9.6,
+   "hex": "010300004f63742032312032303134000000000031343a35383a32390000000000000000"
+  },
+  {
+   "name": "GetChipID",
+   "ms": 10.8,
+   "hex": "10001300ce0009008a00ca00"
+  },
+  {
+   "name": "GetOperationMode",
+   "ms": 11.3,
+   "hex": "0000"
+  },
+  {
+   "name": "GetIPMode",
+   "ms": 12.1,
+   "hex": "0600"
+  },
+  {
+   "name": "GetErrorCode",
+   "ms": 12.8,
+   "hex": "00000000"
+  },
+  {
+   "name": "SetOperationMode(0)",
+   "ms": 13.4,
+   "hex": null
+  },
+  {
+   "name": "SetOperationMode(1)",
+   "ms": 14.3,
+   "hex": null
+  },
+  {
+   "name": "GetOperationMode",
+   "ms": 15.2,
+   "hex": "0100"
+  },
+  {
+   "name": "GetErrorCode",
+   "ms": 15.9,
+   "hex": "00000000"
+  }
+ ]
+}
