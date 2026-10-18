@@ -79,6 +79,11 @@ export interface PageRefusal {
 /** One Electron window on the slots page, connected to the camera. */
 export interface BenchPage {
   readSlots(): Promise<PageRead>;
+  /**
+   * The page's "No bank of this camera can be written from here" banner, as the page shows it, or null
+   * when the page shows none. The flow asserts it is null wherever the plan allows a write.
+   */
+  banner(): Promise<string | null>;
   dump(letter: BankLetter): Promise<PageDump>;
   /**
    * Picks `image` for `letter` and expects the page to REFUSE it at the picker: the status is

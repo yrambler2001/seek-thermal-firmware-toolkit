@@ -294,6 +294,14 @@ describe.skipIf(!available)(
           expect(run.inspected).toEqual({ a: true, b: true, r: true });
         });
 
+        it('the page shows no "cannot be written" banner wherever the plan allows a write', () => {
+          expect(run.analysisProfile, 'the analysis ran').not.toBeNull();
+          expect(run.planAllowsWrite, 'the plan says whether a bank takes a write').not.toBeNull();
+          if (run.planAllowsWrite === true) {
+            expect(run.bannerRefusal, 'the banner the page would show').toBeNull();
+          }
+        });
+
         if (subject.staging === 'plain') {
           /* The 2014 plaintext chain stores every bank plain, so there is no key to derive an upload
            * under. The page must not say that no bank can be written (TESTING.md 42.13). */
@@ -436,7 +444,9 @@ describe.skipIf(!available)(
             const nb = run.writes[0];
             expect(nb?.error, nb?.notes.join('\n')).toBeNull();
             expect(nb?.commitStatus).toBe(0);
-            expect(nb?.identical, 'the stored bytes are the image XOR Key B, not the payload').toBe(true);
+            expect(nb?.identical, 'the stored bytes are the image XOR Key B, not the payload').toBe(
+              true,
+            );
             expect(nb?.verified, 'the writer compares the stored bytes').toBe(true);
             expect(nb?.accepts, 'the stored image passes the FF app’s Key B gate').toBe(true);
           });

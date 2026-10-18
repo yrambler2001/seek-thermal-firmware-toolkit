@@ -19,6 +19,9 @@ import {
   type DumpedSlot,
   type FlashSlotOptions,
   type FlashSlotResult,
+  type FpsPatchResult,
+  type FpsPlan,
+  type FpsPreDump,
   type ImageHeader,
   type SlotEntry,
   type SlotFlashPlan,
@@ -48,6 +51,7 @@ import {
   parseSlotsArgs,
   readBackLines,
   safeVersion,
+  saveFpsDump,
   slotsCommandWith,
   writeKeyLines,
   type SlotOps,
@@ -75,7 +79,13 @@ const SUPPORTED: Support = { supported: true };
 const UNSUPPORTED = (reason: string): Support => ({ supported: false, reason });
 
 const ADDRESS: Record<SlotKey, number> = { a: 0x14050000, b: 0x14060000, r: 0x14070000 };
-const NO_FLAGS = { raw: false, acknowledgeRisk: false, verify: true, dryRun: false, running16Hz: false } as const;
+const NO_FLAGS = {
+  raw: false,
+  acknowledgeRisk: false,
+  verify: true,
+  dryRun: false,
+  running16Hz: false,
+} as const;
 
 function slotEntry(key: SlotKey, overrides: Partial<SlotEntry> = {}): SlotEntry {
   return {
@@ -415,7 +425,13 @@ describe('parseSlotsArgs', () => {
   });
 
   it('flashes a raw payload when --raw is given, and a decrypted image otherwise', () => {
-    const raw = { raw: true, acknowledgeRisk: false, verify: true, dryRun: false, running16Hz: false };
+    const raw = {
+      raw: true,
+      acknowledgeRisk: false,
+      verify: true,
+      dryRun: false,
+      running16Hz: false,
+    };
     expect(parseSlotsArgs(['flash', 'b', 'x.bin'], raw)).toMatchObject({ kind: 'raw' });
     expect(parseSlotsArgs(['flash', 'b', 'x.bin'], NO_FLAGS)).toMatchObject({ kind: 'plain' });
   });
@@ -436,9 +452,18 @@ describe('parseSlotsArgs', () => {
   });
 
   it.each([
-    [['list'], { raw: true, acknowledgeRisk: false, verify: true, dryRun: false, running16Hz: false }],
-    [['list'], { raw: false, acknowledgeRisk: true, verify: true, dryRun: false, running16Hz: false }],
-    [['dump', 'a'], { raw: false, acknowledgeRisk: false, verify: false, dryRun: false, running16Hz: false }],
+    [
+      ['list'],
+      { raw: true, acknowledgeRisk: false, verify: true, dryRun: false, running16Hz: false },
+    ],
+    [
+      ['list'],
+      { raw: false, acknowledgeRisk: true, verify: true, dryRun: false, running16Hz: false },
+    ],
+    [
+      ['dump', 'a'],
+      { raw: false, acknowledgeRisk: false, verify: false, dryRun: false, running16Hz: false },
+    ],
   ])('refuses the flash-only flags on %j', (args, flags) => {
     expect(() => parseSlotsArgs(args, flags)).toThrow(/applies only to 'slots flash'/);
   });
@@ -466,7 +491,13 @@ describe('parseCli for slots', () => {
       command: 'slots',
       file: null,
       args: ['flash', 'r', 'image.bin'],
-      slotFlags: { raw: true, acknowledgeRisk: true, verify: false, dryRun: false, running16Hz: false },
+      slotFlags: {
+        raw: true,
+        acknowledgeRisk: true,
+        verify: false,
+        dryRun: false,
+        running16Hz: false,
+      },
     });
     if (parsed.kind !== 'run') throw new Error('expected a run');
     expect(parsed.options.yes).toBe(true);
@@ -481,6 +512,8 @@ describe('parseCli for slots', () => {
       verify: true,
       dryRun: false,
       running16Hz: false,
+      write: false,
+      dumpDir: null,
     });
     expect(parsed.args).toEqual(['list']);
   });
@@ -1079,7 +1112,13 @@ describe('slots through run()', () => {
 
   it('--dry-run is refused on list and dump, and on flash it prints the plan and sends no write', () => {
     expect(() =>
-      parseSlotsArgs(['list'], { raw: false, acknowledgeRisk: false, verify: true, dryRun: true, running16Hz: false }),
+      parseSlotsArgs(['list'], {
+        raw: false,
+        acknowledgeRisk: false,
+        verify: true,
+        dryRun: true,
+        running16Hz: false,
+      }),
     ).toThrow(/--dry-run/);
   });
 });
@@ -1533,5 +1572,234 @@ describe('the 2014 plaintext chain', () => {
     const text = listLines(plainChainBench(), false).join('\n');
     expect(text).toContain('none (plaintext)');
     expect(text).not.toContain('unknown key');
+  });
+});
+
+/* ==================================================================== *
+ * patch-fps: the frame-rate patch on one bank, offline (core is faked)
+ * ==================================================================== */
+
+type OfferPlan = Extract<FpsPlan, { status: 'offer' }>;
+
+/** A plan the way core makes one for the 1.3.0.0 stock bank: 8 Hz to 16 Hz, one byte changed plus the sum word. */
+function offerOf(): OfferPlan {
+  return {
+    status: 'offer',
+    patch: {
+      id: 'compact_32k-1.3.0.0-to16',
+      family: 'compact_32k',
+      version: '1.3.0.0',
+      fromHz: 8,
+      targetHz: 16,
+      row: { label: 'mode-6 capture program, block 2', offset: 0xb964, length: 34 },
+    } as unknown as OfferPlan['patch'],
+    fromHz: 8,
+    toHz: 16,
+    sites: [{ offset: 0xb964, before: 0x24, after: 0x22 }],
+    sumWord: { offset: 0x238, before: 0 },
+  };
+}
+
+/** The result core returns for a written patch, with every check passing. */
+function writtenResult(pre: FpsPreDump): FpsPatchResult {
+  return {
+    key: 'a',
+    patch: offerOf().patch,
+    fromHz: 8,
+    toHz: 16,
+    pre,
+    changed: [0xb964, 0x238],
+    plan: fakePlan('a', 'plain', pre.plain),
+    written: { key: 'a', commitStatus: 0, verified: true, after: pre.raw, notes: [] },
+    readBack: { checked: true, differing: [0xb964, 0x238], missing: [], unexpected: [], ok: true },
+    notes: ['saved the pre-patch dump'],
+  };
+}
+
+function preDump(): FpsPreDump {
+  return {
+    key: 'a',
+    bank: 'Bank A',
+    version: '1.3.0.0',
+    address: 0x14050000,
+    raw: new Uint8Array(0x10000).fill(0x11),
+    rawSha256: 'aa',
+    rawName: 'seek-slot-A-v1.3.0.0-before-fps-patch-raw-aa.bin',
+    plain: new Uint8Array(0xbaa8).fill(0x22),
+    plainSha256: 'bb',
+    plainName: 'seek-slot-A-v1.3.0.0-before-fps-patch-decrypted-bb.bin',
+  };
+}
+
+describe('patch-fps', () => {
+  let temp: { path: string; cleanup: () => Promise<void> };
+
+  beforeEach(async () => {
+    temp = await tempDir();
+  });
+  afterEach(async () => {
+    await temp.cleanup();
+  });
+
+  it('parses patch-fps, and refuses a flag the subcommand does not use', () => {
+    const plain = parseCli(['slots', 'patch-fps', 'a']);
+    if (plain.kind !== 'run') throw new Error('expected a run');
+    expect(parseSlotsArgs(plain.args, plain.slotFlags)).toEqual({ action: 'patch-fps', key: 'a' });
+
+    const writing = parseCli(['slots', 'patch-fps', 'b', '--write', '--dump-dir', 'd', '--yes']);
+    if (writing.kind !== 'run') throw new Error('expected a run');
+    const flags = writing.slotFlags;
+    expect(flags).toMatchObject({ write: true, dumpDir: 'd' });
+    expect(() => parseSlotsArgs(['patch-fps', 'a'], { ...flags, raw: true })).toThrow(
+      /--raw applies only to 'slots flash'/,
+    );
+    expect(() => parseSlotsArgs(['list'], { ...flags, dumpDir: null })).toThrow(
+      /--write applies only to 'slots patch-fps'/,
+    );
+    expect(() => parseSlotsArgs(['flash', 'a', 'x'], { ...flags, write: false })).toThrow(
+      /--dump-dir applies only to 'slots patch-fps'/,
+    );
+    expect(() => parseSlotsArgs(['patch-fps'], flags)).toThrow(/needs a bank/);
+  });
+
+  it('is a dry run by default: prints the plan, saves and sends nothing', async () => {
+    const { ops, log } = fakeOps(reportOf({ booted: 'b' }));
+    let patched = 0;
+    const withPatch: SlotOps = {
+      ...ops,
+      fpsPlan: () => offerOf(),
+      patchFps: () => {
+        patched += 1;
+        return Promise.reject(new Error('a dry run must not patch'));
+      },
+    };
+    const test = cameraIo();
+    const result = await slotsCommandWith(withPatch)(
+      contextFor(['slots', 'patch-fps', 'a', '--no-probe'], test),
+    );
+    expect(result).toMatchObject({
+      action: 'patch-fps',
+      bank: 'a',
+      written: false,
+      dryRun: true,
+      status: 'offer',
+      toHz: 16,
+      changedBytes: 1,
+    });
+    expect(patched).toBe(0);
+    expect(log.flashed).toEqual([]);
+    const text = test.stdout.text + test.stderr.text;
+    expect(text).toContain('Frame-rate patch plan');
+    expect(text).toContain('UNTESTED on hardware');
+    expect(text).toContain('dry run: nothing was saved and nothing was written');
+  });
+
+  it('refuses a bank the plan does not offer, with the plan reason and nothing sent', async () => {
+    const { ops } = fakeOps(reportOf({ booted: 'b' }));
+    const withPlan: SlotOps = {
+      ...ops,
+      fpsPlan: () => ({
+        status: 'refused',
+        reason: 'this image is not in the frame-rate patch table',
+      }),
+    };
+    const error = await slotsCommandWith(withPlan)(
+      contextFor(['slots', 'patch-fps', 'a', '--no-probe'], cameraIo()),
+    ).catch((caught: unknown) => caught);
+    expect(error).toBeInstanceOf(CliError);
+    expect((error as CliError).code).toBe('slots/refused');
+    expect((error as CliError).message).toContain('not in the frame-rate patch table');
+  });
+
+  it('refuses --write without --dump-dir before the camera is opened', async () => {
+    const { ops, log } = fakeOps(reportOf({ booted: 'b' }));
+    const withPlan: SlotOps = { ...ops, fpsPlan: () => offerOf() };
+    const error = await slotsCommandWith(withPlan)(
+      contextFor(['slots', 'patch-fps', 'a', '--write', '--yes', '--no-probe'], cameraIo()),
+    ).catch((caught: unknown) => caught);
+    expect((error as CliError).code).toBe('slots/refused');
+    expect((error as CliError).message).toMatch(/needs --dump-dir/);
+    expect(log.inspected).toBe(0);
+  });
+
+  it('saves the pre-patch dump first, then writes, and the files are on disk', async () => {
+    const { ops } = fakeOps(reportOf({ booted: 'b' }));
+    const dir = join(temp.path, 'before');
+    const order: string[] = [];
+    const withPatch: SlotOps = {
+      ...ops,
+      fpsPlan: () => offerOf(),
+      patchFps: async (_ctx, _report, _key, options) => {
+        order.push('patch');
+        const dump = preDump();
+        expect(await options.saveDump(dump)).toBe(true);
+        order.push('written');
+        return writtenResult(dump);
+      },
+    };
+    const result = await slotsCommandWith(withPatch)(
+      contextFor(
+        ['slots', 'patch-fps', 'a', '--write', '--dump-dir', dir, '--yes', '--no-probe'],
+        cameraIo({ stdinIsTty: false }),
+      ),
+    );
+    expect(order).toEqual(['patch', 'written']);
+    expect(result).toMatchObject({
+      action: 'patch-fps',
+      written: true,
+      dryRun: false,
+      commitStatus: 0,
+    });
+    expect((await readdir(dir)).sort()).toEqual([
+      'seek-slot-A-v1.3.0.0-before-fps-patch-decrypted-bb.bin',
+      'seek-slot-A-v1.3.0.0-before-fps-patch-raw-aa.bin',
+    ]);
+    expect(
+      (await readFile(join(dir, 'seek-slot-A-v1.3.0.0-before-fps-patch-raw-aa.bin'))).length,
+    ).toBe(0x10000);
+  });
+
+  it('never replaces a pre-patch dump that already exists', async () => {
+    const dir = join(temp.path, 'twice');
+    expect(await saveFpsDump(dir, preDump())).toBe(true);
+    await expect(saveFpsDump(dir, preDump())).rejects.toMatchObject({ code: 'EEXIST' });
+  });
+
+  it('fails the run with a non-zero exit when the read-back does not match the plan', async () => {
+    const { ops } = fakeOps(reportOf({ booted: 'b' }));
+    const withPatch: SlotOps = {
+      ...ops,
+      fpsPlan: () => offerOf(),
+      patchFps: async (_ctx, _report, _key, options) => {
+        const dump = preDump();
+        await options.saveDump(dump);
+        return {
+          ...writtenResult(dump),
+          readBack: {
+            checked: true,
+            differing: [0xb964, 0x9000],
+            missing: [0x238],
+            unexpected: [0x9000],
+            ok: false,
+          },
+        };
+      },
+    };
+    const dir = join(temp.path, 'verify');
+    const error = await slotsCommandWith(withPatch)(
+      contextFor(
+        ['slots', 'patch-fps', 'a', '--write', '--dump-dir', dir, '--yes', '--no-probe'],
+        cameraIo(),
+      ),
+    ).catch((caught: unknown) => caught);
+    expect((error as CliError).code).toBe('slots/verify-failed');
+  });
+
+  it('lists each bank with its patch verdict in the JSON document', () => {
+    const list = listResult(reportOf({ booted: 'a' }));
+    expect(list.slots).toHaveLength(3);
+    for (const bank of list.slots as readonly { readonly patch: { readonly status: string } }[]) {
+      expect(bank.patch.status).toBe('refused');
+    }
   });
 });

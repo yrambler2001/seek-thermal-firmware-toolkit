@@ -26,6 +26,7 @@ import { cameraBusyReason } from '../preflight.js';
 import type { WriteApproval } from '../supervised-write.js';
 import { openTarget, type TargetHandle } from '../target.js';
 import { guardInstalled, refusalsOf } from '../target-tools.js';
+import { writeBanner } from '../slots-page.js';
 import {
   ACK_BOX,
   CONFIRM_DIALOG,
@@ -192,6 +193,10 @@ function windowOf(target: TargetHandle, scratchDir: string): BenchPage {
   }
 
   return {
+    async banner(): Promise<string | null> {
+      return writeBanner(target.page);
+    },
+
     async readSlots(): Promise<PageRead> {
       const status = await readSlots(target.wizard, target.page);
       if (!status.startsWith('Read. 3/3')) {

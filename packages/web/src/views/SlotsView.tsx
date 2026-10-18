@@ -13,6 +13,7 @@ import {
   derivedKeyLine,
   hexUp,
   onPlaintextChain,
+  type FpsPatchResult,
   type SlotInputKind,
   type SlotKey,
   type SlotsReport,
@@ -22,6 +23,7 @@ import { Prose } from '@/components/Prose';
 import { RunPanel } from '@/components/RunPanel';
 import { Section } from '@/components/Section';
 import { SlotFlashPreview } from '@/components/SlotFlashPreview';
+import { SlotFpsConfirm, type FpsOffer } from '@/components/SlotFpsConfirm';
 import { SlotTable } from '@/components/SlotTable';
 import { SlotWriteConfirm } from '@/components/SlotWriteConfirm';
 import { SlotWriteKeys, writeKeysVerdictOf } from '@/components/SlotWriteKeys';
@@ -30,6 +32,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Toolbar } from '@/components/ui/toolbar';
 import { writeRisk, type SlotFlashOutcome, type SlotsPanelApi } from '@/hooks/useSlotsPanel';
+import { fpsSaveMode } from '@/lib/fps-save';
 import type { Refusal } from '@/lib/identify';
 
 export interface SlotsViewProps {
@@ -49,6 +52,42 @@ function verdict(verified: boolean | null): string {
    * expected image to compare it with (a bank the device re-encrypts), which is
    * not the same as verification being switched off. Its notes say why. */
   return 'the read-back was taken but not compared, so this write is not verified here.';
+}
+
+/**
+ * What a frame-rate patch did, on screen until the next run. The rate it claims is the table's, and the
+ * read-back is the check that only the planned bytes changed. It says what was NOT proven: the rate.
+ */
+function FpsOutcomePanel({ result }: { readonly result: FpsPatchResult }): ReactElement {
+  const { key, fromHz, toHz, pre, readBack } = result;
+  const tone = readBack.ok === true && result.written.verified !== false ? 'ok' : 'err';
+  return (
+    <Alert tone={tone} className="mt-3">
+      <p>
+        <strong>
+          {`Slot ${key.toUpperCase()} — patched from ${String(fromHz)} Hz to ${String(toHz)} Hz (${result.patch.id}).`}
+        </strong>
+      </p>
+      <p>
+        {readBack.checked
+          ? readBack.ok === true
+            ? `The read-back differs from the saved dump only at the ${String(result.changed.length)} planned byte(s), the sites and the sum word.`
+            : `The read-back does NOT differ only as planned: ${String(readBack.unexpected.length)} unexpected and ${String(readBack.missing.length)} missing byte(s).`
+          : 'The read-back was not taken, so the patch is not checked here.'}
+      </p>
+      <p>
+        {`The dump saved before the write: ${pre.rawName} and ${pre.plainName}. The saved decrypted file is the only way back.`}
+      </p>
+      <p>
+        <strong>UNTESTED on hardware:</strong> the {String(toHz)} Hz rate is measured in the
+        emulator only, and nothing here says what the camera publishes.
+      </p>
+      <p>
+        <strong>NOW UNPLUG AND REPLUG THE CAMERA.</strong> No reset was sent. Then read the slots
+        again.
+      </p>
+    </Alert>
+  );
 }
 
 function OutcomePanel({ outcome }: { readonly outcome: SlotFlashOutcome }): ReactElement {
@@ -123,7 +162,12 @@ function RefusalAlert({ refusal }: { readonly refusal: Refusal }): ReactElement 
 
 export function SlotsView({ slots, connected, busy }: SlotsViewProps): ReactElement {
   const [confirming, setConfirming] = useState(false);
-  const { plan, report, refusal, pending, outcome, reading, writing } = slots;
+  /* The bank whose frame-rate patch the person is confirming, or null when no dialog is open. */
+  const [fpsKey, setFpsKey] = useState<SlotKey | null>(null);
+  const { plan, report, refusal, pending, outcome, fpsOutcome, reading, writing } = slots;
+  const fpsPlan = fpsKey === null ? null : slots.planFps(fpsKey);
+  const fpsOffer: FpsOffer | null = fpsPlan !== null && fpsPlan.status === 'offer' ? fpsPlan : null;
+  const fpsView = fpsKey === null || report === null ? null : viewOf(report, fpsKey);
   const unsupported =
     plan !== null && !plan.supportedBuild.supported ? plan.supportedBuild.reason : null;
   const active = report === null ? null : (report.slots.find((view) => view.active) ?? null);
@@ -224,9 +268,10 @@ export function SlotsView({ slots, connected, busy }: SlotsViewProps): ReactElem
                   onChange={(event) => slots.setRunning16Hz(event.target.checked)}
                 />
                 <span>
-                  This camera runs the 16 Hz build. It is used only for the 1.3.0.8 FF image, and only
-                  when the camera&apos;s own answers cannot say which build it runs. If the choice is
-                  wrong, the camera refuses the image with 0x00070100 before it programs anything.
+                  This camera runs the 16 Hz build. It is used only for the 1.3.0.8 FF image, and
+                  only when the camera&apos;s own answers cannot say which build it runs. If the
+                  choice is wrong, the camera refuses the image with 0x00070100 before it programs
+                  anything.
                 </span>
               </label>
             )}
@@ -244,6 +289,11 @@ export function SlotsView({ slots, connected, busy }: SlotsViewProps): ReactElem
               onFillWithBankImage={(key: SlotKey) => {
                 setConfirming(false);
                 void slots.fillWithBankImage(key);
+              }}
+              planFps={slots.planFps}
+              onPatchFps={(key: SlotKey) => {
+                setConfirming(false);
+                setFpsKey(key);
               }}
             />
           </>
@@ -304,7 +354,34 @@ export function SlotsView({ slots, connected, busy }: SlotsViewProps): ReactElem
           />
         )}
 
+        {fpsKey !== null && fpsView !== null && (
+          <SlotFpsConfirm
+            open={fpsOffer !== null}
+            slotName={fpsView.entry.name}
+            offer={fpsOffer}
+            version={report?.state.version ?? null}
+            risk={
+              report === null
+                ? { booted: false, recovery: false, bootUnnamed: false }
+                : writeRisk(report, fpsKey)
+            }
+            namedByWord={
+              report === null ? false : onPlaintextChain(report.state.profile, report.state.version)
+            }
+            saveMode={fpsSaveMode()}
+            onConfirm={(acknowledged) => {
+              const key = fpsKey;
+              setFpsKey(null);
+              void slots.patchFps(key, acknowledged);
+            }}
+            onCancel={() => {
+              setFpsKey(null);
+            }}
+          />
+        )}
+
         {outcome !== null && <OutcomePanel outcome={outcome} />}
+        {fpsOutcome !== null && <FpsOutcomePanel result={fpsOutcome} />}
       </Section>
 
       <Section id="slots-how" title="What these buttons do" icon={<Send />}>
@@ -324,19 +401,24 @@ export function SlotsView({ slots, connected, busy }: SlotsViewProps): ReactElem
             A Compact on 1.3.0.8 can be the 8 Hz build or the 16 Hz FF build, and both report the
             same version. The camera tells them apart itself: its own answer for each bank says
             whether the application that answers takes it, and each build predicts its answers. The
-            8 Hz image goes to any bank. The FF image is staged the way the vendor app stages it (the
-            image XOR Key A), and the camera stores it under Key B, to any bank. The page refuses it
-            while the camera runs the 8 Hz build, and when the camera&apos;s answers cannot say which
-            build runs, it refuses unless you tick the 16 Hz box above. Whether the FF image boots is
-            UNTESTED: no genuine bootloader for this build is in the corpus. Writing R asks for the
-            extra confirmation like any recovery write. An <strong>empty</strong> bank (its
-            header window reads as all 0xFF, as on many 2014 cameras&apos; bank B) is a state, not a
-            fault. It dumps as the raw 64 KiB of 0xFF with nothing to decrypt, and it is written
-            exactly like any other bank; the plan and the confirmation say that no firmware is
-            overwritten. When another bank holds a decrypted image,{' '}
-            <strong>Use the booted bank&apos;s image</strong> prepares a copy of the firmware the
-            camera runs now, so a second slot with the same firmware exists. You still review the
-            plan and confirm.
+            8 Hz image goes to any bank. The FF image is staged the way the vendor app stages it
+            (the image XOR Key A), and the camera stores it under Key B, to any bank. The page
+            refuses it while the camera runs the 8 Hz build, and when the camera&apos;s answers
+            cannot say which build runs, it refuses unless you tick the 16 Hz box above. Whether the
+            FF image boots is UNTESTED: no genuine bootloader for this build is in the corpus.
+            Writing R asks for the extra confirmation like any recovery write. An{' '}
+            <strong>empty</strong> bank (its header window reads as all 0xFF, as on many 2014
+            cameras&apos; bank B) is a state, not a fault. It dumps as the raw 64 KiB of 0xFF with
+            nothing to decrypt, and it is written exactly like any other bank; the plan and the
+            confirmation say that no firmware is overwritten. When another bank holds a decrypted
+            image, <strong>Use the booted bank&apos;s image</strong> prepares a copy of the firmware
+            the camera runs now, so a second slot with the same firmware exists. You still review
+            the plan and confirm.
+          </p>
+          <p>
+            <strong>Make N FPS</strong> is withheld at the moment. On the bench the patch did not
+            raise the publish rate, and the shutter fired on every frame after the write (TESTING.md
+            42.14), so no bank is offered it. A bank that would otherwise have had it says why.
           </p>
           <p>
             A write erases one 64 KiB bank and programs it. The bootloader at{' '}

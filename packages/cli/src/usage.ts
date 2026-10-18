@@ -52,7 +52,7 @@ Commands
   sweep                  probe every BeginFirmwareUpgrade selector and report what each exposes
   decrypt <file>         decrypt a dump or image you already have — no camera needed
   flash <image>          write a decrypted image to the camera
-  slots list|dump|flash  identify, dump or write one firmware bank (A, B, recovery R)
+  slots list|dump|flash|patch-fps  identify, dump, write, or raise the frame rate of one bank (A, B, R)
   preserve               v1 full-flash preservation: in-place patch, whole-part dump, restore
                          (the image is the camera's own active slot, read twice and agreed)
   profiles               list the supported firmware families
@@ -227,6 +227,8 @@ Usage
   seek-fw slots dump <a|b|r> [--out <dir> | --zip <file>] [options]
   seek-fw slots flash <a|b|r> <file> [--raw] [--yes] [--acknowledge-risk]
                                      [--no-verify] [--dry-run] [options]
+  seek-fw slots patch-fps <a|b|r> [--dump-dir <dir>] [--write] [--yes]
+                                  [--acknowledge-risk] [--no-verify] [options]
 
 Banks: A (0x14050000) and B (0x14060000) are the application banks; R is the
 recovery bank. Builds 0.8.0.0 and newer only; an older build is reported as
@@ -241,6 +243,14 @@ not banks and are never written.
            way that bank's firmware needs; --raw sends the bytes verbatim. The
            plan is shown and the write asked for, unless --yes
 
+  patch-fps  raise the bank's frame rate by editing its bytes. WITHHELD: after the bench run (TESTING.md
+           42.14) no bank is offered; the command refuses with the reason. The code stays, for a re-enable.
+           A dry run unless --write: it prints the plan and sends nothing. --write saves the bank (raw and
+           decrypted) into --dump-dir FIRST, then writes the patched image and reads it back.
+
+  --dump-dir <dir>       patch-fps: the folder the pre-patch dump is saved into (required with --write;
+                         an existing dump there is never replaced)
+  --write                patch-fps: send the patch. Without it the command is a dry run
   --raw                  flash: the file is prepared bytes, staged verbatim
   --acknowledge-risk     flash: needed to write the bank the camera boots now,
                          or bank R. Without it the write is refused, and nothing
@@ -251,8 +261,8 @@ not banks and are never written.
                          used only when its own answers cannot say which build
                          runs. A wrong choice is refused by the camera (0x70100)
                          before anything is programmed
-  --yes                  flash: skip the confirmation (required when stdin is
-                         not a tty)
+  --yes                  flash, patch-fps --write: skip the confirmation (required
+                         when stdin is not a tty)
 
 An EMPTY bank (its header window reads as all 0xFF, as on many 2014 cameras'
 bank B) is a state, not an error. list shows it as 'empty'; dump returns the raw

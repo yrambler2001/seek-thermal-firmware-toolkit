@@ -8,7 +8,7 @@
 
 import type { ReactElement } from 'react';
 import { KeyRound } from 'lucide-react';
-import { derivedKeyLine, deriveWriteKeys, slotWriteRefusal, type SlotsReport } from '@seek-fw/core';
+import { derivedKeyLine, deriveWriteKeys, writeBannerOf, type SlotsReport } from '@seek-fw/core';
 import { KeyValue } from './KeyValue';
 import { Panel, PanelTitle } from './Panel';
 import { Prose } from './Prose';
@@ -31,7 +31,6 @@ export interface WriteKeysVerdict {
 
 /** The verdict for a report: core's answer, with the booted bank named as the page names it. */
 export function writeKeysVerdictOf(report: SlotsReport): WriteKeysVerdict {
-  const refusal = slotWriteRefusal(report.state);
   const keys = deriveWriteKeys(report.state);
   const booted =
     keys.booted === null
@@ -39,11 +38,8 @@ export function writeKeysVerdictOf(report: SlotsReport): WriteKeysVerdict {
       : (report.slots.find((view) => view.entry.key === keys.booted)?.entry.name ??
         `slot ${keys.booted.toUpperCase()}`);
   return {
-    refusal:
-      refusal ??
-      (!keys.plainChain && keys.atRest === null
-        ? (keys.refusal ?? 'the keys could not be derived')
-        : null),
+    /* The banner's text is core's (writeBannerOf): the same words the CLI's JSON carries. */
+    refusal: writeBannerOf(report.state),
     plainChain: keys.plainChain,
     bootedName: booted,
     keyName: keys.atRest?.name ?? null,

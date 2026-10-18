@@ -30,12 +30,7 @@ import path from 'node:path';
 import { APPLICATION_KEY_PAIRS, buildSlotPlan, listProfiles } from '@seek-fw/core';
 
 import { sha256 } from '../checks.js';
-import {
-  BENCH_FLASH_BASE,
-  BENCH_FLASH_BYTES,
-  type BenchSubject,
-  type BootSlot,
-} from './types.js';
+import { BENCH_FLASH_BASE, BENCH_FLASH_BYTES, type BenchSubject, type BootSlot } from './types.js';
 import { describeDifference, isFF1308Subject } from './ff-form.js';
 import { ffVendorFilesFromEnv, runFfVendor } from './ff-vendor-run.js';
 import type {
@@ -317,18 +312,29 @@ function isHaltFailure(error: unknown): boolean {
   return /halt/i.test(messageOf(error));
 }
 
-/** The bank addresses the plan gives for `version`, one entry per profile the page may read under. */
-function planLayouts(
-  version: string,
-): readonly { readonly profile: string; readonly banks: Partial<Record<BankLetter, number>> }[] {
-  const layouts: { profile: string; banks: Partial<Record<BankLetter, number>> }[] = [];
+/**
+ * The bank addresses the plan gives for `version`, one entry per profile the page may read under, and
+ * whether that plan lets some bank take a decrypted image (the page's write is allowed).
+ */
+function planLayouts(version: string): readonly {
+  readonly profile: string;
+  readonly banks: Partial<Record<BankLetter, number>>;
+  readonly allowsWrite: boolean;
+}[] {
+  const layouts: {
+    profile: string;
+    banks: Partial<Record<BankLetter, number>>;
+    allowsWrite: boolean;
+  }[] = [];
   for (const profile of listProfiles()) {
     /* A profile that cannot plan this version has no layout to offer, and is skipped. */
     try {
       const plan = buildSlotPlan(profile, version);
       const banks: Partial<Record<BankLetter, number>> = {};
       for (const slot of plan.slots) banks[slot.key] = slot.address;
-      layouts.push({ profile: plan.profileId, banks });
+      const allowsWrite =
+        plan.supportedBuild.supported && plan.slots.some((slot) => slot.flashPlain.supported);
+      layouts.push({ profile: plan.profileId, banks, allowsWrite });
     } catch {
       continue;
     }
@@ -489,6 +495,14 @@ async function readWindow(
       );
     } else {
       r.notes.push(`bank addresses: the ${layout.profile} plan`);
+      /* Whenever the plan lets a bank take a write, the page shows no "cannot be written" banner, and a
+       * page that shows one where the plan allows a write is a failure (TESTING.md 42.14). */
+      const banner = await page.banner();
+      if (layout.allowsWrite && banner !== null) {
+        r.failures.push(
+          `page: the banner "${banner}" is shown where the ${layout.profile} plan allows a write`,
+        );
+      }
     }
     for (const bank of read.banks) {
       if (bank.version === null) {
@@ -818,7 +832,6 @@ function writeResultOf(r: SubjectResult, letter: BankLetter): SlotWriteResult {
   return found;
 }
 
-
 /**
  * One bank the page must refuse at its picker (the FF image into A or B, TESTING 42.6). The
  * page must say "Rejected": it offers no write and sends nothing, so every region of the part
@@ -871,7 +884,11 @@ async function refuseBank(
  * (`ffVendorFilesFromEnv`); the Electron page is not driven, and the CLI runs the same core write path the
  * page runs. The subject records each bank's write, the answers the camera gave, and the boot as observed.
  */
-async function runFF1308(rig: BenchRig, r: SubjectResult, log: (line: string) => void): Promise<void> {
+async function runFF1308(
+  rig: BenchRig,
+  r: SubjectResult,
+  log: (line: string) => void,
+): Promise<void> {
   const files = ffVendorFilesFromEnv(process.env, ffScratchDir());
   if (typeof files === 'string') {
     r.notes.push(`FF steps not run: ${files}`);
@@ -900,7 +917,9 @@ async function runFF1308(rig: BenchRig, r: SubjectResult, log: (line: string) =>
   r.notes.push(
     `FF staged payload sha256 ${report.stagedSha256}, vendor file match ${String(report.stagedMatchesVendor)}`,
   );
-  r.notes.push(`FF restore: ${report.restored ? 'the original 1.3.0.0 runs again' : `NOT restored (${String(report.restoredVersion)})`}`);
+  r.notes.push(
+    `FF restore: ${report.restored ? 'the original 1.3.0.0 runs again' : `NOT restored (${String(report.restoredVersion)})`}`,
+  );
   for (const failure of report.failures) r.failures.push(`FF: ${failure}`);
 }
 

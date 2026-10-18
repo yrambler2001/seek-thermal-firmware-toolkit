@@ -100,6 +100,10 @@ export interface SlotFlags {
    * answers cannot say which build it runs; a wrong choice is refused by the camera before programming.
    */
   readonly running16Hz: boolean;
+  /** `--write` (`slots patch-fps` only): send the patch. Without it the command is a dry run. */
+  readonly write?: boolean;
+  /** `--dump-dir <dir>` (`slots patch-fps`): where the pre-patch dump is saved before a write. */
+  readonly dumpDir?: string | null;
 }
 
 export type ParsedCli =
@@ -193,6 +197,8 @@ export function parseCli(argv: readonly string[]): ParsedCli {
         verify: { type: 'boolean', default: true },
         'dry-run': { type: 'boolean', default: false },
         'running-16hz': { type: 'boolean', default: false },
+        write: { type: 'boolean', default: false },
+        'dump-dir': { type: 'string' },
         help: { type: 'boolean', short: 'h', default: false },
         version: { type: 'boolean', short: 'V', default: false },
       },
@@ -287,6 +293,8 @@ export function parseCli(argv: readonly string[]): ParsedCli {
       verify: values.verify,
       dryRun: values['dry-run'],
       running16Hz: values['running-16hz'],
+      write: values.write,
+      dumpDir: values['dump-dir'] ?? null,
     },
     options,
   };

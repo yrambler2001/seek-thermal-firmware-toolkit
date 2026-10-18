@@ -1,0 +1,765 @@
+{
+ "generator": "FW-V1 emu/fps_patch.py (identify, apply_patch, _examine) over the decrypted corpus images and the 4 MiB corpus dumps",
+ "note": "images: one case per distinct decrypted image; outputs = every table entry whose stock image it is. banks: one case per dump bank per target; storedPlain banks carry the Python output for the TS check.",
+ "images": [
+  {
+   "inputSha256": "04d9e1559d63463cf6c0c29ddc21f64af093bc3fe4d4e769ba41d4d8b0798419",
+   "length": 49888,
+   "pythonState": "stock",
+   "outputs": [
+    {
+     "patch": "compact_32k-4.8.1.7-to16",
+     "target": 16,
+     "version": "4.8.1.7",
+     "outputSha256": "7ef65e01337f6ef3cb6be3c31a63878e15bcdfa0063105a6d3b3278e08df8637",
+     "changed": [
+      568,
+      569,
+      571,
+      38766,
+      38773,
+      38774,
+      38775,
+      38776,
+      38777,
+      38778,
+      38779,
+      38780,
+      38781
+     ]
+    },
+    {
+     "patch": "compact_32k-4.8.1.7-to32",
+     "target": 32,
+     "version": "4.8.1.7",
+     "outputSha256": "d31e52d340e462e684dbc714b03c2712580f380b209dcea233a23c34a45ddfc1",
+     "changed": [
+      568,
+      569,
+      570,
+      571,
+      38766,
+      38771,
+      38772,
+      38773,
+      38774,
+      38775,
+      38776,
+      38777,
+      38778,
+      38779,
+      38780,
+      38781
+     ]
+    }
+   ],
+   "known": null
+  },
+  {
+   "inputSha256": "13db63815bce911fb9388277cc6a177498df1023e9713994dd116e6eef6f84bb",
+   "length": 54840,
+   "pythonState": "stock",
+   "outputs": [
+    {
+     "patch": "compact_pro-4.9.1.15",
+     "target": 18,
+     "version": "4.9.1.15",
+     "outputSha256": "75405c18271faadc8f08c4d713d5c962ec2159cfec7329046574507584943bc8",
+     "changed": [
+      568,
+      570,
+      571,
+      6576,
+      6582,
+      6583
+     ]
+    }
+   ],
+   "known": null
+  },
+  {
+   "inputSha256": "196560c05096369165c8858f6a3f66239b6651ad73ff84f26a3fccdcf8c193d3",
+   "length": 51728,
+   "pythonState": "known-18hz",
+   "outputs": [],
+   "known": "compact_pro-1.0.3.2-FF"
+  },
+  {
+   "inputSha256": "2969d0df5bfeac74b88e6ee608ee8b2657fecf2e0234e9ce2731add2408f3d1c",
+   "length": 49128,
+   "pythonState": "stock",
+   "outputs": [
+    {
+     "patch": "compact_32k-1.3.0.8-to16",
+     "target": 16,
+     "version": "1.3.0.8",
+     "outputSha256": "18d974c489fcbccf92c81a3179a7e5e8ee7612370374276fabd938d8c20ce15f",
+     "changed": [
+      569,
+      570,
+      571,
+      46928,
+      46935,
+      46936,
+      46937,
+      46938,
+      46939,
+      46940,
+      46941,
+      46942,
+      46943
+     ]
+    },
+    {
+     "patch": "compact_32k-1.3.0.8-to32",
+     "target": 32,
+     "version": "1.3.0.8",
+     "outputSha256": "ee8c7f0e09d81b916e1ffeb2807108db34c60b29a277ec8651da22f836fd80eb",
+     "changed": [
+      568,
+      569,
+      570,
+      571,
+      46928,
+      46933,
+      46934,
+      46935,
+      46936,
+      46937,
+      46938,
+      46939,
+      46940,
+      46941,
+      46942,
+      46943
+     ]
+    }
+   ],
+   "known": null
+  },
+  {
+   "inputSha256": "2c5eedec97ba168b5defba3b5065c0d50e058102725c577a33ff29d270c3cdd5",
+   "length": 48800,
+   "pythonState": "stock",
+   "outputs": [
+    {
+     "patch": "compact_32k-4.8.1.9-to16",
+     "target": 16,
+     "version": "4.8.1.9",
+     "outputSha256": "995ffeae7cc6c4582afa0d7482466959225bea2268bf67deba554c2f3f110dc9",
+     "changed": [
+      568,
+      569,
+      571,
+      38310,
+      38317,
+      38318,
+      38319,
+      38320,
+      38321,
+      38322,
+      38323,
+      38324,
+      38325
+     ]
+    },
+    {
+     "patch": "compact_32k-4.8.1.9-to32",
+     "target": 32,
+     "version": "4.8.1.9",
+     "outputSha256": "73586516366fde7bfaa27a8b01414632265db6f5ea00138c4fb23e2097e40d88",
+     "changed": [
+      568,
+      569,
+      570,
+      571,
+      38310,
+      38315,
+      38316,
+      38317,
+      38318,
+      38319,
+      38320,
+      38321,
+      38322,
+      38323,
+      38324,
+      38325
+     ]
+    }
+   ],
+   "known": null
+  },
+  {
+   "inputSha256": "38a9036ae44b9fcaca31a7432257f4aa2cf71d7715a964f1c4b9553dfabfea01",
+   "length": 47768,
+   "pythonState": "stock",
+   "outputs": [
+    {
+     "patch": "compact_32k-1.2.0.0-to16",
+     "target": 16,
+     "version": "1.2.0.0",
+     "outputSha256": "b2dae4a43a69b04fc88b5f650a1998d02f1ca663923bb227069ac540ed04273b",
+     "changed": [
+      568,
+      569,
+      570,
+      571,
+      47460,
+      47462,
+      47463,
+      47464,
+      47465,
+      47466,
+      47468,
+      47469
+     ]
+    }
+   ],
+   "known": null
+  },
+  {
+   "inputSha256": "5e1f3f24c8bc1e85bcb67e73e0ee23f301864ee7839a48135598fca961373e26",
+   "length": 51848,
+   "pythonState": "stock",
+   "outputs": [
+    {
+     "patch": "compact_pro-1.0.3.0",
+     "target": 18,
+     "version": "1.0.3.0",
+     "outputSha256": "d410b04cdaa10c34db64f5ecdda4afcbee2c4a57b053cb951e060258e2d93461",
+     "changed": [
+      568,
+      569,
+      571,
+      49852,
+      49858,
+      49859,
+      49861,
+      49862,
+      49863
+     ]
+    }
+   ],
+   "known": null
+  },
+  {
+   "inputSha256": "862717a8a605021def7858ac0c04ad4aa1abe23d357d6c2417699939137f481c",
+   "length": 47768,
+   "pythonState": "stock",
+   "outputs": [
+    {
+     "patch": "compact_32k-1.3.0.0-to16",
+     "target": 16,
+     "version": "1.3.0.0",
+     "outputSha256": "0ede6768f57acdfa65c19bdb3f62973789a43b28db24d7fbc4bc60fddde90692",
+     "changed": [
+      568,
+      569,
+      570,
+      571,
+      47460,
+      47462,
+      47463,
+      47464,
+      47465,
+      47466,
+      47468,
+      47469
+     ]
+    }
+   ],
+   "known": null
+  },
+  {
+   "inputSha256": "b1016ea14f2e830fb3691afbd60cd679035c7700a99c777a8a3c276e034f6ca1",
+   "length": 49896,
+   "pythonState": "stock",
+   "outputs": [
+    {
+     "patch": "compact_32k-4.16.1.7-FF-to32",
+     "target": 32,
+     "version": "4.16.1.7-FF",
+     "outputSha256": "5d896b208092a8778d839c54ee86ea8aac846a9cd44cdff24c554541e6315bd4",
+     "changed": [
+      568,
+      569,
+      570,
+      571,
+      38774,
+      38779,
+      38780,
+      38781,
+      38782,
+      38783
+     ]
+    }
+   ],
+   "known": null
+  },
+  {
+   "inputSha256": "b8d069f1cedfea80b0f15448a84d148ddc63aba0f0b2c77e10f9a79a7b5d8c0e",
+   "length": 44760,
+   "pythonState": "stock",
+   "outputs": [
+    {
+     "patch": "compact_pro-4.9.2.0",
+     "target": 18,
+     "version": "4.9.2.0",
+     "outputSha256": "4dcf0442478b9eb9f708f6ed08697f78ce1c3d13f2e6acadb527f5c330b8c00b",
+     "changed": [
+      568,
+      569,
+      570,
+      571,
+      42548,
+      42554,
+      42555,
+      42557,
+      42558,
+      42559
+     ]
+    }
+   ],
+   "known": null
+  },
+  {
+   "inputSha256": "b97ced91fff9f0949a02f35fceab697634cc109a0fe2a2fbbfe6ccfadb7d4d16",
+   "length": 49308,
+   "pythonState": "stock",
+   "outputs": [
+    {
+     "patch": "compact_32k-1.3.0.8-FF-to32",
+     "target": 32,
+     "version": "1.3.0.8-FF",
+     "outputSha256": "8e2ffdf6918fa5e88871981b6c443229c05c25ad0d4b7a04b07769aecd35d7e1",
+     "changed": [
+      568,
+      569,
+      570,
+      571,
+      47108,
+      47113,
+      47114,
+      47115,
+      47116,
+      47117
+     ]
+    }
+   ],
+   "known": null
+  },
+  {
+   "inputSha256": "c776924773ed42468957de742284636461e9dafef8d4ab431f5627795b5cfa0c",
+   "length": 51728,
+   "pythonState": "stock",
+   "outputs": [
+    {
+     "patch": "compact_pro-1.0.3.2",
+     "target": 18,
+     "version": "1.0.3.2",
+     "outputSha256": "68bcc5f989384fac390ebd25dd6c12098780e9e79d24528b294e1c8cc156cb2f",
+     "changed": [
+      568,
+      569,
+      570,
+      571,
+      49752,
+      49758,
+      49759,
+      49760,
+      49761
+     ]
+    }
+   ],
+   "known": null
+  }
+ ],
+ "banks": [
+  {
+   "dumpSha256": "6d94b0890635d5d8ee8bffeb0ad6a4c6c9ec07dd9bf2198aed12b46814515825",
+   "bankAddress": 335872000,
+   "length": 47768,
+   "target": 16,
+   "pythonAction": "patch applies",
+   "pythonState": "stock",
+   "storedPlain": true,
+   "patch": "compact_32k-1.3.0.0-to16",
+   "outputSha256": "0ede6768f57acdfa65c19bdb3f62973789a43b28db24d7fbc4bc60fddde90692",
+   "changed": [
+    568,
+    569,
+    570,
+    571,
+    47460,
+    47462,
+    47463,
+    47464,
+    47465,
+    47466,
+    47468,
+    47469
+   ]
+  },
+  {
+   "dumpSha256": "6d94b0890635d5d8ee8bffeb0ad6a4c6c9ec07dd9bf2198aed12b46814515825",
+   "bankAddress": 336003072,
+   "length": 47768,
+   "target": 16,
+   "pythonAction": "patch applies",
+   "pythonState": "stock",
+   "storedPlain": true,
+   "patch": "compact_32k-1.3.0.0-to16",
+   "outputSha256": "0ede6768f57acdfa65c19bdb3f62973789a43b28db24d7fbc4bc60fddde90692",
+   "changed": [
+    568,
+    569,
+    570,
+    571,
+    47460,
+    47462,
+    47463,
+    47464,
+    47465,
+    47466,
+    47468,
+    47469
+   ]
+  },
+  {
+   "dumpSha256": "059931aa844587f3ba3d63671202af8c33a91956548a939925e793185c8df9fe",
+   "bankAddress": 336003072,
+   "length": 47768,
+   "target": 16,
+   "pythonAction": "patch applies",
+   "pythonState": "stock",
+   "storedPlain": true,
+   "patch": "compact_32k-1.3.0.0-to16",
+   "outputSha256": "0ede6768f57acdfa65c19bdb3f62973789a43b28db24d7fbc4bc60fddde90692",
+   "changed": [
+    568,
+    569,
+    570,
+    571,
+    47460,
+    47462,
+    47463,
+    47464,
+    47465,
+    47466,
+    47468,
+    47469
+   ]
+  },
+  {
+   "dumpSha256": "40447c7e6da5cbc84621f4694ffff5bda0f783e7807a45e80443383b19a8eb72",
+   "bankAddress": 335872000,
+   "length": 47768,
+   "target": 16,
+   "pythonAction": "patch applies",
+   "pythonState": "stock",
+   "storedPlain": true,
+   "patch": "compact_32k-1.3.0.0-to16",
+   "outputSha256": "0ede6768f57acdfa65c19bdb3f62973789a43b28db24d7fbc4bc60fddde90692",
+   "changed": [
+    568,
+    569,
+    570,
+    571,
+    47460,
+    47462,
+    47463,
+    47464,
+    47465,
+    47466,
+    47468,
+    47469
+   ]
+  },
+  {
+   "dumpSha256": "40447c7e6da5cbc84621f4694ffff5bda0f783e7807a45e80443383b19a8eb72",
+   "bankAddress": 336003072,
+   "length": 47768,
+   "target": 16,
+   "pythonAction": "patch applies",
+   "pythonState": "stock",
+   "storedPlain": true,
+   "patch": "compact_32k-1.3.0.0-to16",
+   "outputSha256": "0ede6768f57acdfa65c19bdb3f62973789a43b28db24d7fbc4bc60fddde90692",
+   "changed": [
+    568,
+    569,
+    570,
+    571,
+    47460,
+    47462,
+    47463,
+    47464,
+    47465,
+    47466,
+    47468,
+    47469
+   ]
+  },
+  {
+   "dumpSha256": "37f5f983066e85c4007bb2b12e159d678d37647242d406451969cf3f81f7de78",
+   "bankAddress": 335872000,
+   "length": 47768,
+   "target": 16,
+   "pythonAction": "patch applies",
+   "pythonState": "stock",
+   "storedPlain": true,
+   "patch": "compact_32k-1.3.0.0-to16",
+   "outputSha256": "0ede6768f57acdfa65c19bdb3f62973789a43b28db24d7fbc4bc60fddde90692",
+   "changed": [
+    568,
+    569,
+    570,
+    571,
+    47460,
+    47462,
+    47463,
+    47464,
+    47465,
+    47466,
+    47468,
+    47469
+   ]
+  },
+  {
+   "dumpSha256": "37f5f983066e85c4007bb2b12e159d678d37647242d406451969cf3f81f7de78",
+   "bankAddress": 336003072,
+   "length": 47768,
+   "target": 16,
+   "pythonAction": "patch applies",
+   "pythonState": "stock",
+   "storedPlain": true,
+   "patch": "compact_32k-1.3.0.0-to16",
+   "outputSha256": "0ede6768f57acdfa65c19bdb3f62973789a43b28db24d7fbc4bc60fddde90692",
+   "changed": [
+    568,
+    569,
+    570,
+    571,
+    47460,
+    47462,
+    47463,
+    47464,
+    47465,
+    47466,
+    47468,
+    47469
+   ]
+  },
+  {
+   "dumpSha256": "ff4f2b9cb6a03e3f4050bcf77b392747e4a6ee8c0d0dc8a5e17dc6775c2cf1e0",
+   "bankAddress": 335872000,
+   "length": 47768,
+   "target": 16,
+   "pythonAction": "patch applies",
+   "pythonState": "stock",
+   "storedPlain": true,
+   "patch": "compact_32k-1.3.0.0-to16",
+   "outputSha256": "0ede6768f57acdfa65c19bdb3f62973789a43b28db24d7fbc4bc60fddde90692",
+   "changed": [
+    568,
+    569,
+    570,
+    571,
+    47460,
+    47462,
+    47463,
+    47464,
+    47465,
+    47466,
+    47468,
+    47469
+   ]
+  },
+  {
+   "dumpSha256": "ff4f2b9cb6a03e3f4050bcf77b392747e4a6ee8c0d0dc8a5e17dc6775c2cf1e0",
+   "bankAddress": 336003072,
+   "length": 47768,
+   "target": 16,
+   "pythonAction": "patch applies",
+   "pythonState": "stock",
+   "storedPlain": true,
+   "patch": "compact_32k-1.3.0.0-to16",
+   "outputSha256": "0ede6768f57acdfa65c19bdb3f62973789a43b28db24d7fbc4bc60fddde90692",
+   "changed": [
+    568,
+    569,
+    570,
+    571,
+    47460,
+    47462,
+    47463,
+    47464,
+    47465,
+    47466,
+    47468,
+    47469
+   ]
+  },
+  {
+   "dumpSha256": "afa9800f8969e46a0d868b19bdd55a9514fec40cfd958de41d0f769eea5a6e7b",
+   "bankAddress": 335872000,
+   "length": 49128,
+   "target": 16,
+   "pythonAction": "patch applies",
+   "pythonState": "stock",
+   "storedPlain": true,
+   "patch": "compact_32k-1.3.0.8-to16",
+   "outputSha256": "18d974c489fcbccf92c81a3179a7e5e8ee7612370374276fabd938d8c20ce15f",
+   "changed": [
+    569,
+    570,
+    571,
+    46928,
+    46935,
+    46936,
+    46937,
+    46938,
+    46939,
+    46940,
+    46941,
+    46942,
+    46943
+   ]
+  },
+  {
+   "dumpSha256": "afa9800f8969e46a0d868b19bdd55a9514fec40cfd958de41d0f769eea5a6e7b",
+   "bankAddress": 336003072,
+   "length": 49128,
+   "target": 16,
+   "pythonAction": "patch applies",
+   "pythonState": "stock",
+   "storedPlain": true,
+   "patch": "compact_32k-1.3.0.8-to16",
+   "outputSha256": "18d974c489fcbccf92c81a3179a7e5e8ee7612370374276fabd938d8c20ce15f",
+   "changed": [
+    569,
+    570,
+    571,
+    46928,
+    46935,
+    46936,
+    46937,
+    46938,
+    46939,
+    46940,
+    46941,
+    46942,
+    46943
+   ]
+  },
+  {
+   "dumpSha256": "afa9800f8969e46a0d868b19bdd55a9514fec40cfd958de41d0f769eea5a6e7b",
+   "bankAddress": 335872000,
+   "length": 49128,
+   "target": 32,
+   "pythonAction": "patch applies",
+   "pythonState": "stock",
+   "storedPlain": true,
+   "patch": "compact_32k-1.3.0.8-to32",
+   "outputSha256": "ee8c7f0e09d81b916e1ffeb2807108db34c60b29a277ec8651da22f836fd80eb",
+   "changed": [
+    568,
+    569,
+    570,
+    571,
+    46928,
+    46933,
+    46934,
+    46935,
+    46936,
+    46937,
+    46938,
+    46939,
+    46940,
+    46941,
+    46942,
+    46943
+   ]
+  },
+  {
+   "dumpSha256": "afa9800f8969e46a0d868b19bdd55a9514fec40cfd958de41d0f769eea5a6e7b",
+   "bankAddress": 336003072,
+   "length": 49128,
+   "target": 32,
+   "pythonAction": "patch applies",
+   "pythonState": "stock",
+   "storedPlain": true,
+   "patch": "compact_32k-1.3.0.8-to32",
+   "outputSha256": "ee8c7f0e09d81b916e1ffeb2807108db34c60b29a277ec8651da22f836fd80eb",
+   "changed": [
+    568,
+    569,
+    570,
+    571,
+    46928,
+    46933,
+    46934,
+    46935,
+    46936,
+    46937,
+    46938,
+    46939,
+    46940,
+    46941,
+    46942,
+    46943
+   ]
+  },
+  {
+   "dumpSha256": "27ec751fe1646dbf01250195bac2b27adfa5a1c0ffcb2a2ad6f18b5b06c6b026",
+   "bankAddress": 335872000,
+   "length": 47768,
+   "target": 16,
+   "pythonAction": "patch applies",
+   "pythonState": "stock",
+   "storedPlain": true,
+   "patch": "compact_32k-1.2.0.0-to16",
+   "outputSha256": "b2dae4a43a69b04fc88b5f650a1998d02f1ca663923bb227069ac540ed04273b",
+   "changed": [
+    568,
+    569,
+    570,
+    571,
+    47460,
+    47462,
+    47463,
+    47464,
+    47465,
+    47466,
+    47468,
+    47469
+   ]
+  },
+  {
+   "dumpSha256": "27ec751fe1646dbf01250195bac2b27adfa5a1c0ffcb2a2ad6f18b5b06c6b026",
+   "bankAddress": 336003072,
+   "length": 47768,
+   "target": 16,
+   "pythonAction": "patch applies",
+   "pythonState": "stock",
+   "storedPlain": true,
+   "patch": "compact_32k-1.2.0.0-to16",
+   "outputSha256": "b2dae4a43a69b04fc88b5f650a1998d02f1ca663923bb227069ac540ed04273b",
+   "changed": [
+    568,
+    569,
+    570,
+    571,
+    47460,
+    47462,
+    47463,
+    47464,
+    47465,
+    47466,
+    47468,
+    47469
+   ]
+  }
+ ]
+}
