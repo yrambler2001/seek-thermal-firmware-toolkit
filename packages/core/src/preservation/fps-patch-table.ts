@@ -153,43 +153,6 @@ export const FPS_PATCH_TABLE: readonly FpsPatchSource[] = [
     },
   },
   {
-    // compact_32k-1.3.0.8-to16. Python PATCHES entry, emu/fps_patch.py. Evidence:
-    // // 1 6   H z ,   t w o   c a p t u r e s   p e r   f r a m e .   T h e   1 . 3 . 0 . 8 - F F   b u
-    // // i l d   ( 1 6   H z )   r u n s   t h e   s a m e   p r o g r a m   i n   e v e r y   b l o c k
-    // // b u t   t h i s   o n e :   i t s   b l o c k   1 3   i s   2   s t e p s   ( 1 3   0 5   2 0
-    // // =   l i n e   o p   5 ,   t h e n   1 1   2 8   2 3   =   l i n e   o p   8   w i t h   t h e
-    // // d e l i v e r y   b i t ) ,   t h e   s t o c k   b l o c k   h a s   4   ( o p s   5 ,   6 ,
-    // // 7 ,   8 ) .   T h e   p a t c h e d   b l o c k   e q u a l s   t h e   F F   b l o c k   b y t
-    // // e   f o r   b y t e .   E m u l a t o r   ( f p s _ p a t c h _ f r a m e s . p y ,   8 0 - f r
-    // // a m e   b o o t ) :   e v e r y   s t e a d y   f r a m e   b o d y   e q u a l s   t h e   1 .
-    // // 3 . 0 . 8 - F F   f r a m e   a t   t h e   s a m e   i n d e x   ( 6 0   o f   6 0 ) .   W h a
-    // // t   i s   l o s t   i s   t h e   t h r e e - c a p t u r e   a v e r a g e   o f   t h e   s t
-    // // o c k   f r a m e ,   w h i c h   t h e   F F   b u i l d   a l s o   g i v e s   u p .
-    id: 'compact_32k-1.3.0.8-to16',
-    family: 'compact_32k',
-    version: '1.3.0.8',
-    fromHz: 8,
-    targetHz: 16,
-    stockSha256: '2969d0df5bfeac74b88e6ee608ee8b2657fecf2e0234e9ce2731add2408f3d1c',
-    patchedSha256: '18d974c489fcbccf92c81a3179a7e5e8ee7612370374276fabd938d8c20ce15f',
-    length: 49128,
-    edits: [
-      { offset: 0xb750, before: '04', after: '02' },
-      { offset: 0xb757, before: '130620130720112823', after: '112823000000000000' },
-    ],
-    row: {
-      label:
-        'mode-8 capture program, block 13 (header 04 0d 0d 00: count 4, first = next = 13), a self-loop whose last step carries the delivery bit',
-      offset: 0xb750,
-      length: 52,
-    },
-    sibling: {
-      sha256: 'b97ced91fff9f0949a02f35fceab697634cc109a0fe2a2fbbfe6ccfadb7d4d16',
-      offset: 0xb804,
-      length: 52,
-    },
-  },
-  {
     // compact_32k-1.3.0.8-to32. Python PATCHES entry, emu/fps_patch.py. Evidence:
     // // 3 2   H z ,   o n e   s t e p   p e r   c a p t u r e :   b l o c k   1 3   i s   1 3   2 5   2
     // // 3   ( l i n e   o p   5   w i t h   t h e   d e l i v e r y   b i t ,   h e a d e r   t y p e
@@ -231,40 +194,6 @@ export const FPS_PATCH_TABLE: readonly FpsPatchSource[] = [
     sibling: null,
   },
   {
-    // compact_32k-4.8.1.7-to16. Python PATCHES entry, emu/fps_patch.py. Evidence:
-    // // 1 6   H z .   T h e   4 . 1 6 . 1 . 7 - F F   b u i l d   ( 1 6   H z )   h a s   t h i s   b l
-    // // o c k   a s   2   s t e p s   ( 1 1   0 5   2 0 ,   1 0   2 8   2 3 ) ;   t h e   p a t c h e d
-    // // b l o c k   e q u a l s   i t   b y t e   f o r   b y t e .   E m u l a t o r   ( 8 0 - f r a m
-    // // e   b o o t ) :   e v e r y   s t e a d y   f r a m e   b o d y   e q u a l s   t h e   4 . 1 6
-    // // . 1 . 7 - F F   f r a m e   a t   t h e   s a m e   i n d e x   ( 5 6   o f   5 6 ) .   T h e
-    // // s t o c k   b l o c k   d i f f e r s   f r o m   t h e   F F   b l o c k   i n   t h e   c o u
-    // // n t   b y t e   a n d   t h e   t w o   m i d d l e   l i n e   s t e p s   ( 1 1   0 6   2 0 ,
-    // // 1 1   0 7   2 0 ) ,   n o t h i n g   e l s e .
-    id: 'compact_32k-4.8.1.7-to16',
-    family: 'compact_32k',
-    version: '4.8.1.7',
-    fromHz: 8,
-    targetHz: 16,
-    stockSha256: '04d9e1559d63463cf6c0c29ddc21f64af093bc3fe4d4e769ba41d4d8b0798419',
-    patchedSha256: '7ef65e01337f6ef3cb6be3c31a63878e15bcdfa0063105a6d3b3278e08df8637',
-    length: 49888,
-    edits: [
-      { offset: 0x976e, before: '04', after: '02' },
-      { offset: 0x9775, before: '110620110720102823', after: '102823000000000000' },
-    ],
-    row: {
-      label:
-        'steady self-loop block (header 04 0d 0d 00: count 4, first = next = 13) of the 32K capture program, last step carries the delivery bit',
-      offset: 0x976e,
-      length: 52,
-    },
-    sibling: {
-      sha256: 'b1016ea14f2e830fb3691afbd60cd679035c7700a99c777a8a3c276e034f6ca1',
-      offset: 0x9776,
-      length: 52,
-    },
-  },
-  {
     // compact_32k-4.8.1.7-to32. Python PATCHES entry, emu/fps_patch.py. Evidence:
     // // 3 2   H z ,   o n e   s t e p   p e r   c a p t u r e :   b l o c k   1 3   i s   1 1   2 5   2
     // // 3   ( l i n e   o p   5   o n   s e l   1   w i t h   t h e   d e l i v e r y   b i t ) .   T h
@@ -300,39 +229,6 @@ export const FPS_PATCH_TABLE: readonly FpsPatchSource[] = [
     sibling: null,
   },
   {
-    // compact_32k-4.8.1.9-to16. Python PATCHES entry, emu/fps_patch.py. Evidence:
-    // // 1 6   H z .   S a m e   b l o c k   b y t e s   a s   t h e   4 . 8 . 1 . 7   s t o c k   i m a
-    // // g e .   T h e   p a t c h e d   b l o c k   e q u a l s   t h e   4 . 1 6 . 1 . 7 - F F   b l o
-    // // c k   ( 1 6   H z ;   a n o t h e r   v e r s i o n :   n o   4 . 8 . 1 . 9   F F   e x i s t s
-    // // ) .   E m u l a t o r   ( 8 0 - f r a m e   b o o t ) :   e v e r y   s t e a d y   f r a m e
-    // // b o d y   e q u a l s   t h e   4 . 1 6 . 1 . 7 - F F   f r a m e   a t   t h e   s a m e   i n
-    // // d e x   ( 5 6   o f   5 6 ) ,   t h e   s a m e   f r a m e s   a s   t h e   4 . 8 . 1 . 7   p
-    // // a t c h .
-    id: 'compact_32k-4.8.1.9-to16',
-    family: 'compact_32k',
-    version: '4.8.1.9',
-    fromHz: 8,
-    targetHz: 16,
-    stockSha256: '2c5eedec97ba168b5defba3b5065c0d50e058102725c577a33ff29d270c3cdd5',
-    patchedSha256: '995ffeae7cc6c4582afa0d7482466959225bea2268bf67deba554c2f3f110dc9',
-    length: 48800,
-    edits: [
-      { offset: 0x95a6, before: '04', after: '02' },
-      { offset: 0x95ad, before: '110620110720102823', after: '102823000000000000' },
-    ],
-    row: {
-      label:
-        'steady self-loop block (header 04 0d 0d 00: count 4, first = next = 13) of the 32K capture program, last step carries the delivery bit',
-      offset: 0x95a6,
-      length: 52,
-    },
-    sibling: {
-      sha256: 'b1016ea14f2e830fb3691afbd60cd679035c7700a99c777a8a3c276e034f6ca1',
-      offset: 0x9776,
-      length: 52,
-    },
-  },
-  {
     // compact_32k-4.8.1.9-to32. Python PATCHES entry, emu/fps_patch.py. Evidence:
     // // 3 2   H z ,   o n e   s t e p   p e r   c a p t u r e :   1 1   2 5   2 3 ,   t h e   s a m e
     // // b l o c k   a s   t h e   4 . 8 . 1 . 7   p a t c h .   E m u l a t o r   ( 8 0 - f r a m e   b
@@ -361,82 +257,17 @@ export const FPS_PATCH_TABLE: readonly FpsPatchSource[] = [
     sibling: null,
   },
   {
-    // compact_32k-1.3.0.0-to16. Python PATCHES entry, emu/fps_patch.py. Evidence:
-    // // 1 6   H z ,   t w o   c a p t u r e s   p e r   f r a m e :   o p   3   ( c o p y ,   3 9   6 0
-    // // )   t h e n   o p   9   w i t h   t h e   d e l i v e r y   b i t   ( 9 9   2 7 ) .   N o   F F
-    // // s i b l i n g   o f   1 . 3 . 0 . 0   e x i s t s .   T h e   f i r s t   v e r s i o n   o f
-    // // t h i s   e d i t   k e p t   t h e   i d l e   s t e p   0 1   4 0   a n d   r e m o v e d   o
-    // // p   3 ,   s o   o p   9   s u b t r a c t e d   t h e   p r e v i o u s   f r a m e :   t h e
-    // // b o d y   m e a n   a l t e r n a t e d   b e t w e e n   a b o u t   - 7 0   a n d   + 6 , 9 0
-    // // 0   ( w i t h d r a w n ) .   E m u l a t o r   ( 8 0 - f r a m e   b o o t ,   t h i s   b l o
-    // // c k ) :   n o   a l t e r n a t i o n   ( m e d i a n   m e a n   s w i n g   1 . 1   h a l f w
-    // // o r d s ;   s t o c k   1 . 0 ) ;   b o d y   l e v e l   m e d i a n   - 1 . 3   ( s t o c k
-    // // - 2 . 8 ) ;   2 7 , 5 1 6   h a l f w o r d s   c h a n g e   p e r   f r a m e   ( s t o c k
-    // // 2 7 , 5 5 8 ) .   O n e   s t e a d y   f r a m e   i n   t h i r t y   h a s   a   t r a n s i
-    // // e n t   m e a n   ( + 3 5 2 ,   - 3 3 )   a t   t h e   s a m e   6 0 - c a p t u r e   p e r i
-    // // o d   t h e   s t o c k   s h o w s   a s   - 4 6 ,   - 1 1 ;   t h e   s i z e   o f   t h a t
-    // // t r a n s i e n t   i s   n o t   e x p l a i n e d .   O P E N :   t h e   t w o   r e m o v e
-    // // d   i d l e   s t e p s   c a r r i e d   s h u t t e r   c o d e s   2   a n d   0 ,   s o   t
-    // // h e   s h u t t e r   s e q u e n c e   c h a n g e s   f r o m   2 , 3 , 0 , 1   t o   3 , 1
-    // // ( n o t   m o d e l l e d   b y   t h e   e m u l a t o r ) ;   n o   1 6   H z   1 . 3 . 0 . 0
-    // // C o m p a c t   e x i s t s   t o   c o m p a r e   w i t h .
-    id: 'compact_32k-1.3.0.0-to16',
-    family: 'compact_32k',
-    version: '1.3.0.0',
-    fromHz: 8,
-    targetHz: 16,
-    stockSha256: '862717a8a605021def7858ac0c04ad4aa1abe23d357d6c2417699939137f481c',
-    patchedSha256: '0ede6768f57acdfa65c19bdb3f62973789a43b28db24d7fbc4bc60fddde90692',
-    length: 47768,
-    edits: [
-      { offset: 0xb964, before: '24', after: '22' },
-      { offset: 0xb966, before: '0140396001009927', after: '3960992700000000' },
-    ],
-    row: {
-      label:
-        'mode-6 capture program, block 2 (34-byte blocks; self-loop, first = next = 2), 4 steps, last one carries the delivery bit',
-      offset: 0xb964,
-      length: 34,
-    },
-    sibling: null,
-  },
-  {
     // compact_32k-1.3.0.0-to32. Python PATCHES entry, emu/fps_patch.py. 32 Hz in the Normal stream (IP mode 8): the
     // mode-8 capture program's block 8 (the steady self-loop) goes from op 5, 6, 6, 7 (mean of four, publish on the
-    // fourth capture) to one op-3 copy with the delivery bit; the mode-6 16 Hz edit is carried too. Measured on a
-    // Compact 1.3.0.0 (serial 1013CE098ACA): Normal mode 32.2 fps median, 0 frozen pairs.
+    // fourth capture) to one op-3 copy with the delivery bit. Measured on a Compact 1.3.0.0 (serial 1013CE098ACA):
+    // Normal mode 32.2 fps median, 0 frozen pairs.
     id: 'compact_32k-1.3.0.0-to32',
     family: 'compact_32k',
     version: '1.3.0.0',
     fromHz: 8,
     targetHz: 32,
     stockSha256: '862717a8a605021def7858ac0c04ad4aa1abe23d357d6c2417699939137f481c',
-    patchedSha256: 'd91284c65a5dfde608e1c221b66a7ada487f3d42e6f49f01d09c2c7d643b59a9',
-    length: 47768,
-    edits: [
-      { offset: 0xb964, before: '24', after: '22' },
-      { offset: 0xb966, before: '0140396001009927', after: '3960992700000000' },
-      { offset: 0xb898, before: '84', after: '81' },
-      { offset: 0xb89a, before: '5920692069207927', after: '3927000000000000' },
-    ],
-    row: {
-      label:
-        'mode-8 capture program block 8 (the steady self-loop, 34-byte blocks) and mode-6 block 2, one copy with the delivery bit per capture in mode 8',
-      offset: 0xb898,
-      length: 238,
-    },
-    sibling: null,
-  },
-  {
-    // compact_32k-1.3.0.0-to32-from16. Python PATCHES entry, emu/fps_patch.py. The 1.3.0.0 image that already carries the
-    // 16 Hz patch, taken to the same final image as compact_32k-1.3.0.0-to32 by the mode-8 edit alone.
-    id: 'compact_32k-1.3.0.0-to32-from16',
-    family: 'compact_32k',
-    version: '1.3.0.0',
-    fromHz: 8,
-    targetHz: 32,
-    stockSha256: '0ede6768f57acdfa65c19bdb3f62973789a43b28db24d7fbc4bc60fddde90692',
-    patchedSha256: 'd91284c65a5dfde608e1c221b66a7ada487f3d42e6f49f01d09c2c7d643b59a9',
+    patchedSha256: 'ef90c94a448b69feea06421026c5765eceb1685d6806e7a48714c76c3d0ed273',
     length: 47768,
     edits: [
       { offset: 0xb898, before: '84', after: '81' },
@@ -446,35 +277,6 @@ export const FPS_PATCH_TABLE: readonly FpsPatchSource[] = [
       label:
         'mode-8 capture program block 8 (the steady self-loop, 34-byte blocks); one copy with the delivery bit per capture',
       offset: 0xb898,
-      length: 34,
-    },
-    sibling: null,
-  },
-  {
-    // compact_32k-1.2.0.0-to16. Python PATCHES entry, emu/fps_patch.py. Evidence:
-    // // T h e   s a m e   3 4 - b y t e   b l o c k   a s   1 . 3 . 0 . 0   ( i d e n t i c a l   b y t
-    // // e s   a t   + 0 x B 9 6 4 :   2 4   0 2 ,   0 1   4 0   3 9   6 0   0 1   0 0   9 9   2 7 ) ,
-    // // s o   t h e   s a m e   e d i t   a n d   t h e   s a m e   r e a s o n i n g .   N o   F F   s
-    // // i b l i n g   o f   1 . 2 . 0 . 0 .   E m u l a t o r   ( 8 0 - f r a m e   b o o t ) :   i t s
-    // // s t e a d y   f r a m e s   e q u a l   t h e   1 . 3 . 0 . 0   p a t c h ' s   f r a m e s   (
-    // // 7 8   o f   7 8 ,   s a m e   i n d i c e s ) ;   t h e   1 . 3 . 0 . 0   O P E N   p o i n t s
-    // // a p p l y .
-    id: 'compact_32k-1.2.0.0-to16',
-    family: 'compact_32k',
-    version: '1.2.0.0',
-    fromHz: 8,
-    targetHz: 16,
-    stockSha256: '38a9036ae44b9fcaca31a7432257f4aa2cf71d7715a964f1c4b9553dfabfea01',
-    patchedSha256: 'b2dae4a43a69b04fc88b5f650a1998d02f1ca663923bb227069ac540ed04273b',
-    length: 47768,
-    edits: [
-      { offset: 0xb964, before: '24', after: '22' },
-      { offset: 0xb966, before: '0140396001009927', after: '3960992700000000' },
-    ],
-    row: {
-      label:
-        'mode-6 capture program, block 2 (34-byte blocks; self-loop, first = next = 2), 4 steps, last one carries the push bit',
-      offset: 0xb964,
       length: 34,
     },
     sibling: null,
@@ -542,32 +344,6 @@ export const FPS_PATCH_TABLE: readonly FpsPatchSource[] = [
     sibling: null,
   },
   {
-    // compact_32k-4.8.2.1-to16. Python PATCHES entry, emu/fps_patch.py. Evidence: stock steady command page 13
-    // (68 bytes, n_substeps 4 -> 2) keeps seed (slot 7) and makes the terminator mean2 (slot 9, (s + acc + 1) >> 1,
-    // LAST, type 3, gpio 1) in place of mean4 after two accumulates. Measured on the Compact XR 4.8.2.1 (IP mode 9):
-    // stock 8.02 to 8.10 fps, patched 16.1 Hz steady (thermal interval 62.1 to 62.2 ms), 0 frozen pairs.
-    // Emulator: stock 8.06 Hz, patched 16.13 Hz. The calibration stretch is unchanged and not patched.
-    id: 'compact_32k-4.8.2.1-to16',
-    family: 'compact_32k',
-    version: '4.8.2.1',
-    fromHz: 8,
-    targetHz: 16,
-    stockSha256: 'f96ac57eda75bca22791acc3ed21c80bde96c1f538f0ddd2aea6ffe447752882',
-    patchedSha256: '6a94a44d10b27f466e16f37d4e15dd23b7bce931c40b20737d59ef42e375bb02',
-    length: 42680,
-    edits: [
-      { offset: 0x90f2, before: '04', after: '02' },
-      { offset: 0x90fa, before: '2308000123080001208a0301', after: '208903010000000000000000' },
-    ],
-    row: {
-      label:
-        'steady self-loop command page 13 of the 68-byte frame program (n_substeps 4 -> 2, next = alt = 13; 4 captures per published type-3 frame in stock)',
-      offset: 0x90f2,
-      length: 68,
-    },
-    sibling: null,
-  },
-  {
     // compact_32k-4.8.2.1-to32. Python PATCHES entry, emu/fps_patch.py. Evidence: stock steady command page 13
     // keeps its header and becomes ONE substep: frame_chunk_copy (slot 1, the capture as the sensor delivered it)
     // with LAST, on param 0x23 as the stock seed and accumulates, type 3, gpio 1: one capture per published frame,
@@ -630,13 +406,19 @@ export const FPS_KNOWN_RATE: Readonly<
     name: 'nano_200-42.32.3.10',
     hz: 32,
   },
+  // the 1.3.0.0 image measured first on the bench: the mode-8 32 Hz edit plus the since-withdrawn mode-6 16 Hz edit
+  d91284c65a5dfde608e1c221b66a7ada487f3d42e6f49f01d09c2c7d643b59a9: {
+    name: 'compact-1.3.0.0-mode8-32hz',
+    hz: 32,
+  },
 };
 
 /** What the Python tool does NOT patch, and why (NOT_PATCHED), kept for the record. */
 export const FPS_NOT_PATCHED_NOTES: readonly string[] = [
   'Compact 32K 0.3.0.1, 0.7.0.7, 0.7.0.8, 0.8.0.0, 0.9.0.2, 0.9.0.6, 0.9.0.7, 0.9.1.0, 0.10.0.0, 1.0.0.0 at 8 Hz (and 0.5.x, 0.6.0.4, which the framerate suite cannot stream): no patch. Their images carry none of the steady-record byte patterns this tool knows (the 52-byte and 34-byte capture blocks, the PRO 1.0.3.0 row 14 and the PRO 4.9 row 20; see emu/README.md). Their record layout is not decoded.',
-  'Compact 4.8.2.1 image f96ac57eda75 (the Compact 4.8.2.1 dump and the Compact XR 4.8.2.1 dump, one image) is in the table as compact_32k-4.8.2.1-to16 (two captures per frame) and compact_32k-4.8.2.1-to32 (one copy with LAST, one capture per frame; the page offers the highest).',
-  'Compact 32K 1.3.0.0 and 1.2.0.0 at 32 Hz through the mode-6 block: no patch. Its one-step block (op 3 and the idle steps removed, op 9 kept alone) alternates: each frame is the difference of the previous output and a capture, so the body mean swings about 6,900 halfwords per frame (emulator, 1.3.0.0 and 1.2.0.0: mean from -340 to +7,197). A correlated double sample needs a reference copy in the same frame, and no one-step block has one. (1.3.0.0 reaches 32 Hz in the Normal stream through its mode-8 steady block instead, compact_32k-1.3.0.0-to32; 1.2.0.0 has no such patch yet.)',
+  'Compact 4.8.2.1 image f96ac57eda75 is in the table as compact_32k-4.8.2.1-to32 (page 13 reduced to one copy with LAST, one capture per frame; measured on the XR, offered). The Compact 4.8.2.1 image is also the Compact XR 4.8.2.1 image.',
+  'Compact 32K 1.2.0.0: no patch. Its former 16 Hz patch (mode-6 block 2) was removed with every other 16 Hz patch, and its mode-8 steady block (the one 1.3.0.0 is patched through) was not read or measured.',
+  'No 16 Hz patch exists any more (1.2.0.0, 1.3.0.0, 1.3.0.8, 4.8.1.7, 4.8.1.9, 4.8.2.1 had one, each also reachable as a 32 Hz patch except 1.2.0.0): the 32 Hz patches replace them. The 16 Hz FF builds are stock 16 Hz images, not patches. The 1.3.0.0 mode-6 one-step form (op 3 and the idle steps removed, op 9 kept alone) alternates: each frame is the difference of the previous output and a capture, so the body mean swings about 6,900 halfwords per frame (emulator: mean from -340 to +7,197). A correlated double sample needs a reference copy in the same frame, and no one-step block has one. 1.3.0.0 reaches 32 Hz in the Normal stream through its mode-8 steady block instead (compact_32k-1.3.0.0-to32).',
   'Earlier 32K 32 Hz blocks that dropped op 5 (1.3.0.8, 4.8.1.7, 4.8.1.9, and the FF 1.3.0.8 and 4.16.1.7 ids): withdrawn. Op 5 starts the frame and clears the mask that op 8 reads, so the picture froze (emulator: 56 to 58 of 58 to 61 steady pairs with zero changed halfwords). Replaced by the one-step block that keeps op 5 with the delivery bit.',
   'Mosaic 10.9.1.31: already an 18 Hz image (FRAME_RATE, emu/README.md LABEL_DECISIONS); not a 9 Hz target.',
   'Nano 200 42.32.3.10 already publishes every capture (32 Hz); Mosaic FF and Nano 300 are not 9 Hz targets.',

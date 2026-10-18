@@ -190,31 +190,22 @@ describe('the rate the page names (the bench-measured rate, FPS_MEASURED_HZ)', (
         id,
       ).toBe(true);
     }
-    // TESTING.md 42.20: the 32 Hz entry publishes 26 fps and the 16 Hz entry 14 fps in IP mode 9.
+    // TESTING.md 42.20: the 1.3.0.8 32 Hz entry publishes 26 fps in IP mode 9.
     expect(FPS_MEASURED_HZ.get('compact_32k-1.3.0.8-to32')).toBe(26);
-    expect(FPS_MEASURED_HZ.get('compact_32k-1.3.0.8-to16')).toBe(14);
-    // An entry the bench did not change keeps its target: 1.2.0.0 and 1.3.0.0 measured 16 Hz (mode 6).
-    expect(FPS_MEASURED_HZ.has('compact_32k-1.2.0.0-to16')).toBe(false);
-    expect(FPS_MEASURED_HZ.has('compact_32k-1.3.0.0-to16')).toBe(false);
+    // An entry the bench did not change keeps its target: the 1.3.0.0 mode-8 entry measured 32 Hz.
+    expect(FPS_MEASURED_HZ.has('compact_32k-1.3.0.0-to32')).toBe(false);
   });
 });
 
 describe('the stages: which entries are offered (pinned, so a change is deliberate)', () => {
   it('offers exactly the stage-one (plain 2014 chain) and stage-two (Key A, 4.8.x) sets', () => {
     expect([...FPS_STAGE_ONE_IDS].sort()).toEqual([
-      'compact_32k-1.2.0.0-to16',
-      'compact_32k-1.3.0.0-to16',
       'compact_32k-1.3.0.0-to32',
-      'compact_32k-1.3.0.0-to32-from16',
-      'compact_32k-1.3.0.8-to16',
       'compact_32k-1.3.0.8-to32',
     ]);
     expect([...FPS_STAGE_TWO_IDS].sort()).toEqual([
-      'compact_32k-4.8.1.7-to16',
       'compact_32k-4.8.1.7-to32',
-      'compact_32k-4.8.1.9-to16',
       'compact_32k-4.8.1.9-to32',
-      'compact_32k-4.8.2.1-to16',
       'compact_32k-4.8.2.1-to32',
     ]);
     for (const id of FPS_STAGE_ONE_IDS) expect(FPS_STAGE_TWO_IDS.has(id), id).toBe(false);

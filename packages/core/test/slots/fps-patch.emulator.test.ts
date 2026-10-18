@@ -1,9 +1,9 @@
 /* ====================================================================
- * The frame-rate patch on the three plain 2014-chain Compacts (stage one), in the emulator:
- * 1.2.0.0, 1.3.0.0 (the native dump) and 1.3.0.8 8 Hz (the chimera on the 2014 donor).
+ * The frame-rate patch on the two plain 2014-chain Compacts that have one (stage one), in the emulator:
+ * 1.3.0.0 (the native dump) and 1.3.0.8 8 Hz (the chimera on the 2014 donor).
  *
  * FOR EACH FIRMWARE, one boot of the stock flash, then a second boot of the patched flash:
- *   1. the analysis offers the patch on bank A, at the build's top rate (16 Hz for 1.2.0.0, 32 Hz for 1.3.0.0; 26 Hz for 1.3.0.8, the
+ *   1. the analysis offers the patch on bank A, at the build's top rate (32 Hz for 1.3.0.0; 26 Hz for 1.3.0.8, the
  *      bench-measured rate of its 32 Hz entry, FPS_MEASURED_HZ);
  *   2. THE SAVE GATE: a save that does not happen refuses the write, and no SetFeaturedFirmwareData
  *      (0x50) or CompleteMemoryUpgrade (0x51) is sent;
@@ -78,7 +78,6 @@ const sha = (bytes: Uint8Array): string => createHash('sha256').update(bytes).di
 
 /** The stage-one subjects, by the label the locked-line suite gives them. */
 const STAGE_ONE: readonly { readonly label: string; readonly top: number }[] = [
-  { label: 'Compact 1.2.0.0', top: 16 },
   { label: 'Compact 1.3.0.0 (native dump)', top: 32 },
   // The page's rate for the 32 Hz entry is the bench-measured 26 (FPS_MEASURED_HZ, TESTING.md 42.20).
   { label: 'Compact 1.3.0.8 (8 Hz)', top: 26 },

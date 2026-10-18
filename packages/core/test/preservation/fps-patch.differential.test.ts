@@ -77,12 +77,9 @@ const FLASH_BASE = 0x14000000;
 const sha256 = (bytes: Uint8Array): string => createHash('sha256').update(bytes).digest('hex');
 
 /** Every patch the Python has, by its id: the table must have exactly these. */
-const PYTHON_IDS = new Set([
-  ...FIXTURE.images.flatMap((image) => image.outputs.map((output) => output.patch)),
-  // The entry whose stock image is another entry's output (the 1.3.0.0 image that already has the 16 Hz patch) is
-  // not a corpus file, so it has no image case; the corpus test below reaches it through the 16 Hz patch.
-  'compact_32k-1.3.0.0-to32-from16',
-]);
+const PYTHON_IDS = new Set(
+  FIXTURE.images.flatMap((image) => image.outputs.map((output) => output.patch)),
+);
 
 function entryNamed(id: string): FpsPatch {
   const entry = FPS_PATCHES.find((candidate) => candidate.id === id);
@@ -93,7 +90,7 @@ function entryNamed(id: string): FpsPatch {
 describe('the table against the Python table (no corpus needed)', () => {
   it('has the same entries as fps_patch.py, and the same stock and patched hashes', () => {
     expect(new Set(FPS_PATCHES.map((patch) => patch.id))).toEqual(PYTHON_IDS);
-    expect(FPS_PATCHES).toHaveLength(18);
+    expect(FPS_PATCHES).toHaveLength(11);
     for (const image of FIXTURE.images) {
       for (const output of image.outputs) {
         if (output.outputSha256 === undefined) continue;
@@ -107,19 +104,12 @@ describe('the table against the Python table (no corpus needed)', () => {
 
   it('enables exactly the stage-one (plain 2014 chain) and stage-two (Key A, 4.8.x) entries, and records a reason for every other', () => {
     expect([...FPS_STAGE_ONE_IDS].sort()).toEqual([
-      'compact_32k-1.2.0.0-to16',
-      'compact_32k-1.3.0.0-to16',
       'compact_32k-1.3.0.0-to32',
-      'compact_32k-1.3.0.0-to32-from16',
-      'compact_32k-1.3.0.8-to16',
       'compact_32k-1.3.0.8-to32',
     ]);
     expect([...FPS_STAGE_TWO_IDS].sort()).toEqual([
-      'compact_32k-4.8.1.7-to16',
       'compact_32k-4.8.1.7-to32',
-      'compact_32k-4.8.1.9-to16',
       'compact_32k-4.8.1.9-to32',
-      'compact_32k-4.8.2.1-to16',
       'compact_32k-4.8.2.1-to32',
     ]);
     for (const entry of FPS_PATCHES) {
@@ -213,23 +203,7 @@ corpusDescribe('the table against the Python tool, over the corpus (SEEK_FPS_COR
         compared++;
       }
     }
-    expect(compared).toBe(17);
-  });
-
-  it('takes the 1.3.0.0 image that already has the 16 Hz patch to the same 32 Hz image as the stock image', () => {
-    const stock = findByHash(47768, '862717a8a605021def7858ac0c04ad4aa1abe23d357d6c2417699939137f481c', 47768);
-    expect(stock, 'the stock 1.3.0.0 image').not.toBeNull();
-    if (stock === null) return;
-    const at16 = applyFpsPatch(stock.subarray(0, 47768), entryNamed('compact_32k-1.3.0.0-to16'));
-    const plan = planFpsPatch(at16, '1.3.0.0');
-    expect(plan.status).toBe('offer');
-    if (plan.status !== 'offer') return;
-    expect(plan.patch.id).toBe('compact_32k-1.3.0.0-to32-from16');
-    expect(plan.toHz).toBe(32);
-    const at32 = applyFpsPatch(at16, plan.patch);
-    const direct = applyFpsPatch(stock.subarray(0, 47768), entryNamed('compact_32k-1.3.0.0-to32'));
-    expect(sha256(at32)).toBe(sha256(direct));
-    expect(planFpsPatch(at32, '1.3.0.0').status).toBe('patched');
+    expect(compared).toBe(11);
   });
 
   it.skipIf(!FPS_OFFER_WITHHELD)(

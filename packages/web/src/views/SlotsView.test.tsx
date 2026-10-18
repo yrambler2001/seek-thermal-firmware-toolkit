@@ -905,9 +905,9 @@ describe('SlotsView: the frame-rate row action', () => {
   it('keeps the outcome of a patch on screen: the rate, the read-back, the saved files, and the way back', () => {
     const outcome = {
       key: 'a',
-      patch: { id: 'compact_32k-1.3.0.0-to16' },
+      patch: { id: 'compact_32k-1.3.0.0-to32' },
       fromHz: 8,
-      toHz: 16,
+      toHz: 32,
       pre: { rawName: 'raw.bin', plainName: 'plain.bin' },
       changed: [0xb964, 0x238],
       written: { verified: true },
@@ -923,7 +923,7 @@ describe('SlotsView: the frame-rate row action', () => {
       panel({ plan: slotPlan(true), report: slotReport(base), fpsOutcome: outcome }),
     );
     const text = container.textContent;
-    expect(text).toContain('patched from 8 Hz to 16 Hz');
+    expect(text).toContain('patched from 8 Hz to 32 Hz');
     expect(text).toContain('differs from the saved dump only at the 2 planned byte(s)');
     expect(text).toContain('raw.bin and plain.bin');
     expect(text).not.toContain('UNTESTED on hardware');

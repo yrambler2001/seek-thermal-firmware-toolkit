@@ -21,7 +21,7 @@
  * THE STAGES. Each offered entry has been staged on its own line, and only then is it
  * offered (see `gateOf`):
  *   - stage one: the 2014 plain chain, whose banks are stored as plain bytes (the Compact
- *     1.2.0.0, 1.3.0.0 and the 8 Hz 1.3.0.8). The write is byte-exact on the read-back.
+ *     1.3.0.0 and the 8 Hz 1.3.0.8). The write is byte-exact on the read-back.
  *   - stage two: the 4.x Compact line (4.8.1.7, 4.8.1.9, 4.8.2.1), whose banks are staged under the
  *     camera's Key A and stored under the bank's own key. The write is checked on the read-back
  *     DECRYPTED, against the patched image (slots/fps-patch.ts).
@@ -108,11 +108,7 @@ const WITHHELD_REASON =
 
 /** The stage-one entries: the plain 2014 chain. Pinned by a test, so a change is deliberate. */
 export const FPS_STAGE_ONE_IDS: ReadonlySet<string> = new Set([
-  'compact_32k-1.2.0.0-to16',
-  'compact_32k-1.3.0.0-to16',
   'compact_32k-1.3.0.0-to32',
-  'compact_32k-1.3.0.0-to32-from16',
-  'compact_32k-1.3.0.8-to16',
   'compact_32k-1.3.0.8-to32',
 ]);
 
@@ -122,11 +118,8 @@ export const FPS_STAGE_ONE_IDS: ReadonlySet<string> = new Set([
  * Their write is checked on the read-back decrypted (slots/fps-patch.ts, TESTING.md 42.22).
  */
 export const FPS_STAGE_TWO_IDS: ReadonlySet<string> = new Set([
-  'compact_32k-4.8.1.7-to16',
   'compact_32k-4.8.1.7-to32',
-  'compact_32k-4.8.1.9-to16',
   'compact_32k-4.8.1.9-to32',
-  'compact_32k-4.8.2.1-to16',
   'compact_32k-4.8.2.1-to32',
 ]);
 
@@ -184,12 +177,10 @@ export const FPS_PATCHES: readonly FpsPatch[] = FPS_PATCH_TABLE.map((source) => 
  * The rate an entry was MEASURED to publish at on the bench, where that differs from the table's target
  * (TESTING.md 42.20, mean of three runs of the frame counter, whole fps; the byte edits are the table's and
  * are not changed). The offer names this rate: the page's button, its note and its confirmation, and the CLI's
- * plan, all read the plan's toHz. 1.3.0.8's 32 Hz entry publishes 26 fps; its 16 Hz entry 14 fps (not offered:
- * the offer takes the highest target of an image's entries). Entries not listed run at their target.
+ * plan, all read the plan's toHz. 1.3.0.8's 32 Hz entry publishes 26 fps. Entries not listed run at their target.
  */
 export const FPS_MEASURED_HZ: ReadonlyMap<string, number> = new Map([
   ['compact_32k-1.3.0.8-to32', 26],
-  ['compact_32k-1.3.0.8-to16', 14],
 ]);
 
 /** The corpus builds that already run at a target rate, by the SHA-256 of the decrypted image. */
@@ -446,7 +437,7 @@ export function planFpsPatch(image: Uint8Array, cameraVersion: string | null): F
     status: 'refused',
     reason:
       'this image is not in the frame-rate patch table, so no frame-rate patch is made for this build. ' +
-      'The table names the Compact 1.2.0.0, 1.3.0.0, 1.3.0.8 (8 Hz and 16 Hz FF), 4.8.1.7, 4.8.1.9, 4.8.2.1 and ' +
+      'The table names the Compact 1.3.0.0, 1.3.0.8 (8 Hz and 16 Hz FF), 4.8.1.7, 4.8.1.9, 4.8.2.1 and ' +
       '4.16.1.7 FF builds and the Compact PRO 1.0.3.x and 4.9.x builds; no other build has an entry',
   };
 }

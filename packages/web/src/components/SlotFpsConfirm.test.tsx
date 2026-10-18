@@ -11,9 +11,9 @@ import { buttonByText, render } from '../test-helpers';
 
 const OFFER = {
   status: 'offer',
-  patch: { id: 'compact_32k-1.3.0.0-to16' },
+  patch: { id: 'compact_32k-1.3.0.0-to32' },
   fromHz: 8,
-  toHz: 16,
+  toHz: 32,
   sites: [{ offset: 0xb964, before: 0x24, after: 0x22 }],
   sumWord: { offset: 0x238, before: 0 },
 } as unknown as FpsOffer;
@@ -52,9 +52,9 @@ describe('the frame-rate patch confirmation', () => {
   it('says the bank, the build, the rate change, and that the rate is untested on hardware', () => {
     const { unmount } = setup();
     const text = dialog().textContent;
-    expect(text).toContain('Make slot B run at 16 FPS?');
+    expect(text).toContain('Make slot B run at 32 FPS?');
     expect(text).toContain('holds firmware 1.3.0.0');
-    expect(text).toContain('makes its image run at 16 Hz instead of 8 Hz');
+    expect(text).toContain('makes its image run at 32 Hz instead of 8 Hz');
     expect(text).toContain('1 byte(s) of the image');
     expect(text).not.toContain('UNTESTED on hardware');
     unmount();

@@ -1623,21 +1623,21 @@ describe('the 2014 plaintext chain', () => {
 
 type OfferPlan = Extract<FpsPlan, { status: 'offer' }>;
 
-/** A plan the way core makes one for the 1.3.0.0 stock bank: 8 Hz to 16 Hz, one byte changed plus the sum word. */
+/** A plan the way core makes one for the 1.3.0.0 stock bank: 8 Hz to 32 Hz, one byte changed plus the sum word. */
 function offerOf(): OfferPlan {
   return {
     status: 'offer',
     patch: {
-      id: 'compact_32k-1.3.0.0-to16',
+      id: 'compact_32k-1.3.0.0-to32',
       family: 'compact_32k',
       version: '1.3.0.0',
       fromHz: 8,
-      targetHz: 16,
-      row: { label: 'mode-6 capture program, block 2', offset: 0xb964, length: 34 },
+      targetHz: 32,
+      row: { label: 'mode-8 capture program, block 8', offset: 0xb898, length: 34 },
     } as unknown as OfferPlan['patch'],
     fromHz: 8,
-    toHz: 16,
-    sites: [{ offset: 0xb964, before: 0x24, after: 0x22 }],
+    toHz: 32,
+    sites: [{ offset: 0xb898, before: 0x84, after: 0x81 }],
     sumWord: { offset: 0x238, before: 0 },
   };
 }
@@ -1648,13 +1648,13 @@ function writtenResult(pre: FpsPreDump): FpsPatchResult {
     key: 'a',
     patch: offerOf().patch,
     fromHz: 8,
-    toHz: 16,
+    toHz: 32,
     pre,
     patched: pre.plain,
-    changed: [0xb964, 0x238],
+    changed: [0xb898, 0x238],
     plan: fakePlan('a', 'plain', pre.plain),
     written: { key: 'a', commitStatus: 0, verified: true, after: pre.raw, notes: [] },
-    readBack: { checked: true, differing: [0xb964, 0x238], missing: [], unexpected: [], ok: true },
+    readBack: { checked: true, differing: [0xb898, 0x238], missing: [], unexpected: [], ok: true },
     notes: ['saved the pre-patch dump'],
   };
 }
@@ -1726,7 +1726,7 @@ describe('patch-fps', () => {
       written: false,
       dryRun: true,
       status: 'offer',
-      toHz: 16,
+      toHz: 32,
       changedBytes: 1,
     });
     expect(patched).toBe(0);

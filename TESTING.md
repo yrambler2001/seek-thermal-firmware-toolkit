@@ -7770,3 +7770,30 @@ mode 6 only, so it has no rate or picture test for the mode-8 edit; the rate and
 **5. What is not established.** The mode-8 edit's effect on the shutter/NUC sequence (blocks 0 to 7, 9 to 11 are unchanged, and the camera ran its shutter
 cycle normally in the measurements); 1.2.0.0 and the other 2014-chain builds; the picture's noise against stock (the averaging is gone by design: the
 picture is the single-capture picture, as at 32 Hz on the 4.8.2.1, 42.24); the cause of the 16-versus-32 Hi FPS difference above.
+
+### 42.26 The 16 Hz frame-rate patches are removed; the 1.3.0.0 32 Hz patch is the mode-8 edit alone (2026-10-18)
+
+**Summary.** Every 8 to 16 Hz patch is gone from the table, the offers, the tests and the tools (FW-V1 `emu/fps_patch.py`, `fps-patch-table.ts`).
+Removed: `compact_32k-1.2.0.0-to16`, `compact_32k-1.3.0.0-to16`, `compact_32k-1.3.0.8-to16`, `compact_32k-4.8.1.7-to16`,
+`compact_32k-4.8.1.9-to16`, `compact_32k-4.8.2.1-to16`, and `compact_32k-1.3.0.0-to32-from16` (the migration entry 42.25 added). The tool's targets are 18 Hz
+(the Compact PRO 9 Hz images) and 32 Hz; `--to 16` is no longer a choice. The 16 Hz FF builds (1.3.0.8-FF, 4.16.1.7-FF) are stock 16 Hz images, not patches,
+and keep their 32 Hz entries.
+
+**What changed per build.**
+- 1.3.0.8, 4.8.1.7, 4.8.1.9, 4.8.2.1: their 32 Hz entries are unchanged and are now their only entry (the offer already took the highest target).
+- 1.3.0.0: `compact_32k-1.3.0.0-to32` no longer carries the mode-6 16 Hz edit. It is the mode-8 steady-block edit alone (`+0xB898` count 4 -> 1;
+  `+0xB89A..+0xB8A1` `59 20 69 20 69 20 79 27 -> 39 27 00 00 00 00 00 00`): 9 image bytes and the sum word, 13 changed bytes. Stock
+  `862717a8...` goes to `ef90c94a...`. The image measured on the bench in 42.25 (`d91284c6...`) had the mode-6 edit as well; it is listed as a known 32 Hz build
+  (`compact-1.3.0.0-mode8-32hz`) so the page reads it as already at rate. The mode-6 stream is not used by the Normal or Hi FPS streams.
+- 1.2.0.0: it had only the 16 Hz patch, so it has no patch now (its mode-8 block was never read).
+
+**Tests (measured).** FW-V1 `fps_patch_unit_tests.py` 65 of 65 (the 16 Hz tests were removed or rewritten; new: no 16 Hz target, no `-to16` key, no 1.2.0.0 entry,
+the 1.3.0.0 entry edits `0xB898` and `0xB89A` only). `fps_patch_tests.py` keeps its 32 Hz rows (1.3.0.8 and 4.8.2.1 re-run: 32.258 Hz, PASS); its 16 Hz rows,
+the 16 Hz long-run row and the 16 Hz labels in `fps_patch_frames.py` / `fps_long_stream.py` are gone. Core `fps-patch.test.ts`, `fps-patch.differential.test.ts` (with the
+corpus: the fixture holds 11 entries, the 1.3.0.0 output on the image and on nine dump banks), `slots/fps-patch.test.ts`, `page-expectations.emulator.test.ts` (the 1.2.0.0
+row is now "no frame-rate offer") and the emulator flow `fps-patch.emulator.test.ts` for 1.3.0.0 and 1.3.0.8: 218 passed, 1 skipped. Web 332 of 332, CLI `slots.test.ts` 100 of 100,
+typechecks and lint clean. The CLI's `camera.test.ts` has one failure that is not from this change (its expected text for the 2016 Compact PRO refusal is older than the
+message); the untracked `real-camera-probe.test.ts` also ran when the whole CLI suite was run by mistake (it is a read-only probe and fails on this camera).
+
+**Bench.** The new 1.3.0.0 image `ef90c94a...` was not run on a camera in this section; the bench proof in 42.25 is of `d91284c6...`, which differs from it by the
+mode-6 16 Hz edit. [not measured]

@@ -943,9 +943,9 @@ function fpsPreDumpOf(key: SlotKey): FpsPreDump {
 function fpsResultOf(key: SlotKey): FpsPatchResult {
   return {
     key,
-    patch: { id: 'compact_32k-1.3.0.0-to16' },
+    patch: { id: 'compact_32k-1.3.0.0-to32' },
     fromHz: 8,
-    toHz: 16,
+    toHz: 32,
     pre: fpsPreDumpOf(key),
     changed: [0xb964, 0x238],
     written: { verified: true, commitStatus: 0, after: null, notes: [] },
