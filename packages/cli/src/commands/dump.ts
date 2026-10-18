@@ -18,7 +18,7 @@
  * a successful one, and it is not a reason to throw the bytes away either.
  */
 
-import { runDump, runSweep } from '@seek-fw/core';
+import { readRunningFirmware, runDump, runSweep } from '@seek-fw/core';
 import type { CommandContext, CommandResult } from '../cli.js';
 import { CliError } from '../errors.js';
 import {
@@ -40,6 +40,20 @@ const V4_FAMILIES: ReadonlySet<string> = new Set(['modern-4x', 'generic']);
 export async function dumpCommand(ctx: CommandContext): Promise<CommandResult> {
   const session = await openSession(ctx);
   try {
+    /* The version first, and nothing else: the probe below reads a bank open on every
+     * line, which a 0.x or 1.x camera must not be asked for. */
+    const running = await readRunningFirmware(session.device);
+    const major = Number.parseInt(running.version?.split('.')[0] ?? '', 10);
+    if (running.version !== null && major <= 1) {
+      throw new CliError(
+        `this camera runs ${running.version}, a 0.x/1.x 2014–2016 build, which \`seek-fw dump\` ` +
+          'does not read; nothing was read but the version',
+        {
+          code: 'dump/refused',
+          hint: 'Use `seek-fw preserve` for this camera. `seek-fw info` shows what it answers as.',
+        },
+      );
+    }
     const choice = await chooseProfileByProbe(ctx, session);
     if (!V4_FAMILIES.has(choice.profile.id)) {
       throw new CliError(

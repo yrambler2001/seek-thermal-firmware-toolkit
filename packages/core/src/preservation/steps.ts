@@ -108,6 +108,7 @@ import {
   buildV1Patch,
   clearsArmCursor,
   conjugateCapture,
+  outsideLineRefusal,
   preWideningRefusal,
   stagedAcceptanceSum,
   stagedFormOf,
@@ -1297,6 +1298,10 @@ async function runBackupStep(
   const version = await withSession(opener, async (device) => {
     assertLive(signal);
     const v = await readVersion(device);
+    /* THE LINE GATE, before a single window is armed or read: a 4.x or Nano build is
+     * the 4.x/Nano flow's, and this run refuses it with the tab to use. */
+    const outside = outsideLineRefusal(v);
+    if (outside !== null) fail(outside);
     /* THE GENERATION GATE, before a single window read: the 2014 builds older
      * than 0.7.0.7 are outside the widening route (doc 36.7, measured) and
      * this run refuses with that evidence instead of reading anything. */

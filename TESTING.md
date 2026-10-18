@@ -7096,3 +7096,51 @@ Run here (targeted, no camera, no emulator): `npx vitest run --project web` 29 f
 - Nothing here was run against the real camera. The Info tab's read and the slots page's device info are the existing identity reads, unchanged on the wire.
 - Two pieces of copy left with their components: the re-key warning on the flash page's prepared write (`FlashPreview`), and the flash page's opcode table. The slots page keeps its own write warning, which the safety test now pins.
 - CLI: the `info`, `preserve`, `dump`, `decrypt file|slot`, `slots` shape is the other agent's. Nothing in `packages/cli` was edited here.
+
+### 42.18 The non-slots pages on the emulator, in Electron and through the CLI: three defects fixed on the way (2026-10-18)
+
+**What runs.** `npm run e2e:pages:emu` (`e2e/pages-emu.e2e.ts`, helpers `e2e/lib/pages-camera.ts` and `e2e/lib/pages-corpus.ts`) drives the four pages in an Electron window on the Vite dev server. The window's `navigator.usb` is the bridge's stand-in, served by the FW-V1 emulator booted from a corpus entry, so no physical camera and no real WebUSB is reached. A session with no camera gets an empty bus. The CLI mirrors are `packages/cli/test/pages-emulator.test.ts`: the real parser and commands, over node-usb on the emulator (`node-usb-over-usbip.ts`), and a backend that enumerates nothing for the commands that need no camera.
+
+**The corpus is the reference.** Every corpus file is read through `data/corpus/MANIFEST.json` and checked against its recorded sha256 and size before a test compares against it. The plaintext references are the image-only entries the corpus holds for a bank found at a known address in a whole dump: Nano 300 44.27.3.10 bank A (Key B), Compact PRO 1.0.3.0 bank B (2016 chain), Compact PRO 1.0.3.0 FF recovery bank, Compact PRO 4.18.2.0 FF bank A, Compact 4.8.2.1 bank A, Compact 1.3.0.0 bank A (2014 plain chain).
+
+**Results (measured on the final HEAD).**
+
+| Spec | Result | Covers |
+| --- | --- | --- |
+| `pages-emu.e2e.ts` (Electron, emulator) | 42 of 42 pass | Info, 0.x/1.x, 4.x/Nano, Decrypt File/Slot |
+| `pages-emulator.test.ts` (CLI, emulator and no camera) | 17 of 17 pass | `info`, `preserve --backup-only`, `dump`, `decrypt file`, `decrypt slot`, usage |
+| `line-gate.test.ts` (core, unit) | 3 of 3 pass | the 0.x/1.x line gate on the version string |
+| `useDumpPanel.test.tsx` (web, unit) | 14 of 14 pass | the 4.x tab's refusal before any family question |
+| `render-smoke`, `App`, `PreserveView` (web) | 45 of 45 pass | the tabs, the refusal copy |
+| `steps`, `patch`, `line-gate` (core) | 75 pass, 6 skipped (the emulator and corpus cases, skipped without the env) | the Preserve pipeline's unit tests |
+| `preserve`, `surface` (CLI) | 47 of 47 pass | the CLI's preserve and surface |
+
+`npm run typecheck` is clean for every project, and ESLint is clean on every changed file.
+
+**The e2e pass and denial sets, per page.**
+
+- *Info* (1.3.0.0, 4.8.2.1, Compact PRO 2016 1.0.3.0): the version is read (`Read. Firmware <v>.`), the Info text names the tab for the camera, and the wire holds only `in 0x4e` (GetFirmwareInfo, two reads). With no camera the read is disabled, says "Connect the camera above first", and the wire is empty.
+- *Dump & decrypt 0.x/1.x* (1.3.0.0, Compact PRO 1.0.3.0): Read & build completes and saves its run file; the run file's backup holds the emulated flash, window by window, for the 31 windows of `preservationWindows()` (the backup file is the 4 MiB flash image with those windows at their offsets); step 03 is offered with no past-commit alarm; the wire has no write, commit, reset or setter. Denial: a 4.8.2.1 is refused on the version, before any window is armed or read (see defect 3).
+- *Dump & decrypt 4.x/Nano* (Compact 4.8.2.1, Nano 200 42.32.3.10): "Dump all selectors" sits inside the Options spoiler, which is closed by default and hidden (checked with `checkVisibility`); Start dump finishes `Done — N/N windows read`, and the dump image equals the emulated flash byte for byte; "Dump all selectors", from Options, runs to `selectors armed`. Denial: a 1.3.0.0 is refused before any window is read (see defect 1), with the 0.x/1.x tab named.
+- *Decrypt File/Slot, no camera*: no connect section and no USB banner; a whole corpus Nano 300 dump decrypts to the corpus plaintext for 0x14030000; a 64 KiB slot cut from each of the six known banks downloads as the corpus plaintext, byte length and sha256 equal (2014 plain chain, 2016 chain, 2016 FF, the 4.x Nano bank with Key B, the 4.x Compact PRO FF, the 4.8.2.1 Compact bank). Denials: an erased bank is reported as empty and nothing is downloaded; a 65,535-byte file is refused with "is not a firmware slot this page can decrypt" and nothing is downloaded; a random 64 KiB file is refused; a bank with an image header over random bytes ("key does not recover") is refused, nothing downloaded.
+
+**The CLI pass and denial sets.** `info` on the three cameras, with `tabs` in the web order and no flash write, commit or reset on the wire; `info` with no camera exits 1 and sends nothing; `info --devices` lists none and exits 0. `preserve --backup-only` on 1.3.0.0 and the 2016 PRO writes the backup, equal to the emulated flash window by window, with run id and `nextStep` `patch`. `preserve --backup-only` on a 4.8.2.1 exits 1, names the 0.x/1.x build rule and `seek-fw dump`, and sends no `in 0x4f` and no `out 0x52`. `dump` on a 4.8.2.1 writes a 4 MiB image equal to the emulated flash; `dump` on a 1.3.0.0 exits 1 with `seek-fw preserve` named and sends no window read or arm. `decrypt file` on the Nano 300 dump and `decrypt slot` on its bank A both give the corpus plaintext, with the report written; an erased bank exits 0 and reports `empty`; a 65,535-byte file exits 1 (`slots/refused`) and writes nothing; a random bank and a bank whose key does not recover exit 1 with the report written and nothing decrypted; `decrypt` without a form and `dump --profile` exit 2.
+
+**Defects found and fixed.** Each has a regression test, and each was checked by breaking the code on purpose.
+
+1. *The 4.x tab read a window from a 0.x/1.x camera before refusing it.* `identifyCamera`'s channel questions arm two BeginFirmwareUpgrade selectors and read one window (GetFeaturedFirmwareData, `in 0x4f`), then the tab refused. The page's own text says "refused before anything is read". Fix (`packages/web/src/hooks/useDumpPanel.ts`): the tab reads the version first, and a 0.x or 1.x camera the identity gate permits is refused with `lineRefusal` before the family questions. A build the gate refuses (below 0.8.0.0) keeps its old refusal. Regression: `useDumpPanel.test.tsx` (the 2016 and sweep tests assert that only version reads are sent). With the check disabled, two tests fail; restored.
+2. *`seek-fw dump` did the same.* `chooseProfileByProbe` reads a bank open on every line before the refusal. Fix (`packages/cli/src/commands/dump.ts`): the version is read first and a 0.x/1.x build is refused with `seek-fw preserve` named, before the probe. Regression: `pages-emulator.test.ts`, "refuses a 1.3.0.0 on the version" (no `in 0x4f`, no `out 0x52` on the ledger).
+3. *`preserve` on a 4.x camera ran the backup and failed with no pointer.* The backup step's only version gate was the 0.x generation gate, so a 4.8.2.1 armed windows, read them, and ended `Failed — see the log above.` with a `backup-failed` run file. The page never named the 4.x tab. Fix (`packages/core/src/preservation/patch.ts`, `outsideLineRefusal`; `steps.ts`): after the version read, a version whose major number is 2 or more is refused, before any window is armed or read. The message names the build, says nothing beyond the version was read, and points to Dump & decrypt 4.x/Nano (`seek-fw dump`). Regression: `pages-emu.e2e.ts` (the step's log line names the build and the tab, and the wire has no `in 0x4f` and no `out 0x52`); `pages-emulator.test.ts`; `line-gate.test.ts`. With the gate disabled the CLI test fails; restored.
+
+*A note on the test itself.* The first version of the defect-3 assertion looked for the tab's name anywhere on the page. The navigation bar always carries that name, so the assertion would have passed on the broken build. It now reads the step's own log line.
+
+**Recorded, not changed.**
+
+- The CLI `info` sends SetFirmwareInfoFeatures (0x55) and SetRAMDataFeatures (0x5a) on its read path. `ops.ts` lists both in `FLASH_OPS`. They are feature selectors, not flash writes, and the web Info sends neither. `info` also reads the boot config and all three slots, while the web Info reads only the version and says "Nothing else". Both are the read paths as they were built; the CLI's `info` help says it is read-only, which is true of writes. Not changed.
+- The emulated Compact 1.3.0.8 FF (the image-only corpus entry, booted on a donor image) does not complete Read & build on the emulator. The step refuses at the derivation gate: no candidate derivation of the factory plaintext passes, and no build in the table matches the donor-built image. It writes nothing. It is not a passing flow here and is not in the pass set. TESTING.md 26.4 and 26.5 record a different construction of this build. Testing it needs a full-flash FF dump in the corpus.
+
+**Not known here.** Whether a real 1.3.0.8 FF part passes Read & build (the emulated one, built on a donor image, does not). That the real camera answers the 4.x tab's and the 0.x/1.x tab's refusals the way the emulator does: nothing was run on hardware in this section.
+
+**Not run here.** The real bench camera (`e2e/lib/bench` is the bench agent's); the real-camera versions of these pages; the whole vitest suite (targeted files only, as the brief says); the emulator-backed core suites other than the ones listed (the core pipeline emulator tests need `SEEK_EMU_DIR` and were not run for this change); the docs bundle was not rebuilt.
+
+**Commit.** See the commit on `worktree-agent-a1e044e0448116f64`; the plan's Log has the entry.
