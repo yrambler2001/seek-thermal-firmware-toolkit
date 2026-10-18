@@ -19,7 +19,7 @@
  * string 5 differently, this test would say so instead of passing vacuously.
  * ==================================================================== */
 
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 
 import { afterAll, describe, expect, it } from 'vitest';
@@ -36,7 +36,7 @@ import {
 } from '../../core/test/emulator/suite.js';
 import { NodeUsbBackend, type BackendOptions } from '../src/backend.js';
 import { run } from '../src/cli.js';
-import { EXIT_OK } from '../src/errors.js';
+import { EXIT_FAILED, EXIT_OK } from '../src/errors.js';
 import { tempDir, testIo } from './helpers.js';
 import { nodeUsbOverUsbIp, type NodeUsbOverUsbIp } from './node-usb-over-usbip.js';
 
@@ -65,6 +65,38 @@ async function cli(argv: readonly string[], device: NodeUsbOverUsbIp): Promise<C
   const { io, stdout, stderr } = testIo({ backend });
   const code = await run([...argv, '--json'], io, new AbortController().signal);
   return { code, json: JSON.parse(stdout.text) as Record<string, unknown>, stderr: stderr.text };
+}
+
+/** `cli` without parsing stdout: a refusal prints no JSON. */
+async function cliRaw(
+  argv: readonly string[],
+  device: NodeUsbOverUsbIp,
+): Promise<{ readonly code: number; readonly stderr: string }> {
+  const backend = (options: BackendOptions): UsbBackend =>
+    new NodeUsbBackend({
+      ...options,
+      enumerate: () => Promise.resolve([device]),
+      clock: device.usbip.deadlineClock,
+    });
+  const { io, stderr } = testIo({ backend });
+  const code = await run([...argv], io, new AbortController().signal);
+  return { code, stderr: stderr.text };
+}
+
+/** The preserve run's backup image (31 windows at their flash offsets), wherever the run put it. */
+function findBackupImage(dir: string): Buffer {
+  const walk = (current: string): string | null => {
+    for (const name of readdirSync(current)) {
+      const full = path.join(current, name);
+      if (statSync(full).isDirectory()) {
+        const found = walk(full);
+        if (found !== null) return found;
+      } else if (name === 'preserve_backup_windows.bin') return full;
+    }
+    return null;
+  };
+  const file = walk(dir);
+  return file === null ? Buffer.alloc(0) : readFileSync(file);
 }
 
 describe.skipIf(!available)(
@@ -124,25 +156,29 @@ describe.skipIf(!available)(
               serial: '101310HSNEA2',
             });
 
-            /* ---- dump: every window it reads is the device's own bytes ---- */
-            const dump = await cli(['dump', '--out', out.path, '--no-decrypt'], device);
-            expect(dump.code, dump.stderr).toBe(EXIT_OK);
-            expect(dump.json).toMatchObject({ windowsRead: 31, windowsExpected: 31 });
-            const truth = readFileSync(truthPath);
-            const files = (dump.json.output as { files: string[] }).files.filter((file) =>
-              /windows\/addr_[0-9a-f]{8}_subcmd_[0-9a-f]{2}\.bin$/.test(file),
+            /* ---- the 2014 line's read-only dump is the first preserve step: every window it
+             * reads is the device's own bytes (`dump` is for 4.x/Nano and refuses this camera) ---- */
+            const refused = await cliRaw(['dump', '--out', out.path, '--no-decrypt'], device);
+            expect(refused.code).toBe(EXIT_FAILED);
+            expect(refused.stderr).toContain('seek-fw preserve');
+            const backup = await cli(
+              ['preserve', '--backup-only', '--yes', '--out', out.path],
+              device,
             );
-            expect(files).toHaveLength(31);
-            for (const file of files) {
-              const address = Number.parseInt(/addr_([0-9a-f]{8})/.exec(file)?.[1] ?? '', 16);
-              const offset = address - FLASH_BASE;
-              const bytes = readFileSync(file);
-              expect(bytes.length, path.basename(file)).toBe(0x10000);
-              expect(
-                Buffer.compare(bytes, truth.subarray(offset, offset + bytes.length)),
-                `${path.basename(file)} equals the emulated part at ${address.toString(16)}`,
-              ).toBe(0);
-            }
+            expect(backup.code, backup.stderr).toBe(EXIT_OK);
+            const truth = readFileSync(truthPath);
+            const image = findBackupImage(out.path);
+            expect(image.length, 'the backup image').toBeGreaterThan(0);
+            /* the 31 windows, 64 KiB each, 0x14010000..0x141FFFFF */
+            const first = 0x14010000 - FLASH_BASE;
+            const span = 31 * 0x10000;
+            expect(
+              Buffer.compare(
+                image.subarray(first, first + span),
+                truth.subarray(first, first + span),
+              ),
+              'the backup windows equal the emulated part',
+            ).toBe(0);
           });
           await row.assertDelivery();
         } finally {

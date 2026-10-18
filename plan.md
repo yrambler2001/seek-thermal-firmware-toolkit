@@ -53,3 +53,4 @@ Tabs: Info | Dump & decrypt 0.x/1.x 2014/2016 | Dump & decrypt 4.x/Nano | Decryp
 - 04:15 three agents launched from 72c705f: shutter + Compact measurer (bench), web restructure, CLI restructure; check cron every 10 min.
 - 04:20 added item 3b (Electron tests for the other pages, emulator and real camera).
 - 04:35 CLI restructured on this branch: `info` (--devices, --profiles), `preserve` (--backup-only, --zip), `dump` (v4 only, --all-selectors), `decrypt file|slot` (new slot form, core decryptSlotFile), `slots`; `flash`, `sweep`, `devices`, `profiles` removed with no alias. TESTING.md 42.16 lists what `flash` did that `slots flash` does not.
+- 04:42 CLI branch merged; emulator-cli test now takes the read-only 2014 dump through `preserve --backup-only` and checks that `dump` refuses the camera (emulator-cli, slots.emulator, giveup, slots-empty: 34/34).
