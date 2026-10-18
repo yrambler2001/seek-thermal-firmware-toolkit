@@ -34,12 +34,12 @@ Tabs: Info | Dump & decrypt 0.x/1.x 2014/2016 | Dump & decrypt 4.x/Nano | Decryp
 - [ ] Tests that expect success and tests that expect a denial, on the emulator (core, CLI, web) and on the real camera through the CLI and Electron, with banner assertions (no "cannot be written" banner whenever the plan allows a write).
 
 ## 3b. Quality of the other pages (Electron tests on the emulator and on the real camera)
-- [ ] Info, Dump & decrypt 0.x/1.x 2014/2016, Dump & decrypt 4.x/Nano and Decrypt File/Slot each get Electron tests, a pass set and a denial set per page:
+- [~] Info, Dump & decrypt 0.x/1.x 2014/2016, Dump & decrypt 4.x/Nano and Decrypt File/Slot each get Electron tests, a pass set and a denial set per page (emulator part done: `npm run e2e:pages:emu`, 42 of 42; TESTING.md 42.18; the real-camera part is not run):
   - emulator: the page drives a corpus camera and the expected result appears (dump zip, decrypted output, version read), plus the refusals (wrong camera line for the tab, unreadable or foreign slot file, no camera where one is needed).
   - real bench camera (Compact 1.3.0.0): the same flows through the page, camera restored to baseline afterwards.
   - banner/text assertions as for the slots page (no wrong refusal banner when the flow is allowed).
-- [ ] The same flows through the CLI commands, so both entrances are covered.
-- [ ] Findings from these tests are fixed in the pages, then the matrix is re-run.
+- [~] The same flows through the CLI commands, so both entrances are covered (emulator and no-camera part done: `packages/cli/test/pages-emulator.test.ts`, 17 of 17; the real camera is not run).
+- [~] Findings from these tests are fixed in the pages (three fixed in 42.18: the 4.x tab and `dump` read a window before refusing a 0.x/1.x camera; `preserve` ran the backup on a 4.x camera with no pointer to the 4.x tab), then the matrix is re-run (emulator re-run done; the real-camera matrix is not).
 
 ## 4. Verification
 - [ ] Full Electron bench matrix (28 subjects) on the final HEAD, after each stage that changes the page or the plan.
@@ -48,6 +48,8 @@ Tabs: Info | Dump & decrypt 0.x/1.x 2014/2016 | Dump & decrypt 4.x/Nano | Decryp
 
 ## 5. Open items carried over (not started)
 - Stage two of FPS (encrypted lines), faithful platform for the 1.3.0.8 FF, FW-V1 branch `ff-dump-keyed-bootloader`.
+- Preserve Read & build on the emulated 1.3.0.8 FF (image-only, donor-built) refuses at the derivation gate and writes nothing; testing it needs a full-flash FF dump in the corpus (TESTING.md 42.18).
+- CLI `info` sends SetFirmwareInfoFeatures (0x55) and SetRAMDataFeatures (0x5a) on its read path, and reads the slots; the web Info sends neither (TESTING.md 42.18, recorded, not changed).
 
 ## Log
 - 04:10 plan written; FPS merged and enabled.
@@ -59,3 +61,5 @@ Tabs: Info | Dump & decrypt 0.x/1.x 2014/2016 | Dump & decrypt 4.x/Nano | Decryp
 - 04:55 shutter/measurer branch merged. Owner's standing decision stands (offer on, no warning); finding recorded in TESTING.md 42.15 for the morning. Next: bench-measure the 1.2.0.0 and 1.3.0.8 entries (their labels 16 and 32 are unmeasured).
 - 04:43 web restructure (branch worktree-agent-ae06de44936493a52): five tabs; the 4.x tab is v4-only; 2016 and 1.3.0.8 FF stay on the 0.x/1.x tab (no firmware select added); Decrypt File/Slot decrypts a slot file with no camera; Firmware & flashing removed. Section 2 CLI item and the docs bundle are not done here (TESTING.md 42.17).
 - 05:05 web, CLI and measurer branches merged (the Decrypt tab now uses the CLI's decryptSlotFile; web 326/326). Launched A (emulator page tests, non-slots), B (slots page quality + expectation table, emulator), C (bench: FPS map for 1.2.0.0 and 1.3.0.8, real-camera page runs, slots bench). Next after they merge: full 28-subject matrix on the final HEAD, docs bundle rebuild.
+- 06:05 agent A (pages, emulator): `npm run e2e:pages:emu` 42 of 42 and `pages-emulator.test.ts` (CLI) 17 of 17 on the final HEAD. Fixed three defects: the 4.x tab and `seek-fw dump` read a window before refusing a 0.x/1.x camera (now refused on the version); `preserve` on a 4.x camera ran the backup and failed without naming the 4.x tab (now refused after the version read). Regression tests and mutation checks in TESTING.md 42.18. Not run: the real camera; the 1.3.0.8 FF Preserve on the emulator fails at the derivation gate (open).
+- 06:05 agent A merged: pages-emu Electron 42/42, pages-emulator CLI 17/17; three refuse-before-read defects fixed (4.x tab, `seek-fw dump`, Preserve on a 4.x camera). Recorded: the emulated 1.3.0.8 FF does not complete Read & build on the 0.x/1.x tab (derivation gate refusal, no write); needs a full-flash FF dump.

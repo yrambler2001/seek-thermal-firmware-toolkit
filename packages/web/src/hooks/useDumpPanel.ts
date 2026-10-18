@@ -29,6 +29,8 @@ import {
   SeekError,
   errorMessage,
   isoStamp,
+  identityGate,
+  readRunningFirmware,
   runDump,
   runSweep,
   type ProfileId,
@@ -37,6 +39,7 @@ import {
 import { reportInUseElsewhere } from '../lib/camera-lock';
 import { downloadArchive, mib } from '../lib/download';
 import { logHint } from '../lib/hints';
+import { firmwareLineOf } from '../lib/family-line';
 import { chooseActingProfile, refusalOf, type ActingProfile, type Refusal } from '../lib/identify';
 import {
   asOptionsFailure,
@@ -96,6 +99,21 @@ function notThisFamily(id: string, name: string): SeekError {
   );
 }
 
+/**
+ * The refusal for a 0.x or 1.x camera on this tab. It is decided on the version
+ * alone, before the family questions: those send three BeginFirmwareUpgrade
+ * arms and a window read, which a camera of the other line must not see.
+ */
+function lineRefusal(version: string): SeekError {
+  return new SeekError(
+    'profile/unsupported',
+    `The camera runs ${version}, a 0.x or 1.x build (2014 or 2016), and this tab reads only ` +
+      '4.x/Nano. Nothing was read but the version. For a 0.x or 1.x camera, use ' +
+      '"Dump & decrypt 0.x/1.x 2014/2016".',
+    { detail: { version } },
+  );
+}
+
 /** The original's cancel copy for these panels. */
 const CANCELLING = 'Cancelling — will save whatever has been read so far ...';
 
@@ -134,6 +152,14 @@ export function useDumpPanel(params: DumpPanelParams): DumpPanelApi {
 
       try {
         await transport.open();
+        const running = await readRunningFirmware(client);
+        if (
+          running.version !== null &&
+          firmwareLineOf(running.version) === 'legacy' &&
+          identityGate(running).permitsArming
+        ) {
+          throw lineRefusal(running.version);
+        }
         const chosen = await chooseActingProfile(client, mode, (text, level) => {
           reporter.reporter.log(text, level);
         });
