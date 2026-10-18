@@ -47,6 +47,7 @@ import {
 import { SeekDevice } from '../src/protocol/client.js';
 import { OP } from '../src/protocol/ops.js';
 import { legacyAuth, OLD_FW_UNLOCK_TOKEN } from '../src/profiles/legacy-auth.js';
+import { deriveWriteKeys, slotWriteRefusal } from '../src/slots/write-keys.js';
 import { readDeviceInfo } from '../src/workflows/device-info.js';
 import { prepareImage, writeFirmware } from '../src/workflows/flash.js';
 import type { DeviceState, WorkflowContext } from '../src/workflows/types.js';
@@ -247,6 +248,12 @@ describe('the 2014 plaintext chain on the normal flash path', () => {
     expect(log).not.toContain('footer BAD');
     expect(log).not.toContain('NOT bootable');
     expect(log).not.toContain('unknown key');
+    /* the analysis names no key for a plain bank (the placeholder was the bank's own identity), and
+     * the slots page's write verdict is open: no upload key is derived on this chain (TESTING.md 42.13) */
+    expect(state.byKey.get('a')?.keyName).toBeNull();
+    expect(state.byKey.get('r')?.keyName).toBeNull();
+    expect(slotWriteRefusal(state)).toBeNull();
+    expect(deriveWriteKeys(state).plainChain).toBe(true);
   }, 60_000);
 
   it('stages the plain image verbatim — no cipher, no footer, no keys', async () => {

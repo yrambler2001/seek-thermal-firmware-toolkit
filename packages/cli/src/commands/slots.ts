@@ -382,7 +382,7 @@ function slotRow(view: SlotView): string[] {
     view.active ? 'yes' : 'no',
     versionText(view),
     header === null ? '-' : `${String(header.length)} B`,
-    state?.keyName ?? '-',
+    state?.keyName ?? (state?.plain == null ? '-' : 'none (plaintext)'),
     bootableText(view),
     sha256 === null ? '-' : sha256.slice(0, 16),
   ];
@@ -431,6 +431,16 @@ export function writeKeyLines(report: SlotsReport, color: boolean): string[] {
   const refusal = slotWriteRefusal(report.state);
   const keys = deriveWriteKeys(report.state);
   const lines: string[] = ['', heading('Write keys', color)];
+  if (refusal === null && keys.plainChain) {
+    lines.push(
+      table([
+        ['  chain', 'the 2014 plaintext chain: every bank is stored plain, so none holds a key'],
+        ['  written as', 'the image as it is, with no key, to any bank'],
+      ]),
+    );
+    for (const line of keys.evidence) lines.push(`  · ${line}`);
+    return lines;
+  }
   if (refusal !== null || keys.atRest === null || keys.booted === null) {
     lines.push(table([['  refused', refusal ?? keys.refusal ?? 'the keys could not be derived']]));
     return lines;
@@ -543,6 +553,8 @@ export function listResult(report: SlotsReport): CommandResult {
       refused: slotWriteRefusal(report.state),
       booted: keys.booted,
       key: keys.atRest?.name ?? null,
+      /* The 2014 plaintext chain: no upload key is derived, and no bank is refused for one. */
+      plainChain: keys.plainChain,
     },
     product: report.state.description.productName,
     serial: report.state.serial,

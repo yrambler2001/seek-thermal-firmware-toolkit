@@ -142,6 +142,13 @@ export interface KeyIdentity {
 }
 
 /**
+ * The name `identifyKey` gives a keystream that matches none of the keys this read knows. It is a
+ * PLACEHOLDER, not a key: nothing may treat it as one (write-keys.ts), and a bank stored with no key
+ * at all (the 2014 plaintext chain) is not named with it (device-info.ts).
+ */
+export const UNNAMED_KEY = 'unknown key';
+
+/**
  * Which key encrypted this slot, and — separately — whether the BOOTLOADER can
  * do anything with it.
  *
@@ -171,7 +178,7 @@ export function identifyKey(
    * this whole function exists to stop being made loosely. */
   const storeName = store ? store.name : null;
   const bootable = !!(slot.accepts && name && (name === 'Key A' || name === storeName));
-  return { name: name ?? 'unknown key', bootable };
+  return { name: name ?? UNNAMED_KEY, bootable };
 }
 
 /* ---- the application's own embedded key table ---------------------------- *

@@ -126,6 +126,46 @@ describe('SlotsView', () => {
     unmount();
   });
 
+  it('shows the 2014 plaintext chain as stored plain, not as a refusal, with A, B and R still offered', () => {
+    /* The bench Compact PIR206 (1.3.0.0, 2014 chain), as the analysis reads it: A and R hold the
+     * image stored plain and name no key, so the page must not say no bank can be written (TESTING.md 42.13). */
+    const plainState = {
+      ...base,
+      version: '1.3.0.0',
+      plainChain: true,
+      keyTable: null,
+      deviceKeySlot: null,
+      storeKey: { name: 'Key B', key: null, programmed: false },
+      flashBlockedBy: [],
+      canFlash: true,
+      appKeysBlock: null,
+    } as unknown as DeviceState;
+    const plainReport = slotReport(plainState);
+    const report: SlotsReport = {
+      ...plainReport,
+      slots: plainReport.slots.map((v) =>
+        v.state !== null && v.entry.key !== 'b'
+          ? { ...v, state: { ...v.state, keyName: null } }
+          : v,
+      ),
+    };
+    const verdict = writeKeysVerdictOf(report);
+    expect(verdict.refusal).toBeNull();
+    expect(verdict.plainChain).toBe(true);
+
+    const { container, unmount } = view(panel({ plan: slotPlan(true), report }));
+    const text = container.textContent;
+    expect(text).not.toContain('No bank of this camera can be written');
+    expect(text).not.toContain('unknown key');
+    expect(text).toContain(
+      'the 2014 plaintext chain: every bank is stored plain, so none holds a key',
+    );
+    const rows = bankRows(container);
+    expect(rows[0]?.textContent).toContain('none (plaintext)');
+    expect(rows[2]?.textContent).toContain('none (plaintext)');
+    unmount();
+  });
+
   it('shows one row per bank, with the booted bank marked and every column filled', () => {
     const { container, unmount } = view(panel({ plan: slotPlan(true), report: slotReport(base) }));
 

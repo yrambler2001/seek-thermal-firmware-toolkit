@@ -15,8 +15,10 @@ import { Prose } from './Prose';
 import { Alert } from './ui/alert';
 
 export interface WriteKeysVerdict {
-  /** The measured reason no bank can be written under the derived keys, or null. */
+  /** The measured reason no bank can be written, or null. */
   readonly refusal: string | null;
+  /** The 2014 plaintext chain: every bank is stored plain, so no upload key is derived (not a refusal). */
+  readonly plainChain: boolean;
   /** The booted bank's name, as the page shows it ("slot A"), or null when none is named. */
   readonly bootedName: string | null;
   /** The key every bank is written under (e.g. "Key B"). */
@@ -38,7 +40,11 @@ export function writeKeysVerdictOf(report: SlotsReport): WriteKeysVerdict {
         `slot ${keys.booted.toUpperCase()}`);
   return {
     refusal:
-      refusal ?? (keys.atRest === null ? (keys.refusal ?? 'the keys could not be derived') : null),
+      refusal ??
+      (!keys.plainChain && keys.atRest === null
+        ? (keys.refusal ?? 'the keys could not be derived')
+        : null),
+    plainChain: keys.plainChain,
     bootedName: booted,
     keyName: keys.atRest?.name ?? null,
     bootedKeyName: keys.bootedKeyName,
@@ -59,6 +65,28 @@ export function SlotWriteKeys({ verdict }: SlotWriteKeysProps): ReactElement {
         </p>
         <p>{verdict.refusal}</p>
       </Alert>
+    );
+  }
+  if (verdict.plainChain) {
+    return (
+      <Panel className="mt-3">
+        <PanelTitle icon={<KeyRound />}>Keys for the writes</PanelTitle>
+        <KeyValue
+          rows={[
+            ['Chain', 'the 2014 plaintext chain: every bank is stored plain, so none holds a key'],
+            ['Written as', 'the image as it is, with no key, to any bank'],
+          ]}
+        />
+        {verdict.evidence.length > 0 && (
+          <Prose>
+            <ul>
+              {verdict.evidence.map((line) => (
+                <li key={line}>{line}</li>
+              ))}
+            </ul>
+          </Prose>
+        )}
+      </Panel>
     );
   }
   const booted = verdict.bootedName ?? 'the booted bank';

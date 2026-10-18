@@ -542,7 +542,12 @@ export function compareRows(
     row('Reset vector', b ? hexUp(b.entry) : none, (h) => hexUp(h.entry)),
     row('Size', b ? `${hex(b.length)} B` : none, (h) => `${hex(h.length)} B`),
     shaRow,
-    { field: 'Key', before: before.keyName ?? none, after: after.keyName },
+    /* A bank with an image and no key name is stored plain (the 2014 chain), not an empty bank. */
+    {
+      field: 'Key',
+      before: before.keyName ?? (b === null ? none : 'none (plaintext)'),
+      after: after.keyName,
+    },
   ];
 }
 

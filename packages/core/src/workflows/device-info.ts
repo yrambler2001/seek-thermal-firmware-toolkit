@@ -24,6 +24,7 @@ import {
   identifyKey,
   pickKeyTable,
   storeKeyOf,
+  UNNAMED_KEY,
   type KeyIdentity,
   type PickedKeyTable,
   type StoreKey,
@@ -789,7 +790,9 @@ export async function readDeviceInfo(
       accepts: slot.accepts,
       footerOk: slot.footerOk,
       sha256: slot.sha256,
-      keyName: identity.name,
+      /* A bank stored plain has no key, so it is not named: identifyKey would call its identity
+       * keystream UNNAMED_KEY, which reads as "encrypted under a key nobody knows" (TESTING.md 42.13). */
+      keyName: storedPlain(slot) ? null : identity.name,
       bootable,
       bootability,
     };
@@ -827,7 +830,7 @@ export async function readDeviceInfo(
               : 'NOT bootable';
       reporter.log(
         `${descriptor.name}: firmware ${slot.plainHeader?.versionStr ?? '?'}, ` +
-          `${String(slot.header?.length ?? 0)} B, ${identity.name ?? 'unknown key'}, ` +
+          `${String(slot.header?.length ?? 0)} B, ${identity.name ?? UNNAMED_KEY}, ` +
           `acceptance ${slot.accepts ? 'ok' : 'FAILS'}, ${footer} -> ${verdict}`,
         bootable
           ? 'ok'

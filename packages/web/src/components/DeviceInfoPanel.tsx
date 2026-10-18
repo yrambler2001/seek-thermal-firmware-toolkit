@@ -189,7 +189,7 @@ export function DeviceInfoPanel({ state }: DeviceInfoPanelProps): ReactElement {
                       </span>
                     </TableCell>
                     <TableCell label="Encryption">
-                      {slot.keyName ?? 'unknown'}
+                      {slot.keyName ?? (slot.plain === null ? 'unknown' : 'none (plaintext)')}
                       <span className="block text-[0.75rem]">{verdict(slot, checksFooter)}</span>
                     </TableCell>
                     <TableCell label="SHA-256 of plaintext">

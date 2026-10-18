@@ -267,7 +267,10 @@ export interface SlotState {
   readonly accepts: boolean;
   readonly footerOk: boolean;
   readonly sha256: string | null;
-  /** 'Key A' / 'Key B' / 'per-device key' / 'unknown key', or null when unread. */
+  /**
+   * 'Key A' / 'Key B' / 'per-device key' / 'unknown key' (a placeholder: no key this read knows), or
+   * null when unread, and when the bank is stored plain (the 2014 chain: there is no key to name).
+   */
   readonly keyName: string | null;
   /** The bootloader can actually key AND take this slot. Not implied by `accepts`. */
   readonly bootable: boolean;
