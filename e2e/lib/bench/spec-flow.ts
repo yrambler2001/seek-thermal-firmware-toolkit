@@ -894,6 +894,22 @@ async function runFF1308(
     r.notes.push(`FF steps not run: ${files}`);
     return;
   }
+  /* The vendor-form run starts from the camera's original flash (its step 0 checks the restore point and
+   * writes nothing otherwise). The subject's own file was just flashed in step 1, so the original goes
+   * back first, halted-read and checked, then a power cycle: the run starts where it says it starts. */
+  const original = await attempt(r, 'FF restore point', async () => {
+    await rig.jlink.flashFull(files.restoreFile);
+    await verifyFlash(rig, files.restoreSha256, r);
+    await rig.camera.powerCycle();
+    return true;
+  });
+  if (original === null) {
+    r.notes.push('FF steps not run: the original flash could not be put back before the run');
+    return;
+  }
+  r.notes.push(
+    `FF: the original flash (sha256 ${short(files.restoreSha256)}) is put back before the run`,
+  );
   const report = await runFfVendor({ jlink: rig.jlink, camera: rig.camera, log }, files);
   for (const write of report.writes) {
     const result = writeResultOf(r, write.bank);

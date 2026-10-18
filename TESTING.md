@@ -7292,3 +7292,91 @@ Not fixed; findings for the owner:
 - The 1.3.0.8 build reads IP mode 9 at boot (`GetIPMode`, read only). The 1.2.0.0 and 1.3.0.0 builds read mode 6 (42.15).
 - Rates are the count of complete frames over 20 s in one boot; thermal-only rates are given where they differ.
 - Not measured here: the FF 1.3.0.8 slot steps (the matrix row is not run), the Compact Pro 1.0.3.x write path (refused by the page), and whether the 0.x/1.x backup gap affects a restore (not tried).
+
+### 42.21 The final bench run: the 28-subject matrix on the merged branch, the harness fixes, and what is left for the owner (2026-10-18)
+
+**Summary.** On the bench camera (PIR206 Compact, serial 101310HSNEA2, original 1.3.0.0; J-Link on switch channel 1, camera on channel 2) the 28-subject slots matrix ran on the committed HEAD `406cf28`: **26 of 28 pass; 2 fail**. Both failures are page refusals that agree with the shared verdict table (`e2e/lib/slots-expectations.ts`): the bench's pass criterion expects a write where the table, and the page, say refused. No page defect was found in this run. The matrix before this run (42.20, HEAD `2ad2096`, before agent B's slots-page fixes) had 19 of 28. The pages on the real camera (9 of 9), the CLI on the real camera (8 of 8), and the emulator page, view, quality and offline specs all pass. The camera is at the baseline: a halted whole-flash read is `40447c7e…eb72` (verified after the last restore), and both switch channels are on.
+
+A correction to 42.20 §4: it says the slots code "has not changed since 719a8c2 on this branch". That is wrong. The verdict-table commits (`91581c5`, `cff1e83`, `5682c26`, `1997c65`) are on the branch and are not contained in `2ad2096`, the HEAD that 42.20 ran on (`git merge-base --is-ancestor`). That is why the 42.20 matrix refused six subjects that now pass.
+
+**1. The matrix, measured (`npm run e2e:slots:bench`, HEAD `406cf28`, `NODE_OPTIONS=--max-old-space-size=16384 --expose-gc`, 123 min).**
+
+Each row: the verdict table's expectation; what the page showed; the write results (B, A, R; "skipped" = no image of its own, the 2014 chain's B); the matrix's result. Writes are the page's (or, for 1.3.0.8 FF, the vendor-form CLI run's).
+
+| # | subject (bench label) | table | observed (page / J-Link) | writes B, A, R | boot proof | matrix |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1 | Compact 0.8.0.0 std | all writable | J-Link match; no booted bank named | skipped, ok, ok | ok | pass |
+| 2 | Compact 0.9.0.2 std | all writable | match; identified | skipped, ok, ok | ok | pass |
+| 3 | Compact 0.9.0.6 std | all writable | match; identified | skipped, ok, ok | ok | pass |
+| 4 | Compact 0.9.0.7 std | all writable | match; identified | skipped, ok, ok | ok | pass |
+| 5 | Compact 0.9.1.0 std | all writable | match; identified | skipped, ok, ok | ok | pass |
+| 6 | Compact 0.10.0.0 std | all writable | match; identified | skipped, ok, ok | ok | pass |
+| 7 | Compact 1.0.0.0 std | all writable | match; identified | skipped, ok, ok | ok | pass |
+| 8 | Compact 1.2.0.0 std | all writable | match; identified | skipped, ok, ok | ok | pass |
+| 9 | Compact 1.3.0.8 FF (vendor form, CLI; no page) | all writable | the FF run: restore point checked, three writes, verified | ok, ok, ok | not run (observed only) | pass |
+| 10 | Compact 1.3.0.8 std (8 Hz) | all writable | match; identified | skipped, ok, ok | ok | pass |
+| 11 | Compact 4.8.1.7 std | all writable | match; identified | ok, ok, ok | ok | pass |
+| 12 | Compact 4.8.1.9 std | all writable | match; identified | ok, ok, ok | ok | pass |
+| 13 | Compact 4.8.2.1 std | all writable | match; identified | ok, ok, ok | ok | pass |
+| 14 | Compact 4.16.1.7 FF | **all refused**, banner "checks an upload under its own keys" | banner shown with that reason; bank B pick "Rejected"; A and R not probed | **failed** (B), not run, not run | not run | **FAIL** (bench expects writes) |
+| 15 | Compact PRO 1.0.3.0 FF | all writable | match; not identified (no booted bank named) | ok, ok, ok | ok | pass |
+| 16 | Compact PRO 1.0.3.0 std | all writable | match; not identified | ok, ok, ok | ok | pass |
+| 17 | Compact PRO 1.0.3.2 FF (folder 15.45.44, no FF suffix) | all writable | match; not identified | ok, ok, ok | ok | pass |
+| 18 | Compact PRO 1.0.3.2 FF-FF (folder ends -FF) | all writable | match; not identified | ok, ok, ok | ok | pass |
+| 19 | Compact PRO 1.0.3.2 std | all writable | match; not identified | ok, ok, ok | ok | pass |
+| 20 | Compact PRO 4.9.1.15 std | A, R writable; B writable from another image; **B's own image refused** | page reads bank B as 1.0.3.2 (the bench's version check fails for B); B's own image "Rejected" | **failed** (B own image), not run, not run | not run | **FAIL** (bench expects B's own image to write) |
+| 21 | Compact PRO 4.9.2.0 std | all writable | match; identified | ok, ok, ok | ok | pass |
+| 22 | Compact PRO FF 4.18.2.0 | all writable | match; identified | ok, ok, ok | ok | pass |
+| 23 | Compact XR 4.8.2.1 std | all writable | match; identified | ok, ok, ok | ok | pass |
+| 24 | Mosaic 320x240 2.27.1.33 FF | all writable | match; identified | ok, ok, ok | ok | pass |
+| 25 | Mosaic 320x240 10.9.1.31 std | all writable | match; identified | ok, ok, ok | ok | pass |
+| 26 | Nano 200 42.32.3.10 std | all writable | match; identified | ok, ok, ok | ok | pass |
+| 27 | Nano 300 44.27.3.10 std | all writable | match; identified | ok, ok, ok | ok | pass |
+| 28 | Compact 1.3.0.0 std (the camera's own original, last) | all writable | match; identified | skipped, ok, ok | ok (the camera is then left patched: restored, below) | pass |
+
+Counts (measured, from the 28 result lines): **26 pass, 2 fail**. Bank writes: 68 ok, 10 skipped (no image of its own), 2 failed (rows 14 and 20, both refusals), 4 not run (behind those two). Boot proofs ok: 25 (row 9 is the FF run, which records the boot as observed). Every page row reports "banks = J-Link yes" (row 9, the FF run, has no page: its bank check is the vendor run's own). The run ended with the original flash, which the boot proof leaves patched; the restore below put it back.
+
+**The two failures, and why they are not page defects.** Row 14 and row 20 are the page refusing what the table says it refuses. Row 14: the table refuses all three banks with the banner "checks an upload under its own keys" (the application checks an upload under its own keys, and the key the writes store under is neither of its pair). The page shows that banner and refuses B. Row 20: the table refuses B's own decrypted image (its pair is in neither key table) and allows the write of another image into B. The page refuses B's own image. What the bench checks is different: it expects a write of B's own image to pass, and it expects every bank of a 4.9.1.15 dump to report 4.9.1.15 (bank B holds 1.0.3.2 by the dump's design). So the bench's criterion is wrong for these two rows, not the page and not the table. Making the bench read the table's verdicts is a follow-up for the owner (section 5); it is not done here, so the matrix still reports these two as failures, as 42.20 did.
+
+**2. Matrix history on this branch.**
+
+| run | HEAD | result | what it shows |
+| --- | --- | --- | --- |
+| 42.20 | `2ad2096` (before agent B's page fixes) | 19 pass, 8 fail, 1 not run | the pre-fix page |
+| first attempt | `069eee6` | aborted after row 1 | `switch.js cycle 2 3000: spawn node ENOENT`: the switch project was looked up under `.claude/` in the worktree (defect 2 below); row 1 had flashed and failed its halt, and the camera was then restored with the FW-V1 runner before the next run |
+| matrix 1 | `069eee6` | 25 pass, 3 fail | the 1.3.0.8 FF row refused by its own precondition (defect 3); rows 14 and 20 as above |
+| rerun 3 (three rows) | `406cf28` (code as committed) | 1.3.0.8 FF passes; rows 14 and 20 fail as above | the FF fix works |
+| final | `406cf28` | **26 pass, 2 fail** | this table |
+
+**3. Harness defects found and fixed (measured on the bench).**
+
+1. **The camera-holder scan counted shells** (42.20 finding E). `preflight.ts` now reads `ps` and counts only node, Electron and J-Link processes whose command names the camera, excluding this run's own process and its ancestors; it fails closed when `ps` cannot answer. Pure tests: `e2e/preflight-holders.e2e.ts` (9 pass). Measured: no false block in any run of this session; the scan reports the camera free while the bench runs.
+2. **The switch project was looked up in the wrong place from a worktree.** The default was `REPO_ROOT/../..`, which is `.claude/` inside a worktree, not the checkout's sibling. The first attempt of matrix 1 died at row 1 with `spawn node ENOENT` (the power-cycle failed; the camera was restored with the runner before the next run). The default is now the sibling of the main checkout (`mainCheckoutRoot`), and a missing `switch.js` names its path. Pure tests: `e2e/bench-paths.e2e.ts` (5 pass).
+3. **The 1.3.0.8 FF vendor run refused its own precondition.** Its step 0 needs the camera's original flash (sha `40447c7e`), but the subject's own launchable file is flashed in step 1 first. The original is now put back before the FF run: halted read, checked, then a power cycle (`runFF1308`, `406cf28`). Measured: the row passes (rerun 3 and the final run: three writes, the FF restore runs, 0 failures).
+4. **The offline bundle spec's dump step was stale.** The dump page is v4-only (42.17), so a 1.3.0.0 camera is refused before any read; the spec ran the old dump and failed (`npm run e2e:offline` with the emulator: 3 of 4). The step now asserts the refusal offline (`6e92549`); the 0.x/1.x offline flow (Preserve step 02) passes. Measured after the fix: 4 of 4.
+5. **Retained memory grows about 200 MB per subject** (42.20 finding D). Measured with the retained heap read after a collection (`--expose-gc`): 39 MB at the start of the run, 262 MB after row 1, +~200 MB per subject, 5,733 MB after row 28. The growth is per Electron window, about 22 to 30 MB that stays after the window closes (`heap window open / connected / closed` lines, `406cf28`). The cause is not located. Ruled out here: the JS side of the bench (the in-memory fake rig, the same control flow with no hardware, stays at 38 MB across subjects); the Vite dev server each window starts (a start and close of the same config, in a separate process, retains about 1 MB per cycle); and the J-Link and CLI calls, which keep nothing across subjects. The matrix therefore needs the 16 GB heap; with it the run completes. The FF row retained no memory (it drives the CLI, not a window).
+
+**4. The other specs, measured.**
+
+| spec | camera | result |
+| --- | --- | --- |
+| `npm run e2e:pages:bench` (`SEEK_E2E_WRITE=i-understand`) | real, 1.3.0.0 original | 9 of 9 |
+| `SEEK_REAL_CAMERA=1 npx vitest run test/real-camera-pages.test.ts` (from `packages/cli`) | real | 8 of 8 |
+| `npm run e2e:pages:emu` (`SEEK_EMU_DIR`) | emulator | 42 of 42 |
+| `vitest run --config e2e/vitest.config.ts slots-view.e2e` (`SEEK_EMU_DIR`) | emulator | 12 of 12 |
+| `npm run e2e:slots:quality` (`SEEK_EMU_DIR`) | emulator | 12 of 12 |
+| `npm run e2e:offline` (`SEEK_EMU_DIR`, after the fix in defect 4) | emulator, docs bundle | 4 of 4 |
+| pure: `bench-lib`, `preflight-holders`, `bench-paths` | none | 108 pass, 2 skipped (the corpus cases, `SEEK_FULL_DUMPS_BY_CAMERA` not set in that shell) |
+
+Notes: the camera's state after the pages bench and the CLI test was read again at the end of the run (section 6). Without `SEEK_EMU_DIR`, `e2e:offline` skips with "no FW-V1 emulator found" (its 4 tests are not run); with it, all four run. The docs bundle (`npm run build:docs`) was rebuilt from the branch as `9d71a70`, alone in its commit; the stale hashed assets are removed.
+
+**5. What is left for the owner.**
+- **The bench's criterion for rows 14 and 20** (defined above). The page and the table agree; the matrix does not yet read the table, so it reports two failures on purpose-built refusals. Either the bench reads the table's verdicts for those rows or the owner accepts the two as the expected result.
+- **The retained memory** (defect 5): about 200 MB per subject, 22 to 30 MB per Electron window, not located. A longer run needs the 16 GB heap; `NODE_OPTIONS=--max-old-space-size=16384 --expose-gc` is what this run used.
+- **The 0.x/1.x backup gap** (42.20 §5 A) is still open, unchanged by this run.
+- **The page clears its bank table after a write** until "Read slots" (42.20 §5 C): not changed here.
+- **The 1.3.0.8 FF row is run through the CLI's vendor-form path, not the page**; its boot is observed, not proven by a boot proof. The FF bootloader does not run the vendor form (42.12).
+- **The offline spec does not cover a v4 camera's offline dump.** A 4.x corpus camera would need its own offline case.
+- The web suite was not re-run in this session; it was last run at 42.19 (332 of 332).
+
+**6. The camera, afterwards.** The matrix's last row (the original) leaves the camera patched by its boot proof. It was put back with the FW-V1 runner (`erase-spifi-range`, then `flash-factory-4m` with the baseline image, each after a channel-2 power cycle; the flash verify printed "Verify successful"), and its halted read was `40447c7e…eb72`. After the pages bench and the CLI test, a channel-2 power cycle and a read-only halted dump (`dump-spifi-4m-halted`) gave the same sha, `40447c7e…eb72`. Both switch channels are on (`OK 1=on 2=on`). No background job of this agent is running.

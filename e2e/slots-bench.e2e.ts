@@ -165,6 +165,7 @@ describe.skipIf(!runnable)('the slots bench', () => {
           const log = (line: string): void => {
             say(line);
           };
+          heapLine(`before ${subjectLabel(subject)}`);
           const result =
             rig === null
               ? missingRig(subject)
@@ -172,6 +173,7 @@ describe.skipIf(!runnable)('the slots bench', () => {
                 ? await runSubject(rig, subject, log)
                 : await runProbe(rig, subject, PROBE, log);
           results.push(result);
+          heapLine(`after ${subjectLabel(subject)}`);
           /* The run's log is the only place a failure's cause shows before the run ends. */
           for (const note of result.notes) say(`${result.label}: note: ${note}`);
           for (const failure of result.failures) say(`${result.label}: FAILED: ${failure}`);
@@ -189,6 +191,19 @@ describe.skipIf(!runnable)('the slots bench', () => {
     expect(failing, `subjects that did not pass: ${failing.join('; ')}`).toEqual([]);
   });
 });
+
+/**
+ * One line of the worker's heap, after a collection when the run exposes `gc` (NODE_OPTIONS
+ * --expose-gc): the RETAINED heap, so growth between subjects is a leak and not garbage.
+ * Read by the matrix's memory notes (TESTING.md 42.21); it changes no result.
+ */
+function heapLine(when: string): void {
+  const gc = (globalThis as { gc?: () => void }).gc;
+  if (gc !== undefined) gc();
+  const mb = (n: number): string => String(Math.round(n / 2 ** 20));
+  const m = process.memoryUsage();
+  say(`heap ${when}: heapUsed ${mb(m.heapUsed)} MB, rss ${mb(m.rss)} MB${gc === undefined ? ' (no gc: not retained)' : ''}`);
+}
 
 /** The record of a subject whose rig never opened (the beforeAll error says why). */
 function missingRig(subject: BenchSubject): SubjectResult {

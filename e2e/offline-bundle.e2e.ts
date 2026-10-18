@@ -17,9 +17,9 @@
 import { expect, it } from 'vitest';
 
 import { say } from './lib/browser.js';
-import { checkDumpArchive, checkStep02RunFile } from './lib/camera-flow.js';
+import { checkStep02RunFile } from './lib/camera-flow.js';
 import { targetSpec } from './lib/spec.js';
-import { expectedImageSha, runStep02 } from './lib/target-tools.js';
+import { runStep02 } from './lib/target-tools.js';
 
 interface Req {
   readonly url: string;
@@ -42,12 +42,14 @@ targetSpec(
       await t.wizard.connect();
     });
 
-    it('goes offline and still dumps and decrypts', async () => {
+    it('goes offline and the 4.x dump page still refuses this 0.x/1.x camera before it reads', async () => {
       const t = ctx.target();
       await t.setOffline(true);
       try {
-        const dump = await t.wizard.dumpAndDecrypt(20 * 60_000);
-        checkDumpArchive(dump, expectedImageSha(t));
+        /* The dump page is v4-only (TESTING 42.17, pinned by 42.18): a 1.3.0.0 camera is refused on its
+         * version, before any read, and the refusal does not need the network. The 0.x/1.x line's own
+         * offline flow is the next test. A v4 camera's offline dump is not covered by this spec. */
+        await expect(t.wizard.dumpAndDecrypt(60_000)).rejects.toThrow(/Refused — nothing was read/);
       } finally {
         await t.setOffline(false);
       }
