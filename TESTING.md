@@ -9170,6 +9170,78 @@ Either way, the checker and Swift must change together. Changing only the checke
 - Seek: `e0c33fc` (the regenerated table, comments only), and this note on branch `worktree-agent-a798ff52301db527d`.
 - `refactor/all-firmware-profiles` moved to `796e5d9` (another session's work) after this reset. These commits sit on `eff9bf5`, as the brief asked, and need a rebase onto that tip before any merge.
 
+### 42.43 The 4.x active-slot word stays 0 because the factory startup never writes it, the 2016 footer is absent from the flash, and modes 4 and 7 are read (emulator only, 2026-10-19)
+
+**Summary.** Three `plan.md` section 1 items (the 4.8.x active-slot word, the 2016 `footerOk`, and modes 4 and 7 with the 0.x masks). Nothing ran on a camera, and no J-Link or switch was used. No harness was changed, so the emulator suite was not re-run and no code changed in this repo.
+
+- **Modes 4 and 7 and the 0.x masks.** Answered in FW-V1 `docs/FRAME_RATE_MODES.md` (commit `7a9b52398`, branch `emu-research`, not merged). Mode 4 on 1.3.0.8 and 4.8.1.7 is a 32.26 Hz stream of live pictures, one per capture. Mode 7 has no capture program and sends a synthetic ramp frame with no sensor picture. The 0.8.0.0 to 0.10.0.0 handlers accept mask `0x1F9` (modes 0, 3 to 8), read from the image bytes.
+- **The 4.x active-slot word.** It reads 0 because the factory 4.x startup does not write it. The harness and the emulator both report the value correctly. The bootloader's handoff `R0` does name the right slot.
+- **The 2016 `footerOk` false.** It is the flash. The factory 2016 banks have no `CODE` footer at the 4.x offset, and the 2016 verdict does not read `footerOk` at all. The `bootability unknown` comes from the key table, not from the footer.
+
+**Tags.** [measured] is an emulator run or a byte read from a corpus image. [source] is read from the reconstructed C, which is not the build. [inferred] follows from those.
+
+**1. Modes 4 and 7 (summary; detail in FW-V1 `docs/FRAME_RATE_MODES.md`).**
+
+- 1.3.0.8, mode 4 (80 frames, `framerate.run_entry`, IP 4): all 80 frames are type 3, the rate is 32.258 Hz (31.0 ms, device clock), 0 frozen pairs, picture level 6,806 against 6,801 for the mode-8 control. [measured]
+- 4.8.1.7, mode 4: the same (32.258 Hz, level 6,806). [measured]
+- Mode 7 on both builds: no type-3 frame in 80; the frames are a frame counter plus a ramp (value = pixel index), type word 10. [measured]
+- The mode table decode: 1.3.0.8 `frame_mode_table_r32k` at file `0xB45C`, mode 4 is block 23 (one step, op 16, publish), mode 7 is empty. 4.8.1.7 `g_mode_framecfg` at file `0x9B30`, mode 4 is one page at `0x9B80`, mode 7 is empty. [measured, from the image bytes]
+- SetIPMode masks of the six 0.x builds with a table entry: `0x1F9` (0, 3, 4, 5, 6, 7, 8), from the `cmp r3,#8; movw r2,#0x1F9` pair in each `cmd_SetIPMode`. [measured]
+
+**2. The 4.x active-slot word (`roots[8]`, GetFirmwareInfo selector 10).**
+
+Where it is read and reported:
+- The harness and the core read the word at `packages/core/src/workflows/device-info.ts:556-557` (`tryFwInfo(10, 64, ...)`, offset 8).
+- Reported as "booted", not used for the run verdict: `packages/core/src/slots/boot-choice.ts:47-50` (`reportedBootedOf`), and the run verdict comes from `cfg0` (`bootChoiceOf`, lines 136-160).
+- Used for the upgrade target only on the 2014 plaintext chain: `device-info.ts:915` (inside the `plainChain` branch at 884-925).
+- In FW-V1, the emulator reads the same RAM cell, `G_ACTIVE_SLOT = 0x1000AED0` (`emu/seekemu/flash_rpc.py:53`), and records the bootloader's handoff `R0` (`machine.py:1163-1164`; `flash_rpc.py:643`, `:745`).
+
+What the probe showed (`/private/tmp/claude-501/-Users-yrambler2001-things-a-noindex-seek-seek-thermal-firmware-backup/82174575-1341-45d6-a306-7518156cd978/scratchpad/active_slot_probe.py`, a cold boot of the 4.8.2.1 full dump `2229A0YZ7E28`, IP unset, boot word set in the NOR image): [measured]
+
+| boot word | handoff `R0` (slot the bootloader gave) | `0x1000AED0` (active_slot) after the run | `0x1000CF6C` (g_boot_image_flash_base) after the run | `0x1000CDB0` (g_flash_base_offset) |
+| --- | --- | --- | --- | --- |
+| 1 | `0x14050000` (slot B) | 0 | 0 | 0 |
+| 2 | `0x14070000` (recovery R) | 0 | 0 | 0 |
+
+The handoff snapshot (taken before the app's own startup) has the same zeros. So the bootloader and the emulator agree on the slot, and the app never writes its cell.
+
+Why the app does not write it (the factory image, not the emulator):
+- The 4.8.1.7 startup chunk (vector at `0x100002E1`, so the chunk is `0x100002E0`) is, in the factory bytes, table copy and zero loops followed by a table-driven call. In `0x100002E0..0x10000408` the only compares are loop bounds. No compare against `0x14030000`, `0x14050000` or `0x14070000` appears, and `0x1000CF6C` is not referenced anywhere in the 4.8.1.7 image. [measured, from the disassembly]
+- `targets/compact_xr_8hz_4_8_2_1/src/target_startup.c:9-17` says the factory Compact XR body has "no boot-bank arm in it at all and no boot_addr argument - the factory body never reads R0". The arm at `target_startup.c:188-201` is a reconstruction addition, and it is the only writer of `g_fw_info_roots.active_slot` in the source (both the 4.8.1.7 and XR trees). [source]
+- So the cell stays 0 from the BSS clear on every boot of a 4.8.x image, whatever the word. The emulator and the harness report that correctly. [inferred from the two points above; the 4.8.2.1 probe covers the XR-target image, and 4.8.1.7 is static only]
+
+Consequences (product code, not changed here):
+- The "last start" line that `slots list` and the page show from `reportedBooted` (`boot-choice.ts:47-50`) reads slot A on every 4.x boot, including a boot from B or R. The run verdict is not affected. [inferred from the code and the probe]
+- FPS_32HZ.md section 9 says the bootloader writes the word "at every start". That holds for what the 4.x factory app does not do, and it was not checked for the 2014 or 2016 lines here.
+- Recommended: on the 4.x line, do not show `reportedBooted` as the booted bank (or show it as "not reported"). The reconstructed `target_startup.c` arm should be marked as not in the factory image.
+
+**3. The 2016 `footerOk` false.**
+
+The analysis (`packages/core/src/workflows/device-info.ts:313-316`) sets `footerOk = footer.tag === FOOTER_TAG && footer.length === header.length`, with the footer at `footerOffsetFor(length)` (`packages/core/src/image/header.ts:102-104`, `((len >> 14) + 1) * 0x4000 - 0x40`). [source]
+
+The flash on the 2016 line has no such footer:
+- 1.0.3.0 standard full dump `0C21A1M5KP15` (`emu/data/corpus/compact_pro/2016.07.06-17.04.49-1.0.3.0/0C21A1M5KP15/compact_pro_android_uq-aaa.bin`): bank A is erased; bank B and R hold a 51,848-byte image (`0xCA88`). The footer position `0xFFC0` in each bank is `FF` x 16. No byte after `0xCA88` in bank B is other than `FF`, and the string `CODE` does not occur in bank B. [measured]
+- The 2014 control, 1.3.0.0 full dump `101310HSNEA2`: bank R (`len 0xBA98`) has `FF` at its footer position `0xBFC0`. So the factory 2014 banks also carry no footer. The footer that FW-V1's J-Link runner writes ("padded to 0xBFC0, then CODE") is the writer's convention, not what the factory leaves. [measured]
+- The 2016 bootloader does not read a footer. Its boot path decrypts the header, copies the sections and jumps (`targets/compact_pro_9hz_1_0_3_0_bootloader/src/startup.c:150-200`). [source]
+- The 2016 profile uses `LEGACY_BOOT` (`packages/core/src/profiles/compact-2016.ts:300`), whose `checksFooter` is false (`legacy-auth.ts:586-587`, and the `BootPolicy` note in `types.ts:158-166`). So `footerPasses` is true (`device-info.ts:775`), and the verdict ternary at `device-info.ts:776-786` does not read `footerOk`.
+
+So `footerOk false` is the analysis reading the flash correctly. It is not an emulator artifact. The 42.36 banks written by the harness also report `footerOk` false, which matches a 2016 write that adds no footer. [inferred from 42.36's report]
+
+The `bootability unknown` on the 2016 line comes from another branch: `device-info.ts:783` (`slot.present && slot.accepts && footerPasses && keyTable === null`). `keyTable` is null because no candidate key table matches the 2016 keystream state (`device-info.ts:711-722`), and the 2016 line's acceptance is the sum 0 with K=0 (`compact-2016.ts`). [source; the key-table miss is inferred from the null result]
+
+Recommended, product decision, not changed here:
+- Report `footerOk` as not applicable when `profile.boot.checksFooter` is false, instead of `false`.
+- For the 2016 line, the verdict needs a key table or a boot-word replay. The page then says "bootable" for the bank the bootloader runs, not "unknown". The 4.x line already replays the boot word (`modern-4x.ts`, `MODERN_BOOT`).
+
+**4. Counts.** Emulator runs: 6 IP-mode boots (1.3.0.8 and 4.8.1.7, IP 8, 4, 7), 3 frame dumps (1.3.0.8 mode 4 and 7, 4.8.1.7 mode 7), 2 cold boots of the 4.8.2.1 dump (words 1 and 2). Static reads: 6 0.x `cmd_SetIPMode` handlers, the 4.8.1.7 mode table and page, the 1.3.0.8 mode table and blocks, and 3 full dumps (the 2016 1.0.3.0 and the 2014 1.3.0.0 controls, and the 4.8.2.1). Test suites run: none. Harness changes: none.
+
+**5. Not measured or open.**
+- No camera: the mode-4 rate on a Compact is not measured; the 32.26 Hz is the emulator's device clock.
+- The active-slot cause is shown on the 4.8.2.1 image by the probe and on 4.8.1.7 by the chunk disassembly only. The 4.8.1.9 image has the `0x1000AEC8` literal once (not checked). Word 0 was not probed (it reads 0 by construction).
+- Mode 4 over a longer stream: the calibration stretch was not checked beyond 2.5 s.
+- The 2014 chain's own bootloader (`compact_8hz_1_3_0_0_bootloader/src/startup.c:154`) passes no slot argument to the entry. Whether the 2014 app writes the cell was not checked.
+- The `footerOk` recommendation and the key-table gap are for the owner's decision.
+
 ### 42.44 The slots table stays after a write (read again under the write's own profile, with no identify probe); the Info tab's identity read and the CLI `info` read are recorded as deliberate, nothing changed (2026-10-19)
 
 **Summary.** Two plan items. (1) After a committed write the slots page dropped its read, so the bank table stayed empty until "Read slots" was pressed. The read is still dropped at the commit point, and the banks are read again after the read-back, under the write's own profile and build. Changed in `packages/web/src/hooks/useSlotsPanel.ts` (commit `ffaa310`), with tests in `useSlotsPanel.test.tsx` and `SlotsView.test.tsx`. (2) The CLI `info` sends SetFirmwareInfoFeatures (0x55) and SetRAMDataFeatures (0x5a) and reads the slots; the web Info sends neither. The difference is deliberate: 42.17 made the Info tab an identity read. Nothing was changed for item 2; the options are below. Nothing ran on a camera.
