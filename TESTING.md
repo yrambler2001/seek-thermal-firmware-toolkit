@@ -11614,3 +11614,197 @@ Reading the table. (a) The stock check is what the camera does: at 0.5 to 2 ms p
 - `FPS_32HZ.md` has no lost-frames section. The paragraph on the in-flight count is in section 8, after the checker paragraph, and it states the one-IN limit on the bench.
 
 **Commits.** Two on `worktree-agent-af301a17e8933f4cf`, after `5f921dc`: the checker's reader, link, camera, CLI, fake and tests, and then this section with the `FPS_32HZ.md` paragraph. The hashes are in the agent's report.
+
+### 42.76 The candidate 6 copy gate as a recorded byte build (the byte-exact link refuses a source change), four 1.3.0.0 images in plain banks, and the emulator table at 0 to 20 ms: where the gate code lives on the camera (study, no camera, 2026-10-19)
+
+**Summary.** Agent 42.76, on `worktree-agent-a6c534c6ec02ee744`, reset to `refactor/all-firmware-profiles` (e2419ed). 42.75 is not on this branch yet, so this section follows 42.74. The FW-V1 work is on worktree `/private/tmp/claude-501/fwv1-drop`, branch `drop-path-study` (commits 79ff1fec2 and 42ae65ea5, not merged into FW-V1 main). No camera, J-Link, switch or flash was used, and nothing was pushed or merged. At most three emulator jobs ran at once (the coordinator's limit). A first attempt ran eight at once for about 15 minutes before the limit arrived; it was stopped, and its output is not used.
+- **Build.** The unmodified 1.3.0.0 source builds byte for byte to the factory image and passes the acceptance gate. A source change to a stream function fails the link, so the gate is not in the reconstruction tree. It is compiled on its own from `emu/drop_gate/candidate6_gate.c` with the target's compiler and flags (228 bytes), and written into the image as recorded byte edits, the same kind of edit `emu/fps_patch.py` makes for the 32 Hz form.
+- **Images.** S (stock, from source), S+gate, P (the 32 Hz form, `fps_patch.py` on S) and P+gate. Each is 47,768 B with header.length 0xBA98. Each packages through `build_flash.mjs` without `--flash` into a plain 2014 bank (word sum 0, 0xFF to 64 KiB). The stock bank equals 42.70's bank and the owner's factory bank A.
+- **Emulator.** With a fast host, the gated and ungated builds give the same frames in the same order (body and header credit), with no skip and no torn transfer. The matrix (76 runs, 160 frames each) shows the stock build losing 45 to 334 fields a minute from 0.5 to 10 ms, and the gated 32 Hz build losing none from 0 to 5 ms with either credit, and none at 10 ms with the body credit. At 15 and 20 ms the gated build still loses about 700 fields a minute to copy-group skips (against 1,023 for P at 15 ms), with no torn transfer: past about 10 ms per IN the host cannot keep up, as 42.74 found.
+- **Boot placement (asked by the coordinator).** The gate code is copied to RAM at every boot of a 2014-chain bank, by the 2014 bootloader's `Reset_Handler`, as the first 512 bytes of the selected slot. Section 7 gives the evidence and what is not shown. Silicon is not shown.
+
+**Tags.** [measured] is a command or emulator run here; the logs are under `/private/tmp/claude-501/agent-76/`. [source] is read from the code or the link named. [inferred] follows from those and was not measured.
+
+**1. Build route.**
+1.1 *The stock build (S).* `make target-image` in `targets/compact_8hz_1_3_0_0` (TOOLCHAIN_PROFILE gcc48q4, `~/toolchains/gcc-arm-none-eabi-4_8-2013q4`, 4.8.3 20131129) writes `build/image.bin`, 47,768 B, sha256 `862717a8a605021def7858ac0c04ad4aa1abe23d357d6c2417699939137f481c`. `cmp` against `base/compact_8hz_1_3_0_0/firmware_to_be_reconstructed.bin` is silent. `make target-verify-image` prints `verify-image: PASS - byte-identical (0 differing, 0 allowed)` and exits 0. [measured]
+1.2 *The bank for S.* `node tools/build_flash.mjs` (no `--flash`), run in a scratch copy of the target, writes `build/bank_payload.bin`: 65,536 B, sha256 `5cbbdd0fe2fb09ff64b2f3897f0ff3a97e2f0f8b27d8122747289fd8e0ce5b2a` (the hash 42.70 recorded). Its 65,536 bytes equal the owner's factory bank A (slot A 0x14050000 in the `40447c7e…` full dump). [measured]
+1.3 *What the byte gates refuse.* No gate refuses an unchanged build. Two refuse a change. (a) The link: `image_layout.ld` has one `ASSERT(SIZEOF(.img.c.<addr>) == <size>, "... promoted size is N - the C section changed; re-run the sweep")` per compiled function, and every section has a fixed address. A one-statement edit to `frame_line_dispatch` in a scratch copy fails the link with `frame_line_dispatch: promoted size is 648 - the C section changed; re-run the sweep` (`ld returned 1 exit status`). (b) `make target-verify-image` refuses any changed byte, by design. [measured]
+1.4 *The supported way to build a variant.* The tree has none. The `FW_FLASHABLE` track was removed on 2026-07-31, and AGENTS.md says there is "no longer anywhere to put a change that moves an image byte". The frame-rate variants are recorded byte edits to the stock image, each checked before and after (`emu/fps_patch.py`: the stock sha, each old byte, the patched sha, the acceptance word retuned). Candidate 6 is built the same way. The reconstruction tree is unchanged (`git status` clean on `refactor/all-firmware-profiles`). [source: AGENTS.md; FW-V1 `emu/fps_patch.py`]
+1.5 *The gate's build.* `emu/drop_gate/build_gate.sh` compiles `candidate6_gate.c` with `arm-none-eabi-gcc -std=gnu99 -mcpu=cortex-m4 -mthumb -mfloat-abi=soft -Os -fno-strict-volatile-bitfields -ffunction-sections -fno-common -fno-builtin -fomit-frame-pointer -ffreestanding -nostdlib -Wall -Wextra -Werror` (the target's ARCH, OPT and EXTRA_CFLAGS; no include path, which the gate does not use), links it at 0x10000114 with `gate.ld`, and writes `gate.bin`: 228 B, sha256 `470e7ef0ce9cc388e932ced0d61237c1c06d510e4419c2d17364283e73391e06`. A rebuild from the committed source gives the same hash. The gate calls only the stock `basepri_lock_acquire` (0x100812AC) and `basepri_lock_release` (0x1008128C), by absolute address, and reads the stream cells at their 1.3.0.0 addresses (`build/seek.map`). [measured]
+1.6 *The four images* (`emu/drop_gate/apply_gate.py`; `fps_patch.py` for P):
+
+| image | built from | edits | size | sha256 |
+| --- | --- | --- | --- | --- |
+| S | `make target-image` (1.1) | none | 47,768 B | `862717a8a605021def7858ac0c04ad4aa1abe23d357d6c2417699939137f481c` |
+| P | `fps_patch.py S P --to 32` | 13 bytes (0xB898, 0xB89A..0xB8A1, and the acceptance word 0x238 = `0x198947e5`) | 47,768 B | `ef90c94a448b69feea06421026c5765eceb1685d6806e7a48714c76c3d0ed273` (the table's patched sha) |
+| S+gate (Sg) | `apply_gate.py S Sg` | gate at 0x114..0x1F7 (228 B), two BL words, acceptance word 0x238 = `0xc0ae0f98` | 47,768 B | `3151da290ca882f7adb2a2c8f2dc04c9f0ac74f9d8e93cfe350eb295006167fb` |
+| P+gate (Pg) | `apply_gate.py P Pg` | the same gate edits; acceptance word 0x238 = `0xda37577d` | 47,768 B | `10d9a2f9dc7dae22b9bfac2184393218160dadcca0d845c6121837f356d6fbdb` |
+
+The plain banks come from `build_flash.mjs` without `--flash` (`/private/tmp/claude-501/agent-76/package.py`, a scratch copy of the target). For the variants, the copy's `tools/image_tool.py` is a shim that copies the variant image in place of the ELF extraction; nothing else in the path changes. The verify step prints "NOT byte-exact" for the variants, which is expected.
+
+| bank | file | size | sha256 | header.length | word sum | bytes differing from factory A |
+| --- | --- | --- | --- | --- | --- | --- |
+| S | `/private/tmp/claude-501/agent-76/images/bank/S.bank.bin` | 65,536 B | `5cbbdd0fe2fb09ff64b2f3897f0ff3a97e2f0f8b27d8122747289fd8e0ce5b2a` | 0xBA98 | 0 | 0 |
+| S+gate | `/private/tmp/claude-501/agent-76/images/bank/Sg.bank.bin` | 65,536 B | `39be84caca59b186f2c2cdc21f207ad340642d75297fe6164814451d12c1b462` | 0xBA98 | 0 | 220 |
+| P | `/private/tmp/claude-501/agent-76/images/bank/P.bank.bin` | 65,536 B | `84d42fc2803723cdc5bd5e062c3a51e602656038cb0aa0833d682bada6d7e259` | 0xBA98 | 0 | 13 |
+| P+gate | `/private/tmp/claude-501/agent-76/images/bank/Pg.bank.bin` | 65,536 B | `a544ac68f874b302c7173d3b9b737a050af382ea9ac380762ffc09149286473c` | 0xBA98 | 0 | 229 |
+
+All four pad with 0xFF from header.length to 64 KiB. [measured]
+1.7 *The edits.* The dispatch call: the stock `BL basepri_lock_acquire` at runtime 0x10085DFA (file 0x5A92, bytes `fbf757fa`) becomes `BL gate_dispatch` at 0x10000114 (bytes `7af78bf9`). The field-start call: the stock `BL usb_ep_has_flag` at 0x100864F4 (file 0x618C, bytes `fcf7baf9`) becomes `BL gate_hdr` at 0x100001A0 (bytes `79f754fe`). `apply_gate.py` checks that the stock bytes decode to their stock targets before it writes, and that only those words, the gate bytes and the acceptance word moved (220 bytes in S+gate). [measured]
+
+**2. The change.** Candidate 6 of 42.74, with its two rules.
+- *`gate_dispatch`, the per-group copy gate.* It runs where `frame_line_dispatch` starts. It takes the basepri lock as the stock call did (the stock function still releases it at done) and returns unless: capture is running, the mode is not 7, the arm is odd and at most 9, `_10` (the skip flag) is clear, `line != 0`, and the current step is active. If a queued or in-flight IN transfer (ring slot phase nibble non-zero) overlaps the 1,664 bytes this group writes (`0x20000000 + 416*(line-4)`), it does the stock skip actions: `_10 = 1` and `FRAME_FLAG_D = 0`. The rest of the stock function runs unchanged. [source: `app_init.c:580-720`; ring: `usb_core.c:700-860`]
+- *`gate_hdr`, the field-start rule for the 0x8200 path.* It replaces `BL usb_ep_has_flag` in `frame_capture_step`. It takes the lock and returns 1 only when an in-flight transfer overlaps the 0x680-byte header buffer at 0x10005962. The caller's CBZ and its step-active test are unchanged. [source: `app_init.c:952`]
+- *`gate_busy`.* Takes the lock, scans the eight ring slots (`usb_ep_slot_r32k_t`: buffer at +0x10, length at +0x14, phase at +0x20), releases the lock and returns the overlap. The lock is a nesting count (`basepri_lock_acquire` is an `ldrex`/`strex` increment; `build/seek.elf` disassembly), so the gate can take it inside the stock call. [measured]
+- *Not changed:* the calibration excursion code, the shutter frame handling, the watchdog, the header words, and every other function. The gate runs only at the two sites above.
+
+**3. Checks.**
+3.1 *The gate is in RAM and runs.* At the first gate call the 228 bytes at 0x10000114 equal `gate.bin` (`gate_ram_matches_blob = 1` in all 42 gated runs). Each gated run checks every gate call (`gate_ram_mismatch_calls`, see section 6): none mismatched. Over 60 frames of Sg, `gate_dispatch` ran 10,200 times and `gate_hdr` 255 times. [measured]
+3.2 *Fast host: the same pictures.* Frame sha1 lists in arrival order, gated against ungated, no skip and no torn transfer:
+
+| pair | credit | frames | in order equal | field + group skips | torn |
+| --- | --- | --- | --- | --- | --- |
+| S vs Sg | body 0x7EC0 | 60 | 60 of 60 | 0 + 0 | 0 |
+| P vs Pg | body 0x7EC0 | 60 | 60 of 60 | 0 + 0 | 0 |
+| S vs Sg | header 0x8200 | 40 | 40 of 40 | 0 + 0 | 0 |
+
+The fast host is the 42.74 fast host: no completion threshold and no delay (`--host pipelined --inflight 3 --delay 0`). [measured]
+3.3 *The gate's copy-skip branch is exercised.* The table's group-gate column is non-zero at 10 ms with the header credit (16 to 20 a minute) and at 15 and 20 ms with either credit (about 700 a minute). Those skips do stop the copy and the field, as the stock skip does. [measured]
+
+**4. The host model and the emulator** (`emu/drop_gate/drop_probe.py`; `emu/drop_gate/summarize.py`). Each run boots the owner's 1.3.0.0 full dump with the image in slot A (boot word 0), through the dump's own bootloader (reset at 0x14000269). `serial` is the 42.74 host: the EHCI completion threshold, plus the delay before each IN, one IN in flight (N = 1). `pipelined` removes the threshold and keeps the delay. Its N = 3 label is a proxy, not a measurement: the emulator's host is sequential, and its device serves one dTD at a time and retires it when the host collects it (`seekemu/usb_device.py` `in_transfer`), so three INs cannot be held in flight. The camera's three-in-flight host (42.75) removes the wait between a completion and the next IN, and `pipelined` is the nearest emulator row. The N = 3 rows are a proxy, and the camera is the test.
+
+**Frames per run: 160** (instead of the 240 planned, for the coordinator's load limit). At 32 Hz that is 6.7 s of device time, and at 8 Hz 21 s. A lost-field count of about 20 or more in a run is good to about ±20 %. A zero means fewer than about 27 a minute (three events in 6.7 s, the rule of three). Calibration gaps (A, A') are counted only where the capture step is 1 (32 Hz) or 4 (8 Hz). From 2 ms on the stock stream loses one capture per frame, so the step is 5 (or 2 or 3 in the gated throughput-limited runs) and the gap classes do not apply; those cells read n/a. Field losses are the firmware's skip path (`_10` written from `frame_capture_step`); group losses are the gate's skips. Each is one lost field, since either sets `_10`.
+
+| credit | image | IN in flight | host delay (ms) | frames | device s | fps (median gap) | fps (mean) | lost fields /min | of which group-gate /min | torn | captures per frame | calibration A / A' per min | gate calls | RAM mismatch calls |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 0x7EC0 | S | 1 | 0 | 160 | 20.81 | 8.05 | 7.64 | 0.0 | 0.0 | 0 | 4 (8 Hz) | 51.9 / 28.8 | - | - |
+| 0x7EC0 | S | 1 | 0.5 | 160 | 22.02 | 8.02 | 7.22 | 106.2 | 0.0 | 0 | 4 (8 Hz) | 49.0 / 27.2 | - | - |
+| 0x7EC0 | S | 1 | 1 | 160 | 21.31 | 8.05 | 7.46 | 45.1 | 0.0 | 0 | 4 (8 Hz) | 50.7 / 28.2 | - | - |
+| 0x7EC0 | S | 1 | 2 | 160 | 23.48 | 6.45 | 6.77 | 219.7 | 0.0 | 0 | 5 (a capture lost per frame) | n/a | - | - |
+| 0x7EC0 | S | 1 | 5 | 160 | 24.54 | 6.45 | 6.48 | 295.9 | 0.0 | 0 | 5 (a capture lost per frame) | n/a | - | - |
+| 0x7EC0 | S | 1 | 10 | 160 | 25.12 | 6.62 | 6.33 | 334.3 | 0.0 | 0 | 5 (a capture lost per frame) | n/a | - | - |
+| 0x7EC0 | Sg | 1 | 0 | 160 | 20.81 | 8.05 | 7.64 | 0.0 | 0.0 | 0 | 4 (8 Hz) | 51.9 / 28.8 | 26841 | 0 |
+| 0x7EC0 | Sg | 1 | 0.5 | 160 | 20.81 | 8.05 | 7.64 | 0.0 | 0.0 | 0 | 4 (8 Hz) | 51.9 / 28.8 | 26841 | 0 |
+| 0x7EC0 | Sg | 1 | 1 | 160 | 20.81 | 8.05 | 7.64 | 0.0 | 0.0 | 0 | 4 (8 Hz) | 51.9 / 28.8 | 26840 | 0 |
+| 0x7EC0 | Sg | 1 | 2 | 160 | 20.81 | 8.06 | 7.64 | 0.0 | 0.0 | 0 | 4 (8 Hz) | 51.9 / 28.8 | 26841 | 0 |
+| 0x7EC0 | Sg | 1 | 5 | 160 | 20.81 | 7.9 | 7.64 | 0.0 | 0.0 | 0 | 4 (8 Hz) | 51.9 / 28.8 | 26847 | 0 |
+| 0x7EC0 | Sg | 1 | 10 | 160 | 20.93 | 7.69 | 7.59 | 0.0 | 0.0 | 0 | 4 (8 Hz) | 51.6 / 28.7 | 27023 | 0 |
+| 0x7EC0 | Sg | 1 | 15 | 160 | 25.17 | 6.29 | 6.32 | 333.7 | 333.7 | 0 | 5 (a capture lost per frame) | n/a | 32492 | 0 |
+| 0x7EC0 | P | 1 | 0 | 160 | 6.68 | 32.19 | 23.81 | 0.0 | 0.0 | 0 | 1 (32 Hz) | 71.9 / 44.9 | - | - |
+| 0x7EC0 | P | 1 | 0.5 | 160 | 7.33 | 32.19 | 21.69 | 171.9 | 0.0 | 0 | 1 (32 Hz) | 65.5 / 40.9 | - | - |
+| 0x7EC0 | P | 1 | 1 | 160 | 6.99 | 32.2 | 22.75 | 85.8 | 0.0 | 0 | 1 (32 Hz) | 68.7 / 42.9 | - | - |
+| 0x7EC0 | P | 1 | 2 | 160 | 10.69 | 16.13 | 14.88 | 730.0 | 0.0 | 0 | 2 (a capture lost per frame) | n/a | - | - |
+| 0x7EC0 | P | 1 | 5 | 160 | 9.66 | 17.13 | 16.47 | 602.7 | 0.0 | 0 | 2 (a capture lost per frame) | n/a | - | - |
+| 0x7EC0 | P | 1 | 10 | 160 | 11.3 | 15.15 | 14.06 | 796.1 | 0.0 | 0 | 2 (a capture lost per frame) | n/a | - | - |
+| 0x7EC0 | P | 1 | 15 | 160 | 14.08 | 12.5 | 11.3 | 1023.0 | 0.0 | 0 | 3 (a capture lost per frame) | n/a | - | - |
+| 0x7EC0 | P | 3 (proxy) | 0 | 160 | 6.68 | 32.19 | 23.81 | 0.0 | 0.0 | 0 | 1 (32 Hz) | 71.9 / 44.9 | - | - |
+| 0x7EC0 | P | 3 (proxy) | 0.5 | 160 | 6.68 | 32.19 | 23.81 | 0.0 | 0.0 | 0 | 1 (32 Hz) | 71.9 / 44.9 | - | - |
+| 0x7EC0 | P | 3 (proxy) | 1 | 160 | 6.68 | 32.19 | 23.81 | 0.0 | 0.0 | 0 | 1 (32 Hz) | 71.9 / 44.9 | - | - |
+| 0x7EC0 | P | 3 (proxy) | 2 | 160 | 7.27 | 32.19 | 21.88 | 156.9 | 0.0 | 0 | 1 (32 Hz) | 66.1 / 41.3 | - | - |
+| 0x7EC0 | P | 3 (proxy) | 5 | 160 | 9.94 | 16.37 | 16.0 | 640.0 | 0.0 | 0 | 2 (a capture lost per frame) | n/a | - | - |
+| 0x7EC0 | P | 3 (proxy) | 10 | 160 | 11.31 | 15.91 | 14.06 | 795.9 | 0.0 | 0 | 2 (a capture lost per frame) | n/a | - | - |
+| 0x7EC0 | Pg | 1 | 0 | 160 | 6.68 | 32.19 | 23.81 | 0.0 | 0.0 | 0 | 1 (32 Hz) | 71.9 / 44.9 | 8641 | 0 |
+| 0x7EC0 | Pg | 1 | 0.5 | 160 | 6.68 | 32.2 | 23.81 | 0.0 | 0.0 | 0 | 1 (32 Hz) | 71.9 / 44.9 | 8641 | 0 |
+| 0x7EC0 | Pg | 1 | 1 | 160 | 6.68 | 32.2 | 23.81 | 0.0 | 0.0 | 0 | 1 (32 Hz) | 71.9 / 44.9 | 8641 | 0 |
+| 0x7EC0 | Pg | 1 | 2 | 160 | 6.68 | 32.26 | 23.81 | 0.0 | 0.0 | 0 | 1 (32 Hz) | 71.9 / 44.9 | 8642 | 0 |
+| 0x7EC0 | Pg | 1 | 5 | 160 | 6.68 | 33.33 | 23.82 | 0.0 | 0.0 | 0 | 1 (32 Hz) | 71.9 / 44.9 | 8643 | 0 |
+| 0x7EC0 | Pg | 1 | 10 | 160 | 11.15 | 15.15 | 14.26 | 0.0 | 0.0 | 0 | 2 (a capture lost per frame) | n/a | 14420 | 0 |
+| 0x7EC0 | Pg | 1 | 15 | 160 | 12.12 | 15.38 | 13.12 | 742.6 | 742.6 | 0 | 2 (a capture lost per frame) | n/a | 15688 | 0 |
+| 0x7EC0 | Pg | 1 | 20 | 160 | 15.93 | 11.76 | 9.98 | 696.6 | 696.8 | 0 | 3 (a capture lost per frame) | n/a | 20633 | 0 |
+| 0x7EC0 | Pg | 3 (proxy) | 0 | 160 | 6.68 | 32.19 | 23.81 | 0.0 | 0.0 | 0 | 1 (32 Hz) | 71.9 / 44.9 | 8640 | 0 |
+| 0x7EC0 | Pg | 3 (proxy) | 0.5 | 160 | 6.68 | 32.19 | 23.81 | 0.0 | 0.0 | 0 | 1 (32 Hz) | 71.9 / 44.9 | 8640 | 0 |
+| 0x7EC0 | Pg | 3 (proxy) | 1 | 160 | 6.68 | 32.19 | 23.81 | 0.0 | 0.0 | 0 | 1 (32 Hz) | 71.9 / 44.9 | 8640 | 0 |
+| 0x7EC0 | Pg | 3 (proxy) | 2 | 160 | 6.68 | 32.19 | 23.81 | 0.0 | 0.0 | 0 | 1 (32 Hz) | 71.9 / 44.9 | 8641 | 0 |
+| 0x7EC0 | Pg | 3 (proxy) | 5 | 160 | 6.67 | 30.41 | 23.82 | 0.0 | 0.0 | 0 | 1 (32 Hz) | 71.9 / 44.9 | 8640 | 0 |
+| 0x7EC0 | Pg | 3 (proxy) | 10 | 160 | 11.15 | 15.91 | 14.26 | 0.0 | 0.0 | 0 | 2 (a capture lost per frame) | n/a | 14416 | 0 |
+| 0x8200 | S | 1 | 0 | 160 | 20.81 | 8.05 | 7.64 | 0.0 | 0.0 | 0 | 4 (8 Hz) | 51.9 / 28.8 | - | - |
+| 0x8200 | S | 1 | 0.5 | 160 | 22.02 | 8.02 | 7.22 | 106.2 | 0.0 | 0 | 4 (8 Hz) | 49.0 / 27.2 | - | - |
+| 0x8200 | S | 1 | 1 | 160 | 21.31 | 8.05 | 7.46 | 45.1 | 0.0 | 0 | 4 (8 Hz) | 50.7 / 28.2 | - | - |
+| 0x8200 | S | 1 | 2 | 160 | 23.48 | 6.45 | 6.77 | 219.7 | 0.0 | 0 | 5 (a capture lost per frame) | n/a | - | - |
+| 0x8200 | S | 1 | 5 | 160 | 24.41 | 6.45 | 6.51 | 287.5 | 0.0 | 0 | 5 (a capture lost per frame) | n/a | - | - |
+| 0x8200 | S | 1 | 10 | 160 | 25.13 | 6.62 | 6.33 | 334.3 | 0.0 | 0 | 5 (a capture lost per frame) | n/a | - | - |
+| 0x8200 | Sg | 1 | 0 | 160 | 20.81 | 8.05 | 7.64 | 0.0 | 0.0 | 0 | 4 (8 Hz) | 51.9 / 28.8 | 26841 | 0 |
+| 0x8200 | Sg | 1 | 0.5 | 160 | 20.81 | 8.05 | 7.64 | 0.0 | 0.0 | 0 | 4 (8 Hz) | 51.9 / 28.8 | 26841 | 0 |
+| 0x8200 | Sg | 1 | 1 | 160 | 20.81 | 8.05 | 7.64 | 0.0 | 0.0 | 0 | 4 (8 Hz) | 51.9 / 28.8 | 26840 | 0 |
+| 0x8200 | Sg | 1 | 2 | 160 | 20.81 | 8.05 | 7.64 | 0.0 | 0.0 | 0 | 4 (8 Hz) | 51.9 / 28.8 | 26841 | 0 |
+| 0x8200 | Sg | 1 | 5 | 160 | 20.81 | 7.9 | 7.64 | 0.0 | 0.0 | 0 | 4 (8 Hz) | 51.9 / 28.8 | 26846 | 0 |
+| 0x8200 | Sg | 1 | 10 | 160 | 21.16 | 7.69 | 7.52 | 19.9 | 19.8 | 0 | 4 (8 Hz) | 51.1 / 28.4 | 27306 | 0 |
+| 0x8200 | P | 1 | 0 | 160 | 6.68 | 32.19 | 23.81 | 0.0 | 0.0 | 0 | 1 (32 Hz) | 71.9 / 44.9 | - | - |
+| 0x8200 | P | 1 | 0.5 | 160 | 7.33 | 32.19 | 21.69 | 171.9 | 0.0 | 0 | 1 (32 Hz) | 65.5 / 40.9 | - | - |
+| 0x8200 | P | 1 | 1 | 160 | 6.99 | 32.2 | 22.75 | 85.8 | 0.0 | 0 | 1 (32 Hz) | 68.7 / 42.9 | - | - |
+| 0x8200 | P | 1 | 2 | 160 | 10.31 | 16.13 | 15.42 | 686.5 | 0.0 | 0 | 2 (a capture lost per frame) | n/a | - | - |
+| 0x8200 | P | 1 | 5 | 160 | 8.32 | 32.18 | 19.11 | 382.2 | 0.0 | 0 | 1 (32 Hz) | 57.7 / 36.1 | - | - |
+| 0x8200 | P | 1 | 10 | 160 | 11.31 | 15.15 | 14.06 | 796.0 | 0.0 | 0 | 2 (a capture lost per frame) | n/a | - | - |
+| 0x8200 | P | 3 (proxy) | 0 | 160 | 6.68 | 32.19 | 23.81 | 0.0 | 0.0 | 0 | 1 (32 Hz) | 71.9 / 44.9 | - | - |
+| 0x8200 | P | 3 (proxy) | 0.5 | 160 | 6.68 | 32.19 | 23.81 | 0.0 | 0.0 | 0 | 1 (32 Hz) | 71.9 / 44.9 | - | - |
+| 0x8200 | P | 3 (proxy) | 1 | 160 | 8.26 | 31.46 | 19.24 | 370.3 | 0.0 | 0 | 1 (32 Hz) | 58.1 / 36.3 | - | - |
+| 0x8200 | P | 3 (proxy) | 2 | 160 | 11.24 | 16.1 | 14.14 | 789.7 | 0.0 | 0 | 2 (a capture lost per frame) | n/a | - | - |
+| 0x8200 | P | 3 (proxy) | 5 | 160 | 8.97 | 16.53 | 17.72 | 494.8 | 0.0 | 0 | 2 (a capture lost per frame) | n/a | - | - |
+| 0x8200 | P | 3 (proxy) | 10 | 160 | 11.31 | 16.06 | 14.05 | 795.5 | 0.0 | 0 | 2 (a capture lost per frame) | n/a | - | - |
+| 0x8200 | Pg | 1 | 0 | 160 | 6.68 | 32.19 | 23.81 | 0.0 | 0.0 | 0 | 1 (32 Hz) | 71.9 / 44.9 | 8641 | 0 |
+| 0x8200 | Pg | 1 | 0.5 | 160 | 6.68 | 32.2 | 23.81 | 0.0 | 0.0 | 0 | 1 (32 Hz) | 71.9 / 44.9 | 8641 | 0 |
+| 0x8200 | Pg | 1 | 1 | 160 | 6.68 | 32.2 | 23.81 | 0.0 | 0.0 | 0 | 1 (32 Hz) | 71.9 / 44.9 | 8641 | 0 |
+| 0x8200 | Pg | 1 | 2 | 160 | 6.68 | 32.26 | 23.81 | 0.0 | 0.0 | 0 | 1 (32 Hz) | 71.9 / 44.9 | 8642 | 0 |
+| 0x8200 | Pg | 1 | 5 | 160 | 6.68 | 32.26 | 23.82 | 0.0 | 0.0 | 0 | 1 (32 Hz) | 71.9 / 44.9 | 8644 | 0 |
+| 0x8200 | Pg | 1 | 10 | 160 | 11.15 | 15.15 | 14.26 | 16.1 | 16.1 | 0 | 2 (a capture lost per frame) | n/a | 14420 | 0 |
+| 0x8200 | Pg | 3 (proxy) | 0 | 160 | 6.68 | 32.19 | 23.81 | 0.0 | 0.0 | 0 | 1 (32 Hz) | 71.9 / 44.9 | 8640 | 0 |
+| 0x8200 | Pg | 3 (proxy) | 0.5 | 160 | 6.68 | 32.19 | 23.81 | 0.0 | 0.0 | 0 | 1 (32 Hz) | 71.9 / 44.9 | 8640 | 0 |
+| 0x8200 | Pg | 3 (proxy) | 1 | 160 | 6.68 | 31.97 | 23.81 | 0.0 | 0.0 | 0 | 1 (32 Hz) | 71.9 / 44.9 | 8640 | 0 |
+| 0x8200 | Pg | 3 (proxy) | 2 | 160 | 6.68 | 32.87 | 23.81 | 0.0 | 0.0 | 0 | 1 (32 Hz) | 71.9 / 44.9 | 8641 | 0 |
+| 0x8200 | Pg | 3 (proxy) | 5 | 160 | 6.68 | 30.98 | 23.81 | 0.0 | 0.0 | 0 | 1 (32 Hz) | 71.9 / 44.9 | 8644 | 0 |
+| 0x8200 | Pg | 3 (proxy) | 10 | 160 | 11.16 | 16.06 | 14.25 | 0.0 | 0.0 | 0 | 2 (a capture lost per frame) | n/a | 14424 | 0 |
+
+Rows: 76 (72 matrix runs plus 4 extra at 15 and 20 ms). Every run ended with `host script complete`, with no fault and no traceback. Torn transfers are 0 in all 76 runs. The stock build's protection against tears is its own skip, so the matrix does not show a tear case; 42.74's copy-anyway run (452 of 1,199 torn at 15 ms) is not repeated here.
+
+*Reading the table.*
+- *Stock (S, P).* The stock field-start skip loses 45 to 334 fields a minute (S, 0.5 to 10 ms) and 86 to 1,023 (P, 0.5 to 15 ms). The 0.5 ms and 1 ms stock numbers agree with 42.74 (36 and 17 skips in 300 frames for S; here 34 and 13 in 160).
+- *Gated 32 Hz (Pg).* Zero lost fields from 0 to 5 ms with either credit, and at 10 ms with the body credit. With the header credit at 10 ms, 16 a minute are lost to the group gate. At 15 and 20 ms the group gate loses about 700 a minute, at 13 and 10 fps, with no tear.
+- *The 8 Hz gated build (Sg).* No loss from 0 to 5 ms with either credit, and none at 10 ms with the body credit. At 15 ms, 334 group losses a minute.
+- *The pipelined proxy.* On the stock build (P) it changes the 1 and 2 ms rows (serial 86 and 730 a minute; pipelined 370 and 790 with the header credit, 0 and 157 with the body credit). The stock build is timing-sensitive and not monotonic in the delay; the gated build has no loss from 0 to 5 ms either way.
+- *Throughput.* From about 10 ms per IN (five transfers per frame), the host cannot keep up with 32 Hz, and the frame rate falls to about 14 to 16 fps for both builds, with or without the gate.
+
+**5. Where the gate code lives on the camera.** The coordinator's question (42.56 selector 10 reads the word at 0x10000208). The gate's last byte is 0x100001F7, so its bytes are 0x10000114..0x100001F7 inclusive (228 B); 0x100001F8..0x100001FF is the image's zero fill and the boot record starts at 0x10000200.
+5.1 *Who copies it, and when.* The 2014 bootloader's `Reset_Handler` (factory block 0 of the dump, reset vector 0x14000269), after it has chosen the slot. The copy is `boot_copy(0x10000000, slot, 0x200)`. In the dump's own code this is `mov.w r0,#0x10000000; mov r1,image; mov.w r2,#512; bl boot_copy` at 0x140004C0..0x140004CA. [measured, `objdump` of the dump's block 0; source: `targets/compact_8hz_1_3_0_0_bootloader/src/startup.c:141`]. The order inside `Reset_Handler`: the image's data-copy records (the LINK FILL zero record from slot+0x97D4 to 0x10000000..0x1000023F, using `slot - 0x14000000` as the delta), the bss zeroing, the payload copy, then the 512-byte vector-page copy, then the handoff writes at 0x10000200, then `SCB_VTOR = 0x10000000`, then the image entry. So the vector-page copy is the last writer of 0x10000000..0x100001FF before the entry. [source and dump, as above]
+5.2 *What is copied.* The first 512 bytes of the slot: the vector table `g_pfnVectors`, 69 words (0x000..0x113; `boot_data.c`, ASSERT 0x114), then the image's align:0x200 LINK FILL (0x114..0x1FF, zero in the stock image; `layout/link_fill.csv`). The gate is in that fill. So the gate bytes reach 0x10000114..0x100001F7 on every boot of a bank whose slot holds the gated image: slot A on boot word 0, slot B on boot word 1 (the same code, `image` = 0x14060000). [source; the bank layout is measured in 1.6]
+5.3 *What shows the range is not used.*
+- *The vector table.* The core reads vectors from VTOR for exception numbers up to 68, i.e. 0x000..0x113. Nothing in the table lies at 0x114 or above. [source: `g_pfnVectors`]
+- *The handoff and the boot record.* The bootloader's handoff is at 0x10000200 (the literal 0x10000200 is in the dump's block 0 at 0x140004EC; `boot_handoff_t`: bl_info +0x00, boot_config +0x04, slot +0x08, magic +0x0C, count +0x10). The gate ends at 0x100001F7, below it. Selector 10 reads 0x10000208 (42.56), which is the handoff's slot word. [measured in the dump; source]
+- *The stack.* The firmware's initial MSP is `_vStackTop` = 0x10008000 (the firmware's word 0; `Reset_Handler` sets MSP from it). The bootloader's stack top is 0x10018000 (the dump's word 0). The firmware's stack grows down from 0x10008000, through the data at 0x10000240 and up to the BSS (0x100022C8..0x1000474C). To reach 0x100001F7 it would first have to pass the whole of the data and BSS. That is not measured for the worst case. [source: link map, `image_layout.ld`, `startup.c`; inferred]
+- *Other references.* No 4-byte word in the stock image (scanned at 2-byte steps) has a value in 0x10000100..0x100001FF. Address forms built from movw/movt were not scanned. [measured for literal words only]
+- *The link.* Nothing is placed in 0x10000114..0x100001FF: `.img.f.10000000` is the 512-byte LINK FILL, and `.img.d.10000200` is the header (`build/seek.map`). [measured]
+- *The emulator.* It boots the dump's own bootloader and the patched slot, and the vector-page copy writes the image head to RAM as the source says (at the first CBZ the RAM at 0x10000100 holds the image's bytes there; `seekemu/chimera.py` `VECTOR_TABLE_BYTES`; the segmented-bank repair in that file does not apply to this 2014 chain). At the first gate call the gate bytes in RAM equal `gate.bin`, and in all 42 gated runs no later gate call found them changed. [measured in the emulator; not silicon]
+5.4 *What is not shown.* (a) Silicon: no 1.3.0.0 camera RAM dump exists on disk. The two SRAM dumps in `FW-V1/jlink_dumps` (`sram_10000000_64k.bin`, 21 Sep; `sram_a_10000000_128k.bin`, 25 Aug) are from another image (word 0 = 0x1001F800), and their 0x114..0x1FF are zero, which is the stock fill but not evidence for 1.3.0.0. (b) The worst-case stack depth. (c) Address forms built with movw/movt. (d) A RAM check after a long run on the camera.
+5.5 *A note on the header copy.* The RAM copy of the header at 0x10000238 comes from the image's header record (file 0x99D4), which is not retuned. So the RAM copy keeps the stock acceptance word (0), while the bank's own header (file 0x238) holds the retuned word. The 32 Hz form already does this and runs on the camera (FPS_32HZ.md section 4), so the difference is not new. [measured in the images; inferred for the firmware's use]
+
+**6. The matrix, run details.** Probe outputs: `/private/tmp/claude-501/agent-76/runs/<tag>.json` (+ `.log`). Each row is one run. The per-call gate check (`gate_ram_mismatch_calls`) was added at 21:45:29, before the first gated run (21:49); a zero there is "no call found a change", and the key is absent when the count is zero.
+
+**7. The camera command (for 42.77; not run here).** The gate is in the image, so `build_flash.mjs --flash --slot b` cannot write it: that route builds the stock source (S). For P+gate or S+gate, use the runner directly, from the FW-V1 drop-path-study target directory (after the owner's merge, from FW-V1 main's `targets/compact_8hz_1_3_0_0`), with the banks above. Channel 1 is the J-Link and channel 2 the camera, as in 42.70; the agent switches as the bench rule says.
+
+```
+cd /private/tmp/claude-501/fwv1-drop/targets/compact_8hz_1_3_0_0
+node tools/jlink/jlink-runner.js dump-spifi-4m                  # pre-flash 4 MB copy -> jlink_dumps/spifi_14000000_4m.bin; copy it, e.g. to <agent>/pre-flash-4m.bin
+BANK_PAYLOAD=/private/tmp/claude-501/agent-76/images/bank/Pg.bank.bin BANK_ADDR=0x14060000 BANK_FORM=plain-2014 node tools/jlink/jlink-runner.js flash-bank
+node tools/jlink/jlink-runner.js set-boot-slot-b                # cfg[0] = 1, boot word 1 (template: the dump above)
+node tools/jlink/jlink-runner.js reset-go
+node tools/jlink/jlink-runner.js read-boot-slots                # expect: next start slot B, active-slot word 1, bank B 1.3.0.0
+node tools/jlink/jlink-runner.js dump-sram-64k                  # RAM 0x10000000..0x1000FFFF -> jlink_dumps/sram_10000000_64k.bin
+python3 -c "import hashlib;d=open('jlink_dumps/sram_10000000_64k.bin','rb').read();g=open('/private/tmp/claude-501/agent-76/gate/gate.bin','rb').read();print(d[0x114:0x114+228]==g, d[0x114:0x114+228].hex()[:16])"
+```
+
+For S+gate use `images/bank/Sg.bank.bin` in the same sequence. The stock bank B (no gate) is `build_flash.mjs --flash --slot b` from the FW-V1 target (42.70).
+
+Restore: `FACTORY_IMAGE=<pre-flash copy> node tools/jlink/jlink-runner.js flash-factory-4m-2` (rewrites only the 64 KiB blocks that differ and re-reads the whole part; exit 0 only when byte-identical), then `node tools/jlink/jlink-runner.js reset-go`, then `dump-spifi-4m` and `cmp` against the pre-flash copy. The quick route `node tools/build_flash.mjs rescue` sets boot word 0 (slot A) and leaves bank B holding the gated bank; that is safe but not a byte restore. Check the bench's bank A before writing: on 42.70's start it held P (`ef90c94a`). Power-cycle the camera (channel 2) at the end.
+
+**8. Not verified, and open.**
+- Silicon, in every part: the gate has not run on the camera, and its RAM copy at 0x10000114 is not read back there. Section 7's `dump-sram-64k` check is the first test, before any timing run.
+- The bootloader's copy is read from the dump's block 0 and from the source; the camera's block 0 is the same unit's, but the copy has not been observed on the bench.
+- The worst-case stack depth; movw/movt address forms; a RAM check after a long run.
+- Three IN in flight is a proxy; the emulator cannot hold three transfers in flight. The camera result for 42.75's checker is the test for that.
+- The emulator's skip counts are a model's timing (the host and the bus). The 0.5 ms and 1 ms stock rows agree with 42.74 in size, not exactly.
+- The stock build's header copy in RAM keeps the stock acceptance word (5.5).
+- The 0.5 to 1 ms counts are from 160 frames (about 20 events); the ±20 % error bar in section 4 applies to them.
+
+**9. Files and commits.** FW-V1 `drop-path-study`: `79ff1fec2` (the gate source, build script, linker script, `apply_gate.py`, `drop_probe.py`), `42ae65ea5` (the per-call RAM check, `summarize.py`); not merged. Scratch (not committed): `/private/tmp/claude-501/agent-76/` (images, banks, gate blob, runs, `package.py`, `jobs.py`, `table.py`). Seek: this section only, on `worktree-agent-a6c534c6ec02ee744`.
+
+Co-Authored-By: Claude Haiku 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01XKhSca8W2e3Q8Dcd4CkwCy
