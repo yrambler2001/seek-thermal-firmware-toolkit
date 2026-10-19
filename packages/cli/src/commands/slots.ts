@@ -816,7 +816,7 @@ export function safeVersion(version: string | null): string {
 }
 
 /**
- * `slot-<key>-<version>-<sha8>.bin` for the bank as stored, and the same stem with
+ * `seek-slot-<key>-<version>-<sha8>.bin` for the bank as stored, and the same stem with
  * `-decrypted.bin` when a key recovered and the image decrypts. The eight-digit tag is the first
  * eight hex digits of the stored bank's own SHA-256, so the two files of one read share it.
  *
@@ -835,7 +835,7 @@ export function dumpArtifacts(
 ): Artifact[] {
   /* An empty bank has no version to name it by; it says what it is instead. */
   const label = dumped.empty ? 'empty' : safeVersion(version);
-  const stem = `slot-${dumped.key}-${label}-${dumped.sha256.slice(0, 8)}`;
+  const stem = `seek-slot-${dumped.key}-${label}-${dumped.sha256.slice(0, 8)}`;
   const artifacts: Artifact[] = [{ name: `${stem}.bin`, data: dumped.raw }];
   if (dumped.plain !== null) {
     const suffix =

@@ -658,27 +658,31 @@ describe('dump file names', () => {
   it('names the raw bank and its decrypted image after the version and the bank digest', () => {
     const artifacts = dumpArtifacts('4.9.5.0', fakeDumped('a', true));
     expect(artifacts.map((artifact) => artifact.name)).toEqual([
-      'slot-a-4.9.5.0-deadbeef.bin',
-      'slot-a-4.9.5.0-deadbeef-decrypted.bin',
+      'seek-slot-a-4.9.5.0-deadbeef.bin',
+      'seek-slot-a-4.9.5.0-deadbeef-decrypted.bin',
     ]);
     expect(artifacts[0]?.data.length).toBe(0x10000);
   });
 
   it('writes only the raw bank when no key recovers the image', () => {
     const artifacts = dumpArtifacts('4.9.5.0', fakeDumped('r', false));
-    expect(artifacts.map((artifact) => artifact.name)).toEqual(['slot-r-4.9.5.0-deadbeef.bin']);
+    expect(artifacts.map((artifact) => artifact.name)).toEqual([
+      'seek-slot-r-4.9.5.0-deadbeef.bin',
+    ]);
   });
 
   it('names the decrypted image with the key pair it holds, as decrypt does, and bare when it holds neither', () => {
     /* A flash takes its keys from the file name (write-image.ts), so a dumped image the flash can
      * retarget must carry the pair the image contains. */
     const dumped = { ...fakeDumped('b', true), plain: buildPlainImage() };
-    const named = `slot-b-4.9.5.0-deadbeef-decrypted${keyFilenameSuffix(KEY_A, KEY_B)}.bin`;
+    const named = `seek-slot-b-4.9.5.0-deadbeef-decrypted${keyFilenameSuffix(KEY_A, KEY_B)}.bin`;
     expect(dumpArtifacts('4.9.5.0', dumped, { keyA: KEY_A, keyB: KEY_B })[1]?.name).toBe(named);
     expect(
       dumpArtifacts('4.9.5.0', dumped, { keyA: FOREIGN_KEY_A, keyB: FOREIGN_KEY_B })[1]?.name,
-    ).toBe('slot-b-4.9.5.0-deadbeef-decrypted.bin');
-    expect(dumpArtifacts('4.9.5.0', dumped)[1]?.name).toBe('slot-b-4.9.5.0-deadbeef-decrypted.bin');
+    ).toBe('seek-slot-b-4.9.5.0-deadbeef-decrypted.bin');
+    expect(dumpArtifacts('4.9.5.0', dumped)[1]?.name).toBe(
+      'seek-slot-b-4.9.5.0-deadbeef-decrypted.bin',
+    );
   });
 
   it('keeps a version that is not known, or not safe in a name, out of the path', () => {
@@ -686,7 +690,7 @@ describe('dump file names', () => {
     expect(safeVersion('')).toBe('unknown');
     expect(safeVersion('4/../x')).toBe('4_.._x');
     expect(dumpArtifacts(null, fakeDumped('b', false))[0]?.name).toBe(
-      'slot-b-unknown-deadbeef.bin',
+      'seek-slot-b-unknown-deadbeef.bin',
     );
   });
 });
@@ -814,10 +818,10 @@ describe('slots command', () => {
     expect(result).toMatchObject({ action: 'dump', bank: 'b', decrypted: true });
     expect(log.dumped).toEqual(['b']);
     expect((await readdir(out)).sort()).toEqual([
-      'slot-b-4.9.5.0-deadbeef-decrypted.bin',
-      'slot-b-4.9.5.0-deadbeef.bin',
+      'seek-slot-b-4.9.5.0-deadbeef-decrypted.bin',
+      'seek-slot-b-4.9.5.0-deadbeef.bin',
     ]);
-    const raw = await readFile(join(out, 'slot-b-4.9.5.0-deadbeef.bin'));
+    const raw = await readFile(join(out, 'seek-slot-b-4.9.5.0-deadbeef.bin'));
     expect(raw.length).toBe(0x10000);
     expect(raw[0]).toBe(0xab);
   });
@@ -1301,7 +1305,9 @@ describe('empty banks', () => {
   describe('dump', () => {
     it('names an empty dump by what it is, and writes no decrypted file', () => {
       const artifacts = dumpArtifacts(null, fakeDumped('b', true, true));
-      expect(artifacts.map((artifact) => artifact.name)).toEqual(['slot-b-empty-ffeeddcc.bin']);
+      expect(artifacts.map((artifact) => artifact.name)).toEqual([
+        'seek-slot-b-empty-ffeeddcc.bin',
+      ]);
       expect(artifacts[0]?.data).toHaveLength(0x10000);
       expect(artifacts[0]?.data.every((byte) => byte === 0xff)).toBe(true);
     });
@@ -1323,8 +1329,8 @@ describe('empty banks', () => {
         plainSha256: null,
         version: null,
       });
-      expect(await readdir(out)).toEqual(['slot-b-empty-ffeeddcc.bin']);
-      const raw = await readFile(join(out, 'slot-b-empty-ffeeddcc.bin'));
+      expect(await readdir(out)).toEqual(['seek-slot-b-empty-ffeeddcc.bin']);
+      const raw = await readFile(join(out, 'seek-slot-b-empty-ffeeddcc.bin'));
       expect(raw).toHaveLength(0x10000);
       expect(raw.every((byte) => byte === 0xff)).toBe(true);
       expect(test.stdout.text).toContain('bank B: empty, nothing to decrypt');
@@ -1340,8 +1346,8 @@ describe('empty banks', () => {
       );
       expect(result).toMatchObject({ empty: false, decrypted: true });
       expect((await readdir(out)).sort()).toEqual([
-        'slot-a-4.9.5.0-deadbeef-decrypted.bin',
-        'slot-a-4.9.5.0-deadbeef.bin',
+        'seek-slot-a-4.9.5.0-deadbeef-decrypted.bin',
+        'seek-slot-a-4.9.5.0-deadbeef.bin',
       ]);
     });
   });
@@ -1466,7 +1472,7 @@ describe('empty banks', () => {
       const code = await run(['slots', '--help'], test.io, new AbortController().signal);
       expect(code).toBe(EXIT_OK);
       expect(test.stdout.text).toContain('An EMPTY bank');
-      expect(test.stdout.text).toContain('slot-<bank>-empty-<sha8>.bin');
+      expect(test.stdout.text).toContain('seek-slot-<bank>-empty-<sha8>.bin');
     });
   });
 });

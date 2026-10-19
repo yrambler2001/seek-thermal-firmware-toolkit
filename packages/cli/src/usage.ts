@@ -235,7 +235,7 @@ tried. The bootloader and the boot-config block are not banks and are never writ
 
   list     the camera, each bank's address, whether the camera boots it, its
            version, key and bootability, and what this build can do with each
-  dump     read one bank as stored: slot-<bank>-<version>-<sha8>.bin, and the
+  dump     read one bank as stored: seek-slot-<bank>-<version>-<sha8>.bin, and the
            decrypted image beside it when its key recovers (-decrypted.bin)
   flash    write one bank. The default image is a DECRYPTED image, encrypted the
            way that bank's firmware needs; --raw sends the bytes verbatim. The
@@ -269,7 +269,7 @@ tried. The bootloader and the boot-config block are not banks and are never writ
 
 An EMPTY bank (its header window reads as all 0xFF, as on many 2014 cameras'
 bank B) is a state, not an error. list shows it as 'empty'; dump returns the raw
-64 KiB of 0xFF (slot-<bank>-empty-<sha8>.bin) and says there is nothing to
+64 KiB of 0xFF (seek-slot-<bank>-empty-<sha8>.bin) and says there is nothing to
 decrypt; flash writes it like any other bank, and the plan says nothing is
 overwritten. To give it the firmware another bank holds, dump that bank and
 flash the -decrypted file it writes.

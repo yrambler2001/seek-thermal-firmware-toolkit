@@ -255,7 +255,7 @@ describe.skipIf(!available)('seek-fw slots on an empty bank, through the CLI', (
         });
         const files = filesOf(dump ?? null);
         expect(files).toHaveLength(1);
-        expect(path.basename(files[0] ?? '')).toBe(`slot-b-empty-${FF_SHA.slice(0, 8)}.bin`);
+        expect(path.basename(files[0] ?? '')).toBe(`seek-slot-b-empty-${FF_SHA.slice(0, 8)}.bin`);
         expect(seq?.rawB).toHaveLength(BANK_BYTES);
         expect(seq?.rawB?.every((b) => b === 0xff)).toBe(true);
         const at = BANK_B - FLASH_BASE;

@@ -159,12 +159,12 @@ function decryptedFile(files: readonly string[]): string | null {
   return files.find((file) => /-decrypted[^/]*\.bin$/.test(path.basename(file))) ?? null;
 }
 
-/** The stored-bank file of a bank B dump: `slot-b-<version>-<sha8>.bin`, never the decrypted one. */
+/** The stored-bank file of a bank B dump: `seek-slot-b-<version>-<sha8>.bin`, never the decrypted one. */
 function rawFile(files: readonly string[]): string | null {
   return (
     files.find((file) => {
       const name = path.basename(file);
-      return /^slot-b-.*\.bin$/.test(name) && !name.includes('-decrypted');
+      return /^seek-slot-b-.*\.bin$/.test(name) && !name.includes('-decrypted');
     }) ?? null
   );
 }
@@ -401,7 +401,7 @@ describe.skipIf(!available)('seek-fw slots, through the CLI, on the emulated cam
         ).toBe(0);
         /* The decrypted file is the image the bank decrypts to, and it is named with the pair it holds. */
         expect(seq.current.decryptedName).toMatch(
-          /^slot-b-.*-decrypted-KeyA-[0-9a-f]{32}-KeyB-[0-9a-f]{32}\.bin$/,
+          /^seek-slot-b-.*-decrypted-KeyA-[0-9a-f]{32}-KeyB-[0-9a-f]{32}\.bin$/,
         );
         expect(sha256Hex(seq.current.decrypted ?? new Uint8Array())).toBe(json.plainSha256);
       });
@@ -612,12 +612,13 @@ async function ffSequence(entry: ManifestEntry): Promise<FFSequence> {
         readOrNull(
           written.find((file) => {
             const name = path.basename(file);
-            return /^slot-r-.*\.bin$/.test(name) && !name.includes('-decrypted');
+            return /^seek-slot-r-.*\.bin$/.test(name) && !name.includes('-decrypted');
           }) ?? null,
         ) ?? null;
       seq.decrypted =
         readOrNull(
-          written.find((file) => /^slot-r-.*-decrypted.*\.bin$/.test(path.basename(file))) ?? null,
+          written.find((file) => /^seek-slot-r-.*-decrypted.*\.bin$/.test(path.basename(file))) ??
+            null,
         ) ?? null;
     });
     await row.assertDelivery();

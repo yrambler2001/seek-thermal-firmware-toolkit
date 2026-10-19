@@ -256,7 +256,7 @@ describe.skipIf(!REAL)('the CLI on the bench camera (1.3.0.0, real USB)', () => 
         const out = path.join(dir, `dump-${letter}`);
         const run = cli(['slots', 'dump', letter, '--out', out]);
         expect(run.status, run.out).toBe(0);
-        const raw = onlyFile(out, new RegExp(`^slot-${letter}-(?!.*decrypted)`));
+        const raw = onlyFile(out, new RegExp(`^seek-slot-${letter}-(?!.*decrypted)`));
         expect(
           sameBytes(readFileSync(raw), bankOf(flash, letter)),
           `dump ${letter} is the halted bank`,
@@ -279,7 +279,7 @@ describe.skipIf(!REAL)('the CLI on the bench camera (1.3.0.0, real USB)', () => 
       const out = path.join(dir, 'dump-a-after-refusal');
       expect(cli(['slots', 'dump', 'a', '--out', out]).status).toBe(0);
       expect(
-        sameBytes(readFileSync(onlyFile(out, /^slot-a-(?!.*decrypted)/)), bankOf(flash, 'a')),
+        sameBytes(readFileSync(onlyFile(out, /^seek-slot-a-(?!.*decrypted)/)), bankOf(flash, 'a')),
       ).toBe(true);
     },
     CLI_TIMEOUT_MS,
@@ -295,7 +295,7 @@ describe.skipIf(!REAL)('the CLI on the bench camera (1.3.0.0, real USB)', () => 
       expect(run.out).toMatch(/read-back|matches/);
       const out = path.join(dir, 'dump-b-after-write');
       expect(cli(['slots', 'dump', 'b', '--out', out]).status).toBe(0);
-      const after = readFileSync(onlyFile(out, /^slot-b-(?!.*decrypted)/));
+      const after = readFileSync(onlyFile(out, /^seek-slot-b-(?!.*decrypted)/));
       const image = readFileSync(decrypted);
       expect(sameBytes(after.subarray(0, image.length), image), 'bank B holds the image').toBe(
         true,
