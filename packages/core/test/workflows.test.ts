@@ -911,6 +911,15 @@ describe('prepareImage', () => {
     expectRefusal(() => prepareImage(state, image, `fw${suffix}.bin`), 'profile/unsupported');
   });
 
+  it('refuses the 2016 profile at its flash capability, so the footer rekey test (flash.ts) is never reached on it', () => {
+    /* compact-2016 declares flash unsupported (profiles/compact-2016.ts), so the gate that runs first is the
+     * capability's: the rekey warning, which tests footerOk, is not asked on this line. */
+    const state: DeviceState = { ...makeDeviceState(myKeyA, myKeyB), profile: compact2016 };
+    const image = makePlainImage(srcKeyA, srcKeyB, modern4x);
+    const suffix = keyFilenameSuffix(srcKeyA, srcKeyB);
+    expectRefusal(() => prepareImage(state, image, `fw${suffix}.bin`), 'profile/unsupported');
+  });
+
   /* ---- and the accept path ---------------------------------------- */
 
   it('retargets a well-formed image and produces a payload the bank guard accepts', () => {

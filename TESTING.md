@@ -9690,3 +9690,71 @@ Totals: with the stand-in, 21 targets reach flash-bank at bank B with boot word 
 **Commits.**
 - FW-V1, branch `plan-hygiene`, worktree `/private/tmp/claude-501/fwv1-hygiene` (not merged, not pushed): `b99426f8b` (item 1), `289548951` (item 2), `3c3e688ea` (item 3).
 - Seek: this note, on branch `worktree-agent-af0c564a9330f9626`, reset to `refactor/all-firmware-profiles` at `2744ad1`.
+
+### 42.50 The 4.x upgrade target is the camera's own upgrade destination on every boot measured, so the word override stays; the 2016 rekey warning does not fire, by design, and the code and tests say why (2026-10-19)
+
+**Summary.** Two items from `plan.md` section 1: the 4.x upgrade target, and the 2016 rekey warning. Emulator only: no camera, J-Link or USB switch was used. (1) The code's upgrade target matches the camera's own upgrade destination on all six boots measured (the Compact 4.8.2.1 and the Compact PRO 4.9.1.15 dumps, boot words 0, 1 and 2). The fix the plan describes, gating the active-slot word out of `device-info.ts:944` the way 42.48 gated `bootChoiceOf`, makes the 4.8.2.1 boots with words 1 and 2 name slot A, where the camera writes slot B. So `device-info.ts` is unchanged, and a new emulator test pins the picks. (2) The rekey warning cannot fire on 2016 and should not: the 2016 line never reaches either site, and on 2016 bootability is "unknown", not "not bootable". Both sites now say so in a comment, and three tests pin the 4.x rule and the 2016 gate. The change is comments and tests only.
+
+**Tags.** [measured] is an emulator run, or a read-only probe of the emulator. [source] is read from code. [inferred] follows from those.
+
+**1. The 4.x upgrade target (`device-info.ts:944`, `confirmUpgradeTarget`).**
+
+Before, as the test shows it. Each row boots the full dump with the boot-config word at `0x14010000` set, and reads the device info the way the page does. The code's pick is `boot.target`. [measured]
+
+| dump | cfg[0] | active-slot word | replay boots | window confirms | code picks | camera's own destination |
+| --- | --- | --- | --- | --- | --- | --- |
+| Compact 4.8.2.1 | 0 | 0 | A | neither (A and B are identical) | B | B |
+| Compact 4.8.2.1 | 1 | 0 | B | neither | B | B |
+| Compact 4.8.2.1 | 2 | 0 | R | neither | B | B |
+| Compact PRO 4.9.1.15 | 0 | 0 | A | B | B | B |
+| Compact PRO 4.9.1.15 | 1 | 0 | A (B is not bootable in this dump) | B | B | B |
+| Compact PRO 4.9.1.15 | 2 | 2 | R | A | A | A |
+
+On 4.8.2.1 with words 1 and 2 the replay names A ("booted Slot B, so an upgrade would write Slot A"; "booted Recovery, so an upgrade would write Slot A"). The active-slot word is 0, so the override says "Slot B instead — trusting the camera". The window matches both A and B, so it cannot overrule, and B stands.
+
+The camera's own answer. `upgrade_target_probe.py` (in the session scratchpad, `/private/tmp/claude-501/-Users-yrambler2001-things-a-noindex-seek-seek-thermal-firmware-backup/82174575-1341-45d6-a306-7518156cd978/scratchpad/`) cold-boots the same dump with the word set, arms selector 0 with the two-byte payload the code sends, and reads `g_fw_op_desc.dest`. It is read-only: a copy-on-write NOR, and `PYTHONDONTWRITEBYTECODE=1` so nothing under FW-V1 is written. In the emulator the upgrade commit (81) programs the slot at `dest`, and `upgrade_phase` reads the slot back there (`seekemu/flash_rpc.py`). So `dest` is the upgrade target. [measured] Results: 4.8.2.1, B for words 0, 1 and 2. 4.9.1.15 PRO, B, B and A. Forcing the active-slot cell `0x1000AED0` to 1 or 2 before the arm left the 4.8.2.1 destination at B, and so did forcing `0x10000208` to 2. So the RAM word that mode 0 reads on 4.8.2.1 was not found; the outcome was measured, the input was not.
+
+The gate the plan describes. `if (activeSlotWord !== null && plainChain)`, the 42.48 gate applied at line 944, fails the 4.8.2.1 rows for words 1 and 2: it names A, and the camera writes B. The other four rows still pass. It was run and reverted; `device-info.ts` has no diff. [measured]
+
+Why the code is right here. [inferred]
+- Where the window tells A from B, it is the camera's answer: it reads the block the selector arms (`confirmUpgradeTarget`), and the code trusts it over the replay. The PRO rows show it.
+- Where the window cannot tell them apart, as on the identical banks of the 4.8.2.1 dump, the active-slot word decides. The rule the code states for that, active slot 0 gives B and anything else gives A, matches the camera on all six boots.
+- The replay's rule (booted A gives B, otherwise A) is the part that disagrees with the camera, on 4.8.2.1 with words 1 and 2. TESTING.md 27.2 defines the upgrade target as mode 0 itself, which is the camera's answer, so the replay is the prediction to drop.
+
+Corrections. [measured] 42.43 and 42.48 say the active-slot word is always 0 on 4.x. It is 0 on 4.8.2.1 under every word. On the Compact PRO 4.9.1.15 it read 2 when the replay booted R, and 0 when it booted A. Word 1 boots A in this dump because the replay finds B not bootable. TESTING.md 8937 records words 1 and 2 reading 1 and 2 on the 4.9.x Compact PRO. So "always 0 on 4.x" holds for 4.8.x only.
+
+For the owner. [measured on the emulator, not a camera] On the Compact 4.8.2.1 with the word at 1 or 2, the camera's own upgrade writes slot B, the bank it booted from. The page shows "Booted from B" and "Upgrade target B" together. Whether the page should say so is the owner's call. The replay log line "so an upgrade would write Slot A" is wrong for this build; it is followed by the override, and it is left as it is.
+
+Not changed: `device-info.ts`, and the 2014 chain (its gate and its word reading are as 42.48 left them).
+
+**2. The 2016 rekey warning (`write.ts:565`, `flash.ts:437`).**
+
+What it says. [source] `rekeyRisk` warns that the target "already holds an image the bootloader cannot take", so the write "lands in the same state". The condition is present, accepts, `footerOk` and not `bootable`.
+
+Where it can be reached. [source]
+- `write.ts:565` is the `key-a-ciphertext` branch. `stagingFor` gives that staging to the modern family only. The 2016 line stages `slot-keystream-ciphertext`, and that branch sets `rekeyRisk: false` (`write.ts:580`).
+- `flash.ts:437` is in `prepareImage`, which begins with `requireCapability(state.profile, 'flash')` (`flash.ts:120`). `compact-2016` declares flash unsupported (`profiles/compact-2016.ts:120`), so `prepareImage` refuses the profile before line 437.
+- So neither site computes a rekey risk on 2016. `footerOk` is false there (the flash has no footer, 42.43 section 3), but that is not what keeps the warning off.
+
+Should it fire on 2016? No. [inferred]
+- It states a demonstrated fact: the bank is not bootable. On 2016 every accepting bank is `bootability: 'unknown'`, because no key table matches (`device-info.ts`, the `unknown` branch; 42.43 section 3, 42.48 section 3). Using `checksFooter` in place of `footerOk` would not make the fact true: `!bootable` alone would name every 2016 bank that accepts, a false warning.
+- The 2016 write does not re-key: a bank written with its own image reads back byte-identical (the comment at `write.ts:577`).
+- So there is no 2016 rule. The comments at `write.ts:565` and `flash.ts:437` say why. Revisit when a 2016 key table can establish "not bootable" (42.48 section 3).
+
+Tests (new; they pass on the unchanged logic).
+- `write.test.ts`, "the rekey warning on the 4.x line": a footered, accepting, not-bootable target gets the warning, and the same target without its footer does not. This pins the 4.x rule the comment relies on.
+- `write.test.ts`, "the rekey warning never fires on the 2016 line": a 2016 bank that accepts, with `footerOk` true and `bootability: 'unknown'`, gets no warning, and its staging is `slot-keystream-ciphertext`.
+- `workflows.test.ts`, "refuses the 2016 profile at its flash capability": `prepareImage` on a compact-2016 state refuses with `profile/unsupported`, before any rekey test.
+
+**Tests (no camera, no J-Link, no switch):**
+- `packages/core/test/slots/upgrade-target.emulator.test.ts` (new; run alone with `SEEK_EMU_DIR` set to FW-V1's `emu`): 6 passed, about 30 s. With the gate from section 1 applied: 4 passed, 2 failed (4.8.2.1, words 1 and 2). Reverted.
+- `packages/core/test/slots/write.test.ts` and `packages/core/test/workflows.test.ts`: 98 passed, the three new tests among them.
+- `packages/core/test/slots/boot-choice.test.ts`, `write-commit.test.ts`, `write-keys.test.ts`, `write-ff.test.ts`, `empty-bank.test.ts` and `plain-chain-flash.test.ts`: 124 passed, 5 skipped (the real dump is not on this machine, as before).
+- `tsc --noEmit -p packages/core/tsconfig.json`: exit 0. eslint on the five changed TypeScript files: clean. Prettier: clean.
+- The CLI and web tests were not run: their output did not change.
+
+**Not verified.**
+- No camera was used. The 4.8.x and 4.9.x destinations are emulator measurements; none was taken on a camera.
+- The RAM word that mode 0 reads on 4.8.2.1 was not identified (section 1).
+- 2016 bootability needs a key table (42.48 section 3); nothing about it is claimed here.
+- `plan.md` is not edited.

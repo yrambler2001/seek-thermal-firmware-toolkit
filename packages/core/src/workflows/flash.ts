@@ -426,7 +426,14 @@ export function prepareImage(
 
   /* If the slot an upgrade writes already holds a valid image under a key the
    * bootloader cannot use, the application demonstrably re-encrypts with that
-   * key — so this write will land in the same unbootable state. */
+   * key — so this write will land in the same unbootable state.
+   *
+   * footerOk is the test because this is the cipher chain's (modern 4.x) rule, and that bootloader checks
+   * the "CODE" footer. The 2016 profile cannot reach it: prepareImage's requireCapability('flash') refuses
+   * compact-2016 (its flash capability is unsupported, profiles/compact-2016.ts:120), so
+   * footerOk, which is false on 2016 because the flash has no footer (TESTING.md 42.43), never decides
+   * anything there. The 2014 plaintext chain returns rekeyRisk false above. A 2016 rule is not written
+   * until a key table can call a bank "not bootable" (TESTING.md 42.48 §3). */
   const rekeyRisk = target.present && target.accepts && target.footerOk && !target.bootable;
 
   return {

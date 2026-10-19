@@ -714,6 +714,55 @@ describe('prepareSlotFlash warnings', () => {
     const outB = prepareSlotFlash(unnamed, 'b', { kind: 'raw', bytes: image, fileName: 'x' });
     expect(outB.warnings.some((w) => w.includes('could not be named'))).toBe(true);
   });
+
+  /* The rekey warning (write.ts, key-a branch; TESTING.md 42.50): the target accepts, has its footer, and
+   * is not bootable, so the application re-keys a valid image under a key the bootloader will not try. */
+  const REKEY_WARNING = 'already holds an image the bootloader cannot take';
+
+  it('the rekey warning on the 4.x line: named for a footered bank the bootloader cannot key, not for one without a footer', () => {
+    const plan = buildSlotPlan(modern, '4.8.1.9');
+    const image = imageOf(0x5000, 5);
+    image.set(SRC_A, 0x4000);
+    image.set(SRC_B, 0x4020);
+    const name = `img${keyFilenameSuffix(SRC_A, SRC_B)}.bin`;
+    const warnedFor = (footerOk: boolean): boolean => {
+      const slot = slotState({ key: 'b', present: true, accepts: true, footerOk });
+      const report = reportFor(
+        stateFor(modern, {
+          version: '4.8.1.9',
+          slots: [slot, bootedWithApp()],
+          keyA: KEY_A,
+          keyB: KEY_B,
+        }),
+        plan,
+      );
+      const out = prepareSlotFlash(report, 'b', { kind: 'plain', bytes: image, fileName: name });
+      expect(out.staging).toBe('key-a-ciphertext');
+      return out.warnings.some((w) => w.includes(REKEY_WARNING));
+    };
+    expect(warnedFor(true)).toBe(true);
+    expect(warnedFor(false)).toBe(false);
+  });
+
+  it('the rekey warning never fires on the 2016 line: its stage-key staging takes no rekey rule, and a bank that accepts is not "not bootable" there', () => {
+    /* On 2016 the bank is "unknown" (no key table), not "not bootable", and the stage-key form sets
+     * rekeyRisk false. A footer the 2016 bootloader never reads does not make the bank unbootable. */
+    const plan = buildSlotPlan(compact2016, '1.0.3.0');
+    const image = imageOf(0x6000, 4);
+    image.set(hexToBytes(KEY_PAIRS.cp103.block0), 0x3000);
+    image.set(hexToBytes(KEY_PAIRS.cp103.block1), 0x3100);
+    const slot = slotState({
+      key: 'b',
+      present: true,
+      accepts: true,
+      footerOk: true,
+      bootability: 'unknown',
+    });
+    const report = reportFor(stateFor(compact2016, { version: '1.0.3.0', slots: [slot] }), plan);
+    const out = prepareSlotFlash(report, 'b', { kind: 'plain', bytes: image, fileName: 'x.bin' });
+    expect(out.staging).toBe('slot-keystream-ciphertext');
+    expect(out.warnings.some((w) => w.includes(REKEY_WARNING))).toBe(false);
+  });
 });
 
 /* ==================================================================== *
@@ -1000,7 +1049,9 @@ describe('the 1.3.0.8 FF image on the slot writer', () => {
         expect(rec.calls.find((c) => c.op === 'commit')?.arg).toBe(flash.sum16);
         expect(result.commitStatus).toBe(0);
         expect(result.verified).toBe(true);
-        expect(result.notes.join('\n')).toMatch(/holds the image XOR Key B that the FF build stores/);
+        expect(result.notes.join('\n')).toMatch(
+          /holds the image XOR Key B that the FF build stores/,
+        );
       },
     );
 

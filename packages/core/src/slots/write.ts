@@ -555,6 +555,13 @@ function stageImage(
       /* The device decrypts with the application's keys and re-encrypts under its store key, so
        * the bytes it keeps are not the bytes it was sent: nothing to predict. */
       expectedStored: () => null,
+      /* THIS BRANCH IS THE 4.x (modern) FAMILY ONLY: `stagingFor` gives key-a-ciphertext to no other line.
+       * footerOk is a real test here, because the 4.x bootloader checks a "CODE" footer (checksFooter).
+       * It is not the 2016 gap: the 2016 line never reaches this branch (its staging is the stage-key form
+       * below, which sets rekeyRisk false), and its bank has no footer in the flash (TESTING.md 42.43), so
+       * footerOk is false there. Nor may `!bootable` alone stand in for 2016: its bootability is "unknown"
+       * (no key table, device-info.ts), not "not bootable", so the warning would name every bank that
+       * accepts. A 2016 rule waits on a key table that can establish "not bootable" (TESTING.md 42.48 §3). */
       rekeyRisk: slot.present && slot.accepts && slot.footerOk && !slot.bootable,
     };
   }
