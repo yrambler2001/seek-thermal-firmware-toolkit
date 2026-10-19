@@ -9758,3 +9758,52 @@ Tests (new; they pass on the unchanged logic).
 - The RAM word that mode 0 reads on 4.8.2.1 was not identified (section 1).
 - 2016 bootability needs a key table (42.48 section 3); nothing about it is claimed here.
 - `plan.md` is not edited.
+
+### 42.51 FW-V1 plan items: the 9 Hz PRO factory flash named as on disk (.BIN), make's BUILD in the 4.x 8 Hz and FF 4.16.1.7 copies, and the STATE.MD checkpoint (2026-10-19)
+
+**Summary.** The three FW-V1 items from the 42.49 follow-ups, on branch `plan-hygiene` in the FW-V1 worktree `/private/tmp/claude-501/fwv1-hygiene`, three commits on top of 42.49's `3c3e688ea`: `7110fd0fb` (the `.BIN` name), `ebbff71a7` (`$(BUILD)` in three more copies) and `752378ea3` (STATE.MD). Nothing was merged to FW-V1 main or pushed, and FW-V1's main checkout was not touched. The seek worktree was reset to `refactor/all-firmware-profiles` at `47f3fe4`, as the brief asked. No camera, J-Link or USB switch was used. Every run went through the sandbox harness, with `JLINKEXE` pointed at a logging stub that talks to nothing.
+
+**Tags.** [measured] is a command run in this session. [inferred] is read from the code and not run.
+
+**1. The `.BIN` reference (FW-V1 `7110fd0fb`).**
+- `targets/compact_pro_9hz_1_0_3_0/tools/build_flash.mjs:158`: the factory-flash name is now `firmware_to_be_reconstructed_full_flash.BIN`. The file in `base/compact_pro_9hz_1_0_3_0/` is `.BIN` in git, so the file is not renamed. The target's `target.json` (`targets/compact_pro_9hz_1_0_3_0/targets/compact_pro_9hz_1_0_3_0/target.json`, line 48) already names `.BIN`.
+- [measured] A directory listing with exact names: the `.BIN` name is present and the lowercase name is absent. `node --check` passes. The harness (real base folder, stub make, logging JLinkExe) still reaches flash-bank at 0x14060000 with boot word 1.
+- [inferred] The old name fails the existence checks at `build_flash.mjs:182` (preflight) and `:221` (packageBank) on a case-sensitive filesystem. Not run: no Linux host was used.
+- The other lowercase names in this target's tools (`launch_function_worktree_ubuntu.py`, `complete_function_worker.py`) point at `compact_pro_ff_18hz_4_18_2_0`, whose file is lowercase. They are correct and were not changed.
+
+**2. `$(BUILD)` in the 4.x copies (FW-V1 `ebbff71a7`).**
+- `targets/compact_8hz_4_8_1_7/tools/build_flash.mjs`, `compact_8hz_4_8_1_9/tools/build_flash.mjs` and `compact_ff_16hz_4_16_1_7/tools/build_flash.mjs`, lines 138-139: the comment and `vars.BUILD = makeVar(makefile, "BUILD", "build");`, the same two lines as `b99426f8b`.
+- Cause [measured]. Each Makefile says `TARGET_IMAGE ?= $(BUILD)/image.bin` (line 177) with `BUILD ?= build` (line 53). `gmake -n target-image` in each tree ends in `--out build/image.bin`. Before the change, the harness stopped on all three with `build finished but .../$(BUILD)/image.bin is missing`.
+- After [measured], with a stand-in factory flash in the sandbox only:
+
+| Target | `--flash` (default) | `--slot a` | `--slot recovery` |
+| --- | --- | --- | --- |
+| compact_8hz_4_8_1_7 | B 0x14050000, boot word 1 | A 0x14030000, boot word 0 | R 0x14070000, boot word 2 |
+| compact_8hz_4_8_1_9 | B 0x14050000, boot word 1 | A 0x14030000, boot word 0 | R 0x14070000, boot word 2 |
+| compact_ff_16hz_4_16_1_7 | B 0x14050000, boot word 1 | A 0x14030000, boot word 0 | R 0x14070000, boot word 2 |
+
+- Real trees [measured]. These base folders hold no `firmware_to_be_reconstructed_full_flash.bin`, so the script stops in `packageBank` (`build_flash.mjs:221`) with `missing factory flash reference`, after the stub make and before any J-Link call. No `jlink_calls.log` was written. That refusal is the existing check, not new code.
+
+**3. The other copies (checked, not changed).** [measured] `git ls-files` lists 37 `build_flash.mjs` files: 36 targets and `codegen/harness`.
+- 24 are on the 2014 chain and already have the line (`b99426f8b`).
+- FF 1.3.0.8, nano 200 and nano 300 expand `TARGET_BUILD`, not `$(BUILD)`. Before the change the harness reached bank B on all three [measured].
+- PRO 4.9.1.15, PRO 4.9.2.0, XR 4.8.2.1 and the two mosaic targets run `tools/target_image.py assemble --output-dir $(TARGET_BUILD)`, which writes `output-dir/image.bin` (`target_image.py:1344`). The fallback `build/targets/<FIRMWARE_TARGET>/image.bin` matches. [inferred] The harness could not run them: their Makefiles have no `TARGET_IMAGE` line for its probe.
+- PRO FF 4.18.2.0 has no `target-image` rule. Its `image` rule writes `$(BUILD)/image.bin` with `BUILD ?= build`, which matches the literal `build/image.bin` that the script expects. [inferred]
+- `codegen/harness/tools/build_flash.mjs` has no `BUILD` line, but its Makefile has no `target-image` rule either, so it is not affected. Left as is. [inferred]
+
+**4. STATE.MD (FW-V1 `752378ea3`).** A plan-hygiene section at the top, covering the twelve commits on the branch (`89237fef3` to `ebbff71a7`), what each changed, and what is still open. None of the ten earlier commits had touched `STATE.MD` [measured by `git log main..plan-hygiene -- STATE.MD`, empty before this commit].
+
+**Found, not changed (for the owner).**
+- The 2014 bank format (42.49 sec 5.1). Nothing changed in the packagers or their encryption.
+- The factory-flash references (42.49 sec 5.2). The three 4.x copies fixed here have no dump either. None was added.
+- The codegen single-source rule (AGENTS sec 9). `codegen/harness/tools/` is the declared source for target tools, and the rule says to edit codegen and run `regen-all`. The hygiene commits edited the `targets/` copies by hand (`b99426f8b`, `ebbff71a7`), and no codegen manifest declares `build_flash.mjs`. The `codegen/Makefile` `tree-guard` refuses to run on this branch (`cannot tell which targets are pending`), so the rule could not be checked here.
+- The 1.3.0.8 footer (42.49 sec 3): unchanged.
+
+**Not verified.**
+- Nothing ran against a J-Link, a camera or a bank. The stub make does not build. The stand-in factory flash is a copy of the 2014 1.3.0.0 dump, and the payload is not encrypted.
+- Item 1 was not run on a case-sensitive filesystem.
+- The five `target_image.py` targets were not run through the harness (see item 3).
+
+**Commits.**
+- FW-V1, branch `plan-hygiene`, worktree `/private/tmp/claude-501/fwv1-hygiene` (not merged, not pushed): `7110fd0fb` (item 1), `ebbff71a7` (item 2), `752378ea3` (item 3).
+- Seek: this note, on branch `worktree-agent-aa5aa115715f0f164`, reset to `refactor/all-firmware-profiles` at `47f3fe4`.
