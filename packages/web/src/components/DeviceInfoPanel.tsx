@@ -16,6 +16,7 @@ import {
   bytesToHex,
   hexUp,
   targetSlot,
+  upgradeTargetWarning,
   type DeviceState,
   type SlotState,
 } from '@seek-fw/core';
@@ -96,12 +97,21 @@ export function DeviceInfoPanel({ state }: DeviceInfoPanelProps): ReactElement {
 
   const orphans = orphanSlots(state);
   const targetIsOrphan = target !== null && orphans.includes(target);
+  /* TESTING.md 42.50: the upgrade target is the bank the camera booted from. A warning, never a gate. */
+  const targetWarning = upgradeTargetWarning(state, (slot, key) =>
+    slot === undefined ? key.toUpperCase() : bankLabel(slot),
+  );
 
   return (
     <>
       <Panel>
         <PanelTitle icon={<Microchip />}>Running firmware</PanelTitle>
         <KeyValue rows={running} />
+        {targetWarning !== null && (
+          <Alert tone="warn" className="mt-3">
+            <p>{targetWarning}</p>
+          </Alert>
+        )}
       </Panel>
 
       {state.keyTable !== null && (

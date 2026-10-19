@@ -344,6 +344,8 @@ export {
   targetSlot,
   transportInfoOf,
   unlockTokenOf,
+  upgradeTargetIsBooted,
+  upgradeTargetWarning,
   usesAuthChannel,
   versionUnknownReason,
   writeFirmware,

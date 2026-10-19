@@ -928,11 +928,15 @@ export async function readDeviceInfo(
   }
 
   if (prediction !== null) {
+    /* The replay's target is a prediction, and the camera's own answers below can overrule it (on
+     * 4.8.2.1 with cfg[0] 1 or 2 they do: TESTING.md 42.50). So the line says it is predicted, and
+     * the "an upgrade writes" line after the checks is the one that states the target. */
     if (!chainReplay) {
       reporter.log('');
       reporter.log(
         `boot config replay: booted ${byKey.get(prediction.booted)?.name ?? prediction.booted}, ` +
-          `so an upgrade would write ${byKey.get(prediction.target)?.name ?? prediction.target}`,
+          `predicting ${byKey.get(prediction.target)?.name ?? prediction.target} as the upgrade ` +
+          'target (checked against the camera below)',
         'detail',
       );
     }
@@ -1319,6 +1323,33 @@ export function bootedSlot(state: DeviceState): SlotState | null {
 /** The slot an upgrade would overwrite, when the boot policy could name one. */
 export function targetSlot(state: DeviceState): SlotState | null {
   return state.boot === null ? null : (state.byKey.get(state.boot.target) ?? null);
+}
+
+/**
+ * True when the upgrade target is the bank the camera booted from. On 4.8.2.1 with cfg[0] 1 the
+ * replay boots B and the camera's own answer names B as the target (TESTING.md 42.50). An upgrade
+ * from such a camera overwrites the image it is running from. A warning only: nothing gates on it.
+ */
+export function upgradeTargetIsBooted(state: DeviceState): boolean {
+  return state.boot !== null && state.boot.target === state.boot.booted;
+}
+
+/**
+ * The sentence the page and `seek-fw info` show under the upgrade target when it is the booted bank, or
+ * null. `nameOf` names the bank; the page passes its own label ("Bank B") so the same bank carries the
+ * same name on the page, and the CLI keeps the profile's name.
+ */
+export function upgradeTargetWarning(
+  state: DeviceState,
+  nameOf: (slot: SlotState | undefined, key: SlotKey) => string = (slot, key) => slot?.name ?? key,
+): string | null {
+  if (state.boot === null || !upgradeTargetIsBooted(state)) return null;
+  const name = nameOf(state.byKey.get(state.boot.target), state.boot.target);
+  return (
+    `${name} is both the bank the camera booted from and the bank its own upgrade writes. ` +
+    'An upgrade run from this camera would overwrite the image it is running. ' +
+    'This is a warning only: nothing here stops an upgrade.'
+  );
 }
 
 /** Thrown when a workflow is handed an analysis that cannot support a write. */

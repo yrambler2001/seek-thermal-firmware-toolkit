@@ -10,15 +10,18 @@
 import { readFile, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { OP, READ_ONLY_OPS } from '@seek-fw/core';
+import { OP, READ_ONLY_OPS, modern4x } from '@seek-fw/core';
 import { run } from '../src/cli.js';
 import { EXIT_CANCELLED, EXIT_FAILED, EXIT_OK } from '../src/errors.js';
 import { MemorySink } from '../src/sink.js';
 import {
+  FLASH_BASE,
   buildSyntheticFlash,
   cameraWithFlash,
   compactPro1030Camera,
   fixedBackend,
+  runningBuildBlock,
+  slotOffsetOf,
   tempDir,
   testIo,
   type SyntheticFlash,
@@ -133,6 +136,76 @@ describe('seek-fw info', () => {
     const parsed = JSON.parse(stdout.text) as { canFlash: boolean; flashBlockedBy: string[] };
     expect(parsed.canFlash).toBe(false);
     expect(parsed.flashBlockedBy.join(' ')).toContain('does not support flashing');
+  });
+});
+
+describe('seek-fw info: the upgrade target when it is the bank the camera booted from (TESTING.md 42.50)', () => {
+  /* A 4.x camera whose boot-config word is 1 (prefer B) with both banks holding the same bootable
+   * image, and its active-slot word 0. The replay boots B and predicts A as the target; the active-slot
+   * word names B, and the upgrade selector's window cannot overrule it because A and B are identical.
+   * On the bench's Compact 4.8.2.1 the same pair appears with words 1 and 2 (42.50). */
+  function sameBankCamera(
+    cfg0: number,
+    activeSlotWord: number,
+  ): ReturnType<typeof cameraWithFlash> {
+    const flash = new Uint8Array(synthetic.flash);
+    new DataView(flash.buffer).setUint32(modern4x.memory.bootConfigBase - FLASH_BASE, cfg0, true);
+    flash.set(synthetic.bank, slotOffsetOf('b'));
+    const roots = new Uint8Array(64);
+    new DataView(roots.buffer).setUint32(8, activeSlotWord, true);
+    return cameraWithFlash(flash, {
+      fwInfo: new Map([
+        [0, runningBuildBlock()],
+        [10, roots],
+      ]),
+    });
+  }
+
+  it('says so under the upgrade target, in the text and the JSON, and warns without blocking', async () => {
+    const camera = sameBankCamera(1, 0);
+    const { io, stdout } = testIo({ backend: fixedBackend([camera]) });
+    expect(await run(['info'], io, signal())).toBe(EXIT_OK);
+    expect(stdout.text).toMatch(/upgrade target\s+Slot B/);
+    expect(stdout.text).toContain('warning: ');
+    expect(stdout.text).toContain('nothing here stops an upgrade');
+    /* The warning is a line of information: the rest of the report is still printed. */
+    expect(stdout.text).toContain('Writing');
+
+    const again = sameBankCamera(1, 0);
+    const json = testIo({ backend: fixedBackend([again]) });
+    expect(await run(['info', '--json'], json.io, signal())).toBe(EXIT_OK);
+    const boot = (JSON.parse(json.stdout.text) as { boot: Record<string, unknown> }).boot;
+    expect(boot).toMatchObject({ booted: 'b', upgradeTarget: 'b', upgradeTargetBooted: true });
+    expect(String(boot.upgradeTargetWarning)).toContain('nothing here stops an upgrade');
+    /* Read-only, as every info run is: the warning changed nothing on the wire. */
+    const sent = new Set(again.calls.map((call) => call.op));
+    expect(sent.has(OP.COMPLETE_MEMORY_UPGRADE)).toBe(false);
+    expect(sent.has(OP.SET_FEATURED_FIRMWARE_DATA)).toBe(false);
+  });
+
+  it('gives the replay line as a prediction, and names the target the camera confirms', async () => {
+    const camera = sameBankCamera(1, 0);
+    /* The run's log lines go to stdout, as `info` prints them. */
+    const { io, stdout } = testIo({ backend: fixedBackend([camera]) });
+    expect(await run(['info', '--verbose'], io, signal())).toBe(EXIT_OK);
+    /* The replay predicts A (booted B is not booted A); the camera's word overrules it to B. */
+    expect(stdout.text).toMatch(
+      /boot config replay: booted Slot B, predicting Slot A as the upgrade target/,
+    );
+    expect(stdout.text).toMatch(/the camera's active-slot word says Slot B instead/);
+    expect(stdout.text).toMatch(/an upgrade writes Slot B/);
+    expect(stdout.text).not.toContain('so an upgrade would write');
+  });
+
+  it('does not warn when the upgrade target is the other bank', async () => {
+    const { io, stdout } = testIo({ backend: fixedBackend([cameraWithFlash(synthetic.flash)]) });
+    expect(await run(['info', '--json'], io, signal())).toBe(EXIT_OK);
+    const boot = (JSON.parse(stdout.text) as { boot: Record<string, unknown> }).boot;
+    expect(boot).toMatchObject({ booted: 'a', upgradeTarget: 'b', upgradeTargetBooted: false });
+    expect(boot.upgradeTargetWarning).toBeNull();
+    const text = testIo({ backend: fixedBackend([cameraWithFlash(synthetic.flash)]) });
+    await run(['info'], text.io, signal());
+    expect(text.stdout.text).not.toContain('warning: ');
   });
 });
 

@@ -17,6 +17,8 @@ import {
   onPlaintextChain,
   readDeviceInfo,
   runningApplicationOf,
+  upgradeTargetIsBooted,
+  upgradeTargetWarning,
   type CapabilityName,
   type DeviceState,
   type FirmwareProfile,
@@ -125,6 +127,9 @@ export function stateJson(state: DeviceState): Record<string, unknown> {
       activeSlotWord: state.activeSlotWord === null ? null : hexUp(state.activeSlotWord),
       booted: state.boot?.booted ?? null,
       upgradeTarget: state.boot?.target ?? null,
+      /* TESTING.md 42.50: the upgrade target is the bank the camera booted from. A warning, never a gate. */
+      upgradeTargetBooted: upgradeTargetIsBooted(state),
+      upgradeTargetWarning: upgradeTargetWarning(state),
       targetConfirmed: state.targetConfirmed,
     },
     keys: {
@@ -215,6 +220,8 @@ export function renderState(ctx: CommandContext, state: DeviceState): void {
           }`,
     ],
   ]);
+  const targetWarning = upgradeTargetWarning(state);
+  if (targetWarning !== null) ctx.out(`  warning: ${targetWarning}`);
 
   ctx.out('');
   ctx.out(heading('Keys', ctx.color));

@@ -77,5 +77,7 @@ export {
   profileToRereadUnder,
   readDeviceInfo,
   targetSlot,
+  upgradeTargetIsBooted,
+  upgradeTargetWarning,
 } from './device-info.js';
 export { flashInvalidatesAnalysis, prepareImage, writeFirmware } from './flash.js';
