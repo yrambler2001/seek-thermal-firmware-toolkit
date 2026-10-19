@@ -9217,6 +9217,178 @@ Either way, the checker and Swift must change together. Changing only the checke
 - Seek: `e0c33fc` (the regenerated table, comments only), and this note on branch `worktree-agent-a798ff52301db527d`.
 - `refactor/all-firmware-profiles` moved to `796e5d9` (another session's work) after this reset. These commits sit on `eff9bf5`, as the brief asked, and need a rebase onto that tip before any merge.
 
+### 42.41 The 1.3.0.8 copy form over 20 s, the 0.9.1.0 pair, 30- and 10-minute streams on stock 1.3.0.0, and the checker stall traced to the CLI's bank-unlock token (2026-10-19)
+
+**Summary.** On the owner's Compact PIR206 (serial `101310HSNEA2`, chip ID `1013CE098ACA`), with the start image restored at the end (`cmp` silent):
+- **1.3.0.8 copy form (`5313f107`, offered).** Three 20 s compact-fps runs on one boot: 24.09, 25.01, 24.19 fps whole-run. The stock 1.3.0.8 on the same tool: 7.60, 7.78, 7.81 fps. Checker Normal (`--no-opzero`) settles from read 3: 5 s medians 30.1 to 32.5 fps, 5 s means 21.0 to 22.6 fps. Stock: medians about 8.0, means 4.8 to 5.6. The copy form has the same kind of frame-sequence excursion as the op-5 form, with more of it: 143 to 161 captures per 20 s never published, against 105 to 118 for op-5 in 42.37.
+- **0.9.1.0, stock and patched.** compact-fps reads the boot IP mode, 6 on this build, and sets nothing. The patch lives in the mode-8 program, so these runs do not show it: stock 8.09, 7.89, 7.71 fps; patched 8.01, 7.94, 7.81 fps. The patch is measured in Normal (IP 8) with the checker's `stream -n 20`, whole-run frames over 20 s: stock 5.70, 5.95, 5.45 fps; patched 22.10, 21.20, 21.35 fps. Patched Normal reads 1 to 7 are unsettled (medians 4.8 to 32.1 fps); reads 8 to 10 settle at 32.0 to 32.2. This is the first-run shape of 42.27 (27.8 to 30.8), not the same numbers.
+- **Long streams, stock 1.3.0.0 (the owner's original bank A, `862717a8`).** Hi FPS, 30 min (default flags): whole-run 30.35 fps (54,629 frames), minute rates 25.8 to 32.2 fps, no frozen pairs. Normal (8 Hz), 10 min: whole-run 7.28 fps (4,368 frames), minute rates 6.7 to 7.4 fps.
+- **The checker stall, traced.** A CLI write or a read-only `slots list` with no power cycle before the checker stalled the checker's first init request, OUT 0x56 `01` (rep1, rep3, rep4, and the 0.9.1.0 series). A power cycle between the CLI step and the checker cleared it (rep2, and the 0.9.1.0 series). The CLI sends an 18-byte vendor request 0x52, `05 00` plus the 16-byte `OLD_FW_UNLOCK_TOKEN`; the camera accepts it, and from then on the camera refuses some init requests, and its first GetFirmwareInfo read can return window bytes that the checker misreads. Sending only the token packet reproduces the stall; sending the same packet with the token zeroed does not; the 2-byte probe alone does not. The 0x37 stall of the copy image (default option) also happens on a clean boot with no CLI step: the 1.3.0.8 image refuses 0x37 by itself. Fix proposed in section 4; not made.
+- Start `50e900c2…01d7d`, end `50e900c2…01d7d`. `cmp start-4m.bin end-4m.bin` printed nothing and exited 0. Final steady read (read 20 of the end series): medians 32.18 to 32.21 fps.
+
+**Tags.** [measured] is read from the logs under `/private/tmp/claude-501/agent-hw2/` (per-run logs, stream logs, the USB traces). [source] is read from code or a doc. [inferred] is what follows from the measurements and was not measured directly.
+
+**Setup.** The worktree was reset to `refactor/all-firmware-profiles` (eff9bf5). It held only `cf5420b`, an ancestor of the target, so nothing was lost. `npm ci` ran in the worktree; `packages/core` and `packages/cli` were built with `npm run build --workspace @seek-fw/core` and `@seek-fw/cli`. The checker ran from source (`node --import ./e2e/lib/bench/seek-fps/register.mjs e2e/lib/bench/seek-fps/seek-fps.ts --camera …`), the CLI from `packages/cli/dist/bin.js`. The USB trace is a preload, `trace/usb-trace.mjs`, not committed. It wraps the native transfer methods of the `usb` package and logs each request, its payload, its timeout and its outcome, STALL included. It sends nothing itself. Repo code was not changed.
+
+**Images.** Every image was written with `seek-fw slots flash a` (decrypted image, 2014 plaintext chain) and read back by the CLI:
+- Copy form `5313f107` (49128 B): the stock 1.3.0.8 image (`2969d0df`, bank A of `SEEK_FULL_DUMPS/Compact/2017.01.06-11.16.17-1.3.0.8/full_dump_reconstructed.bin` at 0x50000) with the two table edits (0xB750 `04` to `01`; 0xB754 the 12 bytes to `13 23 23` and zeros), then the acceptance word at +0x238 moved from 0 to `0x3d381329` so the 32-bit sum is 0 (42.37's rule). The sha is the table's `5313f107…`. [measured]
+- Stock 1.3.0.8 (`2969d0df`, 49128 B): the same bank A. [measured]
+- Stock 0.9.1.0 (`f0ff04d5`, 47368 B): bank A of `SEEK_FULL_DUMPS/Compact/2014.10.02-13.48.57-0.9.1.0/full_dump_reconstructed.bin`. Patched 0.9.1.0 (`1814e5ac`): `seek-fw slots patch-fps a --write --dump-dir <folder> --yes --acknowledge-risk` on the camera, after the stock write. The read-back differed from the saved dump only at the 9 planned bytes and the sum word. [measured]
+- Stock 1.3.0.0 (`862717a8`, 47768 B): the owner's original bank A, copied from 42.37. [measured]
+
+**Start.** A channel-1 cycle and an 8 s wait, then `node tools/jlink/jlink-runner.js dump-spifi-4m-halted` in `FW-V1/targets/compact_8hz_1_3_0_0`, copied at once to `start-4m.bin`: sha256 `50e900c23ff4bb7e0a5a30fc5879f6ed276289e43aeace2f9ab74eaec9b01d7d`, the value the brief expects. The file is read-only. `slots list`: A `ef90c94a` (1.3.0.0, 32 Hz), B and R `d91284c6`, boot word 0, slot A runs. [measured]
+
+**1. The 1.3.0.8 copy form, and stock 1.3.0.8 for comparison.**
+
+Commands: `slots flash a <image> --dry-run --acknowledge-risk`, then `--yes --acknowledge-risk`; `switch.js cycle 2 3000` and 10 s before each run; `node e2e/lib/bench/compact-fps/compact-fps.mjs --seconds 20 --out <dir> --label <name>` three times on one boot; `seek-fps --camera --fps --mode normal --no-hifps --no-opzero`, repeated. The copy-form write was followed by a default-init checker connect (`Startup with Operation=0` on), which stalled at `control OUT 0x37` (section 4). `--no-opzero` connected in the same boot, and every copy and stock checker read below uses it.
+
+Compact-fps (IP mode 9 at boot, the Normal program). [measured]
+
+| run | frames | whole-run fps | thermal-only fps | captures never published |
+| --- | --- | --- | --- | --- |
+| copy 1 | 480 | 24.09 | 23.68 | 161 |
+| copy 2 | 499 | 25.01 | 24.64 | 143 |
+| copy 3 | 482 | 24.19 | 23.79 | 159 |
+| stock 1 | 152 | 7.60 | 6.66 | 489 |
+| stock 2 | 156 | 7.78 | 6.60 | 486 |
+| stock 3 | 157 | 7.81 | 6.62 | 487 |
+
+The "never published" count is the sum over capture-index deltas above 1 of (delta − 1) times its count, the 42.37 method. The stock's 486 to 489 is its normal publish of one frame in four. The copy form's gap histogram has 37 to 53 deltas of 2 per run, 7 to 8 of 5, 8 to 10 of 6, and single deltas of 7 to 15. Op-5 in 42.37 had 2:10 to 15, the same larger deltas, and 105 to 118 never published.
+
+Checker Normal reads on the copy form, 5 s medians per second and the five-second mean, consecutive on one boot. [measured]
+- read 1: 30.13 16.36 25.79 17.07 15.99; mean 12.80
+- read 2: 30.82 29.91 29.17 30.19 31.12; 17.80
+- read 3: 31.06 32.08 32.22 32.30 32.08; 21.40
+- read 4: 32.05 32.08 32.01 32.23 31.99; 22.20
+- read 5: 31.95 31.81 30.87 31.95 32.26; 21.20
+- read 6: 31.89 32.16 31.94 31.74 32.12; 21.80
+- read 7: 32.17 32.47 32.16 32.11 32.18; 22.40
+- read 8: 32.28 32.20 32.19 32.07 32.20; 22.60
+- read 9: 32.01 31.45 31.87 31.42 32.26; 21.80
+- read 10: 32.14 32.14 30.11 31.97 32.15; 21.00
+- read 11: 32.10 32.16 31.46 32.06 32.19; 21.40
+
+Checker Normal reads on stock 1.3.0.8, same flags, reads 1 to 10. [measured]
+- read 1: 8.05 8.05 7.98 7.57 8.06; mean 5.40
+- read 2: 8.10 8.03 7.87 8.05 6.93; 5.60
+- read 3: 8.07 7.65 8.02 8.04 8.12; 5.60
+- read 4: 8.01 7.90 7.99 8.04 8.04; 4.80
+- read 5: 8.06 8.06 8.07 8.04 8.05; 5.60
+- read 6: 8.06 6.42 6.91 8.05 7.90; 5.00
+- read 7: 7.99 8.02 8.00 8.04 7.95; 5.60
+- read 8: 8.05 8.04 8.03 7.96 8.02; 5.40
+- read 9: 8.04 7.08 8.08 8.05 7.84; 5.20
+- read 10: 8.02 7.96 7.97 8.06 7.92; 5.60
+
+Reading. The copy form's 5 s medians are near 32 fps from read 3 (medians 30.1 to 32.5 from then on), the same steady level as op-5 in 42.37. Its whole-run compact-fps (24.1 to 25.0) is about 2 fps under op-5's 26.3 to 26.9 on the same tool, and its checker means (21.0 to 22.6) sit with op-5's (22.2 to 22.8). Its excursions are of the same kind as op-5's, somewhat more frequent. [measured; the link between the gaps and the excursion mechanism is [inferred], as in 42.37]
+
+**2. 0.9.1.0, stock and patched.**
+
+Writes: stock `slots flash a` (read-back `8881f545`), then the patch on the camera with `patch-fps a --write`, dry run first (9 bytes, the sum word moves). Patched bank A `1814e5ac` after the power cycle. Boot IP mode 6 on both (compact-fps reads it, GetIPMode). [measured]
+
+Compact-fps, three 20 s runs per image, each series on one boot: stock 8.09, 7.89, 7.71 fps (frames 163, 159, 155; interval median 124.2 to 124.3 ms); patched 8.01, 7.94, 7.81 fps (frames 161, 160, 157). compact-fps does not set the image-processing mode (its ALLOWED_OUT list has no SetImageProcessingMode), so these runs stay in IP 6, the program the patch does not touch. They do not measure the patch. [measured; the reason is [source], `e2e/lib/bench/compact-fps/compact-fps.mjs`]
+
+Checker Normal reads (`--no-opzero`, Normal, Hi FPS off), 10 each, consecutive on one boot each. [measured]
+
+Stock:
+- read 1: 7.69 7.64 8.05 7.82 8.04; mean 4.80
+- read 2: 8.07 7.96 7.32 8.04 8.02; 5.00
+- read 3: 7.39 7.89 1.91 5.50 6.64; 3.80
+- read 4: 7.08 8.04 7.48 7.95 7.89; 4.40
+- read 5: 6.51 8.08 7.57 8.01 7.89; 4.80
+- read 6: 7.36 6.85 6.85 7.73 8.05; 4.80
+- read 7: 8.01 8.07 8.00 7.88 6.51; 4.80
+- read 8: 8.05 8.05 8.05 8.04 8.04; 4.80
+- read 9: 7.90 8.07 7.91 7.98 7.18; 4.80
+- read 10: 8.03 7.99 7.24 8.05 8.06; 5.00
+
+Patched:
+- read 1: 31.62 30.98 27.17 27.21 31.78; mean 17.00
+- read 2: 29.81 12.81 19.69 24.57 31.61; 15.20
+- read 3: 31.76 29.01 28.47 30.16 17.88; 17.00
+- read 4: 32.02 30.23 31.91 28.75 22.33; 17.60
+- read 5: 20.92 30.24 22.89 30.17 30.79; 17.00
+- read 6: 29.84 28.16 28.99 30.83 31.83; 18.20
+- read 7: 22.80 32.09 31.94 4.79 31.88; 16.00
+- read 8: 32.10 32.10 32.08 32.02 32.09; 20.40
+- read 9: 32.19 32.19 32.20 32.19 32.18; 20.40
+- read 10: 27.08 31.94 32.01 32.07 32.20; 20.40
+
+Normal whole-run, checker `stream -n 20` (`--mode normal --no-hifps --no-opzero`), frames delivered in 20 s, then frames/20. [measured]
+- stock: 114, 119, 109 frames (5.70, 5.95, 5.45 fps); capture index 643, 641, 635. Three streams on one boot, after three stalled attempts and a power cycle (section 4).
+- patched: 442, 424, 427 frames (22.10, 21.20, 21.35 fps); capture index 638, 643, 642. Three streams on one boot, after reads 1 to 10.
+
+Reading. In the same tool the patched image delivers about four times the stock's frames. The 5 s medians settle at 32.0 to 32.2 from read 8. Stock medians stay near 8 fps (most seconds 7.0 to 8.1; one second at 1.9 in read 3). The first patched series is unsettled for reads 1 to 7, the shape of 42.27's first run; reads settle, as 42.31 found for the 1.3.0.0 image after a dump. [measured; the cause of the slow settling is not established]
+
+**3. Long streams on stock 1.3.0.0.**
+
+Commands: `seek-fps --camera stream -n 1800` (default flags: Normal with Hi FPS init, IP 3), log `longstream/hifps-stock130-1800.log`; then `seek-fps --camera --mode normal --no-hifps stream -n 600`, log `longstream/normal-stock130-600.log`. Each after a channel-2 cycle and 10 s. Whole-run is frames(t)/t; minute rates are frames gained over 60 s (`longstream/analyze_stream.py`). [measured]
+
+Hi FPS, 30 min. Whole-run at 60 s 30.55, 120 s 31.00, 300 s 31.54, 600 s 31.32, 900 s 31.23, 1200 s 30.47, 1500 s 30.52, **1800 s 30.35 fps** (54,629 frames; capture index 57,922, 32.18 /s). Minute rates for minutes 2 to 30: 31.45, 32.02, 31.88, 31.80, 30.27, 30.67, 31.35, 32.08, 31.17, 29.63, 31.97, 32.05, 30.97, 30.58, **25.83**, 30.38, 26.87, 31.10, 26.72, 26.38, 32.17, 32.17, 31.10, 31.85, 29.48, 31.27, 29.03, 31.20, 26.50. Minimum 25.83 (the 900 to 960 s window), maximum 32.17. Status 3 for all 1800 seconds; frozen pairs 0; changed 94 to 97 %.
+
+Normal (8 Hz), 10 min. Whole-run at 60 s 6.70, 120 s 6.92, 300 s 7.18, **600 s 7.28 fps** (4,368 frames; capture index 19,315, 32.19 /s). Minute rates for minutes 2 to 10: 7.13, 7.33, 7.37, 7.35, 7.32, 7.40, 7.40, 7.40, 7.40. Status 3 for 540 s, 1 for 24 s, 6 for 36 s; frozen pairs 0; changed 0 % in the first second, 94 to 96 % after.
+
+Reading. The stock Hi FPS stream holds about 31 fps for the first 10 minutes (windows 30.3 to 32.1), then has four windows at 25.8 to 26.9 fps in the next 20 minutes and recovers; the whole run is 30.35 fps, 95 % of 32. The stock Normal stream runs at 7.28 fps against its 8 Hz nominal, 91 %. Both streams run below their nominal, as the patched 32 Hz stream does (42.37: 29.10 fps at 30 min, 91 % of 32). The comparison is not like for like: 42.37's stream was Normal on the patched bank, and this Hi FPS stream is the stock's 32 Hz. [measured; the shared 91 % is noted, not explained]
+
+**4. The checker stall: what the CLI leaves the camera in.**
+
+Runs. Each row is a power cycle, the step named, then a traced checker connect (`stream -n 3`, default flags unless noted). Results from the checker's log. [measured]
+
+| run | step before the checker | power cycle between | checker result |
+| --- | --- | --- | --- |
+| rep1 | `slots flash a` (stock 1.3.0.0, verified) | no | 0x4e, 0x36, 0x37 and 0x3c OK; stall OUT 0x56 `01` |
+| rep2 | same write | yes, 10 s | connected, streamed |
+| rep3 | same write, `--no-verify` | no | stall OUT 0x56 `01` |
+| rep4 | `slots list` only | no | stall OUT 0x56 `01` |
+| expB | replay of rep4's 14 OUT transfers, no reads | no | Pro init chosen (first 0x4e byte 0xb8); stall OUT 0x55 `17 00` |
+| expD | replay of OUT 0 to 6 | no | Pro init; stall OUT 0x55 `17 00` |
+| expE | replay of OUT 0 only (the 2-byte 0x52 probe) | no | connected, streamed |
+| expF | replay of OUT 0 to 3 | no | classic init; stall OUT 0x56 `01` |
+| expG | replay of OUT 1 only (the 18-byte 0x52 packet) | no | classic init; stall OUT 0x56 `01` |
+| expH | as expG, token bytes zeroed | no | packet refused (STALL); connected, streamed |
+| expJ | compact-fps 5 s, no CLI | no | connected, streamed |
+| expK | `slots flash a` (copy form 1.3.0.8) | yes, 10 s | stall OUT 0x37 `01 00 00 00` |
+| expK2 | no CLI step, copy form on bank A | yes, 10 s | stall OUT 0x37 `01 00 00 00` (head `01 03 00 08`) |
+| 0.9.1.0 | `slots list` after the 0.9.1.0 write | yes, then a series | stall OUT 0x56 three times (`--no-opzero`); after a cycle, connected |
+
+The replays send the transfers of the CLI's own `slots list` trace (`trace/raw-replay.mjs`), with the same bytes and order and the same timeouts, then release and close the interface. The 14 transfers were, in order: 0x52 `05 00` (stalls), 0x52 18 B (accepted), 0x52 `01 00`, 0x55 `01 00`, 0x55 `14 00` (stalls), 0x55 `11 00` (stalls), 0x55 `0a 00`, 0x5a `00 00 7c 00 00 00`, 0x52 18 B ×5, 0x52 `00 00`. [measured]
+
+What the CLI leaves. In every CLI trace (write, write without read-back, list): the stall-prone window setup above, then the reads, then `releaseInterface 0` and `close`, so the CLI closes the device. A write adds the commit (0x51, 20 s timeout, the transfer checksum; `cc 5e` for the stock 1.3.0.0 image), then the status read (IN 0x35, four bytes, 0), then the read-back (IN 0x4f, 64 B). The CLI sends no SetOperationMode (0x3C) and no SetImageProcessingMode (0x3E) in any of the four CLI traces, so no stream is left running. The camera's mode after the CLI was not read. [measured]
+
+The token. The 18-byte payload is `05 00 53 16 10 31 80 dd 00 b7 4a f9 e4 17 c5 94 be d4`, which is `authPayload(0x05, OLD_FW_UNLOCK_TOKEN)` (`packages/core/src/profiles/legacy-auth.ts`, lines 129 to 146). The 2-byte form `05 00` is refused on the first try in every trace, and the 18-byte form is then accepted. The checker's init decision is in `e2e/lib/bench/seek-fps/camera.ts`: `usesCompactProInit` (line 111) takes the Pro init when the first byte of the 8-byte GetFirmwareInfo reply is 4 or more, and `readFirmwareHead` (line 124) keeps the first non-zero byte. [source]
+
+Mechanism.
+- [measured] The accepted token packet is the trigger. The packet alone (expG) makes the next init stall; the same packet with the token zeroed (expH) is refused and does not; the 2-byte probe (expE) does nothing.
+- [measured] A power cycle clears it (rep2, and the 0.9.1.0 series). The checker's own close after a stall, and a new open in a later process, did not (rep4, the 0.9.1.0 attempts, expB).
+- [measured] The stalled requests are the checker's first init writes: OUT 0x56 `01` in the classic init, OUT 0x55 `17 00` in the Pro init (expB, expD).
+- [measured] The 8-byte GetFirmwareInfo reply changes after the token. In a clean boot it is `01 03 00 00 4f 63 74 20` (version 1.3.0.0, "Oct 21 2014"). After the token it was `b8 2a 00 14 00 00 01 14` (expB, expD, and this was the first read, so the Pro path was taken), and `00 09 00 00 53 65 70 20` (expF, a different entry, which the checker retried). A first byte of `b8` (184) passes the test for a 4.x camera, so the checker reads a 1.3.0.0 as a 4.x Pro and runs the Pro init. [inferred] This is the checker misreading a changed reply, not a firmware-version change.
+- [inferred] The token leaves a flag in the camera's vendor-request handling that lasts until the power cycle, and that flag refuses the classic init's 0x56 `01` and the Pro init's 0x55 `17 00`. The GetFirmwareInfo cursor's window bytes are a side effect. The firmware was not decoded to confirm either.
+- [not established] A firmware request that re-locks without a power cycle. The CLI's last transfer, `52 00 00`, does not re-lock (expB ends with it and stalls).
+
+The 0x37 stall is different. The copy image refuses OUT 0x37 with no CLI step before it (expK2), so the 1.3.0.8 image refuses `Startup with Operation=0` on a clean boot. The 1.3.0.0 image accepts it (rep1, rep3). So the op-5 stall of 42.37 and the copy stall of this section are firmware refusals of the default option, not a CLI effect. [measured on the copy image; the op-5 image was not re-run]
+
+Recommended fix (not made; the owner decides).
+1. Checker: choose the init from a GetFirmwareInfo reply that is consistent, not from one read's first byte. Read until two consecutive 8-byte replies agree and the major is 0 to 9; otherwise report the state. When an init request stalls, say the camera is unlocked by a slot command and needs a power cycle, not a bare stall.
+2. Checker: `Startup with Operation=0` should be off for the 1.3.0.8 family, or the checker should retry without it on a 0x37 stall.
+3. CLI: after any command that sends the unlock packet (`slots list`, `dump`, `flash`, `patch-fps`; the list sends it too), print that the camera stays unlocked until its next power cycle and that other tools will stall until then.
+4. Firmware (FW-V1): a re-lock request, if one exists, would remove the power cycle. Look for it in the USB handler before deciding.
+
+**5. End.**
+
+- Restore: `FACTORY_IMAGE=/private/tmp/claude-501/agent-hw2/start-4m.bin node tools/jlink/jlink-runner.js flash-factory-4m-2` after a channel-1 cycle and an 8 s wait. `plan: 1 of 64 blocks differ -> 0x14050000 +0x10000`, attempt 1 verified, `DONE: the part reads back byte-identical` (`restore-1.log`). [measured]
+- End dump: channel-1 cycle, 8 s, `dump-spifi-4m-halted`, copied to `end-4m.bin`: sha256 `50e900c23ff4bb7e0a5a30fc5879f6ed276289e43aeace2f9ab74eaec9b01d7d`. `cmp start-4m.bin end-4m.bin` printed nothing and exited 0. [measured]
+- Normal fps after a channel-2 cycle and 10 s, checker default flags, reads 1 to 20 (`fps/end-normal-*.log`). Reads 1 to 12 are not settled: medians 16.2 to 32.1 per second, means 14.4 to 16.2 fps. Read by read, medians: 1: 17.84 20.63 27.04 16.66 17.98; 2: 25.33 27.81 26.95 30.25 26.66; 3: 31.79 30.07 23.64 17.89 17.83; 4: 19.92 25.75 27.68 31.49 27.27; 5: 32.05 24.03 19.00 18.55 16.54; 6: 18.05 18.45 29.00 24.08 20.86; 7: 18.97 18.14 26.50 17.92 23.24; 8: 16.24 19.15 26.19 27.67 28.48; 9: 27.39 31.94 26.18 26.76 16.33; 10: 29.14 30.55 30.78 19.01 27.55; 11: 27.46 18.40 17.37 20.56 25.02; 12: 19.02 28.58 22.27 27.21 28.86. Reads 13 to 20 are steady, medians 32.14 to 32.21, means 21.6 to 21.8 fps. Read 20: 32.18 32.18 32.19 32.18 32.21. [measured]
+
+**Not measured or open.**
+- The 42.27 first 0.9.1.0 run (27.8 to 30.8) is reproduced as unsettled reads, not as the same numbers; its cause is not established.
+- compact-fps cannot see the 0.9.1.0 patch (IP 6). The patched 0.9.1.0 whole-run figures are from the checker stream. The two tools disagree on the same stock image (checker 5.7 fps against compact-fps 7.9 at IP 6), so compare only within one tool.
+- The default-init 0x37 refusal was shown on the copy image only (1.3.0.8 std). The stock 1.3.0.8 was not run with the default option.
+- The firmware's unlock state and the GetFirmwareInfo window bytes were not decoded.
+- The 30-minute Hi FPS stream and the 42.37 Normal stream are different modes; no same-mode comparison was run.
+- Only one non-token variant was tried (the token zeroed). Other well-formed tokens were not tried.
+- The status values 1 and 6 are reported as seen, not decoded, as in 42.37.
+- `packages/cli/test/real-camera-probe.test.ts` was not run, and no vitest suite was run in this section.
+
 ### 42.42 The over-ceiling check on a warm-ramp scene, and a `--flash` part that streams through the checker (2026-10-19)
 
 **Summary.** Two open items of `plan.md` section 1 are answered on the emulator. (1) The 32 Hz copy does not clip, and does not write 0xFFFF, at or above the sensor ceiling (15000): on a scene with samples from 14,880 to 16,370 every delivered sample of the patched 1.3.0.8 and 4.8.2.1 equals its input, exactly as the stock build's does. The superseded one-step op-5 form on the same scene writes 0xFFFF on 679,520 of the 684,480 samples at or above 15000. (2) A `--flash` part now gets its build's 32K sensor when it is booted with `--flash-entry` (FW-V1 `seekemu/cli.py`), and the TypeScript checker streams the patched 1.3.0.0 (2014 chain) and 4.8.2.1 (Key A) parts at 32.26 fps medians, against 32.258 Hz in the Python IP rows. Nothing was run on a camera.
