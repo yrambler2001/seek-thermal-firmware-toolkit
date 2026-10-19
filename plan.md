@@ -1,7 +1,7 @@
 # Plan: what is still to do
 
 Branch `refactor/all-firmware-profiles`: all commits are local; nothing is pushed and main is never touched without the owner's explicit approval (owner, 2026-10-19: keep it local until the owner says). FW-V1 `main` was pushed on the owner's word on 2026-10-19 (`a13c615c6`).
-Done work is in `TESTING.md` (sections 42.x; the latest is 42.37; 42.38 to 42.45 are running) and `FPS_32HZ.md`; this file lists only what is open. Status marks: [ ] open, [~] running, [?] needs the owner.
+Done work is in `TESTING.md` (sections 42.x; the latest is 42.37; 42.38 merged; 42.39 to 42.45 are running) and `FPS_32HZ.md`; this file lists only what is open. Status marks: [ ] open, [~] running, [?] needs the owner.
 
 ## Standing rules
 
@@ -27,7 +27,6 @@ Every 8 and 9 fps build with a table entry is offered except the FF entries and 
 - [ ] Hi FPS: the 4.8.1.7 and 4.8.1.9 builds refuse mode 3 (the build's mask), so their Hi FPS cannot be measured (the XR 4.8.2.1 needs no entry of its own: same image as the Compact, 42.34).
 - [~] Over-ceiling behaviour of the 32 Hz copy on a 32K camera. No 32K emulator scene has samples at or above 15000, and the camera's 1.3.0.8 scene had no warm pixel. (running: TESTING.md 42.42)
 - [?] Long streams (42.37): a 30-minute Normal stream on the 1.3.0.0 32 Hz bank kept per-second medians near 32, but its whole-run rate was 27.0 fps at 1 min and 29.1 at 20 and 30 min (minute rates 25.0 to 30.4; no frozen pairs; one dip at 660 to 720 s, cause unknown). Stock Hi FPS on 0.10.0.0 shows the same gap (medians 31 to 32, means 27.8 to 28.4). The gap is captures that are never published. Decide what the page's "Make 32 FPS" should name, and whether to chase the excursions (`docs/FPS_PATCH_LONG_STREAM.md`); a stock Hi FPS long stream is the comparison not yet run.
-- [~] Fix two texts after 42.37: the `FPS_MEASURED_HZ` comment in `fps-patch.ts` (42.27 measured the 1.3.0.8 copy form 5313f107 at 32.2 by medians; the 26 fps of 42.20 was the op-5 form ee8c7f0e's whole-run average, which counts unpublished captures; re-measured 26.3 to 26.9 with 42.20's tool), and 42.27's sentence that it measured "the same image" as 42.20. (running: TESTING.md 42.38)
 - [~] The offered 1.3.0.8 copy form (5313f107) has no whole-run (20 s `compact-fps`) measurement; 42.37 expects the same excursions as the op-5 form. Run it. (running: TESTING.md 42.41)
 - [~] 0.9.1.0's first patched run (27.8 to 30.8 fps) was not re-measured. 0.10.0.0's 23.4 against 27.4 did not reproduce in 42.37 (stock medians 31.0 to 32.3, patched 32.1 to 32.2); the cause of the old figure is not known. (running: TESTING.md 42.41)
 - [~] Modes 4 and 7 (accepted by 1.3.0.8 and 4.8.x): their programs were not read. The 0.x SetIPMode masks were not read. (running: TESTING.md 42.43)
@@ -56,9 +55,8 @@ Every 8 and 9 fps build with a table entry is offered except the FF entries and 
 
 - [?] `refactor/all-firmware-profiles` (all of 42.27 to 42.37 merged on it) is local. The owner keeps it local until they say otherwise (2026-10-19); pushing it and merging to main need the owner's word (the hosted docs bundle in `docs/` is built from this branch). FW-V1 `main` is pushed (`a13c615c6`). All agent branches of 42.27 to 42.37 are merged and their worktrees removed.
 - [?] The FF vendor-form write on the FF platform's bootloader (2.0.2.3): the merged branch f8f2f55 refused every bank there; 42.33 dropped that refusal with the rest of the superseded code, so the page allows the vendor-form write on every bootloader, and that write is not measured on 2.0.2.3. Owner to decide: refuse it on 2.0.2.3, or keep it open and run bench row 9 on a 2.0.2.3 camera first.
-- [~] TESTING.md 42.21 says "the FF bootloader does not run the vendor form (42.12)"; 42.12 does not measure that (42.33). Correct the sentence. (running: TESTING.md 42.38)
-- [~] `packages/cli/test/slots.test.ts` gives its 4.9.5.0 fixture the 2014 bank addresses (`:160`, `:237`, `:304-307`); the 4.x map is A 0x14030000, B 0x14050000, R 0x14070000 (found in 42.34). Fixture data only. (running: TESTING.md 42.38)
-- [~] The 0.x/1.x profile-level dump message (`packages/cli/src/commands/dump.ts:61`, "2014–2017 line … nothing was dumped") has no test (42.34). (running: TESTING.md 42.38)
+- [?] The 0.x/1.x profile-level dump refusal (`packages/cli/src/commands/dump.ts:61`) looks unreachable on a real camera: the version refusal at `:47` catches every 0.x/1.x build first, and a camera whose version read never answers is refused earlier by the identity gate (42.38; its test uses a synthetic 2.0.0.0). Owner: keep the guard or remove it.
+- [ ] Two stale texts left by 42.38: `packages/core/test/preservation/fps-patch.test.ts:194` says the 1.3.0.8 copy form "has no camera measurement" (42.27 measured it), and TESTING.md 42.27 section 11 says "No cause was found", which 42.37 section 3a answers.
 
 ## 5. The slots bench and older open items (42.20 to 42.31)
 
