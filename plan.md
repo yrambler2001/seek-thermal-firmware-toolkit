@@ -1,7 +1,7 @@
 # Plan: what is still to do
 
 Branch `refactor/all-firmware-profiles`: all commits are local; nothing is pushed and main is never touched without the owner's explicit approval (owner, 2026-10-19: keep it local until the owner says). FW-V1 `main` was pushed on the owner's word on 2026-10-19 (`a13c615c6`).
-Done work is in `TESTING.md` (sections 42.x; the latest is 42.37) and `FPS_32HZ.md`; this file lists only what is open. Status marks: [ ] open, [~] running, [?] needs the owner.
+Done work is in `TESTING.md` (sections 42.x; the latest is 42.37; 42.38 to 42.45 are running) and `FPS_32HZ.md`; this file lists only what is open. Status marks: [ ] open, [~] running, [?] needs the owner.
 
 ## Standing rules
 
@@ -20,31 +20,31 @@ Done work is in `TESTING.md` (sections 42.x; the latest is 42.37) and `FPS_32HZ.
 
 Every 8 and 9 fps build with a table entry is offered except the FF entries and 0.7.0.8: stage one (2014 plain chain), stage two (Key A: the Compact 4.8.x and the Compact PRO 4.9.1.15, 4.9.2.0, 42.28) and stage three (the Compact PRO 2016 keystream line 1.0.3.0, 1.0.3.2, 42.29). Principle and per-build table: `TESTING.md` 42.27 to 42.29 and `FPS_32HZ.md`. The orchestration brief (`BRIEF_FOR_CLAUDE_ORCHESTRATOR.md`) and the task text (`PROMPT_FPS_ALL_FIRMWARES.md`) are kept as history.
 
-- [ ] The generated table comment for `compact_pro-4.9.1.15` says "Exactly 3 bytes differ"; the flashed image differs in 6 (the three edits plus the acceptance-sum word at 0x238, 0x23A, 0x23B; 42.32). The text comes from FW-V1 `emu/fps_patch.py`; fix it there and regenerate.
+- [~] The generated table comment for `compact_pro-4.9.1.15` says "Exactly 3 bytes differ"; the flashed image differs in 6 (the three edits plus the acceptance-sum word at 0x238, 0x23A, 0x23B; 42.32). The text comes from FW-V1 `emu/fps_patch.py`; fix it there and regenerate. (running: TESTING.md 42.40)
 - [ ] Builds whose table patch never ran on a camera: 4.8.1.7, 4.8.1.9, 4.16.1.7 FF, 1.3.0.8 FF, the Compact PRO 1.0.3.0, 1.0.3.2 and 4.9.2.0, and the Compact 4.8.2.1 (the XR was measured in 42.24; 42.34 showed the Compact and XR 4.8.2.1 run the same image, f96ac57eda75, on different hardware). Each needs its unit on the switch.
-- [ ] On the emulator the 4.8.x line's active-slot word reads 0 under boot words 1 and 2 (unpatched control too), so 42.36 proved which bank ran by marking bank A's build string; the cause is in the FW-V1 Python machine and not known. On the 2016 line the analysis reports `footerOk` false and bootability unknown on every boot while the bootloader runs the requested bank (42.36).
-- [ ] The verdict table's `Compact 4.8.1.7 (std)` row has `emulator: null`; 42.36 maps it by row name. Give it its emulator subject.
+- [~] On the emulator the 4.8.x line's active-slot word reads 0 under boot words 1 and 2 (unpatched control too), so 42.36 proved which bank ran by marking bank A's build string; the cause is in the FW-V1 Python machine and not known. On the 2016 line the analysis reports `footerOk` false and bootability unknown on every boot while the bootloader runs the requested bank (42.36). (running: TESTING.md 42.43)
+- [~] The verdict table's `Compact 4.8.1.7 (std)` row has `emulator: null`; 42.36 maps it by row name. Give it its emulator subject. (running: TESTING.md 42.39)
 - [ ] Hi FPS: the 4.8.1.7 and 4.8.1.9 builds refuse mode 3 (the build's mask), so their Hi FPS cannot be measured (the XR 4.8.2.1 needs no entry of its own: same image as the Compact, 42.34).
-- [ ] Over-ceiling behaviour of the 32 Hz copy on a 32K camera. No 32K emulator scene has samples at or above 15000, and the camera's 1.3.0.8 scene had no warm pixel.
+- [~] Over-ceiling behaviour of the 32 Hz copy on a 32K camera. No 32K emulator scene has samples at or above 15000, and the camera's 1.3.0.8 scene had no warm pixel. (running: TESTING.md 42.42)
 - [?] Long streams (42.37): a 30-minute Normal stream on the 1.3.0.0 32 Hz bank kept per-second medians near 32, but its whole-run rate was 27.0 fps at 1 min and 29.1 at 20 and 30 min (minute rates 25.0 to 30.4; no frozen pairs; one dip at 660 to 720 s, cause unknown). Stock Hi FPS on 0.10.0.0 shows the same gap (medians 31 to 32, means 27.8 to 28.4). The gap is captures that are never published. Decide what the page's "Make 32 FPS" should name, and whether to chase the excursions (`docs/FPS_PATCH_LONG_STREAM.md`); a stock Hi FPS long stream is the comparison not yet run.
-- [ ] Fix two texts after 42.37: the `FPS_MEASURED_HZ` comment in `fps-patch.ts` (42.27 measured the 1.3.0.8 copy form 5313f107 at 32.2 by medians; the 26 fps of 42.20 was the op-5 form ee8c7f0e's whole-run average, which counts unpublished captures; re-measured 26.3 to 26.9 with 42.20's tool), and 42.27's sentence that it measured "the same image" as 42.20.
-- [ ] The offered 1.3.0.8 copy form (5313f107) has no whole-run (20 s `compact-fps`) measurement; 42.37 expects the same excursions as the op-5 form. Run it.
-- [ ] 0.9.1.0's first patched run (27.8 to 30.8 fps) was not re-measured. 0.10.0.0's 23.4 against 27.4 did not reproduce in 42.37 (stock medians 31.0 to 32.3, patched 32.1 to 32.2); the cause of the old figure is not known.
-- [ ] Modes 4 and 7 (accepted by 1.3.0.8 and 4.8.x): their programs were not read. The 0.x SetIPMode masks were not read.
+- [~] Fix two texts after 42.37: the `FPS_MEASURED_HZ` comment in `fps-patch.ts` (42.27 measured the 1.3.0.8 copy form 5313f107 at 32.2 by medians; the 26 fps of 42.20 was the op-5 form ee8c7f0e's whole-run average, which counts unpublished captures; re-measured 26.3 to 26.9 with 42.20's tool), and 42.27's sentence that it measured "the same image" as 42.20. (running: TESTING.md 42.38)
+- [~] The offered 1.3.0.8 copy form (5313f107) has no whole-run (20 s `compact-fps`) measurement; 42.37 expects the same excursions as the op-5 form. Run it. (running: TESTING.md 42.41)
+- [~] 0.9.1.0's first patched run (27.8 to 30.8 fps) was not re-measured. 0.10.0.0's 23.4 against 27.4 did not reproduce in 42.37 (stock medians 31.0 to 32.3, patched 32.1 to 32.2); the cause of the old figure is not known. (running: TESTING.md 42.41)
+- [~] Modes 4 and 7 (accepted by 1.3.0.8 and 4.8.x): their programs were not read. The 0.x SetIPMode masks were not read. (running: TESTING.md 42.43)
 - [ ] 0.3.0.1 mode-8 program not located. 0.5.0.2, 0.5.1.0, 0.5.1.3, 0.6.0.4 and 0.7.0.7 have their capture programs built at run time, so no patch (a patch would change builder code).
 - [?] 0.7.0.8: the table has the index-2 entry, measured on the camera, but slots refuse firmware older than 0.8.0.0, so the page does not offer it. Decide whether slots should accept it (flashing it needs the J-Link today). Owner, 2026-10-19: not now.
 - [?] The FF entries (1.3.0.8 FF, 4.16.1.7 FF) are in the table but not offered (stage two for the encrypted FF lines, section 5). Decide whether to stage them. Owner, 2026-10-19: not now.
 - [?] Raw (IP mode 0, the app's "Raw") stays at 8 fps on every build: its program averages four captures and no patch edits it. Decide whether to patch it too (one more edit per build, same rule). Owner, 2026-10-19: not now.
-- [ ] The TypeScript checker cannot stream patched parts through `--flash` (no frames: the emulator attaches the sensor only for a corpus-entry boot). The Python IP rows are the route; the checker's README says so.
+- [~] The TypeScript checker cannot stream patched parts through `--flash` (no frames: the emulator attaches the sensor only for a corpus-entry boot). The Python IP rows are the route; the checker's README says so. (running: TESTING.md 42.42)
 
 ## 2. Hardware and the J-Link runner
 
 - State (not a task): the owner's Compact PIR206 (chip serial 1013CE098ACA) runs slot A (`ef90c94a`, the table's 1.3.0.0 image, 32 Hz) with word 0. Slot B and recovery R hold `d91284c6` (the 1.3.0.0 32 Hz image that also carries the removed mode-6 edit). Every bank runs at 32 fps. The whole flash is `50e900c2…` (halted read); the 42.29 bench rows, the 42.30 matrix and the 42.31 reset runs left it byte-identical. Normal fps reads right after a whole-flash dump or restore take several reads to settle (42.31: medians 16 to 27 fps on the first reads, then 32.2), so repeat the read before judging it.
 - [?] FW-V1 branch `plan-hygiene` (worktree `/private/tmp/claude-501/fwv1-hygiene`, 42.35): flash-bank in the 1.3.0.0 and 1.3.0.8 targets needs an explicit `BANK_ADDR` (the `SLOT_BASES` default is removed), the `fps_patch_tests.py` docstring matches the table, and `jlink_dumps/` is ignored. Not merged into FW-V1 `main` (the bench uses that checkout's runner); merging and pushing need the owner's word.
-- [ ] FW-V1 `build_flash.mjs` in `targets/compact_8hz_1_3_0_0` and `compact_8hz_1_3_0_8` carries the modern 4.x table (`SLOTS.b` = 0x14050000): its default `--flash` writes the payload to 0x14050000 (bank A on the 2014 chain) and then sets the boot word to 1 (bank B). A live wrong-bank path (found in 42.35). The same flash-bank call is in `compact_8hz_0_5_1_3`, `0_9_0_2` and `1_0_0_0` (tables not read).
-- [ ] 34 other FW-V1 `jlink-runner.js` files under `targets/` and `codegen/harness/tools/jlink/` still define `SLOT_BASES` and default flash-bank to it (42.35 fixed only the 1.3.0.0 and 1.3.0.8 targets).
+- [~] FW-V1 `build_flash.mjs` in `targets/compact_8hz_1_3_0_0` and `compact_8hz_1_3_0_8` carries the modern 4.x table (`SLOTS.b` = 0x14050000): its default `--flash` writes the payload to 0x14050000 (bank A on the 2014 chain) and then sets the boot word to 1 (bank B). A live wrong-bank path (found in 42.35). The same flash-bank call is in `compact_8hz_0_5_1_3`, `0_9_0_2` and `1_0_0_0` (tables not read). (running: TESTING.md 42.40)
+- [~] 34 other FW-V1 `jlink-runner.js` files under `targets/` and `codegen/harness/tools/jlink/` still define `SLOT_BASES` and default flash-bank to it (42.35 fixed only the 1.3.0.0 and 1.3.0.8 targets). (running: TESTING.md 42.40)
 - [?] Serial labels (42.37): `101310HSNEA2` is the ASCII device serial (+16 of the device-identity block at 0x14020000), which the CLI and the page show; `1013CE098ACA` is GetChipID, which the JS checker and the Swift `seek` tool print as "serial" when the USB string is absent (it is on 1.3.0.0). Owner to pick: (A) the checker and Swift show the ASCII serial and print the chip ID as its own field, or (B) they keep it and rename the field "chip id". The checker and Swift change together.
-- [ ] The first checker connect after a CLI slot write stalled at op 0x56 (0x37 on the op-5 image) until a power cycle (42.37); cause not established.
+- [~] The first checker connect after a CLI slot write stalled at op 0x56 (0x37 on the op-5 image) until a power cycle (42.37); cause not established. (running: TESTING.md 42.41)
 - [ ] The 1.3.0.0 boot-config word is 0. A warm reset can set it to 2 again (the bootloader writes it), and the word itself is not guarded. The warning (42.27 section 6) shows when the word points at R while a patched bank A does not run.
 
 ## 3. tv-jc and the macOS app
@@ -56,20 +56,20 @@ Every 8 and 9 fps build with a table entry is offered except the FF entries and 
 
 - [?] `refactor/all-firmware-profiles` (all of 42.27 to 42.37 merged on it) is local. The owner keeps it local until they say otherwise (2026-10-19); pushing it and merging to main need the owner's word (the hosted docs bundle in `docs/` is built from this branch). FW-V1 `main` is pushed (`a13c615c6`). All agent branches of 42.27 to 42.37 are merged and their worktrees removed.
 - [?] The FF vendor-form write on the FF platform's bootloader (2.0.2.3): the merged branch f8f2f55 refused every bank there; 42.33 dropped that refusal with the rest of the superseded code, so the page allows the vendor-form write on every bootloader, and that write is not measured on 2.0.2.3. Owner to decide: refuse it on 2.0.2.3, or keep it open and run bench row 9 on a 2.0.2.3 camera first.
-- [ ] TESTING.md 42.21 says "the FF bootloader does not run the vendor form (42.12)"; 42.12 does not measure that (42.33). Correct the sentence.
-- [ ] `packages/cli/test/slots.test.ts` gives its 4.9.5.0 fixture the 2014 bank addresses (`:160`, `:237`, `:304-307`); the 4.x map is A 0x14030000, B 0x14050000, R 0x14070000 (found in 42.34). Fixture data only.
-- [ ] The 0.x/1.x profile-level dump message (`packages/cli/src/commands/dump.ts:61`, "2014–2017 line … nothing was dumped") has no test (42.34).
+- [~] TESTING.md 42.21 says "the FF bootloader does not run the vendor form (42.12)"; 42.12 does not measure that (42.33). Correct the sentence. (running: TESTING.md 42.38)
+- [~] `packages/cli/test/slots.test.ts` gives its 4.9.5.0 fixture the 2014 bank addresses (`:160`, `:237`, `:304-307`); the 4.x map is A 0x14030000, B 0x14050000, R 0x14070000 (found in 42.34). Fixture data only. (running: TESTING.md 42.38)
+- [~] The 0.x/1.x profile-level dump message (`packages/cli/src/commands/dump.ts:61`, "2014–2017 line … nothing was dumped") has no test (42.34). (running: TESTING.md 42.38)
 
 ## 5. The slots bench and older open items (42.20 to 42.31)
 
 - [?] The bench's reset check after the 42.31 fix (`waitForReboot` polls every 100 ms while it waits for the camera to leave the bus): only rows 10, 15 and 21 were re-run. Row 27's first-attempt failure in 42.30 is put down to the same missed sample without a trace; the next full matrix run confirms it (about 2 hours on the camera; asked the owner, 2026-10-19). The failure text still names two causes (not rebooted, or not back within 40 s); splitting it is optional. Owner, 2026-10-19: not yet.
 - [ ] The bench's row-9 (1.3.0.8 FF) run needs `SEEK_BENCH_FF_RESTORE`, `SEEK_BENCH_FF_PLATFORM` and `SEEK_BENCH_FF_PLAIN`. Without them its page steps do not run and the row fails (42.30 first attempt). Record them in the bench header or README, or make the bench refuse to start without them.
-- [ ] The verdict table has no per-bank version field; the bench treats the `ownImage` bank's version (row 20's bank B, 1.0.3.2) as a note, not a checked value (42.29).
-- [ ] The Electron windows retain about 200 MB per subject (22 to 30 MB per window; not located); the full matrix needs `NODE_OPTIONS=--max-old-space-size=16384`.
+- [~] The verdict table has no per-bank version field; the bench treats the `ownImage` bank's version (row 20's bank B, 1.0.3.2) as a note, not a checked value (42.29). (running: TESTING.md 42.39)
+- [~] The Electron windows retain about 200 MB per subject (22 to 30 MB per window; not located); the full matrix needs `NODE_OPTIONS=--max-old-space-size=16384`. (running: TESTING.md 42.45)
 - [ ] The 0.x/1.x backup on the bench unit is erased where the bootloader's first 11 KiB are (11,268 bytes; the test pins the gap).
-- [ ] The slots page clears its bank table after a write until "Read slots".
+- [~] The slots page clears its bank table after a write until "Read slots". (running: TESTING.md 42.44)
 - [ ] 1.3.0.8 FF: stage two for the encrypted lines, a faithful emulator platform, FW-V1 branch `ff-dump-keyed-bootloader` (unmerged); its boot is observed, not proven; Preserve "Read & build" on the emulated 1.3.0.8 FF refuses at the derivation gate and needs a full-flash FF dump in the corpus.
-- [ ] CLI `info` sends SetFirmwareInfoFeatures (0x55) and SetRAMDataFeatures (0x5a) on its read path and reads the slots; the web Info sends neither (recorded, not changed).
-- [ ] An offline dump of a v4 camera is not covered by `e2e:offline`.
+- [~] CLI `info` sends SetFirmwareInfoFeatures (0x55) and SetRAMDataFeatures (0x5a) on its read path and reads the slots; the web Info sends neither (recorded, not changed). (running: TESTING.md 42.44)
+- [~] An offline dump of a v4 camera is not covered by `e2e:offline`. (running: TESTING.md 42.39)
 - [?] The shutter question of 42.15 (a per-frame shutter in mode 6) is moot now the mode-6 patch is gone; the Normal-mode patches left the shutter cycle unchanged in the measurements. Owner to confirm it can be closed.
 - [?] The 4.8.1.7 and 4.8.1.9 Key A path is proven on the emulator only (the stock and patched rate, the saved dumps, the Electron button and the restore were never run on a camera).
