@@ -9117,6 +9117,53 @@ Either way, the checker and Swift must change together. Changing only the checke
 - `packages/core/test/preservation/fps-patch.test.ts:194` says the copy form "has no camera measurement", the same error fixed in section 1. It is outside these items and is not changed.
 - `plan.md` is not edited. The owner can close the "Fix two texts after 42.37" item in plan.md section 1 and the three items in section 4 (the 42.21 sentence, the slots fixture, the dump message) after review.
 
+### 42.39 The 4.8.1.7 row names its emulator subject, the table records each bank's build, and a v4 camera dumps offline from a corpus dump (2026-10-19)
+
+**Summary.** Three plan items of section 5 and section 1 are done on `worktree-agent-ab2a02da655260b8f` (from `eff9bf5`).
+
+1. The verdict table's `Compact 4.8.1.7 (std)` row names its emulator subject, `Compact 4.8.1.7 image (on 4.8.2.1)` (`e2b0dbd`). The row had `emulator: null` since 42.4, when no emulator entry was known. `corpus-modern-run.ts` boots that image with no pinned gap.
+2. The table records the build each bank holds (`bankVersions`), for all 28 rows: 73 bank entries, filled from the corpus dumps. The bench (`verdict.ts`, `spec-flow.ts`) and the emulator page-expectations test compare the build the page shows for each recorded bank with the table. A mismatch fails, naming the bank and both builds. Row 20's bank B (1.0.3.2) is now checked, not a note (`d03d51f`).
+3. `npm run e2e:offline` now covers a v4 camera's offline dump. Its second spec boots the corpus dump of a 4.8.2.1 Compact on the emulator, goes offline, and runs Dump & decrypt (`5982a3b`).
+
+**Tags.** [measured] is read from the runs named below. [source] is read from the code named. [corpus] is read from the dump files: each bank's build word at +0x20C of the bank, which is the header `slotVersion` shows on the page. No camera, J-Link or USB switch was used, and no bench row was run (`SEEK_E2E_WRITE` unset).
+
+**1. The 4.8.1.7 emulator subject.** [source] `e2e/lib/slots-expectations.ts`, the row's `emulator` field. Every reader of the field was checked: `emulatorSubjects()` (the filter), `page-expectations.emulator.test.ts` (boots by label through `bootOf`, which finds the label in `corpus-modern-run.ts`), and the table's own count test. The bench, `bench-verdict.e2e.ts`, `slots-quality.e2e.ts` and `fps-patch-banks.ts` find rows by name and never read `emulator`. `fps-patch.stage-two.emulator.test.ts` keeps its own label list, so it is unchanged. The one row still bench-only is `Compact PRO 1.0.3.2 (FF-FF)`, which has no emulator entry (its source line says so).
+- [measured] The emulator page for the row: banner none, banks A, B and R offered, booted A (`[page] Compact 4.8.1.7 (std): bank A (image, booted): offered`, and B and R likewise).
+
+**2. The build each bank holds.**
+- The field: `SlotsSubject.bankVersions?: Partial<Record<BankLetter, string>>`. A letter left out is not checked.
+- The layouts, by line. The 0.x, 1.x and 2016 Compact PRO line: A 0x14050000, B 0x14060000, R 0x14070000 (the 1.3.0.8 FF build's own layout, 42.12 "Bank addresses"; the bench fixture for 1.3.0.0). The 4.x and later line: A 0x14030000, B 0x14050000, R 0x14070000 (42.29 row 14's page read; row 20's bank B at 0x14050000).
+- [corpus] The values are the bank build words of each row's dump, the file the bench flashes (`launchable` where the tree has one). A blank bank has no build and is left out. The rows:
+  - 11 rows of the 2014 chain and the 1.3.0.8 FF build: A and R hold the row's build. B is erased on the 2014 layout, so it is left out.
+  - 16 rows whose three banks all hold the row's build: the Compact PRO 1.0.3.0 std and FF, the 1.0.3.2 std, FF and FF-FF (2016 layout), and the 4.8.1.7, 4.8.1.9, 4.8.2.1, 4.16.1.7 FF, 4.9.2.0, FF 4.18.2.0, XR 4.8.2.1, Mosaic 10.9.1.31, Mosaic FF 2.27.1.33, Nano 200 and Nano 300 rows (modern layout).
+  - Compact PRO 4.9.1.15 (std): A 4.9.1.15, B 1.0.3.2, R 4.9.1.15. B holds the 1.0.3.2-FF build (sha `196560c0`, 42.29 section 3). [measured, 42.29] The page read B as 1.0.3.2 on the bench (`row20b.log`).
+- The bench: `judgeVersions` (`verdict.ts`) names each bank whose page build differs from the table, or whose page shows none. In `spec-flow.ts` `readWindow` records the page's build per bank; a recorded bank no longer gives the `ownImage` note, and it does not decide `pageIdentified` (the verdict judges it). The note stays for an unrecorded `ownImage` bank.
+- The emulator: each row with a recorded build reads the build the page shows for that bank (`slotVersionOf`, a mirror of `slotVersion` in `packages/web/src/hooks/useSlotsPanel.ts`) and checks it against the table.
+- The fake rig (`spec-fakes.ts`): a bank shows its row's recorded build, and `pageBuilds` overrides a bank, so a test can make the page disagree.
+
+**Tests.**
+- [measured] `packages/core/test/slots/page-expectations.emulator.test.ts`, run alone with `SEEK_EMU_DIR=…/FW-V1/emu` and `--testTimeout=900000`: 218 of 218 passed in 343.5 s. The count includes the new per-bank check on each of the 27 emulator rows (the bench-only FF-FF row has none) and the 4.8.1.7 row.
+- [measured] `e2e/bench-lib.e2e.ts` (97 `it` blocks, unchanged) and `e2e/bench-verdict.e2e.ts` (41, of which 11 are new: 2 on the table's shape, 6 on the judge, 2 on the fake-rig flow, 1 corpus check), with `SEEK_FULL_DUMPS_BY_CAMERA` set: 138 of 138 passed. The corpus check reads each recorded bank of the 28 dump files and compares it with the header.
+- [measured] `npx tsc --noEmit -p e2e/tsconfig.json` and `-p packages/core/tsconfig.json`: exit 0. eslint and prettier on every changed file: clean.
+
+**3. The v4 camera's offline dump.**
+- [source] `e2e/offline-bundle.e2e.ts` (what `e2e:offline` runs) had one spec, for the 0.x/1.x line, and its dump step refuses a 1.3.0.0 on its version (42.17, 42.18). No spec dumped a v4 camera offline.
+- The new second spec: the emulator boots `SEEK_FULL_DUMPS_BY_CAMERA/Compact/Compact/2020.02.26-11.23.26-4.8.2.1/full_dump_original.bin` (`targetSpec`'s new `flash` option, passed to `EmulatorBus`); the hosted `docs/` bundle loads; the connection is made; the network goes off; Dump & decrypt runs for 20 minutes. Checks: the dump image is the corpus file (sha256; 42.18 records that a 4.x dump image equals the emulated flash), the manifest's `selectorTable.firmwareVersion` is 4.8.2.1, at least one decrypted slot is in the archive, and no request leaves the static server after load.
+- Without `SEEK_FULL_DUMPS_BY_CAMERA`, or with no dump at that path, the spec is not registered and prints `[skip] the 4.x offline dump: SEEK_FULL_DUMPS_BY_CAMERA is not set`. [measured] A run with the variable unset printed that line and only the first spec's four tests (skipped there for lack of `SEEK_EMU_DIR`).
+- `targetSpec` and `OpenTargetOptions` take `flash`. On the camera target such a spec is skipped with "a spec-named part boots on the emulator only".
+- [measured] The whole file, `SEEK_EMU_DIR` and `SEEK_FULL_DUMPS_BY_CAMERA` set, headless Chrome: 6 of 7 passed in 277 s. The one failure was my first decrypted-slot pattern (`decrypted_1[0-9a-f]{7}\.bin$`), which misses the key pair in the name (`<stem>_decrypted_<address>-KeyA-…-KeyB-….bin`). The dump itself passed `checkDumpArchive`. The pattern now allows the suffix.
+- [measured] After the fix, the v4 spec alone (`-t "a 4.x camera dumps and decrypts"`): 3 of 3 passed, 4 skipped, in 141 s. The archive holds the three slots `…_decrypted_14030000-KeyA-4631…-KeyB-e5ee….bin`, `…_14050000…`, `…_14070000…`, all with the same key pair.
+- The whole file was not run again after the pattern fix. The first spec's four tests are unchanged since their pass in the whole-file run.
+
+**Not measured or open.**
+- The per-bank builds are checked against the emulator's page (27 rows) and against the dump files (all 28). None is checked against a camera in this section.
+- The 2014 rows' bank B and the 1.3.0.8 FF row's bank B are erased and left out; the table does not check them.
+- The offline v4 dump runs on the emulator's copy of the 4.8.2.1 dump. It is not a camera run.
+- `plan.md` is not edited; the three plan lines stay open for the owner to close.
+- `npm run build:docs` was not run; the `docs/` bundle is the committed one.
+
+**Commits** on `worktree-agent-ab2a02da655260b8f`: `e2b0dbd` (item 1), `d03d51f` (item 2), `5982a3b` (item 3), and the docs commit that adds this section.
+
 ### 42.40 FW-V1 plan items: the 2014-chain bank in build_flash, BANK_ADDR in every runner, and the 4.9.1.15 byte count (2026-10-19)
 
 **Summary.** Three plan.md items, on branch `plan-hygiene` in the FW-V1 worktree `/private/tmp/claude-501/fwv1-hygiene`, three commits on top of 42.35's three. Nothing was merged to FW-V1 main or pushed, and FW-V1's main checkout was not edited. The seek worktree was reset to `refactor/all-firmware-profiles` at `eff9bf5`, as the brief asked; its old HEAD `cf5420b` is an ancestor of it. No camera, J-Link or USB switch was used. Every check ran offline: `build_flash.mjs` ran in a sandbox with a stub `make` and packager, and `JLINKEXE` pointed at a stub that logs its command file and talks to nothing.
