@@ -11404,3 +11404,46 @@ The CLI's output did not change: its tests already pinned this form (42.69), and
 - FW-V1, branch `plain-2014-tools`, commit `e4662626e626d0589a4e2ae542f5d837f9683689`, on main `b4f47a71f`, worktree `/private/tmp/claude-501/fwv1-tools`. Not merged, not pushed.
 - Seek: this note, on branch `worktree-agent-aabf3b90c466f23fe`, reset to `refactor/all-firmware-profiles`.
 - Scripts (scratch, not in the repo): `/private/tmp/claude-501/agent-72/` (`sandbox.py`, `extra_checks.py`, `gen_check_all.py`, `regen_managed.py`, `sync_pending.py`, `patch_tools.py`).
+
+### 42.73 The hosted bundle rebuilt for the 42.59 to 42.71 page (`npm run build:docs`), the bundle string checks, and the offline-bundle run against it: 7 passed (offline, 2026-10-19)
+
+**Summary.** Agent 42.73 on `worktree-agent-afb3f255e50340686`, reset to `refactor/all-firmware-profiles` (2ffbe9d). `docs/` rebuilt with `npm run build:docs`; `offline-bundle.e2e` run against the rebuilt `docs/`. No camera, J-Link or USB switch was used; `packages/cli/test/real-camera-probe.test.ts` is not in this worktree and nothing ran against it; no whole-suite vitest. Commits: the bundle (`4c5e7c4`), then this section. Nothing is pushed or merged.
+
+**Tags.** [measured] is a build, a grep or a test run here. [source] is read from the code named.
+
+**1. Build (`npm run build:docs`, vite 8.3.0).** `git status` after the build showed only paths under `docs/`.
+- `docs/index.html` (1.03 kB): the script now points at `./assets/index-C_rw4Uye.js`. The CSS link is unchanged.
+- Added: `docs/assets/index-C_rw4Uye.js`, 741,422 B (741.42 kB; gzip 234.99 kB), and its map `index-C_rw4Uye.js.map`, 3,218,417 B.
+- Removed: `docs/assets/index-ClJEir0S.js`, 733,407 B, and `index-ClJEir0S.js.map`, 3,190,540 B.
+- Unchanged: `docs/assets/index-BwTO31bJ.css`, 40,989 B. Its SHA-256 matches the committed file (`64d61e63…2b02`).
+- Vite printed its chunk-size warning (over 500 kB). The previous bundle was also over that size (733 kB).
+
+**2. Grep checks [measured].** Fixed-string counts, new bundle against the bundle at HEAD before this change.
+
+| string (from the page code) | new | old | added by |
+| --- | --- | --- | --- |
+| `The camera is running its recovery bank, and its own upgrade writes ` | 1 | 0 | 42.67 |
+| `which it is not running.` | 1 | 0 | 42.67 |
+| `This is a warning only: nothing here stops an upgrade.` | 2 | 0 | 42.64, 42.67 |
+| `is both the bank the camera booted from` | 1 | 0 | 42.64 |
+| `confirmed on the wire` | 1 | 0 | 42.64 (Info tab) |
+| `Running (1.3.0.8)` | 1 | 0 | 42.64 (Info tab) |
+| `(not replayed)` | 2 | 0 | 42.64 (Info tab upgrade target) |
+| `Read the camera` | 1 | 0 | 42.64 (Info section title) |
+| `store key is not that one` | 1 | 0 | 42.69 (Key A wording) |
+| `Nothing is written.` | 2 | 1 | 42.64 (Info description) |
+
+- Slot dump names: the new bundle builds the CLI form, `` `seek-slot-${e.key}-${r}-${e.sha256.slice(0,8)}` `` (lower-case key, label, eight digits of the stored bank's SHA-256). The old bundle built the page form, `` `seek-slot-${e.toUpperCase()}-v${o}-${n}-${r.slice(0,8)}${s}` ``. The `-KeyA-…-KeyB-…` suffix is in the new bundle. The fps pre-patch and patched names keep their upper-case form, as 42.71 says.
+- Not discriminating (present in both, so they do not show the new page): `the camera stays unlocked until a power cycle` (1 and 1), `Note: ` (2 and 2), `Upgrade target (its own upgrade)` (1 and 1). The Connect-section placement of the unlock note is not checked by a string.
+- `docs/index.html` no longer names `index-ClJEir0S`. Both files it names (`index-C_rw4Uye.js`, `index-BwTO31bJ.css`) are on disk. The new map parses as JSON and has 237 sources.
+
+**3. Offline bundle [measured].** `SEEK_EMU_DIR=…/FW-V1/emu SEEK_FULL_DUMPS_BY_CAMERA=…/SEEK_FULL_DUMPS_BY_CAMERA npx vitest run --config e2e/vitest.config.ts offline-bundle.e2e` (the same form as `e2e:offline` in `package.json`).
+- Result: 1 file, **7 passed, 0 failed, 0 skipped**, 307.40 s, exit 0.
+- The spec served the rebuilt `docs/` over plain HTTP and ran the emulator. The PIR206 Read and build (preserve) ran offline: 0 asks, patch-built zip downloaded. The 4.8.2.1 Compact dump ran offline: 63 of 63 windows read, the archive downloaded, and three decrypted slots (`…_decrypted_14030000`, `…14050000`, `…14070000`) carried the `-KeyA-…-KeyB-…` suffix.
+- No test failed, so no test was edited. No test pins the old page text or the old bundle names.
+
+**Not verified, and open.**
+- The grep checks show the strings are in the bundle. They do not show the Info tab or the Connect note rendering in a browser; the offline spec does not exercise either view.
+- The text in 42.64 above says the Info tab's description reads "nothing is written to flash". The source says "Nothing is written." (`packages/web/src/views/InfoView.tsx:131`), and the bundle has the same. The 42.64 wording is stale. It is not edited here; the owner decides whether it matters.
+- The hashed file names come from this machine's build. A rebuild elsewhere was not compared.
+- The offline run's log is in this agent's session scratchpad and is not kept in the repo.
