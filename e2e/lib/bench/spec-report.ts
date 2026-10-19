@@ -15,6 +15,7 @@ import {
   type StepState,
   type SubjectResult,
 } from './spec-flow.js';
+import { PASSED_AS_WORD } from './verdict.js';
 import type { BenchSubject } from './types.js';
 
 export type RunMode = 'bench' | 'dry' | 'fake';
@@ -41,8 +42,10 @@ export function describePlan(
         `(${subject.fileKind}, sha256 ${subject.sha256.slice(0, 8)})`,
     ),
     '  each: flash the whole part, verify it halted, reset, enumerate; the page reads A, B, R;',
-    '  write each bank its own decrypted image (B, then A, then R, the tick where the page asks);',
-    '  patch the build string and write it into all three; reset; the camera must run it.',
+    '  each bank is held to the verdict table (e2e/lib/slots-expectations.ts): a bank it refuses is offered',
+    '  its own image and must refuse it with its reason; a bank it says is writable must be written (B, A, R,',
+    '  the tick where the page asks); a bank with no image of its own is written by the boot proof;',
+    '  patch the build string and write it into all three; reset; the camera must run it (where no bank is refused);',
     "  the camera's own original goes last (the library orders it).",
   ];
   if (left.length > 0) {
@@ -101,6 +104,16 @@ export function slotBootMarkdown(results: readonly SubjectResult[]): string[] {
   ];
 }
 
+/**
+ * What the subject passed as, in the report's words: a write, a refusal the table records, or both. A subject
+ * that failed (or has no table row) passed as nothing.
+ */
+export function passedAsWord(r: SubjectResult): string {
+  const passedAs = r.judgement?.passedAs ?? null;
+  if (r.failures.length > 0 || passedAs === null) return 'nothing (failed)';
+  return PASSED_AS_WORD[passedAs];
+}
+
 /** One stdout line per subject: the matrix's columns, in order. */
 export function reportLine(r: SubjectResult): string {
   const enumerated =
@@ -113,6 +126,7 @@ export function reportLine(r: SubjectResult): string {
     `page identified ${r.pageIdentified ? 'yes' : 'no'}`,
     `banks = J-Link ${r.banksMatch ? 'yes' : 'no'}`,
     `slot writes ${writesCell(r.slotWrites)}`,
+    `passed as ${passedAsWord(r)}`,
     `boot proof ${STATE_WORD[r.bootProof]}`,
     `failures ${String(r.failures.length)}`,
   ].join(' | ');
@@ -135,6 +149,7 @@ export function matrixMarkdown(results: readonly SubjectResult[], meta: RunMeta)
       r.pageIdentified ? 'yes' : 'no',
       r.banksMatch ? 'yes' : 'no',
       writesCell(r.slotWrites),
+      passedAsWord(r),
       STATE_WORD[r.bootProof],
       notes.length === 0 ? '' : notes.map((note) => `- ${note}`).join('<br>'),
     ].map(cell);
@@ -146,6 +161,7 @@ export function matrixMarkdown(results: readonly SubjectResult[], meta: RunMeta)
     'Page identified',
     'Banks = J-Link',
     'Slot writes',
+    'Passed as (table)',
     'Boot proof',
     'Notes',
   ];

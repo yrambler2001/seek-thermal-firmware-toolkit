@@ -8,6 +8,7 @@
  * hardware. The flow never imports either of them: it sees only these types.
  */
 
+import type { SlotsSubject } from '../slots-expectations.js';
 import { benchRoot, listBenchSubjects } from './index.js';
 import type {
   BenchSubject,
@@ -86,11 +87,11 @@ export interface BenchPage {
   banner(): Promise<string | null>;
   dump(letter: BankLetter): Promise<PageDump>;
   /**
-   * Picks `image` for `letter` and expects the page to REFUSE it at the picker: the status is
-   * "Rejected", and no write is offered or sent. Throws when the page takes the image instead
-   * (it reports "Ready", so the caller must not confirm it; the window is closed).
+   * Picks `image` for `letter` and reads the page's answer at the picker, with nothing confirmed and
+   * nothing sent: a "Rejected" answer is returned as the refusal; "Ready" (the page takes the image)
+   * is returned as 'taken', and the caller must not confirm it (the window is closed either way).
    */
-  refuse(letter: BankLetter, image: PageImage): Promise<PageRefusal>;
+  refuse(letter: BankLetter, image: PageImage): Promise<PageRefusal | 'taken'>;
   /**
    * Picks `image` for `letter`, confirms the write, and returns the page's
    * verdict. Throws when the page does not reach "Written", or when its
@@ -113,6 +114,8 @@ export interface BenchRig {
   readonly kind: 'real' | 'fake';
   readonly jlink: JlinkBench;
   readonly camera: BenchCamera;
+  /** The verdict-table row the subject is judged by (`verdict.ts`), or null when the table has none. */
+  verdictRow(subject: BenchSubject): SlotsSubject | null;
   /** Changes the build string in a copy of `image` (`mark`: the one character it becomes, see patchBuildString). */
   readonly patch: (
     image: Uint8Array,

@@ -7,20 +7,25 @@
  *   2. open the slots page, read the three banks, and check each bank's
  *      address against the plan, its version against the subject, and its
  *      Dump against the J-Link read of the same 64 KiB and the dump file;
- *   3. write the bank's own decrypted image into B, then A, then R, through the
- *      page, each with the page's own verdict checked, the replug the page asks
- *      for, a read-back through the page, and a J-Link read of the bank and of
- *      every other block (the boot config and the bootloader included);
- *   4. patch the booted image's build string, write the patched image into all
- *      three banks the same way, reset the CPU, and require the camera to run
- *      the patched build string, with the three banks as the page read them.
+ *   3. hold each bank to the shared verdict table (verdict.ts judges it): a bank
+ *      the table refuses is offered its own decrypted image at the picker, which
+ *      must refuse it with the table's reason, and nothing is sent; a bank the
+ *      table says is writable is written through the page, from its own image (or,
+ *      where the table records its own image as refused, from another bank's), each
+ *      with the page's own verdict checked, the replug the page asks for, a read-back
+ *      through the page, and a J-Link read of the bank and of every other block (the
+ *      boot config and the bootloader included);
+ *   4. where the table refuses no bank: patch the booted image's build string,
+ *      write the patched image into all three banks the same way, reset the CPU, and
+ *      require the camera to run the patched build string, with the three banks as
+ *      the page read them.
  *
  * A failure is recorded on the subject, and the steps that depend on it are not
  * run: after a failed flash, enumeration, or page read, nothing else runs; after a
  * write that was sent and did not check out, the remaining writes and the boot
  * proof do not run, since the camera is then in an unknown state. A bank with no
- * decrypted image of its own cannot be written, so it is recorded and the other
- * banks are still written. The next subject's full flash puts the camera back.
+ * decrypted image of its own is written by the boot proof, and the judge requires
+ * that write. The next subject's full flash puts the camera back.
  */
 
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -30,6 +35,7 @@ import path from 'node:path';
 import { APPLICATION_KEY_PAIRS, buildSlotPlan, listProfiles } from '@seek-fw/core';
 
 import { sha256 } from '../checks.js';
+import type { SlotsSubject } from '../slots-expectations.js';
 import { BENCH_FLASH_BASE, BENCH_FLASH_BYTES, type BenchSubject, type BootSlot } from './types.js';
 import { describeDifference, isFF1308Subject } from './ff-form.js';
 import { ffVendorFilesFromEnv, runFfVendor } from './ff-vendor-run.js';
@@ -43,6 +49,13 @@ import type {
   PageRead,
   PageRefusal,
 } from './spec-rig.js';
+import {
+  judgeSubject,
+  type BankObservation,
+  type PickerOffer,
+  type SubjectJudgement,
+  type SubjectObservation,
+} from './verdict.js';
 
 /** One 64 KiB bank read, the unit the page's Dump saves. */
 export const BANK_BYTES = 0x10000;
@@ -219,6 +232,8 @@ export interface SlotWriteResult {
   state: StepState;
   /** Whether the bank's bytes before the write equal the bytes the J-Link reads after it. */
   sameAsBefore: boolean | null;
+  /** The picker's answer to the bank's own image, when the bench offered it (null: not offered). */
+  offer: PickerOffer | null;
   readonly notes: string[];
 }
 
@@ -255,6 +270,10 @@ export interface SubjectResult {
   bootProof: StepState;
   /** The per-bank boot tests, when SEEK_BENCH_SLOT_BOOT=1 (empty otherwise). */
   readonly slotBoot: SlotBootResult[];
+  /** The camera-wide banner the page showed (`shown` null: none), or null when the page was not read. */
+  pageBanner: { readonly shown: string | null } | null;
+  /** The subject's judgement against its verdict-table row (verdict.ts); null when it has none. */
+  judgement: SubjectJudgement | null;
   readonly notes: string[];
   readonly failures: string[];
 }
@@ -313,28 +332,20 @@ function isHaltFailure(error: unknown): boolean {
 }
 
 /**
- * The bank addresses the plan gives for `version`, one entry per profile the page may read under, and
- * whether that plan lets some bank take a decrypted image (the page's write is allowed).
+ * The bank addresses the plan gives for `version`, one entry per profile the page may read under.
  */
 function planLayouts(version: string): readonly {
   readonly profile: string;
   readonly banks: Partial<Record<BankLetter, number>>;
-  readonly allowsWrite: boolean;
 }[] {
-  const layouts: {
-    profile: string;
-    banks: Partial<Record<BankLetter, number>>;
-    allowsWrite: boolean;
-  }[] = [];
+  const layouts: { profile: string; banks: Partial<Record<BankLetter, number>> }[] = [];
   for (const profile of listProfiles()) {
     /* A profile that cannot plan this version has no layout to offer, and is skipped. */
     try {
       const plan = buildSlotPlan(profile, version);
       const banks: Partial<Record<BankLetter, number>> = {};
       for (const slot of plan.slots) banks[slot.key] = slot.address;
-      const allowsWrite =
-        plan.supportedBuild.supported && plan.slots.some((slot) => slot.flashPlain.supported);
-      layouts.push({ profile: plan.profileId, banks, allowsWrite });
+      layouts.push({ profile: plan.profileId, banks });
     } catch {
       continue;
     }
@@ -495,15 +506,12 @@ async function readWindow(
       );
     } else {
       r.notes.push(`bank addresses: the ${layout.profile} plan`);
-      /* Whenever the plan lets a bank take a write, the page shows no "cannot be written" banner, and a
-       * page that shows one where the plan allows a write is a failure (TESTING.md 42.14). */
-      const banner = await page.banner();
-      if (layout.allowsWrite && banner !== null) {
-        r.failures.push(
-          `page: the banner "${banner}" is shown where the ${layout.profile} plan allows a write`,
-        );
-      }
     }
+    /* The banner is judged against the subject's verdict-table row (verdict.ts), not the plan. */
+    r.pageBanner = { shown: await page.banner() };
+    /* The bank whose own image the table records as refused (ownImage) holds another build by the dump's own
+     * design (TESTING.md 42.21): its version is a note, and the page's read of it is still checked below. */
+    const refusedOwn = rig.verdictRow(subject)?.ownImage?.bank ?? null;
     for (const bank of read.banks) {
       if (bank.version === null) {
         r.notes.push(
@@ -517,6 +525,11 @@ async function readWindow(
             `bank ${UPPER[bank.letter]} holds ${bank.version}, not the running ${subject.version}: ` +
               'it has no image of its own for this build',
           );
+        } else if (bank.letter === refusedOwn) {
+          r.notes.push(
+            `bank ${UPPER[bank.letter]} holds ${bank.version}, not ${subject.version}: the table records ` +
+              "its own image as refused (ownImage), so it is that dump's other build",
+          );
         } else {
           r.failures.push(
             `page: bank ${UPPER[bank.letter]} reports ${bank.version}, the subject is ${subject.version}`,
@@ -526,7 +539,8 @@ async function readWindow(
     }
     const booted = read.banks.filter((bank) => bank.booted).length;
     const versionsMatch = read.banks.every(
-      (bank) => bank.version === null || bank.version === subject.version,
+      (bank) =>
+        bank.version === null || bank.version === subject.version || bank.letter === refusedOwn,
     );
     r.pageIdentified =
       layout !== undefined &&
@@ -759,30 +773,36 @@ async function writeBank(
  * into all three banks, then a reset, and the camera must run the patched build
  * with the banks as the page read them after the writes.
  */
-async function bootProof(rig: BenchRig, reading: Reading, r: SubjectResult): Promise<void> {
+async function bootProof(
+  rig: BenchRig,
+  reading: Reading,
+  r: SubjectResult,
+  sources: ReadonlyMap<BankLetter, PageImage | null>,
+): Promise<boolean> {
   /* The booted bank's image when the page names a booted bank; the locked line cannot, and the
-   * patch is written to all three banks anyway, so any bank's image will do. */
+   * patch is written to all three banks anyway, so any bank's image will do. A bank whose own image
+   * the table records as refused is not a source (`sources` leaves it out). */
   const withImage = reading.read.banks.filter(
-    (bank) => (reading.images.get(bank.letter) ?? null) !== null,
+    (bank) => (sources.get(bank.letter) ?? null) !== null,
   );
   const source = withImage.find((bank) => bank.booted) ?? withImage[0];
-  const image = source === undefined ? null : (reading.images.get(source.letter) ?? null);
+  const image = source === undefined ? null : (sources.get(source.letter) ?? null);
   if (image === null) {
     r.bootProof = 'skipped';
     r.notes.push('boot proof skipped: no decrypted image of any bank to patch');
-    return;
+    return true;
   }
   const buildString = (await rig.camera.runningInfo())?.buildString ?? null;
   if (buildString === null) {
     r.bootProof = 'skipped';
     r.notes.push('boot proof skipped: the camera did not report a build string to look for');
-    return;
+    return true;
   }
   const patched = rig.patch(image.bytes, buildString);
   if (patched === null) {
     r.bootProof = 'skipped';
     r.notes.push('boot proof skipped: patchBuildString found no build string in the bank image');
-    return;
+    return true;
   }
   r.notes.push(
     `boot proof: build string ${patched.from} -> ${patched.to} at ${String(patched.offsets.length)} offset(s)`,
@@ -793,12 +813,21 @@ async function bootProof(rig: BenchRig, reading: Reading, r: SubjectResult): Pro
   const raws = new Map<BankLetter, Uint8Array>();
   for (const letter of WRITE_ORDER) {
     const outcome = await writeBank(rig, reading, letter, patchedImage);
-    for (const problem of outcome.problems) {
-      r.failures.push(`boot write ${UPPER[letter]}: ${problem}`);
-    }
+    const slot = writeResultOf(r, letter);
     if (outcome.problems.length > 0) {
+      slot.state = 'failed';
+      for (const problem of outcome.problems) {
+        r.failures.push(`boot write ${UPPER[letter]}: ${problem}`);
+      }
       r.bootProof = 'failed';
-      return;
+      return false;
+    }
+    /* A bank with no image of its own in the slot step is written here, and this write is its write. */
+    if (slot.state === 'skipped' || slot.state === 'not-run') {
+      slot.state = 'passed';
+      slot.notes.push(
+        'written by the boot proof: the bank had no image of its own in the slot step',
+      );
     }
     raws.set(letter, outcome.raw);
   }
@@ -807,7 +836,7 @@ async function bootProof(rig: BenchRig, reading: Reading, r: SubjectResult): Pro
   if ((await rig.camera.waitForReboot(RESET_DROP_MS, ENUMERATE_MS)) === null) {
     r.failures.push(`boot: ${rebootFailure(RESET_DROP_MS, ENUMERATE_MS)}`);
     r.bootProof = 'failed';
-    return;
+    return true;
   }
   const running = (await rig.camera.runningInfo())?.buildString ?? null;
   if (running === null) {
@@ -823,6 +852,7 @@ async function bootProof(rig: BenchRig, reading: Reading, r: SubjectResult): Pro
     }
   }
   r.bootProof = r.failures.length === failuresBefore ? 'passed' : 'failed';
+  return true;
 }
 
 /** The write record for `letter`. Every subject's record carries all three banks, so a miss is a bug. */
@@ -833,28 +863,25 @@ function writeResultOf(r: SubjectResult, letter: BankLetter): SlotWriteResult {
 }
 
 /**
- * One bank the page must refuse at its picker (the FF image into A or B, TESTING 42.6). The
- * page must say "Rejected": it offers no write and sends nothing, so every region of the part
- * reads back unchanged, and the window records no refused request. A page that takes the image
- * is a failure, and nothing is confirmed here.
+ * One bank's own image offered at its picker, with nothing confirmed and nothing sent: the page's answer
+ * ('taken', or the refusal with its logged reason), and the checks the window and the part must pass after
+ * it (the window closed, no refused request, every region unchanged). The verdict is the judge's (verdict.ts).
  */
-async function refuseBank(
+async function offerAtPicker(
   rig: BenchRig,
   reading: Reading,
   letter: BankLetter,
   image: PageImage,
-  r: SubjectResult,
-): Promise<void> {
+): Promise<{ readonly offer: PickerOffer | null; readonly problems: string[] }> {
   const name = UPPER[letter];
-  const result = writeResultOf(r, letter);
   const problems: string[] = [];
   const before = await snapshot(rig, reading.addresses);
-  let refusal: PageRefusal | null = null;
+  let answer: PageRefusal | 'taken' | null = null;
   const page = await rig.openPage();
   try {
     /* The picker's rows exist only once the banks are read in this window (as writeBank does). */
     await page.readSlots();
-    refusal = await page.refuse(letter, image);
+    answer = await page.refuse(letter, image);
     const refused = await page.refusals();
     if (refused.length > 0) problems.push(`refused requests: ${refused.join('; ')}`);
   } catch (error) {
@@ -867,15 +894,13 @@ async function refuseBank(
   for (const region of regionsChanged(before, after, null)) {
     problems.push(`${region} changed while the page was refusing bank ${name}`);
   }
-  if (refusal !== null) {
-    result.notes.push(`page: "${refusal.status}", logged: ${refusal.reason ?? 'no reason logged'}`);
-  }
-  if (problems.length > 0) {
-    result.state = 'failed';
-    for (const problem of problems) r.failures.push(`refuse ${name}: ${problem}`);
-    return;
-  }
-  result.state = 'refused';
+  const offer: PickerOffer | null =
+    answer === null
+      ? null
+      : answer === 'taken'
+        ? { accepted: true, reason: null }
+        : { accepted: false, reason: answer.reason };
+  return { offer, problems };
 }
 
 /**
@@ -978,9 +1003,10 @@ async function slotBootProof(
   r: SubjectResult,
   written: ReadonlySet<BankLetter>,
   log: (line: string) => void,
+  sources: ReadonlyMap<BankLetter, PageImage | null> = reading.images,
 ): Promise<void> {
   const booted = reading.read.banks.find((bank) => bank.booted)?.letter ?? null;
-  const source = fallbackSource(reading.images, null, booted);
+  const source = fallbackSource(sources, null, booted);
   const running = (await rig.camera.runningInfo())?.buildString ?? null;
   if (source === null || running === null) {
     r.bootProof = 'skipped';
@@ -1094,7 +1120,6 @@ async function slotBootProof(
   }
 }
 
-/** Runs the whole flow for one subject. Never throws: every failure lands in the result. */
 /** A subject's record before any step has run. */
 function resultFor(subject: BenchSubject): SubjectResult {
   return {
@@ -1110,10 +1135,13 @@ function resultFor(subject: BenchSubject): SubjectResult {
       bank,
       state: 'not-run',
       sameAsBefore: null,
+      offer: null,
       notes: [],
     })),
     bootProof: 'not-run',
     slotBoot: [],
+    pageBanner: null,
+    judgement: null,
     notes: [],
     failures: [],
   };
@@ -1200,7 +1228,19 @@ async function runRefusalProbe(
   r.notes.push(
     `bank ${UPPER[letter]}: its own decrypted image ${image.name}, ${String(image.bytes.length)} B`,
   );
-  await refuseBank(rig, reading, letter, image, r);
+  const result = writeResultOf(r, letter);
+  const answer = await offerAtPicker(rig, reading, letter, image);
+  result.offer = answer.offer;
+  if (answer.offer?.accepted === true) {
+    answer.problems.push('the picker took the image; it was not refused, so nothing is confirmed');
+  }
+  if (answer.offer !== null && !answer.offer.accepted) {
+    result.notes.push(
+      `page: refused at the picker, logged: ${answer.offer.reason ?? 'no reason logged'}`,
+    );
+  }
+  for (const problem of answer.problems) r.failures.push(`refuse ${UPPER[letter]}: ${problem}`);
+  result.state = answer.problems.length > 0 ? 'failed' : 'refused';
 }
 
 /**
@@ -1456,6 +1496,36 @@ export async function runProbe(
   return r;
 }
 
+/**
+ * The decrypted images a write may be taken from: every bank's own image, except one the table records as
+ * refused (its `ownImage`). The slot step and the boot proof both read from this map.
+ */
+function writableSources(
+  images: ReadonlyMap<BankLetter, PageImage | null>,
+  row: SlotsSubject,
+): Map<BankLetter, PageImage | null> {
+  const out = new Map(images);
+  if (row.ownImage !== undefined) out.set(row.ownImage.bank, null);
+  return out;
+}
+
+/** What the flow did with each bank, and the banner, as the judge reads it (verdict.ts). */
+function observationOf(r: SubjectResult, finished: boolean): SubjectObservation {
+  const bank = (letter: BankLetter): BankObservation => {
+    const result = writeResultOf(r, letter);
+    return {
+      offer: result.offer,
+      write: result.state === 'passed' ? 'written' : result.state === 'failed' ? 'failed' : 'none',
+    };
+  };
+  return { banks: { a: bank('a'), b: bank('b'), r: bank('r') }, banner: r.pageBanner, finished };
+}
+
+/**
+ * Runs the whole flow for one subject, then judges what it did against the subject's row of the verdict
+ * table (verdict.ts): a bank the table refuses must be refused at the picker with the table's reason, a bank it
+ * says is writable must be written. Never throws: every failure lands in the result.
+ */
 export async function runSubject(
   rig: BenchRig,
   subject: BenchSubject,
@@ -1467,85 +1537,175 @@ export async function runSubject(
     `${r.label}: ${r.file} (${short(subject.sha256)}), ${subject.fileKind}${slotBoot ? ', slot boot tests on' : ''}`,
   );
 
-  const bytes = await subjectBytes(r, subject);
-  if (bytes === null) {
-    r.notes.push('steps 1-4 not run: the file is not the one the tree indexed');
+  /* The table says what the subject must do, so it is read before anything touches the bench. */
+  const row = rig.verdictRow(subject);
+  if (row === null) {
+    r.failures.push(
+      `the verdict table has no row for ${r.label}, so the bench cannot judge it (nothing was sent)`,
+    );
     return r;
   }
 
-  /* Step 1: the whole flash, read back, then the CPU reset and the camera on USB. */
-  if (!(await flashAndBoot(rig, subject, r, log))) return r;
+  const finished = await flowOf(rig, subject, row, r, log, slotBoot);
+  const judgement = judgeSubject(row, observationOf(r, finished));
+  r.judgement = judgement;
+  r.failures.push(...judgement.failures);
+  return r;
+}
 
-  /* The 1.3.0.8 FF build has its own write path: R alone, A and B refused (TESTING 42.6). */
+/**
+ * The subject's steps (see the header): the file, the flash, the page, each bank held to its row of the table,
+ * and the boot proof. Returns whether the flow ran every bank to its step; false when it stopped on a failure
+ * that is already on the record.
+ */
+async function flowOf(
+  rig: BenchRig,
+  subject: BenchSubject,
+  row: SlotsSubject,
+  r: SubjectResult,
+  log: (line: string) => void,
+  slotBoot: boolean,
+): Promise<boolean> {
+  const bytes = await subjectBytes(r, subject);
+  if (bytes === null) {
+    r.notes.push('steps 1-4 not run: the file is not the one the tree indexed');
+    return false;
+  }
+
+  /* Step 1: the whole flash, read back, then the CPU reset and the camera on USB. */
+  if (!(await flashAndBoot(rig, subject, r, log))) return false;
+
+  /* The 1.3.0.8 FF build has its own write path: the vendor-form run (TESTING.md 42.12) writes A, B and R. */
   if (isFF1308Subject(subject)) {
     if (slotBoot) {
       r.notes.push(
         'per-bank boot tests not run on the FF build: the vendor-form run writes A, B and R and records the boot as observed',
       );
     }
-    await attempt(r, 'FF', () => runFF1308(rig, r, log));
-    return r;
+    const ran = await attempt(r, 'FF', () => runFF1308(rig, r, log));
+    return ran !== null;
   }
 
   /* Step 2: the page and the J-Link agree on the banks and their dumps. */
   const reading = await attempt(r, 'page read', () => readPage(rig, subject, bytes, r, slotBoot));
   if (reading === null) {
     r.notes.push('steps 3-4 not run: the page read failed');
-    return r;
+    return false;
   }
   log(
     `${r.label}: page identified=${String(r.pageIdentified)}, banks match J-Link=${String(r.banksMatch)}`,
   );
 
-  /* Step 3: the bank's own decrypted image into B, then A, then R. A write that
-   * was sent and did not check out ends the writes, and the boot proof. */
+  /* Step 3: each bank, held to the table (TESTING.md 42.21). A bank the table refuses is offered its own image
+   * at the picker, which must refuse it with the table's reason, and nothing is sent. A bank the table says is
+   * writable is written: from its own image, or, where the table records its own image as refused, from another
+   * bank's image. A bank with no image of its own is written by the boot proof. A write that was sent and did
+   * not check out ends the writes, and the boot proof. */
   const booted = reading.read.banks.find((bank) => bank.booted)?.letter ?? null;
+  const sources = writableSources(reading.images, row);
+  let finished = true;
   for (const result of r.slotWrites) {
     const name = UPPER[result.bank];
-    let image = reading.images.get(result.bank) ?? null;
-    let from: BankLetter | null = null;
-    if (image === null && slotBoot) {
-      /* Under the boot test a bank with no image of its own (blank, undecryptable, or another
-       * build) takes the booted bank's image, so every bank holds a bootable image of this build. */
-      const source = fallbackSource(reading.images, result.bank, booted);
-      if (source !== null) {
-        image = { name: source.image.name, bytes: source.image.bytes };
-        from = source.letter;
+    const verdict = row.banks[result.bank];
+    const ownRefused = row.ownImage?.bank === result.bank;
+    if (!verdict.writable || ownRefused) {
+      const own = reading.own.get(result.bank) ?? null;
+      if (own === null) {
+        result.notes.push(
+          'the page decrypts no image of its own, so none is offered at the picker',
+        );
+      } else {
+        const answer = await offerAtPicker(rig, reading, result.bank, own);
+        result.offer = answer.offer;
+        for (const problem of answer.problems) r.failures.push(`refuse ${name}: ${problem}`);
+        if (answer.problems.length > 0) {
+          finished = false;
+          break;
+        }
+        if (answer.offer !== null && !answer.offer.accepted) {
+          result.notes.push(
+            `page: refused at the picker, logged: ${answer.offer.reason ?? 'no reason logged'}`,
+          );
+        }
       }
     }
-    if (image === null) {
-      /* An empty bank (or one the page cannot decrypt) has no image of its own to write.
-       * That is recorded, not failed: the boot proof writes all three banks anyway. */
-      result.state = 'skipped';
-      result.notes.push("the bank holds no image of its own: its write is the boot proof's");
-      r.notes.push(
-        `bank ${name}: no image of its own, so no slot write (the boot proof writes it)`,
-      );
+    if (!verdict.writable) {
+      /* Refused by the table: nothing is sent, and the judge reads the picker's answer. */
+      result.state = result.offer !== null && !result.offer.accepted ? 'refused' : 'skipped';
       continue;
     }
+
+    /* Writable: from the bank's own image, or, where the table records its own as refused, another bank's. */
+    let chosen: { image: PageImage; from: BankLetter | null } | null;
+    if (ownRefused) {
+      const source = fallbackSource(sources, result.bank, booted);
+      chosen = source === null ? null : { image: source.image, from: source.letter };
+      if (chosen === null) {
+        result.state = 'skipped';
+        result.notes.push('no other bank holds an image to write it from');
+        continue;
+      }
+    } else {
+      const own = sources.get(result.bank) ?? null;
+      /* Under the boot test a bank with no image of its own takes the booted bank's image (or another's). */
+      const fallback =
+        own === null && slotBoot ? fallbackSource(sources, result.bank, booted) : null;
+      chosen =
+        own !== null
+          ? { image: own, from: null }
+          : fallback !== null
+            ? { image: fallback.image, from: fallback.letter }
+            : null;
+      if (chosen === null) {
+        /* An empty bank (or one the page cannot decrypt) has no image of its own to write.
+         * That is recorded, and the boot proof writes it (the judge requires that write). */
+        result.state = 'skipped';
+        result.notes.push("the bank holds no image of its own: its write is the boot proof's");
+        r.notes.push(
+          `bank ${name}: no image of its own, so no slot write (the boot proof writes it)`,
+        );
+        continue;
+      }
+    }
+
     let outcome: WriteOutcome;
     try {
-      outcome = await writeBank(rig, reading, result.bank, image);
+      outcome = await writeBank(rig, reading, result.bank, chosen.image);
     } catch (error) {
       result.state = 'failed';
       r.failures.push(`write ${name}: ${messageOf(error)}`);
+      finished = false;
       break;
     }
     result.sameAsBefore = outcome.sameAsBefore;
     if (outcome.problems.length > 0) {
       result.state = 'failed';
       for (const problem of outcome.problems) r.failures.push(`write ${name}: ${problem}`);
+      finished = false;
       break;
     }
     result.state = 'passed';
-    if (from !== null) {
-      result.notes.push(`written with bank ${UPPER[from]}'s image (it had no image of its own)`);
+    if (chosen.from !== null) {
+      result.notes.push(
+        ownRefused
+          ? `written with bank ${UPPER[chosen.from]}'s image (its own image is refused by the table)`
+          : `written with bank ${UPPER[chosen.from]}'s image (it had no image of its own)`,
+      );
     }
     log(`${r.label}: bank ${name} written, verified, and read back`);
   }
   if (r.slotWrites.some((result) => result.state === 'failed' || result.state === 'not-run')) {
     r.notes.push('boot proof not run: a slot write did not pass');
-    return r;
+    return false;
+  }
+
+  /* A bank the table refuses: nothing is written past it, so the boot proof does not run (TESTING.md 42.21). */
+  if (Object.values(row.banks).some((verdict) => !verdict.writable)) {
+    r.bootProof = 'not-run';
+    r.notes.push(
+      'boot proof not run: the table records a refusal of a bank of this subject, so nothing is written past it',
+    );
+    return finished;
   }
 
   if (slotBoot) {
@@ -1553,13 +1713,18 @@ export async function runSubject(
     const written = new Set(
       r.slotWrites.filter((result) => result.state === 'passed').map((result) => result.bank),
     );
-    const proof = await attempt(r, 'slot boot', () => slotBootProof(rig, reading, r, written, log));
+    const proof = await attempt(r, 'slot boot', () =>
+      slotBootProof(rig, reading, r, written, log, sources),
+    );
     if (proof === null) r.bootProof = 'failed';
-    return r;
+    return proof !== null;
   }
 
   /* Step 4: the patched build, in all three banks, and the camera runs it. */
-  const proof = await attempt(r, 'boot proof', () => bootProof(rig, reading, r));
-  if (proof === null) r.bootProof = 'failed';
-  return r;
+  const proof = await attempt(r, 'boot proof', () => bootProof(rig, reading, r, sources));
+  if (proof === null) {
+    r.bootProof = 'failed';
+    return false;
+  }
+  return proof;
 }

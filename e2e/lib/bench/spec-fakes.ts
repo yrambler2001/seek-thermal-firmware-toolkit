@@ -26,6 +26,7 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
 import { sha256 } from '../checks.js';
+import type { SlotsSubject } from '../slots-expectations.js';
 import { LENGTH_OFFSET } from '../../../packages/core/src/image/header.js';
 import { viewOf } from '../../../packages/core/src/bytes.js';
 import { KEY_PAIRS } from '../../../packages/core/src/preservation/patch.js';
@@ -232,13 +233,44 @@ function isBlank(bytes: Uint8Array): boolean {
  */
 export type FakeFfFault = 'stored' | 'accepted';
 
-/** The fake rig over one subject list. Each call builds a fresh, empty bench. */
+/** The banner heading the real page shows (slots-page.ts WRITE_BANNER_HEADING). */
+const BANNER_HEADING = 'No bank of this camera can be written from here.';
+
+/** A verdict row that writes every bank: the default for a fake subject. */
+export function writableRowFor(subject: BenchSubject): SlotsSubject {
+  const writable = { writable: true } as const;
+  return {
+    name: subject.folder,
+    group: 'fake',
+    version: subject.version,
+    emulator: null,
+    banks: { a: writable, b: writable, r: writable },
+    fps: { offer: false, reason: '' },
+    banner: 'none',
+    source: 'fake (bench-lib)',
+  };
+}
+
+/** Whether two images are the same bytes. */
+function sameBytes(left: Uint8Array, right: Uint8Array): boolean {
+  return left.length === right.length && left.every((byte, at) => byte === right[at]);
+}
+
+/**
+ * The fake rig over one subject list. Each call builds a fresh, empty bench. `verdicts` gives each
+ * subject (by index) the table row the page is held to: a bank the row refuses is refused at the
+ * picker with the row's reason, its own image included, and the row's `ownImage` bank refuses its
+ * own image alone. Without `verdicts`, every subject's row writes every bank.
+ */
 export function createFakeRig(options: {
   readonly subjects: readonly BenchSubject[];
   readonly failure: FakeFailure | null;
   readonly ffFault?: FakeFfFault | null;
+  readonly verdicts?: readonly SlotsSubject[];
 }): BenchRig {
   const ffFault = options.ffFault ?? null;
+  const rows: readonly SlotsSubject[] =
+    options.verdicts ?? options.subjects.map((candidate) => writableRowFor(candidate));
   let flash = new Uint8Array(BENCH_FLASH_BYTES).fill(0xff);
   let current = -1;
   let running: string | null = null;
@@ -248,6 +280,8 @@ export function createFakeRig(options: {
   let lastWritten: BankLetter | null = null;
 
   const subject = (): BenchSubject | null => options.subjects[current] ?? null;
+  /** The verdict row of the subject the fake camera is running, or null before any flash. */
+  const rowNow = (): SlotsSubject | null => (current < 0 ? null : (rows[current] ?? null));
   /**
    * The bank the fake camera boots: R for the FF build; otherwise the first non-blank of B, A, R
    * (the order bootedBuild uses). A blank B therefore has A booted, as on the 2014 chain.
@@ -426,10 +460,27 @@ export function createFakeRig(options: {
     r: 'Recovery bank R',
   };
 
+  /** The reason the row refuses this image at this bank's picker, or null when it takes it. */
+  const refusalReasonFor = (letter: BankLetter, image: PageImage): string | null => {
+    const row = rowNow();
+    if (row === null) return null;
+    const verdict = row.banks[letter];
+    if (!verdict.writable) return verdict.reason === '' ? 'refused (fake)' : verdict.reason;
+    if (row.ownImage?.bank === letter && sameBytes(image.bytes, bankBytes(letter))) {
+      return row.ownImage.reason === '' ? 'refused (fake)' : row.ownImage.reason;
+    }
+    return null;
+  };
+
   const openPage = (): Promise<BenchPage> => {
     const page: BenchPage = {
-      /* The fake page's keys verdict is always "writable" (the fake camera is not refused by its keys). */
-      banner: () => Promise.resolve(null),
+      /* The banner the row names (its heading and reason, as the real page shows them), or none. */
+      banner: () => {
+        const row = rowNow();
+        return Promise.resolve(
+          row === null || row.banner === 'none' ? null : `${BANNER_HEADING} ${row.banner}`,
+        );
+      },
       async readSlots(): Promise<PageRead> {
         const version = subject()?.version ?? null;
         /* The FF build boots from recovery; every other fake boots B. */
@@ -477,8 +528,11 @@ export function createFakeRig(options: {
               : `seek-slot-${upper}-v${subject()?.version ?? '?'}-decrypted-${stamp}.bin`,
         };
       },
-      async refuse(letter: BankLetter, image: PageImage): Promise<PageRefusal> {
-        if (!ff()) throw new Error('fake: only the FF image is refused at the picker');
+      async refuse(letter: BankLetter, image: PageImage): Promise<PageRefusal | 'taken'> {
+        if (!ff()) {
+          const reason = refusalReasonFor(letter, image);
+          return reason === null ? 'taken' : { status: 'Rejected — see the log above.', reason };
+        }
         if (letter === 'r') throw new Error('fake: the page takes the FF image for R');
         if (ffFault === 'accepted') {
           throw new Error(`fake: the picker took the FF image for ${letter}, it was not refused`);
@@ -491,6 +545,10 @@ export function createFakeRig(options: {
         };
       },
       async write(letter: BankLetter, image: PageImage, acknowledge: boolean): Promise<PageWrite> {
+        /* A refused image never reaches the write: the picker answers "Rejected", as the real page does. */
+        if (!ff() && refusalReasonFor(letter, image) !== null) {
+          throw new Error('the picker answered "Rejected — see the log above."');
+        }
         /* The page asks the tick on R, and on the bank the camera boots. */
         const ackShown = letter === 'r' || letter === bootedNow();
         if (ackShown !== acknowledge)
@@ -565,6 +623,10 @@ export function createFakeRig(options: {
     jlink,
     camera,
     patch,
+    verdictRow: (candidate: BenchSubject) => {
+      const index = options.subjects.findIndex((other) => other.file === candidate.file);
+      return index < 0 ? null : (rows[index] ?? null);
+    },
     openPage,
   };
 }

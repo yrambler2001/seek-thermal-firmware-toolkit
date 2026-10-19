@@ -491,6 +491,7 @@ describe.skipIf(!RUNNABLE)('the web app pages on the bench camera (1.3.0.0, real
           name: 'not-a-slot.bin',
           bytes: new Uint8Array(1000),
         });
+        if (refusal === 'taken') throw new Error('the picker took the file, so it was not refused');
         expect(refusal.status, 'the picker rejects the file').toMatch(/^Rejected/);
         expect(refusal.reason, 'the refusal says why').not.toBeNull();
         expect(await need().refusals(), 'nothing went to the camera past the guard').toEqual([]);

@@ -5,13 +5,17 @@
  * For each launchable dump the bench camera's tree lists at 0.8.0.0 or above,
  * one after the other: flash the whole part with the J-Link and read it back
  * halted; reset; drive the Firmware slots page in Electron over real WebUSB and
- * check each bank against the J-Link; write each bank its own decrypted image
- * through the page (B, then A, then R), checking the page's verdict and the
- * J-Link after each; then patch the build string and write it into all three
- * banks, reset, and require the camera to run the patched build. The flow is
- * `lib/bench/spec-flow.ts`; the real parts are `lib/bench/index.ts` (the
- * library) and `lib/bench/spec-page.ts` (the page); the fakes are
- * `lib/bench/spec-fakes.ts`.
+ * check each bank against the J-Link; then judge each bank against the shared
+ * verdict table (`e2e/lib/slots-expectations.ts`, its row found by `lib/bench/verdict.ts`):
+ * a bank the table refuses must be refused at the picker with the table's reason
+ * (nothing sent); a bank the table says is writable is written through the page
+ * (its own image, or another bank's where the table records its own as refused),
+ * checking the page's verdict and the J-Link after each; then patch the build string
+ * and write it into all three banks, reset, and require the camera to run the patched
+ * build (where the table refuses no bank). A subject passes when every bank does what
+ * its row says. The flow is `lib/bench/spec-flow.ts`; the judge is `lib/bench/verdict.ts`;
+ * the real parts are `lib/bench/index.ts` (the library) and `lib/bench/spec-page.ts`
+ * (the page); the fakes are `lib/bench/spec-fakes.ts`.
  *
  * THE GATE (`approveWrite`, lib/supervised-write.ts):
  *   SEEK_E2E_WRITE=i-understand  runs it on the bench (never with CI set);
@@ -51,6 +55,7 @@ import { createFakeRig, fakeSubjects, type FakeFailure } from './lib/bench/spec-
 import { createRealRig } from './lib/bench/spec-page.js';
 import {
   describePlan,
+  passedAsWord,
   reportLine,
   writeMatrix,
   type RunMeta,
@@ -160,7 +165,7 @@ describe.skipIf(!runnable)('the slots bench', () => {
   for (const [index, subject] of subjects.entries()) {
     describe(`${String(index + 1)}/${String(subjects.length)} ${subjectLabel(subject)}`, () => {
       it(
-        'flashes it, checks the page and the J-Link, writes both banks, and proves the boot',
+        'flashes it, checks the page and the J-Link, holds each bank to the verdict table, and proves the boot',
         async () => {
           const log = (line: string): void => {
             say(line);
@@ -186,6 +191,8 @@ describe.skipIf(!runnable)('the slots bench', () => {
   }
 
   it('the matrix: every subject passes, and the failing ones are named', () => {
+    /* The summary: each subject, and whether it passed as a write or as a refusal the table records. */
+    for (const r of results) say(`${r.label}: passed as ${passedAsWord(r)}`);
     const failing = results.filter((r) => r.failures.length > 0).map((r) => r.label);
     expect(results.length, 'every subject ran').toBe(subjects.length);
     expect(failing, `subjects that did not pass: ${failing.join('; ')}`).toEqual([]);
@@ -202,7 +209,9 @@ function heapLine(when: string): void {
   if (gc !== undefined) gc();
   const mb = (n: number): string => String(Math.round(n / 2 ** 20));
   const m = process.memoryUsage();
-  say(`heap ${when}: heapUsed ${mb(m.heapUsed)} MB, rss ${mb(m.rss)} MB${gc === undefined ? ' (no gc: not retained)' : ''}`);
+  say(
+    `heap ${when}: heapUsed ${mb(m.heapUsed)} MB, rss ${mb(m.rss)} MB${gc === undefined ? ' (no gc: not retained)' : ''}`,
+  );
 }
 
 /** The record of a subject whose rig never opened (the beforeAll error says why). */
@@ -219,6 +228,8 @@ function missingRig(subject: BenchSubject): SubjectResult {
     slotWrites: [],
     bootProof: 'not-run',
     slotBoot: [],
+    pageBanner: null,
+    judgement: null,
     notes: [],
     failures: ['the bench rig did not open (see the beforeAll error)'],
   };

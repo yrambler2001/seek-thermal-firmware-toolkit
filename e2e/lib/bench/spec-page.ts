@@ -47,6 +47,7 @@ import {
 import { installWriteGuard, type WriteGuardConfig } from '../write-guard.js';
 import type { UiGuard } from '../wizard.js';
 import { createBenchCamera, createJlinkBench, patchBuildString } from './index.js';
+import { verdictRowOf } from './verdict.js';
 import type {
   BankLetter,
   BankView,
@@ -237,7 +238,7 @@ function windowOf(target: TargetHandle, scratchDir: string): BenchPage {
       };
     },
 
-    async refuse(letter: BankLetter, image: PageImage): Promise<PageRefusal> {
+    async refuse(letter: BankLetter, image: PageImage): Promise<PageRefusal | 'taken'> {
       const name = (await rowOf(target.page, letter)).name;
       const file = writeScratch(picked, image);
       /* Every budget is zero: a refused image must not reach the stage or the commit. */
@@ -249,10 +250,12 @@ function windowOf(target: TargetHandle, scratchDir: string): BenchPage {
         commitSum16: null,
       });
       const status = await pickImage(target.wizard, target.page, letter, 'plain', file);
+      if (status.startsWith('Ready')) {
+        /* Taken: the prepared plan is never confirmed, and the window closes with nothing sent. */
+        return 'taken';
+      }
       if (!status.startsWith('Rejected')) {
-        throw new Error(
-          `${name}: the picker took the image ("${status}"); it was not refused, so nothing is confirmed`,
-        );
+        throw new Error(`${name}: the picker answered "${status}", neither taken nor refused`);
       }
       const log = await target.wizard.logTail('slotsrun', 60);
       const reasons = [...log.matchAll(/cannot use this file: (.+)$/gm)].map(
@@ -336,6 +339,7 @@ export function createRealRig(approval: WriteApproval, scratchRoot: string): Pro
     camera,
     patch: (image: Uint8Array, buildString: string, mark?: string) =>
       patchBuildString(image, buildString, mark),
+    verdictRow: (subject) => verdictRowOf(subject),
     openPage: () => {
       windows += 1;
       return openBenchPage(path.join(scratchRoot, `window-${String(windows)}`));
