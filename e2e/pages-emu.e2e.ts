@@ -67,6 +67,20 @@ if (UNAVAILABLE !== null) process.stderr.write(`\n[skip] the pages [emu]: ${UNAV
 /** The opcodes that change the camera: the flash write, its commit, the reset and the setters. */
 const CHANGES_THE_CAMERA = ['out 0x50', 'out 0x51', 'out 0x55', 'out 0x59', 'out 0x5a'];
 
+/**
+ * Every request the Info read sends on the emulator (TESTING.md 42.68): the identity reads, the
+ * device-info reads and the arms, and the two info selectors 0x55 and 0x5a, which only that read sends.
+ */
+const INFO_READ_KEYS = [
+  'in 0x35',
+  'in 0x3d',
+  'in 0x4e',
+  'in 0x4f',
+  'out 0x52',
+  'out 0x55',
+  'out 0x5a',
+];
+
 /** Which of a wire count's keys would change the camera. */
 function changesIn(wire: ReadonlyMap<string, number>): string[] {
   return [...wire.keys()].filter((key) => CHANGES_THE_CAMERA.includes(key));
@@ -132,6 +146,8 @@ const INFO_CAMERAS: readonly {
   readonly camera: PagesCamera;
   readonly version: string;
   readonly tab: string;
+  /** How many device-info reads the Info read makes on this camera (each sends 4 selectors and 1 block). */
+  readonly reads: number;
 }[] = [
   {
     camera: entryFor(
@@ -141,6 +157,7 @@ const INFO_CAMERAS: readonly {
     ),
     version: '1.3.0.0',
     tab: 'Dump & decrypt 0.x/1.x 2014/2016',
+    reads: 1,
   },
   {
     camera: entryFor(
@@ -150,6 +167,7 @@ const INFO_CAMERAS: readonly {
     ),
     version: '4.8.2.1',
     tab: 'Dump & decrypt 4.x/Nano',
+    reads: 1,
   },
   {
     camera: entryFor(
@@ -159,6 +177,9 @@ const INFO_CAMERAS: readonly {
     ),
     version: '1.0.3.0',
     tab: 'Dump & decrypt 0.x/1.x 2014/2016',
+    /* The 2016 PRO's read runs twice: the second read is under the profile the evidence names
+     * (`profileToRereadUnder`, useInfoPanel.ts). Measured on the emulator: 8 selector writes, 2 blocks. */
+    reads: 2,
   },
 ];
 
@@ -195,11 +216,17 @@ for (const subject of INFO_CAMERAS) {
       expect(await s.wizard.redAlerts(), 'no red alert on a good read').toEqual([]);
     });
 
-    it('sends only the identity read (GetFirmwareInfo) and nothing that changes the camera', async () => {
+    it('sends the Info read and nothing that changes the camera: no flash write, no reset, and the info selectors only as the read sends them', async () => {
       const wire = await s.wire();
       say(`info wire: ${JSON.stringify([...wire.entries()])}`);
-      expect([...wire.keys()]).toEqual(['in 0x4e']);
-      expect(changesIn(wire)).toEqual([]);
+      expect([...wire.keys()].filter((key) => !INFO_READ_KEYS.includes(key))).toEqual([]);
+      expect(changesIn(wire).filter((key) => !INFO_READ_KEYS.includes(key))).toEqual([]);
+      expect(wire.get('out 0x55') ?? 0, 'SetFirmwareInfoFeatures: four per device-info read').toBe(
+        4 * subject.reads,
+      );
+      expect(wire.get('out 0x5a') ?? 0, 'SetRamDataFeatures: once per device-info read').toBe(
+        subject.reads,
+      );
     });
   });
 }

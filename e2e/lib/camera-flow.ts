@@ -149,6 +149,25 @@ export const WRITE_GUARD: WriteGuardConfig = {
 };
 
 /**
+ * The device-info read's two RAM selectors, as core sends them (`readDeviceInfo` in
+ * packages/core/src/workflows/device-info.ts, through `readFwInfo` and `readSerial` in
+ * packages/core/src/protocol/client.ts; TESTING.md 42.68):
+ *   - SetFirmwareInfoFeatures (0x55), a u16 record selector: 1 (bootloader), 20 (platform),
+ *     17 (USB speed), 10 (roots), and 6, 7, 8 (the bank verdicts, read only on 1.3.0.8);
+ *   - SetRamDataFeatures (0x5a), the device-id block alone: case 0 at length 124, a 6-byte payload.
+ */
+export const INFO_SELECTOR_KEYS: readonly string[] = ['out 0x55', 'out 0x5a'];
+export const INFO_SELECTORS: readonly number[] = [1, 6, 7, 8, 10, 17, 20];
+export const INFO_SERIAL_BLOCK: readonly number[] = [0x00, 0x00, 0x7c, 0x00, 0x00, 0x00];
+
+const INFO_OPS = {
+  firmwareInfo: OP.SET_FIRMWARE_INFO_FEATURES,
+  ramData: OP.SET_RAM_DATA_FEATURES,
+  selectors: INFO_SELECTORS,
+  serialBlock: INFO_SERIAL_BLOCK,
+};
+
+/**
  * The strict guard plus the Flash view's device-info read: SetFirmwareInfoFeatures
  * and the device-id SetRamDataFeatures come off `neverOps` and are let out by
  * shape (`infoOps`). The two flash writes stay refused, and so does every reset.
@@ -156,8 +175,16 @@ export const WRITE_GUARD: WriteGuardConfig = {
 export const DEVICE_INFO_GUARD: WriteGuardConfig = {
   ...WRITE_GUARD,
   neverOps: [OP.SET_FEATURED_FIRMWARE_DATA, OP.COMPLETE_MEMORY_UPGRADE],
-  infoOps: { firmwareInfo: OP.SET_FIRMWARE_INFO_FEATURES, ramData: OP.SET_RAM_DATA_FEATURES },
+  infoOps: INFO_OPS,
+  infoOpen: true,
 };
+
+/**
+ * The Info tab's guard, for a window that also runs the other read-only tabs (`pages-bench.e2e.ts`
+ * part A): DEVICE_INFO_GUARD's shapes, with the two info selectors SHUT until the test opens them
+ * (`setGuard`'s `infoOpen`) for the Info read. Every other tab's window keeps them refused.
+ */
+export const INFO_TAB_GUARD: WriteGuardConfig = { ...DEVICE_INFO_GUARD, infoOpen: false };
 
 /**
  * The camera write run's guard: the strict one, plus Preserve's two flash
@@ -187,7 +214,8 @@ export const CAMERA_WRITE_GUARD: WriteGuardConfig = {
  * transfer, and the vendor-id device pick in Electron's main process is
  * untouched. Never used by the unattended read-only runs. `seededVersion` is
  * for the write window alone: the version the run's step 02 matched, which a
- * fresh page has not seen (see `write-guard.ts`).
+ * fresh page has not seen (see `write-guard.ts`). `infoTab` is the Info tab's
+ * read-only window (`INFO_TAB_GUARD`): the info selectors start shut.
  *
  * (It used to drop the flash-write ids from `neverOps` and nothing more, which
  * left them refused as "not on this run's whitelist": an approved camera run
@@ -197,15 +225,18 @@ export function writeGuardScript(
   options: {
     readonly lifted?: boolean;
     readonly deviceInfo?: boolean;
+    readonly infoTab?: boolean;
     /** The version step 02 matched, for the write window (`WriteGuardConfig.seededVersion`). */
     readonly seededVersion?: string;
   } = {},
 ): string {
   const base: WriteGuardConfig = options.lifted
     ? CAMERA_WRITE_GUARD
-    : options.deviceInfo === true
-      ? DEVICE_INFO_GUARD
-      : WRITE_GUARD;
+    : options.infoTab === true
+      ? INFO_TAB_GUARD
+      : options.deviceInfo === true
+        ? DEVICE_INFO_GUARD
+        : WRITE_GUARD;
   const seed = options.seededVersion;
   if (seed !== undefined && !/^\d+\.\d+\.\d+\.\d+$/.test(seed)) {
     throw new Error(`a version seed must read like 1.0.3.0, not ${JSON.stringify(seed)}`);

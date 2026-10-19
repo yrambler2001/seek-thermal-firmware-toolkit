@@ -6,7 +6,9 @@
  * THE ORDER (each part leaves the camera as it found it):
  *   0. the whole flash is read back halted and must be the baseline (sha256 40447c7e…eb72);
  *   A. read-only session (the Info, 0.x/1.x, 4.x/Nano and Decrypt File/Slot tabs):
- *      - Info reads the version 1.3.0.0 and names the 0.x/1.x tab, sending identity reads only;
+ *      - Info reads the camera as `seek-fw info` does (TESTING.md 42.64): its identity reads and the
+ *        two info selectors, which this window lets out for that one read; it names the 0.x/1.x tab
+ *        and shows the same serial, bootloader, boot bank and upgrade target as the CLI;
  *      - 0.x/1.x: the first step ("Read & build", read-only) saves a run zip whose windows are
  *        byte runs of the halted flash read (taken with the J-Link, not the page);
  *      - 4.x/Nano refuses this camera before any dump read: its wire is a subset of Info's;
@@ -32,7 +34,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { say } from './lib/browser.js';
 import { closeSharedDevServer } from './lib/target.js';
 import { describeWire, wireSince } from './lib/checks.js';
-import { NEVER_ON_THE_WIRE, step02 } from './lib/camera-flow.js';
+import { INFO_SELECTOR_KEYS, NEVER_ON_THE_WIRE, step02 } from './lib/camera-flow.js';
 import {
   closeCameraSession,
   countsOf,
@@ -118,6 +120,8 @@ let camera: BenchCamera | null = null;
 let restored = false;
 /** A window's wire as the page-side guard counts it (ops sent by the page to the camera). */
 let identityWire: ReadonlySet<string> = new Set();
+/** The two info selectors' counts in the Info read (the only read that sends them in part A). */
+let infoSelectorCounts: ReadonlyMap<string, number> = new Map();
 
 /** The halted flash read of one range, through the J-Link (not the page). */
 async function haltedRead(address: number, length: number): Promise<Uint8Array> {
@@ -158,6 +162,20 @@ function bankOf(flash: Uint8Array, letter: BankLetter): Uint8Array {
 
 function sameBytes(a: Uint8Array, b: Uint8Array): boolean {
   return Buffer.from(a).equals(Buffer.from(b));
+}
+
+/**
+ * The value the Info page shows under a label. The page prints each label and its value on their
+ * own lines (innerText), so the value is the line after the label; runs of spaces collapse.
+ */
+function valueUnder(text: string, label: string): string | null {
+  const lines = text
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line !== '');
+  const at = lines.indexOf(label);
+  const value = at < 0 ? undefined : lines[at + 1];
+  return value === undefined ? null : value.replace(/\s+/g, ' ');
 }
 
 /** Every byte run of `needle` appears in the flash (the zip's windows are the camera's own bytes). */
@@ -243,7 +261,9 @@ describe.skipIf(!RUNNABLE)('the web app pages on the bench camera (1.3.0.0, real
     };
 
     beforeAll(async () => {
-      session = await openCameraSession(path.join(SCRATCH, 'read-only'), HEADED);
+      session = await openCameraSession(path.join(SCRATCH, 'read-only'), HEADED, {
+        infoTab: true,
+      });
     }, 5 * 60_000);
 
     afterAll(async () => {
@@ -251,26 +271,77 @@ describe.skipIf(!RUNNABLE)('the web app pages on the bench camera (1.3.0.0, real
       session = null;
     }, 60_000);
 
-    it('Info: connects, reads firmware 1.3.0.0 and names the 0.x/1.x tab; identity reads only', async () => {
+    it('Info: connects, reads the camera as the CLI does, and names the 0.x/1.x tab; the info selectors go out for this read only', async () => {
       const { app, wizard } = need();
       await wizard.route('#/');
       await wizard.connect();
       const before = countsOf(await guardOf(app.page));
-      await wizard.click('section[aria-labelledby="info-read-heading"]', 'Read firmware version');
-      await app.page.waitForFunction(
-        () =>
-          document.body.innerText.includes('What the camera reports') &&
-          document.body.innerText.includes('1.3.0.0'),
-        { timeout: 60_000, polling: 250 },
-      );
+      /* The Info read is the one request in this window that may send the two info selectors: the
+       * page's guard lets them out for this click and shuts them again after it (TESTING.md 42.68). */
+      await setGuard(app.page, { infoOpen: true });
+      const clickedAt = Date.now();
+      try {
+        await wizard.click('section[aria-labelledby="info-read-heading"]', 'Read firmware version');
+        /* "Read. Firmware 1.3.0.0." is set after the whole read: identify, then the device-info read. */
+        await app.page.waitForFunction(
+          () =>
+            (document.querySelector<HTMLElement>('#info-status')?.innerText ?? '').trim() ===
+            'Read. Firmware 1.3.0.0.',
+          { timeout: 180_000, polling: 250 },
+        );
+      } finally {
+        await setGuard(app.page, { infoOpen: false });
+      }
+      say(`info read: clicked, then the status read in ${String(Date.now() - clickedAt)} ms`);
       const text = await app.page.evaluate(() => document.body.innerText);
+      say(`info page text: ${JSON.stringify(text)}`);
       expect(text, 'the Info result names the 0.x/1.x tab').toContain('0.x/1.x');
+      expect(text, 'the unlock note is on the page').toContain(
+        'stays unlocked until a power cycle',
+      );
       const wire = wireSince(before, countsOf(await guardOf(app.page)));
       say(`info wire: ${describeWire(wire)}`);
-      for (const op of NEVER_ON_THE_WIRE) expect(wire.has(op), op).toBe(false);
+      for (const op of NEVER_ON_THE_WIRE.filter((key) => !INFO_SELECTOR_KEYS.includes(key))) {
+        expect(wire.has(op), op).toBe(false);
+      }
+      /* One device-info read on 1.3.0.0 (the emulator and the CLI send the same): SetFirmwareInfoFeatures
+       * for selectors 1, 20, 17 and 10 (6, 7 and 8 are 1.3.0.8's bank verdicts), and one device-id block. */
+      expect(wire.get('out 0x55'), 'SetFirmwareInfoFeatures: selectors 1, 20, 17, 10').toBe(4);
+      expect(wire.get('out 0x5a'), 'SetRamDataFeatures: the device-id block, once').toBe(1);
       expect((await guardOf(app.page)).refusals).toEqual([]);
-      identityWire = new Set(wire.keys());
+      infoSelectorCounts = new Map([...wire].filter(([key]) => INFO_SELECTOR_KEYS.includes(key)));
+      identityWire = new Set([...wire.keys()].filter((key) => !INFO_SELECTOR_KEYS.includes(key)));
       expect(identityWire.size, 'Info sent something to read the version').toBeGreaterThan(0);
+
+      /* The fields `seek-fw info --json` shows for this camera (cli-info-1.json, TESTING.md 42.65):
+       * serial, running build, bootloader, the booted bank and the upgrade target, which the CLI
+       * names from the roots word (selector 10). Platform and USB link are null in the CLI as well
+       * (both selectors read nothing on 1.3.0.0), so the page shows them unreadable too. A
+       * "(unreadable)" where the CLI reads a value is the regression this catches. */
+      expect(valueUnder(text, 'Serial'), 'serial (CLI: 101310HSNEA2)').toBe('101310HSNEA2');
+      expect(valueUnder(text, 'Running'), 'running (CLI: 1.3.0.0 Oct 21 2014)').toBe(
+        '1.3.0.0 Oct 21 2014',
+      );
+      expect(valueUnder(text, 'Bootloader'), 'bootloader (CLI: 0.9.0.0 Sep 29 2014)').toBe(
+        '0.9.0.0 Sep 29 2014',
+      );
+      expect(valueUnder(text, 'Platform'), 'platform (CLI: null on this camera)').toBe(
+        '(unreadable)',
+      );
+      expect(valueUnder(text, 'USB link'), 'USB link (CLI: null on this camera)').toBe(
+        '(unreadable)',
+      );
+      expect(valueUnder(text, 'cfg[0]'), 'cfg[0] (CLI: 0x00000000)').toMatch(/^0x00000000 /);
+      expect(valueUnder(text, 'Booted'), 'the booted bank (CLI: a, named by the roots word)').toBe(
+        'App image bank 0x14050000 (named by the active-slot word; not a boot record on this line)',
+      );
+      expect(valueUnder(text, 'Upgrade target'), 'the upgrade target (CLI: b)').toBe(
+        'App image bank 0x14060000',
+      );
+      expect(text, 'the read reached the roots word').not.toContain('could not be read');
+      expect(text, 'flashing is not disabled by a read that worked').not.toContain(
+        'flashing disabled',
+      );
     });
 
     it(
@@ -362,6 +433,8 @@ describe.skipIf(!RUNNABLE)('the web app pages on the bench camera (1.3.0.0, real
       );
       const wire = wireSince(before, countsOf(await guardOf(app.page)));
       say(`4.x wire: ${describeWire(wire)}`);
+      /* The 4.x tab's vocabulary has no info selector: 0x55 and 0x5a stay refused on this tab. */
+      for (const op of NEVER_ON_THE_WIRE) expect(wire.has(op), `4.x sent ${op}`).toBe(false);
       for (const op of wire.keys()) {
         expect(identityWire.has(op), `4.x sent ${op}, which Info did not send`).toBe(true);
       }
@@ -434,8 +507,12 @@ describe.skipIf(!RUNNABLE)('the web app pages on the bench camera (1.3.0.0, real
       const { app } = need();
       const guard = await guardOf(app.page);
       expect(guard.refusals, 'page-side refusals').toEqual([]);
-      for (const op of ['out 0x50', 'out 0x51', 'out 0x55', 'out 0x5a']) {
-        expect(guard.counts[op], op).toBeUndefined();
+      for (const op of ['out 0x50', 'out 0x51']) expect(guard.counts[op], op).toBeUndefined();
+      /* The two info selectors went out in the Info read alone: the whole session's totals are its counts. */
+      for (const op of INFO_SELECTOR_KEYS) {
+        expect(guard.counts[op] ?? 0, `${op} over the whole session`).toBe(
+          infoSelectorCounts.get(op) ?? 0,
+        );
       }
       expect(app.timeline.filter((line: string) => line.includes('REFUSED'))).toEqual([]);
     });

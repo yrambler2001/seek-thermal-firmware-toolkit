@@ -14,7 +14,9 @@
  *        answered (nothing but identity reads before the build is known);
  *        `resetOp` with payload u16 0, and only while the test has set
  *        `allowReset` (Preserve step 02, whose probe may reboot a spent reader);
- *        and, for the Flash view's device-info read only, `infoOps`.
+ *        and, for the device-info read only, `infoOps`: the two RAM selectors,
+ *        in the shapes core's read sends, and on the Info tab only while
+ *        `infoOpen` is set (the test opens it for the Info read and shuts it after).
  *
  * Everything else is refused before it leaves the page — above all the ids in
  * `neverOps` (the flash writes and the flash path's selectors), in either
@@ -73,13 +75,25 @@ export interface WriteGuardConfig {
   readonly seededVersion?: string | null;
   /**
    * The two RAM selectors the device-info read sends (Read slots, Read firmware version), let out
-   * only when set: `firmwareInfo` (SetFirmwareInfoFeatures) with a u16 record
-   * selector, `ramData` (SetRamDataFeatures) for the device-id block alone
-   * (case 0, a 6-byte payload). Neither touches flash — the CLI's `info`
-   * sends both — but the dump and step 02 never do, so their runs leave this
-   * unset and refuse them like any other id off the whitelist.
+   * only when set: `firmwareInfo` (SetFirmwareInfoFeatures) with a u16 record selector that is one
+   * of `selectors`, `ramData` (SetRamDataFeatures) for the device-id block alone, exactly
+   * `serialBlock` (case 0, a 6-byte payload). Neither touches flash — the CLI's `info` sends both —
+   * but the dump and step 02 never do, so their runs leave this unset and refuse them like any
+   * other id off the whitelist. The shapes are core's (`readFwInfo` and `readSerial` in
+   * packages/core/src/protocol/client.ts; TESTING.md 42.68).
    */
-  readonly infoOps?: { readonly firmwareInfo: number; readonly ramData: number } | null;
+  readonly infoOps?: {
+    readonly firmwareInfo: number;
+    readonly ramData: number;
+    readonly selectors: readonly number[];
+    readonly serialBlock: readonly number[];
+  } | null;
+  /**
+   * Whether `infoOps` are let out right now: the initial state. The Info tab's window starts shut
+   * and the test opens it for the Info read (`setGuard`'s `infoOpen`), so the same window's dump
+   * tabs still refuse both selectors. Unset means shut.
+   */
+  readonly infoOpen?: boolean;
   /**
    * The camera write run's flash writes, let out only when set, and then
    * only inside the phase budgets in the control object: `stage`
@@ -105,6 +119,8 @@ export interface InjectedStall {
 export interface WriteGuardControl {
   installed: boolean;
   allowReset: boolean;
+  /** Whether `infoOps` are let out now (`WriteGuardConfig.infoOpen`; the test sets it). */
+  infoOpen: boolean;
   /** How many more resets may go out, or null for no cap (still only while `allowReset`). */
   resetBudget: number | null;
   /** How many more SetFeaturedFirmwareData chunks may go out (`writeOps` only; 0 = none). */
@@ -146,6 +162,7 @@ export function installWriteGuard(config: WriteGuardConfig): void {
   const control: WriteGuardControl = {
     installed: false,
     allowReset: false,
+    infoOpen: config.infoOpen === true,
     resetBudget: null,
     stageBudget: 0,
     commitBudget: 0,
@@ -250,14 +267,25 @@ export function installWriteGuard(config: WriteGuardConfig): void {
       return;
     }
     const info = config.infoOps ?? null;
-    if (info !== null && op === info.firmwareInfo) {
-      if (bytes.length !== 2) refuse('SetFirmwareInfoFeatures with a payload other than a u16');
-      return;
-    }
-    if (info !== null && op === info.ramData) {
-      if (bytes.length !== 6 || bytes[0] !== 0 || bytes[1] !== 0) {
-        refuse('SetRamDataFeatures other than the device-id block (case 0)');
+    if (info !== null && (op === info.firmwareInfo || op === info.ramData)) {
+      if (!control.infoOpen) {
+        refuse(`OUT ${hex(op)}: an info selector, let out only for the Info read`);
       }
+      if (op === info.firmwareInfo) {
+        if (bytes.length !== 2) refuse('SetFirmwareInfoFeatures with a payload other than a u16');
+        const selector = (bytes[0] ?? 0) | ((bytes[1] ?? 0) << 8);
+        if (!info.selectors.includes(selector)) {
+          refuse(
+            `SetFirmwareInfoFeatures(${String(selector)}): a selector the Info read does not send`,
+          );
+        }
+        return;
+      }
+      const sameBlock =
+        bytes.length === info.serialBlock.length &&
+        info.serialBlock.every((b, i) => bytes[i] === b);
+      if (!sameBlock)
+        refuse('SetRamDataFeatures other than the device-id block the Info read sends');
       return;
     }
     refuse(`OUT ${hex(op)} is not on this run's whitelist`);

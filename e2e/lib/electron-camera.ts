@@ -28,7 +28,15 @@ export interface CameraSession {
   readonly wizard: Wizard;
 }
 
-export async function openCameraSession(scratch: string, headed: boolean): Promise<CameraSession> {
+/**
+ * `infoTab`: the window runs the Info tab among other read-only tabs, so its guard opens the two
+ * info selectors only while the test sets `infoOpen` for the Info read (`INFO_TAB_GUARD`).
+ */
+export async function openCameraSession(
+  scratch: string,
+  headed: boolean,
+  options: { readonly infoTab?: boolean } = {},
+): Promise<CameraSession> {
   mkdirSync(scratch, { recursive: true });
   say(`scratch: ${scratch}`);
   const server = await startDevServer();
@@ -36,7 +44,7 @@ export async function openCameraSession(scratch: string, headed: boolean): Promi
     const app = await ElectronApp.launch({
       scratchDir: scratch,
       url: `${server.url}#/`,
-      preloadSource: writeGuardScript(),
+      preloadSource: writeGuardScript({ infoTab: options.infoTab === true }),
       guardGlobal: WRITE_GUARD_GLOBAL,
       headed,
     });
@@ -87,6 +95,7 @@ export async function setGuard(
   page: Page,
   patch: {
     readonly allowReset?: boolean;
+    readonly infoOpen?: boolean;
     readonly resetBudget?: number | null;
     readonly fault?: InjectedStall | null;
     readonly stageBudget?: number;

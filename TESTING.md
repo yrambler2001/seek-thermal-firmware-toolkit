@@ -11052,3 +11052,90 @@ The middle sentence depends on B's verdict on this read: "holds a bootable image
 - The Connect note is only as good as the flag. The reset-window blind spot in 42.59 is unchanged.
 - The App test replaces the flag. A real session setting it is covered by `usePreservePanel.adoption.test.tsx` (42.59), which was not run here.
 - `plan.md` is not edited. Nothing is pushed or merged.
+
+### 42.68 The Info tab's test allows the two info selectors for the Info read only, and the page matches the CLI field by field on the bench (2026-10-19)
+
+**Summary.** Agent 42.68, on `worktree-agent-a25bc43799cbb1934`, reset to `refactor/all-firmware-profiles` (6500031). The shipped Info test failed at its "never on the wire" check (`out 0x55 expected true to be false`, 42.65). That list was stale: since 42.64 the Info read sends OUT 0x55 and 0x5A, as `seek-fw info` does. The test and the guards now allow those two requests for the Info read only, in the shapes core sends, and assert the page's fields against what the CLI shows. On the bench the Info test passed twice (once with the wire, once with the page text logged), and the page matched `seek-fw info --json` on every field the two show. The camera's flash was written in three passes (the owner's baseline, the spec's own two restores, and the start image back; section 3 has the list), and it ended as the start image: `cmp` silent, sha256 `50e900c2…01d7d`.
+
+**Tags.** [measured] is a command, a test or a bench run here, logged under `/private/tmp/claude-501/agent-hw7/`. [source] is read from the code named. [inferred] follows from those and was not measured directly.
+
+**1. The guards, and why each changed.**
+- **`e2e/lib/write-guard.ts`** (the page-side guard, injected into Electron). `infoOps` now carries the exact shapes: `selectors` (the u16 record selectors `readDeviceInfo` reads) and `serialBlock` (the 6-byte case-0 `SetRamDataFeatures` payload, `00 00 7c 00 00 00`). A new runtime flag `infoOpen` (on `WriteGuardControl`, initial value `config.infoOpen`) lets both through only while it is set. Before, `infoOps` let any u16 and any 6-byte case-0 block out for every tab that had it. [source] core's shapes: `readFwInfo` sends `SetFirmwareInfoFeatures` with a u16 (`packages/core/src/protocol/client.ts:387`); `readSerial` sends the 6-byte block with case 0 and length 124 (`client.ts:423-429`); `readDeviceInfo` calls `tryFwInfo` with selectors 1, 20, 17, 10 (`device-info.ts:540-556`), and `readBankVerdicts` with 6, 7, 8 only on 1.3.0.8 (`device-info.ts:383-400, 664-666`). Nothing else in core, CLI or web sends 0x55 or 0x5A (grep).
+- **`e2e/lib/camera-flow.ts`.** Adds `INFO_SELECTOR_KEYS` (`out 0x55`, `out 0x5a`), `INFO_SELECTORS` (1, 6, 7, 8, 10, 17, 20), `INFO_SERIAL_BLOCK`, and `INFO_TAB_GUARD` (`DEVICE_INFO_GUARD` with `infoOpen: false`). `DEVICE_INFO_GUARD` keeps its behaviour (`infoOpen: true`), so the slots bench (`spec-page.ts`, `BENCH_GUARD`) is unchanged except that its selector shapes are now exact. `NEVER_ON_THE_WIRE` is not changed: four other specs use it, and none of them runs the Info read.
+- **`e2e/lib/electron-camera.ts`.** `openCameraSession(scratch, headed, { infoTab })` installs `INFO_TAB_GUARD`; `setGuard` takes `infoOpen`.
+- **`e2e/pages-bench.e2e.ts`, part A** (one window for the Info, 0.x/1.x, 4.x and Decrypt tabs). The Info test opens the gate for its click and shuts it in a `finally`. Its checks:
+  - the forbidden list minus the two info selectors (`out 0x50`, `out 0x51` stay forbidden);
+  - the counts `out 0x55` ×4 and `out 0x5a` ×1 (one device-info read on 1.3.0.0: selectors 1, 20, 17, 10, and one block);
+  - no refusals;
+  - the page's fields (`valueUnder`, which reads the line under each label): serial, running, bootloader, platform, USB link, cfg[0], booted, upgrade target, no "could not be read", no "flashing disabled".
+  - The 4.x test now asserts `NEVER_ON_THE_WIRE` directly. Before, its subset check against Info's wire would have allowed 0x55/0x5A once Info sent them.
+  - The final session test asserts `out 0x50`/`out 0x51` never appear, and the two info selectors' session totals equal the Info read's counts.
+  - The 0.x/1.x test still forbids all four (its gate is shut).
+- **`e2e/pages-emu.e2e.ts`** (emulator, no write guard; the bridge only counts). The Info test asserted `['in 0x4e']` and `changesIn == []`, which predate 42.64 and failed on all three subjects before this change. It now asserts the Info key set (`in 0x35`, `in 0x3d`, `in 0x4e`, `in 0x4f`, `out 0x52`, `out 0x55`, `out 0x5a`), no 0x50/0x51/0x59, and the info-selector counts per subject: 4 × reads of 0x55 and 1 × reads of 0x5A, with `reads` 1 for 1.3.0.0 and 4.8.2.1 and 2 for 1.0.3.0 (measured, below). The other tabs' `changesIn` checks (dump tabs) still forbid 0x55/0x5A.
+- **Not changed, on purpose.** `e2e/lib/camera-bus.ts` (the Node bridge): no Info test runs through it, and its refusal of 0x55/0x5A still stands for the bridge runs. `PAGE_REFUSED_OUT` and `NEVER_ON_THE_WIRE`. `camera.e2e.ts`, `camera-restart.e2e.ts`, `camera-write.e2e.ts` (they use the strict guard). `slots-view.e2e.ts` (its comment is right: it checks only 0x50 and 0x51).
+
+**2. Offline checks (no camera).**
+- `pages-emu.e2e.ts -t "Info tab"` on the emulator, before the edits: `Tests 3 failed | 7 passed | 32 skipped`, the three failures being the stale `['in 0x4e']` assertion (log `/private/tmp/claude-501/agent-hw7/pages-emu-info-baseline.log`). Measured wires: 1.3.0.0 `in 0x4e` 6, `in 0x3d` 9, `out 0x52` 9, `in 0x35` 13, `in 0x4f` 2076, `out 0x55` 4, `out 0x5a` 1; 4.8.2.1 the same except `in 0x4e` 8, `in 0x35` 18, `in 0x4f` 2835; 1.0.3.0 PRO `in 0x4e` 14, `in 0x3d` 11, `out 0x52` 11, `in 0x35` 28, `in 0x4f` 6163, `out 0x55` 8, `out 0x5a` 2 (two reads).
+- The same command after the edits: `Tests 10 passed | 32 skipped` (the three subjects' three tests each, and the no-camera test), exit 0 (`pages-emu-info-after.log`).
+- `installWriteGuard` run directly (`/private/tmp/claude-501/agent-hw7/guard-check.mts`, Node type stripping, a stubbed `USBDevice`, `INFO_TAB_GUARD`'s fields): 22 of 22 cases as expected. Gate shut: 0x55 and 0x5A refused. Gate open: selectors 1, 6, 7, 8, 10, 17, 20 and the exact block sent; selector 2, a 3-byte 0x55, another length, another case, and a nonzero tail refused; 0x50, 0x51 and 0x59 refused open or shut; `SetOperationMode` u16 0 sent.
+- `tsc --noEmit -p e2e/tsconfig.json`: exit 0, before and after. ESLint on the five changed e2e files: exit 0. Prettier: clean (it reformatted two files I had edited; HEAD was clean for both).
+- Not run: the other `pages-emu` tabs (the dump and decrypt tests), `pages-bench` part B, `slots-bench`, `camera.e2e`, `camera-bridge.e2e`, the core and CLI test files. No whole vitest run. `packages/cli/test/real-camera-probe.test.ts` was not run.
+
+**3. The bench.** Camera: PIR206 Thermal Camera, serial `101310HSNEA2`, 1.3.0.0, the 2014 plaintext chain, on channel 2 of the USB switch (channel 1 = J-Link S/N 69656086). All times UTC, as `say()` prints them.
+
+*(a) The start image.* Halted J-Link read, `spifi_14000000_4m_halted.bin`, copied to `start-4m.bin`: sha256 `50e900c23ff4bb7e0a5a30fc5879f6ed276289e43aeace2f9ab74eaec9b01d7d`, as the brief expects. `cmp` against the 42.65 `start-4m.bin` is silent. Banks, over each bank's 47,768-byte image: A `ef90c94a`, B `d91284c6`, R `d91284c6`; cfg word at 0x14010000 `0x00000000`. [measured]
+
+*The start image is not the spec's baseline.* pages-bench's part 0 requires the whole flash to be the owner's 4 MiB `40447c7e…eb72` (`SEEK_FULL_DUMPS_BY_CAMERA/.../full_dump_original.bin`), and the start image differs from it in 47,090 bytes. A `flash-factory-4m-2` dry run (`F4M2_DRY=1`) gave the plan `3 of 64 blocks differ -> 0x14050000+0x30000` (banks A, B and R). So the test could not run from the start image. The spec's own `afterAll` restores that baseline anyway, so I wrote it first, deliberately, with the runner (below) and kept the start image as the restore image.
+
+*(b) The page Info test.* Run 1 (`pages-bench-info-camera.log`): passed, `1 passed | 8 skipped`, 95 s. Its wire: `in 0x35` ×13, `in 0x3d` ×9, `in 0x4e` ×6, `in 0x4f` ×2076, `out 0x52` ×9, `out 0x55` ×4, `out 0x5a` ×1. Run 2, the same test with the read's timing and the page text logged (`pages-bench-info-camera-2.log`): passed, 86 s, part 0 at 16:52:14 read the baseline, the same wire. The click was at about 16:52:16; the status line `Read. Firmware 1.3.0.0.` appeared 4049 ms later. The page's full text is in that log (`info page text`). The field values the page showed:
+
+**The page-vs-CLI table.** The CLI is `node packages/cli/dist/bin.js info --json` (built in the worktree with the main checkout's `tsc`), run after a channel-2 cycle, `readAt` `2026-10-19T16:53:51.825Z`; its output is `cli-info-1.json` and `cli-info-1.err` in `agent-hw7`. The page is run 2's text.
+
+| field | `seek-fw info --json` | Info tab (run 2) | same |
+| --- | --- | --- | --- |
+| product | PIR206 Thermal Camera | PIR206 Thermal Camera | yes |
+| manufacturer | Seek Thermal | Seek Thermal | yes |
+| serial | `firmware.serial` 101310HSNEA2 (`device.serial`, the USB string, null) | 101310HSNEA2 | yes |
+| platform | null | (unreadable) | yes |
+| USB link | null | (unreadable) | yes |
+| running | 1.3.0.0, Oct 21 2014 | 1.3.0.0 Oct 21 2014 | yes |
+| bootloader | 0.9.0.0, Sep 29 2014 | 0.9.0.0 Sep 29 2014 | yes |
+| profile | legacy-auth, score 0.98, not ambiguous | legacy-auth — Legacy locked firmware; legacy-auth (score 0.98) | yes |
+| cfg[0] | 0x00000000 | 0x00000000 — cfg0 0 | yes |
+| booted | a (roots word 0x00000000) | App image bank 0x14050000 (named by the active-slot word; not a boot record on this line) | yes |
+| upgrade target | b, `targetConfirmed` null | App image bank 0x14060000 (no "confirmed on the wire") | yes |
+| upgrade-target warning | null | none | yes |
+| key A, key B | null, null | (not identified), (not identified) | yes |
+| table at | null, 0 candidates | 0 candidate(s), none confirmed | yes |
+| whitening K | 0x00000000 | 0x00000000 | yes |
+| store key | Key B, not programmed | Key B (no per-device key programmed; Key B itself not identified) | yes |
+| slots A, B, R | A 1.3.0.0, 47768 B, plaintext, accepts no, footer n/a, bootable yes, sha `862717a8…`; B absent; R the same as A | A 1.3.0.0, 47768 B, none (plaintext), no, n/a, yes, `862717a8a605021d`; B —; R the same as A | yes |
+| writing | `canFlash` true, `flashBlockedBy` [] | "Available: the Slots tab can write one bank" | yes |
+| unlock note | "the camera stays unlocked until a power cycle" | "Note: the camera stays unlocked until a power cycle" | yes |
+
+- The roots word is not printed as a number on either side. Both show it through the booted and target names, which follow from it (the page says "named by the active-slot word").
+- The page's platform and USB-link rows are unreadable on the camera itself: the page log says `platform string: unavailable (control OUT 0x55 -> stall)` and `USB port speed: unavailable (control OUT 0x55 -> stall)`. The CLI reads the same nulls. So these are not the guard regression. The test pins them to "(unreadable)" with that reason.
+- The regression case: 42.65's harness page text, fed through the test's `valueUnder`, gives "(unreadable)" for Serial and Bootloader (`agent-hw7/value-under-check.mjs`), so the new assertions for those rows would fail on it.
+
+*(c) The CLI on the camera.* Channel 2 cycled, 10 s wait, then `info --json` (exit 0). Field by field, the table above is the whole comparison. No difference was found in any field the page shows.
+
+*(d) The end.* The camera held the baseline after pages-bench's own restore: halted dump sha `40447c7e…eb72` (`end-before-restore-4m.bin`). Then the start image was written back with `flash-factory-4m-2` (`FACTORY_IMAGE=start-4m.bin`): plan `3 of 64 blocks differ -> 0x14050000+0x30000`, attempt 1 verified, "DONE: the part reads back byte-identical to the image (50e900c2…01d7d)". A final halted dump: `cmp start-4m.bin end-4m.bin` silent, exit 0; sha256 `50e900c23ff4bb7e0a5a30fc5879f6ed276289e43aeace2f9ab74eaec9b01d7d`. Channel 2 was then power-cycled, so the camera runs the start image.
+
+*What was written to the camera, in order.*
+- (1) The owner's baseline, by `flash-factory-4m-2`: plan `3 of 64 blocks differ -> 0x14050000+0x30000` (banks A, B and R), attempt 1 verified, read back `40447c7e…eb72` (`s1-f4m2-write-baseline.log`). It was needed for the spec's part 0.
+- (2) pages-bench's own `afterAll` restore, after run 1 and after run 2. The spec calls `flashFull`, which runs `erase-spifi-range` over the whole 4 MiB and then the runner's flash. I did not find the runner logs for these two restores (`compact_8hz_1_3_0_0/jlink_dumps` has none from 16:49 to 16:54, and the bench's default target `compact_8hz_1_3_0_8/jlink_dumps` is empty), and the test log does not show the erase or the flash. So exactly what those two restores wrote is not recorded here. What is measured: part 0 of run 2 read the baseline at 16:52:14, and my halted dump after run 2 read `40447c7e…eb72`.
+- (3) The start image back, by `flash-factory-4m-2`: plan `3 of 64 blocks differ -> 0x14050000+0x30000` (banks A, B and R), attempt 1 verified, read back `50e900c2…01d7d` (`s7-f4m2-restore-start.log`).
+- In (1) and (3) the boot-config block (0x14010000) and the bootloader block (0x14000000) were not in the plan and were not written. In (2) the whole-flash erase covers them, and the flash read back as the baseline afterwards.
+
+**4. Commands.** Worktree: `git reset --hard refactor/all-firmware-profiles`; the `node_modules/@seek-fw` links; core and CLI built with `tsc --build packages/{core,cli}/tsconfig.build.json` from the main checkout's TypeScript, because `npm run` finds no `.bin` in this worktree. Offline: `SEEK_EMU_DIR=…/FW-V1/emu node <main>/node_modules/vitest/vitest.mjs run --config e2e/vitest.config.ts pages-emu.e2e -t "Info tab"`. Bench: the USB switch from `/Users/yrambler2001/things/a.noindex/usb-port-switch-rp2040` (`node switch.js cycle <ch> 3000`); the halted dump `node tools/jlink/jlink-runner.js dump-spifi-4m-halted` in `FW-V1/targets/compact_8hz_1_3_0_0`; the writes with `flash-factory-4m-2` (`F4M2_DRY=1` first for the baseline); the page test as `pages-bench.e2e -t "Info: connects"` with the bench variables from `agent-hw6/bench-env.sh`, pointed at `agent-hw7`.
+
+**5. Not done, and open.**
+- The brief's switch path (`…/seek/usb-port-switch-rp2040`) does not exist; the project is at `…/a.noindex/usb-port-switch-rp2040`. The two failed calls on the wrong path touched no hardware.
+- The baseline write in 3(a): the brief's start image and the spec's precondition disagree, so the bench was taken to the baseline for the test and back to the start image after. The owner should say which state the bench should hold; the spec restores the baseline at its end whichever way it runs.
+- The 1.0.3.0 PRO's two device-info reads and their counts (8 and 2) are from the emulator only; no bench PRO was run.
+- `out 0x52` appears 9 times on the bench and emulator, and the Info test does not pin it. The brief did not ask for it.
+- `camera-bus.ts` (Node bridge) still refuses 0x55/0x5A for every run. Any future Info run through `camera-bridge.e2e` will refuse them until that guard gets the same gate.
+- The shapes allow selectors 6, 7 and 8 on every build. Core sends them only on 1.3.0.8.
+- The slots bench (`slots-bench.e2e`, through `DEVICE_INFO_GUARD`) now has exact shapes. It was not run here.
+- The page's log line "selector 0x0's window matches neither slot — the slots are identical" is not compared with anything; the CLI text was not diffed line by line, only the fields in the table.
+- Nothing was pushed or merged. `plan.md`, FW-V1 and the product code were not changed.
