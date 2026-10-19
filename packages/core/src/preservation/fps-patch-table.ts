@@ -94,8 +94,9 @@ export const FPS_PATCH_TABLE: readonly FpsPatchSource[] = [
   {
     // compact_pro-4.9.1.15. FRAME_RATE.md sec.6.3 (experiment A, the only one of the 9 Hz images measured
     // on hardware): 8.85 fps -> 17.70 fps with these three bytes. No same-layout 18 Hz sibling exists;
-    // 4.18.2.0-FF uses the 54-byte record. Exactly 3 bytes differ from the stock image. Emulator, IP 8
-    // Normal: 8.84 -> 17.68 Hz.
+    // 4.18.2.0-FF uses the 54-byte record. Six bytes differ from the stock image: the three edited bytes
+    // (+0x19B0, +0x19B6, +0x19B7) and the acceptance-sum adjust word at +0x238, +0x23A and +0x23B.
+    // Emulator, IP 8 Normal: 8.84 -> 17.68 Hz.
     id: 'compact_pro-4.9.1.15',
     family: 'compact_pro',
     version: '4.9.1.15',
