@@ -1,7 +1,7 @@
 # Plan: what is still to do
 
 Branch `refactor/all-firmware-profiles` is local: nothing on it is pushed, and main is never touched without the owner's explicit word (owner, 2026-10-19: keep it local until the owner says). FW-V1 `main` `fa9b7b126` and tv-jc master `3be18f6` were pushed on the owner's word on 2026-10-19; each later push needs the owner's word again.
-Done work is in `TESTING.md` (sections 42.x; the latest merged is 42.70; 42.71 and 42.72 are running) and `FPS_32HZ.md`; this file lists only what is open. Status marks: [ ] open, [~] running, [?] needs the owner.
+Done work is in `TESTING.md` (sections 42.x; the latest merged is 42.71; 42.72 and 42.73 are running) and `FPS_32HZ.md`; this file lists only what is open. Status marks: [ ] open, [~] running, [?] needs the owner.
 
 ## 0. Orchestration state (2026-10-19, before a context compaction)
 
@@ -14,14 +14,15 @@ Running agents (Haiku 5.5 xhigh, each in its own worktree under `.claude/worktre
 - 42.67 merged (72ee067 to 347fa71): the upgrade warning also when the camera runs R and its upgrade writes B (text says what B holds, from B's verdict on the read; JSON `boot.upgradeTargetRecovery`); the Connect section shows the unlock note from the shared flag; FPS_32HZ.md mode 4/7 line; the three FF-vendor eslint errors. Verified on merged HEAD: core 62, cli camera 27, web 58 tests, bench-lib/verdict 143+6 skipped, tsc core/cli/web/e2e 0, eslint 0.
 - README "Firmware and flashing" rewrite merged (cherry-pick of 04ef8c0): describes the Info and slots tabs, every kept claim checked against code; it kept three claims it could not check (the ten-dump byte-identical rebuild, agreement with `seek_fw_tool.mjs`, the 2019-bootloader / 4.9.2.0 story).
 - 42.69 merged (2249d48 to 7d299a2): README recovery-case warning and Connect note; FPS_32HZ.md active-slot word and the two identifiers as 42.53/42.56/42.61 measured; the "Key A" wording on the page and README (store key, or the booted bank's key); the CLI bare-name comment; the CLI slot dumps now start `seek-slot-`. Verified: cli slots/args 150, slots-empty emulator 7, web 29, tsc cli/web 0, eslint 0, prettier clean.
-- 42.71, no bench: one core function names slot dumps for both the page and the CLI, in the CLI's form (`seek-slot-b-1.3.0.0-<sha8>.bin`, `…-decrypted<keysuffix>.bin`; orchestrator's choice, since the owner wants the page to match the CLI); the stale "bare name is refused" comments in `useSlotsPanel.ts`; README's "2017+ line" named one way.
+- 42.71 merged (1d13e9d to 310fb45): `slotDumpNames` in `packages/core/src/slots/dump.ts` names slot dumps for the page and the CLI in the CLI's form (`seek-slot-b-1.3.0.0-<sha8>.bin`, `…-decrypted[-KeyA…-KeyB…].bin`, empty `seek-slot-b-empty-<sha8>.bin`); the page's decrypted name now carries the stored bank's sha8; README names the modern line by its versions. Verified: core 9, cli 150 + 7, web 97, bench-lib/verdict 143+6, tsc core/cli/web/e2e 0, eslint 0. Left as is: the fps pre-patch and patched file names keep their own form (`seek-slot-A-v…-before-fps-patch-…`, shared by page and CLI); the write-source name uses the image's sha8.
+- 42.73, no bench: `npm run build:docs` for the page changes since 42.59, then `offline-bundle.e2e`.
 
 Open small item: `packages/core/src/workflows/flash.ts` (`writeFirmware`, `prepareImage`) belonged to the removed `#flash` page and no CLI or web source calls it; tests and a few core files still reference it. Remove only after checking what `plain-chain-flash.test.ts` and `upgrade-target.emulator.test.ts` cover through it.
 
 When they finish:
 1. Check each report and diff; cherry-pick the commits onto the branch; resolve TESTING.md append conflicts with `python3 /private/tmp/claude-501/-Users-yrambler2001-things-a-noindex-seek-seek-thermal-firmware-backup/82174575-1341-45d6-a306-7518156cd978/scratchpad/resolve_testing.py TESTING.md` (keeps both sides' `### 42.N` sections in number order); run the touched tests, the typecheck and eslint on the merged HEAD; remove the worktree and delete the branch; update this file.
 2. After 42.72: merge `plain-2014-tools` into FW-V1 main locally; ask the owner before pushing FW-V1.
-3. After 42.71 is merged: one agent rebuilds the hosted bundle (`npm run build:docs`, as in 705b5fa), since the page changed in 42.64 and 42.67, and runs `offline-bundle.e2e` with `SEEK_EMU_DIR` and `SEEK_FULL_DUMPS_BY_CAMERA`.
+3. Running as 42.73: one agent rebuilds the hosted bundle (`npm run build:docs`, as in 705b5fa), since the page changed in 42.64 and 42.67, and runs `offline-bundle.e2e` with `SEEK_EMU_DIR` and `SEEK_FULL_DUMPS_BY_CAMERA`.
 4. Then report to the owner and ask the open [?] items below. Other camera units come after everything else.
 
 ## Standing rules
