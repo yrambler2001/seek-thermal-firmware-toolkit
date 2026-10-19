@@ -8490,6 +8490,63 @@ The rate settles slowly after the dump in both directions, so a single read afte
 - That 42.21 passed by chance is inferred. The same code and the same sampling were in place.
 - Row 9's FF env item and the other plan items are not touched.
 
+### 42.34 Five open plan items: the 4.8.2.1 image checked, the 2016 refusal text, the usage bank map, the 0.x/1.x dump message, and the bench lint errors (2026-10-19)
+
+**Summary.** Five items from `plan.md` sections 1 and 4, done offline: no camera, J-Link or USB switch. The "one image" claim for the Compact and Compact XR 4.8.2.1 holds byte for byte, so the comment now says what was checked. The 2016 refusal text described the profile's own flash path but called it "this toolkit's write path", which the slot writer contradicts; the text is narrowed and the refusal is unchanged. The usage line gave the 2014 bank map for every build; it now gives each line its own. The dump refusal said "2014–2016" for a line whose builds run to January 2017; the message and the test now agree. The three bench eslint errors are fixed without a behaviour change.
+
+**Tags.** [measured] is from the commands and files named here. [inferred] is from reading the code.
+
+**1. The 4.8.2.1 image.**
+- The entries. The Compact dump is `FW-V1/emu/data/corpus/compact/2020.02.26-11.23.26-4.8.2.1/2229A0YZ7E28/compact_android_cw-.bin` (sha256 `31cc2b7e…afdd`, 4,194,304 B). The XR dump is `FW-V1/emu/data/corpus/compact_xr/2020.02.26-11.23.26-4.8.2.1/1F1660P7U967/…_4.8.2.1_99.28_dump.bin` (sha256 `8aa32da0…faccc`). The XR image is `…_4.8.2.1_99.28_firmware.bin` (42,680 B, sha256 `f96ac57eda75…2882`). The same two dumps are under `SEEK_FULL_DUMPS_BY_CAMERA` with the same hashes. Their `manifest_camera.json` files name two units: serial 2229A0YZ7E28 (product Compact) and serial 1F1660P7U967 (CompactXR). [measured]
+- How the tools locate them. `emu/fps_patch.py:542` (`stock_sha256`) and `emu/fps_patch_unit_tests.py:39-47` (`bytes_of`) load the image by sha256 from `emu/data/corpus/MANIFEST.json`. `emu/data/SHA256SUMS:123` lists the XR image. The MANIFEST entry names both dumps' 0x14030000, 0x14050000 and 0x14070000 slots in `found_in_dumps`. The survey `codegen/docs/recon/b-compact-1308/P4C3b0_SURVEY.md` does not mention 4.8.2.1. The one-image statement is in `FW-V1/docs/EMULATOR_CORPUS.md:3501` ("all three banks are the Compact XR 4.8.2.1 image … byte for byte") and `FW-V1/docs/FPS_PATCH_ALL_FIRMWARES.md:320-332`. [measured]
+- The check. `scratchpad/decrypt-4821.mjs` (outside the repo) calls core's `decryptDump`, from `packages/core/dist` built from this tree, on each dump with no profile and no device:
+
+| Dump | Slot | Bytes | plain sha256 | cipher sha256 |
+| --- | --- | --- | --- | --- |
+| Compact | 0x14030000 | 42,680 | `f96ac57eda75…2882` | `ec26c1d5…0f57` |
+| Compact | 0x14050000, 0x14070000 | 42,680 | same | same (duplicates of 0x14030000) |
+| XR | 0x14030000 | 42,680 | `f96ac57eda75…2882` | `ec26c1d5…0f57` |
+| XR | 0x14050000, 0x14070000 | 42,680 | same | same |
+
+  `cmp` of the decrypted Compact 0x14030000 image against the XR firmware file prints nothing (0 bytes differ). The decrypted XR image is identical to the firmware file. The raw bytes at dump offset 0x30000 (flash 0x14030000), 42,680 long, hash to `ec26c1d5…0f57` in both dumps. [measured]
+- Conclusion. The Compact and the XR 4.8.2.1 bank hold the same encrypted image, and it decrypts to `f96ac57eda75…2882` on both units. Nothing beyond the 0x14030000 bank's first 42,680 bytes and its two copies was compared. [measured]
+- Change: `packages/core/src/preservation/fps-patch.ts:493-498`, the comment on `FPS_NO_PATCH_4821_VERSION` (`:499`). It now states the check, the date and this section. The reason string (`:505-508`) is unchanged. Commit `19ae29d`.
+
+**2. The compact-2016.ts text.** The text is about the profile's own flash capability. `compact-2016.ts:120` sets `flash: unsupported(FLASH_REFUSAL)`. That refusal gates the classic writer: `device-info.ts:1111-1118` blocks the classic flow on it, and `assertFlashable` (`device-info.ts:1315`) refuses on it. The classic writer stages two forms only: the 2014 plain chain verbatim (`workflows/flash.ts:195-205`) and the 4.x Key A form. The wording said "this toolkit's write path has nothing for its banks" and that the keystream form "is built only by the preservation pipeline". Both are wrong for the slot page. The slot writer stages the keystream form (`slots/write.ts:561-575`, `buildSlotKeystreamPayload`), `slots/capability-family.ts:214-215` maps `locked-2016` to `slot-keystream-ciphertext`, and the slot page does not gate on this refusal (`slots/capability.ts:271`, `slots/capability-notes.ts:65-75`). [measured by reading; the slot write itself is covered by 42.19 and 42.29]
+- Change: `FLASH_REFUSAL` (`compact-2016.ts:102-111`) now says "the classic write path (this profile's own flash capability)" and that the slot writer stages the keystream form. The profile summary (`:286-291`) drops "Read-only" and says the classic flash is refused while the slot page stages the banks. The refusal and `capabilities.flash` are unchanged. Commit `5c4e6e9`.
+- Tests. `profiles.test.ts:893-905` and `workflows.test.ts:1529` pin the opening clause "shares legacy-auth's locked BeginFirmwareUpgrade handler", which is kept. `slots/write-keys.test.ts:579` and `cli/test/slots.test.ts:1604` carry the fixture string "the classic write path has nothing for its banks". They do not pin the source text, and the new wording matches them. Not changed.
+
+**3. The CLI usage bank map.** `usage.ts:229` gave "A (0x14050000) and B (0x14060000)" for every build. The maps: `legacy-auth.ts:548-552` `LEGACY_SLOTS` is A 0x14050000, B 0x14060000, R 0x14070000. It is used by `compact-2014.ts:233` and by `compact-2016.ts:297`, so the 2016 keystream line has the legacy map. `modern-4x.ts:239-242` `MODERN_SLOTS` is A 0x14030000, B 0x14050000, R 0x14070000, from `modern-4x.ts:84-86`. [measured from the profile files]
+- Change: `usage.ts:229-234` gives the locked 0.x/1.x line (the 2014 chain and the 1.0.3.0 and 1.0.3.2 keystream line) its map, and the 4.x line (Compact 4.8.x, Compact PRO 4.9.x) its own. R is called the recovery bank only on the 4.x line; the locked line's roles are not decoded (`legacy-auth.ts:541-546`). Commit `5d3bf10`.
+- Tests. No test pins the line. `surface.test.ts` and `args.test.ts` check only the first line and `--all-selectors`.
+- Not changed, noted here: `cli/test/slots.test.ts:84` (`ADDRESS`, the 2014 addresses) is used for a 4.9.5.0 fixture (`:160`, `:237`, `:304-307`). So the `slots list` test expects A 0x14050000 for a 4.x fixture, where the 4.x map is A 0x14030000. It is fixture data, so it is left for a separate change.
+
+**4. The 0.x/1.x dump message.** `dump.ts:47` refuses a camera whose version is 0.x or 1.x, and `dump.ts:58-65` refuses one that answers as a non-4.x profile. The dates on the line: the earliest dump is Compact 0.3.0.1 (2014.05.03). The latest are Compact 1.3.0.8 (`Compact/Compact/2017.01.06-11.16.17-1.3.0.8`) and Compact PRO 1.0.3.2 (`Compact/Compact Pro/2017.01.06-15.45.07-1.0.3.2`), both January 2017. So the range is 2014–2017, and the rest of the code says so (`legacy-auth.ts:2,790`, `dump.ts:6,35,61`, `usage.ts:170`, `info.ts:333`). [measured from the folder names]
+- Change: `dump.ts:49`, "a 0.x/1.x 2014–2016 build" is now "2014–2017 build". Commit `88c2d8e`.
+- Test. `camera.test.ts:200-201` expected the profile-level wording ("0.x/1.x 2014–2017 line", "nothing was dumped"). The 1.0.3.0 fake answers its version, so it takes the version refusal at `dump.ts:47`. Before the change the file gave 1 failed and 20 passed, with "expected 'error: this camera runs 1.0.3.0, a 0.…' to contain '0.x/1.x 2014–2017 line'" and the message read "2014–2016 build". The assertions now check "a 0.x/1.x 2014–2017 build" and "nothing was read but the version". The profile-level message at `dump.ts:61` is not reached by this test. [measured]
+- Hardware. `camera.test.ts` gives every `run()` a `fixedBackend` and uses `compactPro1030Camera()`, both fakes (`packages/cli/test/helpers.ts:217-260`). No call falls back to the USB backend, so the file does not open the physical camera. It was run as a file, never as the whole suite.
+
+**5. The bench eslint errors.** Before: three errors. `e2e/lib/bench/bench-camera.ts:246`, `no-useless-assignment`: the `= null` on `document` is overwritten on both paths. `e2e/bench-lib.e2e.ts:1690:29` and `:1723:31`, `no-unnecessary-type-assertion`: the `as unknown as JlinkBench` and `as unknown as BenchCamera` casts at the ends of the two fake objects (eslint reports them at each literal's start). Change: the initializer is dropped (`bench-camera.ts:246`), and both casts are dropped (`bench-lib.e2e.ts:1721` and `:1768`). Each `const` already has its annotation, and tsc accepts the literals. Commit `8ecbcad`.
+- No behaviour change. Every `createJlinkBench` call in `bench-lib.e2e.ts` passes an injected `exec` (the fake), so the tests spawn no JLinkExe. The "reset: JLinkExe exit 0" line in the run log is the fake's output. [measured]
+
+**6. Tests and checks.**
+- `npx vitest run packages/cli/test/camera.test.ts packages/cli/test/surface.test.ts packages/cli/test/args.test.ts`: 3 files, 86 passed (camera.test.ts 21 of 21; it was 20 passed and 1 failed before the change).
+- `npx vitest run packages/core/test/preservation/fps-patch.test.ts packages/core/test/profiles.test.ts packages/core/test/workflows.test.ts packages/core/test/slots/capability.test.ts`: 4 files, 519 passed, 1 skipped. The skip is one half of the `it.skipIf` pair in `capability.test.ts`; with `SEEK_EMU_DIR` unset, the MANIFEST check is skipped.
+- `SEEK_EMU_DIR=/Users/yrambler2001/things/a.noindex/seek/FW-V1/emu npx vitest run packages/core/test/slots/capability.test.ts`: 368 passed, 1 skipped (the other half of the pair).
+- `npx vitest run packages/core/test/preservation/fps-patch.test.ts` on the final commit: 13 passed.
+- `npx vitest run --config e2e/vitest.config.ts bench-lib.e2e`: 95 passed, 2 skipped (corpus tests, which need `SEEK_FULL_DUMPS_BY_CAMERA`).
+- `npx tsc --noEmit -p` for `packages/core/tsconfig.json`, `packages/cli/tsconfig.json` and `e2e/tsconfig.json`: exit 0 each.
+- `npx eslint` on the seven changed files: no problems. Before: three errors, all in the bench files.
+- `npx prettier --check` on the five non-bench changed files: pass. The two bench files fail prettier, and so do their committed versions at HEAD (checked from `git show HEAD:…`). The warning predates this change, so the files were not reformatted.
+
+**7. Not verified, and what I did not touch.**
+- The one-image check covers the 0x14030000 bank's first 42,680 bytes and its two copies. The rest of the two dumps was not compared.
+- The usage map is read from the profile source. No camera was used to confirm it.
+- `cli/test/slots.test.ts` 4.9.5.0 fixture (section 3) is left as it is.
+- The 0.x/1.x refusal at `dump.ts:61` has no test in `camera.test.ts`. It was not covered before this change either.
+- `plan.md` is not edited, and the FW-V1 repo is not changed. `npm run build:docs` was not run.
+- The worktree branch was reset with `git reset --hard refactor/all-firmware-profiles` (cf5420b to 16d87c7, a fast-forward, since cf5420b is an ancestor). `npm ci --ignore-scripts` created `node_modules` and `packages/core/dist` (both gitignored).
+
 ### 42.35 FW-V1 plan hygiene: flash-bank needs an explicit BANK_ADDR, the fps test docstring matches the table, and jlink_dumps is ignored (2026-10-19)
 
 **Summary.** Three FW-V1 items from plan.md, one commit each, on branch `plan-hygiene` in the FW-V1 worktree `/private/tmp/claude-501/fwv1-hygiene`, cut from FW-V1 `main` at `a13c615c6`. Nothing was merged to FW-V1 main or pushed, and FW-V1's main checkout was not edited. No camera, J-Link or USB switch was used. Every check ran offline, with `JLINKEXE` pointed at a stub that logs its command file and talks to nothing. This worktree was first reset to `refactor/all-firmware-profiles` (`16d87c7`); the old HEAD `cf5420b` is an ancestor of it, so nothing was lost.
