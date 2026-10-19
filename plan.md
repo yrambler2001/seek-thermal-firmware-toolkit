@@ -1,7 +1,7 @@
 # Plan: what is still to do
 
 Branch `refactor/all-firmware-profiles`: all commits are local; nothing is pushed and main is never touched without the owner's explicit approval (owner, 2026-10-19: keep it local until the owner says). FW-V1 `main` was pushed on the owner's word on 2026-10-19 (`a13c615c6`).
-Done work is in `TESTING.md` (sections 42.x; the latest is 42.35; 42.32, 42.33, 42.36 and 42.37 are running) and `FPS_32HZ.md`; this file lists only what is open. Status marks: [ ] open, [~] running, [?] needs the owner.
+Done work is in `TESTING.md` (sections 42.x; the latest is 42.35; 42.33, 42.36 and 42.37 are running) and `FPS_32HZ.md`; this file lists only what is open. Status marks: [ ] open, [~] running, [?] needs the owner.
 
 ## Standing rules
 
@@ -20,13 +20,13 @@ Done work is in `TESTING.md` (sections 42.x; the latest is 42.35; 42.32, 42.33, 
 
 Every 8 and 9 fps build with a table entry is offered except the FF entries and 0.7.0.8: stage one (2014 plain chain), stage two (Key A: the Compact 4.8.x and the Compact PRO 4.9.1.15, 4.9.2.0, 42.28) and stage three (the Compact PRO 2016 keystream line 1.0.3.0, 1.0.3.2, 42.29). Principle and per-build table: `TESTING.md` 42.27 to 42.29 and `FPS_32HZ.md`. The orchestration brief (`BRIEF_FOR_CLAUDE_ORCHESTRATOR.md`) and the task text (`PROMPT_FPS_ALL_FIRMWARES.md`) are kept as history.
 
-- [~] Correct the docs on the Compact PRO 4.9.1.15 rate (asked the owner, 2026-10-19). TESTING.md 42.28, 42.29 and `FPS_32HZ.md` say no Compact PRO rate was measured on hardware. But FW-V1 `docs/FRAME_RATE.md` §6.3 experiment A measured the same three bytes (0x19B0 `02`→`01`, 0x19B6 `00 20`→`10 23`, image 54,840 bytes) on a Compact PRO camera at 8.85 → 17.70 fps (slot B; slot A held stock 4.18.2.0), and `fps-patch-table.ts` says so. Correct the three docs (4.9.1.15 measured on hardware, 4.9.2.0 and 1.0.3.x not); decide whether `FPS_MEASURED_HZ` should carry 17.70. Owner, 2026-10-19: yes, record 17.70. (running, 2026-10-19 wave: TESTING.md 42.32)
+- [ ] The generated table comment for `compact_pro-4.9.1.15` says "Exactly 3 bytes differ"; the flashed image differs in 6 (the three edits plus the acceptance-sum word at 0x238, 0x23A, 0x23B; 42.32). The text comes from FW-V1 `emu/fps_patch.py`; fix it there and regenerate.
 - [ ] Builds whose table patch never ran on a camera: 4.8.1.7, 4.8.1.9, 4.16.1.7 FF, 1.3.0.8 FF, the Compact PRO 1.0.3.0, 1.0.3.2 and 4.9.2.0, and the Compact 4.8.2.1 (the XR was measured in 42.24; 42.34 showed the Compact and XR 4.8.2.1 run the same image, f96ac57eda75, on different hardware). Each needs its unit on the switch.
 - [~] Stage two and three on the emulator write bank A only: the B and R writes the page offers (4.8.x, Compact PRO 4.9.x and 1.0.3.x) are not exercised. (running, 2026-10-19 wave: TESTING.md 42.36)
 - [ ] Hi FPS: the 4.8.1.7 and 4.8.1.9 builds refuse mode 3 (the build's mask), so their Hi FPS cannot be measured (the XR 4.8.2.1 needs no entry of its own: same image as the Compact, 42.34).
 - [ ] Over-ceiling behaviour of the 32 Hz copy on a 32K camera. No 32K emulator scene has samples at or above 15000, and the camera's 1.3.0.8 scene had no warm pixel.
 - [~] Long streams: no 32 Hz entry has run for a long stream. The frame-sequence limit may leave 32 Hz (`docs/FPS_PATCH_LONG_STREAM.md`). The two long-run rows in `fps_patch_tests.py` were not run in 42.27. (running, 2026-10-19 wave: TESTING.md 42.37)
-- [~] The 1.3.0.8 op-5 entry published 26 fps in 42.20 and 32.2 fps for the same image on the same unit in 42.27. Find out why. (running, 2026-10-19 wave: TESTING.md 42.37)
+- [~] The 1.3.0.8 op-5 entry published 26 fps in 42.20 and 32.2 fps for the same image on the same unit in 42.27. Find out why. The `FPS_MEASURED_HZ` comment in `fps-patch.ts` still says the copy form has no camera measurement, which 42.27 contradicts; fix it with the answer. (running, 2026-10-19 wave: TESTING.md 42.37)
 - [~] 0.10.0.0 patched Hi FPS mean 23.4 against stock 27.4 (cause not known). 0.9.1.0: the first patched run was 27.8 to 30.8 fps; four reruns gave 32.2. (running, 2026-10-19 wave: TESTING.md 42.37)
 - [ ] Modes 4 and 7 (accepted by 1.3.0.8 and 4.8.x): their programs were not read. The 0.x SetIPMode masks were not read.
 - [ ] 0.3.0.1 mode-8 program not located. 0.5.0.2, 0.5.1.0, 0.5.1.3, 0.6.0.4 and 0.7.0.7 have their capture programs built at run time, so no patch (a patch would change builder code).
