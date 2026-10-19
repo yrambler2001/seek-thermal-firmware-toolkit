@@ -10133,3 +10133,108 @@ Not measured: the 2.0.2.3 bank selection on the emulator. The Compact XR 4.8.2.1
 **Commits.**
 - Seek, branch `worktree-agent-a52c9de30040c673c`, reset to `refactor/all-firmware-profiles` at `5410f6d` (the branch had moved to `487971f`, a plan.md-only commit; the brief names `5410f6d`): `2bc1b07` (the harness fix, `e2e/seek-fps-emulator.e2e.ts`) and this note.
 - FW-V1: none.
+
+### 42.54 Mode 4 on the camera: stock 1.3.0.0 and 1.3.0.8 stream live pictures at about 32 fps (the checker as shipped cannot show them); the page re-reads all three banks after a committed write and after the frame-rate patch, on bench rows 1 and 21 and the fps bench (2026-10-19)
+
+**Summary.** On the owner's Compact PIR206 (serial `101310HSNEA2`, chip ID `1013CE098ACA`), with the start image restored and dumped again (`cmp` silent):
+- **Mode 4 on the camera, stock 1.3.0.0** (`862717a8`). SetImageProcessingMode 4 is accepted. The mask accepts 0, 3, 4, 5, 6, 7 and 8 and refuses 1, 2 and 9. Mode 4 streams live pictures: three 20 s runs, whole-run 32.10, 32.20 and 26.75 fps; per-second medians 32.17 to 32.21 in the first two runs and 19.41 to 32.21 in the third (nine seconds under 30 fps). No frozen pairs; 88.4 % of pixels change between consecutive frames.
+- **Mode 4 on the camera, stock 1.3.0.8** (`2969d0df`). The mask accepts 0, 4, 7, 8 and 9 and refuses 1, 2, 3, 5 and 6. Mode 4 streams live pictures: whole-run 28.65, 29.35 and 31.90 fps; per-second medians 27.53 to 32.23; no frozen pairs; 88.2 % of pixels change. The Normal (mode 8) control on the same build reads 8.05 fps.
+- **The checker as shipped does not show mode 4.** Every mode-4 frame carries status 0, and the checker's frame loop publishes only status 3. Its own stream stopped with "Timeout while reading frames". The mode-4 figures above come from a scratch probe that pulls frames the checker's way and keeps every frame.
+- **The page's re-read.** After each committed write the page logs "banks read again after the write: 3/3 banks read" (five writes on row 1, six on row 21). After the frame-rate patch on the fps bench it logs "banks read again after the patch: 3/3 banks read". No run logged "were not read again". The bench's judgement is unchanged: row 1 and row 21 passed as writes with failures 0, and the fps write ended "Patched".
+- **Heap** per slots subject: heapUsed 39 MB before, 68 MB after; rss 167 to 277 MB (one run reached 501 MB). The fps bench printed no heap line.
+- Start `50e900c23ff4bb7e0a5a30fc5879f6ed276289e43aeace2f9ab74eaec9b01d7d`, end `50e900c23ff4bb7e0a5a30fc5879f6ed276289e43aeace2f9ab74eaec9b01d7d`. `cmp start-4m.bin end-4m.bin` printed nothing and exited 0. Final steady Normal read (read 16 after the end restore): medians 32.03 to 32.18 fps.
+
+**Tags.** [measured] is read from the logs, JSON and dumps under `/private/tmp/claude-501/agent-hw3/`, or from a run on the bench. [source] is read from code. [inferred] is what follows and was not measured directly.
+
+**Setup.**
+- The worktree was reset with `git reset --hard acd0708`, the HEAD the brief names. The local branch `refactor/all-firmware-profiles` had moved to `79e2d71`, a plan.md-only commit on top of acd0708 (the 42.54 "running" line). The code is identical. [measured]
+- `npm ci` ran in the worktree (`/private/tmp/claude-501/agent-hw3/npm-ci.log`); npm created the `@seek-fw/{core,cli,web}` workspace links. `npm run build --workspace @seek-fw/core` and `@seek-fw/cli` ran (`build-core.log`, `build-cli.log`). The checker ran from source. [measured]
+- The repo changes in this commit are this section. Two temporary diagnostics (sections 2 and 3) were added and reverted with `git checkout` before the commit. Nothing else changed. [measured]
+
+**Start.** A channel-1 cycle and an 8 s wait, then `node tools/jlink/jlink-runner.js dump-spifi-4m-halted` in `FW-V1/targets/compact_8hz_1_3_0_0`, copied at once to `/private/tmp/claude-501/agent-hw3/start-4m.bin`: sha256 `50e900c2…01d7d`, the value the brief expects. `slots list`: A `ef90c94a` (1.3.0.0, the 32 Hz patch, active), B and R `d91284c6`, boot word 0. [measured]
+
+**1. Mode 4 on the camera, stock 1.3.0.0 and 1.3.0.8.**
+
+Scratch, not in the repo: `/private/tmp/claude-501/agent-hw3/ipmode-probe.mjs` (the probe used for the figures) and `mode4-fps.mjs` (the first attempt, through the checker's own stream). Both import the checker's library by absolute path and run with `node --import <worktree>/e2e/lib/bench/seek-fps/register.mjs`. Logs and JSON are in `/private/tmp/claude-501/agent-hw3/mode4/`.
+
+Builds. Stock 1.3.0.0 (`862717a8`, 47768 B, `/private/tmp/claude-501/agent-hw/stock-1.3.0.0-bankA-47768.bin`) was written to bank A with `seek-fw slots flash a <image> --dry-run --acknowledge-risk`, then `--yes --acknowledge-risk`. Read-back `5cbbdd0f` (the 64 KiB block); `slots list` A 1.3.0.0, B and R `d91284c6`. Stock 1.3.0.8 (`2969d0df`, 49128 B, `/private/tmp/claude-501/agent-hw2/img/stock-1.3.0.8-2969d0df.bin`) was written to bank A the same way; `slots list` A 1.3.0.8. A channel-2 cycle and 10 s wait before each CLI step and before each checker run. [measured]
+
+SetIPMode mask. The connect's init leaves the camera streaming. A SetIPMode sent into that live stream stalled on every value on 1.3.0.0 (the first probe), so the probe first sends SetOperationMode 0 three times, then each value, reading GetIPMode back after each:
+- 1.3.0.0: accepted 0, 3, 4, 5, 6, 7 and 8 (the read-back shows each value); refused (STALL) 1, 2 and 9. So 1.3.0.0 accepts mode 4. [measured]
+- 1.3.0.8: accepted 0, 4, 7, 8 and 9; refused 1, 2, 3, 5 and 6. [measured]
+The 1.3.0.8 mask is the `0x391` that 42.48 quotes from FW-V1's `rpc_cmds.c` comment; the 1.3.0.0 mask is the `0x1F9` of the six 0.x builds in 42.43. [measured; the match to the FW-V1 comments is [source]]
+
+Frame pull. The checker sends IMAGE_DATA 0x53 `c0 7e 00 00` before each frame, then reads 64896 bytes with a 3 s timeout (`camera.ts`, `grabBytes`). A bulk loop without that request received nothing, on mode 8 as well, so the probe does the same pull and parses each frame with the checker's `SeekFrame`. [measured]
+
+The checker's own stream on 1.3.0.0, mode 4 (`stock130-mode4-r1.json`): the init was accepted, then "no frame in 10 s (camera error: Timeout while reading frames)". The frames arrive with status 0, and the checker's `grabVisualFrame` has no case for 0 (only a `default` that does nothing). After 40 such frames it returns null and sets that error, so the stream stops. [measured; the switch is [source], `camera.ts` lines 470 to 560]
+
+Results. Each row is one 20 s run from the mode-4 init, every frame kept. Runs on one build are consecutive processes with no power cycle between them; each build began after a power cycle.
+
+| build | run | frames | whole-run fps | per-second medians | seconds under 30 fps | frozen pairs | pixels changed per frame |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 1.3.0.0 | 1 | 642 | 32.10 | 32.17 to 32.21 | 0 | 0 | 88.4 % |
+| 1.3.0.0 | 2 | 644 | 32.20 | 32.18 to 32.21 | 0 | 0 | 88.4 % |
+| 1.3.0.0 | 3 | 535 | 26.75 | 19.41 to 32.21 | 9 | 0 | 88.5 % |
+| 1.3.0.8 | 1 | 573 | 28.65 | 27.53 to 32.20 | 2 | 0 | 88.2 % |
+| 1.3.0.8 | 2 | 587 | 29.35 | 30.30 to 32.20 | 0 | 0 | 88.2 % |
+| 1.3.0.8 | 3 | 638 | 31.90 | 32.13 to 32.23 | 0 | 0 | 88.2 % |
+
+Whole-run is the frames in the 20 s windows over 20 (the checker's "overall"). The medians are the checker's per-second instantaneous-rate medians (`fpsWindows`). The median of the twenty per-second medians is 32.19, 32.19 and 31.76 on 1.3.0.0, and 32.16, 32.09 and 32.20 on 1.3.0.8. Every frame in all six runs has status 0 (header byte 20); a Normal stream's frames carry 1, 3, 4, 5, 6 and others. [measured]
+
+Controls, same probe, pull, 10 s each: 1.3.0.0 mode 8, 76 frames, 7.55 fps whole-run; 1.3.0.8 mode 8 (after the stop below), 81 frames, 8.05 fps, medians 8.04 to 8.05 after a first second at 32.13. [measured]
+
+Live pictures. Consecutive frames differ in about 88 % of pixels with no frozen pair, and the frame average moves from frame to frame (it changes in 236 to 319 of the 534 to 642 pairs per run). A frozen stream would show 0 % changed, and the mode-7 ramp (42.43) has no picture. The scene is a room, not a controlled change: the shutter cannot be used to test the picture, because the checker's shutter path switches the camera to Normal for its calibration. [measured; "a live picture" is [inferred] from the change, not from a scene test]
+
+Second init on 1.3.0.8. The connect's init ends in operation mode 1. With `--no-opzero`, the checker's second init (`reinit`) sends no SetOperationMode 0 first, and the camera refused its first 0x56 write: "init refused: control OUT 0x56 -> stall". That happened in each of the four processes that ran a second init (mode 8 and mode 4 three times). Sending SetOperationMode 0 three times before `reinit` cleared it, and the control and the three mode-4 runs then passed. On 1.3.0.0 the default init sends OP_ZERO and SetOperationMode 0 itself, so no stop was needed. [measured in the probe; the checker's own `--fps --mode fast --no-opzero` on 1.3.0.8 was not run, so that it stalls the same way is [inferred]]
+
+Reading. Mode 4 on stock 1.3.0.0 and 1.3.0.8 is a live picture stream at about 32 Hz per published frame (steady medians 32.1 to 32.3), the rate the 42.43 emulator gives (32.258 Hz). Some runs have frame-sequence dips of the kind 42.37 and 42.41 describe (1.3.0.0 run 3, 1.3.0.8 run 1). The cause is not established. [measured; the link to the 42.37 excursions is [inferred]]
+
+**2. The page's re-read after a committed write, on bench rows 1 and 21.**
+
+Commands. The run-matrix environment (`SEEK_FULL_DUMPS_BY_CAMERA`, `SEEK_E2E_FWV1_DIR`, `SEEK_E2E_JLINK_SN=69656086`, `SEEK_E2E_SWITCH_DIR`, `SEEK_E2E_SWITCH_CHANNEL=2`, `SEEK_E2E_WRITE=i-understand`, `NODE_OPTIONS="--max-old-space-size=16384 --expose-gc"`), with `SEEK_BENCH_ONLY=0.8.0.0` for row 1 (Compact 0.8.0.0 std, the 2014 chain) and `SEEK_BENCH_ONLY=4.9.2.0` for row 21 (Compact Pro 4.9.2.0 std, the 4.x line), each with its own report and scratch folder under `/private/tmp/claude-501/agent-hw3/bench/`. `npx vitest run --config e2e/vitest.config.ts slots-bench.e2e` from the worktree. Before the write runs, `SEEK_E2E_WRITE=dry-run` listed one subject each (`dry-0800.log`, `dry-4920.log`). The matrix was not run. [measured]
+
+Row 1, first run (`bench/row1/run.log`, no diagnostic): RESULT "passed as a write", slot writes B ok, A ok, R ok, boot proof ok, failures 0, duration 260.22 s. The verify step's halt failed twice and the bench power-cycled and read again (routine, as in 42.30).
+
+Row 1 with the re-read diagnostic (`bench/row1b/run.log`): the same RESULT, failures 0, duration 270.27 s. Five page writes each logged "banks read again after the write: 3/3 banks read. The version and the active bank settle only after the replug." The first two follow the bench's "bank A written, verified, and read back" and "bank R written, verified, and read back" lines; the other three come from the boot proof's patched-build writes, which log no "written" line [inferred from the timing]. No line said "were not read again".
+
+Row 21 (`bench/row21/run.log`, with the diagnostic): RESULT "passed as a write", page identified yes, enumerated in 734 ms, slot writes B ok, A ok, R ok, boot proof ok, failures 0, duration 275.85 s. Six page re-read lines, all "3/3 banks read"; none "were not read again".
+
+Judgement. The bench judges each write from the J-Link read-back, not from the page's table, so the bench never reads the re-read line. The line is in the page's activity log (`wizard.logTail('slotsrun')`), which the bench only reads for errors; the diagnostic read it after each committed write. The verdicts match 42.30 and 42.31 (rows 1 and 21 pass as writes). [measured]
+
+Heap, slots rows (42.45): row 1 heapUsed 39 MB before and 68 MB after (rss 167 to 501 MB in the first run, 169 to 220 MB in row1b); row 21 39 MB before and 68 MB after (rss 167 to 277 MB). [measured]
+
+The diagnostic. A temporary helper in `e2e/lib/bench/spec-page.ts` (`sayRereadLine`, after each write) polled the page's log for "after the write". It was used for row1b and row21 and reverted with `git checkout` before this commit. [measured]
+
+The camera between the rows and the fps bench. After row 21 the camera held the Compact Pro 4.9.2.0 flash, which the row's J-Link whole-part flash put there and the bench does not restore. A `slots flash` of the 1.3.0.0 image was refused then ("Slot A: firmware 4.9.2.0 … Key B", dry-run exit 1). The start image was restored (section 4) before the 1.3.0.0 write. [measured]
+
+**3. The frame-rate patch on the fps bench (one 2014-chain subject).**
+
+`e2e/fps-bench.e2e.ts` header: `SEEK_E2E_TARGET=camera` and `SEEK_E2E_FPS_BUILD=1.3.0.0` (the 2014 chain; the default 4.8.2.1 is the XR), with `SEEK_E2E_WRITE=dry-run` or `i-understand`. The file reads only its own bench variables; the shared FW-V1, J-Link and switch env was set as for the slots rows. Bank A had to hold stock 1.3.0.0 (`862717a8`), written as in section 1 (`slots list`: A 1.3.0.0 `862717a8`, B and R `d91284c6`, boot word 0). The fps spec shares one dev server for its run (42.48), closed in `afterAll`. [measured]
+
+Dry run (`fps/dry/run.log`): "slots: Read. 3/3 banks read." The dialog read "Make Bank A run at 32 FPS? … Bank A holds firmware 1.3.0.0 … The patch changes 9 byte(s)". The plan was cancelled ("nothing was saved or written"). Tests 1 passed, 1 skipped. [measured]
+
+Write (`fps/write/run.log`, exit 0, Tests 2 passed):
+- the status "Patched. Unplug and replug, then read the slots again.";
+- the outcome "Slot A — patched from 8 Hz to 32 Hz (compact_32k-1.3.0.0-to32)";
+- the page's log, with the diagnostic: "banks read again after the patch: 3/3 banks read. The version and the active bank settle only after the replug." (42.47 says the patch logs it; this is the first run that shows it on the camera);
+- the page's own dumps saved before the write, `seek-slot-A-v1.3.0.0-before-fps-patch-raw-5cbbdd0f.bin` and `…-decrypted-862717a8.bin`, under `/private/tmp/claude-501/agent-hw3/fps/write/scratch/fps-bench/downloads/`.
+
+The fps bench printed no heap line. The patched bank's sha was not read separately: the end restore overwrote the bank. [measured]
+
+**4. End.**
+- Restores: `FACTORY_IMAGE=/private/tmp/claude-501/agent-hw3/start-4m.bin node tools/jlink/jlink-runner.js flash-factory-4m-2` after a channel-1 cycle and an 8 s wait. Before the 1.3.0.0 write (`restore-1.log`) and after the fps write (`restore-2.log`): "DONE: the part reads back byte-identical to the image (50e900c2…01d7d)". [measured]
+- End dump: channel-1 cycle, 8 s, `dump-spifi-4m-halted`, copied to `end-4m.bin`: sha256 `50e900c2…01d7d`. `cmp start-4m.bin end-4m.bin` printed nothing and exited 0. [measured]
+- Normal reads after a channel-2 cycle and 10 s: the checker `--fps --mode normal --no-hifps` with default flags, consecutive, one boot (`fps/end/end-normal-1.log` to `end-normal-16.log`). Medians per read: 1: 17.05 26.79 32.04 32.17 17.16; 2: 20.28 20.38 18.55 32.14 32.18; 3: 32.28 32.23 32.19 32.21 32.13; 4: 32.20 32.16 32.16 32.21 31.88; 5: 17.34 27.10 20.25 31.49 32.12; 6: 32.28 32.18 32.27 32.12 32.19; 7: 32.18 32.16 32.06 32.25 32.15; 8: 32.22 32.12 32.08 17.41 17.15; 9: 18.13 28.53 32.01 28.39 24.68; 10: 19.17 21.65 30.20 18.32 16.83; 11: 32.19 31.74 18.96 32.22 32.14; 12: 32.19 32.18 32.21 32.17 32.22; 13: 17.56 17.03 28.05 16.83 21.83; 14: 32.05 32.17 32.18 32.19 27.61; 15: 31.42 31.39 31.80 31.64 31.64; 16: 32.03 32.10 32.07 32.10 32.18. The reads are not monotonic: reads 3, 4, 6, 7, 12 and 16 have every median between 31.9 and 32.3; the others have seconds at 16 to 28 fps. The final steady read is 16. [measured]
+
+**Not measured or open.**
+- The checker's stream does not publish status-0 frames, so the checker as shipped does not show mode 4 on these builds. A checker change (a case for status 0) would be the fix; not made. [source; the fix is for the owner]
+- The live reading is pixel change, not a scene change; the picture was not tested against a deliberate change.
+- The status-0 frames differ from the emulator's type 3 (42.43); the status word was not decoded.
+- The cause of the dips in 1.3.0.0 run 3 and 1.3.0.8 run 1 is not established.
+- The `--mode fast --no-opzero` stall on 1.3.0.8 (second init) was not run with the checker; it is [inferred] from the probe.
+- The bench does not read the page's table after a write, only the log line; the re-read's table content was not checked.
+- The fps bench printed no heap line; its heap per subject is not measured.
+- The patched bank's sha after the fps write was not read; the page's read-back said "Patched".
+- The row 1 first-run rss reached 501 MB; the later runs were 220 to 277 MB. Not explained.
+
+**Commits.** Branch `worktree-agent-a367a91f341cf6586`, reset to `acd0708` (see Setup). This section is the only change; the commit hash is in the report.
