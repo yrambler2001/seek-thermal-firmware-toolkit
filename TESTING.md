@@ -8980,3 +8980,101 @@ Per-test times are not in the logs for passing tests; the file times above are t
 - The verdict-table row `Compact 4.8.1.7 (std)` has `emulator: null`. The stage-two test maps its 4.8.1.7 image subject to that row by name, so the link lives in the test. The table itself is not changed.
 - Not in these suites: the Compact PRO FF builds (`Compact PRO 1.0.3.0 (FF)`, `1.0.3.2 (FF)`, `FF-FF`, `FF 4.18.2.0`), the Compact 4.16.1.7 FF (every bank refused by the page), and the Key A `ownImage` refusal of the 4.9.1.15 bank B.
 - plan.md section 1's line "Stage two and three on the emulator write bank A only" is not edited here (the task forbids it). The B and R writes and boots are proven on the emulator by this section; the bench is not.
+
+### 42.37 Bench follow-ups: the two serial labels, the stock 1.3.0.0 rate, the op-5 and 0.10.0.0 puzzles, and a 30-minute 32 Hz stream (2026-10-19)
+
+**Summary.** On the owner's Compact PIR206 (serial `101310HSNEA2`), with the start image restored at the end:
+- The serial is not a bug in either tool. The CLI and the page show the ASCII device serial `101310HSNEA2`; the checker and the Swift `seek` show the GetChipID value `1013CE098ACA` under the label "serial". Both are fields of one device-identity block. No code changed (a naming choice; both options below).
+- Stock 1.3.0.0 (the owner's original bank A): Normal 8.04 to 8.05 fps (median, six reads), Hi FPS 32.14 to 32.23 fps (six reads). Stock Hi FPS already runs at about 32 fps.
+- Puzzle (a): 42.27 did not measure the op-5 image. Its 1.3.0.8 row is the copy form `5313f107`. The op-5 image `ee8c7f0e` was rebuilt exactly from git history and reproduces 42.20's 26 fps with the same tool, on the same bytes, on a fresh boot. The 26 is a whole-run average over the frame-sequence excursions, not a settle effect and not a different image. The steady median on the same image is 32.2 fps.
+- Puzzle (b): 0.10.0.0 Hi FPS, ten reads each after settling: stock medians 31.0 to 32.3 (about 32.2), overall means 27.8 to 28.4; patched medians 32.1 to 32.2, overall means 29.6 to 29.8. The 42.27 finding (patched mean 23.4 against stock 27.4) is not reproduced; its cause is not established.
+- Long stream: the 1.3.0.0 32 Hz bank (`ef90c94a`), Normal, one continuous 1800 s stream from a fresh boot. 32 Hz does not hold for the whole stream: the whole-run delivered rate was 27.0 fps at 1 min, 28.2 at 3 min, 29.1 at 20 min and 29.1 at 30 min, with minute rates between 25.0 and 30.4 fps. No frozen pairs. No minute ran below 25.0 fps and no minute sat at the 22 fps level the doc predicts for its first phase; the rate stayed about 3 fps under 32.26 Hz.
+- Start and end: start `50e900c2…`, end `50e900c2…`, `cmp` printed nothing and exited 0.
+
+**Tags.** [measured] is read from the logs under `/private/tmp/claude-501/agent-hw/` (per-read logs and the stream log). [source] is read from the code or a doc. [inferred] is what follows from the measurements and is not measured directly.
+
+**Setup.** The worktree was reset to `refactor/all-firmware-profiles`. The branch had moved to `563555f` (a plan.md-only commit) between two checks; the worktree was pinned to `16d87c7` as the brief states (no code difference). `npm ci` ran in the worktree, and `packages/core` and `packages/cli` were built with `npm run build --workspace`. The checker ran from source (`node --import ./e2e/lib/bench/seek-fps/register.mjs e2e/lib/bench/seek-fps/seek-fps.ts --camera ...`). The CLI ran from `packages/cli/dist/bin.js`.
+
+**Start.** A channel-1 cycle, an 8 s wait, then `dump-spifi-4m-halted` in `FW-V1/targets/compact_8hz_1_3_0_0`, copied at once to `start-4m.bin`: sha256 `50e900c23ff4bb7e0a5a30fc5879f6ed276289e43aeace2f9ab74eaec9b01d7d`, the value the brief expects. A first attempt used `timeout`, which macOS does not have, so it never ran; its copy was discarded and the dump was taken again. The file is read-only.
+
+**Camera state at the start.** `slots list`: A `ef90c94a` (1.3.0.0, 32 Hz), B and R `d91284c6`, boot word 0, the 2014 plaintext chain.
+
+**1. The serial labels.**
+
+Commands: `seek-fps --camera info` gave `serial 1013CE098ACA`; `seek-fw info` and `seek-fw slots list` gave `serial 101310HSNEA2`.
+
+| value | what it is | where it comes from in code |
+| --- | --- | --- |
+| `101310HSNEA2` | the ASCII device serial, 12 bytes at +16 of the device-identity block | `packages/core/src/protocol/client.ts:405` `readSerial()`: SetRamDataFeatures case 0 (the device-id block), then bytes 16 to 28, asciiz. The CLI (`device-info.ts:549`) and the slots plan (`slots/write.ts:480`) use it. |
+| `1013CE098ACA` | the chip ID, six bytes | `e2e/lib/bench/seek-fps/camera.ts:252`, GetChipID (0x36, 12 bytes), every other byte in hex; used only when the USB serial is empty (`camera.ts:258`). Swift `Camera.swift:121` does the same. |
+
+- Why the USB string is not used: on 1.3.0.0 the USB `iSerialNumber` string is absent (`packages/core/src/protocol/webusb.ts:264`, which notes the 2014 Compacts name string 5 and answer it with a bad reply). The checker and Swift therefore fall back to the chip ID. [source]
+- Both values are fields of one block. The owner's original dump (`SEEK_DUMPS/.../101310HSNEA2 yrambler2001 Dump.bin`, sha `40447c7e…`) has, at 0x14020000: `01 00 31 f7` (header), then `10 00 13 00 ce 00 09 00 8a 00 ca 00` (six little-endian 16-bit words; the even bytes read `1013CE098ACA`), then the ASCII `101310HSNEA2` at +16. The same 28 bytes are the `PAGE_SHIFT_ANCHOR` in `packages/core/src/preservation/windows.ts`. [measured from the dump; source]
+- The bytes of GetChipID itself were not read raw. That the 12-byte reply equals the block's +4..+15 words is [inferred] from the checker's every-other-byte rule and the block bytes above.
+- The owner's dump names and the slots plan both use `101310HSNEA2`, which is why the CLI and page label it "serial". [source]
+
+Decision: naming, not a bug. No code changed. Two options for the owner:
+- Option A: the checker (and the Swift `seek`) show `101310HSNEA2` as serial, and print the chip ID as a separate "chip id" field. This matches the CLI and the page. It changes the checker, and the Swift app in `tv-jc` (a separate repo, pushed), which the checker is meant to agree with.
+- Option B: keep the checker and Swift as they are and rename their field to "chip id" (a label change only). The CLI and page are unchanged.
+Either way, the checker and Swift must change together. Changing only the checker would break its "agrees with Swift" check.
+
+**2. Stock 1.3.0.0 Normal and Hi FPS.**
+
+- Image: bank A of the owner's original dump (`40447c7e…`), 47768 bytes, sha `862717a8a605021d…`. This matches the table's `stockSha256` (`fps-patch-table.ts`, 1.3.0.0). Its 32-bit word sum over the declared length is 0 (valid plaintext bank). [measured]
+- Write: `seek-fw slots flash a stock-1.3.0.0-bankA-47768.bin --dry-run --acknowledge-risk`, then `--yes --acknowledge-risk`. Read-back matched. Bank A's 64 KiB block (sha8 `5cbbdd0f`) equals the original dump's bank A block. Power cycle channel 2, 10 s wait. [measured]
+- Trap: the first checker connect after the CLI write (and several more) stalled at `control OUT 0x56`, and `seek-fps info` stalled too. A fresh power cycle cleared it, with no other change; the CLI `info` in between connected. Cause not established. [measured]
+- Normal (`--fps --mode normal --no-hifps`), six reads, all steady: medians 8.04 to 8.05 (read 2 had one second at 7.68), overall mean 5.40 fps (27 frames in 5 s) each. [measured]
+- Hi FPS (`--fps`), six reads: medians 32.14 to 32.23, overall means 32.00 to 32.20 (160 to 161 frames). The stock 1.3.0.0 Hi FPS is FastRaw at about 32 fps. [measured]
+
+**3a. The 1.3.0.8 op-5 entry (puzzle a).**
+
+- History: the op-5 entry (`compact_32k-1.3.0.8-to32`, patched `ee8c7f0e…`) was added in `c6ef550` and removed in `4667d7f` ("the table follows the copy-form 52-byte patches"). [source]
+- 42.27 did not measure this image. Its 1.3.0.8 row is `1.3.0.8 (5313f107)`, the copy form (8.04 to 8.05 becoming 32.16 to 32.20). Section 11 of 42.27 says "32.18 to 32.20 fps in this section's run of the same image", which is wrong. [source]
+- Rebuild: the stock 1.3.0.8 image (`2969d0df…`, 49128 bytes) is bank A of `SEEK_FULL_DUMPS/Compact/2017.01.06-11.16.17-1.3.0.8/full_dump_reconstructed.bin`. The two edits from the table at `4667d7f^` (0xb750 `04` to `01`; 0xb754 the 12 bytes to `13 25 23` and zeros) give `ba069e66…`, not the target. Their 32-bit sum is `0xc2c7eed7`, not 0, so the acceptance word at +0x238 moves from 0 to `0x3d381129` to restore a zero sum. The result is `ee8c7f0e09d81b91…`, equal to the table's `patchedSha256`. [measured]
+- Write: `seek-fw slots flash a op5-1.3.0.8-rebuilt.bin --dry-run`, then `--yes --acknowledge-risk`. Read-back matched (sha8 `0a3765cb`). Power cycle channel 2. `slots list`: A 1.3.0.8, `ee8c7f0e`. [measured]
+- Trap: the checker's default init stalls at `control OUT 0x37` (OP_ZERO) on this image, even 12 s after a power cycle. `--no-opzero` connects in the same boot. The 10 reads below use `--no-opzero`. [measured]
+- Normal (`--no-opzero --fps --mode normal --no-hifps`), 10 reads taken after the power cycle: medians 31.95 to 32.25 (each read's median of medians 32.07 to 32.20), overall mean 22.2 to 22.8 fps (111 to 114 frames in 5 s). [measured]
+- The 26 fps, reproduced: `e2e/lib/bench/compact-fps/compact-fps.mjs --seconds 20`, three runs after a power cycle and a 10 s wait, the same bytes. Rates 26.26, 26.92, 26.83 fps (thermal-only 25.84, 26.53, 26.43); interval median 31.1 ms; capture rate from the index 32.19 /s. The 42.20 runs were 26.72, 26.23, 26.11 fps. [measured]
+- Missing captures (capture-index deltas): run 1 has 485 frames with delta 1, 15 with 2, 2 with 4, 9 with 5, 10 with 6 and 1 with 12, so 118 captures were never published; runs 2 and 3 give 105 and 107. [measured]
+- The 26 is the whole-run figure: `compact-frames.mjs` sets `fps = (frames - 1) / (last - first)`, so the gaps count. The steady interval is 31.1 ms. The gaps are the frame-sequence excursions that `docs/FPS_PATCH_LONG_STREAM.md` describes (FW-V1). [source; the link to the excursions is inferred]
+- Answer: the 26 was not a settle effect (runs taken after a fresh boot still show 26, and the later steady reads show 32.2) and not a different image (identical sha). It is the whole-run average of a 1.3.0.8 op-5 stream over 20 s, which includes the excursions. [measured, with the mechanism inferred]
+
+**3b. 0.10.0.0 Hi FPS, stock and patched (puzzle b).**
+
+- Stock image: bank A of `SEEK_FULL_DUMPS/Compact/2014.10.02-14.16.26-0.10.0.0/full_dump_reconstructed.bin`, 47368 bytes, sha `68b31405…` (the table's `stockSha256`). Word sum 0. [measured]
+- Write: `slots flash a` (read-back `37ad41e5`), power cycle channel 2, `slots list`: A 0.10.0.0 active. [measured]
+- Stock Hi FPS, eleven reads (the first after the boot, then ten): medians 31.02 to 32.31 (most near 32.2), overall means 27.8 to 28.4 (139 to 142 frames). [measured]
+- Patch: `seek-fw slots patch-fps a` (dry run: 9 bytes change, and the acceptance word at 0x238 moves), then `--write --dump-dir <new folder> --yes --acknowledge-risk`. The read-back differs from the saved dump only at the planned sites and the sum word. Bank A sha `efd72e1c` (`slots list`). Power cycle channel 2. [measured]
+- Patched Hi FPS, ten reads: medians 32.13 to 32.24, overall means 29.6 to 29.8 (148 to 149 frames). [measured]
+- 42.27's patched mean (23.4) is not reproduced: the patched mean is 1.6 fps above the stock mean here, not below. The image is the same (`efd72e1c`). The 42.27 numbers have no per-read log in the repo, so the cause of the 23.4 cannot be established from here. [measured; cause unknown]
+
+**4. The long stream (1.3.0.0, 32 Hz).**
+
+- The doc is `FW-V1/docs/FPS_PATCH_LONG_STREAM.md` (the seek repo's `docs/` has no copy). Its limit table `frame_seq_limit_r32k` is `{32,3}, {96,30}, {160,120}, {256,0}`: 4 triggers at 32 captures, 31 at 96, 121 at 160, then 256 captures for ever. The phases use about 22,464 captures, which is about 12 minutes at 32.26 Hz (longer with fallback). The doc's model for the 1.3.0.8 family predicts 22.2, 28.9, 30.3 and 31.0 fps for the four phases. The doc does not analyse the 1.3.0.0 mode-8 program. [source]
+- Run length: 30 minutes, past the table's last change plus about 17 minutes of the final phase. The brief allowed up to 60 minutes.
+- Restore before the run: the runner restored 1 block (bank A) and verified it byte-identical (`restore-1.log`). Power cycle channel 2 (10 s wait), so the run starts from a fresh boot with bank A `ef90c94a` and boot word 0. [measured]
+- Command: `seek-fps --camera --mode normal --no-hifps stream -n 1800`. One session, one line per second (`t=…s frames=<cumulative>`), 1800 lines, log `/private/tmp/claude-501/agent-hw/longstream/stream-1800.log`. The run began at 10:50:29Z and the process exited at 11:20:32Z, after 1800 s. [measured]
+- Whole-run cumulative rate (frames(t)/t): 17.00 at 5 s, 23.20 at 10 s, 26.98 at 60 s, 27.60 at 120 s, 28.20 at 180 s, 28.72 at 300 s, 28.96 at 600 s, 29.07 at 1200 s, 29.11 at 1500 s, 29.10 at 1800 s (52,377 frames). [measured]
+- Per-minute rates (frames gained over 60 s): 26.98, 28.22, 29.40, 29.53, 29.48, 29.20, 29.60, 28.87, 29.17, 29.13, 29.10, **25.03** (660 to 720 s), 28.70, 29.80, 29.77, 29.98, 30.38, 29.82, 29.90, 29.25, 29.60, 29.05, 29.38, 28.92, 29.42, 29.00, 28.70, 29.63, 28.20, 29.73. Frozen pairs 0 throughout; changed about 94 %. [measured]
+- The dip: 10 s windows from 670 s show 24.2, 25.6, 29.2, 27.0, 15.5 (710 to 720 s), 27.8, then back to about 29 to 30. Status values 6 (47 seconds) and 1 (19 seconds) appear sporadically through the run and are not tied to the dip; the cause of the dip is not established. [measured; cause unknown]
+- Does 32 Hz hold? No, not at the frame level. The delivered rate was 27 fps in the first minute, 28 to 29.5 fps in minutes 2 to 11, and 28 to 30 fps after that. It did not collapse. The 32.2 Hz medians in the short reads are the interval between delivered frames, and about 10 % of the time is lost in gaps. [measured]
+- Against the doc: the 1.3.0.8 model's first phase (22 fps for about 4 s) is not visible as a plateau; the first minute is a boot ramp at 27. The rise from about 27 to about 29.5 is in the direction the model gives for growing limits. The plateau near 29.5, and the 30 fps seen later, sit below the model's 31 fps for the final phase. The 1.3.0.0 image's excursion pattern is not measured, so the difference is [inferred]. The 11 min dip is near the model's phase change (about 700 s), which is also [inferred].
+- Host effects are not fully excluded (the checker pulls one frame per credit); the short reads show 32.2 medians on the same stream, which points at the camera. [inferred]
+
+**5. End.**
+
+- Second restore: `flash-factory-4m-2`, `plan: 0 of 64 blocks differ`, `DONE: the part reads back byte-identical` (`restore-2.log`). The flash already matched the start image after the first restore and the stream did not write flash. [measured]
+- End dump: channel 1 cycle, 8 s wait, `dump-spifi-4m-halted`, copied to `end-4m.bin`: sha `50e900c23ff4bb7e0a5a30fc5879f6ed276289e43aeace2f9ab74eaec9b01d7d`. `cmp start-4m.bin end-4m.bin` printed nothing and exited 0. [measured]
+- Normal fps after the end dump and a channel-2 power cycle (`--fps --mode normal --no-hifps`), eighteen reads:
+  - Reads 1 and 2: medians 32.01 to 32.21 and 32.17 to 32.20.
+  - Reads 3 to 9: not settled. Read 3 medians 19.4 to 32.2; reads 4 to 8 medians 16.5 to 29.9 (most seconds 17 to 22); read 9 medians 17.0 to 18.7. Overall means 13.6 to 17.8 fps.
+  - Reads 10 to 18: steady, medians 32.0 to 32.3 (read 13 had one second at 29.08), overall means 19.8 to 22.0.
+  - The unsettled reads follow the post-dump pattern in 42.31. Here they appear after reads 1 and 2, which settled first. [measured]
+- Final steady read: read 18, medians 31.97 to 32.21.
+
+**Not measured or open.**
+- The copy-form 1.3.0.8 (`5313f107`, offered) has not been run with the 20 s whole-run tool. Its block 13 is the same one-step form with the same trigger structure, so the same excursions are [inferred] to apply. Worth a 20 s run before the owner offers 32 Hz for 1.3.0.8.
+- The 1.3.0.0 excursion pattern (E and D per trigger) is not measured. The doc's model is for 1.3.0.8.
+- The 0.9.1.0 first-run dip (42.27) was not re-measured; the brief asked only for 0.10.0.0.
+- The stalls on the first checker connect after CLI slot writes (`0x56`, `0x37`) are recorded above; the cause is not established.
+- Status values 1 and 6 are reported as seen; their meaning is not decoded here.
