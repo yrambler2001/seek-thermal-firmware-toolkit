@@ -225,11 +225,18 @@ export const FPS_PATCHES: readonly FpsPatch[] = FPS_PATCH_TABLE.map((source) => 
  * (the byte edits are the table's and are not changed). The offer names this rate: the page's button, its note
  * and its confirmation, and the CLI's plan, all read the plan's toHz. Entries not listed run at their target.
  *
- * Empty now. The 1.3.0.8 32 Hz entry was 26 fps on the bench (TESTING.md 42.20), but that figure was for its
+ * compact_pro-4.9.1.15 is 17.7: FRAME_RATE.md sec.6.3 experiment A, flashed to slot B of a Compact PRO 4.9.1.15
+ * camera and read at 17.70 fps delivered (17.68 Hz captured), against 8.85 fps for its unmodified control on the
+ * same unit (TESTING.md 42.32). The table's bytes are that experiment's three edits, plus the acceptance-sum
+ * word the packager moves (FRAME_RATE.md sec.9). 4.9.2.0 and 1.0.3.x are not measured and run at their target.
+ *
+ * The 1.3.0.8 32 Hz entry was 26 fps on the bench (TESTING.md 42.20), but that figure was for its
  * earlier one-step form (op 5), which the table replaced with the plain-copy form. The copy form has no camera
  * measurement, so it is offered at its target (32 Hz), like the other unmeasured entries.
  */
-export const FPS_MEASURED_HZ: ReadonlyMap<string, number> = new Map<string, number>();
+export const FPS_MEASURED_HZ: ReadonlyMap<string, number> = new Map<string, number>([
+  ['compact_pro-4.9.1.15', 17.7],
+]);
 
 /** The corpus builds that already run at a target rate, by the SHA-256 of the decrypted image. */
 export const FPS_KNOWN_BUILDS: ReadonlyMap<string, { readonly name: string; readonly hz: number }> =

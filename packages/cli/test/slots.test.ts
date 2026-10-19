@@ -46,7 +46,9 @@ import {
   flashPlanLines,
   flashQuestion,
   flashRefusal,
+  fpsPlanJson,
   fpsPlanLines,
+  fpsQuestion,
   imageSourceFor,
   listLines,
   listResult,
@@ -1988,6 +1990,39 @@ describe('the boot word and the frame-rate warning', () => {
     );
     expect(bootWarning?.[1]).toBe(
       'Patching slot A would not make it run, because the camera boots recovery R instead.',
+    );
+  });
+});
+
+describe('the measured Compact PRO 4.9.1.15 rate, as the CLI prints it', () => {
+  it('shows 17.7 Hz in the plan, the JSON and the question: not 18, and no float tail', () => {
+    const base = offerOf();
+    const plan: OfferPlan = {
+      ...base,
+      patch: {
+        ...base.patch,
+        id: 'compact_pro-4.9.1.15',
+        family: 'compact_pro',
+        version: '4.9.1.15',
+        fromHz: 9,
+        targetHz: 18,
+      },
+      fromHz: 9,
+      toHz: 17.7,
+    };
+    const text = fpsPlanLines('a', plan, 0x14030000, '4.9.1.15', false, null).join('\n');
+    expect(text).toContain('9 Hz -> 17.7 Hz');
+    expect(text).toContain('compact_pro-4.9.1.15');
+    expect(text).not.toContain('18 Hz');
+    expect(fpsPlanJson(plan)).toMatchObject({
+      status: 'offer',
+      patch: 'compact_pro-4.9.1.15',
+      fromHz: 9,
+      toHz: 17.7,
+    });
+    expect(JSON.stringify(fpsPlanJson(plan))).not.toContain('17.700000001');
+    expect(fpsQuestion(reportOf({ booted: 'b' }), 'a', plan)).toContain(
+      'from 9 Hz to 17.7 Hz? The bank is saved first. [y/N] ',
     );
   });
 });

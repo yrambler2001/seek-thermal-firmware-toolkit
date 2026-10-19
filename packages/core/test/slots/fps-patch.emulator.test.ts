@@ -5,7 +5,7 @@
  *
  * FOR EACH FIRMWARE, one boot of the stock flash, then a second boot of the patched flash:
  *   1. the analysis offers the patch on bank A, at the build's top rate (32 Hz for both: 1.3.0.8's 32 Hz entry is the
- *      plain-copy form, unmeasured on a camera, so it names its target; FPS_MEASURED_HZ is empty);
+ *      plain-copy form, unmeasured on a camera, so it names its target; FPS_MEASURED_HZ has no 32 Hz entry);
  *   2. THE SAVE GATE: a save that does not happen refuses the write, and no SetFeaturedFirmwareData
  *      (0x50) or CompleteMemoryUpgrade (0x51) is sent;
  *   3. the patch: the pre-patch dump is handed to the save FIRST, holding bank A exactly as the
@@ -80,7 +80,7 @@ const sha = (bytes: Uint8Array): string => createHash('sha256').update(bytes).di
 /** The stage-one subjects, by the label the locked-line suite gives them. */
 const STAGE_ONE: readonly { readonly label: string; readonly top: number }[] = [
   { label: 'Compact 1.3.0.0 (native dump)', top: 32 },
-  // The page's rate for the 32 Hz entry is its target: the plain-copy form has no camera measurement (FPS_MEASURED_HZ is empty).
+  // The page's rate for the 32 Hz entry is its target: the plain-copy form has no camera measurement (FPS_MEASURED_HZ has no 32 Hz entry).
   { label: 'Compact 1.3.0.8 (8 Hz)', top: 32 },
   // The 2014-chain builds added with the 32 Hz entries of 0.8.0.0 to 1.2.0.0: offered at their table rate, unmeasured.
   { label: 'Compact 0.8.0.0', top: 32 },

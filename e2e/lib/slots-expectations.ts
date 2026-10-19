@@ -335,7 +335,7 @@ export const SLOTS_SUBJECTS: readonly SlotsSubject[] = [
     version: '4.9.1.15',
     emulator: 'Compact PRO 4.9.1.15 dump',
     banks: ALL_WRITABLE,
-    fps: { offer: true, toHz: 18 },
+    fps: { offer: true, toHz: 17.7 },
     fpsNotOffered: { bank: 'b', reason: 'already runs at 18 Hz' },
     banner: 'none',
     ownImage: {
@@ -343,7 +343,7 @@ export const SLOTS_SUBJECTS: readonly SlotsSubject[] = [
       reason: "neither this camera's pair nor a decoded application pair occurs in the image",
     },
     source:
-      '42.1 and 42.5: the dump’s bank B holds a 1.0.3.2 image with neither key pair, so writing B back from its own image is refused; the bench writes B from A’s image (42.5 note 2), which the page offers. Frame-rate: banks A and R hold the 4.9.1.15 image, 18 Hz table entry (stage two, TESTING.md 42.28); bank B holds the 1.0.3.2-FF build, which the table records at 18 Hz already, so it takes no patch.',
+      '42.1 and 42.5: the dump’s bank B holds a 1.0.3.2 image with neither key pair, so writing B back from its own image is refused; the bench writes B from A’s image (42.5 note 2), which the page offers. Frame-rate: banks A and R hold the 4.9.1.15 image, offered at its measured 17.7 Hz (stage two, TESTING.md 42.28, corrected in 42.32); bank B holds the 1.0.3.2-FF build, which the table records at 18 Hz already, so it takes no patch.',
   },
 
   /* ---- XR, Mosaic, Nano ------------------------------------------------------------------ */

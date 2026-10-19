@@ -78,13 +78,14 @@ const OP_RESET_DEVICE = 0x59;
 const sha = (bytes: Uint8Array): string => createHash('sha256').update(bytes).digest('hex');
 
 /**
- * The stage-two subjects: the 4.8.1.x Compact builds (32 Hz) and the Compact PRO 4.9.x builds (18 Hz), with
- * the table's top rate the page offers for each.
+ * The stage-two subjects: the 4.8.1.x Compact builds (32 Hz) and the Compact PRO 4.9.x builds (18 Hz target), with
+ * the rate the page offers for each. The 4.9.1.15 rate is its measured 17.7 (FPS_MEASURED_HZ, TESTING.md 42.32);
+ * 4.9.2.0 is not measured and offers its 18 Hz target.
  */
 const STAGE_TWO: readonly { readonly label: string; readonly top: number }[] = [
   { label: 'Compact 4.8.1.7 image (on 4.8.2.1)', top: 32 },
   { label: 'Compact 4.8.1.9 image (on 4.8.2.1)', top: 32 },
-  { label: 'Compact PRO 4.9.1.15 dump', top: 18 },
+  { label: 'Compact PRO 4.9.1.15 dump', top: 17.7 },
   { label: 'Compact PRO 4.9.2.0 dump (1215A0YZ9AA8)', top: 18 },
 ];
 

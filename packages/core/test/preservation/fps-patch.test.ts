@@ -198,6 +198,18 @@ describe('the rate the page names (the bench-measured rate, FPS_MEASURED_HZ)', (
     // An entry the bench did not change keeps its target: the 1.3.0.0 mode-8 entry measured 32 Hz.
     expect(FPS_MEASURED_HZ.has('compact_32k-1.3.0.0-to32')).toBe(false);
   });
+
+  it('names 17.7 for the Compact PRO 4.9.1.15 entry (measured, TESTING.md 42.32), and the 18 Hz target for 4.9.2.0 and 1.0.3.x', () => {
+    // The page and the CLI print String(rate): the literal 17.7 prints "17.7", with no float tail.
+    expect(FPS_MEASURED_HZ.get('compact_pro-4.9.1.15')).toBe(17.7);
+    expect(String(FPS_MEASURED_HZ.get('compact_pro-4.9.1.15'))).toBe('17.7');
+    expect(FPS_PATCHES.find((p) => p.id === 'compact_pro-4.9.1.15')?.targetHz).toBe(18);
+    // Not measured on a camera: these name their target, 18 Hz.
+    for (const id of ['compact_pro-4.9.2.0', 'compact_pro-1.0.3.0', 'compact_pro-1.0.3.2']) {
+      expect(FPS_MEASURED_HZ.has(id), id).toBe(false);
+      expect(FPS_PATCHES.find((p) => p.id === id)?.targetHz, id).toBe(18);
+    }
+  });
 });
 
 describe('the stages: which entries are offered (pinned, so a change is deliberate)', () => {
