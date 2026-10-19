@@ -296,11 +296,122 @@ describe('useSlotsPanel: writing a bank', () => {
     expect(mocks.flash.mock.calls[0]?.[3]).toEqual({ verify: true, acknowledgeRisk: false });
     expect(result.current.panel.outcome?.result.verified).toBe(true);
     expect(result.current.panel.pending).toBeNull();
-    /* The bank has changed, so the read it came from is no longer true. */
-    expect(result.current.panel.report).toBeNull();
+    /* The banks are read again after the write, so the table is not left empty. */
+    expect(result.current.panel.report).not.toBeNull();
+    expect(mocks.inspect).toHaveBeenCalledTimes(2);
     expect(
       lineIncludes(result.current.panel.reporter.lines, 'NOW UNPLUG AND REPLUG THE CAMERA.'),
     ).toBe(true);
+    unmount();
+  });
+
+  it('after a successful write the table shows the banks read again, not the read from before', async () => {
+    const { backend, mocks } = makeBackend();
+    const before = slotReport(base);
+    const after = slotReport(base);
+    mocks.inspect
+      .mockImplementationOnce(() => Promise.resolve(before))
+      .mockImplementationOnce(() => Promise.resolve(after));
+    const { result, unmount } = setup(backend);
+    await act(async () => {
+      await result.current.panel.readSlots();
+    });
+    expect(result.current.panel.report).toBe(before);
+    await act(async () => {
+      await result.current.panel.pickFile('b', 'plain', file('fw.bin', new Uint8Array(16)));
+    });
+
+    await act(async () => {
+      await result.current.panel.write(false);
+    });
+
+    expect(mocks.flash).toHaveBeenCalledTimes(1);
+    /* The re-read takes no identify probe (the probe arms windows): only Read slots asked the camera. */
+    expect(mocks.identify).toHaveBeenCalledTimes(1);
+    expect(mocks.inspect).toHaveBeenLastCalledWith(expect.anything(), {
+      version: before.state.version,
+    });
+    expect(result.current.panel.report).toBe(after);
+    expect(result.current.panel.outcome?.result.verified).toBe(true);
+    expect(
+      lineIncludes(result.current.panel.reporter.lines, 'banks read again after the write'),
+    ).toBe(true);
+    expect(result.current.panel.reporter.progress.text).toContain('Unplug and replug');
+    unmount();
+  });
+
+  it('after a write that does not read back as written, the table shows the bank as the camera holds it, and says so', async () => {
+    const { backend, mocks } = makeBackend();
+    mocks.flash.mockImplementation((_ctx: unknown, _report: unknown, plan: SlotFlashPlan) =>
+      Promise.resolve(flashedSlot(plan.key, false)),
+    );
+    const { result, unmount } = setup(backend);
+    await act(async () => {
+      await result.current.panel.readSlots();
+    });
+    await act(async () => {
+      await result.current.panel.pickFile('b', 'plain', file('fw.bin', new Uint8Array(16)));
+    });
+
+    await act(async () => {
+      await result.current.panel.write(false);
+    });
+
+    expect(result.current.panel.outcome?.result.verified).toBe(false);
+    expect(result.current.panel.report).not.toBeNull();
+    expect(result.current.panel.reporter.progress.text).toContain('does not match');
+    unmount();
+  });
+
+  it('when the read after a successful write fails, the outcome stays and no bank is shown as read', async () => {
+    const { backend, mocks } = makeBackend();
+    mocks.inspect
+      .mockImplementationOnce(() => Promise.resolve(slotReport(base)))
+      .mockImplementationOnce(() =>
+        Promise.reject(new SeekError('slots/refused', 'the camera stopped answering')),
+      );
+    const { result, unmount } = setup(backend);
+    await act(async () => {
+      await result.current.panel.readSlots();
+    });
+    await act(async () => {
+      await result.current.panel.pickFile('b', 'plain', file('fw.bin', new Uint8Array(16)));
+    });
+
+    await act(async () => {
+      await result.current.panel.write(false);
+    });
+
+    expect(result.current.panel.outcome?.result.verified).toBe(true);
+    expect(result.current.panel.report).toBeNull();
+    expect(result.current.panel.pending).toBeNull();
+    expect(
+      lineIncludes(
+        result.current.panel.reporter.lines,
+        'the banks were not read again after the write',
+      ),
+    ).toBe(true);
+    expect(result.current.panel.reporter.progress.text).toContain('Unplug and replug');
+    unmount();
+  });
+
+  it('a write refused before anything is sent keeps the read it was made from', async () => {
+    const { backend, mocks } = makeBackend();
+    const { result, unmount } = setup(backend);
+    await act(async () => {
+      await result.current.panel.readSlots();
+    });
+    const read = result.current.panel.report;
+    await act(async () => {
+      await result.current.panel.pickFile('a', 'plain', file('fw.bin', new Uint8Array(16)));
+    });
+
+    await act(async () => {
+      await result.current.panel.write(false);
+    });
+
+    expect(mocks.flash).not.toHaveBeenCalled();
+    expect(result.current.panel.report).toBe(read);
     unmount();
   });
 

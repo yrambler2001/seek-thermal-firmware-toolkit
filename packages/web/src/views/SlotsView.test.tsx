@@ -513,6 +513,51 @@ describe('SlotsView', () => {
     unmount();
   });
 
+  it('keeps the bank table on screen after a write, with the outcome above the banks', () => {
+    const { container, unmount } = view(
+      panel({
+        plan: slotPlan(true),
+        report: slotReport(base),
+        outcome: { key: 'b', fileName: 'fw.bin', result: flashedSlot('b', true) },
+      }),
+    );
+
+    expect(bankRows(container)).toHaveLength(3);
+    expect(container.textContent).toContain('reads back as written');
+    expect(container.textContent).not.toContain('Press Read slots');
+    unmount();
+  });
+
+  it('after a write that does not read back, the table still shows the banks and the outcome says the read-back does NOT match', () => {
+    const { container, unmount } = view(
+      panel({
+        plan: slotPlan(true),
+        report: slotReport(base),
+        outcome: { key: 'b', fileName: 'fw.bin', result: flashedSlot('b', false) },
+      }),
+    );
+
+    expect(bankRows(container)).toHaveLength(3);
+    expect(container.textContent).toContain('the read-back does NOT match what was written.');
+    expect(container.textContent).not.toContain('reads back as written');
+    unmount();
+  });
+
+  it('with no read after a write, shows no bank table and no bank as written, and asks for Read slots', () => {
+    const { container, unmount } = view(
+      panel({
+        plan: slotPlan(true),
+        report: null,
+        outcome: null,
+      }),
+    );
+
+    expect(bankRows(container)).toHaveLength(0);
+    expect(container.textContent).not.toContain('reads back as written');
+    expect(container.textContent).toContain('Press Read slots');
+    unmount();
+  });
+
   it('names the refusal and offers nothing else when the camera will not name its build', () => {
     const { container, unmount } = view(
       panel({

@@ -9,8 +9,9 @@
  *    write planned against one unit can never reach another.
  *  - A prepared write is only sent while the report it was built from is still
  *    the current one: the payload was checked against what that bank held.
- *  - After a write starts, the report is dropped. The bank may have changed, so
- *    the read is no longer a picture of it.
+ *  - Once a write is committed the report is dropped: the bank may have changed.
+ *    The banks are read again after the read-back, so the table is a fresh picture
+ *    of the camera, never the read from before the commit.
  *  - A build the slot plan does not support is never read. The plan comes from
  *    the camera's own version answer, and a build older than 0.8.0.0 is
  *    reported and left alone.
@@ -484,6 +485,39 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
 
   /* ---- read the banks ------------------------------------------------- */
 
+  /**
+   * The banks, read again once a write has been committed and read back, so the table shows what the
+   * camera holds now. It reads under the profile and build the write was sent under (the report's own), and
+   * takes no identify probe: that probe arms windows, and nothing after a commit should arm more than the
+   * read of the banks does. This is not the read the page asks for after the replug (the version and the
+   * active bank settle only then, and the log says so). A failure or a cancel here leaves the write's result.
+   */
+  const readAfterWrite = useCallback(
+    async (written: SlotsReport, client: SeekDevice, signal: AbortSignal): Promise<void> => {
+      try {
+        const version = written.state.version;
+        const again = await backend.inspect(
+          contextOf(written, client, workflow, signal),
+          version === null ? undefined : { version },
+        );
+        setCurrentReport(again);
+        log(
+          `banks read again after the write: ${summarise(again)} The version and the active bank ` +
+            'settle only after the replug.',
+          'detail',
+        );
+      } catch (error) {
+        const why = error instanceof CancelledError ? 'cancelled' : errorMessage(error);
+        log(
+          `the banks were not read again after the write (${why}). The write above stands; read the ` +
+            'slots again after the replug.',
+          'warn',
+        );
+      }
+    },
+    [backend, log, setCurrentReport, workflow],
+  );
+
   const readSlots = useCallback(async (): Promise<void> => {
     const result = await runner.start(SLOTS_READ_PANEL_ID, async (signal) => {
       reset('Reading ...');
@@ -839,7 +873,10 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
             'detail',
           );
 
+          /* From the commit on the bank may change, so the read it was made from is dropped here, before
+           * anything is sent. The banks are read again once the write is read back, below. */
           committing = true;
+          forgetReport();
           const written = await backend.flash(
             contextOf(current, client, workflow, signal),
             current,
@@ -860,6 +897,7 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
               'are the only thing that settles it.',
             'detail',
           );
+          await readAfterWrite(current, client, signal);
           workflow.progress(
             1,
             1,
@@ -881,14 +919,25 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
             setStatus('Failed — see the log above.');
           }
         } finally {
-          if (committing) forgetReport();
           if (transport !== null) await transport.close();
           flush();
         }
       });
       if (result === 'in-use-elsewhere') reportInUseElsewhere({ log, setStatus });
     },
-    [backend, device, flush, form, forgetReport, log, reset, runner, setStatus, workflow],
+    [
+      backend,
+      device,
+      flush,
+      form,
+      forgetReport,
+      log,
+      readAfterWrite,
+      reset,
+      runner,
+      setStatus,
+      workflow,
+    ],
   );
 
   /* ---- frame-rate patch ---------------------------------------------- */
