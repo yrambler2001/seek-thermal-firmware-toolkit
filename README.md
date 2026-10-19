@@ -760,8 +760,8 @@ seek-fw slots patch-fps a                                     # frame-rate patch
   publishes at a higher rate. The table offers 32 fps for the Compact 0.8.0.0, 0.9.0.2, 0.9.0.6,
   0.9.0.7, 0.9.1.0, 0.10.0.0, 1.0.0.0, 1.2.0.0, 1.3.0.0 and 1.3.0.8 builds on the plain 2014 chain,
   and for the Compact 4.8.1.7, 4.8.1.9 and 4.8.2.1 (the Compact XR 4.8.2.1 too) under Key A. It
-  offers 17.7 fps for the Compact PRO 4.9.1.15 (measured on one camera), and 18 fps for the Compact
-  PRO 4.9.2.0, 1.0.3.0 and 1.0.3.2. Other builds are refused, with the reason. The bank is saved
+  offers 17.7 fps for the Compact PRO 4.9.1.15, and 18 fps for the Compact PRO 4.9.2.0, 1.0.3.0
+  and 1.0.3.2. Other builds are refused, with the reason. The bank is saved
   first. A bank runs only after a boot, so power-cycle the camera afterwards. On the 2014 chain the
   page and `seek-fw slots list` also warn when a patched bank is one the camera will not run.
   [FPS_32HZ.md](FPS_32HZ.md) has how each build is patched and what was measured.
