@@ -232,12 +232,12 @@ export const SLOTS_SUBJECTS: readonly SlotsSubject[] = [
     name: 'Compact 4.8.1.7 (std)',
     group: 'Compact 4.x',
     version: '4.8.1.7',
-    emulator: null,
+    emulator: 'Compact 4.8.1.7 image (on 4.8.2.1)',
     banks: ALL_WRITABLE,
     fps: { offer: true, toHz: 32 },
     banner: 'none',
     source:
-      '42.4 (slot steps pass after the SPIFI read-back fix; no emulator entry); frame-rate stage two (Key A), 32 Hz table entry (TESTING.md 42.22)',
+      '42.4 (slot steps pass after the SPIFI read-back fix); its emulator subject, the 4.8.1.7 image on the 4.8.2.1 donor, is in corpus-modern-run (no pinned gap; TESTING.md 42.39); frame-rate stage two (Key A), 32 Hz table entry (TESTING.md 42.22)',
   },
   {
     name: 'Compact 4.16.1.7 (FF)',
