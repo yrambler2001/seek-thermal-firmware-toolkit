@@ -575,6 +575,14 @@ When the upgrade target is the bank the camera booted from, the Info tab, the Sl
 `seek-fw info` show a warning: an upgrade run from that camera would overwrite the image it is running.
 It is only a warning, and nothing stops the upgrade.
 
+A second warning covers a camera that runs its recovery bank R while its own upgrade writes B. The
+running image is not the one written, so the warning does not say it will be overwritten. It says what
+B holds on this read: a bootable image (the same as R's when the two match), an empty bank, or a bank
+whose bootability is unknown or not shown as bootable. With a bootable B it adds that an upgrade which
+stops partway leaves B unbootable. This is the case measured on a 4.8.2.1 camera under boot word 2
+(TESTING.md 42.50, 42.67). It is only a warning, and nothing stops the upgrade. `seek-fw info --json`
+reports it as `boot.upgradeTargetRecovery`, and `boot.upgradeTargetWarning` carries the sentence.
+
 ### What it writes
 
 To write a bank, give the Slots tab, or `seek-fw slots flash`, a **decrypted** image: the same kind of
@@ -838,7 +846,7 @@ this, and so do the CLI's `info`, `dump`, `slots` and `preserve` commands. A CLI
 or `--profile` skips the probe.
 
 The page keeps one flag for the camera, so once one tab has sent the token, every tab shows the
-note. The CLI prints the note when the run closes its session, and `--quiet` hides it. The note is a
+note, and so does the Connect section. The CLI prints the note when the run closes its session, and `--quiet` hides it. The note is a
 warning and gates nothing.
 
 **Power-cycle the camera (unplug it, plug it back in) before you use another tool on it**, such as the
