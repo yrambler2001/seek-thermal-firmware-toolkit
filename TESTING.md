@@ -11856,3 +11856,82 @@ Claude-Session: https://claude.ai/code/session_01XKhSca8W2e3Q8Dcd4CkwCy
 **5. Files and commands.** Scratch, not committed: `/private/tmp/claude-501/agent-77/` (`probe-a.ts` step A, `probe-b.ts` and `usb2-link.ts` step B, `fd-run-usb2.ts` driver, `gated-usb2.sh` and `chain-usb2.sh` gated runs, `table.py` and `inspect.py` tables, `loads.txt` with `uptime` before and after each run, `r1-n1.jsonl` to `r10-n3.jsonl` run logs). Usage: `FD_WT=<worktree> node --import ./e2e/lib/bench/seek-fps/register.mjs /private/tmp/claude-501/agent-77/fd-run-usb2.ts <inFlight> 60 20 <out.jsonl>` from the worktree, then `python3 -I scripts/fd-skip/classify.py <out.jsonl>`. `FPS_32HZ.md` is not changed by this section.
 
 **Commits.** This section only, on `worktree-agent-aa64af4c9be798524`. The hash is in the agent's report.
+
+### 42.78 The candidate-6 copy gate on the camera: P against Pg at host delays 0 to 5 ms shows no gain the runs can separate from the storm spread; the camera is restored and its flash reads back byte-identical (2026-10-19, restored 2026-10-20)
+
+**Summary.** Two agents. The measuring agent (scratch `/private/tmp/claude-501/agent-78/`, worktree `agent-a629b98df9bc2ad1d`) wrote Pg, which is P with the candidate-6 gate (42.76), to bank B, checked the gate bytes in SRAM, took the picture check, and ran 20 interleaved timed runs (P in bank A, Pg in bank B, boot word 0 or 1 per run). It stopped after `QUAD DONE` and did not restore the camera. This agent (worktree `agent-adbaba0ba81971886`, reset to `refactor/all-firmware-profiles` at 8911599) made no timing run and wrote no image except the restore. It restored the start image with the runner's `flash-factory-4m-2`, dumped the whole flash, compared it byte for byte, power-cycled the camera, read the boot state, and wrote this section from the logs. No push, no merge, no repo code change. The verdict is in section 7.
+- **Tags.** [measured] is a J-Link or camera log, named. [source] is read from a file, named. [inferred] follows from those and was not measured directly.
+
+**1. The writes (measured, J-Link logs).**
+- *Start image.* `start-4m.bin` is the whole-flash dump taken before any write (`s1-dump-start.log`). sha256 `50e900c2…7d7d`.
+- *Bank B.* `Pg.bank.bin` (65,536 B, header.length 0xBA98, word sum 0, no footer, `/private/tmp/claude-501/agent-76/images/bank/Pg.bank.bin`) was loaded to 0x14060000, and `verifybin` printed "Verify successful" (`s2a-flash-bankB.log`).
+- *Boot word.* The boot-config block at 0x14010000 was written with word 0 = 1 (bank B 0x14060000) and verified. `mem32` reads `00000001 14050000 14060000 14070000` (`s2b-set-boot-b.log`). `run-one.sh` rewrote the boot word before every run except `ab01` (bank A was already set), and each run's slot read then matched.
+- *After-write dump* (`s2c-dump-after-b.log`, `after-b-4m.bin`). Against the start image it differs in two 64 KiB blocks only, 0x14010000 (boot config) and 0x14060000 (bank B). Bank B equals `Pg.bank.bin` byte for byte. Its sha256 (`132d68ea…`) is the same as this agent's pre-restore live read (section 8), so the flash did not change between the write and the restore.
+
+**2. SRAM check (measured).** `s3-sram-B.bin` is the 64 KiB from 0x10000000, read after the Pg boot (`s3-dump-sram.log`). Bytes 0x114 to 0x1F7 (228 B) equal `gate.bin` (`/private/tmp/claude-501/agent-76/gate/gate.bin`, 228 B): **equal**. The slice sha256 is `470e7ef0ce9cc388e932ced0d61237c1c06d510e4419c2d17364283e73391e06`, the same as the gate file.
+- *Boot slots.* Every timed run's slot read in `runs.log` is "ok" (word 0 and booted a for P; word 1 and booted b for Pg; firmware 1.3.0.0). The picture run `s4-picPg-d0` has no slot read of its own. The last read before it, `s3-info.json` (22:34, after the bank B write, word 1, booted b), was not followed by a boot-word write until `s4-set-boot-a.log`, so that run was on Pg by sequence [inferred], not by its own read.
+
+**3. Picture check (measured).** Host delay 0, 6 s run after a 2 s settle (`s4-picP-d0.jsonl`, `s4-picPg-d0.jsonl`):
+
+| image | boot word | picMeanLevel | picMeanSd | picMeanHNoise | picChangedFraction | frames logged | frameErrors |
+|---|---|---|---|---|---|---|---|
+| P | 0 (booted a) | 5570.9 | 1775.0 | 1795.11 | 0.888 | 147 | 0 |
+| Pg | 1 (booted b) | 5575.3 | 1775.9 | 1795.83 | 0.888 | 155 | 0 |
+
+The two are the same scene, with the mean level within 0.1 percent. The picture does not separate P from Pg, and this check does not test the gate's timing.
+
+**4. The table (measured).** 20 runs, from `runs.log` and `table78.py`. The per-run values were checked by hand against `runs.log` for ab01, ab02, ab07, ab13, ab16 and q04. Each run had one bulk IN in flight (K=1), 60 s measured after a 20 s settle, channel 2 power-cycled before it, the host delay injected as shown, and the 1-minute load under 20 before it. Each run is 60 s, so the per-minute count and the event count are the same number. A is a gap into a calibration frame (type 1 or 6); A' is a type-3 frame right after a type-1 frame; single skips are gaps into any other type-3 frame (42.62 classes). P runs have boot word 0 and Pg runs boot word 1.
+
+| run | image | delay ms | load 1 min before / after | frames | missing captures (counter) | whole-run fps | per-second median (min to max) | single skips/min (events) | A/min | A'/min | row check flagged | frame / zero-length errors |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| ab01-P-d0 | P | 0 | 10.32 / 9.10 | 1563 | 368 | 26.05 | 16.08 to 32.20 | 169 | 36 | 19 | 0 of 1563 | 0 / 0 |
+| ab02-Pg-d0 | Pg | 0 | 8.94 / 6.60 | 1255 | 677 | 20.92 | 16.05 to 32.21 | 537 | 28 | 14 | 0 of 1255 | 0 / 0 |
+| ab03-P-d1 | P | 1 | 6.12 / 5.77 | 1612 | 322 | 26.83 | 16.08 to 32.20 | 113 | 38 | 19 | 0 of 1612 | 0 / 0 |
+| ab04-Pg-d1 | Pg | 1 | 5.57 / 7.84 | 1721 | 212 | 28.67 | 32.17 to 32.21 | 11 | 40 | 20 | 0 of 1721 | 0 / 0 |
+| ab05-P-d2 | P | 2 | 7.71 / 8.07 | 1638 | 296 | 27.27 | 16.15 to 32.21 | 84 | 38 | 19 | 0 of 1638 | 0 / 0 |
+| ab06-Pg-d2 | Pg | 2 | 12.11 / 6.31 | 1158 | 775 | 19.28 | 16.06 to 32.19 | 645 | 26 | 13 | 0 of 1158 | 0 / 0 |
+| ab07-P-d5 | P | 5 | 6.21 / 4.61 | 1006 | 928 | 16.75 | 15.79 to 32.13 | 790 | 24 | 12 | 0 of 1006 | 0 / 0 |
+| ab08-Pg-d5 | Pg | 5 | 4.90 / 5.31 | 1080 | 853 | 17.98 | 15.70 to 32.17 | 733 | 24 | 12 | 0 of 1080 | 0 / 0 |
+| ab09-P-d1 | P | 1 | 5.44 / 6.48 | 1597 | 336 | 26.60 | 16.11 to 32.20 | 138 | 36 | 18 | 0 of 1597 | 0 / 0 |
+| ab10-Pg-d1 | Pg | 1 | 6.58 / 6.01 | 1140 | 792 | 19.00 | 16.06 to 32.18 | 652 | 28 | 14 | 0 of 1140 | 0 / 0 |
+| ab11-P-d0 | P | 0 | 5.56 / 5.62 | 1117 | 818 | 18.58 | 15.93 to 32.06 | 675 | 26 | 13 | 0 of 1117 | 0 / 0 |
+| ab12-Pg-d0 | Pg | 0 | 5.54 / 5.72 | 1123 | 811 | 18.70 | 16.02 to 32.09 | 681 | 26 | 13 | 0 of 1123 | 0 / 0 |
+| ab13-P-d5 | P | 5 | 5.47 / 4.15 | 1303 | 642 | 21.67 | 15.70 to 32.20 | 466 | 32 | 16 | 0 of 1303 | 0 / 0 |
+| ab14-Pg-d5 | Pg | 5 | 3.99 / 6.54 | 1393 | 541 | 23.18 | 16.29 to 32.20 | 378 | 32 | 16 | 0 of 1393 | 0 / 0 |
+| ab15-P-d2 | P | 2 | 6.61 / 10.18 | 1541 | 392 | 25.67 | 16.33 to 32.20 | 191 | 36 | 18 | 0 of 1541 | 0 / 0 |
+| ab16-Pg-d2 | Pg | 2 | 9.88 / 7.51 | 1625 | 317 | 27.03 | 16.07 to 32.21 | 127 | 38 | 19 | 0 of 1625 | 0 / 0 |
+| q01-P-d0 | P | 0 | 6.94 / 4.82 | 1289 | 643 | 21.48 | 16.11 to 32.22 | 478 | 30 | 15 | 0 of 1289 | 0 / 0 |
+| q02-Pg-d0 | Pg | 0 | 4.55 / 5.67 | 1467 | 465 | 24.45 | 15.87 to 32.20 | 294 | 34 | 17 | 0 of 1467 | 0 / 0 |
+| q03-P-d0 | P | 0 | 6.53 / 7.13 | 1230 | 704 | 20.48 | 16.08 to 32.19 | 547 | 28 | 14 | 0 of 1230 | 0 / 0 |
+| q04-Pg-d0 | Pg | 0 | 6.49 / 5.49 | 1324 | 610 | 22.05 | 16.11 to 32.20 | 457 | 30 | 15 | 0 of 1324 | 0 / 0 |
+
+- *Reading.* The single skips run 11 to 790 a minute on both images, and the per-second medians fall to about 16 fps in the storm seconds. A and A' stay near 24 to 40 and 12 to 20 a minute on both images and do not track the single-skip counts. Frame errors and zero-length packets are 0 in every run.
+- *Load.* Across the 20 runs the Pearson r between the 1-minute load before each run and its single-skip count is -0.07. The storms do not follow the host load.
+
+**5. Per delay (from section 4).** The 0 ms cell is four runs per image (ab01, ab11, q01, q03 for P; ab02, ab12, q02, q04 for Pg). The other cells are two runs each (1 ms: ab03, ab09 for P and ab04, ab10 for Pg; 2 ms: ab05, ab15 for P and ab06, ab16 for Pg; 5 ms: ab07, ab13 for P and ab08, ab14 for Pg).
+
+| delay ms | P single skips/min | Pg single skips/min | P mean | Pg mean |
+|---|---|---|---|---|
+| 0 | 169, 675, 478, 547 | 537, 681, 294, 457 | 467 | 492 |
+| 1 | 113, 138 | 11, 652 | 126 | 332 |
+| 2 | 84, 191 | 645, 127 | 138 | 386 |
+| 5 | 790, 466 | 733, 378 | 628 | 556 |
+
+**6. Tear check (partly measured).** Not done as plan.md described it. The shutter-frame check (change events every 96 captures) and the hand-in-front-of-the-lens check were not run, and no capture was taken for them here. What the logs hold is the checker's seam check (`orderSuspect`, in the agent's `fd-run-78.ts`): at rows 38, 77 and 116 the row difference is divided by the frame's median row difference, and a frame is flagged above 4. It flagged 0 frames in all 20 runs (0 of 1,006 to 1,625 frames per run) and in both picture runs. A check on three rows cannot show a tear elsewhere in the frame, so it is weak evidence.
+
+**7. Verdict (measured, with the statistics from section 4).**
+- *Pooled.* P (10 runs): mean 365 single skips a minute, median 329, sd 257. Pg (10 runs): mean 452, median 497, sd 246. Pg is higher by 86 a minute, with a 95 percent interval of about -150 to +320 (Welch). A two-sided permutation test gives p = 0.45, and Pg is above P in 58 of 100 pairs (AUC 0.58).
+- *Paired in time.* Taking the adjacent pairs (ab01 with ab02, ab03 with ab04, through q03 with q04), Pg had fewer skips in 6 of 10. The sign test gives p of about 0.75.
+- *Per delay.* The sign changes between delays (0 ms: Pg 492 against P 467; 1 ms: 332 against 126; 2 ms: 386 against 138; 5 ms: 556 against 628), and each cell is 2 to 4 runs. The same image spans 84 to 790 on P and 11 to 733 on Pg.
+- *Conclusion.* The candidate-6 gate shows no gain on the camera at this sample size. The runs do not show Pg lowering the single skips at any delay, and they cannot separate the gate's effect from the storm variation, which is present on both images. The interval does not exclude a Pg that is up to about 40 percent lower than P's mean, and it does not exclude a Pg that is higher. The emulator (42.76) shows the gated build losing no fields at 0 to 5 ms; on the camera Pg lost 11 to 733 single skips a minute at those delays, so the emulator result did not reproduce on the camera at these settings. Separating a gain of that size from noise would need many more interleaved runs per image, or a bench where the storms can be switched off. The storm cause is still unknown (42.77).
+
+**8. Restore and bench state (measured, this agent).**
+- *Pre-restore read* (`r1-restore.log`). The part reads `132d68ea…`, the same as the after-write dump in section 1.
+- *Restore.* `flash-factory-4m-2` with `FACTORY_IMAGE=start-4m.bin` (`r1-restore.log`). The plan was 2 of 64 blocks differing, 0x14060000 and 0x14010000. Each was written with `loadbin` and `verifybin`, and both verified on attempt 1. The final re-read printed `DONE: the part reads back byte-identical to the image (50e900c23ff4bb7e0a5a30fc5879f6ed276289e43aeace2f9ab74eaec9b01d7d)`. The halted read failed twice in the run (before the writes and before the final read); each time the runner restored SPIFI memory mode through its registers and read again.
+- *End dump* (`r2-dump-end.log`, `dump-spifi-4m-halted`). `end-4m.bin` has sha256 `50e900c23ff4bb7e0a5a30fc5879f6ed276289e43aeace2f9ab74eaec9b01d7d`. `cmp start-4m.bin end-4m.bin` printed nothing and exited 0.
+- *Power cycle* (channel 2, 3 s, then 10 s). `seek-fw info --json` (`r3-info.json`) reads active-slot word 0x00000000, booted a, firmware 1.3.0.0 (bootloader 0.9.0.0), upgrade target b. Slot A (0x14050000) is sha256 `ef90c94a…`, and slots B (0x14060000) and R (0x14070000) are `d91284c6…`. The slot check printed `r3-restore activeSlotWord 0 expect 0 booted a firmware 1.3.0.0 -> ok`.
+- *Bench left.* Channel 1 (J-Link) off, channel 2 (camera) on. Boot word 0, A = P (`ef90c94a`), B = R = stock (`d91284c6`).
+
+**9. Files.** Scratch, not committed: `/private/tmp/claude-501/agent-78/` (`runs.log`, `chain-ab.sh`, `chain-quad.sh`, `table78.py`, `analyze-runs.py`, `loads.txt`, `switch.log`, the per-run `*.jsonl`, `*.stdout` and `*-info.json` files, the step logs `s1` to `s4`, and this agent's `r1-restore.log`, `r2-dump-end.log`, `r3-info.json`, `start-4m.bin`, `after-b-4m.bin` and `end-4m.bin`). Each halted dump writes `FW-V1/targets/compact_8hz_1_3_0_0/jlink_dumps/spifi_14000000_4m_halted.bin`, which the next dump overwrites, so only the copies in the scratch folder are kept. The table: `python3 -I /private/tmp/claude-501/agent-78/table78.py`. `plan.md` still lists 42.78 as running; it is not changed by this section.
+
+**Commits.** This section only, on `worktree-agent-adbaba0ba81971886`.
