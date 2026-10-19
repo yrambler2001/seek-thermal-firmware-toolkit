@@ -191,8 +191,9 @@ describe('the rate the page names (the bench-measured rate, FPS_MEASURED_HZ)', (
         id,
       ).toBe(true);
     }
-    // The 1.3.0.8 32 Hz entry is the plain-copy form, which has no camera measurement, so it names its target (32 Hz).
-    // (Its earlier op 5 form published 26 fps, TESTING.md 42.20; that figure is not this entry's.)
+    // The 1.3.0.8 32 Hz entry is the plain-copy form. The camera measured its per-second medians at 32.16 to 32.20 fps
+    // (TESTING.md 42.27), but its whole-run rate has not been measured, so it names its target (32 Hz).
+    // (Its earlier op 5 form published 26 fps, TESTING.md 42.20; that whole-run figure is not this entry's, 42.37 section 3a.)
     expect(FPS_MEASURED_HZ.has('compact_32k-1.3.0.8-to32')).toBe(false);
     expect(FPS_PATCHES.find((p) => p.id === 'compact_32k-1.3.0.8-to32')?.targetHz).toBe(32);
     // An entry the bench did not change keeps its target: the 1.3.0.0 mode-8 entry measured 32 Hz.

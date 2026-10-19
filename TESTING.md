@@ -8045,8 +8045,10 @@ Notes on the table:
 - [measured] On the owner's unit, after the 1.3.0.0 mode-8-only write: checker Normal medians 32.19 32.19 32.09 32.20 32.20 (21.0 fps overall,
   105 frames in 5 s); Swift `seek --fps --no-hifps` right after, 32.18 to 32.19 (21.8 fps overall, 109 frames). The Normal stream: frozen
   pairs 0, changed 94 to 95 %. Hi FPS: checker 32.0 fps overall (160 frames), Swift 31.2 (156). The medians agree; the overall means differ (32.0 and 31.2 fps).
-- The emulator path: `--emulator <corpus entry>`. A patched part booted with `--flash` gives no frames (the emulator attaches the sensor
-  only for a corpus-entry boot). Patched images are measured in the emulator through the Python IP rows (section 10), not through `--flash`.
+- The emulator path: `--emulator <corpus entry>`. A patched part streams through `--emulator ENTRY --emulator-flash FILE`, which boots it
+  with FW-V1's `--flash-entry` and gives it the build's 32K sensor (42.42). That needs FW-V1 branch `emu-sensor` until it is merged. Before
+  that change a `--flash` part got no frames, because the sensor was attached only for a corpus-entry boot. The Python IP rows (section 10)
+  are the other route. (corrected in 42.52)
 - Unit tests 56 passed (section 10). Not ported: snapshot, deadpixels, renderer. The camera spec is read-only and fails on any request
   outside the port's list.
 - The macOS app change in `tv-jc` (Pro init only on firmware 4.x; the `seek stream` output prints frozen pairs and changed %) is committed
@@ -8094,7 +8096,9 @@ npx vitest run test/preservation/fps-patch.test.ts test/preservation/fps-patch.d
 
 - The 1.3.0.8 op-5 form (the first 32 Hz entry, image ee8c7f0e) published 26 fps in 42.20 on serial 101310HSNEA2 (the PIR206 unit), and
   32.18 to 32.20 fps in this section's run of the copy form 5313f107 on the same unit, which is not the same image (corrected in 42.38). The emulator comment in `fps_patch.py` and the TypeScript
-  comment on `FPS_MEASURED_HZ` both cite the 26 fps. No cause was found.
+  comment on `FPS_MEASURED_HZ` both cite the 26 fps. The cause was found in 42.37 section 3a (corrected in 42.52): the 26 is the whole-run
+  average of the op-5 stream over 20 s, which counts the frame-sequence gaps (the steady interval is 31.1 ms, about 32.2 fps); it was not a
+  settle effect or a different image.
 - The 0.7.0.8 stock picture differs between the E1 run and the P3 run (see the notes under the table).
 - `FPS_32HZ.md` section 8 and TESTING 42.26 say 1.2.0.0 has no patch. The table has `compact_32k-1.2.0.0-to32` (stage one), measured
   here at 32.18 to 32.20 fps on the camera.
@@ -8110,8 +8114,10 @@ npx vitest run test/preservation/fps-patch.test.ts test/preservation/fps-patch.d
 - Over-ceiling behaviour of the 32 Hz copy on a 32K build in the emulator: no 32K emulator scene has samples at or above 15000 (the PRO
   scene does). On the camera, the 1.3.0.8 copy was checked in a scene with no warm pixel, so the copy's over-ceiling behaviour there is
   established only by the emulator's bright scene and by the sel-0x11 camera run.
-- The TypeScript checker over patched parts through `--flash`: no frames, because the emulator attaches the sensor only for a corpus-entry
-  boot. The IP rows are the route; the checker's README is updated to say so.
+- The TypeScript checker over patched parts through `--flash`: 42.42 streams the 1.3.0.0 and 4.8.2.1 parts through
+  `--emulator ENTRY --emulator-flash FILE`, on FW-V1 branch `emu-sensor` (not merged). Before that change they got no frames, because the
+  sensor was attached only for a corpus-entry boot. The 1.3.0.8 patched part is not run through it; the IP rows are its record. The checker's README says so.
+  (corrected in 42.52)
 - Long streams: the 400-frame long-run rows for the current entries were not run. A long stream may leave 32 Hz (the frame-sequence limit
   moves the program on and returns it). Not measured for any 32 Hz entry here.
 - The stock 1.3.0.0 Normal and Hi FPS on the camera in this section (the 8.0 fps in 42.25 was the 16 Hz image, not stock).
@@ -9979,3 +9985,56 @@ Tests (new; they pass on the unchanged logic).
 **Commits.**
 - FW-V1, branch `plan-hygiene`, worktree `/private/tmp/claude-501/fwv1-hygiene` (not merged, not pushed): `7110fd0fb` (item 1), `ebbff71a7` (item 2), `752378ea3` (item 3).
 - Seek: this note, on branch `worktree-agent-aa5aa115715f0f164`, reset to `refactor/all-firmware-profiles` at `47f3fe4`.
+
+### 42.52 Five stale texts from 42.27 to 42.50: the 1.3.0.8 copy and the 26 fps cause, the `--flash` stream, the FLASH_OPS header, the 4.9.x active-slot word, and the mode-4 comments (2026-10-19)
+
+**Summary.** The five plan items. (1) Two texts left by 42.38 are corrected: the 1.3.0.8 copy form has a camera measurement (42.27), and the 26 fps cause is answered (42.37 section 3a). (2) A patched part streams from the emulator through `--flash`, with `--flash-entry` on FW-V1 branch `emu-sensor` (42.42), and three texts now say so. (3) The `FLASH_OPS` header names the two info-read arms that the device-info read also sends. (4) The active-slot word is reported again on the 4.9.x Compact PRO line; it stays hidden on 4.8.x, on 2016, and on the other 4.x lines. (5) The "mode 4 is a self-test" comment is fixed in the three 4.8.x targets, not in all eighteen (see item 5). No camera, J-Link or USB switch was used. Nothing was merged or pushed.
+
+**Tags.** [source] is read from code or comments. [measured] is a test run or a command run in this session. [inferred] follows from those.
+
+**1. The two stale texts (plan item 1).**
+
+- `packages/core/test/preservation/fps-patch.test.ts:194-196`: the comment said the 1.3.0.8 copy "has no camera measurement". It now says the camera measured its per-second medians at 32.16 to 32.20 fps (42.27), and that its whole-run rate has not been measured. The assertions are unchanged. [source]
+- `TESTING.md` 42.27 section 11, "No cause was found" (corrected in 42.52): 42.37 section 3a found it. The 26 fps is the whole-run average of the op-5 stream over 20 s, which counts the frame-sequence gaps; the steady interval is 31.1 ms. It was not a settle effect or a different image. [source: the 42.37 record]
+
+**2. The `--flash` stream (plan item 2).**
+
+- `FPS_32HZ.md` section 8: a patched part streams with `--emulator ENTRY --emulator-flash FILE`, which boots it as the build ENTRY names, with that build's 32K sensor (FW-V1 `--flash-entry`, 42.42). It needs FW-V1 branch `emu-sensor` until that is merged. Before it, a `--flash` part got no frames. The Python rows stay as the other route. [source]
+- `TESTING.md` 42.27 section 7 and section 12 (both corrected in 42.52): the same statement, with the 1.3.0.0 and 4.8.2.1 parts that 42.42 streamed, and the 1.3.0.8 patched part, which was not run through the checker. The checker's README already says this (42.42). [source]
+
+**3. The FLASH_OPS header (plan item 3).** `packages/core/src/protocol/ops.ts`, the comment above `FLASH_OPS`: it names SetFirmwareInfoFeatures (0x55) and SetRamDataFeatures (0x5a) as the info-read arms that the flash path and the device-info read both send. The device-info read is `readDeviceInfo`, behind the CLI `info` and `slots` and the slots page (42.44, 42.47). The set is unchanged, and nothing in a dump sends either. [source]
+
+**4. The active-slot word on the 4.9.x Compact PRO (plan item 4).**
+
+- `packages/core/src/slots/boot-choice.ts`: a private `reportsActiveSlotWord(profile, version)` returns true on the 2014 plaintext chain (the same `onPlaintextChain` gate as before), and on the 4.9.x line. The 4.9.x test uses `classifyBuild`, which the file already gets its line from: the family must be `modern` (profile `modern-4x`) and the parsed version must have major 4 and minor 9. It names no build. A 4.x version read under another profile is refused by `classifyBuild`, so it is hidden.
+- Hidden on 4.8.x (42.43, 42.50: the word reads 0 under every boot word), on 2016 (not checked), and on 4.16.x and 4.18.x (not measured for the word, and not 4.9.x). The header comment, the `reportedBooted` doc and the `bootChoiceOf` comment are updated.
+- The word follows the bank that runs: the 4.9.1.15 dump reads 2 when R runs (42.50) and 1 when B runs (42.36), both in the emulator. The rule covers 4.9.2.0 by line; that build is not measured for the word.
+- `packages/core/test/slots/boot-choice.test.ts`: the 4.8.2.1 test is renamed to 4.8.x. New: 4.9.1.15 and 4.9.2.0 report the word as the bank for words 0, 1 and 2; 4.8.1.7, 4.8.2.1, 4.16.1.7, 4.18.2.0 and legacy-auth with 4.9.1.15 report nothing.
+- Output: the CLI prints the boot section (`bootLines`, `bootJsonOf`, `slots.ts:532` and `:565`) only where `state.plainChain` holds, which is set when a bank is stored plain (`device-info.ts:691`). A 4.9 Key A line does not set it. So the 4.9 value is computed and printed nowhere; no CLI or web text changed. Showing "last start" on 4.9 would need a change to `slots.ts`, which was not made.
+
+**5. The mode-4 comments (plan item 5).** FW-V1 `emu-research`, commit `b03d8ade4` (comments only, 3 files, 15 insertions, 12 deletions).
+
+- Fixed in `targets/compact_8hz_4_8_1_7/src/frame.c`, `targets/compact_8hz_4_8_1_9/src/frame.c` and `targets/compact_xr_8hz_4_8_2_1/src/frame.c`, with the 42.48 wording from 1.3.0.8's `frame.c` and the section references changed to `docs/FRAME_RATE_MODES.md` sections 2.2, 3 and 2.3. The 4.8.1.7 mode-4 page is one step, op 16 with publish and image type 3, and the emulator publishes live pictures on it (FRAME_RATE_MODES.md 2.2 and 3, [measured] on 4.8.1.7). The 4.8.1.9 and XR records are identical in source, the same `HANDLER_49(PACK_HANDLER_SELFTEST)` step with publish and image type; their bytes were not read. [source]
+- Not changed. The same comment is still in fourteen targets: `compact_8hz_0_3_0_1`, `compact_ff_16hz_1_3_0_8`, `compact_ff_16hz_4_16_1_7`, `compact_pro_9hz_1_0_3_0`, `compact_pro_9hz_1_0_3_2`, `compact_pro_9hz_4_9_1_15`, `compact_pro_9hz_4_9_2_0`, `compact_pro_ff_18hz_1_0_3_0`, `compact_pro_ff_18hz_1_0_3_2`, `compact_pro_ff_18hz_4_18_2_0`, `mosaic_18hz_10_9_1_31`, `mosaic_ff_27hz_2_27_1_33`, `nano_200_32hz_42_32_3_10` and `nano_300_27hz_44_27_3_10`. FW-V1's own telemetry docs say mode 4 is the self-test on the 4.9 PRO (`TELEMETRY_ROWS_4_9.md`, the mode-4 entry at hw_rec_22), the 4.18 line and Nano (`TELEMETRY_ROWS_4_18.md`, `TELEMETRY_ROWS_NANO.md`, row 27). Those are not measured on the emulator. The 4.8.1.7 record carries the same SELFTEST handler label and still publishes live pictures, so the label does not decide it. The other targets need the same emulator check before any comment changes. FW-V1's `FRAME_RATE_MODES.md` section 6 scopes its stale-text finding to 1.3.0.8 and 4.8.x.
+- Not touched: `docs/FPS_PATCH_ALL_FIRMWARES.md` line 107 (a doc, not a target), and the `rpc_cmds.c` mode list, which 42.48 says is a different comment.
+
+**Tests and checks (no camera, no J-Link, no switch; no full vitest run).**
+
+- `packages/core`: `npx vitest run test/slots/boot-choice.test.ts test/preservation/fps-patch.test.ts test/protocol.test.ts`: 75 passed (boot-choice 26, up from 24: one test renamed, two new; fps-patch 14; protocol 35).
+- `packages/cli`: `npx vitest run test/slots.test.ts`: 107 passed. The CLI boot section is gated on `plainChain` (item 4), so the 4.9 value does not reach it. The camera probe was not run.
+- Web `SlotsView` tests: not run. No web file calls `bootChoiceOf` or reads `reportedBooted`, so the change cannot reach them.
+- `npx tsc --noEmit -p packages/core/tsconfig.json`: exit 0. eslint on the four changed core TypeScript files: clean (one template literal in the new test fixed). Prettier: clean on those files (`boot-choice.ts` reformatted once).
+- `npm run build --workspace @seek-fw/core` run so the CLI and web resolve the new core. `dist/` is ignored.
+
+**Not verified or open.**
+
+- The 4.8.1.9 and XR mode-4 bytes were not read (item 5). The 4.9 and other comments were not changed for the reason given.
+- The 4.9 active-slot word is measured on the 4.9.1.15 dump in the emulator only (42.36, 42.50), not on a camera. The rule also covers 4.9.2.0 and any other 4.9.x build by line, and those are not measured for the word.
+- Whether the CLI and page should show "last start" on the 4.9 line is the owner's call (item 4).
+- An untracked `emu/chimera_1308_on_1300.bin` was in the FW-V1 `emu-research` worktree when item 5 started, and was gone by the commit. It was not touched by this work, and it is not in the commit.
+- `plan.md` is not edited.
+
+**Commits.**
+
+- FW-V1, branch `emu-research`, worktree `/private/tmp/claude-501/fwv1-emu-research` (not merged, not pushed): `b03d8ade4` (item 5, on top of 42.48's `9374eeded`).
+- Seek: this note and the edits above, on branch `worktree-agent-a77636ffb1a447d03`, reset to `refactor/all-firmware-profiles` at `5410f6d`.

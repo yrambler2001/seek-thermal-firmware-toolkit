@@ -221,8 +221,8 @@ describe('bootChoiceOf: which bank the next start runs', () => {
     expect(choice.runs).toBe('r');
   });
 
-  it('does not report the word as a booted bank on 4.x, where the factory app never writes it', () => {
-    /* The 4.x word reads 0 on every boot (TESTING.md 42.43): slot A here, whatever runs. */
+  it('does not report the word as a booted bank on 4.8.x, where the factory app never writes it', () => {
+    /* The 4.8.x word reads 0 under every boot word (TESTING.md 42.43, 42.50): slot A here, whatever runs. */
     const modern = reportWith({
       cfg0: 1,
       banks: ALL_OK,
@@ -234,6 +234,45 @@ describe('bootChoiceOf: which bank the next start runs', () => {
     expect(choice.reportedBooted).toBeNull();
     expect(choice.runs).toBe('b');
     expect(choice.why).toContain('the boot-config word is 1');
+  });
+
+  it('reports the word as the booted bank on the 4.9.x Compact PRO line, which writes it (TESTING.md 42.50)', () => {
+    /* The 4.9.1.15 dump reads 2 when R runs (42.50) and 1 when B runs (42.36), both in the emulator. 4.9.2.0 is
+     * the same line and is not measured for the word; the rule is the line, not a build list. */
+    for (const version of ['4.9.1.15', '4.9.2.0']) {
+      for (const [word, key] of [
+        [0, 'a'],
+        [1, 'b'],
+        [2, 'r'],
+      ] as const) {
+        const choice = bootChoiceOf(
+          reportWith({
+            cfg0: word,
+            banks: ALL_OK,
+            activeSlotWord: word,
+            profile: 'modern-4x',
+            version,
+          }).report.state,
+        );
+        expect(choice.reportedBooted, `${version} word ${String(word)}`).toBe(key);
+      }
+    }
+  });
+
+  it('keeps the word hidden on the other 4.x lines, and under a profile that does not own the build', () => {
+    /* 4.8.x is measured (above). 4.16.x and 4.18.x are not 4.9.x and are not measured for the word: hidden. */
+    for (const [profile, version] of [
+      ['modern-4x', '4.8.1.7'],
+      ['modern-4x', '4.8.2.1'],
+      ['modern-4x', '4.16.1.7'],
+      ['modern-4x', '4.18.2.0'],
+      ['legacy-auth', '4.9.1.15'],
+    ] as const) {
+      const choice = bootChoiceOf(
+        reportWith({ cfg0: 2, banks: ALL_OK, activeSlotWord: 2, profile, version }).report.state,
+      );
+      expect(choice.reportedBooted, `${profile} ${version}`).toBeNull();
+    }
   });
 
   it('does not report the word as a booted bank on 2016, where it is not checked', () => {

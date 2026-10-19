@@ -185,8 +185,10 @@ $R --camera stream -n 5 --no-hifps              # one status line per second, fr
 
 `--camera` must be given to open a camera; a command with no source refuses. `--fps` measures five seconds after the first frame, and each
 second's median is the median of the instantaneous rates of the intervals that end in it. The checker and the Swift tool agree on the bench
-camera (section 4). Patched parts cannot be streamed from the emulator through `--flash` (no frames: the sensor is attached only for a
-corpus-entry boot), so the emulator's patched rates come from the Python rows below.
+camera (section 4). A patched part streams from the emulator with `--emulator ENTRY --emulator-flash FILE`, which boots it as the build ENTRY names,
+with that build's 32K sensor (FW-V1's `--flash-entry`, TESTING.md 42.42). That needs the FW-V1 branch `emu-sensor` until it is merged.
+Before it, a `--flash` part got no frames, because the sensor was attached only for a corpus-entry boot. The Python rows below are the
+other route; the 1.3.0.8 copy's emulator rate was measured through them.
 
 **The Swift tool** (`tv-jc/macos`, `seek --fps`): the same five-second medians, and `seek stream` for frozen pairs and changed pixels. The Pro
 init is applied only on firmware 4.x and newer.

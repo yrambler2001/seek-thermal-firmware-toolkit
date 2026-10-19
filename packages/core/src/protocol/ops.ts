@@ -144,8 +144,11 @@ export const SAFE_BEFORE_IDENTITY: ReadonlySet<Opcode> = new Set<Opcode>([
   OP.GET_FIRMWARE_INFO,
 ]);
 
-/** Every opcode that can change the camera, plus the info reads that only the
- *  flash path needs. Nothing in here may ever run during a dump. */
+/** Every opcode that can change the camera, plus the two info-read arms
+ *  (SetFirmwareInfoFeatures 0x55 and SetRamDataFeatures 0x5a) that the flash path
+ *  needs and the device-info read needs too: readDeviceInfo, behind the CLI `info`
+ *  and `slots` and the slots page (TESTING.md 42.44, 42.47). Nothing in here may
+ *  ever run during a dump. */
 export const FLASH_OPS: ReadonlySet<Opcode> = new Set<Opcode>([
   OP.SET_FEATURED_FIRMWARE_DATA,
   OP.COMPLETE_MEMORY_UPGRADE,

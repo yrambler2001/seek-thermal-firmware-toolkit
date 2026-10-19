@@ -7,10 +7,12 @@
  *     and keeps the word as DeviceState.cfg0. The NEXT start uses it.
  *   - the active-slot word, roots[8] (GetFirmwareInfo selector 10), kept as DeviceState.activeSlotWord.
  *     It is the app's RAM cell 0x1000AED0, not the bootloader's handoff: the bootloader records the slot
- *     it enters in the warm-boot handoff (bootloader src/startup.c, `handoff->slot`). The 4.x factory app
- *     never writes the cell (TESTING.md 42.43), so the word reads 0 on every 4.x boot. The 2014 and 2016
- *     factory images were not checked for it. Only the 2014 plaintext chain reports it as a bank (below):
- *     0 is slot A, 1 is slot B, 2 is recovery R.
+ *     it enters in the warm-boot handoff (bootloader src/startup.c, `handoff->slot`). The 4.8.x factory
+ *     app never writes the cell (TESTING.md 42.43), so its word reads 0 under every boot word (42.50).
+ *     The 4.9.x Compact PRO does write it, and follows the bank that runs: in the emulator it reads 2 when
+ *     R runs (42.50) and 1 when B runs (42.36). The 2014 and 2016 factory images were not checked for it.
+ *     Only the 2014 plaintext chain and the 4.9.x Compact PRO report it as a bank (below): 0 is slot A,
+ *     1 is slot B, 2 is recovery R.
  *
  * WHICH BANK A START RUNS, from the word (bootloader src/image.c, boot_select_image):
  *   0 or 0xFFFFFFFF: A if it passes the check, else B if it does, else R, which is not checked.
@@ -21,8 +23,9 @@
  * ==================================================================== */
 
 import { identifyFpsImage, FPS_MEASURED_HZ } from '../preservation/fps-patch.js';
-import type { SlotKey } from '../profiles/types.js';
+import type { FirmwareProfile, SlotKey } from '../profiles/types.js';
 import type { DeviceState, SlotState } from '../workflows/types.js';
+import { classifyBuild } from './capability-family.js';
 import { fpsPlanOfBank } from './fps-patch.js';
 import { onPlaintextChain, plainBankVerdict } from './running.js';
 import type { SlotsReport } from './types.js';
@@ -64,8 +67,9 @@ export interface BootChoice {
   readonly runs: SlotKey | null;
   /**
    * The bank the camera reports it entered at its last start, from the active-slot word. Only on the
-   * 2014 plaintext chain; null on every other line, where the word is not established as a boot record
-   * (TESTING.md 42.43), and null when the word is unread or names no bank.
+   * 2014 plaintext chain and the 4.9.x Compact PRO (reportsActiveSlotWord); null on 4.8.x, where the app
+   * never writes the word (TESTING.md 42.43, 42.50), and on 2016, which is not checked. Null too when the
+   * word is unread or names no bank.
    */
   readonly reportedBooted: SlotKey | null;
   /** One sentence: the word's rule and the bank it gives, or what could not be checked. */
@@ -139,6 +143,19 @@ function selectRunning(word: number, accepts: Readonly<Record<SlotKey, Verdict>>
 }
 
 /**
+ * Whether the active-slot word is reported as the bank the camera booted: the 2014 plaintext chain, and
+ * the 4.9.x Compact PRO, which writes the word (42.50). Not 4.8.x, where the factory app never writes it
+ * (42.43, 42.50), and not 2016, which is not checked. The 4.x line is split by the minor number of the
+ * parsed version, the same parse classifyBuild makes; the profile must be modern-4x, or the build is
+ * refused and not reported.
+ */
+function reportsActiveSlotWord(profile: FirmwareProfile, version: string | null): boolean {
+  if (onPlaintextChain(profile, version)) return true;
+  const verdict = classifyBuild(profile, version);
+  return verdict.family === 'modern' && verdict.version?.major === 4 && verdict.version.minor === 9;
+}
+
+/**
  * The bank the next start runs, from the boot-config word and the banks the analysis read. The word
  * alone is not enough: a bank the bootloader refuses is passed over, and recovery R runs when the
  * word asks for it or when A and B both fail, whatever R holds.
@@ -146,10 +163,10 @@ function selectRunning(word: number, accepts: Readonly<Record<SlotKey, Verdict>>
 export function bootChoiceOf(
   state: Pick<DeviceState, 'cfg0' | 'activeSlotWord' | 'byKey' | 'profile' | 'version'>,
 ): BootChoice {
-  /* The word is reported as a bank on the 2014 line only: that is where the page names the booted
-   * bank from it (device-info.ts chainReplay). On 4.x the factory app leaves it 0 (42.43), so it is
-   * not reported there; 2016 is not checked, so it is not reported there either. */
-  const reportedBooted = onPlaintextChain(state.profile, state.version)
+  /* The word is reported as a bank where it is established as one: the 2014 line (where the page names
+   * the booted bank from it, device-info.ts chainReplay) and the 4.9.x Compact PRO (42.50). Not on 4.8.x
+   * (42.43, 42.50), and not on 2016, which is unchecked. */
+  const reportedBooted = reportsActiveSlotWord(state.profile, state.version)
     ? reportedBootedOf(state.activeSlotWord)
     : null;
   if (state.cfg0 === null) {
