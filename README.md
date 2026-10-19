@@ -237,8 +237,8 @@ command are absent from this view. `USBDevice.reset()` is never called either; t
 closes and reopens the handle. Decryption happens entirely in memory on the copy in your browser and
 never touches the device.
 
-Writing lives on its own page, [Firmware and flashing](#firmware-and-flashing), with its own listed
-command set. Nothing in the dump view reaches it.
+Writing lives on the **Work with firmware slots** tab, described in [Firmware and flashing](#firmware-and-flashing).
+Nothing in the dump view reaches it.
 
 ## The v1 full-flash preservation pipeline
 
@@ -549,78 +549,95 @@ The 4.x/Nano tab is read-only, and nothing on it can reach a write.
 
 ### What it shows
 
-**Read slots** (on the **Work with firmware slots** tab) asks the camera what it is, then reads all three
-firmware slots and decrypts them locally. The device info above the bank table comes from the same
-read:
+The **Info** tab (`#/`) and `seek-fw info` both read the camera. **Read firmware version** asks it what
+it is, reads all three firmware slots and decrypts them locally. The **Work with firmware slots** tab
+runs the same read under **Read slots**, then shows the banks next to the write controls. Neither
+writes flash.
 
-|                            |                                                                                                                                                                                    |
-| -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Running firmware           | version and build string from `GetFirmwareInfo`, plus the bootloader's own build string                                                                                            |
-| Serial, platform, USB link | from the device-id RAM block and the info selectors                                                                                                                                |
-| Boot config                | `cfg[0]` at `0x14010000`, which slot the camera booted, and which slot an upgrade would write (rules below)                                                                        |
-| Keys                       | Key A and Key B, read out of the camera's bootloader block and confirmed against a slot's recovered keystream                                                                      |
-| Per-device key             | whether `0x14000218` is programmed                                                                                                                                                 |
-| Each slot                  | firmware version, image id, size, model string, which key encrypts it, whether it passes the bootloader's acceptance sum and `CODE` footer check, and the SHA-256 of its plaintext |
+|                            |                                                                                                                                                                                                                                                                           |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Running firmware           | version and build string from `GetFirmwareInfo`, plus the bootloader's own build string                                                                                                                                                                                   |
+| Serial, platform, USB link | from the device-id RAM block and the info selectors                                                                                                                                                                                                                       |
+| Boot config                | `cfg[0]` at `0x14010000`, which slot the camera booted, and which slot an upgrade would write (rules below)                                                                                                                                                               |
+| Keys                       | Key A and Key B, read out of the camera's bootloader block and confirmed against a slot's recovered keystream                                                                                                                                                             |
+| Per-device key             | whether `0x14000218` is programmed                                                                                                                                                                                                                                        |
+| Each slot                  | firmware version, image id, size, which key encrypts it, whether it passes the bootloader's acceptance sum and `CODE` footer check, whether the camera will boot it, and the SHA-256 of its plaintext. The model string from the footer is in `seek-fw info --json` only. |
 
 Which slot the camera booted depends on the line. On the 2014 chain it is the bank the active-slot word
 records as the camera's last start. On 4.x it is the bank the boot-config word predicts, and there the
 camera's own answer also sets the upgrade target, overriding the prediction.
 
-The read writes no flash. It sets two RAM selectors (`0x55`, `0x5a`) and leaves the vendor window
-unlocked until a power cycle, as [described below](#the-camera-stays-unlocked-until-a-power-cycle).
+The read writes no flash. It sets two RAM selectors (`0x55`, `0x5a`). The identify step before it sends
+the camera's unlock token, which leaves the vendor window unlocked until a power cycle, as
+[described below](#the-camera-stays-unlocked-until-a-power-cycle).
 
-When the upgrade target is the bank the camera booted from, the page and `seek-fw info` show a
-warning: an upgrade run from that camera would overwrite the image it is running. It is only a
-warning, and nothing stops the upgrade.
+When the upgrade target is the bank the camera booted from, the Info tab, the Slots tab and
+`seek-fw info` show a warning: an upgrade run from that camera would overwrite the image it is running.
+It is only a warning, and nothing stops the upgrade.
 
 ### What it writes
 
-Give it a **decrypted** image — the same kind of file this page's `decrypted/*.bin` output contains —
-and it does the packaging for you:
+To write a bank, give the Slots tab, or `seek-fw slots flash`, a **decrypted** image: the same kind of
+file the dump tabs and `seek-fw slots dump` save. On the modern line (2.x, 4.x, 10.x, 42.x and 44.x)
+the tool does the packaging:
 
 1. stamps `header.length` (file `+0x204`) to the real image size;
 2. tunes the reserved adjust word at `+0x238` so the 32-bit word sum over `header.length` bytes is
    `0x0000FFFF`, the bootloader's acceptance target;
-3. encrypts with the Key A it read from your camera;
-4. appends `0xff` padding and a 64-byte `"CODE"` footer at
-   `((header.length>>14)+1)*0x4000 - 0x40`, carrying over the image id, version and model string from
-   the footer already on the device and patching only the length;
-5. shows you the whole plan — target slot, both checksums, footer, payload size, a hex preview —
-   before anything is sent;
-6. streams it in 64-byte chunks and commits.
+3. encrypts the image under keys derived from that camera's own read, so the camera stores it under a
+   key its bootloader tries (usually Key A; see `packages/core/src/slots/write-keys.ts`);
+4. appends `0xff` padding and a 64-byte `"CODE"` footer at `((header.length>>14)+1)*0x4000 - 0x40`. The
+   footer keeps the image id, version and model string from the footer already on the device, and only
+   the length is patched;
+5. shows the plan before anything is sent: the bank, the new image next to what the bank holds now, the
+   payload size in 64-byte chunks, the transfer checksum and any warnings;
+6. streams the payload in 64-byte chunks, commits it, and reads the bank back to compare it with the
+   image that was sent.
 
-Then unplug and replug the camera. The bank switch only takes effect on a real power cycle.
+Nothing is sent until you confirm. Then unplug and replug the camera. A bank is used only at a start, so
+the new image runs after the next power-up.
+
+The other lines are packaged in their own ways. The 2014 plaintext chain takes the image as it is, with
+no key and no footer. The 2016 Compact PRO and the 1.3.0.8 FF build have their own staged forms.
+[Firmware slots](#firmware-slots-list-dump-and-flash-one-bank) has the details.
 
 ### Why the payload is bigger than your image
 
-Each slot holds the encrypted image, padding, and that `CODE` footer. The bootloader reads the footer
-straight out of flash, undecrypted, and takes the normal monolithic boot path **only** if
+On the modern line each bank holds the encrypted image, the padding and that `CODE` footer. The
+bootloader reads the footer straight out of flash, undecrypted, and takes the normal boot path only if
 `footer[0] == "CODE"` and `footer[1] == header.length`.
 
 The camera erases the whole 64 KiB block and writes back only what the host streams, and it never
-writes the footer itself. So a bare-image upload wipes the footer that was there, the bootloader falls
-through to its segmented loader, decrypts a monolithic image as a segment table, and the camera bricks.
-The page always streams the full bank and refuses to send one whose footer does not validate.
+writes the footer itself. So an upload of the bare image would wipe the footer that was there. The
+bootloader would then fall through to its segmented loader, and the camera could be bricked. On this
+line the Slots tab always streams the whole bank, and it refuses to send one whose footer does not
+validate (`assertBankPayload` in `packages/core/src/image/bank.ts`).
 
 The other classic failure is `header.length` not matching the real size. The bootloader sums exactly
-`header.length` bytes, so a stale length makes the slot fail acceptance and the camera quietly boots
-the other bank — "I flashed it but it is still running the old firmware". The page stamps the length
-and balances the sum over that exact range.
+`header.length` bytes, so a stale length makes the slot fail acceptance, and the camera quietly boots
+the other bank. That is how "I flashed it but it is still running the old firmware" happens. The Slots
+tab stamps the length and balances the sum over that exact range.
 
-### Commands it adds
+### Commands a write sends
 
-The dump view's five, plus these — that is the entire additional vocabulary:
+Every slot read sets two RAM selectors. Neither writes flash:
 
-| Opcode | Name                    | Dir | Why                                                                     |
-| ------ | ----------------------- | --- | ----------------------------------------------------------------------- |
-| `0x4e` | GetFirmwareInfo         | IN  | running version, bootloader string, platform, USB speed, boot state     |
-| `0x55` | SetFirmwareInfoFeatures | OUT | selects which of those to return — a selector register, writes no flash |
-| `0x5a` | SetRamDataFeatures      | OUT | arms the 248-byte RAM device-id block so the serial can be read         |
-| `0x50` | SetFeaturedFirmwareData | OUT | streams the payload into the camera's RAM staging buffer                |
-| `0x51` | CompleteMemoryUpgrade   | OUT | the commit — the only command that erases or programs flash             |
+- `0x55` SetFirmwareInfoFeatures selects which fields GetFirmwareInfo returns.
+- `0x5a` SetRamDataFeatures arms the device-id block, so the serial can be read.
 
-`ResetDevice` (`0x59`) is still never sent. There is no raw-block write path, and no code path writes
-the bootloader at `0x14000000` or the recovery slot at `0x14070000`.
+A write also sends:
+
+- `0x52` BeginFirmwareUpgrade arms the bank's 64 KiB window. A dump uses the same command.
+- `0x50` SetFeaturedFirmwareData streams the payload into the camera's RAM staging buffer, 64 bytes at
+  a time.
+- `0x51` CompleteMemoryUpgrade commits the payload. It is the only command that erases or programs
+  flash.
+
+The Slots tab and `seek-fw slots` never send `ResetDevice` (`0x59`). They refuse any window below the
+bank area, so the bootloader at `0x14000000` and the boot-config block are never written. They also
+refuse subcommand 0, the upgrade-target selector, which rewrites `cfg[0]` (`writeWindowOf` in
+`packages/core/src/slots/write.ts`). Bank R can be written, with the extra acknowledgement described
+under [Risk, plainly](#risk-plainly).
 
 ### The keys inside the image, and why the filename carries them
 
@@ -629,31 +646,32 @@ Key A to decrypt an upload, Key B to re-encrypt it into flash. Flash an image wh
 different camera and you have quietly changed which keys your camera will use from then on — every
 later upgrade lands under a key the bootloader cannot try, and the camera stops taking updates.
 
-So a decrypted image is named after the key pair it actually contains:
+So a decrypted image is named after the key pair it contains:
 
 ```
 flash_4m_usb_partial_gap_ff_decrypted_14030000-KeyA-f32ad771…-KeyB-997ed6e5….bin
 ```
 
-The suffix is added **only when the keys are genuinely in that image** — checked, not assumed. The
-keys are locatable by value but not by offset (the pair was found at `0xf54`, `0x9670`, `0x9a3c` and
-`0x9a40` across builds, with no constant word nearby to anchor on), and what makes a value search
-safe is uniqueness: each key must occur exactly once, so there is no ambiguity about which bytes to
-rewrite. They are usually adjacent but need not be — a build may place them apart, and each is
-patched where it is found. An image that does not contain the dump's own pair — because it was built
-for a different key family, or keeps no literal keys — gets no suffix, and the per-slot report says
-so.
+The suffix is added **only when the keys are genuinely in that image** — checked, not assumed. A
+decrypted slot file gets the same suffix when its image holds the camera's own pair. The keys are
+locatable by value but not by offset (the pair was found at `0xf54`, `0x9670`, `0x9a3c` and `0x9a40`
+across builds, with no constant word nearby to anchor on), and what makes a value search safe is
+uniqueness: each key must occur exactly once, so there is no ambiguity about which bytes to rewrite.
+They are usually adjacent but need not be — a build may place them apart, and each is patched where it
+is found. An image that does not contain the dump's own pair — because it was built for a different key
+family, or keeps no literal keys — gets no suffix.
 
-At flash time the filename is the contract:
+At flash time, on the modern line, the filename decides which keys are used:
 
-- **Keys present and both found** → they are rewritten to the target camera's keys before packaging,
-  so the image will encrypt its own future upgrades with keys that camera's bootloader can read. If
-  they are already the target's, nothing changes.
-- **No keys in the name** → refused. There is no way to tell whether the file carries keys for this
-  camera, for another one, or none at all, and the wrong pair quietly stops the camera accepting any
-  later update. The error names the suffix to add if the image does turn out to hold the right pair.
-- **Named keys not both in the file, or either appearing more than once** → refused, saying which
-  check failed. The file has been renamed, edited, or is not the one those keys came from.
+- **The name carries a pair, and both keys occur once.** The image is rewritten to this camera's keys
+  before packaging, so it will encrypt its own future upgrades with keys that camera's bootloader can
+  read. If they are already this camera's keys, nothing changes.
+- **The name has no pair.** The tool looks for this camera's pair in the image, then for the application
+  pairs it knows (`packages/core/src/slots/application-pairs.ts`). It uses the first pair whose two
+  halves each occur exactly once. If neither is found, the file is refused, because a wrong pair would
+  quietly stop the camera accepting later updates.
+- **The named keys are not both in the file, either occurs more than once, or a key sits in the
+  cleartext header.** The file is refused, and the error says which check failed.
 
 The acceptance sum is balanced after the substitution, so the patch costs nothing else.
 
@@ -670,59 +688,79 @@ bootloader's table nor the per-device slot nor anywhere in flash. Each USB upgra
 in the target slot and was then skipped, and the camera carried on booting the other bank — the
 write succeeded and nothing changed.
 
-So this page reports **decryptability and bootability as separate things**. A slot is only marked
-bootable when the key that encrypted it is one the bootloader will actually try. If a slot holds a
-valid image under an unknown key, the page says so, and — because that is direct evidence the
-running application re-keys in a way this bootloader cannot follow — it warns before writing that
-the flash will not be booted. Changing what such a camera runs needs an SPI programmer or SWD/J-Link.
+So the Info tab, the Slots tab and `seek-fw info` report decryptability and bootability as separate
+things. A slot is only marked bootable when the key that encrypted it is one the bootloader will
+actually try. If a slot holds a valid image under any other key, the Slots tab says so after the read.
+If that slot is the one an upgrade writes, the tab warns that a flash through it will not be booted.
+Changing what such a camera runs needs an SPI programmer or SWD/J-Link.
 
-After a commit the page re-reads 576 bytes of the slot, recovers the keystream from the vector table
-alone, and names the key the camera actually stored it under. That is the one thing a clean commit
-does not tell you.
+After a commit the tool reads the bank back and recovers its keystream from the read-back itself. It
+then checks that the bank decrypts to the image that was sent. A clean commit still does not show that
+the camera will boot the bank. After a power cycle, read the slots again: the version and the bank the
+camera reports are what settle it.
 
 ### Risk, plainly
 
-`CompleteMemoryUpgrade` erases a 64 KiB block and repoints the boot config. If the image fails
-acceptance the camera just falls back to a good slot, which is harmless. The dangerous case is an image
-that **passes** acceptance but does not run: the bootloader keeps selecting it, and the bootloader has
-no USB. Recovering from that means writing your dump back with an SPI programmer or over SWD/J-Link.
+`CompleteMemoryUpgrade` erases a 64 KiB bank and programs it. The Slots tab does not change the boot
+config, and it has no control for choosing the boot bank. A write changes the bytes of the bank you
+name, and the camera uses that bank at its next start if the bootloader takes it.
 
-So **Dump the whole flash before writing** is checked by default. Leave it on. The recovery slot at
-`0x14070000` is never touched and stays as a golden copy, but `cfg[0]` has to be rewritten to reach it,
-and that also needs a programmer once the camera stops enumerating.
+If the image fails the bootloader's checks, the camera skips that bank. That is harmless while another
+bank is good. The dangerous case is an image that passes those checks but does not run. The camera
+keeps booting it, and the bootloader has no USB. Recovering from that means writing your dump back with
+an SPI programmer or over SWD/J-Link.
+
+So dump the bank before you write it, and keep the file. **Dump** on the Slots tab and
+`seek-fw slots dump` save it. `seek-fw slots flash` takes no backup for you. **Make N FPS** saves the
+bank before it writes.
+
+Bank R, the recovery bank, can be written too. It is the last image the camera has, and R runs only when
+A and B hold nothing the bootloader takes. Writing R, or the bank the camera boots now, needs an explicit
+acknowledgement: the checkbox on the Slots tab, or `--acknowledge-risk` on the CLI. Without it, nothing
+is sent.
 
 ### Which cameras
 
-The 2018-and-later generation — the `K=0x13579BDF` / acceptance-sum `0xFFFF` profile, which covers the
-Compact, Compact PRO, Compact PRO FF, Compact XR and Nano 300 builds this page has been checked
-against. The 2016 Compact Pro generation uses a different cipher profile and a different upgrade
-selector map; it is detected and refused rather than guessed at, as is any camera whose Key A cannot be
-confirmed against a slot.
+The Slots tab and `seek-fw slots` cover builds **0.8.0.0** and newer. An older build is reported as
+unsupported, with the reason, and nothing is sent to it. Each line can do this:
+
+- **Read and write:** the modern line, 2.x, 4.x, 10.x, 42.x and 44.x (Compact, Compact PRO, Compact XR,
+  Mosaic and Nano), with the `modern-4x` profile.
+- **Read and write:** the 2014 plaintext-chain builds from 0.8.0.0 to 1.3.0.8, the builds listed in
+  `PLAIN_CHAIN_VERSIONS` (`packages/core/src/slots/capability-family.ts`). That includes the 1.3.0.8 8 Hz
+  and 16 Hz FF builds.
+- **Read and write:** the Compact PRO 1.0.3.0 and 1.0.3.2, on the 2016 keystream line.
+- **Read only:** any other 0.x or 1.x build from 0.8.0.0 up. Its banks can be dumped, but nothing is
+  written, because its staging form was never measured.
+- **Refused:** a camera whose build or family cannot be identified, and a camera whose keys cannot be
+  confirmed against a bank. Each is refused with the reason, and nothing is armed.
+
+The rules for each bank on each build are in [Firmware slots](#firmware-slots-list-dump-and-flash-one-bank).
 
 ### How it was verified
 
-Without a camera on the bench, the packaging was checked against real hardware artifacts instead:
+The packaging was checked against real hardware artifacts and in the emulator. The hardware runs are
+under **What has been run** in the Firmware slots section.
 
-- **Byte-identical rebuild.** For ten real 4 MiB dumps across four device generations, decrypting a
-  slot and running the plaintext back through the page's packaging reproduces the bank on the flash —
-  image, padding and footer — byte for byte.
+- **Byte-identical rebuild.** For ten real 4 MiB dumps across four device generations, decrypting a slot
+  and running the plaintext back through the packaging reproduces the bank on the flash, byte for byte:
+  image, padding and footer.
 - **Agreement with the reference tool.** The cipher, acceptance-sum repair, bank payload, footer offset
-  and transfer checksum are byte-identical to `seek_fw_tool.mjs`, the implementation known to have
-  booted a real Compact PRO FF, including for resized images.
-- **A camera emulator.** The upgrade FSM, the boot-slot selection and the key handling were emulated
-  from the reconstructed firmware and bootloader sources, and the page's own code was driven against
-  it: it picks the right slot for `cfg[0]` of 0 and 1, alternates A → B → A across power cycles,
-  leaves the recovery slot bootable, and the slot it writes decrypts back to exactly the bytes that
-  were uploaded — including for an image large enough to move the footer into the next bank.
-- **The refusals.** Bad inputs (misaligned, headerless, still-encrypted, bad stack pointer, ARM reset
-  vector, oversized), a camera that rejects the transfer checksum, a camera that faults mid-stream, and
-  out-of-scope hardware all abort with nothing written.
-- **The dump view is unchanged.** Driven against the same emulator it still issues only the five read
-  opcodes and leaves the camera's flash byte-identical.
-- **Key retargeting, end to end.** The emulator was taught to run the key table inside whatever image
-  it booted, like real hardware does. Flashing a foreign-key image without retargeting reproduces the
-  failure above — the camera comes up running the foreign keys and the next flash lands unbootable —
-  and with retargeting the running keys are the camera's own and every later flash stays bootable.
+  and transfer checksum are byte-identical to `seek_fw_tool.mjs`, the implementation known to have booted
+  a real Compact PRO FF, including for resized images.
+- **Emulator.** The slot path runs against the emulator in `packages/core/test/slots/`. A raw write to
+  bank R reads back identical (`write.emulator.test.ts`). A raw dump matches the emulator's flash
+  (`dump.emulator.test.ts`). The boot choice follows `cfg[0]` (`upgrade-target.emulator.test.ts`).
+- **Refusals.** Bad images are refused before anything is sent. The shape checks are in
+  `assertImageShape` (`packages/core/src/slots/write-image.ts`). A bad transfer checksum, or a status
+  word during staging, stops the write before the commit, and nothing is written
+  (`packages/core/test/slots/write-commit.test.ts`).
+- **Key retargeting.** The image's keys are retargeted, and checked, before any payload is built
+  (`accept.emulator.test.ts`, `write-keys.test.ts`).
+- **Read-only.** The 4.x/Nano dump sends only the commands in `READ_ONLY_OPS`
+  (`packages/core/src/protocol/ops.ts`). The workflow tests check this for every profile
+  (`packages/core/test/workflows.test.ts`), and so does the slot read
+  (`packages/core/test/slots/inspect.test.ts`).
 
 ## Firmware slots: list, dump and flash one bank
 
