@@ -821,10 +821,12 @@ export function safeVersion(version: string | null): string {
  * eight hex digits of the stored bank's own SHA-256, so the two files of one read share it.
  *
  * THE KEY PAIR IN THE NAME. A decrypted file is named with the pair its image holds, the way
- * `decrypt` names its files: `slots flash` retargets an image from the pair its file name carries
- * and refuses a name without one (write-image.ts, retargetImageKeys). So when the image holds this
- * camera's own pair, the suffix is added; when it holds neither, the name stays bare and the flash
- * refuses the file for the reason that is true.
+ * `decrypt` names its files, and `slots flash` retargets an image from the pair its name carries
+ * (write-image.ts, retargetImageKeys). A bare name is accepted too: when both halves of this
+ * camera's pair, or of a known application pair, occur exactly once in the image, that pair is used
+ * (locateOwnKeyPair). So when the image holds this camera's own pair, the suffix is added; when it
+ * holds neither, the name stays bare, and the flash accepts it only if a known application pair
+ * occurs once and refuses it otherwise.
  */
 export function dumpArtifacts(
   version: string | null,
