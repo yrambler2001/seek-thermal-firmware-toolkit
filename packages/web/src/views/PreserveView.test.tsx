@@ -96,6 +96,7 @@ interface Scenario {
   readonly prompt?: PreservePrompt | null;
   readonly lastSave?: RunFileSave | null;
   readonly deliveredCheck?: DeliveredCheck | null;
+  readonly unlockNote?: boolean;
   readonly onConnect?: () => void;
 }
 
@@ -112,6 +113,7 @@ function preserveStub(scenario: Scenario, ran: [PreservePhaseId, PreservePhaseRu
     loading: false,
     lastSave: scenario.lastSave ?? null,
     deliveredCheck: scenario.deliveredCheck ?? null,
+    unlockNote: scenario.unlockNote === true,
     runPhase: (phase: PreservePhaseId, options: PreservePhaseRunOptions = {}): Promise<void> => {
       ran.push([phase, options]);
       return Promise.resolve();
@@ -164,6 +166,26 @@ afterEach(() => {
 });
 
 describe('PreserveView', () => {
+  it('shows the unlock note after a run that sent the token, and no note otherwise', () => {
+    const quiet = renderPreserve({ state: null, connected: true });
+    expect(quiet.container.textContent).not.toContain('stays unlocked');
+    quiet.unmount();
+
+    const { container, unmount } = renderPreserve({
+      state: null,
+      connected: true,
+      unlockNote: true,
+    });
+    const note = [...container.querySelectorAll('[data-slot="alert"]')].find((el) =>
+      el.textContent.includes('stays unlocked'),
+    );
+    expect(note?.textContent).toContain('the camera stays unlocked until a power cycle');
+    expect(note?.textContent).toContain('power-cycle it before you use them');
+    /* information only: phase ① is still offered */
+    expect(runButton(phaseRow(container, 'Read & build')).disabled).toBe(false);
+    unmount();
+  });
+
   it('the image picker is gone — the wizard never asks for a firmware file', () => {
     const { container, unmount } = renderPreserve({ state: null, connected: false });
     expect(container.textContent).not.toContain('Choose plaintext image');

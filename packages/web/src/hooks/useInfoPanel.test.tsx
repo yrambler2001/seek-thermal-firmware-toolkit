@@ -82,6 +82,15 @@ describe('useInfoPanel: the version read', () => {
     unmount();
   });
 
+  it('sends no unlock token on a 4.x build, the build the identify probe would arm on', async () => {
+    /* The Info tab does not run the identify probe, so no 18-byte arm goes out and
+     * the page has no unlock note to show here (TESTING.md 42.57). */
+    const { panel, calls, unmount } = await readOn([4, 18, 2, 0]);
+    expect(panel.result?.gate.permitsArming).toBe(true);
+    expect(calls.some((call) => call.request === OP.BEGIN_FIRMWARE_UPGRADE)).toBe(false);
+    unmount();
+  });
+
   it('says a build older than 0.8.0.0 is read by no tab, and keeps the version it found', async () => {
     const { panel, unmount } = await readOn([0, 3, 0, 1], true);
     expect(panel.result?.version).toBe('0.3.0.1');

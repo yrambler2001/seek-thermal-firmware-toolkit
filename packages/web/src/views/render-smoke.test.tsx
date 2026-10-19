@@ -28,11 +28,13 @@ function reporters(count: number): readonly ReporterHandle[] {
 function dumpStub(
   reporter: ReporterHandle,
   identity: Pick<DumpPanelApi, 'acting' | 'refusal'> = { acting: null, refusal: null },
+  unlockNote = false,
 ): DumpPanelApi {
   return {
     reporter,
     running: false,
     ...identity,
+    unlockNote,
     start: () => Promise.resolve(),
     cancel: () => undefined,
   };
@@ -88,6 +90,23 @@ function renderV4(dump: DumpPanelApi, connected = false) {
 }
 
 describe('V4View', () => {
+  it('shows the unlock note after a dump that sent the token, and no note otherwise', () => {
+    const [a, b] = reporters(2);
+    const quiet = renderV4(dumpStub(a!), true);
+    expect(quiet.container.textContent).not.toContain('stays unlocked');
+    quiet.unmount();
+
+    const { container, unmount } = renderV4(dumpStub(b!, undefined, true), true);
+    const note = [...container.querySelectorAll('[data-slot="alert"]')].find((el) =>
+      el.textContent.includes('stays unlocked'),
+    );
+    expect(note?.textContent).toContain('the camera stays unlocked until a power cycle');
+    expect(note?.textContent).toContain('power-cycle it before you use them');
+    /* information only: the dump can still be started */
+    expect(buttonByText(container, 'Start dump').disabled).toBe(false);
+    unmount();
+  });
+
   it('puts Start dump on the page, and Dump all selectors inside Options', () => {
     const [a] = reporters(1);
     const { container, unmount } = renderV4(dumpStub(a!));

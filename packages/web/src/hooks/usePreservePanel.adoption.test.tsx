@@ -60,6 +60,9 @@ const handed: [PreserveStepId, PreserveRunState][] = [];
  *  start and the open, where the reset puts it. */
 let openingStep: PreserveStepId | null = null;
 const openGates = new Map<PreserveStepId, () => void>();
+/** Which step's session accepts the unlock token before it closes: the 18-byte
+ *  arm a real window arm records through `armWindow` (TESTING.md 42.55). */
+let tokenStep: PreserveStepId | null = null;
 /** The sites the fake patch step records — empty is a patch without the arm
  *  tail's cursor reset, which owes the replug after the drain. */
 let fakePatchSites: { name: string; offset: number; before: number[]; after: number[] }[] = [];
@@ -146,6 +149,12 @@ async function fakeRunStep(
 ): Promise<PreserveStepOutcome> {
   handed.push([step, state]);
   const outcome = fakeOutcome(step, state);
+  if (step === tokenStep) {
+    const session = await opener.open();
+    session.noteBeginAccepted(new Uint8Array(18));
+    await opener.close(session);
+    return outcome;
+  }
   if (step === openingStep) {
     await new Promise<void>((resolve) => {
       openGates.set(step, resolve);
@@ -305,6 +314,7 @@ beforeEach(() => {
   deferreds.clear();
   openingStep = null;
   openGates.clear();
+  tokenStep = null;
   fakePatchSites = [];
   fakeArmResetsCursor = undefined;
   handed.length = 0;
@@ -773,6 +783,33 @@ describe('useDevice — the reconnect is judged by vid/pid', () => {
     const mounted = renderHook(() => useDevice());
     await waitFor(() => mounted.result.current.device === unit);
     expect(mounted.result.current.device).toBe(unit);
+    mounted.unmount();
+  });
+});
+
+describe('the unlock note (information only, TESTING.md 42.57)', () => {
+  it('is shown after a phase whose camera session sent the unlock token', async () => {
+    tokenStep = 'backup';
+    const mounted = mountPanel([fakeCameraUnit(0x0010)]);
+    await waitFor(() => current(mounted).device.device !== null);
+    expect(current(mounted).panel.unlockNote).toBe(false);
+
+    await runTo(mounted, 'read-build', () => current(mounted).panel.state?.nextStep === 'commit');
+
+    expect(current(mounted).panel.unlockNote).toBe(true);
+    /* Information only: the phase ran to its end and the run file was saved. */
+    expect(current(mounted).panel.state?.steps.patch?.status).toBe('done');
+    expect(downloads.length).toBe(1);
+    mounted.unmount();
+  });
+
+  it('is not shown after a phase whose sessions sent no token', async () => {
+    const mounted = mountPanel([fakeCameraUnit(0x0010)]);
+    await waitFor(() => current(mounted).device.device !== null);
+
+    await runTo(mounted, 'read-build', () => current(mounted).panel.state?.nextStep === 'commit');
+
+    expect(current(mounted).panel.unlockNote).toBe(false);
     mounted.unmount();
   });
 });

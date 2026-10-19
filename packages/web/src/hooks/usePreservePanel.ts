@@ -223,6 +223,13 @@ export interface PreservePanelApi {
   readonly lastSave: RunFileSave | null;
   /** The delivered image against the backup, once both are in hand. */
   readonly deliveredCheck: DeliveredCheck | null;
+  /**
+   * True once a phase's camera session on this page sent the unlock token: the
+   * camera then stays unlocked until its next power cycle. Not cleared on a camera
+   * change, because the wizard's own resets re-enumerate the same camera; nothing
+   * is gated on it (TESTING.md 42.57).
+   */
+  readonly unlockNote: boolean;
   runPhase: (phase: PreservePhaseId, options?: PreservePhaseRunOptions) => Promise<void>;
   cancel: () => void;
   saveAgain: () => void;
@@ -284,6 +291,9 @@ export function usePreservePanel(params: PreservePanelParams): PreservePanelApi 
   const [state, setState] = useState<PreserveRunState | null>(null);
   const [lastSave, setLastSave] = useState<RunFileSave | null>(null);
   const [prompt, setPrompt] = useState<PreservePrompt | null>(null);
+  /* Set when a phase's session sent the unlock token (TESTING.md 42.57). Read from
+   * the sessions at each close, below. */
+  const [unlockNote, setUnlockNote] = useState(false);
   /* Clears only the reconnect ask: the camera came back, by the user's pick or
    * by Chrome's own re-grant. */
   const clearReconnect = useCallback((): void => {
@@ -348,7 +358,12 @@ export function usePreservePanel(params: PreservePanelParams): PreservePanelApi 
       patient = false,
     ): { opener: SessionOpener; closeAll: () => Promise<void> } => {
       const opened: WebUsbTransport[] = [];
+      /* The sessions this opener made, so a close can say whether any of them
+       * sent the unlock token before its transport goes. */
+      const sessions: SeekDevice[] = [];
       const closeAll = async (): Promise<void> => {
+        if (sessions.some((session) => session.unlockTokenAccepted)) setUnlockNote(true);
+        sessions.splice(0);
         for (const transport of opened.splice(0)) {
           try {
             await transport.close();
@@ -383,6 +398,7 @@ export function usePreservePanel(params: PreservePanelParams): PreservePanelApi 
               });
               opened.push(transport);
               const client = new SeekDevice(transport, { reporter: rep.reporter, signal });
+              sessions.push(client);
               await transport.open();
               if (instructed) clearReconnect();
               return client;
@@ -916,6 +932,7 @@ export function usePreservePanel(params: PreservePanelParams): PreservePanelApi 
       loading: runner.active === LOAD_PANEL_ID,
       lastSave,
       deliveredCheck,
+      unlockNote,
       runPhase,
       cancel,
       saveAgain,
@@ -930,6 +947,7 @@ export function usePreservePanel(params: PreservePanelParams): PreservePanelApi 
       prompt,
       lastSave,
       deliveredCheck,
+      unlockNote,
       runPhase,
       cancel,
       saveAgain,

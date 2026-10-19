@@ -17,6 +17,7 @@ import { PlatformNotes } from '@/components/PlatformNotes';
 import { Prose } from '@/components/Prose';
 import { RunPanel } from '@/components/RunPanel';
 import { Section } from '@/components/Section';
+import { UnlockNote } from '@/components/UnlockNote';
 import { Button } from '@/components/ui/button';
 import { Disclosure } from '@/components/ui/disclosure';
 import {
@@ -111,6 +112,7 @@ export function V4View({
           lines={dump.reporter.lines}
           trimmed={dump.reporter.trimmed}
         />
+        {dump.unlockNote && <UnlockNote />}
 
         <OptionsDetails
           value={options}

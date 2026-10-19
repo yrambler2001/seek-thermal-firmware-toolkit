@@ -507,3 +507,61 @@ describe('the 4.x/Nano tab reads only its own family', () => {
     unmount();
   });
 });
+
+describe('useDumpPanel: the unlock note (information only)', () => {
+  it('is shown after a dump whose identify probe sent the unlock token, and the dump still packages', async () => {
+    /* The probe's authenticated arm (18 bytes) is accepted by this fake, so the
+     * camera is unlocked by the run and the page says so after it. */
+    const { camera, calls } = scriptedCamera({ version: [4, 18, 2, 0] });
+    const { result, unmount } = await run(camera);
+
+    expect(
+      calls.some((call) => call.request === OP.BEGIN_FIRMWARE_UPGRADE && call.length === 18),
+    ).toBe(true);
+    expect(result.current.panel.unlockNote).toBe(true);
+    /* Information only: the run was not refused and its archive was packaged. */
+    expect(result.current.panel.refusal).toBeNull();
+    expect(downloads).toHaveLength(1);
+    unmount();
+  }, 30_000);
+
+  it('is not shown when the run was refused before the identify probe sent anything', async () => {
+    const { camera, calls } = scriptedCamera({ version: [0, 3, 0, 1], legacy: true });
+    const { result, unmount } = await run(camera);
+
+    expect(result.current.panel.refusal?.code).toBe('profile/unsupported');
+    expect(calls.some((call) => call.request === OP.BEGIN_FIRMWARE_UPGRADE)).toBe(false);
+    expect(result.current.panel.unlockNote).toBe(false);
+    unmount();
+  });
+
+  it('is cleared when the camera changes, because the new camera has not been unlocked', async () => {
+    const { camera } = scriptedCamera({ version: [4, 18, 2, 0] });
+    const generation = { value: 1 };
+    const { result, rerender, unmount } = renderHook(() => {
+      const runner = useRunner();
+      const device: DeviceHandle = { ...deviceHandle(camera), generation: generation.value };
+      const panel = useDumpPanel({
+        id: 'dump',
+        runner,
+        device,
+        form: { ...DEFAULT_OPTIONS_FORM, chunk: String(WINDOW_SIZE) },
+        profileId: 'modern-4x',
+        dirPrefix: 'seek_flash4m_',
+        sweepPrefix: 'seek_selectors_',
+        onOptionsFailure: (failure) => failures.push(failure),
+      });
+      return { panel };
+    });
+
+    await act(async () => {
+      await result.current.panel.start('dump');
+    });
+    expect(result.current.panel.unlockNote).toBe(true);
+
+    generation.value = 2;
+    rerender();
+    expect(result.current.panel.unlockNote).toBe(false);
+    unmount();
+  }, 30_000);
+});

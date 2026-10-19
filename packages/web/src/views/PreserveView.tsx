@@ -33,6 +33,7 @@ import { Panel, PanelTitle } from '@/components/Panel';
 import { Prose } from '@/components/Prose';
 import { RunPanel } from '@/components/RunPanel';
 import { Section } from '@/components/Section';
+import { UnlockNote } from '@/components/UnlockNote';
 import { Alert } from '@/components/ui/alert';
 import {
   AlertDialog,
@@ -241,6 +242,8 @@ export function PreserveView({
           }}
         />
       ))}
+
+      {preserve.unlockNote && <UnlockNote />}
 
       {state !== null && state.nextStep === 'done' && (
         <VerifySummary
