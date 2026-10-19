@@ -10371,3 +10371,122 @@ Setup: the worktree was reset to `refactor/all-firmware-profiles` (4c35a5c). Its
 - The Preserve note is not cleared on a camera swap. The wizard stops on a swap (`stopForSwap`), but a reset's re-enumeration looks the same from the hook, so the hook does not try to tell them apart.
 - 42.55's open item, "a page note on those panels is a decision for the owner", is answered here: Dump and Preserve show it, and Info does not, since it sends nothing.
 - Commits: code `66235b7` on `worktree-agent-a68a3b04f152bfffe`. Nothing was pushed or merged. `plan.md`, FW-V1 and `packages/core` were not changed.
+
+### 42.58 The checker on the camera: a clean refusal after the CLI unlock, the connect inside the window after a power cycle, the 1.3.0.8 default stream publishes no frame, mode 4 on stock 1.3.0.0 as 42.54 gave, and the mode-4 picture against Normal on one scene (2026-10-19)
+
+**Summary.** On the owner's Compact PIR206 (serial `101310HSNEA2`, chip ID `1013CE098ACA`), with the start image restored and dumped again (`cmp` silent):
+- **1. The checker on the camera (plan item 1).**
+  - (a) Three `slots list` and checker runs with no power cycle between: each checker run is refused at its init with the unlock message, exit 1, no stall. After a power cycle the checker connects and streams 1.3.0.0 at about 32 frames a second. [measured]
+  - (b) Five checker connects right after a power cycle, each started when the camera came back on the bus: all five took the trusted 1.3.0.0 reply on the second read, inside the 26-read window, and connected in 44 to 91 ms. One earlier attempt started while the camera was still powered down: all 26 reads failed, and the checker's message blamed the unlock, which was not the cause. [measured]
+  - (c) Stock 1.3.0.8 written to bank A by the CLI and booted: the default connect gets through the 0x37 refusal, but the default stream (Hi FPS on) publishes no frame, exit 0. Normal with `--no-hifps` streams at 5 to 8 frames a second with status 3. `--mode 4` counts status-0 frames. FastRaw (`--mode fast`, Hi FPS) is refused at OUT 0x3e. [measured]
+  - (d) Stock 1.3.0.0 with `--mode 4`, three 20 s runs: 31.8, 27.5 and 27.35 fps (42.54's probe: 32.10, 32.20, 26.75). The checker now counts the frames. [measured]
+- **2. Mode 4 against Normal on one scene (plan item 2).** Stock 1.3.0.0 Normal, stock 1.3.0.0 mode 4 and the patched 32 Hz Normal on bank A, 100 USB frames each after the same 40 s warm-up. Normal's picture carries a per-pixel fixed pattern of about 1,000 counts that is the shutter frame's pattern (r = 0.99). Mode 4's picture does not share it (r = -0.33). Mode 4 has the least temporal noise (6.9 counts per pixel) and no shutter step in its 3.7 s capture. Normal's level steps at each shutter event are 88 to 304 counts RMS, about every 3 s. No scene is visible in any of the pictures. The table and the PNGs are below.
+- **3. End.** The start image restored by J-Link (byte-identical), the end dump `cmp`-silent against the start, sha `50e900c2…01d7d`. The Normal reads after the last power cycle did not settle: 10 of 68 reads were steady at 31.7 to 32.3 fps in every second, and the rest dipped to 16 to 30 fps. [measured]
+
+**Tags.** [measured] is a run on the bench, or a file read in this session. [source] is read from code. [inferred] follows from those.
+
+**Setup.**
+- `git reset --hard 4c35a5c`, the HEAD the brief names. The local `refactor/all-firmware-profiles` is at `65eafb3`, one plan.md-only commit ahead (the 42.57 and 42.58 running line), so the worktree is one plan.md commit behind it. The code is identical. [measured]
+- `npm ci` in the worktree (exit 0), then `npm run build --workspace @seek-fw/core` and `@seek-fw/cli`, both clean; the CLI is `packages/cli/dist/bin.js`. The checker ran from source with `node --import ./e2e/lib/bench/seek-fps/register.mjs`. [measured]
+- Scripts and logs are under `/private/tmp/claude-501/agent-hw4/`: `checker.sh` (each checker run under a 90 s guard), `cycle-and-run.sh` (a channel-2 cycle, then a probe at once), `connect-window-probe.mjs`, `boot-timeline-probe.mjs` and `trusted-read-probe.mjs` (read-only GetFirmwareInfo), `capture.mjs` and `capture.sh` (every raw frame through the checker's `grabBytes`), `analyze.mjs`, `steps.mjs`, `fpn-check.mjs`, `scene-check.mjs` and `zero-slots.mjs`, `restore.sh`, `dump.sh` and `end-reads.sh`. [measured]
+
+**Start.** `start-4m.bin` sha256 `50e900c2…01d7d`, the value the brief expects, read-only. `slots list`: A `ef90c94a` (1.3.0.0, the 32 Hz patch, active), B and R `d91284c6`, boot word 0. [measured]
+
+**1. The checker on the camera.**
+
+(a) The unlock refusal, with no power cycle between the CLI and the checker:
+
+| run | before the checker | checker `stream -n 3` (default options) | result |
+| --- | --- | --- | --- |
+| a1 | `slots list`, exit 0 | exit 1: "the camera refused an init request (control OUT 0x56 -> stall)", then the unlock sentence | refused, no stall |
+| a2 | `slots list`, exit 0 | the same | refused |
+| a3 | `slots list`, exit 0 | the same | refused |
+| a4 (diagnostic) | `slots list`, exit 0; then `trusted-read-probe.mjs` | the probe: 26 raw GetFirmwareInfo reads, all `01 03 00 00 4f 63 74 20`; `readTrustedFirmware` gives 1.3.0.0 in 23 ms. The checker then, exit 1, the same refusal | refused |
+| after a power cycle | channel 2 cycle, 10 s | exit 0: "Seek Compact, firmware 1.3.0.0, serial 1013CE098ACA, 206x156"; t=1 to 3 s frames 7, 39, 71, status 3 | connects and streams |
+
+The trusted-read branch (the window bytes that 42.41 saw) did not show: after the CLI unlock, GetFirmwareInfo answered normally in the one probed run (a4), and every refusal came from the init. [measured; the window-byte refusal is not exercised here]
+
+(b) Connects after a power cycle. Each row is one channel-2 cycle; the times are from the moment the cycle command returned, which is about 0.4 s after the cycle began. `cycle-and-run.sh` starts the checker's own `SeekCamera.connect` once the device has dropped and come back.
+
+| run | back on the bus | connect | GetFirmwareInfo reads | result |
+| --- | --- | --- | --- | --- |
+| b1 (started too early) | 0.27 s, listed while still powered down | failed at 0.83 s | 26 reads, all `usb/transfer-failed`, 0.28 to 0.81 s | refused; the message blamed the unlock |
+| b2 | 3.38 s | OK, 3.39 to 3.44 s | 3.40 ok, 3.42 ok (trusted) | connected |
+| b3 | 3.44 s | OK, 3.45 to 3.54 s | 3.50 ok, 3.52 ok (trusted) | connected |
+| b4 | 3.51 s | OK, 3.52 to 3.56 s | 3.52 ok, 3.55 ok (trusted) | connected |
+| b5 | 3.30 s | OK, 3.30 to 3.35 s | 3.31 ok, 3.33 ok (trusted) | connected |
+| b6 | 3.50 s | OK, 3.50 to 3.56 s | 3.51 ok, 3.53 ok (trusted) | connected |
+
+`boot-timeline-probe.mjs` (one more cycle, read-only): the device listed at 3.415 s after the cycle command returned, the first GetFirmwareInfo answer at 3.425 s, and 268 reads in 6 s, all answering. The checker's window (26 reads, about 0.55 s) therefore covers the camera's start when the checker starts at re-enumeration. [measured] Starting at 0.27 s, the device was listed but not answering, and every read failed inside the window. [measured; the cause is [inferred]: the cycle command returns while the camera is still off, for about 3 s] The checker's message for b1 ("a camera unlocked by a slots command answers this way") is wrong for a camera that was only powered down. [measured; not changed]
+
+(c) Stock 1.3.0.8 on bank A (`2969d0df`, read back `8a11b0dc…`), after a power cycle:
+
+| run | command | result |
+| --- | --- | --- |
+| c1 | `stream -n 6` (defaults: Hi FPS on, Startup with Operation=0 on) | connected with "Startup with Operation=0 refused (connected without it)"; t=1 to 6 s "no frame yet (status 1)"; exit 0 |
+| c2 | `stream -n 8 --no-hifps` | the same connect note; status-3 frames from t=2 s; cumulative 3, 8, 13, 18, 25, 33, 38 frames; no frozen pairs; 95 to 98 % of pixels changed; exit 0 |
+| c3 | `stream -n 8` (a repeat, no power cycle) | "no frame yet (status 28)" at 1 s, then status 1 to 8 s; exit 0 |
+| c4 | `stream -n 8 --mode 4` | connected; 188 status-0 frames counted in 8 s (about 23.5 fps); exit 0 |
+| c5 | `stream -n 5 --mode fast` | "control OUT 0x3e -> stall"; exit 1 |
+
+The 0x37 refusal is caught and the connect goes on, as 42.55 built it (`camera.ts`, `startupOpZeroRefused`). Normal streams with `--no-hifps`. With the default options the stream does not publish. The default Hi FPS switch sends FastRaw (IP 3) when the shutter frame is seen (`camera.ts:607`); 1.3.0.8 refuses it at OUT 0x3e, and `trySendInit` ignores the refusal (`camera.ts:507`), so no status-3 frame follows. [source; the no-frame cause is [inferred] from this, not read off the camera's mode] The checker exits 0 with no frame. Hi FPS is not accepted on 1.3.0.8, as the mask in 42.54 has it. [measured]
+
+(d) Stock 1.3.0.0 with `--mode 4` (the checker, after the stock write and a power cycle), three consecutive 20 s runs on one boot:
+
+| run | frames in 20 s | whole-run fps | per-second frames | status | 42.54 probe, same build and mode |
+| --- | --- | --- | --- | --- | --- |
+| 1 | 636 | 31.8 | 30 to 33 in every second | 0 | 642 frames, 32.10 fps |
+| 2 | 550 | 27.5 | 20 to 32; dips at 4 to 9 s and 12 to 17 s | 0 | 644 frames, 32.20 fps |
+| 3 | 547 | 27.35 | 21 to 32; dips at 3 to 15 s, then 32 | 0 | 535 frames, 26.75 fps |
+
+Run 1 holds about 32 fps; runs 2 and 3 have the 20 to 27 fps stretches that 42.54 recorded for its run 3. The checker's mode-4 frame count (42.55) gives rates close to the probe's, in kind and in size. [measured; the cause of the dips is not established, as in 42.54]
+
+**2. Mode 4 against Normal on one scene (plan item 2).**
+
+Method. Each capture: a channel-2 cycle and 10 s, then the checker's connect (default options; Hi FPS off for Normal; `reinit(4)` for mode 4), a 40 s warm-up on the stream, then 100 USB frames recorded by `capture.mjs`. Recording at `grabBytes` keeps the status-1 shutter frames. Pixels are the checker's `SeekFrame` decode. The three captures: stock 1.3.0.0 Normal (8 Hz, `862717a8` on bank A), stock 1.3.0.0 mode 4 (`862717a8`), and the patched 32 Hz Normal (`ef90c94a`, bank A restored by J-Link first, see 3). [measured]
+
+Excluded slots. 2,158 to 2,160 slots read 0 in every picture frame of all three captures, on a fixed lattice (row 0 at x = 5, 25, 55, 70, 85 and so on, about one word in 15). They are not counted in any statistic. [measured] They are stream words, not sensor pixels [inferred]; the checker's dead-pixel map counts them as dead [source, `deadPixelMap`]. One row-0 slot holds the status word (3, 0 or 0x3fff), so each capture has one "stuck" slot that is a header, not a pixel. [measured]
+
+| | stock Normal (8 Hz) | stock mode 4 | patched Normal (32 Hz, bank A) |
+| --- | --- | --- | --- |
+| USB frames (status) | 100 (3: 92, 1: 4, 6: 4) over 13.3 s | 100 (0: 100) over 3.7 s | 100 (3: 98, 1: 1, 6: 1) over 3.5 s |
+| mean level, counts (per-frame mean range) | 5,770 (5,746 to 5,803) | 5,700 (5,695 to 5,704) | 5,857 (5,844 to 5,880) |
+| temporal noise, per-pixel std: mean / median | 38.8 / 23.6 | 6.9 / 6.7 | 24.3 / 12.4 |
+| temporal noise with each frame's mean removed | 29.2 | 6.5 | 25.4 |
+| temporal noise inside one shutter segment (mean over pixels) | 4.6, 8.7, 9.0, 8.7, 7.7 | 6.9 | 6.5, 11.1 |
+| level step at each shutter event, RMS of the per-pixel mean | 261, 88, 121, 240 | none | 304 |
+| FPN: std of the per-pixel mean | 1,001 | 1,100 | 995 |
+| FPN: 7x7 high-pass std | 987 | 1,070 | 980 |
+| picture minus its own shutter frame: mean / spatial std | -957 / 194 | no shutter frame | -860 / 164 |
+| mean picture against the stock Normal shutter frame (r) | 0.990 | -0.33 | 0.78 (against its own shutter, 0.992) |
+| shutter (status 1) events | 4, at capture indices 11, 34, 57 and 80 (3.0 to 3.3 s apart) | 0 in 100 frames | 1, at index 28 |
+| excluded zero slots / stuck valid slots | 2,158 / 1 (row-0 status word) | 2,160 / 1 (row-0 word) | 2,158 / 1 (row-0 word) |
+| frame pairs changed / frozen | 92.0 % / 0 | 94.8 % / 0 | 94.8 % / 0 |
+
+Reading. [measured unless marked]
+- Mode 4 has the steadiest level and the least temporal noise, with no shutter step in its 3.7 s capture. The warm-up's statuses were not kept, so that is the capture only.
+- Normal's temporal noise is mostly the level step at each shutter event. Inside one segment it is 5 to 11 counts, the same order as mode 4. The steps are 88 to 304 counts RMS, about every 3 s. [the link from the steps to the flat-field re-reference is [inferred]]
+- Neither mode's picture is corrected for its fixed pattern in the checker's default stream. The pattern is about 1,000 counts in both. Mode 4's pattern is not the Normal shutter's (r = -0.33), so the Normal shutter frame cannot serve as mode 4's reference. A host-side mode 4 would need its own reference; not tested.
+- No scene is visible. After the shutter frame is subtracted, the Normal picture is 860 to 960 counts below it, with 160 to 190 counts of spatial spread, and it shows no structure. The view is effectively uniform. Whether a lens cap is on was not known and is not checked; a cap or a uniform field fits the data [inferred].
+- Warm-up rates: patched Normal 20 to 33 fps, stock mode 4 14 to 32 fps, stock Normal 6 to 8 fps (per-second counts in `capture/*.log`).
+- For the owner's question, these numbers do not decide it. Mode 4 gives the steadier level and the lower temporal noise, but it has no flat-field reference in the stream. The patched Normal has the reference, and its shutter steps are about 300 counts. [inferred from the table]
+
+PNGs under `/private/tmp/claude-501/agent-hw4/frames/`: `stock-normal-picture.png`, `stock-mode4-picture.png` and `patched-normal-picture.png` (the first picture frame, 2,500 to 9,500 counts); `*-temporal-std.png` (per-pixel std, 0 to the 99.5th percentile); `stock-normal-shutter-frame.png` and `patched-normal-shutter-frame.png`; `stock-normal-minus-shutter.png` (the Normal picture minus its shutter, -1,200 to +1,200); `stock-mode4-minus-normal-shutter.png` (a cross-capture test, not a flat-field); `*-picture-fixed-scale.png` (the same window); and `summary.json`. Zero slots show as the mean of their neighbours in the pictures.
+
+**3. End.**
+- Restore before step 2, to return the patched bank A for the Normal capture: `restore-1.log`, "plan: 1 of 64 blocks differ -> 0x14050000 +0x10000", verified, "DONE: the part reads back byte-identical". [measured]
+- End restore: `restore-2.log`, the same DONE line (`50e900c2…01d7d`). End dump `end-4m.bin`: sha256 `50e900c2…01d7d`. `cmp start-4m.bin end-4m.bin` printed nothing and exited 0. [measured]
+- Normal reads after the end restore, a channel-2 cycle and 10 s, then `--fps --mode normal --no-hifps`, 68 reads on one boot (`end-reads/end-normal-1.log` to `end-normal-68.log`, read 1 to 16 in the first pass, the rest after it). Reads 1 to 20 had no steady read. Steady reads (all five 5 s medians at 31.7 to 32.3 fps): 21, 22, 33, 36, 37, 40, 44, 45, 65 and 66. Reads 65 and 66 gave 32.13 to 32.21 fps. Read 68 gave 16.8 to 32.2. The stream did not settle in the sense 42.54 used (a run of steady reads). [measured; the cause is not established]
+
+**Not measured or open.**
+- The 1.3.0.8 default stream's cause is read from the source (the refused FastRaw init and the ignored refusal). The camera's mode after the refusal was not read.
+- The window-byte refusal of the trusted read was not exercised: no unlocked connect showed window bytes. The checker's untrusted-reply branch is still unseen on a real camera.
+- The checker's b1 message blames the unlock for a camera that was only powered down. Reported, not changed.
+- The zero lattice: stream words or dead pixels. The checker treats them as dead; the camera's meaning is not established.
+- Mode 4's warm-up statuses were not kept. The shutter count for mode 4 is from the 100-frame capture only.
+- The scene: no known target and no check of a lens cap. One capture per mode, so no repeat for noise.
+- The 1.3.0.8 mode-4 rate (c4, 23.5 fps in 8 s) is below 42.54's 28.7 to 31.9 whole-run; it was run once.
+- The patched Normal stream did not settle in 68 reads after the last power cycle. The shape is the one 42.27 and 42.41 describe; its cause is not established.
+- `packages/cli/test/real-camera-probe.test.ts` was not run, and no vitest suite was run in this section. Nothing was pushed or merged, and `plan.md`, FW-V1 and the product code were not changed.
+
+**Commits.** This section only, on branch `worktree-agent-a547d12fae60cc5fd`; the commit hash is in the report.
