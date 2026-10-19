@@ -42,6 +42,11 @@ Flags, as in `main.swift`: `--mode normal|fast|raw`, `--no-hifps`, `--no-opzero`
 `--raw-min N`, `--raw-max N`, `-n SECONDS`, and the presses `--nuc`, `--big-nuc`, `--shutter-close`,
 `--shutter-open`. `snapshot` and `deadpixels` are not ported (they need the Swift image renderer).
 
+`--in-flight 1..4` sets how many bulk INs are kept pending for each frame (default 3; `1` is one at a time, as
+before TESTING.md 42.75). A USB stack that takes fewer runs with that many: node-usb 3.1.0 on the bench takes one, so the
+default reads one at a time there, and `--in-flight 2` or `3` is refused with a message. `stream` and `--fps` end with
+the count they used.
+
 **Normal means `--no-hifps`.** "Init Hi FPS" is on by default, as in the panel: the camera's first shutter
 frame switches a Normal stream to FastRaw (IP mode 3), which is about 32 fps. Without `--no-hifps` the `--fps`
 line is a Hi FPS line, not a Normal one.
@@ -69,7 +74,8 @@ Only the requests the Swift tool sends (the lists are `CHECKER_REQUESTS_IN` and 
   it; three times at disconnect, and three times before an init on a build that took no 0x37), `0x3E`
   SetImageProcessingMode (the mode), `0x53` ImageData (one frame credit per frame), `0x54`, `0x55`, `0x56` the rest
   of the classic and Pro inits.
-- Bulk IN on endpoint 1 (0x81): the frame bytes, 64896 (Compact) or 177840 (Pro).
+- Bulk IN on endpoint 1 (0x81): the frame bytes, 64896 (Compact) or 177840 (Pro). One credit per frame, sent after the
+  frame's last byte; the INs for a frame are kept pending as `--in-flight` says (TESTING.md 42.74, 42.75).
 
 It never sends a flash write or a reset (`0x50`, `0x51`, `0x52`, `0x59`). `0x5A` is the one setter of the info read
 (core's `FLASH_OPS` lists it with the other info-read arms); it changes no flash and no image. The Compact Pro init is used

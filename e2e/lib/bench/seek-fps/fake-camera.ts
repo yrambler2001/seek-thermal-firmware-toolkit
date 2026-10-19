@@ -13,7 +13,7 @@ import type {
   WebUsbOutTransferResult,
 } from '../../../../packages/core/src/protocol/webusb.js';
 import { SeekError } from '../../../../packages/core/src/errors.js';
-import { COMPACT_FRAME_BYTES, PRO_FRAME_BYTES } from './frame.js';
+import { COMPACT_FRAME_BYTES, COMPACT_HEADER_BYTES, PRO_FRAME_BYTES } from './frame.js';
 import type { WebUsbBulkDevice } from './link.js';
 
 export interface LoggedTransfer {
@@ -57,10 +57,38 @@ export interface FakeCameraOptions {
    * family refuses mode 3 (FastRaw, Init Hi FPS) at 0x3e and takes mode 8 (TESTING.md 42.58).
    */
   readonly refuseModes?: readonly number[];
+  /**
+   * The camera's own transfer size for a payload part (16,224 bytes on the bench). A frame goes out as device
+   * transfers of this size, and a header-form frame (0x8200) starts with its 1,664-byte header (TESTING.md 42.74).
+   */
+  readonly frameTransferBytes?: number;
+  /** A slow host: each bulk IN's data reaches the checker this many milliseconds after the camera sent it. */
+  readonly hostDelayMs?: number;
+  /** The Nth bulk IN (counting from 1) fails with a transfer error. */
+  readonly failIn?: number;
+  /** The Nth bulk IN (counting from 1) is stalled. */
+  readonly stallIn?: number;
+  /** A zero-length packet is sent before the device transfers with these indexes (counting from 0). */
+  readonly zeroLengthBefore?: readonly number[];
+}
+
+/** A bulk IN the checker has posted and the camera has not answered yet. */
+interface PendingIn {
+  readonly length: number;
+  readonly resolve: (result: WebUsbInTransferResult) => void;
+  readonly reject: (error: Error) => void;
+  timer: ReturnType<typeof setTimeout> | undefined;
 }
 
 const SET_IMAGE_PROCESSING_MODE = 0x3e;
 const SET_RAM_DATA_FEATURES = 0x5a;
+const IMAGE_DATA = 0x53;
+/** The payload transfer size of a Compact frame, and the header's (TESTING.md 42.74). */
+const PAYLOAD_TRANSFER_BYTES = 16224;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 /**
  * The device-id block (core's readSerial reads it): the header 01 00 31 f7, the chip id's bytes at +4, the ASCII serial
@@ -120,13 +148,42 @@ export class FakeCamera implements WebUsbDevice, WebUsbBulkDevice {
   private readonly refuseModes: readonly number[];
   private readonly infoFault: 'transfer' | 'timeout' | undefined;
   private infoStalls: number;
-  private stream: Uint8Array[];
+  private readonly stream: Uint8Array[];
   private headIndex = 0;
   /** The next byte the window reader serves from the device-id block; 0 until SetRamDataFeatures arms it. */
   private blockCursor = 0;
   private blockArmed = false;
+  private readonly frameTransferBytes: number;
+  private readonly hostDelayMs: number;
+  private readonly failIn: number;
+  private readonly stallIn: number;
+  private readonly zeroLengthBefore: ReadonlySet<number>;
+  /** The camera's transfers for the frame in progress, not yet answered: a zero-length entry is a ZLP. */
+  private queue: Uint8Array[] = [];
+  /** The bulk INs the checker has posted and the camera has not answered, oldest first. */
+  private readonly waiting: PendingIn[] = [];
+  private inCount = 0;
+  private transferNo = 0;
+  private lastFrame: Uint8Array | null = null;
+  /** ImageData credits received. */
+  credits = 0;
+  /** Credits that arrived while the camera still held a transfer: the firmware cancels those (rpc_cmds.c). */
+  creditsWithDataQueued = 0;
+  /** Camera transfers that a credit cancelled. A correct checker leaves none. */
+  cancelledByCredit = 0;
+  /** Bulk INs the checker cancelled while they were pending. */
+  cancelledIns = 0;
+  /** Bulk INs posted and not yet completed to the checker. */
+  private inFlightIns = 0;
+  /** The most bulk INs in flight at once: the tests' measure of the checker's in-flight count. */
+  maxPendingIns = 0;
 
   constructor(options: FakeCameraOptions = {}) {
+    this.frameTransferBytes = options.frameTransferBytes ?? PAYLOAD_TRANSFER_BYTES;
+    this.hostDelayMs = options.hostDelayMs ?? 0;
+    this.failIn = options.failIn ?? 0;
+    this.stallIn = options.stallIn ?? 0;
+    this.zeroLengthBefore = new Set(options.zeroLengthBefore ?? []);
     this.productId = options.productId ?? 0x0010;
     this.serialNumber = options.serialNumber === undefined ? null : options.serialNumber;
     this.firmwareHeads = options.firmwareHeads ?? [[1, 3, 0, 0, 0, 0, 0, 0]];
@@ -227,27 +284,139 @@ export class FakeCamera implements WebUsbDevice, WebUsbBulkDevice {
       this.blockArmed = true;
       this.blockCursor = 0;
     }
+    if (setup.request === IMAGE_DATA) this.credit(bytes);
     return { status: 'ok', bytesWritten: bytes.length };
   }
 
-  /** Bulk IN on endpoint 1: the next bytes of the scripted stream; a timeout when there are none. */
-  async transferIn(endpointNumber: number, length: number): Promise<WebUsbInTransferResult> {
+  /**
+   * One frame credit (ImageData). The camera releases the next frame onto its transfer queue, as a header-form frame
+   * (0x8200) or a body-only one (0x7EC0). A transfer it still holds is cancelled, as the firmware does.
+   */
+  private credit(data: Uint8Array): void {
+    this.credits += 1;
+    if (this.queue.length > 0) {
+      this.creditsWithDataQueued += 1;
+      this.cancelledByCredit += this.queue.length;
+      this.queue = [];
+    }
+    let frame = this.stream.shift();
+    if (frame === undefined && this.endless) frame = this.lastFrame ?? compactFrame(3, 5000);
+    if (frame === undefined) {
+      /* no frame is left: the INs waiting for one end now, as a stream that has run out does */
+      this.failWaiting('transfer was cancelled');
+      return;
+    }
+    this.lastFrame = frame;
+    this.enqueue(frame, (data[1] ?? 0) === 0x82);
+    this.serve();
+  }
+
+  /** Splits a frame into the camera's transfers: the header (when there is one), then payload parts. */
+  private enqueue(frame: Uint8Array, header: boolean): void {
+    const sizes: number[] = [];
+    let left = frame.length;
+    if (header) {
+      const n = Math.min(COMPACT_HEADER_BYTES, left);
+      sizes.push(n);
+      left -= n;
+    }
+    while (left > 0) {
+      const n = Math.min(this.frameTransferBytes, left);
+      sizes.push(n);
+      left -= n;
+    }
+    let at = 0;
+    for (const n of sizes) {
+      if (this.zeroLengthBefore.has(this.transferNo)) this.queue.push(new Uint8Array(0));
+      this.queue.push(frame.slice(at, at + n));
+      at += n;
+      this.transferNo += 1;
+    }
+  }
+
+  /** Answers waiting INs from the queue, oldest first. A zero-length transfer answers an IN with no bytes. */
+  private serve(): void {
+    for (
+      let head = this.queue[0];
+      head !== undefined && this.waiting.length > 0;
+      head = this.queue[0]
+    ) {
+      const entry = this.waiting.shift();
+      if (entry === undefined) break;
+      if (entry.timer !== undefined) clearTimeout(entry.timer);
+      if (head.length === 0) {
+        this.queue.shift();
+        entry.resolve({ status: 'ok', data: new DataView(new ArrayBuffer(0)) });
+        continue;
+      }
+      const take = Math.min(entry.length, head.length);
+      const out = head.slice(0, take);
+      if (take === head.length) this.queue.shift();
+      else this.queue[0] = head.slice(take);
+      entry.resolve({
+        status: 'ok',
+        data: new DataView(out.buffer, out.byteOffset, out.byteLength),
+      });
+    }
+  }
+
+  /** Ends every waiting IN with `reason` (a cancel, or a stream with nothing left to send). */
+  private failWaiting(reason: string): void {
+    for (const entry of this.waiting.splice(0)) {
+      if (entry.timer !== undefined) clearTimeout(entry.timer);
+      entry.reject(new Error(reason));
+    }
+  }
+
+  /**
+   * Bulk IN on endpoint 1. It is answered from the camera's queue, oldest IN first, and waits for a credit when
+   * the queue is empty. A deadline ends it as a timeout (the transfer's own, as node-usb does). With nothing left
+   * to send, it ends at once, so a stream that has run out does not hold the checker.
+   */
+  async transferIn(
+    endpointNumber: number,
+    length: number,
+    timeoutMs = 3000,
+  ): Promise<WebUsbInTransferResult> {
     this.log.push({ dir: 'bulk', request: endpointNumber, value: 0, index: 0, data: [length] });
-    if (this.endless) {
-      await new Promise((resolve) => setImmediate(resolve));
-      if (this.stream.length === 0) this.stream.push(compactFrame(3, 5000));
+    this.inCount += 1;
+    if (this.inCount === this.failIn) throw new Error('the device has gone');
+    if (this.inCount === this.stallIn) return { status: 'stall' };
+    if (this.queue.length === 0 && this.stream.length === 0 && !this.endless) {
+      throw new Error('transfer was cancelled');
     }
-    const head = this.stream[0];
-    if (head === undefined) throw new Error('transfer was cancelled');
-    const take = Math.min(length, head.length);
-    const out = head.slice(0, take);
-    if (take === head.length) {
-      this.stream.shift();
-      if (this.endless && this.stream.length === 0) this.stream.push(head);
-    } else {
-      this.stream[0] = head.slice(take);
+    /* in flight: posted and not yet completed to the checker, whether the camera answered it at once or later */
+    this.inFlightIns += 1;
+    this.maxPendingIns = Math.max(this.maxPendingIns, this.inFlightIns);
+    try {
+      const result = new Promise<WebUsbInTransferResult>((resolve, reject) => {
+        const entry: PendingIn = { length, resolve, reject, timer: undefined };
+        entry.timer = setTimeout(() => {
+          const at = this.waiting.indexOf(entry);
+          if (at >= 0) this.waiting.splice(at, 1);
+          reject(Object.assign(new Error('timed out'), { name: 'TimeoutError' }));
+        }, timeoutMs);
+        this.waiting.push(entry);
+        this.serve();
+      });
+      const answered = await result;
+      /* a real transfer completes on a later turn of the event loop: a stream loop must not starve its timers */
+      await sleep(this.hostDelayMs);
+      return answered;
+    } finally {
+      this.inFlightIns -= 1;
     }
-    return { status: 'ok', data: new DataView(out.buffer, out.byteOffset, out.byteLength) };
+  }
+
+  /** Cancels the bulk INs the checker has pending on the endpoint. The camera's own queue is left as it is. */
+  cancelTransfers(): void {
+    this.cancelledIns += this.waiting.length;
+    this.failWaiting('transfer was cancelled');
+  }
+
+  /** The bulk INs pending now. */
+  get pendingIns(): number {
+    return this.waiting.length;
   }
 }
 

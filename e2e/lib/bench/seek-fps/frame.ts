@@ -22,6 +22,8 @@ export const PRO_WIDTH = 320;
 export const PRO_HEIGHT = 240;
 /** The bulk length of one Compact frame (ImageData wValue 0x7EC0 halfwords). */
 export const COMPACT_FRAME_BYTES = 64896;
+/** The header transfer that the 0x8200 credit sends ahead of the body (TESTING.md 42.74, section 1.5). */
+export const COMPACT_HEADER_BYTES = 1664;
 /** The bulk length of one Pro frame (ImageData 0x15B58 halfwords). */
 export const PRO_FRAME_BYTES = 177840;
 

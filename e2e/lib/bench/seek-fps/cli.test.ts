@@ -81,11 +81,107 @@ describe('parseArgs (the Swift main.swift flags)', () => {
   });
 });
 
-/** A session over a fake camera, which the command closes. */
-function sessionOver(fake: FakeCamera): CameraSession {
-  const link = seekLink({ control: fake, bulk: fake, api: 'fake camera' });
+/** A session over a fake camera, which the command closes. `maxBulkIn` is the USB stack's limit (one, as node-usb). */
+function sessionOver(fake: FakeCamera, maxBulkIn = 1): CameraSession {
+  const link = seekLink({ control: fake, bulk: fake, api: 'fake camera', maxBulkIn });
   return { link, clock: () => performance.now() / 1000, release: () => link.close() };
 }
+
+describe('--in-flight: the bulk INs kept pending for each frame (TESTING.md 42.75)', () => {
+  it('defaults to three, and the command line did not name it', () => {
+    const a = parsed(['stream', '--camera']);
+    expect([a.inFlight, a.inFlightGiven]).toEqual([3, false]);
+  });
+
+  it('takes one to four, and records that it was named', () => {
+    for (const n of [1, 2, 3, 4]) {
+      const a = parsed(['stream', '--camera', '--in-flight', String(n)]);
+      expect([a.inFlight, a.inFlightGiven]).toEqual([n, true]);
+    }
+  });
+
+  it('refuses zero, five, a non-number, a negative, a fraction, an empty value and a missing value, with the bounds named', () => {
+    for (const bad of ['0', '5', 'x', '-1', '1.5', '']) {
+      expect(failure(['stream', '--camera', '--in-flight', bad])).toBe(
+        `--in-flight needs a number from 1 to 4 (got ${bad})`,
+      );
+    }
+    expect(failure(['stream', '--camera', '--in-flight'])).toBe(
+      '--in-flight needs a number from 1 to 4 (got nothing)',
+    );
+  });
+
+  it('on a stack that takes one IN at a time: an explicit 3 is refused before anything is sent; the default runs with one and says so', async () => {
+    const explicit = capture();
+    const refused = new FakeCamera({
+      productId: 0x0010,
+      frames: [compactFrame(3, 5000)],
+      endless: true,
+    });
+    const refusedCode = await runSeekFps(
+      ['stream', '-n', '1', '--camera', '--in-flight', '3'],
+      () => Promise.resolve(sessionOver(refused)),
+      explicit.io,
+    );
+    expect(refusedCode).toBe(1);
+    expect(explicit.err[0]).toMatch(
+      /^seek: --in-flight 3: this USB stack takes 1 bulk IN at a time/,
+    );
+    expect(refused.log).toHaveLength(0);
+
+    const dflt = capture();
+    const fallback = new FakeCamera({
+      productId: 0x0010,
+      frames: [compactFrame(3, 5000)],
+      endless: true,
+    });
+    const code = await runSeekFps(
+      ['stream', '-n', '1', '--camera'],
+      () => Promise.resolve(sessionOver(fallback)),
+      dflt.io,
+    );
+    expect(code).toBe(0);
+    expect(dflt.out.at(-1)).toBe(
+      'bulk INs in flight per frame: 1 (the default is 3; this USB stack takes 1)',
+    );
+    expect(dflt.err).toEqual([]);
+    expect(fallback.maxPendingIns).toBe(1);
+  });
+
+  it('on a stack that takes four, --in-flight 3 is used as asked, and the run says so', async () => {
+    const io = capture();
+    const fake = new FakeCamera({
+      productId: 0x0010,
+      frames: [compactFrame(3, 5000)],
+      endless: true,
+    });
+    const code = await runSeekFps(
+      ['stream', '-n', '1', '--camera', '--in-flight', '3'],
+      () => Promise.resolve(sessionOver(fake, 4)),
+      io.io,
+    );
+    expect(code).toBe(0);
+    expect(io.out.at(-1)).toBe('bulk INs in flight per frame: 3');
+    expect(fake.maxPendingIns).toBe(3);
+  });
+
+  it('a frame read that fails during the run is reported on stderr, and the run still measures', async () => {
+    const io = capture();
+    const fake = new FakeCamera({
+      productId: 0x0010,
+      frames: [compactFrame(3, 5000)],
+      endless: true,
+      failIn: 6,
+    });
+    const code = await runSeekFps(
+      ['stream', '-n', '2', '--camera', '--in-flight', '3'],
+      () => Promise.resolve(sessionOver(fake, 4)),
+      io.io,
+    );
+    expect(code).toBe(0);
+    expect(io.err).toEqual(['seek: 1 frame read(s) failed; the last: the device has gone']);
+  });
+});
 
 function capture(): {
   out: string[];

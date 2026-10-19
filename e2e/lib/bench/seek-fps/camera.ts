@@ -27,6 +27,7 @@ import { legacyReaderOp } from '../../../../packages/core/src/profiles/legacy-au
 import { SeekError } from '../../../../packages/core/src/errors.js';
 import {
   COMPACT_FRAME_BYTES,
+  COMPACT_HEADER_BYTES,
   COMPACT_HEIGHT,
   COMPACT_WIDTH,
   PRO_FRAME_BYTES,
@@ -35,6 +36,15 @@ import {
   SeekFrame,
 } from './frame.js';
 import { FRAME_ENDPOINT, type SeekLink } from './link.js';
+import {
+  FRAME_TIMEOUT_MS,
+  FrameReader,
+  IN_FLIGHT_MAX,
+  IN_FLIGHT_MIN,
+  type FrameReadOptions,
+} from './frame-read.js';
+
+export { FRAME_TIMEOUT_MS } from './frame-read.js';
 
 /** The Pro is product 0x0011; the Compact and Compact XR are 0x0010 (Swift connect). */
 export const PRO_PRODUCT_ID = 0x0011;
@@ -128,8 +138,30 @@ export interface SeekDeviceInfo {
 /** Firmware-info reads at connect: up to this many, until byte 0 is non-zero (Swift connect). */
 export const FIRMWARE_INFO_READS = 26;
 const FIRMWARE_INFO_GAP_MS = 20;
-/** The frame bulk read's deadline (Swift readExact's default). */
-export const FRAME_TIMEOUT_MS = 3000;
+
+/**
+ * The ImageData credits (TESTING.md 42.74, section 1.4). The value is the bulk length in halfwords.
+ * `body` is what the checker has always sent (0x7EC0, 64,896 bytes). `header` (0x8200) sends the
+ * 1,664-byte header ahead of the body, 66,560 bytes in all.
+ */
+export const CREDIT = {
+  body: { data: [0xc0, 0x7e, 0, 0], bytes: COMPACT_FRAME_BYTES },
+  header: { data: [0x00, 0x82, 0, 0], bytes: COMPACT_HEADER_BYTES + COMPACT_FRAME_BYTES },
+} as const;
+/** The Pro's credit (0x15B58 halfwords, sent as its own request), and its frame. */
+const PRO_CREDIT = { data: [0x58, 0x5b, 0x01, 0x00], bytes: PRO_FRAME_BYTES } as const;
+
+/** How the frame reads are made: the bulk INs in flight, their deadline, and the Compact credit form. */
+export interface FrameReadSettings extends FrameReadOptions {
+  readonly credit: keyof typeof CREDIT;
+}
+
+/** The library default is one bulk IN at a time, the checker's behaviour before TESTING.md 42.75. */
+export const DEFAULT_FRAME_READ: FrameReadSettings = {
+  inFlight: 1,
+  timeoutMs: FRAME_TIMEOUT_MS,
+  credit: 'body',
+};
 
 /** Whether the Compact Pro init applies: a Compact (never a Pro), the option on, firmware major >= 4. */
 export function usesCompactProInit(
@@ -333,6 +365,13 @@ export class SeekCamera {
   lastStatus = 0;
   lastDeviceTemp = 0;
   lastFrameCount = 0;
+  /** Frames read whole, the calibration reads included. */
+  framesRead = 0;
+  /**
+   * Frame reads that failed (a timeout, a stall, a transfer error, or too many bytes). Each one is also in
+   * `lastError`. A run that reports one says so (TESTING.md 42.75).
+   */
+  frameErrors = 0;
   /**
    * Frames whose header status (byte 20, the type word) is 0. On mode 4 they are pictures and are published; in
    * the other modes they are dropped. Counted in both, so a run says how many there were (TESTING.md 42.55).
@@ -354,6 +393,8 @@ export class SeekCamera {
   private connected = false;
   private streaming = false;
   private loop: Promise<void> | null = null;
+  private readonly reads: FrameReadSettings;
+  private readonly frames: FrameReader;
   private doCloseShutter = false;
   private doOpenShutter = false;
   private gains: Float64Array | null = null;
@@ -362,16 +403,50 @@ export class SeekCamera {
   private avrFramesLeft = 10;
   private shutterOffsetMapData: Int16Array | null = null;
 
-  private constructor(link: SeekLink, options: SeekOptions) {
+  private constructor(link: SeekLink, options: SeekOptions, reads: FrameReadSettings) {
+    if (
+      !Number.isInteger(reads.inFlight) ||
+      reads.inFlight < IN_FLIGHT_MIN ||
+      reads.inFlight > IN_FLIGHT_MAX
+    ) {
+      throw new Error(
+        `bulk INs in flight must be ${String(IN_FLIGHT_MIN)} to ${String(IN_FLIGHT_MAX)} (got ${String(reads.inFlight)})`,
+      );
+    }
+    if (reads.inFlight > link.maxBulkIn) {
+      throw new Error(
+        `${String(reads.inFlight)} bulk INs in flight: this USB stack takes ${String(link.maxBulkIn)} at once`,
+      );
+    }
     this.link = link;
     this.options = options;
+    this.reads = reads;
+    this.frames = new FrameReader(link, FRAME_ENDPOINT, reads);
   }
 
   /** Open the camera and send the first init, in Normal mode, as the panel does. */
-  static async connect(link: SeekLink, options: Partial<SeekOptions> = {}): Promise<SeekCamera> {
-    const camera = new SeekCamera(link, { ...DEFAULT_SEEK_OPTIONS, ...options });
+  static async connect(
+    link: SeekLink,
+    options: Partial<SeekOptions> = {},
+    reads: Partial<FrameReadSettings> = {},
+  ): Promise<SeekCamera> {
+    const camera = new SeekCamera(
+      link,
+      { ...DEFAULT_SEEK_OPTIONS, ...options },
+      { ...DEFAULT_FRAME_READ, ...reads },
+    );
     await camera.open();
     return camera;
+  }
+
+  /** The bulk INs kept pending for each frame. */
+  get inFlight(): number {
+    return this.reads.inFlight;
+  }
+
+  /** Zero-length packets taken by the frame reads: transfers with no bytes, after which the frame went on. */
+  get zeroLengthPackets(): number {
+    return this.frames.zeroLengthPackets;
   }
 
   /** The offset map of the last shutter calibration (empty until a big NUC has run). */
@@ -469,6 +544,7 @@ export class SeekCamera {
   /** Stop the stream, send SetOperationMode 0 three times, and close (Swift disconnect). */
   async disconnect(): Promise<void> {
     await this.stopStreaming();
+    this.frames.cancel();
     if (!this.connected) return;
     for (let k = 0; k < 3; k++) {
       await this.controlOut(REQUESTS.SET_OPERATION_MODE, [0, 0]).catch(() => undefined);
@@ -623,33 +699,25 @@ export class SeekCamera {
 
   /* ---- frames ---- */
 
-  /** One bulk read of a whole frame; null on a timeout or an error (the error is kept in lastError). */
+  /**
+   * One frame: the credit, then the bulk INs until the frame's bytes are in (TESTING.md 42.74, 42.75). Null when the
+   * frame could not be read; the reason is kept in lastError and counted in frameErrors, so it is reported.
+   */
   private async grabBytes(): Promise<Uint8Array | null> {
-    try {
-      if (this.isPro) {
-        await this.controlOut(REQUESTS.IMAGE_DATA, [0x58, 0x5b, 0x01, 0x00]);
-        return await this.readExact(FRAME_ENDPOINT, PRO_FRAME_BYTES);
-      }
-      await this.controlOut(REQUESTS.IMAGE_DATA, [0xc0, 0x7e, 0, 0]);
-      return await this.readExact(FRAME_ENDPOINT, COMPACT_FRAME_BYTES);
-    } catch (error) {
-      this.lastError = messageOf(error);
+    const form = this.isPro ? PRO_CREDIT : CREDIT[this.reads.credit];
+    const result = await this.frames.read(form.bytes, () =>
+      this.controlOut(REQUESTS.IMAGE_DATA, [...form.data]),
+    );
+    if (!result.ok) {
+      this.frameErrors += 1;
+      this.lastError = result.reason;
       return null;
     }
-  }
-
-  /** Reads exactly `count` bytes from the endpoint, or null when a read times out (Swift readExact). */
-  private async readExact(endpoint: number, count: number): Promise<Uint8Array | null> {
-    const out = new Uint8Array(count);
-    let got = 0;
-    while (got < count) {
-      const chunk = await this.link.bulkIn(endpoint, count - got, FRAME_TIMEOUT_MS);
-      if (chunk === null || chunk.length === 0) return null;
-      const take = Math.min(chunk.length, count - got);
-      out.set(chunk.subarray(0, take), got);
-      got += take;
-    }
-    return out;
+    this.framesRead += 1;
+    /* the header form sends its 1,664-byte header first; the frame decode reads the body only */
+    return this.isPro || this.reads.credit === 'body'
+      ? result.bytes
+      : result.bytes.subarray(COMPACT_HEADER_BYTES);
   }
 
   private async grabFrame(): Promise<SeekFrame | null> {
@@ -815,6 +883,9 @@ export class SeekCamera {
     } catch (error) {
       this.lastError = messageOf(error);
       this.streaming = false;
+    } finally {
+      /* the stream is over: the bulk INs still pending for the next frame are cancelled (none with one IN in flight) */
+      this.frames.cancel();
     }
   }
 }

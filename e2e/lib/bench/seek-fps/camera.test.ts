@@ -14,7 +14,7 @@ import {
 } from './camera.js';
 import { FakeCamera, compactFrame, type LoggedTransfer } from './fake-camera.js';
 import { seekLink } from './link.js';
-import type { SeekFrame } from './frame.js';
+import { COMPACT_HEADER_BYTES, type SeekFrame } from './frame.js';
 import { WebUsbTransport } from '../../../../packages/core/src/protocol/webusb.js';
 
 function linkFor(fake: FakeCamera) {
@@ -620,6 +620,117 @@ describe('the frame loop', () => {
     expect(camera.info).toBeNull();
   });
 });
+
+/** A Compact frame whose counter (body halfword 40) is `k`, so a test can see the order; `header` puts 1,664 bytes ahead. */
+function numbered(k: number, header = false): Uint8Array {
+  const body = compactFrame(3, 5000);
+  body[80] = k & 0xff;
+  body[81] = (k >> 8) & 0xff;
+  if (!header) return body;
+  const out = new Uint8Array(COMPACT_HEADER_BYTES + body.length);
+  out.set(body, COMPACT_HEADER_BYTES);
+  return out;
+}
+
+/** The link to a fake that takes `maxBulkIn` bulk INs at once. */
+function linkWith(fake: FakeCamera, maxBulkIn: number) {
+  return seekLink({ control: fake, bulk: fake, api: 'fake camera', maxBulkIn });
+}
+
+describe('bulk INs in flight on the frame read (TESTING.md 42.74, 42.75)', () => {
+  it('one IN at a time by default: the frames come in order and no IN is ever pending beside another', async () => {
+    const fake = new FakeCamera({
+      productId: 0x0010,
+      frames: Array.from({ length: 8 }, (_, k) => numbered(k + 1)),
+    });
+    const camera = await SeekCamera.connect(linkFor(fake));
+    const frames: SeekFrame[] = [];
+    camera.onFrame = (frame) => frames.push(frame);
+    camera.startStreaming();
+    await waitFor(() => frames.length >= 4);
+    await camera.stopStreaming();
+    expect(camera.inFlight).toBe(1);
+    expect(fake.maxPendingIns).toBe(1);
+    expectConsecutive(frames);
+    await camera.disconnect();
+  });
+
+  it('three in flight: the frames come in order, one credit per frame read, nothing cancelled by a credit, and a stop leaves no IN pending', async () => {
+    const fake = new FakeCamera({
+      productId: 0x0010,
+      frames: Array.from({ length: 12 }, (_, k) => numbered(k + 1)),
+    });
+    const camera = await SeekCamera.connect(linkWith(fake, 4), {}, { inFlight: 3 });
+    const frames: SeekFrame[] = [];
+    camera.onFrame = (frame) => frames.push(frame);
+    camera.startStreaming();
+    await waitFor(() => frames.length >= 6);
+    await camera.stopStreaming();
+    expectConsecutive(frames);
+    expect(camera.frameErrors).toBe(0);
+    expect(fake.maxPendingIns).toBe(3);
+    expect(fake.credits).toBe(camera.framesRead);
+    expect(fake.creditsWithDataQueued).toBe(0);
+    expect(fake.cancelledByCredit).toBe(0);
+    expect(fake.pendingIns).toBe(0);
+    await camera.disconnect();
+  });
+
+  it('the header form (0x8200): the header is set aside and the body decodes in order', async () => {
+    const fake = new FakeCamera({
+      productId: 0x0010,
+      frames: Array.from({ length: 8 }, (_, k) => numbered(k + 1, true)),
+    });
+    const camera = await SeekCamera.connect(
+      linkWith(fake, 4),
+      {},
+      { inFlight: 3, credit: 'header' },
+    );
+    const frames: SeekFrame[] = [];
+    camera.onFrame = (frame) => frames.push(frame);
+    camera.startStreaming();
+    await waitFor(() => frames.length >= 4);
+    await camera.stopStreaming();
+    expectConsecutive(frames);
+    expect(fake.sent('out').find((e) => e.request === REQUESTS.IMAGE_DATA)?.data).toEqual([
+      0x00, 0x82, 0, 0,
+    ]);
+    await camera.disconnect();
+  });
+
+  it('a transfer error mid-stream is counted and kept as the last error, and the stream goes on', async () => {
+    const fake = new FakeCamera({
+      productId: 0x0010,
+      frames: Array.from({ length: 12 }, (_, k) => numbered(k + 1)),
+      failIn: 6,
+    });
+    const camera = await SeekCamera.connect(linkWith(fake, 4), {}, { inFlight: 3 });
+    const frames: SeekFrame[] = [];
+    camera.onFrame = (frame) => frames.push(frame);
+    camera.startStreaming();
+    await waitFor(() => frames.length >= 4);
+    await camera.stopStreaming();
+    expect(camera.frameErrors).toBe(1);
+    expect(camera.lastError).toBe('the device has gone');
+    expect(frames.length).toBeGreaterThanOrEqual(4);
+    await camera.disconnect();
+  });
+
+  it('a count the USB stack cannot take is refused before anything is sent', async () => {
+    const fake = new FakeCamera({ productId: 0x0010 });
+    await expect(SeekCamera.connect(linkWith(fake, 1), {}, { inFlight: 3 })).rejects.toThrow(
+      '3 bulk INs in flight: this USB stack takes 1 at once',
+    );
+    expect(fake.log).toHaveLength(0);
+  });
+});
+
+/** Frame counters that go up by one from frame to frame (a skipped or reordered frame breaks it). */
+function expectConsecutive(frames: readonly SeekFrame[]): void {
+  expect(frames.length).toBeGreaterThanOrEqual(2);
+  const counts = frames.map((frame) => frame.frameCount);
+  for (let i = 1; i < counts.length; i++) expect(counts[i]).toBe((counts[i - 1] ?? 0) + 1);
+}
 
 describe('the transport is the core one', () => {
   it('the link is a core WebUsbTransport with recipient auto', () => {

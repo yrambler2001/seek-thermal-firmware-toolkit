@@ -17,6 +17,7 @@ import {
 } from './camera.js';
 import type { SeekFrame } from './frame.js';
 import type { SeekLink } from './link.js';
+import { DEFAULT_IN_FLIGHT, IN_FLIGHT_MAX, IN_FLIGHT_MIN } from './frame-read.js';
 
 export const USAGE = `seek-fps - Seek Thermal camera (Compact, Compact XR, Pro): the Swift seek CLI, ported
 
@@ -31,6 +32,7 @@ OPTIONS (mirror the Seek Thermal panel)
   --no-opzero                       untick "Startup with Operation=0"
   --no-pro-init                     untick "Compact: use Pro init (new FW)" (default on; applied only on firmware 4.x)
   --raw-min N  --raw-max N          raw range (default 1000 .. 65000)
+  --in-flight 1..4                  bulk INs kept pending for each frame (default 3; 1 is one at a time)
   --nuc | --big-nuc                 press NUC / Big NUC after the stream starts
   --shutter-close | --shutter-open  press Shutter Close / Shutter Open after the stream starts
 
@@ -54,6 +56,10 @@ export interface CliArgs {
   readonly camera: boolean;
   readonly emulatorEntry: string | null;
   readonly emulatorFlash: string | null;
+  /** `--in-flight`: the bulk INs kept pending for each frame (DEFAULT_IN_FLIGHT when not given). */
+  readonly inFlight: number;
+  /** Whether the command line named `--in-flight`: an explicit count the USB stack cannot take is an error. */
+  readonly inFlightGiven: boolean;
 }
 
 export type ParseResult =
@@ -77,11 +83,25 @@ export function parseArgs(argv: readonly string[]): ParseResult {
   let emulatorEntry: string | null = null;
   let emulatorFlash: string | null = null;
   let camera = false;
+  let inFlight = DEFAULT_IN_FLIGHT;
+  let inFlightGiven = false;
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i] ?? '';
     if (a === '-h' || a === '--help') continue;
     if (a === '--camera') {
       camera = true;
+    } else if (a === '--in-flight') {
+      const raw = argv[i + 1];
+      const n = raw !== undefined && /^\d+$/.test(raw) ? Number(raw) : Number.NaN;
+      if (!(n >= IN_FLIGHT_MIN && n <= IN_FLIGHT_MAX)) {
+        return {
+          ok: false,
+          message: `--in-flight needs a number from ${String(IN_FLIGHT_MIN)} to ${String(IN_FLIGHT_MAX)} (got ${raw ?? 'nothing'})`,
+        };
+      }
+      inFlight = n;
+      inFlightGiven = true;
+      i++;
     } else if (a === '--fps') {
       fpsMode = true;
     } else if (a === '-n') {
@@ -161,6 +181,8 @@ export function parseArgs(argv: readonly string[]): ParseResult {
       camera,
       emulatorEntry,
       emulatorFlash,
+      inFlight,
+      inFlightGiven,
     },
   };
 }
@@ -199,6 +221,33 @@ export async function waitUntil(clock: () => number, target: number): Promise<vo
       );
     }
     await sleep(20);
+  }
+}
+
+/**
+ * The bulk INs per frame the run used, and why it is not the default when the USB stack took fewer (TESTING.md 42.75).
+ */
+function inFlightLine(camera: SeekCamera, args: CliArgs): string {
+  const cut = !args.inFlightGiven && camera.inFlight < args.inFlight;
+  return (
+    `bulk INs in flight per frame: ${String(camera.inFlight)}` +
+    (cut
+      ? ` (the default is ${String(args.inFlight)}; this USB stack takes ${String(camera.inFlight)})`
+      : '')
+  );
+}
+
+/** The frame reads that failed and the zero-length packets, as the run's last lines (TESTING.md 42.75). */
+function reportReads(camera: SeekCamera, io: CliIo): void {
+  if (camera.zeroLengthPackets > 0) {
+    io.out(
+      `zero-length packets: ${String(camera.zeroLengthPackets)} (no bytes; each frame went on)`,
+    );
+  }
+  if (camera.frameErrors > 0) {
+    io.err(
+      `seek: ${String(camera.frameErrors)} frame read(s) failed; the last: ${camera.lastError ?? 'no reason kept'}`,
+    );
   }
 }
 
@@ -242,8 +291,19 @@ export async function runSeekFps(
     return 1;
   }
   try {
+    /* An explicit count the USB stack cannot take is an error; the default is cut to what it takes, and the run says so */
+    const stack = session.link.maxBulkIn;
+    if (args.inFlightGiven && args.inFlight > stack) {
+      io.err(
+        `seek: --in-flight ${String(args.inFlight)}: this USB stack takes ${String(stack)} bulk IN at a time ` +
+          `(TESTING.md 42.75). Use --in-flight ${String(stack)} or 1.`,
+      );
+      return 1;
+    }
     try {
-      camera = await SeekCamera.connect(session.link, args.options);
+      camera = await SeekCamera.connect(session.link, args.options, {
+        inFlight: Math.min(args.inFlight, stack),
+      });
     } catch (error) {
       io.err(`seek: ${messageOf(error)}`);
       return 1;
@@ -394,6 +454,8 @@ async function runCommand(
       io.err(`seek: ${noFrameMessage(camera, `the ${String(seconds)} s stream`)}`);
       return 1;
     }
+    io.out(inFlightLine(camera, args));
+    reportReads(camera, io);
     return 0;
   }
   // --fps: stream, wait for the first frame, then measure from there for `seconds` seconds.
@@ -428,5 +490,7 @@ async function runCommand(
           : 'dropped (only mode 4 counts them)'),
     );
   }
+  io.out(inFlightLine(camera, args));
+  reportReads(camera, io);
   return 0;
 }

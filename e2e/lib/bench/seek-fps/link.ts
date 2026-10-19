@@ -33,17 +33,26 @@ export interface WebUsbBulkDevice {
     length: number,
     timeoutMs: number,
   ): Promise<WebUsbInTransferResult>;
+  /**
+   * Cancels the bulk INs still pending on `endpointNumber`, where the stack can. node-usb 3.1.0 has
+   * no such call, and its close() refuses while a transfer is pending (TESTING.md 42.75).
+   */
+  cancelTransfers?(endpointNumber: number): void;
 }
 
 export interface SeekLink {
   /** The control side: vendor requests on interface 0, exactly as the CLI sends them. */
   readonly transport: UsbTransport;
   readonly description: DeviceDescription;
+  /** How many bulk INs the stack takes pending at once on one endpoint. */
+  readonly maxBulkIn: number;
   /**
    * One bulk IN on `endpointNumber`: whatever arrives, up to `length` bytes, or null when nothing
    * arrived before the deadline (the Swift readExact's nil). A stall throws.
    */
   bulkIn(endpointNumber: number, length: number, timeoutMs: number): Promise<Uint8Array | null>;
+  /** Cancels the bulk INs still pending on `endpointNumber`, where the stack can (see `cancelTransfers`). */
+  cancelBulkIn(endpointNumber: number): void;
   close(): Promise<void>;
 }
 
@@ -57,6 +66,11 @@ export interface SeekLinkOptions {
   readonly host?: string | null;
   readonly clock?: DeadlineClock;
   readonly onWarning?: (message: string) => void;
+  /**
+   * The bulk INs the stack takes pending at once on one endpoint. One unless the stack says otherwise:
+   * node-usb 3.1.0 refuses a second IN while one is pending (TESTING.md 42.75).
+   */
+  readonly maxBulkIn?: number;
 }
 
 /** The host stack's words for a bulk read that ran out of time (node-usb, nusb and the emulator). */
@@ -82,6 +96,10 @@ export function seekLink(options: SeekLinkOptions): SeekLink {
     transport,
     get description(): DeviceDescription {
       return transport.description;
+    },
+    maxBulkIn: Math.max(1, options.maxBulkIn ?? 1),
+    cancelBulkIn(endpointNumber): void {
+      options.bulk.cancelTransfers?.(endpointNumber);
     },
     async bulkIn(endpointNumber, length, timeoutMs): Promise<Uint8Array | null> {
       let result: WebUsbInTransferResult;

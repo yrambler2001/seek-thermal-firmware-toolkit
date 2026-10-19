@@ -55,5 +55,8 @@ export async function openNodeUsbCamera(): Promise<SeekLink> {
     api: 'node-usb 3.x (WebUSB shim, CLI correction layer)',
     host: 'seek-fps',
     onWarning: (message) => process.stderr.write(`seek-fps: ${message}\n`),
+    /* node-usb 3.1.0 refuses a second transferIn on the endpoint while one is pending ("endpoint not found"),
+     * and it has no cancel, so one bulk IN at a time (TESTING.md 42.75, the probe in its section 2). */
+    maxBulkIn: 1,
   });
 }

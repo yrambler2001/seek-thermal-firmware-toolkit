@@ -64,6 +64,8 @@ export async function startEmulatorCamera(boot: EmulatorBoot): Promise<EmulatorC
     api: 'usbip (emulator)',
     host: 'seek-fps',
     clock: device.deadlineClock,
+    /* not measured with several bulk INs pending: one at a time until it is (TESTING.md 42.75) */
+    maxBulkIn: 1,
   });
   return {
     emu,
