@@ -12,6 +12,7 @@ import { Panel, PanelTitle } from '@/components/Panel';
 import { Prose } from '@/components/Prose';
 import { RunPanel } from '@/components/RunPanel';
 import { Section } from '@/components/Section';
+import { UnlockNote } from '@/components/UnlockNote';
 import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import {
@@ -156,6 +157,8 @@ export function InfoView({ info, connected, busy }: InfoViewProps): ReactElement
           lines={info.reporter.lines}
           trimmed={info.reporter.trimmed}
         />
+
+        {info.unlockNote && <UnlockNote />}
 
         {result !== null && rows !== null && (
           <Panel>

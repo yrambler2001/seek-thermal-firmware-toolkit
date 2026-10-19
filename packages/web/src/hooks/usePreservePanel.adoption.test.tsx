@@ -812,4 +812,98 @@ describe('the unlock note (information only, TESTING.md 42.57)', () => {
     expect(current(mounted).panel.unlockNote).toBe(false);
     mounted.unmount();
   });
+
+  it('the flag is the device’s: it survives the wizard’s own reset, and the unplug the drain asks for after the reset window clears it (TESTING.md 42.59)', async () => {
+    tokenStep = 'backup';
+    const unitA = fakeCameraUnit(0x0010);
+    const mounted = mountPanel([unitA]);
+    await waitFor(() => current(mounted).device.device !== null);
+
+    await runTo(mounted, 'read-build', () => current(mounted).panel.state?.nextStep === 'commit');
+    expect(current(mounted).device.unlocked).toBe(true);
+
+    /* Phase ②: the reset drops the camera inside the reset window, and the re-enumerated unit keeps the flag. */
+    hungStep = 'drain';
+    act(() => {
+      void current(mounted).panel.runPhase('patch-dump');
+    });
+    await waitFor(() => handed.some(([step]) => step === 'drain'));
+    usb.authorized = [];
+    act(() => {
+      usb.fire('disconnect', unitA);
+    });
+    expect(current(mounted).device.unlocked).toBe(true);
+    const unitA2 = fakeCameraUnit(0x0010);
+    usb.authorized = [unitA2];
+    act(() => {
+      usb.fire('connect', unitA2);
+    });
+    await waitFor(() =>
+      linesOf(current(mounted).panel, 'patch-dump').includes('the camera is back — continuing'),
+    );
+    expect(current(mounted).device.unlocked).toBe(true);
+    expect(current(mounted).panel.unlockNote).toBe(true);
+
+    /* The drain finishes and the phase asks for the unplug. Its reset window has closed, so the unplug clears. */
+    act(() => {
+      deferreds
+        .get('drain')
+        ?.resolve(fakeOutcome('drain', handed.at(-1)?.[1] ?? current(mounted).panel.state!));
+    });
+    await waitFor(() =>
+      linesOf(current(mounted).panel, 'patch-dump').includes('Your turn: unplug the camera'),
+    );
+    usb.authorized = [];
+    act(() => {
+      usb.fire('disconnect', unitA2);
+    });
+    expect(current(mounted).device.unlocked).toBe(false);
+    expect(current(mounted).panel.unlockNote).toBe(false);
+    mounted.unmount();
+  });
+
+  it('a camera that leaves between phases is a power cycle: the flag clears, and the unit that comes back starts unflagged', async () => {
+    tokenStep = 'backup';
+    const unitA = fakeCameraUnit(0x0010);
+    const mounted = mountPanel([unitA]);
+    await waitFor(() => current(mounted).device.device !== null);
+    await runTo(mounted, 'read-build', () => current(mounted).panel.state?.nextStep === 'commit');
+    expect(current(mounted).device.unlocked).toBe(true);
+
+    /* No run is active: the camera is power-cycled. */
+    usb.authorized = [];
+    act(() => {
+      usb.fire('disconnect', unitA);
+    });
+    expect(current(mounted).device.unlocked).toBe(false);
+
+    const unitB = fakeCameraUnit(0x0010);
+    usb.authorized = [unitB];
+    act(() => {
+      usb.fire('connect', unitB);
+    });
+    expect(current(mounted).device.device).toBe(unitB);
+    expect(current(mounted).device.unlocked).toBe(false);
+    expect(current(mounted).panel.unlockNote).toBe(false);
+    mounted.unmount();
+  });
+
+  it('a swap to another model while one camera is held clears the flag', async () => {
+    tokenStep = 'backup';
+    const unitA = fakeCameraUnit(0x0010);
+    const mounted = mountPanel([unitA]);
+    await waitFor(() => current(mounted).device.device !== null);
+    await runTo(mounted, 'read-build', () => current(mounted).panel.state?.nextStep === 'commit');
+    expect(current(mounted).device.unlocked).toBe(true);
+
+    /* The user picks a different camera while this one is still held. */
+    const other = fakeCameraUnit(0x0011);
+    usb.picked = other;
+    await act(async () => {
+      await current(mounted).device.connect();
+    });
+    expect(current(mounted).device.device).toBe(other);
+    expect(current(mounted).device.unlocked).toBe(false);
+    mounted.unmount();
+  });
 });

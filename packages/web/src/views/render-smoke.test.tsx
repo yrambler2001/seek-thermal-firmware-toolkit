@@ -45,6 +45,7 @@ function infoStub(reporter: ReporterHandle, result: InfoReading | null = null): 
     reporter,
     reading: false,
     result,
+    unlockNote: false,
     read: () => Promise.resolve(),
     cancel: () => undefined,
   };

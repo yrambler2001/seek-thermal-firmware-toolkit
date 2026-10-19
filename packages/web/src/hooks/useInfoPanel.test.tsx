@@ -5,14 +5,22 @@
  */
 
 import { act } from 'react';
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { OP, WebUsbTransport, type WebUsbDevice } from '@seek-fw/core';
 import { renderHook } from '../test-helpers';
 import { scriptedCamera, type CameraCall } from '../test-fixtures';
 import { DEFAULT_OPTIONS_FORM } from '../lib/options';
+import { UnlockSeat } from '../lib/unlock-seat';
 import type { DeviceHandle } from './useDevice';
 import { useInfoPanel } from './useInfoPanel';
 import { useRunner } from './useRunner';
+
+/** The device's unlock flag for the test (TESTING.md 42.59); reset per test in `beforeEach`. */
+let seat = new UnlockSeat();
+
+beforeEach(() => {
+  seat = new UnlockSeat();
+});
 
 function deviceHandle(camera: WebUsbDevice): DeviceHandle {
   return {
@@ -22,8 +30,19 @@ function deviceHandle(camera: WebUsbDevice): DeviceHandle {
     canForgetDevice: false,
     connect: () => Promise.resolve({ kind: 'cancelled' }),
     forget: () => Promise.resolve({ kind: 'cancelled' }),
-    makeTransport: () => new WebUsbTransport(camera, { recipient: 'interface' }),
+    makeTransport: () => {
+      const transport = new WebUsbTransport(camera, { recipient: 'interface' });
+      seat.opened(transport);
+      return transport;
+    },
     reattach: () => Promise.resolve(false),
+    unlocked: seat.unlocked,
+    markUnlocked: (transport) => {
+      seat.markUnlocked(transport);
+    },
+    setResetWindow: (open) => {
+      seat.setResetWindow(open);
+    },
   };
 }
 
@@ -89,6 +108,24 @@ describe('useInfoPanel: the version read', () => {
     expect(panel.result?.gate.permitsArming).toBe(true);
     expect(calls.some((call) => call.request === OP.BEGIN_FIRMWARE_UPGRADE)).toBe(false);
     unmount();
+  });
+
+  it('shows the note when another panel’s session sent the token: the camera is unlocked, though this tab sends nothing (TESTING.md 42.59)', async () => {
+    const { camera, calls } = scriptedCamera({ version: [4, 18, 2, 0] });
+    const handle = renderHook(() => useHarness(camera));
+    expect(handle.result.current.panel.unlockNote).toBe(false);
+
+    /* A session on this camera's connection, from another panel, sends the token. */
+    seat.markUnlocked(deviceHandle(camera).makeTransport({ recipient: 'interface' }));
+    handle.rerender();
+    expect(handle.result.current.panel.unlockNote).toBe(true);
+
+    /* This tab's own read sends nothing that unlocks. */
+    await act(async () => {
+      await handle.result.current.panel.read();
+    });
+    expect(calls.some((call) => call.request === OP.BEGIN_FIRMWARE_UPGRADE)).toBe(false);
+    handle.unmount();
   });
 
   it('says a build older than 0.8.0.0 is read by no tab, and keeps the version it found', async () => {

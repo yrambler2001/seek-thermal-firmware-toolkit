@@ -45,6 +45,7 @@ import {
 import { fakeCamera, fakeDeviceState } from '../test-fixtures';
 import { renderHook } from '../test-helpers';
 import type { DeviceHandle } from './useDevice';
+import { UnlockSeat } from '../lib/unlock-seat';
 import {
   bankImageSource,
   needsRiskAck,
@@ -113,7 +114,8 @@ function makeBackend(
   return { backend, mocks };
 }
 
-function deviceHandle(generation: number): DeviceHandle {
+/** A device handle over one fake camera, with the device's unlock flag held in `seat` (TESTING.md 42.59). */
+function deviceHandle(generation: number, seat: UnlockSeat): DeviceHandle {
   const camera = fakeCamera();
   return {
     device: null,
@@ -122,18 +124,29 @@ function deviceHandle(generation: number): DeviceHandle {
     canForgetDevice: false,
     connect: () => Promise.resolve({ kind: 'cancelled' }),
     forget: () => Promise.resolve({ kind: 'cancelled' }),
-    makeTransport: () => new WebUsbTransport(camera, { recipient: 'interface' }),
+    makeTransport: () => {
+      const transport = new WebUsbTransport(camera, { recipient: 'interface' });
+      seat.opened(transport);
+      return transport;
+    },
     reattach: () => Promise.resolve(false),
+    unlocked: seat.unlocked,
+    markUnlocked: (transport) => {
+      seat.markUnlocked(transport);
+    },
+    setResetWindow: (open) => {
+      seat.setResetWindow(open);
+    },
   };
 }
 
 function setup(backend: SlotsBackend) {
-  const state = { generation: 1 };
+  const state = { generation: 1, seat: new UnlockSeat() };
   const handle = renderHook(() => {
     const runner = useRunner();
     const panel = useSlotsPanel({
       runner,
-      device: deviceHandle(state.generation),
+      device: deviceHandle(state.generation, state.seat),
       form: DEFAULT_OPTIONS_FORM,
       onOptionsFailure: () => undefined,
       backend,
@@ -269,7 +282,7 @@ describe('useSlotsPanel: the unlock note (information only)', () => {
     unmount();
   });
 
-  it('is cleared when the camera changes, because the new camera has not been unlocked', async () => {
+  it('is the device’s flag: a re-enumeration alone keeps it, and a swap clears it (the device clears it, not this panel)', async () => {
     const { backend } = makeBackend({ identify: tokenSentIdentify() });
     const { result, rerender, state, unmount } = setup(backend);
 
@@ -278,11 +291,19 @@ describe('useSlotsPanel: the unlock note (information only)', () => {
     });
     expect(result.current.panel.unlockNote).toBe(true);
 
+    /* A new device object with no swap: the device's seat keeps its flag. */
     act(() => {
       state.generation = 2;
       rerender();
     });
+    expect(result.current.panel.unlockNote).toBe(true);
 
+    /* A swap: the seat clears, and the new camera shows no note. */
+    act(() => {
+      state.seat.changed();
+      state.generation = 3;
+      rerender();
+    });
     expect(result.current.panel.unlockNote).toBe(false);
     unmount();
   });

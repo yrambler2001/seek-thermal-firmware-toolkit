@@ -224,10 +224,9 @@ export interface PreservePanelApi {
   /** The delivered image against the backup, once both are in hand. */
   readonly deliveredCheck: DeliveredCheck | null;
   /**
-   * True once a phase's camera session on this page sent the unlock token: the
-   * camera then stays unlocked until its next power cycle. Not cleared on a camera
-   * change, because the wizard's own resets re-enumerate the same camera; nothing
-   * is gated on it (TESTING.md 42.57).
+   * True once any panel's camera session on this page sent the unlock token: the camera then stays unlocked until it
+   * is swapped or power-cycled. The flag is the device's, shared by every panel. The wizard's own reset keeps it, and
+   * a camera that leaves outside the reset window clears it (TESTING.md 42.57, 42.59). Nothing is gated on it.
    */
   readonly unlockNote: boolean;
   runPhase: (phase: PreservePhaseId, options?: PreservePhaseRunOptions) => Promise<void>;
@@ -291,9 +290,9 @@ export function usePreservePanel(params: PreservePanelParams): PreservePanelApi 
   const [state, setState] = useState<PreserveRunState | null>(null);
   const [lastSave, setLastSave] = useState<RunFileSave | null>(null);
   const [prompt, setPrompt] = useState<PreservePrompt | null>(null);
-  /* Set when a phase's session sent the unlock token (TESTING.md 42.57). Read from
-   * the sessions at each close, below. */
-  const [unlockNote, setUnlockNote] = useState(false);
+  /* The camera's unlock flag is the device's, shared with every panel (TESTING.md 42.59). A phase's sessions mark it at
+   * each close, below. */
+  const unlockNote = device.unlocked;
   /* Clears only the reconnect ask: the camera came back, by the user's pick or
    * by Chrome's own re-grant. */
   const clearReconnect = useCallback((): void => {
@@ -362,7 +361,10 @@ export function usePreservePanel(params: PreservePanelParams): PreservePanelApi 
        * sent the unlock token before its transport goes. */
       const sessions: SeekDevice[] = [];
       const closeAll = async (): Promise<void> => {
-        if (sessions.some((session) => session.unlockTokenAccepted)) setUnlockNote(true);
+        /* Each session that sent the token marks the camera's flag, on the connection it was opened on (TESTING.md 42.59). */
+        for (const session of sessions) {
+          if (session.unlockTokenAccepted) deviceRef.current.markUnlocked(session.transport);
+        }
         sessions.splice(0);
         for (const transport of opened.splice(0)) {
           try {
@@ -692,6 +694,10 @@ export function usePreservePanel(params: PreservePanelParams): PreservePanelApi 
         const { opener, closeAll } = makeOpener(phase, rep, signal, meta.resetsCamera);
         let stepInFlight: PreserveStepId | null = null;
         const ran = new Set<PreserveStepId>();
+        /* The reset window (TESTING.md 42.59): on a phase that resets the camera, the camera leaving the bus while its
+         * steps run is the wizard's own reset, and the unlock flag is kept. The window closes when the steps are done,
+         * so the replug the drain asks for afterwards is a power cycle and clears the flag. */
+        if (meta.resetsCamera) deviceRef.current.setResetWindow(true);
         try {
           for (const step of meta.steps) {
             if (current.steps[step]?.status === 'done') {
@@ -734,6 +740,7 @@ export function usePreservePanel(params: PreservePanelParams): PreservePanelApi 
             rep.reporter.log(`${stepMeta(step).label} — done`, 'ok');
           }
           saveRunFile(lastCompletedStep(current));
+          deviceRef.current.setResetWindow(false);
           const lastStep = meta.steps.at(-1);
           const replugOwed =
             meta.replugAfter &&
@@ -811,6 +818,7 @@ export function usePreservePanel(params: PreservePanelParams): PreservePanelApi 
             );
           }
         } finally {
+          deviceRef.current.setResetWindow(false);
           await closeAll();
           rep.flush();
         }

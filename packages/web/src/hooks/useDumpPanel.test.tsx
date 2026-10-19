@@ -29,6 +29,7 @@ import { scriptedCamera, type CameraCall } from '../test-fixtures';
 import { useDumpPanel, type DumpMode } from './useDumpPanel';
 import { useRunner } from './useRunner';
 import type { DeviceHandle } from './useDevice';
+import { UnlockSeat } from '../lib/unlock-seat';
 
 const downloads: { dirName: string; artifacts: readonly Artifact[] }[] = [];
 
@@ -100,6 +101,9 @@ function fakeCamera(onWindowRead?: (count: number) => void): WebUsbDevice {
   };
 }
 
+/** The device's unlock flag for the test (TESTING.md 42.59); reset per test in `beforeEach`. */
+let seat = new UnlockSeat();
+
 function deviceHandle(camera: WebUsbDevice): DeviceHandle {
   return {
     device: null,
@@ -108,8 +112,19 @@ function deviceHandle(camera: WebUsbDevice): DeviceHandle {
     canForgetDevice: false,
     connect: () => Promise.resolve({ kind: 'cancelled' }),
     forget: () => Promise.resolve({ kind: 'cancelled' }),
-    makeTransport: () => new WebUsbTransport(camera, { recipient: 'interface' }),
+    makeTransport: () => {
+      const transport = new WebUsbTransport(camera, { recipient: 'interface' });
+      seat.opened(transport);
+      return transport;
+    },
     reattach: () => Promise.resolve(false),
+    unlocked: seat.unlocked,
+    markUnlocked: (transport) => {
+      seat.markUnlocked(transport);
+    },
+    setResetWindow: (open) => {
+      seat.setResetWindow(open);
+    },
   };
 }
 
@@ -136,6 +151,7 @@ function useHarness(
 }
 
 beforeEach(() => {
+  seat = new UnlockSeat();
   downloads.length = 0;
   failures.length = 0;
 });
@@ -535,7 +551,7 @@ describe('useDumpPanel: the unlock note (information only)', () => {
     unmount();
   });
 
-  it('is cleared when the camera changes, because the new camera has not been unlocked', async () => {
+  it('is the device’s flag: a generation change alone keeps it, and a swap clears it', async () => {
     const { camera } = scriptedCamera({ version: [4, 18, 2, 0] });
     const generation = { value: 1 };
     const { result, rerender, unmount } = renderHook(() => {
@@ -559,7 +575,14 @@ describe('useDumpPanel: the unlock note (information only)', () => {
     });
     expect(result.current.panel.unlockNote).toBe(true);
 
+    /* A new device object with no swap: the device's seat keeps its flag. */
     generation.value = 2;
+    rerender();
+    expect(result.current.panel.unlockNote).toBe(true);
+
+    /* A swap: the seat clears, and the new camera shows no note. */
+    seat.changed();
+    generation.value = 3;
     rerender();
     expect(result.current.panel.unlockNote).toBe(false);
     unmount();

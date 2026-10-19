@@ -9,10 +9,11 @@
  * it changes — so a payload built for one unit can never be sent to another.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { SEEK_VENDOR_ID, WebUsbTransport, hex, type RecipientPreference } from '@seek-fw/core';
 import { asWebUsbDevice } from '../lib/usb-adapter';
 import { canForget, getWebUsb } from '../lib/webusb';
+import { UnlockSeat } from '../lib/unlock-seat';
 
 /** The original's `describeDevice`, on a raw `USBDevice`. */
 export function describeUsbDevice(device: USBDevice): string {
@@ -56,6 +57,18 @@ export interface DeviceHandle {
   reattach: () => Promise<boolean>;
   /** Builds a fresh transport. Never cached: each run opens and closes its own. */
   makeTransport: (options: TransportOptions) => WebUsbTransport;
+  /**
+   * True once a session on this camera's connection sent the unlock token: the camera stays unlocked until it is
+   * swapped or power-cycled, so every panel shows the note until then (TESTING.md 42.59). See `unlock-seat.ts`.
+   */
+  readonly unlocked: boolean;
+  /** Records that the session on `transport` sent the token. Counted only on the connection it was opened on. */
+  markUnlocked: (transport: object) => void;
+  /**
+   * Opens or closes the wizard's reset window. While open, the camera leaving the bus is the wizard's own reset, and
+   * the unlock flag is kept; outside it, a camera that leaves is a power cycle or a replug, and the flag clears.
+   */
+  setResetWindow: (open: boolean) => void;
 }
 
 const NO_DEVICE = 'No device selected.';
@@ -65,6 +78,17 @@ export function useDevice(): DeviceHandle {
   const [description, setDescription] = useState(NO_DEVICE);
   const [generation, setGeneration] = useState(0);
   const current = useRef<USBDevice | null>(null);
+  /* The unlock flag for the connected camera (TESTING.md 42.59). The seat's rules are in lib/unlock-seat.ts; a change
+   * to the seat re-renders this hook, and the handle reads the flag then. */
+  const [, bumpSeat] = useReducer((n: number) => n + 1, 0);
+  const [seat] = useState(
+    () =>
+      new UnlockSeat(() => {
+        bumpSeat();
+      }),
+  );
+  /* The vid/pid of the last camera the page held, kept across a disconnect: a reconnect of another model is a swap. */
+  const lastModel = useRef<{ vid: number; pid: number } | null>(null);
   /* The unit that just dropped off the bus, as its vid/pid. This camera has
    * no USB serial string, so vid/pid is the only identity a reconnect can be
    * judged by — and the preserve wizard's reset (the drain step's wire-89)
@@ -75,14 +99,26 @@ export function useDevice(): DeviceHandle {
    * swapping cameras is a user decision. */
   const dropped = useRef<{ vid: number; pid: number } | null>(null);
 
-  const adopt = useCallback((next: USBDevice | null, reason: string): void => {
-    if (current.current === next) return;
-    current.current = next;
-    if (next !== null) dropped.current = null;
-    setDevice(next);
-    setDescription(next === null ? reason : describeUsbDevice(next));
-    setGeneration((value) => value + 1);
-  }, []);
+  const adopt = useCallback(
+    (next: USBDevice | null, reason: string): void => {
+      if (current.current === next) return;
+      if (next !== null) {
+        /* A camera other than the one held is a swap: a second camera while one is held, or another model. The
+         * same model after a drop is the re-enumeration, and keeps the flag (TESTING.md 42.59). */
+        const last = lastModel.current;
+        const otherModel =
+          last !== null && (last.vid !== next.vendorId || last.pid !== next.productId);
+        if (current.current !== null || otherModel) seat.changed();
+        lastModel.current = { vid: next.vendorId, pid: next.productId };
+      }
+      current.current = next;
+      if (next !== null) dropped.current = null;
+      setDevice(next);
+      setDescription(next === null ? reason : describeUsbDevice(next));
+      setGeneration((value) => value + 1);
+    },
+    [seat],
+  );
 
   /* Reuse a device the user has already authorised, as the original's init()
    * did. getDevices() is unavailable on opaque origins, so failure is silent. */
@@ -118,6 +154,8 @@ export function useDevice(): DeviceHandle {
     const onDisconnect = (event: USBConnectionEvent): void => {
       if (current.current === event.device) {
         dropped.current = { vid: event.device.vendorId, pid: event.device.productId };
+        /* A power cycle or a replug clears the unlock flag, unless this is the wizard's own reset (TESTING.md 42.59). */
+        seat.left();
         adopt(null, 'Device disconnected.');
       }
     };
@@ -127,7 +165,7 @@ export function useDevice(): DeviceHandle {
       usb.removeEventListener('connect', onConnect);
       usb.removeEventListener('disconnect', onDisconnect);
     };
-  }, [adopt]);
+  }, [adopt, seat]);
 
   const connect = useCallback(async (): Promise<ConnectOutcome> => {
     const usb = getWebUsb();
@@ -146,12 +184,13 @@ export function useDevice(): DeviceHandle {
     const held = current.current;
     try {
       if (held !== null && canForget(held)) await held.forget();
+      seat.changed();
       adopt(null, 'Permission revoked.');
       return { kind: 'connected', description: 'Permission revoked.' };
     } catch (error) {
       return { kind: 'failed', message: error instanceof Error ? error.message : String(error) };
     }
-  }, [adopt]);
+  }, [adopt, seat]);
 
   const reattach = useCallback(async (): Promise<boolean> => {
     if (current.current !== null) return true;
@@ -168,21 +207,42 @@ export function useDevice(): DeviceHandle {
     }
   }, [adopt]);
 
-  const makeTransport = useCallback((options: TransportOptions): WebUsbTransport => {
-    /* Read through the ref, not the state: the preserve wizard's opener
-     * ladder holds this closure across a reset — the camera that
-     * re-enumerates after the ~10 s boot silence is a NEW USBDevice
-     * object, and the ladder's next attempt must open that one, not the
-     * dead object the phase started with. */
-    const held = current.current;
-    if (held === null) throw new Error('no device is connected');
-    return new WebUsbTransport(asWebUsbDevice(held), {
-      recipient: options.recipient,
-      api: 'WebUSB',
-      host: typeof navigator === 'undefined' ? null : navigator.userAgent,
-      ...(options.onWarning ? { onWarning: options.onWarning } : {}),
-    });
-  }, []);
+  const makeTransport = useCallback(
+    (options: TransportOptions): WebUsbTransport => {
+      /* Read through the ref, not the state: the preserve wizard's opener
+       * ladder holds this closure across a reset — the camera that
+       * re-enumerates after the ~10 s boot silence is a NEW USBDevice
+       * object, and the ladder's next attempt must open that one, not the
+       * dead object the phase started with. */
+      const held = current.current;
+      if (held === null) throw new Error('no device is connected');
+      const transport = new WebUsbTransport(asWebUsbDevice(held), {
+        recipient: options.recipient,
+        api: 'WebUSB',
+        host: typeof navigator === 'undefined' ? null : navigator.userAgent,
+        ...(options.onWarning ? { onWarning: options.onWarning } : {}),
+      });
+      /* The session belongs to the connection that is current now (see markUnlocked). */
+      seat.opened(transport);
+      return transport;
+    },
+    [seat],
+  );
+
+  const markUnlocked = useCallback(
+    (transport: object): void => {
+      seat.markUnlocked(transport);
+    },
+    [seat],
+  );
+  const setResetWindow = useCallback(
+    (open: boolean): void => {
+      seat.setResetWindow(open);
+    },
+    [seat],
+  );
+  /* Read at render: a change to the seat re-renders this hook (bumpSeat), and the memo below rebuilds the handle. */
+  const unlocked = seat.unlocked;
 
   return useMemo(
     () => ({
@@ -194,7 +254,21 @@ export function useDevice(): DeviceHandle {
       forget,
       reattach,
       makeTransport,
+      unlocked,
+      markUnlocked,
+      setResetWindow,
     }),
-    [device, description, generation, connect, forget, reattach, makeTransport],
+    [
+      device,
+      description,
+      generation,
+      connect,
+      forget,
+      reattach,
+      makeTransport,
+      unlocked,
+      markUnlocked,
+      setResetWindow,
+    ],
   );
 }

@@ -47,6 +47,11 @@ export interface InfoPanelApi {
   readonly reading: boolean;
   /** The last read for this camera, or null. Dropped when the camera changes. */
   readonly result: InfoReading | null;
+  /**
+   * True when a panel's session on this camera has sent the unlock token. This tab sends nothing that unlocks, but the
+   * camera is unlocked all the same, so the note shows (TESTING.md 42.59).
+   */
+  readonly unlockNote: boolean;
   read: () => Promise<void>;
   cancel: () => void;
 }
@@ -118,8 +123,10 @@ export function useInfoPanel(params: InfoPanelParams): InfoPanelApi {
     reporter.log('cancel requested', 'warn');
   }, [reporter, runner]);
 
+  const unlockNote = device.unlocked;
+
   return useMemo(
-    () => ({ reporter, reading, result, read, cancel }),
-    [reporter, reading, result, read, cancel],
+    () => ({ reporter, reading, result, read, cancel, unlockNote }),
+    [reporter, reading, result, read, cancel, unlockNote],
   );
 }

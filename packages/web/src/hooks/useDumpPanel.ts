@@ -78,9 +78,9 @@ export interface DumpPanelApi {
   /** Why the last run was refused before it read anything, or null. */
   readonly refusal: Refusal | null;
   /**
-   * True once a run on this camera sent the unlock token (the identify probe's
-   * authenticated arm, or a dump's own): the camera then stays unlocked until its
-   * next power cycle. The page says so; nothing is gated on it (TESTING.md 42.57).
+   * True once any panel's session on this camera sent the unlock token (the identify probe's authenticated arm, or
+   * a dump's own): the camera then stays unlocked until it is swapped or power-cycled. The flag is the device's,
+   * shared by every panel (TESTING.md 42.57, 42.59). The page says so; nothing is gated on it.
    */
   readonly unlockNote: boolean;
   start: (mode: DumpMode) => Promise<void>;
@@ -129,16 +129,14 @@ export function useDumpPanel(params: DumpPanelParams): DumpPanelApi {
   const running = runner.active === id;
   const [acting, setActing] = useState<ActingProfile | null>(null);
   const [refusal, setRefusal] = useState<Refusal | null>(null);
-  /* A run that sent the unlock token (TESTING.md 42.55). Kept per camera, as the
-   * slots panel keeps it: the camera stays unlocked until its next power cycle. */
-  const [unlockNote, setUnlockNote] = useState(false);
+  /* The camera's unlock flag is the device's, shared with every panel (TESTING.md 42.59). */
+  const unlockNote = device.unlocked;
 
   /* What one camera said is not what the next one will: a connect, a
    * disconnect or a swap drops it, as the flash view drops its analysis. */
   useEffect(() => {
     setActing(null);
     setRefusal(null);
-    setUnlockNote(false);
   }, [device.generation]);
 
   const execute = useCallback(
@@ -233,7 +231,7 @@ export function useDumpPanel(params: DumpPanelParams): DumpPanelApi {
       } finally {
         /* Read before the close, whatever the run's result: a refused or cancelled
          * run that got as far as the identify probe has still sent the token. */
-        if (client.unlockTokenAccepted) setUnlockNote(true);
+        if (client.unlockTokenAccepted) device.markUnlocked(client.transport);
         await transport.close();
       }
     },

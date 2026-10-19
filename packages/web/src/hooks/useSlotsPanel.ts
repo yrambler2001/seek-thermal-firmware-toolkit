@@ -409,8 +409,9 @@ export interface SlotsPanelApi {
   readonly running16Hz: boolean;
   setRunning16Hz: (value: boolean) => void;
   /**
-   * True once a slot read, dump, write or patch on this camera sent the unlock token: the camera then stays
-   * unlocked until its next power cycle. The page says so; nothing is gated on it.
+   * True once any panel's session on this camera sent the unlock token: the camera then stays unlocked until it is
+   * swapped or power-cycled. The flag is the device's, shared by every panel (TESTING.md 42.59). The page says so;
+   * nothing is gated on it.
    */
   readonly unlockNote: boolean;
   readonly reading: boolean;
@@ -430,6 +431,9 @@ export interface SlotsPanelApi {
 
 export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
   const { runner, device, form, onOptionsFailure, backend = CORE_SLOTS_BACKEND } = params;
+  /* The camera's unlock flag is the device's, shared with every panel (TESTING.md 42.59); a session that sent the token
+   * marks it through `device.markUnlocked`. Information only. */
+  const unlockNote = device.unlocked;
   const handle = useReporter('Idle.');
   /* Destructured because the handle is a new object on every log line, and
    * the callbacks below must keep their identity. The `Reporter` and these
@@ -443,9 +447,6 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
   const [outcome, setOutcome] = useState<SlotFlashOutcome | null>(null);
   const [fpsOutcome, setFpsOutcome] = useState<FpsPatchResult | null>(null);
   const [running16Hz, setRunning16Hz] = useState(false);
-  /* After a slot action that sent the unlock token: the camera stays unlocked until its next power cycle,
-   * and the page says so. Information only; nothing is gated on it (TESTING.md 42.55). */
-  const [unlockNote, setUnlockNote] = useState(false);
 
   /* A running task reads these, not the render's copy: it captures its inputs
    * when it starts, and a state value captured then is stale by the time a
@@ -484,7 +485,6 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
     setRefusal(null);
     setOutcome(null);
     setFpsOutcome(null);
-    setUnlockNote(false);
     setStatus(
       device.device === null
         ? 'Device disconnected — read the slots again.'
@@ -601,7 +601,7 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
         }
       } finally {
         if (transport !== null) await transport.close();
-        if (usedClient?.unlockTokenAccepted === true) setUnlockNote(true);
+        if (usedClient?.unlockTokenAccepted === true) device.markUnlocked(usedClient.transport);
         flush();
       }
     });
@@ -698,7 +698,7 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
           }
         } finally {
           if (transport !== null) await transport.close();
-          if (usedClient?.unlockTokenAccepted === true) setUnlockNote(true);
+          if (usedClient?.unlockTokenAccepted === true) device.markUnlocked(usedClient.transport);
           flush();
         }
       });
@@ -942,7 +942,7 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
           }
         } finally {
           if (transport !== null) await transport.close();
-          if (usedClient?.unlockTokenAccepted === true) setUnlockNote(true);
+          if (usedClient?.unlockTokenAccepted === true) device.markUnlocked(usedClient.transport);
           flush();
         }
       });
@@ -1062,7 +1062,7 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
           }
         } finally {
           if (transport !== null) await transport.close();
-          if (usedClient?.unlockTokenAccepted === true) setUnlockNote(true);
+          if (usedClient?.unlockTokenAccepted === true) device.markUnlocked(usedClient.transport);
           flush();
         }
       });
