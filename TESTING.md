@@ -8599,3 +8599,124 @@ The rate settles slowly after the dump in both directions, so a single read afte
 - That the 42.30 failures were these same misses is inferred from the mechanism and the matching timing. 42.30 kept no presence trace, so it is not measured.
 - That 42.21 passed by chance is inferred. The same code and the same sampling were in place.
 - Row 9's FF env item and the other plan items are not touched.
+
+### 42.33 Two earlier branches merged: the balance-word notes kept as 42.11a, the FF platform record as 42.11b, and the FF bank rule dropped where the vendor form replaced it (2026-10-19)
+
+**1. What each branch brought.**
+
+- `worktree-agent-a9c8b175a0187b7be` (f9a34ce, "TESTING 42.13, the balance-word FF run withdrawn before any
+  write"): notes only, TESTING.md. The balance-word direction was withdrawn before any bench write. Host-side sums
+  and sha256 of the FF image's bank R and of the balance-word payload P are recorded, and the 42.6 stored-sum
+  mismatch is flagged and still open. Its section was numbered 42.13 there, which the 2014 plaintext chain holds
+  here, so it sits after 42.11 as **42.11a** (merge `e280829`).
+- `worktree-agent-ae27186421cb01b3e` (f8f2f55, "the FF image's banks follow the camera's bootloader; bench: the
+  FF platform path"), 20 files. It brought a bank rule for the FF image keyed on the bootloader the camera
+  reports (new `ff-platform.ts`: 0.9.0.0 recovery R only; 2.0.2.3 refused for A, B and R; any other or unknown
+  bootloader refused). It brought measurements on the FF platform (bootloader 2.0.2.3, the FF launchable copy):
+  the two-stream write was accepted at B, A and R, and none of the three booted alone with cfg[0] 0, R not with
+  cfg[0] 2. It brought a bench path for that platform (`WRITABLE_BANKS` adding 0x14030000, a 2.0.2.3 FF flow in
+  `spec-flow.ts`, a `ffBootloader` option on the fake rig), a corrected `write-commit.ts` note on 0x70100, and the
+  wording of the notes, the confirm dialog and SlotsView. Its measurements are kept as **42.11b** (merge `9449824`).
+
+**2. What was kept, and what was dropped and why.**
+
+Kept:
+
+- The two sections, 42.11a and 42.11b, with provenance lines. The subsections of 42.11b that describe the dropped
+  code ("What the page does now", "Bench library") say so at their head.
+- `packages/core/src/workflows/device-info.ts`: the `recovery-only` label for the 1.3.0.8-FF image in recovery R
+  is given only when the camera reports bootloader 0.9.0.0. A local constant is used, since `ff-platform.ts` is
+  gone. The reason is 42.11b: on 2.0.2.3 the two-stream form in R booted from no bank alone, so the label is not
+  supported there, and nothing measured supports it there. The gate refuses no write. It changes a label only
+  for a bank that carries the 1.3.0.8-FF key pair (`locateFFKeys` matches that pair and no other) on a camera
+  whose bootloader is not 0.9.0.0.
+
+Dropped, because the vendor form (42.12) replaced the two-stream form they were written for, or because the
+current code already says the same thing better:
+
+- `ff-platform.ts` and `ff-platform.test.ts`. The rule is about the two-stream payload the page no longer sends;
+  `ffBankRefusal` is gone from the current branch. Its 0.9.0.0 "R only" rule is also contradicted by the current
+  42.12 bench run, which wrote the vendor form to A, B and R on the 0.9.0.0 platform (commit 0x0000 each, read back
+  as predicted).
+- `packages/core/src/slots/write.ts`: the four refusal hunks (the import of `ffBankRefusal`, the two-stream check
+  in `prepareSlotFlash`, the 0xFFFF check in `stageImage`, and the plan check in `assertPlanIsCurrent`). The
+  current write path gates the FF image on the running build (`runningApplicationOf`) and stages the vendor form.
+- `packages/core/src/slots/capability-notes.ts`, the FF bank notes, `SlotWriteConfirm.tsx`, `SlotsView.tsx` and
+  their tests: the wording of the R-only rule. The current wording describes the vendor form and the camera's own
+  answers as the basis.
+- `packages/core/src/slots/write-commit.ts`: the 0x70100 note. The current text already says the code is not a
+  nano or Compact XR code alone, and it names the 1.3.0.8 FF gate, so the current text is kept.
+- `e2e/lib/bench/spec-flow.ts`, `spec-fakes.ts`, `bench-lib.e2e.ts`, `ff-form.ts` and `types.ts`, and `jlink.ts`:
+  the 2.0.2.3 FF flow, its picker refusals and the fake's bootloader. The current FF subject runs the vendor-form
+  run (`ff-vendor-run.ts`) and does not use the picker, so that flow cannot run as written.
+- `WRITABLE_BANKS` (0x14030000). The merged code does not need it. The branch's own record says whether 0x14030000
+  is a bank on this bootloader is NOT established, so the current refusal of that address is kept.
+- The branch's refusal of the FF image for every bank on 2.0.2.3. It refuses a form the page no longer produces,
+  and the vendor form has no measurement on that bootloader. Whether to refuse it there is the owner's call (see
+  section 7).
+
+**3. Conflicts and how each was resolved** (one line each; the TESTING.md conflicts are the same in both merges):
+
+- TESTING.md (both merges): both branches appended at the end of 42.11, so the new sections go in before 42.12 as
+  42.11a and 42.11b, not at the end.
+- `e2e/bench-lib.e2e.ts`, `spec-fakes.ts`, `spec-flow.ts`, `packages/cli/test/slots.emulator.test.ts`:
+  the current branch's version; the branch's FF-platform tests and bench branch dropped.
+- `packages/core/src/slots/capability-notes.ts`, `write-commit.ts`, `write.ts`: the current branch's version; see
+  the dropped list above.
+- `packages/core/src/workflows/device-info.ts`: the current branch's version plus the 0.9.0.0 gate on
+  `ffFormInRecovery` (see the kept list). Prettier was applied to the new signature.
+- `packages/core/test/slots/capability.test.ts`, `running.test.ts`, `write.test.ts`: the current branch's version;
+  the branch's expectation changes and its FF-platform test dropped.
+- `packages/web/src/components/SlotWriteConfirm.tsx`, `SlotsView.tsx`, `SlotsView.test.tsx`: the current branch's
+  version.
+
+**4. The verdict table.** Not changed. `e2e/lib/slots-expectations.ts` is not touched by either merge, so no row's
+expectation changed.
+
+**5. Tests.** Per package, not a whole vitest run. `SEEK_EMU_DIR=/Users/yrambler2001/things/a.noindex/seek/FW-V1/emu`
+for the emulator suites. Counts are from this merged tree.
+
+| check | scope | result |
+| --- | --- | --- |
+| `npm run typecheck` (all six `tsc` configs) | repo | exit 0 |
+| core unit, 8 files: capability (no emulator dir, so its manifest check skips), running, write, write-ff, write-commit, camera-refusal, empty-bank, verify | packages/core | 527 passed, 6 skipped |
+| core, consumers of `readDeviceInfo`, 6 files: identity-gate, plain-chain-flash, workflows, slots/inspect, slots/write-keys, slots/fps-patch | packages/core | 145 passed |
+| core emulator, 10 files: capability, corpus-locked, write.emulator, accept, empty-bank.emulator, page-expectations, fps-patch.pro-2016, fps-patch.stage-two, fps-patch.emulator, dump.emulator | packages/core, `SEEK_EMU_DIR` | 967 passed, 1 skipped, 8 failed in one parallel run (see below) |
+| core emulator, page-expectations alone | packages/core, `SEEK_EMU_DIR` | 184 passed |
+| CLI, 3 files: slots.emulator, slots.test, emulator-cli | packages/cli, `SEEK_EMU_DIR` | 130 passed |
+| web, 4 files: SlotsView, SlotsView.verdicts, SlotWriteConfirm, SlotWriteKeys | packages/web | 67 passed |
+| e2e offline: bench-lib.e2e (corpus tests skip without `SEEK_FULL_DUMPS_BY_CAMERA`), bench-verdict.e2e (its real-tree test skips) | e2e | bench-lib 95 passed, 2 skipped; bench-verdict 29 passed, 1 skipped |
+| eslint, `packages/core/src/workflows/device-info.ts` | packages/core | clean |
+| prettier, `device-info.ts` | packages/core | clean after formatting the new signature |
+
+The 8 failures in the parallel core run are all `page-expectations.emulator.test.ts` "bank A / bank B: the page
+offers the write" on Compact 0.8.0.0, 0.9.0.2, 0.9.1.0 and 1.3.0.0, each "Test timed out in 5000ms". The same file
+run alone passes all 184 tests. They are a per-test timeout under parallel load, not a result, and the file is
+not changed. The other nine files in that run passed. `TESTING.md` was already not prettier-clean at HEAD, so it
+was not reformatted.
+
+**6. Bench rows to run on the camera later.** Nothing was run here: no camera, J-Link or switch was used, and no
+bench row was run.
+
+- **Row 9 (Compact 1.3.0.8 FF, vendor form)** is the only subject whose result the merged code can change. The
+  label changes only when the camera's bootloader is not 0.9.0.0 and its recovery bank holds the 1.3.0.8-FF key
+  pair. On the 0.9.0.0 platform that row used, nothing changes. Run row 9 once on a camera whose bootloader is
+  2.0.2.3 (the FF launchable platform of 42.11b) before any vendor-form write there. The refusal that would have
+  stopped that write was dropped, and the vendor form is unmeasured on 2.0.2.3.
+- **Rows 14 (Compact 4.16.1.7 FF) and 15 (Compact PRO 1.0.3.0 FF)** are not affected. Their images do not carry
+  the 1.3.0.8-FF key pair, so the gate never applies to them. Rows 17, 18, 22 and 24 (the other FF builds) are not
+  affected for the same reason. None needs a run for this merge.
+- No row's verdict expectation changed (section 4).
+
+**7. Not done or not verified.**
+
+- The owner's decision: should the vendor form be refused on bootloader 2.0.2.3, as the f8f2f55 branch refused the
+  two-stream form? The merged code does not refuse it. Until a bench run on 2.0.2.3 says what the vendor form does
+  there, the page allows the write on every bootloader.
+- The 42.6 stored-sum discrepancy, flagged in 42.11a, is still open.
+- Section 42.21 says "The FF bootloader does not run the vendor form (42.12)". Section 42.12 does not measure that:
+  its post-write boot was recorded as not measured. That sentence is not edited here.
+- Not run: a whole vitest run (a rule of this work), the web package's full suite, `npm run check`, the bench rows,
+  and the `e2e:slots:quality` and `e2e:fps:bench` specs.
+- The 5-second per-test timeout in `page-expectations.emulator.test.ts` is tight for a parallel emulator run. It
+  is not changed here.
