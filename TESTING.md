@@ -9116,3 +9116,49 @@ Either way, the checker and Swift must change together. Changing only the checke
 - The other CLI test files that import `helpers.ts` were not run (the brief named three files). The helper change adds an optional parameter and keeps the default.
 - `packages/core/test/preservation/fps-patch.test.ts:194` says the copy form "has no camera measurement", the same error fixed in section 1. It is outside these items and is not changed.
 - `plan.md` is not edited. The owner can close the "Fix two texts after 42.37" item in plan.md section 1 and the three items in section 4 (the 42.21 sentence, the slots fixture, the dump message) after review.
+
+### 42.44 The slots table stays after a write (read again under the write's own profile, with no identify probe); the Info tab's identity read and the CLI `info` read are recorded as deliberate, nothing changed (2026-10-19)
+
+**Summary.** Two plan items. (1) After a committed write the slots page dropped its read, so the bank table stayed empty until "Read slots" was pressed. The read is still dropped at the commit point, and the banks are read again after the read-back, under the write's own profile and build. Changed in `packages/web/src/hooks/useSlotsPanel.ts` (commit `ffaa310`), with tests in `useSlotsPanel.test.tsx` and `SlotsView.test.tsx`. (2) The CLI `info` sends SetFirmwareInfoFeatures (0x55) and SetRAMDataFeatures (0x5a) and reads the slots; the web Info sends neither. The difference is deliberate: 42.17 made the Info tab an identity read. Nothing was changed for item 2; the options are below. Nothing ran on a camera.
+
+**Tags.** [measured] is a test run, or a read of the code on this branch that was checked by grep. [inferred] is what follows from the code and was not run.
+
+**1. The bank table after a write.**
+
+- **Cause [measured].** `write` in `useSlotsPanel.ts` called `forgetReport()` in its `finally` once the write was committing. With no report, `SlotsView` unmounts the table and shows "Press Read slots". Core already reads the bank back: `flashSlot` returns the read-back and its verdict (`after`, `verified`, `packages/core/src/slots/write.ts`). The page threw that read-back away with the report.
+- **Change.** The report is dropped at the commit point, before `backend.flash` (`useSlotsPanel.ts:878-879`), so nothing after the commit can use the old read. When the flash returns, whatever its verdict (`verified` true, false or null), `readAfterWrite` reads the banks again with `backend.inspect` on the same client, under the report's own profile and version (`useSlotsPanel.ts:495`, called at `:900`). Read slots is unchanged.
+- **No identify probe after the commit.** The identify step runs `probeSelectorChannel` (`packages/core/src/workflows/capability.ts`), which sends a plain and then an authenticated BeginFirmwareUpgrade on a protected subcommand. [measured in code] Nothing after a commit should arm more than the banks' own read does, so the re-read reuses the profile the write was sent under. [inferred]
+- **Failures stay honest.** A failed or cancelled re-read is logged as a warning, the write's outcome stays, and the report stays null, so no bank is shown as read. A write the page refuses before the commit (no acknowledgement, a stale report) keeps the read it was made from. A refusal core makes inside `flashSlot`, before any byte is sent, is still after the commit point and drops the read, as before.
+- **Why a re-read and not a patch of one row.** The read-back is the raw bytes of one bank. The table's rows are core's analysis of the whole camera (`inspectSlots`, which calls `readDeviceInfo`), and core has no one-bank analysis from bytes. [inferred from `slots/inspect.ts` and `slots/write.ts`]
+- **What the table shows before the replug.** The version and the active bank settle only after a power cycle. The table after a write shows the camera's answers as they stand before the replug. The outcome panel already says so, and the log line for the re-read says so.
+
+Tests, all targeted, no camera:
+
+- `packages/web/src/hooks/useSlotsPanel.test.tsx`: 43 of 43 (39 before, 4 new). The test "writes it only after the confirmation" now asserts the table is read again; it used to assert the table was null. New: the table shows the re-read report and not the one from before, with the identify probe run once; a read-back that does not match keeps the table and says so; a failed re-read keeps the outcome and shows no bank as read; a write refused before the commit keeps its read.
+- `packages/web/src/views/SlotsView.test.tsx`: 44 of 44 (3 new). The table stays on screen after a write, with the outcome above it; a read-back that does not match keeps the table and says it does NOT match; no read after a write shows no table, no "reads back as written", and the Read slots prompt.
+- `packages/web/src/views/SlotsView.verdicts.test.tsx`: 6 of 6, unchanged.
+- `npx tsc --noEmit -p packages/web/tsconfig.app.json`: exit 0. eslint and prettier on the three files: clean.
+
+**Not verified.** On a camera, a read straight after a commit with no reset is not known to be answered. If it is not, the page logs it and the table stays empty, as it did before this change. The re-read is not proven on hardware.
+
+**2. CLI `info` and the web Info: the two read paths.**
+
+- **Web Info** (`packages/web/src/hooks/useInfoPanel.ts`, core `readRunningFirmware`). Two GetFirmwareInfo reads, with the operation-mode and error-code reads. Nothing is armed, no slot is read, and it sends neither 0x55 nor 0x5a. `useInfoPanel.test.tsx`, "sends only the identity read", pins the wire to those three requests. [measured]
+- **CLI `info`** (`packages/cli/src/commands/info.ts`, `analyseCamera`). The identify probe (`identifyCamera`, which arms, unless `--profile` or `--no-probe` is given), then core's `readDeviceInfo`. That sends SetFirmwareInfoFeatures (0x55) for selectors 1, 20, 17 and 10 (`packages/core/src/workflows/device-info.ts:540-556`), SetRamDataFeatures (0x5a) for the device-id block (`client.ts:405`, `device-info.ts:559`), and arms the boot config, the bootloader block and the slots through `armWindow`. [measured]
+- **Web Slots page.** `CORE_SLOTS_BACKEND` (`useSlotsPanel.ts`): `identify` is the same `identifyCamera` probe, then `inspectSlots`, which calls `readDeviceInfo`. So the CLI `info` and the web Slots page already share one read sequence through core. The web Info is the only path that does not. [measured]
+- **Dumps do not reach it.** `readDeviceInfo` is called only by `inspectSlots` (the slots page, and the CLI `slots`) and by the CLI `info`. `readFwInfo`, `tryFwInfo` and `readSerial` are called only from `device-info.ts`. No dump, sweep or preserve path calls either, so the `FLASH_OPS` rule (nothing in it runs during a dump) holds. [measured by grep of `packages/core/src` and `packages/cli/src`]
+- **What the two setters do.** 0x55 latches a selector in the camera's RAM (`g_fw_info_selector`); the next GetFirmwareInfo returns that record and clears the latch. It writes nothing in flash (TESTING.md lines 1838-1870 and 6732-6734). The latch outlives the host session, so a setter that is never read leaves the next unarmed read returning another record. That is why `readRunningFirmware` reads twice and why 0x55 is not sent before identity. 0x5a arms the RAM device-id block for the next ordinary read (`client.ts:403-412`). Neither is a flash write. [measured in the code and TESTING.md; the emulator notes say the same]
+- **History.** 42.16 (2026-10-18): the CLI `info` "reads the camera as before". 42.17 (commit `d3a82dc`): the web Info became "reads the firmware version (read-only)" with "Nothing else", and the device info moved to the Slots page, "the same read as its bank table". Its hook header says "No selector is armed, no slot is read and nothing is written." 42.18: recorded as "Recorded, not changed. ... Both are the read paths as they were built."
+
+Options for the owner. Nothing was changed.
+
+- **A. Keep both (recommended).** The Info tab stays an identity read, and the full read stays on `info` and the Slots page. Evidence: the 42.17 decision, the Info text, and the pinned Info wire test. The bench calls `seek-fw info --json` (42.16), so the CLI's output would change under option C. The `FLASH_OPS` rule is intact.
+- **B. Give the web Info the full read.** The Info tab would send 0x55 and 0x5a, arm the boot config and the slots, and send the probe's arms. That breaks its stated contract ("Nothing else"), fails "sends only the identity read", and repeats the Slots page's read on the landing tab. Only if the owner wants the landing tab to show the slots.
+- **C. Make the CLI `info` identity-only.** That removes the slot table, the boot data and the serial from `info` and from `info --json`, which the bench reads. Not recommended.
+
+**Not verified.** Nothing ran on a camera. No CLI test pins the `info` wire: the only CLI test that names 0x55 is `emulator-host-giveup.test.ts`, which is a bench-only emulator test. So the CLI path's wire is checked by reading the code, not by a test.
+
+**3. Noted, not changed.**
+
+- The frame-rate patch (`patchFps`) drops its report after a patch the same way (`if (used) forgetReport()`). The same fix would apply. It is not in the plan item and is left as it is.
+- `packages/core/src/protocol/ops.ts:44` says 0x55 and 0x5a are "used by the flash path only". The info read uses them too, through `readDeviceInfo`. The `FLASH_OPS` header's dump rule is correct; the comment at `:44` is narrower than the code.
