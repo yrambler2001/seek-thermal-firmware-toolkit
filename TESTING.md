@@ -9631,3 +9631,62 @@ Tests, all targeted, no camera:
 - The 4.x upgrade-target override was read from code and not run on a unit or in a test.
 - Nothing ran on a camera. The fps bench window path is not measured after this change, as in 42.45.
 - `plan.md` is not edited. Its 42.48 line is for the owner to tick.
+
+### 42.49 The FW-V1 build path, the bootloader targets and the 1.3.0.8 footer: make's BUILD is read in 24 targets, the bootloaders refuse before make, and the 1.3.0.8 footer goes after its image (2026-10-19)
+
+**Summary.** The three FW-V1 `plan.md` items, on branch `plan-hygiene` in the FW-V1 worktree `/private/tmp/claude-501/fwv1-hygiene`, three commits on top of 42.46's `1b4faceeb`: `b99426f8b` (the image path), `289548951` (the bootloader targets) and `3c3e688ea` (the 1.3.0.8 footer). Nothing was merged to FW-V1 main or pushed, and FW-V1's main checkout was not touched. The seek worktree was reset to `refactor/all-firmware-profiles` at `2744ad1`, as the brief asked; its old HEAD `cf5420b` is an ancestor of it. No camera, J-Link or USB switch was used. Every check ran in a sandbox holding a copy of one target's `tools/`, `Makefile` and `base/`, with a stub `make` that asks the real GNU make (`gmake`) where `TARGET_IMAGE` points and copies a stand-in image there, a logging `JLinkExe` that talks to nothing (`JLINKEXE` pointed at it), and the real `build_flash.mjs`, `package_image.py` and `jlink-runner.js`.
+
+**Tags.** [measured] is a command run in this session. [inferred] is read from the code and not run.
+
+**1. The image path (FW-V1 `b99426f8b`).**
+- Cause [measured]. `build_flash.mjs` expanded `TARGET_IMAGE` with `BASE_DIR`, `FIRMWARE_TARGET` and `TARGET_BUILD` only. Twenty-three of the 24 Makefiles say `TARGET_IMAGE ?= $(BUILD)/image.bin` with `BUILD ?= build`, so the script looked for the literal `$(BUILD)/image.bin`. Before the fix, 21 of the 24 stopped with `build finished but .../$(BUILD)/image.bin is missing`; the two bootloader targets without a base folder have no stand-in in the sandbox and were not reached.
+- The real make's image path, from `gmake -n target-image` in each tree (nothing executed) [measured]: `build/image.bin` for 23. `compact_pro_9hz_1_0_3_0` recurses with `BUILD=build/targets/compact_pro_9hz_1_0_3_0` and writes `--output build/targets/compact_pro_9hz_1_0_3_0/image.bin`, the path its `TARGET_IMAGE` already expands to.
+- Fix: `vars.BUILD = makeVar(makefile, "BUILD", "build")` in the 24 copies. The one target that takes its image from `TARGET_BUILD` is unchanged.
+- A side fact [measured]. A PATH miss in the sandbox ran the real GNU make on the 1.3.0.0 target, which built `build/image.bin` (47768 B). That image is byte-identical to the factory oracle. So the bytes are right; only the lookup was wrong.
+
+**2. The bootloader targets (FW-V1 `289548951`).**
+- What the three name [measured]. `compact_8hz_1_3_0_0_bootloader` names `base/compact_8hz_1_3_0_0_bootloader`, which is not in its tree. `compact_pro_ff_18hz_1_0_3_0_bootloader` names `base/compact_pro_9hz_1_0_3_0`, which its PRO FF base does not hold. `compact_pro_9hz_1_0_3_0_bootloader` has its base folder, but no `bootloader_to_be_reconstructed_full_flash.bin`. Each `base` is a symlink to another target's `base`.
+- What they should point to [measured]. Each bootloader image is byte-identical (sha256) to the first 64 KB of the 4 MB `firmware_to_be_reconstructed_full_flash.bin` in the same folder: `base/compact_8hz_1_3_0_0`, `base/compact_pro_9hz_1_0_3_0` (the file there is named `.BIN`) and `base/compact_pro_ff_18hz_1_0_3_0`. So the factory-flash file is that camera's own 4 MB dump, and the PRO FF bootloader's own folder is the PRO FF one, not the 9 Hz one its Makefile names.
+- Why the targets are refused rather than pointed there [measured]. A bootloader image has no app header: words 0x200 and 0x204 are both 0. `package_image.py` stamps it and builds a 0x14000-byte payload, which exceeds the 64K upgrade window (`ValueError: bank payload 0x14000 exceeds the 64K upgrade window`). So it is not a bank image.
+- Fix: `preflight()` in the 24 copies runs before make. It refuses, naming the missing BASE_DIR or the missing factory-flash file, with "nothing was built". The three bootloader targets are refused. So are the 18 application targets whose base folder holds no `firmware_to_be_reconstructed_full_flash.bin`; before, they built and then stopped at `packageBank`. No reference file was added to any tree.
+- Real trees, no stand-ins [measured]: `compact_8hz_1_3_0_0`, `compact_pro_9hz_1_0_3_0` and `compact_pro_ff_18hz_1_0_3_0` reach flash-bank. The other 21 refuse before make, each naming the file or folder.
+
+**3. The 1.3.0.8 footer (FW-V1 `3c3e688ea`).**
+- Which value is right. `header.length` 0xBFE8 is right [measured]: it is the file size (49128 B), and the 2014 bootloader's `image_sum_ok` (bootloader 0x14000634, `src/crypto.c`) sums exactly that many bytes. The footer offset 0xBFC0 is wrong for this image: `((0xBFE8>>14)+1)*0x4000 - 0x40` lies inside the image, on its last 40 bytes. The 2014 bootloader reads no footer, and the factory 2014 and 2016 banks carry none: the 1.3.0.0 dump's slot A and recovery have no `CODE` at 0xBFC0, and the PRO 1.0.3.0 and PRO FF 1.0.3.0 dumps have none at 0xFFC0 [measured]. The footer is the 4.x `boot_main` convention, which the docs describe [inferred from the docs and `FLASHING_TROUBLESHOOTING.md`].
+- Overwrite? [measured] No. `package_image.py` and `seek_fw_tool.mjs` both raise `image (0xbfe8) overruns footer slot (0xbfc0)` before writing anything. But the runner's footer guard and `build_flash`'s `validateBank` carry the same formula, so none of the four could build a 1.3.0.8 bank.
+- Fix: the footer is the first page end at or after `length + 0x40`: `((((length + 0x3F) >> 14) + 1) * 0x4000) - 0x40`. It equals `boot_main`'s formula except where that value falls inside the image. For 0xBFE8 it is 0xFFC0, a 0x10000 B payload inside the 64K window. Changed in the 1.3.0.8 copies of `package_image.py`, `seek_fw_tool.mjs`, `build_flash.mjs` and `jlink/jlink-runner.js` (two lines).
+- The other images [measured]. The same formula was checked over 69 images (the tree's base folders and the corpus manifest). Only the 1.3.0.8 image (0xBFE8, two entries) changes, and no image's new footer is inside the image or past 64K. The copies in the other targets, `codegen/` and `emu/` give the same offsets for every image in the tree, so they are not changed.
+- Test [measured]. `package_image.py` loaded from this target: `footer_offset(0xBFE8) = 0xFFC0`; equal to the old value wherever the old footer was after the image. The 1.3.0.8 image packages to 0x10000 B, with the packaged image in front, 0xFF between, and `CODE` and length 0xBFE8 at 0xFFC0.
+
+**4. The sandbox runs, all 24 (stub `make`, logging `JLinkExe`).** The "before" column is HEAD's `build_flash.mjs` with a stand-in factory file where the base folder lacks one. "Stand-in" means a copy of the 1.3.0.0 dump placed as the missing factory file, in the sandbox only. Boot word and bank are read from the `loadbin` calls.
+
+| Target | `make -n` image | before (`--flash`) | after, real tree (`--flash`) | after, stand-in (`--flash` / `--slot a`) |
+| --- | --- | --- | --- | --- |
+| compact_8hz_1_3_0_0 | build/image.bin | `$(BUILD)` missing | B, boot 1 | B, boot 1 (footer 0xBFC0) / A, boot 0 |
+| compact_8hz_1_3_0_8 | build/image.bin | `$(BUILD)` missing | refused: no factory flash | B, boot 1 (footer 0xFFC0) / A, boot 0 |
+| compact_8hz_0_5_1_3, 0_9_0_2, 1_0_0_0, 0_10_0_0, 0_3_0_1, 0_5_0_2, 0_5_1_0, 0_6_0_4, 0_7_0_7, 0_7_0_8, 0_8_0_0, 0_9_0_6, 0_9_0_7, 0_9_1_0, 1_2_0_0 (15 targets) | build/image.bin | `$(BUILD)` missing | refused: no factory flash | B, boot 1 / A, boot 0 (each) |
+| compact_8hz_1_3_0_0_bootloader | build/image.bin | not reached [inferred: same literal path] | refused: BASE_DIR `base/compact_8hz_1_3_0_0_bootloader` | refused: the same |
+| compact_pro_9hz_1_0_3_0 | build/targets/compact_pro_9hz_1_0_3_0/image.bin | B, boot 1 | B, boot 1 (`.BIN` matched) | B, boot 1 / A, boot 0 |
+| compact_pro_9hz_1_0_3_0_bootloader | build/image.bin | `$(BUILD)` missing | refused: no `bootloader_to_be_reconstructed_full_flash.bin` | packager: 0x14000 B exceeds 64K |
+| compact_pro_9hz_1_0_3_2 | build/image.bin | `$(BUILD)` missing | refused: no factory flash | B, boot 1 / A, boot 0 |
+| compact_pro_ff_18hz_1_0_3_0 | build/image.bin | `$(BUILD)` missing | B, boot 1 | B, boot 1 / A, boot 0 |
+| compact_pro_ff_18hz_1_0_3_0_bootloader | build/image.bin | not reached [inferred: same literal path] | refused: BASE_DIR `base/compact_pro_9hz_1_0_3_0` | refused: the same |
+| compact_pro_ff_18hz_1_0_3_2 | build/image.bin | `$(BUILD)` missing | refused: no factory flash | B, boot 1 / A, boot 0 |
+
+Totals: with the stand-in, 21 targets reach flash-bank at bank B with boot word 1 (`--slot a`: bank A, boot word 0). In the real trees, 3 reach it and 21 stop before make.
+
+**5. Found, not changed.**
+- **The 2014 bank format.** [measured] The 1.3.0.0 dump's slot A (0x14050000) is the decrypted image byte for byte, and its word sum over `header.length` is 0. The 2014 bootloader's `image_sum_ok` sums the raw words and requires 0, and `boot_copy` copies without decrypting [measured from the source]. `package_image.py` and `seek_fw_tool.mjs` encrypt with Key A and stamp the sum to 0xFFFF, the 4.x format; for the 1.3.0.8 image the adjust word comes out 0xFFFF. So a 2014-chain bank from `build_flash --flash` is not in the format the 2014 bootloader accepts. [inferred] The camera would then boot slot A. Not tested on a camera. The seek repo already has the 2014 rule: the plain staging form in `packages/core/src/slots/write-image.ts` (the stored word sum is 0) and `checksFooter: false` in `packages/core/src/profiles/legacy-auth.ts`.
+- **The factory-flash reference.** 18 of the 24 target base folders hold no 4 MB dump, and the three bootloader targets name a file their trees do not hold. The three 4 MB dumps in the tree are 1.3.0.0, PRO 1.0.3.0 (`.BIN`) and PRO FF 1.0.3.0. 42.40 and 42.46 used a stand-in packager and stand-in dumps, so they did not see this. `--footer-from` also reads slot A at 0x30000, the 4.x slot. On the 2014 dumps that is erased, so every 2014 bank built here has a blank footer body (`model` is `ÿÿÿ`) [measured].
+- **Case.** `compact_pro_9hz_1_0_3_0` names `firmware_to_be_reconstructed_full_flash.bin`, but the file is `.BIN`. The check passes on a case-insensitive filesystem (macOS) and would fail on Linux [inferred].
+- **4.x copies.** `compact_8hz_4_8_1_7`, `compact_8hz_4_8_1_9` and `compact_ff_16hz_4_16_1_7` have the same `TARGET_IMAGE ?= $(BUILD)/image.bin`, and their `build_flash.mjs` copies are not changed [inferred from the Makefile line].
+- **Seek slot writer.** `packages/core/src/image/header.ts` `footerOffsetFor` gives 0xBFC0 for 0xBFE8, the same as the old FW-V1 formula [measured]. It is used on the Key-A path only, where `bank.ts` throws `flash/refused` ("overruns its footer slot") and writes nothing. A 1.3.0.8 image takes the plain 2014 staging (sum 0, `plainChainBuildOf` in `write-image.ts`), which has no footer. Nothing changed in the seek repo.
+
+**Not verified.**
+- Nothing ran against a J-Link, a camera or a bank. The stub `make` does not build; the one real build (1.3.0.0, above) was an accident.
+- The 2014 acceptance of a packaged bank is not tested on a camera; section 5 is from the code and the dump.
+- The footer rule is correct for the 2014 bootloader only in the sense that it reads no footer. Whether the owner wants a footer on 2014 banks at all is open.
+
+**Commits.**
+- FW-V1, branch `plan-hygiene`, worktree `/private/tmp/claude-501/fwv1-hygiene` (not merged, not pushed): `b99426f8b` (item 1), `289548951` (item 2), `3c3e688ea` (item 3).
+- Seek: this note, on branch `worktree-agent-af0c564a9330f9626`, reset to `refactor/all-firmware-profiles` at `2744ad1`.
