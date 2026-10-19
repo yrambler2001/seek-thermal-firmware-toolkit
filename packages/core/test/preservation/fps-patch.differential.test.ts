@@ -26,6 +26,7 @@ import {
   FPS_OFFER_WITHHELD,
   FPS_MEASURED_HZ,
   FPS_STAGE_ONE_IDS,
+  FPS_STAGE_THREE_IDS,
   FPS_STAGE_TWO_IDS,
   applyFpsPatch,
   fpsImageLength,
@@ -122,8 +123,13 @@ describe('the table against the Python table (no corpus needed)', () => {
       'compact_pro-4.9.1.15',
       'compact_pro-4.9.2.0',
     ]);
+    expect([...FPS_STAGE_THREE_IDS].sort()).toEqual(['compact_pro-1.0.3.0', 'compact_pro-1.0.3.2']);
     for (const entry of FPS_PATCHES) {
-      if (FPS_STAGE_ONE_IDS.has(entry.id) || FPS_STAGE_TWO_IDS.has(entry.id)) {
+      if (
+        FPS_STAGE_ONE_IDS.has(entry.id) ||
+        FPS_STAGE_TWO_IDS.has(entry.id) ||
+        FPS_STAGE_THREE_IDS.has(entry.id)
+      ) {
         expect(entry.gate.enabled).toBe(!FPS_OFFER_WITHHELD);
         if (FPS_OFFER_WITHHELD) expect(entry.gate.reason).toMatch(/withheld after the bench run/);
         else expect(entry.gate.reason).toBeNull();
@@ -253,7 +259,11 @@ corpusDescribe('the table against the Python tool, over the corpus (SEEK_FPS_COR
         const entry = entryNamed(top.patch);
         const build = entry.version.replace(/-FF$/, '');
         const plan = planFpsPatch(stock, build);
-        if (FPS_STAGE_ONE_IDS.has(entry.id) || FPS_STAGE_TWO_IDS.has(entry.id)) {
+        if (
+          FPS_STAGE_ONE_IDS.has(entry.id) ||
+          FPS_STAGE_TWO_IDS.has(entry.id) ||
+          FPS_STAGE_THREE_IDS.has(entry.id)
+        ) {
           expect(plan.status, entry.id).toBe('offer');
           if (plan.status === 'offer') {
             expect(plan.toHz, entry.id).toBe(FPS_MEASURED_HZ.get(entry.id) ?? entry.targetHz);

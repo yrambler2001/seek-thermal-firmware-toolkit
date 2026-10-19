@@ -26,6 +26,9 @@
  *   - stage two: the 4.x line (the Compact 4.8.1.7, 4.8.1.9, 4.8.2.1 and the Compact PRO 4.9.1.15, 4.9.2.0),
  *     whose banks are staged under the camera's Key A and stored under the bank's own key. The write is
  *     checked on the read-back DECRYPTED, against the patched image (slots/fps-patch.ts).
+ *   - stage three: the Compact PRO 2016 keystream line (1.0.3.0 and 1.0.3.2, 9 Hz), whose banks are
+ *     staged under the image's own stage key (key block 0, not Key A) and stored under block 1. The
+ *     write is checked on the read-back DECRYPTED, the same way (slots/fps-patch.ts).
  * Every other entry stays in the table with its gate recorded as "stage two: ...", so it can
  * be switched on after its own staging check.
  *
@@ -139,6 +142,18 @@ export const FPS_STAGE_TWO_IDS: ReadonlySet<string> = new Set([
   'compact_pro-4.9.2.0',
 ]);
 
+/**
+ * The stage-three entries: the Compact PRO 2016 keystream line, the 9 Hz builds 1.0.3.0 and 1.0.3.2. Their banks
+ * store the image under a key block of the image's own pair (the stage key is key block 0, found in the image by
+ * value), not under the camera's Key A, so they are a third staging form and a separate set: the stage-two
+ * entries' write and read-back are about Key A. Written as slots/write-image.ts `buildSlotKeystreamPayload`
+ * stages it, checked on the read-back decrypted (slots/fps-patch.ts). Pinned by a test.
+ */
+export const FPS_STAGE_THREE_IDS: ReadonlySet<string> = new Set([
+  'compact_pro-1.0.3.0',
+  'compact_pro-1.0.3.2',
+]);
+
 /** True when a dotted build version is older than `than` (an FF suffix is ignored). */
 function versionBefore(version: string, than: string): boolean {
   const a = version.replace(/-FF$/, '').split('.').map(Number);
@@ -151,9 +166,13 @@ function versionBefore(version: string, than: string): boolean {
   return false;
 }
 
-/** Why an entry outside stages one and two is not offered yet. Null for an offered entry. */
+/** Why an entry outside the three stage sets is not offered yet. Null for an offered entry. */
 function gateOf(source: FpsPatchSource): FpsGate {
-  if (FPS_STAGE_ONE_IDS.has(source.id) || FPS_STAGE_TWO_IDS.has(source.id)) {
+  if (
+    FPS_STAGE_ONE_IDS.has(source.id) ||
+    FPS_STAGE_TWO_IDS.has(source.id) ||
+    FPS_STAGE_THREE_IDS.has(source.id)
+  ) {
     return FPS_OFFER_WITHHELD
       ? { enabled: false, reason: WITHHELD_REASON }
       : { enabled: true, reason: null };
@@ -168,11 +187,7 @@ function gateOf(source: FpsPatchSource): FpsGate {
     };
   }
   let why: string;
-  if (source.family === 'compact_pro' && source.version.startsWith('1.0.3.')) {
-    why =
-      'stage two: the Compact PRO 1.0.3.x line stores its banks under the 2016 keystream, not as ' +
-      'plain bytes, so its staging check is not done and the page does not offer this patch yet';
-  } else if (source.version.endsWith('-FF')) {
+  if (source.version.endsWith('-FF')) {
     why =
       'stage two: the 16 Hz FF build is staged as the vendor app stages it (the image XOR Key A, ' +
       'stored under Key B), not as plain bytes, so its staging check is not done and the page does ' +

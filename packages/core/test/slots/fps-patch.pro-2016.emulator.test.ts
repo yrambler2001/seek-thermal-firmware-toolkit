@@ -5,12 +5,11 @@
  * are not subjects here.
  *
  * FOR EACH SUBJECT, one boot of the stock flash, then one boot of the patched flash:
- *   1. the bank's decrypted image is the table's stock image of the subject's entry; the offer is still refused
- *      by the stage gate (the planner names the 2016 keystream reason). This file proves the write path with the
- *      offer closed: the write is `writeFpsPatch`, which takes the table's entry for the bank;
+ *   1. the bank's decrypted image is the table's stock image of the subject's entry, and the offer (stage three,
+ *      the planner's own gate) is "Make 18 FPS" on bank A at 18 Hz;
  *   2. THE SAVE GATE: a save that does not happen refuses the write, and no SetFeaturedFirmwareData (0x50) or
  *      CompleteMemoryUpgrade (0x51) is sent;
- *   3. the patch: the pre-patch dump is handed to the save FIRST, holding bank A exactly as the emulator served
+ *   3. the patch (patchBankFps): the pre-patch dump is handed to the save FIRST, holding bank A exactly as the emulator served
  *      it; the write is staged under the image's own stage key (slot-keystream-ciphertext), commits with status 0,
  *      and the writer's own read-back verifies; the read-back, decrypted, differs from the stock image only at
  *      the planned bytes; ResetDevice is never sent;
@@ -36,7 +35,7 @@ import { dumpSlot } from '../../src/slots/dump.js';
 import { inspectSlots } from '../../src/slots/inspect.js';
 import {
   fpsPlanOfBank,
-  writeFpsPatch,
+  patchBankFps,
   type FpsPatchResult,
   type FpsPreDump,
 } from '../../src/slots/fps-patch.js';
@@ -186,13 +185,14 @@ for (const { label, table } of PRO_2016) {
               table,
             ]);
             const offer = fpsPlanOfBank(report, 'a');
-            expect(offer.status, `${label}: the stage gate is closed`).toBe('refused');
-            if (offer.status === 'refused') expect(offer.reason).toMatch(/2016 keystream/);
+            expect(offer.status, `${label}: the offer`).toBe('offer');
+            if (offer.status !== 'offer') return;
+            expect(offer.toHz).toBe(18);
 
             /* 2. the save gate: nothing is written when the dump is not saved */
             const beforeGate = sent.length;
             await expect(
-              writeFpsPatch(ctx, report, 'a', dumpedA, patch, {
+              patchBankFps(ctx, report, 'a', {
                 acknowledgeRisk: true,
                 saveDump: () => Promise.resolve(false),
               }),
@@ -204,7 +204,7 @@ for (const { label, table } of PRO_2016) {
             /* 3. the patch, with the pre-patch save first */
             const saved: FpsPreDump[] = [];
             const beforePatch = sent.length;
-            const result: FpsPatchResult = await writeFpsPatch(ctx, report, 'a', dumpedA, patch, {
+            const result: FpsPatchResult = await patchBankFps(ctx, report, 'a', {
               acknowledgeRisk: true,
               saveDump: (dump) => {
                 saved.push(dump);

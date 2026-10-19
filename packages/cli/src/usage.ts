@@ -243,10 +243,11 @@ not banks and are never written.
            0.9.0.2, 0.9.0.6, 0.9.0.7, 0.9.1.0, 0.10.0.0, 1.0.0.0, 1.2.0.0, 1.3.0.0 and 1.3.0.8
            builds on the plain 2014 chain, and the Compact 4.8.1.7, 4.8.1.9 and 4.8.2.1 (the
            Compact XR 4.8.2.1 too) builds under Key A. To 18 fps: the Compact PRO 4.9.1.15 and
-           4.9.2.0 builds under Key A. Other lines refuse with the reason. A dry run unless
-           --write: it prints the plan and sends nothing. --write saves the bank (raw and
-           decrypted) into --dump-dir FIRST, then writes the patched image and reads it back (on
-           Key A, the read-back is checked as the decrypted image).
+           4.9.2.0 builds under Key A, and the Compact PRO 1.0.3.0 and 1.0.3.2 builds on the
+           2016 keystream line. Other lines refuse with the reason. A dry run unless --write: it
+           prints the plan and sends nothing. --write saves the bank (raw and decrypted) into
+           --dump-dir FIRST, then writes the patched image and reads it back (on Key A and on
+           the 2016 keystream line, the read-back is checked as the decrypted image).
 
   --dump-dir <dir>       patch-fps: the folder the pre-patch dump is saved into (required with
                          --write; an existing dump there is never replaced)

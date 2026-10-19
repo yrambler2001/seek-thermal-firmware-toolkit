@@ -18,6 +18,7 @@ import {
   FPS_OFFER_WITHHELD,
   FPS_PATCHES,
   FPS_STAGE_ONE_IDS,
+  FPS_STAGE_THREE_IDS,
   FPS_STAGE_TWO_IDS,
   applyFpsPatch,
   fpsExpectedChanges,
@@ -220,13 +221,21 @@ describe('the stages: which entries are offered (pinned, so a change is delibera
       'compact_pro-4.9.1.15',
       'compact_pro-4.9.2.0',
     ]);
+    expect([...FPS_STAGE_THREE_IDS].sort()).toEqual(['compact_pro-1.0.3.0', 'compact_pro-1.0.3.2']);
     for (const id of FPS_STAGE_ONE_IDS) expect(FPS_STAGE_TWO_IDS.has(id), id).toBe(false);
+    for (const id of FPS_STAGE_THREE_IDS) {
+      expect(FPS_STAGE_ONE_IDS.has(id), id).toBe(false);
+      expect(FPS_STAGE_TWO_IDS.has(id), id).toBe(false);
+    }
   });
 
   it('enables exactly those entries (the offer is not withheld), and gives every other entry its stage-two reason', () => {
     expect(FPS_OFFER_WITHHELD).toBe(false);
     for (const patch of FPS_PATCHES) {
-      const offered = FPS_STAGE_ONE_IDS.has(patch.id) || FPS_STAGE_TWO_IDS.has(patch.id);
+      const offered =
+        FPS_STAGE_ONE_IDS.has(patch.id) ||
+        FPS_STAGE_TWO_IDS.has(patch.id) ||
+        FPS_STAGE_THREE_IDS.has(patch.id);
       expect(patch.gate.enabled, patch.id).toBe(offered);
       if (offered) expect(patch.gate.reason, patch.id).toBeNull();
       else if (patch.id === 'compact_32k-0.7.0.8-to32')

@@ -262,9 +262,10 @@ export const SLOTS_SUBJECTS: readonly SlotsSubject[] = [
     version: '1.0.3.0',
     emulator: 'Compact PRO 1.0.3.0 (9 Hz, native dump)',
     banks: ALL_WRITABLE,
-    fps: NO_FPS_TABLE,
+    fps: { offer: true, toHz: 18 },
     banner: 'none',
-    source: '42.1 (pass), 42.8 (locked-2016 is writable)',
+    source:
+      '42.1 (pass), 42.8 (locked-2016 is writable); frame-rate stage three (2016 keystream), 18 Hz table entry; every bank of the native dump decrypts to its stock image (fps-patch.pro-2016.emulator.test.ts)',
   },
   {
     name: 'Compact PRO 1.0.3.0 (FF)',
@@ -272,9 +273,9 @@ export const SLOTS_SUBJECTS: readonly SlotsSubject[] = [
     version: '1.0.3.0',
     emulator: 'Compact PRO 1.0.3.0 (FF, native dump)',
     banks: ALL_WRITABLE,
-    fps: NO_FPS_TABLE,
+    fps: { offer: false, reason: 'already runs at 18 Hz' },
     banner: 'none',
-    source: '42.1 (pass)',
+    source: '42.1 (pass); the FF image is the 18 Hz build (known rate), so no patch is offered',
   },
   {
     name: 'Compact PRO 1.0.3.2 (std)',
@@ -282,9 +283,10 @@ export const SLOTS_SUBJECTS: readonly SlotsSubject[] = [
     version: '1.0.3.2',
     emulator: 'Compact PRO 1.0.3.2 (9 Hz, chimera)',
     banks: ALL_WRITABLE,
-    fps: NO_FPS_TABLE,
+    fps: { offer: true, toHz: 18 },
     banner: 'none',
-    source: '42.1 (pass)',
+    source:
+      '42.1 (pass); frame-rate stage three (2016 keystream), 18 Hz table entry; the chimera splices the image into every slot (fps-patch.pro-2016.emulator.test.ts)',
   },
   {
     name: 'Compact PRO 1.0.3.2 (FF)',
@@ -292,9 +294,9 @@ export const SLOTS_SUBJECTS: readonly SlotsSubject[] = [
     version: '1.0.3.2',
     emulator: 'Compact PRO 1.0.3.2 (FF 18 Hz, chimera)',
     banks: ALL_WRITABLE,
-    fps: NO_FPS_TABLE,
+    fps: { offer: false, reason: 'already runs at 18 Hz' },
     banner: 'none',
-    source: '42.1 (pass)',
+    source: '42.1 (pass); the FF image is the 18 Hz build (known rate), so no patch is offered',
   },
   {
     name: 'Compact PRO 1.0.3.2 (FF-FF)',
