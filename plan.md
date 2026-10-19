@@ -1,7 +1,7 @@
 # Plan: what is still to do
 
 Branch `refactor/all-firmware-profiles`: all commits are local; nothing is pushed and main is never touched without the owner's explicit approval (owner, 2026-10-19: keep it local until the owner says). FW-V1 `main` was pushed on the owner's word on 2026-10-19 (`a13c615c6`).
-Done work is in `TESTING.md` (sections 42.x; the latest is 42.31) and `FPS_32HZ.md`; this file lists only what is open. Status marks: [ ] open, [~] running, [?] needs the owner.
+Done work is in `TESTING.md` (sections 42.x; the latest is 42.35; 42.32 to 42.34, 42.36 and 42.37 are running) and `FPS_32HZ.md`; this file lists only what is open. Status marks: [ ] open, [~] running, [?] needs the owner.
 
 ## Standing rules
 
@@ -39,7 +39,9 @@ Every 8 and 9 fps build with a table entry is offered except the FF entries and 
 ## 2. Hardware and the J-Link runner
 
 - State (not a task): the owner's Compact PIR206 (chip serial 1013CE098ACA) runs slot A (`ef90c94a`, the table's 1.3.0.0 image, 32 Hz) with word 0. Slot B and recovery R hold `d91284c6` (the 1.3.0.0 32 Hz image that also carries the removed mode-6 edit). Every bank runs at 32 fps. The whole flash is `50e900c2…` (halted read); the 42.29 bench rows, the 42.30 matrix and the 42.31 reset runs left it byte-identical. Normal fps reads right after a whole-flash dump or restore take several reads to settle (42.31: medians 16 to 27 fps on the first reads, then 32.2), so repeat the read before judging it.
-- [~] Runner: `SLOT_BASES` still maps word 1 to 0x14050000 (the other chain's table), and `flash-bank` defaults to `SLOT_BASES[1]`, which is bank A. Bank B needs `BANK_ADDR=0x14060000`. Fix the default or make the address required, in both `targets/compact_8hz_1_3_0_0` and `targets/compact_8hz_1_3_0_8`. (running, 2026-10-19 wave: TESTING.md 42.35)
+- [?] FW-V1 branch `plan-hygiene` (worktree `/private/tmp/claude-501/fwv1-hygiene`, 42.35): flash-bank in the 1.3.0.0 and 1.3.0.8 targets needs an explicit `BANK_ADDR` (the `SLOT_BASES` default is removed), the `fps_patch_tests.py` docstring matches the table, and `jlink_dumps/` is ignored. Not merged into FW-V1 `main` (the bench uses that checkout's runner); merging and pushing need the owner's word.
+- [ ] FW-V1 `build_flash.mjs` in `targets/compact_8hz_1_3_0_0` and `compact_8hz_1_3_0_8` carries the modern 4.x table (`SLOTS.b` = 0x14050000): its default `--flash` writes the payload to 0x14050000 (bank A on the 2014 chain) and then sets the boot word to 1 (bank B). A live wrong-bank path (found in 42.35). The same flash-bank call is in `compact_8hz_0_5_1_3`, `0_9_0_2` and `1_0_0_0` (tables not read).
+- [ ] 34 other FW-V1 `jlink-runner.js` files under `targets/` and `codegen/harness/tools/jlink/` still define `SLOT_BASES` and default flash-bank to it (42.35 fixed only the 1.3.0.0 and 1.3.0.8 targets).
 - [~] Serial mismatch for the same unit: the CLI's `slots list` (and TESTING.md 42.21) report `101310HSNEA2`; the checker and the Swift tool report the chip serial `1013CE098ACA`. Find which the page and the CLI should show, and fix the other. (running, 2026-10-19 wave: TESTING.md 42.37)
 - [~] The 1.3.0.0 stock Normal and Hi FPS were not measured on the camera in 42.27 (the 8.0 fps quoted in 42.25 was the 16 Hz image). (running, 2026-10-19 wave: TESTING.md 42.37)
 - [ ] The 1.3.0.0 boot-config word is 0. A warm reset can set it to 2 again (the bootloader writes it), and the word itself is not guarded. The warning (42.27 section 6) shows when the word points at R while a patched bank A does not run.
@@ -53,14 +55,12 @@ Every 8 and 9 fps build with a table entry is offered except the FF entries and 
 
 - [?] `refactor/all-firmware-profiles` (HEAD `d62da13` plus this file) is local. The owner keeps it local until they say otherwise (2026-10-19); pushing it and merging to main need the owner's word (the hosted docs bundle in `docs/` is built from this branch). FW-V1 `main` is pushed (`a13c615c6`). All agent branches of 42.27 to 42.31 are merged and their worktrees removed.
 - [~] Two unmerged branches from earlier sessions are kept (their worktrees were removed on 2026-10-19, 42.29 section 6): `worktree-agent-a9c8b175a0187b7be` (`f9a34ce`, TESTING 42.13 notes: the balance-word FF run withdrawn before any write) and `worktree-agent-ae27186421cb01b3e` (`f8f2f55`, the FF image's banks follow the camera's bootloader; the bench FF platform path). Owner to decide: merge or delete. Owner, 2026-10-19: merge. (running, 2026-10-19 wave: TESTING.md 42.33)
-- [~] Stale text (no behaviour): (running: the FW-V1 docstring 42.35, the rest 42.34)
-  - the `FW-V1/emu/fps_patch_tests.py` docstring still mentions 8 or 16 Hz rows;
+- [~] Stale text (no behaviour): (running, 42.34)
   - the `FPS_NO_PATCH_4821_VERSION` comment in `fps-patch.ts` states the Compact and XR 4.8.2.1 are one image, which is not checked (section 1);
   - `packages/core/src/profiles/compact-2016.ts` `FLASH_REFUSAL` (:102-108) and its summary (:288-290) say the write path has nothing for 2016 banks, while the slots writer stages them (`capability-family.ts:214-215`, `write.ts:561-575`); check whether the text is about the profile's own flash path, and fix it if not;
   - the CLI usage line "Banks: A (0x14050000) and B (0x14060000)" (`packages/cli/src/usage.ts` ~229) is the 2014 chain's map; the modern-4x map (the 4.x Compact and the Compact PRO 4.9.x) is A 0x14030000, B 0x14050000, R 0x14070000 (`modern-4x.ts:84-86`).
 - [~] `packages/cli/test/camera.test.ts` fails on the 2016 Compact PRO refusal text (expects `0.x/1.x 2014–2017 line`; the message now says `2014–2016 build`). Not caused by the frame-rate work; update the assertion or the message. (running, 2026-10-19 wave: TESTING.md 42.34)
 - [~] eslint reports 3 errors in the bench files, none from 42.31: `e2e/lib/bench/bench-camera.ts:246` (an unused `document` assignment in `slotFlash`) and `e2e/bench-lib.e2e.ts:1690`, `:1723` (unnecessary type assertions). (running, 2026-10-19 wave: TESTING.md 42.34)
-- [~] FW-V1 `targets/compact_8hz_1_3_0_0/jlink_dumps/` is untracked (the J-Link runner overwrites `spifi_14000000_4m_halted.bin`; the previous file is kept at `~/.claude/jobs/82174575/tmp/previous-spifi_halted.bin`). (running, 2026-10-19 wave: TESTING.md 42.35)
 
 ## 5. The slots bench and older open items (42.20 to 42.31)
 
