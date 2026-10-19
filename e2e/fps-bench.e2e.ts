@@ -31,7 +31,7 @@ import { setGuard } from './lib/electron-camera.js';
 import { HEADED } from './lib/spec.js';
 import { guardInstalled } from './lib/target-tools.js';
 import { approveWrite } from './lib/supervised-write.js';
-import { openTarget, wantedTarget, type TargetHandle } from './lib/target.js';
+import { closeSharedDevServer, openTarget, wantedTarget, type TargetHandle } from './lib/target.js';
 import {
   CONFIRM_DIALOG,
   SLOTS_TABLE_ROWS,
@@ -145,6 +145,9 @@ describe.skipIf(MODE !== 'i-understand' && MODE !== 'dry-run')(
         uiGuard: SLOTS_BENCH_UI,
         preloadSource: `${benchGuardScript()}\n${HIDE_FILE_PICKER}`,
         headed: HEADED,
+        /* One dev server for the run, not one per window: a server per window kept its modules in the
+         * worker's heap (TESTING.md 42.45). The run's afterAll stops it. */
+        sharedServer: true,
       });
       target = opened;
       await opened.wizard.route('#/slots');
@@ -168,6 +171,7 @@ describe.skipIf(MODE !== 'i-understand' && MODE !== 'dry-run')(
           say(`close failed: ${String(error)}`);
         });
       }
+      await closeSharedDevServer();
     });
 
     it('offers "Make 32 FPS" on bank A and states the plan in its dialog', async () => {
