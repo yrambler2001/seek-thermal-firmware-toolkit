@@ -11808,3 +11808,51 @@ Restore: `FACTORY_IMAGE=<pre-flash copy> node tools/jlink/jlink-runner.js flash-
 
 Co-Authored-By: Claude Haiku 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01XKhSca8W2e3Q8Dcd4CkwCy
+
+### 42.77 node-usb 3.1.0 takes one bulk IN and node-usb 2.18.0 takes three on the bench, but the skip rate drifted over the session, so the 1-IN and 3-IN camera runs do not rank (2026-10-19)
+
+**Summary.** Agent 42.77, on `worktree-agent-aa64af4c9be798524`, reset to `refactor/all-firmware-profiles` (79346d8). Step A, node-usb 3.1.0's own `nativeTransferIn`, fails on the camera and in its source. Step B works: node-usb 2.18.0, installed only in a scratch directory, keeps three bulk INs pending on endpoint 1, and the checker's own `SeekCamera`, `SeekLink` and `FrameReader` run over it. The repo's code and dependencies are unchanged, so this section is the only repo change. No flash, J-Link or bank write; no push; no merge. The camera ran read-only streaming: channel 2 power-cycled before each run and at the end, channel 1 off, 1-minute load under 20 before each timed run. The owner's decision on moving the checker to node-usb 2.x is not made here. The camera numbers do not show a clean 1-IN versus 3-IN difference, because the skip rate changed during the session (section 3).
+- **Tags.** [measured] is a probe log or camera log, named. [source] is read from a file, named. [inferred] follows from those and was not measured directly.
+
+**1. Step A: node-usb 3.1.0's native transfer fails (measured and read from source).**
+- *Source.* `transferIn` in node-usb-rs v3.1.0, `src/webusb_device.rs` (`nativeTransferIn`), calls `get_endpoint` on every call, which calls `iface.endpoint::<Bulk, In>(addr)`. nusb 0.2.7's `Interface::endpoint` says it "claims exclusive access to the endpoint" (`src/device.rs`, v0.2.7). The blocking `transfer_blocking` runs under that claim. A second call finds the claim taken, the `.ok()` drops the error, and the message is "endpoint not found". The JS `transferIn` is `this.nativeTransferIn(...)` (`node_modules/usb/dist/index.js`), so the limit is in the native layer, not the wrapper. `close()` sets `self.device = None` while a blocking call still borrows the native value, which is the "cannot be borrowed mutably" error from 42.75.
+- *Camera probe* (`/private/tmp/claude-501/agent-77/probe-a.ts`, log `probe-a.jsonl`). The checker's `SeekCamera.connect` at one IN, then per round one body credit (0x7EC0) and N concurrent `nativeTransferIn(1, 2000, 64896)`. In the two N=3 rounds and two N=2 rounds the first call returned 16,224 bytes and every other call failed at once with "transferIn error: endpoint not found"; the frame was then finished serially (64,896 bytes in each round). The N=1 round read the frame serially. So step A is refused on the camera.
+
+**2. Step B: node-usb 2.18.0 keeps three INs pending (measured).**
+- *Install.* `usb@2.18.0` in `/private/tmp/claude-501/agent-77/usb2` only, not the repo's `package.json`. Published 2026-06-06; 2.19.1 (2026-10-06) is under a month old and was not used. The darwin prebuild loads; npm's install script was not run.
+- *Adapter* (`/private/tmp/claude-501/agent-77/usb2-link.ts`). Each bulk IN is one `endpoint.makeTransfer(timeoutMs, cb)` and `submit(Buffer.alloc(length))`, and `cancelTransfers` calls `cancel()` on the pending ones. The control side is node-usb 2's WebUSB shim on the same device handle, so the checker's `WebUsbTransport` and `seekLink` run unchanged. The shim's own `transferIn` ignores a per-IN timeout, so the adapter uses `makeTransfer` directly.
+- *Concurrency probe* (`probe-b.ts`, log `probe-b.jsonl`). Three and two concurrent INs were accepted in every round; `maxPending` 3; each IN returned 16,224 bytes; the frames assembled to 64,896 bytes with nothing pending after each frame. Row check (below) on the five rounds: four at ratios 0.93 to 1.09 at the transfer boundaries, one (c3-b) at 18.5 at boundary 77|78. That one event was not seen again in the camera runs (section 3). It is listed as unexplained in section 4.
+- *Row check.* Each payload is 39 rows of 416 bytes, so a misordered or torn transfer would show as a jump at rows 38|39, 77|78 and 116|117. The check on every frame of the driver is the ratio of the row difference at those boundaries to the frame's median row difference; a frame is flagged above 4.
+- *Driver* (`/private/tmp/claude-501/agent-77/fd-run-usb2.ts`). 42.75's `fd-run.ts` with the link swapped to the adapter and the row check added; the checker's own connect, frame reader and stream loop; fdtime-format logs for `classify.py` (42.62). Smoke run, 10 s, three in flight: 289 frames, 0 of 290 flagged.
+- *Cancel and close.* Every 3-IN run ended with two INs cancelled by `disconnect`, with no close error and exit 0.
+
+**3. The camera table (measured).** Each run: 60 s measured after a 20 s settle, channel 2 power-cycled before it, the 1-minute load under 20 before it. Runs r1 to r7 are the protocol (alternating 1 and 3 IN, three of each, one 2 IN). r8 to r10 are diagnostics added after the skip rate rose in r7.
+
+| run | IN | load before (1 / 5 / 15 min) | load after | frames | whole-run fps | per-second median (min to max) | single skips/min (events) | A/min | A'/min | frame errors / zero-length | bulk submitted / completed / cancelled / timed out / max pending | row check flagged |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| r1 | 1 | 11.34 13.08 41.75 | 9.23 11.86 38.39 | 1710 | 28.50 | 32.19 (32.17 to 32.21) | 2 (2) | 40 | 20 | 0 / 0 | 8956 / 8956 / 0 / 0 / 1 | 0 of 1711 |
+| r2 | 3 | 9.23 11.86 38.39 | 7.28 10.44 35.17 | 1711 | 28.52 | 32.19 (32.17 to 32.21) | 1 (1) | 40 | 20 | 0 / 0 | 8962 / 8962 / 2 / 0 / 3 | 0 of 1712 |
+| r3 | 1 | 7.28 10.44 35.17 | 7.86 9.95 32.51 | 1706 | 28.43 | 32.19 (16.78 to 32.21) | 9 (9) | 40 | 20 | 0 / 0 | 8944 / 8944 / 0 / 0 / 1 | 0 of 1709 |
+| r4 | 3 | 7.86 9.95 32.51 | 8.58 9.47 30.05 | 1712 | 28.53 | 32.19 (32.17 to 32.20) | 0 (0) | 40 | 20 | 0 / 0 | 8970 / 8970 / 2 / 0 / 3 | 0 of 1714 |
+| r5 | 2 | 8.58 9.47 30.05 | 7.97 9.17 27.76 | 1709 | 28.48 | 32.19 (32.16 to 32.21) | 3 (3) | 40 | 20 | 0 / 0 | 8953 / 8953 / 1 / 0 / 2 | 0 of 1710 |
+| r6 | 1 | 7.97 9.17 27.76 | 7.89 8.80 25.75 | 1711 | 28.52 | 32.19 (32.18 to 32.20) | 1 (1) | 40 | 20 | 0 / 0 | 8964 / 8964 / 0 / 0 / 1 | 0 of 1713 |
+| r7 | 3 | 7.89 8.80 25.75 | 7.93 8.49 23.92 | 1483 | 24.72 | 32.01 (16.11 to 32.20) | 262 (262) | 34 | 17 | 0 / 0 | 8050 / 8050 / 2 / 0 / 3 | 0 of 1484 |
+| r8 (diag) | 3 | 19.80 23.54 26.33 | 9.15 18.97 24.28 | 1569 | 26.15 | 32.14 (30.30 to 32.21) | 158 (158) | 37 | 19 | 0 / 0 | 8330 / 8330 / 2 / 0 / 3 | 0 of 1569 |
+| r9 (diag) | 1 | 7.52 17.81 23.71 | 9.62 15.82 22.35 | 1566 | 26.10 | 32.03 (24.57 to 32.20) | 156 (156) | 38 | 19 | 0 / 0 | 8284 / 8284 / 0 / 0 / 1 | 0 of 1567 |
+| r10 (diag) | 3 | 9.62 15.82 22.35 | 7.83 13.72 20.89 | 1631 | 27.18 | 32.16 (31.10 to 32.26) | 102 (102) | 38 | 19 | 0 / 0 | 8602 / 8602 / 2 / 0 / 3 | 0 of 1634 |
+
+- *Reading the table.* r1 to r6 are the clean window: single skips 0 to 9 a minute at one IN (r1 2, r3 9, r6 1), at two IN (r5 3), and at three IN (r2 1, r4 0). From r7 on, the skips rise to 100 to 260 a minute with the IN count on both sides: three IN in r7, r8 and r10, one IN in r9. The per-second medians fall to 16 to 20 fps in the storm seconds of r7 and r3, and the storm skips are type-3 gaps spread over the run. The bulk counters show no timeouts and no errors, and every IN completed.
+- *Load.* The storms did not follow the 1-minute load: r7 began at 7.89; r8 began at 19.80 (5-minute 23.54, just under the gate); r9 began at 7.52 with 5-minute 17.81.
+- *Row check.* 0 of about 16,000 measured frames flagged, one and three IN alike (the threshold is 4 at any of the three boundaries). The probe's c3-b event (18.5) did not recur in about 8,100 three-IN frames.
+- *Comparison.* 1-IN and 3-IN are not ranked by this table: the clean window has 3-IN at 0 and 1 a minute against 1-IN at 1 to 9, and the storm window has 3-IN at 102 to 262 against 1-IN at 156. The 3-to-12 a minute that 42.74's `fdtime.c` measured with three INs was not reproduced by a clean run here, and the reason is not known.
+
+**4. Not verified, and open.**
+- *The storms.* Their cause is not known. They began between r6 (22:12) and r7 (22:14) and hit one and three IN alike (r9). The logs show no timeout, error or stall; the host and camera thermal state were not tested. Until the cause is known, one-run comparisons on this bench cannot rank IN counts.
+- *Step B only checked on the Compact (0x0010).* The Pro (0x0011) was not run.
+- *The node-usb 2.x dependency.* Adopting it means a repo dependency change and a new control path through the WebUSB shim. Not done here; the owner decides.
+- *Probe c3-b.* One frame with a ratio of 18.5 at boundary 77|78 in five probe rounds, not reproduced. Unexplained.
+- *Sample size.* Each row is one 60 s run. The clean window is six runs and the storm window four.
+
+**5. Files and commands.** Scratch, not committed: `/private/tmp/claude-501/agent-77/` (`probe-a.ts` step A, `probe-b.ts` and `usb2-link.ts` step B, `fd-run-usb2.ts` driver, `gated-usb2.sh` and `chain-usb2.sh` gated runs, `table.py` and `inspect.py` tables, `loads.txt` with `uptime` before and after each run, `r1-n1.jsonl` to `r10-n3.jsonl` run logs). Usage: `FD_WT=<worktree> node --import ./e2e/lib/bench/seek-fps/register.mjs /private/tmp/claude-501/agent-77/fd-run-usb2.ts <inFlight> 60 20 <out.jsonl>` from the worktree, then `python3 -I scripts/fd-skip/classify.py <out.jsonl>`. `FPS_32HZ.md` is not changed by this section.
+
+**Commits.** This section only, on `worktree-agent-aa64af4c9be798524`. The hash is in the agent's report.
