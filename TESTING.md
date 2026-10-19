@@ -8010,6 +8010,8 @@ npx vitest run test/preservation/fps-patch.test.ts test/preservation/fps-patch.d
 
 ### 42.28 The Compact PRO 4.9.1.15 and 4.9.2.0 builds offered at 18 fps (Key A), the write proven on the emulator (2026-10-19)
 
+**Update (42.29):** the 1.0.3.x refusal this section mentions was lifted in 42.29: the Compact PRO 1.0.3.0 and 1.0.3.2 builds are offered at 18 fps.
+
 **Summary.** The owner decided on 2026-10-19 that a build that is patched but not measured is offered exactly like a measured one.
 That removed the only reason the two Compact PRO 4.9.x entries were refused ("its frame rate has not been measured on the bench").
 Both are now offered at 18 Hz, on the page and in the CLI. `compact_pro-4.9.1.15` and `compact_pro-4.9.2.0` (the 18 Hz row patch of
@@ -8114,3 +8116,220 @@ the differential test).
 - `FW-V1/emu/.venv/bin/python scripts/gen-fps-table.py` and `npx prettier --write packages/core/src/preservation/fps-patch-table.ts`:
   the generator wrote 20 entries and 12 known builds, and the fixture with 24 images, 20 entry outputs and 29 banks. Neither file changed in
   git, so the generated table and fixture match the source (`FW-V1/emu/fps_patch.py`, which this section did not change).
+
+### 42.29 The Compact PRO 1.0.3.0 and 1.0.3.2 builds offered at 18 fps (the 2016 keystream line), the bench judged by the verdict table, and the branches merged (2026-10-19)
+
+**Summary.** Three things landed on `refactor/all-firmware-profiles` on 2026-10-19, after 42.28.
+
+1. The two Compact PRO builds on the 2016 keystream line, 1.0.3.0 and 1.0.3.2 (9 fps stock), are offered at 18 Hz. They are a third
+   stage (`FPS_STAGE_THREE_IDS`), not part of stage two: a 2016 bank is staged under the image's own stage key, not under Key A. With
+   this, all four Compact PRO builds in the table (1.0.3.0, 1.0.3.2, 4.9.1.15, 4.9.2.0) are offered at 18 Hz. The emulator writes and
+   boots both 2016 builds. No Compact PRO camera was used to measure a rate, so 18 Hz is not measured on hardware.
+2. The slots bench judges each subject by the shared verdict table (owner decision, 2026-10-19). Its old criterion expected a write of
+   every bank's own image, which the table does not allow for rows 14 and 20 of the 42.21 matrix. On the bench board, row 14 now passes
+   as a refusal the table records; row 20 passes as a write and a refusal the table records, on its retry. Row 20's first attempt failed
+   before any page step, and its cause was not found.
+3. The three branches (4.9.x, 1.0.3.x and the bench) are merged on the local branch, and the merged HEAD passes the checks in section 5,
+   including the emulator slots-quality spec (12 of 12). The old agent worktrees and branches are removed (section 6).
+
+**Tags.** As in 42.27 and 42.28: [measured] was read on the emulator, the bench or a file; [source] was read off the code named, at
+`d77d111` (the bench and the merge commits); [inferred] follows from those. The emulator and bench results are the records of the runs
+named below. The docs pass that wrote this section ran no test and no hardware. It re-read the bench logs and matrix files, the three
+dumps (sha256 and `cmp`), the checker logs, and the table's edit bytes.
+
+**1. Stage three: the 2016 keystream line.**
+
+- [source] Why a separate set. A 4.x bank is staged under the camera's Key A. A 2016 bank is staged under key block 0 of the image's
+  own pair, found by value (`stageKeyBlockOf`, `packages/core/src/slots/write-image.ts:275-287`), and the device stores it under block 1.
+  That is a different staging form and a different read-back, so the two Pro lines are not one set. The set is
+  `FPS_STAGE_THREE_IDS` = `compact_pro-1.0.3.0`, `compact_pro-1.0.3.2` (`packages/core/src/preservation/fps-patch.ts:152-155`; the reason
+  is in the comment at `:145-151` and the header at `:29-31`).
+- [source] The gate. `gateOf` (`fps-patch.ts:170-179`) enables an entry in any of the three sets. The 1.0.3.x branch of `gateOf` is
+  gone. An entry in no set keeps a "stage two:" reason (`:189-200`).
+- [source] The two table entries (`packages/core/src/preservation/fps-patch-table.ts:38-63` and `:69-93`). `compact_pro-1.0.3.0` edits
+  row 14 (count at `0xC2BC`, the substeps at `0xC2C0`). `compact_pro-1.0.3.2` edits record 20 (`0xC258`, and `0xC25E`). Comparing each
+  edit's before and after bytes gives 6 changed bytes for 1.0.3.0 (`0xC2BC`, `0xC2C2`, `0xC2C3`, `0xC2C5`, `0xC2C6`, `0xC2C7`) and 5 for
+  1.0.3.2 (`0xC258`, `0xC25E` to `0xC261`). The acceptance word at `0x238` moves with them.
+- [source] How a 2016 bank is staged and checked:
+  - The family. `COMPACT_PRO_2016_VERSIONS` is 1.0.3.0 and 1.0.3.2 (`packages/core/src/slots/capability-family.ts:78`). `lockedFamily`
+    returns `locked-2016` for them (`:104`). `stagingFor('locked-2016')` is `slot-keystream-ciphertext` (`:214-215`). The family is
+    writable (`packages/core/src/slots/capability.ts:203`).
+  - The staging. `stageImage` takes this branch at `packages/core/src/slots/write.ts:561-575`. `buildSlotKeystreamPayload`
+    (`write-image.ts:302-316`) balances the acceptance sum and XORs the image with the keystream of key block 0. Its `expectedStored` is
+    null, because the device re-encrypts under block 1. The bank is therefore checked as the image it decrypts to.
+  - The flash. `flashSlot` (`write.ts:671-752`) writes it, and `compareReadBack` (`packages/core/src/slots/write-verify.ts:66-175`)
+    checks the read-back by recovering the keystream from it and comparing the decrypted image.
+  - The patch's own steps. `patchBankFps` (`packages/core/src/slots/fps-patch.ts:229-271`) plans the bank from a fresh read.
+    `writeFpsPatch` (`:280-367`) saves the bank first (a save that does not return `true` refuses the write, `:326-340`), writes it
+    (`:344-347`), then checks the read-back. `preparePatchedWrite` (`:181-222`) accepts the `slot-keystream-ciphertext` staging
+    (`:205-213`). For a staging other than plain, the read-back is checked by `checkReadBackDecrypted` (`:350-353`, `:389-407`): the
+    decrypted bytes that differ must be the planned ones.
+
+**2. The emulator, per subject.** [measured] `packages/core/test/slots/fps-patch.pro-2016.emulator.test.ts`: one stock boot and one
+patched boot per subject, on bank A (the subjects are at `:81-85`). For each subject the test checks: the bank's decrypted image is the
+table's stock image; the offer is "Make 18 FPS" at 18 Hz, with the planner's gate open; a save that does not happen refuses the write and
+sends no SetFeaturedFirmwareData (0x50) or CompleteMemoryUpgrade (0x51) (`:192-202`); the write is staged `slot-keystream-ciphertext`,
+commits with status 0 and verifies; the decrypted read-back differs from the stock image only at the planned bytes (`:226-242`); no
+ResetDevice is sent (`:246`); and the patched flash boots its own build, bank A decrypts to the patched image, and the planner says
+"patched" (`:254-300`).
+
+| subject (table entry)                                                   | stock image                        | offer     | read-back: differing bytes (decrypted)                                          | boot                                      |
+| ----------------------------------------------------------------------- | ---------------------------------- | --------- | ------------------------------------------------------------------------------- | ----------------------------------------- |
+| Compact PRO 1.0.3.0, native dump, serial 0C21A1M5KP15 (`compact_pro-1.0.3.0`) | `5e1f3f24c8bc1e85…` (all three banks decrypt to it, per the run) | 18 Hz, A | 9: `0x238 0x239 0x23b 0xc2bc 0xc2c2 0xc2c3 0xc2c5 0xc2c6 0xc2c7`, all planned | enumerates 1.0.3.0; A decrypts to the patched image; "patched" |
+| Compact PRO 1.0.3.0, chimera (image-only, same entry)                   | `5e1f3f24…`                        | 18 Hz, A | the same 9                                                                       | enumerates 1.0.3.0; "patched"             |
+| Compact PRO 1.0.3.2, chimera (`compact_pro-1.0.3.2`)                    | `c776924773ed4246…`                | 18 Hz, A | 9: `0x238 0x239 0x23a 0x23b 0xc258 0xc25e 0xc25f 0xc260 0xc261`, all planned     | enumerates 1.0.3.2; "patched"             |
+
+- The native dump's file sha (`db4efc84…`) is from the run's record, not re-read here. The two chimeras are image-only entries, spliced
+  onto their manifest donor (`packages/core/test/slots/corpus-locked-subjects.ts:15-16`).
+- Test count: 3 (one per subject). The first form (`a28336c`) ran the write with the gate closed, through `writeFpsPatch`, and asserted
+  the planner's refusal: 3 of 3 passed. `c528a99` opened the gate and runs the same steps through `patchBankFps`: 3 of 3 passed.
+- [source] The emulator's Normal rate for the 9 Hz builds, 8.84 to 17.68 Hz, is recorded in the table's comments (`fps-patch-table.ts:36`
+  and `:68`). This test does not measure a rate.
+- Not covered: writes to banks B and R (the test writes bank A only). See section 7.
+
+**3. The verdict-table rows** (`e2e/lib/slots-expectations.ts`; still 28 rows). [source] The frame-rate column is `fps`, with
+`fpsNotOffered` where a bank is the exception.
+
+| row (line)                                    | banks                                  | frame-rate row                                                                        |
+| --------------------------------------------- | -------------------------------------- | ------------------------------------------------------------------------------------- |
+| Compact PRO 1.0.3.0 (std) (`:259-269`)        | all writable                           | offer, 18 Hz                                                                          |
+| Compact PRO 1.0.3.0 (FF) (`:270-279`)         | all writable                           | "already runs at 18 Hz": the known build `6f06b333…` (`fps-patch-table.ts:729-732`)   |
+| Compact PRO 1.0.3.2 (std) (`:280-290`)        | all writable                           | offer, 18 Hz                                                                          |
+| Compact PRO 1.0.3.2 (FF) (`:291-300`)         | all writable                           | "already runs at 18 Hz": the known build `196560c0…` (`:733-736`)                     |
+| Compact PRO 1.0.3.2 (FF-FF) (`:301-310`)      | all writable                           | none, and no reason (`NO_FPS_TABLE`); no emulator entry; unchanged                    |
+| Compact PRO 4.9.2.0 (`:311-321`)              | all writable                           | offer, 18 Hz                                                                          |
+| Compact PRO 4.9.1.15 (std) (`:332-347`)       | all writable; bank B's own image refused (`ownImage`) | offer, 18 Hz on A and R; bank B: "already runs at 18 Hz" (`fpsNotOffered`, `:339`) |
+
+- The 4.9.1.15 dump's bank B holds the 1.0.3.2-FF build (sha `196560c0…`), which the table records at 18 Hz. The page reads bank B as
+  1.0.3.2 (`row20b.log`, the bench notes). The "already runs" reason is the planner's `at-rate` status (`packages/core/src/preservation/fps-patch.ts:474-480`).
+- The row's `source` text for 1.0.3.0 (std) says every bank of the native dump decrypts to its stock image. The emulator test checks bank A
+  only, so banks B and R rest on the run's offline decrypt, not on this test.
+
+**4. The slots bench reads the verdict table (owner decision, 2026-10-19).**
+
+- The old criterion (`df143e6`, before the change; line numbers of that file, `e2e/lib/bench/spec-flow.ts` and `e2e/slots-bench.e2e.ts`):
+  - Step 3 wrote every bank's own decrypted image, in the order B, A, R (`WRITE_ORDER`, `:122`; the loop at `:1500-1545`). A bank with no
+    image of its own was skipped and written by the boot proof. A write that did not read back failed the subject.
+  - The banner: a banner shown "where the ... plan allows a write" failed (`:501-505`). The plan decided the banner, not the table.
+  - The version: a bank that reported another build than the subject's failed (`:521-523`), except under the per-bank boot test (`:515-520`).
+  - Effect: rows 14 and 20 failed (42.21 section 1). The table refuses writes that the old criterion expected, so the page and the table
+    agreed and the bench did not read the table.
+- The new criterion (`d77d111`):
+  - Row lookup. `verdictRowOf` maps a subject to its table row (`e2e/lib/bench/verdict.ts:31-76`). A subject with no row is not run, and it fails
+    (`e2e/lib/bench/spec-flow.ts:1541-1547`).
+  - The judge. `judgeSubject` (`verdict.ts:143-152`) holds each bank to its row in `judgeBank` (`:154-209`):
+    - a bank the table refuses: the page must refuse the bank's image at the picker with the table's reason (`reasonMatches`, `:125-129`),
+      and no write may reach the bank (`:195-200`);
+    - a bank the table says is writable: its write must read back as written (`:201-207`);
+    - a bank whose own image the table refuses (`ownImage`): its own image must be refused with the reason, and the bank must then be
+      written from another bank's image (`:164-168`; the source is chosen at `spec-flow.ts:1639-1647`).
+    - The banner must match the row's `banner` (`judgeBanner`, `:211-222`), and it is judged only when the page was read (`:146`).
+  - The flow. `runSubject` (`spec-flow.ts:1529-1554`) runs `flowOf` and judges what it observed. `flowOf` step 3 (`:1599-1696`)
+    offers the own image at each refused bank's picker (`offerAtPicker`, `:870-904`). `writableSources` (`:1503-1510`) leaves the
+    `ownImage` bank out of the write sources, and `bootProof` (`:776-789`) takes its image only from the allowed banks. `readWindow`
+    reads the banner at `:511` and exempts the `ownImage` bank's version (`:514-531`).
+  - The report. A subject passes "as a write", "as a refusal the table records", or "as a write and a refusal the table records"
+    (`verdict.ts:224-229`; `e2e/lib/bench/spec-report.ts:111-115`). The RESULT line carries it (`spec-report.ts:118-133`).
+  - The rig. `verdictRow` is on the rig (`spec-rig.ts:118`). A picker that takes the file answers `'taken'` (`spec-rig.ts:92-94`) instead of
+    throwing. The pages bench has one guard line for that case (`e2e/pages-bench.e2e.ts`, typechecked, not run).
+- The offline counts, on `d77d111` (the orchestrator's runs): `e2e/bench-lib.e2e.ts` 96 passed and `e2e/bench-verdict.e2e.ts` 30 passed,
+  both with `SEEK_FULL_DUMPS_BY_CAMERA` set, 126 in all; the fake-rig rehearsal (`SEEK_BENCH_FAKE=1 SEEK_E2E_WRITE=dry-run`,
+  `slots-bench.e2e`) 3 passed. The `it(` counts in the two files are 96 and 30.
+
+**Hardware: rows 14 and 20 on the bench board** (the owner's Compact PIR206 board, chip serial `1013CE098ACA`; J-Link on switch channel 1,
+the board on channel 2; `SEEK_E2E_WRITE=i-understand`, `NODE_OPTIONS=--max-old-space-size=16384 --expose-gc`; one row per run with
+`SEEK_BENCH_ONLY`; logs in `/private/tmp/claude-501/agent-bench-table/`).
+
+| run                                | started (UTC) | duration | exit | outcome                                                         |
+| ---------------------------------- | ------------- | -------- | ---- | --------------------------------------------------------------- |
+| row 14, Compact 4.16.1.7 FF        | 01:46:33      | 2 min 36 s | 0  | refusal the table records                                       |
+| row 20, first attempt              | 01:49:48      | 1 min 47 s | 1  | failed before any page step                                     |
+| restore after the first attempt    | 01:52:33      | 56 s     | 0    | 5 runs, 30 of 64 blocks, all verified                           |
+| row 20, retry                      | 01:55:00      | 4 min 36 s | 0  | a write and a refusal the table records                         |
+| restore after the retry            | 02:00:01      | 57 s     | 0    | the same 5 runs, 30 of 64 blocks, all verified                  |
+
+- Row 14. The RESULT line (`row14.log:88`):
+  `RESULT Compact 4.16.1.7 ff (2018.09.04-15.37.00-4.16.1.7-FF) | file full_dump_reconstructed.bin | flash verified yes | enumerated yes, 622 ms | page identified yes | banks = J-Link yes | slot writes B refused by the page, A refused by the page, R refused by the page | passed as a refusal the table records | boot proof not run | failures 0`
+  Each bank's own image was offered at its picker and refused, with the table's reason ("checks an upload under its own keys"); the banner
+  shows the same reason. Nothing was written and the boot proof did not run. The page read A at `0x14030000`, B at `0x14050000` and R at
+  `0x14070000` (the modern-4x plan). 42.21 had A and R not probed; here all three were refused. The log also has "verify: the halt failed"
+  notes, which the flow records and goes on from.
+- Row 20, first attempt (`row20.log:27`). The CPU could not be halted in two reads (01:50:40 and 01:51:00). The whole-part read-back matched
+  (sha256 `9fa38b8d…`) at 01:51:29, and the reset followed. Then the flow failed with "the camera stayed on the bus 5 s after the reset (not
+  rebooted), or did not come back within 40 s", and steps 2 to 4 did not run. The RESULT line says "enumerated no | page identified no |
+  banks = J-Link no | slot writes B not run, A not run, R not run | passed as nothing (failed) | boot proof not run | failures 1". The
+  cause is not found.
+- Row 20, retry (`row20b.log:197`). The RESULT line:
+  `RESULT Compact Pro 4.9.1.15 std (2019.03.14-09.18.41-4.9.1.15) | file full_dump_original.bin | flash verified yes | enumerated yes, 1165 ms | page identified yes | banks = J-Link yes | slot writes B ok, A ok, R ok | passed as a write and a refusal the table records | boot proof ok | failures 0`
+  Bank B's own image was offered and refused with the table's reason ("neither this camera's pair nor a decoded application pair occurs in
+  the image"). Then B was written from bank A's image ("written with bank A's image (its own image is refused by the table)"). A and R were
+  written from their own images. The banner was none, and the boot proof wrote the build string at two offsets (`Mar 14 2019 -> Mar 14 2010`).
+  The page windows of the retry name the board's USB device `PIR324 Thermal Camera (289d:0011)` (`row20b.log:28`).
+- Dumps. `start-4m.bin` sha256 `50e900c23ff4bb7e0a5a30fc5879f6ed276289e43aeace2f9ab74eaec9b01d7d` (word 0 at the start, bank A `ef90c94a`,
+  B and R `d91284c6`; the same start as 42.27). After the first restore, `end-4m.bin` has the same sha and is identical by `cmp`. After
+  the second restore, `end2-4m.bin` has the same sha and `cmp` reports them identical (the docs pass checked both again). The restores use
+  the FW-V1 runner's `flash-factory-4m-2` with `FACTORY_IMAGE` set to the start image: 5 runs, 30 of 64 blocks differ, each run verified,
+  the bootloader block last.
+- Normal medians. The checker's per-second medians, over 5 seconds each (the logs do not name the mode; the facts record them as Normal).
+  The camera reports 1.3.0.0 at serial `1013CE098ACA`, with the 32 Hz image of 42.27 in its banks.
+
+  | read                        | medians (fps)                                              |
+  | --------------------------- | ---------------------------------------------------------- |
+  | before row 14 (`fps-before.log`) | 32.20 32.20 32.19 32.18 32.19                         |
+  | after the first restore (`fps-after-restore.log`) | 32.17 32.19 32.22 32.20 32.20             |
+  | end, first read (`fps-end.log`)  | 17.75 30.95 31.37 31.14 31.36, a transient           |
+  | end, repeat (`fps-end2.log`)     | 30.86 32.19 32.19 32.20 32.18                        |
+
+**5. The merge (the orchestrator's notes).**
+
+- The 4.9.x work (`9773ddf`, `e99ba1b`, `d65a07a`) was merged fast-forward. The 1.0.3.x work (`ba052e2`, `a28336c`, `c528a99`) and the
+  bench work (`539d28e` as `fecd2ec`, `5e6e523` as `d77d111`) were cherry-picked onto the branch.
+- The 4.9.x and 1.0.3.x branches conflicted in `gateOf`, in the header of `packages/core/src/preservation/fps-patch.ts`, and in the CLI usage
+  (`packages/cli/src/usage.ts`). Both sides were kept: the header and `gateOf` name the three sets, and the usage names both lines.
+- `df143e6` fixed the 4.9.x pin test. It had expected the 1.0.3.x refusal; it now pins every Compact PRO build as offered at 18
+  (`packages/core/test/preservation/fps-patch.test.ts`, 5 lines added, 3 removed).
+- `6d30aea` removed the "not measured" note from the CLI usage's 4.9.x line (`9773ddf` had "not measured on a Compact PRO camera"). It
+  is the owner's decision that an unmeasured build is offered exactly like a measured one.
+- Final verification counts. The packages did not change between `df143e6` and `d77d111` (`git diff --stat` over `packages/` is empty;
+  the bench commits touch `e2e/` only), so the package counts hold for the merged HEAD.
+
+| check                                                                 | HEAD       | result                          |
+| --------------------------------------------------------------------- | ---------- | ------------------------------- |
+| core unit tests                                                       | `df143e6`  | 60 passed, 1 skipped            |
+| CLI, `slots.test.ts` and `emulator-cli.test.ts`                        | `df143e6`  | 107 passed                      |
+| web, `vitest run`                                                     | `df143e6`  | 335 passed                      |
+| typecheck, the six `tsc` configs                                      | `df143e6`  | clean                           |
+| eslint, the changed files                                             | `df143e6`  | clean                           |
+| generator `gen-fps-table.py`                                          | `df143e6`  | clean                           |
+| emulator: pro-2016, stage two, page expectations, fps-patch.emulator  | `df143e6`  | 201 passed (196 s)              |
+| `e2e:slots:quality` (emulator, the Chrome spec; `SEEK_EMU_DIR`)       | `d77d111`  | 12 passed (111.5 s)             |
+| bench offline: `bench-lib.e2e` and `bench-verdict.e2e`                | `d77d111`  | 96 + 30 = 126 passed            |
+| bench fake rig (`SEEK_BENCH_FAKE=1`, dry-run, `slots-bench.e2e`)      | `d77d111`  | 3 passed                        |
+
+**6. Repo hygiene.**
+
+- Removed 31 old agent worktrees under `.claude/worktrees` (10 were locked, and were unlocked first). None had uncommitted changes. Free
+  disk went from 72 to 77 GiB. The worktrees' names are not in the record kept for this section.
+- Deleted the merged `worktree-agent-*` branches (their names are not in the record kept for this section), and three branches whose
+  commits are already on the branch as cherry-picks: `worktree-agent-a6713f2fed3e45564` (`e6bbd9f` = `3c6e419`), `fps-p1-fw` (`a3b32e8` =
+  `56fc217`, plus `6b26f76`, an empty regeneration commit) and `fps-p2-fw` (`b6136c0` = `4667d7f`).
+- Kept two unmerged branches, with no worktree: `worktree-agent-a9c8b175a0187b7be` (`f9a34ce`, TESTING 42.13: the balance-word FF run,
+  withdrawn before any write, notes only) and `worktree-agent-ae27186421cb01b3e` (`f8f2f55`, the FF image's banks follow the camera's
+  bootloader, and the bench's FF platform path).
+- Not touched: the FW-V1 worktree at `~/.claude/jobs/82174575/tmp/ff-dump/fwv1-ffdump` (branch `ff-dump-keyed-bootloader`, unmerged), and
+  `~/.codex/worktrees/*`, which belong to another tool.
+- `refactor/all-firmware-profiles` stays local until the owner says otherwise.
+
+**7. Not done / not measured.**
+
+- No Compact PRO camera was used to measure a rate. The 18 Hz for the four Compact PRO builds is not measured on hardware; the owner's
+  decision offers them unmeasured. The emulator's 8.84 to 17.68 Hz is from the table's comments (section 2).
+- Writes to banks B and R are not exercised on the emulator for the Pro builds (the 2016 test writes bank A only) or for the 4.8.x
+  stage-two builds (42.28 section 3).
+- The 1.0.3.2 FF-FF row has no emulator entry and no table entry. It is unchanged.
+- The 28-subject matrix is not re-run on the merged HEAD. The last run is 42.21 (`406cf28`, 26 of 28), and the criterion has changed since.
+- pages-bench was not run. Its guard line is typechecked only.
+- Row 20's first-attempt failure is unexplained. The flow's own check says the camera stayed on the bus after the reset, or did not come
+  back in 40 s. No cause was found. The retry, on the same board and dump, passed.
+- The table has no per-bank version field. The `ownImage` bank's version is a note, not a check (`spec-flow.ts:514-531`).
+- Row 20 ran the 4.9.1.15 image on the bench board, not on a Compact PRO camera. No frame rate was taken in that run.
