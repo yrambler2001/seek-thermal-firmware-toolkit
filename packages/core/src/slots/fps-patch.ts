@@ -14,17 +14,21 @@
  *       table (applyFpsPatch, verifyFpsPatchedImage);
  *   (4) the patched image is prepared as the writer prepares any decrypted image for this bank
  *       (prepareSlotFlash, pure). Its staging must be one this patch is written on (the plain 2014
- *       chain, or the Key A line), its payload and the image it predicts must be the patched image
- *       (the writer would not change the key pair or the sum), and the camera-wide refusal applies;
+ *       chain, the Key A line, or the 2016 keystream line), its payload and the image it predicts must
+ *       be the patched image (the writer would not change the key pair or the sum), and the camera-wide
+ *       refusal applies;
  *   (5) the bank is SAVED, raw and decrypted, before anything is written. `saveDump` must say it
  *       saved: a false or a throw refuses the write. There is no restore control; the saved
  *       decrypted file is the way back;
  *   (6) flashSlot writes it, with the same direct mode and the same acknowledgement rules as every
  *       other write, and reads it back;
  *   (7) the read-back is compared with the bank before the patch: on the plain chain the stored bytes
- *       (byte for byte); on the Key A line, which stores the image under the bank's own key, the image
- *       the read-back DECRYPTS to. Either way the differing bytes must be the planned ones, neither
- *       more nor fewer.
+ *       (byte for byte); on the Key A line and the 2016 keystream line, which store the image under a
+ *       key of the bank's own, the image the read-back DECRYPTS to. Either way the differing bytes must
+ *       be the planned ones, neither more nor fewer.
+ *
+ * Steps (3) to (7) are `writeFpsPatch`. `patchBankFps` is steps (1), (2) and the offer; a caller that
+ * has its own planned patch (the emulator suite, before a stage's offer is opened) calls `writeFpsPatch`.
  * ==================================================================== */
 
 import { equalBytes, viewOf } from '../bytes.js';
@@ -34,6 +38,7 @@ import { recoverKeyInfo } from '../crypto/recover.js';
 import type { CipherProfile } from '../profiles/types.js';
 import {
   applyFpsPatch,
+  FPS_MEASURED_HZ,
   planFpsPatch,
   verifyFpsPatchedImage,
   type FpsPatch,
@@ -169,8 +174,9 @@ export type { FpsPatch, FpsPlan };
 /**
  * The writer's plan for the patched image, decided before anything is saved or sent. The image goes
  * through prepareSlotFlash exactly as the page's "Flash decrypted image" would send it, and must come
- * out as this patch expects: staged plain (2014 chain) or under Key A (the 4.x line), predicting the
- * patched image itself. An image the writer would change (a key pair retargeted, a sum moved) is refused.
+ * out as this patch expects: staged plain (2014 chain), under Key A (the 4.x line), or under the 2016 stage
+ * key (the Compact PRO 2016 line), predicting the patched image itself. An image the writer would change (a
+ * key pair retargeted, a sum moved) is refused.
  */
 function preparePatchedWrite(
   report: SlotsReport,
@@ -196,10 +202,13 @@ function preparePatchedWrite(
     if (!equalBytes(prepared.payload, patched)) {
       throw refuse(`${name}: the payload is not the patched image, so it was not sent.`);
     }
-  } else if (prepared.staging !== 'key-a-ciphertext') {
+  } else if (
+    prepared.staging !== 'key-a-ciphertext' &&
+    prepared.staging !== 'slot-keystream-ciphertext'
+  ) {
     throw refuse(
       `${name}: the plan stages the image as ${prepared.staging}; a frame-rate patch is written only ` +
-        'on the plain 2014 chain and on the Key A line.',
+        'on the plain 2014 chain, on the Key A line and on the 2016 keystream line.',
     );
   }
   const expectedPlain = prepared.expectedPlain ?? null;
@@ -258,7 +267,38 @@ export async function patchBankFps(
         `(${early.patch.id}). Read the slots again.`,
     );
   }
-  const patch = plan.patch;
+  return writeFpsPatch(ctx, report, key, dumped, plan.patch, options);
+}
+
+/**
+ * Write one planned patch to one bank: steps (3) to (7) of the header. `dumped` is the bank as it was read
+ * just now (dumpSlot), and `patch` is the table entry the caller planned for it. This function does not decide
+ * the offer: `patchBankFps` decides it through the stage gate (planFpsPatch) before it calls this. The patch
+ * must be the stock image's own entry (applyFpsPatch refuses any other image before anything is saved), the
+ * camera must report its build, and the save must happen before the write. Refusals send nothing.
+ */
+export async function writeFpsPatch(
+  ctx: WorkflowContext,
+  report: SlotsReport,
+  key: SlotKey,
+  dumped: DumpedSlot,
+  patch: FpsPatch,
+  options: FpsPatchOptions,
+): Promise<FpsPatchResult> {
+  const name = key.toUpperCase();
+  const entry = report.plan.slots.find((candidate) => candidate.key === key);
+  if (entry === undefined) throw refuse(`this build's plan has no bank ${name}.`);
+  if (dumped.key !== key)
+    throw refuse(`the bank read is bank ${dumped.key.toUpperCase()}, not ${name}.`);
+  if (dumped.plain === null) throw refuse(`${entry.name} has no decrypted image to patch.`);
+  if (report.state.version === null) {
+    throw refuse('the analysis does not say which firmware the camera runs.');
+  }
+  if (patch.version.replace(/-FF$/, '') !== report.state.version) {
+    throw refuse(
+      `${entry.name}: the patch is for build ${patch.version}, but the camera reports ${report.state.version}.`,
+    );
+  }
   const notes: string[] = [];
 
   /* (3) the patched image and its pre-send check. */
@@ -314,8 +354,8 @@ export async function patchBankFps(
   return {
     key,
     patch,
-    fromHz: plan.fromHz,
-    toHz: plan.toHz,
+    fromHz: patch.fromHz,
+    toHz: FPS_MEASURED_HZ.get(patch.id) ?? patch.targetHz,
     pre,
     patched,
     changed,
@@ -341,8 +381,9 @@ export function checkReadBack(
 }
 
 /**
- * The read-back of a bank that stores its image under its own key (the Key A line): the image it DECRYPTS
- * to, recovered from the read-back itself (the same solve the writer's verification uses), is compared with
+ * The read-back of a bank that stores its image under a key of its own (the Key A line, and the 2016 line,
+ * whose device re-encrypts the staged image under block 1 of the image's pair): the image it DECRYPTS to,
+ * recovered from the read-back itself (the same solve the writer's verification uses), is compared with
  * the decrypted image before the patch. The differences must be the planned ones.
  */
 export function checkReadBackDecrypted(

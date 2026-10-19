@@ -9,8 +9,11 @@
 import { describe, expect, it } from 'vitest';
 
 import { SeekError } from '../../src/errors.js';
+import { cryptBytes } from '../../src/crypto/cipher.js';
+import { stateOf } from '../../src/crypto/xorshift128.js';
 import { IMAGE_MAGIC, LENGTH_OFFSET } from '../../src/image/header.js';
 import { wordSum32 } from '../../src/image/bank.js';
+import { FPS_PATCHES } from '../../src/preservation/fps-patch.js';
 import { getProfile } from '../../src/profiles/registry.js';
 import { buildSlotPlan } from '../../src/slots/capability.js';
 import {
@@ -19,12 +22,14 @@ import {
   fpsPlanOfBank,
   fpsPreDumpNames,
   patchBankFps,
+  writeFpsPatch,
 } from '../../src/slots/fps-patch.js';
-import type { SlotKey } from '../../src/slots/types.js';
+import type { DumpedSlot, SlotKey } from '../../src/slots/types.js';
 import type { DeviceState, SlotState, WorkflowContext } from '../../src/workflows/types.js';
 import { reportFor } from './write-fixtures.js';
 
 const legacy = getProfile('legacy-auth');
+const compact2016 = getProfile('compact-2016');
 const BANK = 0x10000;
 
 /** A context whose device must never be touched: any use is a test failure. */
@@ -85,17 +90,39 @@ function slotWith(key: SlotKey, image: Uint8Array | null): SlotState {
   } as unknown as SlotState;
 }
 
-function stateFor(version: string, banks: readonly SlotState[]): DeviceState {
+/**
+ * A synthetic image the 2016 line's recovery can solve: the plain words 7..10 and 13 are zero (the reserved
+ * vectors recovery reads), and the acceptance sum is the 2016 target, 0.
+ */
+/** Flips the bits of one byte of a synthetic image. */
+function xorAt(bytes: Uint8Array, offset: number, mask: number): void {
+  bytes[offset] = (bytes[offset] ?? 0) ^ mask;
+}
+
+function zeroVectorImage(length: number, seed: number): Uint8Array {
+  const out = plainImage(length, seed);
+  const dv = new DataView(out.buffer);
+  for (const word of [7, 8, 9, 10, 13]) dv.setUint32(4 * word, 0, true);
+  dv.setUint32(0x238, 0, true);
+  dv.setUint32(0x238, (0 - wordSum32(out, length)) >>> 0, true);
+  return out;
+}
+
+function stateFor(
+  version: string,
+  banks: readonly SlotState[],
+  profile: typeof legacy = legacy,
+): DeviceState {
   return {
     version,
     serial: 'FPSSERIAL',
     cfg0: 0,
-    profile: legacy,
+    profile,
     slots: banks,
     byKey: new Map(banks.map((bank) => [bank.key, bank])),
     boot: { booted: 'b', target: 'b' },
     keyTable: null,
-    keyWhiteningK: legacy.cipher.whiteningK,
+    keyWhiteningK: profile.cipher.whiteningK,
     storeKey: { name: 'Key B', key: null, programmed: false },
     deviceKeySlot: null,
     canFlash: true,
@@ -109,6 +136,20 @@ describe('the plan for one bank, from its own image (no device)', () => {
     const report = reportFor(
       stateFor('1.3.0.0', [slotWith('a', plainImage(0x4000, 1)), slotWith('b', null)]),
       buildSlotPlan(legacy, '1.3.0.0'),
+    );
+    const plan = fpsPlanOfBank(report, 'a');
+    expect(plan.status).toBe('refused');
+    if (plan.status === 'refused') expect(plan.reason).toMatch(/not in the frame-rate patch table/);
+  });
+
+  it('does not offer a 1.0.3.0 bank whose decrypted image is not the stock image of its table entry', () => {
+    const report = reportFor(
+      stateFor(
+        '1.0.3.0',
+        [slotWith('a', zeroVectorImage(0x800, 11)), slotWith('b', null)],
+        compact2016,
+      ),
+      buildSlotPlan(compact2016, '1.0.3.0'),
     );
     const plan = fpsPlanOfBank(report, 'a');
     expect(plan.status).toBe('refused');
@@ -226,5 +267,104 @@ describe('the read-back of a Key A bank, judged on its decrypted image', () => {
       legacy.cipher,
     );
     expect(check).toMatchObject({ checked: true, ok: false, missing: [0x238] });
+  });
+});
+
+describe('the read-back of the 2016 keystream line, judged on its decrypted image', () => {
+  /* The bank holds the image under a keystream of its own. A synthetic bank is the image XORed with
+   * that keystream (cryptBytes is self-inverse), and the read-back's own keystream is what the check solves. */
+  const KEYSTREAM = stateOf(0x12345678, 0x9abcdef0, 0x0badf00d, 0x2545f491);
+  const stored = (plain: Uint8Array): Uint8Array =>
+    cryptBytes(plain, KEYSTREAM, compact2016.cipher);
+  const before = zeroVectorImage(0x800, 21);
+
+  it('passes when the decrypted read-back differs from the saved image only at the planned bytes', () => {
+    const patched = before.slice();
+    xorAt(patched, 0x100, 0xff);
+    xorAt(patched, 0x101, 0x0f);
+    xorAt(patched, 0x238, 0x5a);
+    const check = checkReadBackDecrypted(
+      before,
+      stored(patched),
+      [0x100, 0x101, 0x238],
+      compact2016.cipher,
+    );
+    expect(check).toMatchObject({ checked: true, ok: true, unexpected: [], missing: [] });
+    expect(check.differing).toEqual([0x100, 0x101, 0x238]);
+  });
+
+  it('refuses a read-back that changes a byte the patch does not plan, however small', () => {
+    const patched = before.slice();
+    xorAt(patched, 0x100, 0xff);
+    xorAt(patched, 0x238, 0x5a);
+    xorAt(patched, 0x300, 0x01);
+    const check = checkReadBackDecrypted(
+      before,
+      stored(patched),
+      [0x100, 0x238],
+      compact2016.cipher,
+    );
+    expect(check.ok).toBe(false);
+    expect(check.unexpected).toEqual([0x300]);
+  });
+
+  it('refuses a read-back where a planned byte did not change', () => {
+    const patched = before.slice();
+    xorAt(patched, 0x100, 0xff);
+    const check = checkReadBackDecrypted(
+      before,
+      stored(patched),
+      [0x100, 0x102],
+      compact2016.cipher,
+    );
+    expect(check.ok).toBe(false);
+    expect(check.missing).toEqual([0x102]);
+  });
+});
+
+describe('writing a planned patch refuses before the device is touched', () => {
+  const patch = FPS_PATCHES.find((candidate) => candidate.id === 'compact_pro-1.0.3.0');
+
+  function dumpOf(plain: Uint8Array): DumpedSlot {
+    return {
+      key: 'a',
+      address: 0x14050000,
+      raw: new Uint8Array(BANK).fill(0xff),
+      sha256: 'x',
+      empty: false,
+      plain,
+      plainSha256: null,
+      notes: [],
+    };
+  }
+
+  it('refuses a bank whose decrypted image is not the patch’s stock image', async () => {
+    if (patch === undefined) throw new Error('the table has no compact_pro-1.0.3.0 entry');
+    const image = zeroVectorImage(0x800, 31);
+    const report = reportFor(
+      stateFor('1.0.3.0', [slotWith('a', image), slotWith('b', null)], compact2016),
+      buildSlotPlan(compact2016, '1.0.3.0'),
+    );
+    await expect(
+      writeFpsPatch(untouchableContext(), report, 'a', dumpOf(image), patch, {
+        acknowledgeRisk: true,
+        saveDump: () => Promise.resolve(true),
+      }),
+    ).rejects.toThrow(/not the stock image this patch was written for/);
+  });
+
+  it('refuses a patch for a build other than the one the camera reports', async () => {
+    if (patch === undefined) throw new Error('the table has no compact_pro-1.0.3.0 entry');
+    const image = zeroVectorImage(0x800, 32);
+    const report = reportFor(
+      stateFor('1.3.0.0', [slotWith('a', image), slotWith('b', null)]),
+      buildSlotPlan(legacy, '1.3.0.0'),
+    );
+    await expect(
+      writeFpsPatch(untouchableContext(), report, 'a', dumpOf(image), patch, {
+        acknowledgeRisk: true,
+        saveDump: () => Promise.resolve(true),
+      }),
+    ).rejects.toThrow(/is for build 1\.0\.3\.0, but the camera reports 1\.3\.0\.0/);
   });
 });
