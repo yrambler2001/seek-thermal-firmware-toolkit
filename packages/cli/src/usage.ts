@@ -226,10 +226,12 @@ Usage
   seek-fw slots patch-fps <a|b|r> [--dump-dir <dir>] [--write] [--yes]
                                   [--acknowledge-risk] [--no-verify] [options]
 
-Banks: A (0x14050000) and B (0x14060000) are the application banks; R is the
-recovery bank. Builds 0.8.0.0 and newer only; an older build is reported as
-unsupported and is never tried. The bootloader and the boot-config block are
-not banks and are never written.
+Banks: the locked 0.x/1.x line (the 2014 chain, and the 2016 keystream line of
+1.0.3.0 and 1.0.3.2) has A 0x14050000, B 0x14060000 and R 0x14070000. The 4.x line
+(Compact 4.8.x, Compact PRO 4.9.x) has A 0x14030000, B 0x14050000 and R 0x14070000,
+where R is the recovery bank (the locked line's roles are not decoded). Builds
+0.8.0.0 and newer only; an older build is reported as unsupported and is never
+tried. The bootloader and the boot-config block are not banks and are never written.
 
   list     the camera, each bank's address, whether the camera boots it, its
            version, key and bootability, and what this build can do with each
