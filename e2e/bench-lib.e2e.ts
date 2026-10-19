@@ -1718,7 +1718,7 @@ function fakeVendorBench(options: { storeAsSentAt?: 'a' | 'b' | 'r'; throwAt?: '
     },
     resetCpu: () => Promise.resolve(),
     setBootSlot: () => Promise.resolve(),
-  } as unknown as JlinkBench;
+  };
 
   const camera: BenchCamera = {
     present: () => on,
@@ -1765,7 +1765,7 @@ function fakeVendorBench(options: { storeAsSentAt?: 'a' | 'b' | 'r'; throwAt?: '
         stderr: '',
       });
     },
-  } as unknown as BenchCamera;
+  };
 
   const files: FfVendorFiles = {
     restoreFile,

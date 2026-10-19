@@ -243,7 +243,7 @@ export function createBenchCamera(options: BenchCameraOptions): BenchCamera {
         cwd: REPO_ROOT,
         timeoutMs: SLOT_FLASH_TIMEOUT_MS,
       });
-      let document: Record<string, unknown> | null = null;
+      let document: Record<string, unknown> | null;
       try {
         const parsed: unknown = JSON.parse(result.stdout);
         document = isRecord(parsed) ? parsed : null;
