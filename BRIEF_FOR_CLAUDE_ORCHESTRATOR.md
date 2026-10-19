@@ -1,5 +1,7 @@
 # Brief for Claude (the orchestrator): run the all-firmwares 32 fps work with Haiku agents
 
+> Status: done on 2026-10-19, see `TESTING.md` 42.27 (and `FPS_32HZ.md`). This brief is kept as the record of the task.
+
 You (Claude Code, Sonnet) read this after the owner has compacted the thread. You do **not** implement the whole job yourself: you split it, spawn Haiku 5.5 agents, watch them,
 merge and verify their work, and talk to the owner. The detailed task text the agents work from is `PROMPT_FPS_ALL_FIRMWARES.md` (same folder). Read it, `plan.md`, `FPS_32HZ.md` and
 `TESTING.md` 42.23 to 42.26 first.

@@ -25,10 +25,10 @@ Against the emulator, give a corpus entry and point SEEK_EMU_DIR at the FW-V1 `e
 SEEK_EMU_DIR=/Users/yrambler2001/things/a.noindex/seek/FW-V1/emu $R --fps --emulator "compact/2014.10.21-14.58.29-1.3.0.0/101310HSNEA2/dump" --mode normal --no-hifps
 ```
 
-`--emulator-flash FILE` boots a 4 MiB part instead of the entry's own flash (a patched image).
+`--emulator-flash FILE` boots a 4 MiB part instead of the entry's own flash. It does not stream frames for a patched part (see "The emulator and the patched images" below).
 
-A command needs a source: `--camera` (the bus) or `--emulator ENTRY`. Without one it refuses, so a stray run
-does not open a bench camera.
+A command needs a source: `--camera` (the bus) or `--emulator ENTRY`. `--camera` must be given explicitly to open a camera;
+without a source the command refuses, so a stray run does not open a bench camera.
 
 Flags, as in `main.swift`: `--mode normal|fast|raw`, `--no-hifps`, `--no-opzero`, `--no-pro-init`,
 `--raw-min N`, `--raw-max N`, `-n SECONDS`, and the presses `--nuc`, `--big-nuc`, `--shutter-close`,
@@ -72,17 +72,28 @@ SEEK_E2E_TARGET=camera npx vitest run --config e2e/vitest.config.ts seek-fps-cam
 The unit tests port `FrameTests.swift` and cover the decode, the calibration steps, the init choice, the
 firmware-info retry, the request list and the CLI, on a fake camera driven through core's `WebUsbTransport`.
 The emulator spec measures the stock builds (1.3.0.0, 1.3.0.8, 1.3.0.8-FF) in each IP mode through their corpus
-entries. The image-only 1.3.0.8 builds refuse the Startup with Operation=0 write, so they run with `--no-opzero`. It builds the patched parts and boots them, but it does not measure their frame rate: see the next section.
+entries. The image-only 1.3.0.8 builds refuse the Startup with Operation=0 write, so they run with `--no-opzero`. It builds the patched parts and boots them, but it does not measure their frame rate: the patched rates are the FW-V1 Python rows (see the emulator section).
 The camera spec runs `info` and `--fps` in Normal and Hi FPS, and fails on any request outside the lists above.
 
 ## The emulator and the patched images
 
 The emulator streams frames only when it boots a corpus entry. The 32K sensor is attached by the FW-V1 CLI
 (`seekemu/cli.py`) for a corpus-entry boot, not for a `--flash` part, so a patched part booted with `--flash`
-connects and enumerates but sends no frames. A stock part booted the same way sends none either, which is how
-this was told apart from the patch. Patched frame rates therefore need a route that boots an entry with its
-own flash replaced, which the FW-V1 tools do not offer through USB/IP. Patched rates come from the bench camera
-(`camera.e2e`, `--camera`), once a patched bank is on it.
+connects and enumerates but sends no frames. A stock part booted the same way sends none either.
+
+Patched images are measured in the emulator through the FW-V1 Python rows, not through `--flash`:
+
+```sh
+SEEK_EMU_DIR=/Users/yrambler2001/things/a.noindex/seek/FW-V1/emu \
+  /Users/yrambler2001/things/a.noindex/seek/FW-V1/emu/.venv/bin/python \
+  /Users/yrambler2001/things/a.noindex/seek/FW-V1/emu/fps_patch_tests.py --only 1.3.0.0@32:ip8 --no-long
+```
+
+Each `--only <build>@<target>:ip<mode>` row boots the corpus entry with the patched image, sends the vendor app's init and
+SetImageProcessingMode for that mode (8, 3 or 9), and measures 80 frames. `--only :ip` selects all 36 IP rows and `--no-ip` skips
+them (`fps_patch_tests.py --list` shows them). The FW-V1 Python tests do the rate and picture checks; this checker is not used for them.
+
+A patched bank on the bench is measured with `--camera`, once the camera boots that bank (`slots patch-fps`, then a power cycle).
 
 ## Not carried over from the Swift
 

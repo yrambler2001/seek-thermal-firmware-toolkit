@@ -1,5 +1,7 @@
 # Brief: consistent 32 fps (Pro: 18 fps) patches for every reconstructed 8 Hz / 9 Hz firmware, a JS frame-rate checker, and tests
 
+> Status: done on 2026-10-19, see `TESTING.md` 42.27 (and `FPS_32HZ.md`). This brief is kept as the record of the task.
+
 You are a Haiku 5.5 agent working alone (no nested agents). Work in a git worktree of each repo you change. Read this whole file first, then
 `FPS_32HZ.md` and `TESTING.md` sections 42.23 to 42.26 (repo root), then start. Report only what you measured, and say what you did not measure.
 

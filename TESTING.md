@@ -7797,3 +7797,213 @@ message); the untracked `real-camera-probe.test.ts` also ran when the whole CLI 
 
 **Bench.** The new 1.3.0.0 image `ef90c94a...` was not run on a camera in this section; the bench proof in 42.25 is of `d91284c6...`, which differs from it by the
 mode-6 16 Hz edit. [not measured]
+
+### 42.27 Frame rate: one patch rule for every 8 and 9 fps build, measured (2026-10-19)
+
+**Summary.** Every reconstructed Compact build that stock publishes at 8 fps and that can be patched (section 5 lists the rest), from 0.7.0.8 to 1.3.0.8 and the 4.8.x line, now has one
+32 Hz rule: the steady self-loop block of its Normal stream (mode 8, or the program mode 9 shares) becomes one copy step with the
+publish bit. The copy reads the source selection the stock seeds read, so it sees the sensor mode the stock average sees, and it
+averages nothing. The Compact XR (4.8.2.1) and the four Compact PRO 9 Hz builds follow the same shape (one armed substep in the
+steady page or row). On the owner's Compact PIR206 (serial 1013CE098ACA), booted from bank B (word 1), the 0.7.0.8, 0.8.0.0,
+0.9.0.2, 0.9.0.6, 0.9.0.7, 0.9.1.0, 0.10.0.0, 1.0.0.0, 1.2.0.0 and 1.3.0.8 images each ran the Normal stream at a median of about
+32.2 fps with 0 frozen pairs and the stock level and spread (the 0.9.0.7, 0.9.1.0 and 1.0.0.0 runs dip in a few seconds), and the 1.3.0.0 mode-8-only image ran from bank A at the same rate.
+The 4.8.1.7, 4.8.1.9, 4.16.1.7 FF, 1.3.0.8 FF, Compact 4.8.2.1 and Compact PRO builds were measured in the emulator only (the XR 4.8.2.1 on hardware in 42.24). The table of
+measurements is in section 4.
+
+**Tags.** [measured] was read on the camera, the emulator or a file; [source] was read off the firmware file named; [inferred] follows
+from those and was not measured.
+
+**1. The rule, and why it changed.**
+
+- [source] The mode-8 program of each build is a list of capture blocks. A block with first = next = its own index is the steady
+  self-loop. Stock steady blocks take four captures and publish on the fourth (seed, accumulate, accumulate, mean of four), which
+  gives 8 fps from a 32 fps capture. The patch makes the block one step with the publish bit, so every capture is published.
+- [source] The copy is a plain row copy with no read of the destination and no rescale. On the 2014 chain it is op 3 (the identity
+  operator table in frame_data.c) on 0.8.0.0 and later, and on the 1.3.0.8 family it is op 3 on the seeds' selection (0x13).
+  On the 4.8.x family it is op 1 (frame_chunk_copy) on the seeds' selection (0x11).
+- [measured] The first 52-byte forms used op 5 (seed) as the one step. Op 5 writes 0xFFFF over every sample above the sensor
+  ceiling (15000) and nothing refills it (1.3.0.8 image.c:1149; 4.8.x frame_chunk_seed, frame_chunk_ops_target.c:171). In the
+  emulator's bright scene the op-5 form had a mean of 26,285 with 33 % dead pixels; the copy form had a mean of 9,702 and no dead
+  pixel, against stock 9,713.
+- [measured] The copy's selection matters. On the camera, the 1.3.0.8 copy with the terminator selection (0x11) saturated the
+  picture: 67 % of samples at or above 15000, level 15,576 against stock 5,739, and it was rejected. The emulator's 4.8.x copy with
+  selection 0 froze the picture (58 of 58 steady pairs equal). The seeds' selection gives the stock picture on both.
+- [inferred] The reason the seeds' selection is right: the stock average is made of seed captures, so a copy on the same selection
+  is one of the captures the stock picture is made from. The picture is then the stock picture without the averaging.
+
+**2. The 0.7.0.8 op table.**
+
+- [source] `targets/compact_8hz_0_7_0_8/src/frame_data.c:52-54` has no frame_line_op_2, so table index n is not function op_n.
+  Index 2 is frame_line_op_3, which maps 206 of 208 samples through the gain table (image.c:307); index 1 is a plain word copy
+  (op_1, image.c:284); index 4 is op_5 (image.c:368).
+- [measured] The stock steps are table indices 4, 5, 5, 6. The first 0.7.0.8 entry used index 1 (a plain word copy, image 8b0f4781).
+  It ran at 32 fps, but the picture was 10 to 12 % brighter than stock (the two sessions give different stock levels) with about five times the spread. The index-4 op-5 copy was about 12 % brighter, with the same spread. Index 2 (the gain-table remap of one capture) matched stock, so 0.7.0.8's entry is index 2, image c5194276.
+
+**3. The offered entries and their gates.** The table has 20 entries (`FW-V1/emu/fps_patch.py`). The page and the CLI offer the ones
+in the stage sets (`packages/core/src/preservation/fps-patch.ts`):
+
+- Stage one (the plain 2014 chain, offered): 0.8.0.0, 0.9.0.2, 0.9.0.6, 0.9.0.7, 0.9.1.0, 0.10.0.0, 1.0.0.0, 1.2.0.0, 1.3.0.0, 1.3.0.8.
+- Stage two (Key A, offered): 4.8.1.7, 4.8.1.9, 4.8.2.1.
+- Not offered: 0.7.0.8 (slots refuses firmware older than 0.8.0.0); 1.3.0.8-FF and 4.16.1.7-FF (stage two, FF staging not done);
+  the four Compact PRO builds (stage two, the Pro line's staging and measurer not done).
+- `FPS_MEASURED_HZ` is empty, so every offered entry names its target (32 Hz, or 18 Hz for the PRO builds).
+
+**4. The per-build table.** Block offsets are file offsets in the decrypted image. "Stock -> patched" lists the changed bytes of the
+steady block only; the acceptance-sum word at +0x238 moves so the bootloader's sum does not change. Camera figures are per-second
+Normal medians over five seconds (IP mode 8, Hi FPS off), with the picture from the E1 scratch statistics (per-frame medians; (m) marks a mean of frames). Emulator figures are the 80-frame IP rows (`fps_patch_tests.py --only :ip`).
+
+| build (patched sha8)            | layout, block (offset)              | stock -> patched bytes                                                                                     | offered                 | camera Normal, stock -> patched                                                                        | camera picture, stock -> patched                                        | emulator IP 8                                      | Hi FPS                                                              |
+| ------------------------------- | ----------------------------------- | ---------------------------------------------------------------------------------------------------------- | ----------------------- | ------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------- | -------------------------------------------------- | ------------------------------------------------------------------- |
+| 0.7.0.8 (c5194276)              | 14-byte, style a, block 4 (+0xB514) | `24 04 \| 25 10 2d 10 2d 10 b5 13` -> `21 04 \| 95 13 \| 00 x6`                                            | no (older than 0.8.0.0) | 8.05 -> 32.18 to 32.21                                                                                 | level 5,716 -> 5,693, std 34.3 -> 33.5, range 207 -> 209 (same session) | 8.065 -> 32.258                                    | stock 32.2; patched not run                                         |
+| 0.8.0.0 (9b2c6f89)              | 14-byte, block 6 (+0xB744)          | `64 06 \| 59 20 69 20 69 20 79 27` -> `61 06 \| 39 27 \| 00 x6`                                            | stage one               | 8.05 -> 32.16 to 32.20                                                                                 | level 5,814 -> 5,829, std 72 -> 71                                      | 8.065 -> 32.258                                    | 27.4 -> 32.2 (mean)                                                 |
+| 0.9.0.2 (e41610e3)              | 14-byte, block 7 (+0xB7F6)          | `74 07 \| 59 20 69 20 69 20 79 27` -> `71 07 \| 39 27 \| 00 x6`                                            | stage one               | 8.05 -> 32.16 to 32.21                                                                                 | level 5,836 -> 5,835, std 71 -> 70                                      | 8.065 -> 32.258                                    | 27.8 -> 29.6 (mean)                                                 |
+| 0.9.0.6 (54d383ad)              | 14-byte, block 7 (+0xB712)          | as 0.9.0.2                                                                                                 | stage one               | 8.05 -> 32.10 to 32.20                                                                                 | level 4,848 -> 4,868, std 97 -> 95 (a darker, noisier build)            | 8.065 -> 32.258                                    | not recorded                                                        |
+| 0.9.0.7 (1ad41e1e)              | 14-byte, block 7 (+0xB7E6)          | as 0.9.0.2                                                                                                 | stage one               | 7.19 to 8.09 -> 30.73 to 32.19 (first seconds low)                                                     | level 5,826 -> 5,833, std 71 -> 71                                      | 8.065 -> 32.258                                    | 25.4 -> 25.6 (mean)                                                 |
+| 0.9.1.0 (1814e5ac)              | 14-byte, block 7 (+0xB7F6)          | as 0.9.0.2                                                                                                 | stage one               | 8.05 -> run 1: 30.77, 29.36, 30.07, 27.83, 29.87; reruns 32.16 to 32.23                                | level 5,847 -> 5,842, std 68 -> 72                                      | 8.065 -> 32.258                                    | not recorded                                                        |
+| 0.10.0.0 (efd72e1c)             | 14-byte, block 7 (+0xB7F6)          | as 0.9.0.2                                                                                                 | stage one               | 8.05 -> 32.17 to 32.24                                                                                 | level 5,847 -> 5,838, std 69 -> 69                                      | 8.065 -> 32.258                                    | 27.4 -> 23.4 (mean; not explained)                                  |
+| 1.0.0.0 (d55ccb47)              | 14-byte, block 7 (+0xB7E6)          | as 0.9.0.2                                                                                                 | stage one               | 7.87 to 8.08 -> 31.29 to 32.16                                                                         | level 5,866 -> 5,835, std 68 -> 70                                      | 8.065 -> 32.258                                    | 24.0 -> 26.6 (mean)                                                 |
+| 1.2.0.0 (547d0e85)              | 34-byte, block 8 (+0xB898)          | `84 08 \| 59 20 69 20 69 20 79 27` -> `81 08 \| 39 27 \| 00 x6`                                            | stage one               | 8.19 7.81 8.05 8.02 7.99 -> 32.18 to 32.20                                                             | level 5,817 -> 5,809, std 71 -> 71                                      | 8.065 -> 32.258                                    | 30.0 -> 29.8 (mean)                                                 |
+| 1.3.0.0 (ef90c94a)              | 34-byte, block 8 (+0xB898)          | as 1.2.0.0                                                                                                 | stage one               | stock not run in this section; patched (bank A) 32.17 to 32.22 (E1 final), 32.09 to 32.20 (JS checker) | patched level 5,880, std 66; stock not measured here                    | 8.065 -> 32.258 (level 6,798 -> 6,797)             | patched Hi FPS 32.2 (JS, medians); IP 3 identical to stock          |
+| 1.3.0.8 (5313f107)              | 52-byte, block 13 (+0xB750)         | `04 0d 0d 00 \| 13 05 20 13 06 20 13 07 20 11 28 23` -> `01 0d 0d 00 \| 13 23 23 \| 00 x9`                 | stage one               | 8.04 to 8.05 -> 32.16 to 32.20                                                                         | level 5,739 -> 5,760 (+0.4 %), std 76.3 -> 76.7, 95 -> 94 % changed     | 8.065 -> 32.258 (IP 8 and 9; level 6,801 -> 6,797) | stock refused by the camera (0x53 stall); IP 3 refused by the build |
+| 1.3.0.8-FF (bf99816f)           | 52-byte, FF block 13 (+0xB804)      | `02 0d 0d 00 \| 13 05 20 11 28 23` -> `01 0d 0d 00 \| 13 23 23 \| 00 x3`                                   | no (FF stage two)       | not run                                                                                                | not run                                                                 | 16.129 -> 32.258 (IP 8 and 9)                      | not run                                                             |
+| 4.8.1.7 (51c6f0d5)              | 52-byte, page 13 (+0x976E)          | `04 0d 0d 00 \| 11 05 20 11 06 20 11 07 20 10 28 23` -> `01 0d 0d 00 \| 11 21 23 \| 00 x9`                 | stage two               | not run                                                                                                | not run                                                                 | 8.065 -> 32.258 (IP 8 and 9; level 6,797 -> 6,792) | refused by the build (IP 3 not accepted)                            |
+| 4.8.1.9 (14e25960)              | 52-byte, page 13 (+0x95A6)          | as 4.8.1.7                                                                                                 | stage two               | not run                                                                                                | not run                                                                 | 8.065 -> 32.258 (IP 8 and 9)                       | refused by the build                                                |
+| 4.16.1.7 FF (aec53641)          | 52-byte, FF page 13 (+0x9776)       | `02 0d 0d 00 \| 11 05 20 10 28 23` -> `01 0d 0d 00 \| 11 21 23 \| 00 x3`                                   | no (FF stage two)       | not run                                                                                                | not run                                                                 | 16.129 -> 32.258 (IP 8 and 9)                      | not run                                                             |
+| 4.8.2.1 (d64d91b0)              | 68-byte command page 13 (+0x90F2)   | `04 0d 0d 00 \| 23 07 00 01 23 08 00 01 23 08 00 01 20 8a 03 01` -> `01 0d 0d 00 \| 23 81 03 01 \| 00 x12` | stage two               | Compact not run; XR 4.8.2.1 measured in 42.24 (32.0 to 32.2 steady, 0 frozen)                          | Compact not run; XR body mean 5.6k to 5.7k, stock 5.67k                 | 8.065 -> 32.258 (IP 8 and 9; level 6,797 -> 6,805) | not run                                                             |
+| Compact PRO 1.0.3.0 (d410b04c)  | 68-byte row 14 (+0xC2BC)            | count `02 -> 01`; `00 04 00 20 00 04 10 23` -> `00 04 10 23 00 00 00 00`                                   | no (Pro stage two)      | not run (no PRO on the bench)                                                                          | not run                                                                 | 8.84 -> 17.68 (IP 8)                               | not run                                                             |
+| Compact PRO 1.0.3.2 (68bcc5f9)  | 38-byte record 20 (+0xC258)         | count `02 -> 01`; `00 20 10 23` -> `10 23 00 00`                                                           | no                      | not run                                                                                                | not run                                                                 | 8.84 -> 17.68 (IP 8)                               | not run                                                             |
+| Compact PRO 4.9.1.15 (75405c18) | 38-byte record 20 (+0x19B0)         | count `02 -> 01`; `00 20` -> `10 23` at +0x19B6                                                            | no                      | not run                                                                                                | not run                                                                 | 8.84 -> 17.68 (IP 8)                               | not run                                                             |
+| Compact PRO 4.9.2.0 (4dcf0442)  | 54-byte row 20 (+0xA634)            | count `02 -> 01`; `00 00 01 20 03 01` -> `20 03 01 00 00 00`                                               | no                      | not run                                                                                                | not run                                                                 | 8.84 -> 17.68 (IP 8)                               | not run                                                             |
+
+Notes on the table:
+
+- The 2014-chain emulator rows (0.8.0.0 to 1.3.0.0) show one picture: level 6,798 stock against 6,791 to 6,797 patched, spread 2,091 against 2,089 to 2,091, and IP 3 gives 32.258 Hz for stock
+  and patched alike. The 0.7.0.8 row is its own run (level 6,008.3 to 6,005.0, IP 3 identical).
+- The 0.7.0.8 emulator row was first run with the old index-1 entry (8b0f4781), which gave a 13 % brighter picture; the row above is the
+  index-2 entry that replaced it (P3).
+- The camera stock figures of 0.7.0.8 differ between two sessions on the same unit (level 5,649 and std 38 in the E1 run; level 5,716
+  and std 34.3 in the P3 run). Both are shown; the comparison in the table is the one made in the same session.
+- The Hi FPS means are the camera's own Hi FPS run (IP 3, five seconds, means) where the bench ran it; the emulator's Hi FPS is IP 3.
+- 0.9.1.0: the first run of the patched image gave 27.8 to 30.8 fps in its five seconds. Four reruns gave 32.16 to 32.23 fps. The first run
+  was not reproduced; the cause is not known.
+- 0.10.0.0: the patched Hi FPS mean (23.4) is lower than the stock Hi FPS mean (27.4). The patched edit is in the Normal (mode 8)
+  program only, and the Hi FPS stream is mode 3; the difference is recorded and not explained.
+
+**5. The builds that cannot be patched, and why.**
+
+- 0.5.0.2, 0.5.1.0, 0.5.1.3, 0.6.0.4, 0.7.0.7: the capture programs are built at run time by code (a .bss block written by the
+  builder), so the image holds no program bytes to edit. A patch would change builder code, which was not surveyed. These five do not
+  stream in the emulator either (`framerate_tests.py` CANNOT_STREAM).
+- 0.3.0.1: the mode-8 program was not located in the image (no pointer word to its table, and no copy of the 1.0.3.0 row-14 bytes).
+  Not established.
+- The 1.3.0.0 mode-6 one-step form (op 9 alone, or op 3 with the idle steps removed) alternates between frames, and the 32 Hz edit of the
+  same block with op 9 alone does too. The op-5 forms of 1.3.0.8, 4.8.1.x and the FF builds freeze or saturate (above). All of these were
+  replaced or withdrawn; the table holds none of them.
+- Mosaic 10.9.1.31 is already an 18 Hz image; Nano 200 42.32.3.10 already publishes every capture (32 Hz); Mosaic FF and Nano 300 are
+  not 9 Hz targets.
+
+**6. The boot-word warning, and its bench check.** Commit 3c6e419 (agent W).
+
+- [source] USB reads two words that matter here: the boot-config word cfg[0] at 0x14010000 (the analysis keeps it as
+  `DeviceState.cfg0`, and the next start uses it), and the active-slot word roots[8] (GetFirmwareInfo selector 10), which the
+  bootloader writes at every start (0 slot A, 1 slot B, 2 recovery R; bootloader src/startup.c). The page and the CLI used to show any
+  non-zero active-slot word as B. Now 2 is R.
+- [source] `packages/core/src/slots/boot-choice.ts` gives the bank the next start runs from the word and from each bank's image sum
+  check (the bootloader's boot_select_image order), and names the frame-rate patches that will not run. The warning is raised only on
+  the 2014 plaintext chain, when a bank that holds a patch (or the bank about to be patched) is not the bank that runs, and the bank
+  that runs holds none.
+- The text (the same paragraphs on the page's Firmware slots alert and Make N FPS dialog, and in `slots list` and `slots patch-fps`
+  in the CLI, with a JSON form), for word 2 with slot A patched and recovery R stock:
+  "The camera boots recovery R. The boot-config word is 2, so the bootloader tries recovery R first, and it holds an image the
+  bootloader accepts." / "Slot A holds a frame-rate patch, but it does not run, so the patch does not take effect." / "Patch recovery R
+  too (the bank that runs): that is what makes the frame-rate patch take effect."
+- The button is not gated by the warning. The warning is text; "Make N FPS" stays enabled.
+- [measured] Bench (owner's unit, J-Link on channel 1, word set by `set-boot-recovery`): after the word was set to 2, `slots list` printed "boot-config word 0x00000002 — recovery R first, then A, then B", "next start runs recovery R",
+  and "last start the camera reports it entered recovery R (active-slot word 2)". The word was restored to 0 with `set-boot-slot-a`
+  and `info` reported booted slot A.
+- [measured] Owner's unit at the end of this section: word 0, slot A = ef90c94a (the 1.3.0.0 32 Hz image), slot B = recovery R =
+  d91284c6 (the 1.3.0.0 image with the removed mode-6 edit as well; recognised as a known 32 Hz build). Start and end dumps are
+  byte-identical after the E1 and P3 runs (0 differing bytes).
+- [measured] Which bank ran: a J-Link SRAM read after the 1.3.0.0 mode-8-only write found 0x100020C4 = `81 08 39 27 00 00 00 00 00 00`
+  (the patched block) and 0x10002190 = `24 02 01 40 39 60 01 00 99 27` (the stock mode-6 pair). Only ef90c94a has that pair, so bank A ran.
+
+**7. The JS frame-rate checker and the Swift tool.** Commit 944a058 (agent J), `e2e/lib/bench/seek-fps/`.
+
+- A port of `tv-jc/macos` SeekKit and the `seek` CLI: `info`, `stream`, and `--fps` (five seconds, mean and median per second, frozen
+  pairs, changed pixels). Modes are `normal` (IP 8), `fast` (IP 3) and `raw` (IP 0). `--no-hifps`, `--no-opzero`, `--no-pro-init`.
+  The Compact Pro init is used only on firmware 4.x and later. `--camera` must be given to open a camera; a command with no source refuses.
+- [measured] On the owner's unit, after the 1.3.0.0 mode-8-only write: checker Normal medians 32.19 32.19 32.09 32.20 32.20 (21.0 fps overall,
+  105 frames in 5 s); Swift `seek --fps --no-hifps` right after, 32.18 to 32.19 (21.8 fps overall, 109 frames). The Normal stream: frozen
+  pairs 0, changed 94 to 95 %. Hi FPS: checker 32.0 fps overall (160 frames), Swift 31.2 (156). The medians agree; the overall means differ (32.0 and 31.2 fps).
+- The emulator path: `--emulator <corpus entry>`. A patched part booted with `--flash` gives no frames (the emulator attaches the sensor
+  only for a corpus-entry boot). Patched images are measured in the emulator through the Python IP rows (section 10), not through `--flash`.
+- Unit tests 56 passed (section 10). Not ported: snapshot, deadpixels, renderer. The camera spec is read-only and fails on any request
+  outside the port's list.
+- The macOS app change in `tv-jc` (Pro init only on firmware 4.x; the `seek stream` output prints frozen pairs and changed %) is committed
+  and pushed as `tv-jc` master d28d2ed, on the owner's decision; `swift test` 5 passed.
+
+**8. The FW-V1 emulator rows (IP modes).** `framerate.app_init_steps` ports the checker's init (the classic init, with the 1.3.0.8
+build's 0x56 chain and no Startup Op 0; the Pro 79-block init for the PRO and 4.x builds), ends at SetImageProcessingMode, and reads
+GetIPMode back after the run. `fps_patch_tests.py` has 36 IP rows: 0.7.0.8 to 1.3.0.0 at IP 8 and 3, 1.3.0.8, the FF builds, and
+4.8.1.7, 4.8.1.9 and 4.8.2.1 at IP 8 and 9, and the four PRO builds at IP 8. Before J2 the harness sent no SetIPMode, so the boot default ran (mode 6 on 0.9.0.2 and 1.2.0.0), and those rows said nothing about Normal. The IP rows are the emulator's evidence for the Normal rate of each edit.
+
+**9. The J-Link runner (FW-V1 `targets/compact_8hz_1_3_0_0/tools/jlink/jlink-runner.js`, and the 1.3.0.8 copy). Commit 15e74e942.**
+
+- `-NoGui 1` is added to every JLinkExe spawn through `withNoGui()` (the owner did not want GUI windows). Before this, the spawns at
+  about lines 2341 and 2352 had no `-NoGui`.
+- `BANK_BASES` names A, B and R (0x14050000, 0x14060000, 0x14070000). `flash-bank` accepts bank B; the CODE-footer guard on the payload
+  is kept (the payload must be the image, padded to 0xBFC0, then "CODE", the header length and 0xFF).
+- `set-boot` logs the bank the word selects.
+- Still open: `SLOT_BASES` maps word 1 to 0x14050000 (the other chain's table), and `flash-bank` defaults to `SLOT_BASES[1]`, which is
+  bank A. To write bank B, pass `BANK_ADDR=0x14060000`. The 0.7.0.8 bank B write used `flash-region` with `FLASH_ADDR=0x14060000`.
+
+**10. Tests, with counts.** Commands run from the stated folder. "Re-run" means run by Agent D for this section; "orchestrator" means the
+counts recorded by the orchestrator after the merge (not run again here).
+
+- FW-V1 `emu/.venv/bin/python emu/fps_patch_unit_tests.py`: 75 OK (re-run, 4.8 s). Five new tests cover the IP modes.
+- FW-V1 `emu/.venv/bin/python emu/fps_patch_tests.py --list`: 48 rows, 10 steady, 2 long-run, 36 IP (re-run). The two long-run rows are
+  the 1.3.0.8 32 Hz and the 1.3.0.8 FF reference; they were not run in this section.
+- FW-V1 `SEEK_EMU_DIR=<FW-V1>/emu emu/.venv/bin/python emu/fps_patch_tests.py --no-long --no-ip -j 2`: 10 PASS in 628 s (orchestrator).
+- FW-V1 `... --only :ip --no-long -j 2 --json ip_all.json`: 36 PASS, 72 boots, 1810 s (orchestrator).
+- FW-V1 `... --only 0.7.0.8@32:ip8 --only 0.7.0.8@32:ip3 --only 1.3.0.0@32:ip8 --no-long -j 2`: 3 PASS, 125 s, after the 0.7.0.8
+  index-2 change (orchestrator).
+- Firmware `npx vitest run --config e2e/lib/bench/seek-fps/vitest.config.mjs`: 56 passed in 4 files (re-run, 1.2 s).
+- Firmware `cd packages/cli && npx vitest run test/slots.test.ts`: 106 passed (re-run, 0.7 s). The CLI test file for emulator flows
+  (`emulator-cli`) was not re-run here; the orchestrator recorded 107 for the two together.
+- Firmware `cd packages/core && SEEK_FPS_CORPUS=<SEEK_FULL_DUMPS_BY_CAMERA, SEEK_FULL_DUMPS, SEEK_DUMPS, FW-V1/emu/data, FW-V1/targets>
+npx vitest run test/preservation/fps-patch.test.ts test/preservation/fps-patch.differential.test.ts test/slots/fps-patch.test.ts test/slots/boot-choice.test.ts`:
+  53 passed, 1 skipped, in 4 files (re-run, 5.9 s). The differential test needs all five corpus roots; with fewer roots it fails on one dump
+  it cannot find.
+- Firmware `cd packages/core && npx vitest run test/slots/page-expectations.emulator.test.ts test/slots/fps-patch.emulator.test.ts`:
+  194 passed in 209 s (orchestrator; these suites do not cover the 0.7.0.8 index-2 change).
+- Firmware `cd packages/web && npx vitest run`: 335 passed (orchestrator; 42.26 recorded 332).
+- Typecheck of core, cli, web, app/web, node, tools and e2e, and eslint on the changed files: clean (orchestrator).
+- Known and not from this work: `packages/cli/test/camera.test.ts` has one stale assertion on the 2016 Compact PRO refusal text.
+
+**11. What the sources disagree on (recorded, not resolved).**
+
+- The 1.3.0.8 op-5 form (the first 32 Hz entry, image ee8c7f0e) published 26 fps in 42.20 on serial 101310HSNEA2 (the PIR206 unit), and
+  32.18 to 32.20 fps in this section's run of the same image on the same unit. The emulator comment in `fps_patch.py` and the TypeScript
+  comment on `FPS_MEASURED_HZ` both cite the 26 fps. No cause was found.
+- The 0.7.0.8 stock picture differs between the E1 run and the P3 run (see the notes under the table).
+- `FPS_32HZ.md` section 8 and TESTING 42.26 say 1.2.0.0 has no patch. The table has `compact_32k-1.2.0.0-to32` (stage one), measured
+  here at 32.18 to 32.20 fps on the camera.
+- The 4.8.2.1 image is one image in the survey and in `fps_patch.py` (f96ac57eda75, Compact and Compact XR). The emulator run uses the
+  Compact corpus entry 2229A0YZ7E28; the XR was measured on hardware in 42.24 (serial 1E2A50YZ7628). Whether the XR corpus entry holds the same image is not checked here. The Compact 4.8.2.1 has not been measured on a camera.
+- The CLI reports the owner's unit as serial 101310HSNEA2; the checker and the Swift tool report the chip serial 1013CE098ACA. Both are
+  in use; neither has been reconciled.
+
+**12. Not measured.**
+
+- Hi FPS in the emulator for 4.8.1.7, 4.8.1.9 (the build refuses mode 3) and for 4.8.2.1 as the XR (not run as its own corpus entry).
+- The 4.8.1.7, 4.8.1.9, 4.16.1.7 FF, 1.3.0.8 FF and the four Compact PRO builds on a camera. The Compact 4.8.2.1 on a camera.
+- Over-ceiling behaviour of the 32 Hz copy on a 32K build in the emulator: no 32K emulator scene has samples at or above 15000 (the PRO
+  scene does). On the camera, the 1.3.0.8 copy was checked in a scene with no warm pixel, so the copy's over-ceiling behaviour there is
+  established only by the emulator's bright scene and by the sel-0x11 camera run.
+- The TypeScript checker over patched parts through `--flash`: no frames, because the emulator attaches the sensor only for a corpus-entry
+  boot. The IP rows are the route; the checker's README is updated to say so.
+- Long streams: the 400-frame long-run rows for the current entries were not run. A long stream may leave 32 Hz (the frame-sequence limit
+  moves the program on and returns it). Not measured for any 32 Hz entry here.
+- The stock 1.3.0.0 Normal and Hi FPS on the camera in this section (the 8.0 fps in 42.25 was the 16 Hz image, not stock).
+- The Pro builds' picture on hardware, and the FF builds' rate with the 32 Hz copy.
+- The first 0.9.1.0 run (27.8 to 30.8 fps) was not reproduced.
