@@ -8014,9 +8014,9 @@ npx vitest run test/preservation/fps-patch.test.ts test/preservation/fps-patch.d
 
 **Summary.** The owner decided on 2026-10-19 that a build that is patched but not measured is offered exactly like a measured one.
 That removed the only reason the two Compact PRO 4.9.x entries were refused ("its frame rate has not been measured on the bench").
-Both are now offered at 18 Hz, on the page and in the CLI. `compact_pro-4.9.1.15` and `compact_pro-4.9.2.0` (the 18 Hz row patch of
+Both are now offered at 18 Hz, on the page and in the CLI (corrected in 42.32: 4.9.1.15 is offered at its measured 17.7 Hz; 4.9.2.0 at 18 Hz). `compact_pro-4.9.1.15` and `compact_pro-4.9.2.0` (the 18 Hz row patch of
 42.27, section 6) are in `FPS_STAGE_TWO_IDS`, and the 4.9.x branch of `gateOf` is removed. The 1.0.3.x branch (the 2016 keystream line)
-is unchanged and still refuses. No Compact PRO camera was used. The rate, 8.84 to 17.68 fps, is the emulator's IP 8 result from 42.27.
+is unchanged and still refuses. No Compact PRO camera was used in this section. The rate, 8.84 to 17.68 fps, is the emulator's IP 8 result from 42.27. (corrected in 42.32: the 4.9.1.15 rate was measured on a camera, 17.70 fps; 4.9.2.0 is not measured.)
 
 **Tags.** As in 42.27: [measured] was read on the emulator or a file; [source] was read off the code named; [inferred] follows from those.
 
@@ -8044,6 +8044,7 @@ is unchanged and still refuses. No Compact PRO camera was used. The rate, 8.84 t
   planner says "already runs at 18 Hz" and offers nothing there. It is not the 1.0.3.x refusal (that reason is for the line's own
   entries); it is not offered either way, which is what the 1.0.3.x instruction asked for.
 - The bank addresses above are the Compact PRO's. They are not the ones the CLI usage text gives (see item 5).
+- (corrected in 42.32) The 4.9.1.15 rows A and R say "offered, 18 Hz" in the table above. They are offered at 17.7 Hz, the measured rate (FRAME_RATE.md sec.6.3).
 
 **3. The write flow, on the emulator** (`packages/core/test/slots/fps-patch.stage-two.emulator.test.ts`, the two full dumps added at 18 Hz).
 
@@ -8052,7 +8053,7 @@ is unchanged and still refuses. No Compact PRO camera was used. The rate, 8.84 t
   page does not offer this patch yet"). The two 4.8.1.x subjects passed.
 - The write flow with the two ids in the stage set: 4 passed. Then the same run on the final code (gate in the committed form): 4 passed.
 - Per Pro subject, the assertions that passed:
-  - the offer on bank A at 18 Hz (line 178, `expect(offer.toHz).toBe(top)`);
+  - the offer on bank A at 18 Hz for 4.9.2.0 and 17.7 Hz for 4.9.1.15 (corrected in 42.32; line 178, `expect(offer.toHz).toBe(top)`);
   - the save gate: a save that does not happen refuses the write, and no SetFeaturedFirmwareData (0x50) or CompleteMemoryUpgrade (0x51) is
     sent (lines 187 to 190);
   - the write is staged `key-a-ciphertext` (line 214), the commit status is 0 and the write verified (lines 216 to 217);
@@ -8067,7 +8068,7 @@ is unchanged and still refuses. No Compact PRO camera was used. The rate, 8.84 t
 **4. The verdict table and its tests.**
 
 - `e2e/lib/slots-expectations.ts`: the 4.9.2.0 row is `fps: { offer: true, toHz: 18 }` (all three banks hold its image). The 4.9.1.15
-  row is `fps: { offer: true, toHz: 18 }` with `fpsNotOffered: { bank: 'b', reason: 'already runs at 18 Hz' }`, the new optional field
+  row is `fps: { offer: true, toHz: 17.7 }` (corrected in 42.32; it was 18) with `fpsNotOffered: { bank: 'b', reason: 'already runs at 18 Hz' }`, the new optional field
   for the one bank whose image is not the row's build.
 - `packages/core/test/slots/page-expectations.emulator.test.ts`: the frame-rate check honours `fpsNotOffered`.
 - `packages/core/test/preservation/fps-patch.test.ts` and `fps-patch.differential.test.ts`: the pinned stage-two set now lists the two
@@ -8076,7 +8077,7 @@ is unchanged and still refuses. No Compact PRO camera was used. The rate, 8.84 t
 **5. The CLI and the other text.**
 
 - `packages/cli/src/usage.ts`: `slots patch-fps` names the 4.9.1.15 and 4.9.2.0 builds (under Key A, 18 fps, not measured on a Compact PRO
-  camera). The plan lines and the confirmation already read the plan's rate, so they say 18 Hz with no other change.
+  camera; corrected in 42.32: 4.9.1.15 is named at 17.7 fps, measured). The plan lines and the confirmation already read the plan's rate, so they say 17.7 Hz for 4.9.1.15 and 18 Hz for 4.9.2.0, with no other change.
 - `e2e/seek-fps-emulator.e2e.ts`, the list of builds not built by the checker: the 4.9.x banks are Key A banks, not 2016 keystream banks,
   and the two lines now say so.
 - Observed, not changed: the CLI usage line "Banks: A (0x14050000) and B (0x14060000)" is the Compact layout. The Compact PRO banks in
@@ -8097,7 +8098,7 @@ is unchanged and still refuses. No Compact PRO camera was used. The rate, 8.84 t
 **7. Not measured, not run.**
 
 - No Compact PRO camera was used. The connected camera is a Compact 1.3.0.0, and nothing was run with `--camera`.
-- The 18 Hz rate on a Compact PRO is not measured. The emulator rate (8.84 to 17.68 fps, IP 8) is from 42.27.
+- The 18 Hz rate on the Compact PRO 4.9.2.0 is not measured. (Corrected in 42.32: the 4.9.1.15 rate is measured on a camera, 17.70 fps, FRAME_RATE.md sec.6.3.) The emulator rate (8.84 to 17.68 fps, IP 8) is from 42.27.
 - Writes to banks B and R on the emulator (item 3).
 - The slots bench and the Electron matrix were not run.
 
@@ -8123,8 +8124,8 @@ the differential test).
 
 1. The two Compact PRO builds on the 2016 keystream line, 1.0.3.0 and 1.0.3.2 (9 fps stock), are offered at 18 Hz. They are a third
    stage (`FPS_STAGE_THREE_IDS`), not part of stage two: a 2016 bank is staged under the image's own stage key, not under Key A. With
-   this, all four Compact PRO builds in the table (1.0.3.0, 1.0.3.2, 4.9.1.15, 4.9.2.0) are offered at 18 Hz. The emulator writes and
-   boots both 2016 builds. No Compact PRO camera was used to measure a rate, so 18 Hz is not measured on hardware.
+   this, all four Compact PRO builds in the table (1.0.3.0, 1.0.3.2, 4.9.1.15, 4.9.2.0) are offered at 18 Hz (4.9.1.15 at its measured 17.7 Hz, corrected in 42.32). The emulator writes and
+   boots both 2016 builds. No Compact PRO camera was used to measure a rate in this section, so 18 Hz is not measured on hardware for 1.0.3.0 or 1.0.3.2 (corrected in 42.32: 4.9.1.15 was measured at 17.70 fps).
 2. The slots bench judges each subject by the shared verdict table (owner decision, 2026-10-19). Its old criterion expected a write of
    every bank's own image, which the table does not allow for rows 14 and 20 of the 42.21 matrix. On the bench board, row 14 now passes
    as a refusal the table records; row 20 passes as a write and a refusal the table records, on its retry. Row 20's first attempt failed
@@ -8322,7 +8323,7 @@ the board on channel 2; `SEEK_E2E_WRITE=i-understand`, `NODE_OPTIONS=--max-old-s
 
 **7. Not done / not measured.**
 
-- No Compact PRO camera was used to measure a rate. The 18 Hz for the four Compact PRO builds is not measured on hardware; the owner's
+- No Compact PRO camera was used to measure a rate in this section. The 18 Hz for 4.9.2.0, 1.0.3.0 and 1.0.3.2 is not measured on hardware (corrected in 42.32: 4.9.1.15 is measured at 17.70 fps); the owner's
   decision offers them unmeasured. The emulator's 8.84 to 17.68 Hz is from the table's comments (section 2).
 - Writes to banks B and R are not exercised on the emulator for the Pro builds (the 2016 test writes bank A only) or for the 4.8.x
   stage-two builds (42.28 section 3).
@@ -8427,7 +8428,7 @@ The brief expected about 32.2 after the restore. The after-run first second was 
 - Rows 10, 15 and 21 were not retried, by the retry rule (their page steps ran).
 - The row 9 env gap: `run-row.sh` does not set the FF variables. I did not verify where the 42.21 run got them.
 - The FF vendor path's boot is observed, not proven ("no boot (expected)"). Row 9 is a vendor-form run, not a page run.
-- The Compact PRO frame rate is not measured on hardware (carried over from 42.29).
+- The Compact PRO frame rate is not measured on hardware (carried over from 42.29; corrected in 42.32: 4.9.1.15 is measured at 17.70 fps, and 4.9.2.0, 1.0.3.0 and 1.0.3.2 are not).
 - The retries' reports are single-row matrices. They are not merged into `slots-bench-matrix.json`.
 
 ### 42.31 The come-back-after-reset check: a fast reboot fell between two 500 ms polls, so the drop wait now polls every 100 ms; rows 10, 15 and 21 pass (2026-10-19)
@@ -8489,6 +8490,88 @@ The rate settles slowly after the dump in both directions, so a single read afte
 - That the 42.30 failures were these same misses is inferred from the mechanism and the matching timing. 42.30 kept no presence trace, so it is not measured.
 - That 42.21 passed by chance is inferred. The same code and the same sampling were in place.
 - Row 9's FF env item and the other plan items are not touched.
+
+### 42.32 The Compact PRO 4.9.1.15 rate is measured (17.7 fps, FRAME_RATE.md 6.3): recorded in the table, the page and the CLI, and the "not measured" sentences corrected (2026-10-19)
+
+**Summary.** TESTING.md 42.28, 42.29 and 42.30 and `FPS_32HZ.md` said that no Compact PRO frame rate had been measured on hardware. For one build that was wrong. FW-V1 `docs/FRAME_RATE.md` sec.6.3, experiment A, flashed three byte edits of the 4.9.1.15 image to slot B of a Compact PRO 4.9.1.15 camera and read 17.70 fps delivered (17.68 Hz captured), against 8.85 fps for the unmodified control on the same unit. `FPS_MEASURED_HZ` now holds `compact_pro-4.9.1.15` at 17.7, so the page, the CLI and the boot-choice text name 17.7 Hz for this build. 4.9.2.0, 1.0.3.0 and 1.0.3.2 have no camera measurement and keep their 18 Hz target. No camera, J-Link or USB switch was used here: the figures are read from FW-V1's record, and the checks ran on the emulator, the corpus and the unit tests.
+
+Code and tests: commit `7672740`. This section and the 42.28 to 42.30 corrections are in the docs commit after it.
+
+**Tags.** [measured] is a figure read from FW-V1's record, or a command run here. [source] is read off the code named. [inferred] follows from those.
+
+**1. Is the measured patch the table's patch?**
+
+- [source] FRAME_RATE.md sec.6.3, experiment A: `src/data_unattributed.c:117` edited. Three bytes change in the 4.9.1.15 image: `0x19B0` 02→01, `0x19B6` 00→10, `0x19B7` 20→23. Size 54,840, unchanged.
+- [source] The table entry `compact_pro-4.9.1.15` (`fps-patch-table.ts:99-118`) has the same edits (`0x19b0` `02`→`01`, `0x19b6` `0020`→`1023`) and length 54,840.
+- [measured] The stock image, `FW-V1/targets/compact_pro_9hz_4_9_1_15/base/compact_pro_9hz_4_9_1_15/firmware_to_be_reconstructed.bin`, is 54,840 B with sha256 `13db63815bce911fb9388277cc6a177498df1023e9713994dd116e6eef6f84bb`. The doc's identity is its first eight digits, `13db6381` (sec.0 table), and the table's `stockSha256` is the same full hash.
+- [measured, scratch script, not committed] Stock with the three bytes changed hashes to `138cb75c…`, not the table's `patchedSha256` `75405c18…`. The difference is the acceptance-sum word at `0x238` (bytes `0x238`, `0x23A`, `0x23B`). The stock sum is `0xFFFF`, and the three edits move it by `0x30FFFFF`. Writing `0xFCF00001` at `0x238` brings it back to `0xFFFF`. Stock, plus the three bytes, plus that word, hashes to `75405c18…`.
+- [source] The Python table, `FW-V1 emu/fps_patch.py`, gives the same hash, with the changed offsets 568, 570 and 571 (`0x238`, `0x23A`, `0x23B`) and 6576, 6582 and 6583 (`0x19B0`, `0x19B6`, `0x19B7`). Its output is in the repo's `packages/core/test/preservation/fps-patch-python.json`.
+- [source] FRAME_RATE.md sec.9 says `package_image.py --bank-payload` recomputes the acceptance-sum adjust word for the image it flashes, and sec.8.2 gives "3 differing bytes" for the build before packaging. So the flashed image is the three edits plus the packager's adjust word. [inferred] The doc records neither the flashed sha256 nor the adjust value for experiment A, so the flashed image was not hashed here.
+
+Result: the table entry is the measured patch. The one extra step is the adjust word, which the packager applies. The table's comment "Exactly 3 bytes differ from the stock image" (`fps-patch-table.ts:97`) is true of the build before packaging. The patched image differs at six bytes (`0x19B0`, `0x19B6`, `0x19B7`, `0x238`, `0x23A`, `0x23B`). That comment is generated from the Python, so it is left as it is.
+
+**2. The measurement** [measured, from FRAME_RATE.md sec.6.3; not re-run here]
+
+| Run | Image | Slot | Period | Delivered | Slots missed |
+| --- | --- | --- | --- | --- | --- |
+| Control: unmodified `make target-image`, byte-exact to the factory image | stock 4.9.1.15 | B | 113.0 ms | 8.85 fps | 0 |
+| Experiment A: the three bytes above | 4.9.1.15 + 3 bytes | B | 56.5 ms | 17.70 fps | n/a |
+
+- Capture rate, read live over SWD while streaming, from `0x10003344` (the frame-sync counter) and `0x10003760` (its ms word), without halting the core: Δ 88 in 4,977 ms = 17.68 Hz, and Δ 89 in 5,026 ms = 17.71 Hz. Delivered over captured is 1.00. Row 20's `subindex_a` read `0x14`, with `subindex_b` at 0, as `n_substeps = 1` predicts. Slot A held stock 4.18.2.0 throughout.
+- The same record's sec.0 table has the stock 4.9.1.15 at 112.8 ms, 8.86 fps (`fps:detailed`, 20 s).
+- Caveat: one camera, one run of experiment A, and three counter reads. The doc does not give the run length behind the 17.70 figure.
+
+**3. What changed** [source]
+
+- `packages/core/src/preservation/fps-patch.ts:223-239`: the `FPS_MEASURED_HZ` comment is rewritten. The "Empty now" sentence is gone and the 1.3.0.8 history sentence is kept. The map holds `['compact_pro-4.9.1.15', 17.7]`.
+- `packages/core/test/preservation/fps-patch.test.ts:202`: new test. It pins 17.7 for 4.9.1.15 (and that `String` prints `"17.7"`), the 18 Hz target for 4.9.1.15, and no measured rate for 4.9.2.0, 1.0.3.0 and 1.0.3.2.
+- `packages/core/test/slots/fps-patch.stage-two.emulator.test.ts:88`: the 4.9.1.15 dump's `top` is 17.7 (was 18).
+- `packages/core/test/preservation/fps-patch.differential.test.ts:251-252` and `packages/core/test/slots/fps-patch.emulator.test.ts:8` and `:83`: comments that said `FPS_MEASURED_HZ` is empty.
+- `e2e/lib/slots-expectations.ts:338`: the 4.9.1.15 row is `toHz: 17.7`. Its bank B reason, "already runs at 18 Hz", stays, since bank B holds the 1.0.3.2-FF build, a known build at 18 Hz. The source note at `:346` is updated.
+- `packages/cli/src/usage.ts:245-247`: the `patch-fps` usage now reads "To 17.7 fps: the Compact PRO 4.9.1.15 build under Key A (measured on a camera). To 18 fps: the Compact PRO 4.9.2.0 build under Key A, and ..."
+- `packages/cli/test/slots.test.ts`: `fpsPlanJson` and `fpsQuestion` are imported, and a new describe is at `:1997`.
+- `packages/web/src/components/SlotFpsConfirm.test.tsx:88` and `packages/web/src/views/SlotsView.test.tsx:872`: new tests with 17.7.
+- Not changed: `packages/core/src/preservation/fps-patch-table.ts` and `fps-patch-python.json`. The generator reproduces both (section 5).
+
+**4. The strings the page and the CLI show for 4.9.1.15** ([source] for the template; [test] where a test pins the text)
+
+| Where | Text now shown |
+| --- | --- |
+| Slots page, bank row button (`SlotTable.tsx:357`) | `Make 17.7 FPS` [test] |
+| Row note under the button (`SlotTable.tsx:65-68`) | `Raises this bank from 9 Hz to 17.7 Hz by editing its bytes. The bank is saved in full before anything is written, and the saved decrypted file is the only way back.` |
+| Confirmation title (`SlotFpsConfirm.tsx:91`) | `Make slot A run at 17.7 FPS?` [test] |
+| Confirmation body (`SlotFpsConfirm.tsx:119-122`) | `slot A holds firmware 4.9.1.15, and this makes its image run at 17.7 Hz instead of 9 Hz.` [test], then `The patch changes 3 byte(s) of the image and the acceptance-sum word, so the sum the bootloader checks is kept. The key pair is not touched.` |
+| Page, after a write (`SlotsView.tsx:69`) | `Slot A — patched from 9 Hz to 17.7 Hz (compact_pro-4.9.1.15).` |
+| Page log, after a write (`useSlotsPanel.ts:956`) | `slot <name>: patched from 9 Hz to 17.7 Hz (compact_pro-4.9.1.15); the dump was saved first as ...` |
+| CLI plan, rate row (`commands/slots.ts`, `fpsPlanLines`) | `9 Hz -> 17.7 Hz` [test] |
+| CLI plan, bytes row | `3 byte(s) of the decrypted image change; the acceptance-sum word at 0x0238 moves so the sum is kept; the key pair is not touched` |
+| CLI prompt (`fpsQuestion`) | `Patch bank <bank> on <product> (<serial>) from 9 Hz to 17.7 Hz? The bank is saved first. [y/N] ` [test, the tail] |
+| CLI JSON (`fpsPlanJson`) | `"toHz": 17.7` [test] |
+| CLI usage (`--help`) | `To 17.7 fps: the Compact PRO 4.9.1.15 build under Key A (measured on a camera).` |
+| "Already patched" reason (`fps-patch.ts`, `planFpsPatch`) | `already patched: this image runs at 17.7 Hz (compact_pro-4.9.1.15), so no patch is offered` [source; not run, since it needs the patched bytes] |
+| Boot-choice rate for a patched bank (`boot-choice.ts:176`) | 17.7 [source; not run] |
+
+Bank B of the 4.9.1.15 dump still reads "already runs at 18 Hz" (the 1.0.3.2-FF known build). [source, `e2e/lib/slots-expectations.ts`]
+
+**5. Tests and checks** (in the worktree, targeted files only; no camera; no full vitest)
+
+- `packages/core`: `npx vitest run test/preservation/fps-patch.test.ts`: 14 passed, including the new pin.
+- `packages/core`: `SEEK_FPS_CORPUS=<the five corpus roots> npx vitest run test/preservation/fps-patch.differential.test.ts`: 8 passed, 1 skipped (the withheld-offer check, which is skipped because the offer is not withheld). The corpus test checks the planner's `toHz` on the real 4.9.1.15 stock image against `FPS_MEASURED_HZ`, and it passes at 17.7.
+- `packages/core`: `SEEK_EMU_DIR=FW-V1/emu npx vitest run test/slots/fps-patch.stage-two.emulator.test.ts`: 4 passed. The 4.9.1.15 dump offers 17.7 Hz on bank A, and the write, read-back and patched boot pass. The 4.9.2.0 dump offers 18 Hz.
+- `packages/core`: `SEEK_EMU_DIR=FW-V1/emu npx vitest run --testTimeout=60000 test/slots/page-expectations.emulator.test.ts test/slots/fps-patch.emulator.test.ts`: 194 passed in 2 files (the 42.28 baseline is 194). With the default 5 s timeout, 12 write tests on other subjects timed out under load. Each one passes alone (Compact 0.8.0.0: 7 passed).
+- `packages/cli`: `npx vitest run test/slots.test.ts`: 107 passed, including the new 17.7 test.
+- `packages/web`: `npx vitest run src/views/SlotsView.test.tsx src/components/SlotFpsConfirm.test.tsx`: 50 passed, including the two new 17.7 tests. The web package resolves `@seek-fw/core` from its built `dist/`, so `npm run build --workspace @seek-fw/core` ran first.
+- Typecheck, `npx tsc --noEmit -p` for core, cli, web app and e2e: all exit 0.
+- `npx eslint` on the ten changed TypeScript files: clean. `npx prettier --check` on them and on the table: clean.
+- Generator: `FW-V1/emu/.venv/bin/python scripts/gen-fps-table.py` wrote 20 entries, 12 known builds and 7 notes, and the fixture with 24 images, 20 entry outputs and 29 banks. Then `npx prettier --write` on the table. `git status` shows the table and the fixture unchanged, so both match the Python source.
+
+**6. Not measured, not established**
+
+- One camera and one run of experiment A. No second unit or second run was done here.
+- The flashed image's acceptance-sum word for experiment A is inferred from FRAME_RATE.md sec.9 and the Python table. It was not read off a flashed bank.
+- 4.9.2.0, 1.0.3.0 and 1.0.3.2 have no camera measurement, and keep the 18 Hz target.
+- The "already patched" reason and the boot-choice rate are read from the code and not run. The unit tests cannot build a patched 4.9.1.15 image, since the planner needs the real stock bytes; the corpus test covers only the stock side.
+- Nothing ran on a camera, the bench or the e2e bench. The bench expectation for banks A and R now says 17.7 and is not run here.
 
 ### 42.34 Five open plan items: the 4.8.2.1 image checked, the 2016 refusal text, the usage bank map, the 0.x/1.x dump message, and the bench lint errors (2026-10-19)
 
