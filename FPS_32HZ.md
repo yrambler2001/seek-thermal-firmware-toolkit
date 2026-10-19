@@ -266,9 +266,10 @@ so a flip to R would not drop the rate there (not tested by flipping the word). 
 - The 0.10.0.0 patched Hi FPS mean (23.4) is below its stock mean (27.4); the cause is not known. The first 0.9.1.0 run (27.8 to 30.8 fps) was
   not reproduced.
 - The 1.3.0.0 stock picture and rate on the camera in the 42.27 run (the 8.0 fps in 42.25 was the 16 Hz image).
-- Modes 4 and 7 on a camera. Their programs are read (TESTING.md 42.43; FW-V1 `docs/FRAME_RATE_MODES.md`): mode 4 is one capture per
-  published frame, a live picture, 32.26 Hz on the emulator only; mode 7 has no program and sends a synthetic ramp, not a sensor picture.
-  Neither is measured on a Compact.
+- Modes 4 and 7 on a camera. Mode 4 is measured on a Compact: stock 1.3.0.0 and stock 1.3.0.8 stream live pictures, one capture per
+  published frame, with no patch; whole-run rates were 26.8 to 32.2 fps on 1.3.0.0 and 28.7 to 31.9 fps on 1.3.0.8 (TESTING.md 42.54, 42.58).
+  Mode 7 has no capture program: it sends a synthetic ramp, not a sensor picture (TESTING.md 42.43; FW-V1 `docs/FRAME_RATE_MODES.md`), so it is
+  not measured.
 - Whether the 2014 and 2016 factory images write the active-slot cell (`0x1000AED0`). The 4.x factory image does not (TESTING.md 42.43).
 - The TypeScript checker's `--flash` route for patched parts (no frames, see section 8).
 - The CLI and the checker report different serials for the owner's unit (`101310HSNEA2` and `1013CE098ACA`). Neither has been reconciled.
