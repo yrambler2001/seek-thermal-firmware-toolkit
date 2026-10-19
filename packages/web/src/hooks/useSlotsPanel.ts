@@ -9,9 +9,9 @@
  *    write planned against one unit can never reach another.
  *  - A prepared write is only sent while the report it was built from is still
  *    the current one: the payload was checked against what that bank held.
- *  - Once a write is committed the report is dropped: the bank may have changed.
- *    The banks are read again after the read-back, so the table is a fresh picture
- *    of the camera, never the read from before the commit.
+ *  - Once a write or a patch is committed the report is dropped: the bank may have
+ *    changed. The banks are read again after the read-back, so the table is a fresh
+ *    picture of the camera, never the read from before the commit.
  *  - A build the slot plan does not support is never read. The plan comes from
  *    the camera's own version answer, and a build older than 0.8.0.0 is
  *    reported and left alone.
@@ -486,14 +486,19 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
   /* ---- read the banks ------------------------------------------------- */
 
   /**
-   * The banks, read again once a write has been committed and read back, so the table shows what the
-   * camera holds now. It reads under the profile and build the write was sent under (the report's own), and
-   * takes no identify probe: that probe arms windows, and nothing after a commit should arm more than the
+   * The banks, read again once a write or a patch has been committed and read back, so the table shows what
+   * the camera holds now. It reads under the profile and build the commit was sent under (the report's own),
+   * and takes no identify probe: that probe arms windows, and nothing after a commit should arm more than the
    * read of the banks does. This is not the read the page asks for after the replug (the version and the
-   * active bank settle only then, and the log says so). A failure or a cancel here leaves the write's result.
+   * active bank settle only then, and the log says so). A failure or a cancel here leaves the commit's result.
    */
   const readAfterWrite = useCallback(
-    async (written: SlotsReport, client: SeekDevice, signal: AbortSignal): Promise<void> => {
+    async (
+      written: SlotsReport,
+      client: SeekDevice,
+      signal: AbortSignal,
+      what: 'write' | 'patch',
+    ): Promise<void> => {
       try {
         const version = written.state.version;
         const again = await backend.inspect(
@@ -502,14 +507,14 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
         );
         setCurrentReport(again);
         log(
-          `banks read again after the write: ${summarise(again)} The version and the active bank ` +
+          `banks read again after the ${what}: ${summarise(again)} The version and the active bank ` +
             'settle only after the replug.',
           'detail',
         );
       } catch (error) {
         const why = error instanceof CancelledError ? 'cancelled' : errorMessage(error);
         log(
-          `the banks were not read again after the write (${why}). The write above stands; read the ` +
+          `the banks were not read again after the ${what} (${why}). The ${what} above stands; read the ` +
             'slots again after the replug.',
           'warn',
         );
@@ -897,7 +902,7 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
               'are the only thing that settles it.',
             'detail',
           );
-          await readAfterWrite(current, client, signal);
+          await readAfterWrite(current, client, signal, 'write');
           workflow.progress(
             1,
             1,
@@ -958,7 +963,8 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
   /**
    * Patches one bank. The core saves the bank's dump first (`saveDump`) and refuses the write if that did
    * not happen; then it writes the patched image through the page's own plain-chain path and reads it back.
-   * Like `write`, a failure after the analysis is used drops the report: the bank may have changed.
+   * Like `write`, the report is dropped once the patch is committed: the bank may have changed. The banks
+   * are read again after the read-back.
    */
   const patchFps = useCallback(
     async (key: SlotKey, acknowledged: boolean): Promise<void> => {
@@ -968,7 +974,8 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
         setFpsOutcome(null);
         const current = reportRef.current;
         let transport: ReturnType<DeviceHandle['makeTransport']> | null = null;
-        let used = false;
+        /* Set once the patch is handed to the core. From then on the bank may have changed. */
+        let committing = false;
         try {
           if (current === null) {
             throw new SeekError(
@@ -992,7 +999,11 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
           });
           const client = new SeekDevice(transport, { reporter: workflow, signal });
           await transport.open();
-          used = true;
+
+          /* From the commit on the bank may change, so the read it was made from is dropped here, before
+           * anything is sent. The banks are read again once the patch is read back, below. */
+          committing = true;
+          forgetReport();
           const patch = backend.patchFps ?? patchBankFps;
           const save = backend.saveDump ?? saveFpsDumpInBrowser;
           const done = await patch(contextOf(current, client, workflow, signal), current, key, {
@@ -1008,6 +1019,7 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
           );
           for (const note of done.notes) log(note, 'detail');
           log('NOW UNPLUG AND REPLUG THE CAMERA.', 'warn');
+          await readAfterWrite(current, client, signal, 'patch');
           workflow.progress(
             1,
             1,
@@ -1019,7 +1031,7 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
           if (error instanceof CancelledError) {
             log(`cancelled: ${error.message}`, 'warn');
             setStatus(
-              used
+              committing
                 ? 'Cancelled — the bank may be partly written. Read it before relying on it.'
                 : 'Cancelled — nothing was written.',
             );
@@ -1029,15 +1041,25 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
             setStatus('Failed — see the log above.');
           }
         } finally {
-          /* Once the camera was used the analysis is no longer a picture of the bank: read again. */
-          if (used) forgetReport();
           if (transport !== null) await transport.close();
           flush();
         }
       });
       if (result === 'in-use-elsewhere') reportInUseElsewhere({ log, setStatus });
     },
-    [backend, device, flush, form, forgetReport, log, reset, runner, setStatus, workflow],
+    [
+      backend,
+      device,
+      flush,
+      form,
+      forgetReport,
+      log,
+      readAfterWrite,
+      reset,
+      runner,
+      setStatus,
+      workflow,
+    ],
   );
 
   const cancel = useCallback((): void => {

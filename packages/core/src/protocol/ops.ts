@@ -41,7 +41,9 @@ export const OP = {
    * (May 2014) to 4.16.1.7 (Sep 2018) — see `test/firmware/facts.json`.
    */
   GET_FIRMWARE_INFO: 0x4e,
-  /* --- used by the flash path only (see FLASH_OPS below) --- */
+  /* --- used by the flash path; 0x55 and 0x5a also by the device-info read
+   *     (readDeviceInfo: the CLI info and slots commands and the slots page),
+   *     and by no dump (see FLASH_OPS below) --- */
   SET_FEATURED_FIRMWARE_DATA: 0x50,
   COMPLETE_MEMORY_UPGRADE: 0x51,
   SET_FIRMWARE_INFO_FEATURES: 0x55,

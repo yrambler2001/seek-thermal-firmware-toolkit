@@ -12,6 +12,7 @@
 import { act } from 'react';
 import { beforeAll, beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 import {
+  CancelledError,
   SeekError,
   WebUsbTransport,
   type DeviceState,
@@ -1157,5 +1158,150 @@ describe('useSlotsPanel: the frame-rate patch', () => {
     });
     expect(patchFps).not.toHaveBeenCalled();
     expect(result.current.panel.fpsOutcome).toBeNull();
+  });
+
+  it('after a patch the table shows the banks read again, not the read from before, with no identify probe', async () => {
+    const { backend, mocks } = makeBackend();
+    const before = slotReport(base);
+    const after = slotReport(base);
+    mocks.inspect
+      .mockImplementationOnce(() => Promise.resolve(before))
+      .mockImplementationOnce(() => Promise.resolve(after));
+    const patchFps = vi.fn((_ctx: unknown, _report: unknown, key: SlotKey) =>
+      Promise.resolve(fpsResultOf(key)),
+    );
+    const { result, unmount } = setup({ ...backend, patchFps });
+    await act(async () => {
+      await result.current.panel.readSlots();
+    });
+    expect(result.current.panel.report).toBe(before);
+
+    await act(async () => {
+      await result.current.panel.patchFps('b', false);
+    });
+
+    expect(patchFps).toHaveBeenCalledTimes(1);
+    /* The re-read takes no identify probe (the probe arms windows): only Read slots asked the camera. */
+    expect(mocks.identify).toHaveBeenCalledTimes(1);
+    expect(mocks.inspect).toHaveBeenCalledTimes(2);
+    expect(mocks.inspect).toHaveBeenLastCalledWith(expect.anything(), {
+      version: before.state.version,
+    });
+    expect(result.current.panel.report).toBe(after);
+    expect(result.current.panel.fpsOutcome?.key).toBe('b');
+    expect(
+      lineIncludes(result.current.panel.reporter.lines, 'banks read again after the patch'),
+    ).toBe(true);
+    expect(result.current.panel.reporter.progress.text).toContain('Unplug and replug');
+    unmount();
+  });
+
+  it('after a patch whose read-back does not match the plan, the table stays and the outcome says so', async () => {
+    const { backend, mocks } = makeBackend();
+    const patchFps = vi.fn((_ctx: unknown, _report: unknown, key: SlotKey) =>
+      Promise.resolve({
+        ...fpsResultOf(key),
+        readBack: { checked: true, ok: false, differing: [], missing: [0xb964], unexpected: [] },
+      } as unknown as FpsPatchResult),
+    );
+    const { result, unmount } = setup({ ...backend, patchFps });
+    await act(async () => {
+      await result.current.panel.readSlots();
+    });
+
+    await act(async () => {
+      await result.current.panel.patchFps('b', false);
+    });
+
+    expect(mocks.inspect).toHaveBeenCalledTimes(2);
+    expect(result.current.panel.report).not.toBeNull();
+    expect(result.current.panel.fpsOutcome?.readBack.ok).toBe(false);
+    expect(result.current.panel.reporter.progress.text).toContain(
+      'does not differ only as planned',
+    );
+    unmount();
+  });
+
+  it('when the read after a patch fails, the patch result stays and no bank is shown as read', async () => {
+    const { backend, mocks } = makeBackend();
+    mocks.inspect
+      .mockImplementationOnce(() => Promise.resolve(slotReport(base)))
+      .mockImplementationOnce(() =>
+        Promise.reject(new SeekError('slots/refused', 'the camera stopped answering')),
+      );
+    const patchFps = vi.fn((_ctx: unknown, _report: unknown, key: SlotKey) =>
+      Promise.resolve(fpsResultOf(key)),
+    );
+    const { result, unmount } = setup({ ...backend, patchFps });
+    await act(async () => {
+      await result.current.panel.readSlots();
+    });
+
+    await act(async () => {
+      await result.current.panel.patchFps('b', false);
+    });
+
+    expect(result.current.panel.fpsOutcome?.key).toBe('b');
+    expect(result.current.panel.report).toBeNull();
+    expect(
+      lineIncludes(
+        result.current.panel.reporter.lines,
+        'the banks were not read again after the patch (the camera stopped answering)',
+      ),
+    ).toBe(true);
+    expect(result.current.panel.reporter.progress.text).toContain('Unplug and replug');
+    unmount();
+  });
+
+  it('when the read after a patch is cancelled, the patch result stays and the cancel is logged', async () => {
+    const { backend, mocks } = makeBackend();
+    mocks.inspect
+      .mockImplementationOnce(() => Promise.resolve(slotReport(base)))
+      .mockImplementationOnce(() => Promise.reject(new CancelledError('cancelled by the user')));
+    const patchFps = vi.fn((_ctx: unknown, _report: unknown, key: SlotKey) =>
+      Promise.resolve(fpsResultOf(key)),
+    );
+    const { result, unmount } = setup({ ...backend, patchFps });
+    await act(async () => {
+      await result.current.panel.readSlots();
+    });
+
+    await act(async () => {
+      await result.current.panel.patchFps('b', false);
+    });
+
+    expect(result.current.panel.fpsOutcome?.key).toBe('b');
+    expect(result.current.panel.report).toBeNull();
+    expect(
+      lineIncludes(
+        result.current.panel.reporter.lines,
+        'the banks were not read again after the patch (cancelled)',
+      ),
+    ).toBe(true);
+    unmount();
+  });
+
+  it('a patch refused before anything is sent keeps the read it was made from', async () => {
+    const { backend, mocks } = makeBackend();
+    const patchFps = vi.fn((_ctx: unknown, _report: unknown, key: SlotKey) =>
+      Promise.resolve(fpsResultOf(key)),
+    );
+    const { result, unmount } = setup({ ...backend, patchFps });
+    await act(async () => {
+      await result.current.panel.readSlots();
+    });
+    const read = result.current.panel.report;
+
+    await act(async () => {
+      await result.current.panel.patchFps('a', false);
+    });
+
+    expect(patchFps).not.toHaveBeenCalled();
+    expect(
+      lineIncludes(result.current.panel.reporter.lines, 'needs the risk acknowledgement'),
+    ).toBe(true);
+    expect(result.current.panel.report).toBe(read);
+    expect(mocks.inspect).toHaveBeenCalledTimes(1);
+    unmount();
   });
 });

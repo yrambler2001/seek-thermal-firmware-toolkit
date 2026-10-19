@@ -1031,6 +1031,59 @@ describe('SlotsView: the frame-rate row action', () => {
     expect(text).toContain('The saved decrypted file is the only way back');
     unmount();
   });
+
+  /** A patch's outcome as the page holds it: the read-back is the only thing these tests vary. */
+  function patchOutcome(readBackOk: boolean): FpsPatchResult {
+    return {
+      key: 'b',
+      patch: { id: 'compact_32k-1.3.0.0-to32' },
+      fromHz: 8,
+      toHz: 32,
+      pre: { rawName: 'raw.bin', plainName: 'plain.bin' },
+      changed: [0xb964, 0x238],
+      written: { verified: true },
+      readBack: {
+        checked: true,
+        ok: readBackOk,
+        differing: readBackOk ? [0xb964, 0x238] : [],
+        missing: readBackOk ? [] : [0xb964],
+        unexpected: [],
+      },
+    } as unknown as FpsPatchResult;
+  }
+
+  it('keeps the bank table on screen after a patch, with the patch outcome above the banks', () => {
+    const { container, unmount } = view(
+      panel({ plan: slotPlan(true), report: slotReport(base), fpsOutcome: patchOutcome(true) }),
+    );
+
+    expect(bankRows(container)).toHaveLength(3);
+    expect(container.textContent).toContain('patched from 8 Hz to 32 Hz');
+    expect(container.textContent).not.toContain('Press Read slots');
+    unmount();
+  });
+
+  it('after a patch whose read-back does not match, the table still shows the banks and the outcome says it does NOT match', () => {
+    const { container, unmount } = view(
+      panel({ plan: slotPlan(true), report: slotReport(base), fpsOutcome: patchOutcome(false) }),
+    );
+
+    expect(bankRows(container)).toHaveLength(3);
+    expect(container.textContent).toContain('does NOT differ only as planned');
+    expect(container.textContent).not.toContain('differs from the saved dump only');
+    unmount();
+  });
+
+  it('with no read after a patch, shows no bank table, keeps the patch outcome, and asks for Read slots', () => {
+    const { container, unmount } = view(
+      panel({ plan: slotPlan(true), report: null, fpsOutcome: patchOutcome(true) }),
+    );
+
+    expect(bankRows(container)).toHaveLength(0);
+    expect(container.textContent).toContain('patched from 8 Hz to 32 Hz');
+    expect(container.textContent).toContain('Press Read slots');
+    unmount();
+  });
 });
 
 describe('SlotsView: the device info on this page', () => {
