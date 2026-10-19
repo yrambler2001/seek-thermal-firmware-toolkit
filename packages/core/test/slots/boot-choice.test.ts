@@ -275,17 +275,24 @@ describe('bootChoiceOf: which bank the next start runs', () => {
     }
   });
 
-  it('does not report the word as a booted bank on 2016, where it is not checked', () => {
-    const choice = bootChoiceOf(
-      reportWith({
-        cfg0: 0,
-        banks: ALL_OK,
-        activeSlotWord: 1,
-        profile: 'compact-2016',
-        version: '1.0.3.0',
-      }).report.state,
-    );
-    expect(choice.reportedBooted).toBeNull();
+  it('reports the word as the bank that ran on 2016, where it follows the boot word (TESTING.md 42.56)', () => {
+    /* 1.0.3.0 on the emulator: the word is 0, 1, 2 for slots A, B, R, each the bank that ran. */
+    for (const [word, key] of [
+      [0, 'a'],
+      [1, 'b'],
+      [2, 'r'],
+    ] as const) {
+      const choice = bootChoiceOf(
+        reportWith({
+          cfg0: word,
+          banks: ALL_OK,
+          activeSlotWord: word,
+          profile: 'compact-2016',
+          version: '1.0.3.0',
+        }).report.state,
+      );
+      expect(choice.reportedBooted, `2016 word ${String(word)}`).toBe(key);
+    }
   });
 
   it('says what each word means, in the words the CLI prints', () => {

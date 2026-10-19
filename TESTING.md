@@ -10266,3 +10266,74 @@ The fps bench printed no heap line. The patched bank's sha was not read separate
 - `--quiet` hides the note, like every other CLI warning.
 - The power-cycle note is information: a camera that is unlocked by a run that the note does not see (a run with `--profile` or `--no-probe`) is not flagged.
 - Commits: code `0be89d3` on `worktree-agent-acbde648dc93540f7`. Nothing was pushed or merged, and `plan.md` and FW-V1 were not changed.
+
+### 42.56 Which cell selector 10 reads: the word is the +8 of the record the firmware names, and the record differs by line; the 2016 word follows the bank that ran, so it is reported now; 4.9.1.15's word is not at 0x1000AED0 (emulator only, 2026-10-19)
+
+**Summary.** 42.43 and 42.53 named different cells, 0x1000AED0 and 0x10000208. Each was right for its own line, and neither was right for all of them. One emulator test (`packages/core/test/slots/active-slot-cells.emulator.test.ts`, four builds, 4 of 4 passed, run alone with `SEEK_EMU_DIR`) reads selector 10 through the product path and reads the record directly in a second boot of the same flash. The bank that ran is named by a marked build string, one mark per bank. Result: selector 10 returns the address of the firmware's roots record, and its word is the record's +8. On 1.3.0.0 and 1.0.3.0 the record is the boot record at 0x10000200, so the word is 0x10000208 and it is the bank that ran. On 4.9.1.15 the record is at 0x10002110, so the word is 0x10002118, and it follows the bank that ran too. On 4.8.2.1 the reply is zero, so the word is 0 under every boot word. The rule in `boot-choice.ts` now reports the word on 2016 as well. No camera, J-Link or USB switch was used.
+
+**Tags.** [measured] is a line of the test's output or a run in this session. [source] is read from the reconstructed sources named. [inferred] follows from those.
+
+**1. Where selector 10 reads (source, then measured).**
+
+- Source, the selector-10 arm of each line's `src/rpc_cmds.c`: 1.3.0.0 returns `&g_fw_info_roots_r32k` (rpc_cmds.c:2301 on); 1.0.3.0 returns `FW_INFO_ROOTS_BASE`, which is `g_this_image_header_words`, the header at 0x10000200; 4.8.1.7, 4.9.1.15 and the XR 4.8.2.1 return `&g_fw_info_roots`, 64 bytes. The 4.x reconstruction names that record `unk_1000AEC8`, which the factory image does not bear out on 4.9.1.15 (below).
+- The emulator answers from the firmware, not a shim. Selector 10 runs the firmware's own handler under unicorn. `flash_rpc.py:53` reads the cell only for its own record. The one read hook in `machine.py` is the uninitialised-SRAM diagnostic. No Python code answers GetFirmwareInfo.
+- Where the reply is (measured). The 64-byte reply is found in RAM by its bytes, and the match must be unique: 1.3.0.0 and 1.0.3.0 at 0x10000200, 4.9.1.15 at 0x10002110. The startup pool word at 0x10000404 reads 0x10002110 on 4.9.1.15, and a sentinel written at 0x10002118 comes back at reply +8 (the positive control for the method). On 4.8.2.1 the reply is 64 zero bytes, so nothing matches. Sentinels at 0x1000AED0, 0x1001FF08 and 0x1001FF58 did not reach the reply, and the pool word at 0x10000400 is not a pointer there. The 4.8.2.1 record is not established.
+
+**2. The table (measured: the test's output lines).** "Product" is selector 10 in the usbip boot, read by `readDeviceInfo`. "Record" is the RAM record the reply came from in the direct boot, and its +8. The bank that ran is the marked build string the product reports. Handoff R0 is the entry address the emulator captured (4.x only).
+
+| build | word | selector 10 (product) | record, +8 (direct) | cell 0x1000AED0 | word 0x10000208 | bank that ran | handoff R0 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 1.3.0.0 (2014 chain) | 0 | 0 | 0x10000200, +8 = 0 | 0x182F192D | 0 | A | not captured |
+| 1.3.0.0 | 1 | 0 | 0x10000200, +8 = 0 | 0x182F192D | 0 | A (B erased) | not captured |
+| 1.3.0.0 | 2 | 2 | 0x10000200, +8 = 2 | 0x182F192D | 2 | R | not captured |
+| 1.0.3.0 (2016 keystream) | 0 | 0 | 0x10000200, +8 = 0 | 0x8B887E88 | 0 | A | not captured |
+| 1.0.3.0 | 1 | 1 | 0x10000200, +8 = 1 | 0x8B887E88 | 1 | B | not captured |
+| 1.0.3.0 | 2 | 2 | 0x10000200, +8 = 2 | 0x8B887E88 | 2 | R | not captured |
+| 4.8.2.1 (XR) | 0 | 0 | none (reply zero) | 0 | 0x292A7D70 | A | 0x14030000 |
+| 4.8.2.1 | 1 | 0 | none (reply zero) | 0 | 0x292A7D70 | B | 0x14050000 |
+| 4.8.2.1 | 2 | 0 | none (reply zero) | 0 | 0x292A7D70 | R | 0x14070000 |
+| 4.9.1.15 | 0 | 0 | 0x10002110, +8 = 0 | 0xFFFFFFFF | 0x403B3A7D | A | 0x14030000 |
+| 4.9.1.15 | 1 | 0 | 0x10002110, +8 = 0 | 0xFFFFFFFF | 0x403B3A7D | A (B refused) | 0x14030000 |
+| 4.9.1.15 | 2 | 2 | 0x10002110, +8 = 2 | 0xFFFFFFFF | 0x403B3A7D | R | 0x14070000 |
+
+- Every product value equals the direct reply's +8, in every row.
+- The bank that ran is the same as the bootloader's rule over the banks it accepts, in every row (the test asserts this).
+- The 2014 bank map is A 0x14050000, B 0x14060000, R 0x14070000 (the legacy map), and B is erased in this dump, so word 1 runs A.
+
+**3. Conclusion, per line.**
+
+- 1.3.0.0 and 1.0.3.0 (the boot record). Selector 10 returns the record at 0x10000200, and its word at 0x10000208 is the bank that ran for boot words 0, 1 and 2. So the word is what 42.53 says. The cell 0x1000AED0 is not the word on these lines: it holds 0x182F192D on 1.3.0.0 and 0x8B887E88 on 1.0.3.0, which is copy-loop data. So 42.43's cell is wrong for these lines. The writer is the bootloader, which stores the slot before it enters the image (42.53, the store PCs in the bootloader's code); this test measures that the value follows the bank that ran, not the store.
+- 4.9.1.15 (the roots record). Selector 10 returns the record at 0x10002110, and its word at 0x10002118 follows the bank that runs (0 for A, 2 for R, and word 1 runs A because B is refused). 0x1000AED0 reads 0xFFFFFFFF throughout. So the word is written, as 42.50 found, but at 0x10002118, not 0x1000AED0. The writer is not established here: the reconstructed reset code writes `g_fw_info_roots.active_slot` from the entry address (`targets/compact_pro_9hz_4_9_1_15/src/main.c:140-144`), and that code's address does not match this factory image.
+- 4.8.2.1 (the zero record). The word is 0 under every boot word, and 0x1000AED0 reads 0, so 42.43's statement that the word reads 0 under every boot word holds here. The record is not located, so whether the cell is the word is open. The rule still hides the word on 4.8.x, which is right: the word would print A for words 1 and 2, when B and R run.
+
+**4. The rule (`packages/core/src/slots/boot-choice.ts`).**
+
+- The header comment at lines 8-15 now names the record per line and the cell for each: 0x10000208 on 1.3.0.0 and 1.0.3.0, 0x10002118 on 4.9.1.15, and the zero reply on 4.8.2.1. The `reportedBooted` doc and the `bootChoiceOf` comment say the same.
+- `reportsActiveSlotWord` now also returns true for the `locked-2016` family (1.0.3.0 and 1.0.3.2; only 1.0.3.0 is measured, 1.0.3.2 is the same family by the source and is not run). Before, 2016 was hidden as "not checked".
+- The callers of `bootChoiceOf`: `fpsBootWarningOf` (`boot-choice.ts`) reads `runs` and `word`, not `reportedBooted`. The CLI `slots` boot section (`bootLines`, `bootJsonOf`, `packages/cli/src/commands/slots.ts`) prints only where `plainChain` holds, which 2016 does not, so no 2016 output changes. The web does not call `bootChoiceOf` (42.52). Nothing depends on hiding the word on 2016.
+- 4.8.x stays hidden, and 4.9.x and 2014 are unchanged.
+
+**5. Tests (no camera, no J-Link, no switch).**
+
+- `packages/core/test/slots/active-slot-cells.emulator.test.ts` (new): 4 passed, run alone with `SEEK_EMU_DIR=/Users/yrambler2001/things/a.noindex/seek/FW-V1/emu`, 4 of 4. Each build is one test. It asserts the product word equals the direct reply's +8, the record is the one the line names (1.3.0.0, 1.0.3.0 and 4.9.1.15; 4.8.2.1 asserts the zero reply and cell 0x1000AED0 = 0), the bank the marked build string names is the bootloader's rule, and the word equals that bank on the lines that track it.
+- `packages/core/test/slots/boot-choice.test.ts`: 26 passed. The 2016 case is now "reports the word as the bank that ran", for words 0, 1 and 2.
+- `packages/cli/test/slots.test.ts`: 107 passed.
+- `tsc --noEmit -p packages/core/tsconfig.json` and `-p packages/cli/tsconfig.json`: exit 0. eslint on the three changed TypeScript files: clean. prettier: clean.
+
+**6. How the marks were made, and what went wrong on the way.**
+
+- Each accepted bank gets a marked copy: its build string's last letter or digit moved on by 1 (A), 2 (B) or 3 (R), written through the product write path (`prepareSlotFlash` with the decrypted image, `flashSlot`). The product stamps the accept sum itself, so the test passes the mark unchanged. The composed flash keeps the stock bytes for every other byte. Then it is booted with the boot-config word set to 0, 1 and 2.
+- Acceptance on the 2014 plain chain is the image check the boot choice uses (`plainBankVerdict`). The analysis's own `accepts` reads false there, because it is a keystream checksum.
+- The 2016 native dump is a Spansion part (JEDEC 010215). Without `--jedec 010215` the erase stage fails (`CompleteMemoryUpgrade` 0x00040005 or 0x00040006).
+- The direct read needs the firmware-init gate (`_wait_startup_gate`, the build's `g_systick_state`) and the RPC interface (`set_interface(1, 1)`) before the first RPC. Without them the RPC times out or returns NOT_STARTED.
+- A correction to 42.43 section 3: on 1.0.3.0, bank A is not erased. The 2016 bootloader's `SLOT_A` is 0x14050000 (`compact_pro_9hz_1_0_3_0_bootloader/src/image.c:1064`), which holds an image. The erased bank is 0x14030000. The three banks A, B and R hold the same bytes at their starts, with the same erased count.
+
+**7. Not verified or open.**
+
+- The 4.8.2.1 record: its address is not established, and its word is 0 under every boot word (section 1).
+- The writer of the word on 4.9.1.15 (0x10002118), and the writer of the boot record on 2014 and 2016 (42.53 measured the store PCs in the bootloader; not re-run here).
+- 1.0.3.2 and 1.3.0.8: the word is reported by family, and the test does not run them.
+- The marked banks are the product's writes in the emulator. The stock boot fills erased bytes with the test seed (388609, scope safe) and saves the flash before serving. Composed boots are not filled, as in the frame-rate suites.
+- `plan.md` is not edited. The 42.43 and 42.53 claims above are corrected in this section and not in those sections.
+
+**Commits.** This section, `boot-choice.ts`, `boot-choice.test.ts` and the new emulator test, on branch `worktree-agent-a44d6a26bf71f1ff2` on top of `2536569`.

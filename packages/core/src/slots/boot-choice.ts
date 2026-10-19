@@ -6,13 +6,17 @@
  *   - cfg[0], the boot-config word at 0x14010000. The analysis arms the mode-3 window on every read
  *     and keeps the word as DeviceState.cfg0. The NEXT start uses it.
  *   - the active-slot word, roots[8] (GetFirmwareInfo selector 10), kept as DeviceState.activeSlotWord.
- *     It is the app's RAM cell 0x1000AED0, not the bootloader's handoff: the bootloader records the slot
- *     it enters in the warm-boot handoff (bootloader src/startup.c, `handoff->slot`). The 4.8.x factory
- *     app never writes the cell (TESTING.md 42.43), so its word reads 0 under every boot word (42.50).
- *     The 4.9.x Compact PRO does write it, and follows the bank that runs: in the emulator it reads 2 when
- *     R runs (42.50) and 1 when B runs (42.36). The 2014 and 2016 factory images were not checked for it.
- *     Only the 2014 plaintext chain and the 4.9.x Compact PRO report it as a bank (below): 0 is slot A,
- *     1 is slot B, 2 is recovery R.
+ *     Selector 10 returns the address of the firmware's roots record, and the word is its +8. The record
+ *     differs by line (TESTING.md 42.56, measured on the emulator against the bank that ran):
+ *       2014 (1.3.0.0) and 2016 (1.0.3.0): the boot record at 0x10000200, so the word is 0x10000208. The
+ *         bootloader stores the slot it enters there before it enters the image (42.53), and the word is the
+ *         bank that ran for boot words 0, 1 and 2. The cell 0x1000AED0 holds other data on these lines.
+ *       4.9.1.15: the roots record at 0x10002110, so the word is 0x10002118. It follows the bank that runs
+ *         (0 for A, 2 for R; boot word 1 runs A, because B is refused). The cell 0x1000AED0 is 0xFFFFFFFF.
+ *         The writer of this word is not established by the test.
+ *       4.8.2.1: the reply is zero under every boot word, so the word is 0 whatever runs (42.43, 42.50). The
+ *         record was not found, and the cell 0x1000AED0 reads 0 there.
+ *     Bank values: 0 is slot A, 1 is slot B, 2 is recovery R. The lines that report it are below.
  *
  * WHICH BANK A START RUNS, from the word (bootloader src/image.c, boot_select_image):
  *   0 or 0xFFFFFFFF: A if it passes the check, else B if it does, else R, which is not checked.
@@ -67,9 +71,9 @@ export interface BootChoice {
   readonly runs: SlotKey | null;
   /**
    * The bank the camera reports it entered at its last start, from the active-slot word. Only on the
-   * 2014 plaintext chain and the 4.9.x Compact PRO (reportsActiveSlotWord); null on 4.8.x, where the app
-   * never writes the word (TESTING.md 42.43, 42.50), and on 2016, which is not checked. Null too when the
-   * word is unread or names no bank.
+   * 2014 plaintext chain, the 2016 line and the 4.9.x Compact PRO (reportsActiveSlotWord); null on 4.8.x,
+   * where the word is 0 whatever runs (TESTING.md 42.43, 42.50, 42.56). Null too when the word is unread
+   * or names no bank.
    */
   readonly reportedBooted: SlotKey | null;
   /** One sentence: the word's rule and the bank it gives, or what could not be checked. */
@@ -143,15 +147,16 @@ function selectRunning(word: number, accepts: Readonly<Record<SlotKey, Verdict>>
 }
 
 /**
- * Whether the active-slot word is reported as the bank the camera booted: the 2014 plaintext chain, and
- * the 4.9.x Compact PRO, which writes the word (42.50). Not 4.8.x, where the factory app never writes it
- * (42.43, 42.50), and not 2016, which is not checked. The 4.x line is split by the minor number of the
- * parsed version, the same parse classifyBuild makes; the profile must be modern-4x, or the build is
- * refused and not reported.
+ * Whether the active-slot word is reported as the bank the camera booted: the 2014 plaintext chain, the 2016
+ * line (1.0.3.0 measured, TESTING.md 42.56: the word is the bank that ran), and the 4.9.x Compact PRO, whose
+ * word follows the bank that runs (42.50, 42.56). Not 4.8.x, where the word is 0 under every boot word (42.43,
+ * 42.50, 42.56). The 4.x line is split by the minor number of the parsed version, the same parse classifyBuild
+ * makes; the profile must be modern-4x, or the build is refused and not reported.
  */
 function reportsActiveSlotWord(profile: FirmwareProfile, version: string | null): boolean {
   if (onPlaintextChain(profile, version)) return true;
   const verdict = classifyBuild(profile, version);
+  if (verdict.family === 'locked-2016') return true;
   return verdict.family === 'modern' && verdict.version?.major === 4 && verdict.version.minor === 9;
 }
 
@@ -164,8 +169,8 @@ export function bootChoiceOf(
   state: Pick<DeviceState, 'cfg0' | 'activeSlotWord' | 'byKey' | 'profile' | 'version'>,
 ): BootChoice {
   /* The word is reported as a bank where it is established as one: the 2014 line (where the page names
-   * the booted bank from it, device-info.ts chainReplay) and the 4.9.x Compact PRO (42.50). Not on 4.8.x
-   * (42.43, 42.50), and not on 2016, which is unchecked. */
+   * the booted bank from it, device-info.ts chainReplay), the 2016 line and the 4.9.x Compact PRO (42.50,
+   * 42.56). Not on 4.8.x, where it is 0 whatever runs (42.43, 42.50, 42.56). */
   const reportedBooted = reportsActiveSlotWord(state.profile, state.version)
     ? reportedBootedOf(state.activeSlotWord)
     : null;
