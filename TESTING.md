@@ -10924,3 +10924,75 @@ The steady band is 31.7 to 32.3 fps, as in 42.54. Reads 8 and 10 each have one m
 - Nothing was pushed or merged. `plan.md`, FW-V1 and the product code were not changed. `npm run build:docs` was not run.
 
 **Commits.** This section only, on branch `worktree-agent-a880d0b04fc561dcb`; the commit hash is in the report.
+
+### 42.66 The 2014-chain targets stage the plain bank the 2014 bootloader accepts (raw word sum 0, no cipher, 0xFF to 64 KiB, no footer), and the .gitignore literal carries jlink_dumps/; offline, and the camera test is still to run (2026-10-19)
+
+**Summary.** The two owner decisions of 2026-10-19 for FW-V1, done on branch `plain-2014` in the FW-V1 worktree `/private/tmp/claude-501/fwv1-plain2014` (cut from main `fa9b7b126`), one commit `b2c3c3c09`. Nothing was merged to FW-V1 main or pushed. The seek worktree was reset to `refactor/all-firmware-profiles` at `2fd01d3`, as the brief asked. No camera, J-Link or USB switch was used, and nothing was flashed. The 2014 bank was checked against the seek repo's own plain-chain staging, compiled from seek `2fd01d3` source to a scratch directory and called directly.
+
+**Tags.** [measured] is a command run in this session. [source] is read from the code or doc named. [inferred] follows from those.
+
+**1. The bank the 2014 bootloader accepts.** [source] `targets/compact_8hz_1_3_0_0_bootloader/src/crypto.c`, `image_sum_ok` (line 210): magic `0xA1B2C3D4` at +0x200, `header.length < 0x10000`, and the 32-bit sum of the words over `header.length` equal to 0. Nothing else is read: no key, no footer. `image.c` `boot_copy` (line 1122) copies the bytes as they are. The seek repo stages this form in `packages/core/src/slots/write-image.ts` `buildPlainPayload` (line 349): the image, `header.length` stamped to its size, the adjust word at +0x238 solved so the stored sum is 0, nothing encrypted, no footer. `assertPlainChainPayload` (`image/bank.ts` line 228) checks it. [measured] The 1.3.0.0 factory dump's slot A (0x14050000) is that form: `header.length` 0xBA98, sum over it 0, every byte after the image to the 64 KiB block end 0xFF, and no `CODE` at 0xBFC0 (`dump_layout.py`, read only).
+
+**2. The change (FW-V1 `b2c3c3c09`).**
+- The 24 2014-chain `build_flash.mjs` copies: `packageBank` stages the plain bank in JS and `validateBank` checks it. `package_image.py` is no longer called on this chain. The image is refused if it has no app header (the bootloader targets) or if `header.length` would reach 0x10000. The bank is 0x10000 bytes, the image followed by 0xFF.
+- `flash-bank` is called with `BANK_FORM=plain-2014`. In the 24 `jlink-runner.js` copies, `validatePlainBankPayloadFile` checks that form. Unset `BANK_FORM` keeps the 4.x `CODE` footer guard. Any other value is refused. The `flash-bank` row of `tools/jlink/README.md` says so.
+- `compact_8hz_1_3_0_0` and `compact_pro_9hz_1_0_3_0` are codegen-managed. Their change is in `codegen/targets/<t>/tools/` (`build_flash.mjs`, `jlink/jlink-runner.js`, `jlink/README.md`, all declared in `codegen.own_tools[]`), and gen wrote the `targets/` copies from them. The 22 pending 2014 targets have no codegen copy (gen exits 6 on a pending target), so their `targets/<t>/tools/` files are edited directly, as 42.40 and 42.46 did.
+- The 4.x targets' `build_flash.mjs`, runner and packagers are unchanged. `codegen/harness/tools/` is unchanged.
+
+**3. The bytes, against seek's staging (`seek_compare.mjs`, scratch).** For each target, the base image the sandbox make copied is staged by seek's `buildPlainPayload`. The FW-V1 bank from the same sandbox `build_flash.mjs --flash` run is compared with it. [measured]
+
+| Target | `header.length` | FW-V1 bank prefix = seek payload | 0xFF after the image | raw sum over `header.length` |
+| --- | --- | --- | --- | --- |
+| compact_8hz_1_3_0_0 | 0xba98 | yes | yes | 0x0 |
+| compact_8hz_1_3_0_8 | 0xbfe8 | yes | yes | 0x0 |
+| compact_8hz_0_5_1_3 | 0xae08 | yes | yes | 0x0 |
+| compact_8hz_0_9_0_2 | 0xb908 | yes | yes | 0x0 |
+| compact_8hz_1_0_0_0 | 0xb8f8 | yes | yes | 0x0 |
+| compact_8hz_0_10_0_0 | 0xb908 | yes | yes | 0x0 |
+| compact_8hz_0_3_0_1 | 0xeecc (see below) | yes | yes | 0x0 |
+| compact_8hz_0_5_0_2 | 0xa4e4 | yes | yes | 0x0 |
+| compact_8hz_0_5_1_0 | 0xae10 | yes | yes | 0x0 |
+| compact_8hz_0_6_0_4 | 0xb16c | yes | yes | 0x0 |
+| compact_8hz_0_7_0_7 | 0xbbf8 | yes | yes | 0x0 |
+| compact_8hz_0_7_0_8 | 0xb618 | yes | yes | 0x0 |
+| compact_8hz_0_8_0_0 | 0xb854 | yes | yes | 0x0 |
+| compact_8hz_0_9_0_6 | 0xb834 | yes | yes | 0x0 |
+| compact_8hz_0_9_0_7 | 0xb8f8 | yes | yes | 0x0 |
+| compact_8hz_0_9_1_0 | 0xb908 | yes | yes | 0x0 |
+| compact_8hz_1_2_0_0 | 0xba98 | yes | yes | 0x0 |
+| compact_pro_9hz_1_0_3_0 | 0xca88 | yes | yes | 0x0 |
+| compact_pro_9hz_1_0_3_2 | 0xca10 | yes | yes | 0x0 |
+| compact_pro_ff_18hz_1_0_3_0 | 0xcadc | yes | yes | 0x0 |
+| compact_pro_ff_18hz_1_0_3_2 | 0xca10 | yes | yes | 0x0 |
+
+21 of 21 equal. The three bootloader targets (`compact_8hz_1_3_0_0_bootloader`, `compact_pro_9hz_1_0_3_0_bootloader`, `compact_pro_ff_18hz_1_0_3_0_bootloader`) refuse, as they did before: a bootloader image has no app header, and two of the three name a `BASE_DIR` the tree does not hold.
+- `compact_8hz_0_3_0_1` has a 0xEECC image. Seek's `buildPlainPayload` refuses it at seek's 0xE000 limit (the USB upgrade staging buffer, `0x20002000 + 0xE000`). The J-Link path writes the 64 KiB bank directly and nothing stages it in RAM, so FW-V1 bounds the image at the bootloader's own rule (`header.length < 0x10000`). The comparison for this row used seek's `setAcceptSum`, the function `buildPlainPayload` calls first.
+- The padding is the one place FW-V1 and seek differ in length. Seek's payload is the image alone, and FW-V1 writes the same image followed by 0xFF to 64 KiB, because the owner asked for the bank to be padded as the 2014 factory dumps are. The seek comparison above is over the image bytes, and the tail is checked to be 0xFF.
+
+**4. `gen.mjs --check` and `.gitignore`.** The `.gitignore` literal in `codegen/engine/gen.mjs` now carries the text 1.3.0.0 had by hand: `build/`, `build-reloc/`, the two-line comment about the J-Link runner output, and `jlink_dumps/`. [measured] 17 managed targets' `.gitignore` changed. `compact_8hz_1_3_0_0`'s did not, because its hand text is the new literal. `gen --check` is clean on all 18 non-pending targets. The regen wrote the 4.x targets' `.gitignore` and manifest only, and no 4.x tool. [measured] `make -C codegen tree-guard` still refuses on this branch with "cannot tell which targets are pending". `codegen/Makefile` is unchanged from main, so that refusal is inherited (42.63).
+- The first regen of 1.3.0.0 and PRO 9hz 1.0.3.0 was refused: gen read the old `targets/` copies as hand edits, because the codegen copy had moved on and the `targets/` copy was not yet the same. The fix was to copy the patched codegen files into `targets/` (the bytes gen would write) and regenerate, which gen accepts. No `--force` was used.
+
+**5. Checks, all offline.**
+- `node --check` on the 53 changed JS files (the gen engine, the codegen copies and the 24 targets' `build_flash.mjs` and `jlink-runner.js`): 0 failures. No Python changed, so no `py_compile`.
+- The sandbox run of the real `build_flash.mjs --flash --no-dump` in each target (stub `make`, `JLINKEXE` pointed at a logging stub; the 42.49 harness, copied to scratch with its tree changed): 21 of 24 build a plain bank and reach the stub `flash-bank`, `set-boot 1` and `reset-go`. The loaded bank's first word is the stack pointer (0x1000xxxx) and the boot-config write is `cfg[0] = 1`. The 3 bootloaders refuse before any J-Link call. In the real trees, 1.3.0.0, PRO 9hz 1.0.3.0 and PRO FF 1.0.3.0 reach `flash-bank`. The other 21 stop at the factory-flash preflight, as 42.49 recorded. The preflight is kept: plain packaging needs no footer, so it no longer reads the factory flash, but dropping the check is an owner decision.
+- The runner's guard, 7 cases, run from a sandbox copy with the stub: a good plain bank reaches the stub; a wrong sum, a non-0xFF byte after the image, `header.length` 0x10000, an unset `BANK_FORM` on a footerless bank, `BANK_FORM=plain-2015` and a 60 KiB file are each refused before any spawn.
+
+**6. The bank B test (not run here).** The camera agent runs, from the FW-V1 `plain-2014` worktree (after the owner's merge, from FW-V1 main's `targets/compact_8hz_1_3_0_0`):
+
+    cd /private/tmp/claude-501/fwv1-plain2014/targets/compact_8hz_1_3_0_0 && node tools/build_flash.mjs --flash --slot b
+
+This builds the image, packages the plain bank, takes the pre-flash 4 MB rescue dump (do not add `--no-dump`), writes it to `BANK_ADDR=0x14060000` with `BANK_FORM=plain-2014`, sets the boot word to 1 (slot B), resets, and reads the slots back. Restore: `npm run rescue` (boot word 0, slot A).
+
+**7. Not verified, and decisions for the owner.**
+- No camera. The 2014 acceptance of this bank is untested on hardware. Section 1 is from the bootloader source and the dump, and 42.49 section 5.1 (the 2014 bank format) is closed only for this staging.
+- The pad: 0xFF to 64 KiB, against seek's image-only payload. Both give the same flash contents once the block is erased. That the J-Link load erases the 64 KiB block first is [inferred] from the runner's erase note, and it is not measured here.
+- The 0xE000 bound: this path uses the bootloader's `< 0x10000`. Seek keeps 0xE000 for its USB staging.
+- The factory-flash preflight (42.49) is kept. It no longer serves the packaging.
+- `package_image.py --bank-payload` and `seek_fw_tool.mjs bank-payload` still make Key-A banks if run by hand on a 2014 target. `build_flash.mjs` no longer calls them on this chain. With `BANK_FORM` unset, the runner accepts a Key-A bank (it has a `CODE` footer), so a Key-A file must not be flashed to a 2014 bank by hand.
+- The 1.3.0.8 8 Hz footer (42.49 section 3, `0xFFC0`) no longer applies on this chain: the 2014 bank has no footer.
+- The 22 pending 2014 targets are not gen-checked and have no codegen copy. Their `targets/` edits are hand edits, as 42.40 and 42.46 left them.
+- `bootloader_to_be_reconstructed.bin` targets were run only to their refusal.
+
+**Commits.**
+- FW-V1, branch `plain-2014`, worktree `/private/tmp/claude-501/fwv1-plain2014` (not merged, not pushed): `b2c3c3c09`, on main `fa9b7b126`.
+- Seek: this note, on branch `worktree-agent-a4696271f88802b56`, reset to `refactor/all-firmware-profiles` at `2fd01d3`.
