@@ -182,21 +182,24 @@ async function rowHandle(page: Page, letter: BankLetter): Promise<ElementHandle>
 }
 
 /**
- * The name the page saves a bank's RAW dump under. A bank with an image is named by its
- * version (`seek-slot-B-v0.9.1.0-raw-<sha8>.bin`); an empty bank has no version, so it is
- * named by its state (`seek-slot-B-empty-raw-<sha8>.bin`, TESTING 42.8).
+ * The name the page saves a bank's RAW dump under, the CLI's name for it (core's slotDumpNames):
+ * `seek-slot-b-<version>-<sha8>.bin`. An empty bank has no version, so it is named by its state
+ * (`seek-slot-b-empty-<sha8>.bin`, TESTING 42.8 and 42.71).
  */
 export function rawDumpNamePattern(letter: BankLetter): RegExp {
-  return new RegExp(`^seek-slot-${letter.toUpperCase()}-(?:v.+|empty)-raw-[0-9a-f]{8}\\.bin$`);
+  return new RegExp(
+    `^seek-slot-${letter}-(?!.*decrypted)(?:empty|[A-Za-z0-9._-]+)-[0-9a-f]{8}\\.bin$`,
+  );
 }
 
 /**
- * The name the page saves a bank's DECRYPTED dump under, when a recovered key opens it. An
- * empty bank has none: there is nothing in it to decrypt.
+ * The name the page saves a bank's DECRYPTED dump under, when a recovered key opens it:
+ * `seek-slot-b-<version>-<sha8>-decrypted[-KeyA-<hex>-KeyB-<hex>].bin`. An empty bank has none:
+ * there is nothing in it to decrypt.
  */
 export function decryptedDumpNamePattern(letter: BankLetter): RegExp {
   return new RegExp(
-    `^seek-slot-${letter.toUpperCase()}-v.+-decrypted-[0-9a-f]{8}(-KeyA-[0-9a-f]{32}-KeyB-[0-9a-f]{32})?\\.bin$`,
+    `^seek-slot-${letter}-(?!empty-)[A-Za-z0-9._-]+-[0-9a-f]{8}-decrypted(-KeyA-[0-9a-f]{32}-KeyB-[0-9a-f]{32})?\\.bin$`,
   );
 }
 

@@ -15,6 +15,7 @@ import {
   CancelledError,
   SeekError,
   WebUsbTransport,
+  slotDumpNames,
   type DeviceState,
   type DumpedSlot,
   type FlashSlotResult,
@@ -50,13 +51,11 @@ import {
   bankImageSource,
   needsRiskAck,
   slotActionGate,
-  slotDumpFileName,
   useSlotsPanel,
   writeRisk,
   type SlotsBackend,
 } from './useSlotsPanel';
 import { useRunner } from './useRunner';
-import { keyPairToName } from './useSlotsPanel';
 
 vi.mock('../lib/download', () => ({
   downloadBytes: vi.fn(),
@@ -310,7 +309,7 @@ describe('useSlotsPanel: the unlock note (information only)', () => {
 });
 
 describe('useSlotsPanel: dumping a bank', () => {
-  it('saves the raw bank and the decrypted image, named by slot, version and short hash', async () => {
+  it('saves the raw bank and the decrypted image, named by slot, version and the stored bank’s short hash', async () => {
     const { backend, mocks } = makeBackend();
     const { result, unmount } = setup(backend);
     await act(async () => {
@@ -326,9 +325,39 @@ describe('useSlotsPanel: dumping a bank', () => {
     expect(downloadBytes).toHaveBeenCalledTimes(2);
     const names = vi.mocked(downloadBytes).mock.calls.map((call) => call[1]);
     expect(names).toEqual([
-      'seek-slot-A-v4.9.1.5-raw-abababab.bin',
-      'seek-slot-A-v4.9.1.5-decrypted-cdcdcdcd.bin',
+      'seek-slot-a-4.9.1.5-abababab.bin',
+      'seek-slot-a-4.9.1.5-abababab-decrypted.bin',
     ]);
+    unmount();
+  });
+
+  it('names the files exactly as core names them for the CLI, with the camera key pair when the image holds it', async () => {
+    const keyA = Uint8Array.from({ length: 16 }, (_, i) => 0x11 + i);
+    const keyB = Uint8Array.from({ length: 16 }, (_, i) => 0x81 + i);
+    const table = { keyA, keyB, offset: 0, matchA: true, matchB: true };
+    const plain = new Uint8Array(0x100).fill(0x5a);
+    plain.set(keyA, 0x20);
+    plain.set(keyB, 0x40);
+    const dumped: DumpedSlot = { ...dumpedSlot('a'), plain, plainSha256: 'cd'.repeat(32) };
+    const report = slotReport({ ...base, keyTable: table });
+    const { backend, mocks } = makeBackend({ report });
+    mocks.dump.mockImplementationOnce(() => Promise.resolve(dumped));
+    const { result, unmount } = setup(backend);
+    await act(async () => {
+      await result.current.panel.readSlots();
+    });
+
+    await act(async () => {
+      await result.current.panel.dump('a');
+    });
+
+    const expected = slotDumpNames(dumped, '4.9.1.5', table);
+    const names = vi.mocked(downloadBytes).mock.calls.map((call) => call[1]);
+    expect(names).toEqual([expected.raw, expected.decrypted]);
+    expect(expected.decrypted).toBe(
+      'seek-slot-a-4.9.1.5-abababab-decrypted' +
+        '-KeyA-1112131415161718191a1b1c1d1e1f20-KeyB-8182838485868788898a8b8c8d8e8f90.bin',
+    );
     unmount();
   });
 
@@ -684,46 +713,6 @@ describe('slot helpers', () => {
     expect(writeRisk(report, 'b')).toEqual({ booted: false, recovery: false, bootUnnamed: true });
   });
 
-  it('names a dump by slot, version and a short hash, with the version made file-safe', () => {
-    expect(slotDumpFileName('a', '4.9.1.5', 'raw', 'ab'.repeat(32))).toBe(
-      'seek-slot-A-v4.9.1.5-raw-abababab.bin',
-    );
-    expect(slotDumpFileName('r', '1.2.3.4/x y', 'decrypted', '0f'.repeat(32))).toBe(
-      'seek-slot-R-v1.2.3.4-x-y-decrypted-0f0f0f0f.bin',
-    );
-    expect(slotDumpFileName('b', null, 'raw', '12345678aa')).toBe(
-      'seek-slot-B-vunknown-raw-12345678.bin',
-    );
-  });
-
-  it('ends a decrypted dump with its key pair, so the flash path can read the keys back', () => {
-    const keyA = new Uint8Array(16).fill(0x11);
-    const keyB = new Uint8Array(16).fill(0x22);
-    expect(slotDumpFileName('a', '4.8.2.1', 'decrypted', 'ab'.repeat(32), { keyA, keyB })).toBe(
-      `seek-slot-A-v4.8.2.1-decrypted-abababab-KeyA-${'11'.repeat(16)}-KeyB-${'22'.repeat(16)}.bin`,
-    );
-    /* A raw bank never carries a pair: its bytes are not decrypted. */
-    expect(slotDumpFileName('a', '4.8.2.1', 'raw', 'ab'.repeat(32), { keyA, keyB })).toBe(
-      `seek-slot-A-v4.8.2.1-raw-abababab-KeyA-${'11'.repeat(16)}-KeyB-${'22'.repeat(16)}.bin`,
-    );
-  });
-
-  it('names a decrypted dump with the camera key pair only when the image holds both keys', () => {
-    const keyA = new Uint8Array(16).fill(0x11);
-    const keyB = new Uint8Array(16).fill(0x22);
-    const table = { keyA, keyB, offset: 0, matchA: true, matchB: true };
-    const withKeys = new Uint8Array(256);
-    withKeys.set(keyA, 32);
-    withKeys.set(keyB, 96);
-    expect(keyPairToName(withKeys, table)).toMatchObject({ keyA, keyB });
-    /* A key missing from the image is not claimed: the name stays bare. */
-    const without = new Uint8Array(256);
-    without.set(keyA, 32);
-    expect(keyPairToName(without, table)).toBeNull();
-    /* No camera table at all: nothing to claim. */
-    expect(keyPairToName(withKeys, null)).toBeNull();
-  });
-
   it('explains every disabled action in words, and the support comes first', () => {
     const view: SlotView = slotView(base, 'b');
     const gate = (
@@ -796,7 +785,7 @@ describe('useSlotsPanel: dumping an empty bank', () => {
     expect(mocks.dump).toHaveBeenCalledTimes(1);
     expect(downloadBytes).toHaveBeenCalledTimes(1);
     const [bytes, name] = vi.mocked(downloadBytes).mock.calls[0] ?? [];
-    expect(name).toBe('seek-slot-B-empty-raw-ffffffff.bin');
+    expect(name).toBe('seek-slot-b-empty-ffffffff.bin');
     expect(bytes).toHaveLength(0x10000);
     const lines = result.current.panel.reporter.lines;
     expect(lineIncludes(lines, 'slot B is empty — nothing to decrypt')).toBe(true);
@@ -843,7 +832,7 @@ describe('useSlotsPanel: filling an empty bank with the booted bank’s image', 
     expect(input.kind).toBe('plain');
     /* The bytes are bank A's decrypted image from the read already made. */
     expect(input.bytes).toBe(SLOT_PLAIN);
-    expect(input.fileName).toMatch(/^seek-slot-A-v4\.9\.1\.5-decrypted-eeeeeeee.*\.bin$/);
+    expect(input.fileName).toMatch(/^seek-slot-a-4\.9\.1\.5-eeeeeeee-decrypted.*\.bin$/);
     const pending = result.current.panel.pending;
     expect(pending?.key).toBe('b');
     expect(pending?.kind).toBe('plain');
@@ -988,7 +977,7 @@ describe('bankImageSource', () => {
     const source = bankImageSource(report, 'b');
     expect(source).toMatchObject({ key: 'a', name: 'slot A', version: '4.9.1.5', booted: true });
     expect(source?.bytes).toBe(SLOT_PLAIN);
-    expect(source?.fileName).toBe('seek-slot-A-v4.9.1.5-decrypted-eeeeeeee.bin');
+    expect(source?.fileName).toBe('seek-slot-a-4.9.1.5-eeeeeeee-decrypted.bin');
     /* The target is never its own source. */
     expect(bankImageSource(report, 'a')?.key).not.toBe('a');
   });
@@ -1057,19 +1046,20 @@ describe('bankImageSource', () => {
     };
     const source = bankImageSource(withPlain, 'b');
     expect(source?.fileName).toBe(
-      `seek-slot-A-v4.9.1.5-decrypted-eeeeeeee-KeyA-${'11'.repeat(16)}-KeyB-${'22'.repeat(16)}.bin`,
+      `seek-slot-a-4.9.1.5-eeeeeeee-decrypted-KeyA-${'11'.repeat(16)}-KeyB-${'22'.repeat(16)}.bin`,
     );
   });
 });
 
 describe('slot helpers: empty banks', () => {
-  it('names an empty dump by what it is, and only the raw file carries the word', () => {
-    expect(slotDumpFileName('b', null, 'raw', 'ff'.repeat(32), null, true)).toBe(
-      'seek-slot-B-empty-raw-ffffffff.bin',
-    );
-    /* A bank that holds an image is named as before. */
-    expect(slotDumpFileName('b', '4.9.1.5', 'raw', 'ab'.repeat(32), null, false)).toBe(
-      'seek-slot-B-v4.9.1.5-raw-abababab.bin',
+  it('names an empty dump by what it is, with no decrypted file, as core does for the CLI', () => {
+    expect(slotDumpNames(dumpedEmptySlot('b'), null, null)).toEqual({
+      raw: 'seek-slot-b-empty-ffffffff.bin',
+      decrypted: null,
+    });
+    /* A bank that holds an image is named by its version. */
+    expect(slotDumpNames(dumpedSlot('b'), '4.9.1.5', null).raw).toBe(
+      'seek-slot-b-4.9.1.5-abababab.bin',
     );
   });
 

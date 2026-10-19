@@ -1,6 +1,7 @@
 /* OWNER: reader agent. See ./types.ts. */
 import { hex, hexUp, sha256hex, viewOf } from '../bytes.js';
 import { decryptImage } from '../crypto/cipher.js';
+import { findEmbeddedKeyTable, keyFilenameSuffix, type KeyPair } from '../crypto/keys.js';
 import { recoverKeyInfo } from '../crypto/recover.js';
 import { errorMessage, CancelledError, SeekError } from '../errors.js';
 import {
@@ -242,4 +243,51 @@ export async function dumpSlot(
     plainSha256: plain === null ? null : await sha256hex(plain),
     notes,
   };
+}
+
+/* ====================================================================
+ * The names a dump is saved under. The CLI (`slots dump`) and the page (Dump) both name
+ * their files here, so one bank, one build, one sha and one key table give the same
+ * names in both places.
+ * ==================================================================== */
+
+/** A version that is safe inside a file name, or "unknown" when nothing was read. */
+export function safeVersion(version: string | null): string {
+  return version === null || version === '' ? 'unknown' : version.replace(/[^A-Za-z0-9._-]/g, '_');
+}
+
+/** The file names of one slot dump. `decrypted` is null when there is no decrypted image to name. */
+export interface SlotDumpNames {
+  /** The bank as stored: the 64 KiB exactly as flash holds it. */
+  readonly raw: string;
+  readonly decrypted: string | null;
+}
+
+/**
+ * `seek-slot-<key>-<version>-<sha8>.bin` for the bank as stored, and the same stem with
+ * `-decrypted.bin` when the bank decrypts. The key is the lowercase bank letter. An empty bank
+ * has no version, so `empty` takes its place. The eight digits are the first eight of the
+ * stored bank's own SHA-256, so the two files of one read share them.
+ *
+ * THE KEY PAIR IN THE NAME. A decrypted file is named with the pair its image holds, the way
+ * `decrypt` names its files, and `slots flash` retargets an image from the pair its name carries
+ * (write-image.ts, retargetImageKeys). So the suffix is added only when `keys` is this camera's
+ * pair and the decrypted image holds both halves exactly once. When it holds neither, the name
+ * stays bare, and the flash accepts a bare name only when a known application pair occurs once
+ * in the image (locateOwnKeyPair).
+ */
+export function slotDumpNames(
+  dumped: Pick<DumpedSlot, 'key' | 'sha256' | 'empty' | 'plain'>,
+  version: string | null,
+  keys: KeyPair | null,
+): SlotDumpNames {
+  /* An empty bank has no version to name it by; it says what it is instead. */
+  const label = dumped.empty ? 'empty' : safeVersion(version);
+  const stem = `seek-slot-${dumped.key}-${label}-${dumped.sha256.slice(0, 8)}`;
+  if (dumped.plain === null) return { raw: `${stem}.bin`, decrypted: null };
+  const suffix =
+    keys !== null && findEmbeddedKeyTable(dumped.plain, keys.keyA, keys.keyB) !== null
+      ? keyFilenameSuffix(keys.keyA, keys.keyB)
+      : '';
+  return { raw: `${stem}.bin`, decrypted: `${stem}-decrypted${suffix}.bin` };
 }

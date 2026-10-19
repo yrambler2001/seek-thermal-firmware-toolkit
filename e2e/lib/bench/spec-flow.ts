@@ -1310,9 +1310,9 @@ async function runEmptyBankFlow(
       `dump B: the page wrote a decrypted file (${dump.decryptedName ?? '?'}) for an empty bank`,
     );
   }
-  if (!/^seek-slot-B-empty-raw-[0-9a-f]{8}\.bin$/.test(dump.rawName)) {
+  if (!/^seek-slot-b-empty-[0-9a-f]{8}\.bin$/.test(dump.rawName)) {
     r.failures.push(
-      `dump B: the file is named "${dump.rawName}", not seek-slot-B-empty-raw-<sha8>.bin`,
+      `dump B: the file is named "${dump.rawName}", not seek-slot-b-empty-<sha8>.bin`,
     );
   }
 

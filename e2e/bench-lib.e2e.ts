@@ -1473,22 +1473,22 @@ describe('the blank-bank fallback source and the bank erase', () => {
 
 describe('the slots page names its dumps (empty banks included, TESTING 42.8)', () => {
   it('matches a version-named raw dump and the empty bank raw dump, per bank', () => {
-    expect(rawDumpNamePattern('b').test('seek-slot-B-v0.9.1.0-raw-8881f545.bin')).toBe(true);
-    expect(rawDumpNamePattern('b').test('seek-slot-B-empty-raw-71189f7f.bin')).toBe(true);
-    expect(rawDumpNamePattern('b').test('seek-slot-A-empty-raw-71189f7f.bin')).toBe(false);
-    expect(rawDumpNamePattern('r').test('seek-slot-R-v1.3.0.8-raw-0a1b2c3d.bin')).toBe(true);
-    expect(rawDumpNamePattern('b').test('seek-slot-B-v0.9.1.0-decrypted-f0ff04d5.bin')).toBe(false);
+    expect(rawDumpNamePattern('b').test('seek-slot-b-0.9.1.0-8881f545.bin')).toBe(true);
+    expect(rawDumpNamePattern('b').test('seek-slot-b-empty-71189f7f.bin')).toBe(true);
+    expect(rawDumpNamePattern('b').test('seek-slot-a-empty-71189f7f.bin')).toBe(false);
+    expect(rawDumpNamePattern('r').test('seek-slot-r-1.3.0.8-0a1b2c3d.bin')).toBe(true);
+    expect(rawDumpNamePattern('b').test('seek-slot-b-0.9.1.0-f0ff04d5-decrypted.bin')).toBe(false);
   });
 
   it('matches a decrypted dump with or without its key pair, and never an empty bank', () => {
     const keys = `-KeyA-${'a'.repeat(32)}-KeyB-${'b'.repeat(32)}`;
-    expect(decryptedDumpNamePattern('a').test('seek-slot-A-v4.8.1.9-decrypted-2c5eedec.bin')).toBe(
+    expect(decryptedDumpNamePattern('a').test('seek-slot-a-4.8.1.9-2c5eedec-decrypted.bin')).toBe(
       true,
     );
     expect(
-      decryptedDumpNamePattern('a').test(`seek-slot-A-v4.8.1.9-decrypted-2c5eedec${keys}.bin`),
+      decryptedDumpNamePattern('a').test(`seek-slot-a-4.8.1.9-2c5eedec-decrypted${keys}.bin`),
     ).toBe(true);
-    expect(decryptedDumpNamePattern('b').test('seek-slot-B-empty-raw-71189f7f.bin')).toBe(false);
+    expect(decryptedDumpNamePattern('b').test('seek-slot-b-empty-71189f7f.bin')).toBe(false);
   });
 });
 
@@ -2091,10 +2091,10 @@ describe('the read-back of a modern write: the camera key pair may replace the a
   it('reads the pair from a decrypted file name', () => {
     expect(
       keyPairNamedBy(
-        `seek-slot-B-v10.9.1.31-decrypted-c6c5719a-KeyA-${CAMERA_A}-KeyB-${CAMERA_B}.bin`,
+        `seek-slot-b-10.9.1.31-c6c5719a-decrypted-KeyA-${CAMERA_A}-KeyB-${CAMERA_B}.bin`,
       ),
     ).toEqual(named);
-    expect(keyPairNamedBy('seek-slot-B-v10.9.1.31-decrypted-c6c5719a.bin')).toBeNull();
+    expect(keyPairNamedBy('seek-slot-b-10.9.1.31-c6c5719a-decrypted.bin')).toBeNull();
   });
 });
 

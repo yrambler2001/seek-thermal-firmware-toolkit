@@ -524,16 +524,17 @@ export function createFakeRig(options: {
               ? `Dumped slot ${upper}: empty, nothing to decrypt.`
               : `Dumped slot ${upper}.`,
           raw,
-          /* An empty bank has no version to name it by: the page says what it is (TESTING 42.8). */
+          /* The CLI's names (core's slotDumpNames). An empty bank has no version to name it by: the page
+           * says what it is (TESTING 42.8). */
           rawName:
             plain === null
-              ? `seek-slot-${upper}-empty-raw-${stamp}.bin`
-              : `seek-slot-${upper}-v${subject()?.version ?? '?'}-raw-${stamp}.bin`,
+              ? `seek-slot-${letter}-empty-${stamp}.bin`
+              : `seek-slot-${letter}-${subject()?.version ?? 'unknown'}-${stamp}.bin`,
           decrypted: plain,
           decryptedName:
             plain === null
               ? null
-              : `seek-slot-${upper}-v${subject()?.version ?? '?'}-decrypted-${stamp}.bin`,
+              : `seek-slot-${letter}-${subject()?.version ?? 'unknown'}-${stamp}-decrypted.bin`,
         };
       },
       async refuse(letter: BankLetter, image: PageImage): Promise<PageRefusal | 'taken'> {

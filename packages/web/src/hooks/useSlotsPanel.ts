@@ -25,19 +25,17 @@ import {
   buildSlotPlan,
   dumpSlot,
   errorMessage,
-  findEmbeddedKeyTable,
   flashSlot,
   fpsPlanOfBank,
   hexUp,
   inspectSlots,
-  keyFilenameSuffix,
   patchBankFps,
   prepareSlotFlash,
+  slotDumpNames,
   type PrepareSlotFlashOptions,
   type FpsPatchResult,
   type FpsPlan,
   type FpsPreDump,
-  type KeyPair,
   type DumpedSlot,
   type FirmwareProfile,
   type FlashSlotOptions,
@@ -239,41 +237,6 @@ export function slotVersion(report: SlotsReport, key: SlotKey): string | null {
 }
 
 /**
- * The name a dump is saved under: the slot, the version the bank reports, and
- * a short hash so two dumps of the same slot never overwrite each other.
- *
- * A decrypted image may end in its key pair (`-KeyA-<hex>-KeyB-<hex>`), which is
- * how the flash path learns which keys the image was built for. `keys` is that
- * pair when the image really holds it (see `keyPairToName`); null leaves the name
- * bare, and the flash path then refuses the file rather than guessing.
- */
-export function slotDumpFileName(
-  key: SlotKey,
-  version: string | null,
-  kind: 'raw' | 'decrypted',
-  sha256: string,
-  keys: KeyPair | null = null,
-  empty = false,
-): string {
-  /* An empty bank has no version to name it by; it says what it is instead. */
-  if (empty) return `seek-slot-${key.toUpperCase()}-empty-${kind}-${sha256.slice(0, 8)}.bin`;
-  const label = (version ?? 'unknown').replace(/[^0-9A-Za-z.]+/g, '-');
-  const suffix = keys === null ? '' : keyFilenameSuffix(keys.keyA, keys.keyB);
-  return `seek-slot-${key.toUpperCase()}-v${label}-${kind}-${sha256.slice(0, 8)}${suffix}.bin`;
-}
-
-/**
- * The key pair to name a decrypted dump with: the camera's own table, but only
- * when both keys are found, exactly once each, inside the decrypted image. The
- * same rule `decrypt.ts` applies to a dump's file names, so a name never claims
- * keys the bytes do not hold. Null when the table is unknown or not in the image.
- */
-export function keyPairToName(plain: Uint8Array, table: KeyPair | null): KeyPair | null {
-  if (table === null) return null;
-  return findEmbeddedKeyTable(plain, table.keyA, table.keyB) === null ? null : table;
-}
-
-/**
  * A decrypted image an empty bank could be filled from, taken from the read the page
  * already made: no second read, nothing asked of the camera.
  */
@@ -284,8 +247,9 @@ export interface BankImageSource {
   readonly bytes: Uint8Array;
   /**
    * The name the image is prepared under. It carries the camera's key pair when the image
-   * holds it, exactly as a dump's decrypted file is named: a write on the Key A line reads
-   * the pair from the name and refuses an image whose name has none.
+   * holds it, as a dump's decrypted file is named. A bare name is still accepted by the write:
+   * it is retargeted when this camera's pair, or a known application pair, occurs exactly once
+   * in the image (core's retargetImageKeys).
    */
   readonly fileName: string;
   /** The camera names this bank as the one it boots; false when it is only a bank that holds an image. */
@@ -309,21 +273,24 @@ export function bankImageSource(report: SlotsReport, target: SlotKey): BankImage
     null;
   const state = view?.state ?? null;
   const plain = state?.plain ?? null;
-  if (view === null || state === null || plain === null) return null;
+  const plainSha256 = state?.sha256 ?? null;
+  if (view === null || state === null || plain === null || plainSha256 === null) return null;
   const version = slotVersion(report, view.entry.key);
-  const keys = keyPairToName(plain, report.state.keyTable);
+  /* Named by the same function as a dump's decrypted file. The eight digits are the decrypted
+   * image's sha, the one this report holds: a dump names its files by the stored bank's sha, which
+   * is not in the report, so this name can differ from that dump's in those eight digits only. */
+  const { decrypted } = slotDumpNames(
+    { key: view.entry.key, sha256: plainSha256, empty: false, plain },
+    version,
+    report.state.keyTable,
+  );
+  if (decrypted === null) return null;
   return {
     key: view.entry.key,
     name: view.entry.name,
     version,
     bytes: plain,
-    fileName: slotDumpFileName(
-      view.entry.key,
-      version,
-      'decrypted',
-      state.sha256 ?? 'unknown',
-      keys,
-    ),
+    fileName: decrypted,
     booted: view.active,
   };
 }
@@ -654,10 +621,9 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
             key,
           );
           const version = slotVersion(current, key);
-          downloadBytes(
-            dumped.raw,
-            slotDumpFileName(key, version, 'raw', dumped.sha256, null, dumped.empty),
-          );
+          /* The same names the CLI's `slots dump` writes (core's slotDumpNames). */
+          const names = slotDumpNames(dumped, version, current.state.keyTable);
+          downloadBytes(dumped.raw, names.raw);
           log(
             dumped.empty
               ? `slot ${name} is empty — nothing to decrypt: ${String(dumped.raw.length)} B of 0xFF, ` +
@@ -667,14 +633,12 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
           );
           if (dumped.empty) {
             /* No decrypted file: there is nothing in the bank to decrypt. */
-          } else if (dumped.plain !== null && dumped.plainSha256 !== null) {
-            /* Named with the camera's key pair when the image holds it: the flash
-             * path reads the pair from the name and refuses a file without one. */
-            const keys = keyPairToName(dumped.plain, current.state.keyTable);
-            downloadBytes(
-              dumped.plain,
-              slotDumpFileName(key, version, 'decrypted', dumped.plainSha256, keys),
-            );
+          } else if (
+            dumped.plain !== null &&
+            dumped.plainSha256 !== null &&
+            names.decrypted !== null
+          ) {
+            downloadBytes(dumped.plain, names.decrypted);
             log(
               `slot ${name} decrypted — ${String(dumped.plain.length)} B, sha256 ${dumped.plainSha256}`,
               'ok',

@@ -818,7 +818,7 @@ describe('SlotsView: an empty bank', () => {
       pending: {
         key: 'b',
         kind: 'plain',
-        fileName: 'seek-slot-A-v4.9.1.5-decrypted-eeeeeeee.bin',
+        fileName: 'seek-slot-a-4.9.1.5-eeeeeeee-decrypted.bin',
         plan: preparedSlot('b', 'plain', new Uint8Array(0x10000), true),
         report,
         source: 'slot A, the bank the camera boots now (4.9.1.5)',

@@ -18,7 +18,7 @@ export {
   type InspectFirmware,
   type InspectSlotsOptions,
 } from './inspect.js';
-export { dumpSlot } from './dump.js';
+export { dumpSlot, safeVersion, slotDumpNames, type SlotDumpNames } from './dump.js';
 export {
   decryptSlotFile,
   slotFileReport,

@@ -38,18 +38,17 @@ import {
   derivedKeyLine,
   deriveWriteKeys,
   dumpSlot,
-  findEmbeddedKeyTable,
   flashSlot,
   fpsBootWarningOf,
   fpsPlanOfBank,
   hexUp,
   inspectSlots,
-  keyFilenameSuffix,
   onPlaintextChain,
   patchBankFps,
   prepareSlotFlash,
   runningApplicationOf,
   sha256hex,
+  slotDumpNames,
   slotWriteRefusal,
   withLevelMap,
   writeBannerOf,
@@ -810,39 +809,19 @@ export function readBackLines(
  * Dump: the file names and the report
  * ==================================================================== */
 
-/** A version that is safe inside a file name, or "unknown" when nothing was read. */
-export function safeVersion(version: string | null): string {
-  return version === null || version === '' ? 'unknown' : version.replace(/[^A-Za-z0-9._-]/g, '_');
-}
-
 /**
- * `seek-slot-<key>-<version>-<sha8>.bin` for the bank as stored, and the same stem with
- * `-decrypted.bin` when a key recovered and the image decrypts. The eight-digit tag is the first
- * eight hex digits of the stored bank's own SHA-256, so the two files of one read share it.
- *
- * THE KEY PAIR IN THE NAME. A decrypted file is named with the pair its image holds, the way
- * `decrypt` names its files, and `slots flash` retargets an image from the pair its name carries
- * (write-image.ts, retargetImageKeys). A bare name is accepted too: when both halves of this
- * camera's pair, or of a known application pair, occur exactly once in the image, that pair is used
- * (locateOwnKeyPair). So when the image holds this camera's own pair, the suffix is added; when it
- * holds neither, the name stays bare, and the flash accepts it only if a known application pair
- * occurs once and refuses it otherwise.
+ * The files one dump writes: the bank as stored, and the decrypted image when there is one.
+ * The names are core's `slotDumpNames`, the same ones the page downloads under.
  */
 export function dumpArtifacts(
   version: string | null,
   dumped: DumpedSlot,
   keys: { readonly keyA: Uint8Array; readonly keyB: Uint8Array } | null = null,
 ): Artifact[] {
-  /* An empty bank has no version to name it by; it says what it is instead. */
-  const label = dumped.empty ? 'empty' : safeVersion(version);
-  const stem = `seek-slot-${dumped.key}-${label}-${dumped.sha256.slice(0, 8)}`;
-  const artifacts: Artifact[] = [{ name: `${stem}.bin`, data: dumped.raw }];
-  if (dumped.plain !== null) {
-    const suffix =
-      keys !== null && findEmbeddedKeyTable(dumped.plain, keys.keyA, keys.keyB) !== null
-        ? keyFilenameSuffix(keys.keyA, keys.keyB)
-        : '';
-    artifacts.push({ name: `${stem}-decrypted${suffix}.bin`, data: dumped.plain });
+  const names = slotDumpNames(dumped, version, keys);
+  const artifacts: Artifact[] = [{ name: names.raw, data: dumped.raw }];
+  if (dumped.plain !== null && names.decrypted !== null) {
+    artifacts.push({ name: names.decrypted, data: dumped.plain });
   }
   return artifacts;
 }

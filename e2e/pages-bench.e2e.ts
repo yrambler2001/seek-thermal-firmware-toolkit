@@ -584,7 +584,7 @@ describe.skipIf(!RUNNABLE)('the web app pages on the bench camera (1.3.0.0, real
       async () => {
         const dumped = await need().dump('a');
         const image = dumped.decrypted ?? imageOf(dumped.raw);
-        const name = dumped.decryptedName ?? 'seek-slot-A-1.3.0.0-decrypted.bin';
+        const name = dumped.decryptedName ?? 'seek-slot-a-1.3.0.0-00000000-decrypted.bin';
         expect(await need().banner(), 'no write banner before the write').toBeNull();
         const written = await need().write('b', { name, bytes: image }, false);
         expect(written.status.startsWith('Written. '), `the write ended "${written.status}"`).toBe(
