@@ -200,7 +200,7 @@ describe('the rate the page names (the bench-measured rate, FPS_MEASURED_HZ)', (
 });
 
 describe('the stages: which entries are offered (pinned, so a change is deliberate)', () => {
-  it('offers exactly the stage-one (plain 2014 chain) and stage-two (Key A, 4.8.x) sets', () => {
+  it('offers exactly the stage-one (plain 2014 chain) and stage-two (Key A, 4.8.x and 4.9.x Compact PRO) sets', () => {
     expect([...FPS_STAGE_ONE_IDS].sort()).toEqual([
       'compact_32k-0.10.0.0-to32',
       'compact_32k-0.8.0.0-to32',
@@ -217,6 +217,8 @@ describe('the stages: which entries are offered (pinned, so a change is delibera
       'compact_32k-4.8.1.7-to32',
       'compact_32k-4.8.1.9-to32',
       'compact_32k-4.8.2.1-to32',
+      'compact_pro-4.9.1.15',
+      'compact_pro-4.9.2.0',
     ]);
     for (const id of FPS_STAGE_ONE_IDS) expect(FPS_STAGE_TWO_IDS.has(id), id).toBe(false);
   });
@@ -230,6 +232,19 @@ describe('the stages: which entries are offered (pinned, so a change is delibera
       else if (patch.id === 'compact_32k-0.7.0.8-to32')
         expect(patch.gate.reason ?? '', patch.id).toMatch(/older than 0\.8\.0\.0/);
       else expect(patch.gate.reason ?? '', patch.id).toMatch(/^stage two: /);
+    }
+  });
+
+  it('offers the Compact PRO 4.9.x builds at 18 Hz, and keeps the 1.0.3.x refusal (2016 keystream)', () => {
+    for (const id of ['compact_pro-4.9.1.15', 'compact_pro-4.9.2.0']) {
+      const patch = FPS_PATCHES.find((candidate) => candidate.id === id);
+      expect(patch?.gate.enabled, id).toBe(true);
+      expect(patch?.targetHz, id).toBe(18);
+    }
+    for (const id of ['compact_pro-1.0.3.0', 'compact_pro-1.0.3.2']) {
+      const patch = FPS_PATCHES.find((candidate) => candidate.id === id);
+      expect(patch?.gate.enabled, id).toBe(false);
+      expect(patch?.gate.reason ?? '', id).toMatch(/2016 keystream/);
     }
   });
 });

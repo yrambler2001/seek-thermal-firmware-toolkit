@@ -102,7 +102,7 @@ describe('the table against the Python table (no corpus needed)', () => {
     }
   });
 
-  it('enables exactly the stage-one (plain 2014 chain) and stage-two (Key A, 4.8.x) entries, and records a reason for every other', () => {
+  it('enables exactly the stage-one (plain 2014 chain) and stage-two (Key A, 4.8.x and 4.9.x Compact PRO) entries, and records a reason for every other', () => {
     expect([...FPS_STAGE_ONE_IDS].sort()).toEqual([
       'compact_32k-0.10.0.0-to32',
       'compact_32k-0.8.0.0-to32',
@@ -119,6 +119,8 @@ describe('the table against the Python table (no corpus needed)', () => {
       'compact_32k-4.8.1.7-to32',
       'compact_32k-4.8.1.9-to32',
       'compact_32k-4.8.2.1-to32',
+      'compact_pro-4.9.1.15',
+      'compact_pro-4.9.2.0',
     ]);
     for (const entry of FPS_PATCHES) {
       if (FPS_STAGE_ONE_IDS.has(entry.id) || FPS_STAGE_TWO_IDS.has(entry.id)) {
@@ -238,7 +240,7 @@ corpusDescribe('the table against the Python tool, over the corpus (SEEK_FPS_COR
   );
 
   it.skipIf(FPS_OFFER_WITHHELD)(
-    'offers the stage-one builds at their top rate, refuses the stage-two builds, and refuses a camera on another build',
+    'offers the stage-one and stage-two builds at their top rate, refuses the rest, and refuses a camera on another build',
     () => {
       // The rate the page names: the table's target, except where the bench measured another (FPS_MEASURED_HZ,
       // which is empty: the 1.3.0.8 32 Hz entry is the unmeasured plain-copy form and names its target).

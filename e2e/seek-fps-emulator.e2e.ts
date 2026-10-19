@@ -80,7 +80,8 @@ const BUILDS = [
 /** The builds not built here, with the reason, so the report says what was not measured. */
 const NOT_BUILT: readonly string[] = [
   '4.8.1.7, 4.8.1.9, 4.8.2.1 and 4.16.1.7-FF: Key A banks, stored under a cipher (patch-images.ts)',
-  'Compact PRO 1.0.3.0, 1.0.3.2, 4.9.1.15 and 4.9.2.0: the 2016 keystream banks and the 177840-byte frame',
+  'Compact PRO 1.0.3.0 and 1.0.3.2: the 2016 keystream banks and the 177840-byte frame',
+  'Compact PRO 4.9.1.15 and 4.9.2.0: Key A banks (not the 2016 keystream) and the 177840-byte frame',
 ];
 
 interface Row {

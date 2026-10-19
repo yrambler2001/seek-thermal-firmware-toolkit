@@ -53,6 +53,11 @@ export interface SlotsSubject {
   /** The frame-rate row action, on every bank that holds an image (see the emulator suite). */
   readonly fps: FpsExpectation;
   /**
+   * A bank that holds an image the frame-rate row does NOT offer, though `fps` is an offer on the others: the
+   * bank and the fragment the planner's reason must contain. Absent when every image bank takes `fps`.
+   */
+  readonly fpsNotOffered?: { readonly bank: BankLetter; readonly reason: string };
+  /**
    * The camera-wide banner ("No bank of this camera can be written from here"): `'none'` when the page
    * shows none, else a fragment of the refusal it must show. A banner is shown only when the camera refuses
    * every bank, and then every bank's verdict is a refusal too (the flash controls are off with it).
@@ -307,9 +312,10 @@ export const SLOTS_SUBJECTS: readonly SlotsSubject[] = [
     version: '4.9.2.0',
     emulator: 'Compact PRO 4.9.2.0 dump (1215A0YZ9AA8)',
     banks: ALL_WRITABLE,
-    fps: NO_FPS_TABLE,
+    fps: { offer: true, toHz: 18 },
     banner: 'none',
-    source: '42.1 (pass), 42.5',
+    source:
+      '42.1 (pass), 42.5; frame-rate stage two (Key A), 18 Hz table entry, offered unmeasured (owner decision 2026-10-19; TESTING.md 42.28)',
   },
   {
     name: 'Compact PRO FF 4.18.2.0',
@@ -327,14 +333,15 @@ export const SLOTS_SUBJECTS: readonly SlotsSubject[] = [
     version: '4.9.1.15',
     emulator: 'Compact PRO 4.9.1.15 dump',
     banks: ALL_WRITABLE,
-    fps: NO_FPS_TABLE,
+    fps: { offer: true, toHz: 18 },
+    fpsNotOffered: { bank: 'b', reason: 'already runs at 18 Hz' },
     banner: 'none',
     ownImage: {
       bank: 'b',
       reason: "neither this camera's pair nor a decoded application pair occurs in the image",
     },
     source:
-      '42.1 and 42.5: the dump’s bank B holds a 1.0.3.2 image with neither key pair, so writing B back from its own image is refused; the bench writes B from A’s image (42.5 note 2), which the page offers.',
+      '42.1 and 42.5: the dump’s bank B holds a 1.0.3.2 image with neither key pair, so writing B back from its own image is refused; the bench writes B from A’s image (42.5 note 2), which the page offers. Frame-rate: banks A and R hold the 4.9.1.15 image, 18 Hz table entry (stage two, TESTING.md 42.28); bank B holds the 1.0.3.2-FF build, which the table records at 18 Hz already, so it takes no patch.',
   },
 
   /* ---- XR, Mosaic, Nano ------------------------------------------------------------------ */

@@ -307,7 +307,14 @@ for (const subject of rows) {
       const { report } = bootedRow();
       for (const view of report.slots) {
         const plan = fpsPlanOfBank(report, view.entry.key);
-        if (view.content === 'image') {
+        const notOffered = subject.fpsNotOffered;
+        if (view.content === 'image' && notOffered?.bank === view.entry.key) {
+          /* The row's own exception: this bank's image takes no patch, and the planner says why. */
+          expect(plan.status, `${subject.name} bank ${view.entry.name}: not offered`).not.toBe(
+            'offer',
+          );
+          if (plan.status !== 'offer') expect(plan.reason).toContain(notOffered.reason);
+        } else if (view.content === 'image') {
           if (subject.fps.offer) {
             expect(plan.status, `${subject.name} bank ${view.entry.name}`).toBe('offer');
             if (plan.status === 'offer') expect(plan.toHz).toBe(subject.fps.toHz);

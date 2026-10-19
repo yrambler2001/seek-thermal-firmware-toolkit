@@ -23,9 +23,9 @@
  *   - stage one: the 2014 plain chain, whose banks are stored as plain bytes (the Compact 0.8.0.0
  *     to 1.3.0.8, 8 Hz). The write is byte-exact on the read-back. Entries of 0.8.0.0 and later that the
  *     slots code writes plain are offered on the same terms as the measured ones (the owner's decision).
- *   - stage two: the 4.x Compact line (4.8.1.7, 4.8.1.9, 4.8.2.1), whose banks are staged under the
- *     camera's Key A and stored under the bank's own key. The write is checked on the read-back
- *     DECRYPTED, against the patched image (slots/fps-patch.ts).
+ *   - stage two: the 4.x line (the Compact 4.8.1.7, 4.8.1.9, 4.8.2.1 and the Compact PRO 4.9.1.15, 4.9.2.0),
+ *     whose banks are staged under the camera's Key A and stored under the bank's own key. The write is
+ *     checked on the read-back DECRYPTED, against the patched image (slots/fps-patch.ts).
  * Every other entry stays in the table with its gate recorded as "stage two: ...", so it can
  * be switched on after its own staging check.
  *
@@ -126,14 +126,17 @@ export const FPS_STAGE_ONE_IDS: ReadonlySet<string> = new Set([
 ]);
 
 /**
- * The stage-two entries: the 4.x Compact line, staged under the camera's Key A and stored under the
- * bank's own key (the device re-keys the upload in fw_validate_decrypt_program). Pinned by a test.
- * Their write is checked on the read-back decrypted (slots/fps-patch.ts, TESTING.md 42.22).
+ * The stage-two entries: the 4.x line (the Compact 4.8.x, and the Compact PRO 4.9.x at 18 Hz, TESTING.md 42.28),
+ * staged under the camera's Key A and stored under the bank's own key (the device re-keys the upload in
+ * fw_validate_decrypt_program). Pinned by a test. Their write is checked on the read-back decrypted
+ * (slots/fps-patch.ts, TESTING.md 42.22).
  */
 export const FPS_STAGE_TWO_IDS: ReadonlySet<string> = new Set([
   'compact_32k-4.8.1.7-to32',
   'compact_32k-4.8.1.9-to32',
   'compact_32k-4.8.2.1-to32',
+  'compact_pro-4.9.1.15',
+  'compact_pro-4.9.2.0',
 ]);
 
 /** True when a dotted build version is older than `than` (an FF suffix is ignored). */
@@ -169,11 +172,6 @@ function gateOf(source: FpsPatchSource): FpsGate {
     why =
       'stage two: the Compact PRO 1.0.3.x line stores its banks under the 2016 keystream, not as ' +
       'plain bytes, so its staging check is not done and the page does not offer this patch yet';
-  } else if (source.family === 'compact_pro') {
-    why =
-      'stage two: the Compact PRO 4.9.x line stages its banks under Key A like the 4.8 Compact, ' +
-      'but its frame rate has not been measured on the bench (the bench camera is a Compact board, ' +
-      'and the PRO frame needs the PRO measurer), so the page does not offer this patch yet';
   } else if (source.version.endsWith('-FF')) {
     why =
       'stage two: the 16 Hz FF build is staged as the vendor app stages it (the image XOR Key A, ' +
