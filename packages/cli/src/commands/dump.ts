@@ -46,7 +46,7 @@ export async function dumpCommand(ctx: CommandContext): Promise<CommandResult> {
     const major = Number.parseInt(running.version?.split('.')[0] ?? '', 10);
     if (running.version !== null && major <= 1) {
       throw new CliError(
-        `this camera runs ${running.version}, a 0.x/1.x 2014–2016 build, which \`seek-fw dump\` ` +
+        `this camera runs ${running.version}, a 0.x/1.x 2014–2017 build, which \`seek-fw dump\` ` +
           'does not read; nothing was read but the version',
         {
           code: 'dump/refused',

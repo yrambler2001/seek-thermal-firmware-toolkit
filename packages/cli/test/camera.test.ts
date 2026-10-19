@@ -197,8 +197,8 @@ describe('seek-fw dump on a 2016 Compact PRO (1.0.3.0)', () => {
     const out = join(dir, 'refused');
     const { io, stderr } = testIo({ backend: fixedBackend([camera]) });
     expect(await run(['dump', '--out', out], io, signal())).toBe(EXIT_FAILED);
-    expect(stderr.text).toContain('0.x/1.x 2014–2017 line');
-    expect(stderr.text).toContain('nothing was dumped');
+    expect(stderr.text).toContain('a 0.x/1.x 2014–2017 build');
+    expect(stderr.text).toContain('nothing was read but the version');
     expect(stderr.text).toContain('seek-fw preserve');
     await expect(readdir(out)).rejects.toThrow();
     for (const call of camera.calls) {
