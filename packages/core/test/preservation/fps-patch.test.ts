@@ -244,16 +244,18 @@ describe('the stages: which entries are offered (pinned, so a change is delibera
     }
   });
 
-  it('offers the Compact PRO 4.9.x builds at 18 Hz, and keeps the 1.0.3.x refusal (2016 keystream)', () => {
+  it('offers every Compact PRO build at 18 Hz: 4.9.x under Key A (stage two), 1.0.3.x on the 2016 keystream (stage three)', () => {
     for (const id of ['compact_pro-4.9.1.15', 'compact_pro-4.9.2.0']) {
       const patch = FPS_PATCHES.find((candidate) => candidate.id === id);
+      expect(FPS_STAGE_TWO_IDS.has(id), id).toBe(true);
       expect(patch?.gate.enabled, id).toBe(true);
       expect(patch?.targetHz, id).toBe(18);
     }
     for (const id of ['compact_pro-1.0.3.0', 'compact_pro-1.0.3.2']) {
       const patch = FPS_PATCHES.find((candidate) => candidate.id === id);
-      expect(patch?.gate.enabled, id).toBe(false);
-      expect(patch?.gate.reason ?? '', id).toMatch(/2016 keystream/);
+      expect(FPS_STAGE_THREE_IDS.has(id), id).toBe(true);
+      expect(patch?.gate.enabled, id).toBe(true);
+      expect(patch?.targetHz, id).toBe(18);
     }
   });
 });
