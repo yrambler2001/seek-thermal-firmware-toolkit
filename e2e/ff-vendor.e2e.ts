@@ -39,7 +39,7 @@ import {
 } from './lib/bench/index.js';
 import { approveWrite, type WriteApproval } from './lib/supervised-write.js';
 
-const gate: WriteApproval = await approveWrite('camera', async () => ({
+const gate: WriteApproval = await approveWrite('camera', () => Promise.resolve({
   describe:
     'the 1.3.0.8 FF (16 Hz) vendor-form run: writes banks A, B and R of the camera through the CLI, ' +
     'reads each back halted over the J-Link, and restores the original flash',

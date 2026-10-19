@@ -135,12 +135,14 @@ export async function readAnswers(camera: BenchCamera): Promise<CameraAnswers> {
   const running = (doc.running ?? null) as Record<string, unknown> | null;
   const cameraAnswers = running === null ? null : ((running.camera ?? null) as CameraAnswers['camera']);
   const predicted = running === null ? null : ((running.predicted ?? null) as Record<string, unknown> | null);
+  /* The CLI writes `why` as text (core's RunningApplication.why is a string); anything else reads as empty. */
+  const runningWhy = typeof running?.why === 'string' ? running.why : '';
   return {
     build: running === null ? null : ((running.build ?? null) as string | null),
     camera: cameraAnswers,
     predictedPlain: predicted === null ? null : ((predicted.plain ?? null) as readonly (number | null)[] | null),
     predictedFf: predicted === null ? null : ((predicted.ff ?? null) as readonly (number | null)[] | null),
-    why: running === null ? 'no running record (not 1.3.0.8)' : String(running.why ?? ''),
+    why: running === null ? 'no running record (not 1.3.0.8)' : runningWhy,
     version: (firmware.version ?? null) as string | null,
     buildString: (firmware.build ?? null) as string | null,
     enumerated: true,
@@ -316,23 +318,23 @@ export async function runFfVendor(
       log('boot after the writes: the camera did not come back on the bus (expected: no boot of the vendor form)');
     }
   } finally {
-    /* The restore: the whole original flash, halted-read and checked, then a power cycle and the build. */
-    try {
-      if (!touched) throw new Error('nothing was written, so there is nothing to restore');
-      await jlink.flashFull(files.restoreFile);
-      await verifyWithRetry(jlink, camera, files.restoreSha256);
-      if (await cycleAndWait(camera)) {
-        const back = await readAnswers(camera);
-        restoredVersion = back.version;
-        restored = back.version === '1.3.0.0';
-        log(`restore: the camera runs ${String(back.version)} ${String(back.buildString)} (${restored ? 'the original' : 'NOT the original'})`);
-      } else {
-        log('restore: the camera did not come back on the bus after the restore');
-      }
-    } catch (error) {
-      /* A failed restore is said loudly: the flash is then not the original, and the run's own error is kept. */
-      const why = error instanceof Error ? error.message : String(error);
-      if (touched) {
+    /* The restore: the whole original flash, halted-read and checked, then a power cycle and the build. Nothing was
+     * written when `touched` is false, so there is nothing to restore and no restore is attempted. */
+    if (touched) {
+      try {
+        await jlink.flashFull(files.restoreFile);
+        await verifyWithRetry(jlink, camera, files.restoreSha256);
+        if (await cycleAndWait(camera)) {
+          const back = await readAnswers(camera);
+          restoredVersion = back.version;
+          restored = back.version === '1.3.0.0';
+          log(`restore: the camera runs ${String(back.version)} ${String(back.buildString)} (${restored ? 'the original' : 'NOT the original'})`);
+        } else {
+          log('restore: the camera did not come back on the bus after the restore');
+        }
+      } catch (error) {
+        /* A failed restore is said loudly: the flash is then not the original, and the run's own error is kept. */
+        const why = error instanceof Error ? error.message : String(error);
         failures.push(`restore: ${why}`);
         log(`RESTORE FAILED: ${why}`);
       }
