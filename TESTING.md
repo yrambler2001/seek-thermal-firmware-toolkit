@@ -9569,3 +9569,65 @@ Tests, all targeted, no camera:
 **Not verified.** Nothing ran against a camera. A re-read straight after a patch, with no reset, is not known to be answered on hardware. If it is not, the page logs it, and the table stays empty as it did before this change. The core refusal after the commit (the dump not saved) is inferred, not tested for the table.
 
 **Commits.** Branch `worktree-agent-a1292974cc2d8b842`. Code and tests: `0c56355`. This note: the commit after it.
+
+### 42.48 The 42.43 follow-ups: the active-slot word is a booted bank only on the 2014 chain, footerOk is not applicable where no footer is checked, the fps bench shares one dev server, and the stale texts are corrected (2026-10-19)
+
+**Summary.** Four plan items from 42.43 and 42.45, and the 4.x upgrade-target override that 42.43 did not reach. Nothing ran on a camera, and the J-Link and the USB switch were not used. (1) The active-slot word is reported as the booted bank only on the 2014 plaintext chain. On 4.x and 2016 `bootChoiceOf` reports none. No 4.x text printed the word before this change, so no CLI or page text changed; the value did. (2) `info --json` gives `footerOk` as null where the profile's bootloader reads no footer. Its text already said "n/a". (3) `e2e/fps-bench.e2e.ts` shares one dev server per run and closes it. (4) The stale texts in FPS_32HZ.md (sections 9 and 10) and in FW-V1's 1.3.0.8 comments are corrected. No 2016 key table was built; item 3 lists what one would need. One finding is left for the owner: the word also overrides the 4.x upgrade target (item 1).
+
+**Tags.** [measured] is a test run or a byte read from a corpus image. [source] is read from code or source comments. [inferred] follows from them.
+
+**1. The active-slot word (roots[8], the cell at 0x1000AED0).**
+
+- **What the word is [source].** It is the app's RAM word. The bootloader does not write the cell. It records the slot it enters in the warm-boot handoff (`compact_8hz_1_3_0_0_bootloader/src/startup.c:142-150`, `compact_pro_9hz_1_0_3_0_bootloader/src/startup.c:188-194`: `handoff->slot`, 0 A, 1 B, 2 R). So 42.43's "the bootloader writes it" named the handoff, not the cell. FW-V1's source writes the cell from the app's startup chunk on the 1.3.0.8 tree (`targets/compact_8hz_1_3_0_8/src/main.c:120-124`) and the 2016 tree (`targets/compact_pro_9hz_1_0_3_0/src/main.c:120-124`). The 1.3.0.0 tree has no writer. The 4.x factory app does not write it (42.43). Whether the 2014 and 2016 factory images write it was not checked: those writers are reconstructions, and neither factory image was disassembled here.
+- **What changed.** `packages/core/src/slots/boot-choice.ts:146-158`: `bootChoiceOf` returns `reportedBooted` only where `onPlaintextChain(profile, version)` holds (`packages/core/src/slots/running.ts:182-184`, family `locked-plain`). That is the gate the page already uses for "Named booted" (`packages/web/src/components/DeviceInfoPanel.tsx:86`). `reportedBootedOf`, the mapping 0, 1, 2 to a bank, is unchanged.
+- **Text, before and after.**
+  - CLI `slots list`, the "last start" row (`packages/cli/src/commands/slots.ts:535-550`), and `slots --json` `boot.reportedBooted` (`slots.ts:565-574`). Before: the value was computed on every line but printed only where the bank state is plain (`bootLines` returns nothing at `slots.ts:532` otherwise), so no 4.x output printed slot A. After: the same text on the 2014 chain; nothing on 4.x or 2016.
+  - CLI `info`, the "booted" row (`packages/cli/src/commands/info.ts:294-298`) names the bank from the word only on the 2014 line, as before. On 4.x the booted bank comes from the boot-config replay (`state.boot.booted`).
+  - Page: there is no "last start" text. On 4.x "Booted from" (`DeviceInfoPanel.tsx:86-88`) and the "booted now" badge (`SlotTable.tsx:221`) come from the cfg0 replay, as before. The 2014 wording ("Named booted", "named by the active-slot word") is unchanged.
+- **Premise of the plan.** A 4.x boot did give slot A as `reportedBooted`, but no 4.x surface printed it. The change keeps it from reaching one.
+- **Finding, not changed [source].** `packages/core/src/workflows/device-info.ts:944-953` uses the word on every line with a replay prediction, 4.x included, where the word is always 0. When cfg0 boots B or R, the replay target is A, the word gives B, and the override sets the target to B with the log line "the camera's active-slot word says Slot B instead — trusting the camera". `confirmUpgradeTarget` (`device-info.ts:447-481`) reverts it only when its selector-0 window matches exactly one of A and B. If it does not, B stays. The target feeds `targetSlot()` (`device-info.ts:1320`): the page's "Upgrade target" row (`DeviceInfoPanel.tsx:60`), the CLI `info` upgrade target (`info.ts:213`), and `writeFirmware` and `prepareImage` (`packages/core/src/workflows/flash.ts:134`, `:505`). Neither exported write has a CLI or page caller now. The fix is to gate line 944 the way `bootChoiceOf` is gated. That changes the write-target path, so it is left for the owner. Not run on a unit or a test.
+
+**2. footerOk where no footer is checked.**
+
+- **Where it shows [source].** The CLI `info` text already printed "n/a" where `checksFooter` is false (`info.ts:246`). `info --json` printed `footerOk: false` for every bank (`info.ts:61`, before the change). The page prints no footer status: `DeviceInfoPanel.tsx:49` uses `footerOk || !checksFooter` for the orphan check, which is correct. The core field keeps the analysis answer, false (the flash carries no footer, 42.43 section 3).
+- **Change.** `packages/cli/src/commands/info.ts:46-61`: `footerOk` is null when `profile.boot.checksFooter` is false. The text row is unchanged.
+- **Before and after.** A 2016 bank in `info --json`: `"footerOk": false` becomes `null`. A 4.x bank stays `true`, now pinned by a test.
+- **Not changed.** `rekeyRisk` (`packages/core/src/slots/write.ts:558`, `packages/core/src/workflows/flash.ts:430`) tests `footerOk`. On 2016 it is always false, so the rekey warning cannot fire there. Changing it changes write confirmations, so it is left as it is.
+
+**3. The 2016 key table: what one would need (not built).**
+
+- **Inputs.**
+  1. The 2016 bootloader block: `BOOT_BLOCK_BYTES` at the profile's `flashBase` (`device-info.ts:590-606`). On 2016 the camera refuses that arm (the 2016 read test in `packages/core/test/workflows.test.ts`: "the bootloader block is refused"), so the bytes would come from a halted whole-flash read (the J-Link runner in FW-V1) or from a full dump of the same unit.
+  2. The candidate scan, `findKeyCandidates` (`packages/core/src/crypto/keys.ts:71`), anchored on the boot-config word. It is in code and needs input 1.
+  3. The 2016 cipher parameters: the whitening K and the acceptance sum (`packages/core/src/profiles/compact-2016.ts`), and the candidate K list (`device-info.ts`). In code already.
+  4. Each bank's keystream state, already recovered by the analysis (`slot.recovered.state`).
+- **Where the bytes come from.** The 1.0.3.0 full dump `0C21A1M5KP15` (42.43 section 3), or a fresh whole-flash read of the owner's unit. Not read here.
+- **What it would change.** Only the verdict. `bootability` moves from `unknown` to `bootable` or `not-bootable` (`device-info.ts:775-786`). The 2016 stage key is the image's own block 0 and the write reads no table (`packages/core/src/slots/capability-notes.ts:57-62`), so staging does not change.
+- **Risks.**
+  - The only check that names a key is the match to a bank's keystream state, so one bank's match is not independent confirmation [inferred]. A coincidental match would name a wrong key, and a bank the bootloader skips could read as bootable, or the reverse. Require the same table to confirm on two banks, on both 1.0.3.0 and 1.0.3.2 units.
+  - The 9 Hz builds share one key pair (`capability-notes.ts`, the 2016 note). A table from one unit holds for the build family, but the per-device key slot is per unit, so keep it read from each camera's own block.
+  - Do not embed the table in the profile. A later build would inherit it without a check.
+
+**4. Stale texts.**
+
+- `FPS_32HZ.md` section 9 said the bootloader writes the word. It now says the cell is the app's, the bootloader records the handoff, the 4.x app never writes the cell, and the 2014 and 2016 factory images were not checked. Section 10 said modes 4 and 7 were unread. It now says they are read (42.43; FW-V1 `docs/FRAME_RATE_MODES.md`), with the emulator-only caveat.
+- FW-V1, branch `emu-research`, commit `9374eeded` (worktree `/private/tmp/claude-501/fwv1-emu-research`, comments only). `targets/compact_8hz_1_3_0_8/src/frame.c:391-395`: the "row 27 synthetic-pattern self-test" comment is replaced. Mode 4 is one capture per published frame (block 23, op 16, publish, image type 3). Mode 7 has no program. The enum name `FRAME_MODE_SELFTEST` is kept, with no code change. `rpc_cmds.c:4107`: "4, 7 and 8 against the mask 0x190" becomes "0, 4, 7, 8 and 9 against the mask 0x391", which is the mask `cmd_SetIPMode` tests (`rpc_cmds.c:1122-1126`, as cited in FRAME_RATE_MODES.md section 5). The rpc comment did not call mode 4 a self-test; its stale part was the mode list.
+- Not changed: the same frame.c self-test comment in other targets (for example `targets/compact_8hz_4_8_1_7/src/frame.c:379-381`, `compact_8hz_4_8_1_9`, the XR, the 4.9.x and FF 1.3.0.8 trees), and FW-V1 `docs/FPS_PATCH_ALL_FIRMWARES.md:107`. The task named the 1.3.0.8 target.
+
+**5. The fps bench (item 3).** `e2e/fps-bench.e2e.ts:34` (the import), `:150` (`sharedServer: true`, for the reason 42.45 gives), and `:174` (`afterAll` closes the shared server after the window). This is the fix 42.45 made in the slots and pages benches. Not run: the describe block runs only when `SEEK_E2E_WRITE` is `i-understand` or `dry-run`, and neither was set.
+
+**Tests (no camera, no J-Link, no switch):**
+
+- `packages/core`: `npx vitest run test/slots/boot-choice.test.ts test/workflows.test.ts`: 72 passed (boot-choice 24, three of them new, one older test split into four; workflows 48).
+- `packages/cli`: `npx vitest run test/slots.test.ts test/camera.test.ts`: 129 passed (slots 107, camera 22). The 2016 `footerOk` pin is now null; the 4.x pin now checks `footerOk: true`.
+- `packages/web`: `npx vitest run src/views/SlotsView.test.tsx src/views/SlotsView.verdicts.test.tsx src/a11y-parity.test.tsx`: 73 passed (44, 6, 23). There is no SlotTable test file; SlotTable is covered by these three.
+- `npx vitest run --config e2e/vitest.config.ts bench-lib.e2e`: 95 passed, 2 skipped (the corpus tests need `SEEK_FULL_DUMPS_BY_CAMERA`). Its J-Link checks run on fake execs.
+- Typecheck, `tsc --noEmit`: `packages/core`, `packages/cli`, `packages/web/tsconfig.app.json`, `packages/web/tsconfig.node.json`, `e2e/tsconfig.json`, all exit 0.
+- eslint on the five changed TypeScript files: clean. Prettier: clean on the changed source and test files. `e2e/fps-bench.e2e.ts:287` and `TESTING.md` were already flagged at HEAD and are left as they are.
+
+**Not verified.**
+
+- Whether the 2014 and 2016 factory images write the cell (item 1). The 2014 "Named booted" display still rests on that unverified write; it is unchanged.
+- The 4.x upgrade-target override was read from code and not run on a unit or in a test.
+- Nothing ran on a camera. The fps bench window path is not measured after this change, as in 42.45.
+- `plan.md` is not edited. Its 42.48 line is for the owner to tick.
