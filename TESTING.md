@@ -9356,3 +9356,42 @@ A separate three-window shared run also rendered each window: each showed the In
 - The Electron processes' own memory was not measured after the fix (they exit when each window closes).
 - `plan.md` line 68 still reads as running (TESTING.md 42.45). It is not edited here; the owner ticks it.
 - Scratch, not committed: the probe `zz-window-probe.e2e.ts`, `analyze-snap.mjs`, the snapshots (`snap/`) and the logs (`probe/`) under `/private/tmp/claude-501/-Users-yrambler2001-things-a-noindex-seek-seek-thermal-firmware-backup/82174575-1341-45d6-a306-7518156cd978/scratchpad/`.
+
+### 42.47 The frame-rate patch keeps the bank table after a patch (read again after the read-back); the `ops.ts:44` comment names the device-info read (2026-10-19)
+
+**Summary.** Two plan items. (1) The frame-rate patch (`patchFps`) dropped the bank table after a patch, as the write did before 42.44. It now follows the same approach: the report is dropped at the commit point, right before the core's patch is called, and after the read-back the banks are read again with `readAfterWrite`, under the report's own profile and version, with no identify probe. This closes the note at 42.44 item 3. Changed in `packages/web/src/hooks/useSlotsPanel.ts`, with tests in `useSlotsPanel.test.tsx` and `SlotsView.test.tsx`. (2) `packages/core/src/protocol/ops.ts:44` said 0x55 and 0x5a are "used by the flash path only". The comment now names the device-info read as the other user, and says no dump sends them. The code is unchanged. The worktree was reset to `refactor/all-firmware-profiles` at `1e16c29`; its old HEAD `cf5420b` is an ancestor of it, so no commit was dropped. Nothing ran on a camera.
+
+**Tags.** [measured] is a test run, or a read of the code checked by grep. [inferred] is what follows from the code and was not run.
+
+**1. The frame-rate patch keeps the bank table.**
+
+- **Cause [measured].** `patchFps` set `used` once the transport was open, and its `finally` called `forgetReport()` when `used` was set. So every patch that reached the core dropped its read. A patch the page refused before that point (no report, the risk tick missing) kept it.
+- **Change.** The commit point is the same as in `write`: `committing = true` and `forgetReport()` sit right before the core's patch call (`useSlotsPanel.ts:1005-1006`), and the `finally` no longer forgets the report. After the read-back, `readAfterWrite(current, client, signal, 'patch')` reads the banks again (`:1022`), under the report's own profile and build. `readAfterWrite` (`:495`) takes the name of the commit, so its log lines say "after the patch" or "after the write"; the write's lines are otherwise unchanged. The write's commit point and re-read are at `:883-884` and `:905`.
+- **Failures stay honest.** A failed or cancelled re-read is logged as a warning. The patch result stays, and the report stays null, so no bank is shown as read. The cancel message after a commit still says the bank may be partly written.
+- **Core refusals after the commit.** A refusal inside `patchBankFps` after the commit point (the pre-patch dump not saved) drops the read, as a refusal inside `flashSlot` does under 42.44. [inferred from the code; the existing test "a dump that was not saved refuses the patch" does not assert the table.]
+- **A patched bank is not offered again.** The re-read bank is planned from its own image by `fpsPlanOfBank`, then `planFpsPatch`. An image that matches a patched entry comes back `status: 'patched'`, "already patched ... so no patch is offered" (`packages/core/src/preservation/fps-patch.ts:474`). [measured in code; not run on a patched image.]
+
+Tests, all targeted, no camera:
+
+- `packages/web/src/hooks/useSlotsPanel.test.tsx`: 48 of 48 (43 before, 5 new, from line 1163). New: the table shows the banks read again after a patch, not the read from before, with the identify probe run once; a read-back that does not match keeps the table and says so; a failed re-read keeps the patch result and shows no bank as read; a cancelled re-read is logged and keeps the patch result; a patch the page refuses before anything is sent (the risk tick missing) keeps the read it was made from.
+- `packages/web/src/views/SlotsView.test.tsx`: 47 of 47 (44 before, 3 new, from line 1055). New: the table stays on screen after a patch, with the outcome above it; a read-back that does not match keeps the table and says it does NOT differ only as planned; no read after a patch shows no table, keeps the outcome, and asks for Read slots.
+- `packages/web/src/views/SlotsView.verdicts.test.tsx`: 6 of 6, unchanged.
+- Mutation check [measured]: with the HEAD hook (the patch drops its report) in place, the four re-read tests fail. The refused-before-commit test passes on both versions, as it should. The hook was restored and checked byte for byte afterwards.
+
+**2. The `ops.ts:44` comment.**
+
+- **Where 0x55 and 0x5a are sent [measured].** `readFwInfo` sends SetFirmwareInfoFeatures (0x55) (`packages/core/src/protocol/client.ts:369`), and `readSerial` sends SetRamDataFeatures (0x5a) (`client.ts:411`). `readDeviceInfo` calls both: `tryFwInfo` for selectors 1, 20, 17 and 10, and `readSerial` (`packages/core/src/workflows/device-info.ts:540-559`). `readDeviceInfo` is reached from `inspectSlots` (`packages/core/src/slots/inspect.ts:77` and `:92`), which is the slots page's bank read and the CLI `slots` (`packages/cli/src/commands/slots.ts:121`), and from the CLI `info` (`packages/cli/src/commands/info.ts:344` and `:359`).
+- **Where they are not sent [measured].** The dump paths (the CLI `dump`, the slot dump in `packages/core/src/slots/dump.ts`, and the web dump page) read the firmware through `readRunningFirmware` (`packages/core/src/workflows/capability.ts:340`), which reads GetFirmwareInfo unarmed and sends neither opcode (`capability.ts:289`). The web Info uses it too. No dump path reaches `readDeviceInfo`, so the `FLASH_OPS` rule (nothing in it runs during a dump) holds, as 42.44 found.
+- **The comment now says** the group is used by the flash path, that 0x55 and 0x5a are also used by the device-info read (the CLI info and slots, and the slots page), and that no dump sends them.
+- No test pins the comment text. A grep found it only in `ops.ts` and the built `dist` copy.
+- **Left alone.** The `FLASH_OPS` header still describes the set as "the info reads that only the flash path needs". The CLI `info` needs the same reads, so that sentence is as narrow as the old comment was. It is outside `:44`, which the brief named, so it is not changed. For the owner to decide.
+
+**Checks [measured].**
+
+- `npx tsc --noEmit -p packages/web/tsconfig.app.json`: exit 0. `npx tsc --noEmit -p packages/core/tsconfig.json`: exit 0.
+- eslint on the four changed files: clean. prettier `--check` on them: clean after one line in the hook test was re-wrapped.
+- `packages/core/test/protocol.test.ts` and `packages/core/test/identity-gate.test.ts`: 56 of 56. The ops module checks its two sets are disjoint at import.
+
+**Not verified.** Nothing ran against a camera. A re-read straight after a patch, with no reset, is not known to be answered on hardware. If it is not, the page logs it, and the table stays empty as it did before this change. The core refusal after the commit (the dump not saved) is inferred, not tested for the table.
+
+**Commits.** Branch `worktree-agent-a1292974cc2d8b842`. Code and tests: `0c56355`. This note: the commit after it.
