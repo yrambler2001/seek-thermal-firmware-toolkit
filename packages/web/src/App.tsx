@@ -163,9 +163,10 @@ export function App({ support }: AppProps = {}): ReactElement {
             </p>
           ) : (
             <p>
-              Reads the firmware version of the connected camera and tells you which of the other
-              tabs covers it. It also says, in plain words, what each tab is for.{' '}
-              <strong>Nothing is written to the camera on this tab.</strong>
+              Reads the connected camera the way <code>seek-fw info</code> does: its firmware, the
+              family it answers as, how it boots, its keys and every bank. It tells you which of the
+              other tabs covers it, and says in plain words what each tab is for.{' '}
+              <strong>Nothing is written to flash on this tab.</strong>
             </p>
           )}
         </Prose>

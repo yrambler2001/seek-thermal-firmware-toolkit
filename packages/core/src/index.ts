@@ -314,6 +314,7 @@ export type {
 export {
   DEFAULT_DUMP_OPTIONS,
   assertFlashable,
+  bootableDescription,
   bootedSlot,
   channelEvidenceOf,
   decryptDump,
@@ -341,6 +342,7 @@ export {
   runDump,
   runSweep,
   slotByKey,
+  storeKeyDescription,
   targetSlot,
   transportInfoOf,
   unlockTokenOf,

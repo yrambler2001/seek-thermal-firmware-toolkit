@@ -16,8 +16,9 @@ import type { OfflineDecryptApi } from '@/hooks/useOfflineDecrypt';
 import type { SlotFileApi } from '@/hooks/useSlotFileDecrypt';
 import { useReporter, type ReporterHandle } from '@/hooks/useReporter';
 import { DEFAULT_OPTIONS_FORM } from '@/lib/options';
-import { detectProfile, getProfile, identityGate } from '@seek-fw/core';
+import { detectProfile, getProfile, identityGate, type DeviceState } from '@seek-fw/core';
 import type { SlotFileDecryption } from '@seek-fw/core';
+import { fakeDeviceState } from '../test-fixtures';
 import { buttonByText, render, renderHook } from '@/test-helpers';
 
 function reporters(count: number): readonly ReporterHandle[] {
@@ -214,6 +215,7 @@ describe('InfoView', () => {
           version: '4.18.2.0',
           buildString: 'Feb 13 2020',
           gate: identityGate({ version: '4.18.2.0', buildString: 'Feb 13 2020', note: '' }),
+          state: null,
         })}
         connected
         busy={false}
@@ -236,6 +238,7 @@ describe('InfoView', () => {
           version: '1.0.3.0',
           buildString: 'Jul  6 2016 17:04:49',
           gate: identityGate({ version: '1.0.3.0', buildString: null, note: '' }),
+          state: null,
         })}
         connected
         busy={false}
@@ -254,6 +257,7 @@ describe('InfoView', () => {
           version: '0.3.0.1',
           buildString: null,
           gate: identityGate({ version: '0.3.0.1', buildString: null, note: '' }),
+          state: null,
         })}
         connected
         busy={false}
@@ -261,6 +265,53 @@ describe('InfoView', () => {
     );
     expect(container.textContent).toContain('No tab reads this build.');
     expect(container.textContent).toContain('0.3.0.1');
+    unmount();
+  });
+
+  it('shows the rest of seek-fw info once the camera is read, and the warning when the target is the booted bank', async () => {
+    const [a] = reporters(1);
+    const state = await fakeDeviceState();
+    const sameBank = { ...state, boot: { booted: 'b', target: 'b' } } as DeviceState;
+    const { container, unmount } = render(
+      <InfoView
+        info={infoStub(a!, {
+          version: '4.9.5.0',
+          buildString: 'Sep 20 2026',
+          gate: identityGate({ version: '4.9.5.0', buildString: 'Sep 20 2026', note: '' }),
+          state: sameBank,
+        })}
+        connected
+        busy={false}
+      />,
+    );
+    const text = container.textContent;
+    /* The sections of `seek-fw info`, in its order. */
+    const titles = Array.from(container.querySelectorAll('h3')).map((title) => title.textContent);
+    expect(titles).toEqual(
+      expect.arrayContaining(['Camera', 'Firmware', 'Profile', 'Boot', 'Keys', 'Slots', 'Writing']),
+    );
+    expect(text).toContain('Product');
+    expect(text).toContain('Store key');
+    expect(text).toContain('Detected');
+    expect(text).toContain('nothing here stops an upgrade');
+    unmount();
+  });
+
+  it('shows no camera report without a read past the version', () => {
+    const [a] = reporters(1);
+    const { container, unmount } = render(
+      <InfoView
+        info={infoStub(a!, {
+          version: '0.3.0.1',
+          buildString: null,
+          gate: identityGate({ version: '0.3.0.1', buildString: null, note: '' }),
+          state: null,
+        })}
+        connected
+        busy={false}
+      />,
+    );
+    expect(container.textContent).not.toContain('Store key');
     unmount();
   });
 
@@ -272,6 +323,7 @@ describe('InfoView', () => {
           version: null,
           buildString: null,
           gate: identityGate({ version: null, buildString: null, note: 'no answer' }),
+          state: null,
         })}
         connected
         busy={false}

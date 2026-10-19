@@ -1,11 +1,15 @@
 /**
- * "Read firmware version" — the Info tab's one read, and the only thing it does
- * to the camera.
+ * "Read the camera" — the Info tab's one read, the same one `seek-fw info` makes (TESTING.md 42.64).
  *
- * It is the identity read every other tab starts with and nothing more: the
- * version the camera reports (`readRunningFirmware`, read-only), judged by the
- * same gate that decides whether any tab may arm a window (`identityGate`).
- * No selector is armed, no slot is read and nothing is written.
+ * The identify probe first (`identifyCamera`: the version, a plain and an authenticated arm of a
+ * protected bank, and a read of a bank open on every line), then core's `readDeviceInfo` under the
+ * family the probe names, and the re-read under a family whose cipher differs (`profileToRereadUnder`,
+ * the rule the slots page and the CLI share). The identity gate decides whether anything is read past
+ * the version: a camera it refuses is shown with the reason, and nothing else is sent.
+ *
+ * The probe's authenticated arm sends the unlock token, so the read unlocks the camera until a power
+ * cycle. The device seat records that (TESTING.md 42.59); the page shows the note, with no special case.
+ * The read writes nothing.
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -13,8 +17,10 @@ import {
   CancelledError,
   SeekDevice,
   errorMessage,
-  identityGate,
-  readRunningFirmware,
+  identifyCamera,
+  profileToRereadUnder,
+  readDeviceInfo,
+  type DeviceState,
   type IdentityGate,
 } from '@seek-fw/core';
 import { reportInUseElsewhere } from '../lib/camera-lock';
@@ -32,7 +38,7 @@ export interface InfoPanelParams {
   readonly form: OptionsForm;
 }
 
-/** What the version read found, and what that allows. */
+/** What the read found, and what that allows. */
 export interface InfoReading {
   /** `major.minor.patch.build` as the camera reported it, or null. */
   readonly version: string | null;
@@ -40,6 +46,11 @@ export interface InfoReading {
   readonly buildString: string | null;
   /** The gate's verdict: `permitsArming` says whether the dump and slots tabs can read this build. */
   readonly gate: IdentityGate;
+  /**
+   * The camera's analysis, as `seek-fw info` builds it. Null when the gate refused the build, so that
+   * nothing was read past the version.
+   */
+  readonly state: DeviceState | null;
 }
 
 export interface InfoPanelApi {
@@ -48,8 +59,8 @@ export interface InfoPanelApi {
   /** The last read for this camera, or null. Dropped when the camera changes. */
   readonly result: InfoReading | null;
   /**
-   * True when a panel's session on this camera has sent the unlock token. This tab sends nothing that unlocks, but the
-   * camera is unlocked all the same, so the note shows (TESTING.md 42.59).
+   * True when a panel's session on this camera has sent the unlock token. This read sends it too (the
+   * identify probe), so after a read the note shows here as well (TESTING.md 42.59).
    */
   readonly unlockNote: boolean;
   read: () => Promise<void>;
@@ -73,6 +84,7 @@ export function useInfoPanel(params: InfoPanelParams): InfoPanelApi {
       reporter.reset('Reading ...');
       setResult(null);
       let transport: ReturnType<DeviceHandle['makeTransport']> | null = null;
+      let client: SeekDevice | null = null;
       try {
         const options = readOptions(form);
         transport = device.makeTransport({
@@ -81,25 +93,60 @@ export function useInfoPanel(params: InfoPanelParams): InfoPanelApi {
             reporter.reporter.log(message, 'warn');
           },
         });
-        const client = new SeekDevice(transport, { reporter: reporter.reporter, signal });
+        client = new SeekDevice(transport, { reporter: reporter.reporter, signal });
         await transport.open();
-        const running = await readRunningFirmware(client);
-        const gate = identityGate(running);
-        setResult({ version: running.version, buildString: running.buildString, gate });
-        if (running.version === null) {
-          reporter.log(running.note, 'warn');
+
+        const identification = await identifyCamera(client);
+        for (const note of identification.probe.notes) reporter.reporter.log(`  ${note}`, 'detail');
+        const { probe, detection, gate } = identification;
+        const version = probe.firmwareVersion;
+        const buildString = probe.buildString;
+
+        if (version === null) {
+          reporter.log(probe.notes[0] ?? 'the camera did not report its firmware version', 'warn');
           reporter.setStatus('No version reported.');
-        } else {
-          reporter.log(
-            `firmware ${running.version}${running.buildString ? `  ${running.buildString}` : ''}`,
-            'ok',
-          );
+          setResult({ version, buildString, gate, state: null });
+          return;
+        }
+        reporter.log(`firmware ${version}${buildString ? `  ${buildString}` : ''}`, 'ok');
+        if (!gate.permitsArming) {
           reporter.setStatus(
-            gate.permitsArming
-              ? `Read. Firmware ${running.version}.`
-              : `Read. Firmware ${running.version} is older than 0.8.0.0 — no tab reads it.`,
+            `Read. Firmware ${version} is older than 0.8.0.0 — nothing else was read.`,
+          );
+          setResult({ version, buildString, gate, state: null });
+          return;
+        }
+
+        const best = detection.best.profile;
+        reporter.log(
+          `detected ${best.name} (${best.id}), confidence ${detection.best.score.toFixed(2)}` +
+            (detection.ambiguous ? ' — the evidence did not settle it, so this is a guess' : ''),
+          detection.ambiguous ? 'warn' : 'ok',
+        );
+        let state = await readDeviceInfo(
+          { device: client, profile: best, detection, reporter: reporter.reporter, signal },
+          {},
+        );
+        const better = profileToRereadUnder(state, false);
+        if (better !== null) {
+          reporter.log(
+            `the evidence identifies this camera as ${better.name} (${better.id}), whose cipher ` +
+              'differs from the one this read used — reading again under it',
+            'warn',
+          );
+          state = await readDeviceInfo(
+            {
+              device: client,
+              profile: better,
+              detection: state.detection,
+              reporter: reporter.reporter,
+              signal,
+            },
+            {},
           );
         }
+        setResult({ version, buildString, gate, state });
+        reporter.setStatus(`Read. Firmware ${version}.`);
       } catch (error) {
         if (error instanceof CancelledError) {
           reporter.log('cancelled', 'warn');
@@ -111,6 +158,10 @@ export function useInfoPanel(params: InfoPanelParams): InfoPanelApi {
         }
       } finally {
         if (transport !== null) await transport.close();
+        /* This read's own session sent the token (TESTING.md 42.59), so the camera is unlocked for the page. */
+        if (client?.unlockTokenAccepted === true && transport !== null) {
+          device.markUnlocked(transport);
+        }
         reporter.flush();
       }
     });

@@ -15,8 +15,10 @@ import {
   hexUp,
   listProfiles,
   onPlaintextChain,
+  bootableDescription,
   readDeviceInfo,
   runningApplicationOf,
+  storeKeyDescription,
   upgradeTargetIsBooted,
   upgradeTargetWarning,
   type CapabilityName,
@@ -235,7 +237,7 @@ export function renderState(ctx: CommandContext, state: DeviceState): void {
         : `${hexUp(state.keyTable.offset)} in the bootloader block, confirmed against a slot`,
     ],
     ['whitening K', hexUp(state.keyWhiteningK)],
-    ['store key', storeKeyText(state)],
+    ['store key', storeKeyDescription(state)],
   ]);
 
   ctx.out('');
@@ -251,7 +253,7 @@ export function renderState(ctx: CommandContext, state: DeviceState): void {
         slot.present ? yesNo(slot.accepts) : '—',
         /* "n/a" where the bootloader reads no footer: a missing one is not a fault there */
         slot.present ? (state.profile.boot.checksFooter ? yesNo(slot.footerOk) : 'n/a') : '—',
-        slot.present ? bootableCell(slot) : '—',
+        slot.present ? bootableDescription(slot) : '—',
         slot.sha256 === null ? '—' : slot.sha256.slice(0, 16),
       ]),
       ['slot', 'address', 'version', 'size', 'key', 'accepts', 'footer', 'bootable', 'sha256'],
@@ -272,23 +274,6 @@ export function renderState(ctx: CommandContext, state: DeviceState): void {
   ctx.out('');
 }
 
-/**
- * Which key the bootloader stores an upgrade under, said only as far as the
- * read knows it. It used to print "Key B (no per-device key programmed)"
- * whenever the per-device slot was not seen programmed, including when the
- * bootloader block was never read at all (a 2016 part refuses it on every
- * channel) and Key B itself was "(not identified)" two lines up.
- */
-function storeKeyText(state: DeviceState): string {
-  if (state.storeKey.programmed) return state.storeKey.name;
-  if (state.deviceKeySlot === null) {
-    return 'unknown — the bootloader block holding the per-device key slot was not read';
-  }
-  return state.keyTable === null
-    ? 'Key B (no per-device key programmed; Key B itself not identified)'
-    : 'Key B (no per-device key programmed)';
-}
-
 function slotName(state: DeviceState, key: string): string {
   return state.slots.find((slot) => slot.key === key)?.name ?? key;
 }
@@ -304,13 +289,6 @@ function bootedText(state: DeviceState): string {
   return onPlaintextChain(state.profile, state.version)
     ? `${name} (named by the active-slot word; not a boot record on this line)`
     : name;
-}
-
-/** The bootable cell: an FF image in recovery is a recovery-only image, not a verdict of 'no'. */
-function bootableCell(slot: SlotState): string {
-  if (slot.bootability === 'unknown') return 'unknown';
-  if (slot.bootability === 'recovery-only') return 'recovery only';
-  return yesNo(slot.bootable);
 }
 
 /**

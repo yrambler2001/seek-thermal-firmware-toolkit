@@ -126,7 +126,7 @@ describe('Info', () => {
     expect(text).toContain('Cameras on 4.x firmware');
     expect(text).toContain('Cameras on 0.8.0.0 and newer firmware');
     expect(text).toContain('None. It uses no camera');
-    expect(text).toContain('Nothing is written to the camera on this tab.');
+    expect(text).toContain('Nothing is written to flash on this tab.');
     unmount();
   });
 

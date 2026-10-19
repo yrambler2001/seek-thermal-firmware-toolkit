@@ -1,7 +1,7 @@
 /**
- * Info: the landing tab. It reads the firmware version of the connected camera
- * (the only camera read this tab makes, and it writes nothing), says which
- * firmware line that version belongs to, and tells the person in plain words
+ * Info: the landing tab. It reads the connected camera the way `seek-fw info` does (TESTING.md 42.64):
+ * the firmware version, the family the camera answers as, the boot state, the keys and every bank. It
+ * writes nothing. It says which firmware line the version belongs to, and tells the person in plain words
  * what each tab is for and which cameras it covers.
  */
 
@@ -10,6 +10,7 @@ import { CircleStop, Info as InfoIcon, ListChecks, ScanSearch } from 'lucide-rea
 import { KeyValue, type KeyValueRow } from '@/components/KeyValue';
 import { Panel, PanelTitle } from '@/components/Panel';
 import { Prose } from '@/components/Prose';
+import { CameraReport } from '@/components/CameraReport';
 import { RunPanel } from '@/components/RunPanel';
 import { Section } from '@/components/Section';
 import { UnlockNote } from '@/components/UnlockNote';
@@ -47,7 +48,9 @@ interface TabGuide {
 const TABS: readonly TabGuide[] = [
   {
     route: 'info',
-    does: 'Reads the firmware version the camera reports. Nothing else.',
+    does:
+      'Reads what the camera reports: its firmware, the family it answers as, how it boots, its keys ' +
+      'and every bank. The same read as seek-fw info. It writes nothing.',
     cameras: 'Any Seek camera that WebUSB can open.',
     writes: 'No.',
   },
@@ -123,9 +126,9 @@ export function InfoView({ info, connected, busy }: InfoViewProps): ReactElement
       <Section
         id="info-read"
         step="2"
-        title="Read the firmware version"
+        title="Read the camera"
         icon={<ScanSearch />}
-        description="Read-only. Asks the camera what firmware it runs. Nothing is armed, read or written beyond that."
+        description="Read-only. Asks the camera what it runs, how it boots, which keys it holds and what each bank holds: the same read as seek-fw info. Nothing is written."
       >
         <Toolbar label="Info actions">
           <Button
@@ -161,35 +164,38 @@ export function InfoView({ info, connected, busy }: InfoViewProps): ReactElement
         {info.unlockNote && <UnlockNote />}
 
         {result !== null && rows !== null && (
-          <Panel>
-            <PanelTitle icon={<InfoIcon />}>What the camera reports</PanelTitle>
-            <KeyValue rows={rows} />
-            {version === null && (
-              <Alert tone="warn" className="mt-3">
-                <p>
-                  <strong>The camera did not report its firmware version.</strong> Nothing else was
-                  sent. Unplug it, let it finish starting up, plug it back in and read again.
-                </p>
-              </Alert>
-            )}
-            {!result.gate.permitsArming && version !== null && (
-              <Alert tone="err" className="mt-3">
-                <p>
-                  <strong>No tab reads this build.</strong>
-                </p>
-                <p>{result.gate.reason}</p>
-              </Alert>
-            )}
-            {result.gate.permitsArming && target !== null && (
-              <Prose className="mt-3">
-                <p>
-                  Open <a href={ROUTE_HREF[target]}>{ROUTE_LABEL[target]}</a> for this camera. That
-                  tab asks the camera which family it is again before it reads anything, and refuses
-                  a camera that is not the family it covers.
-                </p>
-              </Prose>
-            )}
-          </Panel>
+          <>
+            <Panel>
+              <PanelTitle icon={<InfoIcon />}>What the camera reports</PanelTitle>
+              <KeyValue rows={rows} />
+              {version === null && (
+                <Alert tone="warn" className="mt-3">
+                  <p>
+                    <strong>The camera did not report its firmware version.</strong> Nothing else
+                    was sent. Unplug it, let it finish starting up, plug it back in and read again.
+                  </p>
+                </Alert>
+              )}
+              {!result.gate.permitsArming && version !== null && (
+                <Alert tone="err" className="mt-3">
+                  <p>
+                    <strong>No tab reads this build.</strong>
+                  </p>
+                  <p>{result.gate.reason}</p>
+                </Alert>
+              )}
+              {result.gate.permitsArming && target !== null && (
+                <Prose className="mt-3">
+                  <p>
+                    Open <a href={ROUTE_HREF[target]}>{ROUTE_LABEL[target]}</a> for this camera.
+                    That tab asks the camera which family it is again before it reads anything, and
+                    refuses a camera that is not the family it covers.
+                  </p>
+                </Prose>
+              )}
+            </Panel>
+            {result.state !== null && <CameraReport state={result.state} />}
+          </>
         )}
       </Section>
 

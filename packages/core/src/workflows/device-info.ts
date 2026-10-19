@@ -1352,6 +1352,29 @@ export function upgradeTargetWarning(
   );
 }
 
+/**
+ * Which key the bootloader stores an upgrade under, said only as far as the read knows it. Shared by the
+ * CLI's `info` and the page's Info tab, so both say the same (TESTING.md 42.64). A bootloader block that was
+ * never read is named unknown, not "Key B (no per-device key programmed)", which would claim a read that did
+ * not happen.
+ */
+export function storeKeyDescription(state: DeviceState): string {
+  if (state.storeKey.programmed) return state.storeKey.name;
+  if (state.deviceKeySlot === null) {
+    return 'unknown — the bootloader block holding the per-device key slot was not read';
+  }
+  return state.keyTable === null
+    ? 'Key B (no per-device key programmed; Key B itself not identified)'
+    : 'Key B (no per-device key programmed)';
+}
+
+/** The bootable cell for one bank: an FF image in recovery is a recovery-only image, not a verdict of 'no'. */
+export function bootableDescription(slot: SlotState): string {
+  if (slot.bootability === 'unknown') return 'unknown';
+  if (slot.bootability === 'recovery-only') return 'recovery only';
+  return slot.bootable ? 'yes' : 'no';
+}
+
 /** Thrown when a workflow is handed an analysis that cannot support a write. */
 export function assertFlashable(state: DeviceState): void {
   if (state.canFlash) return;
