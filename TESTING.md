@@ -10634,6 +10634,67 @@ The ten new tests: the defaults and their hashes; each default found under its r
 
 **Commits.** Checker `09f6734` on branch `worktree-agent-a3005a2a9a5c4951a`. Swift `3be18f6` on tv-jc branch `serial-labels`. Neither is pushed or merged, and the tv-jc main checkout was not touched. This section is the commit after the checker's.
 
+### 42.62 Lost captures on the 32 Hz Normal streams: a calibration excursion on a fixed capture schedule (the stock has it too), and on the camera a second, host-timing-dependent skip; no safe patch publishes either (2026-10-19)
+
+**Summary.** On the owner's Compact PIR206 (chip ID `1013CE098ACA`, ASCII serial `101310HSNEA2`), one logged 60 s Normal stream per build in IP mode 8, every frame's capture index and type read. The loss has two parts, and the second exists only on the camera:
+- **(A) The calibration excursion.** A fixed program sequence that runs every 96 captures (2.98 s) once the first 128 captures are past. Each excursion publishes two calibration frames (type 6, then type 1, the shutter frame) and drops 10 captures on the patched and copy builds (5 beyond the 4-capture cadence on stock). It is set by the frame-sequence limit (`app_init.c:967-970`) and reproduced exactly on the emulator.
+- **(B) Single captures dropped at steady frames.** On the camera only, 10 to 245 per minute at the host's normal turnaround, and 207 and 864 per minute when the host waits 5 ms and 15 ms before each credit. The firmware's own skip path (`app_init.c:955-961`, "USB TX not complete, skipping field") is the likely cause [inferred]. The emulator, whose host reads at once, shows none.
+- **Fix.** No safe edit to the patched program publishes either part. (A) is the firmware's calibration schedule and its averaged calibration frames. (B) is the firmware skipping a capture while the USB endpoint is busy. The patch and the table are not changed; the proposal is in section 4 below.
+
+**Tags.** [measured] is a camera log, an emulator run or a byte read from the bank image, named. [source] is read from the 1.3.0.0 reconstruction (`FW-V1/targets/compact_8hz_1_3_0_0/src/`) or the 1.3.0.0 limit table, named. [inferred] follows from those and was not measured directly.
+
+**1. Measured loss, per build (camera, [measured]).** Each row is one 60 s run on one boot, after a channel-2 power cycle and 10 s. The capture span is the last minus the first capture index plus one; "excess" is the captures beyond the build's own cadence (4 for stock, 1 for the patched and copy builds). The parts are: (A) gaps into a type-6 or type-1 frame, (A') the type-3 frame right after a type-1 frame, (B) gaps into any other type-3 frame. Logs are under `/private/tmp/claude-501/agent-hw5/fd/`, analysed by `classify_fd.py`.
+
+| run (60 s, IP 8) | frames | whole-run fps | excess per min | (A) per min (events) | (A') per min | (B) per min (events) |
+| --- | --- | --- | --- | --- | --- | --- |
+| stock 1.3.0.0 (`862717a8`), run 1 | 452 | 7.51 | 141 | 97 (45) | 23 | 21 (21) |
+| stock 1.3.0.0, run 2 | 450 | 7.49 | 146 | 97 (45) | 23 | 26 (20) |
+| stock 1.3.0.8 (`2969d0df`), run 1 | 464 | 7.71 | 83 | 74 (45) | 23 | 9 (9) |
+| patched 1.3.0.0 (`ef90c94a`), run 1 | 1460 | 24.26 | 477 | 207 (40) | 20 | 246 (245) |
+| patched 1.3.0.0, run 2 | 1547 | 25.76 | 386 | 222 (43) | 21 | 137 (137) |
+| patched 1.3.0.0, checker's 0x7EC0 credit | 1464 | 24.39 | 469 | 200 (40) | 24 | 229 (226) |
+| 1.3.0.8 copy form (`5313f107`), run 1 | 1619 | 26.99 | 312 | 202 (43) | 22 | 85 (73) |
+| 1.3.0.8 copy form, run 2 | 1647 | 27.45 | 284 | 209 (45) | 23 | 49 (48) |
+| 1.3.0.8 copy form, checker's 0x7EC0 credit | 1686 | 28.11 | 231 | 198 (44) | 23 | 10 (8) |
+| 1.3.0.8 copy form, 5 ms host wait before each credit | 1505 | 25.08 | 426 | 191 (41) | 22 | 207 (204) |
+| 1.3.0.8 copy form, 15 ms host wait | 913 | 15.21 | 1018 | 128 (27) | 14 | 864 (861) |
+
+- Shutter-to-shutter medians: 3.01 to 3.02 s on stock and copy, 3.08 to 3.36 s on patched, 5.56 s at 15 ms (the stream halved).
+- Captures do not line up with the random (B) skips: the nearest type-1 frame is a median 780 ms away (the excursion itself is at 0 ms by definition). The (B) gaps have no period: the missing capture index taken modulo 32, 96 and 128 shows no peak.
+- Run lengths of consecutive frames that each carry a (B) skip, patched run 1: 126 single frames, then 27 pairs, 13 triples, 4 quadruples and 2 quintuples. The 15 ms run is all one run: 861 of 913 frames skipped one capture.
+- Two-credits-outstanding run (not in the table): invalid. `cmd_ImageData` cancels queued IN requests when a new credit arrives (`rpc_cmds.c:2656-2659`), so the second credit can cancel the read that is waiting. Its 179 (B) skips are not evidence.
+- The body-only credit (`0x7EC0`, the checker's own request) gave 10 (B) on the copy form and 229 on the patched build. So it does not reliably reduce (B). Not a fix.
+
+**2. The emulator reproduces (A) exactly and shows no (B) ([measured]).** FW-V1 emulator, patched 1.3.0.0 image in IP 8 with the app's init (`framerate.run_entry`), 1500 frames (52.5 s of device time; scratch `emu_fd.py`, output `/private/tmp/claude-501/agent-hw5/emu/patched130-ip8-1500.json`). The capture counter (body row 0, halfword 40, one more than the header index on every steady frame) gives 20 excursions, at counters 33, 65, 97 and 129 (32 apart: the `{32,3}` limit, four triggers), then 225, 321, 417 and so on (96 apart: the `{96,30}` limit). Each one is type 6 after 6, type 1 after 5, and type 3 after 2, so 10 captures are dropped. There are no other gaps. The camera's excursions match this: type 6 after a 6 gap, type 1 after a 5 gap, type 3 after a 2 gap, every 96 captures. The emulator's host reads every frame at once, so an endpoint-busy skip cannot occur there. The emulator's log has no firmware messages, so this does not show whether the "USB TX" path is reached.
+
+**3. The cause.**
+
+*(A) The calibration excursion.* [source] `app_init.c:967-970` (1.3.0.0). When `FRAME_IDX` reaches `frame_seq_limit_r32k[c].lo` (`app_init.c:794`, the table `{32,3} {96,30} {160,120} {256,0}`, FPS_PATCH_LONG_STREAM.md) while the cursor is on block 8 in gate 8, the code sets `FRAME_IDX = 0` and `frame_mode_table_r32k[8].prog[8].first = 9`. The next pass of block 8 runs the excursion blocks. The counter is per capture, so the stock (4-capture) and the patched (1-capture) streams run the same schedule, 3 s apart. The blocks, decoded from the bank image ([measured] from bytes, mode-8 table at file `+0xB788`, 34-byte blocks):
+- block 9 at `+0xB8BA`: 6 steps: two inactive steps (`gpio` 2), op 5, op 6, op 6, then op 8 with the publish bit and header 6 (a type-6 frame, 4 captures averaged, 2 inactive);
+- block 10 at `+0xB8DC`: 1 step, op 1 from source 3, no publish bit, header 5;
+- block 11 at `+0xB8FE`: 4 steps, op 5, op 6, op 6, op 7 with publish and header 1 (a type-1 shutter frame, 4 captures averaged);
+- block 7 at `+0xB876`: 1 inactive step (`gpio` 0).
+So one excursion is 12 captures and 2 frames. The 10 unpublished captures are: 2 inactive, 3 averaged into the type-6 frame, 1 copy with no publish bit (block 10), 3 averaged into the type-1 frame, and 1 inactive. Blocks 9, 10, 11 and 7 are the same in the stock and patched images; the patch changes only block 8 (count 4 to 1, `+0xB898`).
+
+*(B) The single skips.* [source] `frame_capture_step` (`app_init.c:955-961`): if the USB endpoint still has a transfer (`usb_ep_has_flag`) when a capture starts whose step is active, the code logs "USB TX not complete, skipping field", sets `stream_session._10 = 1` and resets the step to 0, so the capture is not published. The publish gate in `stream_push_chunk` (`app_init.c:482`) also needs the endpoint free. [inferred] The camera's skips are this path: they grow with the host's wait before each credit (0 ms: 49 to 245 per minute; 5 ms: 207; 15 ms: 864), they are absent at the 8 fps stock rate (9 to 26 per minute), and they are absent in the emulator, which models no host wait. The reconstructed source never increments the ready count `_14` (`app_init.c:332, 375, 479, 720` only reset or read it), so the credit path is not fully read; the cause of the endpoint's busy time is not established.
+
+**4. Can the patch publish them? No safe edit, and none tested.**
+- (A) would need the 10 captures published one by one. That changes what the firmware computes: the captures are two inactive steps, three averaged captures into each calibration frame, and one copy with no publish bit (block 10, which would become a header-5 frame that the host has no meaning for). The trigger itself is the firmware's calibration schedule, keyed on the capture count (`app_init.c:967-970`), so it is not a patch target. Publishing the averaged captures would publish un-averaged calibration frames and change the flat-field data. The owner would have to decide that; it is not proposed here. On the 30-minute figure: the limit table alone gives an excursion loss of 10.4 % in the 96 phase, 6.3 % in the 160 phase and 3.9 % in the 256 phase, about 5 % over 30 minutes and a 30.6 fps whole-run rate [inferred from the table, not measured here]. That leaves about 5 % of the owner's 29.1 fps (90 %) to (B) or to the model's error.
+- (B) is the firmware skipping a capture while the endpoint is busy. A program edit cannot publish a capture while the endpoint still holds the previous frame. The only lever seen is the host's turnaround (section 1), and the body-only read did not reproduce a benefit, so no host change is proposed.
+- So no change to `packages/core/src/preservation/fps-patch-table.ts` or FW-V1 `emu/fps_patch.py` is proposed, and no emulator candidate was tested.
+
+**5. The camera and the restore.** [measured] Start: `start-4m.bin` sha256 `50e900c23ff4bb7e0a5a30fc5879f6ed276289e43aeace2f9ab74eaec9b01d7d`, bank A `ef90c94a` (1.3.0.0 32 Hz), B and R `d91284c6`, boot word 0. The CLI wrote bank A six times (stock 1.3.0.0, stock 1.3.0.8, copy 1.3.0.8, patched 1.3.0.0 from `start-4m.bin` bytes `0x50000..0x5BA97`, stock 1.3.0.0 again, then patched 1.3.0.0 again); each read back. Then `runner flash-factory-4m-2` with `FACTORY_IMAGE` set to the start image: "plan: 0 of 64 blocks differ" and "DONE: the part reads back byte-identical". End dump `end-4m.bin` has the same sha, and `cmp start-4m.bin end-4m.bin` printed nothing and exited 0. Normal reads (checker, IP 8, `--no-opzero`), after a channel-2 cycle and 10 s: reads 8 and 9 steady (every second 32.16 to 32.25 fps), reads 1 to 7 and 10 not settled (seconds at 16 to 30 fps). This matches 42.27, 42.41 and 42.54.
+
+**6. Not measured or open.**
+- The 60 s runs are one or two per build. The owner's 30-minute figures were not repeated; section 4's 30-minute number is a model.
+- The random (B) skip counts vary by 5 to 20 times between runs of the same image (49 to 85 on the copy form, 137 to 245 on the patched build). The host-wait trend (0, 5, 15 ms) is one run per point.
+- The endpoint-busy mechanism for (B) is read from the source and fits the measurements, but the camera's firmware log was not read, and the emulator cannot show it.
+- The reconstructed source does not show the credit increment of `_14`, so the credit-to-publish link is not fully read.
+- The block semantics (`gpio` 2 is an inactive step, op 8 publishes an average) are read from the decoded fields and the 1.3.0.0 op table, not from a scene.
+- Nothing was run in the vitest or e2e suites. Nothing was pushed or merged. `plan.md` and FW-V1 were not edited.
+
+**Commits.** This section only, on branch `worktree-agent-ae2783b3ab842e4aa`, reset to `228aea9`; the commit hash is in the report.
+
 ### 42.63 FW-V1 review before the merge: corrections on plan-hygiene and emu-research, the codegen answer and its port, and the merge rehearsal (2026-10-19)
 
 **Summary.** The three FW-V1 branches were checked against 42.35 to 42.59 before the orchestrator merges them into FW-V1 main (`a13c615c6`, unchanged). `plan-hygiene` and `emu-research` got corrections, as small commits; `emu-sensor` needed none. Codegen: a regen does not silently overwrite the hand-edited copies, because `gen.mjs` refuses them. The 25 pending targets cannot be regenerated at all, and the shared `codegen/harness` copies would undo the 2014 fixes if one were derived. Commit `56405fab7` makes the regen reproduce 17 of the 18 managed targets byte for byte (its check mode); the 18th, 1.3.0.0, still refuses one `.gitignore`. The three branches merge into main with no conflict, in the order plan-hygiene, emu-sensor, emu-research, and the checks each branch documents pass on the merged scratch tree. Nothing was merged into FW-V1 main or pushed. No camera, J-Link or switch was used.
