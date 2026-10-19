@@ -9215,3 +9215,72 @@ Options for the owner. Nothing was changed.
 
 - The frame-rate patch (`patchFps`) drops its report after a patch the same way (`if (used) forgetReport()`). The same fix would apply. It is not in the plan item and is left as it is.
 - `packages/core/src/protocol/ops.ts:44` says 0x55 and 0x5a are "used by the flash path only". The info read uses them too, through `readDeviceInfo`. The `FLASH_OPS` header's dump rule is correct; the comment at `:44` is narrower than the code.
+
+### 42.45 The retained memory of the slots bench was the Vite dev server each window started, not Electron: one shared server per run takes the window path from +465 MB to +28 MB over 24 windows (2026-10-19)
+
+**Summary.** The 42.21 finding (about 200 MB per subject, 22 to 30 MB per Electron window, not located) is located, and it is not in Electron. Each bench window (`openBenchPage` through `openTarget('camera')` on the dev source) started its own Vite dev server and closed it with the window. After `close()`, a Vite 8.3.0 dev server's module graph stays reachable, and the transformed code of the page's modules stays in the test worker's heap. The fix is one dev server per process: the windows of a run share it, and the owner closes it when the run ends. On the window path the worker's retained heap went from +465 MB (3 subjects of 8 windows) and +500 MB (2 subjects of 13 windows) to +28 MB once per run. The fake-mode bench opens no windows, so the fix does not change it. The 42.21 figure of about 1 MB per start and close was for a start and close of the same config with no page load (its wording); with the page's modules loaded it is 18 to 31 MB per start and close.
+
+**Tags.** [measured] is read from the probe logs, the heap snapshots and the bench logs. [inferred] is what follows from them.
+
+**1. What was ruled out, and the reproduction.**
+
+- The fake-mode bench does not reproduce the growth: `createFakeRig` opens no Electron window (`spec-fakes.ts`, "no hardware, no Electron"), and the per-window heap lines are written only by `openBenchPage`. Its per-subject heap stayed at 39 MB across both fake subjects. [measured]
+- Electron alone. A window on the static `docs/` bundle, with no Vite server, through `ElectronApp.launch` (the same launcher, no camera, no `connect`): the worker's heap went 27 to 29 MB over three windows (deltas +1, +1, 0). The Electron processes are separate processes and are not in the worker's heap. [measured]
+- The Vite dev server with no Electron. A server started, the page and its modules fetched, and the server closed: +31 and +24 MB per cycle in one run; +30, +18 and +24 MB in a second run. [measured]
+- The bench's own window path (an Electron window on a per-window dev server, no camera): +31, +23 and +22 MB per window. [measured]
+- So the growth belongs to the dev server. The 42.21 note named the server as ruled out, but it was measured with no page load.
+
+**2. The evidence: heap snapshots.** Two heap snapshots of the dev-only run, after cycle 1 and cycle 3 (`v8.writeHeapSnapshot`, 31 MB and 41 MB on disk), diffed by V8 object id (`analyze-snap.mjs`). 117,601 objects are new, 39.5 MB of self size. [measured]
+
+- The largest new groups are the transformed code of the page's modules (`string`, for example the `import { t as __commonJSMin } …` module wrappers at 3.6 MB and 5.3 MB, and the lucide and React license headers), then arrays, objects and closures. No `Uint8Array` or bank image is among the top groups, so the bench's own images are not the growth. [measured]
+- The retaining path of the largest new strings: `(Global handles)` → closure `onWarn` (the rolldown bundler options of Vite's `DevEnvironment`) → its context → the `getEnv` closure → `envs` → `DevEnvironment` → `moduleGraph` → `EnvironmentModuleNode` → `transformResult.code`. The `onWarn` and `onLog` callbacks are passed into rolldown's native binding (`@rolldown/binding-darwin-arm64`). The snapshot shows a global handle still holding the `onWarn` closure after the server closed. Which part of the binding holds it is [inferred]; the binding source was not read. [measured path, inferred owner]
+- One other path in the snapshot ran from the probe's own last-server variable (`(Stack roots)` → the probe's `close` closure). That is the probe holding its last server, not the leak. [measured]
+
+**3. The numbers, the same probe in both modes.** A probe (`zz-window-probe.e2e.ts`, scratch only, not committed) launches `ElectronApp` on `#/`, lets the page settle for 1.5 s, closes the window, and measures the worker heap after two collections. `per-window` starts a dev server per window (the old path); `shared` uses one `sharedDevServer()` for the run. [measured]
+
+| Run                            | Subjects x windows | Worker heap growth per subject | Total   |
+| ------------------------------ | ------------------ | ------------------------------ | ------- |
+| per-window dev server (before) | 3 x 8              | +168, +148, +149 MB            | +465 MB |
+| shared dev server (after)      | 3 x 8              | +28, +1, 0 MB                  | +28 MB  |
+| per-window dev server (before) | 2 x 13             | +260, +241 MB                  | +500 MB |
+| shared dev server (after)      | 2 x 13             | +29, +0 MB                     | +28 MB  |
+
+The 13 windows per subject are the count in the bench flow: the fake run opens 13 windows for each of its two subjects (a temporary counter in `openPage`, reverted). The shared run's first subject carries the one server's transforms (about 28 MB); after that a subject adds nothing. Closing the shared server does not return that 28 MB, which is the same retention once per run. [measured]
+
+A separate three-window shared run also rendered each window: each showed the Info page (title "Seek Thermal Firmware — Info (WebUSB)", 3,760 characters of text, a populated `#root`). [measured]
+
+**4. The fix.**
+
+- `e2e/lib/target.ts:108-113` (`OpenTargetOptions.sharedServer`, camera target, dev source). `e2e/lib/target.ts:121-143` (`sharedDevServer()` at 123 starts one dev server per process, `closeSharedDevServer()` at 135 stops it; a failed start is not cached). `e2e/lib/target.ts:173-189` (`startSource` returns the shared server with a no-op close, so a window's close leaves the server running). `e2e/lib/target.ts:257` (`openCamera` passes the option).
+- `e2e/lib/bench/spec-page.ts:145` (`openBenchPage` passes `sharedServer: true`).
+- `e2e/slots-bench.e2e.ts:47` (import) and `:152-153` (`afterAll` closes the shared server before the report is written).
+- `e2e/pages-bench.e2e.ts:33` (import) and `:222-224` (the top-level `afterAll` closes it; part B is the one that opens windows).
+- Commit `38597d0`.
+
+**5. The fake run, before and after.** `SEEK_E2E_WRITE=dry-run SEEK_BENCH_FAKE=1 NODE_OPTIONS=--expose-gc`, the slots bench, 2 fake subjects. [measured]
+
+|                                                 | before (`a8f16d1`)    | after (`38597d0`)                    |
+| ----------------------------------------------- | --------------------- | ------------------------------------ |
+| heap per subject (`heapUsed`, after collection) | 39 MB and 39 MB, flat | 39 MB and 39 MB, flat                |
+| rss per subject                                 | 150 to 177 MB         | 151 to 175 MB                        |
+| matrix report (JSON and markdown)               | written               | identical (timestamps and ms masked) |
+| tests                                           | 3 passed              | 3 passed                             |
+
+**6. Code and tests.**
+
+- `npx vitest run --config e2e/vitest.config.ts bench-lib.e2e bench-verdict.e2e` (offline): 124 passed, 3 skipped (127). [measured]
+- `tsc --noEmit -p e2e/tsconfig.json`: exit 0. [measured]
+- eslint on the four changed files: clean (one `require-await` on the shared server's no-op close was fixed in the same commit). Prettier `--check` on the four files: clean. [measured]
+- The full vitest and the full e2e suite were not run. The camera was not touched, and the probe was never in `e2e/` at commit time.
+- No test was added. The window path needs Electron and a camera-free launch of the page; the probe above is the check.
+
+**7. Not verified or open.**
+
+- The real matrix was not run (no hardware in this session). The per-subject numbers above are from the window path with no camera. The expected real growth after the fix is about 29 MB once per run; this is inferred, not measured on the bench.
+- The 16 GB setting (`NODE_OPTIONS=--max-old-space-size=16384`) is not needed for this leak once the fix is in, but it is not removed. It is not in any run script in the repo; it appears in this file's commands (42.21, 42.30) and in the owner's shell. The default heap limit on this machine is 4,288 MB.
+- The same retention is in any bench that opens a window on a per-window dev server through `openTarget('camera')` without `sharedServer`. `fps-bench.e2e.ts:142` does this. It was not changed here; its window count per run was not measured.
+- The native handle that keeps Vite's callbacks alive is inferred (the snapshot path ends at the global handle). It is Vite 8.3.0 with rolldown. A Vite upgrade may change this, and the fix stays correct either way.
+- The shared server lives for the whole run. A run that crashes stops the worker, and the server goes with it.
+- The Electron processes' own memory was not measured after the fix (they exit when each window closes).
+- `plan.md` line 68 still reads as running (TESTING.md 42.45). It is not edited here; the owner ticks it.
+- Scratch, not committed: the probe `zz-window-probe.e2e.ts`, `analyze-snap.mjs`, the snapshots (`snap/`) and the logs (`probe/`) under `/private/tmp/claude-501/-Users-yrambler2001-things-a-noindex-seek-seek-thermal-firmware-backup/82174575-1341-45d6-a306-7518156cd978/scratchpad/`.
