@@ -10996,3 +10996,59 @@ This builds the image, packages the plain bank, takes the pre-flash 4 MB rescue 
 **Commits.**
 - FW-V1, branch `plain-2014`, worktree `/private/tmp/claude-501/fwv1-plain2014` (not merged, not pushed): `b2c3c3c09`, on main `fa9b7b126`.
 - Seek: this note, on branch `worktree-agent-a4696271f88802b56`, reset to `refactor/all-firmware-profiles` at `2fd01d3`.
+
+### 42.67 The upgrade target written under boot word 2 is warned, with what B holds; the Connect section shows the unlock note; FPS_32HZ.md's mode 4 line is corrected; three bench lint errors are fixed (2026-10-19)
+
+**Summary.** Four items from `plan.md` (section 1, the word-2 warning and the stale FPS_32HZ.md line; section 2, the Connect note and the bench lint errors). No camera, J-Link or USB switch was used. `packages/cli/test/real-camera-probe.test.ts` is not in this worktree and nothing ran against it. The only emulator runs are the 42.50 suite and one temporary probe of the same kind, both read-only, with `SEEK_EMU_DIR` set to FW-V1's `emu`. Commits on `worktree-agent-a2b91133434452099`: `572304b` (item 1), `7ff0839` (item 2), `e28fb56` (item 3), `d681414` (item 4), and this section.
+
+**Tags.** [measured] is a test or emulator run here. [source] is read from code. [inferred] follows from those.
+
+**1. The warning under boot word 2 (`packages/core/src/workflows/device-info.ts:1342-1412`).**
+
+*What B holds (measured).* A temporary copy of `upgrade-target.emulator.test.ts`, which printed each bank and was deleted before the commit, booted the Compact 4.8.2.1 dump (`2229A0YZ7E28`) with cfg[0] 2. The replay boots R, and the upgrade target is B (the 42.50 row). A, B and R each hold the same image, `f96ac57eda75bca2`: present, bootable, accepted under Key A, footer ok. So B holds a working copy of the image that R runs.
+
+*Whether writing it is a risk (measured for the target, inferred for the failure).* The upgrade writes B, the destination 42.50 measured, and not R, the bank the camera runs. So the running image is not written. A holds the same image, so the write removes one of three copies of it. The new risk is that a write which stops partway leaves B unbootable. That follows from the write path and was not run on a camera. The warning therefore says what B holds, and does not say that the running image is overwritten.
+
+*The text.* On the 4.8.2.1 dump under word 2:
+
+> The camera is running its recovery bank, and its own upgrade writes Slot B, which it is not running. Slot B holds the same bootable image as the bank it runs, which the upgrade replaces; if the upgrade stops partway, Slot B is left unbootable. This is a warning only: nothing here stops an upgrade.
+
+The middle sentence depends on B's verdict on this read: "holds a bootable image" when B's sha256 differs from R's; "is blank, so the upgrade writes into an empty bank"; "bootability is unknown on this read, so the upgrade may replace an image the camera would boot"; "is not shown as bootable on this read, so the upgrade replaces no image the camera would boot"; "could not be read on this check, so what it holds is not known". The booted-bank warning (word 1) is unchanged.
+
+*Where.*
+- Core: `upgradeTargetWhileRecovery` (booted R and target B, `device-info.ts:1342`), `upgradeTargetWarning` (both cases, `:1352`), and the private `recoveryTargetVerdict` (`:1383`). Exported from `workflows/index.ts` and `src/index.ts`.
+- CLI `info`: the text row is the existing `warning:` line under the upgrade target (`info.ts:229`). The JSON gains `boot.upgradeTargetRecovery` (`info.ts:136`); `boot.upgradeTargetWarning` is non-null for this case.
+- The page: `DeviceInfoPanel.tsx:101` and `CameraReport.tsx:94` already call `upgradeTargetWarning`, so they show the new text with no change. The panel names the bank with its page label ("Bank B").
+- Warn only: nothing gates the write.
+
+*Tests.*
+- `packages/core/test/upgrade-target.test.ts`: 13 passed (4 before; 9 new: the predicate, the text, the same and a different image, unknown, not bootable, blank, not read, the page label). The 4.9.1.15-shaped target-A case is still not flagged.
+- `packages/core/test/workflows.test.ts`: 49 passed (unchanged). The two files together: 62 passed.
+- `packages/core/test/slots/upgrade-target.emulator.test.ts`, with `SEEK_EMU_DIR` set: 6 passed, about 95 s, read-only on the emulator. Its 4.8.2.1 word-2 row confirms booted R and target B.
+- `packages/cli/test/camera.test.ts`: 27 passed (25 before). Two new: the word-2 text and JSON on a fixture where A, B and R hold the same image, and word 1 is not flagged as recovery and keeps the booted-bank warning.
+- `packages/web/src/components/DeviceInfoPanel.test.tsx`: 3 passed (one new, word 2). `packages/web/src/components/CameraReport.test.tsx`: 2 passed (new file). `packages/web/src/views/render-smoke.test.tsx`: 18 passed.
+
+**2. The unlock note in the Connect section.**
+- `packages/web/src/components/ConnectSection.tsx`: a new prop `unlocked`, and `{unlocked && <UnlockNote />}` after the device description (`:74`). `App.tsx:184` passes `device.unlocked`. The connection test (`useConnectionTest.ts`) sends no token and does not call `markUnlocked`, so the section only reads the flag.
+- Tests: `components/ConnectSection.test.tsx` (new), 3 passed: the note is inside the Connect section, is hidden while locked, and does not depend on busy or testing. `App.connect-unlock.test.tsx` (new), 2 passed: App passes the flag through, with the real `useDevice` and only its `unlocked` field replaced. `App.test.tsx` and `lib/unlock-seat.test.ts`: 24 passed, unchanged.
+
+**3. `FPS_32HZ.md`, lines 269 to 271.** The bullet said neither mode 4 nor mode 7 is measured on a Compact. Mode 4 is measured there: stock 1.3.0.0 whole-run 26.75 to 32.20 fps (42.54; 42.58 (d) repeats it) and stock 1.3.0.8 28.65 to 31.90 fps (42.54), both with no patch. Mode 7 has no capture program and sends a synthetic ramp (42.43), so it is still not measured. The bullet says so. No other line changed.
+
+**4. Three old lint errors in the FF vendor bench.**
+- `e2e/ff-vendor.e2e.ts:42`, require-await: the write plan is `() => Promise.resolve({...})`, the same object.
+- `e2e/lib/bench/ff-vendor-run.ts:143`, no-base-to-string: `why` is read as text when it is a string, and as empty otherwise. The CLI writes `why` from core's `RunningApplication.why`, which is a string, so every value the CLI writes is unchanged. A non-string would have printed as `String(value)` before; no CLI path writes one.
+- `e2e/lib/bench/ff-vendor-run.ts:321`, no-unsafe-finally: the restore runs only when `touched`, and the `throw` that used to skip it is gone. The old throw was caught by the same try and wrote nothing, so the behaviour is unchanged.
+- The two files were not prettier-clean at HEAD. They are not reformatted here.
+- `npx vitest run --config e2e/vitest.config.ts bench-lib.e2e bench-verdict.e2e`, offline: 143 passed, 6 skipped (the corpus tests need `SEEK_FULL_DUMPS_BY_CAMERA`). The bench tests drive fake execs; the `reset: JLinkExe exit 0` line in the output is a fake.
+
+**Checks.**
+- `tsc --noEmit` for core, the CLI, `packages/web/tsconfig.app.json`, `packages/web/tsconfig.node.json` and `e2e/tsconfig.json`: all exit 0. The core build (`npm run build --workspace @seek-fw/core`) ran so the CLI and web packages see the new exports.
+- ESLint on every changed file: clean. Prettier: clean on every changed file except the two lint-fix files above, which were already unclean at HEAD.
+- No whole-suite vitest was run.
+
+**Not verified, and open.**
+- The 4.8.2.1 facts are emulator measurements. No camera was used. "A write that stops partway leaves B unbootable" is inferred from the write path.
+- The owner's answer in `plan.md` section 1 (2026-10-19) is that word 2 should warn; it does now. The warning fires whenever the target is B under word 2 on any 4.x build. Other builds are not checked.
+- The Connect note is only as good as the flag. The reset-window blind spot in 42.59 is unchanged.
+- The App test replaces the flag. A real session setting it is covered by `usePreservePanel.adoption.test.tsx` (42.59), which was not run here.
+- `plan.md` is not edited. Nothing is pushed or merged.
