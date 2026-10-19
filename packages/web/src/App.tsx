@@ -181,6 +181,7 @@ export function App({ support }: AppProps = {}): ReactElement {
             canForget={device.canForgetDevice}
             busy={runner.busy}
             testing={testing}
+            unlocked={device.unlocked}
             onConnect={onConnect}
             onTest={() => {
               void test();

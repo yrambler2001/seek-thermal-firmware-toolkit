@@ -4,6 +4,7 @@ import type { ReactElement } from 'react';
 import { Plug, PlugZap, Unplug, Waypoints } from 'lucide-react';
 import { Prose } from './Prose';
 import { Section } from './Section';
+import { UnlockNote } from './UnlockNote';
 import { Button } from './ui/button';
 import { Toolbar } from './ui/toolbar';
 import { cn } from '@/lib/utils';
@@ -15,6 +16,8 @@ export interface ConnectSectionProps {
   readonly canForget: boolean;
   readonly busy: boolean;
   readonly testing: boolean;
+  /** The page's one unlock flag for this camera (TESTING.md 42.59). The section only reads it. */
+  readonly unlocked: boolean;
   readonly onConnect: () => void;
   readonly onTest: () => void;
   readonly onForget: () => void;
@@ -27,6 +30,7 @@ export function ConnectSection({
   canForget,
   busy,
   testing,
+  unlocked,
   onConnect,
   onTest,
   onForget,
@@ -66,6 +70,8 @@ export function ConnectSection({
         />
         <span className="min-w-0 [overflow-wrap:anywhere]">{description}</span>
       </p>
+
+      {unlocked && <UnlockNote />}
 
       <Prose>
         <p>
