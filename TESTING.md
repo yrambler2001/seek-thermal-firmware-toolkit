@@ -8893,3 +8893,90 @@ bench row was run.
 **6. Commits.**
 - FW-V1, branch `plan-hygiene`, worktree `/private/tmp/claude-501/fwv1-hygiene` (not merged, not pushed): `89237fef3` (item 1), `623aa7f1f` (item 2), `e7297caed` (item 3).
 - This note: the seek repo commit on branch `worktree-agent-ae97b484abf9c2c54`.
+
+### 42.36 The frame-rate patch on every bank the table offers, on the emulator: B and R written, read back and booted on nine builds; the one bank the table refuses is refused (2026-10-19)
+
+**Summary.** 42.28 and 42.29 proved the frame-rate write on bank A only, and plan.md section 1 kept the open item: the page offers the same patch on B and R. This section runs every bank the verdict table (`e2e/lib/slots-expectations.ts`) offers, on each stage-two and stage-three build the emulator boots, through `patchBankFps`, the function the web page (`useSlotsPanel.ts`) and the CLI both call. The flow is shared in `packages/core/test/slots/fps-patch-banks.ts`. `fps-patch.stage-two.emulator.test.ts` runs six subjects, two of them new to the stage-two suite (the Compact 4.8.2.1 dump and the Compact XR 4.8.2.1 dump). `fps-patch.pro-2016.emulator.test.ts` runs three. Result: 17 bank writes on the Key A line and 9 on the 2016 keystream line pass, each read back decrypted and checked against every other bank. The one bank the table refuses (the 4.9.1.15 dump's bank B) refuses with the table's reason, and nothing is sent. Every patched flash boots, and each B and R boot is judged by a marked bank A (section 4). No camera was used and no frame rate was measured.
+
+**Tags.** [measured] is read from the test runs named below (the `[fps-banks]` lines and the vitest summaries). [source] is read off the code named. [inferred] follows from those.
+
+**1. What each subject checks, in order** [source: `fps-patch-banks.ts`].
+
+- Stock boot: every bank is read with `dumpSlot` (the whole 64 KiB bank and its decrypted image). Each bank is the flash's bank, and each offered bank's image is the table entry's stock image.
+- The refusal the table records: a bank the table does not offer refuses through `patchBankFps` with the table's reason. No save happens, and no 0x50, 0x51 or 0x59 is sent.
+- Each offered bank, in the bench's order B, A, R, after a fresh analysis: the offer is the table's rate on the table's entry; the save gate (a save that does not happen refuses, with no 0x50 or 0x51); the patch (save, write, read-back); the save is the bank as it was; the written image is the stock image with the planned bytes and nothing else; the read-back differs only at the planned bytes; a fresh read decrypts to the patched image; every other bank's raw bytes are unchanged.
+- Boots: after the writes, the boot-a flash holds the three patched banks, and it is booted with the word at 0. For each bank written, a B or R flash holds the patched banks with bank A marked (section 4), and it is booted with the word at 1 (B) or 2 (R).
+
+**2. The Key A line** [measured; `stage-two-run3`, 6 of 6 passed].
+
+| Subject (verdict row) | Rate | Written, read back decrypted, others unchanged | Refused | Booted (word: bank that ran) |
+| --- | --- | --- | --- | --- |
+| Compact 4.8.1.7 image on 4.8.2.1 (`Compact 4.8.1.7 (std)`, no emulator label in the table) | 32 Hz | B, A, R | none | 0: A; 1: B; 2: R |
+| Compact 4.8.1.9 image on 4.8.2.1 (`Compact 4.8.1.9`) | 32 Hz | B, A, R | none | 0: A; 1: B; 2: R |
+| Compact 4.8.2.1 dump (`Compact 4.8.2.1`) | 32 Hz | B, A, R | none | 0: A; 1: B; 2: R |
+| Compact XR 4.8.2.1 dump (`Compact XR 4.8.2.1`) | 32 Hz | B, A, R | none | 0: A; 1: B; 2: R |
+| Compact PRO 4.9.1.15 dump (`Compact PRO 4.9.1.15 (std)`) | 18 Hz | A, R | B: "already runs at 18 Hz (compact_pro-1.0.3.2-FF), so no patch is offered" | 0: A; 2: R. B is not bootable (`accepts` false), so word 1 is not tested |
+| Compact PRO 4.9.2.0 dump (1215A0YZ9AA8) (`Compact PRO 4.9.2.0`) | 18 Hz | B, A, R | none | 0: A; 1: B; 2: R |
+
+- Every write committed with status 0 and verified, and its read-back matched the planned bytes (`readBack.ok` true, `differing` equal to `changed`).
+- The 4.9.1.15 dump's stock boot word is 1, which prefers B; B is not bootable, so A runs. [measured in run 2, the stock word of boot-a]
+- The 4.9.1.15 bank B refusal is the table's `fpsNotOffered`. The table's separate `ownImage` refusal (writing B's own image back) is a page control, checked by `page-expectations.emulator.test.ts`, not by these suites.
+
+**3. The 2016 keystream line** [measured; `pro-2016-run1`, 3 of 3 passed].
+
+| Subject (verdict row) | Rate | Written, read back decrypted, others unchanged | Refused | Booted (word: bank that ran) |
+| --- | --- | --- | --- | --- |
+| Compact PRO 1.0.3.0, 9 Hz native dump (`Compact PRO 1.0.3.0 (std)`) | 18 Hz | B, A, R | none | 0: A; 1: B; 2: R |
+| Compact PRO 1.0.3.0, 9 Hz chimera (`Compact PRO 1.0.3.0 (std)`) | 18 Hz | B, A, R | none | 0: A; 1: B; 2: R |
+| Compact PRO 1.0.3.2, 9 Hz chimera (`Compact PRO 1.0.3.2 (std)`) | 18 Hz | B, A, R | none | 0: A; 1: B; 2: R |
+
+- On every boot of this line the analysis reads each bank as `footerOk` false and `bootability` unknown. The bootloader still ran the bank each word preferred. Why the analysis cannot vouch for the footer is not established here.
+
+**4. How a boot is judged** [measured].
+
+- On the Key A line the active-slot word (roots[8], the word the page reads) follows the boot word on the 4.9.x Compact PRO (words 1 and 2 read 1 and 2) and on the 2016 line. On the 4.8.x line it reads 0 under every word: the patched 4.8.1.7, 4.8.1.9, 4.8.2.1 and XR dumps, and the unpatched 4.8.2.1 dump with words 1 and 2 (a temporary control, not committed). So the word cannot say which bank ran on 4.8.x.
+- The build string decides instead, by the method of the accept suite (42.7). Bank A is marked: the last letter or digit of its build string moved one on, with the sum fixed. A boot that runs A then reports the marked string. Every B and R boot reported the running string, so A did not run, and the bootloader's order for word 1 (B, then A, then recovery R; FPS_32HZ.md section 9) puts B first. [inferred from that order; the marked string is never seen]
+- Bank A is exact, unmarked, in the boot-a flash. Bank A is marked only in the B and R flashes, so a B or R boot checks B or R exactly as patched and A not at all. Bank A's marked image is a test image, not one the page writes.
+
+**5. The runs, including the ones that failed** [measured].
+
+| Run | File | Result | Time | What it showed |
+| --- | --- | --- | --- | --- |
+| Baseline, before this section | stage-two, original file | 4 passed | 76.1 s | The bank A flow of 42.28, unchanged code |
+| Run 1 | stage-two, new flow | 5 failed, 1 passed (4.9.1.15) | 282.5 s | Four subjects failed at the stock check "bank A as the analysis reads it is the flash's bank: expected false to be true". The analysis's `raw` is the image, pad and footer (`bankPayloadSize`), 64 KiB only for some images, not the whole bank. The check compared the wrong length, which was the test's error, and was replaced by a `dumpSlot` read. 4.8.1.7 got through every write and failed "boot-b runs bank B: expected 'a' to be 'b'" (the word method, below). |
+| Run 2 | stage-two, read by `dumpSlot` | 4 failed (4.8.1.7, 4.8.1.9, 4.8.2.1, XR), 2 passed (4.9.1.15, 4.9.2.0) | 498.4 s | Every write, read-back and unchanged check passed. The four failures were the boot check: "the patched flash boots as its boot-config word says: expected [...] to deeply equal []". The active-slot word read 0 under words 1 and 2. A temporary diagnostic (one test, 55.7 s, deleted) showed the unpatched 4.8.2.1 dump reads 0 too, and the patched B alone and the patched R alone do the same. So the word was the discrepancy, not the patch. The build-string method (section 4) replaced it. |
+| Run 3 | stage-two, marked A | 6 passed | 699.6 s | The passing run in section 2. |
+| Run 4 | pro-2016, marked A | 3 passed | 687.4 s | The passing run in section 3. |
+
+- Before the change, the stage-two file had the four subjects of 42.28 and checked bank A only. This section adds the two 4.8.2.1 dumps (both in `FPS_STAGE_TWO_IDS`, both rows offered at 32 Hz, neither in the old file), and writes and boots every offered bank.
+- The emulator's own record of the booted slot sits in the FW-V1 Python machine (`reboot_handoff_r0`, `seekemu/flash_rpc.py`). The TypeScript harness does not read it, and FW-V1 was not changed.
+
+**6. Counts** [measured].
+
+| Check | Count |
+| --- | --- |
+| stage-two subjects passed | 6 of 6 (run 3) |
+| 2016 subjects passed | 3 of 3 (run 4) |
+| bank writes, each read back decrypted | 26 (17 Key A, 9 2016) |
+| save-gate refusals (one per write) | 26 |
+| table refusals (4.9.1.15 bank B) | 1 |
+| marked-A writes (one per subject) | 9 |
+| stock boots | 9 |
+| patched boots | 26 (17 Key A, 9 2016) |
+| `tsc --noEmit -p packages/core` | exit 0 |
+| eslint on the three changed files | exit 0 |
+| prettier --check on the three changed files | clean |
+
+Per-test times are not in the logs for passing tests; the file times above are the measured ones.
+
+**7. Not covered, and what is still open.**
+
+- The page's buttons and dialog were not driven. The suites call `patchBankFps`, the function the page and the CLI call, not the UI.
+- No camera was used. The 32 Hz and 18 Hz rates are the table's values, not measured on the emulator here or on a Compact PRO.
+- The B and R boots use A marked (section 4), not the exact bank the page writes for A. Bank A exact is booted in boot-a only.
+- The active-slot word on the 4.8.x line stays 0, and its cause is not known. The marked-A method is the basis for the B and R boots on that line.
+- The 2016 line's `footerOk` false and `bootability` unknown are not explained (section 3).
+- The save is the test's callback, which returns true. The CLI file save and the browser download are not run here.
+- The verdict-table row `Compact 4.8.1.7 (std)` has `emulator: null`. The stage-two test maps its 4.8.1.7 image subject to that row by name, so the link lives in the test. The table itself is not changed.
+- Not in these suites: the Compact PRO FF builds (`Compact PRO 1.0.3.0 (FF)`, `1.0.3.2 (FF)`, `FF-FF`, `FF 4.18.2.0`), the Compact 4.16.1.7 FF (every bank refused by the page), and the Key A `ownImage` refusal of the 4.9.1.15 bank B.
+- plan.md section 1's line "Stage two and three on the emulator write bank A only" is not edited here (the task forbids it). The B and R writes and boots are proven on the emulator by this section; the bench is not.
