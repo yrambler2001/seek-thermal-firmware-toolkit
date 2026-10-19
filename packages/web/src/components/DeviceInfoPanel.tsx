@@ -127,7 +127,9 @@ export function DeviceInfoPanel({ state }: DeviceInfoPanelProps): ReactElement {
           <Prose className="mt-2.5">
             <p>
               Confirmed by matching a slot&apos;s keystream state, recovered from the ciphertext
-              itself. Key&nbsp;A is what an upload has to be encrypted with.
+              itself. An upload is built so each bank stores it under the bootloader&apos;s store
+              key ({state.storeKey.name}), or under the booted bank&apos;s own key where the
+              application&apos;s store key is not that one.
             </p>
             <p>
               Each slot was decrypted in the browser by solving for its keystream from its own

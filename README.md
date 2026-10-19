@@ -593,7 +593,8 @@ the tool does the packaging:
 2. tunes the reserved adjust word at `+0x238` so the 32-bit word sum over `header.length` bytes is
    `0x0000FFFF`, the bootloader's acceptance target;
 3. encrypts the image under keys derived from that camera's own read, so the camera stores it under a
-   key its bootloader tries (usually Key A; see `packages/core/src/slots/write-keys.ts`);
+   key its bootloader tries (the store key, or the booted bank's key where the application's store key
+   differs; see `packages/core/src/slots/write-keys.ts`);
 4. appends `0xff` padding and a 64-byte `"CODE"` footer at `((header.length>>14)+1)*0x4000 - 0x40`. The
    footer keeps the image id, version and model string from the footer already on the device, and only
    the length is patched;
@@ -787,9 +788,11 @@ seek-fw slots patch-fps a                                     # frame-rate patch
 ```
 
 - **Flash a decrypted image.** The page stamps the length, balances the acceptance sum and encrypts
-  the image the way that generation needs: under the camera's Key A on the 2017+ line (the camera
-  re-encrypts it under its own store key), under the image's block-0 key stream on the 2016 Compact
-  PRO (the camera re-encrypts it into the bank's key), plain on the 2014 plaintext chain.
+  the image the way that generation needs: on the 2017+ line under keys derived from that camera's own
+  read, so each bank stores the image under the store key, or under the booted bank's key where the
+  application's store key differs (the camera re-encrypts the upload under its own store key), under
+  the image's block-0 key stream on the 2016 Compact PRO (the camera re-encrypts it into the bank's
+  key), plain on the 2014 plaintext chain.
 - **Compact 1.3.0.8: two builds, one version string.** The 8 Hz build and the 16 Hz FF build report the
   same version. The image tells the page what it is (a stored word sum of 0 is the 8 Hz plain chain; an
   image carrying the FF key pair is the FF build), and the **camera** says which build runs: GetFirmwareInfo
