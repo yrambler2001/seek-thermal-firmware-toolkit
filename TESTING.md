@@ -10337,3 +10337,37 @@ The fps bench printed no heap line. The patched bank's sha was not read separate
 - `plan.md` is not edited. The 42.43 and 42.53 claims above are corrected in this section and not in those sections.
 
 **Commits.** This section, `boot-choice.ts`, `boot-choice.test.ts` and the new emulator test, on branch `worktree-agent-a44d6a26bf71f1ff2` on top of `2536569`.
+
+### 42.57 The page's unlock note on the Dump and Preserve panels; the Info tab sends no token, so it gets none (fakes only, 2026-10-19)
+
+**Summary.** `plan.md` said the page's Info, Dump and Preserve panels send the token through the identify probe and show no note. Checked per panel in the code, with `SeekDevice.unlockTokenAccepted` as the test, two of the three send it and now show the same note as the slots page (42.55). The Info tab sends nothing that unlocks, so it gets no note: a note there would say the camera is unlocked when it is not. No camera, J-Link or USB switch was used. Nothing gates on the note.
+
+Setup: the worktree was reset to `refactor/all-firmware-profiles` (4c35a5c). Its old HEAD, `cf5420b`, was an ancestor of the target, so nothing was lost. The `@seek-fw` links were made in `node_modules`, and `packages/core` was built with `npm run build --workspace @seek-fw/core`. Code: commit `66235b7`; this section is the commit after it.
+
+**Which panels send the token.** Tags: [source] is read from code, [measured] is a test run in this session.
+- **Dump** (the 4.x/Nano tab, `useDumpPanel`: "Start dump" and "Dump all selectors"). `chooseActingProfile` (`useDumpPanel.ts:173`) runs core's `identifyCamera`. Its step 3 is the 18-byte authenticated arm of subcommand 5 (`packages/core/src/workflows/capability.ts:546-550`), and `armWindow` records an accepted arm (`packages/core/src/protocol/client.ts:251`). The probe runs after the version read and the 0.x/1.x line refusal (`useDumpPanel.ts:156-162`), so a 4.x-line camera is unlocked even when the run is then refused for its family. [source]
+- **Preserve** (the wizard, `usePreservePanel`). The backup step reads its windows through `backupWindows` (`packages/core/src/preservation/pipeline.ts:463`), which arms every entry of `preservationWindows()` (`pipeline.ts:496`). Modes 3 to 9 of that list are in token form (`packages/core/src/preservation/windows.ts:127`). The commit's pre-check reads the bank through `readBankHead`, which arms `bankWindow` in token form (`steps.ts:1572`, `windows.ts:148`). The drain's widened window is token form too (`pipeline.ts:777`, `windows.ts:232`). [source]
+- **Info** (`useInfoPanel`) does not. Its only camera call is `readRunningFirmware` (`useInfoPanel.ts:81`, `capability.ts:340`), which reads GetFirmwareInfo and arms nothing; the Info tab never runs the probe. [source] Measured: a read of a 4.18.2.0 build sends no `BeginFirmwareUpgrade` (the new test in `useInfoPanel.test.tsx`).
+- Checked, not sending: the connection test (`useConnectionTest.ts`: GetOperationMode and GetErrorCode only), and the two offline decrypt hooks, which never reach a camera. The CLI `info` does send the token by default (42.55); that is the CLI's behaviour, not the page's.
+
+**Change.**
+- `packages/web/src/components/UnlockNote.tsx` (new): the one note, an `Alert tone="warn"` with `UNLOCK_POWER_CYCLE_NOTE`. SlotsView's local copy is removed (`SlotsView.tsx:31`, `:391`). V4View uses the shared note (`V4View.tsx:20`, `:115`), and PreserveView does too (`PreserveView.tsx:36`, `:246`).
+- `useDumpPanel.ts`: `unlockNote` in `DumpPanelApi` (`:85`). It is set in the run's `finally`, from the run's own client (`:236`), so a refused or cancelled run that got as far as the probe still counts. It is cleared on a camera change (`:141`), as the slots panel clears its note.
+- `usePreservePanel.ts`: `unlockNote` in the API (`:232`) and as state (`:296`). Each opener keeps the sessions it made (`:363`, `:401`), and its `close` reads them before the transports go (`:365`). Core calls `close` after each step, and the phase calls it again in `finally`. The note is not cleared on a camera change: the wizard's own resets re-enumerate the same camera, and the note errs toward showing.
+- `SlotsView.tsx`: the frame-rate doc comment is back above `FpsOutcomePanel`. 42.55 had left it above the note.
+- No change to core, the CLI or `useInfoPanel`.
+
+**Tests.** `npx vitest run --project web` on the eight files this touches: 174 passed, against 166 before. Per file, after the change: useDumpPanel 17 (3 new), useInfoPanel 6 (1 new), usePreservePanel.adoption 13 (2 new), useSlotsPanel 51, PreserveView 17 (1 new), SlotsView 48, SlotsView.verdicts 6, render-smoke 16 (1 new, V4View). [measured]
+- Dump: shown after a run whose probe sent the 18-byte arm (`scriptedCamera`, 4.18.2.0), and the archive is still packaged. Not shown after a run refused before the probe (0.3.0.1, legacy). Cleared on a camera change.
+- Preserve: shown after a phase whose session accepted the token. The fake step calls `noteBeginAccepted` on its own session, as an accepted arm does, then closes it. Not shown after a phase whose sessions sent none.
+- Info: a 4.18.2.0 read sends no `BeginFirmwareUpgrade`.
+- Views: PreserveView and V4View show the note only when the flag is set, and the run buttons ("Start dump", phase ①) stay enabled.
+- `npx tsc --noEmit -p packages/web/tsconfig.app.json`: clean. eslint and `prettier --check` on the eleven changed files: clean.
+
+**Not measured or open.**
+- No camera run. The Dump and Preserve notes rest on fakes: a scripted camera for Dump, fake USB units and a fake step for Preserve. The Preserve test sets the accepted-token flag itself. The arm path that sets it is covered by core's protocol test (42.55).
+- A Dump refused for its family after the probe sent the token should show the note under the refusal. That path is not tested, since no fake gives a camera of another family.
+- The notes are per panel, and the camera stays unlocked across panels. A Slots read does not show the Dump note, and the reverse. Whether the page wants one page-wide flag is the owner's call.
+- The Preserve note is not cleared on a camera swap. The wizard stops on a swap (`stopForSwap`), but a reset's re-enumeration looks the same from the hook, so the hook does not try to tell them apart.
+- 42.55's open item, "a page note on those panels is a decision for the owner", is answered here: Dump and Preserve show it, and Info does not, since it sends nothing.
+- Commits: code `66235b7` on `worktree-agent-a68a3b04f152bfffe`. Nothing was pushed or merged. `plan.md`, FW-V1 and `packages/core` were not changed.
