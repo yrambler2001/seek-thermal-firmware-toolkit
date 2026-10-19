@@ -11187,3 +11187,80 @@ The middle sentence depends on B's verdict on this read: "holds a bootable image
 **Not run.** `packages/cli/test/real-camera-pages.test.ts` (real camera; only its regexes changed). No core test (no core file changed). No whole-suite vitest.
 
 **Not verified.** The README's "2017+ line" label for the modern Key A path is kept as written. The "What it writes" section names the modern line as 2.x, 4.x, 10.x, 42.x and 44.x, so the two may not line up; not checked against the builds here.
+
+### 42.70 The 42.66 plain bank written to bank B by `build_flash.mjs --flash --slot b` boots on the bench camera: 1.3.0.0 runs from B, Normal streams at a median of 8.03 fps with pictures, and the start image is restored (2026-10-19)
+
+**Summary.** Agent 42.70, on `worktree-agent-a8b44f89035c1c6e7`, reset to `refactor/all-firmware-profiles` (c0d6937, 42.68). The FW-V1 `plain-2014` build (`b2c3c3c09`, 42.66) was run on the bench camera (PIR206, serial `101310HSNEA2`). Its plain bank went to bank B (0x14060000) and boot word 1 was set. The camera enumerates, runs 1.3.0.0, and the CLI reports bank B as booted (active-slot word 1). The Normal stream reads a median of 8.03 fps over the steady reads, with pictures in every frame. **Result: pass.** The start image was then written back (`cmp` silent, exit 0), and the camera was power-cycled. No FW-V1 file was changed and no FW-V1 commit was made.
+
+**Tags.** [measured] is a command or bench run here; the logs are under `/private/tmp/claude-501/agent-hw8/`. [source] is read from the code named. [inferred] follows from the measurements and was not measured directly.
+
+**Setup.** The worktree was reset from `cf5420b` to `c0d6937` (clean before the reset). It had no `node_modules`, so `npm ci` ran first (exit 0, `npm-ci.log`). Then `node_modules/@seek-fw/{core,cli,web}` were linked, and `npm run build --workspace @seek-fw/core` and `--workspace @seek-fw/cli` both exited 0. [measured]
+
+**1. Start.** Channel 1 was cycled (3 s), with an 8 s wait, and `node tools/jlink/jlink-runner.js dump-spifi-4m-halted` ran in FW-V1 main `targets/compact_8hz_1_3_0_0`. The copy `start-4m.bin` has sha256 `50e900c23ff4bb7e0a5a30fc5879f6ed276289e43aeace2f9ab74eaec9b01d7d`, as the brief expects. It is byte-identical to the 42.65 start image (`agent-hw6/start-4m.bin`, checked by `cmp`). Boot word 0 is 0 (A first). The banks, by their 47,768-byte images: A `ef90c94a`, B `d91284c6`, R `d91284c6`. [measured]
+
+**2. The build (`s2-build-flash.log`, exit 0).** The command was `cd /private/tmp/claude-501/fwv1-plain2014/targets/compact_8hz_1_3_0_0 && node tools/build_flash.mjs --flash --slot b`. Its steps, as printed:
+- `=== build: make target-image [branch plain-2014]`. The image is `build/image.bin`, 47768 B, sha256 `862717a8a605021def7858ac0c04ad4aa1abe23d357d6c2417699939137f481c`. It is byte-exact to `base/compact_8hz_1_3_0_0/firmware_to_be_reconstructed.bin`.
+- `=== package: plain 2014 bank`. `bank ok: plain 2014 bank 0x10000 B, header.length 0xba98, word sum 0, no footer`.
+- `=== pre-flash`. A 4 MB dump went to `jlink_dumps/spifi_14000000_4m.bin` and was archived as `jlink_dumps/pre_flash_2026-10-19T17-04-10.bin`. That archive is byte-identical to `start-4m.bin` (`cmp`).
+- `=== flash`. `Validated plain 2014 bank …/build/bank_payload.bin: 0x10000 B, header.length 0xba98, word sum 0, no footer`. Then `loadbin` to 0x14060000 gave `1 range affected (65536 bytes)`, and `verifybin` gave `Verify successful`.
+- `=== boot selector: cfg[0]=1 (slot B)`. `loadbin` to 0x14010000 and `verifybin` both succeeded.
+- `=== reset and run`, then `=== post-flash`, then `=== done: base/compact_8hz_1_3_0_0 is in slot B and selected`.
+- The runner printed `CPU could not be halted` on several of these steps. The reads and writes still completed, and no step refused. [measured]
+
+**3. The flash, by a halted dump (`s3-dump-bankB.log`, `s3-bankB-4m.bin`, sha256 `1659ab5ba1c0d8bfda6e4523c11dac4dca0074c7f0326029eabf4fd393d97bbf`).** The halt succeeded on this dump. The byte checks are from `scripts/check_bankB.py` and `scripts/final_checks.py`.
+- Bytes 0x60000..+0x10000 equal `build/bank_payload.bin` (sha256 `5cbbdd0f…5b2a`): yes, all 65536 bytes.
+- Boot word at 0x14010000 is `0x00000001` (the words are 1, 0x14050000, 0x14060000, 0x14070000).
+- Banks A (0x50000) and R (0x70000) are unchanged from the start dump, 64 KiB each. Across the 4 MiB, 22 bytes differ from the start: 1 in the boot-config block (0x10000) and 21 in bank B (0x60000).
+- Bank B against the owner's factory bank A: the new bank B equals the original factory bank A byte for byte over 64 KiB. That reference is `SEEK_FULL_DUMPS_BY_CAMERA/Compact/Compact/2014.10.21-14.58.29-1.3.0.0/full_dump_original.bin` (sha256 `40447c7e…eb72`), and its bank A is at 0x50000. Both banks have magic `0xA1B2C3D4` at +0x200, `header.length` 0xba98 at +0x204, a raw word sum of 0 over the length, sum word 0 at +0x238, and 0xFF after the image. [measured]
+- Bank B against the bench's bank A at the start (`ef90c94a`): not equal. Within `header.length`, 13 bytes differ, and it is not only the sum word. Four are the sum word at 0x238..0x23b (`0x198947e5` in the start bank A, 0 in B). Nine are at 0xb898..0xb8a1. The start bank A differs from the owner's factory bank A in exactly those 13 bytes. [measured]
+- The start bank A is therefore not the owner's factory image. The 42.65 notes say it held a 32 Hz patch on the bench, which fits the 13 bytes. [inferred; the patch was not reread here.] The start bank B and R (both `d91284c6`) differ from the factory bank A in 21 bytes each, within `header.length`. [measured]
+
+**4. The camera's answers (channel 1 off, channel 2 cycled, 10 s wait).**
+- `node packages/cli/dist/bin.js info --json` (`s4a-info.json`, `s4a-info.err`, exit 0, `readAt` 2026-10-19T17:07:23Z):
+  - It enumerates: PIR206 Thermal Camera, `0x289d:0x0010`, firmware serial `101310HSNEA2`.
+  - Running firmware 1.3.0.0 (Oct 21 2014). Bootloader 0.9.0.0 (Sep 29 2014). Profile legacy-auth, score 0.98, not ambiguous.
+  - `cfg0` 0x00000001, `activeSlotWord` 0x00000001, `booted` b, `upgradeTarget` a.
+  - Key A and key B not identified, and the store key is not programmed, as on the 2014 chain. `canFlash` true, `flashBlockedBy` [].
+- `node packages/cli/dist/bin.js slots list` (`s4a-slots.out`, exit 0). The "Boot" block says: "next start runs slot B" and "last start the camera reports it entered slot B (active-slot word 1)". The "Banks" table:
+
+| bank | address | active | version | size | bootable | sha256 |
+| --- | --- | --- | --- | --- | --- | --- |
+| A | 0x14050000 | no | 1.3.0.0 | 47768 B | yes | ef90c94a448b69fe |
+| B | 0x14060000 | yes | 1.3.0.0 | 47768 B | yes | 862717a8a605021d |
+| R | 0x14070000 | no | 1.3.0.0 | 47768 B | yes | d91284c65a5dfde6 |
+
+- The CLI's own note says A and R "hold frame-rate patches, but neither runs". [source: the CLI text]
+- **Pass condition: met.** The camera enumerates, runs 1.3.0.0, and reports bank B as booted.
+
+**5. The fps checker (`s4b-fps-read1..8.log`, `s4b-stream-picture.log`).** The channel was cycled, with a 10 s wait, then the 42.65 invocation ran: `node --import ./e2e/lib/bench/seek-fps/register.mjs e2e/lib/bench/seek-fps/seek-fps.ts --camera --fps --mode normal --no-hifps --no-opzero`. That was eight reads on one boot. The table lists the five per-second medians in each read.
+
+| read | per-second medians (fps) | steady |
+| --- | --- | --- |
+| 1 | 7.21 7.82 8.04 7.90 8.04 | no (the first read after the cycle) |
+| 2 | 8.05 8.05 8.02 8.16 8.04 | yes |
+| 3 | 7.97 8.06 7.95 8.03 8.02 | yes |
+| 4 | 7.97 8.04 7.93 8.03 8.04 | yes |
+| 5 | 8.05 8.08 8.03 8.03 8.04 | yes |
+| 6 | 8.04 7.96 8.01 8.02 8.05 | yes |
+| 7 | 8.07 7.13 8.05 7.79 8.05 | no (7.13 and 7.79) |
+| 8 | 7.97 8.05 8.03 8.06 7.99 | yes (final) |
+
+- "Steady" is my rule: all five medians within 7.7 to 8.3 fps. Reads 2 to 6 and 8 pass it, which gives 30 medians with a median of 8.03 and a range of 7.93 to 8.16. The final steady read is read 8, median 8.03.
+- Stock 1.3.0.0 Normal is about 8 fps, as the brief says. The 32 Hz patch that 42.65 measured on bank A would read near 32, so these reads are not bank A. [inferred from the rates]
+- **Picture.** `stream -n 5 --no-hifps` (`s4b-stream-picture.log`): every frame has status 3, `frozenPairs=0`, and 94 to 97% of pixels change between consecutive frames. The min, max and avg values move each second. The frames carry a picture.
+- **Count caveat.** In every read, the five one-second windows total 27 frames, which is 5.40 fps by count. The stream shows 5 frames a second. The camera's `frameCnt` advances about 33 a second. The checker headlines the median of the instantaneous intervals, so the median is what is recorded above. The gap between median and count is not explained here. It resembles the host-side single skips of 42.62 and 42.65 [inferred].
+
+**6. Restore and end.**
+- Channel 1 was cycled (3 s), with an 8 s wait. Then `FACTORY_IMAGE=/private/tmp/claude-501/agent-hw8/start-4m.bin node tools/jlink/jlink-runner.js flash-factory-4m-2` ran (exit 0, `s6-restore.log`). The plan was `2 of 64 blocks differ -> 2 run(s): 0x14060000+0x10000 0x14010000+0x10000`. Both blocks were `attempt 1: verified`, and the result was `DONE: the part reads back byte-identical to the image (50e900c2…01d7d)`.
+- A fresh halted dump, after another channel-1 cycle and an 8 s wait (`s7-dump-end.log`), was copied to `end-4m.bin`. Its sha256 is `50e900c23ff4bb7e0a5a30fc5879f6ed276289e43aeace2f9ab74eaec9b01d7d`. `cmp start-4m.bin end-4m.bin` was silent, with exit 0.
+- Channel 2 was power-cycled at the end, and channel 1 was left off (`OK 1=off 2=on`). The camera runs the start image again, with boot word 0.
+
+**Not measured, or open.**
+- The B boot rests on the CLI's active-slot word (1), with B in the stock image. The fps does not separate B from R on its own. The CLI says R holds a frame-rate patch, but R was never booted, so its rate is unknown.
+- The channel 1 instruction ("leave channel 1 so the J-Link does not hold the camera") was read as "leave channel 1 off". It was on at the start (`OK 1=on 2=on`). The owner should confirm this reading.
+- The source of the 27-frames-in-5-s count, and of the frame counter's rate of about 33 a second, is not established (section 5).
+- The 13-byte difference between the start bank A and the factory bank A is [inferred] to be the 42.65 patch. The patch's own bytes were not compared here.
+- "CPU could not be halted" appeared on several runner steps (section 2). The dump after the flash halted cleanly.
+- The camera was not checked after the final power cycle, to avoid unlocking it.
+
+**Commits.** TESTING.md only, on the worktree branch `worktree-agent-a8b44f89035c1c6e7`. No FW-V1 commit was made. The scripts used for the byte checks are under `/private/tmp/claude-501/agent-hw8/scripts/`, not in the repo.
