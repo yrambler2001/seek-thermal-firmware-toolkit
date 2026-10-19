@@ -6,8 +6,11 @@
  *   - cfg[0], the boot-config word at 0x14010000. The analysis arms the mode-3 window on every read
  *     and keeps the word as DeviceState.cfg0. The NEXT start uses it.
  *   - the active-slot word, roots[8] (GetFirmwareInfo selector 10), kept as DeviceState.activeSlotWord.
- *     The bootloader writes it at every start (bootloader src/startup.c, `handoff->slot`): 0 is slot A,
- *     1 is slot B, 2 is recovery R. It is what the camera RAN at its last start.
+ *     It is the app's RAM cell 0x1000AED0, not the bootloader's handoff: the bootloader records the slot
+ *     it enters in the warm-boot handoff (bootloader src/startup.c, `handoff->slot`). The 4.x factory app
+ *     never writes the cell (TESTING.md 42.43), so the word reads 0 on every 4.x boot. The 2014 and 2016
+ *     factory images were not checked for it. Only the 2014 plaintext chain reports it as a bank (below):
+ *     0 is slot A, 1 is slot B, 2 is recovery R.
  *
  * WHICH BANK A START RUNS, from the word (bootloader src/image.c, boot_select_image):
  *   0 or 0xFFFFFFFF: A if it passes the check, else B if it does, else R, which is not checked.
@@ -21,7 +24,7 @@ import { identifyFpsImage, FPS_MEASURED_HZ } from '../preservation/fps-patch.js'
 import type { SlotKey } from '../profiles/types.js';
 import type { DeviceState, SlotState } from '../workflows/types.js';
 import { fpsPlanOfBank } from './fps-patch.js';
-import { plainBankVerdict } from './running.js';
+import { onPlaintextChain, plainBankVerdict } from './running.js';
 import type { SlotsReport } from './types.js';
 
 /** The banks, in the order the page and the CLI list them. */
@@ -41,8 +44,8 @@ export function bankWordsOf(key: SlotKey): string {
 }
 
 /**
- * The bank the camera reports it entered at its last start: the active-slot word (roots[8]) as the
- * bootloader writes it, 0 slot A, 1 slot B, 2 recovery R. Null for any other value, or when unread.
+ * The bank the active-slot word names: 0 slot A, 1 slot B, 2 recovery R. Null for any other value, or
+ * when unread. This is the mapping only; bootChoiceOf decides which lines it is reported on.
  */
 export function reportedBootedOf(activeSlotWord: number | null): SlotKey | null {
   if (activeSlotWord === 0) return 'a';
@@ -59,7 +62,11 @@ export interface BootChoice {
   readonly word: number | null;
   /** The bank the next start runs, or null when a bank the word needs was not read. */
   readonly runs: SlotKey | null;
-  /** The bank the camera reports it entered at its last start (the active-slot word), or null. */
+  /**
+   * The bank the camera reports it entered at its last start, from the active-slot word. Only on the
+   * 2014 plaintext chain; null on every other line, where the word is not established as a boot record
+   * (TESTING.md 42.43), and null when the word is unread or names no bank.
+   */
   readonly reportedBooted: SlotKey | null;
   /** One sentence: the word's rule and the bank it gives, or what could not be checked. */
   readonly why: string;
@@ -137,9 +144,14 @@ function selectRunning(word: number, accepts: Readonly<Record<SlotKey, Verdict>>
  * word asks for it or when A and B both fail, whatever R holds.
  */
 export function bootChoiceOf(
-  state: Pick<DeviceState, 'cfg0' | 'activeSlotWord' | 'byKey'>,
+  state: Pick<DeviceState, 'cfg0' | 'activeSlotWord' | 'byKey' | 'profile' | 'version'>,
 ): BootChoice {
-  const reportedBooted = reportedBootedOf(state.activeSlotWord);
+  /* The word is reported as a bank on the 2014 line only: that is where the page names the booted
+   * bank from it (device-info.ts chainReplay). On 4.x the factory app leaves it 0 (42.43), so it is
+   * not reported there; 2016 is not checked, so it is not reported there either. */
+  const reportedBooted = onPlaintextChain(state.profile, state.version)
+    ? reportedBootedOf(state.activeSlotWord)
+    : null;
   if (state.cfg0 === null) {
     return {
       word: null,

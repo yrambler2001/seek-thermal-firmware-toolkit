@@ -110,7 +110,7 @@ describe('seek-fw info', () => {
       ok: boolean;
       canFlash: boolean;
       keys: { keyA: string | null };
-      slots: { name: string; bootable: boolean; accepts: boolean }[];
+      slots: { name: string; bootable: boolean; accepts: boolean; footerOk: boolean | null }[];
       boot: { booted: string | null; upgradeTarget: string | null };
     };
     expect(parsed.ok).toBe(true);
@@ -121,7 +121,8 @@ describe('seek-fw info', () => {
       ]) as unknown,
     });
     expect(parsed.boot).toMatchObject({ booted: 'a', upgradeTarget: 'b' });
-    expect(parsed.slots[0]).toMatchObject({ accepts: true, bootable: true });
+    /* 4.x checks the footer: a bootable bank has one, so footerOk is a real answer here */
+    expect(parsed.slots[0]).toMatchObject({ accepts: true, bootable: true, footerOk: true });
     expect(parsed.canFlash).toBe(true);
   });
 
@@ -150,7 +151,12 @@ describe('seek-fw info on a 2016 Compact PRO (1.0.3.0)', () => {
     const parsed = JSON.parse(stdout.text) as {
       profile: { actedUnder: { id: string }; detected: { id: string; ambiguous: boolean } };
       firmware: { bootloaderVersion: string | null };
-      slots: { accepts: boolean; footerOk: boolean; bootable: boolean; bootability: string }[];
+      slots: {
+        accepts: boolean;
+        footerOk: boolean | null;
+        bootable: boolean;
+        bootability: string;
+      }[];
       canFlash: boolean;
       flashBlockedBy: string[];
     };
@@ -158,9 +164,10 @@ describe('seek-fw info on a 2016 Compact PRO (1.0.3.0)', () => {
     expect(parsed.profile.detected).toMatchObject({ id: 'compact-2016', ambiguous: false });
     expect(parsed.firmware.bootloaderVersion).toBe('1.2.0.0');
     for (const slot of parsed.slots) {
+      /* compact-2016's bootloader reads no footer, so footerOk is not applicable (null), not false */
       expect(slot).toMatchObject({
         accepts: true,
-        footerOk: false,
+        footerOk: null,
         bootable: false,
         bootability: 'unknown',
       });

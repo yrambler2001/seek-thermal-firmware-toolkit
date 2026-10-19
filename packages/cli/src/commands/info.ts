@@ -39,7 +39,11 @@ import {
   type Session,
 } from './shared.js';
 
-function slotJson(slot: SlotState): Record<string, unknown> {
+/**
+ * One bank as JSON. `footerOk` is null where the profile's bootloader reads no footer (BootPolicy.checksFooter
+ * is false: the locked 0.x/1.x line). The flash has none there, so "false" would report a fault it does not have.
+ */
+function slotJson(slot: SlotState, checksFooter: boolean): Record<string, unknown> {
   return {
     key: slot.key,
     name: slot.name,
@@ -54,7 +58,7 @@ function slotJson(slot: SlotState): Record<string, unknown> {
     model: slot.footer?.model ?? null,
     key_name: slot.keyName,
     accepts: slot.accepts,
-    footerOk: slot.footerOk,
+    footerOk: checksFooter ? slot.footerOk : null,
     bootable: slot.bootable,
     bootability: slot.bootability,
     sha256: slot.sha256,
@@ -134,7 +138,7 @@ export function stateJson(state: DeviceState): Record<string, unknown> {
       storeKey: { name: state.storeKey.name, programmed: state.storeKey.programmed },
       perDeviceKey: state.deviceKeySlot === null ? null : bytesToHex(state.deviceKeySlot),
     },
-    slots: state.slots.map(slotJson),
+    slots: state.slots.map((slot) => slotJson(slot, state.profile.boot.checksFooter)),
     /* 1.3.0.8 only: the camera's own per-bank answers (GetFirmwareInfo selectors 6, 7, 8) and what they decide. */
     running: runningJson(state),
     familyOk: state.familyOk,

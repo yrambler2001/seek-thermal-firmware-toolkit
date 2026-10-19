@@ -24,6 +24,7 @@ import {
   fpsPatchHeldBy,
   reportedBootedOf,
 } from '../../src/slots/boot-choice.js';
+import { getProfile } from '../../src/profiles/registry.js';
 import type { SlotKey, SlotsReport } from '../../src/slots/types.js';
 import type { DeviceState, SlotState } from '../../src/workflows/types.js';
 
@@ -85,6 +86,9 @@ function reportWith(options: {
   readonly banks: Partial<Record<SlotKey, BankSpec>>;
   readonly activeSlotWord?: number | null;
   readonly plainChain?: boolean;
+  /** The acting profile and the build's version. Default: legacy-auth on 1.3.0.0, the 2014 chain. */
+  readonly profile?: string;
+  readonly version?: string;
 }): Fixture {
   const patched = new Set<Uint8Array>();
   const byKey = new Map<SlotKey, SlotState>();
@@ -93,6 +97,8 @@ function reportWith(options: {
     cfg0: options.cfg0,
     activeSlotWord: options.activeSlotWord ?? null,
     plainChain: options.plainChain ?? true,
+    profile: getProfile(options.profile ?? 'legacy-auth'),
+    version: options.version ?? '1.3.0.0',
     byKey,
   } as unknown as DeviceState;
   const slots = KEYS.map((key) => ({
@@ -199,16 +205,48 @@ describe('bootChoiceOf: which bank the next start runs', () => {
     expect(choice.why).toContain('was not read');
   });
 
-  it('reports the bank the active-slot word records, 0 A, 1 B, 2 R, and nothing else', () => {
+  it('maps the active-slot word to a bank, 0 A, 1 B, 2 R, and nothing else', () => {
     expect(reportedBootedOf(0)).toBe('a');
     expect(reportedBootedOf(1)).toBe('b');
     expect(reportedBootedOf(2)).toBe('r');
     expect(reportedBootedOf(3)).toBeNull();
     expect(reportedBootedOf(null)).toBeNull();
+  });
+
+  it('reports the word as the booted bank on the 2014 plaintext chain', () => {
     const choice = bootChoiceOf(
       reportWith({ cfg0: 2, banks: ALL_OK, activeSlotWord: 2 }).report.state,
     );
     expect(choice.reportedBooted).toBe('r');
+    expect(choice.runs).toBe('r');
+  });
+
+  it('does not report the word as a booted bank on 4.x, where the factory app never writes it', () => {
+    /* The 4.x word reads 0 on every boot (TESTING.md 42.43): slot A here, whatever runs. */
+    const modern = reportWith({
+      cfg0: 1,
+      banks: ALL_OK,
+      activeSlotWord: 0,
+      profile: 'modern-4x',
+      version: '4.8.2.1',
+    });
+    const choice = bootChoiceOf(modern.report.state);
+    expect(choice.reportedBooted).toBeNull();
+    expect(choice.runs).toBe('b');
+    expect(choice.why).toContain('the boot-config word is 1');
+  });
+
+  it('does not report the word as a booted bank on 2016, where it is not checked', () => {
+    const choice = bootChoiceOf(
+      reportWith({
+        cfg0: 0,
+        banks: ALL_OK,
+        activeSlotWord: 1,
+        profile: 'compact-2016',
+        version: '1.0.3.0',
+      }).report.state,
+    );
+    expect(choice.reportedBooted).toBeNull();
   });
 
   it('says what each word means, in the words the CLI prints', () => {
