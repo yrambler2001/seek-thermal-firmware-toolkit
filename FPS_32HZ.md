@@ -190,6 +190,8 @@ with that build's 32K sensor (FW-V1's `--flash-entry`, TESTING.md 42.42). That n
 Before it, a `--flash` part got no frames, because the sensor was attached only for a corpus-entry boot. The Python rows below are the
 other route; the 1.3.0.8 copy's emulator rate was measured through them.
 
+**Lost frames on the checker's reads.** The checker can keep several bulk INs pending for each frame: `--in-flight`, default 3 (TESTING.md 42.75, from the host timing in 42.74). On the bench it reads one at a time. Its USB stack, node-usb 3.1.0, refuses a second IN on the endpoint while one is pending and cannot cancel one, so `--in-flight 2` and `3` are refused there. The libusb probe in 42.74 showed the gain: single skips fell from 23 to 32 a minute with one IN to 3 to 12 a minute with three. With one IN, six 60 s runs on the patched 1.3.0.0 gave 5 to 54 single skips a minute, three with the checker before the change and three with it after. That spread is the run-to-run variation 42.62 saw on one image, so the change does not show in the count (TESTING.md 42.75).
+
 **The Swift tool** (`tv-jc/macos`, `seek --fps`): the same five-second medians, and `seek stream` for frozen pairs and changed pixels. The Pro
 init is applied only on firmware 4.x and newer.
 
