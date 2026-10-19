@@ -11313,3 +11313,94 @@ The CLI's output did not change: its tests already pinned this form (42.69), and
 - The write source's name (`bankImageSource`, `fileName`) carries the decrypted image's sha8, not the stored bank's. The report holds no hash of the stored bank and the name is built synchronously. It is shown in the write confirmation and never downloaded. A dump of the same bank names its decrypted file with the stored sha8. Whether the write source should match is the owner's call.
 - The fps pre-patch and patched files (core's `fpsPreDumpNames` and `patchedFileName` in `packages/core/src/slots/fps-patch.ts`: `seek-slot-A-v<ver>-before-fps-patch-raw-<sha8>.bin`, `…-fps<N>-patched.bin`) keep their own uppercase-key form. The page and the CLI already share those functions, so they agree with each other, but they do not match the slot dump names. Not changed here.
 - README line 40 (`decrypted/*.bin`) and the `flash_4m_…_decrypted_…` example near line 661 describe the whole-flash dump, not `slots dump`. Left alone.
+
+### 42.72 The two hand tools write the plain 2014 bank on a 2014-chain target, the bytes `build_flash.mjs` writes; their 4.x output is unchanged (offline, 2026-10-19)
+
+**Summary.** Agent 42.72, on `worktree-agent-aabf3b90c466f23fe`, reset to `refactor/all-firmware-profiles`. The tip read `b3d4da7` at the first check and `445bd88` at the reset (a plan commit landed between them); both contain 42.70. The FW-V1 change is branch `plain-2014-tools`, commit `e4662626e626d0589a4e2ae542f5d837f9683689`, on main `b4f47a71f`, in worktree `/private/tmp/claude-501/fwv1-tools`. Not merged, not pushed. On a 2014-chain target, `seek_fw_tool.mjs bank-payload` and `package_image.py --bank-payload` now write the plain 64 KiB bank that `build_flash.mjs` writes. On all 21 2014 targets that build, both tools' output equals `build_flash.mjs`'s `bank_payload.bin` byte for byte. On `compact_8hz_1_3_0_0` that bank also equals the owner's factory bank A. On the 4.x targets checked, the output is byte-identical to before. No camera, J-Link or USB switch was used, and nothing was flashed.
+
+**Tags.** [measured] is a command run here. [source] is read from the code named. [inferred] follows from those.
+
+**1. The rule for a 2014-chain target.** [source] The flash path already decides the chain by its slot map: `build_flash.mjs` SLOTS (A `0x14050000`, B `0x14060000`, R `0x14070000`) and the runner's `BANK_BASES`. [measured] The line `a: { index: 0, addr: 0x14050000 }` is in the `build_flash.mjs` of the 24 targets of the 42.66 list (1.3.0.0 and its bootloader, 1.3.0.8 8 Hz, and the rest). It is in no 4.x copy, where slot A is `0x14030000`. The two tools use that rule: each reads the `build_flash.mjs` beside it in `tools/` and tests the same regex (`onPlainChain2014()` in `seek_fw_tool.mjs`, `on_plain_chain_2014()` in `package_image.py`). A `tools/` with no `build_flash.mjs` takes the 4.x path. [measured] The new `seek_fw_tool.mjs`, copied where no `build_flash.mjs` sits, refused the 1.3.0.0 image at the 4.x vector check (rc 3). No second rule was added.
+
+**2. What changed (FW-V1 `e4662626e`, 78 files).**
+- `codegen/harness/tools/seek_fw_tool.mjs` and `package_image.py`. On the 2014 chain, bank-payload builds the plain bank before any 4.x check. The image must be 4-byte aligned, have the magic at `0x200`, and be below `0x10000` bytes. `header.length` is stamped to the file size, and the word at `0x238` is set so the raw 32-bit word sum over `header.length` is 0. The rest of the 64 KiB is `0xFF`, with no cipher and no footer. `--footer-from` is refused. `--splice` on the 2014 chain defaults to slot A at `0x50000` (the 4.x default `0x30000` is 4.x slot A). The 4.x code is unchanged and runs when the branch is not taken.
+- Codegen. The harness copies are regenerated with `gen.mjs --target <t>` (no `--force`) for the 18 non-pending targets. Eleven changed their `tools/` copies and their `.codegen/manifest.json`: the 2014 managed pair (`compact_8hz_1_3_0_0`, `compact_pro_9hz_1_0_3_0`) and nine 4.x targets (`compact_ff_16hz_1_3_0_8`, `compact_pro_9hz_4_9_1_15`, `compact_pro_9hz_4_9_2_0`, `compact_pro_ff_18hz_4_18_2_0`, `compact_xr_8hz_4_8_2_1`, `mosaic_18hz_10_9_1_31` (seek tool only; its `package_image.py` is its own declared fork), `mosaic_ff_27hz_2_27_1_33`, `nano_200_32hz_42_32_3_10`, `nano_300_27hz_44_27_3_10`). The other seven have no copy of these two files. `gen --check` passes on all 18: 18 of 18 before the change and 18 of 18 after the regen.
+- Pending 2014 targets (no codegen copy; gen exits 6 on them). 21 `targets/<t>/tools/` copies were byte-equal to the old harness and took the new harness file. `compact_8hz_1_3_0_8` has its own footer-at-0xFFC0 variant of both files (it differs only in `footer_offset`) and took the same edit as an anchored patch, each anchor required to occur once.
+- Not changed. The three pending 4.x targets (`compact_8hz_4_8_1_7`, `compact_8hz_4_8_1_9`, `compact_ff_16hz_4_16_1_7`) keep their old copies. Their behaviour is the same, and they are outside the 2014 list.
+
+**3. Comparison on the 2014 chain.** Reference: `build_flash.mjs` run without `--flash` in a sandbox (a copy of the Makefile, `tools/` and the oracle image; a stub `make` that copies the oracle image to the build image path, as 42.66 did; a 4 MB stand-in factory flash only where the tree lacks one, for the preflight). Its `build/bank_payload.bin` is the reference. Both tools were run on its `build/image.bin`. "before" is FW-V1 main's copy (`git show main:`), and "after" is the tree after the change. The sha column is the first 12 hex digits of the reference bank.
+
+| target | build_flash bank (sha256, first 12) | seek_fw_tool, before | seek_fw_tool, after | package_image, before | package_image, after |
+| --- | --- | --- | --- | --- | --- |
+| compact_8hz_0_10_0_0 | 37ad41e5b856 | refused (rc 3, vector SP check) | equal | not equal (49152 B, Key-A) | equal |
+| compact_8hz_0_3_0_1 | 93add3e54444 | refused (rc 3, vector SP check) | equal | not equal (65536 B, Key-A) | equal |
+| compact_8hz_0_5_0_2 | 37e5453ad920 | refused (rc 3, vector SP check) | equal | not equal (49152 B, Key-A) | equal |
+| compact_8hz_0_5_1_0 | 0b86dab4aa4c | refused (rc 3, vector SP check) | equal | not equal (49152 B, Key-A) | equal |
+| compact_8hz_0_5_1_3 | a9a71f09b8cd | refused (rc 3, vector SP check) | equal | not equal (49152 B, Key-A) | equal |
+| compact_8hz_0_6_0_4 | 623c90f97039 | refused (rc 3, vector SP check) | equal | not equal (49152 B, Key-A) | equal |
+| compact_8hz_0_7_0_7 | 785c5db03b30 | refused (rc 3, vector SP check) | equal | not equal (49152 B, Key-A) | equal |
+| compact_8hz_0_7_0_8 | 51b681bead1e | refused (rc 3, vector SP check) | equal | not equal (49152 B, Key-A) | equal |
+| compact_8hz_0_8_0_0 | c582e6122d25 | refused (rc 3, vector SP check) | equal | not equal (49152 B, Key-A) | equal |
+| compact_8hz_0_9_0_2 | ba4b3827c05f | refused (rc 3, vector SP check) | equal | not equal (49152 B, Key-A) | equal |
+| compact_8hz_0_9_0_6 | 20a7caa8e0ee | refused (rc 3, vector SP check) | equal | not equal (49152 B, Key-A) | equal |
+| compact_8hz_0_9_0_7 | b07c644512e6 | refused (rc 3, vector SP check) | equal | not equal (49152 B, Key-A) | equal |
+| compact_8hz_0_9_1_0 | 8881f545eb31 | refused (rc 3, vector SP check) | equal | not equal (49152 B, Key-A) | equal |
+| compact_8hz_1_0_0_0 | dcb487cef8d9 | refused (rc 3, vector SP check) | equal | not equal (49152 B, Key-A) | equal |
+| compact_8hz_1_2_0_0 | 230cc7a6f12e | refused (rc 3, vector SP check) | equal | not equal (49152 B, Key-A) | equal |
+| compact_8hz_1_3_0_0 | 5cbbdd0fe2fb | refused (rc 3, vector SP check) | equal | not equal (49152 B, Key-A) | equal |
+| compact_8hz_1_3_0_8 | 8a11b0dc45d5 | refused (rc 3, vector SP check) | equal | not equal (65536 B, Key-A) | equal |
+| compact_pro_9hz_1_0_3_0 | a6cb095281c7 | refused (rc 3, vector SP check) | equal | not equal (65536 B, Key-A) | equal |
+| compact_pro_9hz_1_0_3_2 | 48153eb647ea | refused (rc 3, vector SP check) | equal | not equal (65536 B, Key-A) | equal |
+| compact_pro_ff_18hz_1_0_3_0 | e4beb6d9428b | refused (rc 3, vector SP check) | equal | not equal (65536 B, Key-A) | equal |
+| compact_pro_ff_18hz_1_0_3_2 | 9958cc6d5b5d | refused (rc 3, vector SP check) | equal | not equal (65536 B, Key-A) | equal |
+
+21 of 21 "after" cells equal for both tools (42 comparisons). The 21 are the 24 targets of the 42.66 list minus the three bootloaders.
+
+- Before, `seek_fw_tool.mjs bank-payload` refused all 21 images with rc 3 at its 4.x vector check (SP `0x1000xxxx` against the expected `0x1001f800`). It did not write a Key-A bank on these images, and the refusal names no chain. [measured]
+- Before, `package_image.py --bank-payload` wrote the Key-A bank: 49152 B where the footer sits at `0xBFC0`, and 65536 B where it sits at `0xFFC0` (0.3.0.1, 1.3.0.8 8 Hz through its variant, and the PRO and PRO FF 1.0.3.x). [measured]
+- Bootloaders. `compact_pro_9hz_1_0_3_0_bootloader` has an image in the tree. After the change both tools refuse it with "no image header at 0x200 (a bootloader image has none)", and the message names `build_flash.mjs` and `BANK_FORM=plain-2014`. `compact_8hz_1_3_0_0_bootloader` and `compact_pro_ff_18hz_1_0_3_0_bootloader` have no image in the tree (`build_flash.mjs` stopped at make and at BASE_DIR), so their tool rows are a missing-path error and show nothing. [measured]
+
+**4. 1.3.0.0 against the owner's factory bank A.** The factory dump is `SEEK_FULL_DUMPS_BY_CAMERA/Compact/Compact/2014.10.21-14.58.29-1.3.0.0/full_dump_original.bin` (sha256 `40447c7e…eb72`, the 42.70 file). Its bank A is bytes `0x50000` to `0x60000`. [measured] Both tools' output equals bank A byte for byte, and equals `build_flash.mjs`'s `bank_payload.bin` (sha256 `5cbbdd0f…5b2a`). With `--splice`, the seek tool's default slot `0x50000` and `package_image.py`'s explicit `0x50000` each write the bank there and change no other byte of a copy of the 4 MB dump. [measured]
+
+**5. 4.x unchanged.** Before is FW-V1 main's copy, after is the regenerated copy, on the same image (the target's base image) with the same arguments. "identical" means both runs exited 0 and the bytes match. "refused" means both runs exited 3 with the same stderr.
+
+| target | seek_fw_tool bank-payload | package_image --bank-payload | bank bytes |
+| --- | --- | --- | --- |
+| compact_8hz_4_8_1_7 | refused, same (rc 3) | identical | 65536 |
+| compact_8hz_4_8_1_9 | refused, same (rc 3) | identical | 49152 |
+| compact_ff_16hz_1_3_0_8 | refused, same (rc 3) | identical | 65536 |
+| compact_ff_16hz_4_16_1_7 | refused, same (rc 3) | identical | 65536 |
+| compact_pro_9hz_4_9_1_15 | refused, same (rc 3) | identical | 65536 |
+| compact_pro_9hz_4_9_2_0 | identical | identical | 49152 |
+| compact_pro_ff_18hz_4_18_2_0 | identical | identical | 49152 |
+| compact_xr_8hz_4_8_2_1 | refused, same (rc 3) | identical | 49152 |
+| mosaic_18hz_10_9_1_31 | identical | identical | 49152 |
+| mosaic_ff_27hz_2_27_1_33 | identical | identical | 49152 |
+| nano_200_32hz_42_32_3_10 | refused, same (rc 3) | identical | 49152 |
+| nano_300_27hz_44_27_3_10 | refused, same (rc 3) | identical | 49152 |
+
+- Splice on `compact_pro_9hz_4_9_2_0` (a 4 MB dump, slot `0x30000`, both tools): the bank and the patched dump are identical before and after. [measured]
+- The 4.x self-check `package_image.py --validate` on `compact_pro_9hz_4_9_1_15`, with the owner's `2019.03.14-09.18.41-4.9.1.15` dump and the target's base image as `SEEK_DECRYPTED_IMAGE`: the output is identical before and after. Its own verdict is False in both runs, because the base image (`firmware_to_be_reconstructed.bin`) is not byte-equal to that dump's slot A (54566 bytes differ). That verdict predates this change; why the bytes differ was not checked here. [measured]
+
+**6. Refusals on a 2014 target.** `--footer-from` is refused by both tools (rc 2). A 0x10004 B image is refused by both (rc 2), and the message names `build_flash.mjs` and `BANK_FORM=plain-2014`. A non-4-aligned image is refused by both (rc 2). [measured]
+
+**7. Checks.**
+- `node --check` on the 34 changed `.mjs`/`.js` files: 0 failures. `py_compile` on the 33 changed `.py` files: 0 failures (bytecode to scratch). [measured]
+- No existing test exercises `bank-payload` or `--bank-payload` (grep of FW-V1). Run instead: `node codegen/engine/test_gen.mjs`, 73 passed, 0 failed; `python3 -m unittest codegen.harness.tools.test_target_paths`, 6 run, OK, 1 skipped (`package_image.py` imports `target_paths`). [measured]
+- `gen --check` on the 18 non-pending targets: 18 of 18 before and after. [measured]
+- `make -C codegen tree-guard` not run: it refuses on this branch with "cannot tell which targets are pending", inherited from main (42.63). [source]
+- 22 extra checks, all passing: the 1.3.0.0 bank against factory bank A and `build_flash.mjs`, the splice placement, the refusals, the 4.x splice before and after, and the no-`build_flash.mjs` fallback. [measured]
+
+**8. Not verified, and for the owner.**
+- Nothing was flashed. The 2014 acceptance of this bank rests on 42.70, which booted `build_flash.mjs`'s bank; the hand tools' output is equal to that bank, not separately booted.
+- `seek_fw_tool.mjs upload` and `flash-custom` still build the Key-A payload (`buildBankPayload`) and were not changed. On a 2014 image they stop at the same 4.x vector check, which is incidental. The owner decides whether they take the same branch.
+- `package_image.py` without `--bank-payload` (encrypt only) still writes a Key-A image. That is outside the two commands asked for, and it is unchanged.
+- The chain rule reads the sibling `build_flash.mjs`. A pending 2014 target later derived from the harness gets the 4.x copy until its `build_flash.mjs` is on the 2014 chain; that is the STATE.MD item 3 risk. The 22 pending 2014 copies must be re-synced by hand when the harness moves.
+- `SEEK_FW_TOOL_README.md` still describes `bank-payload` as the 4.x Key-A bank. It is a harness file, so changing it would change every copy; it is not changed here.
+- The three pending 4.x copies are not synced to the harness (behaviour unchanged).
+- The 2014 `--splice` default of `0x50000` is my choice, to match the 2014 slot map.
+
+**Commits.**
+- FW-V1, branch `plain-2014-tools`, commit `e4662626e626d0589a4e2ae542f5d837f9683689`, on main `b4f47a71f`, worktree `/private/tmp/claude-501/fwv1-tools`. Not merged, not pushed.
+- Seek: this note, on branch `worktree-agent-aabf3b90c466f23fe`, reset to `refactor/all-firmware-profiles`.
+- Scripts (scratch, not in the repo): `/private/tmp/claude-501/agent-72/` (`sandbox.py`, `extra_checks.py`, `gen_check_all.py`, `regen_managed.py`, `sync_pending.py`, `patch_tools.py`).
