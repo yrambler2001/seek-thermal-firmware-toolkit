@@ -1,7 +1,7 @@
 # Plan: what is still to do
 
 Branch `refactor/all-firmware-profiles`: all commits are local; nothing is pushed and main is never touched without the owner's explicit approval (owner, 2026-10-19: keep it local until the owner says). FW-V1 `main` was pushed on the owner's word on 2026-10-19 (`a13c615c6`).
-Done work is in `TESTING.md` (sections 42.x; the latest is 42.37; 42.38, 42.40, 42.43 to 42.45 merged; 42.39, 42.41, 42.42, 42.46 to 42.48 are running) and `FPS_32HZ.md`; this file lists only what is open. Status marks: [ ] open, [~] running, [?] needs the owner.
+Done work is in `TESTING.md` (sections 42.x; the latest is 42.37; 42.38, 42.40, 42.43 to 42.45 and 42.47 merged; 42.39, 42.41, 42.42, 42.46 and 42.48 are running) and `FPS_32HZ.md`; this file lists only what is open. Status marks: [ ] open, [~] running, [?] needs the owner.
 
 ## Standing rules
 
@@ -68,8 +68,8 @@ Every 8 and 9 fps build with a table entry is offered except the FF entries and 
 - [~] `e2e/fps-bench.e2e.ts:142` still starts a Vite dev server per window (`openTarget('camera')` without `sharedServer`), the retention 42.45 fixed for the slots and pages benches. The 16 GB heap setting should no longer be needed for the slots matrix (inferred; not run on the camera). (running: TESTING.md 42.48)
 - [ ] The 0.x/1.x backup on the bench unit is erased where the bootloader's first 11 KiB are (11,268 bytes; the test pins the gap).
 - [ ] 1.3.0.8 FF: stage two for the encrypted lines, a faithful emulator platform, FW-V1 branch `ff-dump-keyed-bootloader` (unmerged); its boot is observed, not proven; Preserve "Read & build" on the emulated 1.3.0.8 FF refuses at the derivation gate and needs a full-flash FF dump in the corpus.
-- [ ] Check the 42.44 slots-page change on the camera: after a committed write the page now reads all three banks again before the replug (it used to read back only the written bank). Run a few bench rows (a 2014-chain one and a 4.x one) once the bench is free.
-- [~] The frame-rate patch (`patchFps` in `useSlotsPanel.ts`) still drops the bank table after a patch, as the write did before 42.44; and `packages/core/src/protocol/ops.ts:44` says 0x55 and 0x5a are used by the flash path only, while the info read uses them too (42.44). (running: TESTING.md 42.47)
+- [ ] Check the 42.44 and 42.47 slots-page change on the camera: after a committed write or frame-rate patch the page now reads all three banks again before the replug (it used to read back only the written bank). Run a few bench rows (a 2014-chain one and a 4.x one) once the bench is free.
+- [ ] The `FLASH_OPS` header in `packages/core/src/protocol/ops.ts` (above the set) still says it holds "the info reads that only the flash path needs"; CLI `info` and the slots read need them too (42.47).
 - [?] CLI `info` and the page's Slots tab read through core `readDeviceInfo` (0x55 for selectors 1, 20, 17, 10; 0x5a for the serial; the slots); the page's Info tab reads identity only (42.17, by design). 0x55 latches a RAM selector and 0x5a arms the RAM device-id block; neither writes flash. 42.44 recommends keeping both as they are; owner to confirm.
 - [~] An offline dump of a v4 camera is not covered by `e2e:offline`. (running: TESTING.md 42.39)
 - [?] The shutter question of 42.15 (a per-frame shutter in mode 6) is moot now the mode-6 patch is gone; the Normal-mode patches left the shutter cycle unchanged in the measurements. Owner to confirm it can be closed.
