@@ -14,7 +14,8 @@
  * Without SEEK_E2E_WRITE the file skips and says why.
  *
  * SEEK_E2E_FPS_BUILD=1.3.0.0 runs it on a Compact 1.3.0.0 (default 4.8.2.1, the Compact XR).
- * The operator restores bank A and power-cycles the camera afterwards (TESTING.md 42.23).
+ * The operator restores bank A and power-cycles the camera afterwards (TESTING.md 42.24, section 7;
+ * the 1.3.0.0 run is 42.25).
  * ==================================================================== */
 
 import { mkdirSync } from 'node:fs';

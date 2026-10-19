@@ -6,12 +6,13 @@
  * camera nothing that changes its flash). Three corpus cameras, each booted on the emulator and
  * opened on the page, each checked against its table row:
  *   - Compact 1.3.0.0 (the 2014 plain chain; bank B is empty on the dump): every bank's flash
- *     controls are on, no camera-wide banner, Make 16 FPS on A and R, and the empty B says why it
- *     has no frame-rate patch;
+ *     controls are on, no camera-wide banner, Make 32 FPS on A and R (the table's 32 Hz row; the
+ *     16 Hz patch was removed, TESTING.md 42.26), and the empty B says why it has no frame-rate patch;
  *   - Compact 4.8.2.1 (the modern Key A line): every bank's flash controls on, no banner, and
  *     Make 32 FPS on the banks that hold the image (TESTING.md 42.24);
- *   - Compact PRO 1.0.3.0 (the 2016 keystream line): every bank's flash controls on, and NO banner
- *     (the false "cannot be written" banner this page used to show on this line is the regression).
+ *   - Compact PRO 1.0.3.0 (the 2016 keystream line): every bank's flash controls on, NO banner
+ *     (the false "cannot be written" banner this page used to show on this line is the regression),
+ *     and Make 18 FPS on every bank that holds the 1.0.3.0 image (the table's 18 Hz row, TESTING.md 42.29).
  * A row the table says is writable must show its flash controls enabled with no refusal; a row the
  * table says is refused must show the banner and its controls off. The camera is only read.
  *
