@@ -8429,3 +8429,63 @@ The brief expected about 32.2 after the restore. The after-run first second was 
 - The FF vendor path's boot is observed, not proven ("no boot (expected)"). Row 9 is a vendor-form run, not a page run.
 - The Compact PRO frame rate is not measured on hardware (carried over from 42.29).
 - The retries' reports are single-row matrices. They are not merged into `slots-bench-matrix.json`.
+
+### 42.31 The come-back-after-reset check: a fast reboot fell between two 500 ms polls, so the drop wait now polls every 100 ms; rows 10, 15 and 21 pass (2026-10-19)
+
+**Summary.** The 42.30 boot-proof failures (rows 10, 15, 21) and the row 27 enumeration failure were not a J-Link or camera fault, and not a change made in 42.29. The bench's `waitForReboot` (`e2e/lib/bench/bench-camera.ts`) passes only when one of its presence samples sees the camera off the USB bus, and it sampled every 500 ms. The fast-booting images (the matrix's rows 9 to 27, 1.3.0.8 and later; rows 1 to 8 and the original of row 28 take 3.4 to 4.0 s) are off the bus for about 0.4 s after a reset. When the drop falls just after the bench's first sample, the whole absence can fall between two samples, so the bench reports "the camera stayed on the bus 5 s" for a camera that rebooted. The fix polls every 100 ms during the drop wait (`REBOOT_POLL_MS`, `bench-camera.ts:37`). On the bench, 5 of 25 resets on a 1.3.0.8 image failed at 500 ms and none at 100 ms. Rows 10, 15 and 21 each passed on their first attempt after the fix, with no retry.
+
+**Tags.** [measured] is read from the run logs, the presence traces and the reset JSON. [inferred] is what follows from them.
+
+**1. What was ruled out.**
+- The J-Link reset. `resetCpu` (`jlink.ts:659`) is unchanged since 42.21. Its session exited 0 in every reset below, and the camera dropped and came back in all 85 resets measured with an independent presence probe (the 1.3.0.0 and 1.3.0.8 images). [measured]
+- The 5 s wait. `RESET_DROP_MS` and `ENUMERATE_MS` are unchanged. In every trace the camera dropped within 0.2 s either side of the reset return and was back well inside 5 s. [measured]
+- The bench flow. `bootProof` and the flash-step reset (`spec-flow.ts`) changed in 42.29 only where the image comes from (the verdict table's `sources`); the reset and wait lines are the same as at `406cf28` (42.21). `bench-camera.ts` is unchanged since 42.21. [measured, by diff]
+- A power cycle first. `writeBank` power-cycles after every bank write, and the boot proof resets after the last one. Ten resets each after a 3 s power cycle all passed (below), so the power cycle does not change the reset. [measured]
+
+**2. Measurements.** The probe is `ioreg -p IOUSB -l -w0` counting `idVendor` 10397, the same test the bench uses. "Off" is the time from the first off sample to the first on sample. Scripts and JSON are under `/private/tmp/claude-501/agent-reset/`.
+
+| Image | Drop poll | Resets | Failed | Off time | Notes |
+| --- | --- | --- | --- | --- | --- |
+| 1.3.0.0 start image (2014 bootloader) | 500 ms | 25 | 0 | 3.43 to 3.75 s | reset call 292 to 571 ms |
+| same, a 3 s power cycle before each reset | 500 ms | 10 | 0 | 3.46 to 3.75 s | |
+| 1.3.0.8 std (row 10's patched image) | 500 ms (as built) | 25 | 5 | 0.40 to 0.71 s | |
+| same | 100 ms (fixed) | 25 | 0 | 0.34 to 0.69 s | |
+
+The five failures (iterations 3, 4, 5, 10 and 23) have the same shape. The bench's first sample was at the reset return and saw the camera on the bus. The camera dropped 32 to 66 ms after that sample and came back 443 to 505 ms after it, an off time of 408 to 447 ms. The next sample, about 525 ms after the first, also saw it on the bus, and the wait ran out at 5 s. [measured] A reset passes when the drop falls before the first sample, or when a sample lands inside the off time. Off times as short as 402 ms passed in this run, which is why the failure is intermittent. With a 500 ms poll and an off time of about 0.42 s the chance of a miss is about one in five, which matches the 5 of 25. [inferred from the sampling]
+
+On the 1.3.0.8 image (25 resets) the return falls 0.38 to 0.59 s after the reset call returns, while the drop moves between 190 ms before and 66 ms after the return. That fits the reset happening inside JLinkExe's session and the camera coming back after its last `g`. [inferred; the session's internals are not logged]
+
+**3. The rows.** Each row's log gives one plan line ("1 Compact subject"), and the subject was checked before its first write. The presence traces show the two resets of each row (the flash-step reset and the boot-proof reset) as off times of 390 to 671 ms; the other off periods are the power cycles. [measured]
+
+| Row | Subject (`SEEK_BENCH_ONLY`) | Attempt | Flash-step reboot | Boot proof | Verdict |
+| --- | --- | --- | --- | --- | --- |
+| 10 | Compact 1.3.0.8 std (`2017.01.06-11.16.17`) | 1, before the fix (`row10-try1.log`) | 586 ms | ok | pass, write |
+| 10 | same | 1, after the fix (`row10-post-fix.log`) | 717 ms | ok | pass, write |
+| 15 | Compact Pro 1.0.3.0 FF (`2016.07.06-17.05.32`) | 1, after the fix (`row15-post-fix.log`) | 579 ms | ok | pass, write |
+| 21 | Compact Pro 4.9.2.0 std (`2020.02.13-15.26.01`) | 1, after the fix (`row21-post-fix.log`) | 588 ms | ok | pass, write |
+
+Row 10 also passed before the fix, in this run, so the 42.30 failure did not repeat on that row. Row 27 was not re-run; it is not in this brief, and the same mechanism applies to its first-attempt enumeration failure. [inferred]
+
+Row 10 before the fix started from the start image. Each later row started after a restore: restore A (3 of 64 blocks), restore B (3 of 64), restore C (16 of 64, six runs; the run at `0x14180000+0x80000` failed verification on its first attempt and passed on its second), and restore D after row 21 (28 of 64, five runs). Each restore ends with the runner's own byte-identical check. [measured]
+
+**4. Start and end.** `start-4m.bin` is the halted whole-flash read taken before any change, after a channel-1 cycle: sha256 `50e900c23ff4bb7e0a5a30fc5879f6ed276289e43aeace2f9ab74eaec9b01d7d`. `end-4m.bin` is a halted read after the last restore, after a channel-1 cycle: the same sha256. `cmp start-4m.bin end-4m.bin` exits 0 and prints nothing (0 bytes differ). [measured]
+
+**5. Normal fps before and after.** `seek-fps --camera --fps --mode normal --no-hifps`, per-second medians over 5 s.
+- Before (`fps-before-3.log`, the fourth read after the dump; the three before it had medians of 16 to 27 while the camera settled): 32.18, 32.21, 32.19, 32.18, 32.17.
+- After (`fps-after-10.log`, the tenth read after the run; the nine before it had medians of 16 to 32): 32.24, 32.13, 32.19, 32.10 and then 17.88 in the fifth second.
+The rate settles slowly after the dump in both directions, so a single read after a dump is not a measure. [measured]
+
+**6. Code and tests.**
+- Fix: `e2e/lib/bench/bench-camera.ts:37` (`REBOOT_POLL_MS = 100`), used by the drop loop in `waitForReboot`. The 40 s enumeration wait keeps `DEFAULT_POLL_MS` (500 ms). Commit `d94e38e`.
+- Test: `e2e/bench-lib.e2e.ts:1139` ("waitForReboot: a reboot off the bus for less than a 500 ms poll is still seen"). A fake clock with the camera off from 40 to 440 ms; expects 600. Against the 500 ms poll it fails with "expected null to be 600" (checked by setting the constant back to 500 and restoring it).
+- `npx vitest run --config e2e/vitest.config.ts bench-lib.e2e`: 95 passed, 2 skipped (the corpus tests, which need `SEEK_FULL_DUMPS_BY_CAMERA`). The new test alone: 1 passed.
+- `npx tsc --noEmit -p e2e/tsconfig.json`: exit 0.
+- eslint on the two files: 3 errors, all on lines this change does not touch (`bench-camera.ts:246`, the `document` assignment in `slotFlash`; `bench-lib.e2e.ts:1690` and `:1723`). Prettier lists lines outside this change in both files. Not changed here.
+- Reset measurement after the fix (same 1.3.0.8 image, 25 resets): 25 passed, off times 0.34 to 0.69 s. [measured]
+
+**7. Not verified.**
+- A camera off the bus for less than one 100 ms poll would still be missed. The shortest off time seen on the bench is 337 ms.
+- The message "the camera stayed on the bus 5 s after the reset (not rebooted), or did not come back within 40 s" still covers two causes. It is unchanged.
+- That the 42.30 failures were these same misses is inferred from the mechanism and the matching timing. 42.30 kept no presence trace, so it is not measured.
+- That 42.21 passed by chance is inferred. The same code and the same sampling were in place.
+- Row 9's FF env item and the other plan items are not touched.
