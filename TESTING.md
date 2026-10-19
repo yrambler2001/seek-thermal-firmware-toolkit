@@ -11139,3 +11139,51 @@ The middle sentence depends on B's verdict on this read: "holds a bootable image
 - The slots bench (`slots-bench.e2e`, through `DEVICE_INFO_GUARD`) now has exact shapes. It was not run here.
 - The page's log line "selector 0x0's window matches neither slot — the slots are identical" is not compared with anything; the CLI text was not diffed line by line, only the fields in the table.
 - Nothing was pushed or merged. `plan.md`, FW-V1 and the product code were not changed.
+
+### 42.69 Five wording and naming fixes from the 42.67 review: the README's recovery-case warning and the Connect unlock note, the stale FPS_32HZ.md lines, the Key A sentences, the bare-name comment, and the slot dump prefix (offline, 2026-10-19)
+
+**Summary.** Five items from the owner's list, done by agent 42.69 on `worktree-agent-ab72236dbf4753e21`, on top of `refactor/all-firmware-profiles` (94ebe61). No camera, J-Link or USB switch was used. The only hardware-free runs against the emulator are two CLI emulator files, with `SEEK_EMU_DIR` set to FW-V1's `emu`; both passed. The untracked `real-camera-probe.test.ts` is not in this worktree. Commits: `d8dcd22` (item 1), `ab1a177` (item 2), `71dd893` (item 3), `0d92755` (item 4), `f9fda71` (item 5), and this section. Nothing is pushed or merged.
+
+**Tags.** [source] is read from the code named. [measured] is a test run here. [inferred] follows from those.
+
+**1. README: the recovery-case warning and the Connect unlock note (`README.md`, "What it shows" and "The camera stays unlocked until a power cycle").**
+
+- A second warning paragraph after the booted-bank one. It covers the camera running recovery R while its own upgrade writes B. It says the running image is not the one written, and reports what B holds from B's verdict on the read: a bootable image (the same as R's when the two match), an empty bank, or a bank whose bootability is unknown or not shown as bootable. With a bootable B it adds that an upgrade stopped partway leaves B unbootable. It names the 4.8.2.1 boot-word-2 measurement (42.50, 42.67) and `boot.upgradeTargetRecovery` in `seek-fw info --json`. [source: `packages/core/src/workflows/device-info.ts`, `upgradeTargetWhileRecovery` and `recoveryTargetVerdict`; `packages/cli/src/commands/info.ts:136-137` for the JSON keys]
+- The unlock section adds that the Connect section shows the note too, from the same page flag. [source: `packages/web/src/components/ConnectSection.tsx:74`, `{unlocked && <UnlockNote />}`, fed by `App.tsx:184`]
+
+**2. `FPS_32HZ.md` stale lines.**
+
+- Section 9, the active-slot bullet: the word is now stated as the +8 of the roots record that selector 10 names (42.56), with 0x10000208 on 1.3.0.0 and 1.0.3.0, 0x10002118 on 4.9.1.15, and zero on 4.8.2.1. It says the cell 0x1000AED0 is not the word on those lines, and gives the 42.53 writer. The "warm-boot handoff" and "the 4.x app never writes the cell" claims are gone; 42.56 contradicts the second one on 4.9.1.15.
+- Section 10, the open list: the 2014/2016 cell question is closed (42.53, 42.56) and removed. What is open now is the 4.9.1.15 writer at 0x10002118 and the 4.8.2.1 record (42.56).
+- Section 10: the serial line now says `101310HSNEA2` is the ASCII device serial (the CLI and the page show it as `serial`; the checker since `cde6257`) and `1013CE098ACA` is the GetChipID value, shown as `chip id` (42.61). The checker printed the chip id as its serial before that.
+- Section 4, the owner's-unit measurement line (line 113) said "serial 1013CE098ACA". It now reads "serial 101310HSNEA2, chip id 1013CE098ACA".
+- Grep of `FPS_32HZ.md` and `README.md` for `1000AED0` and the two serials: no other line needed a change.
+
+**3. "Key A" wording (`packages/web/src/components/DeviceInfoPanel.tsx`, `README.md`).**
+
+- The Keys panel sentence "Key A is what an upload has to be encrypted with" becomes: an upload is built so each bank stores it under the bootloader's store key (`{state.storeKey.name}`), or under the booted bank's own key where the application's store key is not that one. [source: `packages/core/src/slots/write-keys.ts`, `deriveWriteKeys`: `atRest` is the store key when the application's store key matches it, else the booted bank's key]
+- README "Flash a decrypted image" and "What it writes" step 3 said the upload goes under Key A (on 2017+) and "usually Key A". Both now say the store key, or the booted bank's key where the application's store key differs. The "usually Key A" claim was also wrong against the code, so it went too, and this is one more line than the owner listed.
+- No web test pinned the old sentence (grep of `packages/web/src` for "encrypted with" and "is what an upload" found no test). `DeviceInfoPanel.test.tsx` and `a11y-parity.test.tsx` pass unchanged.
+
+**4. Bare-name comment (`packages/cli/src/commands/slots.ts`, the THE KEY PAIR IN THE NAME block).** The comment said a bare name is refused. It now says a bare name is accepted when both halves of this camera's pair, or of a known application pair, occur exactly once in the image (`locateOwnKeyPair`, `write-image.ts:139`, called through `retargetImageKeys` from `write.ts:540`). The flash accepts a bare name only when a known application pair occurs once. Comment only. The CLI usage text and errors never said a bare name is refused, so nothing else changed. [source]
+
+**5. Slot dump filename prefix.** `git log -S` finds no recorded reason for the difference. The page's `seek-slot-` (`slotDumpFileName`, `packages/web/src/hooks/useSlotsPanel.ts:250`) came in with `eb12273` and the CLI's `slot-` (`dumpArtifacts`, `packages/cli/src/commands/slots.ts`) with `4c56630`, both on 2026-10-10. Neither commit message nor TESTING.md gives a reason. So:
+
+- The CLI's stem is `seek-slot-<key>-<version>-<sha8>`, and its usage text and comment say the same (`usage.ts:238, 272`).
+- The rest of each name is unchanged, key suffix included. The names still differ after the prefix: the page writes `seek-slot-B-v1.3.0.0-raw-<sha8>.bin` and `…-decrypted-<sha8>-KeyA-…-KeyB-….bin`; the CLI writes `seek-slot-b-1.3.0.0-<sha8>.bin` and `…-<sha8>-decrypted-KeyA-…-KeyB-….bin`. Empty banks are `seek-slot-B-empty-raw-<sha8>` on the page and `seek-slot-b-empty-<sha8>` in the CLI. Whether the rest should match too is the owner's call; this change does not decide it.
+- Tests that name the CLI's dump files now name the new prefix: `slots.test.ts`, `slots.emulator.test.ts`, `slots-empty.emulator.test.ts`, `real-camera-pages.test.ts`. The `decrypt` command's own `slot-a-decrypted.bin` names (`decrypt.test.ts`) are its input naming and were left alone.
+- README names no slot dump file, so no README line changed.
+
+**Tests (all on the final state).**
+
+- `vitest run --project cli packages/cli/test/slots.test.ts packages/cli/test/args.test.ts`: 150 passed (110 + 40).
+- `SEEK_EMU_DIR=…/FW-V1/emu vitest run --project cli packages/cli/test/slots-empty.emulator.test.ts`: 7 passed (134 s).
+- `SEEK_EMU_DIR=…/FW-V1/emu vitest run --project cli packages/cli/test/slots.emulator.test.ts`: 23 passed.
+- `vitest run packages/web/src/components/DeviceInfoPanel.test.tsx packages/web/src/a11y-parity.test.tsx packages/web/src/components/ConnectSection.test.tsx`: 29 passed (3 files). Web tests needed `npm run build --workspace @seek-fw/core` first.
+- `tsc --noEmit`: `-p packages/core`, `-p packages/cli`, `-p packages/web/tsconfig.app.json`: all exit 0.
+- eslint on every changed .ts/.tsx file: clean.
+- prettier `--check` on `README.md`, `FPS_32HZ.md` and every changed .ts/.tsx file: clean. Two CLI test files were reflowed by `prettier --write` (they were clean at HEAD and the new names lengthened some lines).
+
+**Not run.** `packages/cli/test/real-camera-pages.test.ts` (real camera; only its regexes changed). No core test (no core file changed). No whole-suite vitest.
+
+**Not verified.** The README's "2017+ line" label for the modern Key A path is kept as written. The "What it writes" section names the modern line as 2.x, 4.x, 10.x, 42.x and 44.x, so the two may not line up; not checked against the builds here.
