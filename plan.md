@@ -1,7 +1,7 @@
 # Plan: what is still to do
 
 Branch `refactor/all-firmware-profiles`: all commits are local; nothing is pushed and main is never touched without the owner's explicit approval (owner, 2026-10-19: keep it local until the owner says). FW-V1 `main` was pushed on the owner's word on 2026-10-19 (`a13c615c6`).
-Done work is in `TESTING.md` (sections 42.x; the latest is 42.35; 42.33, 42.36 and 42.37 are running) and `FPS_32HZ.md`; this file lists only what is open. Status marks: [ ] open, [~] running, [?] needs the owner.
+Done work is in `TESTING.md` (sections 42.x; the latest is 42.35; 42.36 and 42.37 are running) and `FPS_32HZ.md`; this file lists only what is open. Status marks: [ ] open, [~] running, [?] needs the owner.
 
 ## Standing rules
 
@@ -53,7 +53,8 @@ Every 8 and 9 fps build with a table entry is offered except the FF entries and 
 ## 4. Repo state and hygiene
 
 - [?] `refactor/all-firmware-profiles` (HEAD `d62da13` plus this file) is local. The owner keeps it local until they say otherwise (2026-10-19); pushing it and merging to main need the owner's word (the hosted docs bundle in `docs/` is built from this branch). FW-V1 `main` is pushed (`a13c615c6`). All agent branches of 42.27 to 42.31 are merged and their worktrees removed.
-- [~] Two unmerged branches from earlier sessions are kept (their worktrees were removed on 2026-10-19, 42.29 section 6): `worktree-agent-a9c8b175a0187b7be` (`f9a34ce`, TESTING 42.13 notes: the balance-word FF run withdrawn before any write) and `worktree-agent-ae27186421cb01b3e` (`f8f2f55`, the FF image's banks follow the camera's bootloader; the bench FF platform path). Owner to decide: merge or delete. Owner, 2026-10-19: merge. (running, 2026-10-19 wave: TESTING.md 42.33)
+- [?] The FF vendor-form write on the FF platform's bootloader (2.0.2.3): the merged branch f8f2f55 refused every bank there; 42.33 dropped that refusal with the rest of the superseded code, so the page allows the vendor-form write on every bootloader, and that write is not measured on 2.0.2.3. Owner to decide: refuse it on 2.0.2.3, or keep it open and run bench row 9 on a 2.0.2.3 camera first.
+- [ ] TESTING.md 42.21 says "the FF bootloader does not run the vendor form (42.12)"; 42.12 does not measure that (42.33). Correct the sentence.
 - [ ] `packages/cli/test/slots.test.ts` gives its 4.9.5.0 fixture the 2014 bank addresses (`:160`, `:237`, `:304-307`); the 4.x map is A 0x14030000, B 0x14050000, R 0x14070000 (found in 42.34). Fixture data only.
 - [ ] The 0.x/1.x profile-level dump message (`packages/cli/src/commands/dump.ts:61`, "2014–2017 line … nothing was dumped") has no test (42.34).
 
