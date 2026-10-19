@@ -8007,3 +8007,110 @@ npx vitest run test/preservation/fps-patch.test.ts test/preservation/fps-patch.d
 - The stock 1.3.0.0 Normal and Hi FPS on the camera in this section (the 8.0 fps in 42.25 was the 16 Hz image, not stock).
 - The Pro builds' picture on hardware, and the FF builds' rate with the 32 Hz copy.
 - The first 0.9.1.0 run (27.8 to 30.8 fps) was not reproduced.
+
+### 42.28 The Compact PRO 4.9.1.15 and 4.9.2.0 builds offered at 18 fps (Key A), the write proven on the emulator (2026-10-19)
+
+**Summary.** The owner decided on 2026-10-19 that a build that is patched but not measured is offered exactly like a measured one.
+That removed the only reason the two Compact PRO 4.9.x entries were refused ("its frame rate has not been measured on the bench").
+Both are now offered at 18 Hz, on the page and in the CLI. `compact_pro-4.9.1.15` and `compact_pro-4.9.2.0` (the 18 Hz row patch of
+42.27, section 6) are in `FPS_STAGE_TWO_IDS`, and the 4.9.x branch of `gateOf` is removed. The 1.0.3.x branch (the 2016 keystream line)
+is unchanged and still refuses. No Compact PRO camera was used. The rate, 8.84 to 17.68 fps, is the emulator's IP 8 result from 42.27.
+
+**Tags.** As in 42.27: [measured] was read on the emulator or a file; [source] was read off the code named; [inferred] follows from those.
+
+**1. The staging claim in plan.md, checked.**
+
+- [source] `packages/core/src/slots/capability-family.ts`: a 4.9.x build on the modern-4x profile is family `modern`, and
+  `stagingFor('modern')` is `key-a-ciphertext`.
+- [source] `packages/core/src/slots/write-keys.ts`: `UNCHECKED_UPLOAD_BUILDS` lists 4.9.1.15 and 4.9.2.0 (the bootloader's upload check is
+  not run for them), so the composite is stored as derived. This is what the stage-two read-back below checks.
+- [measured] Emulator, the two dumps (booted, no camera): the plan's staging on bank A is `key-a-ciphertext` (the stage-two test and the
+  probe in item 2).
+
+**2. What the page offers per bank, before and after** [measured on the emulator; a temporary probe test, removed before the commit].
+
+| dump                  | bank (address)        | image on the bank                    | before                                      | after                         |
+| --------------------- | --------------------- | ------------------------------------ | ------------------------------------------- | ----------------------------- |
+| 4.9.1.15 (1C0EZ0KTAMA5) | A (0x14030000, booted) | 4.9.1.15 stock (`13db63815bce`)      | refused: the 4.9.x gate                     | offered, 18 Hz                |
+| 4.9.1.15              | B (0x14050000)        | 1.0.3.2-FF, known at 18 Hz           | "already runs at 18 Hz", no patch           | unchanged: no patch           |
+| 4.9.1.15              | R (0x14070000)        | 4.9.1.15 stock (`13db63815bce`)      | refused: the 4.9.x gate                     | offered, 18 Hz                |
+| 4.9.2.0 (1215A0YZ9AA8) | A (0x14030000, booted) | 4.9.2.0 stock (`b8d069f1cedf`)       | refused: the 4.9.x gate                     | offered, 18 Hz                |
+| 4.9.2.0               | B (0x14050000)        | 4.9.2.0 stock (`b8d069f1cedf`)       | refused: the 4.9.x gate                     | offered, 18 Hz                |
+| 4.9.2.0               | R (0x14070000)        | 4.9.2.0 stock (`b8d069f1cedf`)       | refused: the 4.9.x gate                     | offered, 18 Hz                |
+
+- Bank B of the 4.9.1.15 dump holds a 1.0.3.2-FF image, which the table's known-builds list records at 18 Hz (`FPS_KNOWN_BUILDS`), so the
+  planner says "already runs at 18 Hz" and offers nothing there. It is not the 1.0.3.x refusal (that reason is for the line's own
+  entries); it is not offered either way, which is what the 1.0.3.x instruction asked for.
+- The bank addresses above are the Compact PRO's. They are not the ones the CLI usage text gives (see item 5).
+
+**3. The write flow, on the emulator** (`packages/core/test/slots/fps-patch.stage-two.emulator.test.ts`, the two full dumps added at 18 Hz).
+
+- First run, with the two ids not yet in the stage set: both Pro subjects booted the stock flash, then failed at the offer assertion
+  (line 174): `expected 'refused' to be 'offer'`, with the gate's reason ("the Compact PRO 4.9.x line stages its banks under Key A ... so the
+  page does not offer this patch yet"). The two 4.8.1.x subjects passed.
+- The write flow with the two ids in the stage set: 4 passed. Then the same run on the final code (gate in the committed form): 4 passed.
+- Per Pro subject, the assertions that passed:
+  - the offer on bank A at 18 Hz (line 178, `expect(offer.toHz).toBe(top)`);
+  - the save gate: a save that does not happen refuses the write, and no SetFeaturedFirmwareData (0x50) or CompleteMemoryUpgrade (0x51) is
+    sent (lines 187 to 190);
+  - the write is staged `key-a-ciphertext` (line 214), the commit status is 0 and the write verified (lines 216 to 217);
+  - the read-back is checked on the image it decrypts to, and its differences are exactly the planned bytes, neither more nor fewer
+    (line 220, against the stock image the save took; the stock-to-patched comparison follows it);
+  - no ResetDevice is sent (line 231);
+  - the patched flash boots: the camera enumerates on its own 4.9.x build (line 262), bank A decrypts to the patched image (line 273),
+    and the analysis says the bank is already patched (line 276).
+- Not covered by this test: the writes to banks B and R. The page offers the same patch on every bank that holds the image (item 2), but
+  the emulator test writes bank A only. The 4.8.x stage-two builds have the same limit (`FPS_32HZ.md` section 10).
+
+**4. The verdict table and its tests.**
+
+- `e2e/lib/slots-expectations.ts`: the 4.9.2.0 row is `fps: { offer: true, toHz: 18 }` (all three banks hold its image). The 4.9.1.15
+  row is `fps: { offer: true, toHz: 18 }` with `fpsNotOffered: { bank: 'b', reason: 'already runs at 18 Hz' }`, the new optional field
+  for the one bank whose image is not the row's build.
+- `packages/core/test/slots/page-expectations.emulator.test.ts`: the frame-rate check honours `fpsNotOffered`.
+- `packages/core/test/preservation/fps-patch.test.ts` and `fps-patch.differential.test.ts`: the pinned stage-two set now lists the two
+  Pro ids; a new test pins that the 4.9.x entries are enabled at 18 Hz and the 1.0.3.x entries are refused with the 2016 keystream reason.
+
+**5. The CLI and the other text.**
+
+- `packages/cli/src/usage.ts`: `slots patch-fps` names the 4.9.1.15 and 4.9.2.0 builds (under Key A, 18 fps, not measured on a Compact PRO
+  camera). The plan lines and the confirmation already read the plan's rate, so they say 18 Hz with no other change.
+- `e2e/seek-fps-emulator.e2e.ts`, the list of builds not built by the checker: the 4.9.x banks are Key A banks, not 2016 keystream banks,
+  and the two lines now say so.
+- Observed, not changed: the CLI usage line "Banks: A (0x14050000) and B (0x14060000)" is the Compact layout. The Compact PRO banks in
+  these dumps are A 0x14030000, B 0x14050000 and R 0x14070000.
+
+**6. The bench (plan section 5, first item).** Not changed, because the new offer does not touch the bench's flow.
+
+- `e2e/slots-bench.e2e.ts` does not press "Make N FPS". Row 20 (Compact PRO 4.9.1.15) runs the default flow in the order B, A, R
+  (`WRITE_ORDER`, `e2e/lib/bench/spec-flow.ts`). Bank B's own image (the 1.0.3.2-FF build) is what the flow writes into B
+  (`images.set`, `spec-flow.ts` near line 615). The writer refuses that image for B (the table's `ownImage` row, checked by the
+  emulator suite through `prepareSlotFlash`). By reading the code, the subject then fails at "write B" and stops before A and R. This
+  was not run on the bench.
+- Under `SEEK_BENCH_SLOT_BOOT=1`, bank B takes bank A's image instead (`fallbackSource`), which the page-expectations suite shows the
+  page offers on bank B.
+- So the table and the default bench still disagree on bank B. The table refuses it and the bench expects a write there. Bench logic
+  unchanged. The "26 of 28" count is the plan's (section 5); the literal text is not in the repo.
+
+**7. Not measured, not run.**
+
+- No Compact PRO camera was used. The connected camera is a Compact 1.3.0.0, and nothing was run with `--camera`.
+- The 18 Hz rate on a Compact PRO is not measured. The emulator rate (8.84 to 17.68 fps, IP 8) is from 42.27.
+- Writes to banks B and R on the emulator (item 3).
+- The slots bench and the Electron matrix were not run.
+
+**8. Tests, with counts** (run in the worktree, from the stated folder; `SEEK_EMU_DIR` set for the emulator suites, the corpus roots for
+the differential test).
+
+- `packages/core`: `npx vitest run test/preservation/fps-patch.test.ts test/preservation/fps-patch.differential.test.ts test/slots/fps-patch.test.ts test/slots/boot-choice.test.ts`: 54 passed, 1 skipped (baseline 53 and 1; the new pin test is the extra one).
+- `packages/core`: `npx vitest run test/slots/fps-patch.stage-two.emulator.test.ts`: 4 passed (both 4.8.1.x and both Pro dumps); the first run, before the stage set changed, was 2 passed and 2 failed (item 3).
+- `packages/core`: `npx vitest run test/slots/page-expectations.emulator.test.ts test/slots/fps-patch.emulator.test.ts`: 194 passed in 2 files (baseline 194), run twice: once before the last formatting-only change and once on the final code.
+- `packages/cli`: `npx vitest run test/slots.test.ts test/emulator-cli.test.ts`: 107 passed (baseline 107), with `SEEK_EMU_DIR` set. Without
+  it the emulator-cli file skips (106 passed, 1 skipped).
+- `packages/web`: `npx vitest run`: 335 passed in 30 files (baseline 335).
+- Typecheck, with `npx tsc --noEmit -p`: core, cli, web app, web node, tools and e2e all clean (after `npx tsc --build tsconfig.build.json`
+  in core and cli).
+- `npx eslint` on each changed TypeScript file: clean.
+- `FW-V1/emu/.venv/bin/python scripts/gen-fps-table.py` and `npx prettier --write packages/core/src/preservation/fps-patch-table.ts`:
+  the generator wrote 20 entries and 12 known builds, and the fixture with 24 images, 20 entry outputs and 29 banks. Neither file changed in
+  git, so the generated table and fixture match the source (`FW-V1/emu/fps_patch.py`, which this section did not change).
