@@ -20,7 +20,7 @@ Open small item: `packages/core/src/workflows/flash.ts` (`writeFirmware`, `prepa
 
 When they finish:
 1. Check each report and diff; cherry-pick the commits onto the branch; resolve TESTING.md append conflicts with `python3 /private/tmp/claude-501/-Users-yrambler2001-things-a-noindex-seek-seek-thermal-firmware-backup/82174575-1341-45d6-a306-7518156cd978/scratchpad/resolve_testing.py TESTING.md` (keeps both sides' `### 42.N` sections in number order); run the touched tests, the typecheck and eslint on the merged HEAD; remove the worktree and delete the branch; update this file.
-2. After 42.72: merge `plain-2014-tools` into FW-V1 main locally; ask the owner before pushing FW-V1. Then merge `plain-2014` into FW-V1 main locally and ask the owner before pushing.
+2. After 42.72: merge `plain-2014-tools` into FW-V1 main locally; ask the owner before pushing FW-V1.
 3. After 42.71 is merged: one agent rebuilds the hosted bundle (`npm run build:docs`, as in 705b5fa), since the page changed in 42.64 and 42.67, and runs `offline-bundle.e2e` with `SEEK_EMU_DIR` and `SEEK_FULL_DUMPS_BY_CAMERA`.
 4. Then report to the owner and ask the open [?] items below. Other camera units come after everything else.
 
