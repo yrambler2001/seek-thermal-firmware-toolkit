@@ -101,13 +101,14 @@ const COMPACT_2016_CIPHER: CipherProfile = {
  * used to say the map differed, which this file's own summary contradicts. */
 const FLASH_REFUSAL =
   "the 2016 generation shares legacy-auth's locked BeginFirmwareUpgrade handler and selector " +
-  "map, so the read is the same, but this toolkit's write path has nothing for its banks. It " +
-  'stages either a 4.x bank encrypted under a confirmed Key A or a 2014 plaintext-chain bank ' +
-  'verbatim, and a 2016 bank is neither: it is xorshift128 under K=0 with a decrypted word sum ' +
-  'of 0, the Key A such a write needs sits in the bootloader block that 1.0.3.x refuses on ' +
-  'every channel, and the form the running application takes (the image XORed with its block-0 ' +
-  'keystream) is built only by the preservation pipeline. The original disabled flashing on ' +
-  'this generation and this profile keeps that refusal.';
+  "map, so the read is the same, but the classic write path (this profile's own flash capability) " +
+  'has nothing for its banks. It stages either a 4.x bank encrypted under a confirmed Key A or a ' +
+  '2014 plaintext-chain bank verbatim, and a 2016 bank is neither: it is xorshift128 under K=0 ' +
+  'with a decrypted word sum of 0, the Key A such a write needs sits in the bootloader block that ' +
+  '1.0.3.x refuses on every channel, and the form the running application takes (the image XORed ' +
+  'with its block-0 keystream) is staged by the slot writer (slots/write.ts), which the slot page ' +
+  'does not gate on this refusal. The original disabled flashing on this generation and this ' +
+  'profile keeps that refusal.';
 
 const CAPABILITIES: ProfileCapabilities = {
   /* Reads stay open, and now on the right map: the six protected banks are
@@ -286,8 +287,9 @@ export const compact2016: FirmwareProfile = {
     'The 2016 Compact Pro generation: xorshift128 images with no whitening (K=0) and a ' +
     '0x00000000 acceptance sum. Its BeginFirmwareUpgrade is the locked one — the same handler ' +
     'legacy-auth describes, decoded byte-exactly from a 1.0.3.0 build — so it uses that ' +
-    'selector map and the 18-byte token on the six protected banks. Read-only: flashing is ' +
-    'refused because the write path has no staged form for this cipher chain.',
+    'selector map and the 18-byte token on the six protected banks. The classic flash is refused, ' +
+    'because that write path has no staged form for this cipher chain; the slot page stages its ' +
+    'banks under the keystream form.',
   cipher: COMPACT_2016_CIPHER,
   /* The legacy geometry, not the modern one: 0x14000000 is blocked on every
    * channel and there is no selector above 0x141FFFFF, so the dump's gap list
