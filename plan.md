@@ -11,7 +11,7 @@ Running agents (Haiku 5.5 xhigh, each in its own worktree under `.claude/worktre
 - 42.67, seek: the upgrade warning also under boot word 2 (R booted, upgrade writes B); the Connect section shows the unlock note from the shared flag; the stale mode-4 line in `FPS_32HZ.md`; the three old eslint errors in the FF vendor files.
 
 When they finish:
-1. Check each report and diff; cherry-pick the commits onto the branch; resolve TESTING.md append conflicts with the scratchpad script `resolve_testing.py` (keeps both sides' `### 42.N` sections in number order); run the touched tests, the typecheck and eslint on the merged HEAD; remove the worktree and delete the branch; update this file.
+1. Check each report and diff; cherry-pick the commits onto the branch; resolve TESTING.md append conflicts with `python3 /private/tmp/claude-501/-Users-yrambler2001-things-a-noindex-seek-seek-thermal-firmware-backup/82174575-1341-45d6-a306-7518156cd978/scratchpad/resolve_testing.py TESTING.md` (keeps both sides' `### 42.N` sections in number order); run the touched tests, the typecheck and eslint on the merged HEAD; remove the worktree and delete the branch; update this file.
 2. After 42.66: a camera agent flashes the plain-staged 1.3.0.0 build to bank B (BANK_ADDR 0x14060000, boot word 1; the command is in 42.66), checks it boots, restores and byte-compares. Then merge `plain-2014` into FW-V1 main locally and ask the owner before pushing.
 3. After 42.67: rebuild the hosted bundle (`npm run build:docs`, an agent, as in 705b5fa), since the page changed in 42.64 and 42.67; run `offline-bundle.e2e` with `SEEK_EMU_DIR` and `SEEK_FULL_DUMPS_BY_CAMERA`.
 4. Then report to the owner and ask the open [?] items below. Other camera units come after everything else.
