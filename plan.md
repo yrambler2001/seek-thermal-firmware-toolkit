@@ -54,7 +54,7 @@ Every 8 and 9 fps build with a table entry is offered except the FF entries and 
 
 ## 4. Repo state and hygiene
 
-- [?] `refactor/all-firmware-profiles` (HEAD `d62da13` plus this file) is local. The owner keeps it local until they say otherwise (2026-10-19); pushing it and merging to main need the owner's word (the hosted docs bundle in `docs/` is built from this branch). FW-V1 `main` is pushed (`a13c615c6`). All agent branches of 42.27 to 42.31 are merged and their worktrees removed.
+- [?] `refactor/all-firmware-profiles` (all of 42.27 to 42.37 merged on it) is local. The owner keeps it local until they say otherwise (2026-10-19); pushing it and merging to main need the owner's word (the hosted docs bundle in `docs/` is built from this branch). FW-V1 `main` is pushed (`a13c615c6`). All agent branches of 42.27 to 42.37 are merged and their worktrees removed.
 - [?] The FF vendor-form write on the FF platform's bootloader (2.0.2.3): the merged branch f8f2f55 refused every bank there; 42.33 dropped that refusal with the rest of the superseded code, so the page allows the vendor-form write on every bootloader, and that write is not measured on 2.0.2.3. Owner to decide: refuse it on 2.0.2.3, or keep it open and run bench row 9 on a 2.0.2.3 camera first.
 - [ ] TESTING.md 42.21 says "the FF bootloader does not run the vendor form (42.12)"; 42.12 does not measure that (42.33). Correct the sentence.
 - [ ] `packages/cli/test/slots.test.ts` gives its 4.9.5.0 fixture the 2014 bank addresses (`:160`, `:237`, `:304-307`); the 4.x map is A 0x14030000, B 0x14050000, R 0x14070000 (found in 42.34). Fixture data only.
@@ -71,5 +71,5 @@ Every 8 and 9 fps build with a table entry is offered except the FF entries and 
 - [ ] 1.3.0.8 FF: stage two for the encrypted lines, a faithful emulator platform, FW-V1 branch `ff-dump-keyed-bootloader` (unmerged); its boot is observed, not proven; Preserve "Read & build" on the emulated 1.3.0.8 FF refuses at the derivation gate and needs a full-flash FF dump in the corpus.
 - [ ] CLI `info` sends SetFirmwareInfoFeatures (0x55) and SetRAMDataFeatures (0x5a) on its read path and reads the slots; the web Info sends neither (recorded, not changed).
 - [ ] An offline dump of a v4 camera is not covered by `e2e:offline`.
-- [ ] The shutter question of 42.15 (a per-frame shutter in mode 6) is moot now the mode-6 patch is gone; the Normal-mode patches left the shutter cycle unchanged in the measurements. Owner to confirm it can be closed.
+- [?] The shutter question of 42.15 (a per-frame shutter in mode 6) is moot now the mode-6 patch is gone; the Normal-mode patches left the shutter cycle unchanged in the measurements. Owner to confirm it can be closed.
 - [?] The 4.8.1.7 and 4.8.1.9 Key A path is proven on the emulator only (the stock and patched rate, the saved dumps, the Electron button and the restore were never run on a camera).
