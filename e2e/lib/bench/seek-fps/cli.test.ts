@@ -35,11 +35,12 @@ describe('parseArgs (the Swift main.swift flags)', () => {
     expect(parsed(['-n', '9', '--fps', '--camera']).seconds).toBe(5);
   });
 
-  it('maps --mode normal|fast|raw to IP modes 8, 3, 0', () => {
+  it('maps --mode normal|fast|raw|4 to IP modes 8, 3, 0, 4', () => {
     expect(parsed(['info', '--camera', '--mode', 'normal']).mode).toBe(8);
     expect(parsed(['info', '--camera', '--mode', 'fast']).mode).toBe(3);
     expect(parsed(['info', '--camera', '--mode', 'raw']).mode).toBe(0);
-    expect(failure(['info', '--camera', '--mode', 'other'])).toMatch(/normal\|fast\|raw/);
+    expect(parsed(['info', '--camera', '--mode', '4']).mode).toBe(4);
+    expect(failure(['info', '--camera', '--mode', 'other'])).toMatch(/normal\|fast\|raw\|4/);
   });
 
   it('--no-hifps, --no-opzero and --no-pro-init turn their option off', () => {
@@ -133,6 +134,63 @@ describe('runSeekFps over a fake camera', () => {
     expect(io.out[1]).toMatch(
       /^t=1s frames=\d+ status=3 min=5000 max=5000 avg=\d+ devTemp=4660 frameCnt=7 frozenPairs=\d+ changed=\d+%$/,
     );
+  });
+
+  it('info says when the camera refused Startup with Operation=0 and connected without it', async () => {
+    const fake = new FakeCamera({
+      productId: 0x0010,
+      serialNumber: 'SN',
+      firmwareHeads: [[1, 3, 0, 8, 0, 0, 0, 0]],
+      refuseOut: [0x37],
+    });
+    const io = capture();
+    const code = await runSeekFps(
+      ['info', '--camera'],
+      () => Promise.resolve(sessionOver(fake)),
+      io.io,
+    );
+    expect(code).toBe(0);
+    expect(io.out[0]).toBe(
+      'Seek Compact, firmware 1.3.0.8, serial SN, 206x156, Startup with Operation=0 refused (connected without it)',
+    );
+  });
+
+  it('a Compact whose firmware reply cannot be trusted is refused on stderr with exit 1, and no init is sent', async () => {
+    const fake = new FakeCamera({
+      productId: 0x0010,
+      firmwareHeads: [[0xb8, 0x2a, 0x00, 0x14, 0x00, 0x00, 0x01, 0x14]],
+    });
+    const io = capture();
+    const code = await runSeekFps(
+      ['info', '--camera'],
+      () => Promise.resolve(sessionOver(fake)),
+      io.io,
+    );
+    expect(code).toBe(1);
+    expect(io.err[0]).toMatch(/^seek: the camera's firmware reply cannot be trusted/);
+    expect(io.err[0]).toMatch(/unlocked by a slots command/);
+    expect(io.err[0]).toMatch(/power cycle/);
+    expect(fake.sent('out')).toEqual([]);
+  });
+
+  it('stream --mode 4 counts the status-0 frames of mode 4 as pictures and prints them', async () => {
+    const fake = new FakeCamera({
+      productId: 0x0010,
+      serialNumber: 'SN',
+      firmwareHeads: [[1, 3, 0, 0, 0, 0, 0, 0]],
+      frames: [compactFrame(0, 5000)],
+      endless: true,
+    });
+    const io = capture();
+    const code = await runSeekFps(
+      ['stream', '-n', '1', '--camera', '--mode', '4', '--no-hifps'],
+      () => Promise.resolve(sessionOver(fake)),
+      io.io,
+    );
+    expect(code).toBe(0);
+    expect(io.out[1]).toMatch(/^t=1s frames=\d+ status=0 /);
+    expect(io.out[1]).not.toMatch(/frames=0 /);
+    expect(fake.sent('out').some((e) => e.request === 0x3e && e.data[0] === 4)).toBe(true);
   });
 
   it('a refusal to connect is reported on stderr with exit 1', async () => {

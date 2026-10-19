@@ -14,6 +14,7 @@ import {
   fpsBootWarningOf,
   hexUp,
   onPlaintextChain,
+  UNLOCK_POWER_CYCLE_NOTE,
   type FpsPatchResult,
   type SlotInputKind,
   type SlotKey,
@@ -59,6 +60,15 @@ function verdict(verified: boolean | null): string {
  * What a frame-rate patch did, on screen until the next run. The rate it claims is the table's, and the
  * read-back is the check that only the planned bytes changed. It says what was NOT proven: the rate.
  */
+/** The note after a slot action that sent the unlock token. Information only: nothing is gated on it. */
+function UnlockNote(): ReactElement {
+  return (
+    <Alert tone="warn" className="mt-3">
+      <p>{`Note: ${UNLOCK_POWER_CYCLE_NOTE}.`}</p>
+    </Alert>
+  );
+}
+
 function FpsOutcomePanel({ result }: { readonly result: FpsPatchResult }): ReactElement {
   const { key, fromHz, toHz, pre, readBack } = result;
   const tone = readBack.ok === true && result.written.verified !== false ? 'ok' : 'err';
@@ -387,6 +397,7 @@ export function SlotsView({ slots, connected, busy }: SlotsViewProps): ReactElem
 
         {outcome !== null && <OutcomePanel outcome={outcome} />}
         {fpsOutcome !== null && <FpsOutcomePanel result={fpsOutcome} />}
+        {slots.unlockNote && <UnlockNote />}
       </Section>
 
       <Section id="slots-how" title="What these buttons do" icon={<Send />}>

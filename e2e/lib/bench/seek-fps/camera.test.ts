@@ -7,7 +7,7 @@ import {
   REQUESTS,
   SEEK_MODE,
   SeekCamera,
-  readFirmwareHead,
+  readTrustedFirmware,
   serialFromChipId,
   usesCompactProInit,
 } from './camera.js';
@@ -89,41 +89,204 @@ describe('which init the Compact gets (the Pro init on firmware 4.x and newer on
   });
 });
 
-describe('the firmware-info read at connect', () => {
-  it('asks again until byte 0 is non-zero, and takes that answer', async () => {
-    // right after a stop the camera answers with the leftover slice [0, 0, 4, 0]
+/** The window reply an unlocked camera gives (TESTING.md 42.41): major 184, read as a version it is not. */
+const WINDOW_REPLY = [0xb8, 0x2a, 0x00, 0x14, 0x00, 0x00, 0x01, 0x14];
+
+describe('the firmware reply the init is chosen from', () => {
+  it('takes the version from two consecutive replies that agree, and passes over a leftover reply', async () => {
+    // right after a stop the camera can answer with the leftover slice [0, 0, 4, 0] once
     const fake = new FakeCamera({
       firmwareHeads: [
         [0, 0, 4, 0, 0, 0, 0, 0],
-        [0, 0, 4, 0, 0, 0, 0, 0],
+        [4, 8, 2, 1, 0, 0, 0, 0],
         [4, 8, 2, 1, 0, 0, 0, 0],
       ],
     });
     const link = linkFor(fake);
     await link.transport.open();
-    const head = await readFirmwareHead(link.transport, 0);
-    expect([...head]).toEqual([4, 8, 2, 1, 0, 0, 0, 0]);
+    const reply = await readTrustedFirmware(link.transport, 0);
+    expect(reply.version).toBe('4.8.2.1');
     expect(fake.sent('in').filter((e) => e.request === REQUESTS.GET_FIRMWARE_INFO)).toHaveLength(3);
   });
 
-  it('stops after six reads and returns the last answer when none is non-zero', async () => {
-    const fake = new FakeCamera({ firmwareHeads: [[0, 0, 4, 0, 0, 0, 0, 0]] });
+  it('gives no version when no two consecutive replies agree in 26 reads', async () => {
+    // every reply differs from the one before it
+    const fake = new FakeCamera({
+      firmwareHeads: Array.from({ length: 26 }, (_, i) =>
+        i % 2 === 0 ? [0, 0, 4, 0, 0, 0, 0, 0] : [1, 3, 0, 0, 0, 0, 0, 0],
+      ),
+    });
     const link = linkFor(fake);
     await link.transport.open();
-    const head = await readFirmwareHead(link.transport, 0);
-    expect(head[0]).toBe(0);
-    expect(fake.sent('in').filter((e) => e.request === REQUESTS.GET_FIRMWARE_INFO)).toHaveLength(6);
+    const reply = await readTrustedFirmware(link.transport, 0);
+    expect(reply.version).toBeNull();
+    expect(reply.note).toContain('no two consecutive replies that agree in 26 reads');
+    expect(fake.sent('in').filter((e) => e.request === REQUESTS.GET_FIRMWARE_INFO)).toHaveLength(
+      26,
+    );
   });
 
-  it('connect with a zero head gives the classic init, and the firmware read before the init', async () => {
+  it('waits out the reads a starting build refuses, and takes the version that two later replies agree on', async () => {
     const fake = new FakeCamera({
       productId: 0x0010,
-      firmwareHeads: [[0, 0, 4, 0, 0, 0, 0, 0]],
-      firmware4: [1, 3, 0, 0],
+      firmwareHeads: [[1, 3, 0, 8, 0, 0, 0, 0]],
+      stallFirstInfo: 5,
     });
     const camera = await SeekCamera.connect(linkFor(fake));
+    expect(camera.info?.firmware).toBe('1.3.0.8');
+    await camera.disconnect();
+  });
+
+  it('a Compact whose firmware is never answered is refused after the start-up reads, with nothing sent', async () => {
+    const fake = new FakeCamera({ productId: 0x0010, stallFirstInfo: 1000 });
+    await expect(SeekCamera.connect(linkFor(fake))).rejects.toThrow(
+      /cannot be trusted[\s\S]*no two consecutive replies that agree in 26 reads/,
+    );
+    expect(outs(fake.log)).toEqual([]);
+    expect(fake.opened).toBe(false);
+  });
+
+  it('refuses a repeated reply whose major is above 9: the window bytes of an unlocked camera', async () => {
+    const fake = new FakeCamera({ firmwareHeads: [WINDOW_REPLY] });
+    const link = linkFor(fake);
+    await link.transport.open();
+    const reply = await readTrustedFirmware(link.transport, 0);
+    expect(reply.version).toBeNull();
+    expect(reply.note).toContain('major 184 is not a Seek build');
+  });
+
+  it('a Compact with an untrusted reply does not connect: no init is sent, and the link is closed', async () => {
+    const fake = new FakeCamera({ productId: 0x0010, firmwareHeads: [WINDOW_REPLY] });
+    await expect(SeekCamera.connect(linkFor(fake))).rejects.toThrow(
+      /cannot be trusted[\s\S]*unlocked by a slots command[\s\S]*power cycle/,
+    );
+    expect(outs(fake.log)).toEqual([]);
+    expect(fake.opened).toBe(false);
+  });
+
+  it('a Pro with an untrusted reply still connects, with the firmware unnamed: its init does not depend on it', async () => {
+    const fake = new FakeCamera({ productId: 0x0011, firmwareHeads: [WINDOW_REPLY] });
+    const camera = await SeekCamera.connect(linkFor(fake));
+    expect(camera.info?.firmware).toBe('-');
     expect(camera.compactOnPro).toBe(false);
-    expect(camera.info?.firmware).toBe('1.3.0.0');
+    expect(outs(fake.log).some((r) => r.request === REQUESTS.INIT_54)).toBe(true);
+    await camera.disconnect();
+  });
+
+  it('a camera that refuses one of its init requests is reported as unlocked until a power cycle', async () => {
+    const fake = new FakeCamera({
+      productId: 0x0010,
+      firmwareHeads: [[1, 3, 0, 0, 0, 0, 0, 0]],
+      refuseOut: [REQUESTS.INIT_56],
+    });
+    await expect(SeekCamera.connect(linkFor(fake))).rejects.toThrow(
+      /refused an init request[\s\S]*unlocked by a slots command[\s\S]*until a power cycle/,
+    );
+    expect(fake.opened).toBe(false);
+  });
+});
+
+describe('Startup with Operation=0, and the stop before an init', () => {
+  it('a build that refuses it (0x37) connects without it, and says so', async () => {
+    const fake = new FakeCamera({
+      productId: 0x0010,
+      firmwareHeads: [[1, 3, 0, 8, 0, 0, 0, 0]],
+      refuseOut: [REQUESTS.OP_ZERO],
+    });
+    const camera = await SeekCamera.connect(linkFor(fake));
+    expect(camera.startupOpZeroRefused).toBe(true);
+    expect(camera.info?.firmware).toBe('1.3.0.8');
+    expect(camera.processingMode).toBe(SEEK_MODE.normal);
+    const rows = outs(fake.log);
+    expect(rows).toContainEqual({ request: REQUESTS.INIT_56, data: [0x01] });
+    expect(rows).toContainEqual({ request: REQUESTS.SET_IMAGE_PROCESSING_MODE, data: [8, 0] });
+    await camera.disconnect();
+  });
+
+  it('after such a refusal, a reinit stops the camera first: three SetOperationMode 0, then the FastRaw init', async () => {
+    const fake = new FakeCamera({
+      productId: 0x0010,
+      firmwareHeads: [[1, 3, 0, 8, 0, 0, 0, 0]],
+      refuseOut: [REQUESTS.OP_ZERO],
+    });
+    const camera = await SeekCamera.connect(linkFor(fake));
+    const before = fake.log.length;
+    await camera.reinit(SEEK_MODE.fastRaw);
+    const rows = outs(fake.log.slice(before));
+    expect(rows.slice(0, 4)).toEqual([
+      { request: REQUESTS.SET_OPERATION_MODE, data: [0, 0] },
+      { request: REQUESTS.SET_OPERATION_MODE, data: [0, 0] },
+      { request: REQUESTS.SET_OPERATION_MODE, data: [0, 0] },
+      { request: REQUESTS.INIT_56, data: [0x01] },
+    ]);
+    expect(rows).toContainEqual({ request: REQUESTS.SET_IMAGE_PROCESSING_MODE, data: [3, 0] });
+    await camera.disconnect();
+  });
+
+  it('a build that takes it gets no extra stop on a reinit while not streaming', async () => {
+    const fake = new FakeCamera({ productId: 0x0010, firmwareHeads: [[1, 3, 0, 0, 0, 0, 0, 0]] });
+    const camera = await SeekCamera.connect(linkFor(fake));
+    const before = fake.log.length;
+    await camera.reinit(SEEK_MODE.fastRaw);
+    const rows = outs(fake.log.slice(before));
+    /* the classic init's own Startup with Operation=0 comes first, and no stop of three precedes it */
+    expect(rows[0]).toEqual({ request: REQUESTS.OP_ZERO, data: [1, 0, 0, 0] });
+    expect(rows[1]).toEqual({ request: REQUESTS.SET_OPERATION_MODE, data: [0, 0] });
+    expect(rows[2]).toEqual({ request: REQUESTS.INIT_56, data: [0x01] });
+    await camera.disconnect();
+  });
+
+  it('--no-opzero connects without 0x37, and a reinit still stops the camera first', async () => {
+    const fake = new FakeCamera({ productId: 0x0010, firmwareHeads: [[1, 3, 0, 8, 0, 0, 0, 0]] });
+    const camera = await SeekCamera.connect(linkFor(fake), { startupOpZero: false });
+    expect(outs(fake.log).some((r) => r.request === REQUESTS.OP_ZERO)).toBe(false);
+    expect(camera.startupOpZeroRefused).toBe(false);
+    const before = fake.log.length;
+    await camera.reinit(SEEK_MODE.raw);
+    const rows = outs(fake.log.slice(before));
+    expect(rows.slice(0, 3).every((r) => r.request === REQUESTS.SET_OPERATION_MODE)).toBe(true);
+    await camera.disconnect();
+  });
+});
+
+describe('mode 4: frames with no header type', () => {
+  it('counts the status-0 frames of mode 4 and delivers them as pictures', async () => {
+    const fake = new FakeCamera({
+      productId: 0x0010,
+      frames: [compactFrame(0, 5000)],
+      endless: true,
+    });
+    const camera = await SeekCamera.connect(linkFor(fake), { hiFPS: false });
+    const statuses: number[] = [];
+    camera.onFrame = (frame) => statuses.push(frame.status);
+    await camera.reinit(SEEK_MODE.mode4);
+    camera.startStreaming();
+    await waitFor(() => statuses.length >= 3);
+    await camera.stopStreaming();
+    expect(statuses.every((status) => status === 0)).toBe(true);
+    expect(camera.untypedFrames).toBeGreaterThanOrEqual(3);
+    expect(camera.processingMode).toBe(SEEK_MODE.mode4);
+    await camera.disconnect();
+  });
+
+  it('in Normal, a status-0 frame is counted and dropped, and the pictures around it are kept', async () => {
+    const fake = new FakeCamera({
+      productId: 0x0010,
+      frames: [
+        compactFrame(3, 5000), // the calibration frame: it sets the dead-pixel map and is not delivered
+        compactFrame(0, 5000),
+        compactFrame(3, 5000),
+        compactFrame(3, 5000),
+      ],
+    });
+    const camera = await SeekCamera.connect(linkFor(fake), { hiFPS: false });
+    const statuses: number[] = [];
+    camera.onFrame = (frame) => statuses.push(frame.status);
+    camera.startStreaming();
+    await waitFor(() => statuses.length >= 2);
+    await camera.stopStreaming();
+    expect(statuses).toEqual([3, 3]);
+    expect(camera.untypedFrames).toBe(1);
     await camera.disconnect();
   });
 });

@@ -46,6 +46,7 @@ function panel(over: Partial<SlotsPanelApi> = {}): SlotsPanelApi {
     cancel: vi.fn(),
     running16Hz: false,
     setRunning16Hz: vi.fn(),
+    unlockNote: false,
     fpsOutcome: null,
     planFps: vi.fn((): FpsPlan => ({ status: 'refused', reason: 'no read yet' })),
     patchFps: vi.fn((_key: SlotKey, _acknowledged: boolean) => Promise.resolve()),

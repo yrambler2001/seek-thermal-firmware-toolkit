@@ -197,15 +197,6 @@ async function measureBoot(options: {
       hiFPS: options.mode.hiFPS,
       startupOpZero: options.startupOpZero,
     });
-    if (!options.startupOpZero && options.mode.mode !== SEEK_MODE.normal) {
-      /* A build that refuses 0x37 leaves the connect in operation 1, and its SetShutterPolarity (0x56) and
-       * SetIPMode (0x3E) refuse operation 1 (RPC_MODE0_IDLE). The checker's reinit only sends 0x3C 0 while
-       * streaming, and it has stopped the stream by then, so it never gets there: the stall at 0x56. Send
-       * the three SetOperationMode(0) first, the stop the checker's sendInit makes while streaming. */
-      for (let k = 0; k < 3; k++) {
-        await emu.link.transport.controlOut(0x3c, new Uint8Array([0, 0]), URB_TIMEOUT_MS);
-      }
-    }
     return rowOf(base, await measureFps(camera, options.mode.mode, clock, SECONDS));
   } catch (error) {
     return {

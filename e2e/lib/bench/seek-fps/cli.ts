@@ -26,7 +26,7 @@ USAGE
   seek-fps --fps                    stream for 5 seconds and print mean and median fps for each second
 
 OPTIONS (mirror the Seek Thermal panel)
-  --mode normal|fast|raw            Normal (IP mode 8) / FastRaw (3) / Raw (0) (default normal)
+  --mode normal|fast|raw|4          Normal (IP mode 8) / FastRaw (3) / Raw (0) / IP mode 4 (default normal)
   --no-hifps                        untick "Init Hi FPS"
   --no-opzero                       untick "Startup with Operation=0"
   --no-pro-init                     untick "Compact: use Pro init (new FW)" (default on; applied only on firmware 4.x)
@@ -95,7 +95,8 @@ export function parseArgs(argv: readonly string[]): ParseResult {
       if (v === 'normal') mode = SEEK_MODE.normal;
       else if (v === 'fast') mode = SEEK_MODE.fastRaw;
       else if (v === 'raw') mode = SEEK_MODE.raw;
-      else return { ok: false, message: `--mode needs normal|fast|raw (got ${v ?? 'nothing'})` };
+      else if (v === '4') mode = SEEK_MODE.mode4;
+      else return { ok: false, message: `--mode needs normal|fast|raw|4 (got ${v ?? 'nothing'})` };
     } else if (a === '--no-hifps') {
       options = { ...options, hiFPS: false };
     } else if (a === '--no-opzero') {
@@ -204,7 +205,10 @@ export async function waitUntil(clock: () => number, target: number): Promise<vo
 function describe(camera: SeekCamera): string {
   const info = camera.info;
   if (info === null) return 'not connected';
-  return `${info.model}, firmware ${info.firmware}, serial ${info.serial}, ${String(info.width)}x${String(info.height)}`;
+  const refused = camera.startupOpZeroRefused
+    ? ', Startup with Operation=0 refused (connected without it)'
+    : '';
+  return `${info.model}, firmware ${info.firmware}, serial ${info.serial}, ${String(info.width)}x${String(info.height)}${refused}`;
 }
 
 /** Runs one command. Returns the process exit code (Swift `fail` is 1). */
@@ -379,5 +383,13 @@ async function runCommand(
   io.out(
     `overall: mean ${(total / args.seconds).toFixed(2)} fps over ${String(args.seconds)} s (${String(total)} frames)`,
   );
+  if (camera.untypedFrames > 0) {
+    io.out(
+      `status 0 (no header type): ${String(camera.untypedFrames)} frames, ` +
+        (args.mode === SEEK_MODE.mode4
+          ? 'counted as pictures in mode 4'
+          : 'dropped (only mode 4 counts them)'),
+    );
+  }
   return 0;
 }

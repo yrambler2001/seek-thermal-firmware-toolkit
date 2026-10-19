@@ -226,6 +226,13 @@ export const MIN_READ_CHUNK = 32;
 export const USB_TIMEOUT_MS = 5000;
 
 /**
+ * The length of the authenticated BeginFirmwareUpgrade payload: the 2-byte subcommand and the 16-byte
+ * unlock token (`authPayload` in `profiles/legacy-auth.ts`). A payload of this length that the camera
+ * accepts unlocks its vendor window until the next power cycle (TESTING.md 42.41).
+ */
+export const AUTHENTICATED_PAYLOAD_BYTES = 18;
+
+/**
  * The shrink retries: a camera that ignored one request for 5 s will not
  * suddenly need 5 s more to ignore a smaller one, and this keeps a dead window
  * from costing half a minute.

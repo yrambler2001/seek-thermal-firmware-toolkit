@@ -51,15 +51,27 @@ line is a Hi FPS line, not a Normal one.
 Only the requests the Swift tool sends (the lists are `CHECKER_REQUESTS_IN` and `CHECKER_REQUESTS_OUT` in
 `camera.ts`):
 
-- IN: `0x36` GetChipID (12 bytes), `0x4E` GetFirmwareInfo (8 bytes, asked again until byte 0 is non-zero; 4 bytes
-  before each init).
+- IN: `0x36` GetChipID (12 bytes), `0x4E` GetFirmwareInfo (8 bytes; two consecutive replies that agree on the
+  version, with a major of 0 to 9, are the version the init is chosen from; at most 26 reads, about 500 ms, while a
+  build starts up; 4 bytes before each init).
 - OUT: `0x37` Startup with Operation=0 (classic init), `0x3C` SetOperationMode (1 starts the stream, 0 stops it;
-  three times at disconnect), `0x3E` SetImageProcessingMode (the mode), `0x53` ImageData (one frame credit per
-  frame), `0x54`, `0x55`, `0x56` the rest of the classic and Pro inits.
+  three times at disconnect, and three times before an init on a build that took no 0x37), `0x3E`
+  SetImageProcessingMode (the mode), `0x53` ImageData (one frame credit per frame), `0x54`, `0x55`, `0x56` the rest
+  of the classic and Pro inits.
 - Bulk IN on endpoint 1 (0x81): the frame bytes, 64896 (Compact) or 177840 (Pro).
 
 It never sends a flash write or a reset (`0x50`, `0x51`, `0x52`, `0x59`, `0x5A`). The Compact Pro init is used
 only on a Compact on firmware 4.x or newer with the option on; a 1.x Compact always gets the classic init.
+
+**A camera unlocked by a slots command.** The CLI's `info`, `dump` and `slots` send the unlock token (`0x52`), and the
+camera then stays unlocked until its next power cycle (TESTING.md 42.41). Such a camera answers GetFirmwareInfo with
+window bytes (major 184) or refuses an init, and the checker says so and stops before it sends an init: power-cycle
+the camera and run again. A build that refuses Startup with Operation=0 (the 1.3.0.8 family) is connected without
+it, and `info` says so.
+
+**Mode 4.** `--mode 4` is IP mode 4, one capture per published frame. Its frames can carry no header type on a
+camera (status 0), so in that mode the checker counts them as pictures and reports how many there were; in the
+other modes status-0 frames are dropped and counted too.
 
 ## Measurement
 

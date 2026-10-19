@@ -9,6 +9,7 @@ import {
   detectProfile,
   getProfile,
   hex,
+  UNLOCK_POWER_CYCLE_NOTE,
   identifyCamera,
   type Artifact,
   type DetectionResult,
@@ -111,6 +112,9 @@ export function backendFor(ctx: CommandContext, options: BackendOptions): UsbBac
   return ctx.io.backend?.(options) ?? new NodeUsbBackend(options);
 }
 
+/** The runs that have already printed the unlock note: a command that opens the camera twice says it once. */
+const unlockNoted = new WeakSet<CommandContext>();
+
 export interface Session {
   readonly transport: UsbTransport;
   readonly device: SeekDevice;
@@ -135,6 +139,12 @@ export async function openSession(ctx: CommandContext): Promise<Session> {
     device,
     close: async (): Promise<void> => {
       await transport.close();
+      /* Any run that sent the unlock token says so once, on the way out, whatever its result: the camera
+       * stays unlocked after the run has failed too. Information only (TESTING.md 42.41, 42.55). */
+      if (device.unlockTokenAccepted && !unlockNoted.has(ctx)) {
+        unlockNoted.add(ctx);
+        ctx.reporter.log(`note: ${UNLOCK_POWER_CYCLE_NOTE}.`, 'warn');
+      }
     },
   };
 }

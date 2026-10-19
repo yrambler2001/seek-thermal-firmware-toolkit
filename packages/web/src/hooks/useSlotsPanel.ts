@@ -408,6 +408,11 @@ export interface SlotsPanelApi {
    */
   readonly running16Hz: boolean;
   setRunning16Hz: (value: boolean) => void;
+  /**
+   * True once a slot read, dump, write or patch on this camera sent the unlock token: the camera then stays
+   * unlocked until its next power cycle. The page says so; nothing is gated on it.
+   */
+  readonly unlockNote: boolean;
   readonly reading: boolean;
   readonly writing: boolean;
   readSlots: () => Promise<void>;
@@ -438,6 +443,9 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
   const [outcome, setOutcome] = useState<SlotFlashOutcome | null>(null);
   const [fpsOutcome, setFpsOutcome] = useState<FpsPatchResult | null>(null);
   const [running16Hz, setRunning16Hz] = useState(false);
+  /* After a slot action that sent the unlock token: the camera stays unlocked until its next power cycle,
+   * and the page says so. Information only; nothing is gated on it (TESTING.md 42.55). */
+  const [unlockNote, setUnlockNote] = useState(false);
 
   /* A running task reads these, not the render's copy: it captures its inputs
    * when it starts, and a state value captured then is stale by the time a
@@ -476,6 +484,7 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
     setRefusal(null);
     setOutcome(null);
     setFpsOutcome(null);
+    setUnlockNote(false);
     setStatus(
       device.device === null
         ? 'Device disconnected — read the slots again.'
@@ -533,6 +542,7 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
       setFpsOutcome(null);
       onOptionsFailure(null);
       let transport: ReturnType<DeviceHandle['makeTransport']> | null = null;
+      let usedClient: SeekDevice | null = null;
       try {
         const options = readOptions(form);
         transport = device.makeTransport({
@@ -542,6 +552,7 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
           },
         });
         const client = new SeekDevice(transport, { reporter: workflow, signal });
+        usedClient = client;
         await transport.open();
         /* The camera is asked first, and only its answer decides what is
          * asked next. Nothing here arms a window. */
@@ -590,6 +601,7 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
         }
       } finally {
         if (transport !== null) await transport.close();
+        if (usedClient?.unlockTokenAccepted === true) setUnlockNote(true);
         flush();
       }
     });
@@ -618,6 +630,7 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
         reset(`Dumping slot ${name} ...`);
         const current = reportRef.current;
         let transport: ReturnType<DeviceHandle['makeTransport']> | null = null;
+        let usedClient: SeekDevice | null = null;
         try {
           if (current === null) {
             throw new SeekError(
@@ -633,6 +646,7 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
             },
           });
           const client = new SeekDevice(transport, { reporter: workflow, signal });
+          usedClient = client;
           await transport.open();
           const dumped = await backend.dump(
             contextOf(current, client, workflow, signal),
@@ -684,6 +698,7 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
           }
         } finally {
           if (transport !== null) await transport.close();
+          if (usedClient?.unlockTokenAccepted === true) setUnlockNote(true);
           flush();
         }
       });
@@ -836,6 +851,7 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
         const ready = pendingRef.current;
         const current = reportRef.current;
         let transport: ReturnType<DeviceHandle['makeTransport']> | null = null;
+        let usedClient: SeekDevice | null = null;
         /* Set once the write is handed to the camera. From then on the bank
          * may have changed, whatever happens next. */
         let committing = false;
@@ -863,6 +879,7 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
             },
           });
           const client = new SeekDevice(transport, { reporter: workflow, signal });
+          usedClient = client;
           await transport.open();
 
           /* The record of what was written: it names the file and the bank. */
@@ -925,6 +942,7 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
           }
         } finally {
           if (transport !== null) await transport.close();
+          if (usedClient?.unlockTokenAccepted === true) setUnlockNote(true);
           flush();
         }
       });
@@ -974,6 +992,7 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
         setFpsOutcome(null);
         const current = reportRef.current;
         let transport: ReturnType<DeviceHandle['makeTransport']> | null = null;
+        let usedClient: SeekDevice | null = null;
         /* Set once the patch is handed to the core. From then on the bank may have changed. */
         let committing = false;
         try {
@@ -998,6 +1017,7 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
             },
           });
           const client = new SeekDevice(transport, { reporter: workflow, signal });
+          usedClient = client;
           await transport.open();
 
           /* From the commit on the bank may change, so the read it was made from is dropped here, before
@@ -1042,6 +1062,7 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
           }
         } finally {
           if (transport !== null) await transport.close();
+          if (usedClient?.unlockTokenAccepted === true) setUnlockNote(true);
           flush();
         }
       });
@@ -1085,6 +1106,7 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
       patchFps,
       running16Hz,
       setRunning16Hz,
+      unlockNote,
       reading: runner.active === SLOTS_READ_PANEL_ID,
       writing: runner.active === SLOTS_FLASH_PANEL_ID || runner.active === SLOTS_FPS_PANEL_ID,
       readSlots,
@@ -1106,6 +1128,7 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
       planFps,
       patchFps,
       running16Hz,
+      unlockNote,
       runner.active,
       readSlots,
       dump,

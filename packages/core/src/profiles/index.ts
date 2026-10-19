@@ -57,6 +57,7 @@ export {
   LEGACY_SLOTS,
   LEGACY_SWEEP_RANGE,
   OLD_FW_UNLOCK_TOKEN,
+  UNLOCK_POWER_CYCLE_NOTE,
   authPayload,
   buildLegacyWindowMap,
   legacyAuth,

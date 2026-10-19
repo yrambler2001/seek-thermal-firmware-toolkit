@@ -1089,6 +1089,29 @@ describe('slots command', () => {
  * ==================================================================== */
 
 describe('slots through run()', () => {
+  it('says once that the camera stays unlocked when the run sent the unlock token', async () => {
+    /* No --no-probe: the probe's 18-byte authenticated arm is the token, and it is accepted by this fake */
+    const test = cameraIo();
+    await run(['slots', 'list'], test.io, new AbortController().signal);
+    const notes = test.stdout.text.split('\n').filter((line) => line.includes('stays unlocked'));
+    expect(notes).toHaveLength(1);
+    expect(notes[0]).toContain('until a power cycle, and other tools may misread it');
+    expect(notes[0]).toContain('power-cycle it before you use them');
+  });
+
+  it('says so for info too, which also probes by default', async () => {
+    const test = cameraIo();
+    await run(['info'], test.io, new AbortController().signal);
+    expect(test.stdout.text).toContain('stays unlocked until a power cycle');
+  });
+
+  it('says nothing about the unlock when the run sent no token (--no-probe)', async () => {
+    const test = cameraIo();
+    await run(['slots', 'list', '--no-probe'], test.io, new AbortController().signal);
+    expect(test.stdout.text).not.toContain('stays unlocked');
+    expect(test.stderr.text).not.toContain('stays unlocked');
+  });
+
   it('reaches the camera layer for a real command, and touches nothing before it', async () => {
     const camera = recordingBackend();
     const test = testIo({ backend: camera.backend });

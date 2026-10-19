@@ -12,6 +12,7 @@ import { CancelledError, errorMessage, SeekError } from '../errors.js';
 import { silentReporter, type Reporter } from '../events.js';
 import type { WindowEntry } from '../profiles/types.js';
 import {
+  AUTHENTICATED_PAYLOAD_BYTES,
   DEFAULT_READ_CHUNK,
   MAX_CONTROL_IN,
   MIN_READ_CHUNK,
@@ -87,6 +88,13 @@ export class SeekDevice {
    * window read, never after.
    */
   windowReadOp: number = OP.GET_FEATURED_FIRMWARE_DATA;
+  /**
+   * True once an authenticated BeginFirmwareUpgrade (18 bytes, the unlock token in them) has been accepted on
+   * this link. From then the camera keeps its vendor window unlocked until its next power cycle (TESTING.md
+   * 42.41). `rpcOut` sets it, so every path that arms a window is covered: `armWindow` and the selector
+   * sweep alike. The CLI and the page read it after a run to say so; nothing gates on it.
+   */
+  unlockTokenAccepted = false;
 
   constructor(transport: UsbTransport, options: SeekDeviceOptions = {}) {
     this.transport = transport;
@@ -113,6 +121,15 @@ export class SeekDevice {
 
   rpcOut(op: number, payload: Uint8Array, timeoutMs: number = USB_TIMEOUT_MS): Promise<void> {
     return this.transport.controlOut(op, payload, timeoutMs);
+  }
+
+  /**
+   * Records a BeginFirmwareUpgrade payload the camera accepted (no STALL, no error code). Only the
+   * authenticated form unlocks the window, so only it sets `unlockTokenAccepted`. Called by `armWindow` and by
+   * the selector sweep, the two places that arm a window.
+   */
+  noteBeginAccepted(payload: Uint8Array): void {
+    if (payload.length === AUTHENTICATED_PAYLOAD_BYTES) this.unlockTokenAccepted = true;
   }
 
   /* ---- status and mode --------------------------------------------- */
@@ -231,6 +248,7 @@ export class SeekDevice {
         { deviceCode: beginErr },
       );
     }
+    this.noteBeginAccepted(entry.payload ?? u16Payload(subcmd));
   }
 
   /**

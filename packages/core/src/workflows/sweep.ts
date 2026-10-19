@@ -181,6 +181,7 @@ export async function runSweep(
       let file: string | null = null;
 
       if (armed) {
+        device.noteBeginAccepted(payload);
         armedCount++;
         const read = await device.readArmed(args.chunk, WINDOW_SIZE);
         data = read.data;

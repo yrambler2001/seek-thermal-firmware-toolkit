@@ -234,6 +234,60 @@ describe('useSlotsPanel: reading the banks', () => {
   });
 });
 
+describe('useSlotsPanel: the unlock note (information only)', () => {
+  /** An identify that sends the unlock token: the accepted authenticated arm is what the core records. */
+  function tokenSentIdentify(): Mock {
+    return vi.fn((device: { noteBeginAccepted(payload: Uint8Array): void }) => {
+      device.noteBeginAccepted(new Uint8Array(18));
+      return Promise.resolve(actingProfile());
+    });
+  }
+
+  it('is shown after a read that sent the unlock token', async () => {
+    const { backend } = makeBackend({ identify: tokenSentIdentify() });
+    const { result, unmount } = setup(backend);
+    expect(result.current.panel.unlockNote).toBe(false);
+
+    await act(async () => {
+      await result.current.panel.readSlots();
+    });
+
+    expect(result.current.panel.unlockNote).toBe(true);
+    unmount();
+  });
+
+  it('is not shown after a read that sent no token, and the banks are still read', async () => {
+    const { backend, mocks } = makeBackend();
+    const { result, unmount } = setup(backend);
+
+    await act(async () => {
+      await result.current.panel.readSlots();
+    });
+
+    expect(result.current.panel.unlockNote).toBe(false);
+    expect(mocks.inspect).toHaveBeenCalledTimes(1);
+    unmount();
+  });
+
+  it('is cleared when the camera changes, because the new camera has not been unlocked', async () => {
+    const { backend } = makeBackend({ identify: tokenSentIdentify() });
+    const { result, rerender, state, unmount } = setup(backend);
+
+    await act(async () => {
+      await result.current.panel.readSlots();
+    });
+    expect(result.current.panel.unlockNote).toBe(true);
+
+    act(() => {
+      state.generation = 2;
+      rerender();
+    });
+
+    expect(result.current.panel.unlockNote).toBe(false);
+    unmount();
+  });
+});
+
 describe('useSlotsPanel: dumping a bank', () => {
   it('saves the raw bank and the decrypted image, named by slot, version and short hash', async () => {
     const { backend, mocks } = makeBackend();

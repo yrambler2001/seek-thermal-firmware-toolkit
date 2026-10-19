@@ -37,6 +37,10 @@ export interface FakeCameraOptions {
   readonly frames?: readonly Uint8Array[];
   /** Keep delivering frames forever, the last one again; a read yields to the event loop. */
   readonly endless?: boolean;
+  /** OUT requests the camera refuses (a STALL), every time they are sent. */
+  readonly refuseOut?: readonly number[];
+  /** The first this-many GetFirmwareInfo reads are refused (a STALL), as a build still starting refuses them. */
+  readonly stallFirstInfo?: number;
 }
 
 /** One Compact frame: every word `value`, the header words set as the Swift tests set them. */
@@ -80,6 +84,8 @@ export class FakeCamera implements WebUsbDevice, WebUsbBulkDevice {
   private readonly firmware4: readonly number[];
   private readonly chipId: readonly number[];
   private readonly endless: boolean;
+  private readonly refuseOut: readonly number[];
+  private infoStalls: number;
   private stream: Uint8Array[];
   private headIndex = 0;
 
@@ -92,6 +98,8 @@ export class FakeCamera implements WebUsbDevice, WebUsbBulkDevice {
       0x10, 0x13, 0xce, 0x09, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
     ];
     this.endless = options.endless ?? false;
+    this.refuseOut = options.refuseOut ?? [];
+    this.infoStalls = options.stallFirstInfo ?? 0;
     this.stream = [...(options.frames ?? [])];
   }
 
@@ -127,6 +135,10 @@ export class FakeCamera implements WebUsbDevice, WebUsbBulkDevice {
       index: setup.index,
       data: [length],
     });
+    if (setup.request === 0x4e && length === 8 && this.infoStalls > 0) {
+      this.infoStalls -= 1;
+      return { status: 'stall' };
+    }
     if (setup.request === 0x4e && length === 8) {
       const head =
         this.firmwareHeads[Math.min(this.headIndex, this.firmwareHeads.length - 1)] ?? [];
@@ -150,6 +162,7 @@ export class FakeCamera implements WebUsbDevice, WebUsbBulkDevice {
       index: setup.index,
       data: [...bytes],
     });
+    if (this.refuseOut.includes(setup.request)) return { status: 'stall', bytesWritten: 0 };
     return { status: 'ok', bytesWritten: bytes.length };
   }
 

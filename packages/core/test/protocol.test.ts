@@ -309,6 +309,23 @@ describe('authenticated banks', () => {
     const error = await dev.readWindow(authEntry(3, wrong), 256).catch((e: unknown) => e);
     expect((error as SeekError).deviceCode).toBe(FAKE_ERR.AUTH);
   });
+
+  it('sets unlockTokenAccepted only when an authenticated arm is accepted (TESTING.md 42.41)', async () => {
+    const camera = fakeCamera({ authBanks: [3], authToken: TOKEN });
+    const dev = await opened(camera);
+    expect(dev.unlockTokenAccepted).toBe(false);
+
+    await dev.readWindow(entry(3), 256).catch(() => undefined); // the plain 2-byte arm: refused
+    expect(dev.unlockTokenAccepted).toBe(false);
+
+    const wrong = new Uint8Array(TOKEN);
+    wrong[0] = (wrong[0] ?? 0) ^ 0xff;
+    await dev.readWindow(authEntry(3, wrong), 256).catch(() => undefined); // a wrong token: refused
+    expect(dev.unlockTokenAccepted).toBe(false);
+
+    await dev.readWindow(authEntry(3, TOKEN), 256); // the token: accepted
+    expect(dev.unlockTokenAccepted).toBe(true);
+  });
 });
 
 describe('cancellation', () => {

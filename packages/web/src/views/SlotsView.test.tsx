@@ -98,6 +98,7 @@ function panel(over: Partial<SlotsPanelApi> = {}): SlotsPanelApi {
     cancel: vi.fn(),
     running16Hz: false,
     setRunning16Hz: vi.fn(),
+    unlockNote: false,
     fpsOutcome: null,
     planFps: vi.fn((): FpsPlan => ({ status: 'refused', reason: 'no read yet' })),
     patchFps: vi.fn((_key: SlotKey, _acknowledged: boolean) => Promise.resolve()),
@@ -126,6 +127,24 @@ function dialog(): HTMLElement | null {
 }
 
 describe('SlotsView', () => {
+  it('shows the unlock note after a slot action that sent the token, and no note otherwise', () => {
+    const quiet = view(panel({ plan: slotPlan(true), report: slotReport(base) }));
+    expect(quiet.container.textContent).not.toContain('stays unlocked');
+    quiet.unmount();
+
+    const { container, unmount } = view(
+      panel({ plan: slotPlan(true), report: slotReport(base), unlockNote: true }),
+    );
+    const note = Array.from(container.querySelectorAll('[data-slot="alert"]')).find((el) =>
+      el.textContent.includes('stays unlocked'),
+    );
+    expect(note?.textContent).toContain('the camera stays unlocked until a power cycle');
+    expect(note?.textContent).toContain('power-cycle it before you use them');
+    /* information only: the banks and the write controls are still offered */
+    expect(bankRows(container)).toHaveLength(3);
+    unmount();
+  });
+
   it('shows the reason for a build below 0.8.0.0 and offers no bank action', () => {
     const { container, unmount } = view(panel({ plan: slotPlan(false) }));
 

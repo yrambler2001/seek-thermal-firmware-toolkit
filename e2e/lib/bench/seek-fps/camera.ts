@@ -20,6 +20,7 @@
 
 import { USB_TIMEOUT_MS, OP } from '../../../../packages/core/src/protocol/ops.js';
 import type { UsbTransport } from '../../../../packages/core/src/protocol/transport.js';
+import { SeekError } from '../../../../packages/core/src/errors.js';
 import {
   COMPACT_FRAME_BYTES,
   COMPACT_HEIGHT,
@@ -63,9 +64,16 @@ export const CHECKER_REQUESTS_OUT: readonly number[] = [
   REQUESTS.INIT_56,
 ];
 
-/** The processing modes the panel offers: Normal, FastRaw (Hi FPS) and Raw. */
-export const SEEK_MODE = { raw: 0, fastRaw: 3, normal: 8 } as const;
+/**
+ * The processing modes: Normal, FastRaw (Hi FPS) and Raw are the panel's. `mode4` is IP mode 4, one capture per
+ * published frame (FW-V1 docs/FRAME_RATE_MODES.md). Its frames can carry no header type on a camera (status 0),
+ * so the checker counts them as pictures in that mode (TESTING.md 42.55).
+ */
+export const SEEK_MODE = { raw: 0, fastRaw: 3, normal: 8, mode4: 4 } as const;
 export type SeekMode = (typeof SEEK_MODE)[keyof typeof SEEK_MODE];
+
+/** The processing mode before any init was sent. */
+const NO_INIT_MODE = 255;
 
 /**
  * The IP mode 6 (shutter-managed correlated double sample, op 9). The panel does not offer it; the emulator
@@ -102,7 +110,7 @@ export interface SeekDeviceInfo {
 }
 
 /** Firmware-info reads at connect: up to this many, until byte 0 is non-zero (Swift connect). */
-export const FIRMWARE_INFO_TRIES = 6;
+export const FIRMWARE_INFO_READS = 26;
 const FIRMWARE_INFO_GAP_MS = 20;
 /** The frame bulk read's deadline (Swift readExact's default). */
 export const FRAME_TIMEOUT_MS = 3000;
@@ -116,24 +124,88 @@ export function usesCompactProInit(
   return !isPro && option && firmwareMajor !== null && firmwareMajor >= 4;
 }
 
+/** The highest major version a Seek build reports. An unlocked camera's window bytes read as 184 (TESTING.md 42.41). */
+export const MAX_PLAUSIBLE_MAJOR = 9;
+
+/** What `readTrustedFirmware` decided, and what it saw. */
+export interface TrustedFirmware {
+  /** `major.minor.patch.build` from two consecutive replies that agree, or null when none is trusted. */
+  readonly version: string | null;
+  /** One sentence for the user: what the camera answered and what the checker made of it. */
+  readonly note: string;
+}
+
 /**
- * The firmware-info head the connect uses: an 8-byte read, asked again (up to six times) until
- * its first byte is non-zero. Right after a stop the camera can answer with a leftover slice
- * whose first byte is 0 (Swift connect). A failed read counts as an empty answer.
+ * The version the init is chosen from. GetFirmwareInfo (8 bytes) is asked until two consecutive replies agree on
+ * bytes 0 to 3 and the major is 0 to 9. A leftover reply that the next one does not repeat is passed over, and an
+ * unlocked camera's window reply (major 184) is refused. A failed read counts as no answer, and a build still
+ * starting refuses GetFirmwareInfo for a few milliseconds, so the reads go on for `FIRMWARE_INFO_READS` (26 reads,
+ * about 500 ms, the window core's `readRunningFirmware` allows; TESTING.md 42.55).
+ *
+ * Core's `readRunningFirmware` is not used: it takes the second reply without asking that the two agree, and it
+ * reads 36 bytes, where the checker has always read 8 (the Swift connect).
  */
-export async function readFirmwareHead(
+export async function readTrustedFirmware(
   transport: UsbTransport,
   gapMs: number = FIRMWARE_INFO_GAP_MS,
-): Promise<Uint8Array> {
-  let head: Uint8Array = new Uint8Array(0);
-  for (let attempt = 0; attempt < FIRMWARE_INFO_TRIES; attempt++) {
-    head = await transport
+): Promise<TrustedFirmware> {
+  let previous: string | null = null;
+  const seen: string[] = [];
+  for (let attempt = 0; attempt < FIRMWARE_INFO_READS; attempt++) {
+    const reply = await transport
       .controlIn(REQUESTS.GET_FIRMWARE_INFO, 8, USB_TIMEOUT_MS)
-      .catch(() => new Uint8Array(0));
-    if (head.length > 0 && head[0] !== 0) break;
+      .catch(() => null);
+    if (reply === null || reply.length < 4) {
+      seen.push('no answer');
+      previous = null;
+    } else {
+      const version = Array.from(reply.subarray(0, 4)).join('.');
+      seen.push(version);
+      if (version === previous) {
+        const major = reply[0] ?? 0;
+        if (major <= MAX_PLAUSIBLE_MAJOR) {
+          return { version, note: `GetFirmwareInfo answered ${version} twice in a row` };
+        }
+        return {
+          version: null,
+          note:
+            `GetFirmwareInfo answered ${version} twice in a row, and major ${String(major)} is not ` +
+            'a Seek build (the window bytes of an unlocked camera read this way)',
+        };
+      }
+      previous = version;
+    }
     await sleep(gapMs);
   }
-  return head;
+  return {
+    version: null,
+    note:
+      `GetFirmwareInfo gave no two consecutive replies that agree in ${String(FIRMWARE_INFO_READS)} ` +
+      `reads (${seen.join(', ')})`,
+  };
+}
+
+/** Whether the camera refused a request (a STALL), as opposed to a failure for another reason. */
+export function isRefusal(error: unknown): boolean {
+  return error instanceof SeekError && error.code === 'usb/stalled';
+}
+
+/** The connect's message when no trusted version came back (a Compact's init depends on it). */
+export function untrustedFirmwareMessage(note: string): string {
+  return (
+    `the camera's firmware reply cannot be trusted, so no init is chosen from it (${note}). ` +
+    'A camera unlocked by a slots command answers this way: the CLI info, dump and slots commands send ' +
+    'the unlock token, and the camera stays unlocked until a power cycle. Power-cycle the camera and run again.'
+  );
+}
+
+/** The connect's message when the camera refuses one of its init requests. */
+export function refusedInitMessage(detail: string): string {
+  return (
+    `the camera refused an init request (${detail}). A camera unlocked by a slots command refuses the init ` +
+    'until a power cycle: the CLI info, dump and slots commands send the unlock token, and the camera stays ' +
+    'unlocked until a power cycle. Power-cycle the camera and run again.'
+  );
 }
 
 /** The serial from the chip-id read: every other byte, as hex (Swift connect's `serialHex`). */
@@ -167,10 +239,20 @@ export class SeekCamera {
   /** 0 normal; 1 / 2 / 3 little NUC steps; 10..13 big NUC steps. */
   nucState = 0;
   /** The mode of the last init that was sent (255 before one). */
-  processingMode = 255;
+  processingMode = NO_INIT_MODE;
   lastStatus = 0;
   lastDeviceTemp = 0;
   lastFrameCount = 0;
+  /**
+   * Frames whose header status (byte 20, the type word) is 0. On mode 4 they are pictures and are published; in
+   * the other modes they are dropped. Counted in both, so a run says how many there were (TESTING.md 42.55).
+   */
+  untypedFrames = 0;
+  /**
+   * The camera refused `Startup with Operation=0` (0x37) at connect, and the connect went on without it. Such a
+   * build leaves the camera in operation 1 after an init, so a later init stops it first (see `sendInit`).
+   */
+  startupOpZeroRefused = false;
   deadMap: boolean[] | null = null;
   lastError: string | null = null;
 
@@ -184,7 +266,6 @@ export class SeekCamera {
   private isNormalMode = true;
   private avrFramesLeft = 10;
   private shutterOffsetMapData: Int16Array | null = null;
-  private firmwareBytes: Uint8Array = new Uint8Array(0);
 
   private constructor(link: SeekLink, options: SeekOptions) {
     this.link = link;
@@ -235,20 +316,34 @@ export class SeekCamera {
     this.gains = null;
     this.nucState = 0;
     this.isNormalMode = true;
+    this.untypedFrames = 0;
+    this.startupOpZeroRefused = false;
 
-    const head = await readFirmwareHead(this.link.transport);
-    this.compactOnPro = usesCompactProInit(
-      this.isPro,
-      this.options.compactProInit,
-      head.length > 0 ? (head[0] ?? null) : null,
-    );
+    let firmware: TrustedFirmware;
     try {
-      await this.sendInit(SEEK_MODE.normal);
+      firmware = await readTrustedFirmware(this.link.transport);
+      /* A Pro's init does not depend on the version, so it connects with the firmware unnamed. A Compact's does,
+       * so a reply that is not trusted stops the connect before anything is sent. */
+      if (firmware.version === null && !this.isPro) {
+        throw new Error(untrustedFirmwareMessage(firmware.note));
+      }
+      this.compactOnPro = usesCompactProInit(
+        this.isPro,
+        this.options.compactProInit,
+        firmware.version === null ? null : Number(firmware.version.split('.')[0]),
+      );
+      try {
+        await this.sendInit(SEEK_MODE.normal);
+      } catch (error) {
+        if (isRefusal(error)) {
+          throw new Error(refusedInitMessage(messageOf(error)), { cause: error });
+        }
+        throw error;
+      }
     } catch (error) {
       await this.link.close();
       throw error;
     }
-    const fw = head.length >= 4 && head[0] !== 0 ? head.subarray(0, 4) : this.firmwareBytes;
     const serialHex = serialFromChipId(await this.inBytes(REQUESTS.GET_CHIP_ID, 12));
     const model = this.isPro
       ? 'Seek Thermal Pro'
@@ -257,7 +352,7 @@ export class SeekCamera {
         : 'Seek Compact';
     const usbSerial = this.link.description.serialNumber;
     this.info = {
-      firmware: fw.length === 4 ? Array.from(fw).join('.') : '-',
+      firmware: firmware.version ?? '-',
       serial:
         usbSerial !== null && usbSerial !== '' ? usbSerial : serialHex === '' ? '-' : serialHex,
       model,
@@ -339,12 +434,25 @@ export class SeekCamera {
   }
 
   /** The init sequences (Swift sendInit): the Pro init on a Pro or a Compact with the Pro init, else the classic. */
+  /** Whether the classic init sends Startup with Operation=0: the option is on and the build has not refused it. */
+  private startupOpZeroUsable(): boolean {
+    return this.options.startupOpZero && !this.startupOpZeroRefused;
+  }
+
   private async sendInit(requested: number): Promise<void> {
     let mode: number = requested;
-    if (this.streaming) {
+    /* The stop before an init: a stream is stopped first (Swift sendInit). A classic build that takes no
+     * Startup with Operation=0 is left in operation 1 by its last init, and its 0x56 is refused there
+     * (RPC_MODE0_IDLE, TESTING.md 42.53). So it is stopped first on every later init, streaming or not. */
+    const leftInRun =
+      this.processingMode !== NO_INIT_MODE &&
+      !this.isPro &&
+      !this.compactOnPro &&
+      !this.startupOpZeroUsable();
+    if (this.streaming || leftInRun) {
       for (let k = 0; k < 3; k++) await this.controlOut(REQUESTS.SET_OPERATION_MODE, [0, 0]);
     }
-    this.firmwareBytes = await this.controlIn(REQUESTS.GET_FIRMWARE_INFO, 4);
+    await this.controlIn(REQUESTS.GET_FIRMWARE_INFO, 4); // the read the Swift makes before each init
     await this.controlIn(REQUESTS.GET_CHIP_ID, 12);
     if (this.compactOnPro) mode = SEEK_MODE.normal; // 4.8.2.1: mode 3 reboots it, mode 0 sends no frames
     if (this.isPro || this.compactOnPro) {
@@ -372,9 +480,16 @@ export class SeekCamera {
       this.processingMode = mode;
       return;
     }
-    if (this.options.startupOpZero) {
-      await this.controlOut(REQUESTS.OP_ZERO, [1, 0, 0, 0]);
-      await this.controlOut(REQUESTS.SET_OPERATION_MODE, [0x00, 0x00]);
+    if (this.startupOpZeroUsable()) {
+      try {
+        await this.controlOut(REQUESTS.OP_ZERO, [1, 0, 0, 0]);
+        await this.controlOut(REQUESTS.SET_OPERATION_MODE, [0x00, 0x00]);
+      } catch (error) {
+        /* The 1.3.0.8 family refuses Startup with Operation=0 on a clean boot (TESTING.md 42.41, 42.53): the
+         * connect goes on without it, and a later init stops the camera first (above). */
+        if (!isRefusal(error)) throw error;
+        this.startupOpZeroRefused = true;
+      }
     }
     await this.controlOut(REQUESTS.INIT_56, [0x01]);
     await this.controlOut(REQUESTS.INIT_56, [0x00, 0x00]);
@@ -432,7 +547,15 @@ export class SeekCamera {
   private async grabFrame(): Promise<SeekFrame | null> {
     const bytes = await this.grabBytes();
     if (bytes === null) return null;
-    return new SeekFrame(bytes, this.width, this.height, this.options.rawMin, this.options.rawMax);
+    const frame = new SeekFrame(
+      bytes,
+      this.width,
+      this.height,
+      this.options.rawMin,
+      this.options.rawMax,
+    );
+    if (frame.status === 0) this.untypedFrames += 1;
+    return frame;
   }
 
   /**
@@ -458,7 +581,10 @@ export class SeekCamera {
       this.lastDeviceTemp = f.deviceTemp;
       this.lastFrameCount = f.frameCount;
       const { rawMin, rawMax } = this.options;
-      switch (f.status) {
+      /* Mode 4's frames are pictures, whatever their header says: the camera's publish gate skips the header type
+       * for that mode (FW-V1 FRAME_RATE_MODES.md), so a status 0 there is an image (TESTING.md 42.55). */
+      const status = f.status === 0 && this.processingMode === SEEK_MODE.mode4 ? 3 : f.status;
+      switch (status) {
         case 4: {
           const dead = f.deadPixelMap(rawMin, rawMax);
           this.gains = f.gains(dead, f.average, rawMin, rawMax);

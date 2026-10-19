@@ -145,6 +145,14 @@ export function authPayload(subcmd: number, token: Uint8Array = OLD_FW_UNLOCK_TO
   return bytes;
 }
 
+/**
+ * The one line a run prints when it sent the unlock token (TESTING.md 42.41, 42.55). The camera stays unlocked
+ * until its next power cycle, and other tools may read it wrongly until then. It is information only: nothing
+ * is refused on it.
+ */
+export const UNLOCK_POWER_CYCLE_NOTE =
+  'the camera stays unlocked until a power cycle, and other tools may misread it until then; power-cycle it before you use them';
+
 /** The first block no legacy subcommand reaches: `mode > 0x21` is refused outright. */
 const LEGACY_TOP = 0x14200000;
 
