@@ -19,7 +19,7 @@
  *
  * THE GATE (`approveWrite`, lib/supervised-write.ts):
  *   SEEK_E2E_WRITE=i-understand  runs it on the bench (never with CI set);
- *   SEEK_E2E_WRITE=dry-run       lists the subjects and the plan, touches no hardware;
+ *   SEEK_E2E_WRITE=dry-run       lists the subjects and the plan, and the FF row's files, touches no hardware;
  *   anything else                the whole file skips, and says why.
  * SEEK_BENCH_FAKE=1 (with dry-run, to rehearse) runs the same control flow against
  * the in-memory fakes instead of the library, the page and the camera.
@@ -28,6 +28,10 @@
  *   SEEK_FULL_DUMPS_BY_CAMERA  the dump tree root (required for a real run)
  *   SEEK_BENCH_CAMERA          the tree's camera, default 'Compact'
  *   SEEK_BENCH_ONLY            run only subjects whose version or folder contains this
+ *   SEEK_BENCH_FF_RESTORE,     the 1.3.0.8 FF row's three files (TESTING 42.60). Each is the variable's path when
+ *   SEEK_BENCH_FF_PLATFORM,    it is set, else the file under its default root: SEEK_FULL_DUMPS_BY_CAMERA (restore,
+ *   SEEK_BENCH_FF_PLAIN        platform) or SEEK_E2E_FWV1_DIR (plain). Each is checked by sha256. They are needed only
+ *                              when that row is selected: a missing or wrong file stops the run before its first subject
  *   SEEK_BENCH_REPORT_DIR      where the JSON and markdown matrix go (default: the scratch dir)
  *   SEEK_BENCH_FAKE_FAIL       with SEEK_BENCH_FAKE=1: '<subject index>:<step>', the step one of
  *                              halt, verify, enumerate, write, verdict, readback, boot
@@ -63,6 +67,7 @@ import {
   type RunMode,
 } from './lib/bench/spec-report.js';
 import { loadSubjects, type BenchRig, type LoadedSubjects } from './lib/bench/spec-rig.js';
+import { describeFfFiles, requireFfFiles } from './lib/bench/ff-vendor-run.js';
 import type { BenchSubject } from './lib/bench/types.js';
 import { approveWrite, type WriteApproval } from './lib/supervised-write.js';
 
@@ -111,7 +116,12 @@ const gate: WriteApproval = await approveWrite('camera', async () => {
   const loaded = FAKE
     ? { subjects: fakeSubjects(path.join(SCRATCH, 'fake')), left: [] }
     : await loadSubjects();
-  const text = describePlan(loaded.subjects, loaded.left, CAMERA);
+  /* The 1.3.0.8 FF row's three files are found and checked here, before any subject runs (TESTING 42.60): a
+   * missing or wrong one throws, so the run stops with one message and nothing is flashed. */
+  const ffFiles = requireFfFiles(loaded.subjects, process.env);
+  const text =
+    describePlan(loaded.subjects, loaded.left, CAMERA) +
+    (ffFiles === null ? '' : `\n${describeFfFiles(ffFiles)}`);
   planned.current = { loaded, text };
   return { describe: text };
 });

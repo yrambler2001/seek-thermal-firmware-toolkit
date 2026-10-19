@@ -42,8 +42,9 @@ import {
   type JlinkBench,
   wordAt,
 } from './lib/bench/index.js';
-import { createFakeRig, fakeSubjects } from './lib/bench/spec-fakes.js';
+import { createFakeRig, fakeFfSubjects, fakeSubjects } from './lib/bench/spec-fakes.js';
 import {
+  PLAIN_FF_SHA256,
   describeDifference,
   isFF1308Subject,
   predictedFFStored,
@@ -53,9 +54,17 @@ import { KEY_PAIRS, locateFFKeys } from '../packages/core/src/preservation/patch
 import { ffBankVerdict, plainBankVerdict } from '../packages/core/src/slots/running.js';
 import {
   FF_BANK_ADDRESS,
+  FF_FILE_SLOTS,
   ORIGINAL_SHA256,
+  PLATFORM_SHA256,
+  chooseFfFile,
+  chooseFfFiles,
+  describeFfFiles,
   ffVendorFilesFromEnv,
+  requireFfFiles,
   runFfVendor,
+  type FfFileKey,
+  type FfFileSlots,
   type FfVendorBench,
   type FfVendorFiles,
 } from './lib/bench/ff-vendor-run.js';
@@ -1572,32 +1581,242 @@ describe('the FF vendor-form run, on a fake J-Link and camera', () => {
     expect(fake.flash).toEqual(fake.original);
   });
 
-  it('names the missing environment variables, and pads the plain image to one bank', () => {
-    const dir = mkdtempSync(path.join(tmpdir(), 'seek-ff-env-'));
-    try {
-      const missing = ffVendorFilesFromEnv({}, dir);
-      expect(typeof missing).toBe('string');
-      expect(missing as string).toMatch(/SEEK_BENCH_FF_RESTORE, SEEK_BENCH_FF_PLATFORM, SEEK_BENCH_FF_PLAIN/);
-      const image = ffTestImage(0xc000, 9);
-      const plainFile = path.join(dir, 'plain.bin');
-      writeFileSync(plainFile, image);
-      const files = ffVendorFilesFromEnv(
-        { SEEK_BENCH_FF_RESTORE: plainFile, SEEK_BENCH_FF_PLATFORM: plainFile, SEEK_BENCH_FF_PLAIN: plainFile },
-        dir,
-      );
-      if (typeof files === 'string') throw new Error(files);
-      expect(files.restoreSha256).toBe(ORIGINAL_SHA256);
-      expect(readFileSync(files.plainFfBankFile).length).toBe(0x10000);
-      expect(readFileSync(files.plainFfBankFile).subarray(0xc000).every((byte) => byte === 0xff)).toBe(true);
-    } finally {
-      rmSync(dir, { recursive: true, force: true });
-    }
-  });
-
   it('the address of each bank is the 2014 chain’s own (A 0x14050000, B 0x14060000, R 0x14070000)', () => {
     expect(FF_BANK_ADDRESS).toEqual({ a: 0x14050000, b: 0x14060000, r: 0x14070000 });
   });
 });
+
+/* ==================================================================== *
+ * The FF vendor-run files (TESTING 42.60): each is the variable's path when the variable is set, else the file under
+ * its default root, and each is checked by sha256 before anything else. The real files are 4 MiB, so the fixtures are
+ * small files of their own, with their own hashes, at the default places; the real defaults are checked at the end.
+ * ==================================================================== */
+
+interface FfFixture {
+  readonly dumps: string;
+  readonly fwv1: string;
+  /** The default table, with each file's sha256 replaced by the fixture's own. */
+  readonly slots: FfFileSlots;
+  /** Where the default of `key` is, under the fixture's two roots. */
+  readonly place: (key: FfFileKey) => string;
+  /** The bytes each default file holds when the fixture is made. */
+  readonly bytes: Readonly<Record<FfFileKey, Uint8Array>>;
+}
+
+/** The fixture: all three files at their default places under a temp dump tree and FW-V1 folder. */
+function fixtureFf(
+  dir: string,
+  plain: Uint8Array = new TextEncoder().encode('the plain fixture\n'),
+): FfFixture {
+  const dumps = path.join(dir, 'dumps');
+  const fwv1 = path.join(dir, 'fw-v1');
+  const bytes: Record<FfFileKey, Uint8Array> = {
+    restore: new TextEncoder().encode('the restore fixture\n'),
+    platform: new TextEncoder().encode('the platform fixture\n'),
+    plain,
+  };
+  const slots: FfFileSlots = {
+    restore: { ...FF_FILE_SLOTS.restore, sha256: sha256(bytes.restore) },
+    platform: { ...FF_FILE_SLOTS.platform, sha256: sha256(bytes.platform) },
+    plain: { ...FF_FILE_SLOTS.plain, sha256: sha256(plain) },
+  };
+  const place = (key: FfFileKey): string =>
+    path.join(
+      FF_FILE_SLOTS[key].root === 'SEEK_FULL_DUMPS_BY_CAMERA' ? dumps : fwv1,
+      ...FF_FILE_SLOTS[key].below,
+    );
+  for (const key of ['restore', 'platform', 'plain'] as const) {
+    mkdirSync(path.dirname(place(key)), { recursive: true });
+    writeFileSync(place(key), bytes[key]);
+  }
+  return { dumps, fwv1, slots, place, bytes };
+}
+
+/** The environment that points the defaults at a fixture's two roots. */
+function rootsOf(fx: FfFixture): NodeJS.ProcessEnv {
+  return { SEEK_FULL_DUMPS_BY_CAMERA: fx.dumps, SEEK_E2E_FWV1_DIR: fx.fwv1 };
+}
+
+describe('the FF vendor-run files: defaults, explicit paths, sha256 (TESTING 42.60)', () => {
+  it('the defaults are the files the 42.30 retry used, with the hashes the header names', () => {
+    expect(FF_FILE_SLOTS.restore.root).toBe('SEEK_FULL_DUMPS_BY_CAMERA');
+    expect(FF_FILE_SLOTS.restore.below.join('/')).toBe(
+      'Compact/Compact/2014.10.21-14.58.29-1.3.0.0/full_dump_original.bin',
+    );
+    expect(FF_FILE_SLOTS.restore.sha256).toBe(
+      '40447c7e6da5cbc84621f4694ffff5bda0f783e7807a45e80443383b19a8eb72',
+    );
+    expect(FF_FILE_SLOTS.platform.root).toBe('SEEK_FULL_DUMPS_BY_CAMERA');
+    expect(FF_FILE_SLOTS.platform.below.join('/')).toBe(
+      'Compact/Compact/2017.01.06-11.16.17-1.3.0.8/full_dump_reconstructed.bin',
+    );
+    expect(PLATFORM_SHA256).toBe(
+      'afa9800f8969e46a0d868b19bdd55a9514fec40cfd958de41d0f769eea5a6e7b',
+    );
+    expect(FF_FILE_SLOTS.plain.root).toBe('SEEK_E2E_FWV1_DIR');
+    expect(FF_FILE_SLOTS.plain.below.join('/')).toBe(
+      'emu/data/corpus/compact/2017.01.06-11.17.29-1.3.0.8-FF/no-serial/' +
+        '32k_43x0_1.3.0.8_compact-16hz_public_-_compact_ff_jan_6_2017_11-17-29_99.28_gabiz_ro_firmware.bin',
+    );
+    expect(PLAIN_FF_SHA256).toBe(
+      'b97ced91fff9f0949a02f35fceab697634cc109a0fe2a2fbbfe6ccfadb7d4d16',
+    );
+  });
+
+  it('finds each file at its default place, under the dump tree and the FW-V1 folder, and says so', () => {
+    const fx = fixtureFf(path.join(scratch, 'ff-default'));
+    const chosen = chooseFfFiles(rootsOf(fx), fx.slots);
+    if (typeof chosen === 'string') throw new Error(chosen);
+    expect(chosen.restore).toEqual({
+      variable: 'SEEK_BENCH_FF_RESTORE',
+      path: fx.place('restore'),
+      from: 'default',
+      sha256: fx.slots.restore.sha256,
+    });
+    expect(chosen.platform.path).toBe(fx.place('platform'));
+    expect(chosen.plain.path).toBe(fx.place('plain'));
+    expect(chosen.plain.from).toBe('default');
+    expect(describeFfFiles(chosen)).toMatch(
+      /SEEK_BENCH_FF_RESTORE \(default\): .*full_dump_original\.bin, sha256 [0-9a-f]{64} ok/,
+    );
+  });
+
+  it('an explicit variable wins over its default, even when the default is gone, and needs no root', () => {
+    const fx = fixtureFf(path.join(scratch, 'ff-explicit'));
+    rmSync(fx.place('restore'));
+    const copy = path.join(scratch, 'ff-explicit', 'elsewhere', 'restore.bin');
+    mkdirSync(path.dirname(copy), { recursive: true });
+    writeFileSync(copy, fx.bytes.restore);
+    const chosen = chooseFfFiles(
+      {
+        SEEK_BENCH_FF_RESTORE: copy,
+        SEEK_BENCH_FF_PLATFORM: fx.place('platform'),
+        SEEK_BENCH_FF_PLAIN: fx.place('plain'),
+      },
+      fx.slots,
+    );
+    if (typeof chosen === 'string') throw new Error(chosen);
+    expect(chosen.restore).toMatchObject({ path: copy, from: 'set' });
+    expect(chosen.platform.from).toBe('set');
+    expect(chosen.plain.from).toBe('set');
+  });
+
+  it('a missing file stops with the variable, the path tried and the expected sha256', () => {
+    const fx = fixtureFf(path.join(scratch, 'ff-missing'));
+    rmSync(fx.place('platform'));
+    const problem = chooseFfFiles(rootsOf(fx), fx.slots);
+    expect(typeof problem).toBe('string');
+    expect(problem).toContain('SEEK_BENCH_FF_PLATFORM');
+    expect(problem).toContain(fx.place('platform'));
+    expect(problem).toContain(fx.slots.platform.sha256);
+    expect(problem).not.toContain('SEEK_BENCH_FF_RESTORE');
+  });
+
+  it('a file with the wrong sha256 stops with the variable, the path, its sha256 and the expected one', () => {
+    const fx = fixtureFf(path.join(scratch, 'ff-wrong'));
+    const other = 'a different plain image\n';
+    writeFileSync(fx.place('plain'), other);
+    const problem = chooseFfFiles(rootsOf(fx), fx.slots);
+    expect(typeof problem).toBe('string');
+    expect(problem).toContain('SEEK_BENCH_FF_PLAIN');
+    expect(problem).toContain(fx.place('plain'));
+    expect(problem).toContain(sha256(new TextEncoder().encode(other)));
+    expect(problem).toContain(fx.slots.plain.sha256);
+  });
+
+  it('an explicit file is checked by sha256 too, and a blank variable counts as not set', () => {
+    const fx = fixtureFf(path.join(scratch, 'ff-explicit-wrong'));
+    const wrong = path.join(scratch, 'ff-explicit-wrong', 'wrong-restore.bin');
+    writeFileSync(wrong, 'not the original');
+    const refused = chooseFfFile({ SEEK_BENCH_FF_RESTORE: wrong }, fx.slots.restore);
+    expect(typeof refused).toBe('string');
+    expect(refused).toContain('SEEK_BENCH_FF_RESTORE');
+    expect(refused).toContain(wrong);
+    expect(refused).toContain(fx.slots.restore.sha256);
+    const blank = chooseFfFile({ SEEK_BENCH_FF_RESTORE: '   ', ...rootsOf(fx) }, fx.slots.restore);
+    expect(blank).toMatchObject({ from: 'default', path: fx.place('restore') });
+  });
+
+  it('with no root and no variable, the message names the root and the real expected sha256', () => {
+    const restore = chooseFfFiles({});
+    expect(restore).toMatch(
+      /SEEK_BENCH_FF_RESTORE is not set, and its default is under SEEK_FULL_DUMPS_BY_CAMERA/,
+    );
+    expect(restore).toContain(ORIGINAL_SHA256);
+    const plain = chooseFfFile({ SEEK_FULL_DUMPS_BY_CAMERA: '/somewhere' }, FF_FILE_SLOTS.plain);
+    expect(plain).toMatch(
+      /SEEK_BENCH_FF_PLAIN is not set, and its default is under SEEK_E2E_FWV1_DIR/,
+    );
+    expect(plain).toContain(PLAIN_FF_SHA256);
+  });
+
+  it('the FF row not selected: no file is looked for, and none is required', () => {
+    const subjects = fakeSubjects(path.join(scratch, 'ff-not-selected'));
+    expect(requireFfFiles(subjects, {})).toBeNull();
+    expect(requireFfFiles([], {})).toBeNull();
+  });
+
+  it('the FF row selected: its three files are required before any subject runs, one message at a time', () => {
+    const ffSubjects = fakeFfSubjects(path.join(scratch, 'ff-selected'));
+    expect(() => requireFfFiles(ffSubjects, {})).toThrow(/no subject was run/);
+    expect(() => requireFfFiles(ffSubjects, {})).toThrow(
+      /SEEK_FULL_DUMPS_BY_CAMERA, which is not set/,
+    );
+    const fx = fixtureFf(path.join(scratch, 'ff-selected-fixture'));
+    const chosen = requireFfFiles(ffSubjects, rootsOf(fx), fx.slots);
+    expect(chosen?.plain.from).toBe('default');
+    rmSync(fx.place('plain'));
+    expect(() => requireFfFiles(ffSubjects, rootsOf(fx), fx.slots)).toThrow(/SEEK_BENCH_FF_PLAIN/);
+  });
+
+  it('ffVendorFilesFromEnv pads the plain image to one bank from the chosen files, and names the first problem', () => {
+    const image = ffTestImage(0xc000, 9);
+    const fx = fixtureFf(path.join(scratch, 'ff-pad'), image);
+    const files = ffVendorFilesFromEnv(
+      rootsOf(fx),
+      path.join(scratch, 'ff-pad', 'scratch'),
+      fx.slots,
+    );
+    if (typeof files === 'string') throw new Error(files);
+    expect(files.restoreFile).toBe(fx.place('restore'));
+    expect(files.restoreSha256).toBe(fx.slots.restore.sha256);
+    expect(files.plainFfFile).toBe(fx.place('plain'));
+    const bank = readFileSync(files.plainFfBankFile);
+    expect(bank.length).toBe(0x10000);
+    expect(Buffer.from(bank.subarray(0, 0xc000)).equals(Buffer.from(image))).toBe(true);
+    expect(bank.subarray(0xc000).every((byte) => byte === 0xff)).toBe(true);
+    expect(ffVendorFilesFromEnv({}, path.join(scratch, 'ff-pad', 'none'))).toMatch(
+      /SEEK_FULL_DUMPS_BY_CAMERA, which is not set/,
+    );
+  });
+});
+
+describe.skipIf(CORPUS === undefined)(
+  'the FF vendor-run defaults on the real tree (TESTING 42.60)',
+  () => {
+    it('the restore and platform defaults are on the dump tree, and match their sha256', () => {
+      for (const key of ['restore', 'platform'] as const) {
+        const chosen = chooseFfFile({ SEEK_FULL_DUMPS_BY_CAMERA: CORPUS }, FF_FILE_SLOTS[key]);
+        if (typeof chosen === 'string') throw new Error(chosen);
+        expect(chosen.from).toBe('default');
+        expect(chosen.sha256).toBe(FF_FILE_SLOTS[key].sha256);
+      }
+    });
+
+    it.skipIf(!process.env.SEEK_E2E_FWV1_DIR?.trim())(
+      'the plain default is in the FW-V1 checkout, and matches its sha256',
+      () => {
+        const chosen = chooseFfFile(
+          { SEEK_E2E_FWV1_DIR: process.env.SEEK_E2E_FWV1_DIR },
+          FF_FILE_SLOTS.plain,
+        );
+        if (typeof chosen === 'string') throw new Error(chosen);
+        expect(chosen.from).toBe('default');
+        expect(chosen.sha256).toBe(PLAIN_FF_SHA256);
+      },
+    );
+  },
+);
 
 /** A synthetic 1.3.0.8 FF image: magic, length, the key pair once each, word 142 solved to a plain sum of 0xFFFF. */
 function ffTestImage(length: number, seed: number): Uint8Array {

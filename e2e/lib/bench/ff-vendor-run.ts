@@ -24,10 +24,11 @@ import {
   FF_BANK_BYTES,
   PLAIN_FF_SHA256,
   VENDOR_FF_SHA256,
+  isFF1308Subject,
   predictedFFStored,
   predictedFFVendorPayload,
 } from './ff-form.js';
-import type { BenchCamera, JlinkBench } from './types.js';
+import type { BenchCamera, BenchSubject, JlinkBench } from './types.js';
 
 /** The bank addresses on the 2014 chain (the 1.3.0.8 FF build's own, TESTING 42.12). */
 export const FF_BANK_ADDRESS: Readonly<Record<BankLetter, number>> = {
@@ -369,38 +370,185 @@ export const ORIGINAL_SHA256 = '40447c7e6da5cbc84621f4694ffff5bda0f783e7807a45e8
 /** The whole flash of the 1.3.0.8 8 Hz build (the platform the FF app is loaded onto). */
 export const PLATFORM_SHA256 = 'afa9800f8969e46a0d868b19bdd55a9514fec40cfd958de41d0f769eea5a6e7b';
 
+/** The three files, by the part each plays in the run. */
+export type FfFileKey = 'restore' | 'platform' | 'plain';
+
 /**
- * The run's files, from the environment: SEEK_BENCH_FF_RESTORE (the original 4 MiB), SEEK_BENCH_FF_PLATFORM
- * (the 1.3.0.8 8 Hz whole-flash dump) and SEEK_BENCH_FF_PLAIN (the plain FF image, 49,308 B), with the optional
- * SEEK_BENCH_FF_VENDOR (the vendor app's staged file). The FF image is padded with 0xFF into a bank-sized file in
- * `scratchDir`. Returns the reason in words when a file is missing, instead of the files.
+ * One of the three files: the environment variable that names it, what it is (for the messages), the sha256 it
+ * must have, and where it is found when the variable is not set: `below` is the path under the folder that the
+ * `root` variable names.
  */
-export function ffVendorFilesFromEnv(env: NodeJS.ProcessEnv, scratchDir: string): FfVendorFiles | string {
-  const restore = env.SEEK_BENCH_FF_RESTORE;
-  const platform = env.SEEK_BENCH_FF_PLATFORM;
-  const plain = env.SEEK_BENCH_FF_PLAIN;
-  const missing = [
-    restore === undefined ? 'SEEK_BENCH_FF_RESTORE' : null,
-    platform === undefined ? 'SEEK_BENCH_FF_PLATFORM' : null,
-    plain === undefined ? 'SEEK_BENCH_FF_PLAIN' : null,
-  ].filter((name): name is string => name !== null);
-  if (missing.length > 0) {
-    return `set ${missing.join(', ')} (the original flash, the 1.3.0.8 8 Hz whole-flash dump and the plain FF image)`;
+export interface FfFileSlot {
+  readonly variable: string;
+  readonly what: string;
+  readonly sha256: string;
+  readonly root: 'SEEK_FULL_DUMPS_BY_CAMERA' | 'SEEK_E2E_FWV1_DIR';
+  readonly below: readonly string[];
+}
+
+export type FfFileSlots = Readonly<Record<FfFileKey, FfFileSlot>>;
+
+/**
+ * The defaults (TESTING 42.60): the files the 42.30 retry used (`run-row9-retry.sh`), under the two roots the bench
+ * already requires, the dump tree (SEEK_FULL_DUMPS_BY_CAMERA) and the FW-V1 checkout (SEEK_E2E_FWV1_DIR).
+ */
+export const FF_FILE_SLOTS: FfFileSlots = {
+  restore: {
+    variable: 'SEEK_BENCH_FF_RESTORE',
+    what: "the camera's original 4 MiB flash",
+    sha256: ORIGINAL_SHA256,
+    root: 'SEEK_FULL_DUMPS_BY_CAMERA',
+    below: ['Compact', 'Compact', '2014.10.21-14.58.29-1.3.0.0', 'full_dump_original.bin'],
+  },
+  platform: {
+    variable: 'SEEK_BENCH_FF_PLATFORM',
+    what: 'the whole flash of the 1.3.0.8 8 Hz build',
+    sha256: PLATFORM_SHA256,
+    root: 'SEEK_FULL_DUMPS_BY_CAMERA',
+    below: ['Compact', 'Compact', '2017.01.06-11.16.17-1.3.0.8', 'full_dump_reconstructed.bin'],
+  },
+  plain: {
+    variable: 'SEEK_BENCH_FF_PLAIN',
+    what: 'the plain FF image, 49,308 B',
+    sha256: PLAIN_FF_SHA256,
+    root: 'SEEK_E2E_FWV1_DIR',
+    below: [
+      'emu',
+      'data',
+      'corpus',
+      'compact',
+      '2017.01.06-11.17.29-1.3.0.8-FF',
+      'no-serial',
+      '32k_43x0_1.3.0.8_compact-16hz_public_-_compact_ff_jan_6_2017_11-17-29_99.28_gabiz_ro_firmware.bin',
+    ],
+  },
+};
+
+/** One file as chosen: its variable, its path, whether the variable named it or the default did, and its sha256. */
+export interface FfFileChoice {
+  readonly variable: string;
+  readonly path: string;
+  readonly from: 'set' | 'default';
+  readonly sha256: string;
+}
+
+export type FfFileChoices = Readonly<Record<FfFileKey, FfFileChoice>>;
+
+/**
+ * One file: the variable's own path when the variable is set to a value that is not blank (an explicit path always
+ * wins), else the default under its root. The file must exist and have the slot's sha256. Returns the problem in
+ * words otherwise, naming the variable, the path tried and the expected sha256. Nothing is written.
+ */
+export function chooseFfFile(env: NodeJS.ProcessEnv, slot: FfFileSlot): FfFileChoice | string {
+  const named = env[slot.variable];
+  let filePath: string;
+  let from: 'set' | 'default';
+  if (named !== undefined && named.trim() !== '') {
+    filePath = named;
+    from = 'set';
+  } else {
+    const root = env[slot.root]?.trim() ?? '';
+    if (root === '') {
+      return (
+        `${slot.variable} is not set, and its default is under ${slot.root}, which is not set either. ` +
+        `Set ${slot.variable} to ${slot.what} (sha256 ${slot.sha256}).`
+      );
+    }
+    filePath = path.join(root, ...slot.below);
+    from = 'default';
   }
-  const image = new Uint8Array(readFileSync(plain ?? ''));
-  if (image.length > FF_BANK_BYTES) return `the plain FF image is ${String(image.length)} B, larger than a bank`;
+  const where = from === 'set' ? `named by ${slot.variable}` : `the default under ${slot.root}`;
+  let actual: string;
+  try {
+    actual = fileSha(filePath);
+  } catch {
+    return `${slot.variable}: no readable file at ${filePath} (${where}). Expected ${slot.what}, sha256 ${slot.sha256}.`;
+  }
+  if (actual !== slot.sha256) {
+    return `${slot.variable}: ${filePath} has sha256 ${actual}, not ${slot.sha256} (expected ${slot.what}).`;
+  }
+  return { variable: slot.variable, path: filePath, from, sha256: actual };
+}
+
+/**
+ * The three files, in order (restore, platform, plain), chosen and checked. Returns the first problem, so a run
+ * stops with one message. `slots` is the table the defaults come from: `FF_FILE_SLOTS`, unless a test names its own.
+ */
+export function chooseFfFiles(
+  env: NodeJS.ProcessEnv,
+  slots: FfFileSlots = FF_FILE_SLOTS,
+): FfFileChoices | string {
+  const restore = chooseFfFile(env, slots.restore);
+  if (typeof restore === 'string') return restore;
+  const platform = chooseFfFile(env, slots.platform);
+  if (typeof platform === 'string') return platform;
+  const plain = chooseFfFile(env, slots.plain);
+  if (typeof plain === 'string') return plain;
+  return { restore, platform, plain };
+}
+
+/**
+ * The FF files the selected subjects need, chosen and checked before the first subject runs (TESTING 42.60). Null
+ * when no 1.3.0.8 FF row is selected, and then no file is looked for. Throws one message when the row is selected
+ * and a file is missing or has the wrong sha256.
+ */
+export function requireFfFiles(
+  subjects: readonly Pick<BenchSubject, 'version' | 'variant'>[],
+  env: NodeJS.ProcessEnv,
+  slots: FfFileSlots = FF_FILE_SLOTS,
+): FfFileChoices | null {
+  if (!subjects.some((subject) => isFF1308Subject(subject))) return null;
+  const chosen = chooseFfFiles(env, slots);
+  if (typeof chosen === 'string') {
+    throw new Error(
+      `the 1.3.0.8 FF row is selected and needs its three files; no subject was run. ${chosen}`,
+    );
+  }
+  return chosen;
+}
+
+/** The plan's lines for the three files, as the dry run and the gate print them. */
+export function describeFfFiles(choices: FfFileChoices): string {
+  const lines = [
+    '  the 1.3.0.8 FF row (vendor-form run) needs these three files, found and checked by sha256:',
+  ];
+  for (const key of ['restore', 'platform', 'plain'] as const) {
+    const choice = choices[key];
+    const how = choice.from === 'set' ? 'set' : 'default';
+    lines.push(`    ${choice.variable} (${how}): ${choice.path}, sha256 ${choice.sha256} ok`);
+  }
+  return lines.join('\n');
+}
+
+/**
+ * The run's files, from the environment (TESTING 42.60): SEEK_BENCH_FF_RESTORE (the original 4 MiB),
+ * SEEK_BENCH_FF_PLATFORM (the 1.3.0.8 8 Hz whole-flash dump) and SEEK_BENCH_FF_PLAIN (the plain FF image, 49,308 B).
+ * Each one that is set is used; each one that is not is found under its root (`FF_FILE_SLOTS`). Each is checked by
+ * sha256. The optional SEEK_BENCH_FF_VENDOR is the vendor app's staged file. The FF image is padded with 0xFF into a
+ * bank-sized file in `scratchDir`. Returns the first problem in words, instead of the files.
+ */
+export function ffVendorFilesFromEnv(
+  env: NodeJS.ProcessEnv,
+  scratchDir: string,
+  slots: FfFileSlots = FF_FILE_SLOTS,
+): FfVendorFiles | string {
+  const chosen = chooseFfFiles(env, slots);
+  if (typeof chosen === 'string') return chosen;
+  const image = new Uint8Array(readFileSync(chosen.plain.path));
+  if (image.length > FF_BANK_BYTES)
+    return `the plain FF image is ${String(image.length)} B, larger than a bank`;
   mkdirSync(scratchDir, { recursive: true });
   const bank = path.join(scratchDir, 'ff-plain-bank-r.bin');
   const padded = new Uint8Array(FF_BANK_BYTES).fill(0xff);
   padded.set(image, 0);
   writeFileSync(bank, padded);
   return {
-    restoreFile: restore ?? '',
-    restoreSha256: ORIGINAL_SHA256,
-    platformFile: platform ?? '',
-    platformSha256: PLATFORM_SHA256,
-    plainFfFile: plain ?? '',
-    plainFfSha256: PLAIN_FF_SHA256,
+    restoreFile: chosen.restore.path,
+    restoreSha256: chosen.restore.sha256,
+    platformFile: chosen.platform.path,
+    platformSha256: chosen.platform.sha256,
+    plainFfFile: chosen.plain.path,
+    plainFfSha256: chosen.plain.sha256,
     plainFfBankFile: bank,
     vendorFile: env.SEEK_BENCH_FF_VENDOR ?? null,
   };

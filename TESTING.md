@@ -10537,6 +10537,55 @@ PNGs under `/private/tmp/claude-501/agent-hw4/frames/`: `stock-normal-picture.pn
 
 **Commits.** Checker `852ef7c` and page `364c004`, on branch `worktree-agent-a3bcf919eddebd8b6`. This section is the commit after them.
 
+### 42.60 The 1.3.0.8 FF row finds its three files itself, and the bench stops before its first subject when one is missing or has the wrong sha256 (offline and dry run only, 2026-10-19)
+
+**Summary.** Row 9 (Compact 1.3.0.8 FF) needed `SEEK_BENCH_FF_RESTORE`, `SEEK_BENCH_FF_PLATFORM` and `SEEK_BENCH_FF_PLAIN` in the environment, and without them its page steps did not run (42.30). Owner decision, 2026-10-19: yes. Each of the three now defaults to its file under a root the bench already requires, and each is checked by sha256 before any subject runs. No camera, J-Link or USB switch was used, and `SEEK_E2E_WRITE` was only ever `dry-run`. Row 9 was not re-run on the bench.
+
+**Setup.** `git reset --hard refactor/all-firmware-profiles` (HEAD `228aea9`). The previous HEAD `cf5420b` is an ancestor of it, so no commit was lost. `node_modules/@seek-fw/{core,cli,web}` are symlinks to the worktree's packages (not committed).
+
+**1. The three defaults.** A variable that is set to a value that is not blank always wins. An unset or blank one is found under its root. Each is checked by sha256. All three files were hashed on this machine and match.
+
+| variable | default | sha256 | size |
+| --- | --- | --- | --- |
+| `SEEK_BENCH_FF_RESTORE` | `$SEEK_FULL_DUMPS_BY_CAMERA/Compact/Compact/2014.10.21-14.58.29-1.3.0.0/full_dump_original.bin` | `40447c7e6da5cbc84621f4694ffff5bda0f783e7807a45e80443383b19a8eb72` | 4,194,304 B |
+| `SEEK_BENCH_FF_PLATFORM` | `$SEEK_FULL_DUMPS_BY_CAMERA/Compact/Compact/2017.01.06-11.16.17-1.3.0.8/full_dump_reconstructed.bin` | `afa9800f8969e46a0d868b19bdd55a9514fec40cfd958de41d0f769eea5a6e7b` | 4,194,304 B |
+| `SEEK_BENCH_FF_PLAIN` | `$SEEK_E2E_FWV1_DIR/emu/data/corpus/compact/2017.01.06-11.17.29-1.3.0.8-FF/no-serial/32k_43x0_1.3.0.8_compact-16hz_public_-_compact_ff_jan_6_2017_11-17-29_99.28_gabiz_ro_firmware.bin` | `b97ced91fff9f0949a02f35fceab697634cc109a0fe2a2fbbfe6ccfadb7d4d16` | 49,308 B |
+
+These are the files the 42.30 retry used (`run-row9-retry.sh`). The two roots are the ones the bench already requires: `SEEK_FULL_DUMPS_BY_CAMERA` (the dump tree, `benchRoot`) and `SEEK_E2E_FWV1_DIR` (the FW-V1 checkout). The FF row is a Compact row, so the defaults name the Compact tree.
+
+**2. What changed.**
+
+- `e2e/lib/bench/ff-vendor-run.ts`: `FF_FILE_SLOTS` (l.395) is the table above. `chooseFfFile` (l.442) takes the explicit path, else the default, and requires the file to exist with its sha256. It returns the first problem as one message: the variable, the path tried, and the full expected sha256. `chooseFfFiles` (l.477) checks restore, platform, plain, in that order. `requireFfFiles` (l.495) returns null when no 1.3.0.8 FF row is selected, so no file is looked for; when the row is selected and a file is not usable, it throws one message. `describeFfFiles` (l.511) gives the plan lines. `ffVendorFilesFromEnv` (l.530) now uses the chooser, so `runFF1308` and `ff-vendor.e2e.ts` get the defaults and the checks too.
+- `e2e/slots-bench.e2e.ts` (l.115-126): the gate's plan calls `requireFfFiles` on the selected subjects. The plan runs for a dry run and for a real run before the rig opens and before any flash, so a throw ends the suite before subject 1, and a dry run prints the three resolved paths. Its header lists the three variables.
+- `e2e/ff-vendor.e2e.ts`: the header gives each default. The check is unchanged in place: it runs inside the test before the J-Link or the camera is created.
+- `e2e/bench-lib.e2e.ts`: the old test (one file for all three variables) is replaced; it would now fail the hash check. New tests are at l.1640, and the corpus test at l.1794.
+
+**3. Why the check is at plan time.** Before this change, `ffVendorFilesFromEnv` only checked that the three variables were set. The sha256 check was in `runFfVendor`, which runs after `runFF1308` has already flashed the restore file (`flashFull(files.restoreFile)`, then `verifyFlash`). A wrong restore file would therefore have been written to the camera before the mismatch was seen. The check now runs before any flash.
+
+**4. Tests.** Only the two offline files were run (`bench-lib.e2e` and `bench-verdict.e2e`, both in each count below). They touch no hardware.
+
+- Before this change, no roots: 134 passed, 4 skipped (138).
+- After, no roots: 143 passed, 6 skipped (149).
+- After, `SEEK_FULL_DUMPS_BY_CAMERA` set: 148 passed, 1 skipped (the plain default needs FW-V1).
+- After, both roots set: 149 passed, 0 skipped.
+
+The ten new tests: the defaults and their hashes; each default found under its root, with a description; an explicit path wins with no root, and a blank variable counts as unset; a missing file (variable, path, expected hash); a wrong sha256 (variable, path, actual, expected); an explicit file is checked too; no root and no variable names the root and the real sha256; the FF row not selected (nothing required); the FF row selected (required before any subject, one message at a time); `ffVendorFilesFromEnv` pads the plain image to one bank and names the first problem. The corpus tests (only with the roots set) check the real restore and platform files, and the real plain file when FW-V1 is also set.
+
+**5. Dry runs** (`SEEK_E2E_WRITE=dry-run`, the `run-matrix.sh` roots, no hardware):
+
+- `SEEK_BENCH_ONLY=1.3.0.8-FF`: exit 0, 1 passed. The plan lists row 9 and then:
+  - `SEEK_BENCH_FF_RESTORE (default): …/SEEK_FULL_DUMPS_BY_CAMERA/Compact/Compact/2014.10.21-14.58.29-1.3.0.0/full_dump_original.bin, sha256 40447c7e6da5cbc84621f4694ffff5bda0f783e7807a45e80443383b19a8eb72 ok`
+  - `SEEK_BENCH_FF_PLATFORM (default): …/Compact/Compact/2017.01.06-11.16.17-1.3.0.8/full_dump_reconstructed.bin, sha256 afa9800f8969e46a0d868b19bdd55a9514fec40cfd958de41d0f769eea5a6e7b ok`
+  - `SEEK_BENCH_FF_PLAIN (default): …/FW-V1/emu/data/corpus/…-1.3.0.8-FF/no-serial/32k_43x0_…gabiz_ro_firmware.bin, sha256 b97ced91fff9f0949a02f35fceab697634cc109a0fe2a2fbbfe6ccfadb7d4d16 ok`
+- The same with `SEEK_BENCH_FF_PLAIN=/private/tmp/claude-501/no-such-ff-plain.bin`: exit 1, no test run. The suite stops with one message: `the 1.3.0.8 FF row is selected and needs its three files; no subject was run. SEEK_BENCH_FF_PLAIN: no readable file at /private/tmp/claude-501/no-such-ff-plain.bin (named by SEEK_BENCH_FF_PLAIN). Expected the plain FF image, 49,308 B, sha256 b97ced91….`
+- `SEEK_BENCH_ONLY=4.8.1.7` with the dump root and no FW-V1 root: exit 0. The plan lists 4.8.1.7 only, with no FF lines.
+
+**6. Checks.** `npx tsc --noEmit -p e2e/tsconfig.json`: exit 0. ESLint on the four changed files reports three errors, and HEAD has the same three (`ff-vendor-run.ts`: `no-base-to-string`, `no-unsafe-finally`; `ff-vendor.e2e.ts`: `require-await`); none is new. Prettier: `slots-bench.e2e.ts` passes `prettier --check`, as it did on HEAD. `ff-vendor-run.ts`, `ff-vendor.e2e.ts` and `bench-lib.e2e.ts` already failed it on HEAD, so only the new hunks were formatted and the old lines were left alone.
+
+**7. Not done.** No bench run, so row 9 is not re-run and 42.30's result stands. `plan.md` and FW-V1 were not touched (`plan.md` still says "running: TESTING.md 42.60"). `npm run build:docs` was not run. Nothing was pushed or merged.
+
+**Commit.** This section and the code are one commit on branch `worktree-agent-a3db5bd2cdf2b34b5`, on top of `228aea9`.
+
 ### 42.61 The serial labels: the checker and the Swift `seek` show the ASCII device serial as `serial` and the GetChipID value as `chip id` (owner's option A; fakes and unit tests only, 2026-10-19)
 
 **Summary.** The owner chose option A for 42.37's first item (2026-10-19): the checker and the Swift `seek info` show the ASCII device serial as `serial`, as the CLI and the page do, and print the GetChipID value under its own label. No camera, J-Link or USB switch was used. Checker: commit `09f6734` on `worktree-agent-a3005a2a9a5c4951a`. Swift: commit `3be18f6` on branch `serial-labels` in tv-jc (not merged, not pushed). This section is the commit after the checker's.

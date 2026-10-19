@@ -4,10 +4,15 @@
  * Needs the bench and the write gate:
  *   SEEK_E2E_WRITE=i-understand   runs it on the camera (never with CI set);
  *   SEEK_E2E_WRITE=dry-run        prints the plan and touches no hardware.
- * and these files (checked by sha256 before anything is written):
+ * and these three files, each checked by sha256 before anything is written. A variable that is set names its
+ * file; one that is not set finds the file under its default root (TESTING 42.60, lib/bench/ff-vendor-run.ts):
  *   SEEK_BENCH_FF_RESTORE    the camera's original 4 MiB flash (sha256 40447c7e...eb72)
+ *                            default: $SEEK_FULL_DUMPS_BY_CAMERA/Compact/Compact/2014.10.21-14.58.29-1.3.0.0/full_dump_original.bin
  *   SEEK_BENCH_FF_PLATFORM   the whole flash of the 1.3.0.8 8 Hz build (sha256 afa9800f...)
+ *                            default: $SEEK_FULL_DUMPS_BY_CAMERA/Compact/Compact/2017.01.06-11.16.17-1.3.0.8/full_dump_reconstructed.bin
  *   SEEK_BENCH_FF_PLAIN      the plain FF image, 49,308 B (sha256 b97ced91...)
+ *                            default: $SEEK_E2E_FWV1_DIR/emu/data/corpus/compact/2017.01.06-11.17.29-1.3.0.8-FF/no-serial/32k_43x0_1.3.0.8_compact-16hz_public_-_compact_ff_jan_6_2017_11-17-29_99.28_gabiz_ro_firmware.bin
+ * A missing or wrong file stops the run before the camera is touched, with the variable, the path and the expected sha256.
  * optional:
  *   SEEK_BENCH_FF_VENDOR     the vendor app's staged file (sha256 fd9da63b...), compared byte for byte
  *   SEEK_BENCH_FF_SCRATCH    where the padded bank file and the report go (default: the OS temp dir)
