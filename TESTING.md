@@ -10633,3 +10633,53 @@ The ten new tests: the defaults and their hashes; each default found under its r
 - The Swift and checker retry difference in item 4.
 
 **Commits.** Checker `09f6734` on branch `worktree-agent-a3005a2a9a5c4951a`. Swift `3be18f6` on tv-jc branch `serial-labels`. Neither is pushed or merged, and the tv-jc main checkout was not touched. This section is the commit after the checker's.
+
+### 42.63 FW-V1 review before the merge: corrections on plan-hygiene and emu-research, the codegen answer and its port, and the merge rehearsal (2026-10-19)
+
+**Summary.** The three FW-V1 branches were checked against 42.35 to 42.59 before the orchestrator merges them into FW-V1 main (`a13c615c6`, unchanged). `plan-hygiene` and `emu-research` got corrections, as small commits; `emu-sensor` needed none. Codegen: a regen does not silently overwrite the hand-edited copies, because `gen.mjs` refuses them. The 25 pending targets cannot be regenerated at all, and the shared `codegen/harness` copies would undo the 2014 fixes if one were derived. Commit `56405fab7` makes the regen reproduce 17 of the 18 managed targets byte for byte (its check mode); the 18th, 1.3.0.0, still refuses one `.gitignore`. The three branches merge into main with no conflict, in the order plan-hygiene, emu-sensor, emu-research, and the checks each branch documents pass on the merged scratch tree. Nothing was merged into FW-V1 main or pushed. No camera, J-Link or switch was used.
+
+**Tags.** [measured] is a command run in this session. [source] is read from the code or doc named. [inferred] follows from those.
+
+**1. Corrections, per branch.**
+
+- `plan-hygiene`, tip `393d09077` (16 commits over main):
+  - `c2c4b7583` STATE.MD: the source line now includes 42.51; the commit list is in log order (`b99426f8b` before `289548951`); the lowercase `.BIN` note says the name matched only on a case-insensitive filesystem (Linux not run, 42.51), not "passed on macOS"; open item 3 is rewritten to the codegen finding in section 2.
+  - `56405fab7` codegen: the flash tools that `gen --check` refused are owned by their targets (section 2). Its commit message says "16 of the 17 non-pending targets"; the count is 17 of 18, corrected in `393d09077`.
+  - `393d09077` STATE.MD count, as above.
+  - Checked, no change: the `fps_patch.py` text (the 8.84 to 17.68 Hz figure is the emulator IP 8 result from 42.27; six differing bytes is 42.40); the 1.3.0.8 footer formula (it differs from `boot_main`'s only when `length mod 0x4000 > 0x3FC0`, as its comment says; 0xBFE8 gives 0xFFC0, 42.49).
+- `emu-research`, tip `aa6f3511d` (7 commits over main):
+  - `7aae3cb93` `docs/FRAME_RATE_MODES.md`: the camera runs contradict three statements. "The mode-4 rate on a Compact is not measured" (42.54 measured mode 4 on stock 1.3.0.0 and 1.3.0.8, about 32 fps). "The frames are type 3" (camera frames carry status 0 at halfword 10; the emulator writes type 3); the publish-gate conclusion in 2.1 is now qualified the same way. "Live sensor pictures" (42.58 saw no scene; the pixel change is [inferred] as a picture). The "2.5 s" limit is now stated against the 20 s camera runs. Section 0 row 6 and section 6 are updated.
+  - `4131a4a39` comments: "live sensor picture" becomes "sensor picture" in the mode-4 comments; the XR and 4.8.1.9 records are described as source-only (their bytes were not read, 42.52).
+  - `5ee0f5f7c` REVERT of the hand edits to generated sources. `b03d8ade4` and `9374eeded` had edited `targets/compact_xr_8hz_4_8_2_1/src/frame.c`, `compact_8hz_4_8_1_7`, `compact_8hz_4_8_1_9` and `compact_8hz_1_3_0_8` (`src/frame.c` and `src/rpc_cmds.c`) by hand. `gen --check` on the XR target then refused `src/frame.c` (rc 3), and `sync_back` refuses the edit as residue: the text is in `codegen/tu/frame.c`, shared by about twenty targets whose modes differ. The five files are restored to main's content. `4131a4a39`'s edits to them are reverted with them.
+  - `aa6f3511d` `FRAME_RATE_MODES.md` section 6: the `frame.c` and `rpc_cmds.c` comments are still stale in generated residue, and the fix is a codegen decision, not a branch edit.
+- `emu-sensor`, tip `08e1abc6e`: no change. Checked the warm-ramp constants against 42.42 (rows 40 to 119, columns 20 to 169, 14,880 + 10 per column, column 32 = 15,000, column 169 = 16,370, 11,040 samples at or above 15,000 per frame; `HEADER_WORDS` = 832), the `cli.py` `--flash-entry` path (`sensor_power(doc, entry, donor)` and the `count` and `label` attributes exist), and the README.
+
+**2. The codegen question (AGENTS sec 9).**
+
+- What produces the copies. `codegen/harness/tools/` is the canonical source for every target's tools; a target's copy is recorded by hash in `targets/<t>/.codegen/manifest.json`. On main the canonical `build_flash.mjs` has the 4.x slot table and no BUILD line. `a6afd9312` changed the canonical `jlink-runner.js` to require BANK_ADDR (still the 4.x table).
+- Would a regen overwrite them? Not silently. `node codegen/engine/gen.mjs --target <t>` (the `regen-<t>` rule) checks for hand edits first and exits 3, naming the files, without writing. Measured on plan-hygiene before the port: `compact_8hz_1_3_0_0` refused `tools/build_flash.mjs`, `tools/jlink/jlink-runner.js`, `tools/jlink/README.md` and `.gitignore`; `compact_pro_9hz_1_0_3_0` refused `build_flash.mjs`, its runner and README; `compact_ff_16hz_1_3_0_8`, `compact_pro_9hz_4_9_1_15`, `compact_pro_9hz_4_9_2_0`, `compact_pro_ff_18hz_4_18_2_0`, `compact_xr_8hz_4_8_2_1`, `mosaic_18hz_10_9_1_31`, `mosaic_ff_27hz_2_27_1_33`, `nano_200_32hz_42_32_3_10` and `nano_300_27hz_44_27_3_10` refused their runner and README. The bootloader targets refused nothing.
+- The 25 pending targets (`validate_manifest.mjs --list-pending`; `codegen.pool_derived` false) are refused by gen itself, which has nothing to render from. `make -C codegen pending-check`, `regen-all` and `tree-guard` refuse on this branch ("cannot tell which targets are pending"). `codegen/Makefile` and `codegen/engine` are unchanged from main, so that refusal is inherited.
+- Answer: a regen today does not undo the fixes, but it stops at the first refusal. Two things would undo them: `--force` (AGENTS: never), and deriving a pending target, whose canonical copies would replace the 2014 fixes unless the target owns them.
+- Already on main: `targets/compact_8hz_1_3_0_0/tools/jlink/jlink-runner.js` (blob `0aa9cdad`) does not match its manifest hash (`2065eba6`, the canonical content). Commits `15e74e942` and `37cf6cfa8` edited the copy after the canonical file last changed (`4aee2f979`), without the canonical file. So main has one hand edit a regen would refuse.
+- The port, `56405fab7`. The sanctioned shape for a target's own tool is `codegen/targets/<t>/tools/` with a declaration in `codegen.own_tools[]` that gives a reason (gen.mjs: "tools NOT excluded - the normal shape"). The refused files of the managed targets are copied there and declared, `bin` `-`. Four of the `target.json` files use inline arrays, so their row is inserted as text and the rest of the file is unchanged. Nothing under `targets/` changed.
+- Proof: `gen.mjs --target <t> --check` (the regen's own check mode, which writes nothing) on the 18 non-pending targets, at the port commit: 17 exit 0. `compact_8hz_1_3_0_0` exits 3 with one file, `.gitignore`. gen writes that file from its own literal (`build/`, `build-reloc/`); a per-target `codegen/targets/<t>/.gitignore` is not honoured (tested). Adding `jlink_dumps/` to the literal changes every target's `.gitignore`, so that is left to the owner. The pending targets have no codegen path yet, so the port does not touch them.
+
+**3. Merge rehearsal.** A detached scratch worktree at `a13c615c6` (`/private/tmp/claude-501/fwv1-merge`), merged in the order given. plan-hygiene, emu-sensor and emu-research each merged with zero conflicts (`git merge --no-ff`, no `CONFLICT` line, exit 0). The scratch tip is `98d379b4c`, which includes plan-hygiene `393d09077`. Checks on the merged tree:
+- `node --check` on the 78 changed `.js` and `.mjs` files: 0 failures.
+- Compile of the 6 changed `.py` files with the system `python3`, bytecode off: 0 failures.
+- `emu/selftest.py --only usbip,image_data_test_pattern,1308_calibration_frames` with the FW-V1 emu venv interpreter (executed, not modified): 29 passed, 0 failed, 42 s. This is emu-sensor's documented check; it does not exercise `--flash-entry` or the warm-ramp scene, which 42.42 ran on the branch.
+- `emu/fps_patch_tests.py --list` (plan-hygiene's documented check): exit 0, 73 lines. `fps_patch_unit_tests.py` was not run.
+- `gen --check` on the 18 non-pending targets: 17 exit 0; `compact_8hz_1_3_0_0` exit 3 (`.gitignore` only).
+- emu-research's final tip changes only `docs/`, so there is no code check to run.
+
+**4. Commits and tips** (not merged into FW-V1 main, not pushed).
+- seek: this section, on branch `worktree-agent-a7f679fd9bf643f15`, reset to `refactor/all-firmware-profiles` at `228aea9` (its old HEAD `cf5420b` is an ancestor).
+- FW-V1: `plan-hygiene` `393d09077`, `emu-sensor` `08e1abc6e`, `emu-research` `aa6f3511d`; main `a13c615c6`.
+- Scratch worktrees, which can be removed with `git worktree remove`: `/private/tmp/claude-501/fwv1-merge` (merge rehearsal, detached) and `/private/tmp/claude-501/fwv1-codegen-probe` (detached at `56405fab7`, the gen checks).
+
+**5. Not verified or open.**
+- The `.gitignore` literal in `gen.mjs` (section 2), and the 25 pending targets, which have no codegen path. Their hand copies, including the 1.3.0.8 footer and the 4.8.x BUILD fixes, remain hand edits.
+- The 14 other targets' `frame.c` mode-4 comment (42.52 item 5), and the `rpc_cmds.c` mask comment in the pending 1.3.0.8 target: stale, generated residue.
+- Seek `FPS_32HZ.md` ("Modes 4 and 7 on a camera", about lines 269 to 271) still says neither mode is measured on a Compact. 42.54 measured mode 4. The seek doc was not changed here.
+- Not run: `fps_patch_unit_tests.py`; the warm-ramp rows and a `--flash-entry` boot on the merged tree; the seek vitest suites (no seek code changed).
+- The `jlink/README.md` rows of the 2014 targets were checked by the port's byte comparison, not re-read against 42.40.
