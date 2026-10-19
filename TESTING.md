@@ -11447,3 +11447,116 @@ The CLI's output did not change: its tests already pinned this form (42.69), and
 - The text in 42.64 above says the Info tab's description reads "nothing is written to flash". The source says "Nothing is written." (`packages/web/src/views/InfoView.tsx:131`), and the bundle has the same. The 42.64 wording is stale. It is not edited here; the owner decides whether it matters.
 - The hashed file names come from this machine's build. A rebuild elsewhere was not compared.
 - The offline run's log is in this agent's session scratchpad and is not kept in the repo.
+
+### 42.74 Holding the frame: the endpoint-busy skip, what a host can do about it, and a copy gate that the emulator says loses no field and tears no frame (study, 2026-10-19)
+
+**Summary.** Agent 42.74, on `worktree-agent-ac04396cf04e77202`, reset to `refactor/all-firmware-profiles` (ee612e3). A study only: no camera flash write, no J-Link, no firmware change, no push, no merge. The camera ran read-only streaming (the checker's own Normal connect, then host timing loops) and was power-cycled on channel 2 at the end. No whole vitest run.
+- **Mechanism.** The field-start check (`app_init.c:952`) skips a whole field when any IN transfer of the previous frame is still not retired. The last payload transfer of a field is primed at the field's last DMA group, and the next field's check comes one group later. The margin is one group (0.69 ms in the emulator, about 0.78 ms on the camera), and a transfer takes about 0.37 ms to complete when the host is prompt. So the skip is a timing margin of a few tenths of a millisecond, not a field-sized window.
+- **Host.** One transfer in flight (both the checker and the Swift tool) loses 23, 32 and 25 single captures a minute on the camera. Keeping three transfers in flight, with one credit per frame sent at the frame's last byte, loses 3, 12 and 4 a minute. Two in flight loses 15. Nothing in the firmware forbids this; the credit is the only constraint.
+- **Candidates.** Second frame buffer: no room in the 1.3.0.0 memory map. Defer the publish: it is the stock skip. Re-arm from the completion interrupt: already done. Copy gate per 4-row group (candidate 6 below): the emulator shows 0 lost fields and 0 torn transfers at 0 to 5 ms of host delay per transfer, where the stock build loses 17 to 249 captures per 300 to 400 frames. Copy with no check: tears 452 of 1,199 transfers at 15 ms.
+- **Recommendation.** Host pipelining now (checker and Swift tool; measured, no firmware change). The copy gate is the only firmware candidate that removes the field-start loss; it is a source change with a 2013 toolchain build and a camera test, and needs the owner's decision. Details in section 6.
+
+**Tags.** [measured] is a camera log, an emulator run or a file read here, named. [source] is read from the 1.3.0.0 reconstruction (`FW-V1/targets/compact_8hz_1_3_0_0/src/`) or the layout file, named. [inferred] follows from those and was not measured directly.
+
+**1. Mechanism.**
+
+1.1 *Field and group.* A field is 40 GPDMA terminal counts: `DMA_IRQHandler` (`isr.c:877`) calls `frame_capture_step` then `frame_line_dispatch` on each, and the counters reset at 40 [source]. Each call handles one 4-row group: `frame_line_dispatch` (`app_init.c:580`) copies rows `k = line-4 .. k+3` into the frame pool at `0x20000000` (`stream_ahb_frame_pool_r32k`, 416 bytes a row, `app_init.c:570`, `image_layout.ld:555`). Rows 0 to 155 are the body; the pool is 64,896 bytes of the 64 KB AHB SRAM [source, `emu/seekemu/memmap.py` for the 64 KB].
+
+1.2 *The check.* At the first group of each field, `frame_capture_step` runs `if (usb_ep_has_flag(stream_ep_queue_cell_r32k) && step[D].active)` (`app_init.c:952`). When true it logs "USB TX not complete, skipping field", sets `stream_session._10 = 1` and resets the step to 0 (`app_init.c:955-961`). `usb_ep_has_flag` is `*(u8*)(queue + 0x148) != 0` under the basepri lock (`usb_core.c:392-400`), the number of IN transfers written and not yet retired. In the 1.3.0.0 binary the call is at runtime `0x100864F4` and the branch on its result at `0x100864F8` (IDA `loc_10006188` plus `0x80368`; the offset is the same for `usb_ep_has_flag` and `frame_capture_step`) [source; the address is a layout offset]. The emulator's probe reads that result at 487 field starts in 400 frames, and it equals "some primed IN transfer is not yet complete" at all 397 checks of one run (section 4) [measured].
+
+1.3 *What "TX complete" is.* The IN completion handler `usb_ep_complete_2` (`usb_core.c:1783`, registered as EP handler 5 at `usb_core.c:2333`) runs in the USB interrupt through the ROM stack. For a finished transfer it calls `usb_ep_retire_td` (`usb_core.c:1003-1025`, which decrements the count at `+0x148`) and then `usb_ep_service_queue` (`usb_core.c:772`), which writes the next transfer [source]. So the flag clears in the completion interrupt, and the re-arm is already there. The queue has 8 slots of 40 bytes (`usb_core.c:733-739`).
+
+1.4 *What a credit is.* `cmd_ImageData` (`rpc_cmds.c:2634`) takes the code 0x7EC0 (checker) or 0x8200. It sets the frame length `g_stream_len` (`0x100043F4`, session `+0x04`) to `code << 1`, increments the ready count `_14` (`g_stream_busy`, `0x10004404`), and if the queue count is not zero it cancels every queued IN (`rpc_cmds.c:2656-2659`, "Canceling queued IN requests") [source]. One credit grants one frame. A second credit while transfers are queued cancels them, so a host must not send the next credit before the frame's last byte.
+
+1.5 *Transfers per frame.* A frame starts (`stream_push_chunk`, `app_init.c:467`) only when `_14 != 0` and the endpoint is idle (`app_init.c:482`). The 1,664-byte header transfer is written only with the 0x8200 credit (`app_init.c:490-491`). Payload transfers of `_04 >> 2` = 16,224 bytes are written as the pending count reaches that (`app_init.c:494-496`) [source]. The camera's logs show only 1,664-byte and 16,224-byte transfers, four of the latter per frame (section 5) [measured].
+
+1.6 *Bytes and link.* A 0x8200 frame is 66,560 bytes (1,664 + 4 x 16,224); the checker's 0x7EC0 frame is 64,896 (4 x 16,224). At the measured field period of 31.06 ms (32.2 Hz) that is 2.1 MB/s, about 17 Mb/s, 3.6% of the 480 Mb/s link. libusb reports the camera at speed 3, high speed [measured, `fdtime` meta line]. One frame's data bits take 1.11 ms at 480 Mb/s, and 130 packets of 512 bytes need at least 10 microframes (1.25 ms). At full speed (12 Mb/s) the 64,896-byte frame alone needs 43 ms of data bits, longer than a field, so the 32 Hz stream could not run at full speed [arithmetic on the measured link speed].
+
+1.7 *Timeline of one field* (emulator, device time; camera, host time).
+- The first transfer of a frame is primed when its rows exist: the header at the credit, then P1 (rows 0-38), P2 (39-77), P3 (78-116), P4 (117-155) as the pending count allows; P4 is primed at the field's last group [source; emulator].
+- Emulator, 300 frames, the field-end transfer (P4): prime-to-completion median 0.37 ms with a prompt host (0.1 ms per IN: median 0.367, max 0.475). The next field's check comes 0.691 ms after the prime, every time. With 0.5 ms per IN the completion p90 is 0.82 ms and 96 of 415 fields miss the margin [measured].
+- Camera, serial host (S1, 1,649 frames): credit complete to header complete median 0.61 ms (p90 1.31); frame complete to next credit 0.015 ms median; in one frame of S1 the completions were 7.4, 10.1, 5.5 and 7.5 ms apart (header to P4, sum 30.5 ms, one field) [measured].
+- So the margin is one group minus the last transfer's completion time: 0.69 - 0.37 = about 0.3 ms in the emulator. On the camera one group is about 31.06 / 40 = 0.78 ms [inferred], so the margin is about 0.4 ms there.
+
+1.8 *Why immediate re-arming does not close it.* The host can only shorten the wait before its IN token. The transfer itself takes about 0.37 ms, and a host that posts the IN late, or a USB scheduling tail, leaves the last transfer in flight at the next check. The 1-credit serial host and the 3-IN host differ only in that wait (section 2.3). The credit is not the limit: it arrives 0.015 ms after the frame ends on the serial host [measured].
+
+1.9 *What the skip protects.* The transfers reference the pool rows in place; the USB controller reads them while the transfer is in flight [inferred: the emulator's dTD model reads the buffer pages at completion (`emu/seekemu/usb_device.py`, `in_transfer`), and the ROM's transfers are at most 16 KB per dTD, which fits a dTD that references its pages; not measured on silicon]. The copy into a row that is still in flight tears the frame (section 4, `copy anyway`). The skip is therefore a pool interlock as well as a loss.
+
+**2. Host side.**
+2.1 *The checker and the Swift tool keep one transfer in flight.* The checker's `grabBytes` sends one credit (`controlOut(83, [0xC0,0x7E,0,0])`) and `readExact` awaits one `bulkIn` after another until the frame's bytes are in (`e2e/lib/bench/seek-fps/camera.ts:626-650`, `link.ts:86-100`). The Swift tool does the same with a synchronous `libusb_bulk_transfer` loop (`tv-jc/macos/Sources/SeekKit/USB.swift:88-103`, `Camera.swift:190-198`) [source].
+2.2 *Is more than one IN legal?* Yes for the bus and for this firmware. The endpoint queue is a ring of 8 transfers served in order; an IN token with no transfer queued is NAKed and the host retries. The firmware has no limit on pending IN requests. The one firmware rule is the credit (1.4): a second credit while transfers are queued cancels them. So the host may keep several IN requests pending, and must send one credit per frame, after the frame's last byte, and never a second credit early.
+2.3 *Measured* (camera, 60 s per run, the 0x8200 credit with the header; `fdtime`, section 5). Single captures lost (type-3 gaps) per minute, and the frame cadence:
+
+| run | in flight | frames | fps | single skips /min (events) | frame-to-frame gap p10-p90 (ms) |
+| --- | --- | --- | --- | --- | --- |
+| S1 | 1, serial | 1649 | 27.48 | 23 (23) | 29.72-34.05 |
+| S2 | 1, serial | 1640 | 27.33 | 32 (32) | 29.77-34.31 |
+| S3 | 1, serial | 1647 | 27.45 | 25 (25) | 29.64-34.29 |
+| P1 | 1, next IN posted before the credit | 1654 | 27.57 | 19 (19) | 30.36-32.76 |
+| P2 | 2 | 1658 | 27.63 | 15 (15) | 29.77-33.67 |
+| P3a | 3 | 1670 | 27.83 | 3 (3) | 31.02-31.14 |
+| P3b | 3 | 1660 | 27.67 | 12 (12) | 29.70-33.70 |
+| P3c | 3 | 1669 | 27.82 | 4 (4) | 30.08-32.77 |
+
+The 42.62 per-credit waits (5 ms and 15 ms: 207 and 864 a minute) are above this floor. The frame cadence tightens with pipelining in some runs and not others (P3a is tight; P3b is as loose as S1). Calibration: the classes A, A' and B follow 42.62's `classify_fd.py`; the excursions (A) are 45 a minute in every run, and the period fit gives 31.06 ms in all six logs. The 3-in-flight rate is not zero: its residual is not explained (section 7).
+
+**3. Candidates.** Each is judged on the 1.3.0.0 reconstruction and the emulator model (section 4).
+
+| # | candidate | change | cost (memory, time) | other readers of the flag or buffer | risk | verdict |
+| --- | --- | --- | --- | --- | --- | --- |
+| 0 | keep the stock skip | none | none | none | a skip per busy field start: camera 23-32 a minute serial; emulator 36 of 300 frames at 0.5 ms per IN, 234 of 300 at 2 ms | baseline |
+| 1 | host keeps 2-3 IN in flight, one credit per frame at the last byte | host only (checker, Swift tool) | none on the camera | `cmd_ImageData` cancels queued IN when a transfer is queued (`rpc_cmds.c:2656`) | a second credit before the last byte cancels the frame | SAFE, measured: 15 a minute (2 in flight), 3-12 (3 in flight) |
+| 2 | defer the publish one field until TX completes | the next field's copy waits | none | the next field's copy is what the check protects, so deferring it is the stock skip | none new | NO GAIN: the same as stock |
+| 3 | second frame buffer (ping-pong) | a second 64,896-byte pool | 64 KB needed; AHB SRAM is one pool (64,896 of 65,536 bytes); local SRAM bank A has `frame_offset_table` (32 KB at `0x10010000`) and the stack top at `0x1001F800`; bank B holds the USB RAM and a ~39 KB EP buffer (`SeekCompactPRO_RE_handoff.md` table) | a memory re-layout would move those; the byte gates would change | the layout and every gate change with it | INFEASIBLE as the 1.3.0.0 map stands; not built |
+| 4 | re-arm the TX from the completion interrupt | none | none | `usb_ep_complete_2` already does it (`usb_core.c:1783-1820`) | none | ALREADY DONE: no gain |
+| 5 | bounce the last 16,224-byte transfer into a 16 KB buffer at prime | copy P4 out of the pool at prime, so the pool rows are free at once | ~16 KB SRAM (32 KB for back-to-back transfers) and a 16 KB copy per frame (about 0.1 ms, estimated); the free range was not checked against the linker map | the copy gate and the header buffer are unchanged | medium; SRAM fit unverified | NOT EVALUATED: needs the free-SRAM range from the linker map |
+| 6 | per-group copy gate (the candidate) | in `frame_line_dispatch` (`app_init.c:580`), before the copy of group `k`: if an in-flight transfer covers the 1,664 bytes of pool rows that the group writes, do the stock skip (`_10 = 1`, step to 0); keep the field-start check only for an in-flight header-buffer transfer (`app_init.c:952`) | no RAM; eight queue-slot compares per group (every 0.69-0.78 ms) | the header words written at `_00 == 4` into pool row 0 (`app_init.c:668`) are in the first group, so covered; the header buffer is rewritten at every field start (emulator: 95 of 95 changes), so it keeps the field-start rule | needs the stock skip actions and the header rule; a frame still starts only on an idle endpoint (`app_init.c:482`), so a host that is slow for a whole field still loses it | SAFE IN THE EMULATOR MODEL: 0 lost fields and 0 torn transfers at 0-5 ms per IN; the only candidate that removes the field-start loss; not on hardware |
+| 7 | copy anyway (no check) | delete the check | none | the pool and the header buffer | tears: 452 of 1,199 transfers at 15 ms; 898 of 1,599 at 20 ms (emulator) | UNSAFE |
+
+Why candidate 6 is safe, in the terms the code gives: a frame starts only when the endpoint is idle (`app_init.c:482`), so from then on the only transfers in flight belong to that frame, and they reference rows already copied in that field. The rows the next copy will overwrite are those of the previous field's last transfer, which the group test checks. The rule holds for the frame in progress by that invariant, and for the header buffer by the field-start rule. [inferred from the source; the emulator is the test.]
+
+**4. Emulator (FW-V1 emulator, patched 1.3.0.0 bank, IP 8, the checker's 0x7EC0 body-only credit).** `scripts/fd-skip/skip_probe.py` runs the stock-decrypted patched image with three knobs: the host (default serial with the 1 ms completion threshold, or `fast`), a fixed delay before each IN, and the check (`stock`, `overlap` = candidate 6, `none` = candidate 7). The candidate is Unicorn code hooks at the field-start branch (`0x100864F8`, which forces or reads the result) and at the entry of `frame_line_dispatch` (`0x10085DF4`, which reads the step, the queue and the pool rows and writes `_10`). It is not a firmware build. The torn check snapshots each transfer when the firmware primes it and compares the bytes at completion. The probe found and fixed three artefacts of its own (a stale snapshot on a recycled transfer address, a length change in place, and a hook that undid the header rule); the numbers below are after those fixes. Runs are deterministic: the stock 2 ms run was repeated and gave the same counts.
+
+| host delay per IN | check | frames | single skips (B) | fields checked (busy at check) | overlap skips | torn transfers |
+| --- | --- | --- | --- | --- | --- | --- |
+| fast host, 0 | stock | 400 | 0 | 486 (0) | - | 0 |
+| serial, 0 | stock | 400 | 0 | 487 (0) | - | 0 |
+| serial, 0.25 | stock | 300 | 0 | 378 (2) | - | 0 |
+| serial, 0.5 | stock | 300 | 36 | 416 (45) | - | 0 |
+| serial, 1.0 | stock | 300 | 17 | 397 (21) | - | 0 |
+| serial, 2.0 | stock | 300 | 234 | 620 (255) | - | 0 |
+| serial, 5.0 | stock | 400 | 249 | 744 (269) | - | 0 |
+| serial, 10 | stock | 300 | 274 | 662 (300) | - | 0 |
+| serial, 20 | stock | 400 | 371 | 1262 (800) | - | 0 |
+| serial, 0 | overlap (cand. 6) | 300 | 0 | 377 (0) | 0 | 0 |
+| serial, 2.0 | overlap | 300 | 0 | 377 (0) | 0 | 0 |
+| serial, 5.0 | overlap | 300 | 0 | 377 (0) | 0 | 0 |
+| serial, 15 | overlap | 300 | 274 | 713 (0) | 286 | 0 |
+| serial, 10 | copy-gate only, no header rule (earlier form) | 300 | 274 | 655 | 0 | 0 |
+| serial, 5.0 | none (cand. 7) | 300 | 0 | 377 (247 R0 logged) | - | 0 |
+| serial, 10 | none | 300 | 274 | 655 | - | 0 |
+| serial, 15 | none | 300 | 274 | 707 | - | 452 of 1,199 |
+| serial, 20 | none | 400 | 371 | 1246 | - | 898 of 1,599 |
+
+Reading the table. (a) The stock check is what the camera does: at 0.5 to 2 ms per IN it loses 36 to 234 captures. (b) Candidate 6 loses nothing at 0 to 5 ms; it turns the field-start loss into a copy-group test that fires only when a transfer would be overwritten (286 times at 15 ms, none below). (c) Above about 6 ms per IN the stream is throughput-limited: a frame needs five transfers, so the frame start itself is blocked for whole fields under either check (the 10 ms row). (d) Copy-anyway tears from about 15 ms; the candidate's tear count is 0 throughout. (e) The serial host's 1 ms threshold alone does not produce skips (0 at 0 ms). The camera's serial rate of 23-32 a minute is near the 0.5 to 1 ms rows; that calibration is a fit, not a measurement.
+
+**5. Camera timing (read-only streaming; `fdtime`, `classify.py`, `ana.py`, `fit.py` in `scripts/fd-skip/`).** Each run: a channel-2 cycle, 10 s, the checker's Normal connect left streaming (`fdinit`), then the timing loop for 60 s, then SetOperationMode 0. Every bulk completion, credit and frame is logged with its time. No flash, J-Link or other write. Results are the table in 2.3. Frame structure: 1,650 header and 6,598 payload transfers in S1, all of 1,664 and 16,224 bytes [measured]. Credit to header: 0.61 ms median, serial [measured]. Not measured: the completion time of the last transfer relative to the field, which the host cannot see; the field-period fit is 31.06 ms in all six logs [measured; the group time is inferred].
+
+**6. Recommendation and next steps.**
+1. *Now, host only, no flash:* keep 2 to 3 IN requests pending in the checker and in the Swift tool, send one credit per frame at the frame's last byte, and never a second credit early. Measured on the camera: single skips fall from 23-32 to 3-12 a minute at 3 in flight. The change is in `e2e/lib/bench/seek-fps/` (`camera.ts` `readExact`, `link.ts` `bulkIn`) and `tv-jc/macos/Sources/SeekKit/USB.swift`, with the fake-camera tests. Owner decision: which tool, and whether 3 in flight is accepted.
+2. *Firmware, if the owner wants the field-start loss gone:* candidate 6. Its next step is (a) a source change on a FW-V1 `drop-path-study` worktree built with the installed 2013-q4 toolchain (`~/toolchains/gcc-arm-none-eabi-4_8-2013q4`, the profile the 1.3.0.0 target names), (b) an emulator run of the built image in place of the hook model, and (c) a camera A/B. The camera test needs: a bank write of the candidate (the bench rule allows bank writes with a restore image saved first), two runs of stock and two of the candidate with `fdtime S` and the checker, `classify.py` for the single skips, and a tear check on a scene with motion (a frame's rows against the field they came from). The byte gates would need an exemption for the source change.
+3. *Not recommended:* candidates 2, 3 and 4 (no gain, or no room). Candidate 5 needs the linker's free SRAM first.
+
+**7. Not verified, and open.**
+- The DMA-by-reference reading of the transfers (section 1.9) is from the emulator's model and the 16 KB limit, not from silicon.
+- The camera's last-transfer completion is not visible to the host; the 0.78 ms group time is 31.06 ms over 40 groups, inferred.
+- The emulator's serial-host delays (0.5 to 2 ms per IN) are a fit to the camera's skip rate, not a measurement, and its group time (0.691 ms) is not the camera's.
+- The 3-in-flight residual (3-12 a minute) is not explained. It may be host scheduling or the tail of the last transfer; the three runs differ by a factor of four.
+- Candidate 6's header rule and the 0x8200 header transfer are not exercised in the emulator, whose probe used the body-only credit. The camera runs with 0x8200 (section 5) showed the header transfer working but did not test the rule.
+- Candidate 5's SRAM fit was not checked.
+- The skip also resets the step to 0 (`app_init.c:961`); candidate 6 keeps that action. Its effect on the excursion schedule was not separately measured (the excursion counts matched the stock runs: 12 (A) and 7 (A') per 300 frames).
+- Nothing on hardware for candidate 6.
+
+**8. Files and commands.** In `scripts/fd-skip/`: `fdtime.c` (`clang -O2 -Wall -I/opt/homebrew/include -L/opt/homebrew/lib -lusb-1.0 -o fdtime fdtime.c`; run `./fdtime <S|P> <K> <seconds> <out.jsonl>`), `classify.py`, `ana.py`, `fit.py`, `margin.py`, `probe_ana.py` (analysis of the logs), and `skip_probe.py` (the emulator probe; `<FW-V1>/emu/.venv/bin/python skip_probe.py patched <frames> <serial|fast> <delay_ms> <stock|overlap|none> <out.json>`). Logs are under `/private/tmp/claude-501/agent-74/` (`fd/` for the camera, `emu/` for the emulator). The FW-V1 tree was not changed (no `drop-path-study` commit: the candidate exists as the emulator hooks in `skip_probe.py`, and a source build is the next step in 6.2).
+
+**Commits.** This section and `scripts/fd-skip/` only, on `worktree-agent-ac04396cf04e77202`. The hash is in the agent's report.
