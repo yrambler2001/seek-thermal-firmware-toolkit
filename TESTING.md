@@ -10536,3 +10536,51 @@ PNGs under `/private/tmp/claude-501/agent-hw4/frames/`: `stock-normal-picture.pn
 - `plan.md` and FW-V1 were not touched. `npm run build:docs` was not run. Nothing was pushed or merged.
 
 **Commits.** Checker `852ef7c` and page `364c004`, on branch `worktree-agent-a3bcf919eddebd8b6`. This section is the commit after them.
+
+### 42.61 The serial labels: the checker and the Swift `seek` show the ASCII device serial as `serial` and the GetChipID value as `chip id` (owner's option A; fakes and unit tests only, 2026-10-19)
+
+**Summary.** The owner chose option A for 42.37's first item (2026-10-19): the checker and the Swift `seek info` show the ASCII device serial as `serial`, as the CLI and the page do, and print the GetChipID value under its own label. No camera, J-Link or USB switch was used. Checker: commit `09f6734` on `worktree-agent-a3005a2a9a5c4951a`. Swift: commit `3be18f6` on branch `serial-labels` in tv-jc (not merged, not pushed). This section is the commit after the checker's.
+
+**Setup.** The worktree was reset to `refactor/all-firmware-profiles` (228aea9); the old HEAD `cf5420b` is an ancestor of it, so no commit was lost. The `@seek-fw` links were made. The checker's tests, typecheck and eslint ran with the main checkout's `node_modules/.bin` binaries, since the worktree has no `node_modules` of its own, not `npx`. The tv-jc worktree is `/private/tmp/claude-501/tvjc-serial` on `serial-labels`, from `master` (d28d2ed).
+
+**1. The info lines, as the fakes print them.** The Swift line is `SeekDeviceInfo.line` (`macos/Sources/SeekKit/DeviceInfo.swift`), and its test checks the same strings as the checker's.
+- `Seek Compact, firmware 1.3.0.0, serial 101310HSNEA2, chip id 1013CE098ACA, 206x156`
+- The serial cannot be read (SetRamDataFeatures refused): `Seek Compact, firmware 1.3.0.0, serial -, chip id 1013CE098ACA, 206x156`
+- Startup with Operation=0 refused (1.3.0.8) adds the same suffix as before: `..., 206x156, Startup with Operation=0 refused (connected without it)`.
+
+**2. The change in the checker.**
+- `e2e/lib/bench/seek-fps/camera.ts:299` `readDeviceSerial`: core's `SeekDevice.readSerial` is reused, with `windowReadOp` set by `legacyReaderOp(version)` as core's preservation pipeline does. The requests are the ones core makes: OUT 0x5A (SetRamDataFeatures, case 0, 6 bytes), IN 0x35 (GetErrorCode), then IN 0x4F in requests of 64, 64, 64 and 56 bytes (0x58 on 0.7.x), 248 bytes in all. The serial is the ASCII at +16.
+- `camera.ts:438`: the read is in `open()` before the first init. The CLI's `info` reads it with no init sent, so the camera is in the state the CLI sees. The state after an init was not measured for these requests.
+- `camera.ts:460`: `serial` is that read, or `-`. The USB string is no longer read (on 1.3.0.0 it is absent). `chipId` is GetChipID as hex, `-` when empty (`chipIdHex`, `camera.ts:286`, renamed from `serialFromChipId`).
+- `camera.ts:47` and `:62`, `:69`: the request lists. IN adds 0x35, 0x4F and 0x58; OUT adds 0x5A.
+- `cli.ts:211` is the info line; `cli.ts:24` is the usage text.
+- `fake-camera.ts`: the device-id block (header `01 00 31 f7`, the chip ID bytes at +4, the serial at +16) is armed by 0x5A case 0 and served through 0x4F or 0x58. The `deviceSerial` option defaults to `101310HSNEA2`, and `chipId` defaults to the bench's `10 00 13 00 ce 00 09 00 8a 00 ca 00`.
+- `README.md`: the info description, the request list, and the two labels. The old README said the checker never sends 0x5A, which this change makes untrue; that sentence is corrected.
+- `e2e/seek-fps-camera.e2e.ts:11` and `:28`: the camera spec's read-only guard refused 0x5A along with the flash and reset requests. It now refuses 0x50, 0x51, 0x52 and 0x59 only. 0x5A is still checked against `CHECKER_REQUESTS_OUT`.
+
+**3. The change in Swift (tv-jc `serial-labels`, `3be18f6`).**
+- `macos/Sources/SeekKit/DeviceInfo.swift` (new): `SeekDeviceInfo` moved here, with `chipID` and `line`. `readDeviceSerial` works on a `ControlChannel` protocol that `USBDevice` conforms to, so the tests can run it against a fake. Also `windowReaderOp`, `serialFromDeviceBlock` and `chipIdHex`.
+- `macos/Sources/SeekKit/Camera.swift`, `connect()`: the serial is read before `sendInit`, the chip ID after it, and the info has both.
+- `macos/Sources/SeekKit/USB.swift`: the USB serial-string read and the `serial` property are removed.
+- `macos/Sources/seek/main.swift`: `describe()` is `info.line`, and the usage text matches the checker's.
+- `macos/Tests/SeekKitTests/DeviceInfoTests.swift` (new): 11 tests. The serial read's requests against a fake (order, lengths, 0x58 on 0.7.x, refused arm, nonzero error code), the parsing, and the info line.
+- The app (`App.swift`) shows `info.serial` as "Serial:", so it now shows the ASCII serial. It does not show the chip ID.
+
+**4. Decisions for the owner to check.**
+- The serial is read before the first init, as the CLI reads it. The alternative (after the init, where the chip ID is read) was not chosen because 0x5A and 0x4F after an init are not measured.
+- No fallback: if the device serial cannot be read, `serial` is `-`. It is not the USB string and not the chip ID.
+- 0x5A is one of core's info-read arms (`FLASH_OPS` in `packages/core/src/protocol/ops.ts`, which lists it as a setter). It writes no flash and resets nothing, and the bench CLI's `info` sends it too. The checker now sends it once per connect, and the camera spec's guard was changed to match (item 2).
+- Swift's serial read retries a failed window request once at the same size. Core's `readArmed` also shrinks the request size after repeated stalls. So a camera that stalls at 64-byte requests would show `serial -` in Swift and might still read in the checker. Not seen on the bench for this read.
+
+**5. Tests.**
+- Checker, `vitest run --config e2e/lib/bench/seek-fps/vitest.config.mjs`: 95 passed in 4 files (88 before). The old serial test is replaced by seven, and one CLI test covers the unreadable serial. [measured]
+- `tsc --noEmit -p e2e/tsconfig.json`: clean. eslint on the six changed TypeScript files: clean. prettier: clean on the TypeScript files. `README.md` was not prettier-clean at HEAD, and it was not reformatted here. [measured]
+- Swift: `swift build` succeeds with no warnings from the changed sources. `swift test`: 16 passed (5 before, all `FrameTests`, plus 11 new). [measured]
+- Not run: `seek-fps-camera.e2e` (the bench, read-only, by the owner's rule) and `seek-fps-emulator.e2e` (it needs `SEEK_EMU_DIR`). The emulator's answers to 0x5A and 0x4F are not checked. [not measured]
+
+**Not measured or open.**
+- No camera run. When the owner allows a bench check: `seek-fps --camera info` and `seek info` should both print `serial 101310HSNEA2, chip id 1013CE098ACA` on the 1.3.0.0 Compact, and the checker's stream should still run after the serial read.
+- Whether a 1.3.0.8 or a 4.x camera answers 0x5A and 0x4F at connect, before its first init. Unknown; a refusal shows as `serial -` and does not stop the connect.
+- The Swift and checker retry difference in item 4.
+
+**Commits.** Checker `09f6734` on branch `worktree-agent-a3005a2a9a5c4951a`. Swift `3be18f6` on tv-jc branch `serial-labels`. Neither is pushed or merged, and the tv-jc main checkout was not touched. This section is the commit after the checker's.
