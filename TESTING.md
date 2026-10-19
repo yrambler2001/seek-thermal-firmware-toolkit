@@ -9117,6 +9117,59 @@ Either way, the checker and Swift must change together. Changing only the checke
 - `packages/core/test/preservation/fps-patch.test.ts:194` says the copy form "has no camera measurement", the same error fixed in section 1. It is outside these items and is not changed.
 - `plan.md` is not edited. The owner can close the "Fix two texts after 42.37" item in plan.md section 1 and the three items in section 4 (the 42.21 sentence, the slots fixture, the dump message) after review.
 
+### 42.40 FW-V1 plan items: the 2014-chain bank in build_flash, BANK_ADDR in every runner, and the 4.9.1.15 byte count (2026-10-19)
+
+**Summary.** Three plan.md items, on branch `plan-hygiene` in the FW-V1 worktree `/private/tmp/claude-501/fwv1-hygiene`, three commits on top of 42.35's three. Nothing was merged to FW-V1 main or pushed, and FW-V1's main checkout was not edited. The seek worktree was reset to `refactor/all-firmware-profiles` at `eff9bf5`, as the brief asked; its old HEAD `cf5420b` is an ancestor of it. No camera, J-Link or USB switch was used. Every check ran offline: `build_flash.mjs` ran in a sandbox with a stub `make` and packager, and `JLINKEXE` pointed at a stub that logs its command file and talks to nothing.
+
+**Tags.** [measured] is a command run in this session. [inferred] is read from the code and not run.
+
+**1. build_flash in the five targets: the 2014 chain's slot map (FW-V1 `f5995f8d9`).**
+- Chain. The header word sum over `header.length` is `0x00000000` for all five base images. That is the 2014 bootloader's acceptance test; the 4.x images in the tree sum to `0x0000FFFF`. [measured] The 2014 bootloader's source has `SLOT_A 0x14050000`, `SLOT_B 0x14060000`, `SLOT_RECOVERY 0x14070000` (`targets/compact_8hz_1_3_0_0_bootloader/src/image.c:1065`). [measured] The 1.3.0.0 full dump is the only one of the five with a 4 MB image: boot word `0`, bootloader first word `0x10018000` (the 2014 value; the 2018 one is `0x10020000`). [measured] `docs/V1_WIDENING_1308.md` calls the 1.3.0.8 build the 2014 chain. [inferred from the doc; the sum agrees]
+- The slot map before and after, with the bank a default `--flash` writes and the boot word it sets:
+
+| Target | Chain | Default `--flash`, before | after | `--slot a`, before | after |
+| --- | --- | --- | --- | --- | --- |
+| compact_8hz_1_3_0_0 | 2014 | 0x14050000 (A), boot word 1 (B) | 0x14060000 (B), boot word 1 | 0x14030000, boot word 0 | 0x14050000 (A), boot word 0 |
+| compact_8hz_1_3_0_8 | 2014 | 0x14050000 (A), boot word 1 (B) | 0x14060000 (B), boot word 1 | 0x14030000, boot word 0 | 0x14050000 (A), boot word 0 |
+| compact_8hz_0_5_1_3 | 2014 | 0x14050000 (A), boot word 1 (B) | 0x14060000 (B), boot word 1 | 0x14030000, boot word 0 | 0x14050000 (A), boot word 0 |
+| compact_8hz_0_9_0_2 | 2014 | 0x14050000 (A), boot word 1 (B) | 0x14060000 (B), boot word 1 | 0x14030000, boot word 0 | 0x14050000 (A), boot word 0 |
+| compact_8hz_1_0_0_0 | 2014 | 0x14050000 (A), boot word 1 (B) | 0x14060000 (B), boot word 1 | 0x14030000, boot word 0 | 0x14050000 (A), boot word 0 |
+
+- Offline runs: `build_flash.mjs --flash --no-dump` (and with `--slot a`) in a sandbox per target, once with the HEAD script and runner and once with the changed ones. Each run made four calls to the stub (flash-bank, set-boot, reset-go, read-boot-slots). The boot word is the first word the stub read from the cfg file it was sent at 0x14010000. [measured]
+- The recovery slot (0x14070000, boot word 2) is the same on both chains and is unchanged.
+- The `flash-bank` call in these scripts already passed `BANK_ADDR` from the same table, so no call site changed.
+- Ordering: until item 2's commit, the runners of `compact_8hz_0_5_1_3`, `compact_8hz_0_9_0_2` and `compact_8hz_1_0_0_0` refuse 0x14060000, so their default `--flash` stops at flash-bank with no J-Link call. Item 2 fixes that.
+
+**2. flash-bank in every other runner (FW-V1 `a6afd9312`).**
+- 22 runners are on the 2014 chain: the 1.3.0.0 bootloader target, the 0.3.0.1 to 1.2.0.0 Compact targets, the Compact PRO 1.0.3.0 and 1.0.3.2 targets and their bootloader, and the PRO FF 1.0.3.x targets. Their `SLOT_BASES` is the 4.x map, which is the wrong chain's map, so it was replaced with the 42.35 form: `BANK_BASES` (A 0x14050000, B 0x14060000, R 0x14070000), `BANK_OF_WORD`, and `GUARDED_BANK_BASES` (0x14030000 kept, 0x14060000 added). `flash-bank` requires `BANK_ADDR`, and `flash-region` and `set-boot` use the same table. The old default, `SLOT_BASES[1]` = 0x14050000, is bank A on this chain.
+- 12 runners are on the 4.x chain and keep `SLOT_BASES`, which is their map. Their word sums (`0x0000FFFF`) and their `bootloader.h` files agree: Compact 4.8.1.7 and 4.8.1.9, Compact PRO 4.9.1.15 and 4.9.2.0, Compact PRO FF 4.18.2.0, Compact XR 4.8.2.1, Compact FF 4.16.1.7 and 1.3.0.8, Mosaic 18 Hz and FF, Nano 200 and 300. In these only the default and the refusal text changed.
+- `codegen/harness/tools/jlink/jlink-runner.js` has no single chain. It keeps the 4.x table, since its examples are 4.x bases, and gets the same flash-bank change.
+- The `flash-bank` row in each of the 34 target `tools/jlink/README.md` files names that chain's banks and no longer gives a default.
+- Checks [measured]: `node --check` passes on all 35 changed scripts. A stub run of the real runner, in place, on 15 runners (9 on 2014, 6 on 4.x): no `BANK_ADDR` is refused before any call; each bank of the chain is accepted and sent to its address; `0x14000000` and `14060000` (no `0x`) are refused; the 4.x table refuses `0x14060000`; `set-boot` with `BOOT_SLOT=1` writes cfg[0]=1 and names the bank. `flash-region` refuses a bare 64 KiB image at a guarded address on one 2014 runner (0x14060000 and 0x14050000) and one 4.x runner (0x14050000 and 0x14030000). All checks passed.
+- Behavior changes: on the 2014 runners `flash-region` also refuses a bare image at 0x14060000, which the old table did not guard. `npm run jlink:flash:bank` (`tools/jlink/package.json`) passes no `BANK_ADDR`, so it now refuses unless the environment sets one.
+
+**3. The table text (FW-V1 `589efc006`; seek `e0c33fc`).**
+- The `compact_pro-4.9.1.15` evidence said "Exactly 3 bytes differ from the stock image". Measured with `apply_patch` on that target's stock image, 6 bytes differ: the three edits (+0x19B0, +0x19B6, +0x19B7) and the acceptance-sum adjust word (+0x238, +0x23A, +0x23B; +0x239 is unchanged). The text now says six and names the offsets. [measured]
+- No other entry states a byte count. The measured counts for the other 19 patches with a stock image in the tree are 9 to 16 differing bytes; none is stated in the text. [measured]
+- Regenerated with `gen-fps-table.py --fw-v1` on FW-V1 `589efc006`, then `prettier --write` (the script's own step; prettier 3.9.8 from the root checkout). The generator's raw output reflows object literals and labels, so the prettier step is needed. After it, the diff is three comment lines. The JSON fixture regenerated byte-identical. [measured]
+- Tests: `fps-patch.test.ts`, 14 passed. `fps-patch.differential.test.ts`, 3 passed and 6 skipped; the skips need `SEEK_FPS_CORPUS`, which is not set here. The generator printed no missing comment and no Edit-count mismatch. [measured]
+
+**Open, not changed.**
+1. The same modern table is still in the `build_flash.mjs` of 19 more 2014-chain targets: compact_8hz_0_10_0_0, 0_3_0_1, 0_5_0_2, 0_5_1_0, 0_6_0_4, 0_7_0_7, 0_7_0_8, 0_8_0_0, 0_9_0_6, 0_9_0_7, 0_9_1_0, 1_2_0_0, 1_3_0_0_bootloader, compact_pro_9hz_1_0_3_0 and its bootloader, compact_pro_9hz_1_0_3_2, compact_pro_ff_18hz_1_0_3_0 and its bootloader, and compact_pro_ff_18hz_1_0_3_2. Their default `--flash` still writes 0x14050000 and sets boot word 1, which is the same live wrong-bank path. The brief named five targets, so they are not changed. Each one's chain comes from the same sum test (all sum to 0).
+2. `compact_ff_16hz_1_3_0_8` has the later-acceptance word sum (`0x0000FFFF`), but it is the FF platform (42.11b, bootloader 2.0.2.3). No file in the tree states its bank map, so it keeps the 4.x table. [inferred]
+3. The codegen harness is shared by every branch. On a 2014 branch its flash-bank refuses 0x14060000 and says why; it does not write the wrong bank.
+4. On the 2014 runners, flash-bank still accepts 0x14030000, since the guard set keeps it as 42.35 did. No 2014 boot word selects that address.
+
+**Not verified.**
+- Nothing ran against a J-Link, a camera or a bank. The 2014 bank map comes from the bootloader source and the 1.3.0.0 dump, not from a boot.
+- The sandbox replaces `make` and the packager. Its payload is not encrypted and its footer is a stand-in, so the check covers the addresses and the boot word, not the payload.
+- The six corpus-dependent tests in `fps-patch.differential.test.ts` were not run.
+
+**Commits.**
+- FW-V1, branch `plan-hygiene`, worktree `/private/tmp/claude-501/fwv1-hygiene` (not merged, not pushed): `f5995f8d9` (item 1), `a6afd9312` (item 2), `589efc006` (item 3).
+- Seek: `e0c33fc` (the regenerated table, comments only), and this note on branch `worktree-agent-a798ff52301db527d`.
+- `refactor/all-firmware-profiles` moved to `796e5d9` (another session's work) after this reset. These commits sit on `eff9bf5`, as the brief asked, and need a rebase onto that tip before any merge.
+
 ### 42.44 The slots table stays after a write (read again under the write's own profile, with no identify probe); the Info tab's identity read and the CLI `info` read are recorded as deliberate, nothing changed (2026-10-19)
 
 **Summary.** Two plan items. (1) After a committed write the slots page dropped its read, so the bank table stayed empty until "Read slots" was pressed. The read is still dropped at the commit point, and the banks are read again after the read-back, under the write's own profile and build. Changed in `packages/web/src/hooks/useSlotsPanel.ts` (commit `ffaa310`), with tests in `useSlotsPanel.test.tsx` and `SlotsView.test.tsx`. (2) The CLI `info` sends SetFirmwareInfoFeatures (0x55) and SetRAMDataFeatures (0x5a) and reads the slots; the web Info sends neither. The difference is deliberate: 42.17 made the Info tab an identity read. Nothing was changed for item 2; the options are below. Nothing ran on a camera.
