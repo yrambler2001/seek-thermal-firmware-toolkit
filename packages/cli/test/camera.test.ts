@@ -209,6 +209,85 @@ describe('seek-fw info: the upgrade target when it is the bank the camera booted
   });
 });
 
+describe('seek-fw info: the upgrade target written while the camera runs recovery (TESTING.md 42.67)', () => {
+  /* The 4.8.2.1 shape (TESTING.md 42.50): boot word 2 replays R, the active-slot word is 0, and A, B and R hold
+   * the same bootable image, so the window cannot tell A from B and the word names B as the upgrade target. */
+  function recoveryCamera(): ReturnType<typeof cameraWithFlash> {
+    const flash = new Uint8Array(synthetic.flash);
+    new DataView(flash.buffer).setUint32(modern4x.memory.bootConfigBase - FLASH_BASE, 2, true);
+    flash.set(synthetic.bank, slotOffsetOf('b'));
+    flash.set(synthetic.bank, slotOffsetOf('r'));
+    const roots = new Uint8Array(64);
+    new DataView(roots.buffer).setUint32(8, 0, true);
+    return cameraWithFlash(flash, {
+      fwInfo: new Map([
+        [0, runningBuildBlock()],
+        [10, roots],
+      ]),
+    });
+  }
+
+  it('says the camera runs recovery and its upgrade writes B, in the text and the JSON, without blocking', async () => {
+    const camera = recoveryCamera();
+    const { io, stdout } = testIo({ backend: fixedBackend([camera]) });
+    expect(await run(['info'], io, signal())).toBe(EXIT_OK);
+    expect(stdout.text).toMatch(/booted\s+Recovery/);
+    expect(stdout.text).toMatch(/upgrade target\s+Slot B/);
+    expect(stdout.text).toContain('warning: The camera is running its recovery bank');
+    expect(stdout.text).toContain('its own upgrade writes Slot B, which it is not running');
+    expect(stdout.text).toContain('Slot B holds the same bootable image as the bank it runs');
+    expect(stdout.text).toContain('nothing here stops an upgrade');
+    /* The warning is a line of information: the rest of the report is still printed. */
+    expect(stdout.text).toContain('Writing');
+
+    const again = recoveryCamera();
+    const json = testIo({ backend: fixedBackend([again]) });
+    expect(await run(['info', '--json'], json.io, signal())).toBe(EXIT_OK);
+    const boot = (JSON.parse(json.stdout.text) as { boot: Record<string, unknown> }).boot;
+    expect(boot).toMatchObject({
+      booted: 'r',
+      upgradeTarget: 'b',
+      upgradeTargetBooted: false,
+      upgradeTargetRecovery: true,
+    });
+    expect(String(boot.upgradeTargetWarning)).toContain('nothing here stops an upgrade');
+    /* Read-only, as every info run is. */
+    const sent = new Set(again.calls.map((call) => call.op));
+    expect(sent.has(OP.COMPLETE_MEMORY_UPGRADE)).toBe(false);
+    expect(sent.has(OP.SET_FEATURED_FIRMWARE_DATA)).toBe(false);
+  });
+
+  it('is not flagged as recovery when the same pair boots B (word 1), which is the booted-bank warning instead', async () => {
+    const camera = sameBankCamera(1, 0);
+    const json = testIo({ backend: fixedBackend([camera]) });
+    expect(await run(['info', '--json'], json.io, signal())).toBe(EXIT_OK);
+    const boot = (JSON.parse(json.stdout.text) as { boot: Record<string, unknown> }).boot;
+    expect(boot).toMatchObject({
+      booted: 'b',
+      upgradeTarget: 'b',
+      upgradeTargetBooted: true,
+      upgradeTargetRecovery: false,
+    });
+  });
+
+  function sameBankCamera(
+    cfg0: number,
+    activeSlotWord: number,
+  ): ReturnType<typeof cameraWithFlash> {
+    const flash = new Uint8Array(synthetic.flash);
+    new DataView(flash.buffer).setUint32(modern4x.memory.bootConfigBase - FLASH_BASE, cfg0, true);
+    flash.set(synthetic.bank, slotOffsetOf('b'));
+    const roots = new Uint8Array(64);
+    new DataView(roots.buffer).setUint32(8, activeSlotWord, true);
+    return cameraWithFlash(flash, {
+      fwInfo: new Map([
+        [0, runningBuildBlock()],
+        [10, roots],
+      ]),
+    });
+  }
+});
+
 describe('seek-fw info on a 2016 Compact PRO (1.0.3.0)', () => {
   /* The probe picks legacy-auth here by design (the two share every
    * selector). The slots then name compact-2016, whose cipher differs, so the

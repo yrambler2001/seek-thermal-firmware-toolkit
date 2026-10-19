@@ -81,5 +81,6 @@ export {
   targetSlot,
   upgradeTargetIsBooted,
   upgradeTargetWarning,
+  upgradeTargetWhileRecovery,
 } from './device-info.js';
 export { flashInvalidatesAnalysis, prepareImage, writeFirmware } from './flash.js';

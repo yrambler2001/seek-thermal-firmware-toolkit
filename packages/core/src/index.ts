@@ -348,6 +348,7 @@ export {
   unlockTokenOf,
   upgradeTargetIsBooted,
   upgradeTargetWarning,
+  upgradeTargetWhileRecovery,
   usesAuthChannel,
   versionUnknownReason,
   writeFirmware,

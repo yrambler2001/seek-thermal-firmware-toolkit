@@ -21,6 +21,7 @@ import {
   storeKeyDescription,
   upgradeTargetIsBooted,
   upgradeTargetWarning,
+  upgradeTargetWhileRecovery,
   type CapabilityName,
   type DeviceState,
   type FirmwareProfile,
@@ -131,6 +132,8 @@ export function stateJson(state: DeviceState): Record<string, unknown> {
       upgradeTarget: state.boot?.target ?? null,
       /* TESTING.md 42.50: the upgrade target is the bank the camera booted from. A warning, never a gate. */
       upgradeTargetBooted: upgradeTargetIsBooted(state),
+      /* TESTING.md 42.67: the camera runs recovery and its own upgrade writes B. Also a warning, never a gate. */
+      upgradeTargetRecovery: upgradeTargetWhileRecovery(state),
       upgradeTargetWarning: upgradeTargetWarning(state),
       targetConfirmed: state.targetConfirmed,
     },

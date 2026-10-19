@@ -1335,21 +1335,75 @@ export function upgradeTargetIsBooted(state: DeviceState): boolean {
 }
 
 /**
- * The sentence the page and `seek-fw info` show under the upgrade target when it is the booted bank, or
- * null. `nameOf` names the bank; the page passes its own label ("Bank B") so the same bank carries the
- * same name on the page, and the CLI keeps the profile's name.
+ * True when the camera runs its recovery bank and its own upgrade writes B: on 4.8.2.1 with cfg[0] 2 the
+ * replay boots R and the camera's own answer names B (TESTING.md 42.50). The bank written is not the one
+ * running, so the warning says what B holds, not that the running image is overwritten (TESTING.md 42.67).
+ */
+export function upgradeTargetWhileRecovery(state: DeviceState): boolean {
+  return state.boot !== null && state.boot.booted === 'r' && state.boot.target === 'b';
+}
+
+/**
+ * The sentence the page and `seek-fw info` show under the upgrade target, or null. Two cases: the target is
+ * the booted bank, so an upgrade overwrites the running image; or the camera runs its recovery bank and its
+ * own upgrade writes B. `nameOf` names the bank; the page passes its own label ("Bank B") so the same bank
+ * carries the same name on the page, and the CLI keeps the profile's name.
  */
 export function upgradeTargetWarning(
   state: DeviceState,
   nameOf: (slot: SlotState | undefined, key: SlotKey) => string = (slot, key) => slot?.name ?? key,
 ): string | null {
-  if (state.boot === null || !upgradeTargetIsBooted(state)) return null;
-  const name = nameOf(state.byKey.get(state.boot.target), state.boot.target);
-  return (
-    `${name} is both the bank the camera booted from and the bank its own upgrade writes. ` +
-    'An upgrade run from this camera would overwrite the image it is running. ' +
-    'This is a warning only: nothing here stops an upgrade.'
-  );
+  if (state.boot === null) return null;
+  const target = state.boot.target;
+  const name = nameOf(state.byKey.get(target), target);
+  if (upgradeTargetIsBooted(state)) {
+    return (
+      `${name} is both the bank the camera booted from and the bank its own upgrade writes. ` +
+      'An upgrade run from this camera would overwrite the image it is running. ' +
+      'This is a warning only: nothing here stops an upgrade.'
+    );
+  }
+  if (upgradeTargetWhileRecovery(state)) {
+    return (
+      'The camera is running its recovery bank, and its own upgrade writes ' +
+      `${name}, which it is not running. ` +
+      `${recoveryTargetVerdict(state.byKey.get(target), state.byKey.get(state.boot.booted), name)} ` +
+      'This is a warning only: nothing here stops an upgrade.'
+    );
+  }
+  return null;
+}
+
+/**
+ * What the recovery-case warning says about the bank its upgrade writes, from that bank's own verdict on
+ * this read. A bootable bank holds an image the upgrade replaces; on 4.8.2.1 that image is the same as the
+ * recovery bank's (TESTING.md 42.50, measured on the emulator: A, B and R identical and bootable), so the
+ * text says so. An interrupted write leaves the bank unbootable, which is the one risk named.
+ */
+function recoveryTargetVerdict(
+  slot: SlotState | undefined,
+  running: SlotState | undefined,
+  name: string,
+): string {
+  if (!slot?.present) {
+    return `${name} could not be read on this check, so what it holds is not known.`;
+  }
+  if (slot.blank) return `${name} is blank, so the upgrade writes into an empty bank.`;
+  if (slot.bootability === 'bootable') {
+    const same = slot.sha256 !== null && slot.sha256 === (running?.sha256 ?? null);
+    const holds = same ? 'the same bootable image as the bank it runs' : 'a bootable image';
+    return (
+      `${name} holds ${holds}, which the upgrade replaces; ` +
+      `if the upgrade stops partway, ${name} is left unbootable.`
+    );
+  }
+  if (slot.bootability === 'unknown') {
+    return (
+      `${name}'s bootability is unknown on this read, so the upgrade may replace an image ` +
+      'the camera would boot.'
+    );
+  }
+  return `${name} is not shown as bootable on this read, so the upgrade replaces no image the camera would boot.`;
 }
 
 /**
