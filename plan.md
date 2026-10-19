@@ -1,7 +1,7 @@
 # Plan: what is still to do
 
 Branch `refactor/all-firmware-profiles`: all commits are local; nothing is pushed and main is never touched without the owner's explicit approval (owner, 2026-10-19: keep it local until the owner says). FW-V1 `main` was pushed on the owner's word on 2026-10-19 (`a13c615c6`).
-Done work is in `TESTING.md` (sections 42.x; the latest is 42.30) and `FPS_32HZ.md`; this file lists only what is open. Status marks: [ ] open, [~] running, [?] needs the owner.
+Done work is in `TESTING.md` (sections 42.x; the latest is 42.31) and `FPS_32HZ.md`; this file lists only what is open. Status marks: [ ] open, [~] running, [?] needs the owner.
 
 ## Standing rules
 
@@ -38,7 +38,7 @@ Every 8 and 9 fps build with a table entry is offered except the FF entries and 
 
 ## 2. Hardware and the J-Link runner
 
-- State (not a task): the owner's Compact PIR206 (chip serial 1013CE098ACA) runs slot A (`ef90c94a`, the table's 1.3.0.0 image, 32 Hz) with word 0. Slot B and recovery R hold `d91284c6` (the 1.3.0.0 32 Hz image that also carries the removed mode-6 edit). Every bank runs at 32 fps. The whole flash is `50e900c2…` (halted read); the 42.29 bench rows and the 42.30 matrix left it byte-identical.
+- State (not a task): the owner's Compact PIR206 (chip serial 1013CE098ACA) runs slot A (`ef90c94a`, the table's 1.3.0.0 image, 32 Hz) with word 0. Slot B and recovery R hold `d91284c6` (the 1.3.0.0 32 Hz image that also carries the removed mode-6 edit). Every bank runs at 32 fps. The whole flash is `50e900c2…` (halted read); the 42.29 bench rows, the 42.30 matrix and the 42.31 reset runs left it byte-identical. Normal fps reads right after a whole-flash dump or restore take several reads to settle (42.31: medians 16 to 27 fps on the first reads, then 32.2), so repeat the read before judging it.
 - [ ] Runner: `SLOT_BASES` still maps word 1 to 0x14050000 (the other chain's table), and `flash-bank` defaults to `SLOT_BASES[1]`, which is bank A. Bank B needs `BANK_ADDR=0x14060000`. Fix the default or make the address required, in both `targets/compact_8hz_1_3_0_0` and `targets/compact_8hz_1_3_0_8`.
 - [ ] Serial mismatch for the same unit: the CLI's `slots list` (and TESTING.md 42.21) report `101310HSNEA2`; the checker and the Swift tool report the chip serial `1013CE098ACA`. Find which the page and the CLI should show, and fix the other.
 - [ ] The 1.3.0.0 stock Normal and Hi FPS were not measured on the camera in 42.27 (the 8.0 fps quoted in 42.25 was the 16 Hz image).
@@ -51,7 +51,7 @@ Every 8 and 9 fps build with a table entry is offered except the FF entries and 
 
 ## 4. Repo state and hygiene
 
-- [?] `refactor/all-firmware-profiles` (HEAD `b2c1cee` plus this file) is local. The owner keeps it local until they say otherwise (2026-10-19); pushing it and merging to main need the owner's word (the hosted docs bundle in `docs/` is built from this branch). FW-V1 `main` is pushed (`a13c615c6`). All agent branches of 42.27 to 42.29 are merged and their worktrees removed.
+- [?] `refactor/all-firmware-profiles` (HEAD `d62da13` plus this file) is local. The owner keeps it local until they say otherwise (2026-10-19); pushing it and merging to main need the owner's word (the hosted docs bundle in `docs/` is built from this branch). FW-V1 `main` is pushed (`a13c615c6`). All agent branches of 42.27 to 42.31 are merged and their worktrees removed.
 - [?] Two unmerged branches from earlier sessions are kept (their worktrees were removed on 2026-10-19, 42.29 section 6): `worktree-agent-a9c8b175a0187b7be` (`f9a34ce`, TESTING 42.13 notes: the balance-word FF run withdrawn before any write) and `worktree-agent-ae27186421cb01b3e` (`f8f2f55`, the FF image's banks follow the camera's bootloader; the bench FF platform path). Owner to decide: merge or delete.
 - [ ] Stale text (no behaviour):
   - the `FW-V1/emu/fps_patch_tests.py` docstring still mentions 8 or 16 Hz rows;
@@ -63,7 +63,7 @@ Every 8 and 9 fps build with a table entry is offered except the FF entries and 
 
 ## 5. Older open items (carried over from 42.20 to 42.22)
 
-- [ ] The bench's "come back after a reset" check fails intermittently (TESTING.md 42.30). In the 28-subject matrix at `5db4c9e`, rows 10 (Compact 1.3.0.8), 15 (Compact PRO 1.0.3.0 FF) and 21 (Compact PRO 4.9.2.0) failed at the boot proof after every page write had passed, with "the camera stayed on the bus 5 s after the reset (not rebooted), or did not come back within 40 s". Row 27 (Nano 300) failed with the same message right after its flash, then passed on a retry, and so did 42.29's row 20 first attempt. All of these rows passed their boot proof in 42.21. Diagnose it: J-Link reset timing, the 5 s wait, or the bench flow changed in 42.29 (`bootProof`, spec-flow.ts). Then re-run rows 10, 15 and 21.
+- [ ] The bench's reset check after the 42.31 fix (`waitForReboot` polls every 100 ms while it waits for the camera to leave the bus): only rows 10, 15 and 21 were re-run. Row 27's first-attempt failure in 42.30 is put down to the same missed sample without a trace; the next full matrix run confirms it. The failure text still names two causes (not rebooted, or not back within 40 s); splitting it is optional.
 - [ ] The bench's row-9 (1.3.0.8 FF) run needs `SEEK_BENCH_FF_RESTORE`, `SEEK_BENCH_FF_PLATFORM` and `SEEK_BENCH_FF_PLAIN`. Without them its page steps do not run and the row fails (42.30 first attempt). Record them in the bench header or README, or make the bench refuse to start without them.
 - [ ] The verdict table has no per-bank version field; the bench treats the `ownImage` bank's version (row 20's bank B, 1.0.3.2) as a note, not a checked value (42.29).
 - [ ] The Electron windows retain about 200 MB per subject (22 to 30 MB per window; not located); the full matrix needs `NODE_OPTIONS=--max-old-space-size=16384`.
