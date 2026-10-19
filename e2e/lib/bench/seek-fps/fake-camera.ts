@@ -32,8 +32,13 @@ export interface FakeCameraOptions {
   readonly firmwareHeads?: readonly (readonly number[])[];
   /** The answer to GET_FIRMWARE_INFO with length 4. */
   readonly firmware4?: readonly number[];
-  /** The 12-byte chip id (GET_CHIP_ID). */
+  /** The 12-byte chip id (GET_CHIP_ID). It is also the device-id block's +4 words, as on the bench camera. */
   readonly chipId?: readonly number[];
+  /**
+   * The ASCII device serial at +16 of the device-id block, which SetRamDataFeatures case 0 arms and the window reader
+   * (0x4F, or 0x58 on 0.7.x) serves. Null: the block carries no serial (TESTING.md 42.37).
+   */
+  readonly deviceSerial?: string | null;
   /** Frame bytes that the stream delivers, in order. Empty: bulk reads time out. */
   readonly frames?: readonly Uint8Array[];
   /** Keep delivering frames forever, the last one again; a read yields to the event loop. */
@@ -55,6 +60,19 @@ export interface FakeCameraOptions {
 }
 
 const SET_IMAGE_PROCESSING_MODE = 0x3e;
+const SET_RAM_DATA_FEATURES = 0x5a;
+
+/**
+ * The device-id block (core's readSerial reads it): the header 01 00 31 f7, the chip id's bytes at +4, the ASCII serial
+ * at +16 (asciiz, twelve bytes), then zeros to 248. The bytes are the bench Compact's (TESTING.md 42.37).
+ */
+function deviceIdentityBlock(chipId: readonly number[], serial: string | null): Uint8Array {
+  const block = new Uint8Array(248);
+  block.set([0x01, 0x00, 0x31, 0xf7], 0);
+  block.set(chipId.slice(0, 12), 4);
+  if (serial !== null) block.set(new TextEncoder().encode(serial).slice(0, 12), 16);
+  return block;
+}
 
 /** One Compact frame: every word `value`, the header words set as the Swift tests set them. */
 export function compactFrame(status: number, value: number): Uint8Array {
@@ -96,6 +114,7 @@ export class FakeCamera implements WebUsbDevice, WebUsbBulkDevice {
   private readonly firmwareHeads: readonly (readonly number[])[];
   private readonly firmware4: readonly number[];
   private readonly chipId: readonly number[];
+  private readonly deviceBlock: Uint8Array;
   private readonly endless: boolean;
   private readonly refuseOut: readonly number[];
   private readonly refuseModes: readonly number[];
@@ -103,15 +122,23 @@ export class FakeCamera implements WebUsbDevice, WebUsbBulkDevice {
   private infoStalls: number;
   private stream: Uint8Array[];
   private headIndex = 0;
+  /** The next byte the window reader serves from the device-id block; 0 until SetRamDataFeatures arms it. */
+  private blockCursor = 0;
+  private blockArmed = false;
 
   constructor(options: FakeCameraOptions = {}) {
     this.productId = options.productId ?? 0x0010;
     this.serialNumber = options.serialNumber === undefined ? null : options.serialNumber;
     this.firmwareHeads = options.firmwareHeads ?? [[1, 3, 0, 0, 0, 0, 0, 0]];
     this.firmware4 = options.firmware4 ?? [1, 3, 0, 0];
+    /* The bench Compact 1013CE098ACA (TESTING.md 42.37): the chip ID's every other byte is the chip ID. */
     this.chipId = options.chipId ?? [
-      0x10, 0x13, 0xce, 0x09, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+      0x10, 0x00, 0x13, 0x00, 0xce, 0x00, 0x09, 0x00, 0x8a, 0x00, 0xca, 0x00,
     ];
+    this.deviceBlock = deviceIdentityBlock(
+      this.chipId,
+      options.deviceSerial === undefined ? '101310HSNEA2' : options.deviceSerial,
+    );
     this.endless = options.endless ?? false;
     this.refuseOut = options.refuseOut ?? [];
     this.refuseModes = options.refuseModes ?? [];
@@ -170,6 +197,11 @@ export class FakeCamera implements WebUsbDevice, WebUsbBulkDevice {
     }
     if (setup.request === 0x4e) return bytesResult(this.firmware4.slice(0, length));
     if (setup.request === 0x36) return bytesResult(this.chipId.slice(0, length));
+    if ((setup.request === 0x4f || setup.request === 0x58) && this.blockArmed) {
+      const from = this.blockCursor;
+      this.blockCursor += length;
+      return bytesResult(Array.from(this.deviceBlock.subarray(from, from + length)));
+    }
     return bytesResult(new Array<number>(length).fill(0));
   }
 
@@ -189,6 +221,11 @@ export class FakeCamera implements WebUsbDevice, WebUsbBulkDevice {
       setup.request === SET_IMAGE_PROCESSING_MODE && this.refuseModes.includes(bytes[0] ?? -1);
     if (this.refuseOut.includes(setup.request) || refusedMode) {
       return { status: 'stall', bytesWritten: 0 };
+    }
+    /* SetRamDataFeatures case 0 arms the device-id block (core's readSerial). */
+    if (setup.request === SET_RAM_DATA_FEATURES && bytes[0] === 0 && bytes[1] === 0) {
+      this.blockArmed = true;
+      this.blockCursor = 0;
     }
     return { status: 'ok', bytesWritten: bytes.length };
   }

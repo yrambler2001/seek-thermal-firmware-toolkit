@@ -8,7 +8,8 @@
  * request the run sends is recorded at the transport, and the spec fails on any request outside the
  * list the Swift tool sends (lib/bench/seek-fps/camera.ts CHECKER_REQUESTS_IN / _OUT), on any flash
  * or reset request (0x50 SetFeaturedFirmwareData, 0x51 CompleteMemoryUpgrade, 0x52 BeginFirmwareUpgrade,
- * 0x59 ResetDevice, 0x5A SetRamDataFeatures), and on any bulk read that is not the frame endpoint.
+ * 0x59 ResetDevice), and on any bulk read that is not the frame endpoint. 0x5A SetRamDataFeatures is allowed by the
+ * list: it arms the device-id block that the serial is read from (TESTING.md 42.61), as the CLI's `info` arms it.
  *
  * The run is the checker's own command line (lib/bench/seek-fps/cli.ts), so what the spec measures is what
  * the orchestrator runs by hand: `--camera info`, `--camera --fps --mode normal --no-hifps` (Normal) and
@@ -24,7 +25,7 @@ import { openNodeUsbCamera, wallSeconds } from './lib/bench/seek-fps/node-usb-li
 
 const CAMERA = process.env.SEEK_E2E_TARGET === 'camera';
 /** Requests that change the flash or reset the part. None may be sent by this checker. */
-const FLASH_OR_RESET: readonly number[] = [0x50, 0x51, 0x52, 0x59, 0x5a];
+const FLASH_OR_RESET: readonly number[] = [0x50, 0x51, 0x52, 0x59];
 
 interface Sent {
   readonly dir: 'in' | 'out' | 'bulk';

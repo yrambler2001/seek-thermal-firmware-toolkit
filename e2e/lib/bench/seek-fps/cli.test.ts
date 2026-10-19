@@ -98,10 +98,11 @@ function capture(): {
 }
 
 describe('runSeekFps over a fake camera', () => {
-  it('info prints the model, firmware, serial and geometry, and exits 0', async () => {
+  it('info prints the model, firmware, serial, chip id and geometry, and exits 0', async () => {
     const fake = new FakeCamera({
       productId: 0x0010,
       serialNumber: '1013CE098ACA',
+      deviceSerial: '101310HSNEA2',
       firmwareHeads: [[1, 3, 0, 0, 0, 0, 0, 0]],
     });
     const io = capture();
@@ -112,7 +113,27 @@ describe('runSeekFps over a fake camera', () => {
     );
     expect(code).toBe(0);
     expect(io.err).toEqual([]);
-    expect(io.out[0]).toBe('Seek Compact, firmware 1.3.0.0, serial 1013CE098ACA, 206x156');
+    expect(io.out[0]).toBe(
+      'Seek Compact, firmware 1.3.0.0, serial 101310HSNEA2, chip id 1013CE098ACA, 206x156',
+    );
+  });
+
+  it('info with the serial unreadable says "serial -" and shows the chip id under its own label', async () => {
+    const fake = new FakeCamera({
+      productId: 0x0010,
+      refuseOut: [0x5a],
+      firmwareHeads: [[1, 3, 0, 0, 0, 0, 0, 0]],
+    });
+    const io = capture();
+    const code = await runSeekFps(
+      ['info', '--camera'],
+      () => Promise.resolve(sessionOver(fake)),
+      io.io,
+    );
+    expect(code).toBe(0);
+    expect(io.out[0]).toBe(
+      'Seek Compact, firmware 1.3.0.0, serial -, chip id 1013CE098ACA, 206x156',
+    );
   });
 
   it('stream -n 1 prints one status line for the second, with frames and frozen pairs', async () => {
@@ -130,7 +151,9 @@ describe('runSeekFps over a fake camera', () => {
       io.io,
     );
     expect(code).toBe(0);
-    expect(io.out[0]).toMatch(/^Seek Compact, firmware 1\.3\.0\.0, serial SN, 206x156$/);
+    expect(io.out[0]).toMatch(
+      /^Seek Compact, firmware 1\.3\.0\.0, serial 101310HSNEA2, chip id 1013CE098ACA, 206x156$/,
+    );
     expect(io.out[1]).toMatch(
       /^t=1s frames=\d+ status=3 min=5000 max=5000 avg=\d+ devTemp=4660 frameCnt=7 frozenPairs=\d+ changed=\d+%$/,
     );
@@ -151,7 +174,7 @@ describe('runSeekFps over a fake camera', () => {
     );
     expect(code).toBe(0);
     expect(io.out[0]).toBe(
-      'Seek Compact, firmware 1.3.0.8, serial SN, 206x156, Startup with Operation=0 refused (connected without it)',
+      'Seek Compact, firmware 1.3.0.8, serial 101310HSNEA2, chip id 1013CE098ACA, 206x156, Startup with Operation=0 refused (connected without it)',
     );
   });
 

@@ -8,9 +8,11 @@
  * place of the Swift thread; nothing else is changed on purpose.
  *
  * WHAT IT SENDS (the whole list, and the only one the checker may send):
- *   IN   0x36 GetChipID (12 bytes, the serial when the USB string is empty)
+ *   IN   0x36 GetChipID (12 bytes: the chip ID, its own field on the info line)
  *        0x4E GetFirmwareInfo (4 or 8 bytes; 8 at connect, 4 before each init)
- *   OUT  0x37 "Startup with Operation=0" (classic init, option on)
+ *        0x35 GetErrorCode, and 0x4F GetFeaturedFirmwareData (0x58 on 0.7.x), for the ASCII serial
+ *   OUT  0x5A SetRamDataFeatures (case 0, the device-id block), once at connect, before the first init
+ *        0x37 "Startup with Operation=0" (classic init, option on)
  *        0x3C SetOperationMode: 1 starts the stream, 0 stops it (three times at disconnect)
  *        0x3E SetImageProcessingMode: the mode, 8 Normal, 3 Hi FPS / FastRaw, 0 Raw
  *        0x53 ImageData: one frame credit (the bulk length)
@@ -19,7 +21,9 @@
  * ==================================================================== */
 
 import { USB_TIMEOUT_MS, OP } from '../../../../packages/core/src/protocol/ops.js';
+import { SeekDevice } from '../../../../packages/core/src/protocol/client.js';
 import type { UsbTransport } from '../../../../packages/core/src/protocol/transport.js';
+import { legacyReaderOp } from '../../../../packages/core/src/profiles/legacy-auth.js';
 import { SeekError } from '../../../../packages/core/src/errors.js';
 import {
   COMPACT_FRAME_BYTES,
@@ -40,6 +44,11 @@ export const COMPACT_PRODUCT_ID = 0x0010;
 export const REQUESTS = {
   GET_CHIP_ID: 0x36,
   GET_FIRMWARE_INFO: OP.GET_FIRMWARE_INFO,
+  GET_ERROR_CODE: OP.GET_ERROR_CODE,
+  /** The window reader on 0.8 and later builds; the 0.7.x builds read the window through GET_FEATURED_DATA (0x58). */
+  GET_FEATURED_FIRMWARE_DATA: OP.GET_FEATURED_FIRMWARE_DATA,
+  GET_FEATURED_DATA: OP.GET_FEATURED_DATA,
+  SET_RAM_DATA_FEATURES: OP.SET_RAM_DATA_FEATURES,
   OP_ZERO: 0x37,
   SET_OPERATION_MODE: OP.SET_OPERATION_MODE,
   SET_IMAGE_PROCESSING_MODE: 0x3e,
@@ -53,8 +62,12 @@ export const REQUESTS = {
 export const CHECKER_REQUESTS_IN: readonly number[] = [
   REQUESTS.GET_CHIP_ID,
   REQUESTS.GET_FIRMWARE_INFO,
+  REQUESTS.GET_ERROR_CODE,
+  REQUESTS.GET_FEATURED_FIRMWARE_DATA,
+  REQUESTS.GET_FEATURED_DATA,
 ];
 export const CHECKER_REQUESTS_OUT: readonly number[] = [
+  REQUESTS.SET_RAM_DATA_FEATURES,
   REQUESTS.OP_ZERO,
   REQUESTS.SET_OPERATION_MODE,
   REQUESTS.SET_IMAGE_PROCESSING_MODE,
@@ -103,7 +116,10 @@ export const DEFAULT_SEEK_OPTIONS: SeekOptions = {
 
 export interface SeekDeviceInfo {
   readonly firmware: string;
+  /** The ASCII device serial (core's `readSerial`, the CLI's and the page's), or '-' when it could not be read. */
   readonly serial: string;
+  /** The GetChipID value as hex, or '-' when it could not be read. Not the serial (TESTING.md 42.37). */
+  readonly chipId: string;
   readonly model: string;
   readonly width: number;
   readonly height: number;
@@ -266,12 +282,28 @@ export function refusedInitMessage(detail: string): string {
   );
 }
 
-/** The serial from the chip-id read: every other byte, as hex (Swift connect's `serialHex`). */
-export function serialFromChipId(id: Uint8Array): string {
+/** The chip ID as hex: every other byte of the GetChipID reply (Swift connect's `serialHex`); '' when empty. */
+export function chipIdHex(id: Uint8Array): string {
   let out = '';
   for (let k = 0; k < id.length; k += 2)
     out += (id[k] ?? 0).toString(16).toUpperCase().padStart(2, '0');
   return out;
+}
+
+/**
+ * The ASCII device serial, read the way core's `SeekDevice.readSerial` reads it (TESTING.md 42.37): SetRamDataFeatures
+ * case 0 arms the device-id block, and the window reader serves its first 248 bytes. The serial is the twelve bytes at
+ * +16. Core does the reading (its error check, its retries); the only choice here is the window reader for the build,
+ * which core's preservation pipeline makes the same way. Nil when it cannot be read or the block has no serial in it.
+ */
+export async function readDeviceSerial(
+  transport: UsbTransport,
+  version: string | null,
+): Promise<string | null> {
+  const device = new SeekDevice(transport);
+  device.windowReadOp = legacyReaderOp(version);
+  const serial = await device.readSerial();
+  return serial === null || serial === '' ? null : serial;
 }
 
 function sleep(ms: number): Promise<void> {
@@ -384,6 +416,7 @@ export class SeekCamera {
     this.initRefusal = null;
 
     let firmware: TrustedFirmware;
+    let deviceSerial: string | null;
     try {
       firmware = await readTrustedFirmware(this.link.transport);
       /* No read got a reply: the camera is off the bus or still starting, and no init is sent to it (TESTING.md 42.58). */
@@ -400,6 +433,9 @@ export class SeekCamera {
         this.options.compactProInit,
         firmware.version === null ? null : Number(firmware.version.split('.')[0]),
       );
+      /* The serial is read before the first init, in the state the CLI's `info` reads it in: no init has been
+       * sent, so the camera is as it booted (TESTING.md 42.61). */
+      deviceSerial = await readDeviceSerial(this.link.transport, firmware.version);
       try {
         await this.sendInit(SEEK_MODE.normal);
       } catch (error) {
@@ -412,17 +448,17 @@ export class SeekCamera {
       await this.link.close();
       throw error;
     }
-    const serialHex = serialFromChipId(await this.inBytes(REQUESTS.GET_CHIP_ID, 12));
+    const chipId = chipIdHex(await this.inBytes(REQUESTS.GET_CHIP_ID, 12));
     const model = this.isPro
       ? 'Seek Thermal Pro'
       : this.compactOnPro
         ? 'Seek Compact / Compact XR (Pro init)'
         : 'Seek Compact';
-    const usbSerial = this.link.description.serialNumber;
+    /* The USB string is not used: on 1.3.0.0 it is absent, and the serial is the device's own (core's readSerial). */
     this.info = {
       firmware: firmware.version ?? '-',
-      serial:
-        usbSerial !== null && usbSerial !== '' ? usbSerial : serialHex === '' ? '-' : serialHex,
+      serial: deviceSerial ?? '-',
+      chipId: chipId === '' ? '-' : chipId,
       model,
       width: this.width,
       height: this.height,

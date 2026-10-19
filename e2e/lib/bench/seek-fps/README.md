@@ -11,7 +11,7 @@ Node runs the TypeScript directly through the loader in this folder (no build st
 
 ```sh
 R="node --import ./e2e/lib/bench/seek-fps/register.mjs e2e/lib/bench/seek-fps/seek-fps.ts"
-$R --camera info                                # the bench camera: model, firmware, serial, geometry
+$R --camera info                                # the bench camera: model, firmware, serial, chip id, geometry
 $R --camera --fps --mode normal --no-hifps      # Normal (IP mode 8), the Hi FPS box unticked
 $R --camera --fps                               # Hi FPS: Normal with Init Hi FPS on (the default)
 $R --camera --fps --mode fast                   # FastRaw (IP mode 3)
@@ -58,17 +58,28 @@ restarted in Normal without new logic in the frame loop (TESTING.md 42.59).
 Only the requests the Swift tool sends (the lists are `CHECKER_REQUESTS_IN` and `CHECKER_REQUESTS_OUT` in
 `camera.ts`):
 
-- IN: `0x36` GetChipID (12 bytes), `0x4E` GetFirmwareInfo (8 bytes; two consecutive replies that agree on the
-  version, with a major of 0 to 9, are the version the init is chosen from; at most 26 reads, about 500 ms, while a
-  build starts up; 4 bytes before each init).
-- OUT: `0x37` Startup with Operation=0 (classic init), `0x3C` SetOperationMode (1 starts the stream, 0 stops it;
-  three times at disconnect, and three times before an init on a build that took no 0x37), `0x3E`
+- IN: `0x36` GetChipID (12 bytes: the chip id, every other byte in hex, on the info line), `0x4E` GetFirmwareInfo
+  (8 bytes; two consecutive replies that agree on the version, with a major of 0 to 9, are the version the init is
+  chosen from; at most 26 reads, about 500 ms, while a build starts up; 4 bytes before each init).
+- IN, for the serial (read once at connect, before the first init, as the CLI's `info` reads it): `0x35`
+  GetErrorCode (4 bytes), and `0x4F` GetFeaturedFirmwareData, or `0x58` on a 0.7.x build, in 64-byte requests for the
+  first 248 bytes of the device-id block. The serial is the ASCII at +16 (TESTING.md 42.37, 42.61).
+- OUT: `0x5A` SetRamDataFeatures (case 0, which arms the device-id block for that read; the same request the CLI's
+  `info` makes), `0x37` Startup with Operation=0 (classic init), `0x3C` SetOperationMode (1 starts the stream, 0 stops
+  it; three times at disconnect, and three times before an init on a build that took no 0x37), `0x3E`
   SetImageProcessingMode (the mode), `0x53` ImageData (one frame credit per frame), `0x54`, `0x55`, `0x56` the rest
   of the classic and Pro inits.
 - Bulk IN on endpoint 1 (0x81): the frame bytes, 64896 (Compact) or 177840 (Pro).
 
-It never sends a flash write or a reset (`0x50`, `0x51`, `0x52`, `0x59`, `0x5A`). The Compact Pro init is used
+It never sends a flash write or a reset (`0x50`, `0x51`, `0x52`, `0x59`). `0x5A` is the one setter of the info read
+(core's `FLASH_OPS` lists it with the other info-read arms); it changes no flash and no image. The Compact Pro init is used
 only on a Compact on firmware 4.x or newer with the option on; a 1.x Compact always gets the classic init.
+
+**The two labels.** The info line prints `serial` and `chip id` as two fields. `serial` is the ASCII device serial
+(`101310HSNEA2` on the bench Compact), the same one the CLI `info` and the slots page show. `chip id` is the GetChipID
+value (`1013CE098ACA`). The USB string is not used. If the serial cannot be read, the line says `serial -` and still
+shows the chip id under its own label, so the chip id is never printed as the serial. The Swift `seek info` prints the
+same two fields in the same order.
 
 **When the connect fails.** The checker reads GetFirmwareInfo before it sends any init, and a failed connect says
 which of three things happened (TESTING.md 42.58):

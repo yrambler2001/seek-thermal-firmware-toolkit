@@ -7,9 +7,9 @@ import {
   REQUESTS,
   SEEK_MODE,
   SeekCamera,
+  chipIdHex,
   noAnswerMessage,
   readTrustedFirmware,
-  serialFromChipId,
   usesCompactProInit,
 } from './camera.js';
 import { FakeCamera, compactFrame, type LoggedTransfer } from './fake-camera.js';
@@ -421,17 +421,72 @@ describe('mode 4: frames with no header type', () => {
   });
 });
 
-describe('the serial', () => {
-  it('is the USB serial string when there is one, else the chip id as hex (every other byte)', async () => {
-    expect(serialFromChipId(new Uint8Array([0x10, 0x01, 0x13, 0x02, 0xce, 0x03]))).toBe('1013CE');
-    const withString = new FakeCamera({ serialNumber: '101310HSNEA2' });
-    const a = await SeekCamera.connect(linkFor(withString));
-    expect(a.info?.serial).toBe('101310HSNEA2');
-    await a.disconnect();
-    const noString = new FakeCamera({ serialNumber: null, chipId: [0x10, 0, 0x13, 0, 0xce, 0] });
-    const b = await SeekCamera.connect(linkFor(noString));
-    expect(b.info?.serial).toBe('1013CE');
-    await b.disconnect();
+describe('the serial and the chip id (TESTING.md 42.37, 42.61)', () => {
+  it('the chip id is every other byte of the GetChipID reply, as hex', () => {
+    expect(chipIdHex(new Uint8Array([0x10, 0x01, 0x13, 0x02, 0xce, 0x03]))).toBe('1013CE');
+    const bench = [0x10, 0x00, 0x13, 0x00, 0xce, 0x00, 0x09, 0x00, 0x8a, 0x00, 0xca, 0x00];
+    expect(chipIdHex(new Uint8Array(bench))).toBe('1013CE098ACA');
+    expect(chipIdHex(new Uint8Array(0))).toBe('');
+  });
+
+  it('the serial is the ASCII device serial at +16 of the device-id block; the chip id is its own field', async () => {
+    const camera = await SeekCamera.connect(
+      linkFor(new FakeCamera({ deviceSerial: '101310HSNEA2' })),
+    );
+    expect(camera.info?.serial).toBe('101310HSNEA2');
+    expect(camera.info?.chipId).toBe('1013CE098ACA');
+    await camera.disconnect();
+  });
+
+  it('the USB string does not become the serial: a camera with one still shows the device serial', async () => {
+    const fake = new FakeCamera({ serialNumber: '1013CE098ACA', deviceSerial: '101310HSNEA2' });
+    const camera = await SeekCamera.connect(linkFor(fake));
+    expect(camera.info?.serial).toBe('101310HSNEA2');
+    await camera.disconnect();
+  });
+
+  it('is read before the first init, as the CLI reads it: SetRamDataFeatures case 0, then 248 bytes in 64-byte requests', async () => {
+    const fake = new FakeCamera({ deviceSerial: '101310HSNEA2' });
+    const camera = await SeekCamera.connect(linkFor(fake));
+    const arm = fake.log.findIndex((e) => e.dir === 'out' && e.request === 0x5a);
+    const firstInit = fake.log.findIndex(
+      (e) => e.dir === 'out' && [0x37, 0x3e, 0x54, 0x55, 0x56].includes(e.request),
+    );
+    expect(arm).toBeGreaterThanOrEqual(0);
+    expect(arm).toBeLessThan(firstInit);
+    expect(fake.log[arm]?.data).toEqual([0, 0, 124, 0, 0, 0]);
+    const reads = fake.log
+      .filter((e) => e.dir === 'in' && e.request === 0x4f)
+      .map((e) => e.data[0]);
+    expect(reads).toEqual([64, 64, 64, 56]);
+    await camera.disconnect();
+  });
+
+  it('a 0.7.x build serves the device-id block through 0x58, and the other builds through 0x4F', async () => {
+    const old = new FakeCamera({
+      firmwareHeads: [[0, 7, 0, 8, 0, 0, 0, 0]],
+      deviceSerial: '1013CE0001',
+    });
+    const oldCamera = await SeekCamera.connect(linkFor(old));
+    expect(oldCamera.info?.serial).toBe('1013CE0001');
+    expect(old.sent('in').some((e) => e.request === 0x58)).toBe(true);
+    expect(old.sent('in').some((e) => e.request === 0x4f)).toBe(false);
+    await oldCamera.disconnect();
+  });
+
+  it('when SetRamDataFeatures is refused the serial is "-", and the chip id still shows under its own label', async () => {
+    const fake = new FakeCamera({ refuseOut: [0x5a], deviceSerial: '101310HSNEA2' });
+    const camera = await SeekCamera.connect(linkFor(fake));
+    expect(camera.info?.serial).toBe('-');
+    expect(camera.info?.chipId).toBe('1013CE098ACA');
+    await camera.disconnect();
+  });
+
+  it('a device-id block with no serial in it gives serial "-"', async () => {
+    const camera = await SeekCamera.connect(linkFor(new FakeCamera({ deviceSerial: null })));
+    expect(camera.info?.serial).toBe('-');
+    expect(camera.info?.chipId).toBe('1013CE098ACA');
+    await camera.disconnect();
   });
 });
 

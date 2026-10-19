@@ -21,7 +21,7 @@ import type { SeekLink } from './link.js';
 export const USAGE = `seek-fps - Seek Thermal camera (Compact, Compact XR, Pro): the Swift seek CLI, ported
 
 USAGE
-  seek-fps info                     connect and print firmware, serial and model
+  seek-fps info                     connect and print firmware, serial, chip id and model
   seek-fps stream [-n SECONDS]      stream and print one status line per second (default 5 s)
   seek-fps --fps                    stream for 5 seconds and print mean and median fps for each second
 
@@ -208,7 +208,7 @@ function describe(camera: SeekCamera): string {
   const refused = camera.startupOpZeroRefused
     ? ', Startup with Operation=0 refused (connected without it)'
     : '';
-  return `${info.model}, firmware ${info.firmware}, serial ${info.serial}, ${String(info.width)}x${String(info.height)}${refused}`;
+  return `${info.model}, firmware ${info.firmware}, serial ${info.serial}, chip id ${info.chipId}, ${String(info.width)}x${String(info.height)}${refused}`;
 }
 
 /** Runs one command. Returns the process exit code (Swift `fail` is 1). */
