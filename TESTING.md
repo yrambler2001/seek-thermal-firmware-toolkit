@@ -8489,3 +8489,36 @@ The rate settles slowly after the dump in both directions, so a single read afte
 - That the 42.30 failures were these same misses is inferred from the mechanism and the matching timing. 42.30 kept no presence trace, so it is not measured.
 - That 42.21 passed by chance is inferred. The same code and the same sampling were in place.
 - Row 9's FF env item and the other plan items are not touched.
+
+### 42.35 FW-V1 plan hygiene: flash-bank needs an explicit BANK_ADDR, the fps test docstring matches the table, and jlink_dumps is ignored (2026-10-19)
+
+**Summary.** Three FW-V1 items from plan.md, one commit each, on branch `plan-hygiene` in the FW-V1 worktree `/private/tmp/claude-501/fwv1-hygiene`, cut from FW-V1 `main` at `a13c615c6`. Nothing was merged to FW-V1 main or pushed, and FW-V1's main checkout was not edited. No camera, J-Link or USB switch was used. Every check ran offline, with `JLINKEXE` pointed at a stub that logs its command file and talks to nothing. This worktree was first reset to `refactor/all-firmware-profiles` (`16d87c7`); the old HEAD `cf5420b` is an ancestor of it, so nothing was lost.
+
+**Tags.** [measured] is a command run in this session. [inferred] is read from the code and not run.
+
+**1. The runner's bank default (FW-V1 `89237fef3`).**
+- `targets/compact_8hz_1_3_0_0/tools/jlink/jlink-runner.js` and `targets/compact_8hz_1_3_0_8/tools/jlink/jlink-runner.js`: `SLOT_BASES` is removed. Its only other use in each file was the `flash-bank` default, `SLOT_BASES[1]` = 0x14050000, which is bank A on the 2014 chain. `flash-bank` now refuses a run without `BANK_ADDR`, before any J-Link call, and names the 2014 banks (A 0x14050000, B 0x14060000, R 0x14070000). `GUARDED_BANK_BASES` keeps the same four addresses as before (0x14030000 and the 2014 A, B, R), so the `flash-region` guard does not change. The two `jlink/README.md` flash-bank rows no longer give a default. No other command's code changed.
+- [measured] The unmodified runner, with no `BANK_ADDR`, sent `loadbin ..., 0x14050000` to the stub. The changed runner: no `BANK_ADDR` exits 2 and sends nothing; `BANK_ADDR=0x14060000` sends `loadbin` and `verifybin` to 0x14060000; `BANK_ADDR=0x14000000` and `14060000` (no `0x`) are refused; `flash-region` with a bare 64 KiB image at 0x14060000 is still refused by the CODE-footer guard. `node --check` passes on both files.
+
+**2. The `fps_patch_tests.py` docstring (FW-V1 `623aa7f1f`).**
+- `emu/fps_patch_tests.py`: the module docstring and two function docstrings now match the row table. The stock firmwares named are 9 Hz Compact PRO, 8 Hz Compact 32K and the 16 Hz FF Compact 32K builds. Block 13 is said to be the 32K family's. The content checks say which rows use them: `even_ref` by the five rows that name a reference; `same_as_ref` and `cds_level` by none, since the 16 Hz wording described rows removed in `5373ec576`. The 16 Hz FF long-run row is measured and checked for its frame count only, and no row sets `compare`, which the docstring now says. No code changed.
+- [measured] `ast.parse` passes with the emu venv interpreter. `emu/.venv` is untracked and absent from the worktree, so the interpreter was the FW-V1 main checkout's, run read-only. `--list` runs and prints the current rows; nothing boots.
+
+**3. The untracked `jlink_dumps` (FW-V1 `e7297caed`).**
+- `targets/compact_8hz_1_3_0_0/.gitignore` and `targets/compact_8hz_1_3_0_8/.gitignore` each get `jlink_dumps/`, after the `build/` and `build-reloc/` lines already there. The root `*.bin` rule does not catch the `.log`, `.json` and `.csv` files the runner writes to that folder.
+- `compact_8hz_1_3_0_8` needed it too: its runner writes to the same folder, and its copy in the main checkout is empty today.
+- [measured] Probe files in both folders are ignored (`git check-ignore`), and `git status` shows nothing new.
+
+**4. Found, not changed.**
+- [inferred from the code] `build_flash.mjs` in both named targets keeps the modern 4.x table: `SLOTS.b` is 0x14050000, which is bank A on the 2014 chain. The default `--flash` (slot b) passes that address to `flash-bank`, then `set-boot` with index 1 selects bank B. The image lands in bank A while the boot word points at bank B. The same `flash-bank` call is in `compact_8hz_0_5_1_3`, `compact_8hz_0_9_0_2` and `compact_8hz_1_0_0_0`, whose tables I did not read. This needs its own change.
+- [measured by grep] 34 other `jlink-runner.js` files under `targets/`, and `codegen/harness/tools/jlink/jlink-runner.js`, still define `SLOT_BASES` and default `flash-bank` to `SLOT_BASES[1]`. Only the two named targets were changed. The `SLOT_BASES` tables under `emu/` hold the modern 4.x addresses (0x14030000, 0x14050000, 0x14070000) and were not touched.
+
+**5. Not verified.**
+- Nothing ran against a J-Link or a camera. A real `flash-bank` to bank B has not run on hardware since this change. The change only adds a refusal and removes a default.
+- `flash-bank` still accepts 0x14030000 (the modern A, in the guard set). No 2014 boot word selects it. It stays because `flash-region` shares the set; tightening `flash-bank` to the three 2014 bases is a separate choice for the owner.
+- The `fps_patch_unit_tests.py` suite was not run. The change is docstring-only, checked by the parse and `--list`.
+- Sections 42.32 to 42.34 are not in this file. This one is numbered 42.35 as asked.
+
+**6. Commits.**
+- FW-V1, branch `plan-hygiene`, worktree `/private/tmp/claude-501/fwv1-hygiene` (not merged, not pushed): `89237fef3` (item 1), `623aa7f1f` (item 2), `e7297caed` (item 3).
+- This note: the seek repo commit on branch `worktree-agent-ae97b484abf9c2c54`.
