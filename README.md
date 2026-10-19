@@ -52,13 +52,13 @@ WebUSB needs Chrome, Edge, or another Chromium browser on Windows, macOS, Linux 
 
 The page has five tabs, in this order. Each one is a real URL.
 
-| Tab                              | Hash         | For                                                                                           | Writes to the camera?                  |
-| -------------------------------- | ------------ | --------------------------------------------------------------------------------------------- | -------------------------------------- |
-| Info                             | `#/`         | any camera: reads the firmware version and says which tab covers it                           | no                                     |
-| Dump & decrypt 0.x/1.x 2014/2016 | `#/preserve` | 0.x and 1.x cameras: the 2014 builds, the 2016 Compact PRO (1.0.3.x) and the 1.3.0.8 FF build | yes, two guided steps, each asks first |
-| Dump & decrypt 4.x/Nano          | `#/v4`       | 4.x, Nano and Mosaic cameras: a read-only dump of the whole flash, decrypted                  | no                                     |
-| Decrypt File/Slot                | `#/decrypt`  | nothing: a dump file you have, or one 64 KiB firmware slot. No camera is used                 | no                                     |
-| Work with firmware slots         | `#/slots`    | 0.8.0.0 and newer: read, dump or write one bank (A, B or R)                                   | yes, one bank at a time, asks first    |
+| Tab                              | Hash         | For                                                                                              | Writes to the camera?                  |
+| -------------------------------- | ------------ | ------------------------------------------------------------------------------------------------ | -------------------------------------- |
+| Info                             | `#/`         | any camera: the same read as `seek-fw info` (identity, boot config, banks, keys, upgrade target) | no flash (sets two RAM selectors)      |
+| Dump & decrypt 0.x/1.x 2014/2016 | `#/preserve` | 0.x and 1.x cameras: the 2014 builds, the 2016 Compact PRO (1.0.3.x) and the 1.3.0.8 FF build    | yes, two guided steps, each asks first |
+| Dump & decrypt 4.x/Nano          | `#/v4`       | 4.x, Nano and Mosaic cameras: a read-only dump of the whole flash, decrypted                     | no                                     |
+| Decrypt File/Slot                | `#/decrypt`  | nothing: a dump file you have, or one 64 KiB firmware slot. No camera is used                    | no                                     |
+| Work with firmware slots         | `#/slots`    | 0.8.0.0 and newer: read, dump, write or raise the frame rate of one bank (A, B or R)             | yes, one bank at a time, asks first    |
 
 Old hashes (`#/dump`, `#/flash`) are not redirected: they open the Info tab.
 
@@ -86,14 +86,14 @@ brevity; substitute `node packages/cli/dist/bin.js` if you have not linked it.
 
 The commands are the web app's tabs, one each:
 
-| Command                       | Tab                              | What it does                                                                                                            |
-| ----------------------------- | -------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| `seek-fw info`                | Info                             | firmware version, identity, slots, key table, boot config; `--devices` lists the cameras, `--profiles` the families     |
-| `seek-fw preserve`            | Dump & decrypt 0.x/1.x 2014/2016 | the six-step preservation run; `--backup-only` is its read-only first step, `--zip <file>` saves the run as one archive |
-| `seek-fw dump`                | Dump & decrypt 4.x/Nano          | read the whole 4 MiB flash and decrypt it; `--all-selectors` probes every selector instead                              |
-| `seek-fw decrypt file <dump>` | Decrypt File/Slot                | decrypt a dump you already have — no camera needed                                                                      |
-| `seek-fw decrypt slot <file>` | Decrypt File/Slot                | decrypt one 64 KiB firmware bank from a file — no camera needed                                                         |
-| `seek-fw slots ...`           | Work with firmware slots         | list, dump, write or raise the frame rate of one bank (A, B or R)                                                       |
+| Command                       | Tab                              | What it does                                                                                                                        |
+| ----------------------------- | -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `seek-fw info`                | Info                             | firmware version, identity, slots, key table, boot config, upgrade target; `--devices` lists the cameras, `--profiles` the families |
+| `seek-fw preserve`            | Dump & decrypt 0.x/1.x 2014/2016 | the six-step preservation run; `--backup-only` is its read-only first step, `--zip <file>` saves the run as one archive             |
+| `seek-fw dump`                | Dump & decrypt 4.x/Nano          | read the whole 4 MiB flash and decrypt it; `--all-selectors` probes every selector instead                                          |
+| `seek-fw decrypt file <dump>` | Decrypt File/Slot                | decrypt a dump you already have — no camera needed                                                                                  |
+| `seek-fw decrypt slot <file>` | Decrypt File/Slot                | decrypt one 64 KiB firmware bank from a file — no camera needed                                                                     |
+| `seek-fw slots ...`           | Work with firmware slots         | list, dump, write or raise the frame rate of one bank (A, B or R)                                                                   |
 
 The old names are gone, with no alias: `devices` is `info --devices`, `profiles` is `info --profiles`,
 `sweep` is `dump --all-selectors`, and `flash` is `slots flash`. A flag a command does not take is a
@@ -110,6 +110,7 @@ Common options:
 --gap-fill <byte>    fill byte for unreachable blocks (default 0xff)
 --retries <n>        per-window retry count (default 2)
 --retry-delay <ms>   pause between window retries (default 500)
+--no-probe           info, dump, slots: do not ask the camera which protocol it speaks first
 --recipient <r>      interface | device | auto (default auto)
 --serial <id>        pick one camera when several are attached
 --no-decrypt         dump: dump the flash but skip the decryption stage
@@ -214,8 +215,8 @@ same tool rather than two implementations that drift.
 
 ## Read-only by design
 
-The dump view — the default page — can issue exactly six vendor commands. That is its entire
-vocabulary, and there is no code path to anything else:
+The dump view (the Dump & decrypt 4.x/Nano tab) can issue exactly six vendor commands. That is its
+entire vocabulary, and there is no code path to anything else:
 
 | Opcode | Name                    | Dir | Why                                                                                                      |
 | ------ | ----------------------- | --- | -------------------------------------------------------------------------------------------------------- |
@@ -542,12 +543,9 @@ read it over SWD/J-Link or with an SPI programmer.
 
 ## Firmware and flashing
 
-There is a second view at **[`#flash`](https://yrambler2001.github.io/seek-thermal-firmware-dump/#flash)**. It
-shows what firmware the camera is running, and writes a new **plaintext** firmware image to it through
-the camera's own upgrade path.
-
-The 4.x/Nano tab is read-only. Writes live on the **Work with firmware slots** tab (`#/slots`), which
-has its own command vocabulary and asks before every write; nothing on the 4.x/Nano tab can reach it.
+Firmware writes live on the **Work with firmware slots** tab (`#/slots`), which has its own command
+vocabulary and asks before every write. The old `#flash` page is gone: `#flash` opens the Info tab.
+The 4.x/Nano tab is read-only, and nothing on it can reach a write.
 
 ### What it shows
 
@@ -559,12 +557,21 @@ read:
 | -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Running firmware           | version and build string from `GetFirmwareInfo`, plus the bootloader's own build string                                                                                            |
 | Serial, platform, USB link | from the device-id RAM block and the info selectors                                                                                                                                |
-| Boot config                | `cfg[0]` at `0x14010000`, which slot the camera booted, and which slot an upgrade would write                                                                                      |
+| Boot config                | `cfg[0]` at `0x14010000`, which slot the camera booted, and which slot an upgrade would write (rules below)                                                                        |
 | Keys                       | Key A and Key B, read out of the camera's bootloader block and confirmed against a slot's recovered keystream                                                                      |
 | Per-device key             | whether `0x14000218` is programmed                                                                                                                                                 |
 | Each slot                  | firmware version, image id, size, model string, which key encrypts it, whether it passes the bootloader's acceptance sum and `CODE` footer check, and the SHA-256 of its plaintext |
 
-All of that is reads only.
+Which slot the camera booted depends on the line. On the 2014 chain it is the bank the active-slot word
+records as the camera's last start. On 4.x it is the bank the boot-config word predicts, and there the
+camera's own answer also sets the upgrade target, overriding the prediction.
+
+The read writes no flash. It sets two RAM selectors (`0x55`, `0x5a`) and leaves the vendor window
+unlocked until a power cycle, as [described below](#the-camera-stays-unlocked-until-a-power-cycle).
+
+When the upgrade target is the bank the camera booted from, the page and `seek-fw info` show a
+warning: an upgrade run from that camera would overwrite the image it is running. It is only a
+warning, and nothing stops the upgrade.
 
 ### What it writes
 
@@ -730,6 +737,7 @@ seek-fw slots dump r --out ./banks                  # the bank as stored, plus t
 seek-fw slots flash b my-image.bin --dry-run        # print the plan, send nothing
 seek-fw slots flash b my-image.bin                  # decrypted image, encrypted for THAT bank
 seek-fw slots flash r prepared.bin --raw --acknowledge-risk   # raw staged bytes, verbatim
+seek-fw slots patch-fps a                                     # frame-rate patch: prints the plan, sends nothing
 ```
 
 - **Flash a decrypted image.** The page stamps the length, balances the acceptance sum and encrypts
@@ -747,6 +755,16 @@ seek-fw slots flash r prepared.bin --raw --acknowledge-risk   # raw staged bytes
   (`TESTING.md` §42.11 and §42.12).
 - **Flash raw bytes.** The bytes you give go through the staging stream as they are. Whether they
   boot is the camera's business, and the plan says what the bootloader's checks make of them.
+- **Raise the frame rate.** On a bank whose image the table knows, **Make N FPS** (or
+  `seek-fw slots patch-fps`, a dry run unless `--write`) edits the bank's bytes so its picture
+  publishes at a higher rate. The table offers 32 fps for the Compact 0.8.0.0, 0.9.0.2, 0.9.0.6,
+  0.9.0.7, 0.9.1.0, 0.10.0.0, 1.0.0.0, 1.2.0.0, 1.3.0.0 and 1.3.0.8 builds on the plain 2014 chain,
+  and for the Compact 4.8.1.7, 4.8.1.9 and 4.8.2.1 (the Compact XR 4.8.2.1 too) under Key A. It
+  offers 17.7 fps for the Compact PRO 4.9.1.15 (measured on one camera), and 18 fps for the Compact
+  PRO 4.9.2.0, 1.0.3.0 and 1.0.3.2. Other builds are refused, with the reason. The bank is saved
+  first. A bank runs only after a boot, so power-cycle the camera afterwards. On the 2014 chain the
+  page and `seek-fw slots list` also warn when a patched bank is one the camera will not run.
+  [FPS_32HZ.md](FPS_32HZ.md) has how each build is patched and what was measured.
 - **Writes arm bank 7/8/9 and nothing else.** They program that bank and leave the boot config
   alone, so there is no "select the active slot": the protocol has no such command. Writing the bank
   the camera boots now, or the recovery bank, needs an explicit acknowledgement (a checkbox on the
@@ -772,6 +790,21 @@ What has been run: the whole path on the emulator for every build from 0.8.0.0 i
 and a write of the recovery bank with the bank's own image, with an image changed by one byte
 (the read-back decrypted to exactly that image) and with raw staged bytes, then restored. Every
 other family is emulator-proven only.
+
+## The camera stays unlocked until a power cycle
+
+The identify probe that runs before a read sends the camera's unlock token, an 18-byte form of
+`BeginFirmwareUpgrade`. The Preserve backup sends it too. Once the camera accepts the token, it keeps
+its vendor window unlocked until its next power cycle. So the Info, Dump, Preserve and Slots tabs do
+this, and so do the CLI's `info`, `dump`, `slots` and `preserve` commands. A CLI run given `--no-probe`
+or `--profile` skips the probe.
+
+The page keeps one flag for the camera, so once one tab has sent the token, every tab shows the
+note. The CLI prints the note when the run closes its session, and `--quiet` hides it. The note is a
+warning and gates nothing.
+
+**Power-cycle the camera (unplug it, plug it back in) before you use another tool on it**, such as the
+vendor app or a frame-rate checker. Until then, another tool may misread the camera.
 
 ## Browser and platform support
 
