@@ -10,7 +10,7 @@
 
 import { SEEK_VENDOR_ID } from '../../../../packages/core/src/protocol/ops.js';
 import { fromNodeUsb, type NodeUsbDevice } from '../../../../packages/cli/src/node-usb.js';
-import { COMPACT_PRODUCT_ID, PRO_PRODUCT_ID } from './camera.js';
+import { COMPACT_PRODUCT_ID, PRO_PRODUCT_ID, noAnswerMessage } from './camera.js';
 import { seekLink, type SeekLink, type WebUsbBulkDevice } from './link.js';
 
 /** The `usb` package's device as this file uses it: the CLI's view, plus the bulk transfer. */
@@ -36,11 +36,13 @@ export async function findSeekCameras(): Promise<UsbDeviceWithBulk[]> {
   );
 }
 
-/** Opens the first Seek camera on the bus as a link. Throws when there is none. */
+/** Opens the first Seek camera on the bus as a link. Throws when there is none (the camera did not answer). */
 export async function openNodeUsbCamera(): Promise<SeekLink> {
   const [device] = await findSeekCameras();
   if (device === undefined) {
-    throw new Error('no Seek Thermal camera found (product 0x0011 or 0x0010)');
+    throw new Error(
+      noAnswerMessage('no Seek Thermal camera is on the bus (product 0x0011 or 0x0010)'),
+    );
   }
   if (typeof device.transferIn !== 'function') {
     throw new Error(

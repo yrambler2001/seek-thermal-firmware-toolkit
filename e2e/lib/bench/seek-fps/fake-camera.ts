@@ -12,6 +12,7 @@ import type {
   WebUsbInTransferResult,
   WebUsbOutTransferResult,
 } from '../../../../packages/core/src/protocol/webusb.js';
+import { SeekError } from '../../../../packages/core/src/errors.js';
 import { COMPACT_FRAME_BYTES, PRO_FRAME_BYTES } from './frame.js';
 import type { WebUsbBulkDevice } from './link.js';
 
@@ -41,7 +42,19 @@ export interface FakeCameraOptions {
   readonly refuseOut?: readonly number[];
   /** The first this-many GetFirmwareInfo reads are refused (a STALL), as a build still starting refuses them. */
   readonly stallFirstInfo?: number;
+  /**
+   * Every GetFirmwareInfo read fails: 'transfer' as a device that has gone (a transfer error), 'timeout' as one that
+   * never answers in time. The camera is not answering at all (TESTING.md 42.58).
+   */
+  readonly infoFault?: 'transfer' | 'timeout';
+  /**
+   * SetImageProcessingMode requests for these modes are refused (a STALL), and the rest are accepted. The 1.3.0.8
+   * family refuses mode 3 (FastRaw, Init Hi FPS) at 0x3e and takes mode 8 (TESTING.md 42.58).
+   */
+  readonly refuseModes?: readonly number[];
 }
+
+const SET_IMAGE_PROCESSING_MODE = 0x3e;
 
 /** One Compact frame: every word `value`, the header words set as the Swift tests set them. */
 export function compactFrame(status: number, value: number): Uint8Array {
@@ -85,6 +98,8 @@ export class FakeCamera implements WebUsbDevice, WebUsbBulkDevice {
   private readonly chipId: readonly number[];
   private readonly endless: boolean;
   private readonly refuseOut: readonly number[];
+  private readonly refuseModes: readonly number[];
+  private readonly infoFault: 'transfer' | 'timeout' | undefined;
   private infoStalls: number;
   private stream: Uint8Array[];
   private headIndex = 0;
@@ -99,6 +114,8 @@ export class FakeCamera implements WebUsbDevice, WebUsbBulkDevice {
     ];
     this.endless = options.endless ?? false;
     this.refuseOut = options.refuseOut ?? [];
+    this.refuseModes = options.refuseModes ?? [];
+    this.infoFault = options.infoFault;
     this.infoStalls = options.stallFirstInfo ?? 0;
     this.stream = [...(options.frames ?? [])];
   }
@@ -135,6 +152,12 @@ export class FakeCamera implements WebUsbDevice, WebUsbBulkDevice {
       index: setup.index,
       data: [length],
     });
+    if (setup.request === 0x4e && this.infoFault === 'transfer') {
+      throw new Error('the device has gone');
+    }
+    if (setup.request === 0x4e && this.infoFault === 'timeout') {
+      throw new SeekError('usb/timeout', 'control IN 0x4e did not answer within 500 ms');
+    }
     if (setup.request === 0x4e && length === 8 && this.infoStalls > 0) {
       this.infoStalls -= 1;
       return { status: 'stall' };
@@ -162,7 +185,11 @@ export class FakeCamera implements WebUsbDevice, WebUsbBulkDevice {
       index: setup.index,
       data: [...bytes],
     });
-    if (this.refuseOut.includes(setup.request)) return { status: 'stall', bytesWritten: 0 };
+    const refusedMode =
+      setup.request === SET_IMAGE_PROCESSING_MODE && this.refuseModes.includes(bytes[0] ?? -1);
+    if (this.refuseOut.includes(setup.request) || refusedMode) {
+      return { status: 'stall', bytesWritten: 0 };
+    }
     return { status: 'ok', bytesWritten: bytes.length };
   }
 

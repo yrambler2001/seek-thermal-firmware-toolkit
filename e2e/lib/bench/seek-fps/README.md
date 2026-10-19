@@ -46,6 +46,13 @@ Flags, as in `main.swift`: `--mode normal|fast|raw`, `--no-hifps`, `--no-opzero`
 frame switches a Normal stream to FastRaw (IP mode 3), which is about 32 fps. Without `--no-hifps` the `--fps`
 line is a Hi FPS line, not a Normal one.
 
+**A build that refuses Hi FPS.** The 1.3.0.8 family refuses FastRaw (IP mode 3) with `0x3e`. On such a build the
+default run publishes no frame, and the checker does not fall back to Normal: it prints the refused init and exits 1
+(`seek: no frame was published in the 1 s stream: the camera refused the FastRaw init that Init Hi FPS sends ...`).
+Run it again with `--no-hifps` to measure Normal, which the build takes. A silent fallback would make the number a
+different measurement from the one asked for, and the refused init leaves the stream stopped, so it could not be
+restarted in Normal without new logic in the frame loop (TESTING.md 42.59).
+
 ## What it sends to the camera
 
 Only the requests the Swift tool sends (the lists are `CHECKER_REQUESTS_IN` and `CHECKER_REQUESTS_OUT` in
@@ -63,17 +70,30 @@ Only the requests the Swift tool sends (the lists are `CHECKER_REQUESTS_IN` and 
 It never sends a flash write or a reset (`0x50`, `0x51`, `0x52`, `0x59`, `0x5A`). The Compact Pro init is used
 only on a Compact on firmware 4.x or newer with the option on; a 1.x Compact always gets the classic init.
 
-**A camera unlocked by a slots command.** The CLI's `info`, `dump` and `slots` send the unlock token (`0x52`), and the
-camera then stays unlocked until its next power cycle (TESTING.md 42.41). Such a camera answers GetFirmwareInfo with
-window bytes (major 184) or refuses an init, and the checker says so and stops before it sends an init: power-cycle
-the camera and run again. A build that refuses Startup with Operation=0 (the 1.3.0.8 family) is connected without
-it, and `info` says so.
+**When the connect fails.** The checker reads GetFirmwareInfo before it sends any init, and a failed connect says
+which of three things happened (TESTING.md 42.58):
+- **The camera did not answer.** No read got a reply: each one failed, stalled or timed out, or the camera is not on
+  the bus at all. The message says so and says to wait for the camera to come back after a power cycle. Nothing
+  is sent to it, and this includes a Pro.
+- **The replies cannot be trusted.** Replies came, but no two consecutive ones agreed, or the major is not a Seek build
+  (window bytes, major 184). That is a camera unlocked by a slots command: the CLI's `info`, `dump` and `slots` send
+  the unlock token (`0x52`), and the camera stays unlocked until its next power cycle (TESTING.md 42.41). The checker
+  stops before an init (a Pro still connects, with its firmware unnamed).
+- **An init is refused.** The camera answers, and refuses an init request (a STALL). The message gives the same
+  unlock cause as the second case, since a camera unlocked by a slots command also refuses inits.
+
+Power-cycle the camera and run again in each case. A build that refuses Startup with Operation=0 (the 1.3.0.8 family)
+is connected without it, and `info` says so.
 
 **Mode 4.** `--mode 4` is IP mode 4, one capture per published frame. Its frames can carry no header type on a
 camera (status 0), so in that mode the checker counts them as pictures and reports how many there were; in the
 other modes status-0 frames are dropped and counted too.
 
 ## Measurement
+
+A stream that publishes no frame in its window exits 1 in every mode: `stream -n N` when no frame came in its N
+seconds, and `--fps` when none came in its wait for a first frame (up to 10 s). The message names the refused init
+when the camera refused one.
 
 `--fps` starts the stream, waits up to 10 s for the first frame, drops the arrival times, then measures five
 seconds from there. Each second's `mean` is the frame count of that second, and its `median` is the median of the

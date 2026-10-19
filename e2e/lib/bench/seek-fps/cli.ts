@@ -285,7 +285,31 @@ async function startStream(
   }
 }
 
-/** Swift waitForFrame: the first frame within `seconds` on the session clock, or the camera's own error. */
+/** A stream that published no frame in the window it waited for (TESTING.md 42.58). */
+export class NoFrameError extends Error {}
+
+/**
+ * The failure for a stream that published no frame in its window, in every mode. When the camera refused the FastRaw
+ * init that Init Hi FPS sends (the 1.3.0.8 family refuses it at 0x3e), the stream stopped at that refusal, so the
+ * message says so and names the way out: `--no-hifps` streams Normal, which the build takes (TESTING.md 42.58).
+ */
+export function noFrameMessage(camera: SeekCamera, window: string): string {
+  const base = `no frame was published in ${window}`;
+  const refusal = camera.initRefusal;
+  if (refusal !== null && refusal.mode === SEEK_MODE.fastRaw && camera.options.hiFPS) {
+    return (
+      `${base}: the camera refused the FastRaw init that Init Hi FPS sends (${refusal.detail}), ` +
+      'and the stream stopped there. This build does not take Init Hi FPS: run again with --no-hifps ' +
+      'to stream Normal.'
+    );
+  }
+  if (refusal !== null) {
+    return `${base}: the camera refused the init for mode ${String(refusal.mode)} (${refusal.detail})`;
+  }
+  return camera.lastError === null ? base : `${base}: ${camera.lastError}`;
+}
+
+/** Swift waitForFrame: the first frame within `seconds` on the session clock, or NoFrameError. */
 async function waitForFrame(
   camera: SeekCamera,
   stats: FrameStats,
@@ -300,7 +324,7 @@ async function waitForFrame(
     await sleep(20);
   }
   if (stats.latest !== null) return stats.latest;
-  throw new Error(camera.lastError ?? 'no frames received');
+  throw new NoFrameError(camera.lastError ?? 'no frames received');
 }
 
 /** One `--fps` measurement: the per-second windows from the first published frame, and the counters. */
@@ -350,7 +374,8 @@ async function runCommand(
   if (args.command === 'stream') {
     io.out(describe(camera));
     await startStream(camera, args.mode, args.actions, stats, clock, t0);
-    for (let s = 1; s <= Math.max(1, args.seconds); s++) {
+    const seconds = Math.max(1, args.seconds);
+    for (let s = 1; s <= seconds; s++) {
       await waitUntil(clock, t0 + s);
       const f = stats.latest;
       if (f !== null) {
@@ -364,11 +389,23 @@ async function runCommand(
         io.out(`t=${String(s)}s no frame yet (status ${String(camera.lastStatus)})`);
       }
     }
+    // A stream that published nothing in its window is a failure in every mode, not a run that measured nothing.
+    if (stats.stamps.length === 0) {
+      io.err(`seek: ${noFrameMessage(camera, `the ${String(seconds)} s stream`)}`);
+      return 1;
+    }
     return 0;
   }
   // --fps: stream, wait for the first frame, then measure from there for `seconds` seconds.
   io.out(describe(camera));
-  const measured = await measureFps(camera, args.mode, clock, args.seconds, args.actions);
+  let measured: FpsMeasurement;
+  try {
+    measured = await measureFps(camera, args.mode, clock, args.seconds, args.actions);
+  } catch (error) {
+    if (!(error instanceof NoFrameError)) throw error;
+    io.err(`seek: ${noFrameMessage(camera, 'the wait for a first frame (up to 10 s)')}`);
+    return 1;
+  }
   const windows = measured.windows;
   if (windows.length === 0) {
     io.err('seek: no frames in the measurement window');

@@ -127,10 +127,18 @@ export function usesCompactProInit(
 /** The highest major version a Seek build reports. An unlocked camera's window bytes read as 184 (TESTING.md 42.41). */
 export const MAX_PLAUSIBLE_MAJOR = 9;
 
+/**
+ * How the trusted read ended. 'trusted': the version is usable. 'untrusted': replies came, but none was agreed on,
+ * or the major was not a Seek build (the unlock case). 'no-answer': no read got a reply (each one failed, stalled or
+ * timed out), so the camera is off the bus or still powering up (TESTING.md 42.58).
+ */
+export type FirmwareReadOutcome = 'trusted' | 'untrusted' | 'no-answer';
+
 /** What `readTrustedFirmware` decided, and what it saw. */
 export interface TrustedFirmware {
   /** `major.minor.patch.build` from two consecutive replies that agree, or null when none is trusted. */
   readonly version: string | null;
+  readonly outcome: FirmwareReadOutcome;
   /** One sentence for the user: what the camera answered and what the checker made of it. */
   readonly note: string;
 }
@@ -138,9 +146,10 @@ export interface TrustedFirmware {
 /**
  * The version the init is chosen from. GetFirmwareInfo (8 bytes) is asked until two consecutive replies agree on
  * bytes 0 to 3 and the major is 0 to 9. A leftover reply that the next one does not repeat is passed over, and an
- * unlocked camera's window reply (major 184) is refused. A failed read counts as no answer, and a build still
- * starting refuses GetFirmwareInfo for a few milliseconds, so the reads go on for `FIRMWARE_INFO_READS` (26 reads,
- * about 500 ms, the window core's `readRunningFirmware` allows; TESTING.md 42.55).
+ * unlocked camera's window reply (major 184) is refused. A failed read (a stall, a timeout, a transfer error) is no
+ * reply, and a build still starting refuses GetFirmwareInfo for a few milliseconds, so the reads go on for
+ * `FIRMWARE_INFO_READS` (26 reads, about 500 ms, the window core's `readRunningFirmware` allows; TESTING.md 42.55).
+ * When no read gets a reply at all, the outcome is 'no-answer', which is not the unlock case (TESTING.md 42.58).
  *
  * Core's `readRunningFirmware` is not used: it takes the second reply without asking that the two agree, and it
  * reads 36 bytes, where the checker has always read 8 (the Swift connect).
@@ -151,38 +160,79 @@ export async function readTrustedFirmware(
 ): Promise<TrustedFirmware> {
   let previous: string | null = null;
   const seen: string[] = [];
+  let replies = 0;
   for (let attempt = 0; attempt < FIRMWARE_INFO_READS; attempt++) {
-    const reply = await transport
-      .controlIn(REQUESTS.GET_FIRMWARE_INFO, 8, USB_TIMEOUT_MS)
-      .catch(() => null);
-    if (reply === null || reply.length < 4) {
-      seen.push('no answer');
+    let reply: Uint8Array;
+    try {
+      reply = await transport.controlIn(REQUESTS.GET_FIRMWARE_INFO, 8, USB_TIMEOUT_MS);
+    } catch (error) {
+      seen.push(readFailureLabel(error));
       previous = null;
-    } else {
-      const version = Array.from(reply.subarray(0, 4)).join('.');
-      seen.push(version);
-      if (version === previous) {
-        const major = reply[0] ?? 0;
-        if (major <= MAX_PLAUSIBLE_MAJOR) {
-          return { version, note: `GetFirmwareInfo answered ${version} twice in a row` };
-        }
+      await sleep(gapMs);
+      continue;
+    }
+    if (reply.length < 4) {
+      seen.push(reply.length === 0 ? 'empty reply' : 'short reply');
+      previous = null;
+      await sleep(gapMs);
+      continue;
+    }
+    replies += 1;
+    const version = Array.from(reply.subarray(0, 4)).join('.');
+    seen.push(version);
+    if (version === previous) {
+      const major = reply[0] ?? 0;
+      if (major <= MAX_PLAUSIBLE_MAJOR) {
         return {
-          version: null,
-          note:
-            `GetFirmwareInfo answered ${version} twice in a row, and major ${String(major)} is not ` +
-            'a Seek build (the window bytes of an unlocked camera read this way)',
+          version,
+          outcome: 'trusted',
+          note: `GetFirmwareInfo answered ${version} twice in a row`,
         };
       }
-      previous = version;
+      return {
+        version: null,
+        outcome: 'untrusted',
+        note:
+          `GetFirmwareInfo answered ${version} twice in a row, and major ${String(major)} is not ` +
+          'a Seek build (the window bytes of an unlocked camera read this way)',
+      };
     }
+    previous = version;
     await sleep(gapMs);
+  }
+  if (replies === 0) {
+    return {
+      version: null,
+      outcome: 'no-answer',
+      note:
+        `GetFirmwareInfo gave no reply in ${String(FIRMWARE_INFO_READS)} reads ` +
+        `(${tally(seen)})`,
+    };
   }
   return {
     version: null,
+    outcome: 'untrusted',
     note:
       `GetFirmwareInfo gave no two consecutive replies that agree in ${String(FIRMWARE_INFO_READS)} ` +
       `reads (${seen.join(', ')})`,
   };
+}
+
+/** What a failed control read was, in the words the checker prints. */
+function readFailureLabel(error: unknown): string {
+  if (error instanceof SeekError) {
+    if (error.code === 'usb/stalled') return 'stalled';
+    if (error.code === 'usb/timeout') return 'timed out';
+    if (error.code === 'usb/not-open') return 'not open';
+  }
+  return 'transfer failed';
+}
+
+/** "transfer failed x26" for a list of labels, in the order each label first appears. */
+function tally(labels: readonly string[]): string {
+  const counts = new Map<string, number>();
+  for (const label of labels) counts.set(label, (counts.get(label) ?? 0) + 1);
+  return [...counts].map(([label, n]) => `${label} x${String(n)}`).join(', ');
 }
 
 /** Whether the camera refused a request (a STALL), as opposed to a failure for another reason. */
@@ -190,7 +240,15 @@ export function isRefusal(error: unknown): boolean {
   return error instanceof SeekError && error.code === 'usb/stalled';
 }
 
-/** The connect's message when no trusted version came back (a Compact's init depends on it). */
+/** The connect's message when the camera answered no GetFirmwareInfo read: it is off the bus, or still starting. */
+export function noAnswerMessage(detail: string): string {
+  return (
+    `the camera did not answer: ${detail}. No init was sent. The camera may be off the bus or still ` +
+    'powering up: wait for it to come back after a power cycle, then run again.'
+  );
+}
+
+/** The connect's message when the replies cannot be trusted (a Compact's init depends on the version). */
 export function untrustedFirmwareMessage(note: string): string {
   return (
     `the camera's firmware reply cannot be trusted, so no init is chosen from it (${note}). ` +
@@ -253,6 +311,11 @@ export class SeekCamera {
    * build leaves the camera in operation 1 after an init, so a later init stops it first (see `sendInit`).
    */
   startupOpZeroRefused = false;
+  /**
+   * The last init the stream sent that the camera refused (a STALL), and the mode it asked for. The stream goes on
+   * without it, so a stream that then publishes no frame can say why (TESTING.md 42.58). Null when none was refused.
+   */
+  initRefusal: { readonly mode: number; readonly detail: string } | null = null;
   deadMap: boolean[] | null = null;
   lastError: string | null = null;
 
@@ -318,10 +381,15 @@ export class SeekCamera {
     this.isNormalMode = true;
     this.untypedFrames = 0;
     this.startupOpZeroRefused = false;
+    this.initRefusal = null;
 
     let firmware: TrustedFirmware;
     try {
       firmware = await readTrustedFirmware(this.link.transport);
+      /* No read got a reply: the camera is off the bus or still starting, and no init is sent to it (TESTING.md 42.58). */
+      if (firmware.outcome === 'no-answer') {
+        throw new Error(noAnswerMessage(firmware.note));
+      }
       /* A Pro's init does not depend on the version, so it connects with the firmware unnamed. A Compact's does,
        * so a reply that is not trusted stops the connect before anything is sent. */
       if (firmware.version === null && !this.isPro) {
@@ -504,12 +572,16 @@ export class SeekCamera {
     this.processingMode = mode;
   }
 
-  /** Swift `try? sendInit`: a failed init during the loop is ignored, as the panel ignores it. */
+  /**
+   * Swift `try? sendInit`: a failed init during the loop is ignored, as the panel ignores it. A refusal is kept in
+   * `initRefusal`, so a stream that publishes nothing after it can say which init the camera refused (TESTING.md 42.58).
+   */
   private async trySendInit(mode: number): Promise<void> {
     try {
       await this.sendInit(mode);
-    } catch {
+    } catch (error) {
       /* ignored on purpose, as in the Swift */
+      if (isRefusal(error)) this.initRefusal = { mode, detail: messageOf(error) };
     }
   }
 

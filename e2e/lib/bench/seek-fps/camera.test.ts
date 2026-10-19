@@ -7,6 +7,7 @@ import {
   REQUESTS,
   SEEK_MODE,
   SeekCamera,
+  noAnswerMessage,
   readTrustedFirmware,
   serialFromChipId,
   usesCompactProInit,
@@ -120,6 +121,7 @@ describe('the firmware reply the init is chosen from', () => {
     await link.transport.open();
     const reply = await readTrustedFirmware(link.transport, 0);
     expect(reply.version).toBeNull();
+    expect(reply.outcome).toBe('untrusted');
     expect(reply.note).toContain('no two consecutive replies that agree in 26 reads');
     expect(fake.sent('in').filter((e) => e.request === REQUESTS.GET_FIRMWARE_INFO)).toHaveLength(
       26,
@@ -137,10 +139,10 @@ describe('the firmware reply the init is chosen from', () => {
     await camera.disconnect();
   });
 
-  it('a Compact whose firmware is never answered is refused after the start-up reads, with nothing sent', async () => {
+  it('a Compact whose firmware read is stalled on every read is reported as not answering, with nothing sent', async () => {
     const fake = new FakeCamera({ productId: 0x0010, stallFirstInfo: 1000 });
     await expect(SeekCamera.connect(linkFor(fake))).rejects.toThrow(
-      /cannot be trusted[\s\S]*no two consecutive replies that agree in 26 reads/,
+      /did not answer[\s\S]*\(stalled x26\)[\s\S]*wait for it to come back after a power cycle/,
     );
     expect(outs(fake.log)).toEqual([]);
     expect(fake.opened).toBe(false);
@@ -183,6 +185,134 @@ describe('the firmware reply the init is chosen from', () => {
       /refused an init request[\s\S]*unlocked by a slots command[\s\S]*until a power cycle/,
     );
     expect(fake.opened).toBe(false);
+  });
+});
+
+/** The connect's error text, or null when the connect succeeds (the camera is then disconnected). */
+async function connectError(fake: FakeCamera): Promise<string | null> {
+  try {
+    const camera = await SeekCamera.connect(linkFor(fake));
+    await camera.disconnect();
+    return null;
+  } catch (error) {
+    return error instanceof Error ? error.message : String(error);
+  }
+}
+
+describe('what a failed trusted read says: not answering, unlocked, or an init refused (TESTING.md 42.58)', () => {
+  it('every GetFirmwareInfo read failing (the camera off the bus) is "did not answer", with nothing sent', async () => {
+    const fake = new FakeCamera({ productId: 0x0010, infoFault: 'transfer' });
+    const message = await connectError(fake);
+    expect(message).toMatch(
+      /^the camera did not answer: GetFirmwareInfo gave no reply in 26 reads \(transfer failed x26\)\. No init was sent\./,
+    );
+    expect(message).toMatch(/wait for it to come back after a power cycle, then run again/);
+    expect(message).not.toMatch(/unlock/);
+    expect(outs(fake.log)).toEqual([]);
+    expect(fake.opened).toBe(false);
+  });
+
+  it('every GetFirmwareInfo read timing out is also "did not answer", and the reads are counted as timeouts', async () => {
+    const fake = new FakeCamera({ productId: 0x0010, infoFault: 'timeout' });
+    const message = await connectError(fake);
+    expect(message).toMatch(/did not answer[\s\S]*\(timed out x26\)/);
+    expect(message).not.toMatch(/unlock/);
+    expect(outs(fake.log)).toEqual([]);
+  });
+
+  it('a Pro whose reads all fail is "did not answer" as well: nothing is sent to a camera that is not answering', async () => {
+    const fake = new FakeCamera({ productId: 0x0011, infoFault: 'transfer' });
+    const message = await connectError(fake);
+    expect(message).toMatch(/^the camera did not answer/);
+    expect(outs(fake.log)).toEqual([]);
+    expect(fake.opened).toBe(false);
+  });
+
+  it('replies that never agree are the unlock case, not "did not answer"', async () => {
+    const fake = new FakeCamera({
+      productId: 0x0010,
+      firmwareHeads: Array.from({ length: 26 }, (_, i) =>
+        i % 2 === 0 ? [0, 0, 4, 0, 0, 0, 0, 0] : [1, 3, 0, 0, 0, 0, 0, 0],
+      ),
+    });
+    const message = await connectError(fake);
+    expect(message).toMatch(
+      /cannot be trusted[\s\S]*unlocked by a slots command[\s\S]*power cycle/,
+    );
+    expect(message).not.toMatch(/did not answer/);
+    expect(outs(fake.log)).toEqual([]);
+  });
+
+  it('window bytes (major 184) are the unlock case, not "did not answer"', async () => {
+    const fake = new FakeCamera({ productId: 0x0010, firmwareHeads: [WINDOW_REPLY] });
+    const message = await connectError(fake);
+    expect(message).toMatch(/cannot be trusted[\s\S]*unlocked by a slots command/);
+    expect(message).not.toMatch(/did not answer/);
+  });
+
+  it('an init the camera refuses is the refused-init message, not "did not answer"', async () => {
+    const fake = new FakeCamera({
+      productId: 0x0010,
+      firmwareHeads: [[1, 3, 0, 0, 0, 0, 0, 0]],
+      refuseOut: [REQUESTS.INIT_56],
+    });
+    const message = await connectError(fake);
+    expect(message).toMatch(
+      /refused an init request[\s\S]*unlocked by a slots command[\s\S]*until a power cycle/,
+    );
+    expect(message).not.toMatch(/did not answer/);
+  });
+
+  it('a camera that is not on the bus gets the same "did not answer" wording from the link', () => {
+    const message = noAnswerMessage(
+      'no Seek Thermal camera is on the bus (product 0x0011 or 0x0010)',
+    );
+    expect(message).toMatch(/^the camera did not answer: no Seek Thermal camera is on the bus/);
+    expect(message).toMatch(/wait for it to come back after a power cycle/);
+  });
+
+  it('readTrustedFirmware gives the three outcomes: no-answer, untrusted, and trusted', async () => {
+    const silent = linkFor(new FakeCamera({ infoFault: 'timeout' }));
+    await silent.transport.open();
+    const none = await readTrustedFirmware(silent.transport, 0);
+    expect([none.version, none.outcome]).toEqual([null, 'no-answer']);
+    expect(none.note).toBe('GetFirmwareInfo gave no reply in 26 reads (timed out x26)');
+
+    const window = linkFor(new FakeCamera({ firmwareHeads: [WINDOW_REPLY] }));
+    await window.transport.open();
+    const untrusted = await readTrustedFirmware(window.transport, 0);
+    expect([untrusted.version, untrusted.outcome]).toEqual([null, 'untrusted']);
+
+    const good = linkFor(new FakeCamera({ firmwareHeads: [[1, 3, 0, 0, 0, 0, 0, 0]] }));
+    await good.transport.open();
+    const trusted = await readTrustedFirmware(good.transport, 0);
+    expect([trusted.version, trusted.outcome]).toEqual(['1.3.0.0', 'trusted']);
+  });
+});
+
+describe('a refused Init Hi FPS is recorded, so a stream that stops there can say why (TESTING.md 42.58)', () => {
+  it('the FastRaw init the stream asks for on a shutter frame is refused (0x3e): recorded with mode 3, and no frame follows', async () => {
+    const fake = new FakeCamera({
+      productId: 0x0010,
+      firmwareHeads: [[1, 3, 0, 8, 0, 0, 0, 0]],
+      refuseOut: [REQUESTS.OP_ZERO],
+      refuseModes: [SEEK_MODE.fastRaw],
+      frames: [compactFrame(1, 5000)],
+    });
+    const camera = await SeekCamera.connect(linkFor(fake));
+    const frames: SeekFrame[] = [];
+    camera.onFrame = (frame) => frames.push(frame);
+    camera.startStreaming();
+    await waitFor(() => camera.initRefusal !== null);
+    await camera.stopStreaming();
+    expect(camera.initRefusal?.mode).toBe(SEEK_MODE.fastRaw);
+    expect(camera.initRefusal?.detail).toMatch(/0x3e -> stall/);
+    expect(frames).toEqual([]);
+    expect(outs(fake.log)).toContainEqual({
+      request: REQUESTS.SET_IMAGE_PROCESSING_MODE,
+      data: [3, 0],
+    });
+    await camera.disconnect();
   });
 });
 

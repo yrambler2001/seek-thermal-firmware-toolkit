@@ -229,3 +229,114 @@ describe('runSeekFps over a fake camera', () => {
     expect(io.out[0]).toMatch(/^seek-fps - /);
   });
 });
+
+/** A 1.3.0.8 build: it refuses Startup with Operation=0 (0x37) and FastRaw (mode 3, 0x3e), and takes Normal. */
+function stock1308(frames: Uint8Array[], endless = false): FakeCamera {
+  return new FakeCamera({
+    productId: 0x0010,
+    serialNumber: 'SN',
+    firmwareHeads: [[1, 3, 0, 8, 0, 0, 0, 0]],
+    refuseOut: [0x37],
+    refuseModes: [SEEK_MODE.fastRaw],
+    frames,
+    endless,
+  });
+}
+
+describe('a stream that publishes no frame in its window exits 1 (TESTING.md 42.58)', () => {
+  it('the default stream (Init Hi FPS on) on 1.3.0.8: the refused FastRaw init is named, and the run exits 1, not 0', async () => {
+    const fake = stock1308([compactFrame(1, 5000)]); // a shutter frame: Init Hi FPS asks for FastRaw on it
+    const io = capture();
+    const code = await runSeekFps(
+      ['stream', '-n', '1', '--camera'],
+      () => Promise.resolve(sessionOver(fake)),
+      io.io,
+    );
+    expect(code).toBe(1);
+    expect(io.out.some((line) => line.startsWith('t=1s no frame yet'))).toBe(true);
+    expect(io.err[0]).toMatch(
+      /^seek: no frame was published in the 1 s stream: the camera refused the FastRaw init that Init Hi FPS sends \(control OUT 0x3e -> stall\)/,
+    );
+    expect(io.err[0]).toMatch(/run again with --no-hifps to stream Normal/);
+    expect(fake.sent('out').some((e) => e.request === 0x3e && e.data[0] === 3)).toBe(true);
+  });
+
+  it('the default --fps on 1.3.0.8 fails the same way: no frame, the refusal named, exit 1', async () => {
+    const fake = stock1308([compactFrame(1, 5000)]);
+    const io = capture();
+    const code = await runSeekFps(
+      ['--fps', '--camera'],
+      () => Promise.resolve(sessionOver(fake)),
+      io.io,
+    );
+    expect(code).toBe(1);
+    expect(io.out.some((line) => line.startsWith('second '))).toBe(false);
+    expect(io.err[0]).toMatch(
+      /^seek: no frame was published in the wait for a first frame \(up to 10 s\): the camera refused the FastRaw init/,
+    );
+    expect(io.err[0]).toMatch(/--no-hifps/);
+  });
+
+  it('with --no-hifps the same 1.3.0.8 streams Normal, publishes frames and exits 0', async () => {
+    const fake = stock1308([compactFrame(3, 5000)], true);
+    const io = capture();
+    const code = await runSeekFps(
+      ['stream', '-n', '1', '--camera', '--no-hifps'],
+      () => Promise.resolve(sessionOver(fake)),
+      io.io,
+    );
+    expect(code).toBe(0);
+    expect(io.err).toEqual([]);
+    expect(io.out[1]).toMatch(/^t=1s frames=\d+ status=3 /);
+    expect(fake.sent('out').some((e) => e.request === 0x3e && e.data[0] === 3)).toBe(false);
+  });
+
+  it.each([
+    ['normal', ['--mode', 'normal']],
+    ['fast', ['--mode', 'fast']],
+    ['raw', ['--mode', 'raw']],
+    ['mode 4', ['--mode', '4']],
+  ])('a stream in %s with no frame at all exits 1', async (_name, modeArgs) => {
+    const fake = new FakeCamera({ productId: 0x0010, firmwareHeads: [[1, 3, 0, 0, 0, 0, 0, 0]] });
+    const io = capture();
+    const code = await runSeekFps(
+      ['stream', '-n', '1', '--camera', '--no-hifps', ...modeArgs],
+      () => Promise.resolve(sessionOver(fake)),
+      io.io,
+    );
+    expect(code).toBe(1);
+    expect(io.err[0]).toMatch(/^seek: no frame was published in the 1 s stream/);
+  });
+
+  it('a stream that publishes one frame in its window and then goes quiet still exits 0', async () => {
+    const fake = new FakeCamera({
+      productId: 0x0010,
+      firmwareHeads: [[1, 3, 0, 0, 0, 0, 0, 0]],
+      frames: [compactFrame(3, 5000), compactFrame(3, 5000)], // the first is the calibration read
+    });
+    const io = capture();
+    const code = await runSeekFps(
+      ['stream', '-n', '1', '--camera', '--no-hifps'],
+      () => Promise.resolve(sessionOver(fake)),
+      io.io,
+    );
+    expect(code).toBe(0);
+    expect(io.out[1]).toMatch(/^t=1s frames=1 /);
+  });
+
+  it('a camera that answers no GetFirmwareInfo read is "did not answer" on stderr, exit 1, and no init is sent', async () => {
+    const fake = new FakeCamera({ productId: 0x0010, infoFault: 'transfer' });
+    const io = capture();
+    const code = await runSeekFps(
+      ['info', '--camera'],
+      () => Promise.resolve(sessionOver(fake)),
+      io.io,
+    );
+    expect(code).toBe(1);
+    expect(io.err[0]).toMatch(
+      /^seek: the camera did not answer: GetFirmwareInfo gave no reply in 26 reads \(transfer failed x26\)/,
+    );
+    expect(io.err[0]).toMatch(/wait for it to come back after a power cycle/);
+    expect(fake.sent('out')).toEqual([]);
+  });
+});
