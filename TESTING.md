@@ -10038,3 +10038,98 @@ Tests (new; they pass on the unchanged logic).
 
 - FW-V1, branch `emu-research`, worktree `/private/tmp/claude-501/fwv1-emu-research` (not merged, not pushed): `b03d8ade4` (item 5, on top of 42.48's `9374eeded`).
 - Seek: this note and the edits above, on branch `worktree-agent-a77636ffb1a447d03`, reset to `refactor/all-firmware-profiles` at `5410f6d`.
+
+### 42.53 The 2014 and 2016 start word is the bootloader's record at 0x10000208, not the cell 0x1000AED0; the FF bank maps; the 1.3.0.8 mode switch and the FF patch in the spec; the 0.3.0.1 mode-8 program not located (emulator and static only, 2026-10-19)
+
+**Summary.** Four items of `plan.md` section 1 (the active-slot cell, the FF bank maps, the spec's 1.3.0.8 stalls and FF patch, and the 0.3.0.1 program). Emulator and static reads only: no camera, J-Link or USB switch was used. Seek: one harness commit (`e2e/seek-fps-emulator.e2e.ts`) and this note; no product code changed. FW-V1: no commit (no emulator or target change was needed). The probe scripts are in the session scratchpad and are not committed.
+
+- **Item 1.** The 2014 "last start" line is supported on the emulator, but the plan's premise is wrong: the value it reads is the bootloader's record at 0x10000208, and the factory app never writes 0x1000AED0 with a slot value.
+- **Item 2.** The FF stock bank is stored encrypted, as the camera stores it (42.11b), so the FF patch cannot be built from it. The 1.3.0.8 stalls at 0x56 are the build's operation-1 gate, reached because the checker's reinit never enters operation 0 on a build that refuses 0x37. The spec now enters it and expects the build's own refusals for FastRaw and IP 6.
+- **Item 3.** The FF bank maps are fixed by the bootloader sources and the corpus dumps. No runner table on `plan-hygiene` is wrong.
+- **Item 4.** Not located. The factory image shows no sign of the 0.3.0.1 sequencer table at its reconstructed address. A run-time build is the likely answer, but it is not measured.
+
+**Tags.** [measured] is an emulator run or a byte read in this session. [source] is read from the code named. [inferred] follows from those.
+
+**1. The active-slot cell and the 2014 "last start" word (plan item 1).**
+
+Each factory image was booted cold on the emulator with the boot-config word at 0x14010000 set to 0, 1 and 2, with fast-forward off, and the machine was kept running after enumeration (42.43's probe stops when the host script ends, which is at enumeration on the 2014 chain). The bank the bootloader entered is the value it stores at 0x10000208 before the hand-off, and the flash reads per bank confirm it. [measured]
+
+| image (boot) | word | bank entered (bootloader store to 0x10000208) | writes to 0x1000AED0 | cell after run | selector 10, +8 |
+| --- | --- | --- | --- | --- | --- |
+| 1.3.0.0 factory dump 101310HSNEA2 | 0 | A (store 0, PC 0x140004E6) | 2 stores from a copy loop, PC 0x10089AF4, values 0x192D1D36 and 0x1933182F | 0x182F192D | 0 |
+| same | 1 | A: B is erased, its check fails, A runs (store 0, PC 0x140004E6) | same | 0x182F192D | 0 |
+| same | 2 | R (store 2, PC 0x14000544) | same | 0x182F192D | 2 |
+| 1.3.0.0 dump with bank B copied from A (a test image, not a factory image) | 1 | B (store 1, PC 0x1400053C) | same | 0x182F192D | 1 |
+| 1.3.0.8 image on the 1.3.0.0 donor (the spec's chimera, 1.3.0.0 bootloader) | 0 / 1 / 2 | A / A (B empty) / R | 1 copy store, PC 0x100893CC, value 0x1A001CB1 | 0x1A001CB1 | 0 / 0 / 2 |
+| 1.0.3.0 factory dump 0C21A1M5KP15 (2016) | 0 / 1 / 2 | A / B / R (stores 0 at PC 0x140004F6; 1 and 2 at PC 0x140003FE; the flash reads are of B for 1 and of R for 2) | 1 copy store, PC 0x10089C76, value 0x8B8A8C8D | 0x8B8A8C8D | 0 / 1 / 2 |
+
+- No factory image stores a slot value to 0x1000AED0. The only stores are copy loops in the app's startup (the PCs above) that write non-slot words, and the cell keeps the last one. None of the three factory images contains the literal 0x1000AED0 or 0x1000AEC8 (a literal scan of the 47,768, 49,128 and 51,848-byte images; Thumb code names an absolute address through a literal word). [measured]
+- Selector 10 returns the boot record at 0x10000200. Its first word is the blank-info pointer (0x14002AB8 on 1.3.0.0, 0x14002958 on 2016), its second is 0x14010000, and its active-slot word is at +8 (0x10000208). The bootloader writes that word before it enters the image: the 2014 `startup.c:142-149` writes 0 for 0x14050000, 1 for 0x14060000 and 2 otherwise, and the 2016 `startup.c:187-194` does the same. The stores in the table are those lines. [measured; source]
+- So the 2014 display reads the word the bootloader wrote for the bank it entered. On the emulator the mapping in `boot-choice.ts` (0 is A, 1 is B, 2 is R) matches all three banks, and A is distinct from "not written" because the bootloader writes the 0 explicitly. The line is supported by this measurement, not unreliable. [measured]
+- The premise is wrong. `boot-choice.ts:8-12` says the word "is the app's RAM cell 0x1000AED0, not the bootloader's handoff". For this build both parts are wrong. The 2016 bootloader also records the bank it entered (1 for B, 2 for R), which contradicts the file's statement that the word is "not established as a boot record" on that line. `bootChoiceOf` still reports nothing there, which stays the conservative choice.
+
+Recommended, not changed: correct `boot-choice.ts:8-12` to name 0x10000208 and the bootloader's store, and cite the rows above. Whether the 2016 line should show the word is the owner's call.
+
+Caveats: the 1.3.0.8 rows run on the 1.3.0.0 bootloader (the chimera), so they test the record path, not the 1.3.0.8 bootloader. Nothing was read from a camera. The 4.x findings (42.43, 42.50) are not affected.
+
+**2. The FF platforms' bank maps (plan item 3).**
+
+Each platform's bootloader is identified by its build date and the tree whose `bootloader.h` or `image.c` carries that date. The FF 1.3.0.8 camera reports 2.0.2.3 "Jul  5 2018" (42.11b), which is the Compact XR tree. [source] Each map is checked against the corpus dumps that carry the same bootloader (slot lists in `data/corpus/MANIFEST.json`). [measured]
+
+| FF platform | bootloader (build, tree) | A | B | R | boot word | select code (source) |
+| --- | --- | --- | --- | --- | --- | --- |
+| Compact FF 1.3.0.8 (16 Hz) | 2.0.2.3, Jul 5 2018 (`compact_xr_bootloader`) | 0x14030000 | 0x14050000 | 0x14070000 | 0x14010000 | `select_boot_slot` (`boot_main.c:129-244`): 0 or 0xFFFFFFFF gives A, B, R; 1 gives B, A, R; any other value gives R, A, B |
+| Compact PRO FF 1.0.3.x | Jun 26 2016 (`compact_pro_ff_18hz_1_0_3_0_bootloader`) | 0x14050000 | 0x14060000 | 0x14070000 | 0x14010000 | `boot_select_image` (`image.c:1076-1105`): the same rule |
+| Compact PRO FF 4.18.2.0 | Jan 7 2019 (`compact_pro_ff_bootloader`) | 0x14030000 | 0x14050000 | 0x14070000 | 0x14010000 | `select_boot_slot` (`boot_main.c:189`); not read in full |
+| Mosaic FF 2.27.1.33 | Jan 7 2019 (`mosaic_ff_bootloader`) | 0x14030000 | 0x14050000 | 0x14070000 | 0x14010000 | not read |
+
+- 1.3.0.8 FF: `bootloader.h:21-25` in the XR tree. The Compact XR 4.8.2.1 dump has the same bootloader build (Jul 5 2018) and holds images at 0x14030000, 0x14050000 and 0x14070000. The 42.11b FF dump holds the same three. The corpus has no full dump of 1.3.0.8 FF.
+- PRO FF 1.0.3.x: `image.c:1064-1066`. Dump 0B14A1JULD54 holds images at 0x14050000, 0x14060000 and 0x14070000; dump 1C1AB1CBC8A3 holds one, at 0x14070000.
+- PRO FF 4.18.2.0: `bootloader.h:23-25`. The three 4.18.2.0 FF dumps hold images at 0x14030000, 0x14050000 and 0x14070000, with boot word 0.
+
+The runner and build tables on `plan-hygiene` (`752378ea3`; read, not edited) agree with these maps:
+- `targets/compact_ff_16hz_1_3_0_8/tools/jlink/jlink-runner.js:54` SLOT_BASES {0x14030000, 0x14050000, 0x14070000}, and `tools/build_flash.mjs:45-47`: correct.
+- `targets/compact_pro_ff_18hz_1_0_3_0/tools/jlink/jlink-runner.js:54-58` BANK_BASES {A 0x14050000, B 0x14060000, R 0x14070000}, and `tools/build_flash.mjs:48-51`: correct.
+- `targets/compact_pro_ff_18hz_4_18_2_0/tools/build_flash.mjs` SLOTS a 0x14030000, b 0x14050000, recovery 0x14070000: correct.
+
+So the 42.40 choices stand: the 2014-chain table for the PRO FF 1.0.3.x runners and the 4.x table for the 1.3.0.8 FF runner. The plan's "no file states either platform's map" is wrong; `bootloader.h` and `image.c` state both. No fix is needed.
+
+Quirk (source): the XR tree's hand-off writes slot word 0 for A and 2 for every other bank (`boot_main.c:522-524`), so on the 2.0.2.3 platform a start from B and a start from R look the same to selector 10. Not measured here.
+
+Not measured: the 2.0.2.3 bank selection on the emulator. The Compact XR 4.8.2.1 dump (bootloader Jul 5 2018) booted with words 0, 1 and 2, but the flash-window hook saw no bank reads, and the word at 0x10000208 held 0x292A7D70 (neither 0 nor 2). That run is not explained, and nothing above depends on it.
+
+**3. The 1.3.0.8 stalls and the FF patch in the spec (plan item 2).**
+
+`seek-fps-emulator.e2e` was run on FW-V1 `emu-sensor` (`08e1abc6e`, which has `--flash-entry` for the patched boots). The failures reproduce: 8 of 15 passed, 7 failed. After the change: 14 passed, 1 skipped (the FF patched test, by design).
+
+(a) The 1.3.0.8-FF patched test. The throw is `applyFpsPatch` (`fps-patch.ts:329-333`): the stock bank does not hash to the table's `stockSha256`. [measured]
+- The table's stock sha for 1.3.0.8-FF is `b97ced91…`, which is the sha of the plain decrypted image in the corpus. For 1.3.0.8 (non-FF) it is `2969d0df…`, the corpus image's sha, and the patched 1.3.0.8 boot works.
+- The FF stock bank the emulator writes (`seek-fps-truth-compact_32k-1.3.0.8-FF-to32.bin`, bank 0x14050000, 64 KiB) hashes to `32af77ed…`. Its image region does not match the plain image (the first 16 bytes are `732db02a…` against `00800110…`). Bank R holds the same bytes. The 42.11b camera's bank R hashes to `32af77ed…`, so the emulator stores the FF image as the camera does: encrypted, with only the header at +0x200 in the clear.
+- So the test uses the right bank (the FF image is in the chimera's A and R, and B is erased), but `patch-images.ts` assumes a plain-stored bank, as its own header says. This build cannot be patched by that path. Harness fix: `patchable: false` for 1.3.0.8-FF, and a `NOT_BUILT` line.
+
+(b) The 0x56 stalls (1.3.0.8 at 8 Hz and FF; FastRaw, Raw and IP 6).
+- 0x56 is SetShutterPolarity, with the record flag `RPC_MODE0_IDLE` (`rpc_cmds.c:4063`). The set dispatcher `rpc_dispatch_set_byid` (`rpc_cmds.c:3524-3600`) refuses a request whose record lacks the flag for the current operation mode, and the refusal status is `mode | 0x30000`. A non-zero dispatch result stalls EP0 (`usb_core.c:2385-2390`). Measured: GetErrorCode (vendor IN 0x35) after the 0x56 stall reads 0x30001, which is operation mode 1 (RUN). [measured]
+- Why RUN: the connect ends with SetOperationMode(1) (the checker's `sendInit`). On this build the only operation-0 write before the init is 0x37, "Startup with Operation=0", and the build refuses it, so the option is off. The checker's `reinit` calls `stopStreaming()` before `sendInit`, and `sendInit` sends its three SetOperationMode(0) only `if (this.streaming)`, so the reinit never reaches operation 0. The Swift `reinit` has the same order (`Camera.swift:192-196`, with the check at `:146-151`). [source]
+- Replay on the emulator (connect, then reinit): without an operation-0 write, the 0x56 stalls with 0x30001. With three SetOperationMode(0) first, 0x56 is served, SetIPMode(0) and (8) are served, and SetIPMode(3) and (6) stall on 0x3E. [measured] The SetIPMode mask is `(1 << mode) & 0x391`, so the legal modes are 0, 4, 7, 8 and 9 (`rpc_cmds.c:903-935` and the `cmd_SetIPMode` handler; the FF build has the same mask). FastRaw (3) and IP 6 cannot stream on these builds, whatever the entry. Raw (0) can.
+- Spec change (commit `2bc1b07`): on builds with `startupOpZero: false`, a non-Normal mode switch is preceded by three SetOperationMode(0) writes (the stop the checker's `sendInit` makes while streaming). On 1.3.0.8 the spec expects the 0x3E refusal for FastRaw and IP 6, and expects Raw to stream. The checker is unchanged, because its reinit order is the Swift one.
+- Results. 1.3.0.8 (8 Hz): Normal 8.06 fps (28 frames), Raw 8.06 fps (40 frames), FastRaw and IP 6 `control OUT 0x3e -> stall`, patched Normal 32.26 fps (113 frames). 1.3.0.8-FF: Normal 16.13 fps (57 frames), Raw 8.06 fps (40 frames), FastRaw and IP 6 refused at 0x3E. 1.3.0.0, unchanged: FastRaw 32.26 fps, Raw 8.06, IP 6 8.06, patched 32.26.
+
+(c) The link to 42.41 and the 42.37 camera stalls (not measured here). The emulator's stall is the RUN gate, and it is visible in the status a camera can be asked for. A 0x56 stall followed by GetErrorCode gives 0x30001 for RUN. The set path's FW-init check (`g_systick_state_r32k <= 7`) gives 0x30500 ("Request sent during FW init") with the same STALL. A camera left in RUN by a CLI write would stall the same way, and a power cycle would clear it. Reading 0x35 after the stall on the bench would decide which gate it was. [inferred]
+
+**4. The 0.3.0.1 mode-8 program (plan item 4).** Not located.
+
+- Byte search (`search_capture.py` in the scratchpad) for the known steps. The 1.3.0.0 steady block `84 08 | 59 20 69 20 69 20 79 27` is found at 0xB898, so the search works. The 2014 steps, the 2016 row-14 steps and the 1.3.0.8 steps are absent from the 0.3.0.1 image; its only `84 08` is inside code at file 0x9431. [measured] This does not cover the 0.3.0.1 step encoding, which may differ.
+- The reconstruction places its sequencer at 0x1000A228 (`targets/compact_8hz_0_3_0_1/src/data_unattributed.c:546`: 28 rows of 54 bytes, the 4.18.2.0 shape). No word equal to 0x1000A200, 0x1000A218, 0x1000A220, 0x1000A228 or 0x1000A7DA appears anywhere in the 61,132-byte image. So the factory code does not name that table by an absolute address. [measured]
+- So the program is either built at run time into RAM, as 0.5.0.2 to 0.7.0.7 are (42.27 section 5), or it is reached through a base the image does not name as a literal. [inferred] The decisive run was not done: boot 0.3.0.1 on the emulator with mode 8 streaming (its Normal baseline is 8.065 Hz, `framerate_tests.py`) and log every store into the candidate RAM. Bytes that appear only in RAM would show the run-time build.
+
+**Not measured or open.**
+- No camera. The 2014 and 2016 start word and the FF maps are emulator and source readings.
+- The 1.3.0.8 rows use the 1.3.0.0 bootloader (the chimera). The 1.3.0.8 bootloader was not booted with its own image.
+- The 2.0.2.3 bank selection on the emulator (section 2).
+- Item 4 is open; the decisive run is described above.
+- The patched 1.3.0.8 test needs FW-V1 `emu-sensor` (`--flash-entry`). On `emu-research` (`9374eeded`) it gets no frames, because that branch has no `--flash-entry`.
+- `plan.md` and `boot-choice.ts` are unchanged. The comment fix in section 1 is a recommendation.
+
+**Commits.**
+- Seek, branch `worktree-agent-a52c9de30040c673c`, reset to `refactor/all-firmware-profiles` at `5410f6d` (the branch had moved to `487971f`, a plan.md-only commit; the brief names `5410f6d`): `2bc1b07` (the harness fix, `e2e/seek-fps-emulator.e2e.ts`) and this note.
+- FW-V1: none.
