@@ -30,6 +30,7 @@ import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { say } from './lib/browser.js';
+import { closeSharedDevServer } from './lib/target.js';
 import { describeWire, wireSince } from './lib/checks.js';
 import { NEVER_ON_THE_WIRE, step02 } from './lib/camera-flow.js';
 import {
@@ -219,6 +220,8 @@ describe.skipIf(!RUNNABLE)('the web app pages on the bench camera (1.3.0.0, real
   }, 10 * 60_000);
 
   afterAll(async () => {
+    /* The windows of part B share one dev server (openBenchPage); stop it with the run. */
+    await closeSharedDevServer();
     if (jlink === null || camera === null || restored) return;
     /* Restores the baseline whatever the run did, then proves it halted. */
     try {

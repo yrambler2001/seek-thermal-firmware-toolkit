@@ -141,6 +141,8 @@ export async function openBenchPage(scratchDir: string): Promise<BenchPage> {
   const target = await openTarget('camera', {
     scratchDir,
     source: 'dev',
+    /* One dev server for the run, not one per window: see target.ts (sharedDevServer, TESTING.md 42.45). */
+    sharedServer: true,
     uiGuard: SLOTS_BENCH_UI,
     preloadSource: benchGuardScript(),
     headed: HEADED,

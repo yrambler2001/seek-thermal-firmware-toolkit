@@ -105,6 +105,40 @@ export interface OpenTargetOptions {
    * passes the lifted guard here. Ignored on the emulator target.
    */
   readonly preloadSource?: string;
+  /**
+   * Camera target, dev source only: the window uses this process's shared dev server
+   * (`sharedDevServer`), and closing the window leaves that server running. Its owner
+   * stops the server with `closeSharedDevServer` when the run is over (TESTING.md 42.45).
+   */
+  readonly sharedServer?: boolean;
+}
+
+/**
+ * One dev server per process, for the windows that ask to share it. After `close()` a Vite 8
+ * dev server's module graph stays reachable (a V8 global handle keeps its bundler callbacks
+ * alive), so a server per window kept about 25 MB per window in the worker (TESTING.md 42.45).
+ */
+let sharedServer: Promise<DevServer> | null = null;
+
+export function sharedDevServer(): Promise<DevServer> {
+  if (sharedServer === null) {
+    const started = startDevServer();
+    sharedServer = started;
+    started.catch(() => {
+      if (sharedServer === started) sharedServer = null;
+    });
+  }
+  return sharedServer;
+}
+
+/** Stops the shared dev server, if one was started. Safe to call more than once. */
+export async function closeSharedDevServer(): Promise<void> {
+  const pending = sharedServer;
+  sharedServer = null;
+  if (pending === null) return;
+  /* A start that failed has nothing to close; its error went to the window that asked. */
+  const server = await pending.catch(() => null);
+  await server?.close();
 }
 
 export interface TargetHandle {
@@ -138,10 +172,20 @@ export async function openTarget(
 
 async function startSource(
   source: 'dev' | 'docs',
+  shared = false,
 ): Promise<{ server: DevServer; url: string; requests: readonly string[] }> {
   if (source === 'docs') {
     const server = await startStaticServer(path.join(REPO_ROOT, 'docs'));
     return { server, url: server.url, requests: server.requests };
+  }
+  if (shared) {
+    const server = await sharedDevServer();
+    /* This window's close leaves the shared server to its owner. */
+    return {
+      server: { url: server.url, close: () => Promise.resolve() },
+      url: server.url,
+      requests: [],
+    };
   }
   const server = await startDevServer();
   return { server, url: server.url, requests: [] };
@@ -210,7 +254,7 @@ async function openEmu(options: OpenTargetOptions): Promise<TargetHandle> {
 
 async function openCamera(options: OpenTargetOptions): Promise<TargetHandle> {
   const source = options.source ?? 'dev';
-  const started = await startSource(source);
+  const started = await startSource(source, options.sharedServer === true);
   try {
     const app = await ElectronApp.launch({
       scratchDir: options.scratchDir,

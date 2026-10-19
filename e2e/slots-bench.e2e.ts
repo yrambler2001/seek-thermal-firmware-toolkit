@@ -44,6 +44,7 @@ import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { say } from './lib/browser.js';
+import { closeSharedDevServer } from './lib/target.js';
 import {
   runProbe,
   runSubject,
@@ -148,7 +149,8 @@ describe.skipIf(!runnable)('the slots bench', () => {
       : await createRealRig(gate, SCRATCH);
   }, 10 * 60_000);
 
-  afterAll(() => {
+  afterAll(async () => {
+    await closeSharedDevServer();
     if (rehearsalOnly || results.length === 0) return;
     const written = writeMatrix(REPORT_DIR, results, meta);
     say(`bench report: ${written.markdown}`);
