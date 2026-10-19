@@ -46,7 +46,11 @@ const MODES = [
   { key: 'ip6', label: 'control: IP 6 (not a panel mode)', mode: CONTROL_IP_MODE, hiFPS: false },
 ] as const;
 
-/** The plain-stored builds the spec patches (the table entries 1.3.0.0, 1.3.0.8 and 1.3.0.8-FF). */
+/**
+ * The builds the spec measures. `patchable`: the table patch can be written into the stock part, which
+ * needs the stock bank to hold the decrypted image as stored (patch-images.ts). The FF build does not:
+ * its banks are stored encrypted (42.11b), so its stock bank never matches the table's stock sha.
+ */
 const BUILDS = [
   {
     label: '1.3.0.0 (native dump)',
@@ -54,6 +58,7 @@ const BUILDS = [
     entryId: 'compact/2014.10.21-14.58.29-1.3.0.0/101310HSNEA2/dump',
     /* the 1.3.0.0 accepts the Startup with Operation=0 write (the panel default) */
     startupOpZero: true,
+    patchable: true,
     patchId: 'compact_32k-1.3.0.0-to32',
   },
   {
@@ -63,6 +68,7 @@ const BUILDS = [
       'compact/2017.01.06-11.16.17-1.3.0.8/no-serial/32k_43x0_1.3.0.8_compact-insecure-8hz_public_-_compact_jan_6_2017_11-16-17_99.28_gabiz_ro_firmware',
     /* this build refuses the Startup with Operation=0 write (0x37): the panel's option is unticked */
     startupOpZero: false,
+    patchable: true,
     patchId: 'compact_32k-1.3.0.8-to32',
   },
   {
@@ -72,6 +78,7 @@ const BUILDS = [
       'compact/2017.01.06-11.17.29-1.3.0.8-FF/no-serial/32k_43x0_1.3.0.8_compact-16hz_public_-_compact_ff_jan_6_2017_11-17-29_99.28_gabiz_ro_firmware',
     /* this build refuses the Startup with Operation=0 write (0x37): the panel's option is unticked */
     startupOpZero: false,
+    patchable: false,
     patchId: 'compact_32k-1.3.0.8-FF-to32',
   },
 ] as const;
@@ -81,7 +88,14 @@ const NOT_BUILT: readonly string[] = [
   '4.8.1.7, 4.8.1.9, 4.8.2.1 and 4.16.1.7-FF: Key A banks, stored under a cipher (patch-images.ts)',
   'Compact PRO 1.0.3.0 and 1.0.3.2: the 2016 keystream banks and the 177840-byte frame',
   'Compact PRO 4.9.1.15 and 4.9.2.0: Key A banks (not the 2016 keystream) and the 177840-byte frame',
+  '1.3.0.8-FF patched: the FF banks are stored encrypted (42.11b), so the table stock sha (the decrypted image) never matches the stored bank',
 ];
+
+/**
+ * The SetIPMode modes a 1.3.0.8 build refuses. Its handler accepts `(1 << mode) & 0x391`, that is modes
+ * 0, 4, 7, 8 and 9 (rpc_cmds.c, cmd_SetIPMode); FastRaw (3) and the control IP 6 are outside it.
+ */
+const IP_MODES_REFUSED_ON_1_3_0_8 = new Set<number>([SEEK_MODE.fastRaw, CONTROL_IP_MODE]);
 
 interface Row {
   readonly build: string;
@@ -183,6 +197,15 @@ async function measureBoot(options: {
       hiFPS: options.mode.hiFPS,
       startupOpZero: options.startupOpZero,
     });
+    if (!options.startupOpZero && options.mode.mode !== SEEK_MODE.normal) {
+      /* A build that refuses 0x37 leaves the connect in operation 1, and its SetShutterPolarity (0x56) and
+       * SetIPMode (0x3E) refuse operation 1 (RPC_MODE0_IDLE). The checker's reinit only sends 0x3C 0 while
+       * streaming, and it has stopped the stream by then, so it never gets there: the stall at 0x56. Send
+       * the three SetOperationMode(0) first, the stop the checker's sendInit makes while streaming. */
+      for (let k = 0; k < 3; k++) {
+        await emu.link.transport.controlOut(0x3c, new Uint8Array([0, 0]), URB_TIMEOUT_MS);
+      }
+    }
     return rowOf(base, await measureFps(camera, options.mode.mode, clock, SECONDS));
   } catch (error) {
     return {
@@ -226,16 +249,24 @@ describe.skipIf(EMU === null)('the frame-rate checker on the FW-V1 emulator', ()
             });
             if (path !== undefined) truth.set(build.patchId, path);
             record(row);
-            expect(row.error).toBeNull();
             if (m.key === 'normal') {
+              expect(row.error).toBeNull();
               expect(row.frames, 'the stock build streams in Normal').toBeGreaterThan(0);
+            } else if (build.version === '1.3.0.8' && IP_MODES_REFUSED_ON_1_3_0_8.has(m.mode)) {
+              /* the build's own refusal, from its SetIPMode handler: the request is refused, nothing streams */
+              expect(row.error, 'the build refuses this IP mode in SetIPMode (0x3E)').toMatch(
+                /0x3e|62/i,
+              );
+              expect(row.frames).toBe(0);
+            } else {
+              expect(row.error).toBeNull();
             }
           },
           RUN_MS,
         );
       }
 
-      it(
+      it.skipIf(!build.patchable)(
         'the patched part (the table patch on bank A) boots on its own build and streams Normal frames',
         async () => {
           const stockPath = truth.get(build.patchId);
