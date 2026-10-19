@@ -490,7 +490,12 @@ export function planFpsPatch(image: Uint8Array, cameraVersion: string | null): F
   };
 }
 
-/** The build of the Compact 4.8.2.1 / Compact XR 4.8.2.1 image (one image, f96ac57eda75). */
+/**
+ * The build of the Compact 4.8.2.1 and of the Compact XR 4.8.2.1. Checked 2026-10-19 (TESTING.md 42.34): in each
+ * unit's full dump the first 42,680 bytes of the 0x14030000 bank are the same ciphertext, and core's decryptDump
+ * decrypts them to one image, f96ac57eda75 (byte for byte the XR corpus file). The other two banks of both dumps
+ * decrypt to that image too.
+ */
 export const FPS_NO_PATCH_4821_VERSION = '4.8.2.1';
 
 /**
