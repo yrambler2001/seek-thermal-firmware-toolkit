@@ -10,7 +10,7 @@ Done work is in `TESTING.md` (sections 42.x; the latest is 42.27) and `FPS_32HZ.
 - Camera: switch channel 1 = J-Link, channel 2 = camera (`node switch.js cycle <ch> 3000` in `usb-port-switch-rp2040`). The J-Link attaches only on its first connection after a channel-1 cycle. Owner decision 2026-10-19: hardware may be used without asking. Save the restore image before any write.
 - Owner decisions in force:
   - no deprecated names and no backward-compatible CLI;
-  - the "Make N FPS" button stays enabled; the boot-word warning (TESTING.md 42.27, section 6) is text on the page and in the CLI and does not gate the button;
+  - the "Make N FPS" button stays enabled and is never gated; it shows the boot-word warning text when the patch would not take effect (TESTING.md 42.27, section 6) (2026-10-19);
   - a build that is patched but not measured is offered on the page and CLI exactly like a measured one (2026-10-19);
   - the page and the CLI warn when the camera boots a bank that does not hold the patch while a patched bank will not run (2026-10-19);
   - the Preserve page keeps its zip step; `FW-V1/targets` holds every reconstructed firmware source.

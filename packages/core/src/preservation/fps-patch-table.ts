@@ -33,7 +33,8 @@ export const FPS_PATCH_TABLE: readonly FpsPatchSource[] = [
   {
     // compact_pro-1.0.3.0. 1.0.3.0-FF (18 Hz) row 14 at 0xC2CC is byte-identical to the patched row 14. The
     // FF build also drops the leading step of rows 0-12, 14 and 16 and changes the row-16 flags; those are
-    // the boot and shutter rows, not the steady state, and are NOT applied here.
+    // the boot and shutter rows, not the steady state, and are NOT applied here. Emulator, IP 8 Normal:
+    // 8.84 -> 17.68 Hz. Not run on a camera.
     id: 'compact_pro-1.0.3.0',
     family: 'compact_pro',
     version: '1.0.3.0',
@@ -64,7 +65,7 @@ export const FPS_PATCH_TABLE: readonly FpsPatchSource[] = [
     // compact_pro-1.0.3.2. 1.0.3.2-FF (18 Hz) record 20 at 0xC258 is byte-identical to the patched record.
     // The FF build also drops the leading substep of records 8, 9, 12, 14-18 (the same nine records as the
     // 4.9 table, FRAME_RATE.md sec.6.4) and moves a u16 table at 0xBF32; those are not the steady state and
-    // are NOT applied here.
+    // are NOT applied here. Emulator, IP 8 Normal: 8.84 -> 17.68 Hz. Not run on a camera.
     id: 'compact_pro-1.0.3.2',
     family: 'compact_pro',
     version: '1.0.3.2',
@@ -93,7 +94,8 @@ export const FPS_PATCH_TABLE: readonly FpsPatchSource[] = [
   {
     // compact_pro-4.9.1.15. FRAME_RATE.md sec.6.3 (experiment A, the only one of the 9 Hz images measured
     // on hardware): 8.85 fps -> 17.70 fps with these three bytes. No same-layout 18 Hz sibling exists;
-    // 4.18.2.0-FF uses the 54-byte record. Exactly 3 bytes differ from the stock image.
+    // 4.18.2.0-FF uses the 54-byte record. Exactly 3 bytes differ from the stock image. Emulator, IP 8
+    // Normal: 8.84 -> 17.68 Hz.
     id: 'compact_pro-4.9.1.15',
     family: 'compact_pro',
     version: '4.9.1.15',
@@ -121,7 +123,8 @@ export const FPS_PATCH_TABLE: readonly FpsPatchSource[] = [
     // compact_pro-4.9.2.0. 4.18.2.0-FF (18 Hz) row 20 at 0xA660 is byte-identical to the patched row 20 (54
     // bytes). The stock 4.9.2.0 row is that 18 Hz row with one leading no-op substep (00 00 01, a whole
     // frame of no work) in front of its armed substep. The same shape is what FRAME_RATE.md sec.6.3
-    // experiment B built from the 18 Hz image. Not measured on hardware.
+    // experiment B built from the 18 Hz image. Emulator, IP 8 Normal: 8.84 -> 17.68 Hz. Not measured on
+    // hardware.
     id: 'compact_pro-4.9.2.0',
     family: 'compact_pro',
     version: '4.9.2.0',
@@ -149,26 +152,17 @@ export const FPS_PATCH_TABLE: readonly FpsPatchSource[] = [
   },
   {
     // compact_32k-1.3.0.8-to32. 32 Hz, one capture per published frame, in the Normal stream (mode 8; mode
-    // 9 runs the same program, and the emulator streams mode 9). Stock block 13 is seed (op 5, sel 3),
-    // accumulate (op 6, sel 3) twice, mean of three (op 7, sel 3), then the fill (op 8, sel 1, delivery):
-    // the picture is the mean of three captures, refilled from the fourth where a seed marked a sample over
-    // the sensor ceiling (15000). The one step is op 3 with the delivery bit, a plain copy of the capture
-    // (frame_line_op_3, image.c:1111: no read of the destination, no rescale, no marker), on the seeds
-    // selection 0x13, so every capture runs the sensor mode the stock average runs (CMD mode 3,
-    // app_init.c:1547-1557). The earlier one-step form 13 25 23 (op 5) is replaced: frame_line_op_5
-    // (image.c:1149-1170) writes 0xFFFF over every sample above 15000 and nothing refills it, so a scene
-    // over the ceiling shows 0xFFFF holes. Emulator, recorded feed (the sensor is substituted; 40 frames):
-    // stock 8.000 Hz; the copy 32.258 Hz median (32.195 mean), 0 frozen pairs, 26 steady frames, 87.9 % of
-    // body halfwords change between frames (stock 89.1 %), mean 6,768.1 (stock 6,785.5), spread 2,083.2
-    // (stock 2,087.7), and 13 of 13 even steady frames equal the 1.3.0.8-FF steady frames. Emulator, bright
-    // feed (a block of pixels over the ceiling, 33 % of the body): stock mean 9,713.3, spread 4,555.3, 33.3
-    // % over the ceiling, 0 dead; the copy mean 9,702.2, spread 4,561.5, 33.3 % over, 0 dead; the earlier
-    // op 5 form mean 26,284.7 with 33.3 % dead (0xFFFF). The terminator selection 0x11 (CMD mode 0) copy
-    // gives the same picture in the emulator, which does not model the sensor mode; it is not used. NOT
-    // MEASURED ON A CAMERA: the earlier op 5 form published 26 fps on the Compact 1.3.0.8 (TESTING.md
-    // 42.20); the copy form has no camera measurement. OPEN: the copy runs CMD mode 3 on every capture
-    // (stock: 3 for the seeds, 0 for the fill), and a long stream may leave 32 Hz
-    // (docs/FPS_PATCH_LONG_STREAM.md).
+    // 9 runs the same program). Stock block 13 is seed (op 5, sel 3), accumulate (op 6, sel 3) twice, mean
+    // of three (op 7, sel 3), then the fill (op 8, sel 1, delivery). The one step is op 3 with the delivery
+    // bit, a plain copy of the capture (frame_line_op_3, image.c:1111) on the seeds' selection 0x13, so
+    // every capture runs the sensor mode the stock average runs (CMD mode 3, app_init.c:1547-1557). The
+    // earlier one-step op 5 form (13 25 23) wrote 0xFFFF over every sample above 15000 (frame_line_op_5,
+    // image.c:1149): 33 % dead pixels in the emulator's bright scene, and the 26 fps of TESTING.md 42.20
+    // (not reproduced on the same unit in 42.27). Camera (owner's PIR206, bank B, 2026-10-19): Normal 32.16
+    // to 32.20 fps (5 s medians; stock 8.04 to 8.05), 0 frozen pairs, level 5,760 against stock 5,739
+    // (means of frames). The terminator selection 0x11 saturated the camera picture (67 % of samples at or
+    // above 15000) and was rejected. Emulator, IP 8: 8.065 -> 32.258 Hz, level 6,801 -> 6,797. OPEN: a long
+    // stream may leave 32 Hz (docs/FPS_PATCH_LONG_STREAM.md).
     id: 'compact_32k-1.3.0.8-to32',
     family: 'compact_32k',
     version: '1.3.0.8',
@@ -200,22 +194,11 @@ export const FPS_PATCH_TABLE: readonly FpsPatchSource[] = [
     // compact_32k-4.8.1.7-to32. 32 Hz, one capture per published frame, Normal stream (mode 8; mode 9 runs
     // the same program). Stock block 13 is seed (op 5, sel 1), accumulate (op 6, sel 1) twice, mean of
     // three (op 7, sel 1), then the fill (op 8, sel 0, delivery). The one step is op 1 with the delivery
-    // bit, frame_chunk_copy (frame_chunk_ops_target.c:669), a plain copy of the chunk with no read of the
-    // destination and no rescale, on the seeds selection 0x11 (the sel the stock seeds use). The earlier
-    // one-step form 11 25 23 (op 5) is replaced: frame_chunk_seed (line_handler[5],
-    // frame_chunk_ops_target.c:171) writes 0xFFFF over every sample above 15000 and nothing refills it, so
-    // a scene over the ceiling shows 0xFFFF holes. Emulator, recorded feed (sensor substituted; 80 frames):
-    // stock 8.065 Hz (8.249 mean), 0 frozen pairs; the copy 32.258 Hz median (32.183 mean), 59 steady
-    // frames, 0 frozen pairs, 87.9 % of body halfwords change (stock 89.0 %), mean 6,784.6 (stock 6,786.5),
-    // spread 2,087.5 (stock 2,088.0), and 29 of 29 even steady frames equal the 4.16.1.7-FF steady frames.
-    // Emulator, bright feed (a block over the ceiling, 33 % of the body): stock mean 9,714.0, spread
-    // 4,554.8, 33.3 % over the ceiling, 0 dead; the copy mean 9,712.7, spread 4,555.5, 33.3 % over, 0 dead;
-    // the earlier op 5 form mean 26,295.4 with 33.3 % dead (0xFFFF). The terminator selection 0x10 (sel 0)
-    // was tried as the copy selection (10 21 23): on this table its source is not the line; the picture
-    // froze (58 of 58 pairs equal, mean 18,901.3, 41.7 % over the ceiling) with or without the bright
-    // block, so it is rejected. OPEN: the copy runs one CMD mode on every capture (the seeds mode, which
-    // the stock average is made of; the fill mode is not used); the emulator does not model the sensor
-    // mode; 32 Hz on a real Compact is unproven; a long stream may leave 32 Hz
+    // bit, frame_chunk_copy (frame_chunk_ops_target.c:669), a plain copy of the chunk on the seeds'
+    // selection 0x11. The earlier one-step op 5 form (11 25 23) wrote 0xFFFF over every sample above 15000
+    // (frame_chunk_seed, frame_chunk_ops_target.c:171). The terminator selection 0x10 froze the picture in
+    // the emulator, so it is not used. Emulator, IP 8 Normal: 8.065 -> 32.258 Hz, level 6,797 -> 6,792, 0
+    // frozen pairs; IP 9 the same rate. Not measured on a camera. OPEN: a long stream may leave 32 Hz
     // (docs/FPS_PATCH_LONG_STREAM.md).
     id: 'compact_32k-4.8.1.7-to32',
     family: 'compact_32k',
@@ -246,18 +229,10 @@ export const FPS_PATCH_TABLE: readonly FpsPatchSource[] = [
   },
   {
     // compact_32k-4.8.1.9-to32. 32 Hz, one capture per published frame, Normal stream (mode 8; mode 9 runs
-    // the same program). The block is the 4.8.1.7 block (the same bytes and the same handler table), so the
-    // one step is op 1 with the delivery bit on the seeds selection 0x11 (see the 4.8.1.7 entry for the op
-    // semantics and why the terminator selection is not used). The earlier one-step form 11 25 23 (op 5) is
-    // replaced: it writes 0xFFFF over every sample above 15000. Emulator, recorded feed (sensor
-    // substituted; 80 frames): stock 8.065 Hz (8.244 mean); the copy 32.258 Hz median (32.168 mean), 59
-    // steady frames, 0 frozen pairs, 87.9 % of body halfwords change (stock 89.0 %), mean 6,784.6 (stock
-    // 6,786.5), spread 2,087.5 (stock 2,088.0), and 29 of 29 even steady frames equal the 4.16.1.7-FF
-    // steady frames. Emulator, bright feed (a block over the ceiling): stock mean 9,714.0 with 33.3 % over
-    // the ceiling and 0 dead; the copy mean 9,712.7, spread 4,555.5, 33.3 % over, 0 dead; the earlier op 5
-    // form 33.3 % dead (0xFFFF). The terminator selection copy (10 21 23) froze the picture, as on 4.8.1.7
-    // (58 of 58 pairs equal, mean 18,861.7). NOT MEASURED ON A CAMERA. OPEN: the same as 4.8.1.7 (the
-    // sensor mode and a long stream).
+    // the same program). The block is the 4.8.1.7 block (the same bytes and handler table), so the step is
+    // the same op 1 copy on selection 0x11; the 4.8.1.7 entry gives the op semantics and the rejected
+    // selection. Emulator, IP 8 Normal: 8.065 -> 32.258 Hz, 0 frozen pairs; IP 9 the same rate. Not
+    // measured on a camera. OPEN: a long stream may leave 32 Hz (docs/FPS_PATCH_LONG_STREAM.md).
     id: 'compact_32k-4.8.1.9-to32',
     family: 'compact_32k',
     version: '4.8.1.9',
@@ -286,16 +261,14 @@ export const FPS_PATCH_TABLE: readonly FpsPatchSource[] = [
   {
     // compact_32k-1.3.0.0-to32. 32 Hz in the Normal stream (IP mode 8), one capture per published frame, no
     // mean. Stock block 8 is the four-step sequence op 5 (seed, x4 above the level), op 6, op 6
-    // (accumulate), op 7 (mean of four, push, header id 3, gpio 1). The candidate is one step, op 3 (a
-    // plain copy of the line, no read of the destination) with the delivery bit, header id 3 and gpio 1 as
-    // stock: the samples keep their scale (op 7 quarters what op 5 and op 6 multiplied up), so the picture
-    // is the stock picture without the averaging. MEASURED on a Compact 1.3.0.0 (PIR206, serial
-    // 1013CE098ACA), power-cycled after the write: Normal mode (no Hi FPS) steady 32.0 to 32.3 fps median,
-    // 0 frozen pairs, ~94 % of pixels change between consecutive frames, level ~5,900 with a ~430-count
-    // spread as stock; Hi FPS (IP mode 3, which is stock one capture per frame) ~32 fps. Not modelled by
-    // the emulator, which streams mode 6 only. The unit measured first carried the withdrawn mode-6 16 Hz
-    // edit as well (image d91284c6..., KNOWN_RATE); the mode-6 edit does not take part in the Normal or Hi
-    // FPS streams.
+    // (accumulate), op 7 (mean of four, push, header id 3, gpio 1). The one step is op 3 (a plain copy of
+    // the line, no read of the destination) with the delivery bit, header id 3 and gpio 1 as stock, so the
+    // samples keep their scale. Camera (owner's PIR206, serial 1013CE098ACA, bank A, boot word 0,
+    // 2026-10-19): Normal medians 31.1 to 32.3 fps (most 32.2), 0 frozen pairs, about 94 % of pixels change
+    // per frame; Hi FPS (IP 3, stock one capture per frame) about 32 fps. The stock 1.3.0.0 picture was not
+    // measured on the camera. Emulator, IP 8: 8.065 -> 32.258 Hz, level 6,798 -> 6,797. The unit first
+    // carried the withdrawn mode-6 16 Hz edit as well (image d91284c6, KNOWN_RATE); that edit takes no part
+    // in the Normal or Hi FPS streams.
     id: 'compact_32k-1.3.0.0-to32',
     family: 'compact_32k',
     version: '1.3.0.0',
@@ -322,28 +295,16 @@ export const FPS_PATCH_TABLE: readonly FpsPatchSource[] = [
   },
   {
     // compact_32k-0.7.0.8-to32. 32 Hz in the Normal stream (IP mode 8), one capture per published frame, no
-    // mean. Layout: 14-byte blocks with 3-bit header fields and a 2-bit sel (style a, frame_prog_r32k.h of
-    // this build). The mode-8 program is the array at file 0xB4DC (7 blocks; frame_data.c:64; the mode
-    // table frame_data.c:127-137 gives mode 8 the array, whose record pointer 0x10001F64 is the array SRAM
-    // address and agrees with the image under C = 0x0FFF6A88). The source initializer, encoded in this
-    // layout, equals the image in all 7 blocks. Block 4 is the steady self-loop: first = next = 4, four
-    // steps (table indices 4, 5, 5, 6), publish on the fourth. The frame-sequence limit moves it on
-    // (app_init.c:978: FRAME_FLAG_E == 4 in mode 8 sets prog[4].first = 5). What the stock steps do to a
-    // sample: op 5 (frame_line_op_5, image.c:368) copies the line and multiplies each sample at or above
-    // the level 0x3C00 by four; op 6 (image.c:389) accumulates into the destination; op 7 (image.c:420)
-    // averages the four captures in the quarter-scale domain and maps every result through
-    // frame_gain_table_r32k (the halfword table at 0x10010000, which app_init.c:1296-1305 copies from flash
-    // 0x141A0000 when that flash starts zero, and fills with the identity ramp otherwise). frame_line_op_3
-    // (image.c:307) maps the first 206 samples of each 208-sample row through the same table and copies the
-    // last two: one capture through it is the stock transform without the four-capture average. The stock
-    // Hi FPS block (mode 3, frame_prog_mode3_r32k, frame_data.c) is table index 2 with the publish bit, the
-    // stock single-capture picture. Rejected by measurement: the earlier entry (op 1, a plain word copy,
-    // image 8b0f4781, no table) and the op 5 copy (index 4, same header, image 0a43308c): both +12 % level
-    // and about 5x the spread of stock. MEASURED on a Compact 0.7.0.8 (PIR206, serial 1013CE098ACA), booted
-    // from bank B (word 1), power-cycled, against stock in the same session: Normal mode median 32.18 to
-    // 32.21 fps over five seconds (stock 8.05), 0 frozen pairs, 92 % of pixels changed (stock 91 to 92),
-    // level 5,693 (stock 5,716), spread 33.5 (stock 34.3), range 209 (stock 207). Not run on the emulator
-    // (it streams mode 6 only).
+    // mean. Layout: 14-byte blocks with 3-bit header fields (style a). Block 4 is the steady self-loop
+    // (first = next = 4): four steps, table indices 4, 5, 5, 6, publish on the fourth. The table has no
+    // frame_line_op_2 (frame_data.c:52-54), so index 2 is frame_line_op_3 (image.c:307), the gain-table
+    // remap of one capture, the transform the stock Hi FPS block applies. The plain word copy (index 1,
+    // image 8b0f4781) and the op-5 copy (index 4, image 0a43308c) were both about 12 % brighter than stock
+    // with about five times the spread on the camera, so they were rejected. Camera (owner's PIR206, bank
+    // B, 2026-10-19, P3): Normal 32.18 to 32.21 fps (5 s medians; stock 8.05), 0 frozen pairs, level 5,693
+    // against stock 5,716 (same session), std 33.5 against 34.3. Emulator, IP 8: 8.065 -> 32.258 Hz, level
+    // 6,008 -> 6,005. Slots refuse firmware older than 0.8.0.0, so the page does not offer it; flashing it
+    // needs the J-Link.
     id: 'compact_32k-0.7.0.8-to32',
     family: 'compact_32k',
     version: '0.7.0.8',
@@ -375,18 +336,12 @@ export const FPS_PATCH_TABLE: readonly FpsPatchSource[] = [
   },
   {
     // compact_32k-0.8.0.0-to32. 32 Hz in the Normal stream (IP mode 8), one capture per published frame, no
-    // mean. Layout: 14-byte blocks with the 1.3.0.0 step bits (style b, frame_prog_r32k.h of this build).
-    // The mode-8 program is the array at file 0xb6f0 (10 blocks; frame_data.c:63; the mode table
-    // frame_data.c:139 gives mode 8 the array). The source initializer, encoded in this layout, equals the
-    // image at that offset in all 10 blocks, so the array is located by its bytes. Block 6 is the steady
-    // self-loop: first = next = 6, four steps op 5, op 6, op 6, op 7 with the publish bit on the fourth.
-    // The frame-sequence limit moves it on (app_init.c:966: FRAME_FLAG_E == 6 in mode 8 sets prog[6].first
-    // = 7). The operator table is the identity (frame_data.c:51-54), so the copy is operator 3, and
-    // frame_line_op_3 (image.c:343) is a row copy dst[i] = src[i] over the 832-halfword line: no read of
-    // the destination, no scale. SetIPMode accepts 8 (rpc_cmds.c:1042-1050, mask 0x1F9) and writes the cell
-    // the dispatcher reads (g_stream_format_r32k = fsm_mode_gate_r32k = 0x10005384). Slots: on the plain
-    // 2014 chain (capability-family.ts PLAIN_CHAIN_VERSIONS), so the page can write it. Not run on the
-    // emulator or a camera.
+    // mean. Layout: 14-byte blocks with the 1.3.0.0 step bits (style b). Block 6 is the steady self-loop
+    // (first = next = 6): four steps op 5, op 6, op 6, op 7 with the publish bit become one copy, op 3 with
+    // the publish bit (frame_line_op_3, image.c:343: a row copy, no read of the destination, no scale),
+    // header id 3, gpio 1, sel 1 as stock. Camera (owner's PIR206, bank B, E1): Normal 32.16 to 32.20 fps
+    // (stock 8.04 to 8.05), 0 frozen pairs, level 5,829 against stock 5,814. Emulator, IP 8: 8.065 ->
+    // 32.258 Hz.
     id: 'compact_32k-0.8.0.0-to32',
     family: 'compact_32k',
     version: '0.8.0.0',
@@ -417,20 +372,11 @@ export const FPS_PATCH_TABLE: readonly FpsPatchSource[] = [
   },
   {
     // compact_32k-0.9.0.2-to32. 32 Hz in the Normal stream (IP mode 8), one capture per published frame, no
-    // mean. Layout: 14-byte blocks with the 1.3.0.0 step bits (style b, frame_prog_r32k.h of this build).
-    // The mode-8 program is the array at file 0xb794 (11 blocks; frame_data.c:61; the mode table
-    // frame_data.c:138 gives mode 8 the array). The source initializer, encoded in this layout, equals the
-    // image at that offset in all 11 blocks, so the array is located by its bytes. Block 7 is the steady
-    // self-loop: first = next = 7, four steps op 5, op 6, op 6, op 7 with the publish bit on the fourth.
-    // The frame-sequence limit moves it on (app_init.c:966: FRAME_FLAG_E == 7 in mode 8 sets prog[7].first
-    // = 8). The operator table is the identity (frame_data.c:50-53), so the copy is operator 3, and
-    // frame_line_op_3 (image.c:343) is a row copy dst[i] = src[i] over the 832-halfword line: no read of
-    // the destination, no scale. SetIPMode accepts 8 (rpc_cmds.c:1032-1040, mask 0x1F9) and writes the cell
-    // the dispatcher reads (g_stream_format_r32k = fsm_mode_gate_r32k = 0x10005384). Slots: on the plain
-    // 2014 chain (capability-family.ts PLAIN_CHAIN_VERSIONS), so the page can write it. Emulator
-    // (emu/fps_patch_tests.py, 2026-10-19): the boot sets the mode gate to 6 (the harness sends no
-    // SetIPMode), so the patched image streams at the stock 8.065 Hz; the mode-8 edit is not exercised, and
-    // that run says nothing about Normal mode.
+    // mean. Layout: 14-byte blocks, style b. Block 7 is the steady self-loop (first = next = 7): four steps
+    // op 5, op 6, op 6, op 7 with the publish bit become one copy, op 3 with the publish bit
+    // (frame_line_op_3, a row copy with no scale), header id 3, gpio 1, sel 1 as stock. Camera (owner's
+    // PIR206, bank B, E1): Normal 32.16 to 32.21 fps (stock 7.96 to 8.05), 0 frozen pairs, level 5,835
+    // against stock 5,836. Emulator, IP 8: 8.065 -> 32.258 Hz.
     id: 'compact_32k-0.9.0.2-to32',
     family: 'compact_32k',
     version: '0.9.0.2',
@@ -461,18 +407,11 @@ export const FPS_PATCH_TABLE: readonly FpsPatchSource[] = [
   },
   {
     // compact_32k-0.9.0.6-to32. 32 Hz in the Normal stream (IP mode 8), one capture per published frame, no
-    // mean. Layout: 14-byte blocks with the 1.3.0.0 step bits (style b, frame_prog_r32k.h of this build).
-    // The mode-8 program is the array at file 0xb6b0 (11 blocks; frame_data.c:61; the mode table
-    // frame_data.c:138 gives mode 8 the array). The source initializer, encoded in this layout, equals the
-    // image at that offset in all 11 blocks, so the array is located by its bytes. Block 7 is the steady
-    // self-loop: first = next = 7, four steps op 5, op 6, op 6, op 7 with the publish bit on the fourth.
-    // The frame-sequence limit moves it on (app_init.c:966: FRAME_FLAG_E == 7 in mode 8 sets prog[7].first
-    // = 8). The operator table is the identity (frame_data.c:50-53), so the copy is operator 3, and
-    // frame_line_op_3 (image.c:343) is a row copy dst[i] = src[i] over the 832-halfword line: no read of
-    // the destination, no scale. SetIPMode accepts 8 (rpc_cmds.c:1032-1040, mask 0x1F9) and writes the cell
-    // the dispatcher reads (g_stream_format_r32k = fsm_mode_gate_r32k = 0x10005384). Slots: on the plain
-    // 2014 chain (capability-family.ts PLAIN_CHAIN_VERSIONS), so the page can write it. Not run on the
-    // emulator or a camera.
+    // mean. Layout: 14-byte blocks, style b. Block 7 is the steady self-loop (first = next = 7): four steps
+    // op 5, op 6, op 6, op 7 with the publish bit become one copy, op 3 with the publish bit, header id 3,
+    // gpio 1, sel 1 as stock. Camera (owner's PIR206, bank B, E1): Normal 32.10 to 32.20 fps (stock 8.04 to
+    // 8.05), 0 frozen pairs, level 4,868 against stock 4,848 (a darker, noisier build). Emulator, IP 8:
+    // 8.065 -> 32.258 Hz.
     id: 'compact_32k-0.9.0.6-to32',
     family: 'compact_32k',
     version: '0.9.0.6',
@@ -503,18 +442,11 @@ export const FPS_PATCH_TABLE: readonly FpsPatchSource[] = [
   },
   {
     // compact_32k-0.9.0.7-to32. 32 Hz in the Normal stream (IP mode 8), one capture per published frame, no
-    // mean. Layout: 14-byte blocks with the 1.3.0.0 step bits (style b, frame_prog_r32k.h of this build).
-    // The mode-8 program is the array at file 0xb784 (11 blocks; frame_data.c:61; the mode table
-    // frame_data.c:138 gives mode 8 the array). The source initializer, encoded in this layout, equals the
-    // image at that offset in all 11 blocks, so the array is located by its bytes. Block 7 is the steady
-    // self-loop: first = next = 7, four steps op 5, op 6, op 6, op 7 with the publish bit on the fourth.
-    // The frame-sequence limit moves it on (app_init.c:966: FRAME_FLAG_E == 7 in mode 8 sets prog[7].first
-    // = 8). The operator table is the identity (frame_data.c:50-53), so the copy is operator 3, and
-    // frame_line_op_3 (image.c:350) is a row copy dst[i] = src[i] over the 832-halfword line: no read of
-    // the destination, no scale. SetIPMode accepts 8 (rpc_cmds.c:1028-1036, mask 0x1F9) and writes the cell
-    // the dispatcher reads (g_stream_format_r32k = fsm_mode_gate_r32k = 0x10005384). Slots: on the plain
-    // 2014 chain (capability-family.ts PLAIN_CHAIN_VERSIONS), so the page can write it. Not run on the
-    // emulator or a camera.
+    // mean. Layout: 14-byte blocks, style b. Block 7 is the steady self-loop (first = next = 7): four steps
+    // op 5, op 6, op 6, op 7 with the publish bit become one copy, op 3 with the publish bit, header id 3,
+    // gpio 1, sel 1 as stock. Camera (owner's PIR206, bank B, E1): Normal medians 30.73 to 32.19 fps, the
+    // first seconds low (stock 7.19 to 8.09), 0 frozen pairs, level 5,833 against stock 5,826. Emulator, IP
+    // 8: 8.065 -> 32.258 Hz.
     id: 'compact_32k-0.9.0.7-to32',
     family: 'compact_32k',
     version: '0.9.0.7',
@@ -545,18 +477,11 @@ export const FPS_PATCH_TABLE: readonly FpsPatchSource[] = [
   },
   {
     // compact_32k-0.9.1.0-to32. 32 Hz in the Normal stream (IP mode 8), one capture per published frame, no
-    // mean. Layout: 14-byte blocks with the 1.3.0.0 step bits (style b, frame_prog_r32k.h of this build).
-    // The mode-8 program is the array at file 0xb794 (11 blocks; frame_data.c:61; the mode table
-    // frame_data.c:138 gives mode 8 the array). The source initializer, encoded in this layout, equals the
-    // image at that offset in all 11 blocks, so the array is located by its bytes. Block 7 is the steady
-    // self-loop: first = next = 7, four steps op 5, op 6, op 6, op 7 with the publish bit on the fourth.
-    // The frame-sequence limit moves it on (app_init.c:966: FRAME_FLAG_E == 7 in mode 8 sets prog[7].first
-    // = 8). The operator table is the identity (frame_data.c:50-53), so the copy is operator 3, and
-    // frame_line_op_3 (image.c:343) is a row copy dst[i] = src[i] over the 832-halfword line: no read of
-    // the destination, no scale. SetIPMode accepts 8 (rpc_cmds.c:1032-1040, mask 0x1F9) and writes the cell
-    // the dispatcher reads (g_stream_format_r32k = fsm_mode_gate_r32k = 0x10005384). Slots: on the plain
-    // 2014 chain (capability-family.ts PLAIN_CHAIN_VERSIONS), so the page can write it. Not run on the
-    // emulator or a camera.
+    // mean. Layout: 14-byte blocks, style b. Block 7 is the steady self-loop (first = next = 7): four steps
+    // op 5, op 6, op 6, op 7 with the publish bit become one copy, op 3 with the publish bit, header id 3,
+    // gpio 1, sel 1 as stock. Camera (owner's PIR206, bank B): the first run gave 27.8 to 30.8 fps and was
+    // not reproduced; four reruns gave 32.16 to 32.23 fps (stock 8.04 to 8.05); 0 frozen pairs; level 5,842
+    // against stock 5,847. Emulator, IP 8: 8.065 -> 32.258 Hz.
     id: 'compact_32k-0.9.1.0-to32',
     family: 'compact_32k',
     version: '0.9.1.0',
@@ -587,18 +512,11 @@ export const FPS_PATCH_TABLE: readonly FpsPatchSource[] = [
   },
   {
     // compact_32k-0.10.0.0-to32. 32 Hz in the Normal stream (IP mode 8), one capture per published frame,
-    // no mean. Layout: 14-byte blocks with the 1.3.0.0 step bits (style b, frame_prog_r32k.h of this
-    // build). The mode-8 program is the array at file 0xb794 (11 blocks; frame_data.c:61; the mode table
-    // frame_data.c:138 gives mode 8 the array). The source initializer, encoded in this layout, equals the
-    // image at that offset in all 11 blocks, so the array is located by its bytes. Block 7 is the steady
-    // self-loop: first = next = 7, four steps op 5, op 6, op 6, op 7 with the publish bit on the fourth.
-    // The frame-sequence limit moves it on (app_init.c:966: FRAME_FLAG_E == 7 in mode 8 sets prog[7].first
-    // = 8). The operator table is the identity (frame_data.c:50-53), so the copy is operator 3, and
-    // frame_line_op_3 (image.c:343) is a row copy dst[i] = src[i] over the 832-halfword line: no read of
-    // the destination, no scale. SetIPMode accepts 8 (rpc_cmds.c:1032-1040, mask 0x1F9) and writes the cell
-    // the dispatcher reads (g_stream_format_r32k = fsm_mode_gate_r32k = 0x10005384). Slots: on the plain
-    // 2014 chain (capability-family.ts PLAIN_CHAIN_VERSIONS), so the page can write it. Not run on the
-    // emulator or a camera.
+    // no mean. Layout: 14-byte blocks, style b. Block 7 is the steady self-loop (first = next = 7): four
+    // steps op 5, op 6, op 6, op 7 with the publish bit become one copy, op 3 with the publish bit, header
+    // id 3, gpio 1, sel 1 as stock. Camera (owner's PIR206, bank B, E1): Normal 32.17 to 32.24 fps (stock
+    // 7.87 to 8.05), 0 frozen pairs, level 5,838 against stock 5,847. Hi FPS (IP 3, the edit is in the
+    // Normal program only) mean 23.4 against stock 27.4, not explained. Emulator, IP 8: 8.065 -> 32.258 Hz.
     id: 'compact_32k-0.10.0.0-to32',
     family: 'compact_32k',
     version: '0.10.0.0',
@@ -629,18 +547,10 @@ export const FPS_PATCH_TABLE: readonly FpsPatchSource[] = [
   },
   {
     // compact_32k-1.0.0.0-to32. 32 Hz in the Normal stream (IP mode 8), one capture per published frame, no
-    // mean. Layout: 14-byte blocks with the 1.3.0.0 step bits (style b, frame_prog_r32k.h of this build).
-    // The mode-8 program is the array at file 0xb784 (11 blocks; frame_data.c:61; the mode table
-    // frame_data.c:138 gives mode 8 the array). The source initializer, encoded in this layout, equals the
-    // image at that offset in all 11 blocks, so the array is located by its bytes. Block 7 is the steady
-    // self-loop: first = next = 7, four steps op 5, op 6, op 6, op 7 with the publish bit on the fourth.
-    // The frame-sequence limit moves it on (app_init.c:966: FRAME_FLAG_E == 7 in mode 8 sets prog[7].first
-    // = 8). The operator table is the identity (frame_data.c:50-53), so the copy is operator 3, and
-    // frame_line_op_3 (image.c:350) is a row copy dst[i] = src[i] over the 832-halfword line: no read of
-    // the destination, no scale. SetIPMode accepts 8 (rpc_cmds.c:1028-1036, mask 0x1F9) and writes the cell
-    // the dispatcher reads (g_stream_format_r32k = fsm_mode_gate_r32k = 0x10005384). Slots: on the plain
-    // 2014 chain (capability-family.ts PLAIN_CHAIN_VERSIONS), so the page can write it. Not run on the
-    // emulator or a camera.
+    // mean. Layout: 14-byte blocks, style b. Block 7 is the steady self-loop (first = next = 7): four steps
+    // op 5, op 6, op 6, op 7 with the publish bit become one copy, op 3 with the publish bit, header id 3,
+    // gpio 1, sel 1 as stock. Camera (owner's PIR206, bank B, E1): Normal 31.3 to 32.2 fps (stock 7.9 to
+    // 8.1), 0 frozen pairs, level 5,835 against stock 5,866. Emulator, IP 8: 8.065 -> 32.258 Hz.
     id: 'compact_32k-1.0.0.0-to32',
     family: 'compact_32k',
     version: '1.0.0.0',
@@ -671,20 +581,12 @@ export const FPS_PATCH_TABLE: readonly FpsPatchSource[] = [
   },
   {
     // compact_32k-1.2.0.0-to32. 32 Hz in the Normal stream (IP mode 8), one capture per published frame, no
-    // mean. The 1.2.0.0 image has the 1.3.0.0 layout (34-byte blocks, 2-byte steps, operator table
-    // identity: frame_data.c:50-53). Its mode table is at file 0xB740: the mode-8 record at 0xB780 is
-    // (0x10001F90, 11), and its other program records (modes 0, 3, 4, 5, 6) map onto the 1.3.0.0 program
-    // offsets 0xB9CA, 0xBA0E, 0xB9EC, 0xB986 and 0xB920 under the one constant C = 0x0FFF6808, so this
-    // build maps its own SRAM to the image (its source comment, 0x10001FB4, is the 1.3.0.0 address). The
-    // mode-8 array (12 blocks, the source initializer encoded in this layout) is at file 0xB788 in full.
-    // The steady block 8 is first = next = 8 with four steps op 5, op 6, op 6, op 7 and the publish bit on
-    // the last, and the frame-sequence limit moves it on (app_init.c:977: FRAME_FLAG_E == 8 in mode 8 sets
-    // prog[8].first = 9). The copy is operator 3, frame_line_op_3 (image.c:350), a plain row copy.
-    // SetIPMode accepts 8 (rpc_cmds.c:1028-1036, mask 0x1F9). Slots: on the plain 2014 chain
-    // (PLAIN_CHAIN_VERSIONS). The earlier 16 Hz patch of this build was removed (TESTING.md 42.26); this 32
-    // Hz entry is the 1.3.0.0 mode-8 edit at the same bytes. Emulator (emu/fps_patch_tests.py, 2026-10-19):
-    // the boot sets the mode gate to 6 (the harness sends no SetIPMode), so the patched image streams at
-    // the stock 8.065 Hz; the mode-8 edit is not exercised, and that run says nothing about Normal mode.
+    // mean. Layout: 34-byte blocks, the 1.3.0.0 layout. Block 8 is the steady self-loop (first = next = 8):
+    // four steps op 5, op 6, op 6, op 7 with the publish bit become one copy, operator 3 (frame_line_op_3,
+    // image.c:350: a row copy, no scale) with the publish bit, header id 3, gpio 1, sel 1 as stock. Camera
+    // (owner's PIR206, bank B, E1): Normal 32.18 to 32.20 fps (stock 7.81 to 8.19), 0 frozen pairs, level
+    // 5,809 against stock 5,817. Emulator, IP 8: 8.065 -> 32.258 Hz. The 16 Hz patch of this build was
+    // removed (TESTING.md 42.26).
     id: 'compact_32k-1.2.0.0-to32',
     family: 'compact_32k',
     version: '1.2.0.0',
@@ -716,17 +618,11 @@ export const FPS_PATCH_TABLE: readonly FpsPatchSource[] = [
   },
   {
     // compact_32k-1.3.0.8-FF-to32. 32 Hz from the FF build, one capture per published frame: the one step
-    // is the copy of the seeds (op 3 with the delivery bit, selection 0x13), the same form as the 8 Hz
-    // 1.3.0.8 entry. The earlier form 13 25 23 (op 5) is replaced: it writes 0xFFFF over every sample above
-    // 15000 (frame_line_op_5, image.c:1149). The FF image differs from the 8 Hz 1.3.0.8 image elsewhere as
-    // well (reset vector 0x100806b1, not 0x1008066d; 180 bytes longer); of the 16 blocks of its program
-    // only block 13 differs. Emulator, recorded feed (80 frames): stock 16.129 Hz, the copy 32.258 Hz
-    // median (32.196 mean), 0 frozen pairs, 87.9 % of body halfwords change (stock 88.2 %), mean 6,781.5
-    // (stock 6,781.2), spread 2,086.7 (stock 2,086.6), and 31 of 31 even steady frames equal the FF build's
-    // own steady frames. Emulator, bright feed (a block over the ceiling): stock mean 9,710.7, 33.3 % over,
-    // 0 dead; the copy mean 9,710.7, spread 4,556.5, 33.3 % over, 0 dead; the earlier op 5 form 33.3 % dead
-    // (0xFFFF). NOT MEASURED ON A CAMERA. The same OPEN points as the stock 1.3.0.8 32 Hz patch apply (the
-    // sensor mode, a long stream).
+    // is a copy of the seeds (op 3 with the delivery bit, selection 0x13), the same form as the 8 Hz
+    // 1.3.0.8 entry. The earlier op 5 form (13 25 23) wrote 0xFFFF over every sample above 15000
+    // (frame_line_op_5, image.c:1149) and was replaced. Emulator, IP 8 Normal: 16.129 -> 32.258 Hz, picture
+    // level the same as stock (about 6,790 to 6,800). IP 9 the same. Not measured on a camera; not offered
+    // (FF stage two).
     id: 'compact_32k-1.3.0.8-FF-to32',
     family: 'compact_32k',
     version: '1.3.0.8-FF',
@@ -754,17 +650,11 @@ export const FPS_PATCH_TABLE: readonly FpsPatchSource[] = [
   },
   {
     // compact_32k-4.16.1.7-FF-to32. 32 Hz from the FF build, one capture per published frame: the one step
-    // is the copy of the seeds (op 1 with the delivery bit, selection 0x11), the same form as the 4.8.1.7
-    // entry. The earlier form 11 25 23 (op 5) is replaced: it writes 0xFFFF over every sample above 15000
-    // (frame_chunk_seed, frame_chunk_ops_target.c:171). Of the 16 blocks of its program only block 13
-    // differs from the 4.8 8 Hz program. Emulator, recorded feed (80 frames): stock 16.129 Hz, the copy
-    // 32.258 Hz median (32.183 mean), 0 frozen pairs, 87.9 % of body halfwords change (stock 88.2 %), mean
-    // 6,784.6 (stock 6,784.4), spread 2,087.5 (stock 2,087.4), and 29 of 29 even steady frames equal the FF
-    // build's own steady frames. Emulator, bright feed (a block over the ceiling): stock mean 9,712.8, 33.3
-    // % over, 0 dead; the copy mean 9,712.7, spread 4,555.5, 33.3 % over, 0 dead; the earlier op 5 form
-    // 33.3 % dead (0xFFFF). The terminator selection copy (10 21 23) froze the picture (0 of 29 even frames
-    // equal the FF frames; 58 of 58 pairs equal, mean 18,845.5). NOT MEASURED ON A CAMERA. The same OPEN
-    // points as 4.8.1.7 apply.
+    // is op 1 with the delivery bit on selection 0x11, the same form as 4.8.1.7 (frame_chunk_copy,
+    // frame_chunk_ops_target.c:669). The earlier op 5 form (11 25 23) wrote 0xFFFF over samples above 15000
+    // (frame_chunk_seed, frame_chunk_ops_target.c:171) and was replaced. Emulator, IP 8 Normal: 16.129 ->
+    // 32.258 Hz, picture level the same as stock (about 6,790 to 6,800). IP 9 the same. Not measured on a
+    // camera; not offered (FF stage two).
     id: 'compact_32k-4.16.1.7-FF-to32',
     family: 'compact_32k',
     version: '4.16.1.7-FF',
@@ -792,28 +682,15 @@ export const FPS_PATCH_TABLE: readonly FpsPatchSource[] = [
   {
     // compact_32k-4.8.2.1-to32. 32 Hz, one capture per published frame, no mean. Stock page 13 is seed
     // (slot 7, param 0x23), accumulate (slot 8, 0x23) twice, then mean4 (slot 10, param 0x20, LAST). The
-    // candidate is the one substep frame_chunk_copy (slot 1: mem_copy_flashaware of one chunk, no test and
-    // no read of the destination) with LAST, on param 0x23 so that its capture comes from the same source
-    // selection and sensor mode as the stock seed and accumulates. Why this slot: copy writes the raw
-    // sample, as stock mean4 does for an over-ceiling sample; slot 7 would write the 0xFFFF dead marker
-    // over over-ceiling samples. The accumulators (8, 9, 10) read the destination, the state behind the
-    // frozen 1.3.0.8 and 4.8.1.x one-step forms and the alternating 1.3.0.0 form; copy does not. A
-    // one-substep page is valid: g_telemetry_rows pages 0 to 10 are one-step pages, each with LAST; mode 4
-    // has one page of one step. Gpio 1 on the step as stock (the blade is not commanded per frame in steady
-    // state). The acceptance sum moves as the patcher computes it.
-    // FIRST CANDIDATE, REJECTED on the bench (TESTING.md 42.24): the same page with param 0x20 (the
-    // terminator's source selection; patched sha256 d6cea626...). Emulator: 32.26 Hz, not frozen. On the
-    // Compact XR 4.8.2.1 (serial 1E2A50YZ7628): steady 32.2 Hz (31.06 ms), one capture per frame, 0 frozen
-    // pairs, but the picture is not stock: the published samples average 15,577 (99.99 % of pixels above
-    // the sensor ceiling 0x3A98), against stock 5,700. The first candidate is therefore not a rate change
-    // of the stock picture.
-    // MEASURED on the bench (Compact XR 4.8.2.1, serial 1E2A50YZ7628, IP mode 9, TESTING.md 42.24): this
-    // form, raw-written three times and app-written (seek-fw slots patch-fps) three times. Steady thermal
-    // interval 31.07 to 31.25 ms (32.0 to 32.2 Hz), one capture per published frame, 0 frozen pairs, about
-    // 29.6k of 32,448 halfwords change per frame, body mean median 5.6k to 5.7k (stock 5.67k in the same
-    // session), and the render looks like stock. All-frame rate 24.7 to 26.1 fps (the calibration stretch
-    // is unpatched; stock 8.1). 16 Hz (42.23) on the same unit: 14.1 fps all frames, 62.1 ms steady. Not
-    // measured: a warm object in view, IP mode 8.
+    // one substep is frame_chunk_copy (slot 1: a copy of one chunk, no read of the destination) with LAST,
+    // on param 0x23 so the capture comes from the same source selection as the stock seed; slot 7 would
+    // write the 0xFFFF marker over samples above the ceiling. A copy on param 0x20 (the terminator's
+    // selection) published an over-range picture (mean 15,577) and was rejected (TESTING.md 42.24, section
+    // 6). Camera: on the Compact XR 4.8.2.1 (serial 1E2A50YZ7628, IP mode 9, TESTING.md 42.24) the steady
+    // interval is 31.07 to 31.25 ms (32.0 to 32.2 Hz), 0 frozen pairs, body mean 5.6k to 5.7k (stock
+    // 5.67k), and the render looks like stock. The Compact (non-XR) 4.8.2.1 has not been measured on a
+    // camera. Emulator, IP 8 Normal (Compact full dump): 8.065 -> 32.258 Hz, level 6,797 -> 6,805. The 16
+    // Hz form (TESTING.md 42.23, 62.1 ms steady) was removed (42.26).
     id: 'compact_32k-4.8.2.1-to32',
     family: 'compact_32k',
     version: '4.8.2.1',
@@ -903,9 +780,8 @@ export const FPS_KNOWN_RATE: Readonly<
 export const FPS_NOT_PATCHED_NOTES: readonly string[] = [
   'Compact 32K 0.5.0.2, 0.5.1.0, 0.5.1.3, 0.6.0.4 and 0.7.0.7 at 8 Hz: no patch. Their capture programs are built at run time by the firmware (a .bss block written by code, cmd_block_fields_publish and the PB writer), so the image holds no program bytes to edit; a patch would change the builder code, which is not surveyed. 0.5.x and 0.6.0.4 are also not streamed by the framerate suite.',
   'Compact 32K 0.3.0.1 at 8 Hz: no patch. Its mode-8 program was not located in the image: no pointer word to its table and no copy of the 1.0.3.0 row-14 bytes. Not established (docs/FPS_PATCH_ALL_FIRMWARES.md section 5.16).',
-  'Compact 4.8.2.1 image f96ac57eda75 is in the table as compact_32k-4.8.2.1-to32 (page 13 reduced to one copy with LAST, one capture per frame; measured on the XR, offered). The Compact 4.8.2.1 image is also the Compact XR 4.8.2.1 image.',
   'No 16 Hz patch exists any more (1.2.0.0, 1.3.0.0, 1.3.0.8, 4.8.1.7, 4.8.1.9, 4.8.2.1 had one, each also reachable as a 32 Hz patch, 1.2.0.0 included): the 32 Hz patches replace them. The 16 Hz FF builds are stock 16 Hz images, not patches. The 1.3.0.0 mode-6 one-step form (op 3 and the idle steps removed, op 9 kept alone) alternates: each frame is the difference of the previous output and a capture, so the body mean swings about 6,900 halfwords per frame (emulator: mean from -340 to +7,197). A correlated double sample needs a reference copy in the same frame, and no one-step block has one. 1.3.0.0 reaches 32 Hz in the Normal stream through its mode-8 steady block instead (compact_32k-1.3.0.0-to32).',
-  'Earlier 32K 32 Hz blocks that dropped op 5 (1.3.0.8, 4.8.1.7, 4.8.1.9, and the FF 1.3.0.8 and 4.16.1.7 ids): withdrawn. Op 5 starts the frame and clears the mask that op 8 reads, so the picture froze (emulator: 56 to 58 of 58 to 61 steady pairs with zero changed halfwords). Replaced by the one-step block that keeps op 5 with the delivery bit.',
+  'Earlier 32K 32 Hz blocks that dropped op 5 (1.3.0.8, 4.8.1.7, 4.8.1.9, and the FF 1.3.0.8 and 4.16.1.7 ids): withdrawn. Op 5 starts the frame and clears the mask that op 8 reads, so the picture froze (emulator: 56 to 58 of 58 to 61 steady pairs with zero changed halfwords). Replaced by the one-step block that keeps op 5 with the delivery bit, which wrote the 0xFFFF marker; the current form is the plain copy with the delivery bit.',
   'Compact 0.7.0.8 image 8b0f4781 (the 32 Hz entry as first written: operator 1, a plain word copy with no gain table): it runs at 32 Hz but its picture does not match stock (level +12 %, spread about 5x, measured on the bench) and it is not recognised here. A camera that carries it is an unknown image: restore the stock image first, then press Make 32 FPS.',
   'Mosaic 10.9.1.31: already an 18 Hz image (FRAME_RATE, emu/README.md LABEL_DECISIONS); not a 9 Hz target.',
   'Nano 200 42.32.3.10 already publishes every capture (32 Hz); Mosaic FF and Nano 300 are not 9 Hz targets.',

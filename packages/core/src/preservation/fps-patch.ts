@@ -46,8 +46,8 @@ export { FPS_NOT_PATCHED_NOTES } from './fps-patch-table.js';
 /** The reserved adjust word that keeps the acceptance sum (0x238, cleartext). */
 export const FPS_ADJUST_OFFSET = ADJUST_OFFSET;
 
-/** The frame rates the table makes. */
-export const FPS_TARGET_RATES: readonly number[] = [16, 18, 32];
+/** The frame rates the table makes: 18 (Compact PRO) and 32 (Compact 32K). There is no 16 Hz patch (TESTING.md 42.26). */
+export const FPS_TARGET_RATES: readonly number[] = [18, 32];
 
 export interface FpsEdit {
   /** Offset into the decrypted image. */
@@ -487,7 +487,7 @@ export const FPS_NO_PATCH_4821_VERSION = '4.8.2.1';
 export const FPS_NO_PATCH_4821_REASON =
   'this image reports the Compact 4.8.2.1 build (or the Compact XR 4.8.2.1, the same build) but is not the stock ' +
   'image the frame-rate patch was written for (f96ac57eda75: its 68-byte command pages, steady page 13), so no ' +
-  'frame-rate patch is made for it (TESTING.md 42.23)';
+  'frame-rate patch is made for it (TESTING.md 42.24)';
 
 function refused(message: string): SeekError {
   return new SeekError('slots/refused', message);
