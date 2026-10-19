@@ -788,8 +788,8 @@ seek-fw slots patch-fps a                                     # frame-rate patch
 ```
 
 - **Flash a decrypted image.** The page stamps the length, balances the acceptance sum and encrypts
-  the image the way that generation needs: on the 2017+ line under keys derived from that camera's own
-  read, so each bank stores the image under the store key, or under the booted bank's key where the
+  the image the way that generation needs: on the modern line (2.x, 4.x, 10.x, 42.x and 44.x) under keys
+  derived from that camera's own read, so each bank stores the image under the store key, or under the
   application's store key differs (the camera re-encrypts the upload under its own store key), under
   the image's block-0 key stream on the 2016 Compact PRO (the camera re-encrypts it into the bank's
   key), plain on the 2014 plaintext chain.
