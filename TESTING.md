@@ -10795,3 +10795,132 @@ So one excursion is 12 captures and 2 frames. The 10 unpublished captures are: 2
 - No e2e spec was run or changed. The e2e specs name the button "Read firmware version", which is kept.
 - `plan.md` is not edited. `docs/` is not rebuilt. Nothing is pushed or merged.
 - The emulator test for 42.50 (`upgrade-target.emulator.test.ts`) was not run: it needs FW-V1's `emu` directory.
+
+### 42.65 The merged branch on the bench: row 9 with no FF variables, the Info read on the camera (the shipped Info test fails on the two selectors 42.64 sends), the checker's serial lines, and a tighter host loop that lowers the single skips without removing them (2026-10-19)
+
+**Summary.** On the owner's Compact PIR206 (serial `101310HSNEA2`, chip ID `1013CE098ACA`), on `refactor/all-firmware-profiles` at 98298c8 with FW-V1 at fa9b7b126. The start image was dumped and checked (sha256 `50e900c2…01d7d`), and it was restored and dumped again at the end. `cmp start-4m.bin end-4m.bin` printed nothing and exited 0.
+- **1. Row 9 with no FF variables.** The three files were found by their defaults and checked by sha256 before any subject ran. RESULT: "passed as a write", slot writes B, A and R ok, failures 0, boot proof not run, page identified no. The FF row put the original 40447c7e flash back before it ended.
+- **2. The Info read on the camera.** The CLI `seek-fw info --json` and the page's Info read both read the camera. The unlock note shows on the page. The shipped `pages-bench` Info test FAILS, at `out 0x55 expected true to be false`: its "never on the wire" list names 0x55 and 0x5A, and the 42.64 Info read sends both. Under that harness's guard both are refused unsent, so the page reads serial, platform, USB link, bootloader and the roots word as unreadable. The test and the Info read disagree, and the owner has to decide which is right. Nothing was changed.
+- **3. The checker's lines.** (a) On 1.3.0.0 the info line is `serial 101310HSNEA2, chip id 1013CE098ACA`. (b) A connect started right after a channel-2 cycle says "the camera did not answer ... No init was sent" and exits 1. (c) Stock 1.3.0.8 written to bank A and booted: the default stream exits 1 and names `--no-hifps`; the info line shows the serial, so 1.3.0.8 answers 0x5A before its first init. Restored to the start image afterwards.
+- **4. The single-skip floor.** The tightest loop built here (libusb in C) gives 78 and 42 single skips a minute; the node-usb loop with the same credit gives 178 and 206; 42.62's loops gave 246 and 137. A faster host lowers the skips but does not remove them, so they are not only a host-latency problem. Two runs per loop.
+- **5. End.** Restored by the J-Link (0 of 64 blocks differed), dumped, `cmp` silent. Normal reads on one boot reach a steady state at read 7; read 12 is the final steady read, every per-second median 32.08 to 32.20 fps.
+
+**Tags.** [measured] is a command, a bench run or a file read here, with its log under `/private/tmp/claude-501/agent-hw6/`. [source] is read from code, named. [inferred] follows from those and was not measured directly.
+
+**Setup.**
+- `git reset --hard refactor/all-firmware-profiles` from `cf5420b` to `98298c8`. `cf5420b` is an ancestor of the target, so no commit was lost. [measured]
+- `node_modules/@seek-fw/{core,cli,web}` were linked, then `npm ci` ran in the worktree (exit 0, 323 packages; `npm-ci.log`). `npm run build --workspace @seek-fw/core` and `@seek-fw/cli` both exited 0. [measured]
+- FW-V1 is at `fa9b7b126`. [measured]
+- The bench environment is `/private/tmp/claude-501/agent-hw6/bench-env.sh`: the `run-matrix.sh` variables, with the report and scratch folders under `agent-hw6`. `run-matrix.sh` itself changes into another session's worktree, so it was not used. [measured]
+- The start image is `/private/tmp/claude-501/agent-hw6/start-4m.bin`, dumped with `dump-spifi-4m-halted` after a channel-1 cycle and an 8 s wait; sha256 `50e900c23ff4bb7e0a5a30fc5879f6ed276289e43aeace2f9ab74eaec9b01d7d`. [measured]
+- One scratch copy of the Info test was made in `e2e/` for one run and deleted; it is not in the commit. [measured]
+
+**Start.** The start image's sha256 is `50e900c2…01d7d`, the value the brief expects. The bank contents follow from that sha; no `slots list` was run at the start. [measured]
+
+**1. Row 9 with no FF variables.** `SEEK_BENCH_ONLY=1.3.0.8-FF`, the bench environment above, and no `SEEK_BENCH_FF_*` variable set (`run-row9.sh`; `row9.log`). Duration 524.36 s, exit 0. [measured]
+
+The resolved-files lines, as printed:
+- `SEEK_BENCH_FF_RESTORE (default): …/SEEK_FULL_DUMPS_BY_CAMERA/Compact/Compact/2014.10.21-14.58.29-1.3.0.0/full_dump_original.bin, sha256 40447c7e6da5cbc84621f4694ffff5bda0f783e7807a45e80443383b19a8eb72 ok`
+- `SEEK_BENCH_FF_PLATFORM (default): …/Compact/Compact/2017.01.06-11.16.17-1.3.0.8/full_dump_reconstructed.bin, sha256 afa9800f8969e46a0d868b19bdd55a9514fec40cfd958de41d0f769eea5a6e7b ok`
+- `SEEK_BENCH_FF_PLAIN (default): …/FW-V1/emu/data/corpus/compact/2017.01.06-11.17.29-1.3.0.8-FF/no-serial/32k_43x0_1.3.0.8_compact-16hz_public_-_compact_ff_jan_6_2017_11-17-29_99.28_gabiz_ro_firmware.bin, sha256 b97ced91fff9f0949a02f35fceab697634cc109a0fe2a2fbbfe6ccfadb7d4d16 ok`
+
+RESULT: `Compact 1.3.0.8 ff (2017.01.06-11.17.29-1.3.0.8-FF) | file full_dump_launchable.bin | flash verified yes | enumerated yes, 632 ms | page identified no | banks = J-Link no | slot writes B ok, A ok, R ok | passed as a write | boot proof not run | failures 0`
+
+The verify step's halt failed twice ("the CPU could not be halted"); the bench power-cycled and read again, as in 42.30. A whole-flash read after the row gave `40447c7e…eb72`, the original. [measured]
+
+**2. The Info read on the camera.** Power-cycle before each run.
+
+(a) `seek-fw info --json` (CLI `packages/cli/dist/bin.js`, `cli-info-1.json`). Exit 0. Shell wall time about 8 s, including Node start; measured across two shell calls, so an upper bound. [measured]
+
+(b) The page's Info read, through the shipped `pages-bench.e2e.ts` with `-t "Info: connects"` (`info-page.log`). The test failed at its wire check: `AssertionError: out 0x55: expected true to be false`. Test time 4235 ms. The wire it printed: `in 0x35 x7, in 0x3d x8, in 0x4e x4, in 0x4f x2063, out 0x52 x8, out 0x55 x4, out 0x5a x1`. The spec's afterAll restored the 40447c7e baseline and proved it halted. [measured]
+
+(c) The same test as a scratch copy (`scratch-info-note.e2e.ts`, deleted after the run), which logged the forbidden-list hits and the page text instead of asserting them (`info-scratch.log`). Page read 4345 ms from the click to the text. The unlock note is on the page: `Note: the camera stays unlocked until a power cycle, and other tools may misread it until then; power-cycle it before you use them.` The guard's refusals were five, the same count as the 0x55 and 0x5A sends (4 + 1). The copy still failed at its refusal check. [measured; the refusal count matching the sends is [inferred]]
+
+Why the sends were refused. `camera-bus.ts` refuses OUT 0x55 and 0x5A before the inner transfer runs (`controlTransferOut`, `refusal`, `stop`), so those requests never reached the camera. The page's Info read continued without them. [source; [inferred] from the counts above]
+
+The page's text (`scratch/info-page-text.txt`) against the CLI, same camera, same state:
+
+| field | `seek-fw info --json` | Info tab under the harness |
+| --- | --- | --- |
+| firmware running | 1.3.0.0, Oct 21 2014 | 1.3.0.0 Oct 21 2014 |
+| bootloader | 0.9.0.0, Sep 29 2014 | unreadable (OUT 0x55 refused) |
+| serial | 101310HSNEA2 (firmware block); USB string null | unreadable (OUT 0x5a refused) |
+| platform, USB link | null, null | unreadable (OUT 0x55 refused) |
+| profile | legacy-auth, 0.98, not ambiguous | legacy-auth, 0.98 |
+| cfg[0] | 0x00000000 | 0x00000000 |
+| booted, upgrade target | a, b; warning none | "Upgrade target (not replayed)"; flashing disabled, the active-slot word could not be read |
+| key A, key B, table | null, null, 0 candidates | not identified, not identified, 0 candidates, none confirmed |
+| whitening K, store key | 0x00000000; Key B, not programmed | 0x00000000; Key B, no per-device key programmed |
+| bank A, B, R | 1.3.0.0 bootable 862717a8…; absent; 1.3.0.0 bootable 862717a8… | the same three |
+| writing | `flashBlockedBy: []` | "Not available for a whole-image write" (roots unreadable) |
+| unlock note | not applicable | shown |
+
+Times. CLI about 8 s (upper bound, above). Page 4.3 s from the click to the text (4235 ms in the shipped test). [measured]
+
+**3. The checker's new lines (42.59, 42.61).** The checker is `e2e/lib/bench/seek-fps/seek-fps.ts info --camera` and `stream`, each run after a channel-2 cycle and a 10 s wait unless said.
+
+(a) On 1.3.0.0 (`s3a-checker-info.log`): `Seek Compact, firmware 1.3.0.0, serial 101310HSNEA2, chip id 1013CE098ACA, 206x156`. Exit 0. [measured]
+
+(b) A connect started right after the cycle returned (`s3b-early-connect.sh`, `s3b-timing.log`). The cycle command took 0.45 s and returned; the checker exited 1 about 1.1 s later with `seek: the camera did not answer: no Seek Thermal camera is on the bus (product 0x0011 or 0x0010). No init was sent. The camera may be off the bus or still powering up: wait for it to come back after a power cycle, then run again.` This is the not-on-the-bus variant. The listed-but-silent variant of 42.58 (b1) was not reproduced. [measured]
+
+(c) Stock 1.3.0.8 (`2969d0df5bfeac74…`, 49128 B, from `agent-hw2/img`) written to bank A, as 42.54 did.
+- Dry run (`slots flash a <image> --dry-run --acknowledge-risk`): exit 0; firmware 1.3.0.0 becomes 1.3.0.8; afterwards sha256 `8a11b0dc…`, the same as 42.58. [measured]
+- Write (`--yes --acknowledge-risk`, `s3c-write.log`): exit 0; "Bank A: committed, commit status 0"; "read-back: bank A matches the staged image (sha256 8a11b0dc…)". [measured]
+- Info (`s3c-info-1308.log`): `Seek Compact, firmware 1.3.0.8, serial 101310HSNEA2, chip id 1013CE098ACA, 206x156, Startup with Operation=0 refused (connected without it)`. Exit 0. The serial is the 0x5A read, which the checker sends in `open()` before its first init (42.61), so 1.3.0.8 answers 0x5A before its first init. [measured; the order is [source], from `camera.ts`]
+- Default stream (`stream -n 6`, Hi FPS on, `s3c-default-stream.log`): exit 1. No frame in six seconds: `the camera refused the FastRaw init that Init Hi FPS sends (control OUT 0x3e -> stall), and the stream stopped there. This build does not take Init Hi FPS: run again with --no-hifps to stream Normal.` [measured]
+- Restored by the J-Link to the start image (`restore-step3.log`): `plan: 3 of 64 blocks differ -> 1 run(s): 0x14050000+0x30000`, verified, `DONE: the part reads back byte-identical to the image (50e900c2…01d7d)`. [measured]
+
+**4. The single-skip floor (42.62 section 4).** Patched 1.3.0.0 on bank A (the start image's bank), Normal IP mode 8, `--no-opzero`, 0x8200 credit, 60 s per run, a channel-2 cycle and 10 s before each run. Classified with 42.62's `classify_fd.py` (path changed); "random singles" is 42.62's column (B).
+
+The two tight loops, in plain terms:
+- **node-usb (`fdtight.mjs`).** The checker's own connect, the same as 42.62's `fdlog.mjs`. Each frame is read to 66560 bytes, and the 0x8200 credit goes out at once. Per-frame numbers go into typed arrays and are written after the stop. The file write that 42.62's loop made after each frame is gone.
+- **libusb in C (`fdtight.c`, clang against `/opt/homebrew`).** Claims interface 0 of 0x289d:0x0010. The credit is control OUT 0x53 (bmRequestType 0x41, wValue 0, wIndex 0, data `00 82 00 00`); frames come from bulk IN 0x81. The camera was initialised by the checker's connect in `fdinit.mjs`, which exits without a stop; the C loop sends SetOperationMode 0 at the end.
+
+| loop | run | frames | whole-run fps | random singles per min (events) | excursion per min (events) |
+| --- | --- | --- | --- | --- | --- |
+| node-usb, tight | 1 | 1518 | 25.29 | 178 (176) | 212 (41) |
+| node-usb, tight | 2 | 1490 | 24.82 | 206 (194) | 212 (41) |
+| libusb C, tight | 1 | 1606 | 26.77 | 78 (59) | 222 (43) |
+| libusb C, tight | 2 | 1633 | 27.21 | 42 (42) | 232 (45) |
+| 42.62 `fdlog` default, patched | 1 | 1460 | 24.26 | 246 (245) | 207 (40) |
+| 42.62 `fdlog` default, patched | 2 | 1547 | 25.76 | 137 (137) | 222 (43) |
+
+The first frames of each run have the same status sequence (types 4, 9, 8, 7, 10, 5 and 1, then 3); checked on node 1, node 2 and C 1, and steady frames are type 3 in every run. [measured]
+
+Reading. A tighter host lowers the single skips: the C loop gives 42 and 78 a minute, the node-usb loop 178 and 206, and 42.62's loops 137 and 246. It does not remove them: even the C loop keeps 42 or more a minute. So the skips are not only host latency. The part that stays is on the camera side (42.62's endpoint-busy reading, [inferred]), or a host delay that no loop here removed. Two runs per loop is too few to call the C and node difference firm: 42.62 saw 5 to 20 times the run-to-run variation on one image. The node pair sits inside 42.62's range, and the C pair is below it. [measured; the reading is [inferred]]
+
+**5. End.** The restore's `plan: 0 of 64 blocks differ`: the camera was already the start image after step 3's restore, and the host loops wrote nothing. The end dump `end-4m.bin` has sha256 `50e900c2…01d7d`, and `cmp start-4m.bin end-4m.bin` printed nothing and exited 0. The Normal reads after it (below) do not write flash. [measured]
+
+Normal reads on one boot, after one channel-2 cycle and 10 s: reads 1 to 6 from `normal-reads-end.sh 6`, reads 7 to 12 from the same command in a loop (`end-reads/`). Each row is the five per-second medians:
+
+| read | medians (fps) | steady |
+| --- | --- | --- |
+| 1 | 32.15 32.14 32.20 31.61 31.92 | no (31.61 under 31.7) |
+| 2 | 32.05 32.04 18.07 26.19 18.92 | no |
+| 3 | 25.97 24.40 30.15 23.57 19.67 | no |
+| 4 | 31.24 32.19 31.26 28.82 32.20 | no |
+| 5 | 17.01 29.72 29.81 31.11 21.93 | no |
+| 6 | 18.40 31.22 32.17 32.02 32.09 | no |
+| 7 | 32.19 32.15 32.27 32.21 32.14 | yes |
+| 8 | 32.33 32.24 32.25 32.08 32.20 | near (one median above 32.3) |
+| 9 | 32.22 32.10 32.16 32.15 32.20 | yes |
+| 10 | 32.26 32.23 32.38 32.15 32.26 | near (one median above 32.3) |
+| 11 | 32.11 32.14 32.07 32.22 32.15 | yes |
+| 12 | 32.13 32.20 32.08 32.11 32.16 | yes (final) |
+
+The steady band is 31.7 to 32.3 fps, as in 42.54. Reads 8 and 10 each have one median just above it (32.33 and 32.38), so they are marked near. Read 12 is inside the band on every second, so it is the final steady read; reads 7, 9 and 11 are inside it too. [measured]
+
+**Not measured or open.**
+- **The Info test versus the Info read.** The shipped `pages-bench` Info test expects Info to send no OUT 0x55 or 0x5A. 42.44 and 42.64 made both deliberate, and the harness guard refuses them, so under the harness the page's serial, platform, USB link, bootloader and roots word are unreadable, and writing is shown as unavailable. The CLI sends both and reads them. The owner decides whether the harness allows the device-info selectors or Info stops sending them. Not changed here.
+- **The page without the harness.** The real app on the camera was not run without the guard, so what the app's Info shows on the camera is not measured. The table above is the harness's view.
+- **The Info timing.** The CLI time is a shell wall time with Node start, an upper bound. The page time is the test's own clock.
+- **The skip floor.** Two runs per loop. The node-usb overhead itself was not isolated, since the node loop was not compared with a second node variant. The C loop's init came from node, not from C.
+- **Connect before the camera is back.** Only the not-on-the-bus variant was reproduced.
+- **The 1.3.0.8 `--no-hifps` stream** was not run here (42.58 (c2) measured it).
+- **The 0x5A ordering** (before the first init) is from the code, not from a bus trace; the info line shows the serial.
+- **Normal reads 1 to 6** were not steady; their causes are not established, as in 42.54 and 42.58.
+- **The FW-V1 dump file** `jlink_dumps/spifi_14000000_4m_halted.bin` is rewritten by each dump (ignored by git). The copies are in `agent-hw6`.
+- **Test runs.** Only the targeted runs above: `slots-bench.e2e` with `SEEK_BENCH_ONLY=1.3.0.8-FF`, `pages-bench.e2e` with `-t "Info: connects"`, and the scratch copy of that test. No whole vitest run or e2e suite. `packages/cli/test/real-camera-probe.test.ts` was not present in this worktree and was not run.
+- Nothing was pushed or merged. `plan.md`, FW-V1 and the product code were not changed. `npm run build:docs` was not run.
+
+**Commits.** This section only, on branch `worktree-agent-a880d0b04fc561dcb`; the commit hash is in the report.
