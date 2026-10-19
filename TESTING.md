@@ -6584,6 +6584,41 @@ bank B that holds a stored-sum-0 image alone is taken (42.10 measured A only). T
 to R on a camera running the 8 Hz build, which the page now refuses, is still to be run with the
 J-Link route the refusal names.
 
+### 42.11a Addendum from the other branch: the balance-word FF run, withdrawn before any write (notes only, 2026-10-17)
+
+*Merged from `worktree-agent-a9c8b175a0187b7be` (commit f9a34ce), where this section was numbered 42.13. It is renumbered 42.11a because 42.13 is the 2014 plaintext chain section here. The text is otherwise unchanged.*
+
+The bench run asked whether the 8 Hz 1.3.0.8 app accepts a "balance-word" payload P (the FF plain
+image F with word 142 solved so its plain u32 sum is 0), written through the camera's own upgrade
+commands, and which bank then boots FF. The owner withdrew the direction before any bench write.
+
+**Not run (no hardware write, no halt, no power cycle in this run).** Steps 1 to 5 of the brief are
+not measured. No script or test was committed for the proof.
+
+**Camera state, read-only (measured):** `switch.js status` gives `OK 1=on 2=on`; no `JLinkExe` or
+`jlink-runner` process; `ioreg` lists VID 0x289D (10397) "PIR206 Thermal Camera" on the bus. The flash
+was not re-read in this run, so the baseline sha256 `40447c7e…` is the last measured value from 42.10
+step 8, not one re-checked here. Nothing was changed, so no restore was needed; cfg[0] was not touched.
+
+**Host-side measurements (no hardware, measured on the dump file):** F is bank R (offset 0x70000) of
+`SEEK_FULL_DUMPS_BY_CAMERA/Compact/Compact/2017.01.06-11.17.29-1.3.0.8-FF/full_dump_launchable.bin`.
+Magic `0xA1B2C3D4`, length 49,308 B (12,327 words), word 142 = `0x00000000`.
+
+- T, the plain u32 sum of F over 12,327 words: `0x9266E7AF`.
+- sha256(F) `1348e01af6c4f63a7d1751a2b9451493079b7ccd063c38d45cf35b276a46f326`.
+- P: word 142 = `(0 - T) mod 2^32` = `0x6D991851`; sum(P) = `0x00000000` (checked).
+- sha256(P) `4fc0120330caf56e4d588d1edbb3ebf0dacd028363c4c1eee9cc40b4f66343e0`.
+- u16 byte checksum of P (the `CompleteMemoryUpgrade` parameter): `0xE4F1`.
+
+**Discrepancy, not resolved.** Sec. 42.6 records the page's FF stored sum as `0x485662E7`. The dump's
+bank R sums to `0x9266E7AF` with word 142 at zero, so the two are not the same bytes. The dump is a
+donor splice (`reconstructed`), so it may not be the bank a real FF app leaves. Which sum a real camera
+holds is not established here. Any balance word must come from the bank actually written, not from 42.6.
+
+**Also not done:** the bank A and bank R writes of P, the power-cycle boot proof, the cfg[0] route, and
+the old two-stream refusal check (the 42.10 step 2a refusal is the only evidence for that, and it is
+from the page's own payload).
+
 ### 42.12 The vendor's own staged form, to A, B and R; the running build from the camera's own answers (2026-10-18)
 
 The page's 1.3.0.8 FF write (42.6, 42.10, 42.11) is replaced. The FF image is now staged the way the vendor
