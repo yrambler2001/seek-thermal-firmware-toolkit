@@ -76,14 +76,19 @@ export function wantedTarget(fallback: TargetName = 'emu'): TargetName {
   return fallback;
 }
 
-/** Why `target` cannot run here, or null when it can. */
-export function targetUnavailable(target: TargetName): string | null {
+/**
+ * Why `target` cannot run here, or null when it can. `flash` is a spec's own 4 MiB part for the emulator
+ * (`OpenTargetOptions.flash`); left out, the part is `SEEK_E2E_EMU_FLASH` (or the corpus part).
+ */
+export function targetUnavailable(target: TargetName, flash?: string): string | null {
   if (target === 'emu') {
+    const part = flash ?? EMU_FLASH;
     if (EMU_DIR === null) return 'no FW-V1 emulator found (set SEEK_EMU_DIR)';
-    if (EMU_FLASH !== '' && !existsSync(EMU_FLASH)) return `no part at ${EMU_FLASH}`;
+    if (part !== '' && !existsSync(part)) return `no part at ${part}`;
     if (!existsSync(CHROME_PATH)) return `no Chrome at ${CHROME_PATH} (set SEEK_E2E_CHROME)`;
     return null;
   }
+  if (flash !== undefined) return 'a spec-named part boots on the emulator only';
   if (electronBinary() === null) return 'the electron package is not installed';
   return cameraBusyReason();
 }
@@ -93,6 +98,11 @@ export interface OpenTargetOptions {
   /** The page to open: the Vite dev server, or the hosted `docs/` bundle. */
   readonly source?: 'dev' | 'docs';
   readonly headed?: boolean;
+  /**
+   * Emulator target only: the 4 MiB flash file this spec boots, in place of `SEEK_E2E_EMU_FLASH` (or the corpus
+   * part). Its dump is that file, so a spec that names one checks the dump against it.
+   */
+  readonly flash?: string;
   /**
    * The UI guard the wizard runs under. The default is the target's safe one
    * (everything on the emulator, read-only on the camera). A camera write
@@ -193,10 +203,11 @@ async function startSource(
 
 async function openEmu(options: OpenTargetOptions): Promise<TargetHandle> {
   const source = options.source ?? 'dev';
+  const part = options.flash ?? EMU_FLASH;
   const bus = await EmulatorBus.start({
     emuDir: EMU_DIR ?? '',
     entryId: CORPUS_ENTRY,
-    ...(EMU_FLASH === '' ? {} : { flash: EMU_FLASH }),
+    ...(part === '' ? {} : { flash: part }),
     jedec: JEDEC,
     scratchDir: path.join(options.scratchDir, 'flash'),
     log: say,

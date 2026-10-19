@@ -40,13 +40,15 @@ export function targetSpec(
     readonly uiGuard?: OpenTargetOptions['uiGuard'];
     /** The camera target's preload (its page-side write guard); ignored on the emulator. */
     readonly preloadSource?: OpenTargetOptions['preloadSource'];
+    /** The emulator's part for this spec, in place of `SEEK_E2E_EMU_FLASH` (see `OpenTargetOptions.flash`). */
+    readonly flash?: OpenTargetOptions['flash'];
     /** A slug for the scratch directory. */
     readonly slug: string;
   },
   body: (ctx: SpecContext) => void,
 ): void {
   const target = wantedTarget(options.fallback);
-  const reason = targetUnavailable(target);
+  const reason = targetUnavailable(target, options.flash);
   const title = `${options.title} [${target}]`;
   if (reason !== null) process.stderr.write(`\n[skip] ${title}: ${reason}\n`);
 
@@ -65,6 +67,7 @@ export function targetSpec(
         headed: HEADED,
         ...(options.uiGuard === undefined ? {} : { uiGuard: options.uiGuard }),
         ...(options.preloadSource === undefined ? {} : { preloadSource: options.preloadSource }),
+        ...(options.flash === undefined ? {} : { flash: options.flash }),
       });
     });
 
