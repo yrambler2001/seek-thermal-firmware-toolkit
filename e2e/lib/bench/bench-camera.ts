@@ -28,6 +28,13 @@ const SLOT_FLASH_TIMEOUT_MS = 600_000;
 
 /** The default poll interval for `waitForEnumeration`. */
 const DEFAULT_POLL_MS = 500;
+/**
+ * The poll interval while `waitForReboot` waits for the camera to leave the bus. A fast
+ * reboot is off the bus for about 0.4 s (TESTING 42.31: a 1.3.0.8 image, 5 of 25 resets
+ * missed at 500 ms), so a 500 ms poll can fall between two samples that both see it on
+ * the bus. At 100 ms every absence longer than that is seen.
+ */
+const REBOOT_POLL_MS = 100;
 
 /** The default power-off time for `powerCycle`, as the switch's own default. */
 const DEFAULT_OFF_MS = 3000;
@@ -172,7 +179,7 @@ export function createBenchCamera(options: BenchCameraOptions): BenchCamera {
       while (present()) {
         const elapsed = now() - start;
         if (elapsed >= dropMs) return null;
-        await sleep(Math.min(DEFAULT_POLL_MS, dropMs - elapsed));
+        await sleep(Math.min(REBOOT_POLL_MS, dropMs - elapsed));
       }
       const back = await waitForEnumeration(timeoutMs);
       return back === null ? null : now() - start;

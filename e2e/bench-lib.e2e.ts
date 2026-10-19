@@ -1136,6 +1136,24 @@ describe('the camera on the bus and in the CLI', () => {
     expect(clock).toBe(5000);
   });
 
+  it('waitForReboot: a reboot off the bus for less than a 500 ms poll is still seen (TESTING 42.31)', async () => {
+    let clock = 0;
+    /* On the bus at the reset, off from 40 ms to 440 ms (a fast reboot), then back. Both 500 ms
+     * samples a slow poll would take (0 and 500) see the camera on the bus. */
+    const onBus = (ms: number) => (ms < 40 || ms >= 440 ? 1 : 0);
+    const camera = createBenchCamera({
+      gate: APPROVED,
+      env: {},
+      countCameras: () => onBus(clock),
+      now: () => clock,
+      sleep: (ms) => {
+        clock += ms;
+        return Promise.resolve();
+      },
+    });
+    expect(await camera.waitForReboot(5000, 40_000)).toBe(600);
+  });
+
   it('waitForReboot: null when the camera never comes back', async () => {
     let clock = 0;
     const camera = createBenchCamera({
