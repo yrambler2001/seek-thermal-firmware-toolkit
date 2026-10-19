@@ -19,7 +19,8 @@ import { seekLink, type SeekLink } from './link.js';
 export interface EmulatorBoot {
   /** The FW-V1 `emu` directory (SEEK_EMU_DIR). */
   readonly emuDir: string;
-  /** The corpus entry the emulator serves (`--corpus-entry`). */
+  /** The corpus entry the emulator serves (`--corpus-entry`). With `flashOverride`, the build the part is a copy of
+   *  (`--flash-entry`): its board and its 32K sensor are the ones the part boots with. */
   readonly entryId: string;
   /** Boot this 4 MiB part instead of the entry's own flash (`--flash`): a patched image. */
   readonly flashOverride?: string;
@@ -45,7 +46,9 @@ export async function startEmulatorCamera(boot: EmulatorBoot): Promise<EmulatorC
     entryId: boot.entryId,
     /* the frame-rate checker needs frames: the sensor feed is attached (the core suites run without it) */
     sensor: true,
-    ...(boot.flashOverride === undefined ? {} : { flashOverride: boot.flashOverride }),
+    ...(boot.flashOverride === undefined
+      ? {}
+      : { flashOverride: boot.flashOverride, flashEntry: boot.entryId }),
     ...(boot.flashOut === undefined ? {} : { flashOut: boot.flashOut }),
     ...(boot.jedec === undefined ? {} : { jedec: boot.jedec }),
     ...(boot.donor === undefined ? {} : { donor: boot.donor }),

@@ -11,11 +11,10 @@
  * host's: on the emulator the host clock measures how fast the emulator runs.
  *
  * THE PATCHED IMAGES. The table patch is applied to the stock part (patch-images.ts, core's applyFpsPatch)
- * and the part is booted with --flash. That boot connects and enumerates on its own build, but it produces
- * NO FRAMES: the FW-V1 emulator attaches the 32K sensor only to a corpus-entry boot (seekemu/cli.py, the
- * `corpus_entry is not None` branch), so a --flash boot streams nothing, stock or patched (measured: the stock
- * 1.3.0.0 part booted with --flash gives "no calibration frames"). The patched frame rate is not measured
- * here, and the spec says so in its record.
+ * and the part is booted with --flash, naming its build with --flash-entry (emulator-link.ts passes the entry).
+ * The emulator gives a --flash part the 32K sensor of that build (FW-V1 seekemu/cli.py, --flash-entry), so the
+ * patched part streams, and the spec measures its Normal rate the way it measures the stock build's. Before
+ * --flash-entry, a --flash boot had no 32K sensor and produced no frames (stock or patched).
  *
  * Nothing here says what a real camera does; the bench run does that.
  * ==================================================================== */
@@ -127,6 +126,29 @@ function record(row: Row): void {
   process.stdout.write(`${line(row)}\n`);
 }
 
+/** The row of one measurement: its per-second windows, the median of its instantaneous rates, its frozen pairs. */
+function rowOf(
+  base: Pick<Row, 'build' | 'state' | 'mode' | 'note'>,
+  m: Awaited<ReturnType<typeof measureFps>>,
+): Row {
+  const stamps = m.stats.stamps;
+  const rates: number[] = [];
+  for (let i = 1; i < stamps.length; i++) {
+    const dt = (stamps[i] ?? 0) - (stamps[i - 1] ?? 0);
+    if (dt > 0) rates.push(1 / dt);
+  }
+  return {
+    ...base,
+    frames: m.frames,
+    windows: m.windows,
+    median: medianOf(rates),
+    frozenPairs: m.stats.frozenPairs,
+    pairs: m.stats.pairs,
+    changedPct: m.stats.meanChanged() * 100,
+    error: null,
+  };
+}
+
 /**
  * One boot, one measurement: connect, measure `SECONDS` of the camera's clock in `mode`, disconnect, stop.
  * `flashOut` writes the as-booted 4 MiB flash (the ground truth).
@@ -161,23 +183,7 @@ async function measureBoot(options: {
       hiFPS: options.mode.hiFPS,
       startupOpZero: options.startupOpZero,
     });
-    const m = await measureFps(camera, options.mode.mode, clock, SECONDS);
-    const stamps = m.stats.stamps;
-    const rates: number[] = [];
-    for (let i = 1; i < stamps.length; i++) {
-      const dt = (stamps[i] ?? 0) - (stamps[i - 1] ?? 0);
-      if (dt > 0) rates.push(1 / dt);
-    }
-    return {
-      ...base,
-      frames: m.frames,
-      windows: m.windows,
-      median: medianOf(rates),
-      frozenPairs: m.stats.frozenPairs,
-      pairs: m.stats.pairs,
-      changedPct: m.stats.meanChanged() * 100,
-      error: null,
-    };
+    return rowOf(base, await measureFps(camera, options.mode.mode, clock, SECONDS));
   } catch (error) {
     return {
       ...base,
@@ -230,7 +236,7 @@ describe.skipIf(EMU === null)('the frame-rate checker on the FW-V1 emulator', ()
       }
 
       it(
-        'the patched part (the table patch on bank A) is built, boots and enumerates on its own build',
+        'the patched part (the table patch on bank A) boots on its own build and streams Normal frames',
         async () => {
           const stockPath = truth.get(build.patchId);
           expect(
@@ -258,19 +264,23 @@ describe.skipIf(EMU === null)('the frame-rate checker on the FW-V1 emulator', ()
             expect(camera.info?.firmware, 'the patched part enumerates on its own build').toBe(
               build.version,
             );
-            record({
-              build: build.label,
-              state: 'patched',
-              mode: 'Normal (IP 8, Init Hi FPS off)',
-              frames: 0,
-              windows: [],
-              median: null,
-              frozenPairs: 0,
-              pairs: 0,
-              changedPct: 0,
-              note: `connected on ${String(camera.info?.firmware)}; frames not measured: a --flash boot has no 32K sensor`,
-              error: null,
-            });
+            const clock = (): number => emu.device.deadlineClock.now() / 1000;
+            const m = await measureFps(camera, SEEK_MODE.normal, clock, SECONDS);
+            const row = rowOf(
+              {
+                build: build.label,
+                state: 'patched',
+                mode: 'Normal (IP 8, Init Hi FPS off)',
+                note: `connected on ${String(camera.info?.firmware)}`,
+              },
+              m,
+            );
+            record(row);
+            expect(row.error).toBeNull();
+            expect(
+              row.frames,
+              'the patched part streams in Normal (its --flash-entry gives it the 32K sensor)',
+            ).toBeGreaterThan(0);
           } finally {
             if (camera !== null) await camera.disconnect().catch(() => undefined);
             await emu.stop();

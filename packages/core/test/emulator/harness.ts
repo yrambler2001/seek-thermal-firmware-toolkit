@@ -465,6 +465,10 @@ export interface StartOptions {
   /** `true` attaches the SGPIO sensor feed, so the camera can stream frames (the frame-rate checker
    *  needs it). Omitted or false: `--no-sensor`, the core suites' boot, unchanged. */
   readonly sensor?: boolean;
+  /** `--flash-entry <id>` — with `flashOverride`: the corpus entry the part is a build of. The emulator boots
+   *  the part on that entry's board and gives it that entry's 32K sensor (FW-V1 seekemu/cli.py), so a
+   *  patched 32K part streams frames. Omitted: a `--flash` part gets the SGPIO sensor, as before. */
+  readonly flashEntry?: string;
 }
 
 /** How long a SIGTERM'd emulator gets to join its threads and print its ledger. A
@@ -865,6 +869,7 @@ export class Emulator {
        * and the emulator's own frame-path limits are recorded in FW-V1's
        * docs/EMULATOR_CORPUS.md rather than papered over here. */
       ...(options.sensor === true ? [] : (['--no-sensor'] as const)),
+      ...(options.flashEntry === undefined ? [] : (['--flash-entry', options.flashEntry] as const)),
       /* THE CAMERA'S CLOCK. The device-time side channel: every reply comes with the
        * emulated camera's time, and the emulated host gives a transfer up where the
        * transport's own deadline says (device-clock.ts, TESTING.md sec.19). */
