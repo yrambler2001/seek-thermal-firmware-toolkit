@@ -110,7 +110,7 @@ patched  81 08 | 39 27 | 00 00 | 00 00 | 00 00     op 3 copy + publish (hdr 3, g
 
 - Mode 6 is a different program, and the Normal and Hi FPS streams do not use it. The entry `compact_32k-1.3.0.0-to32` (stock `862717a8...` to
   `ef90c94a...`) edits mode 8 only: 9 image bytes and the sum word, 13 changed bytes.
-- [measured] Normal mode on the owner's unit (serial 1013CE098ACA, PIR206) with the mode-8-only image `ef90c94a...` in bank A, word 0:
+- [measured] Normal mode on the owner's unit (serial 101310HSNEA2, chip id 1013CE098ACA, PIR206) with the mode-8-only image `ef90c94a...` in bank A, word 0:
   per-second medians 32.17 to 32.22 fps over five seconds (E1 final), 0 frozen pairs, 94 % of pixels change between frames, level 5,880,
   std 66. The JS checker gave medians 32.09 to 32.20 and the Swift tool 31.09 to 32.25 in one second and 32.17 to 32.20 in the others.
   Hi FPS medians 32.19 to 32.20 (checker) and 31.45 to 32.20 (Swift). The run's stock picture was not measured again on this unit.
@@ -225,10 +225,13 @@ at `2`, A and B holding the 32 Hz patch, and R still stock. The event that flipp
 **What USB can read.** The analysis reads two words, both without writing:
 
 - `cfg[0]`, the boot-config word. It is the word the next start uses.
-- The active-slot word (`roots[8]`, GetFirmwareInfo selector 10). It is the app's RAM cell `0x1000AED0`, not the bootloader's handoff. The
-  bootloader records the slot it enters in the warm-boot handoff (bootloader `src/startup.c`, `handoff->slot`: 0 slot A, 1 slot B, 2 recovery
-  R). The 4.x factory app never writes the cell, so the word reads 0 on every 4.x boot (TESTING.md 42.43). On the 2014 chain the page and the
-  CLI name the booted bank from the word, with 2 as R. Whether the 2014 and 2016 factory images write it was not checked.
+- The active-slot word (`roots[8]`, GetFirmwareInfo selector 10). Selector 10 returns the address of the firmware's roots record, and the
+  word is that record's +8 (TESTING.md 42.56). On 1.3.0.0 and 1.0.3.0 the record is the boot record at 0x10000200, so the word is 0x10000208:
+  the bootloader writes the slot it enters there before it starts the image (0 slot A, 1 slot B, 2 recovery R; 42.53). On 4.9.1.15 the record
+  is at 0x10002110 and the word is 0x10002118, which follows the bank that ran (42.56). On 4.8.2.1 selector 10 returns zero, so the word reads
+  0 under every boot word and the record is not located (42.56). The cell `0x1000AED0` is not the word on these lines: it holds copy-loop data
+  on 1.3.0.0 and 1.0.3.0 and `0xFFFFFFFF` on 4.9.1.15 (42.53, 42.56). On the 2014 chain the page and the CLI name the booted bank from the
+  word, with 2 as R.
 
 **The warning.** `packages/core/src/slots/boot-choice.ts` works out the bank the next start runs from the word and each bank's image check,
 and the page and the CLI warn when a frame-rate patch sits in a bank that will not run. For word 2 with slot A patched and recovery R stock,
@@ -270,9 +273,12 @@ so a flip to R would not drop the rate there (not tested by flipping the word). 
   published frame, with no patch; whole-run rates were 26.8 to 32.2 fps on 1.3.0.0 and 28.7 to 31.9 fps on 1.3.0.8 (TESTING.md 42.54, 42.58).
   Mode 7 has no capture program: it sends a synthetic ramp, not a sensor picture (TESTING.md 42.43; FW-V1 `docs/FRAME_RATE_MODES.md`), so it is
   not measured.
-- Whether the 2014 and 2016 factory images write the active-slot cell (`0x1000AED0`). The 4.x factory image does not (TESTING.md 42.43).
+- The writer of the 4.9.1.15 word at `0x10002118` is not established. The reconstructed reset code that would write the roots record does not
+  match this factory image, and the 4.8.2.1 record is not located, so its word is not measured (TESTING.md 42.56).
 - The TypeScript checker's `--flash` route for patched parts (no frames, see section 8).
-- The CLI and the checker report different serials for the owner's unit (`101310HSNEA2` and `1013CE098ACA`). Neither has been reconciled.
+- The owner's unit has two identifiers. `101310HSNEA2` is the ASCII device serial, shown as `serial` by the CLI and the page, and by the
+  checker since `cde6257`. `1013CE098ACA` is the GetChipID value, shown as `chip id` (TESTING.md 42.61). The checker printed the chip id as
+  its serial before that.
 
 ## 11. The 16 Hz patches were removed
 
