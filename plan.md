@@ -56,7 +56,6 @@ Every 8 and 9 fps build with a table entry is offered except the FF entries and 
 
 - [?] `refactor/all-firmware-profiles` (all of 42.27 to 42.37 merged on it) is local. The owner keeps it local until they say otherwise (2026-10-19); pushing it and merging to main need the owner's word (the hosted docs bundle in `docs/` is built from this branch). FW-V1 `main` is pushed (`a13c615c6`). All agent branches of 42.27 to 42.37 are merged and their worktrees removed.
 - [ ] The FF vendor-form write on bootloader 2.0.2.3 stays open (Owner, 2026-10-19 (second answers): keep it open); it is not measured on a 2.0.2.3 camera (bench row 9 on such a camera when one is on the switch).
-- [?] The 0.x/1.x profile-level dump refusal (`dump.ts:61`) is not unreachable after all (42.64): a camera that reports major 2 or more and refuses the plain 2-byte arm reaches it, because `legacy-auth.ts:728` scores the refusal (0.95) before the version check at `:754`; no known camera does this. Kept for now. Owner: keep it as a safety net, or move the version check above the refusal check and then remove it.
 
 ## 5. The slots bench and older open items (42.20 to 42.31)
 
