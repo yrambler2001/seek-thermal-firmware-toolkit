@@ -8333,3 +8333,99 @@ the board on channel 2; `SEEK_E2E_WRITE=i-understand`, `NODE_OPTIONS=--max-old-s
   back in 40 s. No cause was found. The retry, on the same board and dump, passed.
 - The table has no per-bank version field. The `ownImage` bank's version is a note, not a check (`spec-flow.ts:514-531`).
 - Row 20 ran the 4.9.1.15 image on the bench board, not on a Compact PRO camera. No frame rate was taken in that run.
+
+### 42.30 The 28-subject slots matrix on the bench, judged by the verdict table: 23 of 28 on the full run, two permitted retries, three boot-proof failures (2026-10-19)
+
+**Summary.** On the bench camera (Compact PIR206, chip serial `1013CE098ACA`, original 1.3.0.0; J-Link on switch channel 1, camera on channel 2) the 28-subject slots matrix ran on HEAD `5db4c9e`, with no `SEEK_BENCH_ONLY`, so every subject ran. The bench judged each subject by the shared verdict table (42.29). **Full run: 23 of 28 passed on the first attempt; 5 failed** (rows 9, 10, 15, 21, 27). Under the retry rule (a row that failed before any page step may be re-run once), row 9 and row 27 were each re-run alone, and each passed as a write. **After the retries: 25 of 28 passed; 3 failed** (rows 10, 15, 21, each at the boot proof after the page writes, so not retried). Of the 25 passes, 23 passed as a write, row 14 passed as a refusal the table records, and row 20 passed as both a write and a refusal the table records. The expected 28 of 28 was not reached. The camera is back at the start image: a halted whole-flash read matches it byte for byte.
+
+**Tags.** [measured] is read from the run's logs and RESULT lines. [inferred] is what follows from them.
+
+**1. The command and env.** The full run, from the worktree root (`.claude/worktrees/agent-a5ba157138f8fb3e9`, branch `worktree-agent-a5ba157138f8fb3e9` reset to `refactor/all-firmware-profiles` at `5db4c9e`):
+
+```
+SEEK_FULL_DUMPS_BY_CAMERA=/Users/yrambler2001/things/a.noindex/seek/SEEK_FULL_DUMPS_BY_CAMERA
+SEEK_E2E_FWV1_DIR=/Users/yrambler2001/things/a.noindex/seek/FW-V1
+SEEK_E2E_JLINK_SN=69656086
+SEEK_E2E_SWITCH_DIR=/Users/yrambler2001/things/a.noindex/usb-port-switch-rp2040
+SEEK_E2E_SWITCH_CHANNEL=2
+SEEK_E2E_WRITE=i-understand
+SEEK_BENCH_REPORT_DIR=/private/tmp/claude-501/agent-matrix
+SEEK_E2E_SCRATCH=/private/tmp/claude-501/agent-matrix/scratch
+NODE_OPTIONS="--max-old-space-size=16384 --expose-gc"
+npx vitest run --config e2e/vitest.config.ts slots-bench.e2e
+```
+
+The two retries used the same env plus: row 9, `SEEK_BENCH_ONLY=1.3.0.8-FF`, the three FF vendor-run files (`SEEK_BENCH_FF_RESTORE`, `SEEK_BENCH_FF_PLATFORM`, `SEEK_BENCH_FF_PLAIN`, see section 4) and `SEEK_BENCH_FF_SCRATCH`; row 27, `SEEK_BENCH_ONLY=44.27.3.10`. Each retry wrote its own report folder (`retry-row9/`, `retry-row27/`). `SEEK_BENCH_ONLY` was checked against the plan: `1.3.0.8-FF` matches only row 9, and `44.27.3.10` matches only row 27. The scripts are `/private/tmp/claude-501/agent-matrix/run-matrix.sh`, `run-row9-retry.sh` and `run-row27-retry.sh`. Nothing in the repository changed. The workspace packages `core` and `cli` were built into their gitignored `dist/` (`npx tsc --build tsconfig.build.json` in each package), and `node_modules/@seek-fw/{core,cli,web}` are symlinks to the worktree's packages (not committed).
+
+**2. Duration.** Full run: `2026-10-19T02:38:09Z` to `04:36:53Z` (exit 1, from the matrix's own assertion); vitest reports `Duration 7123 s` (118 min 43 s). Row 9 retry: `04:39:14Z` to `04:47:15Z` (exit 0). Row 27 retry: `04:48:41Z` to `04:53:34Z` (exit 0). Restores finished at `04:38:56Z`, `04:48:25Z` and `04:54:49Z`. Before the run, the start dump was taken at `02:36:52Z` and the first Normal read at `02:37:38Z`.
+
+**3. The matrix, row by row.** The table's expectation is `e2e/lib/slots-expectations.ts`. "writes" is the RESULT line's "slot writes B, A, R". A B `ok` where the page cannot decrypt B's image is the boot proof's write of B (the bench logs "no image of its own, so no slot write (the boot proof writes it)"). The "boot" column is the RESULT line's boot proof, and the verdict is the RESULT line's.
+
+| # | subject (bench label) | table expects | writes B / A / R | boot proof | verdict (first attempt; retry) |
+| --- | --- | --- | --- | --- | --- |
+| 1 | Compact 0.8.0.0 std | all writable | ok / ok / ok | ok | pass, write |
+| 2 | Compact 0.9.0.2 std | all writable | ok / ok / ok | ok | pass, write |
+| 3 | Compact 0.9.0.6 std | all writable | ok / ok / ok | ok | pass, write |
+| 4 | Compact 0.9.0.7 std | all writable | ok / ok / ok | ok | pass, write |
+| 5 | Compact 0.9.1.0 std | all writable | ok / ok / ok | ok | pass, write |
+| 6 | Compact 0.10.0.0 std | all writable | ok / ok / ok | ok | pass, write |
+| 7 | Compact 1.0.0.0 std | all writable | ok / ok / ok | ok | pass, write |
+| 8 | Compact 1.2.0.0 std | all writable | ok / ok / ok | ok | pass, write |
+| 9 | Compact 1.3.0.8 FF (vendor form) | all writable | not run / not run / not run; retry: ok / ok / ok (FF vendor path) | not run (FF: no boot, expected) | **FAIL before any page step**; retry **pass, write** |
+| 10 | Compact 1.3.0.8 std | all writable | ok / ok / ok | **FAILED** | **FAIL, boot proof**; not retried |
+| 11 | Compact 4.8.1.7 std | all writable | ok / ok / ok | ok | pass, write |
+| 12 | Compact 4.8.1.9 std | all writable | ok / ok / ok | ok | pass, write |
+| 13 | Compact 4.8.2.1 std | all writable | ok / ok / ok | ok | pass, write |
+| 14 | Compact 4.16.1.7 FF | all refused, banner "checks an upload under its own keys" | refused / refused / refused | not run | pass, refusal the table records |
+| 15 | Compact PRO 1.0.3.0 FF | all writable | ok / ok / ok | **FAILED** | **FAIL, boot proof**; not retried |
+| 16 | Compact PRO 1.0.3.0 std | all writable | ok / ok / ok | ok | pass, write |
+| 17 | Compact PRO 1.0.3.2 FF | all writable | ok / ok / ok | ok | pass, write |
+| 18 | Compact PRO 1.0.3.2 FF-FF | all writable | ok / ok / ok | ok | pass, write |
+| 19 | Compact PRO 1.0.3.2 std | all writable | ok / ok / ok | ok | pass, write |
+| 20 | Compact PRO 4.9.1.15 std | A, R writable; B's own image refused (`ownImage`) | ok / ok / ok (B written from bank A's image) | ok | pass, write and refusal the table records |
+| 21 | Compact PRO 4.9.2.0 std | all writable | ok / ok / ok | **FAILED** | **FAIL, boot proof**; not retried |
+| 22 | Compact PRO FF 4.18.2.0 | all writable | ok / ok / ok | ok | pass, write |
+| 23 | Compact XR 4.8.2.1 std | all writable | ok / ok / ok | ok | pass, write |
+| 24 | Mosaic 320x240 2.27.1.33 FF | all writable | ok / ok / ok | ok | pass, write |
+| 25 | Mosaic 320x240 10.9.1.31 std | all writable | ok / ok / ok | ok | pass, write |
+| 26 | Nano 200 42.32.3.10 std | all writable | ok / ok / ok | ok | pass, write |
+| 27 | Nano 300 44.27.3.10 std | all writable | not run / not run / not run; retry: ok / ok / ok | not run; retry: ok | **FAIL at enumeration, before any page step**; retry **pass, write** |
+| 28 | Compact 1.3.0.0 std (the camera's original, last) | all writable | ok / ok / ok | ok (the camera is left patched; restored below) | pass, write |
+
+Counts: first attempt, 23 pass and 5 fail. After the two retries, 25 pass (23 as a write, row 14 as a refusal, row 20 as both) and 3 fail (rows 10, 15, 21).
+
+**4. Failures and retries, with their evidence.**
+
+- **Row 9, first attempt (`matrix-full.log`, 03:11:34Z to 03:12:59Z).** The subject flashed and verified, reset, and enumerated in 720 ms. No page step ran. The bench logged `FF steps not run: set SEEK_BENCH_FF_RESTORE, SEEK_BENCH_FF_PLATFORM, SEEK_BENCH_FF_PLAIN (the original flash, the 1.3.0.8 8 Hz whole-flash dump and the plain FF image)`, then `FAILED: bank A/B/R: not written, and the table says it is writable`. Cause [inferred]: this run's environment did not carry the three FF files, and `run-row.sh` from the 42.21 bench does not set them. The 42.21 pass of this row used the vendor path, so those variables were set in that session; I did not verify where. **Retry, alone (`retry-row9.log`, 04:39:14Z to 04:47:15Z, `ONLY=1.3.0.8-FF`, the three files set):** `RESULT Compact 1.3.0.8 ff (2017.01.06-11.17.29-1.3.0.8-FF) | file full_dump_launchable.bin | flash verified yes | enumerated yes, 1186 ms | page identified no | banks = J-Link no | slot writes B ok, A ok, R ok | passed as a write | boot proof not run | failures 0`. The vendor-form notes: `FF write A/B/R: CLI exit 0, commit 0x00000000, verified true; J-Link read equals the prediction`; `FF platform: 8 Hz answers {"a":1,"b":0,"r":1}; FF-in-R answers {"a":0,"b":0,"r":0}; after the writes {"a":1,"b":1,"r":1}`; `FF boot after the writes: no boot (expected: the vendor form is not run by the bootloader)`; `FF restore: the original 1.3.0.0 runs again`. The FF inputs, with their sha256 checked: RESTORE `2014.10.21-14.58.29-1.3.0.0/full_dump_original.bin` (`40447c7e`); PLATFORM `2017.01.06-11.16.17-1.3.0.8/full_dump_reconstructed.bin` (`afa9800f`); PLAIN, the FW-V1 emu corpus file `…/corpus/compact/2017.01.06-11.17.29-1.3.0.8-FF/no-serial/32k_43x0_1.3.0.8_compact-16hz_public_…firmware.bin` (49,308 B, `b97ced91`).
+- **Row 10, boot proof (`matrix-full.log`, 03:16:04Z to 03:16:39Z).** The page read 3 of 3 banks, the writes passed, and the boot proof wrote the build string (`Jan 6 2017 -> Jan 6 2018 at 1 offset(s)`). J-Link reset at 03:16:34Z. At 03:16:39Z: `FAILED: boot: the camera stayed on the bus 5 s after the reset (not rebooted), or did not come back within 40 s`. RESULT: `... enumerated yes, 698 ms | page identified yes | banks = J-Link yes | slot writes B ok, A ok, R ok | passed as nothing (failed) | boot proof FAILED | failures 1`. Not retried: page steps ran.
+- **Row 15, boot proof (`matrix-full.log`, 03:38:31Z).** The same message after the reset: `FAILED: boot: the camera stayed on the bus 5 s after the reset (not rebooted), or did not come back within 40 s`. RESULT: `... enumerated yes, 577 ms | page identified no | banks = J-Link yes | slot writes B ok, A ok, R ok | passed as nothing (failed) | boot proof FAILED | failures 1`. Not retried.
+- **Row 21, boot proof (`matrix-full.log`, reset 04:07:26Z, FAILED 04:07:31Z).** The same message: `FAILED: boot: the camera stayed on the bus 5 s after the reset (not rebooted), or did not come back within 40 s`. RESULT: `... enumerated yes, 624 ms | page identified yes | banks = J-Link yes | slot writes B ok, A ok, R ok | passed as nothing (failed) | boot proof FAILED | failures 1`. Not retried.
+- **Row 27, first attempt (`matrix-full.log`, 04:30:35Z to 04:32:20Z).** Flashed and verified (read-back `3ddf55b0`), reset at 04:32:14Z. The verify read could not halt twice; the camera was power-cycled and read again, and the read-back matched. At 04:32:20Z: `note: steps 2-4 not run: the camera is not on the bus`, then `FAILED: the camera stayed on the bus 5 s after the reset (not rebooted), or did not come back within 40 s`. RESULT: `... flash verified yes | enumerated no | page identified no | banks = J-Link no | slot writes B not run, A not run, R not run | passed as nothing (failed) | boot proof not run | failures 1`. This failed at enumeration, before any page step. **Retry, alone (`retry-row27.log`, 04:48:41Z to 04:53:34Z, `ONLY=44.27.3.10`):** `RESULT Nano 300 44.27.3.10 std (2024.11.21-11.55.00-44.27.3.10) | file full_dump_original.bin | flash verified yes | enumerated yes, 646 ms | page identified yes | banks = J-Link yes | slot writes B ok, A ok, R ok | passed as a write | boot proof ok | failures 0`.
+- **Row 11, a SPIFI recovery that the bench ran through (not a failure).** The halted window read was refused (`Could not read memory`) four times between 03:17:43Z and 03:21:20Z. Each time the bench logged `SPIFI STAT 0x2000020 has MCINIT clear (command mode); writing MCMD 0xeb930000 to re-enter memory mode`, and the row then wrote and verified its banks and passed (`boot proof ok`). This is the 4.8.1.7 condition the FW-V1 runner README names (`restore-spifi-memmode-dump`); the bench's own recovery handled it.
+- **The halt notes.** Nearly every subject logged `the CPU could not be halted` twice on the verify read, and `verify: the halt failed ... power-cycled the camera, read again`. The read that followed matched in every row that passed. These are notes, not failures.
+
+**5. The dumps and the restores.** The start image is `/private/tmp/claude-501/agent-matrix/start-4m.bin`, copied at once from the halted read `dump-spifi-4m-halted` (02:36:52Z): sha256 `50e900c23ff4bb7e0a5a30fc5879f6ed276289e43aeace2f9ab74eaec9b01d7d`, identical to the reference `agent-bench-table/start-4m.bin` by `cmp`. The end image, from a halted read at 04:55Z after the last restore, is `end-4m.bin`: sha256 `50e900c23ff4bb7e0a5a30fc5879f6ed276289e43aeace2f9ab74eaec9b01d7d`. `cmp start-4m.bin end-4m.bin` exits 0 with 0 differing bytes.
+
+The restores, each by `flash-factory-4m-2` with `FACTORY_IMAGE` set to the start image after a channel-1 cycle: restore 1 (before the row 9 retry), 3 of 64 blocks differ, 1 run, verified, `DONE: ... byte-identical`; restore 2 (before the row 27 retry), 3 of 64, 1 run, verified, byte-identical; restore 3 (the end), 30 of 64, 5 runs, each verified, byte-identical. The full run's last subject (row 28) flashed the camera's original, and its boot proof left it patched, which is why restore 1 had to run.
+
+**6. Normal medians, before and after.** `seek-fps --camera --fps --mode normal --no-hifps`, per-second medians over 5 s:
+
+| read | medians (fps) | mean over 5 s |
+| --- | --- | --- |
+| before the run (`fps-before.log`, 02:37:38Z) | 32.11, 31.75, 31.93, 32.10, 32.06 | 21.00 |
+| after the final restore (`fps-end.log`, 04:55:46Z) | 31.33, 32.01, 31.77, 32.10, 31.87 | 19.60 |
+
+The brief expected about 32.2 after the restore. The after-run first second was 31.33, which is not the 42.29 transient (17.75): the five medians sit in the same 31.3 to 32.1 band as the before read. I did not repeat the read. The means sit below the medians in both reads, as they did before the run (the seek-fps tool's per-second frame counts).
+
+**7. Against 42.21 and 42.29.**
+- 42.21 had 26 of 28 on `406cf28`, with rows 14 and 20 as failures under the old criterion. Under the verdict table (42.29), rows 14 and 20 pass here (as a refusal, and as both), which matches 42.29.
+- 42.21 had rows 10, 15, 21 and 27 passing with boot proof ok. Here rows 10, 15 and 21 fail at the boot proof, and row 27 fails at enumeration on the first attempt and passes on retry. The writes agree with 42.21 where it recorded them; the boot does not. This is not explained by the verdict table and is recorded as found.
+- 42.29's row 20 failed before any page step on its first attempt, and its retry passed. Here row 20 passed on its first attempt.
+
+**8. Not done or not verified.**
+- The three boot-proof failures (rows 10, 15, 21) and the first-attempt enumeration failure (row 27) are not diagnosed. The message is the same in all four: the camera stayed on the bus 5 s after the J-Link reset. The bench's check is not changed here, and no code was changed.
+- Rows 10, 15 and 21 were not retried, by the retry rule (their page steps ran).
+- The row 9 env gap: `run-row.sh` does not set the FF variables. I did not verify where the 42.21 run got them.
+- The FF vendor path's boot is observed, not proven ("no boot (expected)"). Row 9 is a vendor-form run, not a page run.
+- The Compact PRO frame rate is not measured on hardware (carried over from 42.29).
+- The retries' reports are single-row matrices. They are not merged into `slots-bench-matrix.json`.
