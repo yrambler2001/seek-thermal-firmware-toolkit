@@ -260,13 +260,16 @@ function sameBytes(left: Uint8Array, right: Uint8Array): boolean {
  * The fake rig over one subject list. Each call builds a fresh, empty bench. `verdicts` gives each
  * subject (by index) the table row the page is held to: a bank the row refuses is refused at the
  * picker with the row's reason, its own image included, and the row's `ownImage` bank refuses its
- * own image alone. Without `verdicts`, every subject's row writes every bank.
+ * own image alone. Without `verdicts`, every subject's row writes every bank. A bank's build on the fake page is
+ * the row's `bankVersions` for it (else the subject's build); `pageBuilds` overrides that for a bank, to make
+ * the page show a build the row does not record (a failure the judge must name).
  */
 export function createFakeRig(options: {
   readonly subjects: readonly BenchSubject[];
   readonly failure: FakeFailure | null;
   readonly ffFault?: FakeFfFault | null;
   readonly verdicts?: readonly SlotsSubject[];
+  readonly pageBuilds?: Readonly<Partial<Record<BankLetter, string>>>;
 }): BenchRig {
   const ffFault = options.ffFault ?? null;
   const rows: readonly SlotsSubject[] =
@@ -483,15 +486,20 @@ export function createFakeRig(options: {
       },
       async readSlots(): Promise<PageRead> {
         const version = subject()?.version ?? null;
+        /* A bank's build as the page shows it: the override, else the row's record of it, else the subject's. */
+        const buildOf = (letter: BankLetter): string | null =>
+          isBlank(bankBytes(letter))
+            ? null
+            : (options.pageBuilds?.[letter] ?? rowNow()?.bankVersions?.[letter] ?? version);
         /* The FF build boots from recovery; every other fake boots B. */
         const booted = bootedNow();
         const banks: BankView[] = (['a', 'b', 'r'] as const).map((letter) => ({
           letter,
           name: bankName[letter],
           address: LAYOUT[letter],
-          version: isBlank(bankBytes(letter)) ? null : version,
+          version: buildOf(letter),
           booted: letter === booted,
-          firmware: isBlank(bankBytes(letter)) ? 'empty' : (version ?? 'no version'),
+          firmware: isBlank(bankBytes(letter)) ? 'empty' : (buildOf(letter) ?? 'no version'),
         }));
         return { status: 'Read. 3/3 banks read.', banks, runningBuild: version };
       },

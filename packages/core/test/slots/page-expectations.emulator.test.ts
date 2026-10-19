@@ -12,7 +12,9 @@
  *   4. the frame-rate row action: offered with the table's rate on a bank that holds an image, or
  *      absent with a reason; an empty or unread bank is absent with a reason, never silently;
  *   5. DENIAL: a write to the booted bank without the acknowledgement is refused, and the camera
- *      receives nothing (the request ledger does not move).
+ *      receives nothing (the request ledger does not move);
+ *   6. the build the page shows for each bank the row records one for (`bankVersions`) is that build
+ *      (TESTING.md 42.39); a bank the row records no build for is not checked.
  *
  * A row the table says is writable and that the page refuses fails here. A row the table lists as
  * refused and that the page now offers fails here too: the table is the owner's measured claim, and
@@ -39,7 +41,13 @@ import { fpsPlanOfBank } from '../../src/slots/fps-patch.js';
 import { inspectSlots } from '../../src/slots/inspect.js';
 import { flashSlot, prepareSlotFlash } from '../../src/slots/write.js';
 import { deriveWriteKeys, writeBannerOf } from '../../src/slots/write-keys.js';
-import type { DumpedSlot, SlotFlashPlan, SlotKey, SlotsReport } from '../../src/slots/types.js';
+import type {
+  DumpedSlot,
+  SlotFlashPlan,
+  SlotKey,
+  SlotView,
+  SlotsReport,
+} from '../../src/slots/types.js';
 import {
   evidenceFromChannelProbe,
   probeSelectorChannel,
@@ -138,6 +146,14 @@ function viewOf(report: SlotsReport, letter: BankLetter) {
   const view = report.slots.find((candidate) => candidate.entry.key === letter);
   if (view === undefined) throw new Error(`the plan has no bank ${letter.toUpperCase()}`);
   return view;
+}
+
+/**
+ * The build the page shows for a bank: the decrypted header's, else the cleartext header's. It mirrors
+ * `slotVersion` in packages/web/src/hooks/useSlotsPanel.ts, which the page's Firmware cell shows.
+ */
+function slotVersionOf(view: SlotView): string | null {
+  return view.state?.plainHeader?.versionStr ?? view.state?.header?.versionStr ?? null;
 }
 
 /**
@@ -242,6 +258,23 @@ for (const subject of rows) {
       expect(firmware, `${subject.name}: the build the camera reports`).toBe(subject.version);
       expect(report.state.version, `${subject.name}: the analysis's build`).toBe(subject.version);
     });
+
+    /* The builds the row records per bank (bankVersions), read as the page shows them (42.39). */
+    const recordedBuilds = (['a', 'b', 'r'] as const).flatMap((letter) => {
+      const build = subject.bankVersions?.[letter];
+      return build === undefined ? [] : [{ letter, build }];
+    });
+    if (recordedBuilds.length > 0) {
+      it(`shows the build the table records for each bank: ${recordedBuilds.map(({ letter, build }) => `${letter.toUpperCase()} ${build}`).join(', ')}`, () => {
+        const { report } = bootedRow();
+        for (const { letter, build } of recordedBuilds) {
+          expect(
+            slotVersionOf(viewOf(report, letter)),
+            `${subject.name} bank ${letter.toUpperCase()}: the build the page shows`,
+          ).toBe(build);
+        }
+      });
+    }
 
     it(
       subject.banner === 'none'

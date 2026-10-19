@@ -6,20 +6,24 @@
  *
  *   npx vitest run --config e2e/vitest.config.ts bench-verdict.e2e
  *
- * The corpus test at the end runs only when SEEK_FULL_DUMPS_BY_CAMERA names the real
- * dump tree: it lists the real subjects and checks that each one has its table row.
+ * The corpus tests at the end run only when SEEK_FULL_DUMPS_BY_CAMERA names the real
+ * dump tree: they list the real subjects, check that each one has its table row, and
+ * check that the builds the table records per bank are the builds the dumps hold.
  */
 
 import { mkdtempSync, rmSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
+import { parseImageHeader } from '@seek-fw/core';
+
 import { SLOTS_SUBJECTS, type BankLetter, type SlotsSubject } from './lib/slots-expectations.js';
 import { createFakeRig, fakeSubjects } from './lib/bench/spec-fakes.js';
 import { runSubject, type SubjectResult } from './lib/bench/spec-flow.js';
-import type { BenchSubject } from './lib/bench/types.js';
+import { BENCH_FLASH_BASE, type BenchSubject } from './lib/bench/types.js';
 import { benchRoot, listBenchSubjects } from './lib/bench/index.js';
 import {
   ROW_NAME_OF_SUBJECT,
@@ -35,6 +39,14 @@ function rowNamed(name: string): SlotsSubject {
   const row = SLOTS_SUBJECTS.find((candidate) => candidate.name === name);
   if (row === undefined) throw new Error(`the table has no row "${name}"`);
   return row;
+}
+
+/** The builds a row records, by bank (its `bankVersions`), in the order a, b, r. */
+function recordedBuildsOf(row: SlotsSubject): { letter: BankLetter; build: string }[] {
+  return (['a', 'b', 'r'] as const).flatMap((letter) => {
+    const build = row.bankVersions?.[letter];
+    return build === undefined ? [] : [{ letter, build }];
+  });
 }
 
 /** Row 14 of TESTING.md 42.21: every bank refused, with the banner. */
@@ -280,6 +292,96 @@ describe('the judge: row 20 (bank B own image refused; A, R and B-from-A written
   });
 });
 
+describe('the builds the table records per bank (bankVersions, TESTING.md 42.39)', () => {
+  it('records bank B of the 4.9.1.15 row as its 1.0.3.2 build: the only recorded build that differs from its row', () => {
+    expect(rowNamed(ROW_20).bankVersions?.b).toBe('1.0.3.2');
+    const differing = SLOTS_SUBJECTS.flatMap((row) =>
+      recordedBuildsOf(row)
+        .filter(({ build }) => build !== row.version)
+        .map(({ letter }) => `${row.name} ${letter}`),
+    );
+    expect(differing).toEqual([`${ROW_20} b`]);
+  });
+
+  it('records only four-part builds', () => {
+    for (const row of SLOTS_SUBJECTS) {
+      for (const { build } of recordedBuildsOf(row)) {
+        expect(build, row.name).toMatch(/^\d+\.\d+\.\d+\.\d+$/);
+      }
+    }
+  });
+});
+
+describe('the judge: the build each bank shows (bankVersions)', () => {
+  const row = rowNamed(ROW_20);
+  const ownRefusal = row.ownImage?.reason ?? '';
+  /* Row 20's own refusal of bank B, and the page's builds as the row records them. */
+  const refusedB = {
+    b: { offer: { accepted: false, reason: ownRefusal }, write: 'written' },
+  } as const;
+
+  it('passes when every bank shows the build the row records', () => {
+    const judged = judgeSubject(row, {
+      ...seen(refusedB),
+      versions: { a: '4.9.1.15', b: '1.0.3.2', r: '4.9.1.15' },
+    });
+    expect(judged.failures).toEqual([]);
+    expect(judged.passedAs).toBe('write and refusal');
+  });
+
+  it('fails, naming bank B, when B shows another build than the row records', () => {
+    const judged = judgeSubject(row, {
+      ...seen(refusedB),
+      versions: { a: '4.9.1.15', b: '4.9.1.15', r: '4.9.1.15' },
+    });
+    expect(judged.failures.join(' ')).toMatch(
+      /bank B: the page reads build 4\.9\.1\.15, and the table records build 1\.0\.3\.2/,
+    );
+    expect(judged.passedAs).toBeNull();
+  });
+
+  it('fails, naming bank B, when the page shows no build for B', () => {
+    const judged = judgeSubject(row, {
+      ...seen(refusedB),
+      versions: { a: '4.9.1.15', b: null, r: '4.9.1.15' },
+    });
+    expect(judged.failures.join(' ')).toMatch(
+      /bank B: the page shows no build for it, and the table records build 1\.0\.3\.2/,
+    );
+  });
+
+  it('names the bank that shows the wrong build, and no other', () => {
+    const judged = judgeSubject(row, {
+      ...seen(refusedB),
+      versions: { a: '1.3.0.0', b: '1.0.3.2', r: '4.9.1.15' },
+    });
+    expect(judged.failures).toHaveLength(1);
+    expect(judged.failures[0]).toMatch(/^bank A: the page reads build 1\.3\.0\.0/);
+  });
+
+  it('checks only the banks the row records a build for', () => {
+    const plain = rowNamed('Compact 0.9.1.0');
+    expect(plain.bankVersions?.b).toBeUndefined();
+    const anything = judgeSubject(plain, {
+      ...seen(),
+      versions: { a: '0.9.1.0', b: 'anything at all', r: '0.9.1.0' },
+    });
+    expect(anything.failures).toEqual([]);
+    const wrongR = judgeSubject(plain, {
+      ...seen(),
+      versions: { a: '0.9.1.0', b: null, r: '1.0.0.0' },
+    });
+    expect(wrongR.failures).toEqual([
+      'bank R: the page reads build 1.0.0.0, and the table records build 0.9.1.0 (TESTING.md 42.39)',
+    ]);
+  });
+
+  it('is not checked when the page builds were not read', () => {
+    const judged = judgeSubject(row, { ...seen(refusedB), versions: null });
+    expect(judged.failures).toEqual([]);
+  });
+});
+
 describe('the judge: a writable row', () => {
   const row = rowNamed(WRITABLE);
 
@@ -382,8 +484,17 @@ describe('the flow on the fake rig, held to the table (runSubject)', () => {
   /** The fake page's rows for the two subjects: row 14 for the first, row 20 for the second. */
   const verdicts = (): SlotsSubject[] => [rowNamed(ROW_14), rowNamed(ROW_20)];
 
-  function run(index: number, verdictRows: readonly SlotsSubject[]): Promise<SubjectResult> {
-    const rig = createFakeRig({ subjects, failure: null, verdicts: verdictRows });
+  function run(
+    index: number,
+    verdictRows: readonly SlotsSubject[],
+    pageBuilds?: Readonly<Partial<Record<BankLetter, string>>>,
+  ): Promise<SubjectResult> {
+    const rig = createFakeRig({
+      subjects,
+      failure: null,
+      verdicts: verdictRows,
+      ...(pageBuilds === undefined ? {} : { pageBuilds }),
+    });
     const subject = subjects[index];
     if (subject === undefined) throw new Error(`no fake subject ${String(index)}`);
     return runSubject(rig, subject, log, false);
@@ -414,6 +525,20 @@ describe('the flow on the fake rig, held to the table (runSubject)', () => {
       /written with bank A's image \(its own image is refused by the table\)/,
     );
     expect(result.bootProof).toBe('passed');
+  });
+
+  it('row 20 on the fake page shows each bank the build its row records (bank B as 1.0.3.2)', async () => {
+    const result = await run(1, verdicts());
+    expect(result.failures).toEqual([]);
+    expect(result.pageVersions).toEqual({ a: '4.9.1.15', b: '1.0.3.2', r: '4.9.1.15' });
+  });
+
+  it('row 20 on a page that shows B as 1.0.3.0 fails the subject, naming bank B and its build', async () => {
+    const result = await run(1, verdicts(), { b: '1.0.3.0' });
+    expect(result.failures.join(' ')).toMatch(
+      /bank B: the page reads build 1\.0\.3\.0, and the table records build 1\.0\.3\.2/,
+    );
+    expect(result.judgement?.passedAs).toBeNull();
   });
 
   it('a writable row whose write fails fails the subject, and passes as nothing', async () => {
@@ -449,6 +574,39 @@ describe.skipIf(!process.env.SEEK_FULL_DUMPS_BY_CAMERA?.trim())(
         unmapped.map((subject) => `${subject.family} ${subject.folder}`),
         'subjects with no table row',
       ).toEqual([]);
+    });
+
+    it('holds, in each dump, every build the table records per bank (TESTING.md 42.39)', () => {
+      /* The bank addresses of each line (the table's bankVersions): the 0.x, 1.x and 2016 Compact PRO line is
+       * the locked one, and every later build is the modern line. */
+      const addressOf = (version: string, letter: BankLetter): number => {
+        const locked = /^[01]\./.test(version);
+        if (letter === 'r') return 0x14070000;
+        if (letter === 'a') return locked ? 0x14050000 : 0x14030000;
+        return locked ? 0x14060000 : 0x14050000;
+      };
+      const subjects = listBenchSubjects({ root: benchRoot(), camera: 'Compact' }).filter(
+        (subject) => subject.slotsSupported,
+      );
+      const mismatches: string[] = [];
+      for (const subject of subjects) {
+        const row = verdictRowOf(subject);
+        if (row === null) continue;
+        const flash = readFileSync(subject.file);
+        for (const { letter, build } of recordedBuildsOf(row)) {
+          const offset = addressOf(subject.version, letter) - BENCH_FLASH_BASE;
+          const bank = flash.subarray(offset, offset + 0x10000);
+          const held = bank.every((byte) => byte === 0xff)
+            ? 'a blank bank'
+            : (parseImageHeader(bank, 0)?.versionStr ?? 'no header');
+          if (held !== build) {
+            mismatches.push(
+              `${row.name} bank ${letter.toUpperCase()}: the dump holds ${held}, the table records ${build}`,
+            );
+          }
+        }
+      }
+      expect(mismatches, 'the table against the dumps').toEqual([]);
     });
   },
 );

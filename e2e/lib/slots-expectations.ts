@@ -68,6 +68,15 @@ export interface SlotsSubject {
    * bank and the fragment the refusal must contain. Absent when the page has no such refusal to show.
    */
   readonly ownImage?: { readonly bank: BankLetter; readonly reason: string };
+  /**
+   * The build each bank's flash holds, as the page reads it (its header's build string), where the table knows it:
+   * the bank's build is checked against the page's read by the bench (verdict.ts) and by the emulator suite
+   * (page-expectations.emulator.test.ts). A bank left out is not checked. Filled from the corpus dumps, on the
+   * line's layout (TESTING.md 42.39): the 0.x, 1.x and 2016 Compact PRO line (A 0x14050000, B 0x14060000,
+   * R 0x14070000), and the 4.x and later line (A 0x14030000, B 0x14050000, R 0x14070000). A blank bank has no
+   * build and is left out.
+   */
+  readonly bankVersions?: Readonly<Partial<Record<BankLetter, string>>>;
   /** Where the row's expectation comes from. */
   readonly source: string;
 }
@@ -90,6 +99,7 @@ export const SLOTS_SUBJECTS: readonly SlotsSubject[] = [
     banks: ALL_WRITABLE,
     fps: { offer: true, toHz: 32 },
     banner: 'none',
+    bankVersions: { a: '0.8.0.0', r: '0.8.0.0' },
     source:
       '42.1 (pass); 42.2 (the camera names no booted bank: every bank takes the tick); 32 Hz table entry, stage one, offered unmeasured (owner decision); not measured on a camera',
   },
@@ -101,6 +111,7 @@ export const SLOTS_SUBJECTS: readonly SlotsSubject[] = [
     banks: ALL_WRITABLE,
     fps: { offer: true, toHz: 32 },
     banner: 'none',
+    bankVersions: { a: '0.9.0.2', r: '0.9.0.2' },
     source:
       '42.1 (pass), 42.5; 32 Hz table entry, stage one, offered unmeasured (owner decision); not measured on a camera',
   },
@@ -112,6 +123,7 @@ export const SLOTS_SUBJECTS: readonly SlotsSubject[] = [
     banks: ALL_WRITABLE,
     fps: { offer: true, toHz: 32 },
     banner: 'none',
+    bankVersions: { a: '0.9.0.6', r: '0.9.0.6' },
     source:
       '42.1 (pass); 32 Hz table entry, stage one, offered unmeasured (owner decision); not measured on a camera',
   },
@@ -123,6 +135,7 @@ export const SLOTS_SUBJECTS: readonly SlotsSubject[] = [
     banks: ALL_WRITABLE,
     fps: { offer: true, toHz: 32 },
     banner: 'none',
+    bankVersions: { a: '0.9.0.7', r: '0.9.0.7' },
     source:
       '42.1 (pass); 32 Hz table entry, stage one, offered unmeasured (owner decision); not measured on a camera',
   },
@@ -134,6 +147,7 @@ export const SLOTS_SUBJECTS: readonly SlotsSubject[] = [
     banks: ALL_WRITABLE,
     fps: { offer: true, toHz: 32 },
     banner: 'none',
+    bankVersions: { a: '0.9.1.0', r: '0.9.1.0' },
     source:
       '42.1 (pass), 42.5; 32 Hz table entry, stage one, offered unmeasured (owner decision); not measured on a camera',
   },
@@ -145,6 +159,7 @@ export const SLOTS_SUBJECTS: readonly SlotsSubject[] = [
     banks: ALL_WRITABLE,
     fps: { offer: true, toHz: 32 },
     banner: 'none',
+    bankVersions: { a: '0.10.0.0', r: '0.10.0.0' },
     source:
       '42.1 (pass); 32 Hz table entry, stage one, offered unmeasured (owner decision); not measured on a camera',
   },
@@ -156,6 +171,7 @@ export const SLOTS_SUBJECTS: readonly SlotsSubject[] = [
     banks: ALL_WRITABLE,
     fps: { offer: true, toHz: 32 },
     banner: 'none',
+    bankVersions: { a: '1.0.0.0', r: '1.0.0.0' },
     source:
       '42.1 (pass), 42.5; 32 Hz table entry, stage one, offered unmeasured (owner decision); not measured on a camera',
   },
@@ -167,6 +183,7 @@ export const SLOTS_SUBJECTS: readonly SlotsSubject[] = [
     banks: ALL_WRITABLE,
     fps: { offer: true, toHz: 32 },
     banner: 'none',
+    bankVersions: { a: '1.2.0.0', r: '1.2.0.0' },
     source:
       '42.1 (pass), 42.5; its 16 Hz patch was removed (42.26); 32 Hz table entry, stage one, not measured on a camera',
   },
@@ -178,6 +195,7 @@ export const SLOTS_SUBJECTS: readonly SlotsSubject[] = [
     banks: ALL_WRITABLE,
     fps: { offer: true, toHz: 32 },
     banner: 'none',
+    bankVersions: { a: '1.3.0.0', r: '1.3.0.0' },
     source:
       '42.1 (pass), 42.5 (the bench camera); frame-rate stage one (42.15); 32 Hz in the Normal stream, measured on a 1.3.0.0 Compact (42.25)',
   },
@@ -189,6 +207,7 @@ export const SLOTS_SUBJECTS: readonly SlotsSubject[] = [
     banks: ALL_WRITABLE,
     fps: { offer: true, toHz: 32 },
     banner: 'none',
+    bankVersions: { a: '1.3.0.8', r: '1.3.0.8' },
     source:
       '42.1 (pass), 42.5; frame-rate stage one, the 8 Hz build, table target 32 Hz (the plain-copy form, not measured on a camera; its earlier op 5 form measured 26 Hz, 42.20)',
   },
@@ -202,6 +221,7 @@ export const SLOTS_SUBJECTS: readonly SlotsSubject[] = [
     banks: ALL_WRITABLE,
     fps: NO_FPS_TABLE,
     banner: 'none',
+    bankVersions: { a: '1.3.0.8', r: '1.3.0.8' },
     source:
       '42.1 listed it as refused; 42.6 and 42.12 made it writable to A, B and R (vendor form)',
   },
@@ -215,6 +235,7 @@ export const SLOTS_SUBJECTS: readonly SlotsSubject[] = [
     banks: ALL_WRITABLE,
     fps: { offer: true, toHz: 32 },
     banner: 'none',
+    bankVersions: { a: '4.8.1.9', b: '4.8.1.9', r: '4.8.1.9' },
     source: '42.1 (pass), 42.5; frame-rate stage two (Key A), 32 Hz table entry (TESTING.md 42.22)',
   },
   {
@@ -225,6 +246,7 @@ export const SLOTS_SUBJECTS: readonly SlotsSubject[] = [
     banks: ALL_WRITABLE,
     fps: { offer: true, toHz: 32 },
     banner: 'none',
+    bankVersions: { a: '4.8.2.1', b: '4.8.2.1', r: '4.8.2.1' },
     source:
       '42.1 (pass); the slots-view spec (modern Key A); frame-rate stage two (Key A), 32 Hz table entry, the highest for this image (TESTING.md 42.24; 16 Hz entry 42.23)',
   },
@@ -236,6 +258,7 @@ export const SLOTS_SUBJECTS: readonly SlotsSubject[] = [
     banks: ALL_WRITABLE,
     fps: { offer: true, toHz: 32 },
     banner: 'none',
+    bankVersions: { a: '4.8.1.7', b: '4.8.1.7', r: '4.8.1.7' },
     source:
       '42.4 (slot steps pass after the SPIFI read-back fix); its emulator subject, the 4.8.1.7 image on the 4.8.2.1 donor, is in corpus-modern-run (no pinned gap; TESTING.md 42.39); frame-rate stage two (Key A), 32 Hz table entry (TESTING.md 42.22)',
   },
@@ -251,6 +274,7 @@ export const SLOTS_SUBJECTS: readonly SlotsSubject[] = [
     },
     fps: NO_FPS_TABLE,
     banner: 'checks an upload under its own keys',
+    bankVersions: { a: '4.16.1.7', b: '4.16.1.7', r: '4.16.1.7' },
     source:
       '42.4: the page refused bank B with the Key A message; its application embeds none of the corpus pairs (42.5 key tables). The application checks an upload under its own keys before it programs it, and the key the writes would store under is neither of its pair, so every bank is refused (the emulator pins it as a gap: corpus-modern-run REASON.notWritable).',
   },
@@ -264,6 +288,7 @@ export const SLOTS_SUBJECTS: readonly SlotsSubject[] = [
     banks: ALL_WRITABLE,
     fps: { offer: true, toHz: 18 },
     banner: 'none',
+    bankVersions: { a: '1.0.3.0', b: '1.0.3.0', r: '1.0.3.0' },
     source:
       '42.1 (pass), 42.8 (locked-2016 is writable); frame-rate stage three (2016 keystream), 18 Hz table entry; every bank of the native dump decrypts to its stock image (fps-patch.pro-2016.emulator.test.ts)',
   },
@@ -275,6 +300,7 @@ export const SLOTS_SUBJECTS: readonly SlotsSubject[] = [
     banks: ALL_WRITABLE,
     fps: { offer: false, reason: 'already runs at 18 Hz' },
     banner: 'none',
+    bankVersions: { a: '1.0.3.0', b: '1.0.3.0', r: '1.0.3.0' },
     source: '42.1 (pass); the FF image is the 18 Hz build (known rate), so no patch is offered',
   },
   {
@@ -285,6 +311,7 @@ export const SLOTS_SUBJECTS: readonly SlotsSubject[] = [
     banks: ALL_WRITABLE,
     fps: { offer: true, toHz: 18 },
     banner: 'none',
+    bankVersions: { a: '1.0.3.2', b: '1.0.3.2', r: '1.0.3.2' },
     source:
       '42.1 (pass); frame-rate stage three (2016 keystream), 18 Hz table entry; the chimera splices the image into every slot (fps-patch.pro-2016.emulator.test.ts)',
   },
@@ -296,6 +323,7 @@ export const SLOTS_SUBJECTS: readonly SlotsSubject[] = [
     banks: ALL_WRITABLE,
     fps: { offer: false, reason: 'already runs at 18 Hz' },
     banner: 'none',
+    bankVersions: { a: '1.0.3.2', b: '1.0.3.2', r: '1.0.3.2' },
     source: '42.1 (pass); the FF image is the 18 Hz build (known rate), so no patch is offered',
   },
   {
@@ -306,6 +334,7 @@ export const SLOTS_SUBJECTS: readonly SlotsSubject[] = [
     banks: ALL_WRITABLE,
     fps: NO_FPS_TABLE,
     banner: 'none',
+    bankVersions: { a: '1.0.3.2', b: '1.0.3.2', r: '1.0.3.2' },
     source: '42.1 (pass); no emulator entry for the FF-FF image',
   },
   {
@@ -316,6 +345,7 @@ export const SLOTS_SUBJECTS: readonly SlotsSubject[] = [
     banks: ALL_WRITABLE,
     fps: { offer: true, toHz: 18 },
     banner: 'none',
+    bankVersions: { a: '4.9.2.0', b: '4.9.2.0', r: '4.9.2.0' },
     source:
       '42.1 (pass), 42.5; frame-rate stage two (Key A), 18 Hz table entry, offered unmeasured (owner decision 2026-10-19; TESTING.md 42.28)',
   },
@@ -327,6 +357,7 @@ export const SLOTS_SUBJECTS: readonly SlotsSubject[] = [
     banks: ALL_WRITABLE,
     fps: NO_FPS_TABLE,
     banner: 'none',
+    bankVersions: { a: '4.18.2.0', b: '4.18.2.0', r: '4.18.2.0' },
     source: '42.1 (pass)',
   },
   {
@@ -342,6 +373,7 @@ export const SLOTS_SUBJECTS: readonly SlotsSubject[] = [
       bank: 'b',
       reason: "neither this camera's pair nor a decoded application pair occurs in the image",
     },
+    bankVersions: { a: '4.9.1.15', b: '1.0.3.2', r: '4.9.1.15' },
     source:
       '42.1 and 42.5: the dump’s bank B holds a 1.0.3.2 image with neither key pair, so writing B back from its own image is refused; the bench writes B from A’s image (42.5 note 2), which the page offers. Frame-rate: banks A and R hold the 4.9.1.15 image, offered at its measured 17.7 Hz (stage two, TESTING.md 42.28, corrected in 42.32); bank B holds the 1.0.3.2-FF build, which the table records at 18 Hz already, so it takes no patch.',
   },
@@ -355,6 +387,7 @@ export const SLOTS_SUBJECTS: readonly SlotsSubject[] = [
     banks: ALL_WRITABLE,
     fps: { offer: true, toHz: 32 },
     banner: 'none',
+    bankVersions: { a: '4.8.2.1', b: '4.8.2.1', r: '4.8.2.1' },
     source:
       '42.1 (pass); frame-rate stage two (Key A), 32 Hz table entry, the highest for this image, measured on the Compact XR 4.8.2.1 (TESTING.md 42.24; 16 Hz entry 42.23)',
   },
@@ -366,6 +399,7 @@ export const SLOTS_SUBJECTS: readonly SlotsSubject[] = [
     banks: ALL_WRITABLE,
     fps: NO_FPS_TABLE,
     banner: 'none',
+    bankVersions: { a: '10.9.1.31', b: '10.9.1.31', r: '10.9.1.31' },
     source:
       '42.1 listed it refused; 42.7 derives its upload keys from the camera and the emulator boots the write',
   },
@@ -377,6 +411,7 @@ export const SLOTS_SUBJECTS: readonly SlotsSubject[] = [
     banks: ALL_WRITABLE,
     fps: NO_FPS_TABLE,
     banner: 'none',
+    bankVersions: { a: '2.27.1.33', b: '2.27.1.33', r: '2.27.1.33' },
     source: '42.1 (pass)',
   },
   {
@@ -387,6 +422,7 @@ export const SLOTS_SUBJECTS: readonly SlotsSubject[] = [
     banks: ALL_WRITABLE,
     fps: NO_FPS_TABLE,
     banner: 'none',
+    bankVersions: { a: '42.32.3.10', b: '42.32.3.10', r: '42.32.3.10' },
     source: '42.1 (pass)',
   },
   {
@@ -397,6 +433,7 @@ export const SLOTS_SUBJECTS: readonly SlotsSubject[] = [
     banks: ALL_WRITABLE,
     fps: NO_FPS_TABLE,
     banner: 'none',
+    bankVersions: { a: '44.27.3.10', b: '44.27.3.10', r: '44.27.3.10' },
     source: '42.1 (pass), 42.5',
   },
 ];

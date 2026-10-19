@@ -272,6 +272,8 @@ export interface SubjectResult {
   readonly slotBoot: SlotBootResult[];
   /** The camera-wide banner the page showed (`shown` null: none), or null when the page was not read. */
   pageBanner: { readonly shown: string | null } | null;
+  /** The build the page showed for each bank (null: none), or null when the page was not read (verdict.ts). */
+  pageVersions: Readonly<Record<BankLetter, string | null>> | null;
   /** The subject's judgement against its verdict-table row (verdict.ts); null when it has none. */
   judgement: SubjectJudgement | null;
   readonly notes: string[];
@@ -509,15 +511,22 @@ async function readWindow(
     }
     /* The banner is judged against the subject's verdict-table row (verdict.ts), not the plan. */
     r.pageBanner = { shown: await page.banner() };
+    /* The build the page shows for each bank, judged against the row's bankVersions by the verdict (verdict.ts). */
+    const buildOf = (letter: BankLetter): string | null =>
+      read.banks.find((bank) => bank.letter === letter)?.version ?? null;
+    r.pageVersions = { a: buildOf('a'), b: buildOf('b'), r: buildOf('r') };
+    const row = rig.verdictRow(subject);
+    /* A bank whose build the table records is held to that build by the verdict: a mismatch fails there (42.39). */
+    const recorded = (letter: BankLetter): boolean => row?.bankVersions?.[letter] !== undefined;
     /* The bank whose own image the table records as refused (ownImage) holds another build by the dump's own
-     * design (TESTING.md 42.21): its version is a note, and the page's read of it is still checked below. */
-    const refusedOwn = rig.verdictRow(subject)?.ownImage?.bank ?? null;
+     * design (TESTING.md 42.21): where the table records no build for it, that build is a note. */
+    const refusedOwn = row?.ownImage?.bank ?? null;
     for (const bank of read.banks) {
       if (bank.version === null) {
         r.notes.push(
           `bank ${UPPER[bank.letter]}: holds no readable image (the page shows no version)`,
         );
-      } else if (bank.version !== subject.version) {
+      } else if (bank.version !== subject.version && !recorded(bank.letter)) {
         /* Under the boot test, a bank holding another build is replaced with the image of a
          * bank that holds the running build (readPage), so it is a note, not a failure. */
         if (slotBoot) {
@@ -540,7 +549,10 @@ async function readWindow(
     const booted = read.banks.filter((bank) => bank.booted).length;
     const versionsMatch = read.banks.every(
       (bank) =>
-        bank.version === null || bank.version === subject.version || bank.letter === refusedOwn,
+        bank.version === null ||
+        bank.version === subject.version ||
+        bank.letter === refusedOwn ||
+        recorded(bank.letter),
     );
     r.pageIdentified =
       layout !== undefined &&
@@ -1141,6 +1153,7 @@ function resultFor(subject: BenchSubject): SubjectResult {
     bootProof: 'not-run',
     slotBoot: [],
     pageBanner: null,
+    pageVersions: null,
     judgement: null,
     notes: [],
     failures: [],
@@ -1518,7 +1531,12 @@ function observationOf(r: SubjectResult, finished: boolean): SubjectObservation 
       write: result.state === 'passed' ? 'written' : result.state === 'failed' ? 'failed' : 'none',
     };
   };
-  return { banks: { a: bank('a'), b: bank('b'), r: bank('r') }, banner: r.pageBanner, finished };
+  return {
+    banks: { a: bank('a'), b: bank('b'), r: bank('r') },
+    banner: r.pageBanner,
+    versions: r.pageVersions,
+    finished,
+  };
 }
 
 /**

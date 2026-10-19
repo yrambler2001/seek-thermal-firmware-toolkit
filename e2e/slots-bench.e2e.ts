@@ -231,6 +231,7 @@ function missingRig(subject: BenchSubject): SubjectResult {
     bootProof: 'not-run',
     slotBoot: [],
     pageBanner: null,
+    pageVersions: null,
     judgement: null,
     notes: [],
     failures: ['the bench rig did not open (see the beforeAll error)'],

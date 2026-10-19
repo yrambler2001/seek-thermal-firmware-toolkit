@@ -9,7 +9,9 @@
  *     A bank whose own image the table records as refused (`ownImage`) must have
  *     that image refused with the table's reason, and must be written from another
  *     bank's image;
- *   - the camera-wide banner must match the row's `banner`.
+ *   - the camera-wide banner must match the row's `banner`;
+ *   - a bank whose build the table records (`bankVersions`) must show that build on the
+ *     page; a bank the table records no build for is not checked (TESTING.md 42.39).
  *
  * This module is pure: it turns what the flow observed into the judgement. The flow
  * (`spec-flow.ts`) gathers the observations; the offline tests (`bench-verdict.e2e.ts`)
@@ -96,6 +98,11 @@ export interface SubjectObservation {
   /** The banner the page showed (`shown` null: none), or null when the page was not read. */
   readonly banner: { readonly shown: string | null } | null;
   /**
+   * The build the page shows for each bank (`shown` null: none), or absent when the page's builds were not read.
+   * Checked only for the banks the row's `bankVersions` records.
+   */
+  readonly versions?: Readonly<Record<BankLetter, string | null>> | null;
+  /**
    * Whether the flow ran every bank to its step. When it stopped early, a missing offer or write is
    * already explained by the flow's own failure, so the judge does not repeat it.
    */
@@ -144,6 +151,9 @@ export function judgeSubject(row: SlotsSubject, observed: SubjectObservation): S
   const failures: string[] = [];
   const banks = LETTERS.map((letter) => judgeBank(letter, row, observed, failures));
   if (observed.banner !== null) judgeBanner(row.banner, observed.banner.shown, failures);
+  if (observed.versions !== undefined && observed.versions !== null) {
+    judgeVersions(row, observed.versions, failures);
+  }
   const refused = banks.some((bank) => bank.refused);
   const written = banks.some((bank) => bank.written);
   const passedAs: PassedAs | null =
@@ -218,6 +228,32 @@ function judgeBanner(expected: string, shown: string | null, failures: string[])
     failures.push(`the table records the banner "${expected}", and the page shows none`);
   } else if (!reasonMatches(shown, expected)) {
     failures.push(`the page shows the banner "${shown}", and the table records "${expected}"`);
+  }
+}
+
+/**
+ * Each bank the row records a build for must show that build on the page. A bank the page shows no build for,
+ * or another build, is a failure named by its bank (a bank the row records nothing for is not checked).
+ */
+function judgeVersions(
+  row: SlotsSubject,
+  shown: Readonly<Record<BankLetter, string | null>>,
+  failures: string[],
+): void {
+  for (const letter of LETTERS) {
+    const expected = row.bankVersions?.[letter];
+    if (expected === undefined) continue;
+    const name = letter.toUpperCase();
+    const seen = shown[letter];
+    if (seen === null) {
+      failures.push(
+        `bank ${name}: the page shows no build for it, and the table records build ${expected} (TESTING.md 42.39)`,
+      );
+    } else if (seen !== expected) {
+      failures.push(
+        `bank ${name}: the page reads build ${seen}, and the table records build ${expected} (TESTING.md 42.39)`,
+      );
+    }
   }
 }
 
