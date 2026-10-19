@@ -348,13 +348,23 @@ function storedPlain(slot: AnalysedSlot): boolean {
   );
 }
 
+/** The 2014 bootloader (the original Compact and the 8 Hz 1.3.0.8 build run on it; TESTING.md 42.10). */
+const LEGACY_2014_BOOTLOADER = '0.9.0.0';
+
 /**
- * Is this bank the 1.3.0.8 FF (16 Hz) image in recovery R? Its stored word sum is not 0 and
- * it carries the FF key pair, so the 2014 bootloader takes no bank with it and recovery runs
- * it only when A and B hold nothing the bootloader takes (TESTING.md 42.10: steps 4, 2c and 7
- * ran it from R with A and B empty; steps 6a and 6c passed over the same form at A and B).
+ * Is this bank the 1.3.0.8 FF (16 Hz) image in recovery R, on the 2014 bootloader? Its stored word
+ * sum is not 0 and it carries the FF key pair, so the 2014 bootloader takes no bank with it and
+ * recovery runs it only when A and B hold nothing the bootloader takes (TESTING.md 42.10: steps 4,
+ * 2c and 7 ran it from R with A and B empty; steps 6a and 6c passed over the same form at A and B).
+ * On the FF platform's bootloader (2.0.2.3) that was not measured for this form, and the two-stream
+ * form in R booted from no bank alone (TESTING.md 42.11b), so the label is not given there.
  */
-function ffFormInRecovery(key: SlotKey, slot: AnalysedSlot): boolean {
+function ffFormInRecovery(
+  key: SlotKey,
+  slot: AnalysedSlot,
+  bootloaderVersion: string | null,
+): boolean {
+  if (bootloaderVersion !== LEGACY_2014_BOOTLOADER) return false;
   if (key !== 'r' || !slot.present || slot.raw === null || slot.header === null) return false;
   const image = slot.raw.subarray(0, slot.header.length);
   return (
@@ -767,7 +777,7 @@ export async function readDeviceInfo(
       ? /* the chain's own model: see the verdict below */ 'bootable'
       : identity.bootable && footerPasses
         ? 'bootable'
-        : ffFormInRecovery(descriptor.key, slot)
+        : ffFormInRecovery(descriptor.key, slot, bootloaderVersion)
           ? /* recovery runs it when A and B hold nothing the bootloader takes: not a skipped slot */
             'recovery-only'
           : slot.present && slot.accepts && footerPasses && keyTable === null

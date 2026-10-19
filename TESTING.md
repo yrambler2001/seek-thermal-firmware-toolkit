@@ -6584,6 +6584,116 @@ bank B that holds a stored-sum-0 image alone is taken (42.10 measured A only). T
 to R on a camera running the 8 Hz build, which the page now refuses, is still to be run with the
 J-Link route the refusal names.
 
+### 42.11a Addendum from the other branch: the balance-word FF run, withdrawn before any write (notes only, 2026-10-17)
+
+*Merged from `worktree-agent-a9c8b175a0187b7be` (commit f9a34ce), where this section was numbered 42.13. It is renumbered 42.11a because 42.13 is the 2014 plaintext chain section here. The text is otherwise unchanged.*
+
+The bench run asked whether the 8 Hz 1.3.0.8 app accepts a "balance-word" payload P (the FF plain
+image F with word 142 solved so its plain u32 sum is 0), written through the camera's own upgrade
+commands, and which bank then boots FF. The owner withdrew the direction before any bench write.
+
+**Not run (no hardware write, no halt, no power cycle in this run).** Steps 1 to 5 of the brief are
+not measured. No script or test was committed for the proof.
+
+**Camera state, read-only (measured):** `switch.js status` gives `OK 1=on 2=on`; no `JLinkExe` or
+`jlink-runner` process; `ioreg` lists VID 0x289D (10397) "PIR206 Thermal Camera" on the bus. The flash
+was not re-read in this run, so the baseline sha256 `40447c7e…` is the last measured value from 42.10
+step 8, not one re-checked here. Nothing was changed, so no restore was needed; cfg[0] was not touched.
+
+**Host-side measurements (no hardware, measured on the dump file):** F is bank R (offset 0x70000) of
+`SEEK_FULL_DUMPS_BY_CAMERA/Compact/Compact/2017.01.06-11.17.29-1.3.0.8-FF/full_dump_launchable.bin`.
+Magic `0xA1B2C3D4`, length 49,308 B (12,327 words), word 142 = `0x00000000`.
+
+- T, the plain u32 sum of F over 12,327 words: `0x9266E7AF`.
+- sha256(F) `1348e01af6c4f63a7d1751a2b9451493079b7ccd063c38d45cf35b276a46f326`.
+- P: word 142 = `(0 - T) mod 2^32` = `0x6D991851`; sum(P) = `0x00000000` (checked).
+- sha256(P) `4fc0120330caf56e4d588d1edbb3ebf0dacd028363c4c1eee9cc40b4f66343e0`.
+- u16 byte checksum of P (the `CompleteMemoryUpgrade` parameter): `0xE4F1`.
+
+**Discrepancy, not resolved.** Sec. 42.6 records the page's FF stored sum as `0x485662E7`. The dump's
+bank R sums to `0x9266E7AF` with word 142 at zero, so the two are not the same bytes. The dump is a
+donor splice (`reconstructed`), so it may not be the bank a real FF app leaves. Which sum a real camera
+holds is not established here. Any balance word must come from the bank actually written, not from 42.6.
+
+**Also not done:** the bank A and bank R writes of P, the power-cycle boot proof, the cfg[0] route, and
+the old two-stream refusal check (the 42.10 step 2a refusal is the only evidence for that, and it is
+from the page's own payload).
+
+### 42.11b The FF platform (bootloader 2.0.2.3): the two-stream writes are accepted, and no bank boots them (2026-10-17)
+
+*Merged from `worktree-agent-ae27186421cb01b3e` (commit f8f2f55), where this section was numbered 42.12. It is renumbered 42.11b because 42.12 is the vendor-form section. The measurements are unchanged. The code the section describes is partly superseded: see the status line under each subsection and sec. 42.33.*
+
+**Setup (measured).** The bench camera (PIR206, original 1.3.0.0, serial `101310HSNEA2`) was flashed whole
+with the 1.3.0.8 FF launchable copy (`full_dump_launchable.bin`, sha256 `1095d108…`). It then reported
+1.3.0.8 "Jan  6 2017", bootloader **2.0.2.3** "Jul  5 2018", serial `2229A0YZ7E28` (the donor's). Its
+boot-config block (0x14010000) is the donor's, cfg[0] = 0; every boot below was taken with cfg[0] = 0 unless
+stated. The dump holds the FF image at 0x14030000, 0x14050000 and 0x14070000, with 0x14060000 erased. The
+decrypted image (`seek-fw decrypt`) is plain with word sum 0xFFFF and the FF key pair, and its build string
+sits at 0xBF56 (`Jan  6 2017`). Bank R of that dump is the image the camera runs from when it boots alone.
+
+**Writes (measured).** The write path is the core's (`seek-fw slots flash`, `--acknowledge-risk --yes
+--no-rescue-dump`). Two local refusals were bypassed for this run only, in an uncommitted edit that is now
+reverted: `ffBankRefusal` at the staging step and at the plan check (A and B). Each image was the FF
+image with its build string's last digit set to the bank's letter, so the bank names itself: `201B`,
+`201A`, `201R`. Each bank read back as the page predicted, and the J-Link's halted read matched that too.
+
+| Bank (address)      | Commit status | Page read-back sha256 | J-Link re-read sha256 | Bench `predictedFFStored` sha256 | Boots alone, cfg[0] = 0                             |
+| ------------------- | ------------- | --------------------- | --------------------- | -------------------------------- | --------------------------------------------------- |
+| B (0x14060000)      | 0x0000        | `6d954048…fb1f2f`     | `6d954048…fb1f2f`     | `6d954048…fb1f2f`                | no: the camera did not enumerate                    |
+| A (0x14050000)      | 0x0000        | `af7df662…99feb0`     | `af7df662…99feb0`     | `af7df662…99feb0`                | no: the camera did not enumerate                    |
+| R (0x14070000)      | 0x0000        | `c92ce642…4458af8ff`  | `c92ce642…4458af8ff`  | `c92ce642…4458af8ff`             | no; with cfg[0] = 2 also no (not enumerated in 40 s) |
+
+The app accepted all three writes, so the FF application's acceptance is measured for A, B and R on this
+platform. The stored bytes are the plain stamped image (word 0x238 solved, sum about 0x4856…), as the
+prediction says. Boot alone, one bank at a time: the other banks, and 0x14030000, erased over the J-Link
+(bank ranges only); the boot-config block was read before and after (sha `9f5e302d…`, cfg[0] 0, unchanged).
+
+**The bootloader's own form (measured).** The original R bank of the dump, which the camera boots alone with
+cfg[0] = 0 (sha `32af77ed…`, word 0x238 = 0, stored sum about 0x9266…), is not the page's form. It differs
+from the page's stored bytes in 49,050 of its first 49,308 bytes, and neither `X XOR ks0 XOR ksD` nor the
+two-stream staged form of the plain image gives it back. So on this bootloader the form that boots is the
+factory's encrypted one, and the form the FF application stores for the page is a plain image that does not
+boot. The prediction is right about what the bank holds; it is not right about what the bootloader accepts.
+
+**What the page does now (core `slots/ff-platform.ts`): not carried into the merged page (sec. 42.33).** The
+merged page writes the FF image in the vendor's form (sec. 42.12) and applies no bootloader rule to its banks,
+so what follows describes the other branch's code and is kept as its record. That branch's rule: the FF image's bank rule follows the camera's
+bootloader, which the page reads from `GetFirmwareInfo` selector 1:
+
+- `0.9.0.0` (the 2014 bootloader, 42.10): R only, as before.
+- `2.0.2.3` (the FF platform, this section): every bank refused, with this measurement as the reason.
+- anything else, or no bootloader reported: every bank refused (conservative).
+
+The `recovery-only` label for an FF image in R is given only on 0.9.0.0 (`device-info.ts`), and the plan
+notes, the per-bank notes, the confirm dialog and the SlotsView text say which rule applies. The running
+application walk (`runningApplicationOf`) is unchanged: on this camera it reports the 8 Hz build (its 2014
+model reads the FF bank as plain), so the bootloader rule, not the walk, decides here. `write-commit.ts`
+now says correctly that 0x70100 is returned from several acceptance gates, not only nano and XR.
+
+**Boot tests that were not clean (recorded, not measured as results).**
+
+- *The 0x14030000 control.* The original R bytes written alone at 0x14030000 (A erased, B erased, cfg[0] 0)
+  read back as `0d3da45d…`, not `32af77ed…`, and the camera then ran "Jan  6 2017" from a bank this run
+  could not name. The halted reads after that returned the same 64 KiB block for several banks, the SPIFI
+  read artefact of 42.4. So whether 0x14030000 is the A bank of this bootloader is NOT established.
+- *Restore.* After the boot tests the whole flash was restored from the verified original (halted sha256
+  `40447c7e…eb72`); the camera runs 1.3.0.0 "Oct 21 2014" on bootloader 0.9.0.0 again.
+
+**Not measured.** Whether the page's form boots when another bank holds an image (A present and rejected, R
+as the fallback); whether an unsolved-word plain image boots; whether any form the page can produce boots
+on 2.0.2.3; the 8 Hz application on 2.0.2.3; cfg[0] values other than 0 and 2 (cfg[0] = 1 for B was not tried);
+the bank address question above. The bench flow (`spec-flow.ts`) now refuses the FF image for B, A and R on
+2.0.2.3 and runs no boot proof there; the per-bank boot tests of this section were run by hand from a scratch
+driver on the bench library (not committed).
+
+**Bench library (not carried into the merged tree, sec. 42.33).** The other branch's bench changes, as its
+record: `WRITABLE_BANKS` (adds 0x14030000 to the 2014 chain's three; still never the bootloader or
+the boot-config block) in `types.ts` and `jlink.ts`; `FF_PLATFORM_BOOTLOADER` in `ff-form.ts`; the FF flow in
+`spec-flow.ts` branches on the camera's reported bootloader; the fake rig takes `ffBootloader` and reports the
+bootloader for the FF subject before any boot. Tests in `bench-lib.e2e.ts`: the 2.0.2.3 refusals (B, A, R:
+nothing written, no boot proof), a page that takes the FF image for R on that bootloader (failed), and
+`writeBank` for 0x14030000 with the bootloader and boot-config addresses refused.
+
 ### 42.12 The vendor's own staged form, to A, B and R; the running build from the camera's own answers (2026-10-18)
 
 The page's 1.3.0.8 FF write (42.6, 42.10, 42.11) is replaced. The FF image is now staged the way the vendor
@@ -8572,6 +8682,127 @@ Bank B of the 4.9.1.15 dump still reads "already runs at 18 Hz" (the 1.0.3.2-FF 
 - 4.9.2.0, 1.0.3.0 and 1.0.3.2 have no camera measurement, and keep the 18 Hz target.
 - The "already patched" reason and the boot-choice rate are read from the code and not run. The unit tests cannot build a patched 4.9.1.15 image, since the planner needs the real stock bytes; the corpus test covers only the stock side.
 - Nothing ran on a camera, the bench or the e2e bench. The bench expectation for banks A and R now says 17.7 and is not run here.
+
+### 42.33 Two earlier branches merged: the balance-word notes kept as 42.11a, the FF platform record as 42.11b, and the FF bank rule dropped where the vendor form replaced it (2026-10-19)
+
+**1. What each branch brought.**
+
+- `worktree-agent-a9c8b175a0187b7be` (f9a34ce, "TESTING 42.13, the balance-word FF run withdrawn before any
+  write"): notes only, TESTING.md. The balance-word direction was withdrawn before any bench write. Host-side sums
+  and sha256 of the FF image's bank R and of the balance-word payload P are recorded, and the 42.6 stored-sum
+  mismatch is flagged and still open. Its section was numbered 42.13 there, which the 2014 plaintext chain holds
+  here, so it sits after 42.11 as **42.11a** (merge `e280829`).
+- `worktree-agent-ae27186421cb01b3e` (f8f2f55, "the FF image's banks follow the camera's bootloader; bench: the
+  FF platform path"), 20 files. It brought a bank rule for the FF image keyed on the bootloader the camera
+  reports (new `ff-platform.ts`: 0.9.0.0 recovery R only; 2.0.2.3 refused for A, B and R; any other or unknown
+  bootloader refused). It brought measurements on the FF platform (bootloader 2.0.2.3, the FF launchable copy):
+  the two-stream write was accepted at B, A and R, and none of the three booted alone with cfg[0] 0, R not with
+  cfg[0] 2. It brought a bench path for that platform (`WRITABLE_BANKS` adding 0x14030000, a 2.0.2.3 FF flow in
+  `spec-flow.ts`, a `ffBootloader` option on the fake rig), a corrected `write-commit.ts` note on 0x70100, and the
+  wording of the notes, the confirm dialog and SlotsView. Its measurements are kept as **42.11b** (merge `9449824`).
+
+**2. What was kept, and what was dropped and why.**
+
+Kept:
+
+- The two sections, 42.11a and 42.11b, with provenance lines. The subsections of 42.11b that describe the dropped
+  code ("What the page does now", "Bench library") say so at their head.
+- `packages/core/src/workflows/device-info.ts`: the `recovery-only` label for the 1.3.0.8-FF image in recovery R
+  is given only when the camera reports bootloader 0.9.0.0. A local constant is used, since `ff-platform.ts` is
+  gone. The reason is 42.11b: on 2.0.2.3 the two-stream form in R booted from no bank alone, so the label is not
+  supported there, and nothing measured supports it there. The gate refuses no write. It changes a label only
+  for a bank that carries the 1.3.0.8-FF key pair (`locateFFKeys` matches that pair and no other) on a camera
+  whose bootloader is not 0.9.0.0.
+
+Dropped, because the vendor form (42.12) replaced the two-stream form they were written for, or because the
+current code already says the same thing better:
+
+- `ff-platform.ts` and `ff-platform.test.ts`. The rule is about the two-stream payload the page no longer sends;
+  `ffBankRefusal` is gone from the current branch. Its 0.9.0.0 "R only" rule is also contradicted by the current
+  42.12 bench run, which wrote the vendor form to A, B and R on the 0.9.0.0 platform (commit 0x0000 each, read back
+  as predicted).
+- `packages/core/src/slots/write.ts`: the four refusal hunks (the import of `ffBankRefusal`, the two-stream check
+  in `prepareSlotFlash`, the 0xFFFF check in `stageImage`, and the plan check in `assertPlanIsCurrent`). The
+  current write path gates the FF image on the running build (`runningApplicationOf`) and stages the vendor form.
+- `packages/core/src/slots/capability-notes.ts`, the FF bank notes, `SlotWriteConfirm.tsx`, `SlotsView.tsx` and
+  their tests: the wording of the R-only rule. The current wording describes the vendor form and the camera's own
+  answers as the basis.
+- `packages/core/src/slots/write-commit.ts`: the 0x70100 note. The current text already says the code is not a
+  nano or Compact XR code alone, and it names the 1.3.0.8 FF gate, so the current text is kept.
+- `e2e/lib/bench/spec-flow.ts`, `spec-fakes.ts`, `bench-lib.e2e.ts`, `ff-form.ts` and `types.ts`, and `jlink.ts`:
+  the 2.0.2.3 FF flow, its picker refusals and the fake's bootloader. The current FF subject runs the vendor-form
+  run (`ff-vendor-run.ts`) and does not use the picker, so that flow cannot run as written.
+- `WRITABLE_BANKS` (0x14030000). The merged code does not need it. The branch's own record says whether 0x14030000
+  is a bank on this bootloader is NOT established, so the current refusal of that address is kept.
+- The branch's refusal of the FF image for every bank on 2.0.2.3. It refuses a form the page no longer produces,
+  and the vendor form has no measurement on that bootloader. Whether to refuse it there is the owner's call (see
+  section 7).
+
+**3. Conflicts and how each was resolved** (one line each; the TESTING.md conflicts are the same in both merges):
+
+- TESTING.md (both merges): both branches appended at the end of 42.11, so the new sections go in before 42.12 as
+  42.11a and 42.11b, not at the end.
+- `e2e/bench-lib.e2e.ts`, `spec-fakes.ts`, `spec-flow.ts`, `packages/cli/test/slots.emulator.test.ts`:
+  the current branch's version; the branch's FF-platform tests and bench branch dropped.
+- `packages/core/src/slots/capability-notes.ts`, `write-commit.ts`, `write.ts`: the current branch's version; see
+  the dropped list above.
+- `packages/core/src/workflows/device-info.ts`: the current branch's version plus the 0.9.0.0 gate on
+  `ffFormInRecovery` (see the kept list). Prettier was applied to the new signature.
+- `packages/core/test/slots/capability.test.ts`, `running.test.ts`, `write.test.ts`: the current branch's version;
+  the branch's expectation changes and its FF-platform test dropped.
+- `packages/web/src/components/SlotWriteConfirm.tsx`, `SlotsView.tsx`, `SlotsView.test.tsx`: the current branch's
+  version.
+
+**4. The verdict table.** Not changed. `e2e/lib/slots-expectations.ts` is not touched by either merge, so no row's
+expectation changed.
+
+**5. Tests.** Per package, not a whole vitest run. `SEEK_EMU_DIR=/Users/yrambler2001/things/a.noindex/seek/FW-V1/emu`
+for the emulator suites. Counts are from this merged tree.
+
+| check | scope | result |
+| --- | --- | --- |
+| `npm run typecheck` (all six `tsc` configs) | repo | exit 0 |
+| core unit, 8 files: capability (no emulator dir, so its manifest check skips), running, write, write-ff, write-commit, camera-refusal, empty-bank, verify | packages/core | 527 passed, 6 skipped |
+| core, consumers of `readDeviceInfo`, 6 files: identity-gate, plain-chain-flash, workflows, slots/inspect, slots/write-keys, slots/fps-patch | packages/core | 145 passed |
+| core emulator, 10 files: capability, corpus-locked, write.emulator, accept, empty-bank.emulator, page-expectations, fps-patch.pro-2016, fps-patch.stage-two, fps-patch.emulator, dump.emulator | packages/core, `SEEK_EMU_DIR` | 967 passed, 1 skipped, 8 failed in one parallel run (see below) |
+| core emulator, page-expectations alone | packages/core, `SEEK_EMU_DIR` | 184 passed |
+| CLI, 3 files: slots.emulator, slots.test, emulator-cli | packages/cli, `SEEK_EMU_DIR` | 130 passed |
+| web, 4 files: SlotsView, SlotsView.verdicts, SlotWriteConfirm, SlotWriteKeys | packages/web | 67 passed |
+| e2e offline: bench-lib.e2e (corpus tests skip without `SEEK_FULL_DUMPS_BY_CAMERA`), bench-verdict.e2e (its real-tree test skips) | e2e | bench-lib 95 passed, 2 skipped; bench-verdict 29 passed, 1 skipped |
+| eslint, `packages/core/src/workflows/device-info.ts` | packages/core | clean |
+| prettier, `device-info.ts` | packages/core | clean after formatting the new signature |
+
+The 8 failures in the parallel core run are all `page-expectations.emulator.test.ts` "bank A / bank B: the page
+offers the write" on Compact 0.8.0.0, 0.9.0.2, 0.9.1.0 and 1.3.0.0, each "Test timed out in 5000ms". The same file
+run alone passes all 184 tests. They are a per-test timeout under parallel load, not a result, and the file is
+not changed. The other nine files in that run passed. `TESTING.md` was already not prettier-clean at HEAD, so it
+was not reformatted.
+
+**6. Bench rows to run on the camera later.** Nothing was run here: no camera, J-Link or switch was used, and no
+bench row was run.
+
+- **Row 9 (Compact 1.3.0.8 FF, vendor form)** is the only subject whose result the merged code can change. The
+  label changes only when the camera's bootloader is not 0.9.0.0 and its recovery bank holds the 1.3.0.8-FF key
+  pair. On the 0.9.0.0 platform that row used, nothing changes. Run row 9 once on a camera whose bootloader is
+  2.0.2.3 (the FF launchable platform of 42.11b) before any vendor-form write there. The refusal that would have
+  stopped that write was dropped, and the vendor form is unmeasured on 2.0.2.3.
+- **Rows 14 (Compact 4.16.1.7 FF) and 15 (Compact PRO 1.0.3.0 FF)** are not affected. Their images do not carry
+  the 1.3.0.8-FF key pair, so the gate never applies to them. Rows 17, 18, 22 and 24 (the other FF builds) are not
+  affected for the same reason. None needs a run for this merge.
+- No row's verdict expectation changed (section 4).
+
+**7. Not done or not verified.**
+
+- The owner's decision: should the vendor form be refused on bootloader 2.0.2.3, as the f8f2f55 branch refused the
+  two-stream form? The merged code does not refuse it. Until a bench run on 2.0.2.3 says what the vendor form does
+  there, the page allows the write on every bootloader.
+- The 42.6 stored-sum discrepancy, flagged in 42.11a, is still open.
+- Section 42.21 says "The FF bootloader does not run the vendor form (42.12)". Section 42.12 does not measure that:
+  its post-write boot was recorded as not measured. That sentence is not edited here.
+- Not run: a whole vitest run (a rule of this work), the web package's full suite, `npm run check`, the bench rows,
+  and the `e2e:slots:quality` and `e2e:fps:bench` specs.
+- The 5-second per-test timeout in `page-expectations.emulator.test.ts` is tight for a parallel emulator run. It
+  is not changed here.
 
 ### 42.34 Five open plan items: the 4.8.2.1 image checked, the 2016 refusal text, the usage bank map, the 0.x/1.x dump message, and the bench lint errors (2026-10-19)
 
