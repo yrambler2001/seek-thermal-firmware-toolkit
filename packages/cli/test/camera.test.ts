@@ -215,6 +215,38 @@ describe('seek-fw dump on a 2016 Compact PRO (1.0.3.0)', () => {
   });
 });
 
+describe('seek-fw dump on a camera whose version the 0.x/1.x refusal lets through', () => {
+  /* dump.ts refuses a version of 0.x or 1.x before any probe ("nothing was read but the version",
+   * dump.ts:47). The profile check after the probe (dump.ts:58) is the other guard: a camera the
+   * probe names as the 2014–2017 line is refused before anything is dumped. No 2014–2017 build
+   * reports 2.x. The 2.0.0.0 below is this fake's version, chosen only to pass dump.ts:47, so the
+   * probe's answers are what name the line. `--profile` is not accepted by `dump`. */
+  it('refuses the line the probe names, and writes nothing', async () => {
+    const version = new Uint8Array(36);
+    version.set([2, 0, 0, 0], 0);
+    const bootloader = new Uint8Array(36);
+    bootloader.set([1, 2, 0, 0], 0);
+    const camera = compactPro1030Camera({
+      fwInfo: new Map([
+        [0, version],
+        [1, bootloader],
+      ]),
+    });
+    const out = join(dir, 'probed');
+    const { io, stderr } = testIo({ backend: fixedBackend([camera]) });
+    expect(await run(['dump', '--out', out], io, signal())).toBe(EXIT_FAILED);
+
+    expect(stderr.text).toContain('answers as Legacy locked firmware (legacy-auth)');
+    expect(stderr.text).toContain('a camera of the 0.x/1.x 2014–2017 line');
+    expect(stderr.text).toContain('nothing was dumped');
+    expect(stderr.text).toContain('seek-fw preserve');
+    await expect(readdir(out)).rejects.toThrow();
+    for (const call of camera.calls) {
+      expect(READ_ONLY_OPS.has(call.op as never), `opcode ${String(call.op)}`).toBe(true);
+    }
+  });
+});
+
 describe('seek-fw dump', () => {
   it('reads the whole flash, decrypts it and writes the archive', async () => {
     const camera = cameraWithFlash(synthetic.flash);

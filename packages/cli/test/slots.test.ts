@@ -83,7 +83,8 @@ import {
 const SUPPORTED: Support = { supported: true };
 const UNSUPPORTED = (reason: string): Support => ({ supported: false, reason });
 
-const ADDRESS: Record<SlotKey, number> = { a: 0x14050000, b: 0x14060000, r: 0x14070000 };
+/* The 4.x map of the fixtures' 4.9.5.0 camera (modern-4x.ts:84-86). The 2014 map is legacy-auth.ts:548-552. */
+const ADDRESS: Record<SlotKey, number> = { a: 0x14030000, b: 0x14050000, r: 0x14070000 };
 const NO_FLAGS = {
   raw: false,
   acknowledgeRisk: false,
@@ -609,8 +610,8 @@ describe('slots list', () => {
     const text = listLines(reportOf({ booted: 'a' }), false).join('\n');
     expect(text).toContain('Seek Compact PRO');
     expect(text).toContain('SN-1');
-    expect(text).toMatch(/A\s+0x14050000\s+yes\s+4\.9\.5\.0/);
-    expect(text).toMatch(/B\s+0x14060000\s+no\s+4\.9\.5\.0/);
+    expect(text).toMatch(/A\s+0x14030000\s+yes\s+4\.9\.5\.0/);
+    expect(text).toMatch(/B\s+0x14050000\s+no\s+4\.9\.5\.0/);
     expect(text).toMatch(/R\s+0x14070000\s+no\s+4\.9\.5\.0/);
     expect(text).toContain('flash decrypted image');
     expect(text).toContain('flash raw bytes');
@@ -701,7 +702,7 @@ describe('the flash plan and read-back', () => {
     const plan = fakePlan('b', 'raw', new Uint8Array(0x10000));
     const text = flashPlanLines(plan, 'raw.bin', 'c0ffee00', false).join('\n');
     expect(text).toContain('Slot flash plan');
-    expect(text).toContain('B (0x14060000)');
+    expect(text).toContain('B (0x14050000)');
     expect(text).toContain('raw.bin — raw bytes, sent verbatim');
     expect(text).toContain('65536 B in 1024 chunk(s) of 64 B');
     expect(text).toContain('0x1234');
@@ -1161,8 +1162,8 @@ describe('empty banks', () => {
   describe('slots list', () => {
     it('shows an empty bank as "empty" with no version, key or bootability, and keeps the others', () => {
       const text = listLines(reportOf({ booted: 'a', empty: ['b'] }), false).join('\n');
-      expect(text).toMatch(/A\s+0x14050000\s+yes\s+4\.9\.5\.0/);
-      expect(text).toMatch(/B\s+0x14060000\s+no\s+empty\s+-\s+-\s+-\s+-/);
+      expect(text).toMatch(/A\s+0x14030000\s+yes\s+4\.9\.5\.0/);
+      expect(text).toMatch(/B\s+0x14050000\s+no\s+empty\s+-\s+-\s+-\s+-/);
       expect(text).toMatch(/R\s+0x14070000\s+no\s+4\.9\.5\.0/);
     });
 

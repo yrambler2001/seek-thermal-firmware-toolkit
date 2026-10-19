@@ -213,8 +213,12 @@ function infoBlock(version: readonly number[], date: string): Uint8Array {
  * channel, the protected banks behind the token, and its three banks holding
  * one 2016 cipher-chain image — keyed xorshift128 under K=0, decrypting to a
  * word sum of 0, with no "CODE" footer. Bootloader 1.2.0.0 on selector 1.
+ * `fwInfo` replaces the two build blocks, e.g. an empty map for a camera whose
+ * GetFirmwareInfo never answers.
  */
-export function compactPro1030Camera(): ReturnType<typeof fakeCamera> {
+export function compactPro1030Camera(
+  options: { readonly fwInfo?: FakeCameraOptions['fwInfo'] } = {},
+): ReturnType<typeof fakeCamera> {
   const image = buildPlainImage();
   viewOf(image).setUint32(HEADER_OFFSET + 12, 0x0003_0001, true); /* version 1.0.3.0 */
   viewOf(image).setUint32(ADJUST_OFFSET, 0, true);
@@ -230,10 +234,12 @@ export function compactPro1030Camera(): ReturnType<typeof fakeCamera> {
     windows: rows.map((row) => ({ subcmd: row.subcmd, offset: (row.address ?? 0) - FLASH_BASE })),
     authBanks: rows.filter((row) => row.channel === 'auth').map((row) => row.subcmd),
     authToken: OLD_FW_UNLOCK_TOKEN,
-    fwInfo: new Map([
-      [0, infoBlock([1, 0, 3, 0], 'Jul  6 2016')],
-      [1, infoBlock([1, 2, 0, 0], 'Jun 26 2016')],
-    ]),
+    fwInfo:
+      options.fwInfo ??
+      new Map([
+        [0, infoBlock([1, 0, 3, 0], 'Jul  6 2016')],
+        [1, infoBlock([1, 2, 0, 0], 'Jun 26 2016')],
+      ]),
   });
 }
 

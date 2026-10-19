@@ -230,9 +230,12 @@ export const FPS_PATCHES: readonly FpsPatch[] = FPS_PATCH_TABLE.map((source) => 
  * same unit (TESTING.md 42.32). The table's bytes are that experiment's three edits, plus the acceptance-sum
  * word the packager moves (FRAME_RATE.md sec.9). 4.9.2.0 and 1.0.3.x are not measured and run at their target.
  *
- * The 1.3.0.8 32 Hz entry was 26 fps on the bench (TESTING.md 42.20), but that figure was for its
- * earlier one-step form (op 5), which the table replaced with the plain-copy form. The copy form has no camera
- * measurement, so it is offered at its target (32 Hz), like the other unmeasured entries.
+ * The 1.3.0.8 32 Hz entry is not listed. 42.20 measured its earlier op-5 form (image ee8c7f0e) at 26 fps, but
+ * that is a whole-run average over 20 s, which counts the captures the stream never publishes; the steady
+ * median of that image is 32.2 fps, and 42.20's tool reads it at 26.3 to 26.9 fps over the whole run
+ * (TESTING.md 42.37 sec.3a). The table's entry is the plain-copy form (image 5313f107): 42.27 measured it on the
+ * camera at 32.16 to 32.20 fps by per-second medians, and its whole-run rate has not been measured, so it names
+ * its target (32 Hz).
  */
 export const FPS_MEASURED_HZ: ReadonlyMap<string, number> = new Map<string, number>([
   ['compact_pro-4.9.1.15', 17.7],

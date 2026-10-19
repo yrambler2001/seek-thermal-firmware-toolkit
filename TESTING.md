@@ -7485,7 +7485,7 @@ Notes: the camera's state after the pages bench and the CLI test was read again 
 - **The retained memory** (defect 5): about 200 MB per subject, 22 to 30 MB per Electron window, not located. A longer run needs the 16 GB heap; `NODE_OPTIONS=--max-old-space-size=16384 --expose-gc` is what this run used.
 - **The 0.x/1.x backup gap** (42.20 §5 A) is still open, unchanged by this run.
 - **The page clears its bank table after a write** until "Read slots" (42.20 §5 C): not changed here.
-- **The 1.3.0.8 FF row is run through the CLI's vendor-form path, not the page**; its boot is observed, not proven by a boot proof. The FF bootloader does not run the vendor form (42.12).
+- **The 1.3.0.8 FF row is run through the CLI's vendor-form path, not the page**; its boot is observed, not proven by a boot proof. The boot of a vendor-form bank is not measured. 42.12 wrote the vendor form to A, B and R and read each back as predicted; after one power cycle the camera did not come back on USB within 60 s, and no bank's boot was measured (corrected in 42.38).
 - **The offline spec does not cover a v4 camera's offline dump.** A 4.x corpus camera would need its own offline case.
 - The web suite was not re-run in this session; it was last run at 42.19 (332 of 332).
 
@@ -8093,7 +8093,7 @@ npx vitest run test/preservation/fps-patch.test.ts test/preservation/fps-patch.d
 **11. What the sources disagree on (recorded, not resolved).**
 
 - The 1.3.0.8 op-5 form (the first 32 Hz entry, image ee8c7f0e) published 26 fps in 42.20 on serial 101310HSNEA2 (the PIR206 unit), and
-  32.18 to 32.20 fps in this section's run of the same image on the same unit. The emulator comment in `fps_patch.py` and the TypeScript
+  32.18 to 32.20 fps in this section's run of the copy form 5313f107 on the same unit, which is not the same image (corrected in 42.38). The emulator comment in `fps_patch.py` and the TypeScript
   comment on `FPS_MEASURED_HZ` both cite the 26 fps. No cause was found.
 - The 0.7.0.8 stock picture differs between the E1 run and the P3 run (see the notes under the table).
 - `FPS_32HZ.md` section 8 and TESTING 42.26 say 1.2.0.0 has no patch. The table has `compact_32k-1.2.0.0-to32` (stage one), measured
@@ -9078,3 +9078,41 @@ Either way, the checker and Swift must change together. Changing only the checke
 - The 0.9.1.0 first-run dip (42.27) was not re-measured; the brief asked only for 0.10.0.0.
 - The stalls on the first checker connect after CLI slot writes (`0x56`, `0x37`) are recorded above; the cause is not established.
 - Status values 1 and 6 are reported as seen; their meaning is not decoded here.
+
+### 42.38 Four open texts and tests from 42.34 and 42.37: the FPS_MEASURED_HZ comment and two earlier sentences corrected, the 4.x slot fixture given the 4.x map, and the 0.x/1.x dump refusal tested (2026-10-19)
+
+**Summary.** Four items from `plan.md` sections 1 and 4, done offline: no camera, J-Link or USB switch. Two statements were wrong, one about the 1.3.0.8 32 Hz entry (a code comment) and one about the vendor-form boot (42.21); the earlier text is corrected with a marked edit where it is quoted. The slots fixture for a 4.9.5.0 camera had the 2014 bank addresses; it now has the 4.x map, and the four assertions that depend on it are updated. The profile-level dump refusal (`dump.ts:61`) had no test; it now has one. No rate, byte, or behaviour changed.
+
+**Tags.** [measured] is from the files and test runs named here. [source] is read from the code or a doc.
+
+**1. The `FPS_MEASURED_HZ` comment (`packages/core/src/preservation/fps-patch.ts:233-238`).**
+- The old comment said the 26 fps of 42.20 was for the op-5 form and that the copy form "has no camera measurement". Both halves were wrong. The 26 is the op-5 form's (`ee8c7f0e`) whole-run average over 20 s, which counts captures the stream never publishes; its steady median is 32.2 fps, and re-measured with 42.20's tool it reads 26.3 to 26.9 fps (42.37 section 3a, [measured]). The copy form (`5313f107`, the table's entry) was measured on the camera at 32.16 to 32.20 fps by per-second medians (42.27 section 4, [measured]); its whole-run rate was not measured (42.37).
+- The comment now says that. The 4.9.1.15 paragraph (17.7 fps, 42.32) is unchanged. The map has the same one entry, and no offer's rate changes.
+
+**2. 42.27 section 11, the "same image" sentence (`TESTING.md:8096`).** The sentence said the 32.18 to 32.20 fps run was "of the same image" as the 42.20 op-5 run. It was the copy form `5313f107` (42.37 section 3a). Corrected, marked "(corrected in 42.38)". The same section's "No cause was found" is superseded by 42.37 section 3a and is not edited here.
+
+**3. 42.21, the vendor-form sentence (`TESTING.md:7488`).** "The FF bootloader does not run the vendor form (42.12)" is not what 42.12 measured. 42.12 lists the boot of any vendor-form bank as "Not measured". What it measured: the three vendor-form writes read back as predicted, and after one power cycle the camera did not come back on USB within 60 s. The sentence now says exactly that, marked "(corrected in 42.38)". 42.33 section 7 had flagged it and left it.
+
+**4. The 4.x slot fixture (`packages/cli/test/slots.test.ts`).**
+- The fixture is a 4.9.5.0 camera (`plan.profileId` `modern-4x`, `firmwareVersion` `4.9.5.0`), so it takes the 4.x map from `packages/core/src/profiles/modern-4x.ts:84-86`: A `0x14030000`, B `0x14050000`, R `0x14070000`. It had the 2014 map (`legacy-auth.ts:548-552`: A `0x14050000`, B `0x14060000`, R `0x14070000`). The constant is `:86-87`; its comment names both sources.
+- Assertions that depended on it: `:613-614` (`slots list`), `:705` (flash plan, `B (0x14050000)`), `:1165-1166` (empty banks, `slots list`). R is the same on both maps and its lines are unchanged.
+- Left on the 2014 map on purpose: the 1.3.0.0 fixtures at `:1673` (the preDump) and `:1969` (`fpsPlanLines` for `1.3.0.0`), which are the 2014 chain. `:478` (`parseBank('0x14050000')` must throw) is a rejection test and does not depend on the map.
+
+**5. The profile-level dump refusal is tested (`packages/cli/test/camera.test.ts:218-248`, `packages/cli/test/helpers.ts:219-244`).**
+- Route. `dump.ts:47` refuses a version of 0.x or 1.x before any probe, and the 2014–2017 profile check is at `dump.ts:58-61`. A real 0.x/1.x camera never reaches line 61. The test uses the bench-shaped 1.0.3.0 fake from `helpers.ts` with a synthetic version of 2.0.0.0, which is what gets past line 47. No 2014–2017 build reports 2.x, so the test pins the guard, not a real camera. The probe names `Legacy locked firmware (legacy-auth)`, and line 61 refuses it.
+- `compactPro1030Camera` takes an optional `fwInfo` (default unchanged) for this.
+- Assertions: the message names the profile and the 0.x/1.x 2014–2017 line, says "nothing was dumped", and points at `seek-fw preserve`. The output directory is not created. Every opcode sent is in `READ_ONLY_OPS`.
+- Two routes that do not reach line 61, found on the way: `dump --profile` is a usage error (`cli.ts:19`), so a forced profile cannot be tried. And a camera whose GetFirmwareInfo never answers is refused first with "the camera did not report its firmware version": without a version the probe cannot arm a bank, so the detection falls back to the USB descriptors and the identity gate refuses. Measured on the fake; the test does not cover this path.
+
+**6. Code and tests.**
+- `npx tsc --noEmit -p packages/core/tsconfig.json`: exit 0. `npx tsc --noEmit -p packages/cli/tsconfig.json`: exit 0. The CLI project references core's build output, so `npm run build --workspace @seek-fw/core` ran first (`dist` is gitignored).
+- `cd packages/core && npx vitest run test/preservation/fps-patch.test.ts`: 14 passed (unchanged; a comment changed, no test did).
+- `cd packages/cli && npx vitest run test/slots.test.ts`: 107 passed (unchanged count; the four assertions pass on the 4.x map).
+- `cd packages/cli && npx vitest run test/camera.test.ts`: 22 passed (was 21; the new test is the 22nd).
+- `npx eslint` on the four changed `.ts` files: no problems. `npx prettier --check` on the same four: clean. `TESTING.md` is not prettier-clean at HEAD (42.34) and is not reformatted.
+
+**7. Not done or not verified.**
+- A mutation check of the new test (removing the `dump.ts:58` check) was not run.
+- The other CLI test files that import `helpers.ts` were not run (the brief named three files). The helper change adds an optional parameter and keeps the default.
+- `packages/core/test/preservation/fps-patch.test.ts:194` says the copy form "has no camera measurement", the same error fixed in section 1. It is outside these items and is not changed.
+- `plan.md` is not edited. The owner can close the "Fix two texts after 42.37" item in plan.md section 1 and the three items in section 4 (the 42.21 sentence, the slots fixture, the dump message) after review.
