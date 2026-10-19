@@ -11264,3 +11264,52 @@ The middle sentence depends on B's verdict on this read: "holds a bootable image
 - The camera was not checked after the final power cycle, to avoid unlocking it.
 
 **Commits.** TESTING.md only, on the worktree branch `worktree-agent-a8b44f89035c1c6e7`. No FW-V1 commit was made. The scripts used for the byte checks are under `/private/tmp/claude-501/agent-hw8/scripts/`, not in the repo.
+
+### 42.71 One slot-dump name for the page and the CLI, from one core function (`slotDumpNames`); the bare-name comments and the README's modern-line name fixed (offline, 2026-10-19)
+
+**Summary.** Agent 42.71 on `worktree-agent-a113d90a138f0ca96`, on top of `refactor/all-firmware-profiles` (fe0bdb8). The owner wants the page to match the CLI, so the CLI's names are the reference. Core's `slotDumpNames` now makes both sets of names, and both the CLI and the page call it. No camera, J-Link or USB switch was used. Commits: `b8f336a` (names, comments, tests), `ce29abf` (README), and this section. Nothing is pushed or merged.
+
+**Tags.** [source] is read from the code named. [measured] is a test run here. [inferred] follows from those.
+
+**1. One name function (`packages/core/src/slots/dump.ts`, `slotDumpNames` and `safeVersion`, exported through `slots/index.ts`).**
+
+- The CLI's `dumpArtifacts` (`packages/cli/src/commands/slots.ts:816`) and the page's dump flow (`packages/web/src/hooks/useSlotsPanel.ts:624`) and write source (`bankImageSource`, line 282) call it. `slotDumpFileName` and `keyPairToName` are removed from the page; `safeVersion` moved from the CLI to core, where it is the only copy.
+- The key-pair rule is the CLI's: the suffix is added only when `findEmbeddedKeyTable` finds this camera's pair exactly once in the decrypted image. Otherwise the name stays bare.
+- `safeVersion` keeps `[A-Za-z0-9._-]` and turns each other character into `_`; null or empty is `unknown`. The page used to collapse runs into `-`, so `4/../x` was `4-x` there and is `4_.._x` now.
+- The eight digits in both files are the first eight of the stored bank's sha256, as the CLI always did. The page's decrypted file used the decrypted image's sha before; that changed.
+
+Name table, for the bank letter `b`, version `1.3.0.0`, the stored sha `<sha8>`:
+
+| file | CLI (unchanged by 42.71) | page before 42.71 | page now |
+| --- | --- | --- | --- |
+| bank as stored | `seek-slot-b-1.3.0.0-<sha8>.bin` | `seek-slot-B-v1.3.0.0-raw-<sha8>.bin` | `seek-slot-b-1.3.0.0-<sha8>.bin` |
+| decrypted, no camera pair | `seek-slot-b-1.3.0.0-<sha8>-decrypted.bin` | `seek-slot-B-v1.3.0.0-decrypted-<plain sha8>.bin` | `seek-slot-b-1.3.0.0-<sha8>-decrypted.bin` |
+| decrypted, camera pair in the image | `…-<sha8>-decrypted-KeyA-<32 hex>-KeyB-<32 hex>.bin` | `…-decrypted-<plain sha8>-KeyA-…-KeyB-….bin` | `…-<sha8>-decrypted-KeyA-…-KeyB-….bin` |
+| empty bank, raw | `seek-slot-b-empty-<sha8>.bin` | `seek-slot-B-empty-raw-<sha8>.bin` | `seek-slot-b-empty-<sha8>.bin` |
+| empty bank, decrypted | none | none | none |
+
+The CLI's output did not change: its tests already pinned this form (42.69), and the CLI test file changed only where it imports `safeVersion`.
+
+**2. Stale comments (`packages/web/src/hooks/useSlotsPanel.ts`).** The comments that said a file name without its key pair is refused (the old `slotDumpFileName` doc, the dump-flow comment and the `BankImageSource.fileName` doc) now say a bare name is accepted when this camera's pair, or a known application pair, occurs exactly once in the image. That is `retargetImageKeys` (`packages/core/src/slots/write-image.ts:160`) through `locateOwnKeyPair` (`write-image.ts:139`). No UI text said the refusal; `hints.ts` `image/key-table` ("the image does not carry the key pair its filename claims") is still true and is unchanged.
+
+**3. README "2017+ line" (`README.md`, "Flash a decrypted image" under Firmware slots).** The sentence now reads "on the modern line (2.x, 4.x, 10.x, 42.x and 44.x)", the list "What it writes" uses and the family `capability-family.ts` calls `modern`. The README's table row for the modern profile still says "2018 and later" (line 137); it was not changed here.
+
+**Tests.**
+
+- Core, new `packages/core/test/slots/dump-names.test.ts`: 9 passed. Covers a bank with a version, the pair present and absent, the pair in the image twice, an empty bank, a bank with no decrypted image, a version with unsafe characters and an unknown version, the reserved bank letter, and `safeVersion`.
+- Core, `test/slots/dump.emulator.test.ts` (`SEEK_EMU_DIR`): 12 passed.
+- CLI, `test/slots.test.ts` and `test/args.test.ts`: 150 passed.
+- CLI, `test/slots.emulator.test.ts` (`SEEK_EMU_DIR`): 23 passed. `test/slots-empty.emulator.test.ts` (`SEEK_EMU_DIR`): 7 passed.
+- Web, `useSlotsPanel.test.tsx`, `SlotsView.test.tsx`, `SlotsView.verdicts.test.tsx`, `lib/fps-save.test.ts`, `SlotWriteConfirm.test.tsx`, `SlotFpsConfirm.test.tsx`, `SlotWriteKeys.test.tsx`, `useSlotFileDecrypt.test.tsx`: 8 files, 145 passed. The new web test checks that the page's downloaded names equal `slotDumpNames` on the same dump, with the camera pair in the image.
+- e2e, `bench-lib.e2e.ts` through `e2e/vitest.config.ts`: 104 passed, 4 skipped (the corpus tests skip without `SEEK_FULL_DUMPS_BY_CAMERA`). Its J-Link calls go through an injected fake `exec`; the `reset: JLinkExe exit 0` line in its output comes from one of those fakes.
+- `tsc --noEmit`: `packages/core/tsconfig.json`, `packages/cli/tsconfig.json`, `packages/web/tsconfig.app.json`, `e2e/tsconfig.json`: all exit 0.
+- eslint on every changed `.ts`/`.tsx`: clean.
+- prettier `--check` on every changed file: clean, except `e2e/bench-lib.e2e.ts`, which was already off-format at HEAD (lines unrelated to this change). Its lines changed here are clean; the rest was left alone.
+
+**Not run.** `packages/cli/test/real-camera-pages.test.ts` (real camera; its regexes already use the CLI's form from 42.69 and were not edited). No whole-suite vitest. The `e2e:slots:*` bench runs. The built bundle in `docs/` still has the old names; it is rebuilt by the step in `plan.md`.
+
+**Not verified or not decided.**
+
+- The write source's name (`bankImageSource`, `fileName`) carries the decrypted image's sha8, not the stored bank's. The report holds no hash of the stored bank and the name is built synchronously. It is shown in the write confirmation and never downloaded. A dump of the same bank names its decrypted file with the stored sha8. Whether the write source should match is the owner's call.
+- The fps pre-patch and patched files (core's `fpsPreDumpNames` and `patchedFileName` in `packages/core/src/slots/fps-patch.ts`: `seek-slot-A-v<ver>-before-fps-patch-raw-<sha8>.bin`, `…-fps<N>-patched.bin`) keep their own uppercase-key form. The page and the CLI already share those functions, so they agree with each other, but they do not match the slot dump names. Not changed here.
+- README line 40 (`decrypted/*.bin`) and the `flash_4m_…_decrypted_…` example near line 661 describe the whole-flash dump, not `slots dump`. Left alone.
