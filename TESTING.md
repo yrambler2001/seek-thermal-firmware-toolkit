@@ -9170,6 +9170,73 @@ Either way, the checker and Swift must change together. Changing only the checke
 - Seek: `e0c33fc` (the regenerated table, comments only), and this note on branch `worktree-agent-a798ff52301db527d`.
 - `refactor/all-firmware-profiles` moved to `796e5d9` (another session's work) after this reset. These commits sit on `eff9bf5`, as the brief asked, and need a rebase onto that tip before any merge.
 
+### 42.42 The over-ceiling check on a warm-ramp scene, and a `--flash` part that streams through the checker (2026-10-19)
+
+**Summary.** Two open items of `plan.md` section 1 are answered on the emulator. (1) The 32 Hz copy does not clip, and does not write 0xFFFF, at or above the sensor ceiling (15000): on a scene with samples from 14,880 to 16,370 every delivered sample of the patched 1.3.0.8 and 4.8.2.1 equals its input, exactly as the stock build's does. The superseded one-step op-5 form on the same scene writes 0xFFFF on 679,520 of the 684,480 samples at or above 15000. (2) A `--flash` part now gets its build's 32K sensor when it is booted with `--flash-entry` (FW-V1 `seekemu/cli.py`), and the TypeScript checker streams the patched 1.3.0.0 (2014 chain) and 4.8.2.1 (Key A) parts at 32.26 fps medians, against 32.258 Hz in the Python IP rows. Nothing was run on a camera.
+
+**Tags.** [measured] was read from the run logs and the frames the runs saved; [source] from the code named; [inferred] follows from those.
+
+**1. The scene.** [source] The default 32K scene (the bench 1.3.0.0 recording, `a2_ip3_raw_frames_subset.bin.gz`, 60 frames) has its highest pixel sample at 10,217 (0x27E9); none of its 1,946,880 pixel samples is at or above 15000. Its over-ceiling column in the IP rows is therefore 0.00 %, on stock and patched alike (the default-scene rows below).
+
+The new scene, `WarmRampFrames` in FW-V1 `emu/seekemu/sensor32k.py` (commit `09517806e`), is that recording with one rectangle of every frame's pixels replaced: rows 40 to 119, columns 20 to 169 of the 156 pixel lines, the value 14,880 + 10 per column from column 20. Column 32 is exactly 15,000; column 169 is 16,370, so 0x3FFF is never reached. The header words and every other pixel are the recording's own. `compact_scene()` picks the scene for a 32K boot: the bench recording by default, the warm ramp with `SEEKEMU_32K_SCENE=warm-ramp`. `corpus_baseline.py` (which the IP rows use) and `cli.py` both call it. Each steady frame has 12,000 rectangle halfwords carrying 11,040 samples at or above 15000.
+
+**2. The IP rows on the warm ramp.** `fps_patch_tests.py --only 1.3.0.8@32:ip8 --only 4.8.2.1@32:ip8 --no-long -j 2` with `SEEKEMU_32K_SCENE=warm-ramp`: both rows PASS. The row's columns (its `%ceil` is the share of body halfwords at or above 15000, `%FFFF` the share equal to 0xFFFF):
+
+| build | run | median Hz | level | %ceil | %FFFF |
+| --- | --- | --- | --- | --- | --- |
+| 1.3.0.8 | stock | 8.065 | 10210.7 | 35.86 | 0.00 |
+| 1.3.0.8 | patched | 32.258 | 10208.4 | 35.86 | 0.00 |
+| 4.8.2.1 | stock | 8.065 | 10208.2 | 35.86 | 0.00 |
+| 4.8.2.1 | patched | 32.258 | 10213.4 | 35.86 | 0.00 |
+
+35.86 % of the 30,784 body halfwords is 11,040 per frame, the scene's own count at or above 15000: the outputs hold every over-ceiling sample.
+
+**3. Sample by sample.** Four boots (`ceiling_boot.py`, the IP-8 init of the row, 80 frames each; scratch scripts, not committed) saved their raw frames. Each steady frame's rectangle was compared halfword by halfword with the value the scene put there:
+
+| build | run | steady frames | rectangle halfwords | exact | at or above 15000 (expected = output) | clipped to 15000 | 0xFFFF |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 1.3.0.8 | stock | 58 | 696,000 | 100 % | 640,320 | 0 | 0 |
+| 1.3.0.8 | patched (copy, `5313f107`) | 62 | 744,000 | 100 % | 684,480 | 0 | 0 |
+| 4.8.2.1 | stock | 50 | 600,000 | 100 % | 552,000 | 0 | 0 |
+| 4.8.2.1 | patched (copy) | 55 | 660,000 | 100 % | 607,200 | 0 | 0 |
+
+Column 32 reads 15000, column 33 15010, column 169 16370, in every run. The output's row and column are the sensor's: no shift. [measured]
+
+**4. The control.** The superseded op-5 one-step form was built by hand on the 1.3.0.8 image (steady block `01 0d 0d 00 | 13 25 23 | 00 x9`: op 5 with the publish bit, the acceptance-sum word moved to keep the sum; not a table entry, not committed) and booted the same way. Of the 744,000 rectangle halfwords, 684,480 are at or above 15000: 679,520 read 0xFFFF, and the other 4,960 are column 32, which is exactly 15000 and not above the ceiling; 0 are clipped to 15000. The run's median was 32.258 Hz, so the rate is the same and the picture is not. [measured] So the scene can show the 0xFFFF the op-5 form writes, and the copy form does not write it.
+
+**5. The default scene is unchanged.** `fps_patch_tests.py --only 1.3.0.0@32:ip8`, `--only 1.3.0.8@32:ip8`, `--only 4.8.2.1@32:ip8` (no scene variable): all PASS. 1.3.0.0: 8.065 -> 32.258 Hz, level 6798.1 -> 6797.0; 1.3.0.8: 8.065 -> 32.258 Hz, level 6800.9 -> 6796.9; 4.8.2.1: 8.065 -> 32.258 Hz, level 6796.8 -> 6805.4. The levels are the 42.27 figures. [measured]
+
+**6. The `--flash` part.** [source] Before this change the 32K sensor was attached only for a `--corpus-entry` boot (`cli.py`, `corpus_entry is not None`). A `--flash` part got the SGPIO feed, and the checker received no frames from it (the spec's earlier record, and `e2e/seek-fps-emulator.e2e.ts` before this commit). The FW-V1 change is `--flash-entry ID` (commit `08e1abc6e`): the part boots on that entry's board (straps, VT repair) and gets its 32K sensor, the way `--corpus-entry` does. `packages/core/test/emulator/harness.ts` passes it as `flashEntry`, and `e2e/lib/bench/seek-fps/emulator-link.ts` passes the entry as `flashEntry` for every `flashOverride` boot.
+
+The patched parts (`fps_patch.py`'s `patch_bytes` on the corpus dump, written to a file) were streamed with the checker, `--emulator ENTRY --emulator-flash FILE --fps --mode normal --no-hifps`, `SEEK_EMU_DIR` set to the FW-V1 worktree's `emu`, `SEEK_EMU_PYTHON` to its venv's Python:
+
+| entry | per-second medians (five seconds) | per-second means | overall mean (frames) | Python IP row (default scene) |
+| --- | --- | --- | --- | --- |
+| `compact/2014.10.21-14.58.29-1.3.0.0/101310HSNEA2/dump` (1.3.0.0, patched) | 32.26 x5 | 21, 20, 20, 20, 32 | 22.60 (113) | 8.065 -> 32.258 Hz |
+| `compact/2020.02.26-11.23.26-4.8.2.1/2229A0YZ7E28/dump` (4.8.2.1, patched) | 32.26 x5 | 19, 18, 18, 32, 32 | 23.80 (119) | 8.065 -> 32.258 Hz |
+
+The medians match the IP rows. The means are lower because the calibration stretch is not patched (`FPS_32HZ.md` section 1). [measured]
+
+**7. The spec.** `e2e/seek-fps-emulator.e2e.ts` now measures the patched part's Normal rate (its `rowOf` is shared with the stock rows) instead of recording "frames not measured". Run: `npx vitest run --config e2e/vitest.config.ts seek-fps-emulator.e2e --testTimeout=600000` on the new emulator: 15 tests, 8 passed, 7 failed.
+- Pass: the 1.3.0.0 stock rows (Normal 8.06, FastRaw 32.26, Raw 8.06, IP 6 8.06); the 1.3.0.0 patched part (Normal 32.26 fps, 113 frames); the 1.3.0.8 stock Normal (8.06); the 1.3.0.8 patched part (Normal 32.26 fps, 113 frames); the 1.3.0.8-FF stock Normal (16.13).
+- Fail, pre-existing: the 1.3.0.8-FF patched test throws in `patchedPart` ("compact_32k-1.3.0.8-FF-to32: not the stock image this patch was written for"), before any emulator starts. The stock FastRaw, Raw and IP 6 boots of 1.3.0.8 and of 1.3.0.8-FF stall at `control OUT 0x56` (six tests). Run `-t "1.3.0.8"` on the pre-change emulator (FW-V1 `a13c615c6`, in a temporary worktree since removed): the same six stalls and the same FF patched error, so neither comes from this change. [measured]
+
+**8. Tests.**
+- `selftest.py --only usbip,image_data_test_pattern,1308_calibration_frames` (the USB/IP boots and the 32K frame sources the change touches): 29 passed, 0 failed, 86 s.
+- The checker's unit tests, `npx vitest run --config e2e/lib/bench/seek-fps/vitest.config.mjs`: 56 passed in 4 files.
+- `npx tsc --noEmit -p e2e/tsconfig.json` and `-p packages/core/tsconfig.json`: no errors. eslint on the three changed TypeScript files: clean. Prettier: clean on the changed files.
+
+**9. Not measured or open.**
+- The 1.3.0.8-FF patched part did not stream through the checker: its stock bank is refused by `patchedPart`, which is a checker-side limit unrelated to the emulator, and it is pre-existing.
+- The checker's Hi FPS (IP 3) and Raw of the patched parts were not measured; the Python rows and `42.27` are the record for those.
+- Nothing measured on a camera: the bench recording has no warm pixel, so the over-ceiling behaviour of the copy is established on the emulator only.
+- The op-5 control's bytes were a one-off edit, not a table entry; it is not committed.
+- `FPS_32HZ.md` section 8, and this file's 42.27 sections 7 and 12, still say a patched part cannot stream through `--flash`. That is out of date now and was left as the record of 42.27; the owner's document was not edited here.
+- The Nano 200 `--corpus-entry` boot through `cli.py` now uses the sensor enable pin `corpus_baseline.py` gives it (the one WHAT-IF pin). Not run.
+- `plan.md` was not edited.
+
+**10. Commits.** FW-V1, branch `emu-sensor` (worktree `/private/tmp/claude-501/fwv1-emu-sensor`, not merged, not pushed): `09517806e` (the warm-ramp scene), `08e1abc6e` (`--flash-entry`, and the README note). Seek, branch `worktree-agent-a344f8b5c2ecd86bc`: `f1cd55a` (the checker, harness and spec), then this section.
+
 ### 42.43 The 4.x active-slot word stays 0 because the factory startup never writes it, the 2016 footer is absent from the flash, and modes 4 and 7 are read (emulator only, 2026-10-19)
 
 **Summary.** Three `plan.md` section 1 items (the 4.8.x active-slot word, the 2016 `footerOk`, and modes 4 and 7 with the 0.x masks). Nothing ran on a camera, and no J-Link or switch was used. No harness was changed, so the emulator suite was not re-run and no code changed in this repo.
