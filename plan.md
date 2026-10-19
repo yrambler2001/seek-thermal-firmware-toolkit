@@ -1,7 +1,7 @@
 # Plan: what is still to do
 
 Branch `refactor/all-firmware-profiles`: all commits are local; nothing is pushed and main is never touched without the owner's explicit approval (owner, 2026-10-19: keep it local until the owner says). FW-V1 `main` was pushed on the owner's word on 2026-10-19 (`a13c615c6`).
-Done work is in `TESTING.md` (sections 42.x; the latest is 42.36; 42.37 is running) and `FPS_32HZ.md`; this file lists only what is open. Status marks: [ ] open, [~] running, [?] needs the owner.
+Done work is in `TESTING.md` (sections 42.x; the latest is 42.37) and `FPS_32HZ.md`; this file lists only what is open. Status marks: [ ] open, [~] running, [?] needs the owner.
 
 ## Standing rules
 
@@ -26,9 +26,10 @@ Every 8 and 9 fps build with a table entry is offered except the FF entries and 
 - [ ] The verdict table's `Compact 4.8.1.7 (std)` row has `emulator: null`; 42.36 maps it by row name. Give it its emulator subject.
 - [ ] Hi FPS: the 4.8.1.7 and 4.8.1.9 builds refuse mode 3 (the build's mask), so their Hi FPS cannot be measured (the XR 4.8.2.1 needs no entry of its own: same image as the Compact, 42.34).
 - [ ] Over-ceiling behaviour of the 32 Hz copy on a 32K camera. No 32K emulator scene has samples at or above 15000, and the camera's 1.3.0.8 scene had no warm pixel.
-- [~] Long streams: no 32 Hz entry has run for a long stream. The frame-sequence limit may leave 32 Hz (`docs/FPS_PATCH_LONG_STREAM.md`). The two long-run rows in `fps_patch_tests.py` were not run in 42.27. (running, 2026-10-19 wave: TESTING.md 42.37)
-- [~] The 1.3.0.8 op-5 entry published 26 fps in 42.20 and 32.2 fps for the same image on the same unit in 42.27. Find out why. The `FPS_MEASURED_HZ` comment in `fps-patch.ts` still says the copy form has no camera measurement, which 42.27 contradicts; fix it with the answer. (running, 2026-10-19 wave: TESTING.md 42.37)
-- [~] 0.10.0.0 patched Hi FPS mean 23.4 against stock 27.4 (cause not known). 0.9.1.0: the first patched run was 27.8 to 30.8 fps; four reruns gave 32.2. (running, 2026-10-19 wave: TESTING.md 42.37)
+- [?] Long streams (42.37): a 30-minute Normal stream on the 1.3.0.0 32 Hz bank kept per-second medians near 32, but its whole-run rate was 27.0 fps at 1 min and 29.1 at 20 and 30 min (minute rates 25.0 to 30.4; no frozen pairs; one dip at 660 to 720 s, cause unknown). Stock Hi FPS on 0.10.0.0 shows the same gap (medians 31 to 32, means 27.8 to 28.4). The gap is captures that are never published. Decide what the page's "Make 32 FPS" should name, and whether to chase the excursions (`docs/FPS_PATCH_LONG_STREAM.md`); a stock Hi FPS long stream is the comparison not yet run.
+- [ ] Fix two texts after 42.37: the `FPS_MEASURED_HZ` comment in `fps-patch.ts` (42.27 measured the 1.3.0.8 copy form 5313f107 at 32.2 by medians; the 26 fps of 42.20 was the op-5 form ee8c7f0e's whole-run average, which counts unpublished captures; re-measured 26.3 to 26.9 with 42.20's tool), and 42.27's sentence that it measured "the same image" as 42.20.
+- [ ] The offered 1.3.0.8 copy form (5313f107) has no whole-run (20 s `compact-fps`) measurement; 42.37 expects the same excursions as the op-5 form. Run it.
+- [ ] 0.9.1.0's first patched run (27.8 to 30.8 fps) was not re-measured. 0.10.0.0's 23.4 against 27.4 did not reproduce in 42.37 (stock medians 31.0 to 32.3, patched 32.1 to 32.2); the cause of the old figure is not known.
 - [ ] Modes 4 and 7 (accepted by 1.3.0.8 and 4.8.x): their programs were not read. The 0.x SetIPMode masks were not read.
 - [ ] 0.3.0.1 mode-8 program not located. 0.5.0.2, 0.5.1.0, 0.5.1.3, 0.6.0.4 and 0.7.0.7 have their capture programs built at run time, so no patch (a patch would change builder code).
 - [?] 0.7.0.8: the table has the index-2 entry, measured on the camera, but slots refuse firmware older than 0.8.0.0, so the page does not offer it. Decide whether slots should accept it (flashing it needs the J-Link today). Owner, 2026-10-19: not now.
@@ -42,8 +43,8 @@ Every 8 and 9 fps build with a table entry is offered except the FF entries and 
 - [?] FW-V1 branch `plan-hygiene` (worktree `/private/tmp/claude-501/fwv1-hygiene`, 42.35): flash-bank in the 1.3.0.0 and 1.3.0.8 targets needs an explicit `BANK_ADDR` (the `SLOT_BASES` default is removed), the `fps_patch_tests.py` docstring matches the table, and `jlink_dumps/` is ignored. Not merged into FW-V1 `main` (the bench uses that checkout's runner); merging and pushing need the owner's word.
 - [ ] FW-V1 `build_flash.mjs` in `targets/compact_8hz_1_3_0_0` and `compact_8hz_1_3_0_8` carries the modern 4.x table (`SLOTS.b` = 0x14050000): its default `--flash` writes the payload to 0x14050000 (bank A on the 2014 chain) and then sets the boot word to 1 (bank B). A live wrong-bank path (found in 42.35). The same flash-bank call is in `compact_8hz_0_5_1_3`, `0_9_0_2` and `1_0_0_0` (tables not read).
 - [ ] 34 other FW-V1 `jlink-runner.js` files under `targets/` and `codegen/harness/tools/jlink/` still define `SLOT_BASES` and default flash-bank to it (42.35 fixed only the 1.3.0.0 and 1.3.0.8 targets).
-- [~] Serial mismatch for the same unit: the CLI's `slots list` (and TESTING.md 42.21) report `101310HSNEA2`; the checker and the Swift tool report the chip serial `1013CE098ACA`. Find which the page and the CLI should show, and fix the other. (running, 2026-10-19 wave: TESTING.md 42.37)
-- [~] The 1.3.0.0 stock Normal and Hi FPS were not measured on the camera in 42.27 (the 8.0 fps quoted in 42.25 was the 16 Hz image). (running, 2026-10-19 wave: TESTING.md 42.37)
+- [?] Serial labels (42.37): `101310HSNEA2` is the ASCII device serial (+16 of the device-identity block at 0x14020000), which the CLI and the page show; `1013CE098ACA` is GetChipID, which the JS checker and the Swift `seek` tool print as "serial" when the USB string is absent (it is on 1.3.0.0). Owner to pick: (A) the checker and Swift show the ASCII serial and print the chip ID as its own field, or (B) they keep it and rename the field "chip id". The checker and Swift change together.
+- [ ] The first checker connect after a CLI slot write stalled at op 0x56 (0x37 on the op-5 image) until a power cycle (42.37); cause not established.
 - [ ] The 1.3.0.0 boot-config word is 0. A warm reset can set it to 2 again (the bootloader writes it), and the word itself is not guarded. The warning (42.27 section 6) shows when the word points at R while a patched bank A does not run.
 
 ## 3. tv-jc and the macOS app
