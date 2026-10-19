@@ -1,7 +1,7 @@
 # Plan: what is still to do
 
 Branch `refactor/all-firmware-profiles`: all commits are local; nothing is pushed and main is never touched without the owner's explicit approval (owner, 2026-10-19: keep it local until the owner says). FW-V1 `main` was pushed on the owner's word on 2026-10-19 (`a13c615c6`).
-Done work is in `TESTING.md` (sections 42.x; the latest is 42.35; 42.32 to 42.34, 42.36 and 42.37 are running) and `FPS_32HZ.md`; this file lists only what is open. Status marks: [ ] open, [~] running, [?] needs the owner.
+Done work is in `TESTING.md` (sections 42.x; the latest is 42.35; 42.32, 42.33, 42.36 and 42.37 are running) and `FPS_32HZ.md`; this file lists only what is open. Status marks: [ ] open, [~] running, [?] needs the owner.
 
 ## Standing rules
 
@@ -33,7 +33,6 @@ Every 8 and 9 fps build with a table entry is offered except the FF entries and 
 - [?] 0.7.0.8: the table has the index-2 entry, measured on the camera, but slots refuse firmware older than 0.8.0.0, so the page does not offer it. Decide whether slots should accept it (flashing it needs the J-Link today). Owner, 2026-10-19: not now.
 - [?] The FF entries (1.3.0.8 FF, 4.16.1.7 FF) are in the table but not offered (stage two for the encrypted FF lines, section 5). Decide whether to stage them. Owner, 2026-10-19: not now.
 - [?] Raw (IP mode 0, the app's "Raw") stays at 8 fps on every build: its program averages four captures and no patch edits it. Decide whether to patch it too (one more edit per build, same rule). Owner, 2026-10-19: not now.
-- [~] The 4.8.2.1 image: the survey and `fps_patch.py` say the Compact and the XR 4.8.2.1 are one image (f96ac57eda75). Whether the XR corpus entry holds the same bytes was not checked. (running, 2026-10-19 wave: TESTING.md 42.34)
 - [ ] The TypeScript checker cannot stream patched parts through `--flash` (no frames: the emulator attaches the sensor only for a corpus-entry boot). The Python IP rows are the route; the checker's README says so.
 
 ## 2. Hardware and the J-Link runner
@@ -55,12 +54,8 @@ Every 8 and 9 fps build with a table entry is offered except the FF entries and 
 
 - [?] `refactor/all-firmware-profiles` (HEAD `d62da13` plus this file) is local. The owner keeps it local until they say otherwise (2026-10-19); pushing it and merging to main need the owner's word (the hosted docs bundle in `docs/` is built from this branch). FW-V1 `main` is pushed (`a13c615c6`). All agent branches of 42.27 to 42.31 are merged and their worktrees removed.
 - [~] Two unmerged branches from earlier sessions are kept (their worktrees were removed on 2026-10-19, 42.29 section 6): `worktree-agent-a9c8b175a0187b7be` (`f9a34ce`, TESTING 42.13 notes: the balance-word FF run withdrawn before any write) and `worktree-agent-ae27186421cb01b3e` (`f8f2f55`, the FF image's banks follow the camera's bootloader; the bench FF platform path). Owner to decide: merge or delete. Owner, 2026-10-19: merge. (running, 2026-10-19 wave: TESTING.md 42.33)
-- [~] Stale text (no behaviour): (running, 42.34)
-  - the `FPS_NO_PATCH_4821_VERSION` comment in `fps-patch.ts` states the Compact and XR 4.8.2.1 are one image, which is not checked (section 1);
-  - `packages/core/src/profiles/compact-2016.ts` `FLASH_REFUSAL` (:102-108) and its summary (:288-290) say the write path has nothing for 2016 banks, while the slots writer stages them (`capability-family.ts:214-215`, `write.ts:561-575`); check whether the text is about the profile's own flash path, and fix it if not;
-  - the CLI usage line "Banks: A (0x14050000) and B (0x14060000)" (`packages/cli/src/usage.ts` ~229) is the 2014 chain's map; the modern-4x map (the 4.x Compact and the Compact PRO 4.9.x) is A 0x14030000, B 0x14050000, R 0x14070000 (`modern-4x.ts:84-86`).
-- [~] `packages/cli/test/camera.test.ts` fails on the 2016 Compact PRO refusal text (expects `0.x/1.x 2014–2017 line`; the message now says `2014–2016 build`). Not caused by the frame-rate work; update the assertion or the message. (running, 2026-10-19 wave: TESTING.md 42.34)
-- [~] eslint reports 3 errors in the bench files, none from 42.31: `e2e/lib/bench/bench-camera.ts:246` (an unused `document` assignment in `slotFlash`) and `e2e/bench-lib.e2e.ts:1690`, `:1723` (unnecessary type assertions). (running, 2026-10-19 wave: TESTING.md 42.34)
+- [ ] `packages/cli/test/slots.test.ts` gives its 4.9.5.0 fixture the 2014 bank addresses (`:160`, `:237`, `:304-307`); the 4.x map is A 0x14030000, B 0x14050000, R 0x14070000 (found in 42.34). Fixture data only.
+- [ ] The 0.x/1.x profile-level dump message (`packages/cli/src/commands/dump.ts:61`, "2014–2017 line … nothing was dumped") has no test (42.34).
 
 ## 5. The slots bench and older open items (42.20 to 42.31)
 
