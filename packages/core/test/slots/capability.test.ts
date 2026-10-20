@@ -421,7 +421,9 @@ describe('the facts a person is shown with the plan', () => {
   it('says the 2016 keystream write is the preservation path, and carries the profile refusal', () => {
     const plan = buildSlotPlan(compact2016, '1.0.3.0');
     expect(plan.slots.every((slot) => slot.flashPlain.supported)).toBe(true);
-    expect(plan.notes.join('\n')).toMatch(/general flash command refuses profile compact-2016/);
+    expect(plan.notes.join('\n')).toMatch(
+      /Profile compact-2016 declares no flash capability of its own/,
+    );
   });
 
   it('warns on 0.8.0.0 that mode 2 is a crash hazard the slot page never arms', () => {

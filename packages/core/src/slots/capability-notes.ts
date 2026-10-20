@@ -62,16 +62,17 @@ const LOCKED_2016_STAGING_NOTE =
   'bank’s keystream is used only to read the bank back.';
 
 /**
- * The general flash command refuses this profile (its own capabilities.flash
- * says why). The slot write is the keystream-staged path the preservation
- * pipeline ran on 1.0.3.0, so the slot page does not gate it on that refusal,
- * and the note says so instead of hiding the refusal.
+ * This profile declares no flash capability of its own (its capabilities.flash says why), so the
+ * device-info read (the Info tab, `seek-fw info`) calls the camera not flashable. The slot write is
+ * the keystream-staged path the preservation pipeline ran on 1.0.3.0, so the slot page does not gate
+ * it on that refusal, and the note says so instead of hiding the refusal.
  */
 export function profileFlashNote(profileId: string): string {
   return (
-    `The general flash command refuses profile ${profileId} (its capabilities.flash, see ` +
-    'compact-2016.ts). The slot write is the keystream-staged path the preservation pipeline ' +
-    'ran on 1.0.3.0, so the slot page does not gate it on that refusal.'
+    `Profile ${profileId} declares no flash capability of its own (its capabilities.flash, see ` +
+    'compact-2016.ts), so the device info calls this camera not flashable. The slot write is the ' +
+    'keystream-staged path the preservation pipeline ran on 1.0.3.0, so the slot page does not ' +
+    'gate it on that refusal.'
   );
 }
 
