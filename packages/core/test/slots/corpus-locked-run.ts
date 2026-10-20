@@ -653,8 +653,9 @@ export async function runLockedFirmware(
       }
       run.imageLength = image.length;
 
-      /* The 1.3.0.8 FF image goes to R only and leaves the plain image with its adjust word solved
-       * (computed here, not by the writer's builder); every other image is left as it was written. */
+      /* The 1.3.0.8 FF image is staged in its vendor form, and the bank holds the image XOR Key B
+       * (`expectedFFStored`, computed here, not by the writer's builder); it goes to A, B and R
+       * (TESTING.md 42.12). Every other image is left as it was written. */
       const ffImage = isFFImage(subject);
       const storedFF: Uint8Array | null = ffImage ? expectedFFStored(image) : null;
       const expectedImage: Uint8Array = image;
@@ -664,7 +665,8 @@ export async function runLockedFirmware(
       const ffOptions: PrepareSlotFlashOptions = ffImage ? FF_PREPARE_OPTIONS : {};
 
       /* ---- 3. the booted bank, without acknowledgeRisk ----
-       * The FF image has no bank but R to go to, so the acknowledgement is asked of R. */
+       * On the FF build the refusal is asked of R, the bank the 2014 bootloader runs that image from
+       * (TESTING.md 42.10); R needs the acknowledgement on every build. */
       /* Every request from here on is the write path's; the analysis above was reads. */
       const writeFrom = sent.length;
       const refusalKey: SlotKey = ffImage ? 'r' : bootedKey;

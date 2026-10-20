@@ -600,12 +600,14 @@ describe('useSlotsPanel: writing a bank', () => {
     unmount();
   });
 
-  it('shows the core refusal of the FF image for bank A and prepares nothing', async () => {
+  /* The fake stands for a refusal core does make (write.ts ffRunningRefusal). Before 42.82 it said the FF
+   * image goes to R only, which core stopped saying in 42.12 (A, B and R take it). */
+  it('shows a core refusal of the FF image (the camera runs the 8 Hz build) and prepares nothing', async () => {
     const { backend, mocks } = makeBackend();
     mocks.prepare.mockImplementation(() => {
       throw new SeekError(
         'slots/refused',
-        'this is the 1.3.0.8 FF (16 Hz) image: it can be written to R only, not to bank A. Nothing was written.',
+        'this is the 1.3.0.8 FF (16 Hz) image, but the camera runs the 8 Hz 1.3.0.8 application. Nothing was sent.',
       );
     });
     const { result, unmount } = setup(backend);
@@ -622,7 +624,12 @@ describe('useSlotsPanel: writing a bank', () => {
         'cannot use this file: this is the 1.3.0.8 FF',
       ),
     ).toBe(true);
-    expect(lineIncludes(result.current.panel.reporter.lines, 'R only, not to bank A')).toBe(true);
+    expect(
+      lineIncludes(
+        result.current.panel.reporter.lines,
+        'the camera runs the 8 Hz 1.3.0.8 application',
+      ),
+    ).toBe(true);
     expect(mocks.flash).not.toHaveBeenCalled();
     unmount();
   });

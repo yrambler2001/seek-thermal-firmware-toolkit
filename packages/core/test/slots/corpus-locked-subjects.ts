@@ -243,7 +243,7 @@ export const LOCKED_SUBJECTS: readonly LockedSubject[] = [
      * corpus-locked.emulator.test.ts), and the FF build's own tests use this boot. */
     jedec: SPANSION_4MB_JEDEC,
     donor: DONOR_2014,
-    note: 'boots only from recovery (word sum 0xFFFF); written to R only, in the two-stream staged form; on the 2014 donor with a Spansion part',
+    note: 'boots only from recovery on the 2014 bootloader (word sum 0xFFFF); written to A, B and R in its vendor form, stored under Key B (TESTING.md 42.12); on the 2014 donor with a Spansion part',
   },
   {
     label: 'Compact PRO 1.0.3.0 (9 Hz, native dump)',
@@ -352,9 +352,9 @@ export function bootedIsNamed(subject: LockedSubject): boolean {
 }
 
 /**
- * The 16 Hz 1.3.0.8 FF image (word sum 0xFFFF) is written to recovery R only, in the two-stream
- * staged form: the 2014 bootloader rejects its sum at A and B, so the writer refuses those banks
- * before anything is sent. The camera stores the plain image, with the adjust word at 0x238 solved.
+ * The 16 Hz 1.3.0.8 FF image (word sum 0xFFFF): the writer stages it in its vendor form (the image XOR
+ * Key A, header window verbatim) to A, B or R, and the camera stores the image XOR Key B (TESTING.md
+ * 42.12). The 2014 bootloader rejects its sum at A and B, so it runs only from recovery R there (42.10).
  */
 export function isFFImage(subject: LockedSubject): boolean {
   return subject.staging === 'plain' && subject.variant === 'ff';
