@@ -76,6 +76,7 @@ Only the requests the Swift tool sends (the lists are `CHECKER_REQUESTS_IN` and 
   of the classic and Pro inits.
 - Bulk IN on endpoint 1 (0x81): the frame bytes, 64896 (Compact) or 177840 (Pro). One credit per frame, sent after the
   frame's last byte; the INs for a frame are kept pending as `--in-flight` says (TESTING.md 42.74, 42.75).
+  Note: the credit goes out after the frame is processed, not at its last byte. A credit later than about 7.5 ms after the last byte loses the next field, so the lost-field counts follow the host thread's speed (TESTING.md 42.79, and `SKIP_STORMS.md` at the repo root). Not changed by owner decision (2026-10-20).
 
 It never sends a flash write or a reset (`0x50`, `0x51`, `0x52`, `0x59`). `0x5A` is the one setter of the info read
 (core's `FLASH_OPS` lists it with the other info-read arms); it changes no flash and no image. The Compact Pro init is used

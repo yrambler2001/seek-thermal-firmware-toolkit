@@ -11936,6 +11936,8 @@ The two are the same scene, with the mean level within 0.1 percent. The picture 
 
 **Commits.** This section only, on `worktree-agent-adbaba0ba81971886`.
 
+Later (42.79): the runs' skip counts track the time the checker's per-frame JavaScript takes (r 0.97, 42.79 section 5), so this A/B measured the host thread, not the gate. The gate is still untested on silicon: these runs cannot show its effect either way.
+
 ### 42.79 The single-skip storms: the camera starts a frame only if its credit lands within about 7.5 ms of the previous frame's last byte, and the checker sends that credit after it has processed the frame, so a slow host thread loses every other field; the mic receiver, the switch board and a USB clock beat are not the cause (bench, no flash write, 2026-10-20)
 
 **Summary.** Agent 42.79 (Opus 5.5), on `worktree-agent-a1b0206f65f1481b0`, reset to `refactor/all-firmware-profiles` (daa369f). Scratch `/private/tmp/claude-501/agent-79/`. Read-only streaming only: no flash write. The J-Link was used once, at the end, for a halted read-only dump; channel 1 was off otherwise. Channel 2 was power-cycled before every run. Every timed run started with the 1-minute load under 20 (14 at most).

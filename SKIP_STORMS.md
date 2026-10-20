@@ -89,6 +89,8 @@ of them (42.74: 3 to 12 a minute).
 
 ## What a host should do
 
+Advice only. None of it is applied to the checker or to tv-jc (owner decision, 2026-10-20; see Status).
+
 1. Send the next frame's credit at the frame's last byte, before decoding and processing it. Never send a second credit
    before a frame's last byte: the firmware cancels the queued IN transfers when one arrives (`rpc_cmds.c` `cmd_ImageData`).
 2. Keep the bulk INs off the processing path: process frames on another thread or worker, or keep 2 to 3 INs pending
@@ -101,3 +103,10 @@ of them (42.74: 3 to 12 a minute).
 
 Until the checker does this, its lost-frame counts measure the host thread as much as the camera. Firmware A/B
 comparisons (like 42.78's copy gate) need a host loop whose credit timing does not depend on the CPU.
+
+## Status (owner decisions, 2026-10-20)
+
+- The checker (`e2e/lib/bench/seek-fps/`) stays as it is. It still sends the next frame's credit after it has decoded and processed the frame. The finding is documented only.
+- tv-jc: `Camera.swift` `grabBytes` has the same order. It is not changed now.
+- The copy gate (candidate 6, FW-V1 branch `drop-path-study`, not in FW-V1 main) is not retested. 42.78's A/B measured the host thread, not the gate: its skip counts track the checker's per-frame JavaScript time (r 0.97). So its "no gain" verdict says nothing about the gate either way. A fair test would use a host loop with a prompt credit, judged against the residual of about 25 a minute (the endpoint-busy skip, TESTING.md 42.74). It was not run.
+- The checker stays on node-usb 3.1.0.
