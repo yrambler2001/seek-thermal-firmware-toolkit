@@ -10,6 +10,8 @@
  * a terminal owes a write, and each of those is decided BEFORE anything is sent:
  *
  *   - a build the slot page does not cover, or a bank that build cannot take, is refused;
+ *   - a camera the Slots page's banner refuses (core's `writeBannerOf`) is refused for every bank, raw
+ *     bytes included, with the banner's words;
  *   - a bank whose read failed is refused, because nothing may be written on the strength of it;
  *   - the bank the camera boots now, and the recovery bank R, are refused unless the person says
  *     --acknowledge-risk. A camera that reports NO booted bank is treated the same way: the bank
@@ -349,6 +351,16 @@ export function flashRefusal(
     return {
       message: `bank ${bank} does not take ${describeKind(kind)} on this build: ${op.reason}`,
       hint: NOTHING_SENT,
+    };
+  }
+  /* The camera-wide refusal the page's banner shows (core's writeBannerOf). The page turns every flash
+   * control off with it, raw bytes included, and core's flashSlot refuses it on every staging; refused
+   * here, before the plan, so a --dry-run never shows a plan for a write the camera cannot take. */
+  const camera = writeBannerOf(report.state);
+  if (camera !== null) {
+    return {
+      message: camera,
+      hint: `The Slots page shows the same refusal in its banner. ${NOTHING_SENT}`,
     };
   }
   if (view.unreadReason !== null) {

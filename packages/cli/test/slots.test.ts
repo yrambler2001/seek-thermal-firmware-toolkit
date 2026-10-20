@@ -1791,11 +1791,18 @@ describe('slots flash on a Mosaic-shaped camera: the page’s key derivation, th
     };
   }
 
-  async function flashB(ops: SlotOps, test: TestIo): Promise<unknown> {
+  async function flashB(
+    ops: SlotOps,
+    test: TestIo,
+    extra: readonly string[] = [],
+  ): Promise<unknown> {
     const name = `image${keyFilenameSuffix(BOOT_A, BOOT_B)}.bin`;
     await writeFile(join(temp.path, name), imageWith(9, BOOT_A, BOOT_B));
     return slotsCommandWith(ops)(
-      contextFor(['slots', 'flash', 'b', join(temp.path, name), '--yes', '--no-probe'], test),
+      contextFor(
+        ['slots', 'flash', 'b', join(temp.path, name), '--yes', '--no-probe', ...extra],
+        test,
+      ),
     ).catch((caught: unknown) => caught);
   }
 
@@ -1806,11 +1813,24 @@ describe('slots flash on a Mosaic-shaped camera: the page’s key derivation, th
     const { ops, plans } = realPrepare(report);
     const test = cameraIo();
     const error = await flashB(ops, test);
-    expect(error).toBeInstanceOf(SeekError);
-    expect((error as SeekError).code).toBe('slots/refused');
-    expect((error as SeekError).message).toContain(banner!);
+    expect(error).toBeInstanceOf(Error);
+    expect((error as { code?: string }).code).toBe('slots/refused');
+    expect((error as Error).message).toContain(banner!);
     expect(plans).toEqual([]);
     expect(test.stdout.text).not.toContain('Slot flash plan');
+  });
+
+  it('the same camera with --raw --dry-run: the CLI refuses with the banner before any plan, as the page turns the raw control off (TESTING.md 42.82 F4)', async () => {
+    const report = mosaicReport('4.16.1.7');
+    const banner = writeBannerOf(report.state);
+    const { ops, plans } = realPrepare(report);
+    const test = cameraIo();
+    const result = await flashB(ops, test, ['--raw', '--dry-run']);
+    expect(result).toBeInstanceOf(CliError);
+    expect((result as CliError).code).toBe('slots/refused');
+    expect((result as CliError).message).toContain(banner!);
+    expect(test.stdout.text).not.toContain('Slot flash plan');
+    expect(plans).toEqual([]);
   });
 
   it('Mosaic 10.9.1.31: the CLI sends the upload the page builds, under the key derived from the booted bank', async () => {
