@@ -59,7 +59,8 @@ import { fakeCamera, type FakeCamera, type FakeWindowSpec } from './fake-transpo
 
 /** The real dump this whole question is about, when this machine has it. */
 const REAL_DUMP =
-  '/Users/yrambler2001/things/a.noindex/seek/SEEK_DUMPS/compacts/compact_101310HSNEA2_4mb.bin';
+  '/Users/yrambler2001/things/a.noindex/seek/SEEK_DUMPS/compacts/' +
+  'Compact Oct 21 2014 14-58-29 1.3.0.0 99.28 101310HSNEA2 yrambler2001 Dump.bin';
 const SLOT_A_OFFSET = 0x50000;
 
 /** The real slot A image's own header fields, measured on the dump. */
