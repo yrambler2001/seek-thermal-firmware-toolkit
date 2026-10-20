@@ -316,6 +316,10 @@ export function createFakeRig(options: {
       }
       flash = new Uint8Array(readFileSync(file));
     },
+    async flashBlocks(file: string): Promise<void> {
+      /* the block diff ends with the same bytes as the whole write; the fake has no blocks to diff */
+      await this.flashFull(file);
+    },
     async eraseRange(address: number, length: number): Promise<void> {
       const offset = address - BENCH_FLASH_BASE;
       if (length !== BANK_BYTES || offset < 0 || offset + length > flash.length) {

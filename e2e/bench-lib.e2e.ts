@@ -503,6 +503,8 @@ interface BenchOverrides {
   readonly gate?: WriteApproval;
   readonly onHaltFailed?: () => void;
   readonly log?: (line: string) => void;
+  /** A FW-V1 target under targets/ (default TARGET). */
+  readonly target?: string;
 }
 
 function bench(exec: Exec, overrides: BenchOverrides = {}): JlinkBench {
@@ -515,6 +517,7 @@ function bench(exec: Exec, overrides: BenchOverrides = {}): JlinkBench {
     tmpRoot: TMP_ROOT,
     log: overrides.log ?? (() => undefined),
     ...(overrides.onHaltFailed === undefined ? {} : { onHaltFailed: overrides.onHaltFailed }),
+    ...(overrides.target === undefined ? {} : { target: overrides.target }),
   });
 }
 
@@ -664,6 +667,98 @@ describe('flashFull: the runner, exact command lines', () => {
     const { exec, calls } = fakeExec(() => OK);
     await expect(bench(exec).flashFull(short)).rejects.toThrow(/1000 bytes, not 4194304/);
     expect(calls).toHaveLength(0);
+  });
+});
+
+/* The block-diff write (TESTING.md 42.81): the runner's flash-factory-4m-2, and no erase. The target
+ * that carries it is a stub runner file that names the command; the default target has none. */
+const TARGET_4M2 = 'compact_8hz_1_3_0_0';
+
+describe('flashBlocks: the runner’s flash-factory-4m-2, no erase', () => {
+  beforeAll(() => {
+    const runner = path.join(FW_V1, 'targets', TARGET_4M2, 'tools', 'jlink', 'jlink-runner.js');
+    mkdirSync(path.dirname(runner), { recursive: true });
+    writeFileSync(
+      runner,
+      "// test stub: names the command the bench runs\n'flash-factory-4m-2';\n",
+    );
+  });
+
+  it('runs flash-factory-4m-2 in the target with the image, and never erases', async () => {
+    const { exec, calls } = fakeExec(() => OK);
+    await bench(exec, { target: TARGET_4M2 }).flashBlocks(IMAGE);
+    expect(calls, 'one runner command, no erase-spifi-range').toHaveLength(1);
+    const [flash] = calls;
+    expect(flash).toMatchObject({
+      command: 'node',
+      args: ['tools/jlink/jlink-runner.js', 'flash-factory-4m-2'],
+      cwd: path.join(FW_V1, 'targets', TARGET_4M2),
+    });
+    expect(flash?.env.FACTORY_IMAGE).toBe(path.resolve(IMAGE));
+    expect(flash?.env.JLINKEXE ?? '').toMatch(/JLinkExe$/);
+    expect(flash?.env.ERASE_ADDR).toBeUndefined();
+    expect(flash?.env.ERASE_LEN).toBeUndefined();
+  });
+
+  it('logs the plan the runner printed; a non-zero exit is logged, not thrown (the read-back decides)', async () => {
+    const lines: string[] = [];
+    const log = (line: string): void => {
+      lines.push(line);
+    };
+    const planned =
+      'flash-factory-4m-2: /x/image.bin\n' +
+      'plan: 3 of 64 blocks differ -> 1 run(s): 0x14050000+0x30000\n' +
+      '  0x14050000 +0x30000  attempt 1: verified\n';
+    const { exec: first } = fakeExec(() => ({ code: 0, stdout: planned, stderr: '' }));
+    await bench(first, { target: TARGET_4M2, log }).flashBlocks(IMAGE);
+    expect(lines).toEqual([
+      'flash-factory-4m-2: plan: 3 of 64 blocks differ -> 1 run(s): 0x14050000+0x30000 (exit 0)',
+    ]);
+
+    lines.length = 0;
+    const { exec: second } = fakeExec(() => ({
+      code: 1,
+      stdout: '',
+      stderr: 'A run failed 3 times - stopping.',
+    }));
+    await expect(
+      bench(second, { target: TARGET_4M2, log }).flashBlocks(IMAGE),
+    ).resolves.toBeUndefined();
+    expect(lines.join('\n')).toMatch(
+      /flash-factory-4m-2 exited 1: .*A run failed 3 times.* \(the read-back decides\)/,
+    );
+  });
+
+  it('refuses a target whose runner has no flash-factory-4m-2, before anything runs', async () => {
+    const { exec, calls } = fakeExec(() => OK);
+    await expect(bench(exec).flashBlocks(IMAGE)).rejects.toThrow(/has none/);
+    expect(calls).toHaveLength(0);
+  });
+
+  it('refuses an image that is not the 4 MiB flash, before anything runs', async () => {
+    const short = path.join(scratch, 'short-blocks.bin');
+    writeFileSync(short, Buffer.alloc(1000));
+    const { exec, calls } = fakeExec(() => OK);
+    await expect(bench(exec, { target: TARGET_4M2 }).flashBlocks(short)).rejects.toThrow(
+      /1000 bytes, not 4194304/,
+    );
+    expect(calls).toHaveLength(0);
+  });
+
+  it('a dry run logs the runner command it would run, and runs nothing', async () => {
+    const lines: string[] = [];
+    const { exec, calls } = fakeExec(() => OK);
+    await bench(exec, {
+      target: TARGET_4M2,
+      gate: DRY,
+      log: (line) => {
+        lines.push(line);
+      },
+    }).flashBlocks(IMAGE);
+    expect(calls).toHaveLength(0);
+    const text = lines.join('\n');
+    expect(text).toMatch(/\[dry-run\].*flash-factory-4m-2/);
+    expect(text).not.toMatch(/erase-spifi-range/);
   });
 });
 
@@ -1572,7 +1667,9 @@ describe('the FF vendor-form run, on a fake J-Link and camera', () => {
     const fake = fakeVendorBench({});
     const wrong = { ...fake.files, restoreSha256: '0'.repeat(64) };
     await expect(runFfVendor(fake.bench, wrong)).rejects.toThrow(/restore file/);
-    expect(fake.calls.filter((call) => call.startsWith('flashFull') || call.startsWith('writeBank'))).toEqual([]);
+    expect(
+      fake.calls.filter((call) => call.startsWith('flashFull') || call.startsWith('writeBank')),
+    ).toEqual([]);
   });
 
   it('a failure in the middle still puts the original flash back', async () => {
@@ -1913,6 +2010,12 @@ function fakeVendorBench(options: { storeAsSentAt?: 'a' | 'b' | 'r'; throwAt?: '
       version = file === restoreFile ? '1.3.0.0' : '1.3.0.8';
       return Promise.resolve();
     },
+    flashBlocks(file: string): Promise<void> {
+      calls.push('flashBlocks');
+      flash.set(readFileSync(file));
+      version = file === restoreFile ? '1.3.0.0' : '1.3.0.8';
+      return Promise.resolve();
+    },
     readFlash(address: number, length: number): Promise<Uint8Array> {
       calls.push('readFlash');
       const at = address - base;
@@ -1920,7 +2023,8 @@ function fakeVendorBench(options: { storeAsSentAt?: 'a' | 'b' | 'r'; throwAt?: '
     },
     verifyFull(sha: string): Promise<void> {
       calls.push('verifyFull');
-      if (sha256(flash) !== sha) return Promise.reject(new Error('verify: the flash is not the file'));
+      if (sha256(flash) !== sha)
+        return Promise.reject(new Error('verify: the flash is not the file'));
       return Promise.resolve();
     },
     eraseRange(address: number, length: number): Promise<void> {
@@ -1956,14 +2060,22 @@ function fakeVendorBench(options: { storeAsSentAt?: 'a' | 'b' | 'r'; throwAt?: '
       const plain = answers('plain');
       const ff = answers('ff');
       const camera = answers(build);
-      const same = (a: (number | null)[], b: (number | null)[]): boolean => a.every((v, i) => v === b[i]);
+      const same = (a: (number | null)[], b: (number | null)[]): boolean =>
+        a.every((v, i) => v === b[i]);
       const decided =
-        same(camera, plain) && !same(camera, ff) ? 'plain' : same(camera, ff) && !same(camera, plain) ? 'ff-1308' : null;
+        same(camera, plain) && !same(camera, ff)
+          ? 'plain'
+          : same(camera, ff) && !same(camera, plain)
+            ? 'ff-1308'
+            : null;
       return Promise.resolve({
         firmware: { version, build: build === 'ff' ? 'Jan 6 2017 (FF)' : 'Jan 6 2017' },
         running: {
           build: decided,
-          why: decided === null ? 'the banks do not tell the builds apart' : `the camera answers ${camera.join(', ')}`,
+          why:
+            decided === null
+              ? 'the banks do not tell the builds apart'
+              : `the camera answers ${camera.join(', ')}`,
           camera: { a: camera[0], b: camera[1], r: camera[2] },
           predicted: { plain, ff },
         },
@@ -1971,10 +2083,20 @@ function fakeVendorBench(options: { storeAsSentAt?: 'a' | 'b' | 'r'; throwAt?: '
     },
     slotFlash(bank: 'a' | 'b' | 'r', file: string): Promise<SlotFlashRun> {
       calls.push(`slotFlash ${bank}`);
-      if (options.throwAt === bank) return Promise.reject(new Error(`CLI fault at ${bank.toUpperCase()}`));
-      if (build !== 'ff') return Promise.resolve({ code: 1, result: { written: false }, stdout: '', stderr: 'refused' });
+      if (options.throwAt === bank)
+        return Promise.reject(new Error(`CLI fault at ${bank.toUpperCase()}`));
+      if (build !== 'ff')
+        return Promise.resolve({
+          code: 1,
+          result: { written: false },
+          stdout: '',
+          stderr: 'refused',
+        });
       const image = new Uint8Array(readFileSync(file));
-      const stored = options.storeAsSentAt === bank ? new Uint8Array(0x10000).fill(0xff) : predictedFFStored(image);
+      const stored =
+        options.storeAsSentAt === bank
+          ? new Uint8Array(0x10000).fill(0xff)
+          : predictedFFStored(image);
       if (options.storeAsSentAt === bank) stored.set(image, 0);
       flash.set(stored, FF_BANK_ADDRESS[bank] - base);
       return Promise.resolve({

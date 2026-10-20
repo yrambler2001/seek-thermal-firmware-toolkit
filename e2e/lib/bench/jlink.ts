@@ -3,8 +3,9 @@
  * own jlink-runner, read the whole flash back halted, reset the CPU.
  *
  * WHAT IT MAY RUN. Exactly these, all built here:
- *   - `node tools/jlink/jlink-runner.js erase-spifi-range`, `... flash-factory-4m` and
- *     `... set-boot` in <SEEK_E2E_FWV1_DIR>/targets/<target> (the runner's own commands; this is
+ *   - `node tools/jlink/jlink-runner.js erase-spifi-range`, `... flash-factory-4m`, `... set-boot`
+ *     and `... flash-factory-4m-2` (the block diff, no erase; `flashBlocks`) in
+ *     <SEEK_E2E_FWV1_DIR>/targets/<target> (the runner's own commands; this is
  *     what the target's `make jlink-run` rule runs, which not every target keeps);
  *   - one `JLinkExe` session per read (`h`, `savebin`, `g`, `q`), one per reset (`r`, `g`,
  *     `q`) and one per 2014-chain bank write (`loadbin`, `verifybin`, `q`, for A, B or R
@@ -517,6 +518,44 @@ export function createJlinkBench(options: JlinkBenchOptions): JlinkBench {
         if (flashed.code !== 0) {
           log(
             `${flashCommand} exited ${String(flashed.code)}: ${tail(flashed)} (the read-back decides)`,
+          );
+        }
+      });
+    },
+
+    async flashBlocks(file: string): Promise<void> {
+      const image = path.resolve(file);
+      if (!existsSync(image)) throw new Error(`the image to flash does not exist: ${image}`);
+      const size = statSync(image).size;
+      if (size !== BENCH_FLASH_BYTES) {
+        throw new Error(
+          `the image to flash is ${String(size)} bytes, not ${String(BENCH_FLASH_BYTES)} (4 MiB): ${image}`,
+        );
+      }
+      if (!runnerHasFlash4m2(targetDir)) {
+        throw new Error(
+          `flashBlocks needs flash-factory-4m-2 in the runner, and ${target} has none (flashFull, or a target that has it)`,
+        );
+      }
+      if (dry) {
+        log(
+          `[dry-run] would run: node tools/jlink/jlink-runner.js flash-factory-4m-2 in ${targetDir} ` +
+            `(FACTORY_IMAGE=${image}): the 64 KiB blocks that differ, no erase; the caller's read-back is the success check`,
+        );
+        return;
+      }
+      /* No erase: the runner's own plan decides what is written, and the read-back decides the result. */
+      await withScratch(async (dir) => {
+        const jlinkExe = writeShim(dir);
+        const flashed = await runRunner('flash-factory-4m-2', {
+          FACTORY_IMAGE: image,
+          JLINKEXE: jlinkExe,
+        });
+        const plan = /^plan: .*$/m.exec(flashed.stdout)?.[0] ?? 'no plan line';
+        log(`flash-factory-4m-2: ${plan} (exit ${String(flashed.code)})`);
+        if (flashed.code !== 0) {
+          log(
+            `flash-factory-4m-2 exited ${String(flashed.code)}: ${tail(flashed)} (the read-back decides)`,
           );
         }
       });

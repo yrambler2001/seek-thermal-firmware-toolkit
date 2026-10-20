@@ -66,6 +66,13 @@ export interface BenchSubjectQuery {
 export interface JlinkBench {
   /** Erase the whole part and flash the full 4 MiB file with the runner (retrying a clean verify). */
   flashFull(file: string): Promise<void>;
+  /**
+   * Writes a whole 4 MiB file with the runner's `flash-factory-4m-2`, with NO erase: the runner reads
+   * the part, writes only the 64 KiB blocks that differ (the boot-config block second to last, the
+   * bootloader block last) and verifies each run. Needs a target whose runner has `flash-factory-4m-2`.
+   * The caller's read-back is the success check, as for `flashFull`.
+   */
+  flashBlocks(file: string): Promise<void>;
   /** One halted J-Link session: `savebin` of [address, address+length) to a file; returns the bytes. */
   readFlash(address: number, length: number): Promise<Uint8Array>;
   /** Read all 0x400000 bytes back and require sha256 equal to `sha256` (throws, naming both). */

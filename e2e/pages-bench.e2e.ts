@@ -1,10 +1,13 @@
 /* ====================================================================
  * The web app's pages on the REAL bench camera (Compact PIR206, 1.3.0.0), through Electron
  * and real WebUSB: `npm run e2e:pages:bench`. Needs the bench (SEEK_E2E_WRITE=i-understand,
- * SEEK_E2E_FWV1_DIR, SEEK_E2E_SWITCH_DIR, SEEK_FULL_DUMPS_BY_CAMERA when the baseline is taken from there).
+ * SEEK_E2E_FWV1_DIR, SEEK_E2E_JLINK_SN, SEEK_E2E_SWITCH_DIR, SEEK_E2E_SWITCH_CHANNEL=2, and the
+ * J-Link powered on switch channel 1).
  *
- * THE ORDER (each part leaves the camera as it found it):
- *   0. the whole flash is read back halted and must be the baseline (sha256 40447c7e…eb72);
+ * THE ORDER (TESTING.md 42.81; each part leaves the camera as it found it):
+ *   0. the whole flash is read back halted and kept as this run's START IMAGE, written to the
+ *      scratch folder before anything is sent to the camera (its sha256 is logged). No test needs
+ *      the owner's factory baseline: the flash is checked against this start image;
  *   A. read-only session (the Info, 0.x/1.x, 4.x/Nano and Decrypt File/Slot tabs):
  *      - Info reads the camera as `seek-fw info` does (TESTING.md 42.64): its identity reads and the
  *        two info selectors, which this window lets out for that one read; it names the 0.x/1.x tab
@@ -17,15 +20,20 @@
  *   B. the slots page (its own window, the bench rig's page): Read slots; Dump A, B and R equal to
  *      the halted flash; a refused image (wrong size) is DENIED with its refusal text and nothing is
  *      sent; one allowed write, the decrypted image into bank B (not booted: no acknowledgement),
- *      with no write banner, the J-Link reads back the same bytes; then the baseline is restored
- *      by the J-Link and verified halted, and the camera is power-cycled.
+ *      with no write banner, the J-Link reads back the same bytes; the page closes and the camera
+ *      is power-cycled and comes back.
+ *   END. afterAll, also when a test failed: the START IMAGE is written back with the runner's
+ *      `flash-factory-4m-2` (only the 64 KiB blocks that differ, no erase), the whole flash is read
+ *      halted, and it is compared with the start image block by block. The spec FAILS if the end
+ *      flash differs. The bootloader block (0x14000000) and the boot-config block (0x14010000) are
+ *      reported on their own.
  *
  * The write guards are the same as the rest of the bench (`lib/bench/spec-page.ts`, `camera-flow.ts`):
  * part A's page cannot write at all (the read-only preload), part B's writes are budgeted.
  * ==================================================================== */
 
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
@@ -62,19 +70,17 @@ const SCRATCH =
   path.join(tmpdir(), `seek-e2e-pages-bench-${String(process.pid)}`);
 const KEEP = process.env.SEEK_E2E_KEEP === '1';
 
-/** The bench camera's original 4 MiB (Compact PIR206, serial 101310HSNEA2, 1.3.0.0). */
-const BASELINE_SHA = '40447c7e6da5cbc84621f4694ffff5bda0f783e7807a45e80443383b19a8eb72';
-const BASELINE_FILE =
-  process.env.SEEK_PAGES_BASELINE ??
-  path.join(
-    process.env.SEEK_FULL_DUMPS_BY_CAMERA ?? '',
-    'Compact',
-    'Compact',
-    '2014.10.21-14.58.29-1.3.0.0',
-    'full_dump_original.bin',
-  );
+/**
+ * The bench's 1.3.0.0 target. Its runner carries `flash-factory-4m-2`, the block-diff write the
+ * end restore uses; the default target (compact_8hz_1_3_0_8) has no such command (TESTING.md 42.81).
+ */
+const PAGES_TARGET = 'compact_8hz_1_3_0_0';
 const FLASH_BASE = 0x14000000;
 const FLASH_BYTES = 0x400000;
+/** One 64 KiB block of the flash, and the two the end check names on their own. */
+const BLOCK_BYTES = 0x10000;
+const BOOTLOADER_BLOCK = 0x14000000;
+const BOOT_CONFIG_BLOCK = 0x14010000;
 /** The three banks the page reads and writes (the 1.3.0.0 layout). */
 const BANK_ADDRESS = { a: 0x14050000, b: 0x14060000, r: 0x14070000 } as const;
 const BANK_BYTES = 0x10000;
@@ -116,7 +122,14 @@ if (!RUNNABLE) {
 let jlink: JlinkBench | null = null;
 /** The bench camera's switch and bus (its power cycle). */
 let camera: BenchCamera | null = null;
-/** Set once the baseline is back and proven, so the last hook does not repeat the restore. */
+/**
+ * The whole flash as it was before this run sent anything (part 0's halted read). The restore image
+ * of this run: the end restore writes it back and checks the flash against it.
+ */
+let startImage: Uint8Array | null = null;
+/** The start image's file in the scratch folder (kept, so a failed run can be restored by hand). */
+let startFile = '';
+/** Set once the end check has passed, so the last hook does not repeat it. */
 let restored = false;
 /** A window's wire as the page-side guard counts it (ops sent by the page to the camera). */
 let identityWire: ReadonlySet<string> = new Set();
@@ -129,14 +142,10 @@ async function haltedRead(address: number, length: number): Promise<Uint8Array> 
   return jlink.readFlash(address, length);
 }
 
-/** The baseline file, checked against its own sha256 before it is used to restore. */
-function baselineBytes(): Uint8Array {
-  if (!existsSync(BASELINE_FILE)) {
-    throw new Error(`the baseline 4 MiB file is missing: ${BASELINE_FILE} (SEEK_PAGES_BASELINE)`);
-  }
-  const bytes = new Uint8Array(readFileSync(BASELINE_FILE));
-  if (sha256(bytes) !== BASELINE_SHA) throw new Error(`the baseline file is not ${BASELINE_SHA}`);
-  return bytes;
+/** The start image, or a throw when part 0 did not take it (then nothing was written to the camera). */
+function startOrThrow(): Uint8Array {
+  if (startImage === null) throw new Error('the start image was not taken (part 0 did not run)');
+  return startImage;
 }
 
 /** A slot file of 64 KiB, written where the Decrypt tab picks it from. */
@@ -184,26 +193,65 @@ function appearsIn(flash: Buffer, needle: Uint8Array): boolean {
 }
 
 /**
- * Writes the baseline back over the J-Link and proves it halted. The first halted read after a
- * flash fails on this bench (TESTING.md 42.2), so each attempt follows a channel-2 power cycle.
+ * The whole flash, read halted. Each attempt follows a channel-2 power cycle: the first halted read
+ * after a flash fails on this bench (TESTING.md 42.2).
  */
-async function restoreBaseline(j: JlinkBench, camera: BenchCamera): Promise<void> {
-  await j.flashFull(BASELINE_FILE);
-  await verifyHalted(j, camera);
-}
-
-/** The whole flash, read halted, must be the baseline; each attempt follows a channel-2 power cycle. */
-async function verifyHalted(j: JlinkBench, camera: BenchCamera): Promise<void> {
+async function readWholeFlash(j: JlinkBench, camera: BenchCamera): Promise<Uint8Array> {
   for (let attempt = 1; ; attempt++) {
     await camera.powerCycle();
     await camera.waitForEnumeration(60_000);
     try {
-      await j.verifyFull(BASELINE_SHA);
-      return;
+      const bytes = await j.readFlash(FLASH_BASE, FLASH_BYTES);
+      if (bytes.length !== FLASH_BYTES) {
+        throw new Error(
+          `the halted read is ${String(bytes.length)} bytes, not ${String(FLASH_BYTES)}`,
+        );
+      }
+      return bytes;
     } catch (error) {
       if (attempt >= 3) throw error;
-      say(`halted read ${String(attempt)} after the restore failed; power-cycling again`);
+      say(`halted read ${String(attempt)} failed (${String(error)}); power-cycling again`);
     }
+  }
+}
+
+/** The addresses of the 64 KiB blocks in which two whole-flash images differ. */
+function differingBlocks(a: Uint8Array, b: Uint8Array): number[] {
+  const blocks: number[] = [];
+  for (let at = 0; at < FLASH_BYTES; at += BLOCK_BYTES) {
+    if (!sameBytes(a.subarray(at, at + BLOCK_BYTES), b.subarray(at, at + BLOCK_BYTES))) {
+      blocks.push(FLASH_BASE + at);
+    }
+  }
+  return blocks;
+}
+
+/**
+ * The end restore and its check (TESTING.md 42.81). The start image is written back with the
+ * runner's block-diff write (only the blocks that differ; no erase; the bootloader block last), then
+ * the whole flash is read halted and compared with the start image. Throws, naming the blocks, when
+ * the flash is not the start image.
+ */
+async function restoreAndCompare(
+  j: JlinkBench,
+  camera: BenchCamera,
+  start: Uint8Array,
+): Promise<void> {
+  await j.flashBlocks(startFile);
+  const end = await readWholeFlash(j, camera);
+  const hex = (address: number): string => `0x${address.toString(16).padStart(8, '0')}`;
+  const differing = differingBlocks(start, end);
+  const state = (address: number): string => (differing.includes(address) ? 'DIFFERENT' : 'equal');
+  say(
+    `end check: whole flash ${differing.length === 0 ? 'equal to' : 'DIFFERS from'} the start image ` +
+      `(end sha256 ${sha256(end)}, start sha256 ${sha256(start)}); ` +
+      `bootloader ${hex(BOOTLOADER_BLOCK)} ${state(BOOTLOADER_BLOCK)}; ` +
+      `boot-config ${hex(BOOT_CONFIG_BLOCK)} ${state(BOOT_CONFIG_BLOCK)}`,
+  );
+  if (differing.length > 0) {
+    throw new Error(
+      `the end flash differs from the start image in the block(s) ${differing.map(hex).join(', ')}`,
+    );
   }
 }
 
@@ -228,26 +276,29 @@ describe.skipIf(!RUNNABLE)('the web app pages on the bench camera (1.3.0.0, real
   beforeAll(async () => {
     mkdirSync(SCRATCH, { recursive: true });
     say(`scratch: ${SCRATCH}`);
-    /* The restore's file is checked before anything is sent to the camera. */
-    baselineBytes();
-    jlink = createJlinkBench({ gate });
+    jlink = createJlinkBench({ gate, target: PAGES_TARGET });
     camera = createBenchCamera({ gate });
-    /* Part 0: the camera is the baseline before anything is sent to it. */
-    await verifyHalted(jlink, camera);
-    say('part 0: the halted whole-flash read is the baseline (40447c7e…eb72)');
+    /* Part 0: the whole flash, halted, is the run's start image. It is written to the scratch folder
+     * before anything else is sent to the camera: that file is the restore image (TESTING.md 42.81). */
+    const start = await readWholeFlash(jlink, camera);
+    startFile = path.join(SCRATCH, 'start-image.bin');
+    writeFileSync(startFile, start);
+    startImage = start;
+    say(`part 0: start image kept at ${startFile} (sha256 ${sha256(start)})`);
   }, 10 * 60_000);
 
   afterAll(async () => {
     /* The windows of part B share one dev server (openBenchPage); stop it with the run. */
     await closeSharedDevServer();
-    if (jlink === null || camera === null || restored) return;
-    /* Restores the baseline whatever the run did, then proves it halted. */
+    /* No start image means part 0 did not run, so nothing was sent to the camera and nothing to undo. */
+    if (jlink === null || camera === null || startImage === null || restored) return;
+    /* The end restore runs whatever the run did (a failed test included), and checks the flash. */
     try {
-      await restoreBaseline(jlink, camera);
+      await restoreAndCompare(jlink, camera, startImage);
       restored = true;
-      say('restored: the halted whole-flash read is the baseline again');
+      say('end: the whole flash is the start image again (block by block, halted)');
     } catch (error) {
-      say(`RESTORE FAILED: ${String(error)}`);
+      say(`END CHECK FAILED: ${String(error)}`);
       throw error;
     }
   }, 20 * 60_000);
@@ -335,9 +386,14 @@ describe.skipIf(!RUNNABLE)('the web app pages on the bench camera (1.3.0.0, real
       expect(valueUnder(text, 'Booted'), 'the booted bank (CLI: a, named by the roots word)').toBe(
         'App image bank 0x14050000 (named by the active-slot word; not a boot record on this line)',
       );
-      expect(valueUnder(text, 'Upgrade target'), 'the upgrade target (CLI: b)').toBe(
-        'App image bank 0x14060000',
+      /* The bank is pinned. "confirmed on the wire" is the page reading back the window the upgrade
+       * selector arms (`confirmUpgradeTarget`), and whether the camera confirms depends on its flash
+       * (the baseline did not, the start image does): either suffix is allowed and logged (TESTING.md 42.81). */
+      const upgrade = valueUnder(text, 'Upgrade target');
+      expect(upgrade, 'the upgrade target (CLI: b, bank 0x14060000)').toMatch(
+        /^App image bank 0x14060000( \(confirmed on the wire\))?$/,
       );
+      say(`info upgrade target: ${String(upgrade)}`);
       expect(text, 'the read reached the roots word').not.toContain('could not be read');
       expect(text, 'flashing is not disabled by a read that worked').not.toContain(
         'flashing disabled',
@@ -366,7 +422,10 @@ describe.skipIf(!RUNNABLE)('the web app pages on the bench camera (1.3.0.0, real
         for (const op of NEVER_ON_THE_WIRE) expect(wire.has(op), op).toBe(false);
 
         const flash = await haltedRead(FLASH_BASE, FLASH_BYTES);
-        expect(sha256(flash), 'the halted read is the baseline').toBe(BASELINE_SHA);
+        expect(
+          sameBytes(flash, startOrThrow()),
+          'the halted read is the start image: the page’s read left the flash as it was',
+        ).toBe(true);
         const haystack = Buffer.from(flash);
         say(
           `0.x/1.x zip: ${run.entries.map((entry) => `${entry.name} (${String(entry.data.length)} B)`).join(', ')}`,
@@ -607,13 +666,12 @@ describe.skipIf(!RUNNABLE)('the web app pages on the bench camera (1.3.0.0, real
     );
 
     it(
-      'closes the page and restores the baseline by the J-Link, then power-cycles the camera',
+      'closes the page, then power-cycles the camera, which comes back (the end restore is the afterAll)',
       async () => {
         await need().close();
         page = null;
-        if (jlink === null || camera === null) throw new Error('the bench is not open');
-        await restoreBaseline(jlink, camera);
-        restored = true;
+        if (camera === null) throw new Error('the bench is not open');
+        await camera.powerCycle();
         const back = await camera.waitForEnumeration(60_000);
         say(`power cycle: camera back on the bus after ${String(back)} ms`);
         expect(back, 'the camera comes back after the power cycle').not.toBeNull();
