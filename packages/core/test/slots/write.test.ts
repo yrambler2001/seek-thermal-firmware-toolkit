@@ -18,12 +18,14 @@ import { equalBytes, hexToBytes } from '../../src/bytes.js';
 import { silentReporter } from '../../src/events.js';
 import { SeekError } from '../../src/errors.js';
 import { cryptBytes } from '../../src/crypto/cipher.js';
-import { keyFilenameSuffix, stateFromKey } from '../../src/crypto/keys.js';
+import { findEmbeddedKeyTable, keyFilenameSuffix, stateFromKey } from '../../src/crypto/keys.js';
 import {
+  HEADER_OFFSET,
   IMAGE_MAGIC,
   LENGTH_OFFSET,
   parseImageHeader,
   FOOTER_TAG,
+  TRY_KEYS_MAX_LEN,
 } from '../../src/image/header.js';
 import { wordSum32, transferSum16 } from '../../src/image/bank.js';
 import { getProfile } from '../../src/profiles/registry.js';
@@ -31,6 +33,7 @@ import type { FirmwareProfile, WindowEntry } from '../../src/profiles/types.js';
 import type { SeekDevice } from '../../src/protocol/client.js';
 import type { DeviceState, SlotState, WorkflowContext } from '../../src/workflows/types.js';
 import { prepareSlotFlash, flashSlot } from '../../src/slots/write.js';
+import { retargetImageKeys } from '../../src/slots/write-image.js';
 import { reportFor } from './write-fixtures.js';
 import { buildSlotPlan } from '../../src/slots/capability.js';
 import {
@@ -466,6 +469,91 @@ describe('prepareSlotFlash refuses before it builds anything', () => {
 /* ==================================================================== *
  * prepareSlotFlash: the three staging forms, and their bytes
  * ==================================================================== */
+
+/* ==================================================================== *
+ * The file, the key pair and the analysis, checked before anything is built.
+ * These were pinned by the removed flash.ts tests (TESTING.md 42.80) and are
+ * pinned here against the writer that replaced it.
+ * ==================================================================== */
+
+describe('prepareSlotFlash: the file, the key pair and the analysis', () => {
+  const version = '4.8.1.9';
+  const plan = buildSlotPlan(modern, version);
+  /* a 4.x camera whose booted bank reads under the store key, carrying this camera's pair */
+  const keyed = (): SlotsReport =>
+    reportFor(
+      stateFor(modern, {
+        version,
+        slots: [slotState({ key: 'b', present: true, accepts: true }), bootedWithApp()],
+        keyA: KEY_A,
+        keyB: KEY_B,
+      }),
+      plan,
+    );
+
+  it('a file name that claims a key pair the image does not hold is refused', () => {
+    const image = imageOf(0x5000, 5);
+    const name = `img${keyFilenameSuffix(SRC_A, SRC_B)}.bin`;
+    const error = refusalOf(() =>
+      prepareSlotFlash(keyed(), 'b', { kind: 'plain', bytes: image, fileName: name }),
+    );
+    expect(error.code).toBe('slots/refused');
+    expect(error.message).toContain('the filename claims Key A');
+  });
+
+  it('an image the bootloader could never boot (header.length at or past the limit) is refused', () => {
+    const image = new Uint8Array(TRY_KEYS_MAX_LEN);
+    expect(() =>
+      prepareSlotFlash(keyed(), 'b', { kind: 'plain', bytes: image, fileName: 'x.bin' }),
+    ).toThrow(/rejects any header\.length/);
+  });
+
+  it('a key the image keeps inside the cleartext header window is not patched', () => {
+    const image = imageOf(0x5000, 5);
+    /* 0x220: inside the window the bootloader reads in clear, before it has a key */
+    image.set(SRC_A, HEADER_OFFSET + 0x20);
+    image.set(SRC_B, 0x4020);
+    const name = `img${keyFilenameSuffix(SRC_A, SRC_B)}.bin`;
+    const error = refusalOf(() =>
+      prepareSlotFlash(keyed(), 'b', { kind: 'plain', bytes: image, fileName: name }),
+    );
+    expect(error.code).toBe('slots/refused');
+    expect(error.message).toContain('inside the cleartext header window');
+  });
+
+  it('retargeting copies the image and leaves the caller’s bytes alone; an image that already carries this camera’s pair is left as it is', () => {
+    const mine = { keyA: KEY_A, keyB: KEY_B };
+    const image = imageOf(0x5000, 5);
+    image.set(SRC_A, 0x4000);
+    image.set(SRC_B, 0x4020);
+    const before = image.slice();
+
+    const out = retargetImageKeys(image, `img${keyFilenameSuffix(SRC_A, SRC_B)}.bin`, mine);
+    expect(equalBytes(image, before)).toBe(true);
+    expect(out).not.toBe(image);
+    expect(equalBytes(out.subarray(0x4000, 0x4010), KEY_A)).toBe(true);
+    expect(equalBytes(out.subarray(0x4020, 0x4030), KEY_B)).toBe(true);
+    expect(findEmbeddedKeyTable(out, KEY_A, KEY_B)).not.toBeNull();
+
+    const own = imageOf(0x5000, 6);
+    own.set(KEY_A, 0x4000);
+    own.set(KEY_B, 0x4020);
+    const kept = retargetImageKeys(own, `own${keyFilenameSuffix(KEY_A, KEY_B)}.bin`, mine);
+    expect(equalBytes(kept, own)).toBe(true);
+  });
+
+  it('an analysis that does not say which firmware it runs is refused before anything is built', () => {
+    const report = reportFor(
+      stateFor(modern, { version: null, slots: [slotState({ key: 'b', present: true })] }),
+      plan,
+    );
+    const error = refusalOf(() =>
+      prepareSlotFlash(report, 'b', { kind: 'raw', bytes: imageOf(0x4000, 1), fileName: 'x.bin' }),
+    );
+    expect(error.code).toBe('slots/refused');
+    expect(error.message).toContain('does not say which firmware');
+  });
+});
 
 describe('prepareSlotFlash builds each staging form', () => {
   it('plain (2014 chain): length stamped, stored word sum 0, the bank holds the payload then erased', () => {

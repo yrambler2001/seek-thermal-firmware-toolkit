@@ -1,8 +1,8 @@
 /**
  * Fixtures the rendering tests need and the hooks do not: a camera that
- * answers every read, the `DeviceState` core builds out of it, and a prepared
- * write plan. Shared so the a11y and safety-copy tests exercise the *real*
- * shapes rather than a hand-drawn approximation of them.
+ * answers every read, and the `DeviceState` core builds out of it. Shared so
+ * the a11y and safety-copy tests exercise the *real* shapes rather than a
+ * hand-drawn approximation of them.
  */
 
 import {
@@ -13,7 +13,6 @@ import {
   getProfile,
   readDeviceInfo,
   type DeviceState,
-  type PreparedFlash,
   type Reporter,
   type WebUsbDevice,
   type WebUsbInTransferResult,
@@ -80,56 +79,6 @@ export async function fakeDeviceState(): Promise<DeviceState> {
     reporter: SILENT_REPORTER,
   };
   return readDeviceInfo(ctx);
-}
-
-/**
- * A write plan with every optional branch turned on — a re-keyed image, a
- * header that differs from the running one, a moved vector table — so the
- * preview renders all of its tables and all of its warnings at once.
- */
-export function fakePreparedFlash(): PreparedFlash {
-  const payload = new Uint8Array(256);
-  for (let index = 0; index < payload.length; index += 1) payload[index] = index & 0xff;
-  return {
-    fileName:
-      'seek_fw_slotA-KeyA-00112233445566778899aabbccddeeff-KeyB-ffeeddccbbaa99887766554433221100.bin',
-    originalSize: 196_608,
-    targetName: 'slot B',
-    bootedName: 'slot A',
-    runningSlot: 'slot A',
-    header: {
-      versionStr: '4.9.1.5',
-      imageId: 0x0000_0011,
-      sp: 0x1000_0400,
-      entry: 0x1401_0201,
-      length: 196_608,
-    },
-    length: 196_608,
-    declaredBefore: 196_600,
-    lengthStamped: true,
-    adjust: 0x1234_5678,
-    keyA: new Uint8Array(16).fill(0xab),
-    keyPatch: {
-      changed: true,
-      where: 'offset 0x0002f000',
-      fromA: '00112233445566778899aabbccddeeff',
-      fromB: 'ffeeddccbbaa99887766554433221100',
-      toA: 'abababababababababababababababab',
-      toB: 'cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd',
-    },
-    carriesMine: true,
-    footer: { length: 196_608, model: 'PIR324' },
-    footerOffset: 0x0003_ffc0,
-    footerFrom: 'slot A',
-    payload,
-    sum16: 0xbeef,
-    rekeyRisk: true,
-    layoutMoved: true,
-    compare: [
-      { field: 'version', onCamera: '4.9.1.4', inImage: '4.9.1.5' },
-      { field: 'initial SP', onCamera: '0x10000200', inImage: '0x10000400' },
-    ],
-  } as unknown as PreparedFlash;
 }
 
 /* ---- a camera that answers the way a given firmware line does ---------- */

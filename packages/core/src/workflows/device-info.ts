@@ -424,8 +424,8 @@ function notInPlan(plan: WindowPlan, version: string | null, address: number): s
  * The profile's boot policy names the subcommand an upgrade arms (0 on the
  * post-2018 line, none on the legacy line); whether THIS build switches on it
  * is its table's to say. The camera computes the block, so the row carries no
- * address, but it has to be there, and plain, because the read-back here and
- * `writeFirmware` both send the plain 2-byte payload.
+ * address, but it has to be there, and plain, because the read-back here sends
+ * the plain 2-byte payload.
  */
 function upgradeSelectorIn(plan: WindowPlan, profile: FirmwareProfile): number | null {
   const subcmd = profile.boot.updateTargetSubcmd;
@@ -1131,9 +1131,9 @@ export async function readDeviceInfo(
     classicWriter.push(reason);
   }
   /* A profile that writes through a selector this build's table does not have
-   * has no window to write, and `writeFirmware` would refuse on the state
-   * anyway; saying so here keeps the button honest. A profile that names no
-   * selector at all is already blocked by its capability, or by the write. */
+   * has no window to write; saying so here keeps the gate honest. A profile
+   * that names no selector at all is already blocked by its capability, or by
+   * the write. */
   if (profile.boot.updateTargetSubcmd >= 0 && updateTargetSubcmd === null) {
     upgradeOnly.push(
       `there is no upgrade-target selector ${hex(profile.boot.updateTargetSubcmd)} in this ` +
@@ -1248,9 +1248,9 @@ export async function readDeviceInfo(
  * (the Compact PRO FF 4.18.2.0 pilot's pair) and its per-device key slot is
  * erased; the emulated upload of a retargeted image committed and booted slot A
  * (FW-V1 Phase 51). Nothing here reads an address: the booted slot is already
- * decrypted, and the keys are looked for BY VALUE, the way `prepareImage` finds
- * the pair it retargets (`findEmbeddedKeyTable`, which explains why an anchor is
- * not trusted). Only an ABSENT key refuses - that is the case the firmware
+ * decrypted, and the keys are looked for BY VALUE, the way the slot writer finds
+ * the pair it retargets (`locateOwnKeyPair`; `findEmbeddedKeyTable` explains
+ * why an anchor is not trusted). Only an ABSENT key refuses - that is the case the firmware
  * cannot survive, and it needs no guess about which copy the code loads.
  */
 export function runningApplicationKeyBlock(

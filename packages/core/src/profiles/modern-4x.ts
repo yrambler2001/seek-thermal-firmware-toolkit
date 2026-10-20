@@ -204,9 +204,9 @@ export const MODERN_MEMORY: MemoryLayout = {
  * (`fw_op_dest = fw_update_slot_address()`, every variant of FW-V1's
  * `cmd_BeginFirmwareUpgrade.c`; `kind: computed` for mode 0 on all 14 post-2018
  * images in `test/firmware/facts.json`). With no address it is never a window
- * and never places a sweep's bytes; it is here because the device read and the
- * write arm the upgrade-target selector only when the running build's table
- * carries it (`readDeviceInfo`, `writeFirmware`).
+ * and never places a sweep's bytes; it is here because the device read arms
+ * the upgrade-target selector only when the running build's table carries it
+ * (`readDeviceInfo`).
  */
 export function modernWindowPlan(
   firmwareVersion: string | null,

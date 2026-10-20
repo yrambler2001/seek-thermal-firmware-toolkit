@@ -175,6 +175,17 @@ export function commitRefusal(name: string, status: number | null): SeekError {
 }
 
 /**
+ * Whether a commit error says the camera's analysis is stale: every error a slot
+ * commit raises after the commit transfer carries `dropAnalysis` (`commitRefusal`),
+ * and a caller seeing it must discard its `DeviceState` and re-read before it does
+ * anything else. The analysis is the caller's, not a global, so the contract rides
+ * on the error itself.
+ */
+export function flashInvalidatesAnalysis(error: unknown): boolean {
+  return error instanceof SeekError && error.detail?.dropAnalysis === true;
+}
+
+/**
  * Arm `write`, stream `payload` in EP0-sized chunks, polling the status word
  * after every chunk (both staging failures the camera reports are sticky), then
  * commit with `sum16`. Returns the commit's status, which is 0 or the call

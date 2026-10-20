@@ -51,7 +51,7 @@ const TOKEN_NOTE =
 const LOCKED_PLAIN_STAGING_NOTE =
   'Staged: the image length only, at most 0xE000 bytes (the descriptor stages into ' +
   '0x20002000 + 0xE000). The commit erases the 64 KiB block and programs exactly those bytes, ' +
-  'and the rest of the bank reads 0xFF. The stored word sum must be 0; prepareImage balances it ' +
+  'and the rest of the bank reads 0xFF. The stored word sum must be 0; the staging balances it ' +
   'through the adjust word at 0x238.';
 
 const LOCKED_2016_STAGING_NOTE =

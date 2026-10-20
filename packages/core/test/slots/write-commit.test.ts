@@ -19,9 +19,9 @@ import { SeekError } from '../../src/errors.js';
 import { getProfile } from '../../src/profiles/registry.js';
 import type { WindowEntry } from '../../src/profiles/types.js';
 import type { SeekDevice } from '../../src/protocol/client.js';
-import { flashInvalidatesAnalysis } from '../../src/workflows/flash.js';
 import type { WorkflowContext } from '../../src/workflows/types.js';
 import type { SlotEntry } from '../../src/slots/types.js';
+import { flashInvalidatesAnalysis } from '../../src/slots/write-commit.js';
 import {
   classifyCommitStatus,
   commitRefusal,

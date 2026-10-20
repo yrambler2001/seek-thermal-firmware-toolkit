@@ -30,6 +30,7 @@ export {
   type SlotFileStatus,
 } from './decrypt-file.js';
 export { prepareSlotFlash, flashSlot, type PrepareSlotFlashOptions } from './write.js';
+export { flashInvalidatesAnalysis } from './write-commit.js';
 export {
   ffBankVerdict,
   onPlaintextChain,

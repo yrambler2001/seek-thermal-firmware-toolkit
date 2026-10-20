@@ -12,11 +12,13 @@
  * again. FW-V1 ran exactly that upload on its emulator: OK, cfg[0] = 1, slot A.
  *
  * WHAT IS CHECKED HERE. The toolkit's own `readDeviceInfo`, over the emulated
- * camera, names the reason and turns flashing off; `prepareImage` then refuses
- * with that reason before a payload exists, and nothing that writes - no
- * SetFeaturedFirmwareData, no CompleteMemoryUpgrade - went out. Before sec.21.2
- * the same read reported this camera flashable. The emulator only: nothing here
- * is ever run against a real camera.
+ * camera, names the reason and turns flashing off, and the read sends no write
+ * (no SetFeaturedFirmwareData, no CompleteMemoryUpgrade). Before sec.21.2 the
+ * same read reported this camera flashable. The slot page does not refuse this
+ * camera: its upload keys are derived from the camera (TESTING.md 42.7), so the
+ * classic write refusal that this file checked before 42.80 has no live
+ * counterpart and is not checked here. The emulator only: nothing here is ever
+ * run against a real camera.
  *
  * AND IT NAMES NO OTHER CAMERA. The same read runs on every other full dump of
  * the post-2016 line (11 of them): on each, the running application carries its
@@ -26,7 +28,6 @@
 
 import { afterAll, describe, expect, it } from 'vitest';
 
-import { SeekError } from '../src/errors.js';
 import { silentReporter } from '../src/events.js';
 import { SeekDevice } from '../src/protocol/client.js';
 import { OP } from '../src/protocol/ops.js';
@@ -34,8 +35,6 @@ import { WebUsbTransport } from '../src/protocol/webusb.js';
 import { getProfile } from '../src/profiles/registry.js';
 import { bytesToHex } from '../src/bytes.js';
 import { bootedSlot, readDeviceInfo } from '../src/workflows/device-info.js';
-import { prepareImage } from '../src/workflows/flash.js';
-import { keyFilenameSuffix } from '../src/crypto/keys.js';
 import { liveEmulatorCount, RowEmulators } from './emulator/harness.js';
 import {
   announceSkip,
@@ -136,17 +135,7 @@ describe.skipIf(!available)('the flash gate on the emulated Mosaic 10.9.1.31 dum
         expect(reason).toContain(bytesToHex(state.keyTable.keyA));
         expect(reason).toContain('10.9.1.31');
 
-        /* ---- and the write path refuses with it, before a payload exists ---- */
-        const name = `mosaic_10.9.1.31${keyFilenameSuffix(state.keyTable.keyA, state.keyTable.keyB)}.bin`;
-        let refused: unknown = null;
-        try {
-          prepareImage(state, running.plain, name);
-        } catch (error) {
-          refused = error;
-        }
-        expect(refused).toBeInstanceOf(SeekError);
-        expect((refused as SeekError).code).toBe('flash/refused');
-        expect((refused as SeekError).message).toContain("does not carry this camera's Key A");
+        /* ---- and the read itself sent no upgrade write ---- */
         expect(
           sent.filter((op) => WRITES.has(op)),
           'no upgrade write went out',

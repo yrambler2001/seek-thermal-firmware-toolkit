@@ -1,12 +1,10 @@
 /* ==================================================================== *
  * Turning a decrypted image into the bytes one slot's staging form needs.
  *
- * Everything here is pure: bytes in, bytes out, no device. It is the
- * per-bank counterpart of `prepareImage` in workflows/flash.ts, which carries
- * the same guards for the one bank the existing page writes (the upgrade
- * target). The copies below are deliberate: flash.ts is not touched by this
- * page, and its behaviour is pinned by its own tests. Keep the two in step by
- * hand when either one changes a guard.
+ * Everything here is pure: bytes in, bytes out, no device. `prepareSlotFlash`
+ * (write.ts) is the only caller: it stages one bank's payload from the image
+ * through these builders, and the shape and key checks below run before any
+ * payload exists.
  *
  * The staging forms (see types.ts):
  *   'key-a-ciphertext'           the image, retargeted to this camera's keys,
@@ -93,7 +91,7 @@ export function asSlotRefusal(error: unknown): SeekError {
 /* ---- the image itself --------------------------------------------------- */
 
 /**
- * The shape checks `prepareImage` makes before it touches an image: size,
+ * The shape checks made before an image is staged: size,
  * header magic, the stack pointer and reset vector of a decrypted image. Each
  * one stops a file that would never boot from reaching a payload.
  */
@@ -151,9 +149,9 @@ export function locateOwnKeyPair(bytes: Uint8Array, mine: KeyPair): KeyPair | nu
 }
 
 /**
- * Retarget the image's own Key A / Key B to this camera's pair, exactly as
- * `prepareImage` does. The keys the image carries are named by its file name
- * (the dump view puts them there); without that name nothing says which pair
+ * Retarget the image's own Key A / Key B to this camera's pair. The keys the
+ * image carries are named by its file name (the dump view puts them there);
+ * without that name nothing says which pair
  * the image was built for, so the file is refused. Returns the image with this
  * camera's pair in it.
  */
@@ -187,7 +185,7 @@ export function retargetImageKeys(bytes: Uint8Array, fileName: string, mine: Key
     }
   }
   /* Two distinct 16-byte values: the same key named twice would leave Key A
-   * nowhere in the image (the same check as flash.ts). */
+   * nowhere in the image. */
   if (at.offsetA < at.offsetB + 16 && at.offsetB < at.offsetA + 16) {
     throw slotRefused(
       `the filename's Key A and Key B resolve to overlapping bytes at ${hexUp(at.offsetA)} and ` +

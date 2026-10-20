@@ -1,8 +1,8 @@
 /* ====================================================================
  * The upgrade target of a 4.x camera, by boot-config word, on the emulator (TESTING.md 42.50).
  *
- * `readDeviceInfo` names the bank an upgrade writes (`boot.target`, the "Upgrade target" row and
- * `writeFirmware`'s target). On 4.x it starts from the boot-config replay (the bank the word boots,
+ * `readDeviceInfo` names the bank an upgrade writes (`boot.target` and the "Upgrade target" row).
+ * On 4.x it starts from the boot-config replay (the bank the word boots,
  * and the other of A and B, or A for recovery), then the camera's own answers overrule it: the
  * active-slot word (roots[8]) when it names a bank, and the window the upgrade selector arms, when that
  * window matches exactly one of A and B.

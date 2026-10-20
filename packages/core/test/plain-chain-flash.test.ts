@@ -13,8 +13,9 @@
  * key table, the acceptance sum and the boot replay are all cipher-chain
  * questions, and the camera's own active-slot word (the word
  * `fw_update_slot_address()` reads, mode 0's input) names both ends of an
- * upgrade — and `prepareImage`/`writeFirmware` stage and commit the image
- * bytes verbatim. A bank stored under a REAL keystream that merely also sums
+ * upgrade — and `prepareSlotFlash`/`flashSlot` stage and commit the image
+ * bytes verbatim into bank B, the bank the page writes. A bank stored under a
+ * REAL keystream that merely also sums
  * to 0 (the 1.0.3.x cipher chain) is refused: the identity keystream is the
  * chain's signature, not the sum alone.
  *
@@ -47,9 +48,10 @@ import {
 import { SeekDevice } from '../src/protocol/client.js';
 import { OP } from '../src/protocol/ops.js';
 import { legacyAuth, OLD_FW_UNLOCK_TOKEN } from '../src/profiles/legacy-auth.js';
+import { inspectSlots } from '../src/slots/inspect.js';
 import { deriveWriteKeys, slotWriteRefusal } from '../src/slots/write-keys.js';
+import { flashSlot, prepareSlotFlash } from '../src/slots/write.js';
 import { readDeviceInfo } from '../src/workflows/device-info.js';
-import { prepareImage, writeFirmware } from '../src/workflows/flash.js';
 import type { DeviceState, WorkflowContext } from '../src/workflows/types.js';
 import { fakeCamera, type FakeCamera, type FakeWindowSpec } from './fake-transport.js';
 
@@ -259,43 +261,66 @@ describe('the 2014 plaintext chain on the normal flash path', () => {
   }, 60_000);
 
   it('stages the plain image verbatim — no cipher, no footer, no keys', async () => {
-    const state = await read2014(camera2014());
+    const camera = camera2014();
+    const report = await inspectSlots(await contextFor(camera, collectingReporter()));
     const image = plainImage2014();
 
-    const prep = prepareImage(state, image, 'compact_1.3.0.0.bin');
+    const plan = prepareSlotFlash(report, 'b', {
+      kind: 'plain',
+      bytes: image,
+      fileName: 'compact_1.3.0.0.bin',
+    });
 
-    expect(prep.plainChain).toBe(true);
+    expect(plan.staging).toBe('plain');
+    expect(plan.key).toBe('b');
+    expect(plan.address).toBe(0x14060000);
     /* the payload IS the image bytes, word for word */
-    expect(prep.payload.length).toBe(image.length);
-    expect(Buffer.from(prep.payload).equals(Buffer.from(image))).toBe(true);
+    expect(plan.payload.length).toBe(image.length);
+    expect(Buffer.from(plan.payload).equals(Buffer.from(image))).toBe(true);
+    /* nothing is stamped or resized: the image's own length stands */
+    expect(parseImageHeader(plan.payload)?.length).toBe(image.length);
     /* the bootloader's own acceptance: the stored words sum to 0 */
-    expect(wordSum32(prep.payload, prep.payload.length)).toBe(0);
+    expect(wordSum32(plan.payload, plan.payload.length)).toBe(0);
     /* the commit's own gate: the u16 sum of the staged bytes */
-    expect(prep.sum16).toBe(transferSum16(prep.payload));
-    /* no footer — the chain's slots hold the image alone */
-    expect(prep.footer).toBeNull();
-    expect(prep.footerFrom).toBeNull();
-    /* no keys anywhere in it */
-    expect(prep.keyPatch.changed).toBe(false);
-    expect(prep.keyPatch.where).toMatch(/plaintext chain/);
-    expect(prep.targetName).toBe('App image bank 0x14060000');
-    expect(prep.bootedName).toBe('App image bank 0x14050000');
-    expect(prep.lengthStamped).toBe(false);
+    expect(plan.sum16).toBe(transferSum16(plan.payload));
+    /* no footer: the bank holds the image alone, and the rest of the block reads erased */
+    expect(
+      Buffer.from(plan.expectedStored!.subarray(0, image.length)).equals(Buffer.from(image)),
+    ).toBe(true);
+    expect(plan.expectedStored?.[image.length]).toBe(0xff);
+    /* no cipher and no keys: nothing is derived, and the bank is predicted to hold the image as sent */
+    expect(plan.derivedFrom ?? null).toBeNull();
+    expect(
+      plan.expectedPlain && Buffer.from(plan.expectedPlain).equals(Buffer.from(plan.payload)),
+    ).toBe(true);
   }, 60_000);
 
-  it('commits the bytes into the update slot and leaves the rest of the camera alone', async () => {
+  it('commits the bytes into bank B and leaves the rest of the camera alone', async () => {
     const camera = camera2014();
-    const state = await read2014(camera);
+    const report = await inspectSlots(await contextFor(camera, collectingReporter()));
     const image = plainImage2014();
-    const prep = prepareImage(state, image, 'compact_1.3.0.0.bin');
-    const reporter = collectingReporter();
+    const plan = prepareSlotFlash(report, 'b', {
+      kind: 'plain',
+      bytes: image,
+      fileName: 'compact_1.3.0.0.bin',
+    });
 
-    await writeFirmware(await contextFor(camera, reporter), state, prep);
+    /* the analysis above arms selector 0 to read the boot prediction; the write is what follows */
+    const armsBefore = camera.arms.length;
+    const result = await flashSlot(await contextFor(camera, collectingReporter()), report, plan, {
+      acknowledgeRisk: false,
+    });
 
-    /* exactly one commit went out, after the arm of the upgrade-target selector */
+    /* exactly one commit went out, after the arm of bank B's own window */
     expect(camera.calls.filter((c) => c.op === OP.COMPLETE_MEMORY_UPGRADE)).toHaveLength(1);
-    expect(camera.arms).toContain(0);
-    /* slot B — the bank mode 0 arms — now holds the staged bytes, verbatim */
+    const bankB = report.plan.slots.find((s) => s.key === 'b')?.write?.subcmd;
+    expect(camera.arms.slice(armsBefore)).toContain(bankB);
+    /* and nothing the write armed is the upgrade-target selector: the slot page does not touch cfg[0] */
+    expect(camera.arms.slice(armsBefore).every((subcmd) => subcmd === bankB)).toBe(true);
+    expect(result.commitStatus).toBe(0);
+    /* the read-back compares equal to the staged bytes */
+    expect(result.verified).toBe(true);
+    /* slot B, the bank the plan names, now holds the staged bytes, verbatim */
     const written = camera.flash.subarray(0x60000, 0x60000 + image.length);
     expect(Buffer.from(written).equals(Buffer.from(image))).toBe(true);
     /* and past the image the block is erased, as the commit leaves it */
@@ -304,43 +329,57 @@ describe('the 2014 plaintext chain on the normal flash path', () => {
     expect(camera.flash[SLOT_A_OFFSET + HEADER_OFFSET]).toBe(0xd4); /* magic byte */
     expect(camera.flash[0x70000 + HEADER_OFFSET]).toBe(0xd4); /* magic byte */
     expect(viewOf(camera.flash.subarray(0x10000, 0x10004)).getUint32(0, true)).toBe(0);
-    expect(logsOf(reporter)).toMatch(/stored verbatim/);
   }, 60_000);
 
   it('refuses a bank that sums to zero under a REAL keystream — the identity is the signature', async () => {
     /* the 1.0.3.x cipher chain: the same image, encrypted, whose decrypted sum
      * is 0 — but the stored bytes are a keystream apart, and staging them
      * verbatim would write ciphertext where the chain wants an image */
-    const state = await read2014(camera2014({ plain: false }));
+    const camera = camera2014({ plain: false });
+    const state = await read2014(camera);
 
     expect(state.plainChain).toBe(false);
     expect(state.canFlash).toBe(false);
     expect(state.flashBlockedBy.join(' ')).toContain('2014 plaintext chain');
     expect(state.updateTargetSubcmd).toBeNull();
+
+    /* and the slot writer refuses a plain image on this camera, with nothing sent */
+    const report = await inspectSlots(await contextFor(camera, collectingReporter()));
     let refused: unknown = null;
     try {
-      prepareImage(state, plainImage2014(), 'compact_1.3.0.0.bin');
+      prepareSlotFlash(report, 'b', {
+        kind: 'plain',
+        bytes: plainImage2014(),
+        fileName: 'compact_1.3.0.0.bin',
+      });
     } catch (error) {
       refused = error;
     }
     expect(refused).toBeInstanceOf(SeekError);
-    expect((refused as SeekError).code).toBe('flash/refused');
+    expect((refused as SeekError).code).toBe('slots/refused');
+    expect(
+      camera.calls.some(
+        (c) => c.op === OP.SET_FEATURED_FIRMWARE_DATA || c.op === OP.COMPLETE_MEMORY_UPGRADE,
+      ),
+    ).toBe(false);
   }, 60_000);
 
   it("refuses an image past the chain's staging buffer, which holds 0xE000 bytes", async () => {
-    const state = await read2014(camera2014());
+    const camera = camera2014();
+    const report = await inspectSlots(await contextFor(camera, collectingReporter()));
     const image = plainImage2014();
     const big = new Uint8Array(TRY_KEYS_MAX_LEN - 4); /* < 0x10000, > 0xE000 */
     big.set(image.subarray(0, 0x240));
     viewOf(big).setUint32(LENGTH_OFFSET, big.length, true);
     let refused: unknown = null;
     try {
-      prepareImage(state, big, 'compact_big.bin');
+      prepareSlotFlash(report, 'b', { kind: 'plain', bytes: big, fileName: 'compact_big.bin' });
     } catch (error) {
       refused = error;
     }
     expect(refused).toBeInstanceOf(SeekError);
-    expect((refused as SeekError).code).toBe('image/unsupported');
+    /* the page's one refusal code (write-image.ts asSlotRefusal) carries the chain's own message */
+    expect((refused as SeekError).code).toBe('slots/refused');
     expect((refused as SeekError).message).toContain('staging buffer');
   }, 60_000);
 
@@ -362,14 +401,21 @@ describe('the 2014 plaintext chain on the normal flash path', () => {
       const camera = camera2014();
       const state = await read2014(camera);
       expect(state.canFlash).toBe(true);
-      const prep = prepareImage(state, slotA, 'compact_101310HSNEA2_slotA.bin');
+      const report = await inspectSlots(await contextFor(camera, collectingReporter()));
+      const plan = prepareSlotFlash(report, 'b', {
+        kind: 'plain',
+        bytes: slotA,
+        fileName: 'compact_101310HSNEA2_slotA.bin',
+      });
 
       /* verbatim: the staged payload is the camera's own bytes, unmodified */
-      expect(prep.lengthStamped).toBe(false);
-      expect(prep.payload.length).toBe(REAL.length);
-      expect(Buffer.from(prep.payload).equals(Buffer.from(slotA))).toBe(true);
+      expect(parseImageHeader(plan.payload)?.length).toBe(REAL.length);
+      expect(plan.payload.length).toBe(REAL.length);
+      expect(Buffer.from(plan.payload).equals(Buffer.from(slotA))).toBe(true);
 
-      await writeFirmware(await contextFor(camera, collectingReporter()), state, prep);
+      await flashSlot(await contextFor(camera, collectingReporter()), report, plan, {
+        acknowledgeRisk: false,
+      });
       const written = camera.flash.subarray(0x60000, 0x60000 + REAL.length);
       expect(Buffer.from(written).equals(Buffer.from(slotA))).toBe(true);
       /* and the footer position stays erased — this chain keeps none */

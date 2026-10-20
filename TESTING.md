@@ -12216,6 +12216,85 @@ Later (42.79): the runs' skip counts track the time the checker's per-frame Java
 
 **Commits.** This section, `SKIP_STORMS.md` (the owner's request: a stand-alone write-up of the storm cause, the evidence and the host fix) and `scripts/fd-skip/` only, on `worktree-agent-a1b0206f65f1481b0`. The hash is in the agent's report.
 
+### 42.80 The removed `workflows/flash.ts`: its tests moved onto the slot writer, the dead ones deleted, and a gap in the live refusal found (no hardware, 2026-10-20)
+
+**Summary.** Agent 42.80 (Haiku 5.5), on `worktree-agent-a59318abc2ebabd99`, reset to `refactor/all-firmware-profiles` (`daa2c9a`; the old HEAD `cf5420b` is its ancestor, so no commit was lost). No camera, J-Link or USB switch was touched, and no other agent was started. `packages/core/src/workflows/flash.ts` is deleted: `writeFirmware`, `prepareImage`, `PreparedFlash`, `ComparisonRow` and `KeyPatchRecord` with it. The live writer is `packages/core/src/slots/` (`prepareSlotFlash`, `flashSlot`, `stageAndCommit`), which already had its own staging, refusals and commit. Each behaviour the old tests pinned is either pinned by a live test (named in the table), moved onto a live function, or deleted with a reason. The one live gap found is F1.
+- No CLI or web source called the removed functions. One CLI test did: `packages/cli/test/emulator-host-giveup.test.ts`, the Chrome-model commit. It now runs the slots path.
+- `flashInvalidatesAnalysis` is not dead. `commitRefusal` in `slots/write-commit.ts` sets the `dropAnalysis` marker that it reads. It moved next to `commitRefusal`, with its three assertions unchanged.
+- `upgrade-target.emulator.test.ts` never called `flash.ts`. It tests `readDeviceInfo`'s `boot.target`, which is live; only its comment named `writeFirmware`.
+- The writer refuses with one code, `slots/refused` (`asSlotRefusal`, `write-image.ts`). An assertion on `flash/refused` or `image/*` kept its message and took the page's code, or was dropped when the live code has no such refusal.
+
+**Decisions.** (a) covered by a live test that already exists, named; (b) a behaviour of a live path that was pinned only through `flash.ts`, now tested on the live function with the same assertions where they apply; (c) a behaviour that only `flash.ts` had, deleted.
+
+| # | Behaviour | Old test (file: test) | Decision | Live test, or the reason |
+|---|---|---|---|---|
+| 1 | 2014 chain: the payload is the image as sent; stored word sum 0; no footer; no key; `sum16` is the u16 of the payload | `plain-chain-flash`: stages the plain image verbatim | b | same test, on `prepareSlotFlash` for bank B. Asserts payload = image, word sum 0, `sum16`, erased tail, `derivedFrom` null, `expectedPlain` = payload, header length unchanged. Dropped: the footer and key-patch fields, which the page's plan does not have |
+| 2 | 2014 chain commit: one commit; the bank's own window armed; B holds the image; the tail erased; A, R and cfg[0] untouched | `plain-chain-flash`: commits the bytes into the update slot | b | same test, on `flashSlot`. Changed: the old "arms selector 0" was the removed writer's upgrade-target arm, now "the write arms only bank B's window, never selector 0" (the analysis's own read arms 0 first, so the check starts after it). `verified === true` replaces the 'stored verbatim' log line |
+| 3 | A bank that sums to zero under a real keystream is not flashable (`canFlash` false, reason names the chain) | `plain-chain-flash`: refuses a bank that sums to zero under a REAL keystream | b | same test. The read's assertions are unchanged. `prepareSlotFlash` refuses with `slots/refused` and nothing is sent, but the refusal that fires is the plan's (the detected family, compact-2016, has no 1.3.0.0 plan). The chain reason does not refuse on the page: see F1 |
+| 4 | Chain staging buffer: an image past 0xE000 is refused | `plain-chain-flash`: refuses an image past the chain's staging buffer | b | same test; code `slots/refused` (`buildPlainPayload` wraps it, `write-image.ts`); the message 'staging buffer' is unchanged |
+| 5 | The real dump's slot A through the whole path | `plain-chain-flash`: rounds the REAL dump's own slot A image | b | same test, on the live functions. Not run here: the dump is not on this machine, so the test returns at its skip line (vitest counts that as passed) |
+| 6 | Mosaic 10.9.1.31: `readDeviceInfo` names the Key A reason and turns flashing off; the read sends no write | `emulator-flash-gate`: refuses a camera whose running application does not carry its Key A | a | kept, unchanged; the "no upgrade write went out" check moved above the removed block |
+| 7 | The same camera: `prepareImage` refuses with `flash/refused` before a payload exists | `emulator-flash-gate`: the `prepareImage` block of the same test | c | deleted. The page does not refuse this camera: its upload keys are derived from the camera (42.7), and `gateWithoutAppKeys` drops the Key A reason. There is no live refusal to move (F3) |
+| 8 | The other eleven post-2016 dumps: the gate says nothing about keys | `emulator-flash-gate`: eleven `…: the running application carries its keys` | not through `flash.ts` | kept |
+| 9 | A file name that claims a key pair the image does not hold: `image/key-table` | `workflows`: refuses when the named key pair is not actually in the image | b | `write`: a file name that claims a key pair the image does not hold is refused ('the filename claims Key A') |
+| 10 | A file name with no key pair: refused | `workflows`: refuses an image whose filename does not carry its key pair | a | `write`: key-a staging needs the booted bank read under a key, and a file that carries its keys ('does not carry its key pair') |
+| 11 | An unnamed image that holds this camera's keys: refused, with a hint | `workflows`: explains differently when the unnamed image does hold this camera keys | c | deleted. The page finds an unnamed image's pair by value (`locateOwnKeyPair`) and accepts it. No live test covers that rule (F2) |
+| 12 | Size not a multiple of 4: `image/malformed` | `workflows`: refuses a size that is not a multiple of 4 | a | `write`: a malformed decrypted image is refused by the existing image checks (/multiple of 4/) |
+| 13 | No header magic: `image/malformed` | `workflows`: refuses an image with no header magic | a | same `write` test (/no image header/) |
+| 14 | `header.length` at or past 0x10000: `image/unsupported` | `workflows`: refuses an image the bootloader could never boot | b | `write`: an image the bootloader could never boot (header.length at or past the limit) is refused |
+| 15 | A key inside the cleartext header window: `flash/refused` | `workflows`: refuses to patch a key that lives inside the cleartext header window | b | `write`: a key the image keeps inside the cleartext header window is not patched |
+| 16 | The analysis says the camera cannot be flashed: `flash/refused` | `workflows`: refuses when the analysis says this camera cannot be flashed | a | `write`: a camera that cannot be flashed from here refuses key-a staging with the reasons ('cannot be written from here') |
+| 17 | Generic profile: `profile/unsupported` at the flash capability | `workflows`: refuses outright on a profile that does not support flashing | a | `profiles`: refuses flash on generic and says why (`requireCapability`, the same code). The `prepareImage` wrapper is c |
+| 18 | compact-2016 refused at its flash capability | `workflows`: refuses the 2016 profile at its flash capability | a | `profiles`: refuses flash on compact-2016 and says why |
+| 19 | A well-formed image is retargeted: footer, key patch, decrypts back under Key A, the caller's buffer unchanged | `workflows`: retargets a well-formed image and produces a payload the bank guard accepts | a + b | `write`: key-a (2017+): the image is retargeted to this camera, footered, and encrypted under its Key A (footer, decrypt-back, `expectedPlain`); `write`: retargeting copies the image and leaves the caller's bytes alone (b: the caller's bytes, the pair's offsets). Dropped: the `KeyPatchRecord` strings (c) |
+| 20 | An image that already carries this camera's keys is left alone | `workflows`: leaves an image that already carries this camera keys alone | b | `write`: retargeting copies the image ... an image that already carries this camera's pair is left as it is |
+| 21 | Writer refuses an analysis with no firmware version, nothing sent | `workflows` (writeFirmware): refuses an analysis that does not say which firmware the camera runs | b | `write`: an analysis that does not say which firmware it runs is refused before anything is built |
+| 22 | Writer refuses a table with no upgrade-target selector, nothing armed | `workflows` (writeFirmware): refuses an analysis whose firmware's table has no upgrade-target selector | c for the writer | deleted. The page writes a bank through that bank's own window and does not need selector 0 (`gateWithoutAppKeys` drops `upgradeBlockedBy`). The read's own gate is kept: `workflows`: arms the upgrade-target selector only when this firmware's own table has it (a). A bank with no window is refused by `write`: a build with no write window, a subcommand 0 window, or a window below the bank area (a) |
+| 23 | `flashInvalidatesAnalysis` reads the `dropAnalysis` marker on every commit error | `write-commit`: three assertions | b (helper moved) | same tests; the import is from `slots/write-commit.ts` |
+| 24 | Chrome give-up: the web's commit finishes inside it on Compact 4.8.2.1 and 4.8.1.9, no deadline fires | `cli` `emulator-host-giveup`: the web app's info and flash commit | b | same test on `inspectSlots` → `prepareSlotFlash` (bank B, the running image) → `flashSlot`. The assertions are unchanged |
+| 25 | Upgrade target by boot word (`readDeviceInfo`) | `upgrade-target.emulator` | not through `flash.ts` | kept; only the comment changed |
+| 26 | `fakePreparedFlash` (web fixture) | none | c | deleted: no user |
+
+**Findings (not fixed here; for the owner).**
+- **F1. The page does not enforce the 2014 chain reason on the 1.3.0.0 line.** `gateWithoutAppKeys` (`slots/write-keys.ts`) drops `classicWriterBlockedBy` whenever `stagesUnderCameraKey` is false, and the 1.3.0.0 line stages plain, so the chain reason is dropped there. The reason stays in `flashBlockedBy`, so the CLI `info` and the web report show it, but the page's refusal, its banner and `flashSlot` do not use it. Reproduced with a state from a cipher-chain 1.3.0.0 camera (`camera2014({ plain: false })`) with the detection reason removed (the real read carries it) and the legacy plan: `prepareSlotFlash(report, 'b', { kind: 'plain' })` is refused, but only by `familyOk` ("no slot decrypts to … acceptance sum"), and the refusal text does not name the chain. The real read gets the detected family's plan (compact-2016), which refuses the write on the plan. So every camera constructed for this check is refused, but no live check names the chain, and the classic gate did. Suggested fix: keep the chain reason for the plain-staging line (the condition is "stages plain", not "stages under the camera key"), and pin it with a test on a cipher-chain 1.3.0.0 state. Not made in this change, because it is a write-safety decision.
+- **F2. An unnamed image's pair is located by value** (`locateOwnKeyPair`, `write-image.ts`). An unnamed file that carries this camera's pair, or a decoded application pair, is accepted. That replaces the classic refusal (row 11). Nothing tests it.
+- **F3. The Mosaic 10.9.1.31 refusal has no successor.** The classic writer refused that camera for its Key A reason. Since 42.7 the page derives the upload keys, so the reason is excluded, and a write is not refused for it. Row 7 is deleted for this reason.
+
+**Left alone, for the owner.**
+- `assertFlashable` (`workflows/device-info.ts`) is exported and has no caller in core, web or CLI. It is not in `flash.ts`.
+- `docs/` (the built bundle, Pages) and `legacy/` still hold the old names. They are built output and history; nothing was rebuilt.
+- `packages/core/src/workflows/index.ts` still lists "flash" among the five operations; `slots/capability-notes.ts` still says "The general flash command refuses this profile".
+- `slots/capability-notes.ts` line 19 is not prettier-clean at HEAD (quote style). It is not reformatted here.
+- `TESTING.md` is not prettier-clean at HEAD (42.34) and is not checked.
+
+**Counts** (`before` = HEAD `daa2c9a`; `after` = this commit; `vitest run`, JSON reporter).
+
+| File | Before | After |
+|---|---|---|
+| `packages/core/test/plain-chain-flash.test.ts` | 9 | 9 |
+| `packages/core/test/emulator-flash-gate.test.ts` | 13 | 13 |
+| `packages/core/test/workflows.test.ts` | 49 | 35 (-14: 12 `prepareImage`, 2 `writeFirmware`) |
+| `packages/core/test/slots/write.test.ts` | 49 | 54 (+5: rows 9, 14, 15 and 21, and the retarget test that covers rows 19 (second half) and 20) |
+| `packages/core/test/slots/write-commit.test.ts` | 13 | 13 |
+| `packages/core/test/slots/upgrade-target.emulator.test.ts` | 6 | 6 |
+| `packages/core/test/profiles.test.ts` (not touched; the refusal coverage of rows 17 and 18) | 90 | 90 |
+| `packages/cli/test/emulator-host-giveup.test.ts` | 3 | 3 |
+| the 9 `packages/web` files that import `test-fixtures.ts` | 173 | 173 |
+
+Core, the seven files: 229 before, 220 after. The emulator files ran with `SEEK_EMU_DIR=/Users/yrambler2001/things/a.noindex/seek/FW-V1/emu` and none skipped. The one test that returns early here is row 5 (the real dump is absent).
+
+**Commands.**
+- `git reset --hard refactor/all-firmware-profiles` (a fast-forward: 0 behind, 499 ahead). `cp -cR` of `node_modules` from the main checkout, and the `@seek-fw/{core,cli,web}` links.
+- `npx vitest run --project core test/plain-chain-flash.test.ts test/emulator-flash-gate.test.ts test/workflows.test.ts test/slots/write.test.ts test/slots/write-commit.test.ts test/slots/upgrade-target.emulator.test.ts test/profiles.test.ts`: 220 passed, 0 failed.
+- `npx vitest run --project cli test/emulator-host-giveup.test.ts`: 3 passed.
+- `npx vitest run --project web` on the nine files: 173 passed.
+- `rm -rf packages/core/dist packages/core/tsconfig.build.tsbuildinfo`, then `npm run build --workspace @seek-fw/core`. An incremental build left a stale `dist/workflows/flash.js`; the clean build emits none. `dist` is gitignored.
+- `npx tsc --noEmit -p` for `packages/core/tsconfig.json`, `packages/cli/tsconfig.json`, `packages/web/tsconfig.app.json`, `packages/web/tsconfig.node.json`, `e2e/tsconfig.json` and `tsconfig.tools.json`: exit 0 each.
+- `npx eslint` on the 18 changed `.ts` and `.tsx` files: exit 0.
+- `npx prettier --check` on the same 18 files: 17 clean; `slots/capability-notes.ts` is unclean at HEAD too (see above), so it is left as it is.
+
+**Commits.** The source, test and doc changes are one commit on `worktree-agent-a59318abc2ebabd99`, `core: remove the dead workflows/flash.ts (TESTING.md 42.80)`. The hash is in the agent's report.
+
 ### 42.81 The pages-bench starts from the whole flash the bench holds and restores that image by a block diff; the Node bridge gates the Info read's two selectors as the page does; no camera write (2026-10-20)
 
 **Summary.** Agent 42.81, on `worktree-agent-a08b5849b06adab90`, reset to `refactor/all-firmware-profiles` (daa2c9a). Two loose ends from 42.68 are closed. (1) `e2e/pages-bench.e2e.ts` no longer needs the owner's factory baseline. Part 0 reads the whole flash halted and keeps it as the run's start image, and the end of the run writes that image back with the runner's `flash-factory-4m-2` (the 64 KiB blocks that differ, no erase), then reads the whole flash and compares it block by block. (2) The Node bridge (`e2e/lib/camera-bus.ts`) lets the Info read's two selectors out only during an Info read, in the shapes core sends, as the page guard does. The camera ran part 0 and the Info test twice. Both runs ended with the flash equal to the start image, sha256 `50e900c2…01d7d`, and neither run wrote a flash block.

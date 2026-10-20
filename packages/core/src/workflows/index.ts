@@ -8,14 +8,11 @@
  */
 
 export type {
-  ComparisonRow,
   DecryptResult,
   DecryptedSlot,
   DeviceState,
   DumpOptions,
   DumpResult,
-  KeyPatchRecord,
-  PreparedFlash,
   SlotState,
   SweepResult,
   WorkflowContext,
@@ -83,4 +80,3 @@ export {
   upgradeTargetWarning,
   upgradeTargetWhileRecovery,
 } from './device-info.js';
-export { flashInvalidatesAnalysis, prepareImage, writeFirmware } from './flash.js';

@@ -6,28 +6,12 @@ import { collectingReporter, silentReporter, type Artifact, type Reporter } from
 import { cryptBytes } from '../src/crypto/cipher.js';
 import { keyFilenameSuffix, stateFromKey } from '../src/crypto/keys.js';
 import type { LogEvent, RunEvent } from '../src/events.js';
-import {
-  assertBankPayload,
-  setAcceptSum,
-  transferSum16,
-  type BankPayload,
-} from '../src/image/bank.js';
-import {
-  FOOTER_SIZE,
-  FOOTER_TAG,
-  HEADER_OFFSET,
-  HEADER_SIZE,
-  IMAGE_MAGIC,
-  TRY_KEYS_MAX_LEN,
-  parseImageHeader,
-  type ImageFooter,
-  type ImageHeader,
-} from '../src/image/header.js';
+import { setAcceptSum, type BankPayload } from '../src/image/bank.js';
+import { HEADER_OFFSET, HEADER_SIZE, IMAGE_MAGIC } from '../src/image/header.js';
 import { SeekDevice } from '../src/protocol/client.js';
 import { OP, OP_DIRECTION, READ_ONLY_OPS, WINDOW_SIZE, type Opcode } from '../src/protocol/ops.js';
 import { compact2014 } from '../src/profiles/compact-2014.js';
 import { compact2016 } from '../src/profiles/compact-2016.js';
-import { generic } from '../src/profiles/generic.js';
 import {
   buildLegacyWindowMap,
   legacyAuth,
@@ -43,7 +27,7 @@ import {
   modernWindowPlan,
 } from '../src/profiles/modern-4x.js';
 import { detectProfile } from '../src/profiles/registry.js';
-import type { FirmwareProfile, SlotKey } from '../src/profiles/types.js';
+import type { FirmwareProfile } from '../src/profiles/types.js';
 import { decryptDump, detectProfileForDump, evidenceFromDump } from '../src/workflows/decrypt.js';
 import { identifyCamera } from '../src/workflows/capability.js';
 import {
@@ -53,14 +37,8 @@ import {
   staleDescriptorCapture,
 } from '../src/workflows/device-info.js';
 import { runDump } from '../src/workflows/dump.js';
-import { prepareImage, writeFirmware } from '../src/workflows/flash.js';
 import { runSweep } from '../src/workflows/sweep.js';
-import type {
-  DeviceState,
-  PreparedFlash,
-  SlotState,
-  WorkflowContext,
-} from '../src/workflows/types.js';
+import type { DeviceState, WorkflowContext } from '../src/workflows/types.js';
 import {
   fakeCamera,
   patternFlash,
@@ -234,122 +212,6 @@ function makeDumpWithImage(
   const slotOffset = 0x30000;
   dump.set(cipher, slotOffset);
   return { dump, plain, slotOffset };
-}
-
-function footerTemplate(length: number): ImageFooter {
-  const raw = new Uint8Array(FOOTER_SIZE).fill(0xff);
-  const dv = viewOf(raw);
-  dv.setUint32(0, FOOTER_TAG, true);
-  dv.setUint32(4, length, true);
-  dv.setUint32(8, 0x00001234, true);
-  dv.setUint32(12, 0x00021204, true);
-  raw.set(new TextEncoder().encode('PIR324'), 16);
-  return {
-    offset: 0,
-    tag: FOOTER_TAG,
-    length,
-    imageId: 0x1234,
-    version: 0x00021204,
-    model: 'PIR324',
-    raw,
-  };
-}
-
-const RUNNING_HEADER: ImageHeader = {
-  sp: 0x10004000,
-  reset: 0x14030201,
-  magic: IMAGE_MAGIC,
-  length: IMAGE_SIZE,
-  imageId: 0x00001234,
-  version: 0x00021204,
-  entry: 0x14030201,
-  adjust: 0,
-  versionStr: '4.18.2.0',
-};
-
-function slot(
-  key: SlotKey,
-  name: string,
-  address: number,
-  extra: Partial<SlotState> = {},
-): SlotState {
-  return {
-    key,
-    name,
-    subcmd: 0,
-    address,
-    present: true,
-    reason: null,
-    unread: false,
-    header: RUNNING_HEADER,
-    raw: null,
-    footer: footerTemplate(IMAGE_SIZE),
-    recovered: null,
-    plain: null,
-    plainHeader: RUNNING_HEADER,
-    accepts: true,
-    footerOk: true,
-    sha256: null,
-    keyName: 'Key A',
-    bootable: true,
-    bootability: 'bootable',
-    ...extra,
-  };
-}
-
-/**
- * A DeviceState as `readDeviceInfo` would have produced it for a flashable
- * camera. Built by hand so the flash guards can be exercised without a camera
- * that would have to be talked through a whole analysis first.
- */
-function makeDeviceState(keyA: Uint8Array, keyB: Uint8Array): DeviceState {
-  const slotA = slot('a', 'Slot A', 0x14030000);
-  const slotB = slot('b', 'Slot B', 0x14050000);
-  const slots = [slotA, slotB];
-  return {
-    readAt: '2026-09-20T00:00:00.000Z',
-    profile: modern4x,
-    detection: {
-      best: { profile: modern4x, score: 0.97, reasons: [] },
-      ranked: [],
-      ambiguous: false,
-    },
-    evidence: {},
-    description: {
-      vendorId: 0x289d,
-      productId: 0x0011,
-      productName: 'Seek Thermal Compact PRO',
-      manufacturerName: 'Seek Thermal',
-      serialNumber: null,
-    },
-    version: '4.18.2.0',
-    buildString: null,
-    bootloaderVersion: null,
-    bootloaderString: null,
-    platform: null,
-    usbSpeed: null,
-    activeSlotWord: null,
-    serial: null,
-    cfg0: 0,
-    cfgSlots: null,
-    deviceKeySlot: null,
-    keyTableCandidates: 1,
-    keyTable: { offset: 0x1000, keyA, keyB, matchA: true, matchB: false },
-    keyWhiteningK: modern4x.cipher.whiteningK,
-    storeKey: { name: 'Key B', key: keyB, programmed: false },
-    slots,
-    byKey: new Map([
-      ['a', slotA],
-      ['b', slotB],
-    ]),
-    boot: { booted: 'a', target: 'b' },
-    updateTargetSubcmd: 0,
-    targetConfirmed: null,
-    familyOk: true,
-    plainChain: false,
-    canFlash: true,
-    flashBlockedBy: [],
-  };
 }
 
 /* ==================================================================== *
@@ -816,166 +678,6 @@ describe('decryptDump', () => {
 });
 
 /* ==================================================================== *
- * prepareImage — the refusals
- * ==================================================================== */
-
-describe('prepareImage', () => {
-  const myKeyA = makeKey(10);
-  const myKeyB = makeKey(11);
-  const srcKeyA = makeKey(20);
-  const srcKeyB = makeKey(21);
-
-  function expectRefusal(fn: () => unknown, code: string): void {
-    let thrown: unknown;
-    try {
-      fn();
-    } catch (error) {
-      thrown = error;
-    }
-    expect(thrown).toBeInstanceOf(SeekError);
-    expect((thrown as SeekError).code).toBe(code);
-  }
-
-  it('refuses an image whose filename does not carry its key pair', () => {
-    const state = makeDeviceState(myKeyA, myKeyB);
-    const image = makePlainImage(srcKeyA, srcKeyB, modern4x);
-    expectRefusal(() => prepareImage(state, image, 'firmware.bin'), 'flash/refused');
-  });
-
-  it('explains differently when the unnamed image does hold this camera keys', () => {
-    const state = makeDeviceState(myKeyA, myKeyB);
-    const image = makePlainImage(myKeyA, myKeyB, modern4x);
-    let message = '';
-    try {
-      prepareImage(state, image, 'firmware.bin');
-    } catch (error) {
-      message = (error as SeekError).message;
-    }
-    expect(message).toContain("The image does contain this camera's keys");
-    expect(message).toContain(keyFilenameSuffix(myKeyA, myKeyB));
-  });
-
-  it('refuses when the named key pair is not actually in the image', () => {
-    const state = makeDeviceState(myKeyA, myKeyB);
-    const image = makePlainImage(srcKeyA, srcKeyB, modern4x);
-    const wrong = keyFilenameSuffix(makeKey(30), makeKey(31));
-    expectRefusal(() => prepareImage(state, image, `firmware${wrong}.bin`), 'image/key-table');
-  });
-
-  it('refuses a size that is not a multiple of 4', () => {
-    const state = makeDeviceState(myKeyA, myKeyB);
-    const image = new Uint8Array(0x4001);
-    expectRefusal(() => prepareImage(state, image, 'firmware.bin'), 'image/malformed');
-  });
-
-  it('refuses an image with no header magic', () => {
-    const state = makeDeviceState(myKeyA, myKeyB);
-    const image = makePlainImage(srcKeyA, srcKeyB, modern4x);
-    viewOf(image).setUint32(HEADER_OFFSET, 0xdeadbeef, true);
-    expectRefusal(() => prepareImage(state, image, 'firmware.bin'), 'image/malformed');
-  });
-
-  it('refuses an image the bootloader could never boot (>= TRY_KEYS_MAX_LEN)', () => {
-    const state = makeDeviceState(myKeyA, myKeyB);
-    const image = new Uint8Array(TRY_KEYS_MAX_LEN);
-    expectRefusal(() => prepareImage(state, image, 'firmware.bin'), 'image/unsupported');
-  });
-
-  it('refuses to patch a key that lives inside the cleartext header window', () => {
-    const state = makeDeviceState(myKeyA, myKeyB);
-    const image = makePlainImage(srcKeyA, srcKeyB, modern4x);
-    /* move Key A into 0x200..0x23F, where the bootloader reads length in clear */
-    image.fill(0, KEY_A_AT, KEY_A_AT + 16);
-    image.set(srcKeyA, HEADER_OFFSET + 0x20);
-    const suffix = keyFilenameSuffix(srcKeyA, srcKeyB);
-    expectRefusal(() => prepareImage(state, image, `fw${suffix}.bin`), 'flash/refused');
-  });
-
-  it('refuses when the analysis says this camera cannot be flashed', () => {
-    const state: DeviceState = {
-      ...makeDeviceState(myKeyA, myKeyB),
-      canFlash: false,
-      flashBlockedBy: ['no slot decrypts to the acceptance sum'],
-    };
-    const image = makePlainImage(srcKeyA, srcKeyB, modern4x);
-    const suffix = keyFilenameSuffix(srcKeyA, srcKeyB);
-    expectRefusal(() => prepareImage(state, image, `fw${suffix}.bin`), 'flash/refused');
-  });
-
-  it('refuses outright on a profile that does not support flashing', () => {
-    /* legacy-auth now declares flash — the gate, not the capability, scopes it
-     * to the plain chain — so the capability refusal left is generic's. */
-    const state: DeviceState = { ...makeDeviceState(myKeyA, myKeyB), profile: generic };
-    const image = makePlainImage(srcKeyA, srcKeyB, modern4x);
-    const suffix = keyFilenameSuffix(srcKeyA, srcKeyB);
-    expectRefusal(() => prepareImage(state, image, `fw${suffix}.bin`), 'profile/unsupported');
-  });
-
-  it('refuses the 2016 profile at its flash capability, so the footer rekey test (flash.ts) is never reached on it', () => {
-    /* compact-2016 declares flash unsupported (profiles/compact-2016.ts), so the gate that runs first is the
-     * capability's: the rekey warning, which tests footerOk, is not asked on this line. */
-    const state: DeviceState = { ...makeDeviceState(myKeyA, myKeyB), profile: compact2016 };
-    const image = makePlainImage(srcKeyA, srcKeyB, modern4x);
-    const suffix = keyFilenameSuffix(srcKeyA, srcKeyB);
-    expectRefusal(() => prepareImage(state, image, `fw${suffix}.bin`), 'profile/unsupported');
-  });
-
-  /* ---- and the accept path ---------------------------------------- */
-
-  it('retargets a well-formed image and produces a payload the bank guard accepts', () => {
-    const state = makeDeviceState(myKeyA, myKeyB);
-    const image = makePlainImage(srcKeyA, srcKeyB, modern4x);
-    const suffix = keyFilenameSuffix(srcKeyA, srcKeyB);
-
-    const prep = prepareImage(state, image, `fw_decrypted_14030000${suffix}.bin`);
-
-    /* the guard that stands between a mistake and a brick passes on this blob */
-    expect(() => {
-      assertBankPayload(prep.payload);
-    }).not.toThrow();
-    expect(prep.sum16).toBe(transferSum16(prep.payload));
-    expect(prep.payload.length).toBe(0x8000);
-    expect(prep.footerOffset).toBe(0x8000 - FOOTER_SIZE);
-    expect(prep.footer?.tag).toBe(FOOTER_TAG);
-    expect(prep.footer?.length).toBe(IMAGE_SIZE);
-    expect(prep.footerFrom).toBe('Slot B');
-
-    /* the image's own key table was rewritten to THIS camera's pair */
-    expect(prep.keyPatch.changed).toBe(true);
-    expect(prep.keyPatch.offsetA).toBe(KEY_A_AT);
-    expect(prep.keyPatch.fromA).toBe(bytesToHex(srcKeyA));
-    expect(prep.keyPatch.toA).toBe(bytesToHex(myKeyA));
-    expect(prep.carriesMine).toBe(true);
-
-    /* and the caller's buffer was not modified in place */
-    expect(equalBytes(image.subarray(KEY_A_AT, KEY_A_AT + 16), srcKeyA)).toBe(true);
-
-    /* decrypting the payload back with Key A returns the retargeted image */
-    const back = cryptBytes(
-      prep.payload.subarray(0, IMAGE_SIZE),
-      stateFromKey(myKeyA, modern4x.cipher.whiteningK),
-      modern4x.cipher,
-    );
-    expect(equalBytes(back.subarray(KEY_A_AT, KEY_A_AT + 16), myKeyA)).toBe(true);
-    const header = parseImageHeader(back);
-    expect(header?.magic).toBe(IMAGE_MAGIC);
-    expect(header?.length).toBe(IMAGE_SIZE);
-    expect(prep.length).toBe(IMAGE_SIZE);
-    expect(prep.targetName).toBe('Slot B');
-    expect(prep.bootedName).toBe('Slot A');
-  });
-
-  it('leaves an image that already carries this camera keys alone', () => {
-    const state = makeDeviceState(myKeyA, myKeyB);
-    const image = makePlainImage(myKeyA, myKeyB, modern4x);
-    const suffix = keyFilenameSuffix(myKeyA, myKeyB);
-    const prep = prepareImage(state, image, `fw${suffix}.bin`);
-    expect(prep.keyPatch.changed).toBe(false);
-    expect(prep.carriesMine).toBe(true);
-  });
-});
-
-/* ==================================================================== *
  * readDeviceInfo
  * ==================================================================== */
 
@@ -1295,54 +997,6 @@ describe('readDeviceInfo', () => {
     expect(reason ?? '').toContain('0x14000301');
     expect(reason ?? '').toContain('0x14000000');
     expect(reason ?? '').toContain('power-cycle');
-  });
-});
-
-describe('writeFirmware', () => {
-  it('refuses an analysis that does not say which firmware the camera runs', async () => {
-    /* Every id the write sends — 0x52, 0x50, 0x51 — is per build. readDeviceInfo
-     * refuses a camera that does not name its build, so a state with no version
-     * did not come from it, and nothing is sent. */
-    const camera = cameraFor(modern4x);
-    const ctx = await contextFor(modern4x, camera);
-    const state: DeviceState = { ...makeDeviceState(makeKey(60), makeKey(61)), version: null };
-    const error = await writeFirmware(ctx, state, {} as PreparedFlash).then(
-      () => null,
-      (e: unknown) => e,
-    );
-    expect(error).toBeInstanceOf(SeekError);
-    expect((error as SeekError).code).toBe('flash/refused');
-    expect((error as SeekError).message).toContain('does not say which firmware');
-    expect(camera.calls).toHaveLength(0);
-  });
-
-  it("refuses an analysis whose firmware's table has no upgrade-target selector", async () => {
-    /* The selector the write arms is the one `readDeviceInfo` took from the
-     * running build's own table, carried on the state. It used to be the
-     * profile's `updateTargetSubcmd`, so an analysis whose table had no such
-     * row still had subcommand 0 armed and the payload streamed at it. */
-    const keyA = makeKey(62);
-    const keyB = makeKey(63);
-    const state: DeviceState = { ...makeDeviceState(keyA, keyB), updateTargetSubcmd: null };
-    const prep = prepareImage(
-      state,
-      makePlainImage(keyA, keyB, modern4x),
-      `fw${keyFilenameSuffix(keyA, keyB)}.bin`,
-    );
-    const camera = cameraFor(modern4x);
-    const ctx = await contextFor(modern4x, camera);
-
-    const error = await writeFirmware(ctx, state, prep).then(
-      () => null,
-      (e: unknown) => e,
-    );
-
-    expect(error).toBeInstanceOf(SeekError);
-    expect((error as SeekError).code).toBe('flash/refused');
-    expect((error as SeekError).message).toContain('no upgrade-target selector');
-    expect((error as SeekError).message).toContain('Nothing was written');
-    expect(camera.arms).toEqual([]);
-    expect(camera.calls).toHaveLength(0);
   });
 });
 

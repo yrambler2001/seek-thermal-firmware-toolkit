@@ -43,8 +43,9 @@ import {
   USB_PROBE_TIMEOUT_MS,
   WebUsbTransport,
   bootedSlot,
-  prepareImage,
-  writeFirmware,
+  inspectSlots,
+  prepareSlotFlash,
+  flashSlot,
   type UsbBackend,
 } from '@seek-fw/core';
 import { liveEmulatorCount, RowEmulators } from '../../core/test/emulator/harness.js';
@@ -174,7 +175,7 @@ describe.skipIf(!available)("the real hosts' give-up on emulated cameras (sec.22
   );
 
   it(
-    "the web app's info and flash commit finish inside Chrome's give-up (Compact 4.8.2.1, 4.8.1.9)",
+    "the web app's info and slots flash commit finish inside Chrome's give-up (Compact 4.8.2.1, 4.8.1.9)",
     { timeout: TIMEOUT_MS },
     async () => {
       await Promise.all(
@@ -203,7 +204,13 @@ describe.skipIf(!available)("the real hosts' give-up on emulated cameras (sec.22
               expect(running?.plain, 'the running image, decrypted').toBeTruthy();
               if (!running?.plain || !state.keyTable) return;
               const name = `same${keyFilenameSuffix(state.keyTable.keyA, state.keyTable.keyB)}.bin`;
-              await writeFirmware(ctx, state, prepareImage(state, running.plain, name));
+              const report = await inspectSlots(ctx);
+              const plan = prepareSlotFlash(report, 'b', {
+                kind: 'plain',
+                bytes: running.plain,
+                fileName: name,
+              });
+              await flashSlot(ctx, report, plan, { acknowledgeRisk: false });
               await transport.close();
             });
             await row.assertDelivery();
