@@ -837,10 +837,13 @@ seek-fw slots patch-fps a                                     # frame-rate patch
   acknowledgement rules do not change (`TESTING.md` §42.8).
 
 What has been run: the whole path on the emulator for every build from 0.8.0.0 in the corpus
-(`TESTING.md` §41); on a **real** camera (a Compact PRO 1.0.3.0 on a Compact board), a dump of all three banks
-and a write of the recovery bank with the bank's own image, with an image changed by one byte
-(the read-back decrypted to exactly that image) and with raw staged bytes, then restored. Every
-other family is emulator-proven only.
+(`TESTING.md` §41). On **real** hardware: a Compact PRO 1.0.3.0 on a Compact board, a dump of all three
+banks and a write of the recovery bank with the bank's own image, with an image changed by one byte
+(the read-back decrypted to exactly that image) and with raw staged bytes, then restored (§41.3); the
+slots bench, which flashes each supported corpus dump whole onto the bench Compact board and writes
+its banks through the page, judged by the verdict table (§42, §42.30); an empty bank B written and
+booted on the 2014 chain (§42.8); and a Compact XR 4.8.2.1 whose bank A took the frame-rate patch
+(§42.24).
 
 ## The camera stays unlocked until a power cycle
 
