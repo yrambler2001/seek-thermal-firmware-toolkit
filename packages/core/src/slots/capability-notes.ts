@@ -89,9 +89,10 @@ const MODERN_GAP_NOTE =
   'bank sits there. The 0x14060000 layout belongs to the locked 0.x/1.x line.';
 
 const MODERN_NAMED_WRITE_NOTE =
-  'Named writes (modes 7 to 9) are decoded from the firmware and are not exercised by any ' +
-  'test or page in this repo on a 4.x part: the flash page writes only the camera’s own ' +
-  'target (mode 0). The first write to a named bank is the first evidence for it.';
+  'Named writes (modes 7 to 9) are decoded from the firmware. The emulator suites write A, B ' +
+  'and R through them on the 4.x builds (TESTING.md 42.7, 42.36), and on a camera bank A of a ' +
+  'Compact XR 4.8.2.1 was written through mode 7 by the frame-rate patch (42.24). The page never ' +
+  'arms mode 0, the upgrade target.';
 
 const UNVERIFIED_NOTE =
   'Read only. The bank layout is the locked line’s decoded table, but no staging form has ' +
@@ -224,7 +225,8 @@ export function bankNotes(
       if (key === 'a') {
         notes.push(
           'Read through mode 5 (0x14030000). Written through mode 7, a decoded alias of mode 5 ' +
-            'that the modern map leaves out and that is not measured on the wire.',
+            'that the modern map leaves out; a Compact XR 4.8.2.1 took a write through it on the ' +
+            'camera (TESTING.md 42.24).',
         );
       } else if (key === 'b') {
         notes.push('Mode 8 (0x14050000).');
@@ -247,9 +249,9 @@ export function bankNotes(
       notes.push(LOCKED_2016_STAGING_NOTE);
       if (key === 'r') {
         notes.push(
-          'Recovery bank, mode 9, token form. A write needs acknowledgeRisk; the only measured ' +
-            '2016 commits are into the booted bank, so R is the same arm and unmeasured on this ' +
-            'family.',
+          'Recovery bank, mode 9, token form. A write needs acknowledgeRisk. Measured on a Compact ' +
+            'PRO 1.0.3.0: R took its own image, a one-byte change and the raw staged bytes, each ' +
+            'with commit status 0 (TESTING.md 41.3).',
         );
       }
       break;

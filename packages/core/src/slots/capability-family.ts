@@ -242,6 +242,7 @@ export const WRITE_SUBCMD: Readonly<Record<SlotKey, number>> = { a: 7, b: 8, r: 
  * Modern bank A is armed for a write through mode 7, which the modern selector
  * map leaves out: it is an alias of mode 5 (`fw_slot_a_base + g_flash_base_offset`,
  * the same 0x14030000 the decoded switch gives on every 2.x/4.x/10.x/42.x/44.x
- * image). Decoded, not measured on the wire, and the notes say so.
+ * image). Decoded; a Compact XR 4.8.2.1 took a write through it on the camera (the frame-rate
+ * patch of bank A, TESTING.md 42.24), and the notes say so.
  */
 export const MODERN_A_WRITE_SUBCMD = 7;

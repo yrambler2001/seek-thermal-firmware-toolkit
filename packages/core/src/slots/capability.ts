@@ -143,7 +143,7 @@ function writeWindow(
     }
     const note = alias
       ? `${BANK_NAME[key]} write arm (mode ${String(subcmd)}, ${hexUp(address, 8)}), plain 2-byte; ` +
-        'a decoded alias of mode 5, not measured on the wire'
+        'a decoded alias of mode 5, written through on a Compact XR 4.8.2.1 (TESTING.md 42.24)'
       : `${BANK_NAME[key]} write arm (mode ${String(subcmd)}, ${hexUp(address, 8)}), plain 2-byte`;
     return { window: { subcmd, address, note }, reason: null };
   }

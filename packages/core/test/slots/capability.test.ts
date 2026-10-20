@@ -412,10 +412,12 @@ describe('the facts a person is shown with the plan', () => {
     expect(plan.slots[1]?.address).toBe(0x14050000);
   });
 
-  it('says mode 7 on the modern line is a decoded alias, not measured on the wire', () => {
+  it('says mode 7 on the modern line is a decoded alias, and names the camera write through it', () => {
     const plan = buildSlotPlan(modern4x, '4.9.2.0');
     expect(plan.slots[0]?.write?.subcmd).toBe(7);
-    expect(plan.slots[0]?.notes.join('\n')).toMatch(/not measured on the wire/);
+    expect(plan.slots[0]?.notes.join('\n')).toMatch(/decoded alias of mode 5/);
+    expect(plan.slots[0]?.notes.join('\n')).toMatch(/Compact XR 4\.8\.2\.1 took a write/);
+    expect(plan.slots[0]?.notes.join('\n')).not.toMatch(/not measured on the wire/);
   });
 
   it('says the 2016 keystream write is the preservation path, and carries the profile refusal', () => {
