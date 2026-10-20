@@ -144,7 +144,11 @@ export interface WriteGuardControl {
    */
   readonly versionsSeen: string[];
   readonly refusals: string[];
-  /** `out 0x52` -> how many went out (injected stalls never went out, so never count). */
+  /**
+   * `out 0x52` -> how many the page asked for. An OUT is counted before the guard checks it, so a refused
+   * one counts too (an "is it absent" assertion is the stricter for it); an injected stall never went out
+   * and never counts.
+   */
   readonly counts: Record<string, number>;
   readonly wrapped: string[];
   fault: InjectedStall | null;
