@@ -11935,3 +11935,281 @@ The two are the same scene, with the mean level within 0.1 percent. The picture 
 **9. Files.** Scratch, not committed: `/private/tmp/claude-501/agent-78/` (`runs.log`, `chain-ab.sh`, `chain-quad.sh`, `table78.py`, `analyze-runs.py`, `loads.txt`, `switch.log`, the per-run `*.jsonl`, `*.stdout` and `*-info.json` files, the step logs `s1` to `s4`, and this agent's `r1-restore.log`, `r2-dump-end.log`, `r3-info.json`, `start-4m.bin`, `after-b-4m.bin` and `end-4m.bin`). Each halted dump writes `FW-V1/targets/compact_8hz_1_3_0_0/jlink_dumps/spifi_14000000_4m_halted.bin`, which the next dump overwrites, so only the copies in the scratch folder are kept. The table: `python3 -I /private/tmp/claude-501/agent-78/table78.py`. `plan.md` still lists 42.78 as running; it is not changed by this section.
 
 **Commits.** This section only, on `worktree-agent-adbaba0ba81971886`.
+
+### 42.79 The single-skip storms: the camera starts a frame only if its credit lands within about 7.5 ms of the previous frame's last byte, and the checker sends that credit after it has processed the frame, so a slow host thread loses every other field; the mic receiver, the switch board and a USB clock beat are not the cause (bench, no flash write, 2026-10-20)
+
+**Summary.** Agent 42.79 (Opus 5.5), on `worktree-agent-a1b0206f65f1481b0`, reset to `refactor/all-firmware-profiles` (daa369f). Scratch `/private/tmp/claude-501/agent-79/`. Read-only streaming only: no flash write. The J-Link was used once, at the end, for a halted read-only dump; channel 1 was off otherwise. Channel 2 was power-cycled before every run. Every timed run started with the 1-minute load under 20 (14 at most).
+- **Cause (shown).** A frame starts only in the first 10 row groups of a field, and only when its credit (ImageData, request 0x53) is already there (`stream_push_chunk`, `app_init.c:472-487`). Measured on the camera, the window closes about 7.5 ms after the previous frame's last byte reaches the host. With the credit later than that, the next field is not published. The field after it is, because the credit is then in place. That is exactly the storm's 32/16 toggle. The checker sends the next credit only after it has decoded and processed the frame (`camera.ts` `grabBytes`, reached through `grabVisualFrame` and `streamLoop`). That takes 2 to 4 ms on a fast core, and over the window when the macOS scheduler runs the node thread slowly.
+- **E1 (controlled, C loop).** Held credits:
+  - With the credit held at least 8 ms after the last byte, every published frame (2,956 of 2,956) is followed by a lost field, a permanent 16 fps storm.
+  - Held 0 ms, 1.8% are followed by a loss.
+  - The edge, measured on the submit time, is between 7.0 and 8.0 ms.
+- **The checker.** 13 runs, 60 s each, with the checker's own credit timing. Every frame whose credit went out 6.6 ms or more after its last byte (JavaScript clocks) was followed by a lost field: 3,691 of 3,691. The largest credit delay with no loss was 6.41 to 6.60 ms in every run.
+- **E2 (the host thread's speed).** Interleaved runs, three triples:
+  - plain: 206, 349 and 421 lost fields a minute;
+  - clamped to background QoS (`taskpolicy -b`, efficiency cores): 750, 735 and 792;
+  - the same clamp with the 42.78 picture analysis off: 691, 806 and 765.
+  The clamp gives a near-permanent storm in every triple.
+- **42.78 again.** In its 20 runs the per-frame time of a fixed piece of JavaScript (42.78's picture analysis) follows the single-skip count with Pearson r = 0.969. The clean run (ab04, 11 a minute) took 0.25 ms a frame; the 790-a-minute run took 1.41 ms.
+- **The host fix (measured, as a wrapper in a scratch driver).** The credit sent at the frame's last byte, before the processing.
+  - Plain QoS (E4b): 90, 67 and 66 lost fields a minute (27.3 to 27.6 fps), against 284, 470 and 234 for the checker's own timing in the same driver, in three of three interleaved pairs. No storm.
+  - Clamped (E4): 29 to 42% of frames followed by a loss against 65 to 71%. With one bulk IN at a time, the next frame's IN reposts still wait for the processing.
+  - Mode 4 (the stock program, clamped): 440 and 183 against 703 and 516.
+- **The C loop's own residual is another path.** 25 a minute in 16 min, no storm. These are host completion-delivery stalls: a transfer is reported 6 to 25 ms late, so the next IN goes out after the field-end transfer is due (42.74's endpoint-busy skip). The C loop's credit goes out 0.01 ms after the last byte.
+- **Ruled out.**
+  - *Mic receiver:* not open during any logged storm. Held open by this agent:
+    - C loop: 238 against 172 lost fields in 16 ABBA pairs (p = 0.10), no storm either way;
+    - node checker: 1,774 against 2,153 in 16 pairs (open lower in 12, p = 0.24), storming in both conditions.
+  - *Switch board:* power only, data passes straight through.
+  - *A beat between the field clock and the USB frame or microframe:* no phase dependence; the field period is stable.
+  - *The host load average* (42.78: r = -0.07).
+  - *The camera's state:* the C loop shows no storm over 16 min of one boot, and the node checker storms right after it on the same bench.
+- **Bench left.** Channel 1 off, channel 2 on and power-cycled last. Boot word 0, booted a, A `ef90c94a`, B and R `d91284c6`. Flash not written: the end dump is sha256 `50e900c2…7d7d` and `cmp` against 42.78's start image is clean.
+
+**Tags.** [measured] is a camera log or a file read here, named. [source] is read from the 1.3.0.0 reconstruction (`FW-V1/targets/compact_8hz_1_3_0_0/src/`) or the checker, named. [inferred] follows from those and was not measured directly.
+
+**1. The two ways a field is lost (source).**
+- *Endpoint busy at the field start* (42.74). `frame_capture_step` (`app_init.c:952-961`): an IN transfer of the previous frame not retired at the field's first group: "USB TX not complete, skipping field".
+- *No credit in time* (new here). `frame_line_dispatch` adds 4 to the row count `_00` per group (`app_init.c:682`) and calls `stream_push_chunk` (`app_init.c:684`). The publish group resets `_00` to 0 (`app_init.c:727`).
+  - A frame that is not yet started begins only when the credit count `_14` is non-zero and the endpoint is idle. The rows already copied must fit in one transfer: `0x1A0 * _00 - 0x680 <= _04 >> 2` (`app_init.c:479-487`).
+  - With the checker's body credit (0x7EC0, `_04` = 0xFD80) that is `_00` <= 43, and the first group is excluded (`app_init.c:472`). So the frame can start in groups 2 to 10, the first 10 x 0.78 = 7.8 ms of the field. With the 0x8200 credit it is groups 1 to 11.
+  - A credit that arrives later stays counted. The frame starts at the next field's early groups, so exactly one field is lost.
+  - `cmd_ImageData` sets the frame length, counts the credit and cancels transfers still queued (`rpc_cmds.c:2652-2659`). It starts nothing itself in this stream format.
+- *The 16 fps lock.* With credits always late, every published frame is followed by one lost field and then a published one: 32.2 / 2 = 16.1 fps, the "storm" medians of 42.77 and 42.78.
+
+**2. E1: the camera's credit window, measured with a held credit (C loop, measured).**
+- *Setup.* `fdtime2` is 42.74's `fdtime.c` with two additions: an anchor line, and a credit-hold schedule. With `CREDIT_SCHED`, the credit is held until N ms after the frame's last byte; the main loop polls every 50 µs. Otherwise it is the S loop: one IN, the 0x8200 credit.
+- *Run.* One boot: channel-2 cycle, 10 s, the checker's Normal connect (`fdinit.mjs`, IP 8), then 470 s. Holds of 0, 4, 6, 6.5, 7, 7.5, 8, 8.5, 9, 10 and 12 ms in 20 s blocks, two passes in shuffled order. The first 20 s at 0 ms are the settle; each block's first 0.5 s is dropped.
+- *Load.* 6.19 before, 15.69 after (`e1.jsonl`).
+
+| credit held after the last byte | published steady frames | followed by a lost field |
+|---|---|---|
+| 0 ms | 1,368 | 24 (1.8%) |
+| 4 ms | 1,048 | 104 (9.9%) |
+| 6 ms | 975 | 167 (17.1%) |
+| 6.5 ms | 784 | 352 (44.9%) |
+| 7 ms | 655 | 511 (78.0%) |
+| 7.5 ms | 603 | 591 (98.0%) |
+| 8 ms | 585 | 585 (100%) |
+| 8.5 ms | 597 | 597 (100%) |
+| 9 ms | 587 | 587 (100%) |
+| 10 ms | 590 | 590 (100%) |
+| 12 ms | 597 | 597 (100%) |
+
+- *Measured on the actual submit time* (the hold is a minimum; host jitter adds to it):
+  - Below 6.5 ms: 107 of 3,106 frames followed by a loss. This is the background rate of section 7.
+  - 6.5 to 7.0 ms: 97 of 985.
+  - 7.0 to 7.5 ms: 189 of 558.
+  - 7.5 to 8.0 ms: 630 of 668.
+  - 8.0 ms and above: 3,827 of 3,827.
+  - The largest submit delay with no loss was 7.64 ms.
+- *Whole run.* 19.98 fps; `classify.py`: 619 single skips a minute.
+- *Reading.* The camera publishes the next field only if the credit is submitted within about 7.5 ms of the previous frame's last byte as the host sees it. Above 8 ms it loses exactly every other field, the storm's signature, with no other change on the host or the camera. [measured]
+
+**3. The checker's credit delay (node checker on the camera, measured).**
+- *Driver.* `fd-run-79.ts` (scratch) is 42.78's `fd-run-78.ts` with no injected delay, wrapped so that every bulk IN (submit and completion), every ImageData credit (submit and completion) and every frame (its last byte, `tdone`) is logged. It is the checker's own connect, frame reader (one IN, node-usb 3.1.0) and stream loop, with 42.78's per-frame picture analysis (`ANALYSIS=1`).
+- *Run.* Each run: a channel-2 cycle, 10 s, 10 s settle, 60 s measured.
+- *D.* The credit's submit time minus the frame's last byte, both on the JavaScript clock.
+- *Pooled over the 13 runs* with the checker's own credit timing (smoke, E2 A/B/C and E4 L):
+
+| run group | D < 4 ms | 4 to 6.6 ms | D >= 6.6 ms |
+|---|---|---|---|
+| plain (smoke, E2 A1-A3) | 216 of 2,727 followed by a loss (7.9%) | 231 of 1,103 (20.9%) | 635 of 635 (100%) |
+| background QoS (E2 B, C; E4 L) | 1,117 of 2,843 (39.3%) | 1,785 of 3,030 (58.9%) | 3,056 of 3,056 (100%) |
+
+- *The edge.* The largest D with no loss was 6.53, 6.60, 6.51, 6.56, 6.54, 6.46, 6.55, 6.42, 6.45, 6.41, 6.44, 6.43 and 6.56 ms in the 13 runs. The edge sits about 1 ms below E1's: the JavaScript clocks miss node-usb's completion delivery before `tdone` and its control submit after the credit call. Below the edge, losses are commoner under background QoS for the same reason: that hidden latency, and the reposts of the one IN, grow on a slow core.
+- *Where D goes* (smoke run, plain). Medians, no loss after the frame against a loss after it:
+  - decode (`tdone` to the frame object): 0.39 against 0.68 ms;
+  - 42.78's analysis: 0.45 against 0.81 ms;
+  - the checker's calibration (`shutterGainCal`, `calcMinMax`, `removeDeadPixels`), the callback and the loop back to `grabBytes`: 2.26 against 5.24 ms.
+  Every part is 1.8 to 2.3 times slower before a loss: the whole thread was running slowly, not one step.
+- *The repost gap* (an IN's completion to the next IN's submit, inside a frame) is 0.02 to 0.04 ms (p50) in storm and clean stretches alike. The checker's IN reposts are not what changes. [measured; the decomposition is from the timestamps]
+
+**4. E2: the host thread's speed decides the storm (measured).** Interleaved A B C, three times:
+- **A:** plain, as 42.78.
+- **B:** under `taskpolicy -b`, which clamps the process to background QoS (the efficiency cores, throttled).
+- **C:** as B with the per-frame analysis off.
+
+| run | condition | frames (60 s) | fps | lost fields per minute | published frames followed by a loss | D p50 no loss / before a loss (ms) | 1-min load before / after |
+|---|---|---|---|---|---|---|---|
+| e2-A1 | plain | 1,533 | 25.55 | 206 | 13.9% | 2.13 / 6.72 | 13.93 / 7.88 |
+| e2-B1 | background | 1,054 | 17.57 | 750 | 61.8% | 3.55 / 6.90 | 7.88 / 8.90 |
+| e2-C1 | background, no analysis | 1,101 | 18.35 | 691 | 58.5% | 3.14 / 6.22 | 8.90 / 8.29 |
+| e2-A2 | plain | 1,409 | 23.48 | 349 | 25.7% | 1.64 / 6.81 | 8.29 / 5.79 |
+| e2-B2 | background | 1,060 | 17.67 | 735 | 67.9% | 3.93 / 6.94 | 5.79 / 7.46 |
+| e2-C2 | background, no analysis | 995 | 16.58 | 806 | 71.7% | 3.63 / 5.87 | 7.46 / 7.18 |
+| e2-A3 | plain | 1,350 | 22.50 | 421 | 32.4% | 3.49 / 6.91 | 7.18 / 9.22 |
+| e2-B3 | background | 1,013 | 16.88 | 792 | 68.5% | 3.73 / 7.05 | 9.22 / 6.06 |
+| e2-C3 | background, no analysis | 1,032 | 17.20 | 765 | 66.5% | 3.41 / 6.48 | 6.06 / 7.66 |
+| smoke (15 s, before E1) | plain | 338 | 22.53 | 424 | 32.5% | 3.34 / 7.21 | 7.22 / 6.19 |
+
+- *Lost fields per minute* are 42.62's single-skip class: missing captures before a type-3 frame that does not follow a type-1 frame. They are counted in captures; `classify.py` counts the gaps, which is the same number when every gap is one field. Under background QoS some losses are 2 or more fields (30 to 83 such gaps a run); the plain runs had none. The same count is used in the tables of sections 6 and 11.
+- *Reading.* The clamp raises the loss three times in every triple. The 42.78 analysis is not needed for it (C is as bad as B): the checker's own calibration on a slow core is enough. The plain runs vary from 206 to 424 a minute in one session, the run-to-run spread 42.78 saw.
+- *Not measured.* Which core the plain thread was on. `powermetrics` needs root, and `sudo` asked for a password.
+
+**5. 42.78 read again (measured from its logs).**
+- *The fixed work.* Each 42.78 run logged `analysisMsTotal`, the time of a fixed per-frame JavaScript computation (the picture statistics). Divided by the frames analysed it measures how fast the thread ran.
+- *Over the 20 runs:* Pearson r = 0.969 with the single-skip count (Spearman 0.964). Examples:
+  - ab04 (Pg, 1 ms): 0.25 ms a frame, 11 skips a minute;
+  - ab05 (P, 2 ms): 0.31, 84;
+  - ab01 (P, 0 ms): 0.45, 169;
+  - q02 (Pg, 0 ms): 0.69, 294;
+  - ab02 (Pg, 0 ms): 0.94, 537;
+  - ab11 (P, 0 ms): 1.31, 675;
+  - ab07 (P, 5 ms): 1.41, 790.
+- *Not P against Pg.* The P/Pg and delay labels do not order the runs; the thread's speed does.
+- *The late frames.* The frames of 42.78's storm stretches arrive about 1 ms late against the run's field grid (median d 0.75 to 1.35 ms before a skip, 0.08 to 0.5 ms in clean stretches; `storm.py`). Its driver took the frame's time after the decode, so a slow thread shows as late frames. Today's runs log the last byte (`tdone`) separately and show the same decode slow-down (section 3).
+- *Storms are not new.* 42.77's r7 storm (3 INs, node-usb 2.18.0) has the same signature: frames 0.87 ms late in storm stretches and 0.14 ms in clean ones.
+- *Why 3 INs and the injected delays did not help.* Both act on the bulk INs. The credit still went out after the processing (`frame-read.ts` sends it at the start of the next `read`). [measured; the reading is [inferred]]
+
+**6. E4 and E4b: the credit at the frame's last byte (measured).**
+- *Driver.* `fd-run-79e.ts` is `fd-run-79.ts` with `EARLY_CREDIT=1`: a wrapper on the reader's `read` sends the next frame's credit as soon as a frame's last byte is in, and the next `read` sends none. One credit per frame, after the frame's last byte, as `cmd_ImageData` allows (42.74 section 1.4). `EARLY_CREDIT=0` is the checker's own timing in the same driver.
+- *E4.* Under `taskpolicy -b`, interleaved E L E L E L:
+
+| run | credit | frames (60 s) | fps | lost fields per minute | published frames followed by a loss | gaps of 2+ fields | D p50 (ms) | load before / after |
+|---|---|---|---|---|---|---|---|---|
+| e4-E1 | at the last byte | 953 | 15.88 | 860 | 42.1% | 140 | 0.06 | 7.53 / 9.19 |
+| e4-L1 | checker's | 1,047 | 17.45 | 739 | 65.4% | 33 | 3.96 | 9.19 / 8.14 |
+| e4-E2 | at the last byte | 1,247 | 20.78 | 531 | 28.9% | 54 | 0.06 | 8.14 / 7.83 |
+| e4-L2 | checker's | 989 | 16.48 | 801 | 70.1% | 55 | 3.75 | 7.83 / 7.74 |
+| e4-E3 | at the last byte | 1,285 | 21.42 | 484 | 29.9% | 42 | 0.06 | 7.74 / 5.66 |
+| e4-L3 | checker's | 978 | 16.30 | 825 | 71.2% | 84 | 3.96 | 5.66 / 9.10 |
+
+- *Reading E4.* With the credit at the last byte, fewer frames are followed by a loss in each pair (42 against 65%, 29 against 70%, 30 against 71%), but the loss stays high under the clamp.
+  - The cause is visible in the logs. With one bulk IN at a time, the next frame's first IN is posted only after the processing: 7.5 ms after the last byte at the median and 13.6 to 14.9 ms at p90 (e4-E2, e4-E3), against 5.1 to 5.2 ms for the checker's own timing (e2-B1, e4-L2).
+  - Each later repost also needs the slow event loop, so a frame's transfers can still be queued at the next field start: 42.74's endpoint-busy skip.
+  - e4-E1 lost more fields in long gaps (140 gaps of 2+ fields) than the others.
+  - A local CLI build ran for about 10 s during e4-L1 (01:51:25 to 01:51:35); that run is not excluded.
+- *E4b.* Plain QoS, interleaved L E L E L E:
+
+| run | credit | frames (60 s) | fps | lost fields per minute | published frames followed by a loss | D p50 (ms) | next frame's first IN p50 (ms) | load before / after |
+|---|---|---|---|---|---|---|---|---|
+| e4b-L1 | checker's | 1,464 | 24.40 | 284 | 20.1% | 2.67 / 6.72 | 3.45 / 8.07 | 5.07 / 4.86 |
+| e4b-E1 | at the last byte | 1,639 | 27.32 | 90 | 5.6% | 0.05 | 5.02 / 2.07 | 4.86 / 7.43 |
+| e4b-L2 | checker's | 1,303 | 21.72 | 470 | 37.3% | 3.53 / 6.83 | 4.66 / 8.16 | 7.43 / 6.44 |
+| e4b-E2 | at the last byte | 1,647 | 27.45 | 67 | 4.2% | 0.05 | 4.44 / 2.81 | 6.44 / 5.50 |
+| e4b-L3 | checker's | 1,505 | 25.08 | 234 | 16.1% | 0.89 / 6.67 | 1.53 / 8.16 | 5.50 / 7.05 |
+| e4b-E3 | at the last byte | 1,656 | 27.60 | 66 | 4.1% | 0.05 | 4.67 / 3.28 | 7.05 / 5.23 |
+
+  The two D and first-IN values are for frames with no loss after them / with a loss after them.
+- *Reading E4b.* On a plain thread the credit at the last byte removes the storms.
+  - Lost fields fall from 234 to 470 a minute to 66 to 90, and the whole-run rate rises from 21.7 to 25.1 fps to 27.3 to 27.6 fps, in each of the three pairs.
+  - The 66 to 90 a minute left are about 2 to 3 times the C loop's 25. Here the next frame's first IN waits for the processing (4.4 to 5.0 ms at the median), and each repost needs the event loop.
+
+**7. The C loop's own losses are the other path (measured).**
+- *Run m1.* `fdtime2` S, one IN, the 0x8200 credit sent 0.01 ms after the last byte. 990 s on one boot, with the mic toggled every 30 s (section 8).
+  - 29,337 frames, 29.63 fps.
+  - Single skips 25 a minute (412 events), excursions 23 a minute.
+  - No storm in any 30 s block (6 to 62 a minute).
+- *The transfers before a loss* (first 6 min of m1, before the 12 ppm period step in section 10; `lat79.py`):
+  - 170 frames were followed by a single skip, and every one had a late payload transfer.
+  - P3 completed a median 7.0 ms late and P4 6.9 ms late, while P1 and P2 were on time.
+  - P4's IN was posted a median 1.08 ms before P4 completed, against 6.98 ms for clean frames. The IN went out after P4 was primed, because P3's completion was reported late.
+  - The delays are continuous, not quantized: 0.5 ms bins fall off roughly exponentially from 0.5 to 20 ms.
+  - The repost gap after a completion is reported stays 0.008 to 0.009 ms (p50).
+- *Reading.* So the C loop loses a field when the host delivers a completion 6 ms or more late. That is 42.74's endpoint-busy skip, and pipelined INs remove most of it (42.74: 3 to 12 a minute with 3 INs). It is not a storm: no phase lock, and about 1.5% of frames. 42.74's S1 to S3 logs (23 to 32 a minute, 2026-10-19) show the same signature (`stalls.py`, committed as `late_transfers.py`). [measured]
+
+**8. Lead 1: the mic receiver and the switch board (measured).**
+- *Topology* (`ioreg -p IOUSB`). On xHCI `0x01000000`, the hub `USB2.0 HUB` (0x1a40:0x0101, `0x01100000`, high speed, bDeviceProtocol 1 = single TT) holds two devices:
+  - the receiver, `Wireless Microphone RX` (DJI, 0x2ca3:0x4008, full speed, `0x01120000`);
+  - the camera, `PIR206 Thermal Camera` (0x289d:0x0010, high speed, `0x01140000`).
+- *The receiver's interfaces:* 0 AudioControl, 1 and 2 AudioStreaming (alternate setting 0 when idle), 3 HID (AppleUserHIDDevice; its event service is open in WindowServer), 4 mass storage (no volume mounted).
+- *Not open during the storms.* At 01:02 CoreAudio device 154 (`Wireless Microphone RX`, 1 in and 1 out stream, 48 kHz) had `IsRunningSomewhere` 0, and no process was running IO on it (`swift/audiostate`).
+  - `log show` for coreaudiod and usbaudiod covers 2026-10-19 21:02 to 2026-10-20 01:02, which includes 42.77's r7 to r10 storms (22:12 to 22:26) and all of 42.78's runs (22:38 to 23:17).
+  - In that window IO started only on `BuiltInSpeakerDevice` (83 starts) and on one process-tap aggregate (`AudioTap-8E69AD22…`, 21:59 to 22:53 and 22:53 to 23:54, on the speakers' output). The receiver never started IO.
+  - So no audio stream was open on the camera's hub during any logged storm.
+- *The open-stream test.*
+  - `swift/micopen` opens the receiver's input with a CoreAudio IOProc that touches no buffer. Its output stream usage is off; nothing is kept or written.
+  - Open, interfaces 1 and 2 go to alternate setting 1 and `IsRunningSomewhere` is 1; closed, both are back at 0. So "open" puts the receiver's isochronous streams (in and out) through the hub's TT.
+  - m1 (C loop), 30 s blocks in ABBA order, 16 pairs: open 238, closed 172 lost fields. Open was higher in 9 pairs, lower in 6 and tied in 1; paired permutation p = 0.097. No storm in either condition.
+  - E3, the node checker, plain: two 480 s runs (e3-a, e3-b), one boot each, 30 s ABBA blocks after a 15 s lead-in, 8 pairs a run.
+    - e3-a: open 902, closed 1,001 lost fields (open lower in 6 of 8, p = 0.61).
+    - e3-b: open 872, closed 1,152 (lower in 6 of 8, p = 0.35).
+    - Pooled, 16 pairs: open 1,774, closed 2,153, open lower in 12, p = 0.24.
+    - The loss swung between 4 and 500 a minute within each run whatever the receiver's state. In e3-a the per-block median of the fixed per-frame work ranged from 0.145 to 0.486 ms and tracked the block's lost fields (r = 0.68 over 16 blocks).
+    - Loads: e3-a 9.10 / 4.08, e3-b 4.08 / 8.69.
+  - So the receiver's stream did not start a storm under either host loop. The two leanings go opposite ways (C: more with the stream open; node: fewer) and neither is significant. A small host-side effect of the audio IO (CPU wake-ups, coreaudiod's real-time thread) is possible and not resolved by these runs.
+- *The switch board.* `usb-port-switch-rp2040/README.md`: each channel cuts only +5 V with a high-side P-MOSFET; D+, D- and GND run straight through a pass-through cable. Its RP2040 enumerates on the other controller (`0x02112000` under xHCI `0x02000000`). So it is in the camera's data path only as passive wiring. It was not removed (no cable moves); the cause in sections 2 to 4 does not involve the data path. [source and measured]
+
+**9. Lead 2: host timing (measured, except as said).**
+- *Completion to resubmit* inside a frame: 0.02 to 0.04 ms (node, p50) and 0.008 ms (C), in storm and clean stretches alike (`repost79.py`, committed as `turnaround.py`).
+- *What moves with the storm is D,* the processing between a frame's last byte and the next credit: node p50 3.3 ms before a frame that publishes, 7.2 ms before a loss (smoke). The C loop's D is 0.01 ms.
+- *P/E-core placement* was moved with `taskpolicy -b` (E2: the storm). The plain thread's core could not be read (no `powermetrics` without root).
+- *Power and timers:* `pmset -g` shows sleep 0 and displaysleep 0, with sleep prevented by `caffeinate`, `sharingd`, `powerd` and `useractivityd` assertions through the session. `caffeinate`, timer coalescing and App Nap were not tested on their own: the clamp already moves the result, and a CLI process has no App Nap.
+- *xHCI interrupt timing* was not read directly. Completion-delivery stalls of 6 to 25 ms are seen from user space in the C loop (section 7).
+- *Load:* the 1-minute load before the runs was 4.1 to 13.9, and the clamp's effect shows at the same load as plain runs.
+
+**10. Lead 3: beat or phase (measured from logs).**
+- *No phase dependence.* In 8 of 42.78's runs the chance that a published frame is followed by a skip, binned by where its field boundary falls in a 1 ms grid (host clock), is flat: spreads 0.02 to 0.12 against a shuffled 95th percentile of 0.07 to 0.18; p 0.29 to 1.00. In a 125 µs grid, 7 of 8 runs are flat (p 0.07 to 0.79) and one gives p = 0.01, which 8 tests allow by chance (`phase.py`). This assumes the xHCI's frame clock and the host clock are coherent; that was not checked.
+- *The field period is stable* on the host clock: 31.06369 ms (32.1919 Hz) for the first 7 min of m1, then 31.06331 ms (a 12 ppm step between 7 and 9 min, cause not known). 42.78's runs fit 31.0631 to 31.0636 ms.
+- *Storms are not a periodic beat.* The autocorrelation of 42.78's per-second skip counts falls from 0.50 at 1 s to 0.08 at 7 s and about 0 from 11 s, with a shoulder of 0.28 to 0.30 at 4 to 5 s.
+- *42.78's storms ran a calibration cycle at a time.* Its 138 storm stretches of 1 s or more last mostly 3.4 to 4.6 s, and 83 of 127 begin within 16 fields after a shutter (type 1) frame. Today's plain node runs have shorter stretches (21 of 1.1 to 3.2 s) and weaker alignment (8 of 20 onsets within 16 fields of a shutter frame).
+- *Not explained.* Why the slow state would persist across a calibration cycle. One candidate is a performance-controller feedback: at 16 fps the thread does half the work and is kept slow, and the excursion's gap is where it can change. That is [inferred], not tested.
+
+**11. Lead 4: the camera side (measured).**
+- *The camera behaves the same throughout.* The window in section 1 is the firmware's, and E1 measured it with a plain host loop. The camera published 32 fps with no storm for 16 min under the C loop, then stormed under the node checker minutes later after the same kind of power cycle.
+- *Power cycles.* Storms appeared in the first seconds of measurement after a fresh cycle (smoke, each E2 A run), and were absent for 16 min of one boot under the C loop. No dependence on time since power-on was seen; the camera's temperature was not read.
+- *The excursions* stay at 20 to 40 a minute in every run.
+- *Mode 4* (E5: the stock one-capture program, `camera.reinit(4)` as the checker's `--mode 4`, under the clamp). Mode 4 writes no header words (`app_init.c` `frame_mode_gate_view_r32k != 4u`), so the lost fields are counted from the frame intervals in whole field periods (`interval_gaps.py`). Interleaved L E L E:
+
+| run | credit | frames (60 s) | lost fields per minute | frames followed by a loss | credit delay >= 6.6 ms followed by a loss | load before / after |
+|---|---|---|---|---|---|---|
+| e5-L1 | checker's | 1,231 | 703 | 45.4% | 110 of 113 | 8.80 / 7.58 |
+| e5-E1 | at the last byte | 1,492 | 440 | 25.3% | - (2 frames) | 7.58 / 5.02 |
+| e5-L2 | checker's | 1,417 | 516 | 31.9% | 125 of 128 | 5.02 / 5.72 |
+| e5-E2 | at the last byte | 1,750 | 183 | 10.2% | - (3 frames) | 5.72 / 5.07 |
+
+  - The stock mode-4 program loses fields in the same way: a late credit is followed by a loss 97 to 98% of the time.
+  - The rest of its losses (30 to 40% of frames with a credit under 4 ms) follow slow IN reposts on the clamped thread.
+  - The credit at the last byte roughly halves the loss there too.
+  - So the storms do not need the frame-rate patch. [measured]
+
+**12. The cause, and how sure.**
+- *Shown* [measured]:
+  - The camera loses the next field whenever the frame's credit is submitted more than about 7.5 ms after the previous frame's last byte. Over 8 ms it loses exactly every other field (E1: 2,956 of 2,956 at 8 to 12 ms).
+  - The checker sends the credit only after processing the frame. Every frame whose credit went out 6.6 ms or more after its last byte (JavaScript clocks) was followed by a loss (3,691 of 3,691).
+  - Clamping the checker to background QoS makes the storm near-permanent (E2, three of three triples).
+- *Suggested:*
+  - The bench's storms are the node thread running slowly at times: in 42.78 the thread's speed predicts the skip count with r = 0.97.
+  - The slow state may persist over a calibration cycle by feedback (section 10).
+- *Ruled out:* the receiver's audio stream, the switch board, a USB frame or microframe beat, the load average, the P/Pg build, and the injected IN delays and pending INs.
+- *Not ruled out:* the C loop's residual (section 7) comes from host completion-delivery stalls whose source (kernel, IOKit, the hub path) is not identified.
+
+**13. Recommendation (owner decision; nothing changed here).**
+- *Checker* (`e2e/lib/bench/seek-fps/`). Send the next frame's credit at the frame's last byte, before the frame is decoded and processed, and keep the bulk INs off the processing path:
+  - either process frames off the reading turn (a worker), or keep 2 to 3 INs pending (node-usb 2.x, 42.77);
+  - never two credits before a frame's last byte (`cmd_ImageData` cancels queued IN).
+  E4b: the credit at the last byte alone, on a plain thread, takes the checker from 234 to 470 lost fields a minute to 66 to 90 and removes the storms. E4: on a throttled thread the INs must come off the processing path too.
+- *Swift tool and app.* `tv-jc/macos/Sources/SeekKit/Camera.swift` has the same order: `grabBytes` sends `controlOut(83, …)` at the start of the next read, after `grabVisualFrame`'s processing and `onFrame`. So the app can show the same storms when its stream thread is slow; not measured here.
+- *Measuring.* Treat 1-IN checker counts as host-thread measurements. Firmware A/B comparisons (42.78) need a host loop whose credit timing does not depend on the CPU, such as `fdtime` or a fixed checker.
+
+**14. Physical tests.** None is needed for the storms: the cause was reproduced and moved from the host. Optional, for the C loop's residual (section 7) only:
+1. With the bench idle, move the camera's USB cable from the `USB2.0 HUB` to a Mac port with no hub in between, leaving the switch board inline.
+2. Ask for the C loop m1 run again (16 min); compare its single skips a minute with m1's 25.
+3. Move the cable back.
+
+**15. Bench state at the end (measured).**
+- *Info read.* After a channel-2 cycle and 10 s, `seek-fw info --json` (`end-info.json`):
+  - firmware 1.3.0.0, `cfg0` 0x00000000, active-slot word 0x00000000, booted a, upgrade target b;
+  - slot A sha256 `ef90c94a…`, slots B and R `d91284c6…`.
+- *Flash.* Then `dump-spifi-4m-halted` through 42.78's J-Link wrapper (channel 1 cycled for it and switched off after; `end-dump.log`). `end-4m.bin` has sha256 `50e900c23ff4bb7e0a5a30fc5879f6ed276289e43aeace2f9ab74eaec9b01d7d`, and `cmp` against `/private/tmp/claude-501/agent-78/start-4m.bin` printed nothing and exited 0. No write was made in the session.
+- *Power.* Then a last channel-2 cycle: the switch reads `1=off 2=on`, and the camera is on the bus at `0x01140000`.
+- *Mic receiver.* Back at alternate setting 0 on every interface, `IsRunningSomewhere` 0, and no `micopen` process left.
+
+**16. Not verified, and open.**
+- The plain checker's core placement in the storm stretches (no `powermetrics`). The slow thread is inferred from its own timings and from the clamp.
+- Why storms persist across a calibration cycle (section 10).
+- The exact window in group terms: the edge was measured in host time (E1, section 3), not against the firmware's group count.
+- The source of the C loop's completion-delivery stalls (section 7).
+- `caffeinate`, timer coalescing and QoS raised above default were not tried. Only the clamp down was.
+- The early credit was tried only as a wrapper in a scratch driver, with one bulk IN. A checker that sends the credit at the last byte and keeps 2 to 3 INs pending (or processes off the reading turn) was not built or run.
+- The mic effect, if any, below what 16 pairs per host loop resolve (section 8).
+
+**17. Files and commands.** Scratch, not committed: `/private/tmp/claude-501/agent-79/`.
+- *Drivers:* `fdtime2.c` and `fdtime2`, `fdinit.mjs`, `fd-run-79.ts`, `fd-run-79e.ts`, and `swift/micopen.swift` and `swift/audiostate.swift`.
+- *Run scripts:* `run79.sh`, `run79n.sh`, `run79e.sh` and the `chain-*.sh` files.
+- *Logs:* `m1.jsonl`, `e1.jsonl`, `smoke.jsonl`, `e2-*.jsonl`, `e3-*.jsonl`, `e4-*.jsonl`, `e4b-*.jsonl`, `e5-*.jsonl`, the `*.marks`, `loads.txt`, `runs.log`, and the audio log extract `audiolog-4h.txt`.
+- *Analysis:* `credit79.py`, `table79.py`, `hold79.py`, `ab79.py`, `lat79.py`, `stalls.py`, `storm.py`, `phase.py`, `repost79.py`, `inpost79.py`, `period79.py` and `gaps79.py`.
+- *Committed under `scripts/fd-skip/`:* `fdtime.c` (the anchor line and the `CREDIT_SCHED` hold; unchanged without it), `credit_window.py` (D against the next field's fate), `credit_hold.py` (E1's table), `late_transfers.py` (late payload transfers, section 7), `turnaround.py` (repost gap and D by stretch), `storm.py` (storm stretches and the field-grid lateness d), `phase.py` (skip chance by 1 ms or 125 µs phase), and `interval_gaps.py` (lost fields from frame intervals, for mode 4).
+
+**Commits.** This section, `SKIP_STORMS.md` (the owner's request: a stand-alone write-up of the storm cause, the evidence and the host fix) and `scripts/fd-skip/` only, on `worktree-agent-a1b0206f65f1481b0`. The hash is in the agent's report.

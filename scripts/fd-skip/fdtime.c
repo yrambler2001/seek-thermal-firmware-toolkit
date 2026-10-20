@@ -1,4 +1,6 @@
-/* Scratch (not in the repo): host timing for the camera's 32 Hz Normal stream (agent 42.74).
+/* Host timing for the camera's 32 Hz Normal stream (agent 42.74; agent 42.79 added the "anchor" line with
+ * CLOCK_MONOTONIC and CLOCK_REALTIME at t0, and the optional credit hold: CREDIT_SCHED=<file> of "<from_s> <hold_ms>"
+ * lines holds each credit until <hold_ms> after the frame's last byte, logged as "hold" in the credit line).
  *
  * The camera is already initialised and streaming (fdinit.mjs ran the checker's connect and exited without a stop).
  * Two host modes, same credit (control OUT 0x53, wValue 0, wIndex 0, data 00 82 00 00 = 0x8200, 66560 bytes):
@@ -13,7 +15,7 @@
  * frame (header capture index, status, completion time) is one JSON line. Times are ms from the start of streaming.
  *
  * build: clang -O2 -Wall -I/opt/homebrew/include -L/opt/homebrew/lib -lusb-1.0 -o fdtime fdtime.c
- * run:   ./fdtime <S|P> <K> <seconds> <out.jsonl>
+ * run:   ./fdtime <S|P> <K> <seconds> <out.jsonl>          (CREDIT_SCHED=<file> ./fdtime ... for the hold)
  */
 #include <libusb-1.0/libusb.h>
 #include <stdio.h>
@@ -53,6 +55,29 @@ static double now_ms(void) {
     struct timespec ts;
     clock_gettime(CLOCK_MONOTONIC, &ts);
     return (double)ts.tv_sec * 1000.0 + (double)ts.tv_nsec / 1e6 - t0;
+}
+
+/* agent 79: optional credit-delay schedule (env CREDIT_SCHED=<file> with lines "<from_s> <delay_ms>"): the credit
+ * for the next frame is held until <delay_ms> after the frame's last byte. Logged in each credit line as "hold". */
+#define MAXSCHED 256
+static double sched_from[MAXSCHED], sched_delay[MAXSCHED];
+static int nsched = 0;
+static double t_frame_done = 0;
+static double cur_hold(void) {
+    double s = now_ms() / 1000.0, d = 0;
+    int i;
+    for (i = 0; i < nsched; i++)
+        if (s >= sched_from[i]) d = sched_delay[i];
+    return d;
+}
+static void load_sched(void) {
+    const char *p = getenv("CREDIT_SCHED");
+    FILE *f;
+    if (!p) return;
+    f = fopen(p, "r");
+    if (!f) { fprintf(stderr, "cannot read %s\n", p); exit(7); }
+    while (nsched < MAXSCHED && fscanf(f, "%lf %lf", &sched_from[nsched], &sched_delay[nsched]) == 2) nsched++;
+    fclose(f);
 }
 
 static unsigned hw(const unsigned char *b, int i) {
@@ -100,6 +125,7 @@ static void bulk_cb(struct libusb_transfer *x) {
             frames++;
             frame_got = 0;
             credit_pending = 1;
+            t_frame_done = t;
             if (serial_mode) resubmit = 0; /* the next bulk IN waits for the credit */
         }
     } else if (x->status == LIBUSB_TRANSFER_CANCELLED) {
@@ -115,7 +141,8 @@ static void bulk_cb(struct libusb_transfer *x) {
 static void credit_cb(struct libusb_transfer *x) {
     double t = now_ms();
     credit_inflight = 0;
-    fprintf(out, "{\"ev\":\"credit\",\"sub\":%.3f,\"t\":%.3f,\"status\":%d}\n", t_credit_submit, t, (int)x->status);
+    fprintf(out, "{\"ev\":\"credit\",\"sub\":%.3f,\"t\":%.3f,\"status\":%d,\"hold\":%.3f}\n", t_credit_submit, t,
+            (int)x->status, nsched ? cur_hold() : 0.0);
     if (x->status != LIBUSB_TRANSFER_COMPLETED) errors++;
     credits++;
     if (serial_mode && !stopping) submit_bulk(&slots[0]);
@@ -169,6 +196,14 @@ int main(int argc, char **argv) {
 
     clock_gettime(CLOCK_MONOTONIC, &ts0);
     t0 = (double)ts0.tv_sec * 1000.0 + (double)ts0.tv_nsec / 1e6;
+    {
+        struct timespec rt;
+        clock_gettime(CLOCK_REALTIME, &rt);
+        /* agent 79: absolute anchors, so other processes' CLOCK_MONOTONIC marks can be aligned */
+        fprintf(out, "{\"ev\":\"anchor\",\"mono0_ms\":%.3f,\"real0_s\":%.6f}\n", t0,
+                (double)rt.tv_sec + (double)rt.tv_nsec / 1e9);
+        fflush(out);
+    }
 
     for (i = 0; i < K; i++) {
         slots[i].buf = malloc(FRAME_BYTES);
@@ -178,8 +213,9 @@ int main(int argc, char **argv) {
     }
     credit_xfer = libusb_alloc_transfer(0);
 
+    load_sched();
     {
-        struct timeval tv = {0, 500};
+        struct timeval tv = {0, nsched ? 50 : 500};
         /* first credit at once; in P mode the K bulk INs go out with it */
         credit_pending = 1;
         submit_credit();
@@ -194,7 +230,9 @@ int main(int argc, char **argv) {
                 for (i = 0; i < K; i++) libusb_cancel_transfer(slots[i].xfer);
                 if (credit_inflight) libusb_cancel_transfer(credit_xfer);
             }
-            if (!stopping && credit_pending && !credit_inflight) submit_credit();
+            if (!stopping && credit_pending && !credit_inflight &&
+                (nsched == 0 || frames == 0 || now_ms() >= t_frame_done + cur_hold()))
+                submit_credit();
             libusb_handle_events_timeout_completed(ctx, &tv, &completed);
             if (stopping && bulk_inflight == 0 && !credit_inflight) break;
         }
