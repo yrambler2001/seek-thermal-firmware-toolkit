@@ -5,16 +5,19 @@ Done work is in `TESTING.md` (sections 42.x; the latest merged is 42.79), `FPS_3
 
 ## 0. Orchestration state (2026-10-20)
 
-Nothing is running. Bench in its home state: flash `50e900c2…` (checked after 42.79), boot word 0, booted A; switch channel 1 (J-Link) off, channel 2 (camera) on.
+Running (owner, 2026-10-20: "fix", Haiku 5.5 xhigh):
+- [~] 42.80 (offline, no bench): remove the dead `packages/core/src/workflows/flash.ts`; move any live-path coverage its tests hold onto the live functions, no shims; tsc/eslint/prettier.
+- [~] 42.81 (has the bench): pages-bench dumps the start image and restores and byte-compares it at the end, instead of requiring and leaving the factory baseline `40447c7e`; `e2e/lib/camera-bus.ts` gets the 42.68 Info gate (OUT 0x55/0x5A shapes only during an Info read), shared from one place; camera run with its own dump/cmp.
+- [ ] 42.82, after both are merged: an Opus 5.5 xhigh agent sweeps the repo for issues and bugs and fixes them (owner, 2026-10-20). If the Opus agent fails, rerun it on Haiku 5.5 xhigh (owner).
+
+Bench in its home state: flash `50e900c2…` (checked after 42.79), boot word 0, booted A; switch channel 1 (J-Link) off, channel 2 (camera) on.
 
 The last wave (42.65 to 42.79, 2026-10-19 to 2026-10-20) is merged; details are in TESTING.md:
 - Info and slots: the Info tab equals `seek-fw info` on the camera (42.68); the upgrade warning covers the recovery case and the Connect section shows the unlock note (42.67, 42.69); the page and the CLI share one slot-dump name (42.71); the hosted bundle was rebuilt (42.73), and no page code has changed since.
 - FW-V1: the 2014-chain targets build the plain bank (42.66, 42.72); it boots from bank B and equals the factory bank A (42.70); pushed as `3ab76e1bc`.
 - Lost frames: closed (owner, 2026-10-20: document only). The storms are late credits: the camera starts a frame only if its credit lands within about 7.5 ms of the previous frame's last byte, and the checker credits after processing (42.79, `SKIP_STORMS.md`, FPS_32HZ.md). The checker keeps its credit order and node-usb 3.1.0; tv-jc is unchanged; the candidate-6 copy gate (FW-V1 branch `drop-path-study`, not in main; banks in `/private/tmp/claude-501/agent-76/images/bank/`) is not retested, because 42.78's A/B measured the host thread. With a prompt credit about 25 fields a minute are still lost (the 42.74 endpoint-busy skip). The calibration frames stay as they are; the button stays "Make 32 FPS".
 
-Left open by that wave (small, no owner question):
-- [ ] `packages/core/src/workflows/flash.ts` (`writeFirmware`, `prepareImage`) belonged to the removed `#flash` page and no CLI or web source calls it; tests and a few core files still reference it. Remove only after checking what `plain-chain-flash.test.ts` and `upgrade-target.emulator.test.ts` cover through it.
-- [ ] pages-bench part 0 wants baseline `40447c7e` while the bench holds `50e900c2` (it writes its baseline and the run restores); `e2e/lib/camera-bus.ts` (the Node bridge) still refuses 0x55/0x5A for every run (42.68).
+Left open by that wave (small, no owner question; `flash.ts` and the two e2e ends are 42.80/42.81 above):
 - [ ] FW-V1 hand tools on 2014-chain targets: `seek_fw_tool.mjs upload`/`flash-custom` and `package_image.py` without `--bank-payload` still build Key A (they stop at the 4.x vector check); `SEEK_FW_TOOL_README.md` still calls `bank-payload` the 4.x bank (42.72).
 - [ ] README keeps three claims the "Firmware and flashing" rewrite could not check: the ten-dump byte-identical rebuild, agreement with `seek_fw_tool.mjs`, and the 2019-bootloader / 4.9.2.0 story.
 - [ ] 42.70's stock 8 Hz reads counted 27 frames per 5-s window (5.4 fps) while the per-second median was 8.0; cause not established (possibly the same late-credit window, 42.79; not checked).
