@@ -12,11 +12,19 @@ import { readFile, readdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
+  APPLICATION_KEY_PAIRS,
+  buildSlotPlan,
+  equalBytes,
   fpsBootWarningOf,
   getProfile,
+  hexToBytes,
+  IMAGE_MAGIC,
   keyFilenameSuffix,
+  LENGTH_OFFSET,
+  prepareSlotFlash,
   safeVersion,
   SeekError,
+  writeBannerOf,
   type DeviceState,
   type DumpedSlot,
   type FlashSlotOptions,
@@ -1649,6 +1657,178 @@ describe('the 2014 plaintext chain', () => {
     const text = writeKeyLines(report, false).join('\n');
     expect(text).not.toContain('cannot be written');
     expect(text).not.toContain('derived from the booted bank');
+  });
+});
+
+/* ==================================================================== *
+ * The Mosaic-shaped camera through `slots flash`, with core's own prepare (TESTING.md 42.82 F3)
+ * ==================================================================== */
+
+/* The classic writer refused Mosaic 10.9.1.31 for its application's keys (the pilot pair, not the
+ * bootloader's). The slot page replaced that refusal with the upload-key derivation (TESTING.md 42.7):
+ * on 10.9.1.31 it derives the three-mask upload, and on a build that checks an upload under its own keys
+ * it refuses. The CLI reaches that derivation only through core's `prepareSlotFlash`, so these run the
+ * command with core's real prepare (the camera analysis and the commit are the only fakes) and hold the
+ * CLI's answer to the page's: the same refusal text as the page's banner, and the same upload bytes. */
+describe('slots flash on a Mosaic-shaped camera: the page’s key derivation, through the CLI (TESTING.md 42.82 F3)', () => {
+  const modern = getProfile('modern-4x');
+  const BOOT_A = Uint8Array.from({ length: 16 }, (_, i) => 0xa0 + i);
+  const BOOT_B = Uint8Array.from({ length: 16 }, (_, i) => 0xb0 + i);
+  const pilot = APPLICATION_KEY_PAIRS.find((p) => p.builds.includes('Mosaic 10.9.1.31'));
+  if (pilot === undefined) throw new Error('the decoded Mosaic 10.9.1.31 pair is not in the table');
+  const APP_BLOCK = "the running application does not carry the bootloader's key pair (fixture)";
+  let temp: { path: string; cleanup: () => Promise<void> };
+
+  beforeEach(async () => {
+    temp = await tempDir();
+  });
+  afterEach(async () => {
+    await temp.cleanup();
+  });
+
+  /** A decrypted-looking image: SRAM stack pointer, Thumb reset vector, the magic, and a key pair. */
+  function imageWith(seed: number, keyA: Uint8Array, keyB: Uint8Array): Uint8Array {
+    const out = new Uint8Array(0x5000);
+    let s = seed;
+    for (let i = 0; i < out.length; i++) {
+      s = (s * 1103515245 + 12345) >>> 0;
+      out[i] = s >>> 24;
+    }
+    const dv = new DataView(out.buffer);
+    dv.setUint32(0, 0x10001000, true);
+    dv.setUint32(4, 0x10000101, true);
+    dv.setUint32(0x200, IMAGE_MAGIC, true);
+    dv.setUint32(LENGTH_OFFSET, out.length, true);
+    out.set(keyA, 0x4100);
+    out.set(keyB, 0x4120);
+    return out;
+  }
+
+  /** The analysis the page and the CLI both act on: booted A under the bootloader's Key A, its application the pilot's. */
+  function mosaicReport(version: string): SlotsReport {
+    const bank = (key: SlotKey, plain: Uint8Array | null): SlotState => ({
+      key,
+      name: `slot ${key.toUpperCase()}`,
+      subcmd: null,
+      address: ADDRESS[key],
+      present: true,
+      reason: null,
+      unread: false,
+      blank: false,
+      header: null,
+      raw: null,
+      footer: null,
+      recovered: null,
+      plain,
+      plainHeader: null,
+      accepts: true,
+      footerOk: true,
+      sha256: null,
+      keyName: 'Key A',
+      bootable: true,
+      bootability: 'bootable',
+    });
+    const slots = [
+      bank('a', imageWith(3, hexToBytes(pilot!.keyA), hexToBytes(pilot!.keyB))),
+      bank('b', null),
+      bank('r', null),
+    ];
+    const state = {
+      ...deviceStateFake(),
+      version,
+      profile: modern,
+      slots,
+      byKey: new Map(slots.map((s) => [s.key, s])),
+      boot: { booted: 'a', target: 'b' },
+      keyTable: { keyA: BOOT_A, keyB: BOOT_B, offset: 0, matchA: true, matchB: true },
+      keyWhiteningK: modern.cipher.whiteningK,
+      storeKey: { name: 'Key B', key: BOOT_B, programmed: false },
+      deviceKeySlot: null,
+      canFlash: false,
+      flashBlockedBy: [APP_BLOCK],
+      appKeysBlock: APP_BLOCK,
+      upgradeBlockedBy: [],
+      classicWriterBlockedBy: [],
+      plainChain: false,
+    } as unknown as DeviceState;
+    const plan = buildSlotPlan(modern, version);
+    return {
+      state,
+      plan,
+      slots: plan.slots.map((entry) => ({
+        entry,
+        state: state.byKey.get(entry.key) ?? null,
+        unreadReason: null,
+        content: 'image' as const,
+        active: entry.key === 'a',
+      })),
+    };
+  }
+
+  /** The command with core's own prepare; the commit is recorded, not sent. */
+  function realPrepare(report: SlotsReport): {
+    readonly ops: SlotOps;
+    readonly plans: SlotFlashPlan[];
+  } {
+    const { ops } = fakeOps(report);
+    const plans: SlotFlashPlan[] = [];
+    return {
+      plans,
+      ops: {
+        ...ops,
+        prepare: prepareSlotFlash,
+        flash: (_ctx, _report, plan) => {
+          plans.push(plan);
+          return Promise.resolve({
+            key: plan.key,
+            commitStatus: 0,
+            verified: null,
+            after: null,
+            notes: [],
+          });
+        },
+      },
+    };
+  }
+
+  async function flashB(ops: SlotOps, test: TestIo): Promise<unknown> {
+    const name = `image${keyFilenameSuffix(BOOT_A, BOOT_B)}.bin`;
+    await writeFile(join(temp.path, name), imageWith(9, BOOT_A, BOOT_B));
+    return slotsCommandWith(ops)(
+      contextFor(['slots', 'flash', 'b', join(temp.path, name), '--yes', '--no-probe'], test),
+    ).catch((caught: unknown) => caught);
+  }
+
+  it('a build that checks its upload under its own keys (4.16.1.7): the CLI refuses with the page’s banner text, and nothing is sent', async () => {
+    const report = mosaicReport('4.16.1.7');
+    const banner = writeBannerOf(report.state);
+    expect(banner).toMatch(/checks an upload under its own keys/);
+    const { ops, plans } = realPrepare(report);
+    const test = cameraIo();
+    const error = await flashB(ops, test);
+    expect(error).toBeInstanceOf(SeekError);
+    expect((error as SeekError).code).toBe('slots/refused');
+    expect((error as SeekError).message).toContain(banner!);
+    expect(plans).toEqual([]);
+    expect(test.stdout.text).not.toContain('Slot flash plan');
+  });
+
+  it('Mosaic 10.9.1.31: the CLI sends the upload the page builds, under the key derived from the booted bank', async () => {
+    const report = mosaicReport('10.9.1.31');
+    expect(writeBannerOf(report.state)).toBeNull();
+    const { ops, plans } = realPrepare(report);
+    const test = cameraIo();
+    const result = await flashB(ops, test);
+    expect(result).toMatchObject({ action: 'flash', bank: 'b', written: true });
+    expect(plans).toHaveLength(1);
+    const page = prepareSlotFlash(report, 'b', {
+      kind: 'plain',
+      bytes: imageWith(9, BOOT_A, BOOT_B),
+      fileName: `image${keyFilenameSuffix(BOOT_A, BOOT_B)}.bin`,
+    });
+    expect(equalBytes(plans[0]!.payload, page.payload)).toBe(true);
+    expect(plans[0]!.derivedFrom).toEqual({ bank: 'a', key: 'Key A', holds: 'Key A' });
+    expect(test.stdout.text).toMatch(/key\s+Key A, derived from the booted bank A/);
   });
 });
 
