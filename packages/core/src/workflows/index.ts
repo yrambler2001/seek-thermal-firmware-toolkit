@@ -1,6 +1,7 @@
 /**
- * The five operations a user actually runs: dump, sweep, decrypt, device-info
- * and flash.
+ * The four read operations a user actually runs: dump, sweep, decrypt and
+ * device-info. Writing a bank is the slot writer's (`slots/write.ts`), and the
+ * preservation pipeline's (`preservation/steps.ts`).
  *
  * Everything here is isomorphic and side-effect-free at the platform level — a
  * workflow returns `Artifact[]` and reports through a `Reporter`, and both the
@@ -69,7 +70,6 @@ export {
   type DecryptOptions,
 } from './decrypt.js';
 export {
-  assertFlashable,
   bootedSlot,
   profileToRereadUnder,
   bootableDescription,

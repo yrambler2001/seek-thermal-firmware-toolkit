@@ -17,7 +17,7 @@
  * ==================================================================== */
 
 import { asciiz, bytesToHex, findAll, hex, hexUp, sha256hex, viewOf } from '../bytes.js';
-import { CancelledError, errorMessage, SeekError } from '../errors.js';
+import { CancelledError, errorMessage } from '../errors.js';
 import { decryptImage } from '../crypto/cipher.js';
 import {
   findKeyCandidates,
@@ -1434,14 +1434,4 @@ export function bootableDescription(slot: SlotState): string {
   if (slot.bootability === 'unknown') return 'unknown';
   if (slot.bootability === 'recovery-only') return 'recovery only';
   return slot.bootable ? 'yes' : 'no';
-}
-
-/** Thrown when a workflow is handed an analysis that cannot support a write. */
-export function assertFlashable(state: DeviceState): void {
-  if (state.canFlash) return;
-  throw new SeekError(
-    'flash/refused',
-    `this camera cannot be flashed from here: ${state.flashBlockedBy.join('; ')}`,
-    { detail: { blockedBy: state.flashBlockedBy } },
-  );
 }

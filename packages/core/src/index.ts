@@ -310,10 +310,9 @@ export type {
   WindowRecordRead,
 } from './archive/index.js';
 
-/* ---- the five workflows ----------------------------------------------- */
+/* ---- the four read workflows ------------------------------------------ */
 export {
   DEFAULT_DUMP_OPTIONS,
-  assertFlashable,
   bootableDescription,
   bootedSlot,
   channelEvidenceOf,
