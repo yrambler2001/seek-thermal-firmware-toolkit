@@ -151,9 +151,10 @@ export function locateOwnKeyPair(bytes: Uint8Array, mine: KeyPair): KeyPair | nu
 /**
  * Retarget the image's own Key A / Key B to this camera's pair. The keys the
  * image carries are named by its file name (the dump view puts them there);
- * without that name nothing says which pair
- * the image was built for, so the file is refused. Returns the image with this
- * camera's pair in it.
+ * without that name the pair is found by value (`locateOwnKeyPair`: this
+ * camera's pair, then the decoded application pairs, each half exactly once),
+ * and the file is refused only when no pair is found that way. Returns the
+ * image with this camera's pair in it.
  */
 export function retargetImageKeys(bytes: Uint8Array, fileName: string, mine: KeyPair): Uint8Array {
   const named = parseKeyFilenameSuffix(fileName);

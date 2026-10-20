@@ -546,6 +546,36 @@ describe('prepareSlotFlash: the file, the key pair and the analysis', () => {
     expect(equalBytes(kept, own)).toBe(true);
   });
 
+  it('an unnamed image that holds this camera’s own pair, each half once, is staged under that pair as it is; the same pair twice is refused (README "The name has no pair", TESTING.md 42.82 F2)', () => {
+    const image = imageOf(0x5000, 7);
+    image.set(KEY_A, 0x4000);
+    image.set(KEY_B, 0x4020);
+    const before = image.slice();
+
+    const plan = prepareSlotFlash(keyed(), 'b', {
+      kind: 'plain',
+      bytes: image,
+      fileName: 'no-key-suffix.bin',
+    });
+    /* nothing retargeted: the stamped image keeps this camera's pair where the file had it, and its code */
+    const stamped = plan.expectedPlain!;
+    expect(findEmbeddedKeyTable(stamped, KEY_A, KEY_B)).toEqual(
+      findEmbeddedKeyTable(image, KEY_A, KEY_B),
+    );
+    expect(equalBytes(stamped.subarray(0x1000, 0x4800), image.subarray(0x1000, 0x4800))).toBe(true);
+    expect(plan.derivedFrom).toEqual({ bank: 'a', key: 'Key B', holds: 'Key B' });
+    expect(equalBytes(image, before)).toBe(true);
+
+    /* the value search needs each half exactly once: a second Key A leaves no pair to go by */
+    const twice = image.slice();
+    twice.set(KEY_A, 0x4800);
+    const error = refusalOf(() =>
+      prepareSlotFlash(keyed(), 'b', { kind: 'plain', bytes: twice, fileName: 'twice.bin' }),
+    );
+    expect(error.code).toBe('slots/refused');
+    expect(error.message).toContain("neither this camera's pair nor a decoded application pair");
+  });
+
   it('an analysis that does not say which firmware it runs is refused before anything is built', () => {
     const report = reportFor(
       stateFor(modern, { version: null, slots: [slotState({ key: 'b', present: true })] }),
