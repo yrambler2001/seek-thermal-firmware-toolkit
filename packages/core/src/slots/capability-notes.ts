@@ -16,7 +16,7 @@ export const FF_1308_NOTE =
   'takes it, and each build predicts its own answers from the banks (slots/running.ts). The FF ' +
   'image is staged as the vendor app stages it, the image XOR the Key A keystream with the header ' +
   'verbatim, and the camera stores it under Key B (the image XOR the Key B keystream). It goes to ' +
-  'A, B or R. The page refuses it while the camera runs the 8 Hz build, and while the camera\'s ' +
+  "A, B or R. The page refuses it while the camera runs the 8 Hz build, and while the camera's " +
   'answers cannot tell the builds apart it refuses unless you say the camera runs the 16 Hz build. ' +
   'UNTESTED: no genuine bootloader for this build is in the corpus, so whether the written bank boots ' +
   'is not measured. On the 0.9.0.0 bootloader the earlier plain form booted from recovery R; this ' +

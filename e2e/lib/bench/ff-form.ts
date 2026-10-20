@@ -79,7 +79,7 @@ function stampedImage(image: Uint8Array, bankBytes: number): Uint8Array {
 export function predictedFFVendorPayload(image: Uint8Array, bankBytes = FF_BANK_BYTES): Uint8Array {
   const stamped = stampedImage(image, bankBytes);
   const keys = locateFFKeys(stamped);
-  if (keys === null || keys.block1Hex === null) {
+  if (keys?.block1Hex == null) {
     throw new Error('the FF image does not carry the 1.3.0.8-FF key pair, each half once');
   }
   const ksA = keystream(keyWordsOf(keys.block0Hex), stamped.length >>> 2);
@@ -96,7 +96,7 @@ export function predictedFFVendorPayload(image: Uint8Array, bankBytes = FF_BANK_
 export function predictedFFStored(image: Uint8Array, bankBytes = FF_BANK_BYTES): Uint8Array {
   const stamped = stampedImage(image, bankBytes);
   const keys = locateFFKeys(stamped);
-  if (keys === null || keys.block1Hex === null) {
+  if (keys?.block1Hex == null) {
     throw new Error('the FF image does not carry the 1.3.0.8-FF key pair, each half once');
   }
   const ksB = keystream(keyWordsOf(keys.block1Hex), stamped.length >>> 2);

@@ -140,11 +140,15 @@ export function runningApplicationOf(state: DeviceState): RunningApplication {
       `the camera reports ${state.version ?? 'no version'}, and only ${FF_1308_VERSION} has two builds`,
     );
   }
-  if (camera === null || camera.a === null || camera.b === null || camera.r === null) {
-    return unknown('the camera did not answer the bank verdicts (GetFirmwareInfo selectors 6, 7, 8)');
+  if (camera?.a == null || camera.b === null || camera.r === null) {
+    return unknown(
+      'the camera did not answer the bank verdicts (GetFirmwareInfo selectors 6, 7, 8)',
+    );
   }
   if (predictions.plain === null || predictions.ff === null) {
-    return unknown('a bank the verdicts depend on was not read, so the answers cannot be predicted');
+    return unknown(
+      'a bank the verdicts depend on was not read, so the answers cannot be predicted',
+    );
   }
   const plainMatch = sameAnswers(camera, predictions.plain);
   const ffMatch = sameAnswers(camera, predictions.ff);

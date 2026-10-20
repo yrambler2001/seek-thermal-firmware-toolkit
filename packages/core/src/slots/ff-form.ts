@@ -21,12 +21,7 @@
 import { viewOf } from '../bytes.js';
 import { SeekError } from '../errors.js';
 import { PLAIN_CHAIN_STAGE_MAX, wordSum32 } from '../image/bank.js';
-import {
-  HEADER_OFFSET,
-  HEADER_SIZE,
-  IMAGE_MAGIC,
-  LENGTH_OFFSET,
-} from '../image/header.js';
+import { HEADER_OFFSET, HEADER_SIZE, IMAGE_MAGIC, LENGTH_OFFSET } from '../image/header.js';
 import {
   KEY_PAIRS,
   keystream,
@@ -75,7 +70,9 @@ export function stageFFVendor(image: Uint8Array): FFVendorStaging {
     );
   }
   if (image.length < HEADER_OFFSET + HEADER_SIZE || (image.length & 3) !== 0) {
-    throw ffRefused(`the FF image is ${String(image.length)} B, which is not a whole image. Nothing was written.`);
+    throw ffRefused(
+      `the FF image is ${String(image.length)} B, which is not a whole image. Nothing was written.`,
+    );
   }
   const stamped = image.slice();
   const dv = viewOf(stamped);
@@ -83,7 +80,7 @@ export function stageFFVendor(image: Uint8Array): FFVendorStaging {
     dv.setUint32(LENGTH_OFFSET, stamped.length >>> 0, true);
   }
   const keys = locateFFKeys(stamped);
-  if (keys === null || keys.block1Hex === null) {
+  if (keys?.block1Hex == null) {
     throw ffRefused(
       'the image does not carry the 1.3.0.8-FF key pair (each half exactly once), so its keys ' +
         'cannot be named. Nothing was written.',
