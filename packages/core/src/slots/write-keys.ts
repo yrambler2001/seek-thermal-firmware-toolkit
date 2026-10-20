@@ -205,7 +205,9 @@ function keyBytesNamed(state: DeviceState, name: string): Uint8Array | null {
  *     the bank it names through that bank's own window, and an unnamed boot is handled by the
  *     acknowledgement, so the upgrade's target does not refuse a write;
  *   - on a build that does not stage under the camera's key (`stagesUnderCameraKey`), the classic writer's
- *     own reasons (`classicWriterBlockedBy`: the key table, the 2014-only line).
+ *     own reasons (`classicWriterBlockedBy`: the key table, the 2014-only line). The 2014-only reason is not
+ *     a camera-wide one there (the 1.3.0.8 FF image stages in its vendor form on a camera with no plain
+ *     bank), so the writer applies it where it stages an image plain (write.ts `refusePlainStaging`).
  * Null when nothing else refuses. Every other reason still refuses the whole camera, and says which.
  */
 export function gateWithoutAppKeys(state: DeviceState): string | null {

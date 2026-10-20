@@ -35,6 +35,7 @@ import type { FirmwareProfile, WindowEntry } from '../../src/profiles/types.js';
 import type { SeekDevice } from '../../src/protocol/client.js';
 import type { DeviceState, SlotState, WorkflowContext } from '../../src/workflows/types.js';
 import { buildSlotPlan } from '../../src/slots/capability.js';
+import { onPlaintextChain } from '../../src/slots/running.js';
 import { flashSlot, prepareSlotFlash } from '../../src/slots/write.js';
 import { compareReadBack } from '../../src/slots/write-verify.js';
 import {
@@ -140,7 +141,8 @@ function stateFor(
     deviceKeySlot: null,
     canFlash: true,
     flashBlockedBy: [],
-    plainChain: false,
+    /* A 2014-chain build's fixture camera holds its banks plain, as the read would find them. */
+    plainChain: onPlaintextChain(profile, version),
   } as unknown as DeviceState;
 }
 

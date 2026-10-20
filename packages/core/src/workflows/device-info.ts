@@ -348,6 +348,17 @@ function storedPlain(slot: AnalysedSlot): boolean {
   );
 }
 
+/**
+ * The locked line's write path for an image staged plain needs the 2014 plaintext chain, and a read
+ * with no bank stored plain is not proven to be on it. The flash gate carries this among the classic
+ * writer's reasons (`classicWriterBlockedBy`); the slot writer refuses a plain-staged image with it
+ * (slots/write.ts), because the slot page's camera-wide gate drops the classic reasons on that line.
+ */
+export const PLAIN_CHAIN_ONLY_REASON =
+  'the write path on this line is implemented only for the 2014 plaintext chain — banks ' +
+  'stored plain, word sum 0, no key material — and no bank this read opened is stored ' +
+  'that way';
+
 /** The 2014 bootloader (the original Compact and the 8 Hz 1.3.0.8 build run on it; TESTING.md 42.10). */
 const LEGACY_2014_BOOTLOADER = '0.9.0.0';
 
@@ -1096,11 +1107,7 @@ export async function readDeviceInfo(
    * chains and the builds whose mode 0 is not the upgrade target — is told
    * exactly that, rather than being waved through a cipher-shaped staging. */
   if (!plainChain && plan.selectors.some((row) => row.channel === 'auth')) {
-    classicWriter.push(
-      'the write path on this line is implemented only for the 2014 plaintext chain — banks ' +
-        'stored plain, word sum 0, no key material — and no bank this read opened is stored ' +
-        'that way',
-    );
+    classicWriter.push(PLAIN_CHAIN_ONLY_REASON);
   }
   blocked.push(...classicWriter);
   /* The reasons that only the classic upgrade flow (`flash`, selector 0) needs: which bank an

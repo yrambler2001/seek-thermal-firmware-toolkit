@@ -48,7 +48,9 @@ import {
 import { SeekDevice } from '../src/protocol/client.js';
 import { OP } from '../src/protocol/ops.js';
 import { legacyAuth, OLD_FW_UNLOCK_TOKEN } from '../src/profiles/legacy-auth.js';
-import { inspectSlots } from '../src/slots/inspect.js';
+import { buildSlotPlan } from '../src/slots/capability.js';
+import { inspectSlots, joinSlotViews } from '../src/slots/inspect.js';
+import type { SlotsReport } from '../src/slots/types.js';
 import { deriveWriteKeys, slotWriteRefusal } from '../src/slots/write-keys.js';
 import { flashSlot, prepareSlotFlash } from '../src/slots/write.js';
 import { readDeviceInfo } from '../src/workflows/device-info.js';
@@ -361,6 +363,64 @@ describe('the 2014 plaintext chain on the normal flash path', () => {
       camera.calls.some(
         (c) => c.op === OP.SET_FEATURED_FIRMWARE_DATA || c.op === OP.COMPLETE_MEMORY_UPGRADE,
       ),
+    ).toBe(false);
+  }, 60_000);
+
+  it('refuses a plain image on a 1.3.0.0 camera with no bank stored plain for the chain reason itself, in prepareSlotFlash and in flashSlot (TESTING.md 42.82 F1)', async () => {
+    /* The same cipher-chain camera, with only the classic writer's reasons and the upgrade's left on the
+     * read: the detection and acceptance-sum reasons (the real read carries both) are taken out, so the
+     * chain reason is the one reason that can refuse. The slot page keeps the legacy plan. Before 42.82
+     * `gateWithoutAppKeys` dropped the chain reason on the plain-staging line and the write went out. */
+    const camera = camera2014({ plain: false });
+    const read = await read2014(camera);
+    const kept = new Set([
+      ...(read.classicWriterBlockedBy ?? []),
+      ...(read.upgradeBlockedBy ?? []),
+    ]);
+    const state: DeviceState = {
+      ...read,
+      flashBlockedBy: read.flashBlockedBy.filter((why) => kept.has(why)),
+    };
+    expect(state.plainChain).toBe(false);
+    expect(state.flashBlockedBy.join(' ')).toContain('2014 plaintext chain');
+    const legacyPlan = buildSlotPlan(legacyAuth, '1.3.0.0');
+    expect(legacyPlan.slots.find((s) => s.key === 'b')?.staging).toBe('plain');
+    const report: SlotsReport = {
+      state,
+      plan: legacyPlan,
+      slots: joinSlotViews(legacyPlan, state),
+    };
+    const input = {
+      kind: 'plain' as const,
+      bytes: plainImage2014(),
+      fileName: 'compact_1.3.0.0.bin',
+    };
+
+    expect(() => prepareSlotFlash(report, 'b', input)).toThrow(
+      /implemented only for the 2014 plaintext chain/,
+    );
+
+    /* flashSlot refuses on its own: a plan made on the plain-chain camera, sent under this analysis. */
+    const plainReport = await inspectSlots(await contextFor(camera2014(), collectingReporter()));
+    const plan = prepareSlotFlash(plainReport, 'b', input);
+    const before = camera.calls.length;
+    let refused: unknown = null;
+    try {
+      await flashSlot(await contextFor(camera, collectingReporter()), report, plan, {
+        acknowledgeRisk: true,
+      });
+    } catch (error) {
+      refused = error;
+    }
+    expect(refused).toBeInstanceOf(SeekError);
+    expect((refused as SeekError).code).toBe('slots/refused');
+    expect((refused as SeekError).message).toContain(
+      'implemented only for the 2014 plaintext chain',
+    );
+    expect(
+      camera.calls
+        .slice(before)
+        .some((c) => c.op === OP.SET_FEATURED_FIRMWARE_DATA || c.op === OP.COMPLETE_MEMORY_UPGRADE),
     ).toBe(false);
   }, 60_000);
 

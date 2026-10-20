@@ -52,6 +52,7 @@ import {
   type SlotPlan,
   type SlotsReport,
 } from '../../src/slots/types.js';
+import { onPlaintextChain } from '../../src/slots/running.js';
 import { flashSlot, prepareSlotFlash } from '../../src/slots/write.js';
 import type * as DeviceInfo from '../../src/workflows/device-info.js';
 import { readDeviceInfo } from '../../src/workflows/device-info.js';
@@ -132,7 +133,8 @@ function stateFor(
     appKeysBlock: null,
     canFlash: true,
     flashBlockedBy: [],
-    plainChain: false,
+    /* A 2014-chain build's fixture camera holds its banks plain, as the read would find them. */
+    plainChain: onPlaintextChain(profile, options.version),
   } as unknown as DeviceState;
 }
 

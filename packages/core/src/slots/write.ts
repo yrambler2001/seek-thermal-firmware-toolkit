@@ -26,6 +26,7 @@ import type { SeekError } from '../errors.js';
 import { transferSum16 } from '../image/bank.js';
 import { FOOTER_TAG } from '../image/header.js';
 import type { CipherProfile, WindowEntry } from '../profiles/types.js';
+import { PLAIN_CHAIN_ONLY_REASON } from '../workflows/device-info.js';
 import {
   isCancelled,
   slotByKey,
@@ -513,6 +514,22 @@ function refuseOnCameraWide(state: DeviceState, kind: SlotInputKind): void {
     throw slotRefused(`${refusal}. Nothing was written.`, { blockedBy: state.flashBlockedBy });
 }
 
+/**
+ * The 2014 plaintext chain's own condition for an image staged plain (a decrypted image; the 1.3.0.8 FF
+ * image is staged in its vendor form and is not this). The slot page's camera-wide gate drops the classic
+ * writer's reasons on every line that does not stage under the camera's key (`gateWithoutAppKeys`), and the
+ * chain reason is one of them, so it is applied here, where the plain form is chosen: a camera with no bank
+ * stored plain is not shown to be on the chain, and its bootloader may want a keyed bank. A raw payload is
+ * sent as given and is not refused for it.
+ */
+function refusePlainStaging(state: DeviceState): void {
+  if (state.plainChain) return;
+  throw slotRefused(
+    `this camera cannot take a plain-staged image from here: ${PLAIN_CHAIN_ONLY_REASON}. Nothing was written.`,
+    { blockedBy: state.flashBlockedBy },
+  );
+}
+
 function stageImage(
   report: SlotsReport,
   slot: SlotState,
@@ -608,6 +625,7 @@ function stageImage(
       warnings: ffStagingWarnings(gate),
     };
   }
+  refusePlainStaging(report.state);
   const staged = buildPlainPayload(input.bytes, cipher);
   return {
     staged,
@@ -700,6 +718,8 @@ export async function flashSlot(
       blockedBy: report.state.flashBlockedBy,
     });
   }
+  /* And the plain form's own condition, which that gate does not carry (see `refusePlainStaging`). */
+  if (plan.kind === 'plain' && plan.staging === 'plain') refusePlainStaging(report.state);
 
   const { reporter } = ctx;
   reporter.log(

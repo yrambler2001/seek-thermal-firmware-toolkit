@@ -32,6 +32,7 @@ import { getProfile } from '../../src/profiles/registry.js';
 import type { FirmwareProfile, WindowEntry } from '../../src/profiles/types.js';
 import type { SeekDevice } from '../../src/protocol/client.js';
 import type { DeviceState, SlotState, WorkflowContext } from '../../src/workflows/types.js';
+import { onPlaintextChain } from '../../src/slots/running.js';
 import { prepareSlotFlash, flashSlot } from '../../src/slots/write.js';
 import { retargetImageKeys } from '../../src/slots/write-image.js';
 import { reportFor } from './write-fixtures.js';
@@ -125,6 +126,7 @@ function stateFor(
     canFlash?: boolean;
     keyA?: Uint8Array | null;
     keyB?: Uint8Array | null;
+    plainChain?: boolean;
   } = {},
 ): DeviceState {
   const slots = options.slots ?? [];
@@ -132,8 +134,9 @@ function stateFor(
   const booted = options.booted === undefined ? 'a' : options.booted;
   const keyA = options.keyA === undefined ? null : options.keyA;
   const keyB = options.keyB === undefined ? null : options.keyB;
+  const version = options.version === undefined ? '4.8.1.9' : options.version;
   return {
-    version: options.version === undefined ? '4.8.1.9' : options.version,
+    version,
     serial: options.serial === undefined ? 'TESTSERIAL' : options.serial,
     profile,
     slots,
@@ -146,7 +149,8 @@ function stateFor(
     deviceKeySlot: null,
     canFlash: options.canFlash ?? true,
     flashBlockedBy: (options.canFlash ?? true) ? [] : ['this camera cannot be flashed (fixture)'],
-    plainChain: false,
+    /* A 2014-chain build's fixture camera holds its banks plain, as the read would find them. */
+    plainChain: options.plainChain ?? onPlaintextChain(profile, version),
   } as unknown as DeviceState;
 }
 
