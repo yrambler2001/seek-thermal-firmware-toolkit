@@ -10,6 +10,12 @@ import { OP } from '../../packages/core/src/protocol/ops.js';
 import { RESET_OP, STAGE_CHUNK } from '../../packages/core/src/preservation/pipeline.js';
 import { say } from './browser.js';
 import { entry, sha256, names, runState, type RunStateView } from './checks.js';
+import {
+  INFO_FIRMWARE_INFO_OP,
+  INFO_RAM_DATA_OP,
+  INFO_SELECTORS,
+  INFO_SERIAL_BLOCK,
+} from './info-read.js';
 import { cameraOnBus } from './preflight.js';
 import { installWriteGuard, type WriteGuardConfig } from './write-guard.js';
 import { PHASE_FOLDER, Wizard, phaseSection, type DumpRun, type PhaseRun } from './wizard.js';
@@ -148,21 +154,13 @@ export const WRITE_GUARD: WriteGuardConfig = {
   resetOp: RESET_OP,
 };
 
-/**
- * The device-info read's two RAM selectors, as core sends them (`readDeviceInfo` in
- * packages/core/src/workflows/device-info.ts, through `readFwInfo` and `readSerial` in
- * packages/core/src/protocol/client.ts; TESTING.md 42.68):
- *   - SetFirmwareInfoFeatures (0x55), a u16 record selector: 1 (bootloader), 20 (platform),
- *     17 (USB speed), 10 (roots), and 6, 7, 8 (the bank verdicts, read only on 1.3.0.8);
- *   - SetRamDataFeatures (0x5a), the device-id block alone: case 0 at length 124, a 6-byte payload.
- */
+/** The two device-info selectors by their wire key (the shapes are in `info-read.ts`). */
 export const INFO_SELECTOR_KEYS: readonly string[] = ['out 0x55', 'out 0x5a'];
-export const INFO_SELECTORS: readonly number[] = [1, 6, 7, 8, 10, 17, 20];
-export const INFO_SERIAL_BLOCK: readonly number[] = [0x00, 0x00, 0x7c, 0x00, 0x00, 0x00];
 
+/** The device-info read's selector shapes, from the one place they are written (`info-read.ts`). */
 const INFO_OPS = {
-  firmwareInfo: OP.SET_FIRMWARE_INFO_FEATURES,
-  ramData: OP.SET_RAM_DATA_FEATURES,
+  firmwareInfo: INFO_FIRMWARE_INFO_OP,
+  ramData: INFO_RAM_DATA_OP,
   selectors: INFO_SELECTORS,
   serialBlock: INFO_SERIAL_BLOCK,
 };

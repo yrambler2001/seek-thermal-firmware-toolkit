@@ -80,7 +80,8 @@ export interface WriteGuardConfig {
    * `serialBlock` (case 0, a 6-byte payload). Neither touches flash — the CLI's `info` sends both —
    * but the dump and step 02 never do, so their runs leave this unset and refuse them like any
    * other id off the whitelist. The shapes are core's (`readFwInfo` and `readSerial` in
-   * packages/core/src/protocol/client.ts; TESTING.md 42.68).
+   * packages/core/src/protocol/client.ts; TESTING.md 42.68), written once in `info-read.ts`;
+   * the Node bridge (`camera-bus.ts`) checks the same lists.
    */
   readonly infoOps?: {
     readonly firmwareInfo: number;

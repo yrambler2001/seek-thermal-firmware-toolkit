@@ -18,11 +18,14 @@
  *        is EnterBootloaderMode);
  *        0x59 ResetDevice, payload u16 0 only, and only while `allowReset` is
  *        set — the test sets it for Preserve step 02, whose probe may reboot a
- *        spent reader by command. Dump & decrypt promises no reset at all.
+ *        spent reader by command. Dump & decrypt promises no reset at all;
+ *        0x55 SetFirmwareInfoFeatures and 0x5A SetRamDataFeatures, the device-info
+ *        read's two selectors, only while `infoOpen` is set (the test opens it for
+ *        the Info read and shuts it after), and only in the shapes core sends
+ *        (`info-read.ts`, the same lists the page-side guard uses).
  *
  * Everything else — above all 0x50 SetFeaturedFirmwareData and 0x51
- * CompleteMemoryUpgrade, the only two requests that change flash, and the 0x55
- * / 0x5A selectors only the device-info read uses — is refused unsent.
+ * CompleteMemoryUpgrade, the only two requests that change flash — is refused unsent.
  *
  * A reboot is the camera's own: it leaves the bus and re-enumerates, node-usb
  * reports both, and the bridge turns them into what Chrome would show the
@@ -50,6 +53,7 @@ import type {
   WebUsbOutTransferResult,
 } from '../../packages/core/src/protocol/webusb.js';
 import type { BusChange, BusDevice, UsbBus, Verdict } from './bridge.js';
+import { INFO_FIRMWARE_INFO_OP, INFO_RAM_DATA_OP, infoShapeRefusal } from './info-read.js';
 import type { ControlSetup } from './protocol.js';
 
 const ALLOWED_IN: ReadonlySet<number> = new Set([
@@ -66,12 +70,14 @@ export const FLASH_WRITE_OPS: readonly number[] = [
   OP.COMPLETE_MEMORY_UPGRADE,
 ];
 
-/** What the page itself refuses on this target, before Node sees it. */
+/**
+ * What the page itself refuses on this target, before Node sees it. The page's stand-in refuses by
+ * request id alone, with no window, so it cannot let the Info read's two selectors out for one read.
+ * Those two are gated on the bus instead (`infoOpen`, `info-read.ts`'s shapes), so they are not here.
+ */
 export const PAGE_REFUSED_OUT: readonly number[] = [
   OP.SET_FEATURED_FIRMWARE_DATA,
   OP.COMPLETE_MEMORY_UPGRADE,
-  OP.SET_FIRMWARE_INFO_FEATURES,
-  OP.SET_RAM_DATA_FEATURES,
 ];
 
 const hexOp = (op: number): string => `0x${op.toString(16).padStart(2, '0')}`;
@@ -123,6 +129,11 @@ export class CameraBus implements UsbBus {
   readonly hostTimeoutMs = 25_000;
   /** Set by the test for Preserve step 02 only. */
   allowReset = false;
+  /**
+   * Set by the test around the Info read's click, and shut after it: the two device-info selectors
+   * (0x55, 0x5A) go out only while it is open, and only in the shapes `info-read.ts` names.
+   */
+  infoOpen = false;
   /** The version the camera reported, once it has. */
   version: string | null = null;
   /** Every transfer the inner wrapper had to stop (a passing run has none). */
@@ -295,6 +306,12 @@ export class CameraBus implements UsbBus {
     if (request === RESET_OP) {
       if (!isU16Zero(data)) return 'ResetDevice with a non-zero payload (the TIMER1 arm route)';
       return this.allowReset ? null : 'ResetDevice outside Preserve step 02';
+    }
+    if (request === INFO_FIRMWARE_INFO_OP || request === INFO_RAM_DATA_OP) {
+      if (!this.infoOpen) {
+        return `OUT ${hexOp(request)}: a device-info selector, let out only during an Info read`;
+      }
+      return infoShapeRefusal(request, data ?? new Uint8Array(0));
     }
     return `OUT ${hexOp(request)} is not on this run's whitelist`;
   }
