@@ -789,10 +789,12 @@ seek-fw slots patch-fps a                                     # frame-rate patch
 
 - **Flash a decrypted image.** The page stamps the length, balances the acceptance sum and encrypts
   the image the way that generation needs: on the modern line (2.x, 4.x, 10.x, 42.x and 44.x) under keys
-  derived from that camera's own read, so each bank stores the image under the store key, or under the
-  application's store key differs (the camera re-encrypts the upload under its own store key), under
-  the image's block-0 key stream on the 2016 Compact PRO (the camera re-encrypts it into the bank's
-  key), plain on the 2014 plaintext chain.
+  derived from that camera's own read, so each bank stores the image under the bootloader's store key,
+  or under the booted bank's own key where the application's store key is not the bootloader's (the
+  camera re-encrypts the upload under its own store key); under the image's block-0 key stream on the
+  2016 Compact PRO (the camera re-encrypts it into the bank's key); plain on the 2014 plaintext chain.
+  A plain image is refused on a camera whose read finds no bank stored plain, because nothing then
+  shows that the camera is on that chain.
 - **Compact 1.3.0.8: two builds, one version string.** The 8 Hz build and the 16 Hz FF build report the
   same version. The image tells the page what it is (a stored word sum of 0 is the 8 Hz plain chain; an
   image carrying the FF key pair is the FF build), and the **camera** says which build runs: GetFirmwareInfo
