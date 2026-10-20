@@ -129,11 +129,11 @@ const EMPTY_PLAIN_WHY =
   'bank B read back identical, and B booted alone (TESTING.md 42.8).';
 
 const EMPTY_MODERN_WHY =
-  'An empty bank takes an image exactly as a used one does. The payload is encrypted under this ' +
-  'camera’s Key A, which comes from the analysis and not from the bank, and the device re-keys ' +
-  'it and erases the block without reading it. The footer is copied from a bank that holds a ' +
-  'valid one, else built blank. Proven on the emulator; not yet measured on a real camera ' +
-  '(TESTING.md 42.8).';
+  'An empty bank takes an image exactly as a used one does. The payload is encrypted under keys ' +
+  'derived from the booted bank and the running application (write-keys.ts), not from the target ' +
+  'bank, and the device re-keys it and erases the block without reading it. The footer is copied ' +
+  'from a bank that holds a valid one, else built blank. Proven on the emulator; not yet measured ' +
+  'on a real camera (TESTING.md 42.8).';
 
 const EMPTY_2016_WHY =
   'An empty bank takes an image exactly as a used one does. The stage key is key block 0 of the ' +

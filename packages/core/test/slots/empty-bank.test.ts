@@ -186,8 +186,8 @@ describe('the plan says an empty bank can be written, and why', () => {
       'the Key A line',
       modern4x,
       '4.8.2.1',
-      /encrypted under this camera’s Key A/,
-      /comes from the analysis and not from the bank/,
+      /derived from the booted bank and the running application/,
+      /not from the target bank/,
     ],
     [
       'the 2016 keystream line',
