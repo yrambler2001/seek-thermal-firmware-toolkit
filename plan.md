@@ -27,6 +27,7 @@ Bench now: the Compact PRO FF board (`090BB12PR939`) on 1.0.3.0, banks A and R h
 Open, not scheduled:
 - [ ] 42.70's stock 8 Hz reads counted 27 frames per 5-s window (5.4 fps) while the per-second median was 8.0; cause not established (possibly the late-credit window, 42.79). Needs the 1.3.0.0 Compact on the bench, as does `pages-bench` (not run since 42.84).
 - [?] 42.88: should the page's frame-rate dialog name the row it changes (it names none)?
+- [ ] 42.93 follow-ups (the no-skip patch, `PHONE_SKIPS.md`): a tear check (probe app, last chunk held 15-30 ms, a moving scene, the chunk seams), a 30-minute soak on a phone, and the owner's call on offering the no-skip branch next to the frame-rate patch (FW-V1 `docs/NOSKIP_PATCH_ALL_FIRMWARES.md` has the per-build table).
 
 Merge routine: check each report and diff; cherry-pick the commits onto the branch; resolve TESTING.md append conflicts with `python3 /private/tmp/claude-501/-Users-yrambler2001-things-a-noindex-seek-seek-thermal-firmware-backup/82174575-1341-45d6-a306-7518156cd978/scratchpad/resolve_testing.py TESTING.md` (keeps both sides' `### 42.N` sections in number order); run the touched tests, the typecheck and eslint on the merged HEAD; remove the worktree and delete the branch; update this file. After a context reset, check `ListAgents`, the bench processes and the agents' log folders before calling anything running.
 
@@ -60,7 +61,7 @@ Every 8 and 9 fps build with a table entry is offered except the FF entries and 
 
 ## 2. Hardware, the J-Link runner and FW-V1
 
-- State (not a task): the owner's Compact PIR206 (device serial `101310HSNEA2`, chip id `1013CE098ACA`) runs bank A (`ef90c94a`, the table's 1.3.0.0 image, 32 Hz) with boot word 0; bank B and recovery R hold `d91284c6`. The whole flash is `50e900c2…` (halted read); every camera session through 42.79 left it byte-identical.
+- State (not a task): the owner's Compact PIR206 (device serial `101310HSNEA2`, chip id `1013CE098ACA`) runs banks A, B and recovery R = `edeabb71` (the table's 1.3.0.0 32 Hz image `ef90c94a` + the no-skip branch, 42.93) with boot word 0, booted A. Before 42.93 all three banks held `ef90c94a` (whole flash `78e53151…`, `SEEK_BENCH_WORK/101310HSNEA2_1300_32hz_before_noskip_2026-10-26.bin`); after, `18cdbeb6…`. The endpoint-busy skip (42.74) no longer happens on this camera, so its residual is gone from any lost-frame count taken on it.
 - [ ] FW-V1 codegen: main's earlier hand edits to the 1.3.0.0 `jlink-runner.js` (`15e74e942`, `37cf6cfa8`) have no canonical copy; the 25 pending targets cannot be regenerated (the shared `codegen/harness` copies carry the 4.x table).
 - [?] 18 FW-V1 2014-chain app targets have no factory-flash reference, so `build_flash` refuses before make (42.49). A corpus donor dump could fill in (the manifest proposes `101310HSNEA2`). Owner's call.
 - [ ] FF platform bank maps (42.53): 1.3.0.8 FF on bootloader 2.0.2.3 is the 4.x map; the Compact PRO FF 1.0.3.x is the 2014 map; the Compact PRO FF 4.18.2.0 is the 4.x map; the boot word is at 0x14010000 on all; the runner tables agree. Open: 2.0.2.3's selection did not reproduce on the emulator.
