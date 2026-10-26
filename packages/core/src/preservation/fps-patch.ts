@@ -34,10 +34,10 @@
  *
  * THE NO-SKIP BRANCH (TESTING.md 42.97). Every 32 Hz Compact entry also makes the field-start USB check
  * unconditional (FW-V1 docs/NOSKIP_PATCH_ALL_FIRMWARES.md), so one press writes the 32 Hz image with the USB fix.
- * The images those entries wrote before the branch joined them are the stock images of the `<id>-add-noskip`
- * entries, which add the branch alone (fromHz = targetHz = 32) and end at the same image; each is offered
- * exactly where its entry is (it sits in the same stage set). Those earlier images are also known 32 Hz builds
- * (FPS_KNOWN_BUILDS), so a bank that holds one still reads as 32 Hz. The Compact PRO entries carry no branch.
+ * No patch takes a patched image as input (the owner). The images those entries wrote before the branch joined
+ * them are known 32 Hz builds marked `earlierPatch` (FPS_KNOWN_BUILDS, with the 1.3.0.0 bench image d91284c6 and
+ * the op-5 forms), so a bank that holds one still reads as 32 Hz, and its plan says to restore the stock image
+ * first (fpsEarlierPatchReason). The Compact PRO entries carry no branch.
  *
  * REFUSES, FAIL CLOSED: an image that is not a stock image of a table entry; an edit
  * site whose old bytes are not there; a patched image whose changed bytes are not the
@@ -140,17 +140,6 @@ export const FPS_STAGE_ONE_IDS: ReadonlySet<string> = new Set([
   'compact_32k-1.2.0.0-to32',
   'compact_32k-1.3.0.0-to32',
   'compact_32k-1.3.0.8-to32',
-  // the no-skip branch alone, on the image the entry above wrote before the branch joined it (TESTING.md 42.97)
-  'compact_32k-0.8.0.0-to32-add-noskip',
-  'compact_32k-0.9.0.2-to32-add-noskip',
-  'compact_32k-0.9.0.6-to32-add-noskip',
-  'compact_32k-0.9.0.7-to32-add-noskip',
-  'compact_32k-0.9.1.0-to32-add-noskip',
-  'compact_32k-0.10.0.0-to32-add-noskip',
-  'compact_32k-1.0.0.0-to32-add-noskip',
-  'compact_32k-1.2.0.0-to32-add-noskip',
-  'compact_32k-1.3.0.0-to32-add-noskip',
-  'compact_32k-1.3.0.8-to32-add-noskip',
 ]);
 
 /**
@@ -165,10 +154,6 @@ export const FPS_STAGE_TWO_IDS: ReadonlySet<string> = new Set([
   'compact_32k-4.8.2.1-to32',
   'compact_pro-4.9.1.15',
   'compact_pro-4.9.2.0',
-  // the no-skip branch alone (TESTING.md 42.97)
-  'compact_32k-4.8.1.7-to32-add-noskip',
-  'compact_32k-4.8.1.9-to32-add-noskip',
-  'compact_32k-4.8.2.1-to32-add-noskip',
 ]);
 
 /**
@@ -268,13 +253,25 @@ export const FPS_PATCHES: readonly FpsPatch[] = FPS_PATCH_TABLE.map((source) => 
  * (TESTING.md 42.37 sec.3a). The table's entry is the plain-copy form (image 5313f107): 42.27 measured it on the
  * camera at 32.16 to 32.20 fps by per-second medians, and its whole-run rate has not been measured, so it names
  * its target (32 Hz). Since 42.97 the entry also carries the no-skip branch (image 18972f32); the branch does not
- * change the capture program, and 5313f107 is the stock image of compact_32k-1.3.0.8-to32-add-noskip.
+ * change the capture program, and 5313f107 is now a known earlier patch (FPS_KNOWN_BUILDS).
  */
 export const FPS_MEASURED_HZ: ReadonlyMap<string, number> = new Map<string, number>([]);
 
+/**
+ * A corpus build that already runs at a target rate. `earlierPatch` marks an image an earlier patch wrote (FW-V1
+ * fps_patch.EARLIER_PATCHES: the 32 Hz images from before the no-skip branch, the 1.3.0.0 bench image d91284c6, the
+ * op-5 forms), as against a build made at that rate. No patch takes a patched image as input (TESTING.md 42.97).
+ */
+export interface FpsKnownBuild {
+  readonly name: string;
+  readonly hz: number;
+  readonly earlierPatch: boolean;
+}
+
 /** The corpus builds that already run at a target rate, by the SHA-256 of the decrypted image. */
-export const FPS_KNOWN_BUILDS: ReadonlyMap<string, { readonly name: string; readonly hz: number }> =
-  new Map(Object.entries(FPS_KNOWN_RATE).map(([sha, value]) => [sha, value] as const));
+export const FPS_KNOWN_BUILDS: ReadonlyMap<string, FpsKnownBuild> = new Map(
+  Object.entries(FPS_KNOWN_RATE).map(([sha, value]) => [sha, value] as const),
+);
 
 /* ==================================================================== *
  * The image
@@ -304,7 +301,7 @@ export interface FpsIdentity {
   /** Table entries whose PATCHED image this is. */
   readonly patchedEntries: readonly FpsPatch[];
   /** A corpus build that already runs at a target rate, or null. */
-  readonly known: { readonly name: string; readonly hz: number } | null;
+  readonly known: FpsKnownBuild | null;
 }
 
 export function identifyFpsImage(image: Uint8Array): FpsIdentity {
@@ -446,7 +443,13 @@ export type FpsPlan =
       readonly sumWord: { readonly offset: number; readonly before: number };
     }
   | { readonly status: 'patched'; readonly reason: string; readonly hz: number }
-  | { readonly status: 'at-rate'; readonly reason: string; readonly hz: number }
+  | {
+      readonly status: 'at-rate';
+      readonly reason: string;
+      readonly hz: number;
+      /** Set (true) only when the image is an earlier patch, not a build made at this rate; the reason says so. */
+      readonly earlierPatch?: true;
+    }
   | { readonly status: 'refused'; readonly reason: string };
 
 /**
@@ -517,7 +520,11 @@ export function planFpsPatch(image: Uint8Array, cameraVersion: string | null): F
   if (identity.known !== null) {
     return {
       status: 'at-rate',
-      reason: `this build already runs at ${String(identity.known.hz)} Hz without a patch`,
+      reason: identity.known.earlierPatch
+        ? fpsEarlierPatchReason(identity.known.hz)
+        : `this build already runs at ${String(identity.known.hz)} Hz without a patch`,
+      // only on an earlier patch, so a build made at its rate plans exactly as before
+      ...(identity.known.earlierPatch ? { earlierPatch: true } : {}),
       hz: identity.known.hz,
     };
   }
@@ -549,6 +556,17 @@ export const FPS_NO_PATCH_4821_REASON =
   'this image reports the Compact 4.8.2.1 build (or the Compact XR 4.8.2.1, the same build) but is not the stock ' +
   'image the frame-rate patch was written for (f96ac57eda75: its 68-byte command pages, steady page 13), so no ' +
   'frame-rate patch is made for it (TESTING.md 42.24)';
+
+/**
+ * Why an image an earlier patch wrote gets no frame-rate patch (TESTING.md 42.97): it runs at `hz` but has no USB
+ * no-skip branch, and no patch takes a patched image as input. The way to the fix is the stock image first.
+ */
+export function fpsEarlierPatchReason(hz: number): string {
+  return (
+    `this image holds an earlier ${String(hz)} Hz frame-rate patch without the USB fix, and a patch is never ` +
+    'applied to a patched image: restore the stock image, then patch it'
+  );
+}
 
 function refused(message: string): SeekError {
   return new SeekError('slots/refused', message);

@@ -14,11 +14,12 @@
  * byte for byte (sha256 of the whole patched image) and offset for offset (the changed bytes).
  * A case whose file is not found FAILS, so an incomplete corpus cannot pass silently.
  *
- * THE EARLIER 32 Hz IMAGES (TESTING.md 42.97). The add-noskip entries start from images an earlier
- * table wrote, which no corpus holds. Their cases carry `derivedFrom` (the base entry's stock image)
- * and are rebuilt here from that corpus image: the base entry applied, its add-noskip edit put back,
- * and the adjust word moved so the sum is the stock sum. The Python rebuilds them the other way
- * round (fps_patch.earlier_image: the base entry's other edits only), and the hashes must agree.
+ * THE EARLIER 32 Hz IMAGES (TESTING.md 42.97). The images the 32 Hz entries wrote before the no-skip
+ * branch joined them are known 32 Hz builds that a patch wrote (`earlierPatch`), and no corpus holds
+ * them. Their cases carry `derivedFrom` (the entry's stock image) and are rebuilt here from that corpus
+ * image: the entry applied, its last edit (the branch) put back, the adjust word moved so the sum is the
+ * stock sum. The Python rebuilds them the other way round (fps_patch.earlier_image: the entry's other
+ * edits only), and the hashes must agree. No patch takes them; the plan gives the earlier-patch reason.
  * ==================================================================== */
 
 import { createHash } from 'node:crypto';
@@ -37,6 +38,7 @@ import {
   FPS_STAGE_THREE_IDS,
   FPS_STAGE_TWO_IDS,
   applyFpsPatch,
+  fpsEarlierPatchReason,
   fpsImageLength,
   identifyFpsImage,
   planFpsPatch,
@@ -59,6 +61,8 @@ interface PythonImageCase {
   readonly pythonState: string;
   readonly known: string | null;
   readonly outputs: readonly PythonOutput[];
+  /** True for a known row a patch wrote (fps_patch.EARLIER_PATCHES). */
+  readonly earlierPatch: boolean;
   /** An earlier 32 Hz image no corpus holds: rebuilt from this stock image and table entry. */
   readonly derivedFrom?: {
     readonly inputSha256: string;
@@ -105,7 +109,7 @@ function entryNamed(id: string): FpsPatch {
 describe('the table against the Python table (no corpus needed)', () => {
   it('has the same entries as fps_patch.py, and the same stock and patched hashes', () => {
     expect(new Set(FPS_PATCHES.map((patch) => patch.id))).toEqual(PYTHON_IDS);
-    expect(FPS_PATCHES).toHaveLength(36);
+    expect(FPS_PATCHES).toHaveLength(20);
     for (const image of FIXTURE.images) {
       for (const output of image.outputs) {
         if (output.outputSha256 === undefined) continue;
@@ -118,37 +122,22 @@ describe('the table against the Python table (no corpus needed)', () => {
   });
 
   it('enables exactly the stage-one (plain 2014 chain) and stage-two (Key A, 4.8.x and 4.9.x Compact PRO) entries, and records a reason for every other', () => {
-    expect([...FPS_STAGE_ONE_IDS].sort()).toEqual(
-      [
-        'compact_32k-0.10.0.0-to32',
-        'compact_32k-0.8.0.0-to32',
-        'compact_32k-0.9.0.2-to32',
-        'compact_32k-0.9.0.6-to32',
-        'compact_32k-0.9.0.7-to32',
-        'compact_32k-0.9.1.0-to32',
-        'compact_32k-1.0.0.0-to32',
-        'compact_32k-1.2.0.0-to32',
-        'compact_32k-1.3.0.0-to32',
-        'compact_32k-1.3.0.8-to32',
-        'compact_32k-0.10.0.0-to32-add-noskip',
-        'compact_32k-0.8.0.0-to32-add-noskip',
-        'compact_32k-0.9.0.2-to32-add-noskip',
-        'compact_32k-0.9.0.6-to32-add-noskip',
-        'compact_32k-0.9.0.7-to32-add-noskip',
-        'compact_32k-0.9.1.0-to32-add-noskip',
-        'compact_32k-1.0.0.0-to32-add-noskip',
-        'compact_32k-1.2.0.0-to32-add-noskip',
-        'compact_32k-1.3.0.0-to32-add-noskip',
-        'compact_32k-1.3.0.8-to32-add-noskip',
-      ].sort(),
-    );
+    expect([...FPS_STAGE_ONE_IDS].sort()).toEqual([
+      'compact_32k-0.10.0.0-to32',
+      'compact_32k-0.8.0.0-to32',
+      'compact_32k-0.9.0.2-to32',
+      'compact_32k-0.9.0.6-to32',
+      'compact_32k-0.9.0.7-to32',
+      'compact_32k-0.9.1.0-to32',
+      'compact_32k-1.0.0.0-to32',
+      'compact_32k-1.2.0.0-to32',
+      'compact_32k-1.3.0.0-to32',
+      'compact_32k-1.3.0.8-to32',
+    ]);
     expect([...FPS_STAGE_TWO_IDS].sort()).toEqual([
       'compact_32k-4.8.1.7-to32',
-      'compact_32k-4.8.1.7-to32-add-noskip',
       'compact_32k-4.8.1.9-to32',
-      'compact_32k-4.8.1.9-to32-add-noskip',
       'compact_32k-4.8.2.1-to32',
-      'compact_32k-4.8.2.1-to32-add-noskip',
       'compact_pro-4.9.1.15',
       'compact_pro-4.9.2.0',
     ]);
@@ -165,7 +154,7 @@ describe('the table against the Python table (no corpus needed)', () => {
       } else {
         expect(entry.gate.enabled).toBe(false);
         expect(entry.gate.reason).toMatch(
-          entry.version === '0.7.0.8' ? /older than 0\.8\.0\.0/ : /^stage two: /,
+          entry.id === 'compact_32k-0.7.0.8-to32' ? /older than 0\.8\.0\.0/ : /^stage two: /,
         );
       }
     }
@@ -177,6 +166,7 @@ describe('the table against the Python table (no corpus needed)', () => {
     for (const image of known) {
       const build = FPS_KNOWN_BUILDS.get(image.inputSha256);
       expect(build?.name).toBe(image.known);
+      expect(build?.earlierPatch, image.known ?? '').toBe(image.earlierPatch);
     }
   });
 });
@@ -222,12 +212,14 @@ function findByHash(size: number, wanted: string, prefix: number | null): Uint8A
 }
 
 /**
- * An earlier 32 Hz image: `base` applied to its stock image, the `upgrade` edits put back to their old bytes, and
- * the adjust word moved so the acceptance sum is the stock image's again (fps_patch.earlier_image's image).
+ * An earlier 32 Hz image: `entry` applied to its stock image, its last edit (the no-skip branch) put back to the old
+ * bytes, and the adjust word moved so the acceptance sum is the stock image's again (fps_patch.earlier_image's image).
  */
-function earlierImage(stock: Uint8Array, base: FpsPatch, upgrade: FpsPatch): Uint8Array {
-  const out = applyFpsPatch(stock, base).slice();
-  for (const edit of upgrade.edits) out.set(edit.before, edit.offset);
+function earlierImage(stock: Uint8Array, entry: FpsPatch): Uint8Array {
+  const out = applyFpsPatch(stock, entry).slice();
+  const branch = entry.edits[entry.edits.length - 1];
+  if (branch === undefined) throw new Error(`${entry.id} has no edits`);
+  out.set(branch.before, branch.offset);
   const view = new DataView(out.buffer, out.byteOffset, out.byteLength);
   const delta = (wordSum32(out, stock.length) - wordSum32(stock, stock.length)) >>> 0;
   view.setUint32(FPS_ADJUST_OFFSET, (view.getUint32(FPS_ADJUST_OFFSET, true) - delta) >>> 0, true);
@@ -239,9 +231,9 @@ function imageOf(image: PythonImageCase): Uint8Array | null {
   const from = image.derivedFrom;
   if (from === undefined) return findByHash(image.length, image.inputSha256, image.length);
   const bytes = findByHash(from.length, from.inputSha256, from.length);
-  const upgrade = image.outputs[0]?.patch;
-  if (bytes === null || upgrade === undefined) return null;
-  return earlierImage(bytes.subarray(0, from.length), entryNamed(from.patch), entryNamed(upgrade));
+  return bytes === null
+    ? null
+    : earlierImage(bytes.subarray(0, from.length), entryNamed(from.patch));
 }
 
 const corpusDescribe = CORPUS_ROOTS.length > 0 ? describe : describe.skip;
@@ -276,7 +268,7 @@ corpusDescribe('the table against the Python tool, over the corpus (SEEK_FPS_COR
         compared++;
       }
     }
-    expect(compared).toBe(36);
+    expect(compared).toBe(20);
     expect(FIXTURE.images.filter((image) => image.derivedFrom !== undefined)).toHaveLength(16);
   });
 
@@ -335,21 +327,39 @@ corpusDescribe('the table against the Python tool, over the corpus (SEEK_FPS_COR
           expect(plan.status, entry.id).toBe('refused');
           if (plan.status === 'refused')
             expect(plan.reason, entry.id).toMatch(
-              entry.version === '0.7.0.8' ? /older than 0\.8\.0\.0/ : /^stage two: /,
+              entry.id === 'compact_32k-0.7.0.8-to32' ? /older than 0\.8\.0\.0/ : /^stage two: /,
             );
         }
       }
     },
   );
 
-  it('plans the same verdict as the Python for every known build', () => {
+  it('plans the same verdict as the Python for every known build, an earlier patch with its own reason', () => {
+    let earlier = 0;
     for (const image of FIXTURE.images.filter((candidate) => candidate.known !== null)) {
       const bytes = imageOf(image);
       expect(bytes).not.toBeNull();
       if (bytes === null) continue;
-      const plan = planFpsPatch(bytes.subarray(0, image.length), '1.0.3.2');
+      const stock = bytes.subarray(0, image.length);
+      const plan = planFpsPatch(stock, '1.0.3.2');
       expect(plan.status).toBe('at-rate');
+      if (plan.status !== 'at-rate') continue;
+      expect(plan.earlierPatch === true, image.known ?? '').toBe(image.earlierPatch);
+      if (image.earlierPatch) {
+        earlier++;
+        expect(plan.reason).toBe(fpsEarlierPatchReason(plan.hz));
+        // the camera's own build does not change it: a patched image is never a patch input
+        const entry =
+          image.derivedFrom === undefined ? undefined : entryNamed(image.derivedFrom.patch);
+        if (entry !== undefined) {
+          expect(planFpsPatch(stock, entry.version.replace(/-FF$/, '')).status).toBe('at-rate');
+          expect(() => applyFpsPatch(stock, entry)).toThrow(/not the stock image/);
+        }
+      } else {
+        expect(plan.reason).toMatch(/already runs at \d+ Hz without a patch/);
+      }
     }
+    expect(earlier).toBe(16);
   });
 
   it('applies every plain-stored bank of the corpus dumps exactly as the Python does', () => {

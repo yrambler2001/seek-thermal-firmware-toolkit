@@ -3,7 +3,7 @@
 
     /Users/yrambler2001/things/a.noindex/seek/FW-V1/emu/.venv/bin/python scripts/gen-fps-table.py [--fw-v1 DIR]
 
-The Python table is the source of truth (PATCHES and UPGRADES, KNOWN_RATE, NOT_PATCHED). This script rewrites the three
+The Python table is the source of truth (PATCHES, KNOWN_RATE, NOT_PATCHED). This script rewrites the three
 data regions of the TypeScript file (the table, the known builds, the notes) and keeps the hand-written header
 and interface. Every entry gets its evidence as a plain-text comment, and every byte edit gets the explanation
 written above it in fps_patch.py (the comment lines directly above its Edit(...)), so the two files cannot
@@ -17,10 +17,10 @@ Python tool, so the two cannot drift: the images (each table stock image, and ea
 target rate) and the plain-stored stock banks of every 4 MiB dump under the corpus roots, with the Python's output for
 each. The roots are --corpus (colon-separated), else SEEK_FPS_CORPUS, else the list the differential test uses.
 
-The UPGRADES entries (TESTING.md 42.97: an image an earlier 32 Hz entry wrote, without the no-skip branch, to the image
-that entry writes now) start from images that are not in the corpus. Their cases are rebuilt by the Python
-(fps_patch.earlier_image) from the base entry's stock image, and carry `derivedFrom` (that stock image's sha256, length and
-the base entry) so the differential test rebuilds them the same way from the corpus.
+The images the 32 Hz entries wrote before the no-skip branch joined them (fps_patch.EARLIER_32HZ, TESTING.md 42.97) are
+KNOWN_RATE rows that no corpus holds. Their cases are rebuilt by the Python (fps_patch.earlier_image) from the entry's stock
+image and carry `derivedFrom` (that stock image's sha256, length and the entry), so the differential test rebuilds them the
+same way. Every known row carries `earlierPatch` (fps_patch.EARLIER_PATCHES: a patch wrote it), in the table and the fixture.
 """
 import argparse
 import hashlib
@@ -139,33 +139,28 @@ def _walk_files(roots):
                 yield os.path.join(dp, name)
 
 
-def all_patches(F):
-    """The table's entries in table order: PATCHES, then UPGRADES (an older fps_patch.py has no UPGRADES)."""
-    return tuple(getattr(F, 'ALL_PATCHES', F.PATCHES))
-
-
 def image_cases(F, C, roots):
-    """One case per distinct decrypted image: each table stock image (it must be in the corpus manifest, or be an
-    UPGRADES input, which is rebuilt from its base entry's stock image), and each corpus build that already runs at a
-    target rate (KNOWN_RATE; skipped when the manifest has no image of it and it is no UPGRADES input)."""
+    """One case per distinct decrypted image: each table stock image (it must be in the corpus manifest), and each
+    corpus build that already runs at a target rate (KNOWN_RATE; skipped when the manifest has no image of it)."""
     by_sha = {e['sha256']: e for e in C.load()['entries']}
     stock = []
-    for p in all_patches(F):
+    for p in F.PATCHES:
         if p.stock_sha256 not in stock:
             stock.append(p.stock_sha256)
-    upgrade_of = {u.stock_sha256: u for u in getattr(F, 'UPGRADES', ())}
+    earlier_of = {sha: next(p for p in F.PATCHES if p.key == key) for key, sha in getattr(F, 'EARLIER_32HZ', {}).items()}
     cases = []
     for sha in sorted(set(stock) | set(F.KNOWN_RATE)):
         entry = by_sha.get(sha)
         derived = None
-        if entry is None and sha in upgrade_of:
-            base = F.base_of(upgrade_of[sha])
-            source = by_sha.get(base.stock_sha256)
+        if entry is None and sha in earlier_of:
+            # an image an earlier table wrote: rebuilt from its entry's stock image (fps_patch.earlier_image)
+            patch = earlier_of[sha]
+            source = by_sha.get(patch.stock_sha256)
             if source is None:
-                raise SystemExit(f'stock image {base.stock_sha256[:12]} of {base.key} is not in the corpus manifest')
+                raise SystemExit(f'stock image {patch.stock_sha256[:12]} of {patch.key} is not in the corpus manifest')
             raw = C.resolve(source).read_bytes()
-            data = F.earlier_image(upgrade_of[sha], raw[:F.image_length(raw)])
-            derived = {'inputSha256': base.stock_sha256, 'length': base.length, 'patch': base.key}
+            data = F.earlier_image(patch, raw[:F.image_length(raw)])
+            derived = {'inputSha256': patch.stock_sha256, 'length': patch.length, 'patch': patch.key}
         elif entry is None:
             if sha in stock:
                 raise SystemExit(f'stock image {sha[:12]} of a table entry is not in the corpus manifest')
@@ -178,7 +173,7 @@ def image_cases(F, C, roots):
                 raise SystemExit(f'corpus file for stock image {sha[:12]} is not that image')
             continue
         outputs = []
-        for p in all_patches(F):
+        for p in F.PATCHES:
             if p.stock_sha256 != sha:
                 continue
             new = F.apply_patch(data[:n], p)
@@ -198,9 +193,10 @@ def image_cases(F, C, roots):
             # the build's name only where the Python says it already runs at a rate (a stock image that is also a
             # KNOWN_RATE build, the 16 Hz FF images, is 'stock' to the Python: identify checks stock first)
             'known': F.KNOWN_RATE[sha][0] if state is not None and state.startswith('known-') else None,
+            # a known row a patch wrote (fps_patch.EARLIER_PATCHES): the reason is "restore the stock image, then patch"
+            'earlierPatch': sha in getattr(F, 'EARLIER_PATCHES', ()),
         }
         if derived is not None:
-            # not in the corpus: the base entry's stock image with the base entry's edits except the upgrade's
             case['derivedFrom'] = derived
         cases.append(case)
     return cases
@@ -293,13 +289,16 @@ def main():
     a = ts.index('export const FPS_PATCH_TABLE: readonly FpsPatchSource[] = [')
     b = ts.index('\n];\n', a) + len('\n];\n')
     table = 'export const FPS_PATCH_TABLE: readonly FpsPatchSource[] = [\n'
-    table += '\n'.join(render_patch(p, comments.get(p.key, [])) for p in all_patches(F)) + '\n];\n'
+    table += '\n'.join(render_patch(p, comments.get(p.key, [])) for p in F.PATCHES) + '\n];\n'
     ts = ts[:a] + table + ts[b:]
     # known builds
     a = ts.index('export const FPS_KNOWN_RATE')
     b = ts.index('\n};\n', a) + len('\n};\n')
-    known = ('export const FPS_KNOWN_RATE: Readonly<\n  Record<string, { readonly name: string; readonly hz: number }>\n> = {\n'
-             + ''.join(f"  {q(sha)}: {{ name: {q(name)}, hz: {hz} }},\n" for sha, (name, hz) in F.KNOWN_RATE.items())
+    earlier = getattr(F, 'EARLIER_PATCHES', frozenset())
+    known = ('export const FPS_KNOWN_RATE: Readonly<\n  Record<string, { readonly name: string; readonly hz: number; '
+             'readonly earlierPatch: boolean }>\n> = {\n'
+             + ''.join(f"  {q(sha)}: {{ name: {q(name)}, hz: {hz}, earlierPatch: {'true' if sha in earlier else 'false'} }},\n"
+                       for sha, (name, hz) in F.KNOWN_RATE.items())
              + '};\n')
     ts = ts[:a] + known + ts[b:]
     # notes
@@ -309,9 +308,9 @@ def main():
              + ''.join(f'  {q(n)},\n' for n in F.NOT_PATCHED) + '];')
     ts = ts[:a] + notes + ts[b:]
     open(TABLE, 'w').write(ts)
-    missing = [(p.key, k) for p in all_patches(F) for k, c in enumerate(comments.get(p.key, [])) if not c]
-    short = [p.key for p in all_patches(F) if len(comments.get(p.key, [])) != len(p.edits)]
-    print(f'wrote {TABLE}: {len(all_patches(F))} entries, {len(F.KNOWN_RATE)} known builds, {len(F.NOT_PATCHED)} notes')
+    missing = [(p.key, k) for p in F.PATCHES for k, c in enumerate(comments.get(p.key, [])) if not c]
+    short = [p.key for p in F.PATCHES if len(comments.get(p.key, [])) != len(p.edits)]
+    print(f'wrote {TABLE}: {len(F.PATCHES)} entries, {len(F.KNOWN_RATE)} known builds, {len(F.NOT_PATCHED)} notes')
     print('edits without a Python comment:', missing or 'none')
     print('entries whose Edit count differs from the comments found:', short or 'none')
     if not args.no_fixture:
