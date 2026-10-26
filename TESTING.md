@@ -13746,6 +13746,132 @@ The 9 Hz block is the one the toolkit's core names (`KEY_PAIRS.cp103.block1`, `p
 - Seek: this section, on `worktree-agent-ae2b1b7751d97627a`, reset to `refactor/all-firmware-profiles` (`9d90e24`).
 - Scratch (not committed): `/private/tmp/claude-501/-Users-yrambler2001-things-a-noindex-seek-seek-thermal-firmware-backup/82174575-1341-45d6-a306-7518156cd978/scratchpad/t9/` (`analyze.py`, `step3_pro.sh` and `pro/`, `emu_run.sh` and `emu/`, `flash_dry.sh` and `fd/`, `ident.sh` and `ident/`, `jl/` the stand-in, `compare.py` and `report.json`, `r/` the runner renders and diffs).
 
+### 42.95 Preserve's bank choice on the branch; the emulator e2e and the pipeline suite fixed; a bank with an unknown image refused in plain words (no hardware, 2026-10-26)
+
+No hardware was used: another agent had the bench.
+
+**1. The merge** [measured].
+- 42.92's eight commits were cherry-picked in order onto `refactor/all-firmware-profiles` at `9d90e24`, which already had 42.89 and 42.91. The new hashes are `07099ff` `9a7788a` `a80db20` `d759245` `4608f55` `4db6b61` `5970e43` `db9b46c`.
+- The code merged with no conflicts. Git merged `README.md`, `packages/cli/src/usage.ts` and `packages/core/src/index.ts` on its own. Only `TESTING.md` conflicted, and `resolve_testing.py` resolved it: 42.91's section, then 42.92's, and no conflict markers left.
+- `npm run typecheck` was clean right after the picks. 42.91's new code (the slots zip before each write, `copy.ts`, `restore.ts`, `archive/zip-read.ts`) and 42.92's per-bank run state do not touch the same lines. `slots/backup.test.ts` and the Slots tests still pass (section 4).
+
+**2. The two findings from 42.92's last runs** [measured on the emulator].
+
+*a. `emulator.e2e.ts`: "Start dump ended: Refused — nothing was read".*
+- 42.92 did not cause this. The same test, run alone (`-t "connects through the chooser"`) at `9d90e24` before the picks, fails the same way: "The camera runs 1.3.0.0 … this tab reads only 4.x/Nano".
+- The cause is `d3a82dc` (42.17, 2026-10-18), which made the 4.x/Nano dump tab v4-only. The spec still pressed that tab's Start dump on the 1.3.0.0 emulator.
+- The fix (`ec4af11`): the spec now checks the refusal. The error must name "Dump & decrypt 0.x/1.x 2014/2016". The wire must carry no write, commit, reset or setter (`out 0x50`, `0x51`, `0x55`, `0x59`, `0x5a`), no arm (`out 0x52`) and no read (`in 0x4f`). The camera itself is read in Preserve's step 02, the next spec.
+- The README's `e2e:emu` paragraph says the same. It no longer names `SEEK_E2E_EMU_DUMP_SHA`, which this file no longer reads. `lib/target-tools.ts` still reads it for the 4.x dump specs.
+
+*b. `pipeline.emulator.test.ts`: "r0s0 / r0s1 failed: GetOperationMode failed: control IN 0x3d -> stall".*
+- These lines are expected, and they are not new. They are the suite's own retry. After the wire-89 reset, the first server never answers, so both of its sessions stall on GetOperationMode. Round 1 then boots a fresh server from the committed flash, and the drain completes there ("r1s0 DRAIN COMPLETE"; corpus P3 GREEN, P4 GREEN).
+- The same lines appear at `9d90e24` (without 42.92) and at `db9b46c` (with it). Both runs used exported trees in the scratchpad, one at a time.
+- 42.92's own log stops after these lines because its run ended before the suite did (`chain.log` has no pipeline exit line).
+- The suite did not pass with or without 42.92: 15 failed, 10 passed and 3 skipped in both runs.
+  - Cause: the J-Link dump rows (1.bin, 2.bin, 4.bin, 6.bin) look for `FW-V1/targets/compact_32k_1_3_0_8/jlink_dumps/`. FW-V1 renamed that target (`compact_8hz_*`), and the dumps are not on this machine.
+  - The per-case gate checked the boot file. That file is null both for the corpus row and for a row whose dump is missing. So the 1.bin, 2.bin and 4.bin rows booted the corpus entry and failed the sha check ("expected 40447c7e… to be 37f5f983…"). The 6.bin row passed only because it ran as a second corpus run.
+- The fix (`29631b8`) gates each row on its case, so a row whose dump is missing is skipped with its reason. The run after the fix: see section 4.
+
+*c. Found in this run: the families suite's corrupt slot A* [measured on the emulator, caused by 42.92].
+- The 1.0.3.0 row with one byte of slot A flipped expected the backup to refuse. Since 42.92, the run is built on the bank the camera started from. That is B, because A fails the bootloader's check. So the backup completed, and the test's retry loop reported "[object Object]": the outcome, not an error.
+- The fix (`b3adcfa`): the backup completes, the run is not built on A, A holds an image with `refused` equal to `unknownImageWords('1.0.3.0')`, choice A is not offered, A is not a target, and nothing write-shaped goes out.
+- The rewritten row has not run yet (see the handoff).
+
+**3. An unknown image is refused in plain words: the owner's decision of 2026-10-26** [source; tests in section 4].
+
+What a person saw before, for a bank holding the frame-rate patch. Each patched corpus image was run through the build table (`buildV1Patch`); the probe is at `/private/tmp/claude-501/-Users-yrambler2001-things-a-noindex-seek-seek-thermal-firmware-backup/82174575-1341-45d6-a306-7518156cd978/scratchpad/probe4295/probe.mjs`:
+
+| family | builds (frame-rate entry) | before: the gate text | adjust word it names |
+|---|---|---|---|
+| 2014 chain, 0.x line | 0.7.0.8, 0.8.0.0, 0.9.0.2, 0.9.0.6, 0.9.0.7, 0.9.1.0, 0.10.0.0 (32 Hz) | "the rebalance word at 0x00000238 is not free (0): it holds 0x…, the balance of an edit made to this image, and the edit is none of the ones Preserve knows (compact-pro-1.0.3.0-accept-pn297: the Compact (PN297) board patch) — refusing to patch, and later restore, an image it cannot name" | 0x0CBD23E5 (0.7.0.8), 0x198947E5 (0.8.0.0), 0x47E51989 (the others) |
+| 2014 chain, v1 | 1.0.0.0, 1.2.0.0, 1.3.0.0 (32 Hz) | the same | 0x47E51989, 0x198947E5, 0x198947E5 |
+| 2014 chain, 1.3.0.8 8 Hz | 1.3.0.8 (32 Hz) | the same | 0x3D381329 |
+| 1.3.0.8 FF | 1.3.0.8-FF (32 Hz) | the same | 0x10FD0529 |
+| Compact PRO 2016 | 1.0.3.0, 1.0.3.2 (18 Hz) | the same | 0x20000401, 0xFCF02311 |
+
+- In the bank table, page and CLI alike, a bank other than the one the run is built on showed `not written — its image cannot be patched: <the gate text>`. Its choice showed `not offered — <bank> cannot be written: its image cannot be patched: …`.
+- When the run's own bank held such an image, step 02 refused with "both reads of slot A agree, but no candidate derivation of the factory plaintext from them passes every gate below, so this run has no image it can patch there and refuses rather than write over it. Every candidate was tried:", followed by one line per candidate.
+- 4.x and Nano are left out: Preserve writes nothing on them.
+
+After (`f125750`, `26fe6f7`). There is one phrase in core (`unknownImageWords`, `unknownImageRefusal` in `preservation/banks.ts`), and it is the same on every family above:
+- The bank table, on the page and in the CLI (core's `bankRecordWords`): `not written — it holds an unknown image (not the stock 1.3.0.0 firmware, nor a change to it that Preserve knows; a frame-rate patch is not one), so Preserve does not patch it or put it back. To include this bank, write the stock image back to it first (for example from a full flash backup taken before the change), then start a new run`.
+- The choices: `not offered — recovery R cannot be written: it holds an unknown image (…)`. The CLI's `--bank r` is refused with `--bank r: recovery R cannot be written: it holds an unknown image (…)`.
+- The run's refusal, when the run's own bank holds one: `Slot A holds an unknown image (not the stock 1.3.0.0 firmware, nor a change to it that Preserve knows; a frame-rate patch is not one), so Preserve does not patch it or put it back. The run takes the firmware it patches from this bank, so it stops here, before anything is written. To preserve this camera, write the stock image back to slot A first (for example from a full flash backup taken before the change), then start a new run.`
+- The candidate list moves to the error's `detail.reasons` and to the step's log (detail level). The log keeps the gate text above.
+- The rule: the bank holds an image whose header names the camera's version, or no candidate parses, and no factory image derives from it. That covers an edit Preserve does not know, a corrupted bank and a Preserve-patched bank left behind by an interrupted run.
+- A bank that holds another build's firmware still says so: `it holds firmware 1.2.0.0, not the 1.3.0.0 the camera runs`. When the run's own bank holds another build, step 02 now says it in one sentence too: `Slot A holds firmware 1.2.0.0, not the 1.3.0.0 the camera runs, so this run has no image it can patch there and refuses rather than write over it.`
+- The core text names neither front end. The page and the CLI show core's strings unchanged.
+
+**4. Tests** [measured].
+
+| what | file(s) | result |
+|---|---|---|
+| typecheck | `npm run typecheck` (all seven projects), after every commit | clean |
+| lint, format | eslint and prettier on every changed file | clean |
+| core | `preservation/steps.test.ts`. New: the edit keeps the sum; the 2014 chain's own bank refused; recovery R refused in the table, the choice and the gate; the 2016 line's own bank refused; a 2016 bank capture. Changed: the already-patched bank, the version mismatch, three negative checks | 75 passed |
+| core | `preservation/families.test.ts` with `SEEK_EMU_DIR`. New: the frame-rate patch on all 14 corpus builds Preserve writes (0.7.0.8 … 1.3.0.8, 1.3.0.8-FF, 1.0.3.0, 1.0.3.2). The stock bank derives; the patched bank, stored as its family stores it, gets `unknownImageWords` | 15 new passed, within the files below |
+| core | `banks`, `families`, `fps-patch`, `fps-patch.differential`, `fps-plan-words`, `fps-row-words`, `line-gate`, `patch`, `solve`, `steps` and `slots/backup` tests (11 files) | 246 passed, 9 skipped |
+| cli | `preserve.test.ts` (2 new: recovery R with an unknown image; the run's bank with one, exit failed and nothing written), `slots.test.ts`, `args.test.ts` | 213 passed |
+| web | `lib/preserve/{client,gating,run-file}.test.ts`, `PreserveView.test.tsx` (1 new: the bank table and the choices not offered), `usePreservePanel.adoption.test.tsx`, `SlotsView.test.tsx`, `SlotsView.verdicts.test.tsx` | 144 passed |
+| e2e, offline | `bench-lib.e2e`, `bench-verdict.e2e`, `supervised-gate.e2e`, `camera-bus.e2e` | 167 passed, 6 skipped |
+| emulator | `emulator.e2e.ts -t "connects through the chooser"` at `9d90e24` (before the picks) | 1 failed: the same refusal as 42.92's log |
+| emulator | `pipeline.emulator.test.ts` at `9d90e24` and at `db9b46c` (exported trees) | both 15 failed, 10 passed, 3 skipped; the same r0s0/r0s1 stalls, then r1s0 drains |
+| emulator | `pipeline.emulator.test.ts` at the branch head, after the gate fix | 5 passed, 23 skipped: the corpus row is green (P3, P4), and the J-Link rows skip with "the jlink dump 6.bin is not beside the emulator" |
+| emulator | `emulator.e2e` (the whole file, as `npm run e2e:emu` names it), at the head | 2 files passed, 19 passed, 1 skipped: the refusal spec, then steps 02, 03 and 04 through both restarts, with the camera back as booted |
+| emulator | `families.emulator.test.ts` at the head (started before `b3adcfa`) | 7 passed, 1 failed. Green rows: 1.3.0.8 8 Hz, 1.0.3.0 native, 1.0.3.0 bench, 1.3.0.8-FF, 0.9.0.7, 0.8.0.0, 0.7.0.7. The failure is "one flipped capture byte" (see below) |
+
+**5. Section 4 of the brief: one zip reader** (`0497d9b`).
+- The Preserve page's own store-only reader (`parseZipEntries` in `lib/preserve/run-file.ts`) did the same walk as core's `archive/zip-read.ts`. It is deleted, and `parseRunFile` now uses `readZipEntries`.
+- A damaged entry is refused in core's words: "`<name>` failed its CRC-32: the archive is damaged". The words "do not resume from it" and the two CRC values are gone.
+- A compressed entry: "`<name>` is compressed (method 8); only a ZIP this toolkit wrote (stored, not compressed) is read here".
+- The page's zip writer, and its zip step, are unchanged.
+
+**6. Not done, and open.**
+- No hardware. The bench plan below is 42.92's (§7), with one check added.
+- A bank holding Preserve's own widening patch (left by a run whose run file is lost) is now called an unknown image. The remedy (write the stock image back) is right, but the words do not say that the change is Preserve's. Telling it apart would mean undoing the patch against each build. Not done.
+- `e2e/lib/bench/jlink.ts` still names `LEGACY_TARGET = 'compact_32k_1_3_0_8'`, a target FW-V1 has renamed. That is the bench's code, and the bench agent should check it. Not changed here.
+- The pipeline suite's J-Link dump rows (1.bin, 2.bin, 4.bin, 6.bin) now skip on this machine. They need the dumps copied beside the emulator under the new target name, and `dumpFile`'s path updated, to run again.
+- `bankImageRefusal` (steps.ts) is exported for the corpus test and is not in core's public index.
+
+**7. The bench plan for Preserve** (42.92 §7, unchanged except the last step). Compact PRO FF board, 1.0.3.0, `090BB12PR939`. J-Link on switch channel 1, camera on channel 2. Use the FW-V1 jlink-runner only.
+
+Before each run, check that the camera is free, and save a halted read with `dump-spifi-4m-halted`.
+1. Write the stock image `bench-42.85-start (stock, R not patched).bin` with `flash-factory-4m-2`, then read it back halted and check the sha. The file's sha256 is `d2ee76b48c1fdefa43b66234f7dc2e56b5bab03ac7c33f5d1ba6ff34670538ce`, and it is in `SEEK_DUMPS/firmwares/Compact Pro/2016.07.06-17.04.49-1.0.3.0/0C21A1M5KP15/`. The boot word is then 0xFFFFFFFF, so the camera tries A first.
+2. Boot word at A first, choice R only, on the page and with `seek-fw preserve --bank r`.
+   - The plan must warn that the next start enters slot A and that this choice does not patch it.
+   - The drain must stop before it arms anything ("an unpatched bank started"), and the restore must put R back.
+   - Then verify. The halted read must equal `d2ee76b4…`.
+3. Boot word at R first, with the default choice. Set the word with J-Link (cfg[0] = 2).
+   - The plan's next start must be recovery R, with its reason.
+   - The default writes R. The drain must report that the start entered R, and the whole 4 MiB must drain.
+   - Then restore and verify.
+   - After the run, write cfg[0] back to 0xFFFFFFFF (or flash `d2ee76b4…` again) and check the halted read.
+4. Every bank (`--bank all`, and "Every bank" on the page).
+   - A, B and R are written, with A last because the camera tries it first.
+   - The drain must enter A, and the restore puts all three back.
+   - Then verify. The halted read must equal `d2ee76b4…`.
+5. End: flash `bench-42.85-end (A and R 18 Hz).bin` back, and confirm the halted read is byte-identical to sha256 `28060916b0fb3f93d2f12bbf9e708997d984c35ce0a3cef44cf1b64b10269c45`.
+   - New check, before you leave this state: run Preserve's step 02 on the page and `seek-fw preserve --backup-only` on this image.
+   - Both must refuse with "Slot A holds an unknown image (not the stock 1.0.3.0 firmware, … a frame-rate patch is not one) … To preserve this camera, write the stock image back to slot A first …".
+   - Nothing may be written, and the halted read must still equal `28060916…`.
+
+**8. Commits** (in this worktree's branch `worktree-agent-a1eae2a0aaa372e84`, on `refactor/all-firmware-profiles` `9d90e24`; not merged, not pushed):
+- 42.92's eight, cherry-picked: `07099ff` `9a7788a` `a80db20` `d759245` `4608f55` `4db6b61` `5970e43` `db9b46c`.
+- This run:
+  - `ec4af11`: the e2e first spec.
+  - `f125750`: core, the unknown-image phrase and its tests.
+  - `01cd0f9`: the CLI and page tests.
+  - `0497d9b`: one zip reader.
+  - `29631b8`: the pipeline suite's gate.
+  - `26fe6f7`: the refusal names the bank.
+  - `b3adcfa`: the corrupt-slot row.
+  - This section.
+
+- Handoff (the run's 150-call budget):
+  - Done: items 1 to 4 of the brief, every unit, offline e2e and typecheck check above, and the head runs of the pipeline, `emulator.e2e` and families suites.
+  - Still running when this was written, one at a time: `banks.emulator.test.ts` (about an hour in 42.92's run; `scratchpad/w4295/chain2.sh`), then the rewritten corrupt-slot row alone (`families.emulator.test.ts -t "one flipped capture byte"`; `scratchpad/w4295/chain3.sh`).
+  - To check them: `/private/tmp/claude-501/-Users-yrambler2001-things-a-noindex-seek-seek-thermal-firmware-backup/82174575-1341-45d6-a306-7518156cd978/scratchpad/logs4295/chain.log` gets a `head-banks exit <code>` line and a `head-corrupt exit <code>` line. Each suite's log (`head-banks.log`, `head-corrupt.log`) ends with vitest's `Test Files` and `Tests` lines.
+
 ### 42.96 42.91's Slots features on the Compact PRO FF board (2026-10-26)
 
 **Summary.** Agent 42.96 (Opus 5.5), on `worktree-agent-ac353fa918dff2f6c`, reset to `refactor/all-firmware-profiles` (`989d0f2`), the only actor on the bench. It ran 42.91's copy, restore, every-bank patch and cancel on the Compact PRO FF board (serial `090BB12PR939`, 1.0.3.0, bootloader 1.2.0.0) through the page in Electron (from source, `SEEK_E2E_SOURCE=dev`) and through the CLI. Every write committed with status 0 and read back as planned; every restore read back byte for byte as the backup stores it; every zip held the bank as it was before the write. The camera showed six things wrong, all words or names, none in the bytes written; each is fixed with tests (§5). The J-Link reads before and after are both `28060916…`, byte-identical to the end image; no `flash-factory-4m-2` was run. Switch: `1=off 2=on`. Nothing was pushed or merged; `plan.md` and `docs/` untouched; no other agent started.
