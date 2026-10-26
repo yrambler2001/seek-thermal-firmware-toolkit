@@ -317,7 +317,7 @@ describe('preserve — a fresh run, checkpointed after every step', () => {
        * why, the banks, the choices, the banks to write. */
       expect(test.stderr.text).toMatch(/read from each bank of the camera, two agreeing reads/);
       expect(test.stderr.text).toMatch(/derived from the camera/);
-      expect(test.stderr.text).toMatch(/v1 2014 chain/);
+      expect(test.stderr.text).toMatch(/Compact 1\.x firmware \(2014\)/);
       expect(test.stderr.text).toMatch(
         /boot-config word\s+0xFFFFFFFF — slot A first, then B, then recovery R/,
       );

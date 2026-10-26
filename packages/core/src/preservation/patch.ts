@@ -969,7 +969,7 @@ function detect2016Shapes(plain: Uint8Array): boolean {
 const V1_2014_PROFILE: BuildPatchProfile = {
   buildId: 'v1-2014',
   family: 'v1-2014',
-  label: 'v1 2014 chain',
+  label: 'Compact 1.x firmware (2014)',
   detect: (plain) =>
     V1_2014_VERSION_WORDS.includes(headerVersionOf(plain) ?? -1) &&
     V1_2014_PATCH_SITES.every((site) => matchesAt(plain, site)),

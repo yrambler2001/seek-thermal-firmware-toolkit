@@ -870,7 +870,7 @@ export function unpatchedStartOf(error: unknown): BankKey | null {
 /** What a front end says of that stop, in place of a failure: the run planned for it. */
 export const PRESERVE_UNPATCHED_START_STOP =
   'Stopped before the whole-flash read: the camera started a bank this run did not patch, so ' +
-  'nothing was read. The restore puts every written bank back.';
+  'nothing was read.';
 
 /**
  * Whether the run's whole-flash read stopped as planned (the start entered a bank the run did
@@ -1826,8 +1826,8 @@ async function runBackupStep(
     },
   );
   reporter.log(
-    `Dump archive: ${String(archive.slots.length)} bank(s) decrypted from the backup into the ` +
-      'run’s decrypted folder; its decryption report keeps every detail.',
+    `Dump archive: ${String(archive.slots.length)} bank(s) from the backup, as plain firmware, in ` +
+      'the run’s decrypted folder; its decryption report keeps every detail.',
     'info',
   );
   const profile = archive.detection?.best.profile ?? getProfile('generic');
@@ -2188,12 +2188,17 @@ function enteredUnpatchedRefusal(
   return (
     `after the restart the camera reports it entered ${bankWordsOf(entered)} (active-slot word ` +
     `${String(word)}), which this run did not patch (it patched ${bankList(targets)}). ` +
-    'The whole-flash read runs only through the patched image, so nothing was armed or read. ' +
+    'The whole-flash read runs only through the patched image, so nothing was read. ' +
     (boot === undefined
       ? ''
-      : `The backup read the boot-config word as ${hexUp(boot.word)} (${boot.rule}); a start ` +
-        'that enters another bank means the word or a bank changed since, or the bootloader ' +
-        'refused the patched bank. ') +
+      : boot.nextStart === entered
+        ? /* The planned stop: the plan said this start enters a bank the choice left out. */
+          `As the plan said, the next start enters ${bankWordsOf(entered)} (the boot-config ` +
+          `word is ${hexUp(boot.word)}: ${boot.rule}), and this run's choice left that bank ` +
+          'out, so this stop was expected. '
+        : `The backup read the boot-config word as ${hexUp(boot.word)} (${boot.rule}); a start ` +
+          'that enters another bank means the word or a bank changed since, or the bootloader ' +
+          'refused the patched bank. ') +
     'The patched banks still hold the patch: the restore step puts every written bank back.'
   );
 }

@@ -2533,7 +2533,12 @@ describe('the banks a run writes — the next start, one bank, every bank', () =
       expect(message).toMatch(
         /after the restart the camera reports it entered slot A \(active-slot word 0\), which this run did not patch \(it patched recovery R\)/,
       );
-      expect(message).toMatch(/nothing was armed or read/);
+      expect(message).toMatch(/nothing was read/);
+      /* The planned stop says so: the plan named slot A as the next start (TESTING.md 42.102). */
+      expect(message).toMatch(
+        /As the plan said, the next start enters slot A \(the boot-config word is 0x00000000: slot A first, then B, then recovery R\), and this run's choice left that bank out, so this stop was expected\./,
+      );
+      expect(message).not.toMatch(/changed since|refused the patched bank|armed/);
       expect(message).toMatch(/the restore step puts every written bank back/);
       expect(message).not.toMatch(/power-cycle the camera/);
       expect((error as SeekError).detail).toEqual({ entered: 'a', targets: ['r'] });
@@ -2989,6 +2994,17 @@ describe('people’s words — one line per sweep, no code names (TESTING.md 42.
       ).toBe(true);
       const results = ALL_STEPS.map((id) => preserveStepResultWords(state, id) ?? '');
       expect(codeNamesIn(results)).toEqual([]);
+      /* Seen on the bench Compact (TESTING.md 42.102): one bank is "it", the archive holds plain
+       * firmware (nothing was decrypted), and the build has a name people read. */
+      expect(state.targets).toEqual(['a']);
+      expect(results[2]).toBe('Write: slot A written with the patch, and the camera accepted it.');
+      expect(lines.filter((line) => line.startsWith('Dump archive:'))).toEqual([
+        'Dump archive: 1 bank(s) from the backup, as plain firmware, in the run’s decrypted ' +
+          'folder; its decryption report keeps every detail.',
+      ]);
+      expect(lines.some((line) => line.endsWith('It holds Compact 1.x firmware (2014).'))).toBe(
+        true,
+      );
     },
   );
 

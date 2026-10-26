@@ -28,7 +28,7 @@ const stop = new SeekError(
   'pipeline/refused',
   'after the restart the camera reports it entered slot A (active-slot word 0), which this run did ' +
     'not patch (it patched recovery R). The whole-flash read runs only through the patched image, so ' +
-    'nothing was armed or read.',
+    'nothing was read.',
   { detail: { entered: 'a', targets: ['r'] } },
 );
 
@@ -97,7 +97,7 @@ describe("the drain's planned stop", () => {
   it('the stop says what happened and what comes next, and names neither front end', () => {
     expect(PRESERVE_UNPATCHED_START_STOP).toBe(
       'Stopped before the whole-flash read: the camera started a bank this run did not patch, so ' +
-        'nothing was read. The restore puts every written bank back.',
+        'nothing was read.',
     );
     expect(PRESERVE_UNPATCHED_START_STOP).not.toMatch(/page|CLI|seek-fw|--|step 0/i);
   });

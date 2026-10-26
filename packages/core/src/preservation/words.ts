@@ -289,7 +289,10 @@ export function preserveStepResultWords(
       );
     }
     case 'commit':
-      return `${label}: ${bankListWords(targets)} written with the patch, and the camera accepted each.`;
+      return (
+        `${label}: ${bankListWords(targets)} written with the patch, and the camera accepted ` +
+        (targets.length === 1 ? 'it.' : 'each.')
+      );
     case 'drain':
       return state.deliveredSha256 === undefined
         ? `${label}: not read.`

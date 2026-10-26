@@ -45,7 +45,7 @@ export function bankRecordOf(
     slotReadShas: ['aa', 'aa'],
     imageSha256: 'ab',
     buildId: 'v1-2014',
-    buildLabel: 'v1 2014 chain',
+    buildLabel: 'Compact 1.x firmware (2014)',
     patch: patchSummaryOf(),
     ...overrides,
   };
@@ -97,7 +97,7 @@ export function handRunState(fields: Partial<PreserveRunState> = {}): PreserveRu
     expectedVersion: '1.3.0.0',
     buildFamily: 'v1-2014',
     buildId: 'v1-2014',
-    buildLabel: 'v1 2014 chain',
+    buildLabel: 'Compact 1.x firmware (2014)',
     stagedForm: 'plain',
     restoreForm: 'capture-verbatim',
     route: 'active-bank',

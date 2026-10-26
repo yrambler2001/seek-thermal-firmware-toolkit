@@ -27,7 +27,13 @@
 
 import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { CancelledError, nextStepAfter, type Artifact, type SessionOpener } from '@seek-fw/core';
+import {
+  CancelledError,
+  nextStepAfter,
+  SeekError,
+  type Artifact,
+  type SessionOpener,
+} from '@seek-fw/core';
 import { IN_USE_ELSEWHERE_LOG, IN_USE_ELSEWHERE_STATUS } from '@/lib/camera-lock';
 import { DEFAULT_OPTIONS_FORM } from '@/lib/options';
 import type * as PreserveClient from '@/lib/preserve/client';
@@ -70,6 +76,8 @@ const openGates = new Map<PreserveStepId, () => void>();
 /** Which step's session accepts the unlock token before it closes: the 18-byte
  *  arm a real window arm records through `armWindow` (TESTING.md 42.55). */
 let tokenStep: PreserveStepId | null = null;
+/** A step that stops as the drain does when the start entered a bank the run did not patch. */
+let stopStep: PreserveStepId | null = null;
 /** The sites the fake patch step records — empty is a patch without the arm
  *  tail's cursor reset, which owes the replug after the drain. */
 let fakePatchSites: { name: string; offset: number; before: number[]; after: number[] }[] = [];
@@ -158,6 +166,14 @@ async function fakeRunStep(
   signal: AbortSignal,
 ): Promise<PreserveStepOutcome> {
   handed.push([step, state]);
+  if (step === stopStep) {
+    throw new SeekError(
+      'pipeline/refused',
+      'after the restart the camera reports it entered slot A (active-slot word 0), which this ' +
+        'run did not patch (it patched recovery R).',
+      { detail: { entered: 'a', targets: ['r'] } },
+    );
+  }
   const outcome = fakeOutcome(step, state);
   if (step === tokenStep) {
     const session = await opener.open();
@@ -321,6 +337,7 @@ function linesOf(panel: PreservePanelApi, phase: PreservePhaseId): string {
 
 beforeEach(() => {
   hungStep = null;
+  stopStep = null;
   deferreds.clear();
   openingStep = null;
   openGates.clear();
@@ -516,6 +533,22 @@ describe('the reset is not a swap — the guard and the opener ladder cooperate'
     expect(current(mounted).panel.phaseReporters['patch-dump'].progress.text).toContain(
       'The run file in your downloads is up to date',
     );
+    mounted.unmount();
+  });
+
+  it('phase ②: the planned stop is logged as a stop, not as an error (TESTING.md 42.102)', async () => {
+    stopStep = 'drain';
+    const unitA = fakeCameraUnit(0x0010);
+    const mounted = mountPanel([unitA]);
+    await waitFor(() => current(mounted).device.device !== null);
+    await runTo(mounted, 'read-build', () => current(mounted).panel.state?.nextStep === 'commit');
+    act(() => {
+      void current(mounted).panel.runPhase('patch-dump');
+    });
+    await waitFor(() => current(mounted).panel.activePhase === null);
+    const log = linesOf(current(mounted).panel, 'patch-dump');
+    expect(log).toContain('Stopped: after the restart the camera reports it entered slot A');
+    expect(log).not.toContain('ERROR:');
     mounted.unmount();
   });
 
