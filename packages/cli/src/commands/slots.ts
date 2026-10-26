@@ -57,6 +57,7 @@ import {
   FF_VENDOR_STORED,
   flashSlotWithBackup,
   fpsBootWarningOf,
+  everyBankBootedLast,
   fpsEveryBankPlan,
   fpsPlanOfBank,
   fullFlashOf,
@@ -1716,7 +1717,8 @@ export function fpsEveryPlanLines(
       ]),
       [
         '  order',
-        `${plan.order.map(bankName).join(', then ')} (the bank the camera boots now last)`,
+        plan.order.map(bankName).join(', then ') +
+          (everyBankBootedLast(report, plan.order) ? ' (the bank the camera boots now last)' : ''),
       ],
       ...plan.others.map((other) => [
         `  ${bankName(other.key)}`,
