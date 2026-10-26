@@ -12418,3 +12418,224 @@ Setup: `git reset --hard refactor/all-firmware-profiles` (`83ec225`); `node_modu
 - `pages-emu.e2e` and `slots-view.e2e` (the page in Chrome on the emulator) were not run; the page reaches fix 1 through core's `prepareSlotFlash`, which the core and emulator suites cover.
 - The sweep read the write paths and the slot code closely; the preservation pipeline (`preservation/steps.ts`, `pipeline.ts`), the decrypt paths and the Info read were read for the guards named above only.
 - Nothing pushed or merged. `main` is not touched.
+
+### 42.84 The 2016 Compact PRO's Info read and slots page at the 2014 chain's standard: the check key named from the bank the camera entered, both starts, the boot-word warning, the 2016 write keys, one Writing section (no hardware, 2026-10-26)
+
+**Summary.** Agent 42.84 (Opus 5.5), on `worktree-agent-aa82d2a3c461a2b41`, reset to the WIP commit `cb40caf` (branch `wip/locked-2016-info`, on `refactor/all-firmware-profiles` `d0a2f58`). No camera, J-Link or USB switch was used, and no other agent was started. The owner's words: "make it good, it is already somewhat good for the compact 1.3.0.0, so make it good high quality for 1.0.3.0". On a real Compact PRO 1.0.3.0 (the FF board, cfg[0] 0xFFFFFFFF) the owner patched recovery R to 18 Hz from the slots page: the write committed and verified, slot A (stock) kept running, the camera stayed at 9 Hz, and the page said nothing. The re-read then printed the Info analysis with four "flashing disabled" lines, "could not confirm this camera's key table", every bank "unknown key … bootable unknown", "boot prediction unavailable … select_boot_slot() has not been reconstructed" and "cfg[0] … layout was never decoded"; and the first read of the camera ran under `legacy-auth`, called every bank "acceptance FAILS → NOT bootable" and "probably a different firmware family", and only then re-read under `compact-2016`. All of that is fixed on fakes and on the owner's real 1.0.3.0 dump (§4). The hosted bundle is rebuilt.
+
+**Tags.** [source] is read from the file named (FW-V1 is the sibling reconstruction repository). [measured] is a test or a command run here. [inferred] follows from those and was not run.
+
+**1. The rule, the check and the key [source].**
+
+| Fact | Where |
+|---|---|
+| The 2016 bootloader picks a bank by the same rule as the 2014 one: word 0 or 0xFFFFFFFF tries A, B, then R; word 1 tries B, A, then R; any other word tries R, A, then B. The first two are checked; the last is entered unchecked | FW-V1 `targets/compact_pro_9hz_1_0_3_0_bootloader/src/image.c:1076-1109` (`boot_select_image`); the FF 1.0.3.0 bootloader's `image.c` is the same |
+| The check is `image_sum_ok_device_seeded`: the magic at +0x200, a length under 0x10000, and a zero word sum of the bank decrypted under the device-seeded stream | `…_bootloader/src/hand_spifi.c:35-44` |
+| The device-seeded stream is seeded from the bootloader's own key block 1 when its version word is above 0x01010000, and from the device words at 0x40045000 XOR key block 0 at or below it. So 1.1.0.0 itself is on the device-word side; the WIP's "from 1.1.0.0 on" was off by one and is corrected (`checkKeyNameOf`). Both 2016 bootloaders FW-V1 reconstructs are 1.2.0.0 | `…_bootloader/src/crypto.c:233-249` (`prng_seed_device_or_key`, `v <= 0x01010000`); the FF bootloader's `crypto.c:238`; `app_data.c` `{ 1, 2, 0, 0 }` in both |
+| The bootloader records the bank it entered (0 A, 1 B, 2 R) in the handoff at 0x10000200 before it jumps; selector 10's word is that record's +8 | `…_bootloader/src/startup.c:187-195`; TESTING.md 42.53, 42.56 (measured on the emulator: the word is the bank that ran, for words 0, 1, 2 on 1.0.3.0) |
+| The application seeds the same stream from the bootloader's record (the handoff's first word points at the bootloader's build record), and a commit of modes 7 to 9 checks the staged image under key block 0, re-keys it into the device-seeded stream, checks it there, then erases and programs. So every bank the camera writes is stored under the key its bootloader checks | `targets/compact_pro_9hz_1_0_3_0/src/crypto.c:291-329`; `rpc_cmds.c:1786-1812` |
+| The 2016 application's mode 0 inlines `fw_update_slot_address()` as a load of 0x10000208: 0 arms 0x14060000, anything else 0x14050000 (the camera's own upgrade target) | `targets/compact_pro_9hz_1_0_3_0/src/rpc_cmds.c:2523-2528` |
+| A failed erase in that commit returns the bank's address byte \| 0x40000 before the program call | `rpc_cmds.c:1808-1812` |
+
+So the read names the key the 2016 bootloader checks a bank under (the "check key") from the bank the camera reports it entered, when the word's rule had the bootloader check that bank before entering it: the keystream the read recovers from that bank's own bytes is the device-seeded stream. A bank under that key is bootable; a bank under another key is not. A bank entered last, unchecked (R under word 0, B under word 2), names nothing. [inferred] The warm-boot path (`image.c:1081-1089`) records word 2 and enters R unchecked; R still runs decrypted under the device-seeded stream (`startup.c:168-185`), so the key it names under word 2 is the same.
+
+**2. What changed** (the WIP commit `cb40caf` did the boot rule, the check key, the 2016 boot prediction, the probe's detection and part of the read's text; this section finishes it).
+
+| Area | Before | After |
+|---|---|---|
+| Detection | the probe picked `legacy-auth` on a 1.0.3.x camera (the two share every selector), so the first read checked the banks against 0xFFFF and failed them all, then re-read | (WIP) the 1.0.3.x version picks `compact-2016` at the probe (`SCORE_VERSION_LINE` 0.85; `legacy-auth` caps itself at 0.5 on that line unless a slot shows its own chains); one read |
+| Boot rule | `profiles/locked-boot.ts` (WIP) | the boot choice moved out of the frame-rate warning: `slots/boot-choice.ts` keeps `bootChoiceOf`, `bootRuleKnown` (now `plainChain` or `onCompactPro2016Line`, so a 1.3.0.8 camera with no plain bank is not judged by the 2014 rule), and the new `slots/fps-boot-warning.ts` has `fpsBootWarningOf`. `device-info.ts` names the next start through `bootChoiceOf`, the function the page and the CLI call, with no import cycle. A stray word prints in hex (0xA5A5A5A5, not 2779096485) |
+| Check key | (WIP) named from the entered bank | `checkKeyOf` exported (pure) with `CheckKey.unnamedWhy`; the 1.1.0.0 boundary fixed; the pair named "the Compact PRO 1.0.3.x 9 Hz pair" or "… FF pair"; on 2016 `state.storeKey` is the check key (it said "Key B", a key this line does not use) |
+| Info: Boot rows | "booted … (named by the active-slot word; not a boot record on this line)" on 2014; nothing on 2016 | "booted App image bank 0x14050000 — the bank the bootloader entered at this start, as it records it (active-slot word 0)" on both locked lines (42.56); a new "next start" row from `bootChoiceOf` where `bootRuleKnown` |
+| Info: Keys rows | key A/B "(not identified)", "0 candidate(s), none confirmed", "store key unknown — the bootloader block … was not read" | on 2016: "check key" (hex, pair, the bank that named it), "key table not read — the bootloader block (0x14000000) is refused on every channel on this line", "store key key block 1: the application stores every bank it writes under the key its bootloader checks" |
+| Info: Writing | "not available for a whole-image write:" and three classic-writer reasons | on 2016: "one bank at a time — `seek-fw slots flash …` or `seek-fw slots patch-fps …` (the page's Slots tab), each bank staged under its image's own key block 0" and "a whole-image write is not available on this line"; only a reason that refuses every bank for the slot writer is listed (`cameraWideBlocks`, the page's own gate) |
+| Info: the read's log | four "flashing disabled", "could not confirm this camera's key table", "boot prediction unavailable …", "cfg[0] … never decoded" | one `BANKS_ONLY_WRITING` line; "check key: …"; "last start … (the bootloader's record)", "next start: …"; "the camera's own upgrade (mode 0) writes …"; the cfg[0] rule |
+| Shared helpers | the CLI and the page each built the rows | core `workflows/device-report.ts`: `bootedReportOf`, `nextStartReportOf`, `keyReportRows`, `checkKeyReportOf`, `bankWritingOf`; `unknownBootabilityWhy`, `cameraWideBlocks` in `device-info.ts`; `STAGED_UNDER_IMAGE_BLOCK_0`, `storedUnderCheckKey` in `write-keys.ts` |
+| `slots list` | the Boot section and its warning only on the 2014 chain; "Write keys refused: the booted bank A decrypts under key block 1, but this camera's key table does not carry that key" | Boot section and warning on 2016 too, with a "check key" row; Write keys "staged as … key block 0", "stored as key block 1, the key its bootloader checks a bank under …" |
+| Write keys | `deriveWriteKeys` ran the modern derivation on 2016 once `state.boot` was set, and refused | `WriteKeys.form`: `'plain'` (2014 chain), `'image-block-0'` (2016: no key derived, `atRest` the check key when named, nothing refused), `'derived'` (modern). `plainChain` is gone (the JSON's `writeKeys.plainChain` is `writeKeys.form`) |
+| Risk acknowledgement | on 2016 no bank was named booted, so every bank asked | the booted bank asks the booted-bank acknowledgement, R keeps the recovery one, the others ask none (`write.ts ackNeeded`, CLI `bootRisk`, page `writeRisk`; `inspect.ts` marks the booted bank active) |
+| Notes | 2016 had no boot note; the flash note said "the device info calls this camera not flashable" | a 2016 boot note (the word is the bootloader's record; the rule; the check under key block 1; the key named from the entered bank); the flash note says a whole-image write is not available and the banks are written one at a time; the 2014 note names 0xFFFFFFFF too; the 2016 staging note says the camera stores under "the key its bootloader checks a bank under (key block 1)" |
+| JSON | — | `info --json`: `boot.nextStart {runs, why}`, `keys.checkKey {name, key, from, pair, unnamedWhy}`, `bankWrites {oneAtATime, refusedBy}` (null off 2016). `slots list --json`: `boot` on 2016, with `checkKey`; `writeKeys.form` |
+| Web | the same as the CLI | Info tab (`CameraReport`) rows from the core helpers; the Slots tab's device panel says "Booted from" on every line and adds "Next start"; the keys panel has a 2016 form; a bank's "unknown" bootability says why (`unknownBootabilityWhy`) |
+| Wording | "Recovery bank R: writing 51848 B (plain, slot-keystream-ciphertext)"; "NOW UNPLUG AND REPLUG THE CAMERA" twice after one patch; Preserve "flash may be partially written" on 0x0004000N | "… writing 51848 B from the decrypted image, staged as slot-keystream-ciphertext"; once (the front end's line); Preserve decodes the status through `protocol/commit-status.ts`, as the slot writer does: "the erase stage failed: nothing was programmed, but the erase may have started, so bank A may be partly erased" |
+| CLI output | four blank lines after `info`'s first line | one (the terminal reporter collapses a run of blank log lines) |
+
+**3. The probe and the re-read.** Under the WIP's detection the probe's version (1.0.3.x) picks `compact-2016`; `legacy-auth` stays a candidate below it and wins back only when a slot decrypts to its own 0xFFFF target or is stored plain (`profiles.test.ts`, WIP). [measured] On a fake 1.0.3.0 camera `seek-fw info` reads once, under `compact-2016`, with no "re-reading under it", no "acceptance FAILS" and no "flashing disabled" (`camera.test.ts`); a read forced under `legacy-auth` still says the evidence names `compact-2016` and asks to be read again (`workflows.test.ts`).
+
+**4. The real-dump check** [measured, offline]. First, the key the read names against the key the camera holds: the owner's dump (sha256 `d2ee76b4…`, equal to the FF board's J-Link dump, plan.md's 42.83 note) holds in its bootloader block, which USB cannot read, the build record `01 02 00 00` "Jun 26 2016" at 0x2958 and the 9 Hz pair's key block 0 at 0x2ABC and key block 1 `faacb3c6…160d` at 0x2ACC; cfg[0] is 0xFFFFFFFF. The check key the read names from bank A (below) is that block 1. Then the outputs: a scratch harness (not committed) runs the real CLI against a fake camera serving the owner's `1.0.3.0 on 4.18.2.0.bin` (in `SEEK_DUMPS/firmwares/Compact Pro/`) with R patched to 18 Hz by `applyFpsPatch` under the 9 Hz pair's block 1, active-slot word 0, cfg[0] erased, bootloader 1.2.0.0; and the same for the owner's Compact 1.3.0.0 dump with R patched to 32 Hz, word 0, cfg[0] 0. The selector rows are each build's own (`legacySelectorRows`), with the token. Progress lines are left out.
+
+`seek-fw info` on 1.0.3.0:
+
+```
+  running firmware 1.0.3.0  Jul  6 2016
+
+check key: key block 1 faacb3c6f1412469bd122fb82d78160d (the Compact PRO 1.0.3.x 9 Hz pair's block 1), named from slot A: the 2016 bootloader enters a bank only after it decrypts to a zero word sum under this key, and the camera reports it entered slot A after that check
+App image bank 0x14050000: firmware 1.0.3.0, 51848 B, key block 1, acceptance ok, no footer check (this bootloader generation reads none) -> bootable
+App image bank 0x14060000: firmware 1.0.3.0, 51848 B, key block 1, acceptance ok, no footer check (this bootloader generation reads none) -> bootable
+App image bank 0x14070000: firmware 1.0.3.0, 51848 B, frame-rate patch 18 Hz, key block 1, acceptance ok, no footer check (this bootloader generation reads none) -> bootable
+
+
+Camera
+  product       Seek Thermal Compact PRO
+  manufacturer  Seek Thermal
+  serial        (unreadable)
+  platform      (unreadable)
+  usb link      (unreadable)
+
+Firmware
+  running     1.0.3.0  Jul  6 2016
+  bootloader  1.2.0.0  Jun 26 2016
+
+Profile
+  read under  compact-2016 — 2016 Compact Pro
+  detected    compact-2016 (score 0.98)
+    · a slot stored under a real xorshift128 keystream decrypts to the 0x00000000 acceptance sum, which is this generation's cipher
+    · and a protected bank refused the plain 2-byte arm, which is the locked handler
+    · the camera reports firmware 1.0.3.0, the 2016 Compact PRO's 1.0.3.x line
+    · the bootloader reports 1.2.0.0, a 2016-generation bootloader (1.2.0.0 is measured under Compact PRO 1.0.3.0; the 2014 Compact's is 0.9.0.0)
+
+Boot
+  cfg[0]          0xFFFFFFFF — slot A first, then B, then recovery R
+  booted          App image bank 0x14050000 — the bank the bootloader entered at this start, as it records it (active-slot word 0)
+  next start      App image bank 0x14050000 — the boot-config word is 0xFFFFFFFF, so the bootloader tries slot A first, and it holds an image the bootloader accepts
+  upgrade target  App image bank 0x14060000
+
+Keys
+  check key    key block 1 faacb3c6f1412469bd122fb82d78160d (the Compact PRO 1.0.3.x 9 Hz pair's block 1), named from slot A, the bank the camera reports it entered after the bootloader's check
+  key table    not read — the bootloader block (0x14000000) is refused on every channel on this line
+  whitening K  0x00000000
+  store key    key block 1: the application stores every bank it writes under the key its bootloader checks
+
+Slots
+slot                       address     version  size     key          accepts  footer  bootable  sha256
+-------------------------  ----------  -------  -------  -----------  -------  ------  --------  ----------------
+App image bank 0x14050000  0x14050000  1.0.3.0  51848 B  key block 1  yes      n/a     yes       5e1f3f24c8bc1e85
+App image bank 0x14060000  0x14060000  1.0.3.0  51848 B  key block 1  yes      n/a     yes       5e1f3f24c8bc1e85
+App image bank 0x14070000  0x14070000  1.0.3.0  51848 B  key block 1  yes      n/a     yes       d410b04cdaa10c34
+
+Writing
+  one bank at a time — `seek-fw slots flash <a|b|r> <file>` or `seek-fw slots patch-fps <a|b|r>` (the page's Slots tab), each bank staged under its image's own key block 0
+  a whole-image write is not available on this line
+```
+
+`seek-fw slots list` on 1.0.3.0:
+
+```
+  running firmware 1.0.3.0  Jul  6 2016
+
+check key: key block 1 faacb3c6f1412469bd122fb82d78160d (the Compact PRO 1.0.3.x 9 Hz pair's block 1), named from slot A: the 2016 bootloader enters a bank only after it decrypts to a zero word sum under this key, and the camera reports it entered slot A after that check
+App image bank 0x14050000: firmware 1.0.3.0, 51848 B, key block 1, acceptance ok, no footer check (this bootloader generation reads none) -> bootable
+App image bank 0x14060000: firmware 1.0.3.0, 51848 B, key block 1, acceptance ok, no footer check (this bootloader generation reads none) -> bootable
+App image bank 0x14070000: firmware 1.0.3.0, 51848 B, frame-rate patch 18 Hz, key block 1, acceptance ok, no footer check (this bootloader generation reads none) -> bootable
+
+
+Camera
+  product   Seek Thermal Compact PRO
+  serial    (unreadable)
+  firmware  1.0.3.0
+  profile   compact-2016
+  build     supported
+
+Boot
+  boot-config word  0xFFFFFFFF — slot A first, then B, then recovery R
+  next start runs   slot A
+  last start        the camera reports it entered slot A (active-slot word 0)
+  check key         key block 1 faacb3c6f1412469bd122fb82d78160d (the Compact PRO 1.0.3.x 9 Hz pair's block 1), named from slot A, the bank the camera reports it entered after the bootloader's check
+  · the boot-config word is 0xFFFFFFFF, so the bootloader tries slot A first, and it holds an image the bootloader accepts.
+
+  ! The camera boots slot A. The boot-config word is 0xFFFFFFFF, so the bootloader tries slot A first, and it holds an image the bootloader accepts.
+  ! Recovery R holds a frame-rate patch, but it does not run, so the patch does not take effect.
+  ! Patch slot A too (the bank that runs): that is what makes the frame-rate patch take effect.
+
+Banks
+bank  address     active  version  size     key          bootable  sha256
+----  ----------  ------  -------  -------  -----------  --------  ----------------
+A     0x14050000  yes     1.0.3.0  51848 B  key block 1  yes       5e1f3f24c8bc1e85
+B     0x14060000  no      1.0.3.0  51848 B  key block 1  yes       5e1f3f24c8bc1e85
+R     0x14070000  no      1.0.3.0  51848 B  key block 1  yes       d410b04cdaa10c34
+
+Write keys
+  staged as  the image under its own key block 0 (found in the image by value), to any bank; this camera's keys are not used
+  stored as  key block 1, the key its bootloader checks a bank under; the camera re-encrypts the upload under it
+  · the 2016 Compact PRO line: an upload is the image XORed with the keystream of its own key block 0, found in the image by value, so no key of this camera builds it
+  · the camera decrypts the upload with that key and re-encrypts it under key block 1 faacb3c6f1412469bd122fb82d78160d, the key its bootloader checks a bank under (named from slot A, the bank the camera reports it entered), so every bank it writes is stored the way the bootloader takes it
+
+Operations
+  A  dump                   yes
+     flash decrypted image  yes
+     flash raw bytes        yes
+  B  dump                   yes
+     flash decrypted image  yes
+     flash raw bytes        yes
+  R  dump                   yes
+     flash decrypted image  yes
+     flash raw bytes        yes
+
+Notes
+  · Banks are protected on this line: a plain 2-byte arm of mode 7, 8 or 9 is refused, so a slot arm carries the 18-byte payload, the 16-byte token OLD_FW_UNLOCK_TOKEN (the same bytes in 22 corpus images). A camera with another token stalls on its banks.
+  · Where the page names a booted bank on this line, it is the bank the camera entered at its last start, as the bootloader records it in the active-slot word (0 slot A, 1 slot B, 2 recovery R). The next start is set by the boot-config word: 0 or 0xFFFFFFFF choose A first, 1 B first, any other value recovery R first. The 2016 bootloader takes a bank only when it decrypts to a word sum of 0 under the key it checks a bank under (key block 1 on its 1.2.0.0 bootloader), and the last bank of that order runs unchecked when the other two fail. The read names that key from the bank the camera entered, because the bootloader block that holds it is refused on every channel (TESTING.md 42.56, 42.84).
+  · The 9 Hz builds of 1.0.3.0 and 1.0.3.2 share one key pair, and the FF builds share another (patch.ts KEY_PAIRS). The version string does not tell them apart, so the keystream is recovered from the bank itself and the bank’s own image decides.
+  · The 1.0.3.0 app reboots on any board but the Compact Pro’s, so a Compact board runs it only with the board patch in its banks (scripts/patch-dump.mjs).
+  · Profile compact-2016 declares no flash capability of its own (its capabilities.flash, see compact-2016.ts), so a whole-image write is not available on this line, and the device info says so. The banks are written here one at a time instead: the slot write is the keystream-staged path the preservation pipeline ran on 1.0.3.0, so the slot page does not gate it on that refusal.
+  · A: Staged: the image, XORed with the xorshift128 keystream of its OWN key block 0 (the stage key, found in the image by value), image length only (at most 0xE000 bytes). The device decrypts the payload with that key and stores it under the key its bootloader checks a bank under (key block 1), so the stored bytes are not the staged ones. Nothing is read from the target bank to stage it: the bank’s keystream is used only to read the bank back.
+  · B: Staged: the image, XORed with the xorshift128 keystream of its OWN key block 0 (the stage key, found in the image by value), image length only (at most 0xE000 bytes). The device decrypts the payload with that key and stores it under the key its bootloader checks a bank under (key block 1), so the stored bytes are not the staged ones. Nothing is read from the target bank to stage it: the bank’s keystream is used only to read the bank back.
+  · R: Staged: the image, XORed with the xorshift128 keystream of its OWN key block 0 (the stage key, found in the image by value), image length only (at most 0xE000 bytes). The device decrypts the payload with that key and stores it under the key its bootloader checks a bank under (key block 1), so the stored bytes are not the staged ones. Nothing is read from the target bank to stage it: the bank’s keystream is used only to read the bank back.
+  · R: Recovery bank, mode 9, token form. A write needs acknowledgeRisk. Measured on a Compact PRO 1.0.3.0: R took its own image, a one-byte change and the raw staged bytes, each with commit status 0 (TESTING.md 41.3).
+```
+
+`seek-fw info --verbose` adds, on 1.0.3.0, after the bank lines:
+
+```
+last start: the camera reports it entered slot A (active-slot word 0, the bootloader's record)
+next start: slot A — the boot-config word is 0xFFFFFFFF, so the bootloader tries slot A first, and it holds an image the bootloader accepts
+the camera's own upgrade (mode 0) writes App image bank 0x14060000, the bank its active-slot word does not name; the Slots tab writes the bank it is given, through that bank's own window
+
+writing: the Slots tab (`seek-fw slots`) writes this camera's banks one at a time, each staged under its image's own key block 0; a whole-image write is not available on the 2016 line
+```
+
+`seek-fw slots list` on 1.3.0.0, the Boot section (the rest is as before this section):
+
+```
+Boot
+  boot-config word  0x00000000 — slot A first, then B, then recovery R
+  next start runs   slot A
+  last start        the camera reports it entered slot A (active-slot word 0)
+  · the boot-config word is 0, so the bootloader tries slot A first, and it holds an image the bootloader accepts.
+
+  ! The camera boots slot A. The boot-config word is 0, so the bootloader tries slot A first, and it holds an image the bootloader accepts.
+  ! Recovery R holds a frame-rate patch, but it does not run, so the patch does not take effect.
+  ! Patch slot A too (the bank that runs): that is what makes the frame-rate patch take effect.
+```
+
+**5. Commands and counts** (final HEAD unless marked).
+
+| Run | Result |
+|---|---|
+| `npx vitest run --project core` on the 39 non-emulator test files, named one by one (`packages/core/test/*.test.ts` and `test/{preservation,slots}/*.test.ts` without `emulator` in the name; two are new: `locked-boot.test.ts`, `check-key.test.ts`) | 38 files passed, 1 skipped (`fps-patch.differential`, no corpus root); 1213 tests passed, 46 skipped, 0 failed; 166.9 s. At `cb40caf` the same set had 6 failures (boot-choice 1, capability 2, workflows 3) |
+| of which (each all passed) `locked-boot.test.ts` (new) / `check-key.test.ts` (new) / `slots/boot-choice.test.ts` / `workflows.test.ts` / `slots/write-keys.test.ts` / `slots/write-commit.test.ts` / `capability.test.ts` / `profiles.test.ts` | 11 / 15 / 35 (26 at `cb40caf`) / 38 (35) / 36 (32) / 16 (13) / 18 (17) / 91 (91, the WIP's) |
+| `npx vitest run --project cli` on `slots`, `args`, `errors`, `reporter`, `output`, `surface`, `decrypt`, `preserve`, `interrupt`, `camera`, `node-usb` | 11 files, 302 passed (the 2016 `info` tests in `camera.test.ts`, the 2016 `slots list` block in `slots.test.ts`, the blank-line test in `reporter.test.ts`) |
+| `npx vitest run --project web` on all 35 web test files, named | 35 files, 399 passed (388 at 42.82) |
+| `node node_modules/vitest/vitest.mjs run --config e2e/vitest.config.ts bench-lib.e2e bench-verdict.e2e supervised-gate.e2e camera-bus.e2e` | 4 files, 167 passed, 6 skipped (the corpus tests: `SEEK_FULL_DUMPS_BY_CAMERA` unset) |
+| `SEEK_EMU_DIR=…/FW-V1/emu npx vitest run --project core test/slots/corpus-locked.emulator.test.ts` | 299 passed, 582 s. The six 2016 subjects (1.0.3.0 9 Hz and FF, native and chimera; 1.0.3.2 9 Hz and FF chimeras) now read "booted A" (they read "booted unknown", a pinned gap), refuse the booted bank without the acknowledgement, and write B unacknowledged and R acknowledged, each status 0, read back and verified. The suite's own row that commits on the default flash part (EF 40 16) and expects 0x00040006 still reads "the erase stage failed … nothing was programmed, but the erase may have started" (the slot writer's words, which Preserve now shares) |
+| `SEEK_EMU_DIR=… npx vitest run --project core test/slots/fps-patch.pro-2016.emulator.test.ts test/slots/active-slot-cells.emulator.test.ts test/slots/page-expectations.emulator.test.ts` | 3 files, 225 passed, 288.7 s. The page-verdict rows for the 2016 builds read "banner: (none); keys: form=image-block-0 atRest=key block 1" with bank A booted. The 2016 frame-rate run patches A, B and R at 18 Hz, then boots words 0, 1 and 2: each time the read names the check key from the bank the real 2016 bootloader entered (A, B, R), predicts that bank, and calls all three patched banks bootable |
+| the scratch real-dump harness (§4), `SCRATCH_OUT=… npx vitest run --project cli packages/cli/test/zz-scratch-locked.test.ts` | 2 passed; deleted, not committed |
+| `npm run build:docs` | `index-CgFdzmiS.js`, 752,149 B (was `index-BJMvqbZ9.js`, 741,851 B); the CSS `index-BwTO31bJ.css` unchanged (`64d61e63…`). In the old bundle and not the new: "not a boot record on this line", "flash may be partially written", "NOW UNPLUG AND REPLUG THE CAMERA, then read the device info again". In the new: "the bank the bootloader entered at this start", "check key not named", "One bank at a time", "Next start" (twice: the Info tab and the slots page's device panel) |
+| `npx tsc --noEmit -p` for `packages/core/tsconfig.json`, `packages/cli/tsconfig.json`, `packages/web/tsconfig.app.json`, `packages/web/tsconfig.node.json`, `e2e/tsconfig.json`, `tsconfig.tools.json` | exit 0 each |
+| `npx eslint` on the 50 changed source and test files | exit 0, no output |
+| `npx prettier --check` on the same files, `README.md` and `FPS_32HZ.md` | clean. `TESTING.md` is not checked (not prettier-clean since 42.34) |
+
+Setup: `git reset --hard cb40caf`; `node_modules` cloned with `cp -cR` from the main checkout (the `@seek-fw` links resolve to this worktree); `npm run build --workspace @seek-fw/core` before the CLI type check and the web tests. Logs: this session's scratchpad (`…/scratchpad/*.log`).
+
+**6. Commits** (on `worktree-agent-aa82d2a3c461a2b41`, on top of `cb40caf`, in order): `dc9c005` (Preserve decodes the commit status as the slot writer does), `9b56004` (the writer's "writing … B" line; the replug line once), `cb10144` (one blank line in the CLI), `712fb45` (the check key, both starts, the warning, the write keys, the Info rows, the notes, the JSON, the tests), `9de6d3e` (the pages-bench Info expectation), `cfc1fe4` (README, FPS_32HZ), `ada2a84` (the bundle), and this section.
+
+**7. Not done, and open.**
+- No hardware. The owner's case is reproduced on the owner's own dump on a fake camera (§4) and on the emulator (the six 2016 subjects); it was not run on the camera. `pages-bench.e2e` now expects the 1.3.0.0 bench's new "Booted" and "Next start" rows and was not run (it needs the bench). `pages-emu.e2e` and `slots-view.e2e` (the page in Chrome on the emulator) were not run.
+- [?] The camera's own verdict. The 2016 application answers GetFirmwareInfo selectors 6, 7 and 8 with `image_sum_ok_device_seeded` of A, B and R (FW-V1 `targets/compact_pro_9hz_1_0_3_0/src/rpc_cmds.c:3226-3240`), the bootloader's own check, as the 1.3.0.8 builds answer theirs (`readBankVerdicts`, 42.12). Reading them would settle every bank even when the check key is not named. Not done: it is a new read on this line, nothing has measured those selectors on a 1.0.3.0 camera, and the Node bridge lets out only the Info read's known selectors (42.81). Owner's call.
+- [inferred, not used] A bank entered unchecked (R under word 0 or 0xFFFFFFFF, B under any other word) still runs decrypted under the device-seeded stream (`startup.c:168-185`), so it would name the check key too. The read keeps to the checked bank, as the WIP designed it; the unchecked case says why it names nothing.
+- The slots page's own 2014 words ("Named booted by the active-slot word", "On this line recovery R can run instead, so it may not be the bank that runs" in `SlotTable`, `SlotWriteConfirm`, `SlotFpsConfirm`, and the CLI's `bootRisk`) are unchanged; their comments no longer say the word is not a boot record. The Info tab and the slots page's device panel now say "Booted from" on both locked lines. Whether the confirmations should say the same is the owner's wording.
+- The 2014 chain's Keys rows still print Key A and Key B "(not identified)" and "store key Key B (no per-device key programmed; Key B itself not identified)", though no key is involved on that chain. Out of this section's scope.
+- `seek-fw info` and the Info tab do not print the frame-rate warning; the slots tab and `slots list` do, and the Info tab's "next start" row says which bank runs.
+- A 1.3.0.8 FF camera with no bank stored plain: `slots list` still prints "Write keys refused: the booted bank could not be named …" while the page shows its own-pair panel (unchanged; not a 2016 item).
+- The whole-image gate (`canFlash`, `flashBlockedBy`, `classicWriterBlockedBy`) is kept for the JSON and still carries the classic writer's reasons on 2016; the human outputs say them once as "a whole-image write is not available on this line". The 42.82 item on retiring that gate stays open.
+- 1.0.3.2 and the FF 1.0.3.0 build: the same family and the same bootloader 1.2.0.0, checked on the emulator only.
+- `plan.md` is not edited. Nothing pushed or merged.
