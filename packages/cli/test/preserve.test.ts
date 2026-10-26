@@ -18,6 +18,8 @@
  * write. An older run directory (schema 1 or 2) is refused with the remedy.
  */
 
+import { createHash } from 'node:crypto';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { readdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { OP } from '@seek-fw/core';
@@ -35,6 +37,7 @@ import {
   V1_2014_PATCH_SITES,
   PRESERVE_CODE_NAMES,
   sha256hex,
+  frameRateImageRefusal,
   unknownImageRefusal,
   unknownImageWords,
   wordSum,
@@ -48,8 +51,14 @@ import {
   rootsReply,
 } from '../../core/test/preservation/fixtures-2016.js';
 import type { StallPoint } from '../../core/test/fake-transport.js';
+import { emulatorDir } from '../../core/test/emulator/harness.js';
+import {
+  FPS_PATCHES,
+  applyFpsPatch,
+  fpsImageLength,
+} from '../../core/src/preservation/fps-patch.js';
 import { run } from '../src/cli.js';
-import { EXIT_CANCELLED, EXIT_FAILED, EXIT_OK, EXIT_USAGE } from '../src/errors.js';
+import { EXIT_CANCELLED, EXIT_FAILED, EXIT_OK, EXIT_STOPPED, EXIT_USAGE } from '../src/errors.js';
 import { fixedBackend, tempDir, testIo } from './helpers.js';
 import type { BackendOptions } from '../src/backend.js';
 
@@ -196,8 +205,25 @@ describe('preserve — a fresh run, checkpointed after every step', () => {
         'Backup: 31 blocks read, one restart before each.',
       ]);
       expect(
-        lines.filter((line) => /^(backup|check) block .*rebooting by command/.test(line)),
+        lines.filter((line) => /^(backup|check) block .*restarting the camera/i.test(line)),
       ).toEqual([]);
+      /* A single session's one routine restart (the second read of a bank, the write, the
+       * restore) is one detail line, not a warning per start (TESTING.md 42.105). */
+      expect(
+        lines.filter((line) => /restarting the camera and trying again|rebooting/.test(line)),
+      ).toEqual([]);
+      const verbose = testIo({ backend: backendOf(v1Camera(syntheticPlain())) });
+      expect(
+        await run(
+          ['preserve', '--out', runDir('verbose'), '--yes', '--verbose'],
+          verbose.io,
+          signal(),
+        ),
+      ).toBe(EXIT_OK);
+      expect(verbose.stdout.text).toMatch(
+        /: the camera was restarted once first, because its reader was not ready\./,
+      );
+      expect(verbose.stdout.text).not.toMatch(/restarting the camera and trying again|rebooting/);
       expect(lines.filter((line) => line.startsWith('Check: 31 blocks read again'))).toEqual([
         'Check: 31 blocks read again, one restart before each.',
         "Check: 31 blocks read again, 0 bytes differ — the camera's flash is byte-identical to the backup.",
@@ -526,7 +552,7 @@ describe('preserve — the power-cycle retry gate on a failed backup', () => {
         /window reader is spent for this boot — power-cycle the camera .* before any retry/,
       );
       expect(first.stderr.text).toMatch(/error: backup block 0x14020000 .* did not answer/);
-      expect(first.stdout.text).toMatch(/backup failed: .*0x14020000/);
+      expect(first.stdout.text).toMatch(/Backup failed: .*0x14020000/);
       const torn = await loadState();
       expect(torn.nextStep).toBe('backup');
       expect(torn.steps.backup?.status).toBe('failed');
@@ -550,7 +576,7 @@ describe('preserve — the power-cycle retry gate on a failed backup', () => {
       const retry = testIo({ backend: backendOf(wedged), stdinIsTty: true, answers: [true] });
       expect(await run(['preserve', '--resume', runDir()], retry.io, signal())).toBe(EXIT_FAILED);
       expect(retry.questions).toHaveLength(1);
-      expect(retry.stdout.text).toMatch(/backup failed:/);
+      expect(retry.stdout.text).toMatch(/Backup failed:/);
       expect((await loadState()).steps.backup?.status).toBe('failed');
 
       /* --yes asserts the power cycle without a prompt. */
@@ -923,7 +949,7 @@ describe('preserve — the read-only first step, and the zip of a run', () => {
         run: { nextStep: 'patch' },
         output: { zip: null },
       });
-      expect(test.stderr.text).toContain('stopping after backup');
+      expect(test.stderr.text).toContain('stopping after the Backup');
     },
   );
 
@@ -1030,22 +1056,29 @@ describe('preserve — --bank: the bank the next start enters, one bank, every b
       const camera = v1Camera(plain, { flash: v1Flash(0, { a: plain, r: plain }), entered: 0 });
       const asBooted = new Uint8Array(camera.flash);
       const first = testIo({ backend: backendOf(camera) });
+      /* A planned stop, not a failure: its own exit status (3), and no "error:" line. */
       expect(
         await run(['preserve', '--out', runDir(), '--bank', 'r', '--yes'], first.io, signal()),
-      ).toBe(EXIT_FAILED);
+      ).toBe(EXIT_STOPPED);
       expect(first.stdout.text).toMatch(
         /! The next start enters slot A \(.*\), and this choice does not patch it/,
       );
-      expect(first.stderr.text).toMatch(
-        /the camera reports it entered slot A \(active-slot word 0\), which this run did not patch \(it patched recovery R\)/,
-      );
-      /* The planned stop in words, and a plain resume: core records the restore as next
-       * (TESTING.md 42.98; it used to say --from-step restore, which then warned of a jump). */
-      expect(first.stdout.text).toMatch(/drain stopped: after the restart the camera reports/);
+      /* The planned stop is said once ("Stopped: …", as the page logs it), and the last line is
+       * the next step (TESTING.md 42.105; before, a third copy came as "error: …"). */
+      const said = first.stdout.text + first.stderr.text;
+      expect(said.split('which this run did not patch (it patched recovery R)')).toHaveLength(2);
       expect(first.stdout.text).toMatch(
-        /Stopped before the whole-flash read: .* Next: the restore puts every written bank back\. .* Continue with the restore: seek-fw preserve --resume \S+/,
+        /Stopped: after the restart the camera reports it entered slot A \(active-slot word 0\), which this run did not patch \(it patched recovery R\)/,
       );
-      expect(first.stdout.text).not.toMatch(/--from-step|Fix the cause/);
+      expect(first.stderr.text).not.toMatch(/error:/);
+      expect(first.stdout.text).toContain(
+        'Whole-flash read: stopped as planned — the camera started slot A, which this run did ' +
+          'not patch, so nothing was read.',
+      );
+      expect(first.stdout.text.trimEnd().split('\n').at(-1)).toMatch(
+        /^Next: the restore puts every written bank back\. The whole-flash read is not tried again: the camera would start the same bank\. Continue with the restore: seek-fw preserve --resume \S+$/,
+      );
+      expect(said).not.toMatch(/--from-step|Fix the cause|drain stopped|Stopped before/);
       const torn = await loadState();
       expect(torn.steps.commit?.status).toBe('done');
       expect(torn.steps.drain?.status).toBe('failed');
@@ -1063,8 +1096,45 @@ describe('preserve — --bank: the bank the next start enters, one bank, every b
       );
       expect((await loadState()).verify?.diffBytes).toBe(0);
       expect(await sha256hex(camera.flash)).toBe(await sha256hex(asBooted));
+
+      /* --json: one document, ok (nothing failed), the stop and the next step; exit status 3. */
+      const again = v1Camera(plain, { flash: v1Flash(0, { a: plain, r: plain }), entered: 0 });
+      const json = testIo({ backend: backendOf(again) });
+      expect(
+        await run(
+          ['preserve', '--out', runDir('json'), '--bank', 'r', '--yes', '--json'],
+          json.io,
+          signal(),
+        ),
+      ).toBe(EXIT_STOPPED);
+      const doc = JSON.parse(json.stdout.text) as {
+        ok: boolean;
+        stopped: { step: string; entered: string; next: string; message: string } | null;
+        run: { nextStep: string };
+        error?: unknown;
+      };
+      expect(doc.ok).toBe(true);
+      expect(doc.error).toBeUndefined();
+      expect(doc.run.nextStep).toBe('restore');
+      expect(doc.stopped).toMatchObject({ step: 'drain', entered: 'a', next: 'restore' });
+      expect(doc.stopped?.message).toMatch(/which this run did not patch/);
     },
   );
+
+  it('--help names the planned stop and its exit status, in the words the page uses', async () => {
+    const test = testIo();
+    expect(await run(['preserve', '--help'], test.io, signal())).toBe(EXIT_OK);
+    const help = test.stdout.text;
+    expect(help).toMatch(/3 stopped as planned/);
+    expect(help).toMatch(/the command exits 3 \(not 1: nothing failed\)/);
+    for (const name of ['Backup:', 'Patch:', 'Write:', 'Whole-flash read:', 'Restore:', 'Check:']) {
+      expect(help).toContain(name);
+    }
+    /* No code words (TESTING.md 42.102 O5): the step ids stay, as --from-step takes them. */
+    expect(help).not.toMatch(
+      /\bwindows?\b|widened|conjugat|plaintext|\barm(?:s|ed)?\b|\bdrain(?:ed|'s)\b|drained|\bwire\b|staged form/,
+    );
+  });
 
   it(
     'a default the run cannot write stops before the commit; --resume --bank chooses, and is refused once the commit has run',
@@ -1198,9 +1268,75 @@ describe('preserve — a bank that holds an unknown image is refused in plain wo
       expect(test.stderr.text).toContain(unknownImageRefusal('a', EXPECTED_VERSION));
       /* A refusal, not a failure to fix and resume: the words say to start a new run (TESTING.md 42.98). */
       expect(test.stdout.text).toMatch(
-        /backup refused: Slot A holds an unknown image .* nothing was written to the camera\./,
+        /Backup refused: Slot A holds an unknown image .* nothing was written to the camera\./,
       );
       expect(test.stdout.text).not.toMatch(/Fix the cause and resume/);
+      expect(await sha256hex(camera.flash)).toBe(await sha256hex(asBooted));
+    },
+  );
+});
+
+/* ==================================================================== *
+ * a known frame-rate build (TESTING.md 42.105)
+ * ==================================================================== */
+
+describe('preserve — a known frame-rate build is named, and never patched', () => {
+  const EMU = emulatorDir();
+  const patch = FPS_PATCHES.find((entry) => entry.version === '1.3.0.0' && entry.targetHz === 32);
+
+  /** The corpus's decrypted image whose header length hashes to `sha`, or null. */
+  function corpusImage(sha: string): Uint8Array | null {
+    if (EMU === null) return null;
+    const walk = (folder: string): Uint8Array | null => {
+      for (const name of readdirSync(folder)) {
+        const file = join(folder, name);
+        const info = statSync(file);
+        if (info.isDirectory()) {
+          const found = walk(file);
+          if (found !== null) return found;
+        } else if (name.endsWith('.bin') && info.size >= 0x8000 && info.size <= 0x100000) {
+          const bytes = new Uint8Array(readFileSync(file));
+          const length = fpsImageLength(bytes);
+          if (length === null) continue;
+          const digest = createHash('sha256').update(bytes.subarray(0, length)).digest('hex');
+          if (digest === sha) return bytes.slice(0, length);
+        }
+      }
+      return null;
+    };
+    const root = join(EMU, 'data', 'corpus');
+    return existsSync(root) ? walk(root) : null;
+  }
+
+  it.skipIf(EMU === null)(
+    '--backup-only on slot A holding the 32 Hz 1.3.0.0 build: refused by name, the stock image first, no read attempts listed',
+    { timeout: 180_000 },
+    async () => {
+      expect(patch).toBeDefined();
+      const stock = corpusImage(patch?.stockSha256 ?? '');
+      expect(stock).not.toBeNull();
+      if (patch === undefined || stock === null) return;
+      const camera = v1Camera(applyFpsPatch(stock, patch));
+      const asBooted = new Uint8Array(camera.flash);
+      const test = testIo({ backend: backendOf(camera) });
+      const code = await run(
+        ['preserve', '--backup-only', '--out', runDir(), '--yes', '--verbose'],
+        test.io,
+        signal(),
+      );
+      expect(code).toBe(EXIT_FAILED);
+      const refusal = frameRateImageRefusal('a', EXPECTED_VERSION, { hz: 32, earlierPatch: false });
+      expect(test.stdout.text).toContain(`Backup refused: ${refusal}`);
+      expect(refusal).toMatch(
+        /^Slot A holds a known frame-rate build: the stock 1\.3\.0\.0 firmware with the 32 Hz frame-rate patch\. .* write the stock image back to slot A first/,
+      );
+      const said = test.stdout.text + test.stderr.text;
+      /* Not "unknown", no patch offered, and (even with --verbose) no list of read attempts. */
+      expect(said).not.toMatch(/unknown image|every way to read it was tried|candidate/);
+      const coded = said
+        .split('\n')
+        .filter((line) => PRESERVE_CODE_NAMES.some((name) => name.test(line)));
+      expect(coded).toEqual([]);
       expect(await sha256hex(camera.flash)).toBe(await sha256hex(asBooted));
     },
   );

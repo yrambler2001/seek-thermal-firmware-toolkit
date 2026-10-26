@@ -12,6 +12,9 @@ import { CancelledError, isSeekError, type SeekErrorCode } from '@seek-fw/core';
 export const EXIT_OK = 0;
 export const EXIT_FAILED = 1;
 export const EXIT_USAGE = 2;
+/** A planned stop (`preserve`: the start entered a bank the run did not patch). Not a failure:
+ *  the run's next step is recorded, and resuming it goes on (TESTING.md 42.105). */
+export const EXIT_STOPPED = 3;
 export const EXIT_CANCELLED = 130;
 
 /** A failure the CLI itself diagnosed. Carries the exit code it deserves. */
