@@ -636,7 +636,8 @@ describe('decryptDump', () => {
     expect(text).toContain('Embedded key table : yes');
     /* The verdict in words, in the report, the key record and the summary; the manifest keeps the code
      * (TESTING.md 42.88). */
-    expect(text).toContain('Key check      : verified by the acceptance sum\n');
+    /* Said once, in the key record the report embeds (TESTING.md 42.89). */
+    expect(text.match(/key check/gi)).toHaveLength(1);
     expect(text).toContain('key check      : verified by the acceptance sum\n');
     expect(text).not.toMatch(/VERIFIED|Confidence|confidence/);
     const summary = new TextDecoder().decode(

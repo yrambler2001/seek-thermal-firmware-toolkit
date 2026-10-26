@@ -456,7 +456,7 @@ export async function decryptDump(
       `Image slot     : flash ${hexUp(flash)}   (file offset ${hexUp(image.base)})\n` +
       `Image length   : ${String(image.len)} bytes (${hexUp(image.len)})\n` +
       '\n' +
-      `Key check      : ${checkWords}\n` +
+      /* The key check is the key record's (below), said once (TESTING.md 42.89). */
       'Key recovery   : cryptanalytic — xorshift128 linear GF(2) solve from ciphertext\n' +
       '                 (no key search; the stored key slot is never read)\n' +
       `  known-plaintext: image words ${KNOWN_ZERO_IDX.join(',')} ` +
