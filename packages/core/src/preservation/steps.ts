@@ -1236,7 +1236,9 @@ function deriveFactoryImage(capture: Uint8Array, cameraVersion: string, bank: Ba
     if (says === cameraVersion) versionMatched = true;
     if (says !== undefined && says !== cameraVersion) {
       reasons.push(`${way}: it says firmware ${says}, not the ${cameraVersion} the camera runs`);
-      codeReasons.push(`the camera reports ${cameraVersion} but the image in ${words} says ${says}`);
+      codeReasons.push(
+        `the camera reports ${cameraVersion} but the image in ${words} says ${says}`,
+      );
       imageVersion ??= says;
       continue;
     }
@@ -1646,7 +1648,9 @@ async function captureOther(
     const reasons = derivationReasonsOf(error);
     reporter.log(
       `${sentence(words)}: no image the run can patch (${error instanceof Error ? error.message : String(error)})` +
-        (reasons.length > 0 ? `; every way to read it was tried:\n  - ${reasons.join('\n  - ')}` : ''),
+        (reasons.length > 0
+          ? `; every way to read it was tried:\n  - ${reasons.join('\n  - ')}`
+          : ''),
       'detail',
     );
     return {

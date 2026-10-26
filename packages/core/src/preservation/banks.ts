@@ -351,8 +351,7 @@ function frameRateRemedy(bank: string): string {
 /** A bank that holds a known frame-rate build, as the bank table and the choices say it. */
 export function frameRateImageWords(cameraVersion: string, build: FrameRateBuild): string {
   return (
-    `it ${frameRateImageWhat(cameraVersion, build)}. To include this bank, ` +
-    frameRateRemedy('it')
+    `it ${frameRateImageWhat(cameraVersion, build)}. To include this bank, ` + frameRateRemedy('it')
   );
 }
 

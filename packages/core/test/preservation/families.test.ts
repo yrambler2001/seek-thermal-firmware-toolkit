@@ -1345,9 +1345,7 @@ describe('a known frame-rate build on every family Preserve writes — named, ne
       expect(identifyFpsImage(patched).patchedEntries.map((entry) => entry.id)).toContain(patch.id);
       expect(bankImageRefusal(storedBank(image, profile), version, 'a')).toBeNull();
       const words = bankImageRefusal(storedBank(patched, profile), version, 'a');
-      expect(words).toBe(
-        frameRateImageWords(version, { hz: patch.targetHz, earlierPatch: false }),
-      );
+      expect(words).toBe(frameRateImageWords(version, { hz: patch.targetHz, earlierPatch: false }));
       expect(words).not.toBe(unknownImageWords(version));
       expect(words).toMatch(
         new RegExp(

@@ -179,6 +179,7 @@ export {
   patchSiteWords,
   preserveBuildWords,
   preserveStepResultWords,
+  preserveStepLabel,
   restoreFormWords,
   stagedFormWords,
 } from './words.js';

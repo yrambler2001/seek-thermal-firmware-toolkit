@@ -346,6 +346,13 @@ const STEP_LABEL = {
   verify: 'Check',
 } as const;
 
+/** A step's name as people read it (the step ids stay for the run file and `--from-step`). */
+export function preserveStepLabel(
+  step: 'backup' | 'patch' | 'commit' | 'drain' | 'restore' | 'verify',
+): string {
+  return STEP_LABEL[step];
+}
+
 /** The site's addresses, kept for callers that print one site per line. */
 export function patchSiteLine(site: { readonly offset: number; readonly name: string }): string {
   return `${hexUp(site.offset)}  ${patchSiteWords(site.name)}`;

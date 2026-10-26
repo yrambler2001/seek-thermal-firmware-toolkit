@@ -472,6 +472,7 @@ export {
   patchSiteWords,
   preserveBuildWords,
   preserveStepResultWords,
+  preserveStepLabel,
   restoreFormWords,
   stagedFormWords,
   preserveStoppedForRestore,
