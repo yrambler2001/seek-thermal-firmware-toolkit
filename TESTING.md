@@ -14182,3 +14182,178 @@ If the first line is a WARNING instead (unknown block, or `could not read`), the
 - FW-V1, branch `fwv1-4299` (worktree `/private/tmp/claude-501/fwv1-4299`, on main `54eee5c3a`; not merged, not pushed): `850d9655a` (the two PRO 1.0.3.0 bootloader targets on "2016"), `39cb05131` (the runner takes the bank map of the bootloader on the part; bank_maps.json as one table; test_bank_map.mjs), `dac8a20f4` (flash-bank takes only A, B, R on 2014 and 2016).
 - Seek: this section, on `worktree-agent-a96c1fa7376f9f29b`, reset to `refactor/all-firmware-profiles` (`0c86e12`).
 - Scratch (not committed): `/private/tmp/claude-501/-Users-yrambler2001-things-a-noindex-seek-seek-thermal-firmware-backup/82174575-1341-45d6-a306-7518156cd978/scratchpad/t99/` (`survey.py` and `survey.out` the 251-file block-0 survey, `blver.py`, `old_runners/` and `c_runners/` the runners before and between the commits, `JLinkExe` the stand-in, `detect.py` and `detect.json`, `compare.py`, `compare.json` and `compare_old.out`, `r1300.diff`, `render.sh`, `gencheck.sh`, `bf_refuse.sh`).
+
+### 42.100 FW-V1: build_flash writes the slot of the bootloader on the camera; on another map it warns, writes that bootloader's slot and leaves the boot word (no hardware, 2026-10-26)
+
+**Summary.** Agent 42.100 (Opus 5.5), on `worktree-agent-ad61a0ec77d3c497c`, reset to `refactor/all-firmware-profiles` (`74e747e`). FW-V1 work is on branch `fwv1-42100` in the worktree `/private/tmp/claude-501/fwv1-42100`, cut from FW-V1 main `dac8a20f4`; one commit, `8946833ee` (section 10), not merged, not pushed. FW-V1's main checkout was not touched. No camera, J-Link or USB switch was used.
+
+42.99's open item: `build_flash.mjs` took the bank address from its own `SLOTS` table, which is the target's map. On the bench board (target `compact_pro_ff_18hz_4_18_2_0`, map 4x; the flash holds `final.bin`, `28060916…`, with the 2016 Compact PRO bootloader 1.2.0.0) its "slot B" 0x14050000 is that bootloader's A, the bank the camera starts. The bank written there has a "CODE" footer under Key A, a form that bootloader cannot start. Owner: yes.
+
+Now, before any write, `build_flash` asks the runner which bootloader the camera holds:
+- Same map as the target: as before.
+- Another map: a WARNING. The bank goes to that bootloader's slot (B by default: 0x14060000 on the bench board). The boot word is left as it is, with the reason printed.
+- Unknown, blank or unread: a WARNING, and the target's own slots.
+
+Nothing is refused because of the bootloader. `npm run rescue` names the camera's own address for the boot word it writes.
+
+**Tags.** [measured] was run here. [source] was read from the file named. [inferred] follows from those and was not run.
+
+**1. Setup** [measured]. `git reset --hard refactor/all-firmware-profiles` gave `74e747e`. `git -C FW-V1 worktree add /private/tmp/claude-501/fwv1-42100 -b fwv1-42100 main` (main `dac8a20f4`). `render_tool.mjs --path tools/build_flash.mjs --check` on every target that has a `build_flash.mjs` before any change:
+- 11 equal: the nine derived 4x targets from `codegen/harness/tools/build_flash.mjs` (`8c369ad7`), and `compact_8hz_1_3_0_0` (`02afb8d8`) and `compact_pro_9hz_1_0_3_0` (`d06f98d2`, the `.BIN` variant) from their own copies under `codegen/targets/<t>/tools/`.
+- 25 pending forks:
+  - 19 equal to the 1.3.0.0 copy: 15 Compact 0.3.0.1 to 1.2.0.0, `compact_8hz_1_3_0_8`, PRO 9 Hz 1.0.3.2, PRO FF 1.0.3.0 and 1.0.3.2;
+  - three 4.x (`compact_8hz_4_8_1_7`, `_4_8_1_9`, `compact_ff_16hz_4_16_1_7`; `88f06dcc`, the harness text plus two `BUILD` lines);
+  - the three bootloader targets (`933bd000`, an older 2014 text with the same flash tail).
+
+**2. The design** [source: FW-V1 `fwv1-42100`].
+
+2.1 The table stays in the runner. `jlink-runner.js` (harness) gains `read-bank-map`. It is `bankMap()` of 42.99 run alone: one J-Link session (`halt`, `savebin <tmp>/bootloader_block_14000000.bin, 0x14000000, 0x10000`, `q`, the runner's usual session arguments and `-NoGui 1`). It prints the same `Bootloader:` line or WARNING a bank operation prints, writes nothing, and ends with one machine line:
+
+`BANK_MAP_JSON {"map":"2016","label":"the 2016 Compact PRO bootloaders","banks":{"A":335872000,"B":335937536,"R":336003072},"form":"stored-2016","status":"known","bootloader":"the 2016 Compact PRO bootloader 1.2.0.0 (Jun 26 2016 11:08:15)","target":"4x","targetLabel":"the 4.x bootloaders","targetBanks":{"A":335740928,"B":335872000,"R":336003072}}`
+
+This is measured: the bench runner against the stand-in playing `final.bin`; the part was unchanged. The addresses are decimal in the JSON; the human line above them gives them in hex. `bankMap()` now also records `status` (known, blank, unknown, unread) and the bootloader's name; nothing else in it changed. `bank_maps.json` gives each map a `label` ("the 2014 Compact bootloader", "the 2016 Compact PRO bootloaders", "the 4.x bootloaders"), which `bank_map.mjs` renders into `BANK_MAPS`. `build_flash.mjs` keeps no copy of the bootloader table: it spawns `node tools/jlink/jlink-runner.js read-bank-map` and parses that one line.
+
+2.2 `build_flash.mjs --flash`. The order is build, verify, package, then `bootloader: which one the camera holds (J-Link read of 0x14000000; nothing is written)`, then the rescue dump, the write, the boot word (or not), `reset-go` and `read-boot-slots`. The read comes before the dump, so its warning shows before the long 4 MB read. What the answer leads to:
+- **Known, same map:** the target's slot, boot word flipped, as before. The step lines now name the address (`boot selector: cfg[0]=1 (slot B, 0x14050000)`, `done: … is in slot B (0x14050000) and selected`).
+- **Known, another map:** on stderr `WARNING: This camera has the 2016 Compact PRO bootloader 1.2.0.0 (Jun 26 2016 11:08:15) (bank map 2016). This build is for the 4.x bootloaders (bank map 4x) and will not start on it.` Then:
+  - `Writing that bootloader's slot B, 0x14060000, not this target's 0x14050000, which is its slot A.`
+  - `Boot word left as it is: this build cannot start there, so pointing the camera at slot B would only make it pass over B and fall back (B, then A, then R).`
+  - After the dump, the boot word read out of it: `The boot word is 0xffffffff (blank), slot A (0x14050000); this write leaves that bank alone.` When the word selects the slot being written, this is a WARNING instead (section 4, `final-word1`).
+  - The write goes to the camera's slot address with the target's own `BANK_FORM`. `set-boot` is not called. The end reads `done: … is in slot B (0x14060000), which the 2016 Compact PRO bootloader … cannot start (boot selector untouched)` and `npm run rescue sets boot word 0: that bootloader's slot A (0x14050000), then B, then R`.
+- **Unknown, blank or unread:** the runner's WARNING, then `WARNING: the camera's bootloader is blank|not one FW-V1 knows|unread (see the runner's warning); using this target's own slots (A …, B …, R …).` From there it runs as before.
+- **A runner without `read-bank-map`** (the 20 pending forks: 16 on `580dfcc1`, three on `a973f398`, `compact_8hz_1_3_0_8` on `a1209783`): the runner's usage exit 2 is caught (no J-Link session). The script prints `WARNING: this target's J-Link runner has no read-bank-map (it is older than unit 42.100), so the camera's bootloader is not known; using this target's own slots (…).`
+
+2.3 The fallback order [source]. Read before the boot-word line was worded:
+- `targets/compact_8hz_1_3_0_0_bootloader/src/image.c` and `targets/compact_pro_9hz_1_0_3_0_bootloader/src/image.c` `boot_select_image`;
+- `targets/compact_pro_ff_bootloader/src/boot_main.c` `select_boot_slot`.
+
+All three pass over a bank that fails their check (`image_sum_ok`, `image_sum_ok_device_seeded`, `image_try_keys`):
+
+| boot word | order |
+|---|---|
+| 0 or blank | A, then B, then R |
+| 1 | B, then A, then R |
+| other | R, then A, then B |
+
+The 2014 and 2016 bootloaders return the last bank unchecked. The 4.x bootloader parks in a loop when no bank passes. So a word pointing at a bank that bootloader cannot start only sends the camera on to the next bank. On the bench board that is A, while A holds the 1.0.3.0 bank.
+
+2.4 `npm run rescue` (`build_flash.mjs rescue`). It writes boot word 0 (or the `--slot` one), and the runner's `set-boot` has named the camera's bank for it since 42.99. On a mismatched chip it selects that bootloader's A: 0x14050000 on the bench board, a bank the new `--flash` never writes by default. So rescue does the right thing. Its own words named only the letter. It now asks `read-bank-map` first:
+- On another map it prints `WARNING: This camera has … (bank map 2016), not the 4.x bootloaders this target builds for (bank map 4x). Boot word 0 selects that bootloader's slot A, 0x14050000.`
+- The step reads `boot selector: cfg[0]=0 (slot A, 0x14050000)`.
+- It ends with `done: booting slot A (0x14050000); a bank the bootloader cannot start is passed over: A, then B, then R`.
+
+Its J-Link writes are unchanged (section 5). `rescue --factory-restore` still calls `flash-factory-4m`, which the runner disables (exit 2); this was not changed.
+
+**3. The copies** [measured]. Changed the way the repository keeps them in step: the 39 copies were edited by one script (scratch `t100/patch_bf.py`, every anchor exactly once per file), and `gen.mjs` placed the managed ones.
+
+| copy | how | targets | before | after |
+|---|---|---|---|---|
+| `codegen/harness/tools/build_flash.mjs` | edited; `gen.mjs --target` places it | the nine derived 4x | `8c369ad7` | `f0dc801d` |
+| `codegen/targets/compact_8hz_1_3_0_0/tools/build_flash.mjs` | edited (own copy); `gen.mjs` places it | `compact_8hz_1_3_0_0` | `02afb8d8` | `f109a102` |
+| the 19 pending copies equal to it | the same edit, still equal to it | 15 Compact 0.3.0.1 to 1.2.0.0, `compact_8hz_1_3_0_8`, PRO 9 Hz 1.0.3.2, PRO FF 1.0.3.0, 1.0.3.2 | `02afb8d8` | `f109a102` |
+| `codegen/targets/compact_pro_9hz_1_0_3_0/tools/build_flash.mjs` | edited (own copy, `.BIN`); `gen.mjs` | `compact_pro_9hz_1_0_3_0` | `d06f98d2` | `0be090df` |
+| three pending 4.x copies | the same edit | `compact_8hz_4_8_1_7`, `_4_8_1_9`, `compact_ff_16hz_4_16_1_7` | `88f06dcc` | `7c688961` |
+| three bootloader-target copies | the same edit (they share the flash and rescue text; the PRO two refuse before make, the 2014 one has no base in the tree) | `compact_8hz_1_3_0_0_bootloader`, both PRO 1.0.3.0 bootloaders | `933bd000` | `3bfad819` |
+
+Each copy is +113/-11. The groups stay groups (5 hashes before, 5 after).
+
+The runner (+24/-2 in the harness) was rendered:
+- with `gen.mjs --target` on the 11 derived targets that receive it: the nine 4x `350b7d13` to `ddfadc68`, 1.3.0.0 `09e76d97` to `1a7263ab`, PRO 9 Hz 1.0.3.0 `41cfcda4` to `b8eb21ee`;
+- with `render_tool.mjs --out` on the five pending PRO 1.0.3.x targets, as 42.99 did: `41cfcda4` to `b8eb21ee`.
+
+Each render is +30/-5. The 20 pending forks are not touched. Five pending PRO copies of `build_flash.mjs` are `DIFFERENT` against the harness render, as on main (they are forks of the 1.3.0.0 text).
+
+**4. Per dump** [measured, scratch `t100/compare.py`, `compare.json`]. A real build of each target first (scratch `t100/build_all.sh`, build only, the new script): 29 exit 0. The other seven:
+- the three bootloader targets refuse before make, as on main;
+- four 4.x targets (`compact_8hz_4_8_1_7`, `_4_8_1_9`, `compact_ff_16hz_1_3_0_8`, `compact_ff_16hz_4_16_1_7`) build byte-exact but have no `firmware_to_be_reconstructed_full_flash.bin` in the tree or in the main checkout.
+
+Then, per target and per side, a sandbox: that side's `tools/` (main's from `git archive dac8a20f4`), the target's Makefile, `base/` and the build's bins. `make` is a no-op stub. `JLINKEXE` is the logging stand-in of 42.94 and 42.99 playing the part named; each case starts from the same part and an empty `jlink_dumps/`. The four targets without a reference got the 4.18.2.0 dump as a stand-in footer reference, the same on both sides, so that their flash path runs.
+
+Bench target `compact_pro_ff_18hz_4_18_2_0` (map 4x):
+
+| part | `--flash` prints (new) | written (new) | boot word after (new) | main wrote |
+|---|---|---|---|---|
+| `final.bin` `28060916` (2016 bootloader `b6cb3507`, boot word blank) | `Bootloader: … 2016 Compact PRO bootloader 1.2.0.0 …, not this target's own 4x.`, the WARNING, `Writing that bootloader's slot B, 0x14060000, not this target's 0x14050000, which is its slot A.`, the boot-word line, `The boot word is 0xffffffff (blank), slot A (0x14050000); this write leaves that bank alone.` | 0x14060000 only (`Flashing … -> 0x14060000 (bank B of bank map 2016)`) | blank, unchanged | 0x14050000 (the 2016 A, the bank the camera starts) and cfg[0]=1 |
+| the same, `--slot recovery` | `Writing that bootloader's slot RECOVERY, 0x14070000 (this target's address too).` | 0x14070000 | unchanged | 0x14070000 and cfg[0]=2 |
+| the same, `--no-boot-flip` | as the first row | 0x14060000 | unchanged | 0x14050000 |
+| `final.bin` with cfg[0]=1 | as the first row, then `WARNING: the boot word is 1, slot B, the slot this writes: at the next start the camera passes over it and falls back (B, then A, then R).` | 0x14060000 | 1, unchanged | 0x14050000 and cfg[0]=1 |
+| 4.18.2.0 FF `a042bb71` (the board's original, 4.x FF bootloader) | `… Compact PRO FF 4.x bootloader (Jan 7 2019 15:56:20): bank map 4x …, this target's own.` | 0x14050000, then cfg[0]=1 | 1 | the same |
+| `final.bin` with block 0 all `0xFF` | the runner's blank WARNING, `WARNING: the camera's bootloader is blank (see the runner's warning); using this target's own slots (A 0x14030000, B 0x14050000, R 0x14070000).` | 0x14050000, then cfg[0]=1 | 1 | the same |
+| `final.bin` with byte 0x100 flipped (block `23ff4d8f…`) | the runner's unknown WARNING, `… is not one FW-V1 knows …; using this target's own slots (…)` | 0x14050000, then cfg[0]=1 | 1 | the same |
+| `final.bin`, every `savebin` failing (`--no-dump --no-boot-flip`) | the runner's `could not read` WARNING, `… is unread …; using this target's own slots (…)` | 0x14050000 | unchanged | the same |
+
+Other targets:
+
+| target (map) | part | new | main |
+|---|---|---|---|
+| `compact_8hz_1_3_0_0` (2014) | 1.3.0.0 Compact `40447c7e` (2014 bootloader) | `… 2014 Compact bootloader 0.9.0.0 …, this target's own.`; plain-2014 bank at 0x14060000, cfg[0]=1 | the same |
+| `compact_8hz_1_3_0_0` | `final.bin` with block 0 blank, and with the flipped byte | the WARNINGs; 0x14060000, cfg[0]=1 (the 2014 map) | the same |
+| `compact_8hz_1_3_0_0` | `final.bin` (2016) | the WARNING (`This build is for the 2014 Compact bootloader (bank map 2014) …`), `Writing that bootloader's slot B, 0x14060000 (this target's address too).`; then the runner refuses `BANK_FORM=plain-2014` on map 2016, exit 2, nothing written | the same refusal, exit 2 |
+| PRO 9 Hz 1.0.3.0, 1.0.3.2, PRO FF 1.0.3.0, 1.0.3.2 (2016) | `final.bin` (2016 bootloader) | match; stored bank at 0x14060000, cfg[0]=1 | the same |
+| the same four | 4.18.2.0 `a042bb71` (4.x) | the WARNING; `Writing that bootloader's slot B, 0x14050000, not this target's 0x14060000.`; the runner refuses `BANK_FORM=stored-2016` on map 4x, exit 2, nothing written | exit 2 at 0x14060000 (`not a bank base of bank map 4x`), nothing written |
+| the pending forks (20 targets) | either part | `WARNING: this target's J-Link runner has no read-bank-map …`; the target's own slots | the same J-Link sessions |
+
+The required checks, all as expected:
+- `final.bin` on the 4x target gives the warning, the write at 0x14060000 and no boot flip.
+- `a042bb71` on it, and the 1.3.0.0 dump on `compact_8hz_1_3_0_0`, match, with unchanged behaviour (only the read is added).
+- Blank and unknown give the warning and the target's map, on both the 4x and the 2014 target.
+
+**5. The J-Link scripts against main** [measured, scratch `t100/compare.py`, `summarize.py`, `check2.py`]. 36 targets, 155 cases: on each target `--flash` and `rescue` on the part of its own map (4x: `a042bb71`; 2016: `final.bin`; 2014: the 1.3.0.0 dump) and on another (4x and 2014: `final.bin`; 2016: `a042bb71`); the bench target and 1.3.0.0 also take the blank, unknown, unread, `--slot recovery`, `--no-boot-flip` and boot-word-1 cases. Compared: the command scripts, the arguments, the exit code, the part afterwards and cfg[0].
+
+| copy, runner (targets) | cases | same | same once the added read is set apart | different |
+|---|---|---|---|---|
+| harness, `ddfadc68` (the nine 4x) | 42 | 0 | 30 | 12 |
+| 1.3.0.0 copy, `1a7263ab` (`compact_8hz_1_3_0_0`) | 9 | 0 | 9 | 0 |
+| 1.3.0.0 copy, `b8eb21ee` (PRO 9 Hz 1.0.3.2, PRO FF 1.0.3.0, 1.0.3.2) | 12 | 0 | 12 | 0 |
+| `.BIN` copy, `b8eb21ee` (PRO 9 Hz 1.0.3.0) | 4 | 0 | 4 | 0 |
+| bootloader copy, `b8eb21ee` (both PRO bootloaders) | 8 | 4 (`--flash`, refused before make) | 4 (rescue) | 0 |
+| 1.3.0.0 copy, `580dfcc1` / `a1209783` (15 Compact, 1.3.0.8) | 64 | 64 | 0 | 0 |
+| 4.x pending copy, `a973f398` (three) | 12 | 12 | 0 | 0 |
+| bootloader copy, `580dfcc1` (`compact_8hz_1_3_0_0_bootloader`) | 4 | 4 | 0 | 0 |
+
+Totals: 84 same, 59 the same with one read added, 12 different. Each difference, explained:
+- **The added read.** Exactly one session, `halt | savebin "<tmp>/bootloader_block_14000000.bin", 0x14000000, 0x10000 | q`, with the same arguments as the runner's own read in `flash-bank` (`-NoGui 1 -SelectEmuBySN 69656086 -device LPC4330_M4 -if SWD -speed 4000 -autoconnect 1`). It is session 0 of a `--flash` (before the rescue dump) and session 1 of a `rescue` that first takes a dump. Every other argument list is equal (0 differences). The pending forks add no session: their usage exit 2 opens no J-Link.
+- **The 12 different cases, all the design, all the 4x render on a 2016 part.**
+  - Nine targets' `--flash` on `final.bin`: main loads 0x14050000 and writes cfg[0]=1; new loads 0x14060000 and writes no boot-config block.
+  - The bench target's `--no-boot-flip`: 0x14050000 becomes 0x14060000.
+  - `--slot recovery`: the same 0x14070000, with the cfg[0]=2 write dropped.
+  - Boot word 1: 0x14050000 and cfg becomes 0x14060000 alone.
+  
+  In every one the new part differs from the starting part in the written bank only. On main, block 0x14050000 (the 2016 A, the bank the camera starts) changed in all but the recovery case.
+- **Refusals that stay refusals.** 2014 runner on the 2016 part, and 2016 runners on the 4.x part, exit 2 on both sides. The 2016 runners' reason moves from the address (0x14060000 is no 4.x bank) to the form (`stored-2016` on map 4x), because the address is now the 4.x B.
+
+**6. Checks** [measured].
+- `node --check` on the 59 `.js`/`.mjs` files the commit changes (39 `build_flash.mjs`, the harness runner and its 16 renders, `bank_map.mjs`, `test_bank_map.mjs`, `test_gen.mjs`): 0 failures.
+- `gmake -C codegen test-engine`: csplit, unifdef and provenance pass; `test_gen` 86 passed, 0 failed (the 2014 render re-pinned at `1a7263ab…`); `test_bank_map` 57 passed, 0 failed (51 before; six `read-bank-map` cases added: a known mismatch, two known matches, blank, unknown and unreadable; each checks one session, one JSON line and an unchanged part); `test_check_mk` 7 passed, 4 failed, as on main, where gmake stops. The commands after it, run one by one (scratch `t100/engine_rest.py`): codegen_notes OK, line_length OK (2 skipped), bl_verify OK, oracle_guard OK, migration_gate skipped (no clang-format), test_fold 16/0, test_validate_manifest 628/0.
+- `gen.mjs --target <t> --check` on the 18 derived targets: all exit 0. `render_tool.mjs --check`: the 16 rendered runners equal, the 11 placed `build_flash.mjs` equal.
+- Builds: 36 build-only runs of the new script (section 4). Comparison: 310 `build_flash.mjs` runs against the stand-in.
+
+**7. For the bench: J-Link reads only** [inferred; not run]. The board should still hold `final.bin` (`28060916…`, boot word blank). From FW-V1 `fwv1-42100`, `targets/compact_pro_ff_18hz_4_18_2_0`, J-Link on (switch channel 1), camera power as for 42.98's halted reads:
+1. `node tools/jlink/jlink-runner.js read-bank-map`. Expect one J-Link session (`halt`, `savebin <tmp>/bootloader_block_14000000.bin, 0x14000000, 0x10000`, `q`), then `Bootloader: the flash holds the 2016 Compact PRO bootloader 1.2.0.0 (Jun 26 2016 11:08:15): bank map 2016 (A 0x14050000, B 0x14060000, R 0x14070000), not this target's own 4x.` Then the `BANK_MAP_JSON` line of section 2.1, `"status":"known"`, B 335937536 (0x14060000), and exit 0. Nothing is written. The core is left halted, so power-cycle after.
+2. `node tools/jlink/jlink-runner.js read-boot-slots` (reads; it halts). `mem32 0x14010000` should show cfg[0] `FFFFFFFF`, the slot A that the next `build_flash --flash` leaves alone.
+
+If step 1 prints a WARNING instead, the halted read did not return the bootloader. Compare with `dump-spifi-4m-halted`'s first 64 KiB (`b6cb35076261dec1…`). In that case `build_flash --flash` would fall back to the 4x slots, which is main's behaviour. A real `build_flash --flash` on the board writes 0x14060000; that is a write and was not asked for.
+
+**8. Open questions.**
+- **A target form the camera's map refuses.** On a 2014 target on a 2016 or 4.x camera, and a 2016 target on a 2014 or 4.x camera, the runner's 42.99 form rule refuses the bank (exit 2, after the rescue dump, nothing written). Only a 4x target on an older camera gets written, because the footer bank is taken on every map. `build_flash` adds no refusal of its own and warns first. Should the write go through on another map, for example by dropping the form check when `build_flash` has already warned?
+- **The pending forks** (20 runners) have no `read-bank-map`, so their `build_flash` warns and keeps its own slots. On the bench board the three pending 4.x targets still write 0x14050000 and flip to B, as on main. `render_tool.mjs --out` gives a target the read (42.99 section 10).
+- **The boot word on the slot being written.** The default B is written even when the camera's boot word selects B (it warns). The owner's rule was the camera's B; picking another slot was not done.
+- **Not changed:**
+  - the `tools/jlink/README.md` copies (no `read-bank-map` row);
+  - the targets' `README.md` "Build and flash" paragraphs (they still say slot B is selected);
+  - `rescue --factory-restore` (calls the disabled `flash-factory-4m`);
+  - `read-boot-slots` (the 4.x footer positions).
+- `BANK_MAP_JSON` gives the addresses as JSON numbers (decimal). A reader sees the hex in the line above it.
+
+**9. Handoff.** Nothing is left half-done; about 95 of the 150 tool calls were used.
+
+**10. Commits.**
+- FW-V1, branch `fwv1-42100` (worktree `/private/tmp/claude-501/fwv1-42100`, on main `dac8a20f4`; not merged, not pushed): `8946833ee`. It holds the runner's `read-bank-map`, the map labels, the `build_flash.mjs` change in its 39 copies, the 16 runner renders, 11 manifests and the tests: 71 files, +4975/-539.
+- Seek: this section, on `worktree-agent-ad61a0ec77d3c497c`, reset to `refactor/all-firmware-profiles` (`74e747e`).
+- Scratch (not committed): `/private/tmp/claude-501/-Users-yrambler2001-things-a-noindex-seek-seek-thermal-firmware-backup/82174575-1341-45d6-a306-7518156cd978/scratchpad/t100/`. It holds:
+  - `patch_bf.py`, `fix1.py`, `edit_maps.py`: the edits;
+  - `render.sh`, `bfcheck.sh`, `apply_and_check.sh`: the renders and checks;
+  - `build_all.sh` and `builds/`: the builds;
+  - `JLinkExe`: the stand-in;
+  - `compare.py`, `compare.json`, `compare.out`, `summarize.py`, `check2.py`, `show.py`: the comparison;
+  - `engine_rest.py`, `test-engine.log` and `nodecheck_commit.sh`: the engine tests and syntax checks.
