@@ -6,7 +6,8 @@
  * and every device call is served in Node by the FW-V1 emulator booted from
  * the bench camera's own dump (the corpus entry 101310HSNEA2, Compact 1.3.0.0
  * — the camera this toolkit is run against). Everything goes through the real
- * UI: the Connect pick in the chooser, Dump & decrypt, then the Preserve
+ * UI: the Connect pick in the chooser, the 4.x/Nano dump tab's refusal of this
+ * 0.x/1.x camera, then the Preserve
  * wizard's steps 02, 03 and 04 with their confirmations, and every "Your turn:
  * press Connect device" ask the restarts raise answered in the chooser.
  *
@@ -57,14 +58,11 @@ const FLASH_BYTES = 4 * 1024 * 1024;
  * ANOTHER PART, on request: `SEEK_E2E_EMU_FLASH` boots a 4 MiB flash file
  * (a J-Link dump) on the emulator's default board instead of the corpus
  * 1.3.0.0 part, and the run checks against that part: the delivered image
- * must be the file itself, the raw dump `SEEK_E2E_EMU_POST_COMMIT_SHA` and the
- * Dump & decrypt image `SEEK_E2E_EMU_DUMP_SHA` when they are given (a 2016
- * part's dump image is gap-filled where no selector reaches, so it is not the
- * part's sha), the version `SEEK_E2E_EMU_VERSION` (TESTING.md sec. 38: the
- * bench camera's Compact PRO 1.0.3.0 flash: 1.0.3.0, raw 759280a2…, dump
- * image 0cb0e544…). For a part the expectation table knows by its flash
- * (`KNOWN_PARTS`, lib/preserve-expectations.ts) the two shas default to the
- * table's.
+ * must be the file itself, the raw dump `SEEK_E2E_EMU_POST_COMMIT_SHA` when it
+ * is given, the version `SEEK_E2E_EMU_VERSION` (TESTING.md sec. 38: the bench
+ * camera's Compact PRO 1.0.3.0 flash: 1.0.3.0, raw 759280a2…). For a part the
+ * expectation table knows by its flash (`KNOWN_PARTS`,
+ * lib/preserve-expectations.ts) the raw sha defaults to the table's.
  */
 const PART_FILE = process.env.SEEK_E2E_EMU_FLASH ?? '';
 const PART_SHA =
@@ -74,8 +72,6 @@ const PART: {
   readonly flash: string | null;
   readonly asBooted: string;
   readonly postCommit: string | null;
-  /** The Dump & decrypt image, or null to skip that check. */
-  readonly dumpImage: string | null;
   readonly version: string;
   readonly product: RegExp;
 } =
@@ -84,7 +80,6 @@ const PART: {
         flash: null,
         asBooted: AS_BOOTED_1300_SHA,
         postCommit: POST_COMMIT_1300_SHA,
-        dumpImage: AS_BOOTED_1300_SHA /* every block of this part is reachable */,
         version: '1.3.0.0',
         product: /PIR206 Thermal Camera/,
       }
@@ -92,7 +87,6 @@ const PART: {
         flash: PART_FILE,
         asBooted: PART_SHA,
         postCommit: process.env.SEEK_E2E_EMU_POST_COMMIT_SHA ?? KNOWN?.postCommit ?? null,
-        dumpImage: process.env.SEEK_E2E_EMU_DUMP_SHA ?? KNOWN?.dumpImage ?? null,
         version: process.env.SEEK_E2E_EMU_VERSION ?? '',
         product: /Thermal Camera/,
       };
@@ -178,35 +172,27 @@ describe.skipIf(UNAVAILABLE !== null)('the web app on the emulated camera (bridg
     else say(`kept: ${SCRATCH}`);
   });
 
-  it('connects through the chooser, and Dump & decrypt reads the camera', async () => {
+  it('connects through the chooser, and the 4.x/Nano dump tab refuses this 0.x/1.x camera before it reads', async () => {
     const w = need(wizard, 'the wizard');
     const b = need(bridge, 'the bridge');
     const name = await w.connect();
     expect(name).toMatch(PART.product);
 
+    /* The 4.x/Nano dump tab reads only 4.x and Nano cameras (TESTING.md 42.17): a 0.x/1.x camera is
+     * refused on its version, before any window is read, and the 0.x/1.x line's own read is
+     * Preserve's step 02, the next test. The refusal names that tab, and nothing that changes the
+     * camera goes on the wire. */
     const before = new Map(b.counts);
-    const dump = await w.dumpAndDecrypt(30 * 60_000);
+    await expect(w.dumpAndDecrypt(5 * 60_000)).rejects.toThrow(
+      /Refused — nothing was read[\s\S]*Dump & decrypt 0\.x\/1\.x 2014\/2016/,
+    );
     const wire = wireSince(before, b.counts);
-    say(`dump wire: ${describeWire(wire)}`);
-    expect(dump.status).toMatch(/^Done — (\d+)\/\1 windows read/);
-    /* The dump view's promise: no write, no commit, no reset on the wire. */
-    for (const op of ['out 0x50', 'out 0x51', 'out 0x59']) expect(wire.has(op), op).toBe(false);
-
-    const all = names(dump.entries);
-    const dir = all[0]?.split('/')[0] ?? '';
-    expect(dir).toMatch(/^seek_flash4m_/);
-    expect(all).toContain(`${dir}/manifest.json`);
-    expect(all).toContain(`${dir}/README.md`);
-    /* The whole-image file at the archive's top: every window the dump read, at
-     * its address, 0xFF where it read nothing — on the 1.3.0.0 part, the part itself. */
-    const combined = dump.entries.find((e) => /^[^/]+\/flash_4m_usb[^/]*\.bin$/.test(e.name));
-    expect(combined?.data.length).toBe(FLASH_BYTES);
-    say(`dump image sha256 ${sha256(combined?.data ?? new Uint8Array(0))}`);
-    if (PART.dumpImage !== null) {
-      expect(sha256(combined?.data ?? new Uint8Array(0)), 'the dump: the emulated part').toBe(
-        PART.dumpImage,
-      );
+    say(`refused dump wire: ${describeWire(wire)}`);
+    for (const op of ['out 0x50', 'out 0x51', 'out 0x55', 'out 0x59', 'out 0x5a']) {
+      expect(wire.has(op), op).toBe(false);
     }
+    expect(wire.has('out 0x52'), 'no window armed').toBe(false);
+    expect(wire.has('in 0x4f'), 'no window read').toBe(false);
   });
 
   it('step 02 reads & builds: no restart on the emulator, the run file in 02-read-build/', async () => {

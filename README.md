@@ -1133,11 +1133,12 @@ checks each run file's name (`preserve-<start>-<saved>-patch-built.zip`, `…-fu
 checks the raw and delivered dumps byte for byte against the emulated part, and the final page's
 "matches the backup on all 31 blocks" and "Verified — a perfect match.". It also checks that the
 camera's flash is back to exactly what it booted with. It takes about six minutes, headless.
+Before the wizard it checks that the 4.x/Nano dump tab refuses this 0.x/1.x camera on its version,
+before it reads anything, and names the 0.x/1.x tab.
 `SEEK_E2E_EMU_FLASH=<4 MiB dump>` boots another part instead, on the emulator's default board,
-and checks against it (`SEEK_E2E_EMU_VERSION`, `SEEK_E2E_EMU_POST_COMMIT_SHA` and
-`SEEK_E2E_EMU_DUMP_SHA` add the strict checks; TESTING.md sec. 38 ran the bench Compact PRO
-1.0.3.0 flash this way). For a part the expectation table knows (`e2e/lib/preserve-expectations.ts`)
-the two shas come from the table. Every other spec's emulator target boots the same part.
+and checks against it (`SEEK_E2E_EMU_VERSION` and `SEEK_E2E_EMU_POST_COMMIT_SHA` add the strict
+checks; TESTING.md sec. 38 ran the bench Compact PRO 1.0.3.0 flash this way). For a part the
+expectation table knows (`e2e/lib/preserve-expectations.ts`) the raw sha comes from the table. Every other spec's emulator target boots the same part.
 
 **`e2e:camera`** and **`e2e:camera:bridge`** are read-only:
 
