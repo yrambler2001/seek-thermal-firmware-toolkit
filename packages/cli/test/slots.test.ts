@@ -2755,7 +2755,7 @@ describe('slots patch-fps all', () => {
       dryRun: true,
       written: false,
       backup: {
-        fileName: 'seek_backup_<time>_SN-1_v4.9.5.0_bank-B-R-A_before-fps-patch-every-bank.zip',
+        fileName: 'seek_backup_<time>_SN-1_v4.9.5.0_bank-A-B-R_before-fps-patch-every-bank.zip',
       },
     });
     const text = test.stdout.text + test.stderr.text;

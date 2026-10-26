@@ -261,6 +261,16 @@ describe('the backup zip’s name', () => {
     ).toBe(
       'seek_backup_2026-10-26T12-00-00Z_unknown-serial_vunknown_bank-A-B-R_before-fps-patch-every-bank',
     );
+    /* TESTING.md 42.93: the write order (B, R, A) does not change the name, so a plan shows the zip's own name. */
+    expect(
+      backupName({
+        stamp: STAMP,
+        serial: null,
+        firmware: null,
+        keys: ['b', 'r', 'a'],
+        action: { kind: 'fps-patch-every-bank' },
+      }),
+    ).toContain('_bank-A-B-R_before-fps-patch-every-bank');
   });
 
   it('the plan names the zip with the time still to come, and what each bank gives', () => {

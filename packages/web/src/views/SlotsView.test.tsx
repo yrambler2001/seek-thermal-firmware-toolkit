@@ -970,7 +970,7 @@ describe('SlotsView: an empty bank', () => {
     const text = dialog()?.textContent ?? '';
     expect(text).toContain('Make every bank run at 18 FPS?');
     expect(text).toContain('They are written in this order: slot B, then slot R, then slot A.');
-    expect(text).toContain('_bank-B-R-A_before-fps-patch-every-bank.zip');
+    expect(text).toContain('_bank-A-B-R_before-fps-patch-every-bank.zip');
     /* The booted bank and R are among them: the tick before the confirm. */
     expect(buttonByText(document.body, 'Yes — patch 3 banks').disabled).toBe(true);
     act(() => {
