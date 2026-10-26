@@ -38,6 +38,8 @@ export interface SlotWriteConfirmProps {
   readonly targetEmpty?: boolean;
   /** The key the image is written under and the bank it was derived from, when there is one. */
   readonly keyLine?: string | null;
+  /** The backup zip's name as the plan shows it (the time still to come): the bank is saved there first. */
+  readonly backupName: string;
   readonly onConfirm: (acknowledged: boolean) => void;
   readonly onCancel: () => void;
 }
@@ -51,6 +53,7 @@ export function SlotWriteConfirm({
   ffImage = false,
   targetEmpty = false,
   keyLine,
+  backupName,
   onConfirm,
   onCancel,
 }: SlotWriteConfirmProps): ReactElement {
@@ -124,6 +127,9 @@ export function SlotWriteConfirm({
             </span>
           )}
           {keyLine && <span className="block">{keyLine}</span>}
+          <span className="block">
+            {`Before anything is sent, ${slotName} is read again and saved as one zip download: ${backupName}. Check your downloads folder for it.`}
+          </span>
           <span className="block">
             No reset is sent. Unplug and replug the camera afterwards for the bank to take effect.
           </span>

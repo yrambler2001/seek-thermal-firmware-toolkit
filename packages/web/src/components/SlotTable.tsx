@@ -9,10 +9,9 @@
  */
 
 import type { ReactElement, ReactNode } from 'react';
-import { Copy, Download, FileUp, Gauge } from 'lucide-react';
+import { ArchiveRestore, Copy, Download, FileUp, Gauge } from 'lucide-react';
 import {
   BOOTED_NOW,
-  bootsNowOf,
   NOT_BOOTED,
   SLOT_BYTES,
   hexUp,
@@ -38,16 +37,19 @@ import {
   TableRowHeader,
 } from './ui/table';
 import {
-  bankImageSource,
+  copyLabel,
   slotActionGate,
+  slotCopyGate,
   slotVersion,
   writeRisk,
-  type BankImageSource,
+  type ActionGate,
   type WriteRisk,
 } from '@/hooks/useSlotsPanel';
 
 /** The same image types the flash view takes. */
 const IMAGE_ACCEPT = '.bin,.img,.rom,application/octet-stream';
+/** A full flash backup: the 4 MiB image, or a Preserve run file (a zip) that holds one. */
+const FULL_FLASH_ACCEPT = '.bin,.img,.rom,.zip,application/octet-stream,application/zip';
 
 export interface SlotTableProps {
   readonly report: SlotsReport;
@@ -55,8 +57,10 @@ export interface SlotTableProps {
   readonly busy: boolean;
   readonly onDump: (key: SlotKey) => void;
   readonly onPickFile: (key: SlotKey, kind: SlotInputKind, file: File) => void;
-  /** Prepare a write of the running firmware's own image into an empty bank. */
-  readonly onFillWithBankImage: (key: SlotKey) => void;
+  /** Prepare a copy of bank `from`'s image into bank `to`. Nothing is sent by it. */
+  readonly onCopy: (from: SlotKey, to: SlotKey) => void;
+  /** Prepare a restore of bank `key` from a full flash backup file. Nothing is sent by it. */
+  readonly onPickRestore: (key: SlotKey, file: File) => void;
   /** The frame-rate plan of one bank, from its own image in the read. Pure. */
   readonly planFps: (key: SlotKey) => FpsPlan;
   /** Opens the confirmation for the frame-rate patch of one bank. Nothing is sent by it. */
@@ -67,9 +71,19 @@ export interface SlotTableProps {
 function fpsNote(plan: Extract<FpsPlan, { status: 'offer' }>): string {
   return (
     `Raises this bank from ${String(plan.fromHz)} Hz to ${String(plan.toHz)} Hz by editing its bytes. ` +
-    'The bank is saved in full before anything is written, and the saved decrypted file is the only way back.'
+    'The bank is saved first, in a zip download, and the decrypted file in it is the way back.'
   );
 }
+
+/** What the copy buttons do, in words, once. */
+const COPY_NOTE =
+  'Copies the firmware this bank holds, as this read decrypted it, into the bank you pick, whatever that ' +
+  'bank holds now. You review the plan before anything is sent.';
+
+/** What the restore button does, in words. */
+const RESTORE_NOTE =
+  'Pick a full flash backup: the 4 MiB image a J-Link reads, or a Preserve run file that holds the whole ' +
+  'flash. This bank is cut out of it, decrypted, and shown as a plan before anything is sent.';
 
 /**
  * Why a bank offers no frame-rate patch, in the page's words, or null when there is nothing to say (a
@@ -132,20 +146,15 @@ function riskNote(risk: WriteRisk): string | null {
   return null;
 }
 
-/**
- * What the "use the booted bank's image" button does, in words. The extra confirmation a write to this
- * bank asks for is said once in the row, under the write buttons (`riskNote`), not again here.
- */
-function fillNote(source: BankImageSource): string {
-  const version = source.version === null ? '' : ` (${source.version})`;
-  const which = source.booted
-    ? `${bootsNowOf('That')}.`
-    : 'The camera does not say which bank it boots; this is the first bank that holds an image.';
-  return [
-    `Copies the firmware ${source.name} holds${version} into this empty bank, so the camera has a second slot with the same firmware.`,
-    which,
-    'You review the plan before anything is sent.',
-  ].join(' ');
+/** The reasons the copy buttons of one row are off, each once, or null when every one is on. */
+function copyReasons(
+  copies: readonly { readonly to: SlotKey; readonly gate: ActionGate }[],
+): string | null {
+  const off = copies.filter((copy) => !copy.gate.enabled);
+  if (off.length === 0) return null;
+  const reasons = [...new Set(off.map((copy) => copy.gate.reason ?? ''))].filter((r) => r !== '');
+  if (off.length === copies.length && reasons.length === 1) return reasons[0] ?? null;
+  return off.map((copy) => `${copyLabel(copy.to)}: ${copy.gate.reason ?? 'off'}`).join(' ');
 }
 
 /** A control and, under it, the words for why it is off (or what it will ask). */
@@ -177,7 +186,8 @@ export function SlotTable({
   busy,
   onDump,
   onPickFile,
-  onFillWithBankImage,
+  onCopy,
+  onPickRestore,
   planFps,
   onPatchFps,
 }: SlotTableProps): ReactElement {
@@ -216,9 +226,20 @@ export function SlotTable({
           const writable = plainGate.reason === null || rawGate.reason === null;
           const version = slotVersion(report, key);
           const empty = view.content === 'empty';
-          /* An empty bank can be filled with the firmware the camera already runs, when another
-           * bank holds a decrypted image of it. */
-          const source = empty ? bankImageSource(report, key) : null;
+          /* This row is the source of a copy: one button for each other bank, whatever it holds. */
+          const copies = report.slots
+            .filter((other) => other.entry.key !== key)
+            .map((other) => ({
+              to: other.entry.key,
+              gate: slotCopyGate({
+                report,
+                from: key,
+                to: other.entry.key,
+                connected,
+                busy,
+                cameraRefusal,
+              }),
+            }));
           /* The frame-rate patch belongs to this row: its own image decides the entry, or the reason none. */
           const fps = planFps(key);
           const supported = report.plan.supportedBuild.supported;
@@ -349,22 +370,37 @@ export function SlotTable({
                     </span>
                   )}
 
-                  {source !== null && (
-                    <Action reason={plainGate.reason} note={fillNote(source)}>
-                      <Button
-                        variant="outline"
-                        disabled={!plainGate.enabled}
-                        onClick={() => {
-                          onFillWithBankImage(key);
-                        }}
-                      >
-                        <Copy />
-                        {source.booted
-                          ? "Use the booted bank's image"
-                          : `Use ${source.name}'s image`}
-                      </Button>
-                    </Action>
-                  )}
+                  <Action reason={copyReasons(copies)} note={COPY_NOTE}>
+                    <div className="flex flex-wrap gap-2">
+                      {copies.map((copy) => (
+                        <Button
+                          key={copy.to}
+                          variant="outline"
+                          disabled={!copy.gate.enabled}
+                          onClick={() => {
+                            onCopy(key, copy.to);
+                          }}
+                        >
+                          <Copy />
+                          {copyLabel(copy.to)}
+                        </Button>
+                      ))}
+                    </div>
+                  </Action>
+
+                  <Action reason={plainGate.reason} note={RESTORE_NOTE}>
+                    <FilePickerButton
+                      id={`slot-${key}-restore-file`}
+                      variant="outline"
+                      icon={<ArchiveRestore />}
+                      label="Restore from full flash backup…"
+                      accept={FULL_FLASH_ACCEPT}
+                      disabled={!plainGate.enabled}
+                      onPick={(file) => {
+                        onPickRestore(key, file);
+                      }}
+                    />
+                  </Action>
 
                   {fps.status === 'offer' ? (
                     <Action reason={plainGate.reason} note={fpsNote(fps)}>

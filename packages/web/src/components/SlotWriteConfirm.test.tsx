@@ -10,6 +10,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SlotWriteConfirm, type SlotWriteConfirmProps } from './SlotWriteConfirm';
 import { buttonByText, render } from '../test-helpers';
 
+/** The backup zip's name as the plan shows it (core's backupFileNameShown). */
+const BACKUP = 'seek_backup_<time>_SN_v1.3.0.0_bank-B_before-flash.zip';
+
 function setup(
   overrides: Partial<Pick<SlotWriteConfirmProps, 'risk' | 'open' | 'ffImage' | 'targetEmpty'>> = {},
 ): ReturnType<typeof render> & {
@@ -20,6 +23,7 @@ function setup(
   const onCancel = vi.fn();
   const handle = render(
     <SlotWriteConfirm
+      backupName={BACKUP}
       open={overrides.open ?? true}
       fileName="fw_decrypted.bin"
       slotName="slot B"
@@ -60,6 +64,14 @@ describe('SlotWriteConfirm', () => {
       'If the image does not run, the camera cannot be recovered over USB — only with SWD/J-Link or an SPI programmer.',
     );
     expect(node.textContent).toContain('No reset is sent.');
+    unmount();
+  });
+
+  it('says the bank is read again and saved as one zip download first, by its name (TESTING.md 42.91)', () => {
+    const { unmount } = setup();
+    expect(dialog().textContent).toContain(
+      `Before anything is sent, slot B is read again and saved as one zip download: ${BACKUP}. Check your downloads folder for it.`,
+    );
     unmount();
   });
 
@@ -236,6 +248,7 @@ describe('SlotWriteConfirm', () => {
             reopen
           </button>
           <SlotWriteConfirm
+            backupName={BACKUP}
             open={open}
             fileName="fw_decrypted.bin"
             slotName="slot B"
@@ -280,6 +293,7 @@ describe('the key line of the confirmation', () => {
   it('says which key the image is written under, and from which booted bank, when the plan is derived', () => {
     const handle = render(
       <SlotWriteConfirm
+        backupName={BACKUP}
         open
         fileName="fw_decrypted.bin"
         slotName="slot B"
@@ -298,6 +312,7 @@ describe('the key line of the confirmation', () => {
   it('says nothing about a key when the plan carries none', () => {
     const handle = render(
       <SlotWriteConfirm
+        backupName={BACKUP}
         open
         fileName="raw.bin"
         slotName="slot B"

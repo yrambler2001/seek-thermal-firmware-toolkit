@@ -3,10 +3,11 @@
  *
  * What is pinned here: a build the plan does not support is never read; a
  * report belongs to one camera; a bank the camera boots, and recovery, are not
- * written without the acknowledgement; a commit drops the read it was made
- * from; and the file names a dump is saved under. No camera is touched: the
- * backend answers every question, and the transport is never opened on a real
- * device.
+ * written without the acknowledgement; every write saves its bank first, as one
+ * zip download; a commit drops the read it was made from, and a write that
+ * stops before its commit keeps it; and the file names a dump is saved under.
+ * No camera is touched: the backend answers every question, and the transport
+ * is never opened on a real device.
  */
 
 import { act } from 'react';
@@ -15,18 +16,24 @@ import {
   CancelledError,
   SeekError,
   WebUsbTransport,
+  copySourceRefusal,
   slotDumpNames,
   type DeviceState,
   type DumpedSlot,
   type FlashSlotResult,
+  type FpsEveryBankResult,
+  type FpsPatchOptions,
   type SlotFlashPlan,
   type SlotInputKind,
   type SlotKey,
   type SlotPlan,
+  type SlotRestorePlan,
   type SlotView,
   type SlotsReport,
+  type WriteAction,
+  type WriteBackup,
 } from '@seek-fw/core';
-import type { FpsPatchResult, FpsPlan, FpsPreDump } from '@seek-fw/core';
+import type { FpsPatchResult, FpsPlan } from '@seek-fw/core';
 import { downloadBytes } from '../lib/download';
 import { DEFAULT_OPTIONS_FORM } from '../lib/options';
 import type { ActingProfile } from '../lib/identify';
@@ -48,11 +55,14 @@ import { renderHook } from '../test-helpers';
 import type { DeviceHandle } from './useDevice';
 import { UnlockSeat } from '../lib/unlock-seat';
 import {
-  bankImageSource,
+  cancelledStatus,
+  copyLabel,
+  everyPatchedStatus,
   needsRiskAck,
   patchedStatus,
   replugRecord,
   slotActionGate,
+  slotCopyGate,
   useSlotsPanel,
   writeRisk,
   writtenStatus,
@@ -83,6 +93,39 @@ interface Mocks {
   dump: Mock;
   prepare: Mock;
   flash: Mock;
+  /** Runs inside the write, after the save and before the commit is announced: a throw here stops a write before its commit. */
+  beforeCommit: Mock;
+  restore: Mock;
+}
+
+/** A backup zip as core builds one, for the bank and the write given. */
+function backupOf(keys: readonly SlotKey[], action: WriteAction): WriteBackup {
+  const label =
+    action.kind === 'copy'
+      ? `before-copy-from-${action.from.toUpperCase()}`
+      : action.kind === 'restore'
+        ? 'before-restore'
+        : action.kind === 'flash'
+          ? action.input === 'raw'
+            ? 'before-flash-raw'
+            : 'before-flash'
+          : action.kind === 'fps-patch'
+            ? 'before-fps-patch'
+            : 'before-fps-patch-every-bank';
+  const name = `seek_backup_2026-10-26T12-00-00Z_SN-1_v4.9.1.5_bank-${keys.map((key) => key.toUpperCase()).join('-')}_${label}`;
+  return {
+    name,
+    fileName: `${name}.zip`,
+    savedAt: '2026-10-26T12:00:00.000Z',
+    serial: 'SN-1',
+    firmware: '4.9.1.5',
+    action,
+    follows: 'the write',
+    banks: [],
+    textName: 'README.txt',
+    text: '',
+    zip: new Uint8Array(1234),
+  };
 }
 
 function makeBackend(
@@ -103,6 +146,8 @@ function makeBackend(
     flash: vi.fn((_ctx: unknown, _report: unknown, plan: SlotFlashPlan) =>
       Promise.resolve(flashedSlot(plan.key)),
     ),
+    beforeCommit: vi.fn(),
+    restore: vi.fn(),
   };
   const backend: SlotsBackend = {
     identify: (device, log) => mocks.identify(device, log) as Promise<ActingProfile>,
@@ -110,8 +155,37 @@ function makeBackend(
     inspect: (ctx, firmware) => mocks.inspect(ctx, firmware) as Promise<SlotsReport>,
     dump: (ctx, report, key) => mocks.dump(ctx, report, key) as Promise<DumpedSlot>,
     prepare: (report, key, input) => mocks.prepare(report, key, input) as SlotFlashPlan,
-    flash: (ctx, report, plan, opts) =>
-      mocks.flash(ctx, report, plan, opts) as Promise<FlashSlotResult>,
+    /* Core's flashSlotWithBackup, as the hook sees it: the save first (the page's own, a download), then the
+     * commit announced, then the write. `flash` gets the two options a write always had. */
+    write: async (ctx, report, plan, opts) => {
+      const backup = backupOf([plan.key], opts.action);
+      if (!(await opts.saveBackup(backup))) {
+        throw new SeekError('slots/refused', `the backup ${backup.fileName} was not saved`);
+      }
+      mocks.beforeCommit(plan.key);
+      opts.onCommit?.(plan.key);
+      const written = (await mocks.flash(ctx, report, plan, {
+        verify: opts.verify,
+        acknowledgeRisk: opts.acknowledgeRisk,
+      })) as FlashSlotResult;
+      return { written, backup };
+    },
+    /* Core's planSlotCopy, as the hook sees it: core's own source refusal, then the target prepared. */
+    copy: (report, from, to) => {
+      const why = copySourceRefusal(report, from);
+      if (why !== null) throw new SeekError('slots/refused', `${why}. Nothing was written.`);
+      const plain = report.slots.find((view) => view.entry.key === from)?.state?.plain ?? null;
+      const fileName = `seek-slot-${from}-4.9.1.5-eeeeeeee-decrypted.bin`;
+      return {
+        from,
+        to,
+        fileName,
+        source: `slot ${from.toUpperCase()} at 0x14030000, firmware 4.9.1.5, as the slots read decrypted it`,
+        plan: mocks.prepare(report, to, { kind: 'plain', bytes: plain, fileName }) as SlotFlashPlan,
+      };
+    },
+    restore: (report, key, picked) =>
+      mocks.restore(report, key, picked) as Promise<SlotRestorePlan>,
   };
   return { backend, mocks };
 }
@@ -837,8 +911,150 @@ describe('useSlotsPanel: dumping an empty bank', () => {
   });
 });
 
-describe('useSlotsPanel: filling an empty bank with the booted bank’s image', () => {
-  it('prepares bank A’s decrypted image into the empty B, says where it came from, and sends nothing', async () => {
+describe('useSlotsPanel: every write saves its bank first, as one zip download (TESTING.md 42.91)', () => {
+  it('downloads the zip before the write, named as core names it, and says what to check', async () => {
+    const { backend, mocks } = makeBackend();
+    const order: string[] = [];
+    vi.mocked(downloadBytes).mockImplementation(() => {
+      order.push('download');
+    });
+    mocks.flash.mockImplementation((_ctx: unknown, _report: unknown, plan: SlotFlashPlan) => {
+      order.push('write');
+      return Promise.resolve(flashedSlot(plan.key));
+    });
+    const { result, unmount } = setup(backend);
+    await act(async () => {
+      await result.current.panel.readSlots();
+    });
+    await act(async () => {
+      await result.current.panel.pickFile('b', 'plain', file('fw.bin', new Uint8Array(16)));
+    });
+    expect(result.current.panel.pending?.action).toEqual({
+      kind: 'flash',
+      input: 'plain',
+      fileName: 'fw.bin',
+    });
+    await act(async () => {
+      await result.current.panel.write(false);
+    });
+    expect(order).toEqual(['download', 'write']);
+    const name = 'seek_backup_2026-10-26T12-00-00Z_SN-1_v4.9.1.5_bank-B_before-flash.zip';
+    expect(vi.mocked(downloadBytes).mock.calls[0]?.slice(1)).toEqual([name, 'application/zip']);
+    expect(result.current.panel.outcome?.backup.fileName).toBe(name);
+    expect(
+      lineIncludes(result.current.panel.reporter.lines, `saved first, as a download: ${name}`),
+    ).toBe(true);
+    unmount();
+  });
+
+  it('names raw bytes as such', async () => {
+    const { backend } = makeBackend();
+    const { result, unmount } = setup(backend);
+    await act(async () => {
+      await result.current.panel.readSlots();
+    });
+    await act(async () => {
+      await result.current.panel.pickFile('b', 'raw', file('raw.bin', new Uint8Array(16)));
+    });
+    await act(async () => {
+      await result.current.panel.write(false);
+    });
+    expect(result.current.panel.outcome?.backup.fileName).toMatch(/_bank-B_before-flash-raw\.zip$/);
+    unmount();
+  });
+
+  it('a backup that was not saved writes nothing, keeps the read, and says so', async () => {
+    const { backend, mocks } = makeBackend();
+    const { result, unmount } = setup({ ...backend, saveBackup: () => Promise.resolve(false) });
+    await act(async () => {
+      await result.current.panel.readSlots();
+    });
+    const read = result.current.panel.report;
+    await act(async () => {
+      await result.current.panel.pickFile('b', 'plain', file('fw.bin', new Uint8Array(16)));
+    });
+    await act(async () => {
+      await result.current.panel.write(false);
+    });
+    expect(mocks.flash).not.toHaveBeenCalled();
+    expect(result.current.panel.outcome).toBeNull();
+    expect(result.current.panel.report).toBe(read);
+    expect(lineIncludes(result.current.panel.reporter.lines, 'was not saved')).toBe(true);
+    unmount();
+  });
+});
+
+describe('useSlotsPanel: a cancel says "partly written" only once a commit was sent (TESTING.md 42.82, 42.91 C)', () => {
+  it('a cancel before the commit says nothing was written, and the read stays', async () => {
+    const { backend, mocks } = makeBackend();
+    mocks.beforeCommit.mockImplementation(() => {
+      throw new CancelledError('cancelled before commit — nothing was written to flash');
+    });
+    const { result, unmount } = setup(backend);
+    await act(async () => {
+      await result.current.panel.readSlots();
+    });
+    const read = result.current.panel.report;
+    await act(async () => {
+      await result.current.panel.pickFile('b', 'plain', file('fw.bin', new Uint8Array(16)));
+    });
+    await act(async () => {
+      await result.current.panel.write(false);
+    });
+    expect(mocks.flash).not.toHaveBeenCalled();
+    expect(result.current.panel.reporter.progress.text).toBe('Cancelled — nothing was written.');
+    expect(result.current.panel.report).toBe(read);
+    unmount();
+  });
+
+  it('a cancel after the commit was sent says the bank may be partly written, and drops the read', async () => {
+    const { backend, mocks } = makeBackend();
+    mocks.flash.mockImplementation(() => Promise.reject(new CancelledError('cancelled')));
+    const { result, unmount } = setup(backend);
+    await act(async () => {
+      await result.current.panel.readSlots();
+    });
+    await act(async () => {
+      await result.current.panel.pickFile('b', 'plain', file('fw.bin', new Uint8Array(16)));
+    });
+    await act(async () => {
+      await result.current.panel.write(false);
+    });
+    expect(result.current.panel.reporter.progress.text).toBe(
+      'Cancelled after the commit to slot B was sent — the bank may be partly written. Read it before relying on it.',
+    );
+    expect(result.current.panel.report).toBeNull();
+    unmount();
+  });
+
+  it('the patch says the same: nothing written before its commit', async () => {
+    const patchFps = vi.fn(() =>
+      Promise.reject(new CancelledError('cancelled before commit — nothing was written to flash')),
+    );
+    const { backend } = makeBackend();
+    const { result, unmount } = setup({ ...backend, patchFps });
+    await act(async () => {
+      await result.current.panel.readSlots();
+    });
+    await act(async () => {
+      await result.current.panel.patchFps('b', false);
+    });
+    expect(result.current.panel.reporter.progress.text).toBe('Cancelled — nothing was written.');
+    expect(result.current.panel.report).not.toBeNull();
+    unmount();
+  });
+
+  it('cancelledStatus names every bank whose commit was sent', () => {
+    const report = slotReport(base);
+    expect(cancelledStatus([], report)).toBe('Cancelled — nothing was written.');
+    expect(cancelledStatus(['b', 'r'], report)).toBe(
+      'Cancelled after the commits to slot B and recovery R were sent — each may be partly written. Read them before relying on them.',
+    );
+  });
+});
+
+describe('useSlotsPanel: copying a bank into another', () => {
+  it('prepares bank A’s decrypted image for bank B, says where it came from, and sends nothing', async () => {
     const report = slotReport(base, null, ['b']);
     const { backend, mocks } = emptyBackend(report);
     const { result, unmount } = setup(backend);
@@ -847,7 +1063,7 @@ describe('useSlotsPanel: filling an empty bank with the booted bank’s image', 
     });
 
     await act(async () => {
-      await result.current.panel.fillWithBankImage('b');
+      await result.current.panel.copyBank('a', 'b');
     });
 
     expect(mocks.prepare).toHaveBeenCalledTimes(1);
@@ -860,11 +1076,10 @@ describe('useSlotsPanel: filling an empty bank with the booted bank’s image', 
     expect(input.kind).toBe('plain');
     /* The bytes are bank A's decrypted image from the read already made. */
     expect(input.bytes).toBe(SLOT_PLAIN);
-    expect(input.fileName).toMatch(/^seek-slot-a-4\.9\.1\.5-eeeeeeee-decrypted.*\.bin$/);
     const pending = result.current.panel.pending;
     expect(pending?.key).toBe('b');
-    expect(pending?.kind).toBe('plain');
-    expect(pending?.source).toBe('slot A, the bank the camera boots now (4.9.1.5)');
+    expect(pending?.action).toEqual({ kind: 'copy', from: 'a' });
+    expect(pending?.source).toContain('slot A');
     expect(pending?.plan.targetEmpty).toBe(true);
     expect(mocks.flash).not.toHaveBeenCalled();
     expect(mocks.dump).not.toHaveBeenCalled();
@@ -872,46 +1087,39 @@ describe('useSlotsPanel: filling an empty bank with the booted bank’s image', 
     unmount();
   });
 
-  it('writes it after the confirmation like any file, and the outcome says the bank was empty', async () => {
-    const { backend, mocks } = emptyBackend(slotReport(base, null, ['b']));
+  it('writes it after the confirmation like any file; the zip is named for the copy', async () => {
+    const { backend, mocks } = emptyBackend(slotReport(base));
     const { result, unmount } = setup(backend);
     await act(async () => {
       await result.current.panel.readSlots();
     });
     await act(async () => {
-      await result.current.panel.fillWithBankImage('b');
+      await result.current.panel.copyBank('r', 'b');
     });
-
     await act(async () => {
       await result.current.panel.write(false);
     });
-
     expect(mocks.flash).toHaveBeenCalledTimes(1);
-    expect(mocks.flash.mock.calls[0]?.[3]).toEqual({ verify: true, acknowledgeRisk: false });
-    expect(result.current.panel.outcome).toMatchObject({ key: 'b', targetEmpty: true });
-    expect(
-      lineIncludes(result.current.panel.reporter.lines, '(an empty bank: nothing is overwritten)'),
-    ).toBe(true);
+    expect(result.current.panel.outcome?.backup.fileName).toMatch(
+      /_bank-B_before-copy-from-R\.zip$/,
+    );
     unmount();
   });
 
-  it('keeps the acknowledgement rule: with no booted bank named, the write is refused without the tick', async () => {
-    const report = slotReport({ ...base, boot: null }, null, ['b']);
-    const { backend, mocks } = emptyBackend(report);
+  it('keeps the acknowledgement rule: a copy into the booted bank is refused without the tick', async () => {
+    const { backend, mocks } = emptyBackend(slotReport(base));
     const { result, unmount } = setup(backend);
     await act(async () => {
       await result.current.panel.readSlots();
     });
     await act(async () => {
-      await result.current.panel.fillWithBankImage('b');
+      await result.current.panel.copyBank('b', 'a');
     });
-
     await act(async () => {
       await result.current.panel.write(false);
     });
     expect(mocks.flash).not.toHaveBeenCalled();
     expect(lineIncludes(result.current.panel.reporter.lines, 'risk acknowledgement')).toBe(true);
-
     await act(async () => {
       await result.current.panel.write(true);
     });
@@ -919,39 +1127,21 @@ describe('useSlotsPanel: filling an empty bank with the booted bank’s image', 
     unmount();
   });
 
-  it('refuses a bank that is not empty, and prepares nothing', async () => {
+  it('refuses a source with no image to copy, with core’s reason, and prepares nothing', async () => {
     const { backend, mocks } = emptyBackend(slotReport(base, null, ['b']));
     const { result, unmount } = setup(backend);
     await act(async () => {
       await result.current.panel.readSlots();
     });
-
     await act(async () => {
-      await result.current.panel.fillWithBankImage('r');
+      await result.current.panel.copyBank('b', 'a');
     });
-
     expect(mocks.prepare).not.toHaveBeenCalled();
     expect(result.current.panel.pending).toBeNull();
-    expect(lineIncludes(result.current.panel.reporter.lines, 'is not empty')).toBe(true);
-    unmount();
-  });
-
-  it('says so when no other bank holds a decrypted image, and prepares nothing', async () => {
-    const { backend, mocks } = emptyBackend(slotReport(base, null, ['a', 'b', 'r']));
-    const { result, unmount } = setup(backend);
-    await act(async () => {
-      await result.current.panel.readSlots();
-    });
-
-    await act(async () => {
-      await result.current.panel.fillWithBankImage('b');
-    });
-
-    expect(mocks.prepare).not.toHaveBeenCalled();
     expect(
       lineIncludes(
         result.current.panel.reporter.lines,
-        'no other bank holds a decrypted image to copy',
+        'slot B is empty: there is no image to copy',
       ),
     ).toBe(true);
     unmount();
@@ -960,122 +1150,252 @@ describe('useSlotsPanel: filling an empty bank with the booted bank’s image', 
   it('does nothing before the banks were read', async () => {
     const { backend, mocks } = emptyBackend(slotReport(base, null, ['b']));
     const { result, unmount } = setup(backend);
-
     await act(async () => {
-      await result.current.panel.fillWithBankImage('b');
+      await result.current.panel.copyBank('a', 'b');
     });
-
     expect(mocks.prepare).not.toHaveBeenCalled();
     expect(lineIncludes(result.current.panel.reporter.lines, 'read the slots first')).toBe(true);
     unmount();
   });
+});
 
-  it('shows core’s own refusal when the image cannot be written (nothing hidden behind the button)', async () => {
-    const { backend, mocks } = emptyBackend(slotReport(base, null, ['b']));
-    mocks.prepare.mockImplementation(() => {
-      throw new SeekError('slots/refused', 'this is the 16 Hz FF image (word sum 0xFFFF)');
-    });
+/** A restore plan as core makes one: bank `key` of a full flash backup, staged as a decrypted image. */
+function restorePlanOf(key: SlotKey, stored: Uint8Array): SlotRestorePlan {
+  return {
+    key,
+    backup: {
+      fileName: 'whole.bin',
+      flash: new Uint8Array(0),
+      sha256: 'ff'.repeat(32),
+      from: 'flash-file',
+      entry: null,
+      identity: { serial: 'SN-1', chipId: '090BE9B6D4E4' },
+    },
+    stored,
+    storedSha256: 'aa'.repeat(32),
+    sameAsNow: false,
+    sameCamera: true,
+    version: '4.9.1.5',
+    decryption: { plain: SLOT_PLAIN } as unknown as SlotRestorePlan['decryption'],
+    fileName: `seek-slot-${key}-4.9.1.5-aaaaaaaa-decrypted.bin`,
+    source: `the backup's slot ${key.toUpperCase()} in the full flash backup whole.bin, firmware 4.9.1.5`,
+    plan: preparedSlot(key, 'plain', SLOT_PLAIN),
+  };
+}
+
+describe('useSlotsPanel: restoring a bank from a full flash backup', () => {
+  it('prepares the bank cut from the file, writes it, and compares the read-back with the backup’s bytes', async () => {
+    const stored = new Uint8Array(0x10000).fill(0x42);
+    const { backend, mocks } = makeBackend();
+    mocks.restore.mockImplementation((_report: unknown, key: SlotKey) =>
+      Promise.resolve(restorePlanOf(key, stored)),
+    );
+    mocks.flash.mockImplementation((_ctx: unknown, _report: unknown, plan: SlotFlashPlan) =>
+      Promise.resolve({ ...flashedSlot(plan.key), after: stored.slice() }),
+    );
     const { result, unmount } = setup(backend);
     await act(async () => {
       await result.current.panel.readSlots();
     });
+    await act(async () => {
+      await result.current.panel.pickRestore('b', file('whole.bin', new Uint8Array(32)));
+    });
+    expect(mocks.restore).toHaveBeenCalledTimes(1);
+    const [, key, picked] = mocks.restore.mock.calls[0] as [
+      unknown,
+      SlotKey,
+      { bytes: Uint8Array; name: string },
+    ];
+    expect(key).toBe('b');
+    expect(picked.name).toBe('whole.bin');
+    expect(result.current.panel.pending?.action).toEqual({
+      kind: 'restore',
+      fileName: 'whole.bin',
+    });
+    expect(result.current.panel.pending?.source).toContain('full flash backup whole.bin');
+    expect(mocks.flash).not.toHaveBeenCalled();
 
     await act(async () => {
-      await result.current.panel.fillWithBankImage('b');
+      await result.current.panel.write(false);
     });
+    expect(result.current.panel.outcome?.restore).toEqual({
+      compared: true,
+      equal: true,
+      differing: 0,
+      firstDiffering: null,
+    });
+    expect(result.current.panel.outcome?.backup.fileName).toMatch(/_bank-B_before-restore\.zip$/);
+    expect(
+      lineIncludes(
+        result.current.panel.reporter.lines,
+        'slot B reads back byte for byte as the backup stores it',
+      ),
+    ).toBe(true);
+    unmount();
+  });
 
+  it('shows core’s refusal (an empty bank in the backup) and prepares nothing', async () => {
+    const { backend, mocks } = makeBackend();
+    mocks.restore.mockImplementation(() =>
+      Promise.reject(
+        new SeekError(
+          'slots/refused',
+          "the backup's slot B is empty: every byte is 0xFF. A write programs an image and cannot leave a bank erased, so an empty bank cannot be restored by a write. Nothing was written.",
+        ),
+      ),
+    );
+    const { result, unmount } = setup(backend);
+    await act(async () => {
+      await result.current.panel.readSlots();
+    });
+    await act(async () => {
+      await result.current.panel.pickRestore('b', file('whole.bin', new Uint8Array(32)));
+    });
     expect(result.current.panel.pending).toBeNull();
-    expect(lineIncludes(result.current.panel.reporter.lines, '16 Hz FF image')).toBe(true);
+    expect(lineIncludes(result.current.panel.reporter.lines, 'cannot be restored by a write')).toBe(
+      true,
+    );
     unmount();
   });
 });
 
-describe('bankImageSource', () => {
-  const holdsKeys = (): { plain: Uint8Array; table: { keyA: Uint8Array; keyB: Uint8Array } } => {
-    const keyA = new Uint8Array(16).fill(0x11);
-    const keyB = new Uint8Array(16).fill(0x22);
-    const plain = new Uint8Array(256).fill(0x5a);
-    plain.set(keyA, 32);
-    plain.set(keyB, 96);
-    return { plain, table: { keyA, keyB } };
-  };
-
-  it('prefers the bank the camera boots, never the target, and says it is booted', () => {
+describe('slotCopyGate', () => {
+  it('is on for an image into any other bank, filled or empty, and names the button by the target', () => {
     const report = slotReport(base, null, ['b']);
-    const source = bankImageSource(report, 'b');
-    expect(source).toMatchObject({ key: 'a', name: 'slot A', version: '4.9.1.5', booted: true });
-    expect(source?.bytes).toBe(SLOT_PLAIN);
-    expect(source?.fileName).toBe('seek-slot-a-4.9.1.5-eeeeeeee-decrypted.bin');
-    /* The target is never its own source. */
-    expect(bankImageSource(report, 'a')?.key).not.toBe('a');
-  });
-
-  it('falls back to a bank the bootloader can key, then to any bank holding an image', () => {
-    const report = slotReport({ ...base, boot: null }, null, ['b']);
-    const unnamed: SlotsReport = {
-      ...report,
-      slots: report.slots.map((candidate) => ({ ...candidate, active: false })),
-    };
-    const first = bankImageSource(unnamed, 'b');
-    expect(first).toMatchObject({ key: 'a', booted: false });
-
-    const notBootable: SlotsReport = {
-      ...unnamed,
-      slots: unnamed.slots.map((candidate) =>
-        candidate.entry.key === 'r' && candidate.state !== null
-          ? { ...candidate, state: { ...candidate.state, bootable: true } }
-          : candidate.entry.key === 'a' && candidate.state !== null
-            ? { ...candidate, state: { ...candidate.state, bootable: false } }
-            : candidate,
-      ),
-    };
-    expect(bankImageSource(notBootable, 'b')?.key).toBe('r');
-    const noneBootable: SlotsReport = {
-      ...notBootable,
-      slots: notBootable.slots.map((candidate) =>
-        candidate.state === null
-          ? candidate
-          : { ...candidate, state: { ...candidate.state, bootable: false } },
-      ),
-    };
-    expect(bankImageSource(noneBootable, 'b')?.key).toBe('a');
-  });
-
-  it('is null when no other bank holds a decrypted image', () => {
-    expect(bankImageSource(slotReport(base, null, ['a', 'b', 'r']), 'b')).toBeNull();
-    const undecrypted = slotReport(base, null, ['b']);
-    const stripped: SlotsReport = {
-      ...undecrypted,
-      slots: undecrypted.slots.map((candidate) =>
-        candidate.state === null || candidate.content !== 'image'
-          ? candidate
-          : { ...candidate, state: { ...candidate.state, plain: null } },
-      ),
-    };
-    expect(bankImageSource(stripped, 'b')).toBeNull();
-    /* An unread bank is no source either. */
-    expect(bankImageSource(slotReport(base, 'a', ['b']), 'b')?.key).toBe('r');
-  });
-
-  it('names the image with the camera key pair when the image holds both keys, as a dump does', () => {
-    const { plain, table } = holdsKeys();
-    const report = slotReport(
-      { ...base, keyTable: { ...table, offset: 0, matchA: true, matchB: true } },
-      null,
-      ['b'],
+    expect(slotCopyGate({ report, from: 'a', to: 'b', connected: true, busy: false }).enabled).toBe(
+      true,
     );
-    const withPlain: SlotsReport = {
-      ...report,
-      slots: report.slots.map((candidate) =>
-        candidate.state === null || candidate.content !== 'image'
-          ? candidate
-          : { ...candidate, state: { ...candidate.state, plain } },
-      ),
-    };
-    const source = bankImageSource(withPlain, 'b');
-    expect(source?.fileName).toBe(
-      `seek-slot-a-4.9.1.5-eeeeeeee-decrypted-KeyA-${'11'.repeat(16)}-KeyB-${'22'.repeat(16)}.bin`,
+    expect(slotCopyGate({ report, from: 'a', to: 'r', connected: true, busy: false }).enabled).toBe(
+      true,
     );
+    expect(copyLabel('a')).toBe('Copy to slot A');
+    expect(copyLabel('b')).toBe('Copy to slot B');
+    expect(copyLabel('r')).toBe('Copy to recovery slot R');
+  });
+
+  it('is off, with the reason, for a source with no image, and for a target the write rules turn off', () => {
+    const report = slotReport(base, 'r', ['b']);
+    expect(slotCopyGate({ report, from: 'b', to: 'a', connected: true, busy: false })).toEqual({
+      enabled: false,
+      reason: 'Slot B is empty: there is no image to copy.',
+    });
+    expect(
+      slotCopyGate({ report, from: 'a', to: 'r', connected: true, busy: false }).reason,
+    ).toMatch(/^Not read: the window would not arm/);
+    expect(slotCopyGate({ report, from: 'a', to: 'b', connected: false, busy: false })).toEqual({
+      enabled: false,
+      reason: 'Connect the camera first.',
+    });
+  });
+});
+
+describe('useSlotsPanel: Make N FPS in every bank', () => {
+  const offer = (key: SlotKey): FpsPlan =>
+    ({
+      status: 'offer',
+      patch: { id: 'compact_32k-1.3.0.0-to32', version: '1.3.0.0' },
+      fromHz: 8,
+      toHz: 32,
+      sites: [{ offset: 0xb964, before: 0x24, after: 0x22 }],
+      sumWord: { offset: 0x238, before: 0 },
+      key,
+    }) as unknown as FpsPlan;
+
+  function everyResult(order: readonly SlotKey[]): FpsEveryBankResult {
+    return {
+      backup: backupOf(['a', 'b', 'r'], { kind: 'fps-patch-every-bank' }),
+      order,
+      results: order.map((key) => fpsResultOf(key)),
+      stopped: null,
+      unwritten: [],
+    };
+  }
+
+  it('plans every bank that offers it, the booted bank last', async () => {
+    const { backend } = makeBackend();
+    const { result, unmount } = setup({ ...backend, fpsPlan: (_report, key) => offer(key) });
+    expect(result.current.panel.planEveryFps()).toBeNull();
+    await act(async () => {
+      await result.current.panel.readSlots();
+    });
+    expect(result.current.panel.planEveryFps()?.order).toEqual(['b', 'r', 'a']);
+    unmount();
+  });
+
+  it('asks for the tick when the booted bank or R is among them, then patches them all in one run', async () => {
+    const patchEveryFps = vi.fn(
+      async (_ctx: unknown, _report: unknown, options: FpsPatchOptions) => {
+        expect(
+          await options.saveBackup(backupOf(['a', 'b', 'r'], { kind: 'fps-patch-every-bank' })),
+        ).toBe(true);
+        for (const key of ['b', 'r', 'a'] as const) options.onCommit?.(key);
+        return everyResult(['b', 'r', 'a']);
+      },
+    );
+    const { backend, mocks } = makeBackend();
+    const { result, unmount } = setup({
+      ...backend,
+      fpsPlan: (_report, key) => offer(key),
+      patchEveryFps,
+    });
+    await act(async () => {
+      await result.current.panel.readSlots();
+    });
+    await act(async () => {
+      await result.current.panel.patchEveryFps(false);
+    });
+    expect(patchEveryFps).not.toHaveBeenCalled();
+    expect(lineIncludes(result.current.panel.reporter.lines, 'risk acknowledgement')).toBe(true);
+
+    await act(async () => {
+      await result.current.panel.patchEveryFps(true);
+    });
+    expect(patchEveryFps).toHaveBeenCalledTimes(1);
+    expect(downloadBytes).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(downloadBytes).mock.calls[0]?.[1]).toMatch(
+      /_bank-A-B-R_before-fps-patch-every-bank\.zip$/,
+    );
+    expect(result.current.panel.fpsEveryOutcome?.results).toHaveLength(3);
+    expect(result.current.panel.reporter.progress.text).toBe(
+      'Patched 3 banks. Each reads back as planned.',
+    );
+    expect(replugLines(result.current.panel.reporter.lines)).toEqual([replugRecord('patch')]);
+    /* The banks are read again once, after the last write. */
+    expect(mocks.inspect).toHaveBeenCalledTimes(2);
+    unmount();
+  });
+
+  it('a cancel after one commit names that bank, and only that one', async () => {
+    const patchEveryFps = vi.fn((_ctx: unknown, _report: unknown, options: FpsPatchOptions) => {
+      options.onCommit?.('b');
+      return Promise.reject(new CancelledError('cancelled'));
+    });
+    const { backend } = makeBackend();
+    const { result, unmount } = setup({
+      ...backend,
+      fpsPlan: (_report, key) => offer(key),
+      patchEveryFps,
+    });
+    await act(async () => {
+      await result.current.panel.readSlots();
+    });
+    await act(async () => {
+      await result.current.panel.patchEveryFps(true);
+    });
+    expect(result.current.panel.reporter.progress.text).toBe(
+      'Cancelled after the commit to slot B was sent — the bank may be partly written. Read it before relying on it.',
+    );
+    unmount();
+  });
+
+  it('says where it stopped', () => {
+    const stopped: FpsEveryBankResult = {
+      ...everyResult(['b']),
+      order: ['b', 'r', 'a'],
+      stopped: { key: 'r', reason: 'slot R: CompleteMemoryUpgrade returned 0x00040005' },
+      unwritten: ['a'],
+    };
+    expect(everyPatchedStatus(stopped)).toBe('Stopped at slot R — 1 bank patched; see the result.');
   });
 });
 
@@ -1130,35 +1450,17 @@ describe('slot helpers: empty banks', () => {
 
 /* ---- the frame-rate patch --------------------------------------------- */
 
-function fpsPreDumpOf(key: SlotKey): FpsPreDump {
-  return {
-    key,
-    bank: `slot ${key.toUpperCase()}`,
-    version: '1.3.0.0',
-    address: 0x14050000,
-    raw: new Uint8Array(0x10000).fill(0x11),
-    rawSha256: 'aa',
-    rawName: `seek-slot-${key.toUpperCase()}-v1.3.0.0-before-fps-patch-raw-aa.bin`,
-    plain: new Uint8Array(0xbaa8).fill(0x22),
-    plainSha256: 'bb',
-    plainName: `seek-slot-${key.toUpperCase()}-v1.3.0.0-before-fps-patch-decrypted-bb.bin`,
-  };
-}
-
 function fpsResultOf(key: SlotKey): FpsPatchResult {
   return {
     key,
     patch: { id: 'compact_32k-1.3.0.0-to32', version: '1.3.0.0' },
     fromHz: 8,
     toHz: 32,
-    pre: fpsPreDumpOf(key),
+    backup: backupOf([key], { kind: 'fps-patch' }),
     changed: [0xb964, 0x238],
     written: { verified: true, commitStatus: 0, after: null, notes: [] },
     readBack: { checked: true, ok: true, differing: [0xb964, 0x238], missing: [], unexpected: [] },
-    /* Core's own note, as slots/fps-patch.ts writes it once the dump is saved. */
-    notes: [
-      `saved the pre-patch dump: ${fpsPreDumpOf(key).rawName} and ${fpsPreDumpOf(key).plainName}`,
-    ],
+    notes: ['committed 47768 B to slot B at 0x14050000, staged plain; commit status 0x0'],
   } as unknown as FpsPatchResult;
 }
 
@@ -1179,27 +1481,20 @@ describe('useSlotsPanel: the frame-rate patch', () => {
     expect(fpsPlan).toHaveBeenCalledTimes(1);
   });
 
-  it('saves the bank first, then writes the patch, and keeps the outcome until the next run', async () => {
+  it('saves the bank first, as one zip download, then writes the patch, and keeps the outcome until the next run', async () => {
     const order: string[] = [];
-    const saveDump = vi.fn(() => {
-      order.push('saved');
-      return Promise.resolve(true);
-    });
     const patchFps = vi.fn(
-      async (
-        _ctx: unknown,
-        _report: unknown,
-        key: SlotKey,
-        options: { saveDump: (dump: FpsPreDump) => Promise<boolean> },
-      ) => {
+      async (_ctx: unknown, _report: unknown, key: SlotKey, options: FpsPatchOptions) => {
         order.push('patch');
-        expect(await options.saveDump(fpsPreDumpOf(key))).toBe(true);
+        expect(await options.saveBackup(backupOf([key], { kind: 'fps-patch' }))).toBe(true);
+        order.push('saved');
+        options.onCommit?.(key);
         order.push('written');
         return fpsResultOf(key);
       },
     );
     const { backend } = makeBackend();
-    const { result } = setup({ ...backend, saveDump, patchFps });
+    const { result } = setup({ ...backend, patchFps });
     await act(async () => {
       await result.current.panel.readSlots();
     });
@@ -1207,38 +1502,50 @@ describe('useSlotsPanel: the frame-rate patch', () => {
       await result.current.panel.patchFps('b', false);
     });
     expect(order).toEqual(['patch', 'saved', 'written']);
+    /* One automatic download, the zip, named as core names it: no save dialog. */
+    expect(downloadBytes).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(downloadBytes).mock.calls[0]?.slice(1)).toEqual([
+      'seek_backup_2026-10-26T12-00-00Z_SN-1_v4.9.1.5_bank-B_before-fps-patch.zip',
+      'application/zip',
+    ]);
+    expect(
+      lineIncludes(
+        result.current.panel.reporter.lines,
+        'saved first, as a download: seek_backup_2026-10-26T12-00-00Z_SN-1_v4.9.1.5_bank-B_before-fps-patch.zip',
+      ),
+    ).toBe(true);
+    expect(
+      lineIncludes(result.current.panel.reporter.lines, 'check your downloads folder for it'),
+    ).toBe(true);
     expect(result.current.panel.fpsOutcome?.key).toBe('b');
     expect(result.current.panel.writing).toBe(false);
   });
 
-  it('a dump that was not saved refuses the patch: no outcome, and the run says so', async () => {
-    const saveDump = vi.fn(() => Promise.resolve(false));
+  it('a backup that was not saved refuses the patch: no outcome, the read stays, and the run says so', async () => {
+    const saveBackup = vi.fn(() => Promise.resolve(false));
     const patchFps = vi.fn(
-      async (
-        _ctx: unknown,
-        _report: unknown,
-        key: SlotKey,
-        options: { saveDump: (dump: FpsPreDump) => Promise<boolean> },
-      ) => {
-        if (!(await options.saveDump(fpsPreDumpOf(key)))) {
+      async (_ctx: unknown, _report: unknown, key: SlotKey, options: FpsPatchOptions) => {
+        if (!(await options.saveBackup(backupOf([key], { kind: 'fps-patch' })))) {
           throw new SeekError(
             'slots/refused',
-            'The pre-patch dump of slot B was not saved, so the patch was not written.',
+            'the backup x.zip was not saved, so nothing was written.',
           );
         }
         return fpsResultOf(key);
       },
     );
     const { backend } = makeBackend();
-    const { result } = setup({ ...backend, saveDump, patchFps });
+    const { result } = setup({ ...backend, saveBackup, patchFps });
     await act(async () => {
       await result.current.panel.readSlots();
     });
+    const read = result.current.panel.report;
     await act(async () => {
       await result.current.panel.patchFps('b', false);
     });
-    expect(saveDump).toHaveBeenCalledTimes(1);
+    expect(saveBackup).toHaveBeenCalledTimes(1);
     expect(result.current.panel.fpsOutcome).toBeNull();
+    expect(result.current.panel.report).toBe(read);
     expect(lineIncludes(result.current.panel.reporter.lines, 'was not saved')).toBe(true);
   });
 
@@ -1298,11 +1605,8 @@ describe('useSlotsPanel: the frame-rate patch', () => {
     expect(result.current.panel.reporter.lines.map((line) => line.text)).toContain(
       'slot B: patched from 8 Hz to 32 Hz (firmware 1.3.0.0)',
     );
-    /* The saved files are named once in the log, by core's note, not again by the page's line. */
-    const raw = fpsPreDumpOf('b').rawName;
-    expect(
-      result.current.panel.reporter.lines.filter((line) => line.text.includes(raw)),
-    ).toHaveLength(1);
+    /* The patch line names the firmware, not the zip: the zip is named once, by the save's own line. */
+    expect(lineIncludes(result.current.panel.reporter.lines, 'seek_backup_')).toBe(false);
     expect(lineIncludes(result.current.panel.reporter.lines, 'compact_32k-')).toBe(false);
     unmount();
   });

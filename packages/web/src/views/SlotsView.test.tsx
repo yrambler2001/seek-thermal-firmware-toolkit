@@ -52,8 +52,39 @@ import {
   slotView,
 } from '../test-slots';
 import { buildSlotPlan, getProfile } from '@seek-fw/core';
-import type { DeviceState, FpsPatchResult, FpsPlan, SlotKey, SlotsReport } from '@seek-fw/core';
+import type {
+  DeviceState,
+  FpsEveryBankPlan,
+  FpsPatchResult,
+  FpsPlan,
+  SlotKey,
+  SlotsReport,
+  WriteAction,
+  WriteBackup,
+} from '@seek-fw/core';
 import { SlotsView } from './SlotsView';
+
+/** What a prepared write from a picked file is, for the backup's name. */
+const FLASH_ACTION: WriteAction = { kind: 'flash', input: 'plain', fileName: 'fw.bin' };
+
+/** What every outcome carries beside the write's result: the zip saved first, the action, no restore. */
+/** The zip a write saved first, as core builds it. */
+const BACKUP: WriteBackup = {
+  name: 'seek_backup_2026-10-26T12-00-00Z_SN-1_v4.9.1.5_bank-B_before-flash',
+  fileName: 'seek_backup_2026-10-26T12-00-00Z_SN-1_v4.9.1.5_bank-B_before-flash.zip',
+  savedAt: '2026-10-26T12:00:00.000Z',
+  serial: 'SN-1',
+  firmware: '4.9.1.5',
+  action: FLASH_ACTION,
+  follows: 'the write',
+  banks: [],
+  textName: 'README.txt',
+  text: '',
+  zip: new Uint8Array(10),
+};
+
+/** What every outcome carries beside the write's result: the zip saved first, the action, no restore. */
+const OUTCOME_EXTRA = { backup: BACKUP, action: FLASH_ACTION, restore: null } as const;
 
 let base: DeviceState;
 
@@ -94,7 +125,8 @@ function panel(over: Partial<SlotsPanelApi> = {}): SlotsPanelApi {
     readSlots: () => Promise.resolve(),
     dump: vi.fn((_key: SlotKey) => Promise.resolve()),
     pickFile: vi.fn((_key: SlotKey, _kind, _file: File) => Promise.resolve()),
-    fillWithBankImage: vi.fn((_key: SlotKey) => Promise.resolve()),
+    copyBank: vi.fn((_from: SlotKey, _to: SlotKey) => Promise.resolve()),
+    pickRestore: vi.fn((_key: SlotKey, _file: File) => Promise.resolve()),
     write: vi.fn((_acknowledged: boolean) => Promise.resolve()),
     discardPending: vi.fn(),
     cancel: vi.fn(),
@@ -102,8 +134,11 @@ function panel(over: Partial<SlotsPanelApi> = {}): SlotsPanelApi {
     setRunning16Hz: vi.fn(),
     unlockNote: false,
     fpsOutcome: null,
+    fpsEveryOutcome: null,
     planFps: vi.fn((): FpsPlan => ({ status: 'refused', reason: 'no read yet' })),
     patchFps: vi.fn((_key: SlotKey, _acknowledged: boolean) => Promise.resolve()),
+    planEveryFps: vi.fn((): FpsEveryBankPlan | null => null),
+    patchEveryFps: vi.fn((_acknowledged: boolean) => Promise.resolve()),
     ...over,
   };
 }
@@ -359,6 +394,8 @@ describe('SlotsView', () => {
         plan: preparedSlot('a', 'plain', bytes),
         report,
         source: null,
+        action: FLASH_ACTION,
+        restore: null,
       },
     });
     const { container, unmount } = view(api);
@@ -396,6 +433,8 @@ describe('SlotsView', () => {
         kind: 'plain',
         fileName: 'ff.bin',
         source: null,
+        action: FLASH_ACTION,
+        restore: null,
         plan: {
           ...preparedSlot('r', 'plain', new Uint8Array(0x6000)),
           staging: 'key-a-keystream',
@@ -471,6 +510,8 @@ describe('SlotsView', () => {
         kind: 'raw',
         fileName: 'raw.bin',
         source: null,
+        action: FLASH_ACTION,
+        restore: null,
         plan: preparedSlot('r', 'raw', new Uint8Array(16)),
         report,
       },
@@ -516,6 +557,8 @@ describe('SlotsView', () => {
         plan: preparedSlot('b', 'raw', new Uint8Array(16)),
         report,
         source: null,
+        action: FLASH_ACTION,
+        restore: null,
       },
     });
     const { container, unmount } = view(api);
@@ -533,7 +576,7 @@ describe('SlotsView', () => {
       panel({
         plan: slotPlan(true),
         report: slotReport(base),
-        outcome: { key: 'b', fileName: 'fw.bin', result: flashedSlot('b', true) },
+        outcome: { key: 'b', fileName: 'fw.bin', result: flashedSlot('b', true), ...OUTCOME_EXTRA },
       }),
     );
 
@@ -548,7 +591,12 @@ describe('SlotsView', () => {
       panel({
         plan: slotPlan(true),
         report: slotReport(base),
-        outcome: { key: 'b', fileName: 'fw.bin', result: flashedSlot('b', false) },
+        outcome: {
+          key: 'b',
+          fileName: 'fw.bin',
+          result: flashedSlot('b', false),
+          ...OUTCOME_EXTRA,
+        },
       }),
     );
 
@@ -561,7 +609,7 @@ describe('SlotsView', () => {
       panel({
         plan: slotPlan(true),
         report: slotReport(base),
-        outcome: { key: 'b', fileName: 'fw.bin', result: flashedSlot('b', true) },
+        outcome: { key: 'b', fileName: 'fw.bin', result: flashedSlot('b', true), ...OUTCOME_EXTRA },
       }),
     );
 
@@ -576,7 +624,12 @@ describe('SlotsView', () => {
       panel({
         plan: slotPlan(true),
         report: slotReport(base),
-        outcome: { key: 'b', fileName: 'fw.bin', result: flashedSlot('b', false) },
+        outcome: {
+          key: 'b',
+          fileName: 'fw.bin',
+          result: flashedSlot('b', false),
+          ...OUTCOME_EXTRA,
+        },
       }),
     );
 
@@ -769,68 +822,164 @@ describe('SlotsView: an empty bank', () => {
     unmount();
   });
 
-  it('offers "Use the booted bank\'s image" on the empty bank only, labelled, and prepares it on click', () => {
+  it('offers on every row "Copy to" each other bank, filled or empty, labelled, and prepares it on click', () => {
     const api = panel({ plan: slotPlan(true), report: slotReport(base, null, ['b']) });
     const { container, unmount } = view(api);
 
     const rows = bankRows(container);
-    expect(buttonsIn(rows[0] as HTMLElement)).not.toContain("Use the booted bank's image");
-    expect(buttonsIn(rows[2] as HTMLElement)).not.toContain("Use the booted bank's image");
-    const row = rows[1] as HTMLElement;
-    const button = buttonByText(row, "Use the booted bank's image");
-    expect(button.disabled).toBe(false);
-    /* Labelled: where the image comes from, that it is the bank the camera boots, and that nothing is sent yet. */
-    expect(row.textContent).toContain(
-      'Copies the firmware slot A holds (4.9.1.5) into this empty bank',
+    const rowA = rows[0] as HTMLElement;
+    const rowB = rows[1] as HTMLElement;
+    const rowR = rows[2] as HTMLElement;
+    expect(buttonsIn(rowA)).toEqual(
+      expect.arrayContaining(['Copy to slot B', 'Copy to recovery slot R']),
     );
-    expect(row.textContent).toContain('a second slot with the same firmware');
-    expect(row.textContent).toContain('That is the bank the camera boots now.');
-    expect(row.textContent).toContain('You review the plan before anything is sent.');
+    expect(buttonsIn(rowA)).not.toContain('Copy to slot A');
+    expect(buttonsIn(rowR)).toEqual(expect.arrayContaining(['Copy to slot A', 'Copy to slot B']));
+    expect(buttonByText(rowA, 'Copy to slot B').disabled).toBe(false);
+    expect(buttonByText(rowA, 'Copy to recovery slot R').disabled).toBe(false);
+    expect(rowA.textContent).toContain(
+      'Copies the firmware this bank holds, as this read decrypted it, into the bank you pick',
+    );
+    /* The empty bank has nothing to copy: its buttons are off, and say why once. */
+    expect(buttonByText(rowB, 'Copy to slot A').disabled).toBe(true);
+    expect(rowB.textContent).toContain('Slot B is empty: there is no image to copy.');
+    expect(buttonsIn(rowA).some((text) => text.startsWith('Use '))).toBe(false);
 
     act(() => {
-      button.click();
+      buttonByText(rowA, 'Copy to slot B').click();
     });
-    expect(api.fillWithBankImage).toHaveBeenCalledWith('b');
+    expect(api.copyBank).toHaveBeenCalledWith('a', 'b');
     expect(api.write).not.toHaveBeenCalled();
     unmount();
   });
 
-  it('names the first bank that holds an image when the camera names no booted bank', () => {
-    const report = slotReport({ ...base, boot: null }, null, ['b']);
-    const unnamed: SlotsReport = {
-      ...report,
-      slots: report.slots.map((candidate) => ({ ...candidate, active: false })),
-    };
-    const { container, unmount } = view(panel({ plan: slotPlan(true), report: unnamed }));
-
-    const row = bankRows(container)[1] as HTMLElement;
-    expect(buttonsIn(row)).toContain("Use slot A's image");
-    expect(buttonsIn(row)).not.toContain("Use the booted bank's image");
-    expect(row.textContent).toContain('The camera does not say which bank it boots');
-    /* Every bank needs the tick then, an empty one too, and the button says so. */
-    expect(row.textContent).toContain(
-      'The camera does not name its booted bank: writing it asks for an extra confirmation.',
-    );
-    unmount();
-  });
-
-  it('offers no image source when no other bank holds a decrypted image', () => {
-    const all = slotReport(base, null, ['a', 'b', 'r']);
-    const { container, unmount } = view(panel({ plan: slotPlan(true), report: all }));
+  it('offers "Restore from full flash backup…" on each row, with what it takes', () => {
+    const { container, unmount } = view(panel({ plan: slotPlan(true), report: slotReport(base) }));
     for (const row of bankRows(container)) {
-      expect(buttonsIn(row).some((text) => text.startsWith('Use '))).toBe(false);
+      expect(buttonByText(row, 'Restore from full flash backup…').disabled).toBe(false);
+      expect(row.textContent).toContain(
+        'Pick a full flash backup: the 4 MiB image a J-Link reads, or a Preserve run file that holds the whole flash.',
+      );
     }
+    const input = container.querySelector<HTMLInputElement>('#slot-b-restore-file');
+    expect(input?.accept).toContain('.zip');
     unmount();
   });
 
-  it('greys the source button out with the reason when the camera is not connected', () => {
+  it('greys the copy and restore buttons out with the reason when the camera is not connected', () => {
     const { container, unmount } = view(
       panel({ plan: slotPlan(true), report: slotReport(base, null, ['b']) }),
       false,
     );
-    const row = bankRows(container)[1] as HTMLElement;
-    expect(buttonByText(row, "Use the booted bank's image").disabled).toBe(true);
+    const row = bankRows(container)[0] as HTMLElement;
+    expect(buttonByText(row, 'Copy to slot B').disabled).toBe(true);
+    expect(buttonByText(row, 'Restore from full flash backup…').disabled).toBe(true);
     expect(row.textContent).toContain('Connect the camera first.');
+    unmount();
+  });
+
+  it('shows the prepared plan with what is saved first, and the write dialog names the zip', () => {
+    const report = slotReport(base);
+    const api = panel({
+      plan: slotPlan(true),
+      report,
+      pending: {
+        key: 'b',
+        kind: 'plain',
+        fileName: 'seek-slot-a-4.9.1.5-eeeeeeee-decrypted.bin',
+        plan: preparedSlot('b', 'plain', new Uint8Array(0x100)),
+        report,
+        source: 'slot A at 0x14030000, firmware 4.9.1.5, as the slots read decrypted it',
+        action: { kind: 'copy', from: 'a' },
+        restore: null,
+      },
+    });
+    const { container, unmount } = view(api);
+    const text = container.textContent;
+    expect(text).toContain('Saved first');
+    expect(text).toContain(
+      'Before anything is written, slot B (as stored, and decrypted) is read again and saved in one zip',
+    );
+    expect(text).toContain('_bank-B_before-copy-from-A.zip');
+    expect(text).toContain('The zip is downloaded automatically, before anything is sent.');
+    expect(text).toContain('Image taken from');
+    act(() => {
+      buttonByText(container, 'Write to slot B…').click();
+    });
+    expect(dialog()?.textContent).toContain(
+      'Before anything is sent, slot B is read again and saved as one zip download: seek_backup_<time>_',
+    );
+    unmount();
+  });
+
+  it('a restore’s result says whether the bank reads back as the backup stores it, and names the zip', () => {
+    const { container, unmount } = view(
+      panel({
+        plan: slotPlan(true),
+        report: slotReport(base),
+        outcome: {
+          key: 'b',
+          fileName: 'seek-slot-b-4.9.1.5-aaaaaaaa-decrypted.bin',
+          result: flashedSlot('b', true),
+          backup: BACKUP,
+          action: { kind: 'restore', fileName: 'whole.bin' },
+          restore: { compared: true, equal: true, differing: 0, firstDiffering: null },
+        },
+      }),
+    );
+    expect(container.textContent).toContain(
+      'Slot B reads back byte for byte as the backup stores it.',
+    );
+    expect(container.textContent).toContain(`Saved first, as a download: ${BACKUP.fileName}.`);
+    unmount();
+  });
+
+  it('offers "Make N FPS in every bank" beside the per-bank buttons, and opens its one confirmation', () => {
+    const offer = (key: SlotKey) =>
+      ({
+        key,
+        name: `slot ${key.toUpperCase()}`,
+        plan: {
+          status: 'offer',
+          patch: { id: 'x', version: '4.9.1.5' },
+          fromHz: 9,
+          toHz: 18,
+          sites: [{ offset: 1, before: 0, after: 1 }],
+          sumWord: { offset: 0x238, before: 0 },
+        },
+      }) as unknown as FpsEveryBankPlan['offers'][number];
+    const everyPlan: FpsEveryBankPlan = {
+      order: ['b', 'r', 'a'],
+      offers: [offer('b'), offer('r'), offer('a')],
+      others: [],
+    };
+    const api = panel({
+      plan: slotPlan(true),
+      report: slotReport(base),
+      planEveryFps: vi.fn(() => everyPlan),
+    });
+    const { container, unmount } = view(api);
+    const button = buttonByText(container, 'Make 18 FPS in every bank');
+    expect(button.disabled).toBe(false);
+    expect(container.textContent).toContain(
+      'Patches slot B, then slot R, then slot A in one confirmation, the bank the camera boots now last',
+    );
+    act(() => {
+      button.click();
+    });
+    const text = dialog()?.textContent ?? '';
+    expect(text).toContain('Make every bank run at 18 FPS?');
+    expect(text).toContain('They are written in this order: slot B, then slot R, then slot A.');
+    expect(text).toContain('_bank-B-R-A_before-fps-patch-every-bank.zip');
+    /* The booted bank and R are among them: the tick before the confirm. */
+    expect(buttonByText(document.body, 'Yes — patch 3 banks').disabled).toBe(true);
+    act(() => {
+      document.body.querySelector<HTMLInputElement>('#slot-fps-every-ack')?.click();
+    });
+    act(() => {
+      buttonByText(document.body, 'Yes — patch 3 banks').click();
+    });
+    expect(api.patchEveryFps).toHaveBeenCalledWith(true);
     unmount();
   });
 
@@ -846,6 +995,8 @@ describe('SlotsView: an empty bank', () => {
         plan: preparedSlot('b', 'plain', new Uint8Array(0x10000), true),
         report,
         source: 'slot A, the bank the camera boots now (4.9.1.5)',
+        action: FLASH_ACTION,
+        restore: null,
       },
     });
     const { container, unmount } = view(api);
@@ -884,6 +1035,8 @@ describe('SlotsView: an empty bank', () => {
         plan: preparedSlot('b', 'plain', new Uint8Array(0x10000), true),
         report,
         source: null,
+        action: FLASH_ACTION,
+        restore: null,
       },
     });
     const { container, unmount } = view(api);
@@ -913,6 +1066,7 @@ describe('SlotsView: an empty bank', () => {
           fileName: 'fw.bin',
           result: flashedSlot('b', true),
           targetEmpty: true,
+          ...OUTCOME_EXTRA,
         },
       }),
     );
@@ -923,10 +1077,15 @@ describe('SlotsView: an empty bank', () => {
     unmount();
   });
 
-  it('explains empty banks and the one-click source in "What these buttons do"', () => {
+  it('explains empty banks, the copy and the restore, and the zip saved first, in "What these buttons do"', () => {
     const { container, unmount } = view(panel({ plan: slotPlan(true), report: slotReport(base) }));
-    expect(container.textContent).toContain('An empty bank');
-    expect(container.textContent).toContain("Use the booted bank's image");
+    const text = container.textContent;
+    expect(text).toContain('An empty bank');
+    expect(text).toContain('Copy to recovery slot R');
+    expect(text).toContain('Restore from full flash backup');
+    expect(text).toContain('Every write saves its bank first');
+    expect(text).toContain('one zip download');
+    expect(text).not.toContain("Use the booted bank's image");
     unmount();
   });
 });
@@ -1090,6 +1249,8 @@ describe('SlotsView: the frame-rate row action', () => {
       kind: 'plain' as const,
       fileName: 'stock-a.bin',
       source: null,
+      action: FLASH_ACTION,
+      restore: null,
       report,
       plan: {
         ...preparedSlot(key, 'plain', new Uint8Array(0xca88)),
@@ -1226,7 +1387,7 @@ describe('SlotsView: the frame-rate row action', () => {
       patch: { id: 'compact_32k-1.3.0.0-to32', version: '1.3.0.0' },
       fromHz: 8,
       toHz: 32,
-      pre: { rawName: 'raw.bin', plainName: 'plain.bin' },
+      backup: BACKUP,
       changed: [0xb964, 0x238],
       written: { verified: true },
       readBack: {
@@ -1246,9 +1407,9 @@ describe('SlotsView: the frame-rate row action', () => {
     /* The capitalised replug prompt is the panel's, once (TESTING.md 42.86). */
     expect(text.split('NOW UNPLUG AND REPLUG THE CAMERA.')).toHaveLength(2);
     expect(text).toContain('differs from the saved dump only at the 2 planned byte(s)');
-    expect(text).toContain('raw.bin and plain.bin');
+    expect(text).toContain(`Saved first, as a download: ${BACKUP.fileName}.`);
     expect(text).not.toContain('UNTESTED on hardware');
-    expect(text).toContain('The saved decrypted file is the only way back');
+    expect(text).toContain('The decrypted file in it is the way back');
     unmount();
   });
 
@@ -1259,7 +1420,7 @@ describe('SlotsView: the frame-rate row action', () => {
       patch: { id: 'compact_32k-1.3.0.0-to32', version: '1.3.0.0' },
       fromHz: 8,
       toHz: 32,
-      pre: { rawName: 'raw.bin', plainName: 'plain.bin' },
+      backup: BACKUP,
       changed: [0xb964, 0x238],
       written: { verified: true },
       readBack: {

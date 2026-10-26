@@ -1,10 +1,10 @@
 /**
  * The last step before a frame-rate patch is written: the bank, the build, the rate change,
- * how the bank is saved first, and that the saved dump is the only way back. A bank
- * the camera boots now, or the recovery bank, adds the same tick a write needs.
+ * how the bank is saved first (one zip download), and that the decrypted file in it is the way
+ * back. A bank the camera boots now, or the recovery bank, adds the same tick a write needs.
  *
  * The plan is core's (`fpsPlanOfBank`); this only states it. Nothing is sent by opening or confirming it
- * here: confirming asks the page to run the patch, which saves the dump before it writes.
+ * here: confirming asks the page to run the patch, which saves the bank before it writes.
  */
 
 import { useRef, useState, type ReactElement } from 'react';
@@ -21,7 +21,7 @@ import {
   AlertDialogTitle,
 } from './ui/alert-dialog';
 import { needsRiskAck, type WriteRisk } from '@/hooks/useSlotsPanel';
-import type { FpsSaveMode } from '@/lib/fps-save';
+import { BACKUP_DOWNLOAD_NOTE } from '@/lib/backup-save';
 
 export type FpsOffer = Extract<FpsPlan, { status: 'offer' }>;
 
@@ -38,8 +38,8 @@ export interface SlotFpsConfirmProps {
    * this bank would not run. Null, or left out, when the patch takes effect. It states; it does not gate.
    */
   readonly bootWarning?: FpsBootWarning | null;
-  /** How this browser saves the dump: a chosen place per file, or two downloads. */
-  readonly saveMode: FpsSaveMode;
+  /** Core's sentence for the backup the patch saves first (`backupPlanText`): which bank, and the zip's name. */
+  readonly backupText: string;
   readonly onConfirm: (acknowledged: boolean) => void;
   readonly onCancel: () => void;
 }
@@ -51,7 +51,7 @@ export function SlotFpsConfirm({
   version,
   risk,
   bootWarning = null,
-  saveMode,
+  backupText,
   onConfirm,
   onCancel,
 }: SlotFpsConfirmProps): ReactElement {
@@ -116,13 +116,9 @@ export function SlotFpsConfirm({
           <span className="block">
             {`The patch changes ${String(sites)} byte(s) of the image and the acceptance-sum word, so the sum the bootloader checks is kept. The key pair is not touched.`}
           </span>
-          <span className="block">
-            {saveMode === 'picker'
-              ? `Before anything is written, ${slotName} is saved twice, as stored and decrypted. You choose where each file goes, and the write starts only after both are on disk.`
-              : `Before anything is written, ${slotName} is saved twice, as stored and decrypted, as two downloads. This browser cannot confirm that the files reached the disk, so check your downloads folder before you rely on them.`}
-          </span>
+          <span className="block">{`${backupText} ${BACKUP_DOWNLOAD_NOTE}`}</span>
           <span className="block font-medium">
-            {`The saved decrypted file is the only way back. There is no restore button: to undo the patch, flash that file yourself with "Flash decrypted image" on ${slotName}.`}
+            {`The decrypted file in that zip is the way back: to undo the patch, write it with "Flash decrypted image" on ${slotName}.`}
           </span>
           <span className="block">
             No reset is sent. Unplug and replug the camera afterwards for the patched bank to take

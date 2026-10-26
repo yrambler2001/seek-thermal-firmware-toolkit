@@ -1,9 +1,9 @@
 /**
- * The slot page's state: read the three banks, dump one, flash one from a
- * decrypted image or from raw bytes.
+ * The slot page's state: read the three banks, dump one, and write one: a decrypted image or raw bytes from
+ * a file, another bank's image (copy), the bank as a full flash backup holds it (restore), or the frame-rate
+ * patch of one bank or of every bank.
  *
- * Four rules this hook holds. Three are the flash view's, for one camera;
- * the fourth is specific to banks.
+ * Five rules this hook holds. Three are the flash view's, for one camera; the other two are specific to banks.
  *
  *  - A report is ONE camera's. It is dropped whenever the device changes, so a
  *    write planned against one unit can never reach another.
@@ -11,7 +11,10 @@
  *    the current one: the payload was checked against what that bank held.
  *  - Once a write or a patch is committed the report is dropped: the bank may have
  *    changed. The banks are read again after the read-back, so the table is a fresh
- *    picture of the camera, never the read from before the commit.
+ *    picture of the camera, never the read from before the commit. A write that stops
+ *    before its commit was sent changed nothing, and keeps the read (TESTING.md 42.91 C).
+ *  - Every write saves its target bank first, as one zip download (core's backup, owner 2026-10-26):
+ *    core refuses the write before anything is sent unless the download was started.
  *  - A build the slot plan does not support is never read. The plan comes from
  *    the camera's own version answer, and a build older than 0.8.0.0 is
  *    reported and left alone.
@@ -23,41 +26,57 @@ import {
   SeekDevice,
   SeekError,
   buildSlotPlan,
+  copySourceRefusal,
   dumpSlot,
   errorMessage,
-  flashSlot,
+  flashSlotWithBackup,
+  fpsEveryBankPlan,
   fpsPlanOfBank,
+  fullFlashOf,
   hexUp,
   inspectSlots,
   patchBankFps,
+  patchEveryBankFps,
+  planSlotCopy,
+  planSlotRestore,
   prepareSlotFlash,
+  restoreReadBack,
+  restoreReadBackText,
   slotDumpNames,
   stagingPhrase,
   type PrepareSlotFlashOptions,
+  type FpsEveryBankPlan,
+  type FpsEveryBankResult,
+  type FpsPatchOptions,
   type FpsPatchResult,
   type FpsPlan,
-  type FpsPreDump,
   type DumpedSlot,
   type FirmwareProfile,
-  type FlashSlotOptions,
-  type FlashSlotResult,
   type InspectFirmware,
   type LogLevel,
   type Reporter,
+  type RestoreReadBack,
+  type SaveBackup,
+  type SlotCopyPlan,
   type SlotEntry,
   type SlotFlashInput,
   type SlotFlashPlan,
   type SlotInputKind,
   type SlotKey,
   type SlotPlan,
+  type SlotRestorePlan,
   type SlotView,
+  type SlotWriteOptions,
+  type SlotWriteResult,
   type SlotsReport,
   type Support,
   type WorkflowContext,
+  type WriteAction,
+  type WriteBackup,
 } from '@seek-fw/core';
+import { backupDownloadLines, saveBackupAsDownload } from '../lib/backup-save';
 import { reportInUseElsewhere } from '../lib/camera-lock';
 import { downloadBytes } from '../lib/download';
-import { saveFpsDumpInBrowser } from '../lib/fps-save';
 import { logHint } from '../lib/hints';
 import { chooseActingProfile, refusalOf, type ActingProfile, type Refusal } from '../lib/identify';
 import {
@@ -88,14 +107,30 @@ export interface SlotsBackend {
     ctx: WorkflowContext,
     report: SlotsReport,
     key: SlotKey,
-    options: {
-      readonly acknowledgeRisk: boolean;
-      readonly verify?: boolean;
-      readonly saveDump: (dump: FpsPreDump) => Promise<boolean>;
-    },
+    options: FpsPatchOptions,
   ) => Promise<FpsPatchResult>;
-  /** Saves the pre-patch dump in the browser. Resolves true only once it is saved. */
-  readonly saveDump?: (dump: FpsPreDump) => Promise<boolean>;
+  /** Patches every bank that offers it (core `patchEveryBankFps`). Core's by default. */
+  readonly patchEveryFps?: (
+    ctx: WorkflowContext,
+    report: SlotsReport,
+    options: FpsPatchOptions,
+  ) => Promise<FpsEveryBankResult>;
+  /** Saves the backup zip a write saves first. Resolves true once the download was started. */
+  readonly saveBackup?: SaveBackup;
+  /** Plans a copy of one bank's image into another (core `planSlotCopy`). Pure. Core's by default. */
+  readonly copy?: (
+    report: SlotsReport,
+    from: SlotKey,
+    to: SlotKey,
+    options?: PrepareSlotFlashOptions,
+  ) => SlotCopyPlan;
+  /** Plans a restore of one bank from a full flash backup file (core `fullFlashOf` + `planSlotRestore`). */
+  readonly restore?: (
+    report: SlotsReport,
+    key: SlotKey,
+    file: { readonly bytes: Uint8Array; readonly name: string },
+    options?: PrepareSlotFlashOptions,
+  ) => Promise<SlotRestorePlan>;
   /** Asks the camera which build it runs and which family to act under. Read-only. */
   readonly identify: (
     device: SeekDevice,
@@ -115,12 +150,13 @@ export interface SlotsBackend {
     input: SlotFlashInput,
     options?: PrepareSlotFlashOptions,
   ) => SlotFlashPlan;
-  readonly flash: (
+  /** Saves the target bank first, then writes it and reads it back (core `flashSlotWithBackup`). */
+  readonly write: (
     ctx: WorkflowContext,
     report: SlotsReport,
     plan: SlotFlashPlan,
-    options: FlashSlotOptions,
-  ) => Promise<FlashSlotResult>;
+    options: SlotWriteOptions,
+  ) => Promise<SlotWriteResult>;
 }
 
 export const CORE_SLOTS_BACKEND: SlotsBackend = {
@@ -129,10 +165,14 @@ export const CORE_SLOTS_BACKEND: SlotsBackend = {
   inspect: (ctx, firmware) => inspectSlots(ctx, firmware === undefined ? {} : { firmware }),
   dump: (ctx, report, key) => dumpSlot(ctx, report, key),
   prepare: (report, key, input, options) => prepareSlotFlash(report, key, input, options),
-  flash: (ctx, report, plan, options) => flashSlot(ctx, report, plan, options),
+  write: (ctx, report, plan, options) => flashSlotWithBackup(ctx, report, plan, options),
   fpsPlan: (report, key) => fpsPlanOfBank(report, key),
   patchFps: (ctx, report, key, options) => patchBankFps(ctx, report, key, options),
-  saveDump: (dump) => saveFpsDumpInBrowser(dump),
+  patchEveryFps: (ctx, report, options) => patchEveryBankFps(ctx, report, options),
+  saveBackup: (backup) => saveBackupAsDownload(backup),
+  copy: (report, from, to, options) => planSlotCopy(report, from, to, options),
+  restore: async (report, key, file, options) =>
+    planSlotRestore(report, key, await fullFlashOf(file.bytes, file.name), options),
 };
 
 /* ---- pure helpers, exported for the tests ----------------------------- */
@@ -191,6 +231,36 @@ export function patchedStatus(readBackOk: boolean | null): string {
   }
   if (readBackOk === true) return 'Patched. The bank reads back as planned.';
   return 'Patched. The read-back was not checked — see the result.';
+}
+
+/** The status line after an every-bank patch: how it ended. The result panel says each bank's. */
+export function everyPatchedStatus(done: FpsEveryBankResult): string {
+  const n = done.results.length;
+  const banks = `${String(n)} bank${n === 1 ? '' : 's'}`;
+  if (done.stopped !== null) {
+    return `Stopped at slot ${done.stopped.key.toUpperCase()} — ${banks} patched; see the result.`;
+  }
+  if (done.results.some((one) => one.readBack.ok !== true)) {
+    return `Patched ${banks}, but a read-back was not checked as planned — see the result.`;
+  }
+  return `Patched ${banks}. Each reads back as planned.`;
+}
+
+/**
+ * The status line after a cancel. It says a bank may be partly written only once that bank's commit was sent
+ * (`committed`, from core's `onCommit`); a cancel before any commit wrote nothing (TESTING.md 42.82, 42.91 C).
+ */
+export function cancelledStatus(committed: readonly SlotKey[], report: SlotsReport | null): string {
+  if (committed.length === 0) return 'Cancelled — nothing was written.';
+  const name = (key: SlotKey): string =>
+    report?.slots.find((view) => view.entry.key === key)?.entry.name ?? `Bank ${key.toUpperCase()}`;
+  if (committed.length === 1) {
+    return `Cancelled after the commit to ${name(committed[0] ?? 'a')} was sent — the bank may be partly written. Read it before relying on it.`;
+  }
+  return (
+    `Cancelled after the commits to ${committed.map(name).join(' and ')} were sent — each may be partly ` +
+    'written. Read them before relying on them.'
+  );
 }
 
 /** The three things a bank row can do. */
@@ -267,62 +337,42 @@ export function slotVersion(report: SlotsReport, key: SlotKey): string | null {
 }
 
 /**
- * A decrypted image an empty bank could be filled from, taken from the read the page
- * already made: no second read, nothing asked of the camera.
+ * Whether "Copy to <target>" on the `from` row may be pressed, and if not, why: the target's own rules for a
+ * decrypted image (`slotActionGate`, the same as its "Flash decrypted image"), then the source's (an empty bank,
+ * one not read, one no recovered key opens: core's `copySourceRefusal`). The target may hold anything, an
+ * image or nothing.
  */
-export interface BankImageSource {
-  readonly key: SlotKey;
-  readonly name: string;
-  readonly version: string | null;
-  readonly bytes: Uint8Array;
-  /**
-   * The name the image is prepared under. It carries the camera's key pair when the image
-   * holds it, as a dump's decrypted file is named. A bare name is still accepted by the write:
-   * it is retargeted when this camera's pair, or a known application pair, occurs exactly once
-   * in the image (core's retargetImageKeys).
-   */
-  readonly fileName: string;
-  /** The camera names this bank as the one it boots; false when it is only a bank that holds an image. */
-  readonly booted: boolean;
+export function slotCopyGate(args: {
+  readonly report: SlotsReport;
+  readonly from: SlotKey;
+  readonly to: SlotKey;
+  readonly connected: boolean;
+  readonly busy: boolean;
+  readonly cameraRefusal?: string | null;
+}): ActionGate {
+  const target = args.report.slots.find((view) => view.entry.key === args.to) ?? null;
+  if (target === null) return { enabled: false, reason: 'This build has no such bank.' };
+  const gate = slotActionGate({
+    entry: target.entry,
+    view: target,
+    action: 'flash-plain',
+    connected: args.connected,
+    busy: args.busy,
+    cameraRefusal: args.cameraRefusal ?? null,
+  });
+  if (!gate.enabled) return gate;
+  const source = copySourceRefusal(args.report, args.from);
+  if (source !== null) return { enabled: false, reason: `${capitalised(source)}.` };
+  return { enabled: true, reason: null };
 }
 
-/**
- * The running firmware's decrypted image, for an empty bank: the bank the camera boots
- * when it holds an image this read decrypted, else a bank the bootloader can key, else
- * any other bank that holds one. Never the target itself. Null when no bank qualifies.
- */
-export function bankImageSource(report: SlotsReport, target: SlotKey): BankImageSource | null {
-  const holds = (candidate: SlotView): boolean =>
-    candidate.entry.key !== target &&
-    candidate.content === 'image' &&
-    candidate.state?.plain != null;
-  const view =
-    report.slots.find((candidate) => candidate.active && holds(candidate)) ??
-    report.slots.find((candidate) => candidate.state?.bootable === true && holds(candidate)) ??
-    report.slots.find(holds) ??
-    null;
-  const state = view?.state ?? null;
-  const plain = state?.plain ?? null;
-  const plainSha256 = state?.sha256 ?? null;
-  if (view === null || state === null || plain === null || plainSha256 === null) return null;
-  const version = slotVersion(report, view.entry.key);
-  /* Named by the same function as a dump's decrypted file. The eight digits are the decrypted
-   * image's sha, the one this report holds: a dump names its files by the stored bank's sha, which
-   * is not in the report, so this name can differ from that dump's in those eight digits only. */
-  const { decrypted } = slotDumpNames(
-    { key: view.entry.key, sha256: plainSha256, empty: false, plain },
-    version,
-    report.state.keyTable,
-  );
-  if (decrypted === null) return null;
-  return {
-    key: view.entry.key,
-    name: view.entry.name,
-    version,
-    bytes: plain,
-    fileName: decrypted,
-    booted: view.active,
-  };
+function capitalised(text: string): string {
+  return text.length === 0 ? text : `${(text[0] ?? '').toUpperCase()}${text.slice(1)}`;
+}
+
+/** The button's words for a copy target: "Copy to slot A", "Copy to slot B", "Copy to recovery slot R". */
+export function copyLabel(to: SlotKey): string {
+  return to === 'r' ? 'Copy to recovery slot R' : `Copy to slot ${to.toUpperCase()}`;
 }
 
 function contextOf(
@@ -356,19 +406,29 @@ export interface PendingSlotFlash {
   /** The report the plan was checked against. Only that report may send it. */
   readonly report: SlotsReport;
   /**
-   * Where the image came from when it is not a file the person picked: "the booted bank's
-   * image". Null for a file. Shown beside the plan so the source is never a surprise.
+   * Where the image came from when it is not a file the person picked: another bank (a copy), or a
+   * bank of a full flash backup (a restore). Null for a file. Shown beside the plan so the source is
+   * never a surprise.
    */
   readonly source: string | null;
+  /** What the write is: it names the backup zip saved first. */
+  readonly action: WriteAction;
+  /** For a restore: the backup's bank, whose stored bytes the read-back is compared with. */
+  readonly restore: SlotRestorePlan | null;
 }
 
 /** What the last write did, kept on screen until the next run starts. */
 export interface SlotFlashOutcome {
   readonly key: SlotKey;
   readonly fileName: string;
-  readonly result: FlashSlotResult;
+  readonly result: SlotWriteResult['written'];
   /** The bank held no image before this write, so no firmware was overwritten. */
   readonly targetEmpty?: boolean;
+  /** The zip saved before the write. */
+  readonly backup: WriteBackup;
+  readonly action: WriteAction;
+  /** For a restore: the read-back against the backup's stored bank bytes. */
+  readonly restore: RestoreReadBack | null;
 }
 
 export interface SlotsPanelParams {
@@ -397,8 +457,14 @@ export interface SlotsPanelApi {
    * sent. Refused (with the reason) when there is no read.
    */
   readonly planFps: (key: SlotKey) => FpsPlan;
-  /** Patches one bank: saves its dump first, then writes the patched image and reads it back. */
+  /** Patches one bank: saves it first (the backup zip), then writes the patched image and reads it back. */
   readonly patchFps: (key: SlotKey, acknowledged: boolean) => Promise<void>;
+  /** What "Make N FPS in every bank" would patch, from the last read. Pure. Null before a read. */
+  readonly planEveryFps: () => FpsEveryBankPlan | null;
+  /** Patches every bank that offers it, in one confirmation: one zip of all of them first, then each in turn. */
+  readonly patchEveryFps: (acknowledged: boolean) => Promise<void>;
+  /** The last every-bank patch, kept on screen until the next run starts. */
+  readonly fpsEveryOutcome: FpsEveryBankResult | null;
   /**
    * The person says the camera runs the 16 Hz FF 1.3.0.8 build. Used only when the camera's own
    * answers cannot say which build runs; it applies to the next image prepared.
@@ -417,10 +483,15 @@ export interface SlotsPanelApi {
   dump: (key: SlotKey) => Promise<void>;
   pickFile: (key: SlotKey, kind: SlotInputKind, file: File) => Promise<void>;
   /**
-   * Prepares a write of the running firmware's own decrypted image (`bankImageSource`) into
-   * an empty bank, as if its file had been picked. Sends nothing.
+   * Prepares a copy of bank `from`'s image, as the slots read decrypted it, into bank `to`, staged as any
+   * decrypted image is (core `planSlotCopy`). Sends nothing.
    */
-  fillWithBankImage: (key: SlotKey) => Promise<void>;
+  copyBank: (from: SlotKey, to: SlotKey) => Promise<void>;
+  /**
+   * Prepares the restore of bank `key` from a full flash backup file (a 4 MiB flash image, or a Preserve run
+   * file holding one): the bank cut at its address, decrypted, and staged (core `planSlotRestore`). Sends nothing.
+   */
+  pickRestore: (key: SlotKey, file: File) => Promise<void>;
   write: (acknowledged: boolean) => Promise<void>;
   discardPending: () => void;
   cancel: () => void;
@@ -443,6 +514,7 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
   const [pending, setPending] = useState<PendingSlotFlash | null>(null);
   const [outcome, setOutcome] = useState<SlotFlashOutcome | null>(null);
   const [fpsOutcome, setFpsOutcome] = useState<FpsPatchResult | null>(null);
+  const [fpsEveryOutcome, setFpsEveryOutcome] = useState<FpsEveryBankResult | null>(null);
   const [running16Hz, setRunning16Hz] = useState(false);
 
   /* A running task reads these, not the render's copy: it captures its inputs
@@ -482,6 +554,7 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
     setRefusal(null);
     setOutcome(null);
     setFpsOutcome(null);
+    setFpsEveryOutcome(null);
     setStatus(
       device.device === null
         ? 'Device disconnected — read the slots again.'
@@ -539,6 +612,7 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
       setRefusal(null);
       setOutcome(null);
       setFpsOutcome(null);
+      setFpsEveryOutcome(null);
       onOptionsFailure(null);
       let transport: ReturnType<DeviceHandle['makeTransport']> | null = null;
       let usedClient: SeekDevice | null = null;
@@ -703,21 +777,24 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
     [backend, device, flush, form, log, reset, runner, setStatus, workflow],
   );
 
-  /* ---- prepare a file (sends nothing) -------------------------------- */
+  /* ---- prepare a write (sends nothing) ------------------------------- */
 
   /**
-   * Builds the plan for one input and holds it. `load` yields the bytes, the name and where
-   * they came from, given the current report; whatever it throws is shown as a rejection.
-   * Nothing here touches the camera.
+   * Builds the plan for one write and holds it. `load` yields the plan, the name, where the image came from
+   * and what the write is, given the current report; whatever it throws is shown as a rejection. Nothing
+   * here touches the camera.
    */
   const prepareFrom = useCallback(
     async (
       key: SlotKey,
       kind: SlotInputKind,
       load: (current: SlotsReport) => Promise<{
-        readonly bytes: Uint8Array;
+        readonly plan: SlotFlashPlan;
         readonly fileName: string;
+        readonly bytes: number;
         readonly source: string | null;
+        readonly action: WriteAction;
+        readonly restore: SlotRestorePlan | null;
       }>,
       retry: string,
     ): Promise<void> => {
@@ -745,14 +822,9 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
               );
             }
             const input = await load(current);
-            log(`${input.fileName} — ${input.bytes.length.toLocaleString()} bytes`, 'detail');
+            log(`${input.fileName} — ${input.bytes.toLocaleString()} bytes`, 'detail');
             if (input.source !== null) log(`image taken from ${input.source}`, 'detail');
-            const prepared = backend.prepare(
-              current,
-              key,
-              { kind, bytes: input.bytes, fileName: input.fileName },
-              { running16Hz },
-            );
+            const prepared = input.plan;
             setCurrentPending({
               key,
               kind,
@@ -760,6 +832,8 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
               plan: prepared,
               report: current,
               source: input.source,
+              action: input.action,
+              restore: input.restore,
             });
             log(
               `prepared ${String(prepared.payload.length)} B for slot ${key.toUpperCase()}, ` +
@@ -782,7 +856,7 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
         log(`another operation is running — wait for it, then ${retry}`, 'warn');
       }
     },
-    [backend, flush, log, reset, runner, setCurrentPending, setStatus, running16Hz],
+    [flush, log, reset, runner, setCurrentPending, setStatus],
   );
 
   const pickFile = useCallback(
@@ -790,54 +864,102 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
       prepareFrom(
         key,
         kind,
-        async () => ({
-          bytes: new Uint8Array(await file.arrayBuffer()),
-          fileName: file.name,
-          source: null,
-        }),
+        async (current) => {
+          const bytes = new Uint8Array(await file.arrayBuffer());
+          return {
+            plan: backend.prepare(
+              current,
+              key,
+              { kind, bytes, fileName: file.name },
+              { running16Hz },
+            ),
+            fileName: file.name,
+            bytes: bytes.length,
+            source: null,
+            action: { kind: 'flash', input: kind, fileName: file.name },
+            restore: null,
+          };
+        },
         'pick the file again',
       ),
-    [prepareFrom],
+    [backend, prepareFrom, running16Hz],
   );
 
-  /* The running firmware's own image, offered for an empty bank. The bytes are the decrypted
-   * image this read already holds (the bank's `plain`); the name carries the camera's key pair
-   * when the image holds it, as a dump's file would, so every check the file path makes is made. */
-  const fillWithBankImage = useCallback(
-    (key: SlotKey): Promise<void> =>
+  /* A copy: the source bank's image as this read decrypted it, staged for the target as any decrypted image
+   * is (core's planSlotCopy). The name carries the camera's key pair when the image holds it, as a dump's
+   * decrypted file would, so every check the file path makes is made. */
+  const copyBank = useCallback(
+    (from: SlotKey, to: SlotKey): Promise<void> =>
       prepareFrom(
-        key,
+        to,
         'plain',
         (current) => {
-          const view = current.slots.find((candidate) => candidate.entry.key === key);
-          if (view?.content !== 'empty') {
-            throw new SeekError(
-              'slots/refused',
-              `slot ${key.toUpperCase()} is not empty, so there is no empty bank to fill. Pick a ` +
-                'file to replace what it holds.',
-            );
-          }
-          const source = bankImageSource(current, key);
-          if (source === null) {
-            throw new SeekError(
-              'slots/refused',
-              'no other bank holds a decrypted image to copy — pick an image file instead',
-            );
-          }
+          const copy = (backend.copy ?? planSlotCopy)(current, from, to, { running16Hz });
           return Promise.resolve({
-            bytes: source.bytes,
-            fileName: source.fileName,
-            source: source.booted
-              ? `${source.name}, the bank the camera boots now${source.version === null ? '' : ` (${source.version})`}`
-              : `${source.name}, the first bank that holds an image${source.version === null ? '' : ` (${source.version})`}`,
+            plan: copy.plan,
+            fileName: copy.fileName,
+            bytes: copy.plan.expectedPlain?.length ?? copy.plan.payload.length,
+            source: copy.source,
+            action: { kind: 'copy', from } as const,
+            restore: null,
           });
         },
         'press the button again',
       ),
-    [prepareFrom],
+    [backend, prepareFrom, running16Hz],
+  );
+
+  /* A restore: the bank cut out of a full flash backup at its address, decrypted and staged (core's
+   * planSlotRestore). A Preserve run file is read for the whole flash it holds. */
+  const pickRestore = useCallback(
+    (key: SlotKey, file: File): Promise<void> =>
+      prepareFrom(
+        key,
+        'plain',
+        async (current) => {
+          const bytes = new Uint8Array(await file.arrayBuffer());
+          const restore = await (
+            backend.restore ??
+            (async (report, bank, picked, options) =>
+              planSlotRestore(report, bank, await fullFlashOf(picked.bytes, picked.name), options))
+          )(current, key, { bytes, name: file.name }, { running16Hz });
+          log(
+            `${file.name}: a full flash backup (${restore.backup.from === 'preserve-run' ? `the whole flash in a Preserve run file, ${restore.backup.entry ?? ''}` : '4 MiB'}), sha256 ${restore.backup.sha256}; ` +
+              `its identity block names ${restore.backup.identity.serial ?? 'no serial'}`,
+            'detail',
+          );
+          return {
+            plan: restore.plan,
+            fileName: restore.fileName,
+            bytes: restore.decryption.plain?.length ?? 0,
+            source: restore.source,
+            action: { kind: 'restore', fileName: file.name } as const,
+            restore,
+          };
+        },
+        'pick the file again',
+      ),
+    [backend, log, prepareFrom, running16Hz],
   );
 
   /* ---- write ---------------------------------------------------------- */
+
+  /**
+   * The save every write waits for: the zip's download, and the log lines that say it was started and what to
+   * check. Answers what the save answers, so core refuses the write when it did not happen.
+   */
+  const saveFirst = useCallback(
+    async (backup: WriteBackup): Promise<boolean> => {
+      const saved = await (backend.saveBackup ?? saveBackupAsDownload)(backup);
+      if (saved) {
+        const [line, check] = backupDownloadLines(backup);
+        if (line !== undefined) log(line, 'ok');
+        if (check !== undefined) log(check, 'detail');
+      }
+      return saved;
+    },
+    [backend, log],
+  );
 
   const write = useCallback(
     async (acknowledged: boolean): Promise<void> => {
@@ -848,9 +970,9 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
         const current = reportRef.current;
         let transport: ReturnType<DeviceHandle['makeTransport']> | null = null;
         let usedClient: SeekDevice | null = null;
-        /* Set once the write is handed to the camera. From then on the bank
-         * may have changed, whatever happens next. */
-        let committing = false;
+        /* Set when core is about to send the commit. Before it nothing the write sent can have changed the
+         * bank (arming and staging do not touch flash); from it on the bank may be partly written. */
+        const commit = { sent: false };
         try {
           if (ready === null || current === null || ready.report !== current) {
             throw new SeekError(
@@ -891,34 +1013,53 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
             'detail',
           );
 
-          /* From the commit on the bank may change, so the read it was made from is dropped here, before
-           * anything is sent. The banks are read again once the write is read back, below. */
-          committing = true;
+          /* The read the write was planned from is dropped before anything is sent, and the banks are read
+           * again once the write is read back, below. A write that stops before its commit gives it back. */
           forgetReport();
-          const written = await backend.flash(
+          const done = await backend.write(
             contextOf(current, client, workflow, signal),
             current,
             ready.plan,
-            { verify: true, acknowledgeRisk: acknowledged },
+            {
+              verify: true,
+              acknowledgeRisk: acknowledged,
+              action: ready.action,
+              saveBackup: saveFirst,
+              onCommit: () => {
+                commit.sent = true;
+              },
+            },
           );
+          const written = done.written;
+          const restore =
+            ready.restore === null ? null : restoreReadBack(ready.restore.stored, written.after);
           setOutcome({
             key: ready.key,
             fileName: ready.fileName,
             result: written,
             targetEmpty: ready.plan.targetEmpty === true,
+            backup: done.backup,
+            action: ready.action,
+            restore,
           });
           for (const note of written.notes) log(note, 'detail');
+          if (restore !== null) {
+            log(
+              restoreReadBackText(restore, view?.entry.name ?? `Bank ${ready.key.toUpperCase()}`),
+              restore.equal === true ? 'ok' : 'warn',
+            );
+          }
           log(replugRecord('write'), 'warn');
           await readAfterWrite(current, client, signal, 'write');
           workflow.progress(1, 1, writtenStatus(written.verified));
         } catch (error) {
+          /* Nothing was committed: the bank is as the read found it, so the read is the table again. */
+          if (!commit.sent && current !== null && reportRef.current === null) {
+            setCurrentReport(current);
+          }
           if (error instanceof CancelledError) {
             log(`cancelled: ${error.message}`, 'warn');
-            setStatus(
-              committing
-                ? 'Cancelled — the bank may be partly written. Read it before relying on it.'
-                : 'Cancelled — nothing was written.',
-            );
+            setStatus(cancelledStatus(commit.sent ? [ready?.key ?? 'a'] : [], current));
           } else {
             log(`ERROR: ${errorMessage(error)}`, 'error');
             logHint(log, error);
@@ -942,6 +1083,8 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
       readAfterWrite,
       reset,
       runner,
+      saveFirst,
+      setCurrentReport,
       setStatus,
       workflow,
     ],
@@ -962,11 +1105,17 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
     [backend, report],
   );
 
+  const planEveryFps = useCallback(
+    (): FpsEveryBankPlan | null =>
+      report === null ? null : fpsEveryBankPlan(report, backend.fpsPlan ?? fpsPlanOfBank),
+    [backend, report],
+  );
+
   /**
-   * Patches one bank. The core saves the bank's dump first (`saveDump`) and refuses the write if that did
-   * not happen; then it writes the patched image through the page's own plain-chain path and reads it back.
-   * Like `write`, the report is dropped once the patch is committed: the bank may have changed. The banks
-   * are read again after the read-back.
+   * Patches one bank. The core saves the bank first (the backup zip, `saveBackup`) and refuses the write if
+   * that did not happen; then it writes the patched image and reads it back. Like `write`, the read is dropped
+   * before anything is sent and given back when nothing was committed. The banks are read again after the
+   * read-back.
    */
   const patchFps = useCallback(
     async (key: SlotKey, acknowledged: boolean): Promise<void> => {
@@ -974,11 +1123,12 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
       const result = await runner.start(SLOTS_FPS_PANEL_ID, async (signal) => {
         reset(`Patching slot ${name} ...`);
         setFpsOutcome(null);
+        setFpsEveryOutcome(null);
         const current = reportRef.current;
         let transport: ReturnType<DeviceHandle['makeTransport']> | null = null;
         let usedClient: SeekDevice | null = null;
-        /* Set once the patch is handed to the core. From then on the bank may have changed. */
-        let committing = false;
+        /* Set when core is about to send the commit (see `write`). */
+        const commit = { sent: false };
         try {
           if (current === null) {
             throw new SeekError(
@@ -1004,20 +1154,17 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
           usedClient = client;
           await transport.open();
 
-          /* From the commit on the bank may change, so the read it was made from is dropped here, before
-           * anything is sent. The banks are read again once the patch is read back, below. */
-          committing = true;
           forgetReport();
           const patch = backend.patchFps ?? patchBankFps;
-          const save = backend.saveDump ?? saveFpsDumpInBrowser;
           const done = await patch(contextOf(current, client, workflow, signal), current, key, {
             acknowledgeRisk: acknowledged,
             verify: true,
-            saveDump: save,
+            saveBackup: saveFirst,
+            onCommit: () => {
+              commit.sent = true;
+            },
           });
           setFpsOutcome(done);
-          /* The saved files are named once, by core's own note just below ("saved the pre-patch dump: …"):
-           * this line named them too, two lines in a row on the camera (TESTING.md 42.86). */
           log(
             `slot ${name}: patched from ${String(done.fromHz)} Hz to ${String(done.toHz)} Hz ` +
               `(firmware ${done.patch.version})`,
@@ -1028,13 +1175,12 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
           await readAfterWrite(current, client, signal, 'patch');
           workflow.progress(1, 1, patchedStatus(done.readBack.ok));
         } catch (error) {
+          if (!commit.sent && current !== null && reportRef.current === null) {
+            setCurrentReport(current);
+          }
           if (error instanceof CancelledError) {
             log(`cancelled: ${error.message}`, 'warn');
-            setStatus(
-              committing
-                ? 'Cancelled — the bank may be partly written. Read it before relying on it.'
-                : 'Cancelled — nothing was written.',
-            );
+            setStatus(cancelledStatus(commit.sent ? [key] : [], current));
           } else {
             log(`ERROR: ${errorMessage(error)}`, 'error');
             logHint(log, error);
@@ -1058,6 +1204,124 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
       readAfterWrite,
       reset,
       runner,
+      saveFirst,
+      setCurrentReport,
+      setStatus,
+      workflow,
+    ],
+  );
+
+  /**
+   * "Make N FPS in every bank": core plans every bank that offers the patch from a fresh read, saves one zip
+   * of all of them, then writes and reads each back in turn, the booted bank last; the first failure stops
+   * the rest (core `patchEveryBankFps`). One acknowledgement covers the booted bank and recovery R.
+   */
+  const patchEveryFps = useCallback(
+    async (acknowledged: boolean): Promise<void> => {
+      const result = await runner.start(SLOTS_FPS_PANEL_ID, async (signal) => {
+        reset('Patching every bank ...');
+        setFpsOutcome(null);
+        setFpsEveryOutcome(null);
+        const current = reportRef.current;
+        let transport: ReturnType<DeviceHandle['makeTransport']> | null = null;
+        let usedClient: SeekDevice | null = null;
+        const committed: SlotKey[] = [];
+        try {
+          if (current === null) {
+            throw new SeekError(
+              'slots/refused',
+              'read the slots first — the patch is planned from the banks the analysis read',
+            );
+          }
+          const plan = fpsEveryBankPlan(current, backend.fpsPlan ?? fpsPlanOfBank);
+          if (plan.order.length === 0) {
+            throw new SeekError(
+              'slots/refused',
+              'no bank offers the frame-rate patch. Nothing was written.',
+            );
+          }
+          const needs = plan.order.filter((key) => needsRiskAck(writeRisk(current, key)));
+          if (needs.length > 0 && !acknowledged) {
+            throw new SeekError(
+              'slots/refused',
+              `${needs.map((key) => `slot ${key.toUpperCase()}`).join(' and ')} need the risk ` +
+                'acknowledgement before they can be patched. Nothing was written.',
+            );
+          }
+          const options = readOptions(form);
+          transport = device.makeTransport({
+            recipient: options.recipient,
+            onWarning: (message) => {
+              workflow.log(message, 'warn');
+            },
+          });
+          const client = new SeekDevice(transport, { reporter: workflow, signal });
+          usedClient = client;
+          await transport.open();
+
+          forgetReport();
+          const every = backend.patchEveryFps ?? patchEveryBankFps;
+          const done = await every(contextOf(current, client, workflow, signal), current, {
+            acknowledgeRisk: acknowledged,
+            verify: true,
+            saveBackup: saveFirst,
+            onCommit: (key) => {
+              committed.push(key);
+            },
+          });
+          setFpsEveryOutcome(done);
+          for (const one of done.results) {
+            log(
+              `slot ${one.key.toUpperCase()}: patched from ${String(one.fromHz)} Hz to ${String(one.toHz)} Hz ` +
+                `(firmware ${one.patch.version})`,
+              'ok',
+            );
+            for (const note of one.notes) log(note, 'detail');
+          }
+          if (done.stopped !== null) log(`stopped: ${done.stopped.reason}`, 'warn');
+          if (done.unwritten.length > 0) {
+            log(
+              `not written: ${done.unwritten.map((key) => `slot ${key.toUpperCase()}`).join(', ')}`,
+              'warn',
+            );
+          }
+          if (committed.length > 0) {
+            log(replugRecord('patch'), 'warn');
+            await readAfterWrite(current, client, signal, 'patch');
+          }
+          workflow.progress(1, 1, everyPatchedStatus(done));
+        } catch (error) {
+          if (committed.length === 0 && current !== null && reportRef.current === null) {
+            setCurrentReport(current);
+          }
+          if (error instanceof CancelledError) {
+            log(`cancelled: ${error.message}`, 'warn');
+            setStatus(cancelledStatus(committed, current));
+          } else {
+            log(`ERROR: ${errorMessage(error)}`, 'error');
+            logHint(log, error);
+            setStatus('Failed — see the log above.');
+          }
+        } finally {
+          if (transport !== null) await transport.close();
+          if (usedClient?.unlockTokenAccepted === true) device.markUnlocked(usedClient.transport);
+          flush();
+        }
+      });
+      if (result === 'in-use-elsewhere') reportInUseElsewhere({ log, setStatus });
+    },
+    [
+      backend,
+      device,
+      flush,
+      form,
+      forgetReport,
+      log,
+      readAfterWrite,
+      reset,
+      runner,
+      saveFirst,
+      setCurrentReport,
       setStatus,
       workflow,
     ],
@@ -1082,8 +1346,11 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
       pending,
       outcome,
       fpsOutcome,
+      fpsEveryOutcome,
       planFps,
       patchFps,
+      planEveryFps,
+      patchEveryFps,
       running16Hz,
       setRunning16Hz,
       unlockNote,
@@ -1092,7 +1359,8 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
       readSlots,
       dump,
       pickFile,
-      fillWithBankImage,
+      copyBank,
+      pickRestore,
       write,
       discardPending,
       cancel,
@@ -1105,15 +1373,19 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
       pending,
       outcome,
       fpsOutcome,
+      fpsEveryOutcome,
       planFps,
       patchFps,
+      planEveryFps,
+      patchEveryFps,
       running16Hz,
       unlockNote,
       runner.active,
       readSlots,
       dump,
       pickFile,
-      fillWithBankImage,
+      copyBank,
+      pickRestore,
       write,
       discardPending,
       cancel,

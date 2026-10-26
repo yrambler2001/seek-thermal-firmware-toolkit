@@ -1,7 +1,8 @@
 /**
- * The frame-rate patch's confirmation: what it says (the bank, the rate change, that the rate is untested,
- * that the saved dump is the only way back, and how the save works in this browser), and that a bank the
- * camera boots now, or recovery, needs the same tick a write needs before the confirm can be pressed.
+ * The frame-rate patch's confirmation: what it says (the bank, the rate change, the zip the bank is saved in
+ * first, that its decrypted file is the way back, and that a browser cannot see a download reach the disk),
+ * and that a bank the camera boots now, or recovery, needs the same tick a write needs before the confirm can
+ * be pressed.
  */
 
 import { act } from 'react';
@@ -20,6 +21,11 @@ const OFFER = {
 
 const FREE = { booted: false, recovery: false, bootUnnamed: false };
 
+/** Core's sentence for the backup, as the view passes it (backupPlanText). */
+const BACKUP_TEXT =
+  'Before anything is written, slot B (as stored, and decrypted) is read again and saved in one zip with ' +
+  'a note of what each file is: seek_backup_<time>_SN_v1.3.0.0_bank-B_before-fps-patch.zip.';
+
 function setup(overrides: Partial<SlotFpsConfirmProps> = {}): ReturnType<typeof render> & {
   onConfirm: ReturnType<typeof vi.fn>;
   onCancel: ReturnType<typeof vi.fn>;
@@ -33,7 +39,7 @@ function setup(overrides: Partial<SlotFpsConfirmProps> = {}): ReturnType<typeof 
       offer={OFFER}
       version="1.3.0.0"
       risk={FREE}
-      saveMode="download"
+      backupText={BACKUP_TEXT}
       onConfirm={onConfirm}
       onCancel={onCancel}
       {...overrides}
@@ -101,22 +107,16 @@ describe('the frame-rate patch confirmation', () => {
     unmount();
   });
 
-  it('says the saved decrypted file is the only way back, with no restore button', () => {
+  it('says the bank is saved first in one zip download, named, and that its decrypted file is the way back', () => {
     const { unmount } = setup();
-    expect(dialog().textContent).toContain('The saved decrypted file is the only way back');
-    expect(dialog().textContent).toContain('There is no restore button');
-    unmount();
-  });
-
-  it('says that this browser cannot confirm a download reached the disk, when it only downloads', () => {
-    const { unmount } = setup({ saveMode: 'download' });
-    expect(dialog().textContent).toContain('cannot confirm that the files reached the disk');
-    unmount();
-  });
-
-  it('says the write waits for both files, when the browser lets the person choose each place', () => {
-    const { unmount } = setup({ saveMode: 'picker' });
-    expect(dialog().textContent).toContain('the write starts only after both are on disk');
+    const text = dialog().textContent;
+    expect(text).toContain(BACKUP_TEXT);
+    expect(text).toContain('The zip is downloaded automatically, before anything is sent.');
+    expect(text).toContain('check your downloads folder for it');
+    expect(text).toContain(
+      'The decrypted file in that zip is the way back: to undo the patch, write it with "Flash decrypted image" on slot B.',
+    );
+    expect(text).not.toMatch(/choose where|save dialog|There is no restore button/);
     unmount();
   });
 

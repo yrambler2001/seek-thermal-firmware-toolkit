@@ -53,8 +53,10 @@ export interface SlotFlashPreviewProps {
   readonly busy: boolean;
   /** The bank holds no image (its header window reads as all 0xFF): the write overwrites no firmware. */
   readonly targetEmpty?: boolean;
-  /** Where the image came from when it is not a picked file, e.g. the booted bank's image. */
+  /** Where the image came from when it is not a picked file: another bank, or a bank of a full flash backup. */
   readonly source?: string | null;
+  /** What is saved before the write (core's `backupPlanText` and the page's download note). */
+  readonly backupText: string;
   readonly onWrite: () => void;
   readonly onDiscard: () => void;
 }
@@ -68,6 +70,7 @@ export function SlotFlashPreview({
   busy,
   targetEmpty = false,
   source = null,
+  backupText,
   onWrite,
   onDiscard,
 }: SlotFlashPreviewProps): ReactElement {
@@ -111,6 +114,7 @@ export function SlotFlashPreview({
     ],
     ['Transfer checksum', hexUp(plan.sum16, 4)],
     ['Stored afterwards', storedText(plan)],
+    ['Saved first', backupText],
   ];
 
   return (
