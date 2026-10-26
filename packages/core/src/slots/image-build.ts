@@ -5,9 +5,9 @@
  *
  * THE IMAGE'S BUILD is the version word of its header (0x20C). It sits inside the cleartext
  * window every staged form leaves verbatim, so a decrypted image and a raw payload both carry it.
- * Every image of the FW-V1 corpus carries its own build's version there (31 images, 0.3.0.1 to
- * 44.27.3.10; TESTING.md 42.104). THE CAMERA'S BUILD is the version its build block reports
- * (`DeviceState.version`): the same four bytes in the same order.
+ * Every image of the FW-V1 corpus carries its own build's version there (the manifest's 36 image
+ * entries, 0.3.0.1 to 44.27.3.10; TESTING.md 42.104). THE CAMERA'S BUILD is the version its build
+ * block reports (`DeviceState.version`): the same four bytes in the same order.
  *
  * ONE VERSION, TWO BUILDS. 1.3.0.8 is an 8 Hz build and a 16 Hz FF build. The image says which
  * (`plainChainBuildOf`), and the camera's own per-bank answers say which it runs
