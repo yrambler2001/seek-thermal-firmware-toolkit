@@ -11,7 +11,8 @@
 import { crc32, equalBytes, utf8 } from '@seek-fw/core';
 import { describe, expect, it } from 'vitest';
 import { preserveRunStateOf } from '../../test-fixtures';
-import { buildRunFile, parseRunFile, parseZipEntries, RUN_README_FILE } from './run-file';
+import { readZipEntries } from '@seek-fw/core';
+import { buildRunFile, parseRunFile, RUN_README_FILE } from './run-file';
 import { runFileName, type CheckpointName, type PreserveRunState } from './types';
 
 function state(overrides: Partial<PreserveRunState> = {}): PreserveRunState {
@@ -125,7 +126,7 @@ describe('the run-file round trip', () => {
 
   it('carries only the checkpoints that exist so far, state file first', () => {
     const zip = buildRunFile(state(), new Map(CHECKPOINTS.slice(0, 2)));
-    const entries = parseZipEntries(zip);
+    const entries = readZipEntries(zip);
     expect(entries.map((entry) => entry.name)).toEqual([
       'preserve_run.json',
       'README.md',
@@ -144,7 +145,7 @@ describe('the run-file round trip', () => {
     ]);
     const extra = new Map([['02-read-build/decrypted/slot.bin', utf8('plain slot')]]);
     const zip = buildRunFile(state({ deliveredSha256: '9'.repeat(64) }), all, extra);
-    const names = parseZipEntries(zip).map((entry) => entry.name);
+    const names = readZipEntries(zip).map((entry) => entry.name);
     expect(names).toEqual([
       'preserve_run.json',
       'README.md',
@@ -158,7 +159,7 @@ describe('the run-file round trip', () => {
       '02-read-build/decrypted/slot.bin',
     ]);
     const readme = new TextDecoder().decode(
-      parseZipEntries(zip).find((entry) => entry.name === RUN_README_FILE)?.data,
+      readZipEntries(zip).find((entry) => entry.name === RUN_README_FILE)?.data,
     );
     expect(readme).toContain('03-patch-dump/preserve_dump_original.bin');
     expect(readme).toContain('Banks written: slot A (the choice: the bank the next start enters).');
@@ -260,7 +261,7 @@ describe('parseRunFile refusals', () => {
       if (sig === 0x04034b50) zip[at + 8] = 8;
       else if (sig === 0x02014b50) zip[at + 10] = 8;
     }
-    expect(() => parseRunFile(zip)).toThrow(/store-only/);
+    expect(() => parseRunFile(zip)).toThrow(/is compressed \(method 8\)/);
   });
 
   it('refuses something that is not a ZIP at all', () => {

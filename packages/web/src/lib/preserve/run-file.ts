@@ -24,6 +24,7 @@ import {
   bankWordsOf,
   crc32,
   isPreserveBankChoice,
+  readZipEntries,
   utf8,
 } from '@seek-fw/core';
 import {
@@ -146,8 +147,6 @@ export function runReadme(
 const EOCD_SIGNATURE = 0x06054b50;
 const CENTRAL_SIGNATURE = 0x02014b50;
 const LOCAL_SIGNATURE = 0x04034b50;
-/** Central-directory entries can hide a 65,535-byte comment after the EOCD. */
-const EOCD_MAX_COMMENT = 65_535;
 const EOCD_SIZE = 22;
 const CENTRAL_HEADER_SIZE = 46;
 const LOCAL_HEADER_SIZE = 30;
@@ -279,101 +278,6 @@ function dosDate(date: Date): number {
   );
 }
 
-function u16(bytes: Uint8Array, at: number): number {
-  return (bytes[at] ?? 0) | ((bytes[at + 1] ?? 0) << 8);
-}
-
-function u32(bytes: Uint8Array, at: number): number {
-  return (
-    ((bytes[at] ?? 0) |
-      ((bytes[at + 1] ?? 0) << 8) |
-      ((bytes[at + 2] ?? 0) << 16) |
-      ((bytes[at + 3] ?? 0) << 24)) >>>
-    0
-  );
-}
-
-/**
- * Parses a store-only ZIP: locates the end-of-central-directory record, walks
- * the central directory, slices each entry out of its local header and checks
- * its CRC-32. Anything compressed (method != 0) is refused — the run files
- * this app writes are stored, and a foreign deflated archive is not a run
- * file this wizard knows how to resume.
- */
-export function parseZipEntries(zip: Uint8Array): RunFileEntry[] {
-  /* Find the EOCD from the back; its signature can also appear inside a
-   * comment, so take the LAST valid one whose directory fits the file. */
-  let eocdAt = -1;
-  for (
-    let at = zip.length - EOCD_SIZE;
-    at >= 0 && at >= zip.length - EOCD_SIZE - EOCD_MAX_COMMENT;
-    at--
-  ) {
-    if (u32(zip, at) === EOCD_SIGNATURE) {
-      eocdAt = at;
-      break;
-    }
-  }
-  if (eocdAt < 0) throw new Error('this file is not a ZIP archive (no end-of-central-directory)');
-
-  const count = u16(zip, eocdAt + 10);
-  const directorySize = u32(zip, eocdAt + 12);
-  const directoryAt = u32(zip, eocdAt + 16);
-  if (directoryAt + directorySize > zip.length) {
-    throw new Error('this ZIP archive is truncated (its central directory runs past the file)');
-  }
-
-  const decoder = new TextDecoder('utf-8');
-  const entries: RunFileEntry[] = [];
-  let at = directoryAt;
-  for (let index = 0; index < count; index++) {
-    if (u32(zip, at) !== CENTRAL_SIGNATURE) {
-      throw new Error(`this ZIP archive is damaged (entry ${String(index)} has no central header)`);
-    }
-    const method = u16(zip, at + 10);
-    const crc = u32(zip, at + 16);
-    const size = u32(zip, at + 24);
-    const nameLen = u16(zip, at + 28);
-    const extraLen = u16(zip, at + 30);
-    const commentLen = u16(zip, at + 32);
-    const localAt = u32(zip, at + 42);
-    const name = decoder.decode(
-      zip.subarray(at + CENTRAL_HEADER_SIZE, at + CENTRAL_HEADER_SIZE + nameLen),
-    );
-
-    if (method !== METHOD_STORE) {
-      throw new Error(
-        `${name} is compressed (method ${String(method)}) — a run file is store-only; ` +
-          'this wizard cannot read it',
-      );
-    }
-    if (u32(zip, localAt) !== LOCAL_SIGNATURE) {
-      throw new Error(`${name} has no local header — the archive is damaged`);
-    }
-    const localNameLen = u16(zip, localAt + 26);
-    const localExtraLen = u16(zip, localAt + 28);
-    const dataAt = localAt + LOCAL_HEADER_SIZE + localNameLen + localExtraLen;
-    const data = zip.slice(dataAt, dataAt + size);
-    if (data.length !== size) {
-      throw new Error(`${name} is truncated (${String(data.length)}/${String(size)} B)`);
-    }
-    const actual = crc32(data);
-    if (actual !== crc) {
-      throw new Error(
-        `${name} failed its CRC-32 (stored ${hex8(crc)}, computed ${hex8(actual)}) — ` +
-          'the run file is damaged; do not resume from it',
-      );
-    }
-    entries.push({ name, data });
-    at += CENTRAL_HEADER_SIZE + nameLen + extraLen + commentLen;
-  }
-  return entries;
-}
-
-function hex8(word: number): string {
-  return `0x${word.toString(16).padStart(8, '0')}`;
-}
-
 /**
  * Parses a run ZIP: the state file must be present and must be schema version
  * 3 (the run reads every bank and writes the banks it chose). An older run
@@ -381,7 +285,7 @@ function hex8(word: number): string {
  * unknown files ride along in `extra` so a later save keeps them.
  */
 export function parseRunFile(zip: Uint8Array): PreserveRunFile {
-  const entries = parseZipEntries(zip);
+  const entries = readZipEntries(zip);
   const stateEntry = entries.find((entry) => entry.name === RUN_STATE_FILE);
   if (stateEntry === undefined) {
     throw new Error(
