@@ -46,6 +46,13 @@ if (unavailable !== null) {
 const SHOT_DIR = process.env.SEEK_E2E_SLOTS_SHOTS ?? null;
 
 /**
+ * A bank with no "Make N FPS" says why in words (SlotTable `fpsOffNote`): a refusal, or, for a bank that
+ * already runs the faster rate, the state it is in (TESTING.md 42.86).
+ */
+const NO_OFFER_WORDS =
+  /Frame-rate patch not offered: |Frame-rate patch applied: |No frame-rate patch needed: /;
+
+/**
  * The three rows the page spec boots, by their table name, with the corpus prefix each boots from. The
  * prefixes are the manifest's own ids (`corpusEntryId` finds the entry; the table holds the verdicts).
  */
@@ -166,15 +173,11 @@ for (const boot of BOOTED) {
             expect(make[0]?.enabled, `${row.name}: the offer is on`).toBe(true);
           } else {
             expect(make, `${row.name}: no offer on a bank with no image`).toEqual([]);
-            expect(row.actionsText, `${row.name}: says why`).toContain(
-              'Frame-rate patch not offered',
-            );
+            expect(row.actionsText, `${row.name}: says why`).toMatch(NO_OFFER_WORDS);
           }
         } else {
           expect(make, `${row.name}: no frame-rate offer on this build`).toEqual([]);
-          expect(row.actionsText, `${row.name}: says why`).toContain(
-            'Frame-rate patch not offered',
-          );
+          expect(row.actionsText, `${row.name}: says why`).toMatch(NO_OFFER_WORDS);
         }
       }
     });

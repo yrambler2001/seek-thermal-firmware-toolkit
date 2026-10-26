@@ -41,6 +41,9 @@
  * one Writing section, none of the stale lines; on the slots page the same boot facts, the
  * frame-rate warning exactly when a bank other than A holds the patch and A does not, the offer
  * enabled on every bank (never gated); the patch's dialog, its status and one replug line.
+ * And the words 42.86 fixed: the capitalised replug prompt once (the result panel), one replug record in
+ * the log and none in the status; a patched bank's row "Frame-rate patch applied"; no code name
+ * (acknowledgeRisk, the table id) on the slots page; the probe's score and the read's score each labelled.
  * ==================================================================== */
 
 import { createHash } from 'node:crypto';
@@ -175,8 +178,21 @@ const DOES_NOT_RUN =
   'holds a frame-rate patch, but it does not run, so the patch does not take effect';
 const WARNING_NAMES_A = 'The camera boots slot A.';
 const PATCH_SLOT_A = 'Patch slot A too (the bank that runs)';
-const PATCHED_STATUS = 'Patched. Unplug and replug, then read the slots again.';
-const WRITTEN_STATUS = 'Written. Unplug and replug, then read the slots again.';
+/** The status after a write says how it ended; the result panel gives the replug prompt (TESTING.md 42.86). */
+const PATCHED_STATUS = 'Patched. The bank reads back as planned.';
+const WRITTEN_STATUS = 'Written. The bank reads back as written.';
+/** The capitalised replug prompt: the result panel's, once in the section (TESTING.md 42.85 O1, 42.86). */
+const REPLUG_PROMPT = 'NOW UNPLUG AND REPLUG THE CAMERA.';
+/** A patched bank's row: a state, not a refusal, and no table id (TESTING.md 42.85 O3, 42.86). */
+const PATCH_APPLIED = `Frame-rate patch applied: this image runs at ${String(TO_HZ)} Hz.`;
+/** Code names the page must not show a person (TESTING.md 42.85 O2, 42.86). */
+const CODE_NAMES = [
+  'acknowledgeRisk',
+  'compact_pro-1.0.3.0',
+  'OLD_FW_UNLOCK_TOKEN',
+  'KEY_PAIRS',
+  'capabilities.flash',
+];
 
 /** One write of one bank: the stage chunks of a whole bank (64 B each) plus slack, and one commit. */
 const STAGE_BUDGET = Math.ceil(BANK_BYTES / 64) + 64;
@@ -318,6 +334,15 @@ describe.skipIf(!RUNNABLE)(
       expect(log, 'one read, under compact-2016: no legacy-auth read first').not.toContain(
         'legacy-auth',
       );
+      /* Two scores, each saying what it is: the probe's in the log, the read's in the Profile panel
+       * (TESTING.md 42.85 O5, 42.86). */
+      expect(log, 'the probe line').toMatch(
+        /probe: 2016 Compact Pro \(compact-2016\), score \d\.\d\d from the answers above, before any bank is read/,
+      );
+      expect(log, 'no bare "confidence"').not.toContain('confidence');
+      expect(valueUnder(text, 'Detected'), 'Detected: the score after the read').toMatch(
+        /^compact-2016 \(score \d\.\d\d after the read, from the evidence below\)$/,
+      );
       expect(valueUnder(text, 'Serial'), 'serial').toBe(SERIAL);
       expect(valueUnder(text, 'Running'), 'running').toBe(`${VERSION} Jul 6 2016`);
       expect(valueUnder(text, 'Bootloader'), 'bootloader').toBe('1.2.0.0 Jun 26 2016');
@@ -356,6 +381,8 @@ describe.skipIf(!RUNNABLE)(
       const { page } = live();
       for (const stale of STALE)
         expect(text, `the slots page says "${stale}"`).not.toContain(stale);
+      for (const name of CODE_NAMES)
+        expect(text, `the slots page shows the code name "${name}"`).not.toContain(name);
       expect(await writeBanner(page), 'no "cannot be written" banner').toBeNull();
       const summary = await summaryRows(page);
       say(`slots summary: ${JSON.stringify(summary)}`);
@@ -373,8 +400,9 @@ describe.skipIf(!RUNNABLE)(
         if (patched.has(row.letter)) {
           /* A bank that runs the patched image is not offered it again, and says so. */
           expect(offer, `${row.name}: no "${OFFER_LABEL}" on a patched bank`).toBeUndefined();
-          expect(row.actionsText, `${row.name}: why there is no offer`).toContain(
-            `already patched: this image runs at ${String(TO_HZ)} Hz`,
+          expect(row.actionsText, `${row.name}: the patch is applied`).toContain(PATCH_APPLIED);
+          expect(row.actionsText, `${row.name}: a state, not a refusal`).not.toContain(
+            'not offered',
           );
         } else {
           /* The offer is never gated: on, whatever the boot word says (owner, 42.29). */
@@ -596,6 +624,11 @@ describe.skipIf(!RUNNABLE)(
             `${String(count(section, /unplug and replug/i))} in the whole section`,
         );
         expect(status, `the undo of ${L}`).toBe(WRITTEN_STATUS);
+        expect(count(log, /unplug and replug/i), 'the replug line, once in the log').toBe(1);
+        expect(count(section, /NOW UNPLUG AND REPLUG THE CAMERA\./), 'the prompt, once').toBe(1);
+        expect(log, 'the log keeps the record, not the capitalised prompt').not.toContain(
+          REPLUG_PROMPT,
+        );
         expect(await refusalsOf(live()), 'nothing refused by the guards').toEqual([]);
       });
 
@@ -724,6 +757,13 @@ describe.skipIf(!RUNNABLE)(
         );
         expect(status, `the patch of ${L}`).toBe(PATCHED_STATUS);
         expect(replugLog, 'the replug line, once in the log').toBe(1);
+        expect(count(section, /NOW UNPLUG AND REPLUG THE CAMERA\./), 'the prompt, once').toBe(1);
+        expect(log, 'the log keeps the record, not the capitalised prompt').not.toContain(
+          REPLUG_PROMPT,
+        );
+        expect(outcome ?? '', 'the result panel names the firmware, not the table id').toContain(
+          `Slot ${L} — patched from ${String(FROM_HZ)} Hz to ${String(TO_HZ)} Hz (firmware ${VERSION}).`,
+        );
         const raw = await downloads.waitFor(
           (file) => /before-fps-patch-raw-[0-9a-f]+\.bin$/.test(file),
           60_000,

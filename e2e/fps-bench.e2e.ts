@@ -269,7 +269,7 @@ describe.skipIf(MODE !== 'i-understand' && MODE !== 'dry-run')(
         say(`status: ${status}`);
         say(`outcome: ${(await outcomeAlert(handle.page)) ?? '(none)'}`);
         expect(status, 'the patch ends patched, with the read-back as planned').toBe(
-          'Patched. Unplug and replug, then read the slots again.',
+          'Patched. The bank reads back as planned.',
         );
 
         /* The two dumps the page saved before the write: bank A as stored, and decrypted. */
@@ -284,7 +284,9 @@ describe.skipIf(MODE !== 'i-understand' && MODE !== 'dry-run')(
           'the bank A decrypted dump, saved before the patch',
         );
         expect(raw.bytes.length, 'the raw dump is the whole bank').toBe(BANK_BYTES);
-        expect(decrypted.bytes.length, `the decrypted dump is the ${BUILD} image`).toBe(IMAGE_BYTES);
+        expect(decrypted.bytes.length, `the decrypted dump is the ${BUILD} image`).toBe(
+          IMAGE_BYTES,
+        );
         await snap(handle.page, SHOT_DIR, 'fps-bench-after');
         say(`saved before the patch: ${raw.path} ; ${decrypted.path}`);
       },
