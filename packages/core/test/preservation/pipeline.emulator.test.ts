@@ -212,7 +212,9 @@ function dumpUnavailable(): string | null {
  *  the sha table pins them together). */
 function caseUnavailable(spec: CaseSpec): string | null {
   if (UNSUPPORTED !== null) return UNSUPPORTED;
-  if (spec.bootFlash === null) return null;
+  /* By the case, not by its boot file: a dump that is missing leaves
+   * `bootFlash` null, and the case must skip, not boot the corpus entry. */
+  if (spec.key === 'corpus') return null;
   return dumpUnavailable();
 }
 
