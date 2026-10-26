@@ -214,10 +214,11 @@ SEEK_EMU_DIR=<FW-V1>/emu <FW-V1>/emu/.venv/bin/python emu/fps_patch_tests.py --o
 `--only :ip` selects the IP rows, `--no-ip` skips them. The emulator's stock Normal rate is 8.065 Hz on the 2014 builds and 8.000 Hz on
 the 40-frame steady control of 1.3.0.8; the patched rates are their doubling (32.258 Hz) within the 1 % band.
 
-## 9. The trap: the boot-config word (the 2014-chain Compacts)
+## 9. The trap: the boot-config word (the 2014-chain Compacts and the 2016 Compact PRO)
 
 A patched bank only helps if the camera **boots** it. On the 2014 chain the bootloader reads the boot-config word at `0x14010000`
-(`boot_select_image`, bootloader `src/image.c`):
+(`boot_select_image`, bootloader `src/image.c`); the 2016 Compact PRO's bootloader 1.2.0.0 has the same rule (FW-V1
+`targets/compact_pro_9hz_1_0_3_0_bootloader/src/image.c:1076-1109`):
 
 | word                    | boots first                                             |
 | ----------------------- | ------------------------------------------------------- |
@@ -238,8 +239,8 @@ at `2`, A and B holding the 32 Hz patch, and R still stock. The event that flipp
   the bootloader writes the slot it enters there before it starts the image (0 slot A, 1 slot B, 2 recovery R; 42.53). On 4.9.1.15 the record
   is at 0x10002110 and the word is 0x10002118, which follows the bank that ran (42.56). On 4.8.2.1 selector 10 returns zero, so the word reads
   0 under every boot word and the record is not located (42.56). The cell `0x1000AED0` is not the word on these lines: it holds copy-loop data
-  on 1.3.0.0 and 1.0.3.0 and `0xFFFFFFFF` on 4.9.1.15 (42.53, 42.56). On the 2014 chain the page and the CLI name the booted bank from the
-  word, with 2 as R.
+  on 1.3.0.0 and 1.0.3.0 and `0xFFFFFFFF` on 4.9.1.15 (42.53, 42.56). On the 2014 chain and the 2016 Compact PRO the page and the CLI
+  name the booted bank from the word, with 2 as R.
 
 **The warning.** `packages/core/src/slots/boot-choice.ts` works out the bank the next start runs from the word and each bank's image check,
 and the page and the CLI warn when a frame-rate patch sits in a bank that will not run. For word 2 with slot A patched and recovery R stock,
@@ -250,7 +251,18 @@ the text is:
 > runs): that is what makes the frame-rate patch take effect.
 
 The same paragraphs show on the page's slot alert and the "Make N FPS" dialog, in `slots list` and `slots patch-fps` in the CLI, and in its
-JSON. The button stays enabled; the warning is text. The warning only applies to the 2014 plaintext chain.
+JSON. The button stays enabled; the warning is text. The warning applies where the rule and each bank's check are decoded: the 2014
+plaintext chain, whose check is the stored word sum, and the 2016 Compact PRO (1.0.3.0, 1.0.3.2) read under `compact-2016`, whose check is
+the bank decrypted under the key its bootloader checks a bank under (key block 1 on bootloader 1.2.0.0). The bootloader block that holds
+that key is refused on every channel, so the read names it from the bank the camera reports it entered (TESTING.md 42.84). On the owner's
+1.0.3.0 camera, recovery R was patched to 18 Hz with the word erased (`0xFFFFFFFF`), so slot A ran and the camera stayed at 9 Hz; the
+warning there reads:
+
+> The camera boots slot A. The boot-config word is 0xFFFFFFFF, so the bootloader tries slot A first, and it holds an image the bootloader
+> accepts. Recovery R holds a frame-rate patch, but it does not run, so the patch does not take effect. Patch slot A too (the bank that
+> runs): that is what makes the frame-rate patch take effect.
+
+(Built from the owner's 1.0.3.0 dump with R patched, on a fake camera, TESTING.md 42.84; not run on the camera.)
 
 **Bench check** (owner's unit, J-Link on channel 1): the word was set to 2 with `set-boot-recovery`, and `slots list` printed "boot-config
 word 0x00000002 — recovery R first, then A, then B", "next start runs recovery R", and "last start the camera reports it entered recovery R

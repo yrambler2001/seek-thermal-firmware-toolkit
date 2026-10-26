@@ -152,16 +152,20 @@ but not the version check: the run still reads the version first and refuses a c
 report it, or runs a build older than 0.8.0.0, whatever family was named. The web app names no
 family by hand: its 4.x/Nano tab reads only the modern family and refuses any other.
 
-**`legacy-auth` and `compact-2016` share every selector, so the probe cannot tell them apart; the
-slots can.** A 2016 Compact PRO (1.0.3.x) is read under `legacy-auth`, by design, and the read is
-the same 31 windows either way. Once the slots are read, detection keeps the probe's answers and
-adds what only the slots say: a bank under a real xorshift128 keystream that decrypts to a word
-sum of 0 is the 2016 cipher, and rules `legacy-auth` out; a bank stored plain (the 2014 chain,
-whose stored words sum to 0) rules `compact-2016` out. The version line (1.0.3.x is the Compact
-PRO's) and the bootloader's (1.2.0.0 on the 2016 part, 0.9.0.0 on the 2014 Compact) corroborate.
-`seek-fw info` and the slots page's "Read slots" then redo the analysis under the detected
-family, and a dump decrypts its slots under it, saying in the report which profile the read acted
-under. Neither family's flashing changes: `compact-2016` stays read-only.
+**`legacy-auth` and `compact-2016` share every selector, so the channel answers cannot tell them
+apart; the version and the slots can.** The read is the same 31 windows either way, but each family
+checks the banks against its own cipher's target. The probe's version decides the first read: a
+1.0.3.x camera (the Compact PRO's line) is read under `compact-2016` before any slot is read, so its
+banks are checked against the 2016 target from the start (TESTING.md 42.84; it used to be read under
+`legacy-auth` first, which reported every bank failing and then read the camera again). Once the slots
+are read, detection keeps the probe's answers and adds what only the slots say: a bank under a real
+xorshift128 keystream that decrypts to a word sum of 0 is the 2016 cipher, and rules `legacy-auth` out;
+a bank stored plain (the 2014 chain, whose stored words sum to 0) rules `compact-2016` out; a bank that
+decrypts to 0xFFFF (the Compact 1.3.0.8 cipher) keeps a 1.0.3.x camera on `legacy-auth`. The bootloader's
+version (1.2.0.0 on the 2016 part, 0.9.0.0 on the 2014 Compact) corroborates. When the slots name the
+other family, `seek-fw info` and the slots page's "Read slots" redo the analysis under it, and a dump
+decrypts its slots under it, saying in the report which profile the read acted under. `compact-2016`
+declares no whole-image flash: its banks are written one at a time on the Slots tab.
 
 **`compact-2014` refuses to dump, and that refusal is the point.** Every decrypted image carries
 its own RPC method table — wire id = index + 53 — and recovering it from all 36 images in the
@@ -558,14 +562,24 @@ writes flash.
 | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Running firmware           | version and build string from `GetFirmwareInfo`, plus the bootloader's own build string                                                                                                                                                                                   |
 | Serial, platform, USB link | from the device-id RAM block and the info selectors                                                                                                                                                                                                                       |
-| Boot config                | `cfg[0]` at `0x14010000`, which slot the camera booted, and which slot an upgrade would write (rules below)                                                                                                                                                               |
-| Keys                       | Key A and Key B, read out of the camera's bootloader block and confirmed against a slot's recovered keystream                                                                                                                                                             |
+| Boot config                | `cfg[0]` at `0x14010000`, which slot the camera booted, which slot the next start runs (2014 chain and 2016 Compact PRO), and which slot an upgrade would write (rules below)                                                                                             |
+| Keys                       | Key A and Key B, read out of the camera's bootloader block and confirmed against a slot's recovered keystream. On the 2016 Compact PRO, whose bootloader block is refused on every channel, the key its bootloader checks a bank under, named from the bank it entered    |
 | Per-device key             | whether `0x14000218` is programmed                                                                                                                                                                                                                                        |
 | Each slot                  | firmware version, image id, size, which key encrypts it, whether it passes the bootloader's acceptance sum and `CODE` footer check, whether the camera will boot it, and the SHA-256 of its plaintext. The model string from the footer is in `seek-fw info --json` only. |
 
-Which slot the camera booted depends on the line. On the 2014 chain it is the bank the active-slot word
-records as the camera's last start. On 4.x it is the bank the boot-config word predicts, and there the
-camera's own answer also sets the upgrade target, overriding the prediction.
+Which slot the camera booted depends on the line. On the 2014 chain and the 2016 Compact PRO it is the
+bank the active-slot word records as the camera's last start: the bootloader's own record of the bank it
+entered (TESTING.md 42.56). On those two lines the read also names the bank the **next** start runs, from
+the boot-config word and each bank's check, the way the bootloader picks it (TESTING.md 42.84). The
+2016 check is the bank decrypted under the key its bootloader checks a bank under (key block 1 on
+bootloader 1.2.0.0); the read names that key from the bank the camera entered, when the word's rule had
+the bootloader check that bank before entering it, and calls a bank under any other key not bootable. On 4.x it is
+the bank the boot-config word predicts, and there the camera's own answer also sets the upgrade target,
+overriding the prediction.
+
+The Writing section says how the camera can be written. On the 2016 Compact PRO the banks are written
+one at a time on the Slots tab (`seek-fw slots flash` or `patch-fps`), each staged under its image's own
+key block 0, and no whole-image write exists; only a reason that would refuse every bank is listed.
 
 The read writes no flash. It sets two RAM selectors (`0x55`, `0x5a`). The identify step before it sends
 the camera's unlock token, which leaves the vendor window unlocked until a power cycle, as
