@@ -383,8 +383,13 @@ describe.skipIf(!RUNNABLE)('the web app pages on the bench camera (1.3.0.0, real
         '(unreadable)',
       );
       expect(valueUnder(text, 'cfg[0]'), 'cfg[0] (CLI: 0x00000000)').toMatch(/^0x00000000 /);
+      /* The roots word is the bootloader's own record of the bank it entered (TESTING.md 42.56), and the
+       * row says so; the next start follows from cfg[0] 0 and slot A's stored word sum (TESTING.md 42.84). */
       expect(valueUnder(text, 'Booted'), 'the booted bank (CLI: a, named by the roots word)').toBe(
-        'App image bank 0x14050000 (named by the active-slot word; not a boot record on this line)',
+        'App image bank 0x14050000 — the bank the bootloader entered at this start, as it records it (active-slot word 0)',
+      );
+      expect(valueUnder(text, 'Next start'), 'the next start (CLI: boot.nextStart.runs a)').toBe(
+        'App image bank 0x14050000 — the boot-config word is 0, so the bootloader tries slot A first, and it holds an image the bootloader accepts',
       );
       /* The bank is pinned. "confirmed on the wire" is the page reading back the window the upgrade
        * selector arms (`confirmUpgradeTarget`), and whether the camera confirms depends on its flash
