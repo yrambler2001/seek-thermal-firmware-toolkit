@@ -226,13 +226,6 @@ function isBlank(bytes: Uint8Array): boolean {
   return bytes.every((byte) => byte === 0xff);
 }
 
-/**
- * A fault the FF path's checks must catch (unit tests only): `stored` makes R keep the image
- * as sent instead of the predicted stored form; `accepted` lets the page take the FF image
- * into A or B at the picker, where it must be refused.
- */
-export type FakeFfFault = 'stored' | 'accepted';
-
 /** The banner heading the real page shows (slots-page.ts WRITE_BANNER_HEADING). */
 const BANNER_HEADING = 'No bank of this camera can be written from here.';
 
@@ -267,11 +260,9 @@ function sameBytes(left: Uint8Array, right: Uint8Array): boolean {
 export function createFakeRig(options: {
   readonly subjects: readonly BenchSubject[];
   readonly failure: FakeFailure | null;
-  readonly ffFault?: FakeFfFault | null;
   readonly verdicts?: readonly SlotsSubject[];
   readonly pageBuilds?: Readonly<Partial<Record<BankLetter, string>>>;
 }): BenchRig {
-  const ffFault = options.ffFault ?? null;
   const rows: readonly SlotsSubject[] =
     options.verdicts ?? options.subjects.map((candidate) => writableRowFor(candidate));
   let flash = new Uint8Array(BENCH_FLASH_BYTES).fill(0xff);
@@ -296,7 +287,7 @@ export function createFakeRig(options: {
     }
     return null;
   };
-  /** Whether the running subject is the 1.3.0.8 FF build (it boots R, and takes the FF image only in R). */
+  /** Whether the running subject is the 1.3.0.8 FF build (it boots R: A and B pass the FF image over). */
   const ff = (): boolean => {
     const running = subject();
     return running !== null && isFF1308Subject(running);
@@ -541,25 +532,16 @@ export function createFakeRig(options: {
               : `seek-slot-${letter}-${subject()?.version ?? 'unknown'}-${stamp}-decrypted.bin`,
         };
       },
+      /* The 1.3.0.8 FF subject never reaches the page: its vendor-form run writes A, B and R through the CLI
+       * (spec-flow.ts `runFF1308`), so the picker here holds the table's verdict alone (TESTING.md 42.89: the
+       * FF image goes to any bank since 42.12; the refusal of A and B it kept here could not be reached). */
       async refuse(letter: BankLetter, image: PageImage): Promise<PageRefusal | 'taken'> {
-        if (!ff()) {
-          const reason = refusalReasonFor(letter, image);
-          return reason === null ? 'taken' : { status: 'Rejected — see the log above.', reason };
-        }
-        if (letter === 'r') throw new Error('fake: the page takes the FF image for R');
-        if (ffFault === 'accepted') {
-          throw new Error(`fake: the picker took the FF image for ${letter}, it was not refused`);
-        }
-        return {
-          status: 'Rejected — see the log above.',
-          reason:
-            `this is the 1.3.0.8 FF (16 Hz) image (${image.name}); it can be written to R only, ` +
-            `not to bank ${letter.toUpperCase()}. Nothing was written.`,
-        };
+        const reason = refusalReasonFor(letter, image);
+        return reason === null ? 'taken' : { status: 'Rejected — see the log above.', reason };
       },
       async write(letter: BankLetter, image: PageImage, acknowledge: boolean): Promise<PageWrite> {
         /* A refused image never reaches the write: the picker answers "Rejected", as the real page does. */
-        if (!ff() && refusalReasonFor(letter, image) !== null) {
+        if (refusalReasonFor(letter, image) !== null) {
           throw new Error('the picker answered "Rejected — see the log above."');
         }
         /* The page asks the tick on R, and on the bank the camera boots. */
@@ -567,25 +549,6 @@ export function createFakeRig(options: {
         if (ackShown !== acknowledge)
           throw new Error(`fake: the acknowledgement for ${letter} differs`);
         if (failsAt('write')) throw new Error('Failed — the camera refused the commit');
-        if (ff()) {
-          /* Only R takes the FF image; the camera keeps the predicted stored form (or, under the
-           * fault, the image as sent, which the flow's check must refuse). */
-          if (letter !== 'r') throw new Error(`fake: the FF image is not written to ${letter}`);
-          if (image.bytes.length > BANK_BYTES)
-            throw new Error('fake: the image is longer than a bank');
-          const stored =
-            ffFault === 'stored'
-              ? new Uint8Array(BANK_BYTES).fill(0xff)
-              : predictedFFStored(image.bytes);
-          if (ffFault === 'stored') stored.set(image.bytes, 0);
-          flash.set(stored, LAYOUT.r - BENCH_FLASH_BASE);
-          lastWritten = letter;
-          return {
-            status: 'Written. Slot R is written.',
-            ackShown,
-            outcome: `Slot R — ${image.name}: the bank reads back as written.\nNOW UNPLUG AND REPLUG THE CAMERA.`,
-          };
-        }
         if (image.bytes.length !== BANK_BYTES)
           throw new Error('fake: the image is not one bank long');
         const offset = LAYOUT[letter] - BENCH_FLASH_BASE;
