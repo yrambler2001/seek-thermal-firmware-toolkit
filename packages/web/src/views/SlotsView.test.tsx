@@ -1381,6 +1381,30 @@ describe('SlotsView: the frame-rate row action', () => {
     unmount();
   });
 
+  it('tells a bank with an earlier 32 Hz patch to restore the stock image first, not that no patch is needed', () => {
+    const planFps = vi.fn((): FpsPlan => ({
+      status: 'at-rate',
+      reason:
+        'this image holds an earlier 32 Hz frame-rate patch without the USB fix, and a patch is never ' +
+        'applied to a patched image: restore the stock image, then patch it',
+      hz: 32,
+      earlierPatch: true,
+    }));
+    const { container, unmount } = view(
+      panel({ plan: slotPlan(true), report: slotReport(base), planFps }),
+    );
+    const text = bankRows(container)[0]?.textContent ?? '';
+    expect(text).toContain(
+      'Frame-rate patch not offered: this bank holds an earlier 32 Hz patch without the USB fix. ' +
+        'Restore the stock image, then Make 32 FPS.',
+    );
+    expect(text).not.toContain('No frame-rate patch needed');
+    expect(
+      buttonsIn(bankRows(container)[0] as HTMLElement).some((b) => b.startsWith('Make ')),
+    ).toBe(false);
+    unmount();
+  });
+
   it('keeps the outcome of a patch on screen: the rate, the read-back, the saved files, and the way back', () => {
     const outcome = {
       key: 'a',

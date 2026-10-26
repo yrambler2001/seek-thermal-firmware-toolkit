@@ -92,7 +92,8 @@ const RESTORE_NOTE =
  * failed. The words never say a write "cannot be written": that banner belongs to the keys verdict alone.
  *
  * A bank that already runs the faster rate is a state, not a refusal: it says what it holds (the patch, or a
- * build made at that rate), from the plan's rate, with no table id (TESTING.md 42.85 O3, 42.86).
+ * build made at that rate), from the plan's rate, with no table id (TESTING.md 42.85 O3, 42.86). An earlier
+ * patch without the USB fix is the exception: it is not patched again, so it says what to do first.
  */
 export function fpsOffNote(plan: FpsPlan, supported: boolean): string | null {
   if (!supported || plan.status === 'offer') return null;
@@ -100,6 +101,14 @@ export function fpsOffNote(plan: FpsPlan, supported: boolean): string | null {
     return `Frame-rate patch applied: this image runs at ${String(plan.hz)} Hz.`;
   }
   if (plan.status === 'at-rate') {
+    /* An earlier patch (before the USB no-skip branch) is not patched again: the way on is the stock
+     * image first (TESTING.md 42.97). */
+    if (plan.earlierPatch === true) {
+      return (
+        `Frame-rate patch not offered: this bank holds an earlier ${String(plan.hz)} Hz patch without the ` +
+        `USB fix. Restore the stock image, then Make ${String(plan.hz)} FPS.`
+      );
+    }
     return `No frame-rate patch needed: this build already runs at ${String(plan.hz)} Hz.`;
   }
   return `Frame-rate patch not offered: ${plan.reason}`;
