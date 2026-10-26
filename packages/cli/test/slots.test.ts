@@ -2623,6 +2623,9 @@ describe('slots copy', () => {
     expect(result).toMatchObject({ action: 'copy', from: 'a', bank: 'b', dryRun: true });
     const text = test.stdout.text + test.stderr.text;
     expect(text).toContain('image taken from');
+    /* TESTING.md 42.93: the image row names the source bank, not a made-up decrypted file name. */
+    expect(text).toMatch(/image\s+bank A's image — /);
+    expect(text).not.toContain('seek-slot-a-');
     expect(text).toContain('slot A at 14030000, firmware 4.9.5.0, as the slots read decrypted it');
     expect(text).toContain('_bank-B_before-copy-from-A.zip');
   });
@@ -2704,6 +2707,7 @@ describe('slots restore', () => {
     expect(text).toMatch(
       /image taken from\s+the backup's slot B in the full flash backup whole\.bin/,
     );
+    expect(text).toMatch(/image\s+bank B of whole\.bin — /);
     expect(await readdir(dir)).toEqual([
       'seek_backup_2026-10-26T12-00-00Z_SN-1_v4.9.5.0_bank-B_before-restore.zip',
     ]);

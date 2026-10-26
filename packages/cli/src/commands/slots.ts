@@ -1165,9 +1165,10 @@ interface PlannedWrite {
   /** The JSON's `action`: 'flash', 'copy' or 'restore'. */
   readonly command: 'flash' | 'copy' | 'restore';
   readonly plan: SlotFlashPlan;
-  /** The image's name in the plan and the question. */
-  readonly fileName: string;
-  /** What the question says is written ("x.bin", "bank A's image"). */
+  /**
+   * What is written, in the plan's image row and the question: the file's name, or for a copy and a restore
+   * the source in words ("bank A's image", "bank B of <file>"), never a made-up file name (TESTING.md 42.93).
+   */
   readonly what: string;
   readonly action: WriteAction;
   /** Where the image comes from when it is not a file. */
@@ -1194,7 +1195,7 @@ async function runPlannedWrite(
   const dir = backupDirOf(flags);
   const expectedSha256 = plan.expectedStored === null ? null : await sha256hex(plan.expectedStored);
   ctx.reporter.write(
-    flashPlanLines(plan, planned.fileName, expectedSha256, ctx.color, {
+    flashPlanLines(plan, planned.what, expectedSha256, ctx.color, {
       source: planned.source,
       savedFirst: savedFirstText(report, [plan.key], planned.action, dir),
     }).join('\n'),
@@ -1321,7 +1322,6 @@ async function flashAction(
     return runPlannedWrite(ctx, ops, report, workflow, {
       command: 'flash',
       plan,
-      fileName,
       what: fileName,
       action: { kind: 'flash', input: kind, fileName },
       source: null,
@@ -1348,7 +1348,6 @@ async function copyAction(
     return runPlannedWrite(ctx, ops, report, workflow, {
       command: 'copy',
       plan: copy.plan,
-      fileName: copy.fileName,
       what: `bank ${bankName(from)}'s image`,
       action: { kind: 'copy', from },
       source: copy.source,
@@ -1384,7 +1383,6 @@ async function restoreAction(
     return runPlannedWrite(ctx, ops, report, workflow, {
       command: 'restore',
       plan: restore.plan,
-      fileName: restore.fileName,
       what: `bank ${bankName(key)} of ${name}`,
       action: { kind: 'restore', fileName: name },
       source: restore.source,
