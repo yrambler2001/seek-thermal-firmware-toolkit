@@ -81,6 +81,13 @@ import { runningApplicationOf, type RunningApplication } from './running.js';
 import { stagingPhrase } from './staging-words.js';
 import { readBackBank, stageAndCommit } from './write-commit.js';
 import { compareReadBack } from './write-verify.js';
+import {
+  backUpBanks,
+  writeActionWords,
+  type SaveBackup,
+  type WriteAction,
+  type WriteBackup,
+} from './backup.js';
 
 /* ==================================================================== *
  * The guards every write passes through
@@ -712,16 +719,16 @@ function assertPlanIsCurrent(report: SlotsReport, plan: SlotFlashPlan, entry: Sl
 }
 
 /**
- * Arm the bank's write window, stage the payload, commit it, and (by default)
- * read the bank back and compare. Nothing is sent before every check here has
- * passed; the risk acknowledgement is checked first of all.
+ * Every check `flashSlot` makes before it sends a byte, without sending anything: the bank's write window, the
+ * plan against the analysis, the risk acknowledgement, the camera-wide refusal and the plain form's own
+ * condition. Throws the refusal; returns the bank's entry and window. `flashSlotWithBackup` runs it before it
+ * reads the bank for the backup, so a write that would be refused saves nothing.
  */
-export async function flashSlot(
-  ctx: WorkflowContext,
+export function checkSlotFlash(
   report: SlotsReport,
   plan: SlotFlashPlan,
-  options: FlashSlotOptions,
-): Promise<FlashSlotResult> {
+  options: Pick<FlashSlotOptions, 'acknowledgeRisk'>,
+): { readonly entry: SlotEntry; readonly write: WindowEntry } {
   const entry = entryFor(report, plan.key);
   const write: WindowEntry = writeWindowOf(entry);
   assertPlanIsCurrent(report, plan, entry);
@@ -746,6 +753,24 @@ export async function flashSlot(
   }
   /* And the plain form's own condition, which that gate does not carry (see `refusePlainStaging`). */
   if (plan.kind === 'plain' && plan.staging === 'plain') refusePlainStaging(report.state);
+  return { entry, write };
+}
+
+/**
+ * Arm the bank's write window, stage the payload, commit it, and (by default)
+ * read the bank back and compare. Nothing is sent before every check here has
+ * passed; the risk acknowledgement is checked first of all.
+ *
+ * This is the write alone: it saves nothing. A write a person makes goes through
+ * `flashSlotWithBackup` (or the frame-rate patch), which saves the bank first and calls this.
+ */
+export async function flashSlot(
+  ctx: WorkflowContext,
+  report: SlotsReport,
+  plan: SlotFlashPlan,
+  options: FlashSlotOptions,
+): Promise<FlashSlotResult> {
+  const { entry, write } = checkSlotFlash(report, plan, options);
 
   const { reporter } = ctx;
   /* `plan.kind` 'plain' is the INPUT (a decrypted image), not the stored form: on the 2016 line the line
@@ -759,7 +784,9 @@ export async function flashSlot(
       hexUp(plan.sum16, 4),
     'warn',
   );
-  const commitStatus = await stageAndCommit(ctx, entry, write, plan.payload, plan.sum16);
+  const commitStatus = await stageAndCommit(ctx, entry, write, plan.payload, plan.sum16, () => {
+    options.onCommit?.(plan.key);
+  });
 
   const notes: string[] = [
     `committed ${String(plan.payload.length)} B to ${entry.name} at ${hexUp(entry.address)}, ` +
@@ -812,4 +839,48 @@ export async function flashSlot(
   reporter.progress(1, 1, 'Written.');
 
   return { key: plan.key, commitStatus, verified, after, notes };
+}
+
+/* ==================================================================== *
+ * flashSlotWithBackup: the write a person makes
+ * ==================================================================== */
+
+/** A write that saves its target bank first. */
+export interface SlotWriteOptions extends FlashSlotOptions {
+  /** What the write is, for the backup's name and its text file. */
+  readonly action: WriteAction;
+  /** Saves the backup zip. The write waits for it, and a save that did not happen refuses it. */
+  readonly saveBackup: SaveBackup;
+  /** The clock the backup's name and text are stamped with. Default: now. */
+  readonly now?: () => Date;
+}
+
+export interface SlotWriteResult {
+  readonly written: FlashSlotResult;
+  /** The zip saved before the write. */
+  readonly backup: WriteBackup;
+}
+
+/**
+ * Checks the write as `flashSlot` would (nothing is read or saved for a write that would be refused), reads the
+ * target bank again and saves it in the backup zip, then writes and reads back. Every bank write the page and the
+ * CLI make goes through here or through the frame-rate patch, which saves the bank the same way (owner,
+ * 2026-10-26). A target that is empty, or that cannot be read, is said in the zip and does not refuse the write.
+ */
+export async function flashSlotWithBackup(
+  ctx: WorkflowContext,
+  report: SlotsReport,
+  plan: SlotFlashPlan,
+  options: SlotWriteOptions,
+): Promise<SlotWriteResult> {
+  checkSlotFlash(report, plan, options);
+  const backup = await backUpBanks(ctx, report, {
+    keys: [plan.key],
+    action: options.action,
+    follows: writeActionWords(options.action, report, [plan.key]),
+    save: options.saveBackup,
+    ...(options.now === undefined ? {} : { now: options.now }),
+  });
+  const written = await flashSlot(ctx, report, plan, options);
+  return { written, backup };
 }

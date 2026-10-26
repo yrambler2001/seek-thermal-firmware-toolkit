@@ -8,7 +8,7 @@
  *      plain-copy form, unmeasured on a camera, so it names its target; FPS_MEASURED_HZ has no 32 Hz entry);
  *   2. THE SAVE GATE: a save that does not happen refuses the write, and no SetFeaturedFirmwareData
  *      (0x50) or CompleteMemoryUpgrade (0x51) is sent;
- *   3. the patch: the pre-patch dump is handed to the save FIRST, holding bank A exactly as the
+ *   3. the patch: the backup zip is handed to the save FIRST, holding bank A exactly as the
  *      emulator served it; the write commits with status 0; the read-back differs from the pre-patch
  *      bank only at the planned bytes (the edit sites and the adjust word), neither more nor fewer;
  *      ResetDevice is never sent;
@@ -33,13 +33,10 @@ import type { FirmwareProfile } from '../../src/profiles/types.js';
 import { SeekDevice } from '../../src/protocol/client.js';
 import { WebUsbTransport } from '../../src/protocol/webusb.js';
 import { inspectSlots } from '../../src/slots/inspect.js';
-import {
-  fpsPlanOfBank,
-  patchBankFps,
-  type FpsPatchResult,
-  type FpsPreDump,
-} from '../../src/slots/fps-patch.js';
+import { fpsPlanOfBank, patchBankFps, type FpsPatchResult } from '../../src/slots/fps-patch.js';
+import type { WriteBackup } from '../../src/slots/backup.js';
 import type { SlotsReport } from '../../src/slots/types.js';
+import { backupBankFiles } from './backup-files.js';
 import {
   evidenceFromChannelProbe,
   probeSelectorChannel,
@@ -185,7 +182,7 @@ for (const { label, top } of STAGE_ONE) {
             await expect(
               patchBankFps(ctx, report, 'a', {
                 acknowledgeRisk: true,
-                saveDump: () => Promise.resolve(false),
+                saveBackup: () => Promise.resolve(false),
               }),
             ).rejects.toThrow(/was not saved/);
             const gateOps = opsAfter(sent, beforeGate);
@@ -193,27 +190,25 @@ for (const { label, top } of STAGE_ONE) {
             expect(gateOps).not.toContain(OP_COMPLETE_MEMORY_UPGRADE);
 
             /* 3. the patch, with the pre-patch save first */
-            const saved: FpsPreDump[] = [];
+            const saved: WriteBackup[] = [];
             const beforePatch = sent.length;
             const result: FpsPatchResult = await patchBankFps(ctx, report, 'a', {
               acknowledgeRisk: true,
-              saveDump: (dump) => {
-                saved.push(dump);
+              saveBackup: (backup) => {
+                saved.push(backup);
                 return Promise.resolve(true);
               },
             });
             expect(saved).toHaveLength(1);
-            const pre = saved[0];
-            if (pre === undefined) return;
-            expect(pre.key).toBe('a');
-            expect(pre.version).toBe(subject.version);
+            const backup = saved[0];
+            if (backup === undefined) return;
+            expect(backup.banks.map((bank) => bank.key)).toEqual(['a']);
+            expect(backup.banks[0]?.version).toBe(subject.version);
+            expect(backup.fileName).toMatch(/^seek_backup_.+_bank-A_before-fps-patch\.zip$/);
+            const pre = backupBankFiles(backup, 'a');
             expect(pre.raw).toEqual(stockBankA);
-            expect(pre.rawName).toMatch(
-              new RegExp(
-                `^seek-slot-A-v${subject.version.replace(/\./g, '\\.')}-before-fps-patch-raw-`,
-              ),
-            );
-            expect(pre.plainName).toMatch(/-decrypted-/);
+            expect(pre.rawName).toMatch(/^seek-slot-a-.+-[0-9a-f]{8}\.bin$/);
+            expect(pre.plainName).toMatch(/-decrypted/);
             expect(result.toHz).toBe(top);
             expect(result.written.commitStatus, 'commit status').toBe(0);
             expect(result.written.verified).toBe(true);

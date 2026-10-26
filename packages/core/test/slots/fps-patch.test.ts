@@ -1,7 +1,7 @@
 /* ====================================================================
  * The frame-rate patch on a bank (slots/fps-patch.ts), without a camera: every refusal that is
  * decided from the analysis is made before the device is touched (the device proxy below throws
- * on any use), the read-back check, and the names the pre-patch dump is saved under.
+ * on any use), and the read-back check. The backup the patch saves first is tested in backup.test.ts.
  * The write itself, the save gate and the read-back on a real emulated camera are in
  * test/slots/fps-patch.emulator.test.ts.
  * ==================================================================== */
@@ -20,7 +20,6 @@ import {
   checkReadBack,
   checkReadBackDecrypted,
   fpsPlanOfBank,
-  fpsPreDumpNames,
   patchBankFps,
   writeFpsPatch,
 } from '../../src/slots/fps-patch.js';
@@ -174,7 +173,7 @@ describe('the plan for one bank, from its own image (no device)', () => {
     await expect(
       patchBankFps(untouchableContext(), report, 'a', {
         acknowledgeRisk: true,
-        saveDump: () => Promise.resolve(true),
+        saveBackup: () => Promise.resolve(true),
       }),
     ).rejects.toThrow(SeekError);
   });
@@ -187,7 +186,7 @@ describe('the plan for one bank, from its own image (no device)', () => {
     await expect(
       patchBankFps(untouchableContext(), report, 'a', {
         acknowledgeRisk: true,
-        saveDump: () => Promise.resolve(true),
+        saveBackup: () => Promise.resolve(true),
       }),
     ).rejects.toThrow(/not in the frame-rate patch table/);
   });
@@ -229,21 +228,6 @@ describe('the read-back against the pre-patch bank', () => {
       unexpected: [],
       ok: null,
     });
-  });
-});
-
-describe('the names the pre-patch dump is saved under', () => {
-  it('names the bank, the build, the kind and a short hash, marked as taken before a patch', () => {
-    const names = fpsPreDumpNames('a', '1.3.0.0', 'abcdef0123456789', '9876543210fedcba');
-    expect(names.raw).toBe('seek-slot-A-v1.3.0.0-before-fps-patch-raw-abcdef01.bin');
-    expect(names.decrypted).toBe('seek-slot-A-v1.3.0.0-before-fps-patch-decrypted-98765432.bin');
-  });
-
-  it('names an unknown build as unknown, and keeps the file name to safe characters', () => {
-    expect(fpsPreDumpNames('r', null, 'aa', 'bb').raw).toBe(
-      'seek-slot-R-vunknown-before-fps-patch-raw-aa.bin',
-    );
-    expect(fpsPreDumpNames('b', '1.3.0.8 FF/x', 'aa', 'bb').raw).toMatch(/-v1\.3\.0\.8-FF-x-/);
   });
 });
 
@@ -347,7 +331,7 @@ describe('writing a planned patch refuses before the device is touched', () => {
     await expect(
       writeFpsPatch(untouchableContext(), report, 'a', dumpOf(image), patch, {
         acknowledgeRisk: true,
-        saveDump: () => Promise.resolve(true),
+        saveBackup: () => Promise.resolve(true),
       }),
     ).rejects.toThrow(/not the stock image this patch was written for/);
   });
@@ -362,7 +346,7 @@ describe('writing a planned patch refuses before the device is touched', () => {
     await expect(
       writeFpsPatch(untouchableContext(), report, 'a', dumpOf(image), patch, {
         acknowledgeRisk: true,
-        saveDump: () => Promise.resolve(true),
+        saveBackup: () => Promise.resolve(true),
       }),
     ).rejects.toThrow(/is for build 1\.0\.3\.0, but the camera reports 1\.3\.0\.0/);
   });

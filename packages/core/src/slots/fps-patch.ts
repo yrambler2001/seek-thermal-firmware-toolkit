@@ -17,11 +17,11 @@
  *       chain, the Key A line, or the 2016 keystream line), its payload and the image it predicts must
  *       be the patched image (the writer would not change the key pair or the sum), and the camera-wide
  *       refusal applies;
- *   (5) the bank is SAVED, raw and decrypted, before anything is written. `saveDump` must say it
- *       saved: a false or a throw refuses the write. There is no restore control; the saved
- *       decrypted file is the way back;
+ *   (5) the bank is SAVED, as stored and decrypted, in the backup zip every write saves first
+ *       (backup.ts), before anything is written. `saveBackup` must say it saved: a false or a throw
+ *       refuses the write. The zip's decrypted file is the way back ("Flash decrypted image");
  *   (6) flashSlot writes it, with the same direct mode and the same acknowledgement rules as every
- *       other write, and reads it back;
+ *       other write (checked before the save), and reads it back;
  *   (7) the read-back is compared with the bank before the patch: on the plain chain the stored bytes
  *       (byte for byte); on the Key A line and the 2016 keystream line, which store the image under a
  *       key of the bank's own, the image the read-back DECRYPTS to. Either way the differing bytes must
@@ -29,10 +29,18 @@
  *
  * Steps (3) to (7) are `writeFpsPatch`. `patchBankFps` is steps (1), (2) and the offer; a caller that
  * has its own planned patch (the emulator suite, before a stage's offer is opened) calls `writeFpsPatch`.
+ *
+ * EVERY BANK AT ONCE (`patchEveryBankFps`, owner 2026-10-26: a warm reset can make the camera start another
+ * bank than the one patched). Steps (1) to (4) run for every bank that offers the patch before anything is
+ * saved, so a bank that would be refused refuses the whole action with nothing sent. Then ONE zip holds every
+ * one of those banks (a browser asks before it lets a page start a second download on its own, so one zip
+ * per bank could leave a write without its saved backup), and the banks are written and read back in turn:
+ * the banks the camera neither boots nor falls back to first, then recovery R, then the booted bank last, so
+ * a failure stops before the bank the camera runs. The first failure stops the rest.
  * ==================================================================== */
 
 import { equalBytes, viewOf } from '../bytes.js';
-import { errorMessage, SeekError } from '../errors.js';
+import { CancelledError, errorMessage, SeekError } from '../errors.js';
 import { decryptImage } from '../crypto/cipher.js';
 import { recoverKeyInfo } from '../crypto/recover.js';
 import type { CipherProfile } from '../profiles/types.js';
@@ -45,26 +53,25 @@ import {
   type FpsPlan,
 } from '../preservation/fps-patch.js';
 import type { WorkflowContext } from '../workflows/types.js';
+import {
+  buildWriteBackup,
+  saveBackupFirst,
+  backupLogLines,
+  type BankRead,
+  type SaveBackup,
+  type WriteBackup,
+} from './backup.js';
 import { dumpSlot } from './dump.js';
 import { stagingPhrase } from './staging-words.js';
-import { sha256Sync } from './write-sha.js';
-import { flashSlot, prepareSlotFlash } from './write.js';
-import type { DumpedSlot, FlashSlotResult, SlotFlashPlan, SlotKey, SlotsReport } from './types.js';
-
-/** What is saved before a patch: the bank as stored, and its decrypted image. */
-export interface FpsPreDump {
-  readonly key: SlotKey;
-  readonly bank: string;
-  /** The version the bank's build reports, as the file name carries it. */
-  readonly version: string;
-  readonly address: number;
-  readonly raw: Uint8Array;
-  readonly rawSha256: string;
-  readonly rawName: string;
-  readonly plain: Uint8Array;
-  readonly plainSha256: string;
-  readonly plainName: string;
-}
+import { checkSlotFlash, flashSlot, prepareSlotFlash } from './write.js';
+import type {
+  DumpedSlot,
+  FlashSlotResult,
+  SlotEntry,
+  SlotFlashPlan,
+  SlotKey,
+  SlotsReport,
+} from './types.js';
 
 export interface FpsPatchOptions {
   /** Needed to write the bank the camera boots now, or recovery R (as for every write). */
@@ -72,10 +79,15 @@ export interface FpsPatchOptions {
   /** Take the read-back and compare it. Default true. */
   readonly verify?: boolean;
   /**
-   * Saves the pre-patch dump. Must resolve to true only once the files are on disk (or handed to the
-   * browser's download). A false result or a throw refuses the write before anything is sent.
+   * Saves the backup zip of the bank (`WriteBackup`, backup.ts). Must resolve to true only once the zip is
+   * written (or handed to the browser's download). A false result or a throw refuses the write before
+   * anything is sent.
    */
-  readonly saveDump: (dump: FpsPreDump) => Promise<boolean>;
+  readonly saveBackup: SaveBackup;
+  /** Called just before each bank's commit is sent (`FlashSlotOptions.onCommit`). */
+  readonly onCommit?: (key: SlotKey) => void;
+  /** The clock the backup is stamped with. Default: now. */
+  readonly now?: () => Date;
 }
 
 export interface FpsReadBackCheck {
@@ -96,7 +108,8 @@ export interface FpsPatchResult {
   readonly patch: FpsPatch;
   readonly fromHz: number;
   readonly toHz: number;
-  readonly pre: FpsPreDump;
+  /** The zip saved before the write: the bank as stored and its decrypted image. */
+  readonly backup: WriteBackup;
   /** The decrypted image as it was written (the table's patched image). */
   readonly patched: Uint8Array;
   /** The offsets the patch changes: the edit sites that change, and the adjust word when it moves. */
@@ -118,23 +131,6 @@ function refuse(message: string, detail?: Record<string, unknown>): SeekError {
 /** The version as a file name carries it. */
 function safeLabel(version: string | null): string {
   return version === null || version === '' ? 'unknown' : version.replace(/[^0-9A-Za-z.]+/g, '-');
-}
-
-/**
- * The names the pre-patch dump is saved under: the bank, the build and a short hash, marked as
- * the dump taken before a frame-rate patch so it is not mistaken for a stock dump.
- */
-export function fpsPreDumpNames(
-  key: SlotKey,
-  version: string | null,
-  rawSha256: string,
-  plainSha256: string,
-): { readonly raw: string; readonly decrypted: string } {
-  const stem = `seek-slot-${key.toUpperCase()}-v${safeLabel(version)}-before-fps-patch`;
-  return {
-    raw: `${stem}-raw-${rawSha256.slice(0, 8)}.bin`,
-    decrypted: `${stem}-decrypted-${plainSha256.slice(0, 8)}.bin`,
-  };
 }
 
 /** The name of the patched image the write is prepared under (no key pair in it: the writer finds the camera's). */
@@ -223,16 +219,14 @@ function preparePatchedWrite(
 }
 
 /**
- * Patch one bank: plan it, save it, write the patched image through the writer, read it back and check
- * the change. See the header for the order. Throws a SeekError (code `slots/refused`) with the reason before
- * anything is sent for every refusal; a failure after the commit is reported through the result, not thrown.
+ * Steps (1) and (2): the offer from the analysis alone, then the bank read again and its patch planned from
+ * that fresh read, which must name the same table entry. Refusals send nothing.
  */
-export async function patchBankFps(
+async function readAndPlan(
   ctx: WorkflowContext,
   report: SlotsReport,
   key: SlotKey,
-  options: FpsPatchOptions,
-): Promise<FpsPatchResult> {
+): Promise<{ readonly dumped: DumpedSlot; readonly patch: FpsPatch }> {
   const name = key.toUpperCase();
   if (!report.plan.supportedBuild.supported) throw refuse(report.plan.supportedBuild.reason);
   const entry = report.plan.slots.find((candidate) => candidate.key === key);
@@ -268,7 +262,54 @@ export async function patchBankFps(
         `(${early.patch.id}). Read the slots again.`,
     );
   }
-  return writeFpsPatch(ctx, report, key, dumped, plan.patch, options);
+  return { dumped, patch: plan.patch };
+}
+
+/**
+ * Patch one bank: plan it, save it, write the patched image through the writer, read it back and check
+ * the change. See the header for the order. Throws a SeekError (code `slots/refused`) with the reason before
+ * anything is sent for every refusal; a failure after the commit is reported through the result, not thrown.
+ */
+export async function patchBankFps(
+  ctx: WorkflowContext,
+  report: SlotsReport,
+  key: SlotKey,
+  options: FpsPatchOptions,
+): Promise<FpsPatchResult> {
+  const { dumped, patch } = await readAndPlan(ctx, report, key);
+  return writeFpsPatch(ctx, report, key, dumped, patch, options);
+}
+
+/** One bank's patch, prepared and checked, nothing saved or sent: steps (3) and (4). */
+interface PreparedPatch {
+  readonly key: SlotKey;
+  readonly entry: SlotEntry;
+  readonly dumped: DumpedSlot & { readonly plain: Uint8Array };
+  readonly patch: FpsPatch;
+  readonly patched: Uint8Array;
+  readonly changed: readonly number[];
+  readonly plan: SlotFlashPlan;
+}
+
+/** The patch in words, for the backup's text file. */
+function patchFollows(
+  report: SlotsReport,
+  prepared: readonly PreparedPatch[],
+  every: boolean,
+): string {
+  const banks = prepared.map((one) => one.entry.name).join(', then ');
+  const rates = [
+    ...new Set(
+      prepared.map(
+        (one) =>
+          `${String(one.patch.fromHz)} Hz to ${String(FPS_MEASURED_HZ.get(one.patch.id) ?? one.patch.targetHz)} Hz`,
+      ),
+    ),
+  ].join(' or ');
+  const firmware = report.state.version ?? '(unknown)';
+  return every
+    ? `the frame-rate patch of every bank that offers it: ${banks} (${rates}, firmware ${firmware})`
+    : `the frame-rate patch of ${banks}, ${rates} (firmware ${firmware})`;
 }
 
 /**
@@ -286,12 +327,40 @@ export async function writeFpsPatch(
   patch: FpsPatch,
   options: FpsPatchOptions,
 ): Promise<FpsPatchResult> {
+  const prepared = preparePatch(report, key, dumped, patch, options);
+  /* (5) the save: the write waits for it, and a save that did not happen refuses. The zip is built from the
+   * read the patch was planned from: one read, the bank as it is now. */
+  const reads: BankRead[] = [{ key, dumped, unreadWhy: null }];
+  const backup = buildWriteBackup({
+    report,
+    reads,
+    action: { kind: 'fps-patch' },
+    follows: patchFollows(report, [prepared], false),
+    at: (options.now ?? (() => new Date()))(),
+  });
+  await saveBackupFirst(backup, options.saveBackup);
+  for (const line of backupLogLines(backup)) ctx.reporter.log(line, 'ok');
+  return sendPatch(ctx, report, prepared, backup, options);
+}
+
+/**
+ * Steps (3) and (4), and every check the write makes before it sends a byte (`checkSlotFlash`: the
+ * acknowledgement, the camera-wide refusal): pure. Throws the refusal; nothing has been saved or sent.
+ */
+function preparePatch(
+  report: SlotsReport,
+  key: SlotKey,
+  dumped: DumpedSlot,
+  patch: FpsPatch,
+  options: Pick<FpsPatchOptions, 'acknowledgeRisk'>,
+): PreparedPatch {
   const name = key.toUpperCase();
   const entry = report.plan.slots.find((candidate) => candidate.key === key);
   if (entry === undefined) throw refuse(`this build's plan has no bank ${name}.`);
   if (dumped.key !== key)
     throw refuse(`the bank read is bank ${dumped.key.toUpperCase()}, not ${name}.`);
-  if (dumped.plain === null) throw refuse(`${entry.name} has no decrypted image to patch.`);
+  const plain = dumped.plain;
+  if (plain === null) throw refuse(`${entry.name} has no decrypted image to patch.`);
   if (report.state.version === null) {
     throw refuse('the analysis does not say which firmware the camera runs.');
   }
@@ -300,56 +369,32 @@ export async function writeFpsPatch(
       `${entry.name}: the patch is for build ${patch.version}, but the camera reports ${report.state.version}.`,
     );
   }
-  const notes: string[] = [];
-
   /* (3) the patched image and its pre-send check. */
-  const patched = applyFpsPatch(dumped.plain, patch);
-  const changed = verifyFpsPatchedImage(dumped.plain, patched, patch);
-
+  const patched = applyFpsPatch(plain, patch);
+  const changed = verifyFpsPatchedImage(plain, patched, patch);
   /* (4) what the writer would send for it, before anything is saved: the pure check. */
-  const prepared = preparePatchedWrite(report, key, entry.name, patched, patch);
+  const plan = preparePatchedWrite(report, key, entry.name, patched, patch);
+  checkSlotFlash(report, plan, options);
+  return { key, entry, dumped: { ...dumped, plain }, patch, patched, changed, plan };
+}
 
-  /* (5) the pre-patch save: the write waits for it, and a save that did not happen refuses. */
-  const plainSha256 = sha256Sync(dumped.plain);
-  const names = fpsPreDumpNames(key, report.state.version, dumped.sha256, plainSha256);
-  const pre: FpsPreDump = {
-    key,
-    bank: entry.name,
-    version: report.state.version,
-    address: entry.address,
-    raw: dumped.raw,
-    rawSha256: dumped.sha256,
-    rawName: names.raw,
-    plain: dumped.plain,
-    plainSha256,
-    plainName: names.decrypted,
-  };
-  let saved = false;
-  let saveError: string | null = null;
-  try {
-    /* Only the literal true counts: a save that answers anything else did not happen. */
-    const answer: unknown = await options.saveDump(pre);
-    saved = answer === true;
-  } catch (error) {
-    saveError = errorMessage(error);
-  }
-  if (!saved) {
-    throw refuse(
-      `The pre-patch dump of ${entry.name} was not saved${saveError === null ? '' : ` (${saveError})`}, ` +
-        'so the patch was not written. Save the dump first (it is the only way back), then try again.',
-    );
-  }
-  notes.push(`saved the pre-patch dump: ${names.raw} and ${names.decrypted}`);
-
-  /* (6) the write, and its read-back. */
-  const written = await flashSlot(ctx, report, prepared, {
+/** Steps (6) and (7): the write of one prepared patch, its read-back, and the check of the change. */
+async function sendPatch(
+  ctx: WorkflowContext,
+  report: SlotsReport,
+  prepared: PreparedPatch,
+  backup: WriteBackup,
+  options: FpsPatchOptions,
+): Promise<FpsPatchResult> {
+  const { key, dumped, patch, patched, changed, plan } = prepared;
+  const written = await flashSlot(ctx, report, plan, {
     verify: options.verify !== false,
     acknowledgeRisk: options.acknowledgeRisk,
+    ...(options.onCommit === undefined ? {} : { onCommit: options.onCommit }),
   });
-
   /* (7) the read-back against the bank before the patch. */
   const readBack =
-    prepared.staging === 'plain'
+    plan.staging === 'plain'
       ? checkReadBack(dumped.raw, written.after, changed)
       : checkReadBackDecrypted(dumped.plain, written.after, changed, report.state.profile.cipher);
   return {
@@ -357,13 +402,170 @@ export async function writeFpsPatch(
     patch,
     fromHz: patch.fromHz,
     toHz: FPS_MEASURED_HZ.get(patch.id) ?? patch.targetHz,
-    pre,
+    backup,
     patched,
     changed,
-    plan: prepared,
+    plan,
     written,
     readBack,
-    notes: [...notes, ...written.notes],
+    notes: [...written.notes],
+  };
+}
+
+/* ==================================================================== *
+ * Every bank at once
+ * ==================================================================== */
+
+/** One bank's frame-rate verdict, for the every-bank plan. */
+export interface FpsBankVerdict {
+  readonly key: SlotKey;
+  readonly name: string;
+  readonly plan: FpsPlan;
+}
+
+/** What "Make N FPS in every bank" would do, from the analysis alone. Pure. */
+export interface FpsEveryBankPlan {
+  /** The banks that offer the patch, in the order they would be written. */
+  readonly order: readonly SlotKey[];
+  /** Every bank that offers it, with its offer, in that order. */
+  readonly offers: readonly (FpsBankVerdict & {
+    readonly plan: Extract<FpsPlan, { status: 'offer' }>;
+  })[];
+  /** The banks that do not offer it, with their plan (patched, at the rate, or refused with the reason). */
+  readonly others: readonly FpsBankVerdict[];
+}
+
+/**
+ * The order the every-bank patch writes in: the banks the camera neither boots nor falls back to first (A
+ * before B), then recovery R, then the bank the camera boots now, so a failure stops before the bank that
+ * runs. A camera that names no booted bank is written A, B, then R.
+ */
+export function everyBankWriteOrder(report: SlotsReport, keys: readonly SlotKey[]): SlotKey[] {
+  /* The bank the page shows as booted now (the view's own flag, which the read sets from the boot record). */
+  const booted =
+    report.slots.find((view) => view.active)?.entry.key ?? report.state.boot?.booted ?? null;
+  const rank = (key: SlotKey): number => {
+    if (key === booted) return 3;
+    if (key === 'r') return 2;
+    return key === 'a' ? 0 : 1;
+  };
+  return [...keys].sort((a, b) => rank(a) - rank(b));
+}
+
+/**
+ * The every-bank plan: which banks offer the patch and in what order they would be written. Pure. `planOf` is
+ * each bank's own plan (`fpsPlanOfBank`; a front end's test may give its own).
+ */
+export function fpsEveryBankPlan(
+  report: SlotsReport,
+  planOf: (report: SlotsReport, key: SlotKey) => FpsPlan = fpsPlanOfBank,
+): FpsEveryBankPlan {
+  const verdicts: FpsBankVerdict[] = report.slots.map((view) => ({
+    key: view.entry.key,
+    name: view.entry.name,
+    plan: planOf(report, view.entry.key),
+  }));
+  const offering = verdicts.filter(
+    (verdict): verdict is FpsBankVerdict & { plan: Extract<FpsPlan, { status: 'offer' }> } =>
+      verdict.plan.status === 'offer',
+  );
+  const order = everyBankWriteOrder(
+    report,
+    offering.map((verdict) => verdict.key),
+  );
+  return {
+    order,
+    offers: order.flatMap((key) => offering.filter((verdict) => verdict.key === key)),
+    others: verdicts.filter((verdict) => verdict.plan.status !== 'offer'),
+  };
+}
+
+/** What the every-bank patch did. */
+export interface FpsEveryBankResult {
+  /** The one zip saved before the first write: every bank it was about to patch. */
+  readonly backup: WriteBackup;
+  /** The banks it set out to patch, in the order it writes them. */
+  readonly order: readonly SlotKey[];
+  /** Each bank written, in order, with its read-back check. */
+  readonly results: readonly FpsPatchResult[];
+  /**
+   * The bank where it stopped and why: a write that failed (that bank may be partly written), or a
+   * read-back that does not differ only as planned (that bank was written). Null when every bank was written.
+   */
+  readonly stopped: { readonly key: SlotKey; readonly reason: string } | null;
+  /** The banks after the stop, not written. */
+  readonly unwritten: readonly SlotKey[];
+}
+
+/**
+ * Patches every bank that offers the frame-rate patch, in one confirmation: each bank read again and planned
+ * (steps 1 to 4) before anything is saved, one zip of all of them saved, then each written and read back in
+ * turn (`everyBankWriteOrder`). The first failure stops the rest; a cancel is thrown. The acknowledgement
+ * covers every bank that needs one (the booted bank, recovery R). Throws a refusal, with nothing saved or
+ * sent, when no bank offers the patch or any bank would be refused.
+ */
+export async function patchEveryBankFps(
+  ctx: WorkflowContext,
+  report: SlotsReport,
+  options: FpsPatchOptions,
+): Promise<FpsEveryBankResult> {
+  const plan = fpsEveryBankPlan(report);
+  if (plan.order.length === 0) {
+    const why = plan.others
+      .map((other) => `${other.name}: ${'reason' in other.plan ? other.plan.reason : 'no offer'}`)
+      .join('; ');
+    throw refuse(`no bank offers the frame-rate patch (${why}).`);
+  }
+  const prepared: PreparedPatch[] = [];
+  for (const key of plan.order) {
+    const { dumped, patch } = await readAndPlan(ctx, report, key);
+    prepared.push(preparePatch(report, key, dumped, patch, options));
+  }
+  /* The zip lists the banks A, B, R; the text says the order they are written in. */
+  const reads: BankRead[] = [...prepared]
+    .sort((a, b) => 'abr'.indexOf(a.key) - 'abr'.indexOf(b.key))
+    .map((one) => ({ key: one.key, dumped: one.dumped, unreadWhy: null }));
+  const backup = buildWriteBackup({
+    report,
+    reads,
+    action: { kind: 'fps-patch-every-bank' },
+    follows: patchFollows(report, prepared, true),
+    at: (options.now ?? (() => new Date()))(),
+  });
+  await saveBackupFirst(backup, options.saveBackup);
+  for (const line of backupLogLines(backup)) ctx.reporter.log(line, 'ok');
+
+  const results: FpsPatchResult[] = [];
+  let stopped: FpsEveryBankResult['stopped'] = null;
+  for (const one of prepared) {
+    try {
+      const done = await sendPatch(ctx, report, one, backup, options);
+      results.push(done);
+      if (done.readBack.ok === false || done.written.verified === false) {
+        stopped = {
+          key: one.key,
+          reason:
+            `${one.entry.name} was written, but its read-back does not differ from the saved bank only ` +
+            'as planned, so the banks after it were not written',
+        };
+        break;
+      }
+    } catch (error) {
+      if (error instanceof CancelledError) throw error;
+      stopped = { key: one.key, reason: `${one.entry.name}: ${errorMessage(error)}` };
+      break;
+    }
+  }
+  const reached = new Set<SlotKey>([
+    ...results.map((done) => done.key),
+    ...(stopped === null ? [] : [stopped.key]),
+  ]);
+  return {
+    backup,
+    order: plan.order,
+    results,
+    stopped,
+    unwritten: plan.order.filter((key) => !reached.has(key)),
   };
 }
 

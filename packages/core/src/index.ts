@@ -279,6 +279,8 @@ export {
   buildWindowRecord,
   buildZip,
   crc32,
+  looksLikeZip,
+  readZipEntries,
   makeLegacyReadme,
   makeOfflineDecryptReadme,
   makeReadme,
@@ -310,6 +312,7 @@ export type {
   WindowRecord,
   WindowRecordError,
   WindowRecordRead,
+  ZipEntry,
 } from './archive/index.js';
 
 /* ---- the four read workflows ------------------------------------------ */

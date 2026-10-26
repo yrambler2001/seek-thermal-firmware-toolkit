@@ -2,6 +2,7 @@
 
 export { crc32 } from './crc32.js';
 export { buildZip, zipEntryCount, zipTotalDataSize } from './zip.js';
+export { looksLikeZip, readZipEntries, type ZipEntry } from './zip-read.js';
 
 export type {
   DeviceInfo,

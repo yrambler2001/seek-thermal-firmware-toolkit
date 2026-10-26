@@ -54,13 +54,10 @@ import { WebUsbTransport } from '../../src/protocol/webusb.js';
 import { reportedBootedOf } from '../../src/slots/boot-choice.js';
 import { dumpSlot } from '../../src/slots/dump.js';
 import { inspectSlots } from '../../src/slots/inspect.js';
-import {
-  fpsPlanOfBank,
-  patchBankFps,
-  type FpsPatchResult,
-  type FpsPreDump,
-} from '../../src/slots/fps-patch.js';
+import { fpsPlanOfBank, patchBankFps, type FpsPatchResult } from '../../src/slots/fps-patch.js';
+import type { WriteBackup } from '../../src/slots/backup.js';
 import type { SlotsReport } from '../../src/slots/types.js';
+import { backupBankFiles } from './backup-files.js';
 import { flashSlot, prepareSlotFlash } from '../../src/slots/write.js';
 import {
   evidenceFromChannelProbe,
@@ -383,7 +380,7 @@ export async function runBankFlow(subject: BankRunSubject): Promise<void> {
       await expect(
         patchBankFps(ctx, report, key, {
           acknowledgeRisk: true,
-          saveDump: () => {
+          saveBackup: () => {
             saves += 1;
             return Promise.resolve(true);
           },
@@ -416,7 +413,7 @@ export async function runBankFlow(subject: BankRunSubject): Promise<void> {
       await expect(
         patchBankFps(ctx, report, key, {
           acknowledgeRisk: true,
-          saveDump: () => Promise.resolve(false),
+          saveBackup: () => Promise.resolve(false),
         }),
       ).rejects.toThrow(/was not saved/);
       const gateOps = opsAfter(sent, gateFrom);
@@ -426,32 +423,35 @@ export async function runBankFlow(subject: BankRunSubject): Promise<void> {
       expect(gateOps).not.toContain(OP_COMPLETE_MEMORY_UPGRADE);
 
       /* the patch, with the pre-patch save first. */
-      const saved: FpsPreDump[] = [];
+      const saved: WriteBackup[] = [];
       const beforePatch = sent.length;
       const result: FpsPatchResult = await patchBankFps(ctx, report, key, {
         acknowledgeRisk: true,
-        saveDump: (dump) => {
-          saved.push(dump);
+        saveBackup: (backup) => {
+          saved.push(backup);
           return Promise.resolve(true);
         },
       });
       expect(saved, `${label}: bank ${bank} is saved once`).toHaveLength(1);
-      const pre = saved[0];
-      if (pre === undefined) throw new Error(`${label}: bank ${bank} was not saved`);
-      expect(pre.key).toBe(key);
-      expect(pre.version).toBe(subject.version);
+      const backup = saved[0];
+      if (backup === undefined) throw new Error(`${label}: bank ${bank} was not saved`);
+      expect(backup.banks.map((one) => one.key)).toEqual([key]);
+      expect(backup.banks[0]?.version).toBe(subject.version);
+      expect(backup.fileName).toMatch(
+        new RegExp(`^seek_backup_.+_bank-${bank}_before-fps-patch\\.zip$`),
+      );
+      const pre = backupBankFiles(backup, key);
+      if (pre.raw === null || pre.plain === null) {
+        throw new Error(`${label}: bank ${bank}: the zip holds no stored or decrypted file`);
+      }
       expect(pre.raw, `${label}: bank ${bank} is saved as it was`).toEqual(expectedRaw.get(key));
       const stockImage = stockPlain.get(key);
       expect(stockImage, `${label}: bank ${bank} has a stock image`).toBeDefined();
       expect(sha(pre.plain), `${label}: bank ${bank} is saved decrypted as it was`).toBe(
         sha(stockImage ?? new Uint8Array()),
       );
-      expect(pre.rawName).toMatch(
-        new RegExp(
-          `^seek-slot-${bank}-v${subject.version.replace(/\./g, '\\.')}-before-fps-patch-raw-`,
-        ),
-      );
-      expect(pre.plainName).toMatch(/-decrypted-/);
+      expect(pre.rawName).toMatch(new RegExp(`^seek-slot-${key}-.+-[0-9a-f]{8}\\.bin$`));
+      expect(pre.plainName).toMatch(/-decrypted/);
       expect(result.plan.staging, `${label}: bank ${bank} is staged as the line stages it`).toBe(
         subject.staging,
       );

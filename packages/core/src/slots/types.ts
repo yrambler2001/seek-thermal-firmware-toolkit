@@ -278,6 +278,12 @@ export interface FlashSlotOptions {
   readonly verify?: boolean;
   /** Must be true for a write to a slot the camera boots now, or to recovery. */
   readonly acknowledgeRisk: boolean;
+  /**
+   * Called once, just before the commit (CompleteMemoryUpgrade) is sent for this bank. Before it, nothing
+   * the write sent can have changed the bank (arming and staging do not touch flash); from it on, the bank
+   * may be partly written. A front end that reports a cancel tells the two apart by it (TESTING.md 42.82).
+   */
+  readonly onCommit?: (key: SlotKey) => void;
 }
 
 export interface FlashSlotResult {

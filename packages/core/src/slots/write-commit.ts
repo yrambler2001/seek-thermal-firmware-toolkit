@@ -114,6 +114,7 @@ export async function stageAndCommit(
   write: WindowEntry,
   payload: Uint8Array,
   sum16: number,
+  onCommit?: () => void,
 ): Promise<number> {
   const { device, reporter } = ctx;
   if (!device.transport.isOpen) await device.transport.open(); /* a dump closes it */
@@ -161,6 +162,8 @@ export async function stageAndCommit(
   );
 
   reporter.log(`${entry.name}: committing, CompleteMemoryUpgrade(${hexUp(sum16, 4)})`, 'warn');
+  /* From here on the bank may change: the caller is told before the commit goes out. */
+  onCommit?.();
   try {
     await device.completeMemoryUpgrade(sum16, USB_COMMIT_TIMEOUT_MS);
   } catch (error) {

@@ -35,7 +35,51 @@ export {
   type SlotFileKeyMethod,
   type SlotFileStatus,
 } from './decrypt-file.js';
-export { prepareSlotFlash, flashSlot, type PrepareSlotFlashOptions } from './write.js';
+export {
+  checkSlotFlash,
+  flashSlot,
+  flashSlotWithBackup,
+  prepareSlotFlash,
+  type PrepareSlotFlashOptions,
+  type SlotWriteOptions,
+  type SlotWriteResult,
+} from './write.js';
+export {
+  BACKUP_TEXT_NAME,
+  BACKUP_TIME_PLACEHOLDER,
+  backUpBanks,
+  backupBankWords,
+  backupFileNameShown,
+  backupLogLines,
+  backupName,
+  backupPlanText,
+  buildWriteBackup,
+  readBankForBackup,
+  saveBackupFirst,
+  writeActionLabel,
+  writeActionWords,
+  type BackupBank,
+  type BackupContent,
+  type BackupFile,
+  type BankRead,
+  type SaveBackup,
+  type WriteAction,
+  type WriteBackup,
+} from './backup.js';
+export { copySourceRefusal, planSlotCopy, type SlotCopyPlan } from './copy.js';
+export {
+  FLASH_BASE,
+  FULL_FLASH_BYTES,
+  flashIdentityOf,
+  fullFlashOf,
+  planSlotRestore,
+  restoreReadBack,
+  restoreReadBackText,
+  type FlashIdentity,
+  type FullFlashBackup,
+  type RestoreReadBack,
+  type SlotRestorePlan,
+} from './restore.js';
 export { stagingDetail, stagingPhrase, type StagingWords } from './staging-words.js';
 export { flashInvalidatesAnalysis } from './write-commit.js';
 export {
@@ -71,13 +115,18 @@ export { APPLICATION_KEY_PAIRS, type ApplicationKeyPair } from './application-pa
 export {
   checkReadBack,
   checkReadBackDecrypted,
+  everyBankWriteOrder,
+  fpsEveryBankPlan,
   fpsPlanOfBank,
-  fpsPreDumpNames,
   patchBankFps,
+  patchEveryBankFps,
+  writeFpsPatch,
+  type FpsBankVerdict,
+  type FpsEveryBankPlan,
+  type FpsEveryBankResult,
   type FpsPatch,
   type FpsPatchOptions,
   type FpsPatchResult,
   type FpsPlan,
-  type FpsPreDump,
   type FpsReadBackCheck,
 } from './fps-patch.js';
