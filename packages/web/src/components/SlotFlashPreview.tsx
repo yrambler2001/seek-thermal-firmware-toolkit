@@ -8,7 +8,13 @@
 
 import type { ReactElement } from 'react';
 import { FileUp, Flame } from 'lucide-react';
-import { derivedKeyLine, hexUp, type SlotFlashPlan, type SlotInputKind } from '@seek-fw/core';
+import {
+  derivedKeyLine,
+  hexUp,
+  stagingDetail,
+  type SlotFlashPlan,
+  type SlotInputKind,
+} from '@seek-fw/core';
 import { KeyValue, type KeyValueRow } from './KeyValue';
 import { Panel, PanelTitle } from './Panel';
 import { Prose } from './Prose';
@@ -28,16 +34,6 @@ import { Toolbar } from './ui/toolbar';
 
 /** One 0x50 command carries at most this many bytes (the EP0 buffer). */
 const CHUNK = 64;
-
-const STAGING_TEXT: Readonly<Record<SlotFlashPlan['staging'], string>> = {
-  'key-a-ciphertext': 'encrypted so the device stores it under the key the booted bank holds',
-  'slot-keystream-ciphertext':
-    "encrypted under the image's own stage key (key block 0); the camera stores it under the bank's own key",
-  plain: 'plaintext, no cipher',
-  'key-a-keystream':
-    'the 1.3.0.8 FF image as the vendor app stages it (XOR Key A) — the camera stores it under Key B, not these bytes',
-  verbatim: 'verbatim — the bytes exactly as given',
-};
 
 /** What the Stored afterwards row says, by what the plan predicts and how it relates to the payload. */
 function storedText(plan: SlotFlashPlan): string {
@@ -88,14 +84,16 @@ export function SlotFlashPreview({
         ]
       : []),
     [
+      /* What the file is; the Staging row says how it is sent (core's `stagingDetail`), so the two rows do
+       * not say it twice (TESTING.md 42.87). */
       'Read as',
       kind === 'plain'
         ? plan.staging === 'key-a-keystream'
-          ? 'a decrypted 1.3.0.8 FF image — staged as the vendor app stages it (XOR Key A) before it is sent'
-          : 'a decrypted image — encrypted for this bank before it is staged'
-        : 'raw bytes — staged exactly as given',
+          ? 'a decrypted 1.3.0.8 FF image'
+          : 'a decrypted image'
+        : 'raw bytes',
     ],
-    ['Staging', STAGING_TEXT[plan.staging]],
+    ['Staging', stagingDetail(plan.staging)],
     ...(plan.derivedFrom
       ? ([
           ['Key', derivedKeyLine(plan.derivedFrom, `bank ${plan.derivedFrom.bank.toUpperCase()}`)],

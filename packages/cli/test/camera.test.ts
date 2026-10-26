@@ -386,8 +386,13 @@ describe('seek-fw info on a 2016 Compact PRO that names the bank it entered (TES
       /store key\s+key block 1: the application stores every bank it writes under the key its bootloader checks/,
     );
     expect(text).not.toMatch(/key A\s+\(not identified\)/);
-    expect(text).toContain('one bank at a time — `seek-fw slots flash <a|b|r> <file>`');
+    expect(text).toContain(
+      '  one bank at a time — `seek-fw slots flash <a|b|r> <file>` or `seek-fw slots patch-fps <a|b|r>`, ' +
+        "each bank staged under its image's own key block 0",
+    );
     expect(text).toContain('a whole-image write is not available on this line');
+    /* The CLI names its own commands, not the page (TESTING.md 42.87). */
+    expect(text).not.toMatch(/the page|Slots tab/);
     expect(text).not.toContain('not available for a whole-image write:');
     expect(text).not.toContain('flashing disabled');
     expect(text).not.toContain('not a boot record');

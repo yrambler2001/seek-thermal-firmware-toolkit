@@ -131,8 +131,11 @@ function riskNote(risk: WriteRisk, byWord: boolean): string | null {
   return null;
 }
 
-/** What the "use the booted bank's image" button does, in words, with the extra confirmation it will ask for. */
-function fillNote(source: BankImageSource, risk: string | null, byWord: boolean): string {
+/**
+ * What the "use the booted bank's image" button does, in words. The extra confirmation a write to this
+ * bank asks for is said once in the row, under the write buttons (`riskNote`), not again here.
+ */
+function fillNote(source: BankImageSource, byWord: boolean): string {
   const version = source.version === null ? '' : ` (${source.version})`;
   const which = source.booted
     ? byWord
@@ -143,7 +146,6 @@ function fillNote(source: BankImageSource, risk: string | null, byWord: boolean)
     `Copies the firmware ${source.name} holds${version} into this empty bank, so the camera has a second slot with the same firmware.`,
     which,
     'You review the plan before anything is sent.',
-    ...(risk === null ? [] : [risk]),
   ].join(' ');
 }
 
@@ -211,7 +213,10 @@ export function SlotTable({
           const dumpGate = gate('dump');
           const plainGate = gate('flash-plain');
           const rawGate = gate('flash-raw');
+          /* The extra confirmation a write asks for, said once in the row: under the write buttons when
+           * one of them is on, not under each (TESTING.md 42.87). */
           const note = riskNote(risk, byWord);
+          const writable = plainGate.reason === null || rawGate.reason === null;
           const version = slotVersion(report, key);
           const empty = view.content === 'empty';
           /* An empty bank can be filled with the firmware the camera already runs, when another
@@ -313,7 +318,7 @@ export function SlotTable({
                     </Button>
                   </Action>
 
-                  <Action reason={plainGate.reason} note={note}>
+                  <Action reason={plainGate.reason} note={null}>
                     <FilePickerButton
                       id={`slot-${key}-plain-file`}
                       variant="danger"
@@ -327,7 +332,7 @@ export function SlotTable({
                     />
                   </Action>
 
-                  <Action reason={rawGate.reason} note={note}>
+                  <Action reason={rawGate.reason} note={null}>
                     <FilePickerButton
                       id={`slot-${key}-raw-file`}
                       variant="danger"
@@ -341,8 +346,14 @@ export function SlotTable({
                     />
                   </Action>
 
+                  {writable && note !== null && (
+                    <span className="block text-[0.75rem] leading-snug text-muted-foreground">
+                      {note}
+                    </span>
+                  )}
+
                   {source !== null && (
-                    <Action reason={plainGate.reason} note={fillNote(source, note, byWord)}>
+                    <Action reason={plainGate.reason} note={fillNote(source, byWord)}>
                       <Button
                         variant="outline"
                         disabled={!plainGate.enabled}

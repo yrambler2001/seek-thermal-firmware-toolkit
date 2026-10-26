@@ -592,8 +592,8 @@ describe('the 2016 line: the image under its own key block 0, stored by the came
 
 describe('the 2016 staging note says what staging needs', () => {
   it('no longer claims the keystream comes from the target bank', async () => {
-    const { bankNotes } = await import('../../src/slots/capability-notes.js');
-    const note = bankNotes('locked-2016', 'a').join(' ');
+    const { stagingNote } = await import('../../src/slots/capability-notes.js');
+    const note = stagingNote('locked-2016') ?? '';
     expect(note).not.toMatch(/recovered from a readable copy of THIS bank/);
     expect(note).toMatch(/Nothing is read from the target bank to stage it/);
   });

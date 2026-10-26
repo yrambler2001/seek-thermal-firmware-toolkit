@@ -106,8 +106,8 @@ const FLASH_REFUSAL =
   '2014 plaintext-chain bank verbatim, and a 2016 bank is neither: it is xorshift128 under K=0 ' +
   'with a decrypted word sum of 0, the Key A such a write needs sits in the bootloader block that ' +
   '1.0.3.x refuses on every channel, and the form the running application takes (the image XORed ' +
-  'with its block-0 keystream) is staged by the slot writer (slots/write.ts), which the slot page ' +
-  'does not gate on this refusal. The original disabled flashing on this generation and this ' +
+  'with its block-0 keystream) is staged by the slot writer, which does not gate on this refusal. ' +
+  'The original disabled flashing on this generation and this ' +
   'profile keeps that refusal.';
 
 const CAPABILITIES: ProfileCapabilities = {
@@ -292,7 +292,7 @@ export const compact2016: FirmwareProfile = {
     '0x00000000 acceptance sum. Its BeginFirmwareUpgrade is the locked one — the same handler ' +
     'legacy-auth describes, decoded byte-exactly from a 1.0.3.0 build — so it uses that ' +
     'selector map and the 18-byte token on the six protected banks. The classic flash is refused, ' +
-    'because that write path has no staged form for this cipher chain; the slot page stages its ' +
+    'because that write path has no staged form for this cipher chain; the slot writer stages its ' +
     'banks under the keystream form.',
   cipher: COMPACT_2016_CIPHER,
   /* The legacy geometry, not the modern one: 0x14000000 is blocked on every

@@ -59,7 +59,13 @@ import {
   stagingFor,
   type SlotFamily,
 } from './capability-family.js';
-import { bankNotes, emptyBankWhy, planNotes, profileFlashNote } from './capability-notes.js';
+import {
+  bankNotes,
+  emptyBankWhy,
+  planNotes,
+  profileFlashNote,
+  stagingNote,
+} from './capability-notes.js';
 import {
   SLOT_BYTES,
   type CommitEffect,
@@ -272,6 +278,11 @@ export function buildSlotPlan(profile: FirmwareProfile, firmwareVersion: string 
   if (family === 'locked-2016' && !profile.capabilities.flash.supported) {
     notes.push(profileFlashNote(profile.id));
   }
+  /* How a bank write is staged is the same for every bank, so it is said once, with the build's notes,
+   * not on each bank (TESTING.md 42.87). `slots list --json` follows the same split: the camera's notes
+   * in `notes`, a bank's own in `slots[].notes`. */
+  const staging = stagingNote(family);
+  if (staging !== null) notes.push(staging);
   const slots = BANK_KEYS.map((key) =>
     supportedEntry(profile, family, plan, key, verdict.version?.text ?? ''),
   );

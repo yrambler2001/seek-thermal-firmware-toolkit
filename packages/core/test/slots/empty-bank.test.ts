@@ -42,7 +42,7 @@ import { SeekDevice } from '../../src/protocol/client.js';
 import { isReadOnlyOp } from '../../src/protocol/ops.js';
 import { UNVERIFIED_STAGING_REASON } from '../../src/slots/capability-family.js';
 import { buildSlotPlan } from '../../src/slots/capability.js';
-import { bankNotes } from '../../src/slots/capability-notes.js';
+import { bankNotes, stagingNote } from '../../src/slots/capability-notes.js';
 import { dumpSlot } from '../../src/slots/dump.js';
 import { inspectSlots, joinSlotViews, slotContentOf } from '../../src/slots/inspect.js';
 import {
@@ -255,7 +255,8 @@ describe('the plan says an empty bank can be written, and why', () => {
 });
 
 describe('the 2016 staging note no longer claims the bank’s own keystream is needed', () => {
-  const notes = bankNotes('locked-2016', 'b').join('\n');
+  /* The staging note is the camera's, said once (TESTING.md 42.87): no bank carries it. */
+  const notes = stagingNote('locked-2016') ?? '';
 
   it('says the stage key is the image’s own key block 0 and that nothing is read from the target bank', () => {
     expect(notes).toMatch(/OWN key block 0/);
@@ -270,6 +271,12 @@ describe('the 2016 staging note no longer claims the bank’s own keystream is n
 
   it('the recovery bank note no longer says R is written "with its own keystream"', () => {
     expect(bankNotes('locked-2016', 'r').join('\n')).not.toMatch(/own keystream/);
+  });
+
+  it('is on no bank: A and B carry no note, R only its own', () => {
+    expect(bankNotes('locked-2016', 'a')).toEqual([]);
+    expect(bankNotes('locked-2016', 'b')).toEqual([]);
+    expect(bankNotes('locked-2016', 'r').join('\n')).not.toMatch(/^Staged: /m);
   });
 });
 

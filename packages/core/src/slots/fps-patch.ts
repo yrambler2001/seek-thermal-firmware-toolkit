@@ -46,6 +46,7 @@ import {
 } from '../preservation/fps-patch.js';
 import type { WorkflowContext } from '../workflows/types.js';
 import { dumpSlot } from './dump.js';
+import { stagingPhrase } from './staging-words.js';
 import { sha256Sync } from './write-sha.js';
 import { flashSlot, prepareSlotFlash } from './write.js';
 import type { DumpedSlot, FlashSlotResult, SlotFlashPlan, SlotKey, SlotsReport } from './types.js';
@@ -207,7 +208,7 @@ function preparePatchedWrite(
     prepared.staging !== 'slot-keystream-ciphertext'
   ) {
     throw refuse(
-      `${name}: the plan stages the image as ${prepared.staging}; a frame-rate patch is written only ` +
+      `${name}: the plan's payload is ${stagingPhrase(prepared.staging)}; a frame-rate patch is written only ` +
         'on the plain 2014 chain, on the Key A line and on the 2016 keystream line.',
     );
   }

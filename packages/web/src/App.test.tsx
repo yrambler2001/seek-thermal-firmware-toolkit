@@ -138,6 +138,8 @@ describe('Info', () => {
     expect(text).toContain('The 2016 Compact PRO builds (1.0.3.0 and 1.0.3.2');
     expect(text).toContain('the 1.3.0.8 FF (16 Hz) Compact build');
     expect(text).toContain('refused for 38 of its 63 selectors');
+    /* No source file is shown to a person (TESTING.md 42.87). */
+    expect(text).not.toMatch(/\.ts\b|packages\/core/);
     unmount();
   });
 

@@ -250,14 +250,12 @@ export function InfoView({ info, connected, busy }: InfoViewProps): ReactElement
           </p>
           <p>
             The evidence that they work on the 0.x/1.x tab: the Preserve pipeline has a derived
-            patch for each of them (the build table in{' '}
-            <code>packages/core/src/preservation/patch.ts</code>), and its emulator runs are green
-            for both. The 1.0.3.0 build on its native 2016 dump went through backup, patch, commit,
-            drain, restore and verify; the 1.3.0.8 FF went through its recovery route. On the bench
-            camera, a Compact PRO 1.0.3.0, the Preserve step 02 read completed with no reset and no
-            write, and the camera was identified as the 2016 cipher. On these builds the 4.x
-            selector map is refused for 38 of its 63 selectors (<code>compact-2016.ts</code>), so
-            the 4.x tab could only return gaps for them.
+            patch for each of them, and its emulator runs are green for both. The 1.0.3.0 build on
+            its native 2016 dump went through backup, patch, commit, drain, restore and verify; the
+            1.3.0.8 FF went through its recovery route. On the bench camera, a Compact PRO 1.0.3.0,
+            the Preserve step 02 read completed with no reset and no write, and the camera was
+            identified as the 2016 cipher. On these builds the 4.x selector map is refused for 38 of
+            its 63 selectors, so the 4.x tab could only return gaps for them.
           </p>
           <p>
             So they stay on the 0.x/1.x tab, and the 4.x/Nano tab has no family selector that would

@@ -515,11 +515,12 @@ async function confirmUpgradeTarget(
  * What the read says about writing a 2016 camera. The slot writer stages each bank under its image's own
  * key block 0 (slots/write.ts, `buildSlotKeystreamPayload`) and the camera re-keys it, so none of the
  * whole-image writer's reasons (its key table, its 2014-only staging, the profile's flash capability, the
- * upgrade target) applies to it; this one line says so in their place.
+ * upgrade target) applies to it; this one line says so in their place. The page and the CLI both log it,
+ * so it names neither; each one's Writing section says where its own bank writes are (TESTING.md 42.87).
  */
 export const BANKS_ONLY_WRITING =
-  "writing: the Slots tab (`seek-fw slots`) writes this camera's banks one at a time, each staged " +
-  "under its image's own key block 0; a whole-image write is not available on the 2016 line";
+  "writing: this camera's banks are written one at a time, each staged under its image's own key " +
+  'block 0; a whole-image write is not available on the 2016 line';
 
 /** The known 2016 image pairs whose block 1 a check key can be, by name (preservation/patch.ts KEY_PAIRS). */
 const PAIRS_2016: readonly (readonly [string, string])[] = [
@@ -1280,14 +1281,15 @@ export async function readDeviceInfo(
    * targets/compact_pro_9hz_1_0_3_0/src/rpc_cmds.c:2523-2528 inlines fw_update_slot_address() as a load of
    * 0x10000208 that arms 0x14060000 when it is 0 and 0x14050000 otherwise, as on the 2014 chain
    * (`legacyUpgradeTargetBuild`). Nothing is armed to confirm the target: the camera's own upgrade is the
-   * only thing that writes it, and the slot page writes the bank it names through that bank's own window. */
+   * only thing that writes it, and a slot write goes to the bank it names through that bank's own window.
+   * The line is logged by the page and the CLI alike, so it names neither (TESTING.md 42.87). */
   if (line2016 && prediction === null) {
     const booted = bankOfActiveSlotWord(activeSlotWord);
     if (booted !== null && legacyUpgradeTargetBuild(version) !== null) {
       prediction = { booted, target: activeSlotWord === 0 ? 'b' : 'a' };
       reporter.log(
         `the camera's own upgrade (mode 0) writes ${byKey.get(prediction.target)?.name ?? prediction.target}, ` +
-          'the bank its active-slot word does not name; the Slots tab writes the bank it is given, through ' +
+          'the bank its active-slot word does not name; a slot write goes to the bank it names, through ' +
           "that bank's own window",
         'detail',
       );

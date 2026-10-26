@@ -55,6 +55,7 @@ import {
   slotDumpNames,
   slotWriteRefusal,
   STAGED_UNDER_IMAGE_BLOCK_0,
+  stagingDetail,
   storedUnderCheckKey,
   withLevelMap,
   writeBannerOf,
@@ -366,7 +367,7 @@ export function flashRefusal(
   if (camera !== null) {
     return {
       message: camera,
-      hint: `The Slots page shows the same refusal in its banner. ${NOTHING_SENT}`,
+      hint: NOTHING_SENT,
     };
   }
   if (view.unreadReason !== null) {
@@ -535,7 +536,7 @@ export function writeKeyLines(report: SlotsReport, color: boolean): string[] {
   const booted = bankName(keys.booted);
   lines.push(
     table([
-      ['  booted bank', `${booted} holds ${keys.bootedKeyName ?? 'a key the page cannot name'}`],
+      ['  booted bank', `${booted} holds ${keys.bootedKeyName ?? 'a key this read cannot name'}`],
       [
         '  written as',
         `${derivedKeyLine({ key: keys.atRest.name, holds: keys.bootedKeyName }, `bank ${booted}`)}; every bank is written the same way`,
@@ -654,11 +655,15 @@ export function listLines(
   }
   lines.push(table(operationRows));
 
+  /* The camera's notes once, then each bank's own (core says a note that holds for every bank once, with the
+   * camera's: TESTING.md 42.87), and, once per bank, why a write to it needs --acknowledge-risk. */
   const notes: string[] = [...report.plan.notes];
   if (report.state.version === '1.3.0.8') notes.push(runningNote(report));
   for (const view of report.slots) {
     const bank = bankName(view.entry.key);
     for (const note of view.entry.notes) notes.push(`${bank}: ${note}`);
+    const risk = bootRisk(report, view);
+    if (risk !== null) notes.push(`${bank}: a write needs --acknowledge-risk: ${risk}.`);
     if (view.unreadReason !== null) notes.push(`${bank}: not read — ${view.unreadReason}`);
     if (view.content === 'empty') notes.push(emptyBankNote(report, view));
   }
@@ -726,6 +731,8 @@ export function listResult(report: SlotsReport): CommandResult {
     notes: [...report.plan.notes],
     slots: report.slots.map((view) => ({
       ...slotJson(view),
+      /* Why a write to this bank needs --acknowledge-risk (the text's Notes line), or null. */
+      acknowledgeRisk: bootRisk(report, view),
       /* The frame-rate patch the bank's own image offers (or why not), the same verdict the text shows. */
       patch: fpsPlanJson(fpsPlanOfBank(report, view.entry.key)),
     })),
@@ -743,13 +750,17 @@ export function flashPlanLines(
   color: boolean,
 ): string[] {
   const lines: string[] = [''];
+  /* What the input is; the staging row says how it is sent, in core's words (`stagingDetail`), so the two
+   * rows do not say the same thing twice (TESTING.md 42.87). */
+  const ff = plan.staging === 'key-a-keystream' || plan.storedForm === 'key-b-ciphertext';
   const kind =
-    plan.staging === 'key-a-keystream' || plan.storedForm === 'key-b-ciphertext'
-      ? 'decrypted 1.3.0.8 FF image, staged as the vendor app stages it (the image XOR Key A on the way in; ' +
-        'the camera stores it under Key B)'
-      : plan.kind === 'plain'
-        ? 'decrypted image, encrypted for this bank on the way in'
-        : 'raw bytes, sent verbatim';
+    plan.kind === 'plain'
+      ? ff
+        ? 'decrypted 1.3.0.8 FF image'
+        : 'decrypted image'
+      : ff
+        ? 'raw bytes in the 1.3.0.8 FF staged form (the camera stores the image under Key B)'
+        : 'raw bytes';
   const runningBasis =
     plan.ffRunning === 'camera'
       ? "the camera's own answers say it runs the 16 Hz FF build"
@@ -766,7 +777,7 @@ export function flashPlanLines(
         ? [['  target', 'empty — the bank holds no image, so nothing is overwritten']]
         : []),
       ['  image', `${fileName} — ${kind}`],
-      ['  staging', plan.staging],
+      ['  staging', stagingDetail(plan.staging)],
       ...(runningBasis === null ? [] : [['  running build', runningBasis]]),
       ...(plan.derivedFrom
         ? [['  key', derivedKeyLine(plan.derivedFrom, `bank ${bankName(plan.derivedFrom.bank)}`)]]
@@ -812,6 +823,18 @@ export function flashQuestion(report: SlotsReport, plan: SlotFlashPlan, fileName
 }
 
 /** What the read-back said, and what the person does next. */
+/**
+ * The CLI's one replug instruction after a write and after a patch, with the command that reads the banks
+ * again. Core's end-of-write progress says only "Written." (the front end gives the instruction, once), so
+ * on a TTY and in a pipe alike this is the only place it is printed (TESTING.md 42.87).
+ */
+export const REPLUG_LINE_WRITE =
+  'Unplug the camera and plug it back in. A bank is only used when the camera boots, so the new image ' +
+  'runs after the next start. Then run `seek-fw slots list` to read the banks again.';
+export const REPLUG_LINE_PATCH =
+  'Unplug the camera and plug it back in. The patched image runs after the next start. Then run ' +
+  '`seek-fw slots list` to read the banks again.';
+
 export function readBackLines(
   result: FlashSlotResult,
   afterSha256: string | null,
@@ -835,10 +858,7 @@ export function readBackLines(
   } else {
     lines.push('read-back: skipped (--no-verify)');
   }
-  lines.push(
-    'Unplug the camera and plug it back in. A bank is only used when the camera boots, so the ' +
-      'new image runs after the next start.',
-  );
+  lines.push(REPLUG_LINE_WRITE);
   return lines;
 }
 
@@ -1034,8 +1054,8 @@ async function flashAction(
       throw new CliError(`the read-back of bank ${bankName(key)} does not match the staged image`, {
         code: 'slots/verify-failed',
         hint:
-          'Unplug and replug the camera, then run `seek-fw slots list`. Do not rely on ' +
-          `bank ${bankName(key)} until a read matches.`,
+          `Run \`seek-fw slots list\` once the camera is back. Do not rely on bank ${bankName(key)} ` +
+          'until a read matches.',
       });
     }
 
@@ -1106,7 +1126,9 @@ export function fpsPlanLines(
   lines.push(
     table([
       ['  bank', `${bank} (${hexUp(address)})`],
-      ['  build', `${version ?? '(unknown)'} — the table entry ${plan.patch.id}`],
+      /* The build in words, the rate on the next row; the JSON's `patch` keeps the table id for scripts
+       * (TESTING.md 42.87). */
+      ['  build', `firmware ${version ?? plan.patch.version}`],
       ['  rate', `${String(plan.fromHz)} Hz -> ${String(plan.toHz)} Hz`],
       [
         '  bytes',
@@ -1300,7 +1322,7 @@ async function patchFpsAction(
               ctx.color,
             )
         : 'read-back: skipped (--no-verify)',
-      'Unplug the camera and plug it back in. The patched image runs after the next start.',
+      REPLUG_LINE_PATCH,
     ];
     ctx.reporter.write(lines.join('\n'));
     if (readBack.ok === false || result.written.verified === false) {
@@ -1309,8 +1331,8 @@ async function patchFpsAction(
         {
           code: 'slots/verify-failed',
           hint:
-            `The saved dump is in ${saveDir}. Unplug and replug the camera, then run ` +
-            '`seek-fw slots list`. Do not rely on the bank until a read matches.',
+            `The saved dump is in ${saveDir}. Run \`seek-fw slots list\` once the camera is back. ` +
+            'Do not rely on the bank until a read matches.',
         },
       );
     }

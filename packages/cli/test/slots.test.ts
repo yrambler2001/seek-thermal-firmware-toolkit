@@ -70,6 +70,7 @@ import {
   type SlotOps,
 } from '../src/commands/slots.js';
 import { TerminalReporter } from '../src/reporter.js';
+import { MemorySink } from '../src/sink.js';
 import {
   buildPlainImage,
   cameraWithFlash,
@@ -723,7 +724,10 @@ describe('the flash plan and read-back', () => {
     const text = flashPlanLines(plan, 'raw.bin', 'c0ffee00', false).join('\n');
     expect(text).toContain('Slot flash plan');
     expect(text).toContain('B (0x14050000)');
-    expect(text).toContain('raw.bin — raw bytes, sent verbatim');
+    expect(text).toContain('raw.bin — raw bytes');
+    /* The form in words, not its code name (TESTING.md 42.87). */
+    expect(text).toMatch(/staging\s+verbatim — the bytes exactly as given/);
+    expect(text).not.toMatch(/staging\s+verbatim$/m);
     expect(text).toContain('65536 B in 1024 chunk(s) of 64 B');
     expect(text).toContain('0x1234');
     expect(text).toContain('sha256 c0ffee00');
@@ -731,11 +735,28 @@ describe('the flash plan and read-back', () => {
     expect(text).toContain('! raw bytes are sent verbatim');
   });
 
-  it('says a decrypted image is encrypted for the bank on the way in', () => {
+  it('says a decrypted image is encrypted for the bank on the way in, in words', () => {
     const plan = fakePlan('b', 'plain', new Uint8Array(0x10000));
     const text = flashPlanLines(plan, 'image.bin', null, false).join('\n');
-    expect(text).toContain('decrypted image, encrypted for this bank on the way in');
+    expect(text).toContain('image.bin — decrypted image');
+    expect(text).toMatch(
+      /staging\s+encrypted so the device stores it under the key the booted bank holds/,
+    );
+    expect(text).not.toContain('key-a-ciphertext');
     expect(text).toContain('not predicted');
+  });
+
+  it('says the 2016 staging in words, once, with no code name (TESTING.md 42.87)', () => {
+    const plan: SlotFlashPlan = {
+      ...fakePlan('b', 'plain', new Uint8Array(0xca88)),
+      staging: 'slot-keystream-ciphertext',
+    };
+    const text = flashPlanLines(plan, 'image.bin', null, false).join('\n');
+    expect(text).toContain('image.bin — decrypted image');
+    expect(text).toMatch(
+      /staging\s+encrypted under the image's own stage key \(key block 0\); the camera stores it under the bank's own key/,
+    );
+    expect(text).not.toContain('slot-keystream-ciphertext');
   });
 
   it('says the 1.3.0.8 FF image is staged as the vendor app stages it, stored under Key B, and who said the build', () => {
@@ -748,9 +769,13 @@ describe('the flash plan and read-back', () => {
       warnings: ['UNTESTED: the boot of the written bank is not measured'],
     };
     const text = flashPlanLines(plan, 'ff.bin', 'feedface', false).join('\n');
-    expect(text).toMatch(/staging\s+key-a-keystream/);
-    expect(text).toContain('the image XOR Key A on the way in');
-    expect(text).toContain('the camera stores it under Key B');
+    expect(text).toContain('ff.bin — decrypted 1.3.0.8 FF image');
+    expect(text).toMatch(
+      /staging\s+the 1\.3\.0\.8 FF image as the vendor app stages it \(XOR Key A\) — the camera stores it under Key B/,
+    );
+    /* Said once: the image row says what the file is, the staging row how it is sent. */
+    expect(text.match(/vendor app/g)).toHaveLength(1);
+    expect(text).not.toContain('key-a-keystream');
     expect(text).toMatch(/running build\s+your word \(--running-16hz\)/);
     expect(text).not.toContain('encrypted for this bank');
     expect(text).toContain('sha256 feedface');
@@ -785,10 +810,16 @@ describe('the flash plan and read-back', () => {
     ).join('\n');
     expect(readBack).toContain('read back (sha256 abc123)');
     expect(readBack).not.toContain('skipped');
+    /* The one replug instruction, with the CLI's own re-read command: core's end-of-write progress gives
+     * neither (TESTING.md 42.87). */
     for (const verified of [true, false, null]) {
-      expect(readBackLines({ ...base, verified }, null, false).join('\n')).toContain(
-        'Unplug the camera and plug it back in',
+      const text = readBackLines({ ...base, verified }, null, false).join('\n');
+      expect(text.match(/plug it back in/g)).toHaveLength(1);
+      expect(text).toContain(
+        'Unplug the camera and plug it back in. A bank is only used when the camera boots, so the new ' +
+          'image runs after the next start. Then run `seek-fw slots list` to read the banks again.',
       );
+      expect(text).not.toContain('device info');
     }
   });
 });
@@ -911,6 +942,39 @@ describe('slots command', () => {
     expect(result).toMatchObject({ action: 'flash', written: true, verified: true, kind: 'plain' });
   });
 
+  it('after a write, says the replug once with its own re-read command, in a pipe and on a terminal (TESTING.md 42.87)', async () => {
+    for (const isTty of [false, true]) {
+      const { ops } = fakeOps(reportOf({ booted: 'a' }));
+      /* Core's flashSlot ends on this progress line (slots/write.ts); the CLI gives the instruction. */
+      const withProgress: SlotOps = {
+        ...ops,
+        flash: (ctx, report, plan, options) => {
+          ctx.reporter.progress(1, 1, 'Written.');
+          return ops.flash(ctx, report, plan, options);
+        },
+      };
+      await writeFile(join(temp.path, 'image.bin'), new Uint8Array(0x100).fill(7));
+      const stderr = new MemorySink({ isTty });
+      const test = { ...cameraIo({ stderr }), stderr };
+      await slotsCommandWith(withProgress)(
+        contextFor(
+          ['slots', 'flash', 'b', join(temp.path, 'image.bin'), '--yes', '--no-probe'],
+          test,
+        ),
+      );
+      const said = `${test.stdout.text}\n${stderr.text}`;
+      expect(
+        said.match(/plug it back in|unplug and replug/gi),
+        `tty ${String(isTty)}`,
+      ).toHaveLength(1);
+      expect(said, `tty ${String(isTty)}`).toContain(
+        'Then run `seek-fw slots list` to read the banks again.',
+      );
+      expect(said, `tty ${String(isTty)}`).not.toContain('device info');
+      expect(stderr.text, `tty ${String(isTty)}`).toContain('Written.');
+    }
+  });
+
   it('writes the 1.3.0.8 FF image to recovery R with --acknowledge-risk: the vendor-form plan is shown and reported', async () => {
     const { ops, log } = fakeOps(reportOf({ booted: 'a' }));
     const ff: SlotOps = {
@@ -940,7 +1004,9 @@ describe('slots command', () => {
     );
 
     expect(log.flashed).toEqual([{ key: 'r', options: { verify: true, acknowledgeRisk: true } }]);
-    expect(test.stdout.text).toMatch(/staging\s+key-a-keystream/);
+    expect(test.stdout.text).toMatch(
+      /staging\s+the 1\.3\.0\.8 FF image as the vendor app stages it/,
+    );
     expect(test.stdout.text).toContain('! UNTESTED: the boot of the written bank is not measured');
     expect(result).toMatchObject({
       action: 'flash',
@@ -2051,6 +2117,50 @@ describe('patch-fps', () => {
     await expect(readdir(dir)).rejects.toThrow();
   });
 
+  it('after a patch, says the replug once with its own re-read command, in a pipe and on a terminal (TESTING.md 42.87)', async () => {
+    for (const isTty of [false, true]) {
+      const { ops } = fakeOps(reportOf({ booted: 'a' }));
+      const withPatch: SlotOps = {
+        ...ops,
+        fpsPlan: () => offerOf(),
+        patchFps: async (ctx, _report, _key, options) => {
+          const dump = preDump();
+          await options.saveDump(dump);
+          /* Core's flashSlot ends on this progress line (slots/write.ts). */
+          ctx.reporter.progress(1, 1, 'Written.');
+          return writtenResult(dump);
+        },
+      };
+      const stderr = new MemorySink({ isTty });
+      const test = { ...cameraIo({ stderr }), stderr };
+      await slotsCommandWith(withPatch)(
+        contextFor(
+          [
+            'slots',
+            'patch-fps',
+            'b',
+            '--write',
+            '--dump-dir',
+            join(temp.path, `tty-${String(isTty)}`),
+            '--yes',
+            '--no-probe',
+          ],
+          test,
+        ),
+      );
+      const said = `${test.stdout.text}\n${stderr.text}`;
+      expect(
+        said.match(/plug it back in|unplug and replug/gi),
+        `tty ${String(isTty)}`,
+      ).toHaveLength(1);
+      expect(said, `tty ${String(isTty)}`).toContain(
+        'Unplug the camera and plug it back in. The patched image runs after the next start. Then run ' +
+          '`seek-fw slots list` to read the banks again.',
+      );
+      expect(said, `tty ${String(isTty)}`).not.toContain('device info');
+    }
+  });
+
   it('refuses to patch recovery R without --acknowledge-risk, and patches it with it', async () => {
     const { ops } = fakeOps(reportOf({ booted: 'a' }));
     const keys: SlotKey[] = [];
@@ -2382,7 +2492,10 @@ describe('the Compact PRO 4.9.1.15 rate, as the CLI prints it', () => {
     };
     const text = fpsPlanLines('a', plan, 0x14030000, '4.9.1.15', false, null).join('\n');
     expect(text).toContain('9 Hz -> 18 Hz');
-    expect(text).toContain('compact_pro-4.9.1.15');
+    /* The build in words; the table id stays in the JSON's `patch` for scripts (TESTING.md 42.87). */
+    expect(text).toMatch(/build\s+firmware 4\.9\.1\.15$/m);
+    expect(text).not.toContain('compact_pro-4.9.1.15');
+    expect(text).not.toContain('table entry');
     expect(fpsPlanJson(plan)).toMatchObject({
       status: 'offer',
       patch: 'compact_pro-4.9.1.15',
@@ -2584,5 +2697,61 @@ describe('slots list on the 2016 Compact PRO', () => {
     );
     expect(bootRisk(active, { ...viewB, active: false })).toBeNull();
     expect(bootRisk(active, { ...viewR, active: false })).toMatch(/bank R is the recovery bank/);
+  });
+
+  /* The 1.0.3.0 report with core's real plan (its notes and bank entries), bank A booted. */
+  function realReport2016(): SlotsReport {
+    const { report } = report2016({ cfg0: 0xffffffff });
+    const plan = buildSlotPlan(getProfile('compact-2016'), '1.0.3.0');
+    return {
+      ...report,
+      plan,
+      slots: report.slots.map((view) => ({
+        ...view,
+        entry: plan.slots.find((entry) => entry.key === view.entry.key) ?? view.entry,
+        active: view.entry.key === 'a',
+      })),
+    };
+  }
+
+  it('prints a note that holds for every bank once, and the acknowledgement once per bank (TESTING.md 42.87)', () => {
+    const report = realReport2016();
+    const text = listLines(report, false, null).join('\n');
+    const notes = text.slice(text.indexOf('\nNotes\n'));
+    /* Before: "A: Staged: …", "B: Staged: …" and "R: Staged: …", and R's note said the acknowledgement. */
+    expect(notes.match(/Staged: the image, XORed with the xorshift128 keystream/g)).toHaveLength(1);
+    expect(notes).toContain('  · Staged: the image, XORed');
+    expect(notes).not.toMatch(/· [ABR]: Staged/);
+    expect(notes).toContain(
+      '  · A: a write needs --acknowledge-risk: bank A is the bank the camera boots now; a bad write ' +
+        'there can stop the camera booting.',
+    );
+    expect(notes).toContain(
+      '  · R: a write needs --acknowledge-risk: bank R is the recovery bank; a bad write there can ' +
+        'leave the camera with no image it can boot.',
+    );
+    expect(notes).not.toContain('B: a write needs');
+    expect(notes.match(/acknowledge/g)).toHaveLength(2);
+    expect(notes).toContain(
+      '  · R: Recovery bank, mode 9, token form. Measured on a Compact PRO 1.0.3.0: R took its own image',
+    );
+    /* A note both front ends print names neither (TESTING.md 42.87). */
+    expect(notes).toContain(
+      '  · The booted bank named on this line is the bank the camera entered at its last start',
+    );
+    expect(text).not.toMatch(/\bthe page\b|this page|Slots tab/);
+  });
+
+  it('gives the list JSON the same split: the camera’s notes once, a bank’s own on the bank (TESTING.md 42.87)', () => {
+    const list = listResult(realReport2016());
+    const notes = list.notes as string[];
+    expect(notes.filter((note) => note.startsWith('Staged: '))).toHaveLength(1);
+    const slots = list.slots as { bank: string; notes: string[]; acknowledgeRisk: string | null }[];
+    expect(slots.map((slot) => slot.notes.length)).toEqual([0, 0, 1]);
+    expect(slots.map((slot) => slot.acknowledgeRisk)).toEqual([
+      'bank A is the bank the camera boots now; a bad write there can stop the camera booting',
+      null,
+      'bank R is the recovery bank; a bad write there can leave the camera with no image it can boot',
+    ]);
   });
 });

@@ -32,6 +32,7 @@ import {
   patchBankFps,
   prepareSlotFlash,
   slotDumpNames,
+  stagingPhrase,
   type PrepareSlotFlashOptions,
   type FpsPatchResult,
   type FpsPlan,
@@ -885,7 +886,7 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
             'ok',
           );
           log(
-            `  ${String(ready.plan.payload.length)} B payload, staging ${ready.plan.staging}, ` +
+            `  ${String(ready.plan.payload.length)} B payload, ${stagingPhrase(ready.plan.staging)}, ` +
               `transfer checksum ${hexUp(ready.plan.sum16, 4)}`,
             'detail',
           );

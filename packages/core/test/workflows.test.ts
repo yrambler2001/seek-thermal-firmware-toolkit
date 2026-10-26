@@ -1235,7 +1235,10 @@ describe('a 2016 Compact PRO (1.0.3.0), read and judged', () => {
       'next start: slot A — the boot-config word is 0xFFFFFFFF, so the bootloader tries slot A first, ' +
         'and it holds an image the bootloader accepts',
     );
-    expect(log).toContain("the camera's own upgrade (mode 0) writes App image bank 0x14060000");
+    expect(log).toContain(
+      "the camera's own upgrade (mode 0) writes App image bank 0x14060000, the bank its active-slot " +
+        "word does not name; a slot write goes to the bank it names, through that bank's own window",
+    );
     /* the stale lines this line used to print are gone */
     expect(log).not.toContain('boot prediction unavailable');
     expect(log).not.toContain("could not confirm this camera's key table");
@@ -1243,8 +1246,11 @@ describe('a 2016 Compact PRO (1.0.3.0), read and judged', () => {
     expect(log).not.toContain('unknown key');
     /* the whole-image writer's reasons are one line; nothing refuses the banks */
     expect(log).toContain(
-      "writing: the Slots tab (`seek-fw slots`) writes this camera's banks one at a time",
+      "writing: this camera's banks are written one at a time, each staged under its image's own key " +
+        'block 0; a whole-image write is not available on the 2016 line',
     );
+    /* The page and the CLI both log the read, so it names neither (TESTING.md 42.87). */
+    expect(log).not.toMatch(/Slots tab|seek-fw|the page/);
     expect(log).not.toContain('flashing disabled');
     /* the whole-image gate keeps its reasons, for the JSON */
     expect(state.canFlash).toBe(false);

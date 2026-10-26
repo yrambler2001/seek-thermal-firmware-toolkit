@@ -452,9 +452,63 @@ describe('the facts a person is shown with the plan', () => {
           name,
         );
       }
+      /* The acknowledgement is each front end's to say once beside the bank (the page's row, the CLI's
+       * Notes line) and the write plan's to say once in its warnings; a note saying it too made three on
+       * R's row and two in an R write plan (TESTING.md 42.87). */
       const recovery = plan.slots.find((slot) => slot.key === 'r');
-      expect(recovery?.notes.join(' ')).toMatch(/asks you to acknowledge the risk/);
+      expect(recovery?.notes.join(' ')).toMatch(/^Recovery bank, mode 9/);
+      expect(recovery?.notes.join(' ')).not.toMatch(/acknowledge|confirmation/);
     }
+  });
+
+  /* Every plan the matrix builds: each family, and the builds whose notes differ. */
+  const everyPlan = (): SlotPlan[] => [
+    buildSlotPlan(compact2016, '1.0.3.0'),
+    buildSlotPlan(compact2016, '1.0.3.2'),
+    buildSlotPlan(legacyAuth, '0.8.0.0'),
+    buildSlotPlan(legacyAuth, '1.3.0.0'),
+    buildSlotPlan(legacyAuth, '1.3.0.8'),
+    buildSlotPlan(modern4x, '4.8.2.1'),
+    buildSlotPlan(modern4x, '4.9.2.0'),
+    buildSlotPlan(modern4x, '44.27.3.10'),
+  ];
+
+  it('says a note that holds for every bank once, with the camera’s notes, not on each bank (TESTING.md 42.87)', () => {
+    for (const plan of everyPlan()) {
+      const label = `${plan.profileId} ${String(plan.firmwareVersion)}`;
+      const [first, ...rest] = plan.slots;
+      for (const note of first?.notes ?? []) {
+        expect(
+          rest.every((slot) => slot.notes.includes(note)),
+          `${label}: "${note.slice(0, 60)}…" is on every bank`,
+        ).toBe(false);
+      }
+      /* The staging note is the camera's, said once. */
+      const staged = plan.notes.filter((note) => note.startsWith('Staged: '));
+      expect(staged, `${label}: the staging note, once`).toHaveLength(1);
+      expect(
+        plan.slots.flatMap((slot) => slot.notes).filter((note) => note.startsWith('Staged: ')),
+        `${label}: no bank repeats it`,
+      ).toEqual([]);
+    }
+    const pro = buildSlotPlan(compact2016, '1.0.3.0');
+    expect(pro.notes.at(-1)).toMatch(/^Staged: the image, XORed with the xorshift128 keystream/);
+    expect(pro.slots.map((slot) => slot.notes.length)).toEqual([0, 0, 1]);
+  });
+
+  it('names neither front end in a note both print (TESTING.md 42.87)', () => {
+    for (const plan of everyPlan()) {
+      const notes = [...plan.notes, ...plan.slots.flatMap((slot) => slot.notes)].join('\n');
+      expect(notes, `${plan.profileId} ${String(plan.firmwareVersion)}`).not.toMatch(
+        /\bpage\b|Slots tab|seek-fw|\.ts\)|patch\.ts|cp1032/,
+      );
+    }
+    const boot = buildSlotPlan(compact2016, '1.0.3.0').notes.find((note) =>
+      note.includes('active-slot word'),
+    );
+    expect(boot).toMatch(
+      /^The booted bank named on this line is the bank the camera entered at its last start, as the bootloader records it/,
+    );
   });
 
   it('warns on 0.8.0.0 that mode 2 is a crash hazard the slot page never arms', () => {

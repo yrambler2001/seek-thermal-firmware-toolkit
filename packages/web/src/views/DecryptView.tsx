@@ -231,7 +231,7 @@ export function DecryptView({ offline, slotFile, busy }: DecryptViewProps): Reac
                 the cipher profile in the report.
               </p>
             </Prose>
-            <DetectionBox detection={offline.detection} />
+            <DetectionBox detection={offline.detection} scoreBasis="from the images in the file" />
           </Panel>
         )}
       </Section>

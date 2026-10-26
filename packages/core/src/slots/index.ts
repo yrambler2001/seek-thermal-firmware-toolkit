@@ -34,6 +34,7 @@ export {
   type SlotFileStatus,
 } from './decrypt-file.js';
 export { prepareSlotFlash, flashSlot, type PrepareSlotFlashOptions } from './write.js';
+export { stagingDetail, stagingPhrase, type StagingWords } from './staging-words.js';
 export { flashInvalidatesAnalysis } from './write-commit.js';
 export {
   ffBankVerdict,

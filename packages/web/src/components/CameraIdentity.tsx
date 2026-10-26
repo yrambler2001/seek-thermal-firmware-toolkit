@@ -51,7 +51,10 @@ export function CameraIdentity({ acting, refusal }: CameraIdentityProps): ReactE
           ],
         ]}
       />
-      <DetectionBox detection={acting.detection} />
+      <DetectionBox
+        detection={acting.detection}
+        scoreBasis="from the camera's answers, before any bank is read"
+      />
     </Panel>
   );
 }

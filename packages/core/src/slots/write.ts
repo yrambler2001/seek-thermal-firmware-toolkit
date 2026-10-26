@@ -75,6 +75,7 @@ import {
 import { FF_1308_VERSION } from './capability-family.js';
 import { slotContentOf } from './inspect.js';
 import { runningApplicationOf, type RunningApplication } from './running.js';
+import { stagingPhrase } from './staging-words.js';
 import { readBackBank, stageAndCommit } from './write-commit.js';
 import { compareReadBack } from './write-verify.js';
 
@@ -726,11 +727,11 @@ export async function flashSlot(
 
   const { reporter } = ctx;
   /* `plan.kind` 'plain' is the INPUT (a decrypted image), not the stored form: on the 2016 line the line
-   * used to read "(plain, slot-keystream-ciphertext)", which looked like a contradiction. */
+   * used to read "(plain, slot-keystream-ciphertext)", which looked like a contradiction. The form is said
+   * in words (`stagingPhrase`); the JSON outputs keep the code name (TESTING.md 42.87). */
+  const staged = stagingPhrase(plan.staging);
   const source =
-    plan.kind === 'plain'
-      ? `from the decrypted image, staged as ${plan.staging}`
-      : `of raw bytes, sent as given (${plan.staging})`;
+    plan.kind === 'plain' ? `from the decrypted image, ${staged}` : `of raw bytes, ${staged}`;
   reporter.log(
     `${entry.name}: writing ${String(plan.payload.length)} B ${source} — checksum ` +
       hexUp(plan.sum16, 4),
@@ -739,8 +740,8 @@ export async function flashSlot(
   const commitStatus = await stageAndCommit(ctx, entry, write, plan.payload, plan.sum16);
 
   const notes: string[] = [
-    `committed ${String(plan.payload.length)} B to ${entry.name} at ${hexUp(entry.address)} ` +
-      `(${plan.staging}); commit status ${hex(commitStatus)}`,
+    `committed ${String(plan.payload.length)} B to ${entry.name} at ${hexUp(entry.address)}, ` +
+      `${staged}; commit status ${hex(commitStatus)}`,
   ];
   let after: Uint8Array | null = null;
   let verified: boolean | null = null;
@@ -781,10 +782,12 @@ export async function flashSlot(
     notes.push('verify is off: the bank was not read back');
   }
 
-  /* The replug instruction is the front end's to give, once, after its own result lines: the page logs
-   * "NOW UNPLUG AND REPLUG THE CAMERA." and the CLI prints its read-back lines with the same instruction.
-   * Logging it here too printed it twice after one write or one frame-rate patch (TESTING.md 42.84). */
-  reporter.progress(1, 1, 'Written. Unplug and replug, then re-read the device info.');
+  /* The replug instruction, and what to read again after it, are the front end's to give, once, after its
+   * own result lines: the page logs its replug record and shows the prompt in its result panel, and the CLI
+   * prints its read-back lines with the replug and the command to run. Saying it here too printed it twice
+   * after one write or one frame-rate patch (TESTING.md 42.84), and the CLI's copy named "the device info"
+   * (TESTING.md 42.87). */
+  reporter.progress(1, 1, 'Written.');
 
   return { key: plan.key, commitStatus, verified, after, notes };
 }

@@ -899,6 +899,40 @@ describe('prepareSlotFlash warnings', () => {
     expect(out.staging).toBe('slot-keystream-ciphertext');
     expect(out.warnings.some((w) => w.includes(REKEY_WARNING))).toBe(false);
   });
+
+  it('a 2016 write plan says the acknowledgement once, and the staging note once (TESTING.md 42.87)', () => {
+    /* Before: R's plan said "Recovery bank R: writing it asks you to acknowledge the risk. …" and again
+     * "Note: Recovery bank, mode 9, token form. A write asks you to acknowledge the risk. …". */
+    const plan = buildSlotPlan(compact2016, '1.0.3.0');
+    const image = imageOf(0x6000, 4);
+    image.set(hexToBytes(KEY_PAIRS.cp103.block0), 0x3000);
+    image.set(hexToBytes(KEY_PAIRS.cp103.block1), 0x3100);
+    const slots = (['a', 'b', 'r'] as const).map((k) =>
+      slotState({ key: k, present: true, accepts: true }),
+    );
+    const report = reportFor(
+      stateFor(compact2016, { version: '1.0.3.0', slots, booted: 'a' }),
+      plan,
+    );
+    for (const key of ['a', 'r'] as const) {
+      const out = prepareSlotFlash(report, key, { kind: 'plain', bytes: image, fileName: 'x.bin' });
+      expect(
+        out.warnings.filter((w) => w.includes('acknowledge')),
+        `${key}: the acknowledgement, once`,
+      ).toHaveLength(1);
+      expect(
+        out.warnings.filter((w) => w.startsWith('Note: Staged: ')),
+        `${key}: the staging note, once`,
+      ).toHaveLength(1);
+    }
+    const outR = prepareSlotFlash(report, 'r', { kind: 'plain', bytes: image, fileName: 'x.bin' });
+    expect(outR.warnings).toContain(
+      'Note: Recovery bank, mode 9, token form. Measured on a Compact PRO 1.0.3.0: R took its own ' +
+        'image, a one-byte change and the raw staged bytes, each with commit status 0 (TESTING.md 41.3).',
+    );
+    const outB = prepareSlotFlash(report, 'b', { kind: 'plain', bytes: image, fileName: 'x.bin' });
+    expect(outB.warnings.filter((w) => w.includes('acknowledge'))).toEqual([]);
+  });
 });
 
 /* ==================================================================== *
@@ -990,6 +1024,35 @@ describe('flashSlot gates', () => {
     expect(ops[ops.length - 1]).toBe('read');
     expect(result.commitStatus).toBe(0);
     expect(result.verified).toBe(true);
+  });
+
+  it('logs the staging form in words, and ends on "Written." with no replug or re-read of its own (TESTING.md 42.87)', async () => {
+    const { report, payload } = built('a');
+    const rec = recordingDevice(payload.expectedStored!);
+    const logs: string[] = [];
+    const progress: string[] = [];
+    const reporter = {
+      ...silentReporter,
+      log: (message: string) => {
+        logs.push(message);
+      },
+      progress: (_done: number, _total: number, text?: string) => {
+        if (text !== undefined) progress.push(text);
+      },
+    };
+    const result = await flashSlot({ ...ctxFor(rec.device, legacy), reporter }, report, payload, {
+      acknowledgeRisk: false,
+    });
+    expect(logs).toContain(
+      `Bank B: writing ${String(payload.payload.length)} B from the decrypted image, staged plain — ` +
+        `checksum 0x${payload.sum16.toString(16).toUpperCase().padStart(4, '0')}`,
+    );
+    expect(result.notes[0]).toBe(
+      `committed ${String(payload.payload.length)} B to Bank B at 0x14060000, staged plain; commit status 0x0`,
+    );
+    expect(progress.at(-1)).toBe('Written.');
+    const said = [...logs, ...progress, ...result.notes].join('\n');
+    expect(said).not.toMatch(/replug|device info|plain-chain|'plain'|\(plain\)/i);
   });
 
   it('verify off: nothing is read back and no comparison is claimed', async () => {

@@ -595,7 +595,7 @@ describe('useSlotsPanel: writing a bank', () => {
     });
     expect(result.current.panel.pending?.key).toBe('r');
     expect(result.current.panel.pending?.plan.staging).toBe('key-a-keystream');
-    expect(lineIncludes(result.current.panel.reporter.lines, 'staging key-a-keystream')).toBe(
+    expect(lineIncludes(result.current.panel.reporter.lines, 'staged as the vendor app')).toBe(
       false,
     );
 
@@ -610,7 +610,14 @@ describe('useSlotsPanel: writing a bank', () => {
     });
     expect(mocks.flash).toHaveBeenCalledTimes(1);
     expect(mocks.flash.mock.calls[0]?.[3]).toEqual({ verify: true, acknowledgeRisk: true });
-    expect(lineIncludes(result.current.panel.reporter.lines, 'staging key-a-keystream')).toBe(true);
+    /* The staging form in words, from core's map; the code name is the JSON's (TESTING.md 42.87). */
+    expect(
+      lineIncludes(
+        result.current.panel.reporter.lines,
+        'B payload, staged as the vendor app stages the FF image (XOR Key A), transfer checksum',
+      ),
+    ).toBe(true);
+    expect(lineIncludes(result.current.panel.reporter.lines, 'key-a-keystream')).toBe(false);
     unmount();
   });
 

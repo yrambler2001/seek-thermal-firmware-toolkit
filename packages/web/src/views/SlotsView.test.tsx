@@ -293,6 +293,10 @@ describe('SlotsView', () => {
     expect(rows[2]?.textContent).toContain(
       'Recovery bank: writing it asks for an extra confirmation.',
     );
+    /* Once in the row, not under each flash button (TESTING.md 42.87). */
+    for (const row of [rows[0], rows[2]]) {
+      expect(row?.textContent.match(/extra confirmation/g)).toHaveLength(1);
+    }
     unmount();
   });
 
@@ -408,9 +412,8 @@ describe('SlotsView', () => {
     const { container, unmount } = view(api);
 
     expect(container.textContent).toContain('Prepared for recovery R at 0x14070000');
-    expect(container.textContent).toContain(
-      'a decrypted 1.3.0.8 FF image — staged as the vendor app stages it (XOR Key A) before it is sent',
-    );
+    /* "Read as" says what the file is, and "Staging" how it is sent, so the vendor form is said once. */
+    expect(container.textContent).toContain('Read asa decrypted 1.3.0.8 FF imageStaging');
     expect(container.textContent).toContain(
       'the 1.3.0.8 FF image as the vendor app stages it (XOR Key A) — the camera stores it under Key B, not these bytes',
     );
@@ -1017,6 +1020,35 @@ describe('SlotsView: the frame-rate row action', () => {
     expect(text).not.toContain('No bank of this camera can be written');
     /* Each bank's verdict comes from the check key: bootable, not "unknown". */
     expect(bankRows(container)[2]?.textContent).toContain('bootable — the bootloader can key it');
+    unmount();
+  });
+
+  it('on a 2016 Compact PRO, says the staging note once for the camera and each acknowledgement once in its row (TESTING.md 42.87)', () => {
+    /* core's real 1.0.3.0 plan: its notes and its bank entries. Before, every row carried "Staged: …", and
+     * R's row said the acknowledgement three times (its note and under both flash buttons). */
+    const fixture = slotReport2016(base);
+    const plan = buildSlotPlan(getProfile('compact-2016'), '1.0.3.0');
+    const report: SlotsReport = {
+      ...fixture,
+      plan,
+      slots: fixture.slots.map((slotView) => ({
+        ...slotView,
+        entry: plan.slots.find((entry) => entry.key === slotView.entry.key) ?? slotView.entry,
+      })),
+    };
+    const { container, unmount } = view(panel({ plan, report }));
+    const text = container.textContent;
+    expect(text.match(/Staged: the image, XORed with the xorshift128 keystream/g)).toHaveLength(1);
+    const rows = bankRows(container);
+    for (const row of rows) expect(row.textContent).not.toContain('Staged:');
+    expect(rows[0]?.textContent.match(/extra confirmation|acknowledge/g)).toHaveLength(1);
+    expect(rows[1]?.textContent).not.toMatch(/extra confirmation|acknowledge/);
+    expect(rows[2]?.textContent.match(/extra confirmation|acknowledge/g)).toHaveLength(1);
+    expect(rows[2]?.textContent).toContain(
+      'Recovery bank, mode 9, token form. Measured on a Compact PRO 1.0.3.0',
+    );
+    expect(text).toContain('The booted bank named on this line is the bank the camera entered');
+    expect(text).not.toContain('Where the page names');
     unmount();
   });
 

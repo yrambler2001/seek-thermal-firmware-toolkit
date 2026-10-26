@@ -14,17 +14,27 @@ import { Alert } from './ui/alert';
 
 export interface DetectionBoxProps {
   readonly detection: DetectionResult;
+  /**
+   * What the score was taken from, after "of 1.00": the camera's first answers before any bank is read
+   * (the probe, as the run's log line says), or the images in a file. The Info tab's Profile panel labels
+   * its own score the same way (TESTING.md 42.86, 42.87).
+   */
+  readonly scoreBasis: string;
   /** The profile actually used, when it differs from the one detected. */
   readonly actingName?: string | undefined;
 }
 
-export function DetectionBox({ detection, actingName }: DetectionBoxProps): ReactElement {
+export function DetectionBox({
+  detection,
+  scoreBasis,
+  actingName,
+}: DetectionBoxProps): ReactElement {
   const best = detection.best;
   const rows: readonly KeyValueRow[] = [
     ['Detected', best.profile.name],
     [
-      'Confidence',
-      <span key="confidence" className="flex items-center gap-2">
+      'Score',
+      <span key="score" className="flex items-center gap-2">
         <span
           aria-hidden="true"
           className="h-1 w-20 shrink-0 overflow-hidden rounded-full bg-muted"
@@ -34,7 +44,7 @@ export function DetectionBox({ detection, actingName }: DetectionBoxProps): Reac
             style={{ width: `${String(Math.round(Math.max(0, Math.min(1, best.score)) * 100))}%` }}
           />
         </span>
-        {`${best.score.toFixed(2)} of 1.00`}
+        {`${best.score.toFixed(2)} of 1.00, ${scoreBasis}`}
       </span>,
     ],
     ['Read as', actingName === best.profile.name ? null : (actingName ?? null)],

@@ -297,8 +297,8 @@ export function writingLines(state: DeviceState): string[] {
   const banks = bankWritingOf(state);
   if (banks !== null) {
     const lines = [
-      '  one bank at a time — `seek-fw slots flash <a|b|r> <file>` or `seek-fw slots patch-fps <a|b|r>` ' +
-        "(the page's Slots tab), each bank staged under its image's own key block 0",
+      '  one bank at a time — `seek-fw slots flash <a|b|r> <file>` or `seek-fw slots patch-fps <a|b|r>`, ' +
+        "each bank staged under its image's own key block 0",
       '  a whole-image write is not available on this line',
     ];
     if (banks.refusals.length > 0) {
