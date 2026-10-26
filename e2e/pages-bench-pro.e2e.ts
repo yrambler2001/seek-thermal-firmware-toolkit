@@ -44,6 +44,10 @@
  * And the words 42.86 fixed: the capitalised replug prompt once (the result panel), one replug record in
  * the log and none in the status; a patched bank's row "Frame-rate patch applied"; no code name
  * (acknowledgeRisk, the table id) on the slots page; the probe's score and the read's score each labelled.
+ * And 42.87's: the staging note once on the page (not on every bank row); the extra confirmation once in
+ * the booted bank's row and once in R's (not in R's note and under each flash button); the staging form in
+ * words in the write log, not its code name; the boot note naming no front end; a write plan saying the
+ * acknowledgement once.
  * ==================================================================== */
 
 import { createHash } from 'node:crypto';
@@ -185,14 +189,25 @@ const WRITTEN_STATUS = 'Written. The bank reads back as written.';
 const REPLUG_PROMPT = 'NOW UNPLUG AND REPLUG THE CAMERA.';
 /** A patched bank's row: a state, not a refusal, and no table id (TESTING.md 42.85 O3, 42.86). */
 const PATCH_APPLIED = `Frame-rate patch applied: this image runs at ${String(TO_HZ)} Hz.`;
-/** Code names the page must not show a person (TESTING.md 42.85 O2, 42.86). */
+/** Code names the page must not show a person (TESTING.md 42.85 O2, 42.86, 42.87). */
 const CODE_NAMES = [
   'acknowledgeRisk',
   'compact_pro-1.0.3.0',
   'OLD_FW_UNLOCK_TOKEN',
   'KEY_PAIRS',
   'capabilities.flash',
+  'slot-keystream-ciphertext',
 ];
+/** The camera's staging note, said once on the page, not on each bank row (TESTING.md 42.87). */
+const STAGING_NOTE =
+  /Staged: the image, XORed with the xorshift128 keystream of its OWN key block 0/g;
+/** The 2016 boot note, naming neither front end (TESTING.md 42.87). */
+const BOOT_NOTE =
+  'The booted bank named on this line is the bank the camera entered at its last start';
+/** The staging form in the write log, in words (core's `stagingPhrase`; TESTING.md 42.87). */
+const STAGED_WORDS = "staged under the image's own key";
+/** The extra confirmation a row says a write asks for: once in A's row and R's, never in B's. */
+const ASKS = /extra confirmation|acknowledge/gi;
 
 /** One write of one bank: the stage chunks of a whole bank (64 B each) plus slack, and one commit. */
 const STAGE_BUDGET = Math.ceil(BANK_BYTES / 64) + 64;
@@ -384,6 +399,23 @@ describe.skipIf(!RUNNABLE)(
       for (const name of CODE_NAMES)
         expect(text, `the slots page shows the code name "${name}"`).not.toContain(name);
       expect(await writeBanner(page), 'no "cannot be written" banner').toBeNull();
+      /* TESTING.md 42.87: a note that holds for every bank is said once; each acknowledgement once in its
+       * row; the boot note names no front end. */
+      expect(count(text, STAGING_NOTE), 'the staging note, once on the page').toBe(1);
+      expect(text, 'the boot note').toContain(BOOT_NOTE);
+      expect(text, 'the boot note names no front end').not.toContain('Where the page names');
+      const rowTexts = await page.$$eval(SLOTS_TABLE_ROWS, (trs) =>
+        trs.map((tr) => (tr as HTMLElement).innerText),
+      );
+      for (const [index, rowText] of rowTexts.entries()) {
+        const letter = LETTERS[index] ?? 'a';
+        const asks = linesOf(rowText).filter((line) => new RegExp(ASKS.source, 'i').test(line));
+        say(`row ${letter.toUpperCase()}: asks ${JSON.stringify(asks)}`);
+        expect(rowText, `${letter.toUpperCase()} row: no staging note`).not.toContain('Staged:');
+        expect(count(rowText, ASKS), `${letter.toUpperCase()} row: the extra confirmation`).toBe(
+          letter === 'b' ? 0 : 1,
+        );
+      }
       const summary = await summaryRows(page);
       say(`slots summary: ${JSON.stringify(summary)}`);
       expect(summary['booted from'], 'Booted from').toBe('Bank A');
@@ -592,6 +624,14 @@ describe.skipIf(!RUNNABLE)(
           const plan = await preparedView(page);
           await keep(`undo-${undo.letter}-plan`, plan?.text ?? '(no prepared plan)');
           expect(picked, 'the page takes the saved decrypted file').toMatch(/^Ready — /);
+          /* TESTING.md 42.87: the plan says what the file is and how it is staged, each once, and the
+           * acknowledgement once. */
+          const planText = plan?.text ?? '';
+          expect(valueUnder(planText, 'Read as'), 'Read as').toBe('a decrypted image');
+          expect(count(planText, STAGING_NOTE), 'the staging note, once in the plan').toBe(1);
+          expect(count(planText, ASKS), 'the acknowledgement, once in the plan').toBe(
+            undo.letter === 'b' ? 0 : 1,
+          );
           await openWriteConfirm(wizard, page, name);
           const dialog = await page.$eval(CONFIRM_DIALOG, (el) => (el as HTMLElement).innerText);
           await keep(`undo-${undo.letter}-dialog`, dialog);
@@ -624,6 +664,16 @@ describe.skipIf(!RUNNABLE)(
             `${String(count(section, /unplug and replug/i))} in the whole section`,
         );
         expect(status, `the undo of ${L}`).toBe(WRITTEN_STATUS);
+        expect(log, 'the staging form in words').toContain(
+          `B payload, ${STAGED_WORDS}, transfer checksum`,
+        );
+        expect(log, 'the write line in words').toContain(
+          `from the decrypted image, ${STAGED_WORDS} — checksum`,
+        );
+        expect(log, 'the commit line in words').toMatch(
+          new RegExp(`to ${name} at 0x[0-9A-F]+, ${STAGED_WORDS}; commit status 0x0`),
+        );
+        for (const codeName of CODE_NAMES) expect(log, codeName).not.toContain(codeName);
         expect(count(log, /unplug and replug/i), 'the replug line, once in the log').toBe(1);
         expect(count(section, /NOW UNPLUG AND REPLUG THE CAMERA\./), 'the prompt, once').toBe(1);
         expect(log, 'the log keeps the record, not the capitalised prompt').not.toContain(
@@ -756,6 +806,10 @@ describe.skipIf(!RUNNABLE)(
           `"unplug and replug": ${String(replugLog)} in the log, ${String(replugSection)} in the whole section`,
         );
         expect(status, `the patch of ${L}`).toBe(PATCHED_STATUS);
+        expect(log, 'the write line in words').toContain(
+          `from the decrypted image, ${STAGED_WORDS} — checksum`,
+        );
+        for (const codeName of CODE_NAMES) expect(log, codeName).not.toContain(codeName);
         expect(replugLog, 'the replug line, once in the log').toBe(1);
         expect(count(section, /NOW UNPLUG AND REPLUG THE CAMERA\./), 'the prompt, once').toBe(1);
         expect(log, 'the log keeps the record, not the capitalised prompt').not.toContain(
