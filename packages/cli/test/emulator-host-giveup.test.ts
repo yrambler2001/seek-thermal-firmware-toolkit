@@ -199,7 +199,7 @@ describe.skipIf(!available)("the real hosts' give-up on emulated cameras (sec.22
                 reporter: silentReporter,
               };
               const state = await readDeviceInfo(ctx);
-              expect(state.canFlash, state.flashBlockedBy.join('; ')).toBe(true);
+              expect(state.bankWriteRefusals).toEqual([]);
               const running = bootedSlot(state);
               expect(running?.plain, 'the running image, decrypted').toBeTruthy();
               if (!running?.plain || !state.keyTable) return;

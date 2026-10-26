@@ -49,8 +49,9 @@ export { ffKeyBPlainOf, ffPlainOfStaged, stageFFVendor, FF_ACCEPT_SUM } from './
 export {
   derivedKeyLine,
   deriveWriteKeys,
-  gateWithoutAppKeys,
+  cameraWriteRefusal,
   slotWriteRefusal,
+  slotWriteRefusals,
   STAGED_UNDER_IMAGE_BLOCK_0,
   stagesUnderCameraKey,
   storedUnderCheckKey,

@@ -133,9 +133,7 @@ function stateFor(
     keyWhiteningK: profile.cipher.whiteningK,
     deviceKeySlot: null,
     storeKey: { name: 'Key B', key: options.keyB ?? null, programmed: false },
-    appKeysBlock: null,
-    canFlash: true,
-    flashBlockedBy: [],
+    bankWriteRefusals: [],
     /* A 2014-chain build's fixture camera holds its banks plain, as the read would find them. */
     plainChain: onPlaintextChain(profile, options.version),
   } as unknown as DeviceState;

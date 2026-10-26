@@ -184,9 +184,7 @@ describe('SlotsView', () => {
       keyTable: null,
       deviceKeySlot: null,
       storeKey: { name: 'Key B', key: null, programmed: false },
-      flashBlockedBy: [],
-      canFlash: true,
-      appKeysBlock: null,
+      bankWriteRefusals: [],
     } as unknown as DeviceState;
     const plainReport = slotReport(plainState);
     const report: SlotsReport = {

@@ -96,14 +96,15 @@ describe('CameraReport on the 2016 Compact PRO (TESTING.md 42.84)', () => {
     unmount();
   });
 
-  it('says the banks are written one at a time, and no whole-image write exists, with no "flashing disabled"', async () => {
+  it('says the banks are written one at a time, with no whole-image gate and no "flashing disabled"', async () => {
     const state = deviceState2016(await fakeDeviceState());
     const { container, unmount } = render(<CameraReport state={state} />);
     const text = container.textContent;
     expect(text).toContain(
-      "One bank at a time: the Slots tab writes or patches one bank of this camera, each staged under its image's own key block 0, and each write asks first. A whole-image write is not available on this line.",
+      "One bank at a time: the Slots tab writes or patches one bank of this camera, each bank staged under its image's own key block 0, and each write asks first.",
     );
-    expect(text).not.toContain('Not available for a whole-image write');
+    expect(text).not.toContain('whole-image');
+    expect(text).not.toContain('flashing disabled');
     expect(text).not.toContain('does not support flashing');
     expect(text).not.toContain('key table could not be confirmed');
     expect(text).not.toContain('The Slots tab refuses every bank');
@@ -112,10 +113,10 @@ describe('CameraReport on the 2016 Compact PRO (TESTING.md 42.84)', () => {
 
   it('lists a reason that refuses every bank for the slot writer, and only that one', async () => {
     const base = deviceState2016(await fakeDeviceState());
-    const refused = {
+    const refused: DeviceState = {
       ...base,
-      flashBlockedBy: [...base.flashBlockedBy, 'no slot decrypts to the 0x00000000 acceptance sum'],
-    } as DeviceState;
+      bankWriteRefusals: ['no slot decrypts to the 0x00000000 acceptance sum'],
+    };
     const { container, unmount } = render(<CameraReport state={refused} />);
     const text = container.textContent;
     expect(text).toContain('The Slots tab refuses every bank of this camera:');

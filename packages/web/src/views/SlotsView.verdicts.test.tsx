@@ -77,7 +77,7 @@ function flashControlsOf(row: HTMLElement): { text: string; enabled: boolean }[]
 
 /** A copy of the real read with the camera-wide refusal the banner shows. */
 function refusedCamera(reason: string): DeviceState {
-  return { ...base, canFlash: false, flashBlockedBy: [reason] };
+  return { ...base, bankWriteRefusals: [reason] };
 }
 
 /**
@@ -93,26 +93,21 @@ function writableCamera(): DeviceState {
     keyTable: null,
     deviceKeySlot: null,
     storeKey: { name: 'Key B', key: null, programmed: false },
-    flashBlockedBy: [],
-    canFlash: true,
-    appKeysBlock: null,
+    bankWriteRefusals: [],
   };
 }
 
-/** The writable camera with bank B not read, and the gate's own reason for it. */
+/** The writable camera with bank B not read: the read refuses that bank by name, not the camera. */
 function unreadB(): DeviceState {
   const slots = writableCamera().slots.map((slot) =>
     slot.key === 'b'
       ? { ...slot, unread: true, reason: 'the window would not arm', present: false, plain: null }
       : slot,
   );
-  const name = slots.find((slot) => slot.key === 'b')?.name ?? 'slot B';
   return {
     ...writableCamera(),
     slots,
     byKey: new Map(slots.map((slot) => [slot.key, slot])),
-    flashBlockedBy: [`${name} could not be read (the window would not arm)`],
-    canFlash: false,
   };
 }
 
@@ -175,8 +170,7 @@ describe('SlotsView: the keys panel says what the write is keyed by, on each lin
       version: '1.0.3.0',
       plainChain: false,
       keyTable: null,
-      flashBlockedBy: [],
-      canFlash: true,
+      bankWriteRefusals: [],
     };
     const { container, unmount } = view(panel({ plan: slotPlan(true), report: slotReport(state) }));
     const text = container.textContent;

@@ -2,7 +2,7 @@
  * The camera report the Info tab shows once it has read the camera: the same fields, in the same order, as
  * `seek-fw info` prints (TESTING.md 42.64). Camera, firmware, profile, boot, keys, every bank, and how the
  * camera can be written. The values come from the same core functions the CLI uses (the boot and key rows
- * and the 2016 writing verdict are core's workflows/device-report.ts, TESTING.md 42.84); the words are the
+ * and the writing verdict are core's workflows/device-report.ts, TESTING.md 42.84, 42.89); the words are the
  * CLI's, except where the page's own tabs are named.
  */
 
@@ -95,7 +95,7 @@ export function CameraReport({ state }: CameraReportProps): ReactElement {
   const running = runningText(state);
   const best = state.detection.best;
   const nameOf = (key: SlotKey): string => slotName(state, key);
-  /* The 2016 line writes its banks one at a time, and has no whole-image write (core's `bankWritingOf`). */
+  /* How the banks are written, on every line (core's `bankWritingOf`, the CLI's Writing section). */
   const bankWriting = bankWritingOf(state);
 
   return (
@@ -248,12 +248,19 @@ export function CameraReport({ state }: CameraReportProps): ReactElement {
 
       <Panel>
         <PanelTitle>Writing</PanelTitle>
-        {bankWriting !== null ? (
+        {bankWriting.staged === null ? (
+          <Prose>
+            <p>No bank of this camera is written:</p>
+            <ul>
+              {bankWriting.refusals.map((reason) => (
+                <li key={reason}>{reason}</li>
+              ))}
+            </ul>
+          </Prose>
+        ) : (
           <Prose>
             <p>
-              One bank at a time: the Slots tab writes or patches one bank of this camera, each
-              staged under its image&apos;s own key block 0, and each write asks first. A
-              whole-image write is not available on this line.
+              {`One bank at a time: the Slots tab writes or patches one bank of this camera, each bank ${bankWriting.staged}, and each write asks first.`}
             </p>
             {bankWriting.refusals.length > 0 && (
               <>
@@ -265,21 +272,6 @@ export function CameraReport({ state }: CameraReportProps): ReactElement {
                 </ul>
               </>
             )}
-          </Prose>
-        ) : state.canFlash ? (
-          <Prose>
-            <p>
-              Available: the Slots tab can write one bank of this camera, and each write asks first.
-            </p>
-          </Prose>
-        ) : (
-          <Prose>
-            <p>Not available for a whole-image write:</p>
-            <ul>
-              {state.flashBlockedBy.map((reason) => (
-                <li key={reason}>{reason}</li>
-              ))}
-            </ul>
           </Prose>
         )}
       </Panel>

@@ -423,9 +423,9 @@ describe('the facts a person is shown with the plan', () => {
   it('says the 2016 keystream write is the preservation path, and carries the profile refusal', () => {
     const plan = buildSlotPlan(compact2016, '1.0.3.0');
     expect(plan.slots.every((slot) => slot.flashPlain.supported)).toBe(true);
-    expect(plan.notes.join('\n')).toMatch(
-      /A whole-image write is not available on this line \(profile compact-2016 offers none\)/,
-    );
+    expect(plan.notes.join('\n')).toMatch(/Profile compact-2016 declares no write of its own\./);
+    /* no line has a whole-image write since 42.80, so no note speaks of one (TESTING.md 42.89) */
+    expect(plan.notes.join('\n')).not.toMatch(/whole-image/);
     /* Shared by the page and the CLI, so it names neither as "this page" (TESTING.md 42.86). */
     expect(plan.notes.join('\n')).not.toMatch(/this page|the slot page/);
   });

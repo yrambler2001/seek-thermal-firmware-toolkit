@@ -111,7 +111,7 @@ describe('seek-fw info', () => {
     expect(code).toBe(EXIT_OK);
     const parsed = JSON.parse(stdout.text) as {
       ok: boolean;
-      canFlash: boolean;
+      bankWrites: { staged: string | null; refusedBy: string[] };
       keys: { keyA: string | null };
       slots: { name: string; bootable: boolean; accepts: boolean; footerOk: boolean | null }[];
       boot: { booted: string | null; upgradeTarget: string | null };
@@ -126,16 +126,26 @@ describe('seek-fw info', () => {
     expect(parsed.boot).toMatchObject({ booted: 'a', upgradeTarget: 'b' });
     /* 4.x checks the footer: a bootable bank has one, so footerOk is a real answer here */
     expect(parsed.slots[0]).toMatchObject({ accepts: true, bootable: true, footerOk: true });
-    expect(parsed.canFlash).toBe(true);
+    /* how the banks are written, on every line; the whole-image gate is gone (TESTING.md 42.89) */
+    expect(parsed.bankWrites).toEqual({
+      staged: 'staged under keys derived from the booted bank and the running application',
+      refusedBy: [],
+    });
+    expect(parsed).not.toHaveProperty('canFlash');
+    expect(parsed).not.toHaveProperty('flashBlockedBy');
   });
 
-  it('refuses to flash under the generic fallback, and says why', async () => {
+  it('writes no bank under the generic fallback, and says why', async () => {
     const camera = cameraWithFlash(synthetic.flash);
     const { io, stdout } = testIo({ backend: fixedBackend([camera]) });
     await run(['info', '--json', '--profile', 'generic'], io, signal());
-    const parsed = JSON.parse(stdout.text) as { canFlash: boolean; flashBlockedBy: string[] };
-    expect(parsed.canFlash).toBe(false);
-    expect(parsed.flashBlockedBy.join(' ')).toContain('does not support flashing');
+    const parsed = JSON.parse(stdout.text) as {
+      bankWrites: { staged: string | null; refusedBy: string[] };
+    };
+    expect(parsed.bankWrites.staged).toBeNull();
+    expect(parsed.bankWrites.refusedBy[0]).toContain(
+      'the camera family is not identified (profile generic)',
+    );
   });
 });
 
@@ -310,8 +320,7 @@ describe('seek-fw info on a 2016 Compact PRO (1.0.3.0)', () => {
         bootable: boolean;
         bootability: string;
       }[];
-      canFlash: boolean;
-      flashBlockedBy: string[];
+      bankWrites: { staged: string | null; refusedBy: string[] };
     };
     expect(parsed.profile.actedUnder.id).toBe('compact-2016');
     expect(parsed.profile.detected).toMatchObject({ id: 'compact-2016', ambiguous: false });
@@ -325,11 +334,12 @@ describe('seek-fw info on a 2016 Compact PRO (1.0.3.0)', () => {
         bootability: 'unknown',
       });
     }
-    /* still read-only, for compact-2016's own reason */
-    expect(parsed.canFlash).toBe(false);
-    const blocked = parsed.flashBlockedBy.join(' ');
-    expect(blocked).toContain("shares legacy-auth's locked BeginFirmwareUpgrade handler");
-    expect(blocked).not.toContain('the evidence says');
+    /* the banks are written one at a time, and nothing refuses them: no key table is needed here */
+    expect(parsed.bankWrites).toEqual({
+      staged: "staged under its image's own key block 0",
+      refusedBy: [],
+    });
+    expect(parsed).not.toHaveProperty('canFlash');
     const sent = new Set(camera.calls.map((call) => call.op));
     expect(sent.has(OP.SET_FEATURED_FIRMWARE_DATA)).toBe(false);
     expect(sent.has(OP.COMPLETE_MEMORY_UPGRADE)).toBe(false);
@@ -390,13 +400,12 @@ describe('seek-fw info on a 2016 Compact PRO that names the bank it entered (TES
       '  one bank at a time — `seek-fw slots flash <a|b|r> <file>` or `seek-fw slots patch-fps <a|b|r>`, ' +
         "each bank staged under its image's own key block 0",
     );
-    expect(text).toContain('a whole-image write is not available on this line');
+    expect(text).not.toContain('whole-image');
     /* The CLI names its own commands, not the page (TESTING.md 42.87). */
     expect(text).not.toMatch(/the page|Slots tab/);
     /* One blank line between sections: the report's opening blank after the log's, and the Writing
      * section's closing blank before Tabs, each printed two (TESTING.md 42.87). */
     expect(text).not.toContain('\n\n\n');
-    expect(text).not.toContain('not available for a whole-image write:');
     expect(text).not.toContain('flashing disabled');
     expect(text).not.toContain('not a boot record');
     const row = text.split('\n').find((line) => line.startsWith('App image bank 0x14050000 '));
@@ -409,14 +418,17 @@ describe('seek-fw info on a 2016 Compact PRO that names the bank it entered (TES
     const parsed = JSON.parse(stdout.text) as {
       boot: { booted: string; nextStart: { runs: string; why: string } | null };
       keys: { checkKey: { name: string; from: string; key: string } | null };
-      bankWrites: { oneAtATime: boolean; refusedBy: string[] } | null;
+      bankWrites: { staged: string | null; refusedBy: string[] };
       slots: { bootability: string; key_name: string }[];
     };
     expect(parsed.boot.booted).toBe('a');
     expect(parsed.boot.nextStart?.runs).toBe('a');
     expect(parsed.keys.checkKey).toMatchObject({ name: 'key block 1', from: 'a' });
     expect(parsed.keys.checkKey?.key).toMatch(/^[0-9a-f]{32}$/);
-    expect(parsed.bankWrites).toEqual({ oneAtATime: true, refusedBy: [] });
+    expect(parsed.bankWrites).toEqual({
+      staged: "staged under its image's own key block 0",
+      refusedBy: [],
+    });
     expect(parsed.slots.map((slot) => slot.bootability)).toEqual([
       'bootable',
       'bootable',

@@ -166,11 +166,9 @@ export function stateJson(state: DeviceState): Record<string, unknown> {
     running: runningJson(state),
     familyOk: state.familyOk,
     plainChain: state.plainChain,
-    canFlash: state.canFlash,
-    flashBlockedBy: [...state.flashBlockedBy],
-    /* The 2016 line: banks are written one at a time, and no whole-image write exists (`canFlash` and
-     * `flashBlockedBy` are the whole-image gate). `refusedBy` lists what refuses every bank for the slot
-     * writer, the slot page's own gate. Null on every other line. */
+    /* How the banks are written, on every line (core's `bankWritingOf`, the Writing section): one at a time,
+     * `staged` in words (null when the build takes no write), and `refusedBy` what refuses every bank of this
+     * camera, the reasons behind the slots page's banner (TESTING.md 42.89). */
     bankWrites: bankWritesJson(state),
   };
 }
@@ -182,10 +180,10 @@ function nextStartJson(state: DeviceState): Record<string, unknown> | null {
   return { runs: choice.runs, why: choice.why };
 }
 
-/** How a 2016 camera's banks are written, for `--json`; null on every other line. */
-function bankWritesJson(state: DeviceState): Record<string, unknown> | null {
+/** How this camera's banks are written, for `--json`. */
+function bankWritesJson(state: DeviceState): Record<string, unknown> {
   const writing = bankWritingOf(state);
-  return writing === null ? null : { oneAtATime: true, refusedBy: [...writing.refusals] };
+  return { staged: writing.staged, refusedBy: [...writing.refusals] };
 }
 
 function pairs(ctx: CommandContext, rows: readonly (readonly [string, string])[]): void {
@@ -289,31 +287,27 @@ export function renderState(ctx: CommandContext, state: DeviceState): void {
 }
 
 /**
- * The Writing section. The 2016 line writes its banks one at a time through the slot writer, and has no
- * whole-image write at all, so it says that and lists only what refuses every bank (core's `bankWritingOf`,
- * the slot page's own gate). Every other line says whether the whole-image gate is open, and why not.
+ * The Writing section, on every line: the banks are written one at a time by `seek-fw slots`, each staged in
+ * the form the line takes, and what refuses every bank of this camera is listed (core's `bankWritingOf`, the
+ * reasons behind the slots page's banner). The page's Info tab says the same.
  */
 export function writingLines(state: DeviceState): string[] {
   const banks = bankWritingOf(state);
-  if (banks !== null) {
-    const lines = [
-      '  one bank at a time — `seek-fw slots flash <a|b|r> <file>` or `seek-fw slots patch-fps <a|b|r>`, ' +
-        "each bank staged under its image's own key block 0",
-      '  a whole-image write is not available on this line',
+  if (banks.staged === null) {
+    return [
+      '  no bank of this camera is written:',
+      ...banks.refusals.map((reason) => `    · ${reason}`),
     ];
-    if (banks.refusals.length > 0) {
-      lines.push('  the slot writer refuses every bank of this camera:');
-      for (const reason of banks.refusals) lines.push(`    · ${reason}`);
-    }
-    return lines;
   }
-  if (state.canFlash) {
-    return ['  available — `seek-fw slots flash <a|b|r> <file>` can write a bank of this camera'];
-  }
-  return [
-    '  not available for a whole-image write:',
-    ...state.flashBlockedBy.map((reason) => `    · ${reason}`),
+  const lines = [
+    '  one bank at a time — `seek-fw slots flash <a|b|r> <file>` or `seek-fw slots patch-fps <a|b|r>`, ' +
+      `each bank ${banks.staged}`,
   ];
+  if (banks.refusals.length > 0) {
+    lines.push('  the slot writer refuses every bank of this camera:');
+    for (const reason of banks.refusals) lines.push(`    · ${reason}`);
+  }
+  return lines;
 }
 
 function slotName(state: DeviceState, key: string): string {

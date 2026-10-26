@@ -52,9 +52,10 @@ import {
 } from './types.js';
 import { ffKeyBStoredOf } from './ff-form.js';
 import {
+  cameraWriteRefusal,
   deriveWriteKeys,
-  gateWithoutAppKeys,
   slotWriteRefusal,
+  slotWriteRefusals,
   uploadLandsUnder,
 } from './write-keys.js';
 import {
@@ -527,29 +528,30 @@ interface StagedImage {
 /**
  * The camera-wide refusal, raised before a payload is built or sent. A decrypted image is staged under the
  * camera's keys where the line uses them, so it is refused for everything the page's banner names
- * (`slotWriteRefusal`: the gate and the upload-key derivation). A raw payload is sent as given: no key of this
- * write builds it, so only the camera's blocking reasons (the gate) refuse it. The page refuses no less than
- * the writer, and the CLI and the frame-rate patch refuse what the page refuses.
+ * (`slotWriteRefusal`: the read's camera-wide refusals and the upload-key derivation). A raw payload is sent as
+ * given: no key of this write builds it, so only the read's camera-wide refusals refuse it. The page refuses no
+ * less than the writer, and the CLI and the frame-rate patch refuse what the page refuses. The refusal carries
+ * the reasons it was made for (`detail.blockedBy`).
  */
 function refuseOnCameraWide(state: DeviceState, kind: SlotInputKind): void {
-  const refusal = kind === 'raw' ? gateWithoutAppKeys(state) : slotWriteRefusal(state);
-  if (refusal !== null)
-    throw slotRefused(`${refusal}. Nothing was written.`, { blockedBy: state.flashBlockedBy });
+  const refusal = kind === 'raw' ? cameraWriteRefusal(state) : slotWriteRefusal(state);
+  if (refusal === null) return;
+  throw slotRefused(`${refusal}. Nothing was written.`, {
+    blockedBy: kind === 'raw' ? [...state.bankWriteRefusals] : slotWriteRefusals(state),
+  });
 }
 
 /**
  * The 2014 plaintext chain's own condition for an image staged plain (a decrypted image; the 1.3.0.8 FF
- * image is staged in its vendor form and is not this). The slot page's camera-wide gate drops the classic
- * writer's reasons on every line that does not stage under the camera's key (`gateWithoutAppKeys`), and the
- * chain reason is one of them, so it is applied here, where the plain form is chosen: a camera with no bank
- * stored plain is not shown to be on the chain, and its bootloader may want a keyed bank. A raw payload is
- * sent as given and is not refused for it.
+ * image is staged in its vendor form and is not this). It is not one of the read's camera-wide refusals,
+ * because it refuses only this staging: a camera with no bank stored plain is not shown to be on the chain,
+ * and its bootloader may want a keyed bank. A raw payload is sent as given and is not refused for it.
  */
 function refusePlainStaging(state: DeviceState): void {
   if (state.plainChain) return;
   throw slotRefused(
     `this camera cannot take a plain-staged image from here: ${PLAIN_CHAIN_ONLY_REASON}. Nothing was written.`,
-    { blockedBy: state.flashBlockedBy },
+    { blockedBy: [PLAIN_CHAIN_ONLY_REASON] },
   );
 }
 
@@ -565,7 +567,7 @@ function stageImage(
     const { state } = report;
     const refusal = slotWriteRefusal(state);
     if (refusal !== null) {
-      throw slotRefused(refusal, { blockedBy: state.flashBlockedBy });
+      throw slotRefused(refusal, { blockedBy: slotWriteRefusals(state) });
     }
     const keyTable = state.keyTable;
     if (keyTable === null) {
@@ -737,11 +739,11 @@ export async function flashSlot(
   }
   /* The camera-wide refusal the page's banner shows (`slotWriteRefusal`) binds every staging, so the
    * writer sends nothing the page refuses. On the lines that stage under their own image it names only
-   * the camera's real blocking reasons (the classic writer's reasons are excluded there). */
+   * the read's camera-wide refusals (no key-table or derivation reason applies there). */
   const refusal = slotWriteRefusal(report.state);
   if (refusal !== null) {
     throw slotRefused(`${refusal}. Nothing was written.`, {
-      blockedBy: report.state.flashBlockedBy,
+      blockedBy: slotWriteRefusals(report.state),
     });
   }
   /* And the plain form's own condition, which that gate does not carry (see `refusePlainStaging`). */

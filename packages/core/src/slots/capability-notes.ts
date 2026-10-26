@@ -81,19 +81,17 @@ const LOCKED_2016_STAGING_NOTE =
   'target bank to stage it: the bank’s keystream is used only to read the bank back.';
 
 /**
- * This profile declares no flash capability of its own (its capabilities.flash says why), so no
- * whole-image write is offered for the camera. The device-info read (the Info tab, `seek-fw info`) says
- * so in one line (device-info.ts `BANKS_ONLY_WRITING`, TESTING.md 42.84). The slot write is the
- * keystream-staged path the preservation pipeline ran on 1.0.3.0, so the slot writer does not gate it on
+ * This profile declares no write capability of its own (its capabilities.flash says why). The slot write is
+ * the keystream-staged path the preservation pipeline ran on 1.0.3.0, so the slot writer does not gate it on
  * that refusal, and the note says so instead of hiding the refusal. It is a slot view's note (the Slots
- * tab, `seek-fw slots list`), so it names neither front end (TESTING.md 42.87).
+ * tab, `seek-fw slots list`), so it names neither front end (TESTING.md 42.87). No line has a whole-image
+ * write since 42.80, so the note no longer speaks of one (TESTING.md 42.89).
  */
 export function profileFlashNote(profileId: string): string {
   return (
-    `A whole-image write is not available on this line (profile ${profileId} offers none), and the ` +
-    'device info says so. The banks are written one at a time instead, each staged under its own ' +
-    'image’s key, the path the backup already ran on 1.0.3.0 cameras, so a bank write is not ' +
-    'refused for that reason.'
+    `Profile ${profileId} declares no write of its own. The banks are written one at a time, each ` +
+    'staged under its own image’s key, the path the backup already ran on 1.0.3.0 cameras, so a ' +
+    'bank write is not refused for that reason.'
   );
 }
 

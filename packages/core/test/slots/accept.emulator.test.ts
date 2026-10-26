@@ -38,7 +38,7 @@ import { dumpSlot } from '../../src/slots/dump.js';
 import { inspectSlots } from '../../src/slots/inspect.js';
 import { flashSlot, prepareSlotFlash } from '../../src/slots/write.js';
 import type { SlotKey, SlotsReport } from '../../src/slots/types.js';
-import { deriveWriteKeys, gateWithoutAppKeys } from '../../src/slots/write-keys.js';
+import { cameraWriteRefusal, deriveWriteKeys } from '../../src/slots/write-keys.js';
 import { evidenceFromChannelProbe, probeSelectorChannel } from '../../src/workflows/capability.js';
 import type { WorkflowContext } from '../../src/workflows/types.js';
 import { RowEmulators, liveEmulatorCount } from '../emulator/harness.js';
@@ -245,7 +245,7 @@ describe.skipIf(EMU_DIR === null)(
           );
           try {
             const gate =
-              gateWithoutAppKeys(session.report.state) ??
+              cameraWriteRefusal(session.report.state) ??
               deriveWriteKeys(session.report.state).refusal;
             if (subject.label.startsWith('Compact FF 4.16.1.7')) {
               expect(gate, 'the 4.16.1.7 build refuses the derived upload').toMatch(

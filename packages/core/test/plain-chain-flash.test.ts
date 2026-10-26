@@ -9,7 +9,7 @@
  * the preservation pipeline's v1-2014 family, whose staged form is `plain`
  * and whose commit is the u16 sum of the staged bytes).
  *
- * WHAT IS CHECKED. `readDeviceInfo` passes the flash gate ON that chain — the
+ * WHAT IS CHECKED. `readDeviceInfo` refuses no bank write ON that chain — the
  * key table, the acceptance sum and the boot replay are all cipher-chain
  * questions, and the camera's own active-slot word (the word
  * `fw_update_slot_address()` reads, mode 0's input) names both ends of an
@@ -198,7 +198,7 @@ function logsOf(reporter: { readonly events: { readonly type: string }[] }): str
 }
 
 describe('the 2014 plaintext chain on the normal flash path', () => {
-  it('passes the flash gate, and the gate says why', async () => {
+  it('refuses no bank write, and says it is the plaintext chain', async () => {
     const reporter = collectingReporter();
     const state = await readDeviceInfo(await contextFor(camera2014(), reporter));
 
@@ -209,9 +209,8 @@ describe('the 2014 plaintext chain on the normal flash path', () => {
     expect(state.keyTable).toBeNull();
     expect(state.plainChain).toBe(true);
 
-    /* the gate */
-    expect(state.canFlash, state.flashBlockedBy.join('\n')).toBe(true);
-    expect(state.flashBlockedBy).toEqual([]);
+    /* nothing refuses a bank write */
+    expect(state.bankWriteRefusals).toEqual([]);
     expect(logsOf(reporter)).toContain('2014 plaintext chain');
 
     /* the upgrade target: the camera's own active-slot word, not a replay */
@@ -342,8 +341,8 @@ describe('the 2014 plaintext chain on the normal flash path', () => {
     const state = await read2014(camera);
 
     expect(state.plainChain).toBe(false);
-    expect(state.canFlash).toBe(false);
-    expect(state.flashBlockedBy.join(' ')).toContain('2014 plaintext chain');
+    /* the read refuses every bank of it: no slot decrypts to legacy-auth's sum */
+    expect(state.bankWriteRefusals.join(' ')).toContain('acceptance sum');
     expect(state.updateTargetSubcmd).toBeNull();
 
     /* and the slot writer refuses a plain image on this camera, with nothing sent */
@@ -368,22 +367,15 @@ describe('the 2014 plaintext chain on the normal flash path', () => {
   }, 60_000);
 
   it('refuses a plain image on a 1.3.0.0 camera with no bank stored plain for the chain reason itself, in prepareSlotFlash and in flashSlot (TESTING.md 42.82 F1)', async () => {
-    /* The same cipher-chain camera, with only the classic writer's reasons and the upgrade's left on the
-     * read: the detection and acceptance-sum reasons (the real read carries both) are taken out, so the
-     * chain reason is the one reason that can refuse. The slot page keeps the legacy plan. Before 42.82
-     * `gateWithoutAppKeys` dropped the chain reason on the plain-staging line and the write went out. */
+    /* The same cipher-chain camera with the read's camera-wide refusals taken out (the real read carries
+     * the detection and acceptance-sum reasons), so the chain reason is the one reason that can refuse.
+     * The slot page keeps the legacy plan. Before 42.82 the slot page's gate dropped the chain reason on
+     * the plain-staging line and the write went out; it is the writer's own refusal of a plain-staged
+     * image, not a camera-wide one (TESTING.md 42.89). */
     const camera = camera2014({ plain: false });
     const read = await read2014(camera);
-    const kept = new Set([
-      ...(read.classicWriterBlockedBy ?? []),
-      ...(read.upgradeBlockedBy ?? []),
-    ]);
-    const state: DeviceState = {
-      ...read,
-      flashBlockedBy: read.flashBlockedBy.filter((why) => kept.has(why)),
-    };
+    const state: DeviceState = { ...read, bankWriteRefusals: [] };
     expect(state.plainChain).toBe(false);
-    expect(state.flashBlockedBy.join(' ')).toContain('2014 plaintext chain');
     const legacyPlan = buildSlotPlan(legacyAuth, '1.3.0.0');
     expect(legacyPlan.slots.find((s) => s.key === 'b')?.staging).toBe('plain');
     const report: SlotsReport = {
@@ -461,7 +453,7 @@ describe('the 2014 plaintext chain on the normal flash path', () => {
 
       const camera = camera2014();
       const state = await read2014(camera);
-      expect(state.canFlash).toBe(true);
+      expect(state.bankWriteRefusals).toEqual([]);
       const report = await inspectSlots(await contextFor(camera, collectingReporter()));
       const plan = prepareSlotFlash(report, 'b', {
         kind: 'plain',

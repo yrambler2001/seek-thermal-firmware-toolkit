@@ -71,9 +71,7 @@ export {
   type DecryptOptions,
 } from './decrypt.js';
 export {
-  BANKS_ONLY_WRITING,
   bootedSlot,
-  cameraWideBlocks,
   checkKeyNameOf,
   profileToRereadUnder,
   bootableDescription,

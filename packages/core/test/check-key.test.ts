@@ -20,7 +20,6 @@ import { compact2016 } from '../src/profiles/compact-2016.js';
 import { legacyAuth } from '../src/profiles/legacy-auth.js';
 import type { FirmwareProfile, SlotKey } from '../src/profiles/types.js';
 import {
-  cameraWideBlocks,
   checkKeyNameOf,
   checkKeyOf,
   storeKeyDescription,
@@ -183,8 +182,7 @@ function state2016(
   options: {
     readonly checkKey?: CheckKey | null;
     readonly activeSlotWord?: number | null;
-    readonly flashBlockedBy?: readonly string[];
-    readonly classicWriterBlockedBy?: readonly string[];
+    readonly bankWriteRefusals?: readonly string[];
     readonly profile?: FirmwareProfile;
   } = {},
 ): DeviceState {
@@ -213,10 +211,7 @@ function state2016(
       key: null,
       programmed: false,
     },
-    flashBlockedBy: [...(options.flashBlockedBy ?? ['the classic reason'])],
-    upgradeBlockedBy: [],
-    classicWriterBlockedBy: [...(options.classicWriterBlockedBy ?? ['the classic reason'])],
-    appKeysBlock: null,
+    bankWriteRefusals: [...(options.bankWriteRefusals ?? [])],
   } as unknown as DeviceState;
 }
 
@@ -267,19 +262,23 @@ describe('the report rows on the 2016 line (seek-fw info and the Info tab)', () 
     );
   });
 
-  it('writes the banks one at a time, and lists only what refuses every bank for the slot writer', () => {
-    expect(bankWritingOf(state2016())).toEqual({ refusals: [] });
+  it('writes the banks one at a time, each under its image’s key block 0, and lists what refuses every bank', () => {
+    expect(bankWritingOf(state2016())).toEqual({
+      staged: "staged under its image's own key block 0",
+      refusals: [],
+    });
     const refused = state2016({
-      flashBlockedBy: ['the classic reason', 'no slot decrypts to the 0x00000000 acceptance sum'],
+      bankWriteRefusals: ['no slot decrypts to the 0x00000000 acceptance sum'],
     });
     expect(bankWritingOf(refused)).toEqual({
+      staged: "staged under its image's own key block 0",
       refusals: ['no slot decrypts to the 0x00000000 acceptance sum'],
     });
   });
 });
 
 describe('the report rows off the 2016 line', () => {
-  it('keeps the key-table rows, no next start and no bank-writing verdict where the rule is not decoded', () => {
+  it('keeps the key-table rows and no next start where the rule is not decoded, and writes the build as before', () => {
     const state = state2016({ checkKey: null, profile: legacyAuth });
     expect(keyReportRows(state).map(([label]) => label)).toEqual([
       'key A',
@@ -290,25 +289,10 @@ describe('the report rows off the 2016 line', () => {
     ]);
     expect(nextStartReportOf(state, nameOf)).toBeNull();
     expect(bootedReportOf(state, nameOf)).toBe('App image bank a');
-    expect(bankWritingOf(state)).toBeNull();
+    /* the slot writer stages a 1.0.3.x image under its own key block 0 whichever profile read it */
+    expect(bankWritingOf(state).staged).toBe("staged under its image's own key block 0");
     expect(unknownBootabilityWhy(state)).toBe(
       "the bootloader's key table was not read, so the keys it tries cannot be named",
     );
-  });
-
-  it('cameraWideBlocks keeps the classic reasons unless asked to drop them, and drops the rest', () => {
-    const state = state2016({
-      flashBlockedBy: ['classic', 'App image bank 0x14050000 could not be read (stalled)', 'other'],
-      classicWriterBlockedBy: ['classic'],
-    });
-    const unread = {
-      ...state,
-      slots: [
-        { ...state.slots[0], unread: true, reason: 'stalled' } as SlotState,
-        ...state.slots.slice(1),
-      ],
-    } as DeviceState;
-    expect(cameraWideBlocks(unread, true)).toEqual(['other']);
-    expect(cameraWideBlocks(unread, false)).toEqual(['classic', 'other']);
   });
 });

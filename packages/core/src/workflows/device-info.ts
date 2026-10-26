@@ -16,16 +16,7 @@
  * keeps those apart, and nothing here re-conflates them.
  * ==================================================================== */
 
-import {
-  asciiz,
-  bytesToHex,
-  findAll,
-  hex,
-  hexToBytes,
-  hexUp,
-  sha256hex,
-  viewOf,
-} from '../bytes.js';
+import { asciiz, bytesToHex, hex, hexToBytes, hexUp, sha256hex, viewOf } from '../bytes.js';
 import { CancelledError, errorMessage } from '../errors.js';
 import { decryptImage } from '../crypto/cipher.js';
 import {
@@ -63,7 +54,7 @@ import { KEY_PAIRS, locateFFKeys } from '../preservation/patch.js';
 /* boot-choice.ts imports nothing that writes (the frame-rate warning built on it is fps-boot-warning.ts),
  * so this read names the next start through the function the page and the CLI call, with no cycle. */
 import { bootChoiceOf, bootRuleKnown } from '../slots/boot-choice.js';
-import { FF_1308_VERSION } from '../slots/capability-family.js';
+import { classifyBuild, FF_1308_VERSION, stagingFor } from '../slots/capability-family.js';
 import { ffKeyBPlainOf } from '../slots/ff-form.js';
 import { onCompactPro2016Line } from '../slots/running.js';
 /* The stale-descriptor predicate, shared with the preservation pipeline's
@@ -368,9 +359,9 @@ function storedPlain(slot: AnalysedSlot): boolean {
 
 /**
  * The locked line's write path for an image staged plain needs the 2014 plaintext chain, and a read
- * with no bank stored plain is not proven to be on it. The flash gate carries this among the classic
- * writer's reasons (`classicWriterBlockedBy`); the slot writer refuses a plain-staged image with it
- * (slots/write.ts), because the slot page's camera-wide gate drops the classic reasons on that line.
+ * with no bank stored plain is not proven to be on it. The slot writer refuses a plain-staged image with
+ * this reason (slots/write.ts `refusePlainStaging`); it refuses no other write, because the 1.3.0.8 FF
+ * image is staged in its vendor form and a raw payload is sent as given, so it is not a camera-wide one.
  */
 export const PLAIN_CHAIN_ONLY_REASON =
   'the write path on this line is implemented only for the 2014 plaintext chain — banks ' +
@@ -510,17 +501,6 @@ async function confirmUpgradeTarget(
 }
 
 /* ---- the locked line's boot, and the 2016 line's check key ------------- */
-
-/**
- * What the read says about writing a 2016 camera. The slot writer stages each bank under its image's own
- * key block 0 (slots/write.ts, `buildSlotKeystreamPayload`) and the camera re-keys it, so none of the
- * whole-image writer's reasons (its key table, its 2014-only staging, the profile's flash capability, the
- * upgrade target) applies to it; this one line says so in their place. The page and the CLI both log it,
- * so it names neither; each one's Writing section says where its own bank writes are (TESTING.md 42.87).
- */
-export const BANKS_ONLY_WRITING =
-  "writing: this camera's banks are written one at a time, each staged under its image's own key " +
-  'block 0; a whole-image write is not available on the 2016 line';
 
 /** The known 2016 image pairs whose block 1 a check key can be, by name (preservation/patch.ts KEY_PAIRS). */
 const PAIRS_2016: readonly (readonly [string, string])[] = [
@@ -734,44 +714,15 @@ function lockedBootLines(
   return lines;
 }
 
-/**
- * The flash gate's reasons that refuse every bank of the camera for the slot writer, from the gate's own
- * lists. Dropped: the running application's missing pair (`appKeysBlock`, which the write-key derivation
- * replaces), an unread bank (its row says so, and only that bank is refused), the upgrade flow's reasons
- * (the slot writer names its bank and arms that bank's own window), and, when `dropClassic`, the classic
- * whole-image writer's reasons (`classicWriterBlockedBy`: its key table, its 2014-only staging, the
- * profile's flash capability), which do not apply to a build that stages each image under its own keys.
- * The slot page's banner (slots/write-keys.ts `gateWithoutAppKeys`) and the read's own log both use it.
- */
-export function cameraWideBlocks(
-  state: Pick<
-    DeviceState,
-    'flashBlockedBy' | 'upgradeBlockedBy' | 'classicWriterBlockedBy' | 'appKeysBlock' | 'slots'
-  >,
-  dropClassic: boolean,
-): string[] {
-  const unread = new Set(state.slots.filter((slot) => slot.unread).map(unreadSlotBlock));
-  const upgrade = new Set(state.upgradeBlockedBy ?? []);
-  const classic = new Set(dropClassic ? (state.classicWriterBlockedBy ?? []) : []);
-  return state.flashBlockedBy.filter(
-    (why) =>
-      why !== (state.appKeysBlock ?? null) &&
-      !unread.has(why) &&
-      !upgrade.has(why) &&
-      !classic.has(why),
-  );
-}
-
 /* ---- the read -------------------------------------------------------- */
 
 /**
- * Read and analyse everything the flash path depends on.
+ * Read and analyse everything a bank write depends on.
  *
  * NEW versus the original: the evidence gathered along the way is fed to
  * `detectProfile`, so the returned state carries what the camera looks like as
- * well as what it was read as. `canFlash` additionally requires the acting
- * profile to declare `flash` supported — a read-only profile cannot be talked
- * into a write by a camera that happens to look right.
+ * well as what it was read as, and a camera the evidence names as another
+ * family is refused every bank write (`bankWriteRefusals`).
  */
 export async function readDeviceInfo(
   ctx: WorkflowContext,
@@ -821,6 +772,10 @@ export async function readDeviceInfo(
    * and both starts. Under legacy-auth its banks are compared against the 2014 line's target, and the
    * detection below says so instead. */
   const line2016 = onCompactPro2016Line(profile, version);
+  /* Whether this build's bank writes are sent under the camera's own keys (the Key A line): only those read
+   * the key table, so only there does an unconfirmed table refuse a write (slots/write-keys.ts
+   * `stagesUnderCameraKey`, the same test on the finished state). */
+  const underCameraKey = stagingFor(classifyBuild(profile, version).family) === 'key-a-ciphertext';
   warnIfRecipientFellBack(ctx);
 
   reporter.log('firmware info selectors ...', 'detail');
@@ -964,8 +919,8 @@ export async function readDeviceInfo(
    * the plan reached are a reader that served no bank content at all — the
    * 2026-10-02 incident's shape (two backup reads of blank/stale bytes that
    * only a power cycle cleared). Those captures are reclassified as unread, so
-   * they report as spent rather than as empty banks and the flash gate refuses
-   * on them, and the refusal names the remedy once. A read that got bank
+   * they report as spent rather than as empty banks, each bank's write is
+   * refused as unread, and the read names the remedy once. A read that got bank
    * content from any slot keeps every other slot's own reading: an empty bank
    * beside a read one is the truth about that bank, not a spent reader, and
    * scoring draws only on the captures that actually read. */
@@ -1026,7 +981,7 @@ export async function readDeviceInfo(
       reporter.log(
         `  it matches under K=${hexUp(keyWhiteningK)}, not ${profile.name}'s ` +
           `K=${hexUp(profile.cipher.whiteningK)} — writing under the wrong K would produce an ` +
-          'image this camera cannot decrypt, so flashing stays disabled',
+          'image this camera cannot decrypt, so no bank of it is written from here',
         'error',
       );
     }
@@ -1037,7 +992,12 @@ export async function readDeviceInfo(
     reporter.log('no key table — none is involved on the plaintext chain', 'detail');
   } else if (!line2016) {
     reporter.log('');
-    reporter.log("could not confirm this camera's key table — flashing is disabled", 'error');
+    reporter.log(
+      underCameraKey
+        ? "could not confirm this camera's key table — a bank write under its keys needs it"
+        : "could not confirm this camera's key table",
+      underCameraKey ? 'error' : 'warn',
+    );
   }
 
   /* ---- the 2016 line: the key its bootloader checks a bank under -------- */
@@ -1235,8 +1195,8 @@ export async function readDeviceInfo(
    * reads the roots' active-slot word this read already carries and arms the
    * OTHER bank. The camera's own word is therefore both halves of the
    * prediction, and the write targets exactly what it names. Held to the
-   * builds whose own decoded table makes mode 0 that function, and refused
-   * with the reason on the rest. */
+   * builds whose own decoded table makes mode 0 that function; on the rest
+   * the read says why it names neither. */
   let chainReplay = false;
   const chainBlocked: string[] = [];
   if (plainChain && prediction === null) {
@@ -1274,6 +1234,10 @@ export async function readDeviceInfo(
         'detail',
       );
     }
+  }
+  for (const reason of chainBlocked) {
+    reporter.log('');
+    reporter.log(`booted bank not named: ${reason}`, 'warn');
   }
 
   /* The 2016 line: the same camera answer names both ends. The bootloader records the bank it entered
@@ -1356,7 +1320,7 @@ export async function readDeviceInfo(
     }
 
     const targetSlot = byKey.get(prediction.target);
-    /* The 2016 line said it above, as the camera's own upgrade: it has no whole-image write of its own. */
+    /* The 2016 line said it above, as the camera's own upgrade. */
     if (targetSlot && !line2016) {
       reporter.log(
         `an upgrade writes ${targetSlot.name} at ${hex(targetSlot.address, 8)}` +
@@ -1368,25 +1332,14 @@ export async function readDeviceInfo(
     }
   }
 
-  /* ---- the running application's own keys ---------------------------- */
-  const keysBlock = runningApplicationKeyBlock(
-    prediction === null ? null : (byKey.get(prediction.booted) ?? null),
-    keyTable,
-    storeKey,
-  );
-  if (keysBlock !== null) {
-    reporter.log('');
-    reporter.log(keysBlock, 'error');
-  }
-
   /* ---- family check and detection ------------------------------------ */
   const familyOk = slots.some((slot) => slot.accepts);
   if (!familyOk && !plainChain) {
     reporter.log('');
     reporter.log(
       `no slot on this camera decrypts to the ${hexUp(profile.cipher.acceptanceSum)} acceptance ` +
-        `sum ${profile.name} expects — this is probably a different firmware family. ` +
-        'Flashing is disabled.',
+        `sum ${profile.name} expects — this is probably a different firmware family, so no bank ` +
+        'of it is written from here.',
       'error',
     );
   }
@@ -1443,72 +1396,28 @@ export async function readDeviceInfo(
   };
   const detection = detectProfile(evidence);
 
-  /* ---- the flash gate ------------------------------------------------ */
-  const blocked: string[] = [];
-  /* The reasons only the classic writer needs: its key table, and its 2014-only line. A key-A line's
-   * writes are checked by the upload-key derivation (write-keys.ts); a 2016 or FF write stages from its
-   * own image, so neither reason applies to it. Kept apart as `classicWriterBlockedBy`. */
-  const classicWriter: string[] = [];
-  /* The key table and the acceptance sum are the cipher chain's questions. On
-   * the 2014 plaintext chain nothing is encrypted — the arm, the staging and
-   * the commit read no key and sum no decrypted words — so the chain's own
-   * measurements (identity keystream, stored word sum 0) stand in for both. */
-  if (!keyTable && !plainChain) {
-    classicWriter.push("this camera's key table could not be confirmed");
-  }
+  /* ---- what refuses every bank write --------------------------------- */
+  /* The slot writer's camera-wide refusals (slots/write-keys.ts `cameraWriteRefusal`): the reasons no bank
+   * of this camera is written from here, whatever image it is given. Not among them: a bank the read could
+   * not read (its write is refused by name, and the other banks stay writable), which bank the camera's own
+   * upgrade writes (a slot write names its bank and arms that bank's own window), and the running
+   * application's key pair (the Key A line derives its upload keys from the booted bank and the running
+   * application, write-keys.ts). The key table and the acceptance sum are the cipher chains' questions: on
+   * the 2014 plaintext chain nothing is encrypted, and its own measurements (identity keystream, stored
+   * word sum 0) stand in for both. */
+  const bankWriteRefusals: string[] = [];
   if (!familyOk && !plainChain) {
-    blocked.push(
+    bankWriteRefusals.push(
       `no slot decrypts to ${profile.name}'s ${hexUp(profile.cipher.acceptanceSum)} acceptance sum`,
     );
   }
-  /* And the refusal that replaced the profile-level one: the line's write path
-   * is the plain chain's. Any other camera on the same protocol — the cipher
-   * chains and the builds whose mode 0 is not the upgrade target — is told
-   * exactly that, rather than being waved through a cipher-shaped staging. */
-  if (!plainChain && plan.selectors.some((row) => row.channel === 'auth')) {
-    classicWriter.push(PLAIN_CHAIN_ONLY_REASON);
+  /* Only a write sent under the camera's keys reads the table; the 2016 line, the 2014 chain and the
+   * 1.3.0.8 FF image stage from their own image. */
+  if (underCameraKey && !keyTable && !plainChain) {
+    bankWriteRefusals.push("this camera's key table could not be confirmed");
   }
-  blocked.push(...classicWriter);
-  /* The reasons that only the classic upgrade flow (`flash`, selector 0) needs: which bank an
-   * upgrade would write. The slot page writes the bank it names, through that bank's own window,
-   * and treats an unnamed boot with the acknowledgement (`writeRisk.bootUnnamed`), so these reach
-   * `blocked` for the classic gate and are kept apart as `upgradeBlockedBy` for the slot page. */
-  const upgradeOnly: string[] = [];
-  upgradeOnly.push(...chainBlocked);
-  if (prediction === null) {
-    upgradeOnly.push('the slot an upgrade would write could not be determined');
-  }
-  if (keysBlock !== null) blocked.push(keysBlock);
-  /* The original threw out of readDeviceInfo the moment any slot's window
-   * refused to arm, so a partial picture could never reach the write path at
-   * all. Reporting the rest of the read is more useful than throwing it away,
-   * but the refusal has to survive: a slot that was never read could be the
-   * one an upgrade overwrites, and `confirmUpgradeTarget` cannot match a
-   * window against bytes it does not have. */
-  for (const slot of slots) {
-    if (slot.unread) blocked.push(unreadSlotBlock(slot));
-  }
-  const flashSupport = profile.capabilities.flash;
-  if (!flashSupport.supported) {
-    /* The classic writer's own capability (its staging forms). The slot page stages a line by its own
-     * form (slots/write-keys.ts, capability-family.ts), so this reason refuses the classic flow only. */
-    const reason = `${profile.name} does not support flashing: ${flashSupport.reason}`;
-    blocked.push(reason);
-    classicWriter.push(reason);
-  }
-  /* A profile that writes through a selector this build's table does not have
-   * has no window to write; saying so here keeps the gate honest. A profile
-   * that names no selector at all is already blocked by its capability, or by
-   * the write. */
-  if (profile.boot.updateTargetSubcmd >= 0 && updateTargetSubcmd === null) {
-    upgradeOnly.push(
-      `there is no upgrade-target selector ${hex(profile.boot.updateTargetSubcmd)} in this ` +
-        `firmware's own table (${plan.table}), so there is no window to write`,
-    );
-  }
-  blocked.push(...upgradeOnly);
   if (keyWhiteningK !== profile.cipher.whiteningK) {
-    blocked.push(
+    bankWriteRefusals.push(
       `this camera's key table resolves under K=${hexUp(keyWhiteningK)} but ${profile.name} ` +
         `encrypts under K=${hexUp(profile.cipher.whiteningK)}`,
     );
@@ -1518,19 +1427,6 @@ export async function readDeviceInfo(
      * Key A would be this camera's, but the selector map, the cipher and the
      * boot policy would not — so refuse and let the user pick deliberately.
      *
-     * Honestly: with the families that ship here this refusal cannot be the
-     * first one to fire, and is kept as defence in depth rather than as
-     * protection anyone relies on. `modern-4x` is the only profile that
-     * declares `flash` supported, and every entry in `buildModernWindowMap()`
-     * is plain — so any arm at all sets `plainSelectorWorks`, which zeroes
-     * `legacy-auth`; the only other family that can then win is `compact-2016`,
-     * and it wins only on a slot summing to 0 with none summing to 0xFFFF,
-     * which is `familyOk === false` and therefore already in `blocked`. Under
-     * every other profile `capabilities.flash` is unsupported and blocks above.
-     * It stays because that chain is a property of today's four profiles, not
-     * of the design: a family added later can win on evidence the family check
-     * cannot see, and this is the only check that would catch it.
-     *
      * This is deliberately NOT an auto-adopt. Detection needs the slots, and
      * which addresses the slots live at is itself a property of the profile,
      * so a read always commits to one family before it can judge the family.
@@ -1539,36 +1435,16 @@ export async function readDeviceInfo(
      * caller that wants the detected family re-reads under it explicitly —
      * one extra read is a cheap price for the adoption being a decision
      * somebody made rather than one the code made quietly. */
-    blocked.push(
+    bankWriteRefusals.push(
       `the evidence says this camera is ${detection.best.profile.name}, not ${profile.name} ` +
         `(${detection.best.reasons.join('; ')})`,
     );
   }
-
-  /* THE 2016 LINE IS WRITTEN BANK BY BANK. The slot page stages each bank under its image's own key
-   * block 0 (slots/write.ts), so the whole-image writer's reasons (its key table, its 2014-only staging,
-   * this profile's flash capability, the upgrade target) are said once, as BANKS_ONLY_WRITING, and only
-   * the reasons that refuse every bank for the slot writer print (`cameraWideBlocks`, the slot page's own
-   * gate). They all stay in `flashBlockedBy` for the whole-image gate, which the JSON keeps. */
-  const bankBlocks = line2016
-    ? cameraWideBlocks(
-        {
-          flashBlockedBy: blocked,
-          upgradeBlockedBy: upgradeOnly,
-          classicWriterBlockedBy: classicWriter,
-          appKeysBlock: keysBlock,
-          slots,
-        },
-        true,
-      )
-    : blocked;
-  if (line2016) {
+  if (bankWriteRefusals.length > 0) {
     reporter.log('');
-    reporter.log(BANKS_ONLY_WRITING, 'detail');
-  }
-  if (bankBlocks.length > 0) {
-    if (!line2016) reporter.log('');
-    for (const reason of bankBlocks) reporter.log(`flashing disabled: ${reason}`, 'error');
+    for (const reason of bankWriteRefusals) {
+      reporter.log(`no bank can be written: ${reason}`, 'error');
+    }
   }
 
   const state: DeviceState = {
@@ -1600,73 +1476,18 @@ export async function readDeviceInfo(
     targetConfirmed,
     familyOk,
     plainChain,
-    canFlash: blocked.length === 0,
-    flashBlockedBy: blocked,
-    upgradeBlockedBy: upgradeOnly,
-    classicWriterBlockedBy: classicWriter,
-    appKeysBlock: keysBlock,
+    bankWriteRefusals,
     checkKey,
   };
 
   reporter.progress(
     1,
     1,
-    state.canFlash || (line2016 && bankBlocks.length === 0)
+    bankWriteRefusals.length === 0
       ? `Read. ${String(slots.filter((s) => s.present).length)}/${String(descriptors.length)} slots readable.`
-      : 'Read, but this camera cannot be flashed from here — see the log.',
+      : 'Read, but no bank of this camera can be written from here — see the log.',
   );
   return state;
-}
-
-/**
- * Why the RUNNING application cannot take an upload for this camera, or null.
- *
- * THE UPLOAD IS DECRYPTED BY THE APPLICATION, NOT BY THE BOOTLOADER. The flash
- * path encrypts the image under this camera's Key A - the bootloader's, from its
- * key table, confirmed against a slot - and `CompleteMemoryUpgrade` in the
- * running application decrypts it with the `g_keyA` built into THAT image and
- * re-encrypts it under the per-device key, or its own `g_keyB` when none is
- * programmed (`fw_validate_decrypt_program`, FW-V1 `targets/compact_pro_ff/src/
- * update.c`). Its checksum is over the staged bytes, so a wrong key is not
- * noticed: the commit answers OK, the new slot fails the bootloader's acceptance
- * test under both of its keys, and the camera boots the old slot again.
- *
- * That is not hypothetical. The Mosaic 10.9.1.31 dump's bootloader holds
- * 874dfcf6... / b23b0d20..., its application embeds f32ad771... / 997ed6e5...
- * (the Compact PRO FF 4.18.2.0 pilot's pair) and its per-device key slot is
- * erased; the emulated upload of a retargeted image committed and booted slot A
- * (FW-V1 Phase 51). Nothing here reads an address: the booted slot is already
- * decrypted, and the keys are looked for BY VALUE, the way the slot writer finds
- * the pair it retargets (`locateOwnKeyPair`; `findEmbeddedKeyTable` explains
- * why an anchor is not trusted). Only an ABSENT key refuses - that is the case the firmware
- * cannot survive, and it needs no guess about which copy the code loads.
- */
-export function runningApplicationKeyBlock(
-  running: SlotState | null,
-  keyTable: PickedKeyTable | null,
-  storeKey: StoreKey,
-): string | null {
-  const plain = running?.plain ?? null;
-  if (running === null || plain === null || keyTable === null) return null;
-  const what =
-    `the running application (${running.name}, firmware ` +
-    `${running.plainHeader?.versionStr ?? '?'})`;
-  if (findAll(plain, keyTable.keyA).length === 0) {
-    return (
-      `${what} does not carry this camera's Key A ${bytesToHex(keyTable.keyA)}: it decrypts ` +
-      "an upload with the Key A built into it, not with the bootloader's, so a flash would " +
-      'commit, the bootloader would refuse the new slot, and the camera would keep running ' +
-      'its old firmware'
-    );
-  }
-  if (!storeKey.programmed && findAll(plain, keyTable.keyB).length === 0) {
-    return (
-      `${what} carries this camera's Key A but not its Key B ${bytesToHex(keyTable.keyB)}: ` +
-      'with no per-device key programmed it re-encrypts an upload under the Key B built ' +
-      'into it, which this bootloader does not try, so the new slot would never boot'
-    );
-  }
-  return null;
 }
 
 /**
@@ -1693,14 +1514,6 @@ export function profileToRereadUnder(state: DeviceState, forced: boolean): Firmw
     a.clearWords[0] !== b.clearWords[0] ||
     a.clearWords[1] !== b.clearWords[1];
   return differs ? best : null;
-}
-
-/**
- * The flash-gate reason for a bank the read could not read. It names one bank: the slot page refuses
- * that bank (its row says "Not read", and `prepareSlotFlash` refuses it) and no other.
- */
-export function unreadSlotBlock(slot: SlotState): string {
-  return `${slot.name} could not be read (${slot.reason ?? 'unknown error'})`;
 }
 
 /** The slot the camera booted from, when the boot policy could name one. */

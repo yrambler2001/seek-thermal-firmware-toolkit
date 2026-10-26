@@ -123,7 +123,8 @@ function stateFor(
     serial?: string | null;
     booted?: SlotKey | null;
     slots?: readonly SlotState[];
-    canFlash?: boolean;
+    /** The read's camera-wide refusals (none by default). */
+    bankWriteRefusals?: readonly string[];
     keyA?: Uint8Array | null;
     keyB?: Uint8Array | null;
     plainChain?: boolean;
@@ -147,8 +148,7 @@ function stateFor(
     /* The store key of a camera without a per-device key is its Key B (storeKeyOf). */
     storeKey: { name: 'Key B', key: keyB, programmed: false },
     deviceKeySlot: null,
-    canFlash: options.canFlash ?? true,
-    flashBlockedBy: (options.canFlash ?? true) ? [] : ['this camera cannot be flashed (fixture)'],
+    bankWriteRefusals: options.bankWriteRefusals ?? [],
     /* A 2014-chain build's fixture camera holds its banks plain, as the read would find them. */
     plainChain: options.plainChain ?? onPlaintextChain(profile, version),
   } as unknown as DeviceState;
@@ -409,16 +409,26 @@ describe('prepareSlotFlash refuses before it builds anything', () => {
     expect(error.message).toContain('does not carry its key pair');
   });
 
-  it('a camera that cannot be flashed from here refuses key-a staging with the reasons', () => {
+  it('a camera the read refuses every bank write for refuses key-a staging with the reasons', () => {
     const slot = slotState({ key: 'b', present: true });
+    const reason = 'this camera cannot be written (fixture)';
     const report = reportFor(
-      stateFor(modern, { version, slots: [slot], keyA: KEY_A, keyB: KEY_B, canFlash: false }),
+      stateFor(modern, {
+        version,
+        slots: [slot],
+        keyA: KEY_A,
+        keyB: KEY_B,
+        bankWriteRefusals: [reason],
+      }),
       plan,
     );
     const name = `img${keyFilenameSuffix(SRC_A, SRC_B)}.bin`;
-    expect(() =>
+    const error = refusalOf(() =>
       prepareSlotFlash(report, 'b', { kind: 'plain', bytes: image, fileName: name }),
-    ).toThrow(/cannot be written from here/);
+    );
+    expect(error.message).toContain('cannot be written from here');
+    /* the refusal carries the writer's own reasons (TESTING.md 42.89) */
+    expect(error.detail?.blockedBy).toEqual([reason]);
   });
 
   it('2016 staging needs a key pair of its line in the image', () => {

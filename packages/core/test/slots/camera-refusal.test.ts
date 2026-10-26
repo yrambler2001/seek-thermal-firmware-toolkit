@@ -31,7 +31,7 @@ function headered(length: number): Uint8Array {
 }
 
 /** A 2014 plain-chain camera (1.3.0.0), A booted and holding a plain image, B erased. */
-function plainCamera(flashBlockedBy: readonly string[]): DeviceState {
+function plainCamera(bankWriteRefusals: readonly string[]): DeviceState {
   const plain = new Uint8Array(0x10000).fill(0x11);
   const a = slot('a', { present: true, plain, bootable: true, bootability: 'bootable' });
   const b = slot('b', { present: false, blank: true, plain: null });
@@ -49,9 +49,7 @@ function plainCamera(flashBlockedBy: readonly string[]): DeviceState {
     keyWhiteningK: 0,
     storeKey: { name: 'Key B', key: null, programmed: false },
     deviceKeySlot: null,
-    canFlash: flashBlockedBy.length === 0,
-    flashBlockedBy,
-    appKeysBlock: null,
+    bankWriteRefusals,
     plainChain: true,
     cfg0: 0,
   } as unknown as DeviceState;

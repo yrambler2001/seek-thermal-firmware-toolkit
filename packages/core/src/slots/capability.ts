@@ -191,11 +191,10 @@ function dumpSupport(
 
 /**
  * Flash support for one bank, in the family's staging form. The modern and
- * 2014-plain families take the profile's own flash gate. The 2016 family does
- * not: compact-2016 declares no flash capability (so no whole-image write is
- * offered, and the device-info read says so), but the keystream-staged write is
- * the path the preservation pipeline ran on 1.0.3.0, and the plan records that
- * refusal as a note rather than hiding it.
+ * 2014-plain families take the profile's own flash capability. The 2016 family
+ * does not: compact-2016 declares no flash capability, but the keystream-staged
+ * write is the path the preservation pipeline ran on 1.0.3.0, and the plan
+ * records that refusal as a note rather than hiding it.
  */
 function flashSupport(
   profile: FirmwareProfile,

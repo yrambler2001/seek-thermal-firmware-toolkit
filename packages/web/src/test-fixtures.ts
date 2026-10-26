@@ -27,9 +27,9 @@ export const SILENT_REPORTER: Reporter = {
 
 /**
  * A camera that answers every read with 0xA5. No slot carries an image
- * header, so the analysis comes back with `canFlash: false` — which is the
- * correct answer for this fake, and leaves every slot row rendering its
- * "not readable" branch.
+ * header, so the analysis refuses every bank write (`bankWriteRefusals`) —
+ * which is the correct answer for this fake, and leaves every slot row
+ * rendering its "not readable" branch.
  */
 export function fakeCamera(): WebUsbDevice {
   let opened = false;

@@ -30,7 +30,7 @@ import { equalBytes, viewOf } from '../../src/bytes.js';
 import { decryptImage } from '../../src/crypto/cipher.js';
 import { recoverKeyInfo } from '../../src/crypto/recover.js';
 import { SeekError, errorMessage } from '../../src/errors.js';
-import { silentReporter } from '../../src/events.js';
+import { collectingReporter, silentReporter } from '../../src/events.js';
 import { wordSum32 } from '../../src/image/bank.js';
 import {
   KEY_PAIRS,
@@ -190,8 +190,10 @@ export interface LockedRun {
   /** The analysis: which bank the camera boots, and which banks it read. */
   inspectError: string | null;
   booted: SlotKey | null;
-  /** Why the analysis could not name what it could not: the page's own reasons (flashBlockedBy). */
-  blockedBy: string[];
+  /** The read's camera-wide refusals (`DeviceState.bankWriteRefusals`): what refuses every bank write. */
+  bankWriteRefusals: string[];
+  /** The read's own words for why it names no booted bank: its "booted bank not named" and "boot prediction unavailable" lines. */
+  bootUnnamedWhy: string[];
   /** Facts about the run the matrix prints: where the image came from, what raw payload was sent. */
   notes: string[];
   inspected: Record<SlotKey, boolean> | null;
@@ -246,7 +248,8 @@ export function blankLockedRun(subject: LockedSubject, entryId: string): LockedR
     planNotes: [],
     inspectError: null,
     booted: null,
-    blockedBy: [],
+    bankWriteRefusals: [],
+    bootUnnamedWhy: [],
     notes: [],
     inspected: null,
     contents: null,
@@ -570,8 +573,10 @@ export async function runLockedFirmware(
 
       /* ---- 2. the analysis, and each bank dumped against the flash ---- */
       let report: SlotsReport;
+      /* The read's log is kept: it says why a booted bank is not named. */
+      const readLog = collectingReporter();
       try {
-        report = await inspectSlots(ctx);
+        report = await inspectSlots({ ...ctx, reporter: readLog });
       } catch (error) {
         run.inspectError = reasonOf(error);
         return;
@@ -579,7 +584,13 @@ export async function runLockedFirmware(
       const state = report.state;
       run.analysisProfile = state.profile.id;
       run.booted = state.boot?.booted ?? null;
-      run.blockedBy = [...state.flashBlockedBy];
+      run.bankWriteRefusals = [...state.bankWriteRefusals];
+      run.bootUnnamedWhy = readLog.events.flatMap((event) =>
+        event.type === 'log' &&
+        /^(booted bank not named|boot prediction unavailable)/.test(event.message)
+          ? [event.message]
+          : [],
+      );
       run.writeKeysRefusal = slotWriteRefusal(state);
       run.bannerRefusal = writeBannerOf(state);
       run.planAllowsWrite =

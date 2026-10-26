@@ -284,8 +284,8 @@ function hexBytes(hex: string): Uint8Array {
  * A Compact PRO 1.0.3.0 read under compact-2016, built on a real read's shape (`base`): cfg[0] erased
  * (0xFFFFFFFF), the camera reports it entered slot A, and the key its bootloader checks a bank under is
  * named from slot A (key block 1), so every bank stored under it is bootable. With `checkKeyNamed` false
- * the active-slot word is unread and no bank has a verdict. The whole-image writer's reasons stay in the
- * gate, as the read leaves them (`classicWriterBlockedBy`).
+ * the active-slot word is unread and no bank has a verdict. The read refuses no bank write on this line
+ * (`bankWriteRefusals` empty: no key table is needed).
  */
 export function deviceState2016(
   base: DeviceState,
@@ -307,10 +307,6 @@ export function deviceState2016(
       footerOk: false,
     }),
   );
-  const classic = [
-    "this camera's key table could not be confirmed",
-    '2016 Compact Pro does not support flashing: the classic write path has nothing for its banks',
-  ];
   return {
     ...base,
     profile: getProfile('compact-2016'),
@@ -350,11 +346,7 @@ export function deviceState2016(
             "the camera's active-slot word (fw info roots, selector 10) could not be read",
           why: 'check key not named',
         },
-    canFlash: false,
-    flashBlockedBy: classic,
-    classicWriterBlockedBy: classic,
-    upgradeBlockedBy: named ? [] : ['the slot an upgrade would write could not be determined'],
-    appKeysBlock: null,
+    bankWriteRefusals: [],
   };
 }
 

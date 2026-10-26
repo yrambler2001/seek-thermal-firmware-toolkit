@@ -325,8 +325,8 @@ export interface DeviceState {
   /**
    * The whitening constant under which this camera's key table actually
    * resolved. Usually the profile's own K; when it is not, K and the profile
-   * disagree and a write would encrypt under the wrong constant, so the flash
-   * gate refuses.
+   * disagree and a write would encrypt under the wrong constant, so every bank
+   * write is refused (`bankWriteRefusals`).
    */
   readonly keyWhiteningK: number;
   readonly storeKey: StoreKey;
@@ -359,37 +359,20 @@ export interface DeviceState {
    * keystream solve came back as the identity state and the stored words sum
    * to the bootloader's 0 — the slot bytes ARE the image, there is no footer,
    * and no key material is involved on any step of an upgrade. On this chain
-   * the flash gate needs no key table, no cipher target and no boot replay:
-   * the target comes from the camera's own active-slot word, and the staged
-   * bytes go to the camera verbatim. False on every cipher chain, where the
-   * ordinary gate reasons apply in full.
+   * a bank write needs no key table, no cipher target and no boot replay:
+   * the camera's own active-slot word names the booted bank, and the staged
+   * bytes go to the camera verbatim. False on every cipher chain.
    */
   readonly plainChain: boolean;
-  readonly canFlash: boolean;
-  /** Why `canFlash` is false, for a UI that has to explain the greyed-out button. */
-  readonly flashBlockedBy: readonly string[];
   /**
-   * The part of `flashBlockedBy` that only the classic upgrade flow needs: which bank an upgrade
-   * (selector 0) would write, and the window that upgrade would arm. The slot page writes the bank it
-   * names through that bank's own window, so it does not refuse the camera for these (see
-   * `gateWithoutAppKeys`). Optional: states built elsewhere (fixtures) read as none.
+   * The reasons that refuse every bank write on this camera, whatever image is written: the slot
+   * writer's camera-wide refusals (slots/write-keys.ts `cameraWriteRefusal`), empty when none does. A
+   * bank the read could not read is refused by name, not here, and which bank the camera's own upgrade
+   * writes refuses nothing (a slot write names its bank). On a build whose writes are sent under the
+   * camera's keys (the Key A line) an unconfirmed key table is one of them; the builds that stage from
+   * their own image (the 2014 chain, the 2016 line, the 1.3.0.8 FF image) do not need the table.
    */
-  readonly upgradeBlockedBy?: readonly string[];
-  /**
-   * The part of `flashBlockedBy` that only the classic writer needs: the key table it stages under, and
-   * its 2014-only line statement. The slot page keeps them for the key-A line (whose derivation reads the
-   * same table) and drops them on the 2016 keystream line and the 1.3.0.8 FF build, which stage from their
-   * own images (see `gateWithoutAppKeys`). Optional: states built elsewhere read as none.
-   */
-  readonly classicWriterBlockedBy?: readonly string[];
-  /**
-   * The entry of `flashBlockedBy` that says the running application does not carry the
-   * bootloader's key pair (`runningApplicationKeyBlock`), or null. The slot page derives its
-   * upload keys from the booted bank and the running application instead (slots/write-keys.ts),
-   * so it must tell this one reason apart from the others. Optional: states built elsewhere
-   * (fixtures) read as null.
-   */
-  readonly appKeysBlock?: string | null;
+  readonly bankWriteRefusals: readonly string[];
   /**
    * The 2016 Compact PRO line only: the key its bootloader checks a bank under, named from the bank the
    * camera reports it entered (device-info.ts `checkKeyOf`), or the reason it could not be named. Null on

@@ -314,14 +314,12 @@ export type {
 
 /* ---- the four read workflows ------------------------------------------ */
 export {
-  BANKS_ONLY_WRITING,
   DEFAULT_DUMP_OPTIONS,
   KEY_TABLE_REFUSED_2016,
   bankWritingOf,
   bootableDescription,
   bootedReportOf,
   bootedSlot,
-  cameraWideBlocks,
   channelEvidenceOf,
   checkKeyNameOf,
   checkKeyReportOf,

@@ -8,15 +8,22 @@
  * camera entered from the bootloader's own record (the active-slot word, TESTING.md 42.53, 42.56) and the
  * bank the next start runs from the boot-config word and each bank's check (slots/boot-choice.ts). On the
  * 2016 line the bootloader block is refused on every channel, so the key rows name the key its bootloader
- * checks a bank under (device-info.ts `checkKeyOf`) instead of a key table, and the banks are written one at
- * a time by the slot writer, never as a whole image.
+ * checks a bank under (device-info.ts `checkKeyOf`) instead of a key table. On every line the banks are
+ * written one at a time by the slot writer (`bankWritingOf`).
  * ==================================================================== */
 
 import { bytesToHex, hexUp } from '../bytes.js';
 import { bankWordsOf } from '../profiles/locked-boot.js';
 import type { DetectionResult, SlotKey } from '../profiles/types.js';
 import { bootChoiceOf, bootRuleKnown } from '../slots/boot-choice.js';
-import { cameraWideBlocks, storeKeyDescription } from './device-info.js';
+import {
+  classifyBuild,
+  stagingFor,
+  UNVERIFIED_STAGING_REASON,
+} from '../slots/capability-family.js';
+import type { StagingForm } from '../slots/types.js';
+import { slotWriteRefusals } from '../slots/write-keys.js';
+import { storeKeyDescription } from './device-info.js';
 import type { CheckKey, DeviceState } from './types.js';
 
 /** One row of the report: the label (lower case, as the CLI prints it) and its value. */
@@ -120,16 +127,33 @@ export function keyReportRows(state: DeviceState): ReportRow[] {
 }
 
 /**
- * How the banks of a 2016 camera are written, or null on any other line. The slot writer writes them one at
- * a time, each staged under its image's own key block 0; no whole-image write exists on this line.
- * `refusals` are the reasons that refuse every bank for the slot writer (device-info.ts `cameraWideBlocks`,
- * the slot page's own gate), empty when none does.
+ * How this camera's banks are written, for the Writing section the Info tab and `seek-fw info` both show: the
+ * slot writer writes one bank at a time on every line (no whole-image write exists), each staged in the form
+ * its line takes (`staged`), and `refusals` are the reasons it refuses every bank of this camera
+ * (slots/write-keys.ts `slotWriteRefusals`: the read's camera-wide refusals, and on the Key A line the
+ * upload-key derivation's), the reasons behind the Slots tab's banner. On a build the slot writer has no
+ * staging form for, `staged` is null and `refusals` starts with why.
  */
 export interface BankWriting {
+  /** How each bank is staged, as a clause after "each bank" ("staged under its image's own key block 0"), or null. */
+  readonly staged: string | null;
+  /** What refuses every bank of this camera; empty when a bank can be written. */
   readonly refusals: readonly string[];
 }
 
-export function bankWritingOf(state: DeviceState): BankWriting | null {
-  if (state.checkKey == null) return null;
-  return { refusals: cameraWideBlocks(state, true) };
+/** The staging clause of each form the slot writer stages a bank in, in words (TESTING.md 42.89). */
+const STAGED_CLAUSE: Readonly<Record<StagingForm, string>> = {
+  plain: 'staged plain (the image as it is, with no key)',
+  'slot-keystream-ciphertext': "staged under its image's own key block 0",
+  'key-a-ciphertext': 'staged under keys derived from the booted bank and the running application',
+};
+
+export function bankWritingOf(state: DeviceState): BankWriting {
+  const verdict = classifyBuild(state.profile, state.version);
+  const staging = stagingFor(verdict.family);
+  const refusals = slotWriteRefusals(state);
+  if (verdict.refusal !== null || staging === null) {
+    return { staged: null, refusals: [verdict.refusal ?? UNVERIFIED_STAGING_REASON, ...refusals] };
+  }
+  return { staged: STAGED_CLAUSE[staging], refusals };
 }

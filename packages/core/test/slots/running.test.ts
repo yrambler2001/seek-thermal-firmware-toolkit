@@ -181,8 +181,7 @@ function stateOf(
     keyWhiteningK: legacy.cipher.whiteningK,
     storeKey: { name: 'Key B', key: null, programmed: false },
     deviceKeySlot: null,
-    canFlash: true,
-    flashBlockedBy: [],
+    bankWriteRefusals: [],
     bankVerdicts,
   } as unknown as DeviceState;
 }

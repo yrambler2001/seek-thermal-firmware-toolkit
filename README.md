@@ -165,7 +165,7 @@ decrypts to 0xFFFF (the Compact 1.3.0.8 cipher) keeps a 1.0.3.x camera on `legac
 version (1.2.0.0 on the 2016 part, 0.9.0.0 on the 2014 Compact) corroborates. When the slots name the
 other family, `seek-fw info` and the slots page's "Read slots" redo the analysis under it, and a dump
 decrypts its slots under it, saying in the report which profile the read acted under. `compact-2016`
-declares no whole-image flash: its banks are written one at a time on the Slots tab.
+declares no write of its own: its banks are written one at a time on the Slots tab, as on every line.
 
 **`compact-2014` refuses to dump, and that refusal is the point.** Every decrypted image carries
 its own RPC method table — wire id = index + 53 — and recovering it from all 36 images in the
@@ -577,9 +577,13 @@ the bootloader check that bank before entering it, and calls a bank under any ot
 the bank the boot-config word predicts, and there the camera's own answer also sets the upgrade target,
 overriding the prediction.
 
-The Writing section says how the camera can be written. On the 2016 Compact PRO the banks are written
-one at a time on the Slots tab (`seek-fw slots flash` or `patch-fps`), each staged under its image's own
-key block 0, and no whole-image write exists; only a reason that would refuse every bank is listed.
+The Writing section says how the camera can be written. On every line the banks are written one at a
+time on the Slots tab (`seek-fw slots flash` or `patch-fps`), each staged in its line's form (plain on
+the 2014 chain, under the image's own key block 0 on the 2016 Compact PRO, under keys derived from the
+booted bank and the running application on 4.x), and the section lists what refuses every bank of the
+camera, the reasons behind the Slots tab's banner. No line has a whole-image write, and the read no
+longer reports one (`--json` has `bankWrites: {staged, refusedBy}` on every line and no `canFlash` or
+`flashBlockedBy`; TESTING.md 42.89).
 
 The read writes no flash. It sets two RAM selectors (`0x55`, `0x5a`). The identify step before it sends
 the camera's unlock token, which leaves the vendor window unlocked until a power cycle, as

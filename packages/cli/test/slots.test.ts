@@ -139,7 +139,7 @@ function deviceStateFake(serial: string | null = 'SN-1'): DeviceState {
     | 'boot'
     | 'byKey'
     | 'slots'
-    | 'flashBlockedBy'
+    | 'bankWriteRefusals'
     | 'storeKey'
     | 'deviceKeySlot'
     | 'keyTable'
@@ -163,7 +163,7 @@ function deviceStateFake(serial: string | null = 'SN-1'): DeviceState {
     boot: null,
     byKey: new Map(),
     slots: [],
-    flashBlockedBy: [],
+    bankWriteRefusals: [],
     storeKey: { name: 'Key B', key: null, programmed: false },
     deviceKeySlot: null,
     keyTable: null,
@@ -1765,24 +1765,17 @@ describe('the 2014 plaintext chain', () => {
     expect(text).not.toContain('unknown key');
   });
 
-  /* The 2016 keystream line stages each image under the key pair it carries (TESTING.md 42.19): the classic
-   * writer's reasons (its key table, its 2014-only line, its profile flash capability) do not refuse it. The
-   * list and the JSON must agree with the page: no refusal, and no derived key claimed. */
-  it('the 2016 keystream line is not refused for the classic writer’s reasons, and the list claims no derived key', () => {
+  /* The 2016 keystream line stages each image under the key pair it carries (TESTING.md 42.19): it needs no
+   * key table, so an unread one refuses nothing. The list and the JSON must agree with the page: no refusal,
+   * and no derived key claimed. */
+  it('the 2016 keystream line is not refused for a key table it does not need, and the list claims no derived key', () => {
     const base = onLockedPlain(reportOf({ booted: 'a' }));
-    const reasons = [
-      "this camera's key table could not be confirmed",
-      'the write path on this line is implemented only for the 2014 plaintext chain',
-      '2016 Compact Pro does not support flashing: the classic write path has nothing for its banks',
-    ];
     const state = {
       ...base.state,
       version: '1.0.3.0',
       plainChain: false,
       keyTable: null,
-      flashBlockedBy: reasons,
-      classicWriterBlockedBy: reasons,
-      canFlash: false,
+      bankWriteRefusals: [],
     } as unknown as DeviceState;
     const report: SlotsReport = { ...base, state };
     expect(listResult(report).writeKeys).toMatchObject({ refused: null });
@@ -1796,8 +1789,8 @@ describe('the 2014 plaintext chain', () => {
  * The Mosaic-shaped camera through `slots flash`, with core's own prepare (TESTING.md 42.82 F3)
  * ==================================================================== */
 
-/* The classic writer refused Mosaic 10.9.1.31 for its application's keys (the pilot pair, not the
- * bootloader's). The slot page replaced that refusal with the upload-key derivation (TESTING.md 42.7):
+/* The removed whole-image writer refused Mosaic 10.9.1.31 for its application's keys (the pilot pair, not
+ * the bootloader's). The slot page replaced that refusal with the upload-key derivation (TESTING.md 42.7):
  * on 10.9.1.31 it derives the three-mask upload, and on a build that checks an upload under its own keys
  * it refuses. The CLI reaches that derivation only through core's `prepareSlotFlash`, so these run the
  * command with core's real prepare (the camera analysis and the commit are the only fakes) and hold the
@@ -1808,7 +1801,6 @@ describe('slots flash on a Mosaic-shaped camera: the page’s key derivation, th
   const BOOT_B = Uint8Array.from({ length: 16 }, (_, i) => 0xb0 + i);
   const pilot = APPLICATION_KEY_PAIRS.find((p) => p.builds.includes('Mosaic 10.9.1.31'));
   if (pilot === undefined) throw new Error('the decoded Mosaic 10.9.1.31 pair is not in the table');
-  const APP_BLOCK = "the running application does not carry the bootloader's key pair (fixture)";
   let temp: { path: string; cleanup: () => Promise<void> };
 
   beforeEach(async () => {
@@ -1876,11 +1868,7 @@ describe('slots flash on a Mosaic-shaped camera: the page’s key derivation, th
       keyWhiteningK: modern.cipher.whiteningK,
       storeKey: { name: 'Key B', key: BOOT_B, programmed: false },
       deviceKeySlot: null,
-      canFlash: false,
-      flashBlockedBy: [APP_BLOCK],
-      appKeysBlock: APP_BLOCK,
-      upgradeBlockedBy: [],
-      classicWriterBlockedBy: [],
+      bankWriteRefusals: [],
       plainChain: false,
     } as unknown as DeviceState;
     const plan = buildSlotPlan(modern, version);
@@ -2663,8 +2651,7 @@ function report2016(options: {
     slots: [...byKey.values()],
     boot: named ? { booted: 'a', target: 'b' } : null,
     checkKey,
-    upgradeBlockedBy: [],
-    classicWriterBlockedBy: [],
+    bankWriteRefusals: [],
   } as unknown as DeviceState;
   const heldBy = (plain: Uint8Array | null) =>
     plain !== null && patchedImages.has(plain) ? { hz: 18, what: 'marker' } : null;

@@ -701,13 +701,13 @@ describe('decryptDump', () => {
  * ==================================================================== */
 
 describe('readDeviceInfo', () => {
-  it('reports everything it can on a camera off the plain chain and refuses to flash', async () => {
+  it('reports everything it can on a camera off the plain chain, and refuses every bank write for the acceptance sum', async () => {
     /* legacy-auth deliberately throws from selectBootSlot: its bootloader was
      * never decoded, so it will not fabricate a boot prediction. A device-info
-     * run must still complete and say why flashing is off — the profile's
-     * capability no longer refuses for it, so the reasons are the gate's: no
-     * key table, no acceptance sum, no target, and no bank stored plain (the
-     * only form this line's write path stages). */
+     * run must still complete and say what refuses a bank write: no slot
+     * decrypts to the acceptance sum. The key table (this build's writes are
+     * not sent under the camera's keys), the booted bank and the plain chain
+     * are not camera-wide refusals (TESTING.md 42.89). */
     const camera = cameraFor(legacyAuth);
     const reporter = collectingReporter();
     const ctx = await contextFor(legacyAuth, camera, reporter);
@@ -717,12 +717,13 @@ describe('readDeviceInfo', () => {
     expect(state.profile.id).toBe('legacy-auth');
     expect(state.boot).toBeNull();
     expect(state.plainChain).toBe(false);
-    expect(state.canFlash).toBe(false);
-    const blocked = state.flashBlockedBy.join(' ');
-    expect(blocked).toContain('key table could not be confirmed');
-    expect(blocked).toContain('acceptance sum');
-    expect(blocked).toContain('the slot an upgrade would write could not be determined');
-    expect(blocked).toContain('implemented only for the 2014 plaintext chain');
+    const refused = state.bankWriteRefusals.join(' ');
+    expect(refused).toContain('acceptance sum');
+    expect(refused).not.toContain('key table');
+    expect(refused).not.toContain('an upgrade would write');
+    expect(refused).not.toContain('implemented only for the 2014 plaintext chain');
+    expect(logsOf(reporter)).toContain('no bank can be written: no slot decrypts to');
+    expect(logsOf(reporter)).not.toContain('flashing disabled');
     expect(state.slots).toHaveLength(legacyAuth.slots.length);
     /* the emulated flash holds no firmware image, so no slot is present */
     expect(state.slots.every((s) => !s.present)).toBe(true);
@@ -803,11 +804,9 @@ describe('readDeviceInfo', () => {
         expect(slot.reason, label).toContain(hex(slot.address, 8));
         expect(slot.reason, label).toContain(table);
         expect(slot.reason, label).toContain('nothing was armed for it');
-        expect(state.flashBlockedBy, label).toContain(
-          `${slot.name} could not be read (${slot.reason ?? ''})`,
-        );
+        /* an unread bank is refused by name, not as a camera-wide refusal */
+        expect(state.bankWriteRefusals.join(' '), label).not.toContain(slot.name);
       }
-      expect(state.canFlash, version).toBe(false);
     }
   }, 60_000);
 
@@ -852,10 +851,9 @@ describe('readDeviceInfo', () => {
     expect(camera.arms).not.toContain(0);
     expect(state.updateTargetSubcmd).toBeNull();
     expect(state.targetConfirmed).toBeNull();
-    expect(state.canFlash).toBe(false);
-    expect(state.flashBlockedBy.join('\n')).toContain(
-      "no upgrade-target selector 0x0 in this firmware's own table",
-    );
+    /* the read says so, and it refuses no bank write: a slot write arms its own bank's window */
+    expect(logsOf(reporter)).toContain('has no upgrade-target selector 0x0');
+    expect(state.bankWriteRefusals.join('\n')).not.toContain('upgrade-target selector');
 
     /* and under modern-4x itself the row is there, and it is the one armed */
     const modernCamera = cameraFor(modern4x);
@@ -865,7 +863,7 @@ describe('readDeviceInfo', () => {
     expect(modern.boot).not.toBeNull();
     expect(modern.updateTargetSubcmd).toBe(0);
     expect(modernCamera.arms.at(-1)).toBe(0);
-    expect(modern.flashBlockedBy.join('\n')).not.toContain('upgrade-target selector');
+    expect(modern.bankWriteRefusals.join('\n')).not.toContain('upgrade-target selector');
   }, 60_000);
 
   /* ---- the spent-reader signatures (the 2026-10-02 incident) ---------- */
@@ -950,8 +948,8 @@ describe('readDeviceInfo', () => {
     /* and no family scored anything off those captures */
     expect(state.evidence.observedAcceptanceSums ?? []).toEqual([]);
     expect(JSON.stringify(state.detection)).not.toContain('decrypts to the');
-    expect(state.canFlash).toBe(false);
-    expect(state.flashBlockedBy.join(' ')).toContain('could not be read');
+    /* every bank is refused as unread; the camera is refused because nothing decrypted */
+    expect(state.bankWriteRefusals.join(' ')).toContain('acceptance sum');
   }, 60_000);
 
   it('keeps scoring the slot that did read, beside a spent one', async () => {
@@ -1213,7 +1211,7 @@ describe('a 2016 Compact PRO (1.0.3.0), read and judged', () => {
     const state = await readDeviceInfo(ctx, { chunk: 4096 });
 
     expect(state.detection.best.profile.id).toBe('compact-2016');
-    expect(state.flashBlockedBy.join(' ')).toContain(
+    expect(state.bankWriteRefusals.join(' ')).toContain(
       'the evidence says this camera is 2016 Compact Pro',
     );
     expect(profileToRereadUnder(state, false)?.id).toBe('compact-2016');
@@ -1263,17 +1261,13 @@ describe('a 2016 Compact PRO (1.0.3.0), read and judged', () => {
     expect(log).not.toContain("could not confirm this camera's key table");
     expect(log).not.toContain('never decoded');
     expect(log).not.toContain('unknown key');
-    /* the whole-image writer's reasons are one line; nothing refuses the banks */
-    expect(log).toContain(
-      "writing: this camera's banks are written one at a time, each staged under its image's own key " +
-        'block 0; a whole-image write is not available on the 2016 line',
-    );
+    /* nothing refuses a bank write: no key table is needed on this line (TESTING.md 42.89) */
+    expect(state.bankWriteRefusals).toEqual([]);
     /* The page and the CLI both log the read, so it names neither (TESTING.md 42.87). */
     expect(log).not.toMatch(/Slots tab|seek-fw|the page/);
     expect(log).not.toContain('flashing disabled');
-    /* the whole-image gate keeps its reasons, for the JSON */
-    expect(state.canFlash).toBe(false);
-    expect(state.classicWriterBlockedBy?.length).toBeGreaterThan(0);
+    expect(log).not.toContain('whole-image');
+    expect(log).not.toContain('no bank can be written');
   }, 60_000);
 
   it('calls a bank under another key not bootable, and the next start passes it over', async () => {
@@ -1326,15 +1320,12 @@ describe('a 2016 Compact PRO (1.0.3.0), read and judged', () => {
     );
     expect(log).not.toContain('Legacy locked firmware:');
 
-    /* detection agrees with the profile, and the whole-image gate stays shut for the profile's own,
-     * honest reason, which the read says once instead of as "flashing disabled" */
+    /* detection agrees with the profile, and nothing refuses a bank write: an unnamed check key leaves
+     * each bank's verdict unknown, which the write asks to acknowledge, and refuses nothing */
     expect(state.detection.best.profile.id).toBe('compact-2016');
-    expect(state.canFlash).toBe(false);
-    const blocked = state.flashBlockedBy.join(' ');
-    expect(blocked).not.toContain('the evidence says');
-    expect(blocked).toContain("shares legacy-auth's locked BeginFirmwareUpgrade handler");
-    expect(blocked).not.toContain('different BeginFirmwareUpgrade selector map');
+    expect(state.bankWriteRefusals).toEqual([]);
     expect(log).not.toContain('flashing disabled');
+    expect(log).not.toContain('no bank can be written');
     expect(camera.calls.some((c) => c.op === 0x50 || c.op === 0x51)).toBe(false);
   }, 60_000);
 

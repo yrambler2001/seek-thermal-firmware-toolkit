@@ -64,7 +64,6 @@ import { findEmbeddedKeyTable, stateFromKey, UNNAMED_KEY } from '../crypto/keys.
 import { bankWordsOf } from '../profiles/locked-boot.js';
 import type { CipherProfile, SlotKey } from '../profiles/types.js';
 import type { DerivedKey } from './types.js';
-import { cameraWideBlocks } from '../workflows/device-info.js';
 import type { DeviceState } from '../workflows/types.js';
 import { APPLICATION_KEY_PAIRS } from './application-pairs.js';
 import { classifyBuild, stagingFor } from './capability-family.js';
@@ -151,28 +150,39 @@ export function checksUploadUnderOwnKeys(version: string | null): boolean {
 
 /**
  * Whether this build's slot writes are sent under keys the camera holds: the Key A staging, the modern
- * line. Only those writes read the camera's key table and the upload-key derivation, so only those can be
- * refused for the camera as a whole. The 2014 plaintext chain (plain staging), the 2016 keystream line
- * (its own key pair, found in the image) and the 1.3.0.8 FF build (its vendor form) stage from their own
- * images: the write path sends them whatever the camera's key table says, so a camera-wide reason such as
- * "the key table could not be confirmed" or "the write path is implemented only for the 2014 chain" is a
- * false banner on them (it is the classic `flash` gate's wording, not the slot page's).
+ * line. Only those writes read the camera's key table and the upload-key derivation, so only those are
+ * refused for an unconfirmed table or a derivation that fails. The 2014 plaintext chain (plain staging),
+ * the 2016 keystream line (its own key pair, found in the image) and the 1.3.0.8 FF build (its vendor
+ * form) stage from their own images: the write path sends them whatever the camera's key table says. The
+ * read applies the same test to its key-table refusal (device-info.ts, `bankWriteRefusals`).
  */
 export function stagesUnderCameraKey(state: DeviceState): boolean {
   return stagingFor(classifyBuild(state.profile, state.version).family) === 'key-a-ciphertext';
 }
 
 /**
- * Why a bank of this camera cannot be written, or null when it can. On a build whose writes are sent under
- * the camera's keys (`stagesUnderCameraKey`): the page's own gate minus the one reason it replaces, then the
- * derivation of the upload keys. On the other builds no camera-wide reason applies, and the bank's own
- * refusal (the plan, an unread or an empty bank) is the page's answer. The slot page, the CLI and the writer
- * all ask this one question, so they cannot disagree about it.
+ * Why a bank of this camera cannot be written, or null when it can: the camera-wide refusals the read made
+ * (`cameraWriteRefusal`), then, on a build whose writes are sent under the camera's keys
+ * (`stagesUnderCameraKey`), the derivation of the upload keys. Otherwise the bank's own refusal (the plan, an
+ * unread or an empty bank) is the answer. The slot page, the CLI and the writer all ask this one question, so
+ * they cannot disagree about it.
  */
 export function slotWriteRefusal(state: DeviceState): string | null {
-  const gate = gateWithoutAppKeys(state);
-  if (gate !== null) return gate;
+  const camera = cameraWriteRefusal(state);
+  if (camera !== null) return camera;
   return stagesUnderCameraKey(state) && !state.plainChain ? deriveWriteKeys(state).refusal : null;
+}
+
+/**
+ * The reasons behind `slotWriteRefusal`, as a list: the read's camera-wide refusals, else the derivation's
+ * refusal on a build that writes under the camera's keys. Empty when a bank can be written. The writer
+ * attaches it to its refusal (`detail.blockedBy`).
+ */
+export function slotWriteRefusals(state: DeviceState): string[] {
+  if (state.bankWriteRefusals.length > 0) return [...state.bankWriteRefusals];
+  if (!stagesUnderCameraKey(state) || state.plainChain) return [];
+  const refusal = deriveWriteKeys(state).refusal;
+  return refusal === null ? [] : [refusal];
 }
 
 /**
@@ -222,28 +232,14 @@ function keyBytesNamed(state: DeviceState, name: string): Uint8Array | null {
 }
 
 /**
- * The page's own flash gate, for the camera as a whole: the flash gate's reasons minus the three that
- * are not about the camera as a whole.
- *   - the running application lacks the bootloader's pair (this module replaces it, `appKeysBlock`);
- *   - a bank the read could not read: the bank's row says so and its write is refused by name, so the
- *     other banks are still writable and the banner must not say none is;
- *   - the upgrade flow's reasons (`upgradeBlockedBy`: which bank an upgrade would write). The page writes
- *     the bank it names through that bank's own window, and an unnamed boot is handled by the
- *     acknowledgement, so the upgrade's target does not refuse a write;
- *   - on a build that does not stage under the camera's key (`stagesUnderCameraKey`), the classic writer's
- *     own reasons (`classicWriterBlockedBy`: the key table, the 2014-only line). The 2014-only reason is not
- *     a camera-wide one there (the 1.3.0.8 FF image stages in its vendor form on a camera with no plain
- *     bank), so the writer applies it where it stages an image plain (write.ts `refusePlainStaging`).
- * Null when nothing else refuses. Every other reason still refuses the whole camera, and says which. The
- * filter is device-info.ts `cameraWideBlocks`, which the device-info read prints from on the 2016 line, so
- * the read and the page name the same reasons.
+ * The camera-wide refusal, for every bank and every staging: the reasons the read found that refuse every
+ * bank write on this camera (`DeviceState.bankWriteRefusals`), in one sentence, or null when there are none.
+ * A raw payload is refused for these alone (no key of the write builds it); a decrypted image is refused for
+ * these and, on the Key A line, for the derivation too (`slotWriteRefusal`).
  */
-export function gateWithoutAppKeys(state: DeviceState): string | null {
-  /* The classic writer's own reasons refuse only the lines that write under the camera's key; the 2016 and
-   * FF lines do not stage under it, so they never see those reasons. */
-  const others = cameraWideBlocks(state, !stagesUnderCameraKey(state));
-  if (others.length === 0) return null;
-  return `this camera cannot be written from here: ${others.join('; ')}`;
+export function cameraWriteRefusal(state: DeviceState): string | null {
+  if (state.bankWriteRefusals.length === 0) return null;
+  return `this camera cannot be written from here: ${state.bankWriteRefusals.join('; ')}`;
 }
 
 /** How a 2016 upload is staged, as the page's "Staged as" row and the CLI's `staged as` row say it. */

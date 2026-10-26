@@ -139,8 +139,7 @@ function stateFor(
     /* The store key of a camera without a per-device key is its Key B (storeKeyOf). */
     storeKey: { name: 'Key B', key: keys?.keyB ?? null, programmed: false },
     deviceKeySlot: null,
-    canFlash: true,
-    flashBlockedBy: [],
+    bankWriteRefusals: [],
     /* A 2014-chain build's fixture camera holds its banks plain, as the read would find them. */
     plainChain: onPlaintextChain(profile, version),
   } as unknown as DeviceState;

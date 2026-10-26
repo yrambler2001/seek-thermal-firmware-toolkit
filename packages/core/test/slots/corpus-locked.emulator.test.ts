@@ -216,8 +216,8 @@ function matrixLine(run: LockedRun): string {
       (run.setup === null ? '' : ` [setup: ${run.setup}]`) +
       (run.inspectError === null ? '' : ` [inspect: ${run.inspectError}]`),
   ];
-  if (run.booted === null && run.blockedBy.length > 0) {
-    lines.push(`${' '.repeat(38)} booted unknown because: ${run.blockedBy.join(' | ')}`);
+  if (run.booted === null && run.bootUnnamedWhy.length > 0) {
+    lines.push(`${' '.repeat(38)} booted unknown because: ${run.bootUnnamedWhy.join(' | ')}`);
   }
   for (const note of run.notes) lines.push(`${' '.repeat(38)} note: ${note}`);
   return lines.join('\n');
@@ -312,7 +312,7 @@ describe.skipIf(!available)(
             expect(run.writeKeysRefusal ?? '', 'the verdict names a key').not.toMatch(
               /decrypts under|does not carry that key|carries none of the key pairs|checks an upload under|could not be named/,
             );
-            if (run.blockedBy.length === 0) expect(run.writeKeysRefusal).toBeNull();
+            if (run.bankWriteRefusals.length === 0) expect(run.writeKeysRefusal).toBeNull();
           });
         }
 
@@ -346,7 +346,7 @@ describe.skipIf(!available)(
 
         if (named) {
           it('names the booted bank from the active-slot word', () => {
-            expect(run.booted, run.blockedBy.join(' | ')).not.toBeNull();
+            expect(run.booted, run.bootUnnamedWhy.join(' | ')).not.toBeNull();
           });
         } else {
           const why = ffImage
@@ -354,7 +354,7 @@ describe.skipIf(!available)(
             : "0.8.0.0's mode 1 is boot-config, so the mode-0 row that arms the upgrade target is not decoded on this build";
           it(`PINNED GAP: the booted bank is not named on this build, so every bank needs acknowledgement (${why})`, () => {
             expect(run.booted, 'the booted bank').toBeNull();
-            expect(run.blockedBy.length, 'the page gives its reason').toBeGreaterThan(0);
+            expect(run.bootUnnamedWhy.length, 'the read gives its reason').toBeGreaterThan(0);
           });
         }
 

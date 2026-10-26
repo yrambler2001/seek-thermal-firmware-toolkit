@@ -56,7 +56,7 @@ import { buildSlotPlan } from '../../src/slots/capability.js';
 import { dumpSlot } from '../../src/slots/dump.js';
 import { inspectSlots } from '../../src/slots/inspect.js';
 import { flashSlot, prepareSlotFlash } from '../../src/slots/write.js';
-import { deriveWriteKeys, gateWithoutAppKeys } from '../../src/slots/write-keys.js';
+import { cameraWriteRefusal, deriveWriteKeys } from '../../src/slots/write-keys.js';
 import { locateOwnKeyPair, retargetImageKeys } from '../../src/slots/write-image.js';
 import { buildBankPayload, setAcceptSum } from '../../src/image/bank.js';
 import { FOOTER_SIZE, footerOffsetFor } from '../../src/image/header.js';
@@ -871,9 +871,17 @@ function uploadFormNote(report: SlotsReport, plain: Uint8Array, payload: Uint8Ar
   }
 }
 
-/** Why the page cannot write this camera's modern-line banks, or null (the slot page's own gate). */
+/** Why the page cannot write this camera's modern-line banks, or null (the slot page's own refusal). */
 function writeRefusalOf(report: SlotsReport): string | null {
-  return gateWithoutAppKeys(report.state) ?? deriveWriteKeys(report.state).refusal;
+  return cameraWriteRefusal(report.state) ?? deriveWriteKeys(report.state).refusal;
+}
+
+/**
+ * Whether the running application carries the bootloader's own key pair: the derivation finds the pair in
+ * the booted bank's image by value, the bootloader's first (write-keys.ts).
+ */
+function appCarriesBootloaderPair(report: SlotsReport): boolean {
+  return deriveWriteKeys(report.state).application?.source === "the bootloader's key table";
 }
 
 async function checkFlashB(
@@ -890,7 +898,7 @@ async function checkFlashB(
     );
   }
   /* A Key A staged write is refused before anything is sent when the camera's own keys say
-   * the bootloader would refuse the result (state.canFlash). That is the product's verdict on
+   * the bootloader would refuse the result (`writeRefusalOf`). That is the product's verdict on
    * this camera, read from its own dump, and it is recorded as the gap it is. */
   const refusal = writeRefusalOf(report);
   if (refusal !== null) {
@@ -1001,7 +1009,7 @@ async function checkRawR(
     /* On a chimera the image's own keys are not the bootloader's, which is the state the camera
      * reports as not writable. The refusal is then a measurement on the emulated chimera, not
      * on a camera of this build, and it is recorded as the gap it is. */
-    if (chimera && report.state.appKeysBlock != null) {
+    if (chimera && !appCarriesBootloaderPair(report)) {
       return gap(REASON.chimeraRawRefused, refusal);
     }
     return fail(refusal);
