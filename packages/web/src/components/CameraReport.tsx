@@ -10,6 +10,7 @@ import type { ReactElement } from 'react';
 import {
   bankWritingOf,
   bootableDescription,
+  acceptsDescription,
   bootedReportOf,
   detectedReportOf,
   hexUp,
@@ -84,7 +85,7 @@ function bankPresence(
     version: slot.present ? (slot.plainHeader?.versionStr ?? slot.header?.versionStr ?? '?') : '—',
     size: slot.header === null ? '—' : `${String(slot.header.length)} B`,
     key: slot.keyName ?? (slot.plain === null ? '—' : 'none (plaintext)'),
-    accepts: slot.present ? yesNo(slot.accepts) : '—',
+    accepts: acceptsDescription(slot),
     /* "n/a" where the bootloader reads no footer: a missing one is not a fault there */
     footer: slot.present ? (state.profile.boot.checksFooter ? yesNo(slot.footerOk) : 'n/a') : '—',
     bootable: slot.present ? bootableDescription(slot) : '—',
@@ -140,7 +141,7 @@ export function CameraReport({ state }: CameraReportProps): ReactElement {
         <PanelTitle>Profile</PanelTitle>
         <KeyValue
           rows={[
-            ['Read under', `${state.profile.id} — ${state.profile.name}`],
+            ['Read under', state.profile.name],
             ['Detected', detectedReportOf(state.detection)],
           ]}
         />

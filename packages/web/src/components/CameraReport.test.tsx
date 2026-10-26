@@ -109,8 +109,13 @@ describe('CameraReport on the 2016 Compact PRO (TESTING.md 42.84)', () => {
     /* The Profile panel's score is the one taken after the read, and says so (TESTING.md 42.86). */
     expect(text).toContain(detectedReportOf(state.detection));
     expect(detectedReportOf(state.detection)).toMatch(
-      /^[a-z0-9-]+ \(score \d\.\d\d after the read, from the evidence below(; ambiguous)?\)$/,
+      /^.+ \(score \d\.\d\d after the read, from the evidence below(; ambiguous)?\)$/,
     );
+    /* The profile in words, never its code name (TESTING.md 42.103): the code name is in --json only. */
+    expect(detectedReportOf(state.detection).startsWith(state.detection.best.profile.name)).toBe(
+      true,
+    );
+    expect(text).not.toContain(`${state.profile.id} —`);
     unmount();
   });
 

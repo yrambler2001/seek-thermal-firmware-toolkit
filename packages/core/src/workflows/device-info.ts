@@ -953,9 +953,8 @@ export async function readDeviceInfo(
   if (plainChain) {
     reporter.log('');
     reporter.log(
-      '2014 plaintext chain: a bank is stored plain — the keystream solve returns the ' +
-        'identity state and the stored words sum to 0 — so an upgrade stages the image ' +
-        'bytes verbatim and needs no key material',
+      'the banks are stored as plain firmware (their words sum to 0), as on the 2014 line: ' +
+        'a bank is read and written as it is, with no key',
       'ok',
     );
   }
@@ -1241,9 +1240,8 @@ export async function readDeviceInfo(
       updateTargetSubcmd = 0;
       reporter.log('');
       reporter.log(
-        `2014 plaintext chain: no boot replay — the camera's own active-slot word names ` +
-          `${byKey.get(target)?.name ?? target} as the slot an upgrade writes (mode 0 arms the bank ` +
-          'the word does not name); the booted bank stays untouched',
+        `the camera's own upgrade writes ${byKey.get(target)?.name ?? target}: it writes the bank ` +
+          'the camera did not start from, and leaves the bank it started from as it is',
         'detail',
       );
     }

@@ -26,6 +26,13 @@
  * whole path against the dump's own 47,768-byte slot A content.
  * ==================================================================== */
 
+import {
+  acceptsDescription,
+  bootedReportOf,
+  detectedReportOf,
+  keyReportRows,
+  PLAIN_CHAIN_KEYS,
+} from '../src/workflows/device-report.js';
 import { existsSync, readFileSync } from 'node:fs';
 
 import { describe, expect, it } from 'vitest';
@@ -211,7 +218,9 @@ describe('the 2014 plaintext chain on the normal flash path', () => {
 
     /* nothing refuses a bank write */
     expect(state.bankWriteRefusals).toEqual([]);
-    expect(logsOf(reporter)).toContain('2014 plaintext chain');
+    expect(logsOf(reporter)).toContain(
+      'the banks are stored as plain firmware (their words sum to 0), as on the 2014 line',
+    );
 
     /* the upgrade target: the camera's own active-slot word, not a replay */
     expect(state.boot).toEqual({ booted: 'a', target: 'b' });
@@ -228,6 +237,39 @@ describe('the 2014 plaintext chain on the normal flash path', () => {
     expect(state.slots.map((s) => s.bootability)).toEqual(['bootable', 'not-bootable', 'bootable']);
   }, 60_000);
 
+  it('says the Info words in plain words: slot names, the profile by name, one key row, n/a accepts (TESTING.md 42.103)', async () => {
+    const reporter = collectingReporter();
+    const state = await readDeviceInfo(await contextFor(camera2014(), reporter));
+    const log = logsOf(reporter);
+    const nameOf = (key: string): string => state.slots.find((s) => s.key === key)?.name ?? key;
+
+    /* the banks are named as the boot lines name them, not by address */
+    expect(state.slots.map((s) => s.name)).toEqual(['Slot A', 'Slot B', 'Recovery R']);
+    expect(bootedReportOf(state, nameOf)).toBe(
+      'Slot A — the bank the bootloader entered at this start, as it records it',
+    );
+    /* the profile by its name, and its evidence with no request or channel names */
+    expect(detectedReportOf(state.detection)).toMatch(
+      /^Legacy locked firmware \(score \d\.\d\d after the read, from the evidence below\)$/,
+    );
+    const reasons = state.detection.best.reasons.join(' ');
+    for (const word of ['legacy-auth', 'BeginFirmwareUpgrade', '18-byte', 'token', 'modes 2..9']) {
+      expect(reasons).not.toContain(word);
+    }
+    /* no key rows that contradict "no key": one row says none is needed */
+    expect(keyReportRows(state)).toEqual([['keys', PLAIN_CHAIN_KEYS]]);
+    /* a plain bank is not checked against the keyed acceptance sum: n/a, not "no" beside "bootable yes" */
+    expect(state.slots.map(acceptsDescription)).toEqual(['n/a', '—', 'n/a']);
+    /* the upgrade target in words */
+    expect(log).toContain(
+      "the camera's own upgrade writes Slot B: it writes the bank the camera did not start from, " +
+        'and leaves the bank it started from as it is',
+    );
+    for (const word of ['no boot replay', 'keystream solve', 'identity state', 'mode 0 arms']) {
+      expect(log).not.toContain(word);
+    }
+  }, 60_000);
+
   it('renders the chain’s own per-slot verdict, never the cipher clauses', async () => {
     /* The bank that is literally booting used to be reported as "unknown key,
      * acceptance FAILS, footer BAD -> NOT bootable" — every clause a cipher
@@ -242,12 +284,10 @@ describe('the 2014 plaintext chain on the normal flash path', () => {
     /* both banks that hold the image, booting bank A and recovery */
     expect(state.plainChain).toBe(true);
     expect(log).toContain(
-      'App image bank 0x14050000: firmware 1.3.0.0, 47768 B, plaintext chain, ' +
-        'stored word sum 0 — valid',
+      'Slot A: firmware 1.3.0.0, 47768 B, plaintext chain, ' + 'stored word sum 0 — valid',
     );
     expect(log).toContain(
-      'App image bank 0x14070000: firmware 1.3.0.0, 47768 B, plaintext chain, ' +
-        'stored word sum 0 — valid',
+      'Recovery R: firmware 1.3.0.0, 47768 B, plaintext chain, ' + 'stored word sum 0 — valid',
     );
     /* and none of the cipher clauses, for any slot on this camera */
     expect(log).not.toContain('acceptance FAILS');

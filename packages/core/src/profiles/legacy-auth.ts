@@ -555,9 +555,9 @@ export const LEGACY_MEMORY: MemoryLayout = {
  * is the dump report, which names banks by address.
  */
 export const LEGACY_SLOTS: readonly SlotDescriptor[] = [
-  { key: 'a', name: 'App image bank 0x14050000', subcmd: 0x7, address: 0x14050000 },
-  { key: 'b', name: 'App image bank 0x14060000', subcmd: 0x8, address: 0x14060000 },
-  { key: 'r', name: 'App image bank 0x14070000', subcmd: 0x9, address: 0x14070000 },
+  { key: 'a', name: 'Slot A', subcmd: 0x7, address: 0x14050000 },
+  { key: 'b', name: 'Slot B', subcmd: 0x8, address: 0x14060000 },
+  { key: 'r', name: 'Recovery R', subcmd: 0x9, address: 0x14070000 },
 ];
 
 /**
@@ -746,8 +746,8 @@ function scoreLegacy(evidence: DeviceEvidence): DetectionVerdict {
   }
   const chainReasons: string[] = plainZero
     ? [
-        'a slot is stored plain with a word sum of 0 — the 2014 plaintext chain, which this ' +
-          "line's 2014 bootloader boots",
+        'a bank is stored as plain firmware whose words sum to 0, as the 2014 bootloader of this ' +
+          'line boots it',
       ]
     : [];
 
@@ -761,13 +761,13 @@ function scoreLegacy(evidence: DeviceEvidence): DetectionVerdict {
    * in `test/firmware/facts.json`). */
   if (evidence.plainSelectorRefused === true) {
     reasons.push(
-      'a plain 2-byte BeginFirmwareUpgrade of a protected bank was REFUSED, which is this ' +
-        "generation's defining behaviour — its handler rejects modes 2..9 on the plain channel",
+      'the camera refused to open a locked bank for an upgrade when asked without the unlock, as ' +
+        'only this generation of firmware does',
     );
     if (evidence.authSelectorWorks === true) {
       reasons.push(
-        'and the same bank armed on the 18-byte authenticated channel, so the token in this ' +
-          'profile is the one this build compares against',
+        'and it opened the same bank when asked with the unlock, so the unlock this profile ' +
+          'sends is the one this camera checks',
       );
       return { score: SCORE_PROVEN, reasons: [...reasons, ...chainReasons] };
     }
@@ -801,9 +801,9 @@ function scoreLegacy(evidence: DeviceEvidence): DetectionVerdict {
   if (authWorks) {
     score = SCORE_WEAK;
     reasons.push(
-      'a protected bank armed on the 18-byte authenticated selector, which is this ' +
-        "firmware's channel — though nothing tried the plain one there, so this does not " +
-        'prove the plain channel is refused',
+      'it opened a locked bank for an upgrade when asked with the unlock, as this generation ' +
+        'of firmware does; asking without the unlock was not tried, so this alone does not ' +
+        'prove the generation',
     );
   }
   if (version !== null) {

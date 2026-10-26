@@ -338,6 +338,7 @@ export {
   identityGate,
   identityRefusal,
   isCancelled,
+  acceptsDescription,
   keyReportRows,
   lastStartReportOf,
   nextStartReportOf,
