@@ -52,6 +52,7 @@
     "e2e:slots:quality": "vitest run --config e2e/vitest.config.ts slots-quality.e2e",
     "e2e:fps:bench": "vitest run --config e2e/vitest.config.ts fps-bench.e2e",
     "e2e:pages:bench": "vitest run --config e2e/vitest.config.ts pages-bench.e2e",
+    "e2e:pages:bench:pro": "vitest run --config e2e/vitest.config.ts pages-bench-pro.e2e",
     "e2e:ff:vendor": "vitest run --config e2e/vitest.config.ts ff-vendor.e2e",
     "e2e:pages:emu": "vitest run --config e2e/vitest.config.ts pages-emu.e2e",
     "clean": "rm -rf packages/*/dist packages/*/tsconfig.tsbuildinfo coverage"
