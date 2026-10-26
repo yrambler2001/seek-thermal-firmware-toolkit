@@ -5,6 +5,10 @@ the per-second rate drops from about 32.2 to about 16.1 fps, and the single skip
 minute on the same image at the same settings (TESTING.md 42.77, 42.78). This file states what causes those "storms", how
 it was shown, and what a host can do about it. The full record, with every run, is `TESTING.md` 42.79.
 
+A second cause, on a host that drains a transfer slowly (an Android phone on EHCI): the endpoint-busy skip, not a late
+credit. That one is in `PHONE_SKIPS.md` (TESTING.md 42.93), with the firmware patch that removes it; since 2026-10-26 the
+bench Compact runs that patch.
+
 ## The short answer
 
 The storms come from the host, not the camera, the USB path or the microphone receiver on the same hub.
@@ -86,6 +90,8 @@ A C loop that sends the credit 0.01 ms after the last byte still loses about 25 
 flight, never in storms. Those come from the host reporting a transfer's completion 6 ms or more late, so the next IN is
 posted after the field-end transfer is due (TESTING.md 42.74's endpoint-busy skip). Keeping 2 to 3 INs pending removes most
 of them (42.74: 3 to 12 a minute).
+On a slow host the same skip becomes storms: the last transfer itself drains too slowly (`PHONE_SKIPS.md`). The no-skip
+branch (42.93) removes the skip in the firmware; the bench Compact runs it since 2026-10-26.
 
 ## What a host should do
 
