@@ -473,6 +473,8 @@ export {
   widenedWindow,
   wordSum,
   xorWindowVerbatim,
+  unknownImageRefusal,
+  unknownImageWords,
 } from './preservation/index.js';
 export type {
   BackupResult,

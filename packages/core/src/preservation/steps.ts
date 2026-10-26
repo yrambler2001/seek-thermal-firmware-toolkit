@@ -103,6 +103,8 @@ import {
   preserveBootFactsOf,
   preserveChoiceOf,
   restoreOrderOf,
+  unknownImageRefusal,
+  unknownImageWords,
   warmBootMarkOf,
   type BankHolds,
   type PreserveBankChoice,
@@ -1122,10 +1124,14 @@ function deriveFactoryImage(capture: Uint8Array, cameraVersion: string, bank: Ba
     if (solved.ok) attempts.push({ plain: solved.plain, method: solved.method });
     else reasons.push(solved.reason);
   }
+  /* Whether any candidate's header names the camera's own version: then the
+   * bank holds that firmware, changed (an unknown image), not another build. */
+  let versionMatched = false;
   for (const attempt of attempts) {
     /* The version cross-check, FIRST of the gates: the camera's own report is
      * the one external fact here, and the derived image must agree with it. */
     const says = parseImageHeader(attempt.plain)?.versionStr;
+    if (says === cameraVersion) versionMatched = true;
     if (says !== undefined && says !== cameraVersion) {
       reasons.push(`the camera reports ${cameraVersion} but the image in ${words} says ${says}`);
       imageVersion ??= says;
@@ -1139,7 +1145,10 @@ function deriveFactoryImage(capture: Uint8Array, cameraVersion: string, bank: Ba
       buildGate ??= why;
     }
   }
-  const detail = { reasons, imageVersion, buildGate };
+  /* Another build's firmware when no candidate names the camera's version and
+   * one names another; otherwise an image Preserve cannot name. */
+  const otherFirmware = imageVersion !== null && !versionMatched;
+  const detail = { reasons, imageVersion, buildGate, unknownImage: !otherFirmware };
   if (spent !== null) {
     throw new SeekError(
       'pipeline/refused',
@@ -1151,29 +1160,52 @@ function deriveFactoryImage(capture: Uint8Array, cameraVersion: string, bank: Ba
     );
   }
   /* The reads are not the problem here — they agreed, and a spent reader was
-   * ruled out above. What failed is every derivation's gate set, so the first
-   * line says that, and the list says which gate. */
+   * ruled out above. What failed is every derivation's gate set: the refusal
+   * says what the bank holds in plain words, and `detail.reasons` (logged by
+   * the caller) says which gate each candidate failed. */
   throw new SeekError(
     'pipeline/refused',
-    `both reads of ${words} agree, but no candidate derivation of the factory ` +
-      'plaintext from them passes every gate below, so this run has no image it can patch there ' +
-      'and refuses rather than write over it. Every candidate was tried:\n  - ' +
-      reasons.join('\n  - '),
+    otherFirmware
+      ? `${words.charAt(0).toUpperCase()}${words.slice(1)} holds firmware ${imageVersion ?? ''}, not ` +
+          `the ${cameraVersion} the camera runs, so this run has no image it can patch there and ` +
+          'refuses rather than write over it.'
+      : unknownImageRefusal(bank, cameraVersion),
     { detail },
   );
 }
 
-/** A bank's derivation failure in one clause, for the plan: the firmware it
- *  holds when that is another build's, else the build gate that refused it. */
+/** The candidates a refused derivation tried, each with the gate it failed, for the log. */
+function derivationReasonsOf(error: unknown): readonly string[] {
+  const reasons = error instanceof SeekError ? error.detail?.reasons : undefined;
+  return Array.isArray(reasons) ? reasons.filter((r): r is string => typeof r === 'string') : [];
+}
+
+/**
+ * Why the run cannot write a bank whose capture is `capture`, in the one clause the bank table shows
+ * (`unknownImageWords` for an image Preserve cannot name), or null when the bank's image derives.
+ * The same rule the backup records for every bank but the one the run's build is taken from.
+ */
+export function bankImageRefusal(
+  capture: Uint8Array,
+  cameraVersion: string,
+  bank: BankKey,
+): string | null {
+  try {
+    deriveFactoryImage(capture, cameraVersion, bank);
+    return null;
+  } catch (error) {
+    return derivationRefusalOf(error, cameraVersion);
+  }
+}
+
+/** A bank's derivation failure in one clause, for the plan: an unknown image,
+ *  or the firmware it holds when that is another build's. */
 function derivationRefusalOf(error: unknown, cameraVersion: string): string {
   const detail = error instanceof SeekError ? error.detail : undefined;
+  if (detail?.unknownImage === true) return unknownImageWords(cameraVersion);
   const imageVersion = detail?.imageVersion;
   if (typeof imageVersion === 'string') {
     return `it holds firmware ${imageVersion}, not the ${cameraVersion} the camera runs`;
-  }
-  const buildGate = detail?.buildGate;
-  if (typeof buildGate === 'string') {
-    return `its image cannot be patched: ${buildGate}`;
   }
   return `no image the run can patch derives from it (${error instanceof Error ? error.message : String(error)})`;
 }
@@ -1356,7 +1388,16 @@ async function captureAnchor(
     );
   }
 
-  const derived = deriveFactoryImage(capture, version, bank);
+  let derived: Derived;
+  try {
+    derived = deriveFactoryImage(capture, version, bank);
+  } catch (error) {
+    const reasons = derivationReasonsOf(error);
+    if (reasons.length > 0) {
+      reporter.log(`${words}: every candidate was tried:\n  - ${reasons.join('\n  - ')}`, 'detail');
+    }
+    throw error;
+  }
   await logDerived(reporter, bank, derived);
   return {
     capture,
@@ -1465,8 +1506,10 @@ async function captureOther(
     return { holds, bytes: row, slotReadShas: shas, derived, refused: null };
   } catch (error) {
     if (error instanceof CancelledError) throw error;
+    const reasons = derivationReasonsOf(error);
     reporter.log(
-      `${words}: no image the run can patch (${error instanceof Error ? error.message : String(error)})`,
+      `${words}: no image the run can patch (${error instanceof Error ? error.message : String(error)})` +
+        (reasons.length > 0 ? `; every candidate was tried:\n  - ${reasons.join('\n  - ')}` : ''),
       'detail',
     );
     return {

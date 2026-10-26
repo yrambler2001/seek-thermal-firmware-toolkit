@@ -87,6 +87,8 @@ export {
   preserveChoiceOf,
   preserveChoicesOf,
   restoreOrderOf,
+  unknownImageRefusal,
+  unknownImageWords,
   warmBootMarkOf,
 } from './banks.js';
 export type {

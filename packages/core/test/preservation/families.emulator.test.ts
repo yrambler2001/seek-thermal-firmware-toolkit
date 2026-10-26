@@ -58,6 +58,7 @@ import {
   openProbedSession,
   readVersion,
   runPreserveStep,
+  unknownImageRefusal,
   type CreatedPreserveRun,
   type PreserveArtifactLoader,
   type PreserveRunState,
@@ -830,10 +831,7 @@ describe.skipIf(
                 ),
               )
               .catch((e: unknown) => e);
-            if (
-              error instanceof SeekError &&
-              error.message.includes('no candidate derivation of the factory plaintext')
-            ) {
+            if (error instanceof SeekError && error.message.includes('holds an unknown image')) {
               break;
             }
             process.stderr.write(
@@ -842,16 +840,17 @@ describe.skipIf(
             );
           }
           expect(error).toBeInstanceOf(SeekError);
-          expect((error as Error).message).toMatch(
-            /no candidate derivation of the factory plaintext/,
-          );
+          /* A bank no candidate derives from is an unknown image, in plain words
+           * (TESTING.md 42.95); each candidate's gate is in the detail. */
+          expect((error as Error).message).toBe(unknownImageRefusal('a', '1.0.3.0'));
+          const reasons = ((error as SeekError).detail?.reasons as string[]).join('\n');
           /* The identity candidate got as far as the build gates (the
            * verbatim header window parses straight through the cipher)... */
-          expect((error as Error).message).toMatch(/failed its build gates/);
+          expect(reasons).toMatch(/failed its build gates/);
           /* ...and both cipher families refuse on the sum rule. */
-          expect((error as Error).message).toMatch(/v1-2014-ff/);
-          expect((error as Error).message).toMatch(/compact-2016/);
-          expect((error as Error).message).toMatch(/word sum is 0x/);
+          expect(reasons).toMatch(/v1-2014-ff/);
+          expect(reasons).toMatch(/compact-2016/);
+          expect(reasons).toMatch(/word sum is 0x/);
         } catch (error) {
           process.stderr.write(
             `--- emulator log tail after the corrupt-byte refusal ---\n${emu.log(80)}\n`,

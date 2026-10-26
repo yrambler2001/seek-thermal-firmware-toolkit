@@ -303,6 +303,39 @@ export function nextStartWords(boot: PreserveBootFacts): string {
   return `${boot.nextStart === null ? 'not known' : bankWordsOf(boot.nextStart)} — ${boot.why}`;
 }
 
+/**
+ * A bank that holds an image Preserve cannot derive from a factory image: the stock firmware with a
+ * change Preserve does not know (a frame-rate patch, say), or no stock image at all. Preserve does not
+ * patch such a bank or put it back (the owner, 2026-10-26; TESTING.md 42.95). One phrase for every
+ * family Preserve writes, in the bank table, the choices and every refusal, on the page and in the CLI.
+ */
+function unknownImageWhat(cameraVersion: string): string {
+  return (
+    `holds an unknown image (not the stock ${cameraVersion} firmware, nor a change to it that ` +
+    'Preserve knows; a frame-rate patch is not one), so Preserve does not patch it or put it back'
+  );
+}
+
+/** What the person can do about a bank that holds an unknown image. */
+const UNKNOWN_IMAGE_REMEDY =
+  'write the stock image back to it first (for example from a full flash backup taken before ' +
+  'the change), then start a new run';
+
+/** A bank that holds an unknown image, as the bank table and the choices say it. */
+export function unknownImageWords(cameraVersion: string): string {
+  return `it ${unknownImageWhat(cameraVersion)}. To include this bank, ${UNKNOWN_IMAGE_REMEDY}`;
+}
+
+/** The run's refusal when the bank its build is taken from holds an unknown image: nothing is written. */
+export function unknownImageRefusal(bank: BankKey, cameraVersion: string): string {
+  const words = bankWordsOf(bank);
+  return (
+    `${words.charAt(0).toUpperCase()}${words.slice(1)} ${unknownImageWhat(cameraVersion)}. ` +
+    'The run takes the firmware it patches from this bank, so it stops here, before anything is ' +
+    `written. To preserve this camera, ${UNKNOWN_IMAGE_REMEDY}.`
+  );
+}
+
 /** One bank of the run in words: its build and that the run can write it, or why it cannot. */
 export function bankRecordWords(bank: PreserveBankRecord): string {
   if (bank.refused !== null) return `not written — ${bank.refused}`;

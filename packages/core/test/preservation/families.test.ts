@@ -15,7 +15,7 @@
  * ==================================================================== */
 
 import { createHash } from 'node:crypto';
-import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import path from 'node:path';
 
 import { describe, expect, it } from 'vitest';
@@ -45,7 +45,19 @@ import {
   type RestoreFormId,
   type StagedFormId,
 } from '../../src/preservation/patch.js';
-import { describeStepGate, type PreserveRunState } from '../../src/preservation/steps.js';
+import {
+  bankImageRefusal,
+  describeStepGate,
+  type PreserveRunState,
+} from '../../src/preservation/steps.js';
+import { unknownImageWords } from '../../src/preservation/banks.js';
+import {
+  FPS_PATCHES,
+  applyFpsPatch,
+  fpsImageLength,
+  identifyFpsImage,
+} from '../../src/preservation/fps-patch.js';
+import { parseImageHeader } from '../../src/image/header.js';
 import type { BankKey } from '../../src/preservation/windows.js';
 import { bankRecordOf, handRunState } from './run-state-fixtures.js';
 import { emulatorDir } from '../emulator/harness.js';
@@ -1218,4 +1230,96 @@ describe('the 0.7.x reader answers on wire 88, not 79', () => {
       }
     }
   });
+});
+
+/* ==================================================================== *
+ * An unknown image on every family Preserve writes (TESTING.md 42.95)
+ * ==================================================================== */
+
+/** The corpus's decrypted images, by the sha256 of their header length, for the stock images the
+ *  frame-rate table names. */
+function stockImagesInCorpus(): Map<string, Uint8Array> {
+  const out = new Map<string, Uint8Array>();
+  if (EMU === null) return out;
+  const wanted = new Set(FPS_PATCHES.map((patch) => patch.stockSha256));
+  const walk = (dir: string): void => {
+    for (const name of readdirSync(dir)) {
+      const file = path.join(dir, name);
+      const stat = statSync(file);
+      if (stat.isDirectory()) walk(file);
+      else if (name.endsWith('.bin') && stat.size >= 0x8000 && stat.size <= 0x100000) {
+        const bytes = new Uint8Array(readFileSync(file));
+        const length = fpsImageLength(bytes);
+        if (length === null) continue;
+        const sha = sha256(bytes.subarray(0, length));
+        if (wanted.has(sha) && !out.has(sha)) out.set(sha, bytes.slice(0, length));
+      }
+    }
+  };
+  const root = path.join(EMU, 'data', 'corpus');
+  if (existsSync(root)) walk(root);
+  return out;
+}
+
+/** A 64 KiB bank as the family stores `image`: as is on the plain families, under the build's
+ *  at-rest key (key block 1) on the cipher families, the header window verbatim. */
+function storedBank(image: Uint8Array, profile: BuildPatchProfile): Uint8Array {
+  const bank = new Uint8Array(0x10000).fill(0xff);
+  const block1 = profile.keysOf(image)?.block1Hex ?? null;
+  bank.set(
+    profile.stagedForm === 'plain' || block1 === null
+      ? image
+      : xorWindowVerbatim(image, keystream(keyWordsOf(block1), image.length >> 2)),
+    0,
+  );
+  return bank;
+}
+
+describe('an unknown image on every family Preserve writes — the frame-rate patch', () => {
+  const stock = stockImagesInCorpus();
+  /* The table entries whose stock image Preserve builds a patch for: the families it writes. */
+  const covered = FPS_PATCHES.flatMap((patch) => {
+    const image = stock.get(patch.stockSha256);
+    if (image === undefined) return [];
+    const profiles = BUILD_PATCH_PROFILES.filter((profile) => profile.detect(image));
+    const profile = profiles.length === 1 ? profiles[0] : undefined;
+    return profile === undefined ? [] : [{ patch, image, profile }];
+  });
+
+  it.skipIf(EMU === null)(
+    'the corpus holds a frame-rate entry for every family Preserve writes',
+    () => {
+      expect(covered.map(({ patch }) => `${patch.version} ${String(patch.targetHz)} Hz`)).toEqual([
+        '1.0.3.0 18 Hz',
+        '1.0.3.2 18 Hz',
+        '1.3.0.8 32 Hz',
+        '1.3.0.0 32 Hz',
+        '0.7.0.8 32 Hz',
+        '0.8.0.0 32 Hz',
+        '0.9.0.2 32 Hz',
+        '0.9.0.6 32 Hz',
+        '0.9.0.7 32 Hz',
+        '0.9.1.0 32 Hz',
+        '0.10.0.0 32 Hz',
+        '1.0.0.0 32 Hz',
+        '1.2.0.0 32 Hz',
+        '1.3.0.8-FF 32 Hz',
+      ]);
+      expect(new Set(covered.map(({ profile }) => profile.family))).toEqual(
+        new Set(['v1-2014', 'v1-2014-ff', 'compact-2016']),
+      );
+    },
+  );
+
+  for (const { patch, image, profile } of covered) {
+    it(`${patch.version} (${profile.buildId}): the stock bank derives, the ${String(patch.targetHz)} Hz bank is an unknown image`, () => {
+      const version = parseImageHeader(image)?.versionStr ?? '';
+      const patched = applyFpsPatch(image, patch);
+      expect(identifyFpsImage(patched).patchedEntries.map((entry) => entry.id)).toContain(patch.id);
+      expect(bankImageRefusal(storedBank(image, profile), version, 'a')).toBeNull();
+      expect(bankImageRefusal(storedBank(patched, profile), version, 'a')).toBe(
+        unknownImageWords(version),
+      );
+    });
+  }
 });

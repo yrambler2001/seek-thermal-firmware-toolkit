@@ -52,6 +52,7 @@ import {
   PRESERVE_STEP_IDS,
   PRESERVE_VERIFY_FILE,
   backupResultFromImage,
+  bankRecordWords,
   choosePreserveBanks,
   classifyReaderBoot,
   createPreserveRun,
@@ -71,6 +72,8 @@ import {
   runPreserveStep,
   spentReaderSignature,
   unrotateDump,
+  unknownImageRefusal,
+  unknownImageWords,
   type PreserveArtifactLoader,
   type PreserveRunState,
   type PreserveStepId,
@@ -93,12 +96,15 @@ import {
   DEVICE_BLOCK_HEAD,
   KEY_CP103,
   boardPatched,
+  cp1030Bank,
   cp1030Camera,
   cp1030Flash,
   cp1030FwInfo,
+  cp1030Plain,
   rootsReply,
 } from './fixtures-2016.js';
 import { bankRecordOf, handRunState, patchSummaryOf, withoutPatch } from './run-state-fixtures.js';
+import { bankImageRefusal } from '../../src/preservation/steps.js';
 
 /* ---- the synthetic factory plaintext (the patch sites included) --------- */
 
@@ -485,7 +491,7 @@ describe('runPreserveStep(backup) — the double read and the derived-image gate
       expect(message).toMatch(/preserve --resume/);
       expect(message).toMatch(/served garbage on three boots/);
       expect(message).toMatch(/no image header parses at 0x200/);
-      expect(message).not.toMatch(/no candidate derivation of the factory plaintext/);
+      expect(message).not.toMatch(/holds an unknown image/);
     },
   );
 
@@ -508,7 +514,11 @@ describe('runPreserveStep(backup) — the double read and the derived-image gate
         (e: unknown) => e,
       );
       expect(error).toBeInstanceOf(SeekError);
-      expect((error as Error).message).toMatch(
+      expect((error as Error).message).toBe(
+        'Slot A holds firmware 1.2.0.0, not the 1.3.0.0 the camera runs, so this run has no ' +
+          'image it can patch there and refuses rather than write over it.',
+      );
+      expect(((error as SeekError).detail?.reasons as string[]).join('\n')).toMatch(
         /the camera reports 1\.3\.0\.0 but the image in slot A says 1\.2\.0\.0/,
       );
     },
@@ -530,9 +540,12 @@ describe('runPreserveStep(backup) — the double read and the derived-image gate
         (e: unknown) => e,
       );
       expect(error).toBeInstanceOf(SeekError);
-      expect((error as Error).message).toMatch(/no candidate derivation of the factory plaintext/);
-      expect((error as Error).message).toMatch(/does not carry the v1 2014 update machinery/);
-      expect((error as Error).message).toMatch(/failed its build gates/);
+      /* An image Preserve cannot derive from a factory image is an unknown image, in plain
+       * words (TESTING.md 42.95); the gate each candidate failed is in the detail and the log. */
+      expect((error as Error).message).toBe(unknownImageRefusal('a', EXPECTED_VERSION));
+      const reasons = ((error as SeekError).detail?.reasons as string[]).join('\n');
+      expect(reasons).toMatch(/does not carry the v1 2014 update machinery/);
+      expect(reasons).toMatch(/failed its build gates/);
     },
   );
 
@@ -890,7 +903,7 @@ describe('the spent-reader refusals and the two-arm double read', () => {
       expect(message).toMatch(/boot-config block \(0x14010000\) and bank A \(0x14050000\)/);
       expect(message).toMatch(/both served entirely unprogrammed 0xFF fill/);
       /* The generic puzzle text stays out of this shape. */
-      expect(message).not.toMatch(/no candidate derivation of the factory plaintext/);
+      expect(message).not.toMatch(/holds an unknown image/);
     },
   );
 
@@ -959,7 +972,7 @@ describe('the spent-reader refusals and the two-arm double read', () => {
       expect(message).toMatch(/0x10018000/);
       expect(message).toMatch(/stale reader descriptor/);
       expect(message).toMatch(/initial SP/);
-      expect(message).not.toMatch(/no candidate derivation of the factory plaintext/);
+      expect(message).not.toMatch(/holds an unknown image/);
     },
   );
 
@@ -2696,4 +2709,112 @@ describe('the banks a run writes — the next start, one bank, every bank', () =
       expect(camera.arms.slice(armsBefore)).toEqual([]);
     },
   );
+});
+
+/* ==================================================================== *
+ * An unknown image: a bank Preserve cannot derive from a factory image
+ * ==================================================================== */
+
+describe('an unknown image — refused in plain words, per bank and as the run (TESTING.md 42.95)', () => {
+  /** `image` with a balanced edit Preserve does not know: one word changed, the adjust word at 0x238
+   *  retuned so the word sum does not move — the frame-rate patch's shape. */
+  function withUnknownEdit(image: Uint8Array): Uint8Array {
+    const out = image.slice();
+    const dv = new DataView(out.buffer);
+    const before = dv.getUint32(0x1000, true);
+    const after = (before ^ 0x00ff00ff) >>> 0;
+    dv.setUint32(0x1000, after, true);
+    dv.setUint32(
+      REBALANCE_WORD_OFFSET,
+      (dv.getUint32(REBALANCE_WORD_OFFSET, true) + before - after) >>> 0,
+      true,
+    );
+    return out;
+  }
+
+  /** A 2014-chain part: boot word blank (slot A first), the given images in A and R. */
+  function chainFlash(a: Uint8Array, r: Uint8Array): Uint8Array {
+    const flash = new Uint8Array(FLASH_SIZE).fill(0xff);
+    new DataView(flash.buffer).setUint32(BOOT_CFG_OFFSET, 0xffffffff, true);
+    flash.set(a, BANK_A_OFFSET);
+    flash.set(r, RECOVERY_OFFSET);
+    return flash;
+  }
+
+  const plain = syntheticPlain();
+  const edited = withUnknownEdit(plain);
+
+  it('the edit keeps the sum and spends the adjust word: the build table refuses it', () => {
+    expect(wordSum(edited)).toBe(0);
+    expect(() => buildV1Patch(edited)).toThrow(/the rebalance word at 0x00000238 is not free/);
+  });
+
+  it(
+    'the 2014 chain: the bank the run is built on holds one — the run stops at the backup, nothing recorded',
+    { timeout: 120_000 },
+    async () => {
+      const camera = v1Camera(edited);
+      const store = memoryStore();
+      const created = await createPreserveRun({ runId: 'unknown-anchor' });
+      const error: unknown = await step('backup', camera, created.state, store).catch(
+        (e: unknown) => e,
+      );
+      expect(error).toBeInstanceOf(SeekError);
+      expect((error as Error).message).toBe(unknownImageRefusal('a', EXPECTED_VERSION));
+      expect((error as Error).message).toMatch(
+        /^Slot A holds an unknown image \(not the stock 1\.3\.0\.0 firmware, nor a change to it that Preserve knows; a frame-rate patch is not one\)/,
+      );
+      expect((error as Error).message).toMatch(/write the stock image back to it first/);
+      const failed = recordStepFailure(created.state, 'backup', error);
+      expect(failed.banks).toBeUndefined();
+    },
+  );
+
+  it(
+    'the 2014 chain: recovery R holds one — not written; the bank table, the choice and the gate say so',
+    { timeout: 120_000 },
+    async () => {
+      const camera = v1Camera(plain, { flash: chainFlash(plain, edited) });
+      const store = memoryStore();
+      let state = (await createPreserveRun({ runId: 'unknown-r' })).state;
+      state = await step('backup', camera, state, store);
+      const words = unknownImageWords(EXPECTED_VERSION);
+      expect(state.banks?.a.refused).toBeNull();
+      expect(state.banks?.r.refused).toBe(words);
+      expect(bankRecordWords(state.banks!.r)).toBe(`not written — ${words}`);
+      expect(words).toMatch(
+        /^it holds an unknown image .* To include this bank, write the stock image back/,
+      );
+      expect(preserveChoiceOf(state, 'r').banks).toBeNull();
+      expect(preserveChoiceOf(state, 'r').what).toContain(words);
+      expect(() => choosePreserveBanks(state, 'r')).toThrow(words);
+      expect(preserveChoiceOf(state, 'all').what).toContain(words);
+      expect(state.targets).toEqual(['a']);
+    },
+  );
+
+  it(
+    'the 2016 line: slot A holds the 1.0.3.0 image with an unknown edit — the same words',
+    { timeout: 120_000 },
+    async () => {
+      const unknown = withUnknownEdit(cp1030Plain());
+      expect(() => buildV1Patch(unknown)).toThrow(/is not free/);
+      const camera = cp1030Camera(cp1030Flash(unknown));
+      const store = memoryStore();
+      const created = await createPreserveRun({ runId: 'unknown-2016' });
+      const error: unknown = await step('backup', camera, created.state, store).catch(
+        (e: unknown) => e,
+      );
+      expect(error).toBeInstanceOf(SeekError);
+      expect((error as Error).message).toBe(unknownImageRefusal('a', CP1030_VERSION));
+    },
+  );
+
+  it('the 2016 line: a bank capture with an unknown edit gets the bank table words', () => {
+    const unknown = withUnknownEdit(cp1030Plain());
+    expect(bankImageRefusal(cp1030Bank(boardPatched()), CP1030_VERSION, 'r')).toBeNull();
+    expect(bankImageRefusal(cp1030Bank(unknown), CP1030_VERSION, 'r')).toBe(
+      unknownImageWords(CP1030_VERSION),
+    );
+  });
 });
