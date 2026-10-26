@@ -34,6 +34,8 @@ import {
   REBALANCE_WORD_OFFSET,
   V1_2014_PATCH_SITES,
   sha256hex,
+  unknownImageRefusal,
+  unknownImageWords,
   wordSum,
   type PreserveRunState,
   type UsbBackend,
@@ -1084,4 +1086,78 @@ describe('preserve — --bank: the bank the next start enters, one bank, every b
     ).toBe(EXIT_USAGE);
     expect(test.stderr.text).toMatch(/--bank takes next-start, a, b, r, all, got 'both'/);
   });
+});
+
+/* ==================================================================== *
+ * an unknown image (TESTING.md 42.95)
+ * ==================================================================== */
+
+describe('preserve — a bank that holds an unknown image is refused in plain words', () => {
+  /** `image` with a balanced edit Preserve does not know (the frame-rate patch's shape): one word
+   *  changed, the adjust word at 0x238 retuned so the word sum does not move. */
+  function withUnknownEdit(image: Uint8Array): Uint8Array {
+    const out = image.slice();
+    const dv = new DataView(out.buffer);
+    const before = dv.getUint32(0x1000, true);
+    const after = (before ^ 0x00ff00ff) >>> 0;
+    dv.setUint32(0x1000, after, true);
+    dv.setUint32(REBALANCE_WORD_OFFSET, (before - after) >>> 0, true);
+    return out;
+  }
+
+  it(
+    'recovery R holds one: the plan says so in its bank table and choices; --bank r is refused with it',
+    { timeout: 180_000 },
+    async () => {
+      const plain = syntheticPlain();
+      const flash = v1Flash(0xffffffff, { a: plain, r: withUnknownEdit(plain) });
+      const words = unknownImageWords(EXPECTED_VERSION);
+      const first = testIo({ backend: backendOf(v1Camera(plain, { flash })) });
+      expect(
+        await run(['preserve', '--backup-only', '--out', runDir(), '--yes'], first.io, signal()),
+      ).toBe(EXIT_OK);
+      expect((await loadState()).banks?.r.refused).toBe(words);
+
+      const second = testIo({ backend: backendOf(v1Camera(plain, { flash })) });
+      const code = await run(
+        ['preserve', '--resume', runDir(), '--bank', 'r', '--yes'],
+        second.io,
+        signal(),
+      );
+      expect(code).not.toBe(EXIT_OK);
+      /* A whole run writes slot A; its plan, printed before the first write, lists R and why. */
+      const camera = v1Camera(plain, { flash });
+      const asBooted = new Uint8Array(camera.flash);
+      const third = testIo({ backend: backendOf(camera) });
+      expect(await run(['preserve', '--out', runDir('full'), '--yes'], third.io, signal())).toBe(
+        EXIT_OK,
+      );
+      expect(third.stdout.text).toContain(`R  0x14070000  not written — ${words}`);
+      expect(third.stdout.text).toContain(
+        `r          not offered — recovery R cannot be written: `,
+      );
+      expect(await sha256hex(camera.flash)).toBe(await sha256hex(asBooted));
+      const said = `${second.stdout.text}\n${second.stderr.text}`;
+      expect(said).toContain(`--bank r: recovery R cannot be written: ${words}`);
+      expect(said).toContain('To include this bank, write the stock image back to it first');
+    },
+  );
+
+  it(
+    'slot A, the bank the run is built on, holds one: the backup refuses with the plain words and writes nothing',
+    { timeout: 180_000 },
+    async () => {
+      const camera = v1Camera(withUnknownEdit(syntheticPlain()));
+      const asBooted = new Uint8Array(camera.flash);
+      const test = testIo({ backend: backendOf(camera) });
+      const code = await run(
+        ['preserve', '--backup-only', '--out', runDir(), '--yes'],
+        test.io,
+        signal(),
+      );
+      expect(code).toBe(EXIT_FAILED);
+      expect(test.stderr.text).toContain(unknownImageRefusal('a', EXPECTED_VERSION));
+      expect(await sha256hex(camera.flash)).toBe(await sha256hex(asBooted));
+    },
+  );
 });

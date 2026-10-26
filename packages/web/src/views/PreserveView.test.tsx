@@ -24,6 +24,7 @@ import type {
   PreserveStepId,
 } from '@/lib/preserve/types';
 import { buttonByText, render, renderHook } from '@/test-helpers';
+import { unknownImageWords } from '@seek-fw/core';
 import {
   preserveBankOf,
   preserveBootOf,
@@ -626,6 +627,32 @@ describe('PreserveView', () => {
     expect(container.textContent).toContain(
       'differs from the backup in 1 of 31 blocks: 0x14020000',
     );
+    unmount();
+  });
+
+  it("a bank that holds an unknown image: the bank table and the choices say it in core's words", () => {
+    const words = unknownImageWords('1.3.0.8');
+    const { container, unmount } = renderPreserve({
+      state: runState(
+        { backup: 'done', patch: 'done' },
+        {
+          nextStep: 'commit',
+          banks: {
+            a: preserveBankOf('a'),
+            b: preserveErasedBankOf('b'),
+            r: (({ patch: _patch, ...bank }) => ({ ...bank, refused: words }))(preserveBankOf('r')),
+          },
+        },
+      ),
+      connected: true,
+      chooseBanks: () => null,
+    });
+    const row = phaseRow(container, 'Read & build');
+    expect(row.textContent).toContain(`not written — ${words}`);
+    expect(row.textContent).toContain(
+      `Recovery R: not offered — recovery R cannot be written: ${words}`,
+    );
+    expect(words).toMatch(/^it holds an unknown image \(not the stock 1\.3\.0\.8 firmware/);
     unmount();
   });
 });
