@@ -315,7 +315,7 @@ function imageBlockZeroKeys(state: DeviceState): WriteKeys {
   const checkKey = state.checkKey ?? null;
   const named =
     checkKey?.name != null && checkKey.key !== null
-      ? { name: checkKey.name, key: checkKey.key, from: checkKey.from }
+      ? { name: checkKey.name, key: checkKey.key, from: checkKey.from, inferred: checkKey.inferred }
       : null;
   const evidence = [
     'the 2016 Compact PRO line: an upload is the image XORed with the keystream of its own key ' +
@@ -329,7 +329,10 @@ function imageBlockZeroKeys(state: DeviceState): WriteKeys {
         `${bytesToHex(named.key)}, the key its bootloader checks a bank under` +
         (named.from === null
           ? ''
-          : ` (named from ${bankWordsOf(named.from)}, the bank the camera reports it entered)`) +
+          : named.inferred
+            ? ` (inferred from ${bankWordsOf(named.from)}, the bank the camera reports it entered, which ` +
+              'the bootloader entered without its check)'
+            : ` (named from ${bankWordsOf(named.from)}, the bank the camera reports it entered)`) +
         ', so every bank it writes is stored the way the bootloader takes it',
   ];
   return {

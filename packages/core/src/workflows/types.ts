@@ -396,6 +396,14 @@ export interface CheckKey {
   readonly key: Uint8Array | null;
   /** The bank that named it: the one the camera reports it entered. Null when not named. */
   readonly from: SlotKey | null;
+  /**
+   * True when `from` is a bank the bootloader entered without its check (the last bank of the boot-config
+   * word's order, recovery R under word 0 or 1): the bank runs decrypted under the same device-seeded
+   * stream the bootloader checks the other banks under, so the key is named from it, but the check itself
+   * did not pass on it, so the key is inferred, not shown by the check. False when the bank was checked, or
+   * when nothing is named.
+   */
+  readonly inferred: boolean;
   /** The image pair whose block 1 it is, when it is a known one (preservation/patch.ts KEY_PAIRS). */
   readonly pair: string | null;
   /** Why the key could not be named, as a clause ("the camera's active-slot word … could not be read"); null when named. */

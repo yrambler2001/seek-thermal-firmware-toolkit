@@ -1270,6 +1270,30 @@ describe('a 2016 Compact PRO (1.0.3.0), read and judged', () => {
     expect(log).not.toContain('no bank can be written');
   }, 60_000);
 
+  it('names the key from recovery R entered unchecked, says it is inferred, and judges the banks under it', async () => {
+    /* The erased record (A first, then B, then recovery R unchecked) and the camera reports it entered R:
+     * R runs under the key the bootloader checks A and B under, so R names it, inferred (TESTING.md 42.89). */
+    const reporter = collectingReporter();
+    const { state } = await probeThenRead(compactPro1030Camera({ activeSlotWord: 2 }), reporter);
+    const log = logOf(reporter);
+
+    expect(state.checkKey?.name).toBe('key block 1');
+    expect(state.checkKey?.from).toBe('r');
+    expect(state.checkKey?.inferred).toBe(true);
+    expect(bytesToHex(state.checkKey?.key ?? new Uint8Array())).toBe(bytesToHex(CHECK_KEY_2016));
+    expect(state.slots.map((slot) => slot.bootability)).toEqual([
+      'bootable',
+      'bootable',
+      'bootable',
+    ]);
+    expect(log).toContain('check key: key block 1 ');
+    expect(log).toContain(
+      'inferred from recovery R: the camera reports it entered recovery R, which the boot-config word ' +
+        '0xFFFFFFFF leaves to last, so the bootloader entered it without its check',
+    );
+    expect(log).not.toContain('check key not named');
+  }, 60_000);
+
   it('calls a bank under another key not bootable, and the next start passes it over', async () => {
     const reporter = collectingReporter();
     const { state } = await probeThenRead(

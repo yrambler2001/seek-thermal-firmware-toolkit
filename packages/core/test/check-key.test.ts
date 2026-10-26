@@ -9,6 +9,8 @@
  * targets/compact_pro_9hz_1_0_3_0_bootloader/src/image.c:1076-1109), and records the bank it entered (the
  * active-slot word, TESTING.md 42.56). So the bank it entered names the key it checks under, when the word
  * says it was checked; and from a bootloader above 1.1.0.0 that key is its key block 1 (crypto.c:233-247).
+ * A bank entered unchecked (the last of the order) still runs under that key (startup.c decrypts whatever it
+ * enters under the device-seeded stream), so it names the key too, marked inferred (TESTING.md 42.89).
  * ==================================================================== */
 
 import { describe, expect, it } from 'vitest';
@@ -75,6 +77,7 @@ describe('checkKeyOf: the key the 2016 bootloader checks a bank under, from the 
     expect(key.name).toBe('key block 1');
     expect(bytesToHex(key.key ?? new Uint8Array())).toBe(KEY_PAIRS.cp103.block1);
     expect(key.from).toBe('a');
+    expect(key.inferred).toBe(false);
     expect(key.pair).toBe('the Compact PRO 1.0.3.x 9 Hz pair');
     expect(key.unnamedWhy).toBeNull();
     expect(key.why).toBe(
@@ -127,15 +130,39 @@ describe('checkKeyOf: the key the 2016 bootloader checks a bank under, from the 
     );
   });
 
-  it('names nothing from a bank entered unchecked: recovery R under the erased record', () => {
+  it('names the key from a bank entered unchecked, and says it is inferred: recovery R under the erased record', () => {
     const key = checkKeyFor({ activeSlotWord: 2 });
-    expect(key.key).toBeNull();
-    expect(key.unnamedWhy).toBe(
-      'the camera entered recovery R, which the boot-config word 0xFFFFFFFF leaves to last, and the ' +
-        'bootloader enters that bank without its check',
+    expect(key.name).toBe('key block 1');
+    expect(bytesToHex(key.key ?? new Uint8Array())).toBe(KEY_PAIRS.cp103.block1);
+    expect(key.from).toBe('r');
+    expect(key.inferred).toBe(true);
+    expect(key.unnamedWhy).toBeNull();
+    expect(key.why).toBe(
+      `check key: key block 1 ${KEY_PAIRS.cp103.block1} (the Compact PRO 1.0.3.x 9 Hz pair's block 1), ` +
+        'inferred from recovery R: the camera reports it entered recovery R, which the boot-config word ' +
+        '0xFFFFFFFF leaves to last, so the bootloader entered it without its check, and the 2016 ' +
+        'bootloader runs every bank it enters under the key it checks the other banks under, so recovery ' +
+        "R's key is that key; the check did not pass on recovery R, so the key is inferred",
     );
-    expect(checkKeyFor({ cfg0: 2, activeSlotWord: 1 }).unnamedWhy).toContain(
-      'the camera entered slot B, which the boot-config word 0x00000002 leaves to last',
+    /* slot B, last under word 2 (recovery R first, then A, then B) */
+    const b = checkKeyFor({ cfg0: 2, activeSlotWord: 1 });
+    expect(b.from).toBe('b');
+    expect(b.inferred).toBe(true);
+    /* recovery R first under word 2: checked */
+    expect(checkKeyFor({ cfg0: 2, activeSlotWord: 2 }).inferred).toBe(false);
+  });
+
+  it('names nothing from a bank entered unchecked that does not decrypt to a zero sum on this read', () => {
+    const key = checkKeyFor({
+      activeSlotWord: 2,
+      banks: { r: bankUnder(BLOCK_1, { accepts: false }) },
+    });
+    expect(key.key).toBeNull();
+    expect(key.inferred).toBe(false);
+    expect(key.unnamedWhy).toBe(
+      'the camera reports it entered recovery R, which the boot-config word 0xFFFFFFFF leaves to last, ' +
+        'so the bootloader entered it without its check, but recovery R does not decrypt to a zero word ' +
+        'sum on this read',
     );
   });
 
@@ -246,6 +273,14 @@ describe('the report rows on the 2016 line (seek-fw info and the Info tab)', () 
         'key block 1: the application stores every bank it writes under the key its bootloader checks',
       ],
     ]);
+  });
+
+  it('says the check key is inferred when the bank that named it was entered without the check', () => {
+    expect(checkKeyReportOf(checkKeyFor({ activeSlotWord: 2 }))).toBe(
+      `key block 1 ${KEY_PAIRS.cp103.block1} (the Compact PRO 1.0.3.x 9 Hz pair's block 1), inferred ` +
+        'from recovery R, the bank the camera reports it entered: the bootloader enters that bank without ' +
+        'its check, and runs it under the key it checks the other banks under',
+    );
   });
 
   it('says why the check key is not named, and what that leaves unknown', () => {

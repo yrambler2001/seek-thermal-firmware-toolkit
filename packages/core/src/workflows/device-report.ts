@@ -76,17 +76,23 @@ export function nextStartReportOf(
     : `${nameOf(choice.runs)} — ${choice.why}`;
 }
 
-/** The check key, as its row says it: the key, the pair it belongs to, and the bank that named it. */
+/**
+ * The check key, as its row says it: the key, the pair it belongs to, and the bank that named it. A key named
+ * from a bank the bootloader entered without its check says it is inferred, and why (TESTING.md 42.89).
+ */
 export function checkKeyReportOf(checkKey: CheckKey): string {
   if (checkKey.name === null || checkKey.key === null) {
     return `not named — ${checkKey.unnamedWhy ?? 'the read could not name it'}`;
   }
   const pair = checkKey.pair === null ? '' : ` (${checkKey.pair}'s block 1)`;
+  const bank = checkKey.from === null ? null : bankWordsOf(checkKey.from);
   const from =
-    checkKey.from === null
+    bank === null
       ? ''
-      : `, named from ${bankWordsOf(checkKey.from)}, the bank the camera reports it entered after ` +
-        "the bootloader's check";
+      : checkKey.inferred
+        ? `, inferred from ${bank}, the bank the camera reports it entered: the bootloader enters that ` +
+          'bank without its check, and runs it under the key it checks the other banks under'
+        : `, named from ${bank}, the bank the camera reports it entered after the bootloader's check`;
   return `${checkKey.name} ${bytesToHex(checkKey.key)}${pair}${from}`;
 }
 

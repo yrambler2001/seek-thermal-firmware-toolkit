@@ -572,8 +572,10 @@ bank the active-slot word records as the camera's last start: the bootloader's o
 entered (TESTING.md 42.56). On those two lines the read also names the bank the **next** start runs, from
 the boot-config word and each bank's check, the way the bootloader picks it (TESTING.md 42.84). The
 2016 check is the bank decrypted under the key its bootloader checks a bank under (key block 1 on
-bootloader 1.2.0.0); the read names that key from the bank the camera entered, when the word's rule had
-the bootloader check that bank before entering it, and calls a bank under any other key not bootable. On 4.x it is
+bootloader 1.2.0.0); the read names that key from the bank the camera entered, and calls a bank under any
+other key not bootable. When the word's rule left that bank to last (recovery R under word 0 or 1), the
+bootloader entered it without its check but still runs it under that key, so the key is named from it and
+the row and `--json` (`keys.checkKey.inferred`) say it is inferred (TESTING.md 42.89). On 4.x it is
 the bank the boot-config word predicts, and there the camera's own answer also sets the upgrade target,
 overriding the prediction.
 

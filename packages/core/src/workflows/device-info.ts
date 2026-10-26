@@ -547,8 +547,14 @@ export function checkKeyNameOf(bootloaderVersion: string | null): string {
  * so no key table is read on this line. But the bootloader records the bank it entered (startup.c:187-195,
  * handoff->slot; selector 10's word, TESTING.md 42.53, 42.56). When the word's rule checked that bank
  * before entering it, the bank decrypts to a zero sum under the device-seeded stream, and the keystream
- * the read recovers from that bank's own bytes (the GF(2) solve) IS that stream. A bank entered last,
- * unchecked, proves nothing about the check, so it names no key here.
+ * the read recovers from that bank's own bytes (the GF(2) solve) IS that stream.
+ *
+ * A BANK ENTERED UNCHECKED (TESTING.md 42.89). The last bank of the word's order (recovery R under word 0
+ * or 1) is entered without its check. The bootloader still decrypts whatever it enters under the same
+ * device-seeded stream (startup.c:168-185, `stream_decrypt_device_seeded` and
+ * `stream_decrypt_range_device_seeded` on the chosen image, checked or not), so a bank that runs from there
+ * runs under the key the bootloader checks the other banks under. When that bank decrypts to a zero word
+ * sum on this read, its keystream names the key too, marked `inferred`: the check did not pass on it.
  *
  * WHY IT STAYS TRUE AFTER A WRITE. The application seeds the same stream from the bootloader's record
  * (targets/compact_pro_9hz_1_0_3_0/src/crypto.c:291-329 reads the version through the boot record's first
@@ -571,6 +577,7 @@ export function checkKeyOf(input: {
     name: null,
     key: null,
     from: null,
+    inferred: false,
     pair: null,
     unnamedWhy: reason,
     why: `check key not named: ${reason}, so whether the bootloader takes each bank is not known`,
@@ -591,18 +598,19 @@ export function checkKeyOf(input: {
         'entered it is not known',
     );
   }
-  if (!enteredChecked(input.cfg0, entered)) {
-    return unnamed(
-      `the camera entered ${bank}, which the boot-config word ${hexUp(input.cfg0)} leaves to last, ` +
-        'and the bootloader enters that bank without its check',
-    );
-  }
+  /* The last bank of the word's order is entered without its check: it still runs under the key the others
+   * are checked under, so it names that key, as an inference. */
+  const inferred = !enteredChecked(input.cfg0, entered);
+  const unchecked = inferred
+    ? `, which the boot-config word ${hexUp(input.cfg0)} leaves to last, so the bootloader entered it ` +
+      'without its check'
+    : '';
   const slot = input.slotOf(entered);
   const state = slot?.recovered?.state ?? null;
   if (slot === undefined || !slot.present || state === null || !slot.accepts) {
     return unnamed(
-      `the camera reports it entered ${bank}, but ${bank} does not decrypt to a zero word sum on ` +
-        'this read',
+      `the camera reports it entered ${bank}${unchecked}, but ${bank} does not decrypt to a zero ` +
+        'word sum on this read',
     );
   }
   const key = keyFromState(state, input.whiteningK);
@@ -611,16 +619,20 @@ export function checkKeyOf(input: {
       sameState(state, stateFromKey(hexToBytes(block1), input.whiteningK)),
     )?.[0] ?? null;
   const name = checkKeyNameOf(input.bootloaderVersion);
+  const head = `check key: ${name} ${bytesToHex(key)}${pair === null ? '' : ` (${pair}'s block 1)`}`;
   return {
     name,
     key,
     from: entered,
+    inferred,
     pair,
     unnamedWhy: null,
-    why:
-      `check key: ${name} ${bytesToHex(key)}${pair === null ? '' : ` (${pair}'s block 1)`}, named ` +
-      `from ${bank}: the 2016 bootloader enters a bank only after it decrypts to a zero word sum under ` +
-      `this key, and the camera reports it entered ${bank} after that check`,
+    why: inferred
+      ? `${head}, inferred from ${bank}: the camera reports it entered ${bank}${unchecked}, and the ` +
+        '2016 bootloader runs every bank it enters under the key it checks the other banks under, so ' +
+        `${bank}'s key is that key; the check did not pass on ${bank}, so the key is inferred`
+      : `${head}, named from ${bank}: the 2016 bootloader enters a bank only after it decrypts to a ` +
+        `zero word sum under this key, and the camera reports it entered ${bank} after that check`,
   };
 }
 

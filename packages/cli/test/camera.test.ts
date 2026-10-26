@@ -412,6 +412,24 @@ describe('seek-fw info on a 2016 Compact PRO that names the bank it entered (TES
     expect(row).toMatch(/key block 1\s+yes\s+n\/a\s+yes\b/);
   });
 
+  it('says the check key is inferred when the camera entered recovery R without the check (TESTING.md 42.89)', async () => {
+    const text = testIo({ backend: fixedBackend([compactPro1030Camera({ activeSlotWord: 2 })]) });
+    expect(await run(['info'], text.io, signal())).toBe(EXIT_OK);
+    expect(text.stdout.text).toMatch(
+      /check key\s+key block 1 [0-9a-f]{32}, inferred from recovery R, the bank the camera reports it entered: the bootloader enters that bank without its check, and runs it under the key it checks the other banks under/,
+    );
+    const json = testIo({ backend: fixedBackend([compactPro1030Camera({ activeSlotWord: 2 })]) });
+    expect(await run(['info', '--json'], json.io, signal())).toBe(EXIT_OK);
+    const parsed = JSON.parse(json.stdout.text) as {
+      keys: { checkKey: { name: string; from: string; inferred: boolean } | null };
+    };
+    expect(parsed.keys.checkKey).toMatchObject({
+      name: 'key block 1',
+      from: 'r',
+      inferred: true,
+    });
+  });
+
   it('carries the check key, the next start and the bank writes in --json', async () => {
     const { io, stdout } = testIo({ backend: fixedBackend([namedCamera()]) });
     expect(await run(['info', '--json'], io, signal())).toBe(EXIT_OK);
@@ -423,7 +441,7 @@ describe('seek-fw info on a 2016 Compact PRO that names the bank it entered (TES
     };
     expect(parsed.boot.booted).toBe('a');
     expect(parsed.boot.nextStart?.runs).toBe('a');
-    expect(parsed.keys.checkKey).toMatchObject({ name: 'key block 1', from: 'a' });
+    expect(parsed.keys.checkKey).toMatchObject({ name: 'key block 1', from: 'a', inferred: false });
     expect(parsed.keys.checkKey?.key).toMatch(/^[0-9a-f]{32}$/);
     expect(parsed.bankWrites).toEqual({
       staged: "staged under its image's own key block 0",

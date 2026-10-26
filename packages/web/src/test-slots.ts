@@ -333,6 +333,7 @@ export function deviceState2016(
           name: 'key block 1',
           key: hexBytes(BLOCK_1_2016),
           from: 'a',
+          inferred: false,
           pair: 'the Compact PRO 1.0.3.x 9 Hz pair',
           unnamedWhy: null,
           why: 'check key: key block 1',
@@ -341,6 +342,7 @@ export function deviceState2016(
           name: null,
           key: null,
           from: null,
+          inferred: false,
           pair: null,
           unnamedWhy:
             "the camera's active-slot word (fw info roots, selector 10) could not be read",

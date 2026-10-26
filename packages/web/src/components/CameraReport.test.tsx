@@ -125,6 +125,21 @@ describe('CameraReport on the 2016 Compact PRO (TESTING.md 42.84)', () => {
     unmount();
   });
 
+  it('says the check key is inferred, as the CLI does, when it was named from a bank entered unchecked', async () => {
+    const base = deviceState2016(await fakeDeviceState());
+    const checkKey = base.checkKey;
+    if (checkKey == null) throw new Error('the fixture names a check key');
+    const state: DeviceState = { ...base, checkKey: { ...checkKey, from: 'r', inferred: true } };
+    const { container, unmount } = render(<CameraReport state={state} />);
+    const text = container.textContent;
+    expect(text).toContain(
+      'inferred from recovery R, the bank the camera reports it entered: the bootloader enters that bank ' +
+        'without its check, and runs it under the key it checks the other banks under',
+    );
+    for (const [, value] of keyReportRows(state)) expect(text).toContain(value);
+    unmount();
+  });
+
   it('says why, when the camera does not say which bank it entered', async () => {
     const state = deviceState2016(await fakeDeviceState(), { checkKeyNamed: false });
     const { container, unmount } = render(<CameraReport state={state} />);

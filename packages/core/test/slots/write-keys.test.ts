@@ -483,6 +483,7 @@ function camera2016(options: { readonly checkKeyNamed?: boolean } = {}): DeviceS
         name: 'key block 1',
         key: BOOT_B,
         from: 'a' as const,
+        inferred: false,
         pair: null,
         unnamedWhy: null,
         why: 'check key: key block 1',
@@ -491,6 +492,7 @@ function camera2016(options: { readonly checkKeyNamed?: boolean } = {}): DeviceS
         name: null,
         key: null,
         from: null,
+        inferred: false,
         pair: null,
         unnamedWhy: "the camera's active-slot word (fw info roots, selector 10) could not be read",
         why: 'check key not named',
@@ -539,6 +541,21 @@ describe('the 2016 line: the image under its own key block 0, stored by the came
     );
     expect(slotWriteRefusal(state)).toBeNull();
     expect(writeBannerOf(state)).toBeNull();
+  });
+
+  it('says the check key is inferred in its evidence when it was named from a bank entered unchecked (TESTING.md 42.89)', () => {
+    const base = camera2016();
+    const state = {
+      ...base,
+      checkKey: { ...base.checkKey, from: 'r', inferred: true },
+    } as DeviceState;
+    const keys = deriveWriteKeys(state);
+    expect(keys.refusal).toBeNull();
+    expect(keys.atRest?.name).toBe('key block 1');
+    expect(keys.evidence[1]).toContain(
+      '(inferred from recovery R, the bank the camera reports it entered, which the bootloader entered ' +
+        'without its check)',
+    );
   });
 
   it('says the stored key is not named, and still refuses nothing, when the read could not name it', () => {

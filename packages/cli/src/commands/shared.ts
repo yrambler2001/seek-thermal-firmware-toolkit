@@ -240,6 +240,8 @@ export function checkKeyJson(checkKey: CheckKey | null): Record<string, unknown>
     name: checkKey.name,
     key: checkKey.key === null ? null : bytesToHex(checkKey.key),
     from: checkKey.from,
+    /* true when `from` was entered without the bootloader's check, so the key is inferred (TESTING.md 42.89) */
+    inferred: checkKey.inferred,
     pair: checkKey.pair,
     unnamedWhy: checkKey.unnamedWhy,
   };
