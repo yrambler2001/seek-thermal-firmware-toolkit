@@ -722,9 +722,15 @@ export async function flashSlot(
   if (plan.kind === 'plain' && plan.staging === 'plain') refusePlainStaging(report.state);
 
   const { reporter } = ctx;
+  /* `plan.kind` 'plain' is the INPUT (a decrypted image), not the stored form: on the 2016 line the line
+   * used to read "(plain, slot-keystream-ciphertext)", which looked like a contradiction. */
+  const source =
+    plan.kind === 'plain'
+      ? `from the decrypted image, staged as ${plan.staging}`
+      : `of raw bytes, sent as given (${plan.staging})`;
   reporter.log(
-    `${entry.name}: writing ${String(plan.payload.length)} B (${plan.kind}, ${plan.staging}) — ` +
-      `checksum ${hexUp(plan.sum16, 4)}`,
+    `${entry.name}: writing ${String(plan.payload.length)} B ${source} — checksum ` +
+      hexUp(plan.sum16, 4),
     'warn',
   );
   const commitStatus = await stageAndCommit(ctx, entry, write, plan.payload, plan.sum16);
@@ -772,7 +778,9 @@ export async function flashSlot(
     notes.push('verify is off: the bank was not read back');
   }
 
-  reporter.log('NOW UNPLUG AND REPLUG THE CAMERA, then read the device info again.', 'warn');
+  /* The replug instruction is the front end's to give, once, after its own result lines: the page logs
+   * "NOW UNPLUG AND REPLUG THE CAMERA." and the CLI prints its read-back lines with the same instruction.
+   * Logging it here too printed it twice after one write or one frame-rate patch (TESTING.md 42.84). */
   reporter.progress(1, 1, 'Written. Unplug and replug, then re-read the device info.');
 
   return { key: plan.key, commitStatus, verified, after, notes };
