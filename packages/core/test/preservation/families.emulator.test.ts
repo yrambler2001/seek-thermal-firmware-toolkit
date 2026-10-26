@@ -385,9 +385,9 @@ async function runFullInPlace(spec: {
    *  delivered dump is the run's product (the FF build), and the refusal is
    *  asserted instead of a restore server. */
   readonly restore: boolean;
-  /** The bank the run's detection must name after the backup (the FF
-   *  build's recovery override). */
-  readonly expectDetectionBank?: 'a' | 'b' | 'r';
+  /** The bank the next start enters, which the run writes by default (the FF
+   *  build: recovery R, where the bootloader runs it unchecked). */
+  readonly expectBank?: 'a' | 'b' | 'r';
   /** Offline oracle for the delivered dump: the bytes the part must have
    *  carried before the run (the corpus dump itself, for a native boot). */
   readonly expectDelivered?: Uint8Array;
@@ -484,11 +484,12 @@ async function runFullInPlace(spec: {
     `[families] ${spec.label} commit phase took ${((Date.now() - t0) / 1000).toFixed(1)} s\n`,
   );
 
-  if (spec.expectDetectionBank !== undefined) {
+  if (spec.expectBank !== undefined) {
     expect(
-      state.detection?.bank,
-      `the run must act on the bank that runs (${spec.expectDetectionBank})`,
-    ).toBe(spec.expectDetectionBank);
+      state.targets,
+      `the run must write the bank the next start enters (${spec.expectBank})`,
+    ).toEqual([spec.expectBank]);
+    expect(state.boot?.nextStart).toBe(spec.expectBank);
   }
 
   /* The as-booted capture and the post-commit ground truth. */
@@ -568,7 +569,7 @@ async function runFullInPlace(spec: {
     } finally {
       await opener.close(device);
     }
-    expect(state.patch?.armResetsCursor).toBe(true);
+    expect(state.banks?.a.patch?.armResetsCursor).toBe(true);
   }
   await assertDelivery(drainRow);
   process.stderr.write(
@@ -783,7 +784,7 @@ describe.skipIf(
           bankFlashOffset: 0x50000 /* bank A: the dump's blank cfg boots A */,
           boot: { flash: DUMP_1030! },
           restore: true,
-          expectDetectionBank: 'a',
+          expectBank: 'a',
           expectDelivered: new Uint8Array(readFileSync(DUMP_1030!)),
         });
         expect(liveEmulatorCount()).toBe(0);
@@ -934,7 +935,7 @@ describe.skipIf(
           bankFlashOffset: 0x50000 /* bank A: the erased boot-config record boots A */,
           boot: { flash: benchPath },
           restore: true,
-          expectDetectionBank: 'a',
+          expectBank: 'a',
           expectDelivered: bench,
           readsAfterDrain: true,
         });
@@ -981,7 +982,7 @@ describe.skipIf(missingPlain('1.3.0.8-FF', PLAIN_FF) !== null)(
           bankFlashOffset: 0x70000 /* recovery — the running bank */,
           boot: { entry: '11.17.29', donor: DONOR_2014 },
           restore: false,
-          expectDetectionBank: 'r',
+          expectBank: 'r',
         });
         expect(liveEmulatorCount()).toBe(0);
       },
@@ -1022,7 +1023,7 @@ describe.skipIf(missingPlain('0.9.0.7', PLAIN_0907) !== null)(
           bankFlashOffset: 0x50000 /* bank A: the donor's blank cfg boots A */,
           boot: { entry: '18.31.47', donor: DONOR_2014 },
           restore: true,
-          expectDetectionBank: 'a',
+          expectBank: 'a',
         });
         expect(liveEmulatorCount()).toBe(0);
       },
@@ -1056,7 +1057,7 @@ describe.skipIf(missingPlain('0.8.0.0', PLAIN_0800) !== null)(
           bankFlashOffset: 0x50000,
           boot: { entry: '09.17.37', donor: DONOR_2014 },
           restore: true,
-          expectDetectionBank: 'a',
+          expectBank: 'a',
         });
         expect(liveEmulatorCount()).toBe(0);
       },
@@ -1087,7 +1088,7 @@ describe.skipIf(missingPlain('0.7.0.7', PLAIN_0707) !== null)(
           bankFlashOffset: 0x50000,
           boot: { entry: '14.15.36', donor: DONOR_2014 },
           restore: true,
-          expectDetectionBank: 'a',
+          expectBank: 'a',
         });
         expect(liveEmulatorCount()).toBe(0);
       },

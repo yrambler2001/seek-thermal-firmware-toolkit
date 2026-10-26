@@ -1,7 +1,8 @@
 /**
  * The wire geometry of the v1 preservation pipeline: which BeginFirmwareUpgrade
- * windows it arms, which one is the boot-config block, which are the image
- * banks, and how the active slot is read out of the boot config.
+ * windows it arms, which one is the boot-config block, and which are the image
+ * banks. Which bank a start enters, from the boot-config word and each bank's
+ * check, is `banks.ts`.
  *
  * All of this is measured on the v1 locked line (Compact 1.0.0.0 / 1.2.0.0 /
  * 1.3.0.0 on the 2016-donor bootloader generation; FW-V1 docs 33 sec. 11.7 and
@@ -19,7 +20,7 @@
  * the widened window is the dump's.
  */
 
-import { bytesToHex, hexUp } from '../bytes.js';
+import { hexUp } from '../bytes.js';
 import { SeekError } from '../errors.js';
 import { authPayload, OLD_FW_UNLOCK_TOKEN } from '../profiles/legacy-auth.js';
 import { WINDOW_SIZE } from '../profiles/modern-4x.js';
@@ -90,11 +91,6 @@ export const BANKS = [
 ] as const;
 
 export type BankKey = (typeof BANKS)[number]['key'];
-
-/** The bank the donor bootloader's fixed validate order boots when the record
- *  is blank: A (disassembly of the dump at 0x14000334..0x1400035e — validate
- *  A, then B, then recovery). */
-export const BLANK_CFG_BANK: BankKey = 'a';
 
 /** The widened window the PATCHED image serves (mode 2, window length 0x400000). */
 export const WIDENED_MODE = 2;
@@ -231,94 +227,4 @@ export function widenedWindow(): WindowEntry {
     note: "bootloader block through the patched image's widened window",
     payload: authPayload(WIDENED_MODE, OLD_FW_UNLOCK_TOKEN),
   };
-}
-
-export interface SlotDetection {
-  /** The 28 bytes as served. */
-  readonly cfgHex: string;
-  /** cfg[0], the selector word. */
-  readonly cfg0: number;
-  /** True when cfg[0] is 0xFFFFFFFF or 0 — no record written, the bootloader's
-   *  fixed A -> B -> recovery validate order decides, and that order boots A. */
-  readonly blank: boolean;
-  /** The bank key the bootloader boots. */
-  readonly bank: BankKey;
-  /** The bank's flash address. */
-  readonly bankAddress: number;
-  /** The BeginFirmwareUpgrade mode that arms the active bank for a write. */
-  readonly bankMode: number;
-  readonly verdict: string;
-}
-
-/**
- * Parse the 28-byte boot-config record into the active-slot verdict.
- *
- * cfg[0] 0xFFFFFFFF or 0 -> blank -> slot A; 1 -> B; 2 -> recovery. Anything
- * else names no slot this bootloader generation validates, and the pipeline
- * refuses rather than guess — the whole point of the preservation route is
- * that the write lands ONLY in the slot the camera actually boots.
- */
-export function parseBootConfig(block: Uint8Array): SlotDetection {
-  if (block.length < BOOT_CONFIG_BYTES) {
-    throw new SeekError(
-      'pipeline/refused',
-      `boot-config read is ${String(block.length)} B, want ${String(BOOT_CONFIG_BYTES)}`,
-    );
-  }
-  const cfg0 = new DataView(block.buffer, block.byteOffset, block.byteLength).getUint32(0, true);
-  const byKey = (k: BankKey): { mode: number; address: number } => {
-    const bank = BANKS.find((b) => b.key === k);
-    if (bank === undefined) throw new SeekError('pipeline/refused', `no bank ${k}`);
-    return { mode: bank.mode, address: bank.address };
-  };
-  if (cfg0 === 0 || cfg0 === 0xffffffff) {
-    const { mode, address } = byKey(BLANK_CFG_BANK);
-    return {
-      cfgHex: bytesToHex(block),
-      cfg0: cfg0 >>> 0,
-      blank: true,
-      bank: BLANK_CFG_BANK,
-      bankAddress: address,
-      bankMode: mode,
-      verdict:
-        `cfg[0]=${hexUp(cfg0)} is blank -> the bootloader's fixed A->B->recovery validate ` +
-        `order boots bank A (${hexUp(address)})`,
-    };
-  }
-  if (cfg0 === 1 || cfg0 === 2) {
-    const key: BankKey = cfg0 === 1 ? 'b' : 'r';
-    const { mode, address } = byKey(key);
-    return {
-      cfgHex: bytesToHex(block),
-      cfg0,
-      blank: false,
-      bank: key,
-      bankAddress: address,
-      bankMode: mode,
-      verdict: `cfg[0]=${String(cfg0)} names bank ${key} (${hexUp(address)})`,
-    };
-  }
-  /* A word shaped like the bootloader vector's own initial SP (an SRAM
-   * address, 0x10018000 measured on the real Compact) is the stale-descriptor
-   * signature: a spent reader serving the bootloader block's first bytes into
-   * the boot-config read. That is a reader state, not a boot-config puzzle —
-   * the refusal leads with the power-cycle remedy, never with the slot table.
-   */
-  if (isStaleDescriptorWord(cfg0)) {
-    throw new SeekError(
-      'pipeline/refused',
-      spentReaderRefusal(
-        `cfg[0]=${hexUp(cfg0)} is an SRAM-shaped word — the bootloader vector’s initial SP ` +
-          'served through a stale reader descriptor, not a record the bootloader wrote — and ' +
-          'no slot can be named from it; nothing is written',
-      ),
-      { detail: { cfg0: cfg0 >>> 0 } },
-    );
-  }
-  throw new SeekError(
-    'pipeline/refused',
-    `cfg[0]=${hexUp(cfg0)} names no slot this bootloader validates (0, 1, 2 or blank) — ` +
-      'refusing to pick a write target on a guess',
-    { detail: { cfg0: cfg0 >>> 0 } },
-  );
 }

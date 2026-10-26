@@ -55,7 +55,6 @@ export type {
 export {
   BACKUP_WINDOW_COUNT,
   BANKS,
-  BLANK_CFG_BANK,
   BOOT_CONFIG_ADDRESS,
   BOOT_CONFIG_BYTES,
   CFG_MODE,
@@ -65,20 +64,43 @@ export {
   cfgWindow,
   doubleReadWindows,
   isStaleDescriptorWord,
-  parseBootConfig,
   planWindowAt,
   preservationWindows,
   spentReaderRefusal,
   widenedWindow,
 } from './windows.js';
-export type { BankKey, SlotDetection } from './windows.js';
+export type { BankKey } from './windows.js';
+
+export {
+  BANK_KEYS,
+  PRESERVE_BANK_CHOICES,
+  WARM_BOOT_MARKS,
+  bankChoiceWords,
+  bankHoldsOf,
+  commitOrderOf,
+  isPreserveBankChoice,
+  preserveBootFactsOf,
+  preserveChoiceOf,
+  preserveChoicesOf,
+  restoreOrderOf,
+  warmBootMarkOf,
+} from './banks.js';
+export type {
+  BankHolds,
+  PreserveBankChoice,
+  PreserveBankRead,
+  PreserveBankRecord,
+  PreserveBootFacts,
+  PreserveChoiceFacts,
+  PreserveChoiceVerdict,
+  PreserveLine,
+} from './banks.js';
 
 export {
   PostResetWedgeError,
   backupSlice,
   backupWindows,
   commitToBank,
-  detectActiveSlotFromHead,
   classifyReaderBoot,
   openProbedSession,
   drainExact,
@@ -109,23 +131,25 @@ export type {
 
 export {
   PRESERVE_BACKUP_FILE,
-  PRESERVE_BANK_CAPTURE_FILE,
+  PRESERVE_BANK_FILES,
   PRESERVE_DUMP_MANIFEST_FILE,
   PRESERVE_DUMP_POSTWRITE_FILE,
   PRESERVE_DUMP_ORIGINAL_FILE,
   PRESERVE_VERIFY_FILE,
   PRESERVE_DUMP_README_FILE,
-  PRESERVE_PATCHED_FILE,
-  PRESERVE_PLAIN_NAME,
   PRESERVE_RUN_STATE_FILE,
   PRESERVE_STEP_IDS,
   assembleBackupImage,
   backupResultFromImage,
+  choosePreserveBanks,
   createPreserveRun,
   describeStepGate,
   drainLeavesReaderReadable,
   isPreserveStepId,
   nextStepAfter,
+  preserveCaptureFile,
+  preservePatchedFile,
+  preservePlainFile,
   recordStepFailure,
   runPreserveStep,
   spentReaderSignature,

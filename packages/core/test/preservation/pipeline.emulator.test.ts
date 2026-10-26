@@ -105,7 +105,6 @@ import {
   cfgWindow,
   commitToBank,
   conjugateCapture,
-  detectActiveSlotFromHead,
   drainWholePart,
   postProcessDump,
   probeWidenedWindow,
@@ -116,8 +115,8 @@ import {
   verifyAgainstBackup,
   type BackupResult,
   type SessionOpener,
-  type SlotDetection,
 } from '../../src/preservation/index.js';
+import { lockedBootOrder } from '../../src/profiles/locked-boot.js';
 import { buildV1Patch, sum16, wordSum } from '../../src/preservation/patch.js';
 import { parseImageHeader } from '../../src/image/header.js';
 import { BANKS, type BankKey } from '../../src/preservation/windows.js';
@@ -538,6 +537,24 @@ function buildCases(): readonly CaseSpec[] {
   ];
 }
 
+/** The bank the boot word names first, as this suite reads the record: these dumps' banks all pass
+ *  the 2014 check where they hold an image, so the first bank of the word's order is the one the
+ *  camera runs (the run's own choice of banks is `banks.ts`, exercised by the step suites). */
+interface SlotDetection {
+  readonly cfg0: number;
+  readonly blank: boolean;
+  readonly bank: BankKey;
+  readonly bankAddress: number;
+}
+
+function detectActiveSlotFromHead(head: Uint8Array): SlotDetection {
+  const cfg0 = new DataView(head.buffer, head.byteOffset, head.byteLength).getUint32(0, true) >>> 0;
+  const bank = lockedBootOrder(cfg0)[0];
+  const entry = BANKS.find((b) => b.key === bank);
+  if (entry === undefined) throw new Error(`no bank ${bank}`);
+  return { cfg0, blank: cfg0 === 0 || cfg0 === 0xffffffff, bank, bankAddress: entry.address };
+}
+
 /** Per-case run state — one full four-phase run per boot description. */
 interface RunState {
   backup: BackupResult | null;
@@ -825,7 +842,9 @@ describe.skipIf(UNSUPPORTED !== null)(
 
             /* The DELIVERED image: the ACTIVE bank swapped back from the P1
              * backup — recovery, not A, on the dump whose record names it. */
-            st.processedDump = postProcessDump(rawDump, st.detection!.bankAddress, st.bankCapture!);
+            st.processedDump = postProcessDump(rawDump, [
+              { address: st.detection!.bankAddress, bytes: st.bankCapture! },
+            ]);
           },
         );
 

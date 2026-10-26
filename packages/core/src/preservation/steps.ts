@@ -8,40 +8,48 @@
  * at the joints a crash actually leaves behind, so each step ends with
  * everything it produced in the caller's hands:
  *
- *   backup  — the 31 stock windows, the active-bank capture read TWICE under
- *             the serve budget (the sweep's own row at the bank address, then
- *             ONE fresh arm — the active slot is served exactly twice per
- *             boot) with the verified-arm ladder on both reads (a swallowed
- *             arm is re-armed once; garbage twice refuses with the power-cycle
- *             remedy; two plausible reads that differ stay a refusal), the
- *             factory plaintext DERIVED from that capture (`solve.ts`:
- *             identity on the plain chain, the family's keystream solver on a
- *             cipher family), the whole gate set run on the derived image, and
- *             the standard dump archive (decrypted slots, reports, manifest)
- *             built offline from the assembled backup. Read-only. THIS is the
- *             user's pre-flash dump of every region the stock plan can read,
- *             and it is handed over before anything write-shaped can possibly
- *             run. A failed backup re-runs only past a power-cycle
- *             acknowledgement (`powerCycled`), because a retry against the
- *             same boot reads a spent reader.
- *   patch   — offline, no device: buildV1Patch from the factory plaintext,
- *             refusing on every before-byte gate, and the patched image.
- *   commit  — the conjugated in-place patch into the active bank, staged
+ *   backup  — the 31 stock windows; the active-slot word (the bank the camera
+ *             reports it entered); then EVERY bank read twice under the serve
+ *             budget (the sweep's own row at the bank address, then ONE fresh
+ *             arm on its own admitted boot). The bank the camera runs (the
+ *             entered one, or the boot word's first) is the run's anchor: its
+ *             reads go through the verified-arm ladder (a swallowed arm is
+ *             re-armed once; garbage twice refuses with the power-cycle remedy;
+ *             two plausible reads that differ stay a refusal), its factory
+ *             plaintext is DERIVED (`solve.ts`: identity on the plain chain,
+ *             the family's keystream solver on a cipher family) and gated, and
+ *             its build is the run's. Every other bank is read the same two
+ *             ways and derived as well; one that cannot be is recorded with the
+ *             reason, never refused over. From those reads it records the boot
+ *             facts (`banks.ts`: the word, each bank's check, the bank the next
+ *             start enters) and the banks the person's choice writes. The
+ *             standard dump archive is built offline from the assembled backup.
+ *             Read-only. THIS is the pre-flash dump of every region the stock
+ *             plan can read, handed over before anything write-shaped can run.
+ *             A failed backup re-runs only past a power-cycle acknowledgement
+ *             (`powerCycled`), because a retry against the same boot reads a
+ *             spent reader.
+ *   patch   — offline, no device: buildV1Patch from each writable bank's
+ *             factory plaintext, refusing on every before-byte gate.
+ *   commit  — the conjugated in-place patch into every chosen bank, staged
  *             image-length-only, committed on a session that NEVER resets
- *             (its post-commit flash state is the ground truth). Requires the
- *             backup files to be loadable, and reads the bank back BEFORE
- *             writing: a bank that already holds the patch is refused with
- *             "jump to drain", a bank that changed any other way is refused
- *             outright. Not replayed blind.
- *   drain   — the wire-89 reset on its own first session, then the whole
- *             4 MiB through the widened window, DRAIN FIRST on its own single
- *             arm (the per-arm budget is consumed in asks; anything read
- *             before the drain shortens its reach — TESTING.md sec. 23.3).
- *   restore — the original bank content staged back verbatim, then a reset.
- *             A bank that already holds the original (a previous restore
- *             landed) is detected and marked done instead of rewritten.
- *   verify  — a fresh boot, the 31 windows re-read, 0 differing bytes against
- *             the backup, and the run's final numbers.
+ *             (its post-commit flash state is the ground truth). Reads every
+ *             chosen bank's head back BEFORE writing any: a bank that already
+ *             holds the patch is not written again, a bank that changed any
+ *             other way refuses the step before anything is written. Not
+ *             replayed blind.
+ *   drain   — the wire-89 reset on its own first session; then, on the first
+ *             session after it, the active-slot word: a start that entered a
+ *             bank this run did not patch stops the step before anything is
+ *             armed. Then the whole 4 MiB through the widened window, DRAIN
+ *             FIRST on its own single arm (the per-arm budget is consumed in
+ *             asks; anything read before the drain shortens its reach —
+ *             TESTING.md sec. 23.3).
+ *   restore — every written bank's original content staged back, then one
+ *             reset. A bank that already holds its original (a previous
+ *             restore landed) is not written again.
+ *   verify  — a fresh boot, the 31 windows re-read (every bank among them), 0
+ *             differing bytes against the backup, and the run's final numbers.
  *
  * ---- the contract ---------------------------------------------------------
  *
@@ -49,17 +57,15 @@
  * `Artifact[]`; the caller (CLI, web runner) persists them and rewrites the
  * run state after every step. Resume hands the state back in together with a
  * `loadArtifact(name)` callback that serves the checkpoint files — the backup
- * windows, the bank capture, the derived factory plaintext — from wherever
- * the caller keeps them. A step that cannot load what an earlier step
+ * windows, each bank's capture, each bank's derived factory plaintext — from
+ * wherever the caller keeps them. A step that cannot load what an earlier step
  * produced refuses with the reason, so `--from-step` cannot silently run
- * against a torn run directory. Every artifact a step produces — the derived
- * factory plaintext included — rides in that set, so a resumed run needs no
- * file the camera did not produce.
+ * against a torn run directory.
  *
  * The state document is the whole cross-step world: everything a later step
- * needs (the detection, the patch summary, the sha256 of every artifact a
- * step produced) lives in it, so a resumed process rebuilds nothing from
- * guesses. It is JSON-shaped by construction:
+ * needs (the boot facts, the banks, the chosen banks, the patch summaries, the
+ * sha256 of every artifact a step produced) lives in it, so a resumed process
+ * rebuilds nothing from guesses. It is JSON-shaped by construction:
  * `JSON.parse(JSON.stringify(state))` round-trips it — exactly how the CLI
  * persists it.
  * ==================================================================== */
@@ -69,17 +75,41 @@ import {
   makeOfflineDecryptReadme,
   manifestToJson,
 } from '../archive/index.js';
-import { bytesToHex, equalBytes, hexToBytes, hexUp, isoStamp, sha256hex, utf8 } from '../bytes.js';
+import {
+  bytesToHex,
+  equalBytes,
+  hexToBytes,
+  hexUp,
+  isoStamp,
+  sha256hex,
+  utf8,
+  viewOf,
+} from '../bytes.js';
 import { CancelledError, SeekError } from '../errors.js';
 import type { Artifact, Reporter } from '../events.js';
 import { HEADER_OFFSET, HEADER_SIZE, IMAGE_MAGIC, parseImageHeader } from '../image/header.js';
 import { FLASH_BASE, FLASH_SIZE } from '../profiles/modern-4x.js';
 import { legacyReaderOp } from '../profiles/legacy-auth.js';
+import { bankOfActiveSlotWord, bankWordsOf, lockedBootOrder } from '../profiles/locked-boot.js';
 import { getProfile } from '../profiles/registry.js';
 import type { WindowEntry } from '../profiles/types.js';
 import type { SeekDevice } from '../protocol/client.js';
 import { decryptDump } from '../workflows/decrypt.js';
 import { profileInfoOf } from '../workflows/types.js';
+import {
+  BANK_KEYS,
+  bankHoldsOf,
+  commitOrderOf,
+  preserveBootFactsOf,
+  preserveChoiceOf,
+  restoreOrderOf,
+  warmBootMarkOf,
+  type BankHolds,
+  type PreserveBankChoice,
+  type PreserveBankRead,
+  type PreserveBankRecord,
+  type PreserveBootFacts,
+} from './banks.js';
 import {
   PostResetWedgeError,
   PROBE_OFFSET,
@@ -88,7 +118,6 @@ import {
   backupSlice,
   backupWindows,
   commitToBank,
-  detectActiveSlotFromHead,
   drainExact,
   drainWholePart,
   isWireStall,
@@ -123,14 +152,15 @@ import { solvePlainFromCapture } from './solve.js';
 import {
   BACKUP_WINDOW_COUNT,
   BANKS,
+  BOOT_CONFIG_ADDRESS,
   BOOT_CONFIG_BYTES,
   WINDOW_BYTES,
   bankWindow,
   doubleReadWindows,
+  isStaleDescriptorWord,
   preservationWindows,
   spentReaderRefusal,
   type BankKey,
-  type SlotDetection,
 } from './windows.js';
 
 /* ==================================================================== *
@@ -177,13 +207,13 @@ export interface PreserveStepRecord {
    *  (`powerCycled`), which core itself cannot observe. */
   readonly powerCycleRequired?: boolean;
   /** Set on a DONE restore record whose commit landed but whose reboot the
-   *  host refused: the bank holds the original, and the camera runs the
+   *  host refused: the banks hold the original, and the camera runs the
    *  patched image from RAM until it is power-cycled. The verify then reads
    *  that boot, and says so. */
   readonly rebootRefused?: boolean;
 }
 
-/** The patch summary, as the run state carries it after the patch step. */
+/** One bank's patch, as the run state carries it after the patch step. */
 export interface PreservePatchSummary {
   readonly sites: {
     readonly name: string;
@@ -196,84 +226,72 @@ export interface PreservePatchSummary {
   readonly chunkCount: number;
   readonly patchedSha256: string;
   /** How many bytes the patched image differs from the factory one in — the
-   *  part's whole enumerated change, rebalance word included. Absent in a
-   *  version-1 run directory's summary (readers may ignore). */
-  readonly diffCount?: number;
+   *  bank's whole enumerated change, rebalance word included. */
+  readonly diffCount: number;
   /** The patched image's arm tail zeroes the reader's whole cursor word — by
    *  a site (the 2014 trio builds' fifth) or by the build's own tail (the
-   *  2016 line): the drain leaves the reader readable on its own boot.
-   *  Absent in run files written before it was recorded; `drainLeavesReaderReadable`
-   *  then falls back to the sites. */
-  readonly armResetsCursor?: boolean;
+   *  2016 line): the drain leaves the reader readable on its own boot. */
+  readonly armResetsCursor: boolean;
 }
 
 /**
  * Whether the drain leaves the camera's reader readable on its own boot, so
- * the restore can read without a power cycle: the committed patch's arm tail
- * zeroes the whole cursor word (TESTING.md secs. 35.4, 36). Recorded by the
- * patch step; an older summary is judged by its sites alone.
+ * the restore can read without a power cycle: every chosen bank's patch
+ * zeroes the whole cursor word in its arm tail (TESTING.md secs. 35.4, 36).
  */
-export function drainLeavesReaderReadable(patch: PreservePatchSummary | undefined): boolean {
-  if (patch === undefined) return false;
-  return patch.armResetsCursor === true || clearsArmCursor(patch.sites);
+export function drainLeavesReaderReadable(
+  state: Pick<PreserveRunState, 'targets' | 'banks'>,
+): boolean {
+  const targets = state.targets;
+  if (targets === undefined || targets.length === 0 || state.banks === undefined) return false;
+  return targets.every((key) => {
+    const patch = state.banks?.[key].patch;
+    return patch !== undefined && (patch.armResetsCursor || clearsArmCursor(patch.sites));
+  });
 }
 
 export interface PreserveRunState {
-  /** 2 — the current schema: the run derives its factory plaintext from the
-   *  camera itself (`imageSource: 'device'`). 1 — the older schema, where the
-   *  caller handed over a plaintext file; version-1 run directories still
-   *  load (their artifact set is identical — when they carry the derived
-   *  plaintext artifact, every step works), and every field below means the
-   *  same thing in both. */
-  version: 1 | 2;
+  /** 3 — the current schema: the backup reads every bank and records which
+   *  bank the next start enters, and the commit writes the banks the person
+   *  chose (`targets`). No older schema loads. */
+  version: 3;
   /** Timestamped (`preserve-2026-10-01T09-30-00Z`); names nothing on disk. */
   runId: string;
-  /** The cipher/acceptance family the detected build belongs to. Undefined
-   *  until the backup step derives the image from the camera. */
-  buildFamily?: PreserveFamilyId;
-  /** The factory plaintext sha the patch derives from — the sha of the
-   *  DERIVED image artifact (`PRESERVE_PLAIN_NAME`). Undefined until the
-   *  backup step derives it. */
-  imageSha256?: string;
-  /** The version the camera reported at the backup, which the derived
-   *  image's own header agreed with. Every later step requires the camera to
-   *  still report it. */
-  expectedVersion?: string;
   createdAt: string;
   nextStep: PreserveStepId | 'done';
   steps: Partial<Record<PreserveStepId, PreserveStepRecord>>;
-  /** Where the factory plaintext came from. A version-2 run always derives
-   *  it from the camera's active slot — there is no manual plaintext-image
-   *  selection anywhere. Absent in version-1 run directories (their
-   *  plaintext arrived from the caller). */
-  imageSource?: 'device';
-  /** The two independent reads of the active slot, as sha256s — the capture's
-   *  trust anchor, recorded by the backup step once the reads agree. */
-  slotReadShas?: readonly [string, string];
-  /** The slot verdict, after backup. */
-  detection?: SlotDetection;
-  /** The patch summary, after patch. */
-  patch?: PreservePatchSummary;
-  /** The dump shas, after drain. */
-  rawDumpSha256?: string;
-  deliveredSha256?: string;
-  /* ---- additive extensions (readers may ignore) --------------------------- */
-  /** The detected build's id in the patch table (`compact-1.3.0.8-8hz`, ...). */
+  /** What the person chose: the bank the next start enters (the default), one bank, or every bank. */
+  choice: PreserveBankChoice;
+  /** The banks the commit writes and the restore puts back, resolved from
+   *  `choice` once the backup has read the banks. Undefined while the choice
+   *  cannot be resolved (the plan says why). Fixed once the commit has run. */
+  targets?: readonly BankKey[];
+  /** The bank whose image the camera runs at the backup — the one it reports
+   *  it entered, else the first the boot word names (the 1.3.0.8 FF build:
+   *  recovery R). Its build is the run's build. */
+  anchor?: BankKey;
+  /** The boot facts the backup read: the word, each bank's check, the bank
+   *  the next start enters, and why. */
+  boot?: PreserveBootFacts;
+  /** Every bank as the backup read it, and its patch after the patch step. */
+  banks?: Readonly<Record<BankKey, PreserveBankRecord>>;
+  /** The cipher/acceptance family of the run's build. */
+  buildFamily?: PreserveFamilyId;
+  /** The version the camera reported at the backup, which the anchor's
+   *  derived image agreed with. Every later step requires the camera to
+   *  still report it. */
+  expectedVersion?: string;
+  /** The run's build id in the patch table (`compact-1.3.0.8-8hz`, ...). */
   buildId?: string;
-  /** The detected build's display name, as the plan print shows it. */
+  /** The run's build, as the plan print names it. */
   buildLabel?: string;
-  /** The known edit the slot's image carries on top of its factory build
-   *  (`KNOWN_DERIVATIONS`), and the share of the adjust word at 0x238 it
-   *  holds: the patch balances on top of it, and the restore puts the image
-   *  back with the edit in it. Absent on a factory image. */
-  imageDerivation?: { readonly id: string; readonly label: string; readonly balanceWord: number };
   /** How the wire-80 staged bytes relate to the patched plaintext. */
   stagedForm?: StagedFormId;
-  /** How (and whether) the restore step can put the original bank back
-   *  through the running app's own commit path ('none' on the FF build). */
+  /** How (and whether) the restore step can put a bank back through the
+   *  running app's own commit path ('none' on the FF build). */
   restoreForm?: RestoreFormId;
-  /** Which bank the patch may be committed into (`recovery-only` for the
-   *  1.3.0.8-FF build). */
+  /** Which bank the build's patch may be committed into (`recovery-only` for
+   *  the 1.3.0.8-FF build). */
   route?: CommitRouteId;
   /** Why, as text a person can act on (the recovery-slot bootloader fact). */
   routeNote?: string | null;
@@ -283,9 +301,15 @@ export interface PreserveRunState {
    *  (64 — one EP0 packet, the ask measured exact on silicon, TESTING.md
    *  sec. 28.3); the emulator suites pass 64 explicitly. */
   drainChunk?: number;
-  /** The bank's expected as-booted image prefix (plain XOR keystream), hex,
-   *  when the slot key is known — the strongest pre-write capture gate. */
+  /** The anchor bank's expected as-booted image prefix (plain XOR keystream),
+   *  hex, when the slot key is known — the strongest pre-write capture gate. */
   expectedSlotPrefix?: string;
+  /** The bank the camera reported it entered after the drain's reset, or
+   *  null when it could not be read. Set by a completed drain. */
+  drainEntered?: BankKey | null;
+  /** The dump shas, after drain. */
+  rawDumpSha256?: string;
+  deliveredSha256?: string;
   /** The verify step's outcome, after verify. */
   verify?: { diffBytes: number; windowsRead: number; badWindows: number[] };
   /** Post-reset retry attempts for the drain and verify ladders. */
@@ -297,8 +321,6 @@ export interface PreserveRunState {
  * ==================================================================== */
 
 export const PRESERVE_BACKUP_FILE = 'preserve_backup_windows.bin';
-export const PRESERVE_BANK_CAPTURE_FILE = 'preserve_bank_capture.bin';
-export const PRESERVE_PATCHED_FILE = 'preserve_patch_plain_patched.bin';
 export const PRESERVE_DUMP_POSTWRITE_FILE = 'preserve_dump_postwrite.bin';
 export const PRESERVE_DUMP_ORIGINAL_FILE = 'preserve_dump_original.bin';
 /** The verify step's re-read of the 31 windows after the restore, assembled
@@ -313,17 +335,29 @@ export const PRESERVE_RUN_STATE_FILE = 'preserve_run.json';
 export const PRESERVE_DUMP_MANIFEST_FILE = 'manifest.json';
 export const PRESERVE_DUMP_README_FILE = 'README.md';
 
-/**
- * The name the factory plaintext (the DERIVED image the patch is built from)
- * travels under: an artifact the BACKUP step emits, the caller persists, and
- * `loadArtifact` serves back to every later step that rebuilds the patch or
- * the restore payload. Since the image always derives from the camera itself,
- * the run directory (or run zip) carries it — `--resume` never needs any
- * external file. Version-1 run directories predate this: their plaintext was
- * the caller's own file, so resuming one at a patch-building step needs that
- * file copied into the directory under this name.
- */
-export const PRESERVE_PLAIN_NAME = 'preserve_image_plain.bin';
+/** One bank's agreed capture (its 64 KiB as stored), emitted by the backup
+ *  step for every bank the run can write. The restore source. */
+export function preserveCaptureFile(bank: BankKey): string {
+  return `preserve_bank_${bank}_capture.bin`;
+}
+
+/** One bank's factory plaintext, DERIVED from its capture by the backup step:
+ *  what its patch is built from, and what a cipher family's restore stages. */
+export function preservePlainFile(bank: BankKey): string {
+  return `preserve_bank_${bank}_plain.bin`;
+}
+
+/** One bank's patched image, built by the patch step. */
+export function preservePatchedFile(bank: BankKey): string {
+  return `preserve_bank_${bank}_patched.bin`;
+}
+
+/** Every per-bank artifact name, in A, B, R order — capture, plain, patched. */
+export const PRESERVE_BANK_FILES: readonly string[] = BANK_KEYS.flatMap((key) => [
+  preserveCaptureFile(key),
+  preservePlainFile(key),
+  preservePatchedFile(key),
+]);
 
 /** Serves one checkpoint artifact by name, or null when the caller does not
  *  have it — which a step that needs it turns into a refusal, never a gap. */
@@ -338,6 +372,8 @@ export interface CreatePreserveRunOptions {
   readonly runId?: string;
   /** Injectable clock for the timestamps, so tests are reproducible. */
   readonly now?: () => Date;
+  /** Which banks the run writes. Default: the bank the next start enters. */
+  readonly banks?: PreserveBankChoice;
   readonly drainChunk?: number;
   readonly expectedSlotPrefix?: Uint8Array;
   readonly postResetAttempts?: number;
@@ -353,27 +389,22 @@ export interface CreatedPreserveRun {
  * the first step, so even a crash during the backup leaves a resumable run.
  *
  * There is NO image argument and nothing to detect yet: the factory
- * plaintext always derives from the camera itself (the backup step reads the
- * active slot twice, requires agreement, solves the family's cipher, and
- * records the build it finds — `runBackupStep`). The run this creates is a
- * shell whose build fields fill in when the backup completes; the desk
- * refusal a wrong image used to earn happens on the wire instead, at the
- * backup step's gates, before anything write-shaped runs.
+ * plaintext always derives from the camera itself, and the banks the choice
+ * names are resolved once the backup has read them (`runBackupStep`).
  */
 export function createPreserveRun(
   options: CreatePreserveRunOptions = {},
 ): Promise<CreatedPreserveRun> {
   /* The Promise shape is kept on purpose: every caller (CLI, web runner,
-   * tests) awaits this entry point, and the sibling front ends are being
-   * rebuilt against it as an async call. */
+   * tests) awaits this entry point. */
   const now = options.now ?? ((): Date => new Date());
   const state: PreserveRunState = {
-    version: 2,
+    version: 3,
     runId: options.runId ?? `preserve-${isoStamp(now())}`,
     createdAt: now().toISOString(),
     nextStep: 'backup',
     steps: {},
-    imageSource: 'device',
+    choice: options.banks ?? 'next-start',
     ...(options.drainChunk === undefined ? {} : { drainChunk: options.drainChunk }),
     ...(options.expectedSlotPrefix === undefined
       ? {}
@@ -385,6 +416,35 @@ export function createPreserveRun(
   return Promise.resolve({ state });
 }
 
+/**
+ * Choose the banks a run writes, before its commit. Offline. Refuses before
+ * the backup has read the banks, once the commit has been run or tried (what
+ * it wrote is what the restore must put back), and when the run cannot write
+ * what the choice names (the reason is the choice's own).
+ */
+export function choosePreserveBanks(
+  state: PreserveRunState,
+  choice: PreserveBankChoice,
+): PreserveRunState {
+  if (state.steps.backup?.status !== 'done') {
+    throw new SeekError(
+      'pipeline/refused',
+      'the banks are chosen after the backup, which reads them — run the backup first',
+    );
+  }
+  if (state.steps.commit !== undefined) {
+    throw new SeekError(
+      'pipeline/refused',
+      `the banks cannot change once the commit has run or been tried: this run writes ` +
+        `${(state.targets ?? []).map(bankWordsOf).join(', ') || 'no bank'}, and the restore puts ` +
+        'back exactly those',
+    );
+  }
+  const verdict = preserveChoiceOf(state, choice);
+  if (verdict.banks === null) throw new SeekError('pipeline/refused', verdict.what);
+  return { ...state, choice, targets: verdict.banks };
+}
+
 /* ==================================================================== *
  * the gates — what each step requires, as text a person can act on
  * ==================================================================== */
@@ -393,115 +453,94 @@ async function loadCheckpoint(
   state: PreserveRunState,
   loadArtifact: PreserveArtifactLoader,
   name: string,
-  step: PreserveStepId,
+  producer: PreserveStepId,
 ): Promise<Uint8Array> {
   const bytes = await loadArtifact(name);
   if (bytes === null) {
     throw new SeekError(
       'pipeline/refused',
-      `the ${step} step needs ${name} in the run directory and it is not there — the step ` +
-        'that produced it must run first (or the file must be put back into this run ' +
-        'directory) before this one can',
+      `this step needs ${name}, which the ${producer} step writes, and the run directory does ` +
+        'not hold it — put the file back from your copy of the run zip (or the run ' +
+        'directory) before this step can run',
     );
   }
-  const recorded = state.steps.backup?.artifactShas?.[name];
+  const recorded =
+    state.steps.backup?.artifactShas?.[name] ?? state.steps.patch?.artifactShas?.[name];
   if (recorded !== undefined) {
     const actual = await sha256hex(bytes);
     if (actual !== recorded) {
       throw new SeekError(
         'pipeline/refused',
-        `${name} changed since the backup step recorded it (recorded sha256 ${recorded}, the ` +
-          'file is ' +
-          `${actual}) — a checkpoint file must not be edited underneath a run`,
+        `${name} changed since the step that wrote it recorded it (recorded sha256 ${recorded}, ` +
+          `the file is ${actual}) — a checkpoint file must not be edited underneath a run`,
       );
     }
   }
   return bytes;
 }
 
-/**
- * The factory plaintext, as the backup step derived it: a run artifact, served
- * by `loadArtifact` and sha-checked against the backup step's record by
- * `loadCheckpoint`. There is no other source — a run directory without the
- * artifact refuses, with the remedy (version-1 run directories kept their
- * plaintext outside; the file goes back under this name).
- */
-async function loadPlain(
+/** One bank's factory plaintext, as the backup step derived it (a run
+ *  artifact, sha-checked against the backup's record). */
+function loadPlain(
   state: PreserveRunState,
   loadArtifact: PreserveArtifactLoader,
+  bank: BankKey,
 ): Promise<Uint8Array> {
-  if ((await loadArtifact(PRESERVE_PLAIN_NAME)) === null) {
-    throw new SeekError(
-      'pipeline/refused',
-      `this step needs the factory plaintext the patch derives from (the run artifact ` +
-        `'${PRESERVE_PLAIN_NAME}') and the run directory does not hold it — the backup step ` +
-        'writes it there, derived from the camera’s own active slot; put the file back ' +
-        'from your copy of the run zip. A version-1 run (the older schema) took it from the ' +
-        'file the run was started with: copy that image into the run directory under this name.',
-    );
-  }
-  return loadCheckpoint(state, loadArtifact, PRESERVE_PLAIN_NAME, 'backup');
+  return loadCheckpoint(state, loadArtifact, preservePlainFile(bank), 'backup');
 }
 
 const isDone = (state: PreserveRunState, id: PreserveStepId): boolean =>
   state.steps[id]?.status === 'done';
 
-/**
- * The bank the camera actually boots, for a recovery-only build. The FF
- * build's raw word sum is the 0xFFFF sentinel, which the 2014 bootloader
- * rejects at slots A/B — it boots the recovery bank 0x14070000 UNCHECKED
- * (measured on the wire: the factory chimera with a blank record runs from
- * recovery; doc 35.3.3). The cfg-derived detection names A for a blank
- * record, which for this build names a bank that can never run — so the
- * detection is re-pointed at recovery, and every step (capture, commit,
- * swap-back, restore) acts on the bank that truly runs. An explicit record
- * naming recovery behaves the same; a record naming B cannot boot this
- * build at all, and `routeRefusal` refuses the write.
- */
-function effectiveDetection(state: PreserveRunState, detection: SlotDetection): SlotDetection {
-  if (state.route !== 'recovery-only') return detection;
-  const recovery = BANKS.find((b) => b.key === 'r');
-  if (recovery === undefined) return detection;
-  return {
-    ...detection,
-    blank: false,
-    cfg0: 2,
-    bank: 'r',
-    bankAddress: recovery.address,
-    bankMode: recovery.mode,
-    verdict:
-      'the 0xFFFF-sum build: slots A/B are rejected by the bootloader and the recovery ' +
-      `bank ${recovery.address.toString(16)} boots unchecked — the running bank is ` +
-      'recovery (doc 35.3)',
-  };
+function buildNameOf(state: PreserveRunState): string {
+  return state.buildId ?? state.buildFamily ?? 'the detected build';
 }
 
-/**
- * The route refusal, shared by the three steps that would touch the patch's
- * bank: a build whose route is recovery-only must never be written into a
- * slot the bootloader would reject at boot. Recovery itself — the bank the
- * route names — passes.
- */
-function routeRefusal(state: PreserveRunState): string | null {
-  if (state.route !== 'recovery-only') return null;
-  if (state.detection?.bank === 'r') return null;
-  const bank = state.detection?.bank ?? '(no detection)';
-  return (
-    `this build's patch boots from the RECOVERY slot only (mode 9): ${state.routeNote ?? ''} — ` +
-    `the backup's detection named bank ${bank}, and the bootloader would not boot the ` +
-    'patch from there, so the run refuses'
-  );
+/** Why the chosen banks cannot be written, or null. Shared by the steps that
+ *  touch them. */
+function targetsRefusal(state: PreserveRunState, step: PreserveStepId): string | null {
+  const targets = state.targets;
+  if (state.banks === undefined || state.boot === undefined) {
+    return `${step} needs the banks the backup step read, and the state has none`;
+  }
+  if (targets === undefined || targets.length === 0) {
+    return `no banks are chosen for this run: ${preserveChoiceOf(state, state.choice).what}`;
+  }
+  for (const key of targets) {
+    const bank = state.banks[key];
+    if (bank.refused !== null) {
+      return `${bankWordsOf(key)} cannot be written: ${bank.refused}`;
+    }
+    if (state.route === 'recovery-only' && key !== 'r') {
+      return (
+        `this build's patch boots from recovery R only: ${state.routeNote ?? ''} — the run ` +
+        `would write ${bankWordsOf(key)}, where the bootloader never runs it`
+      );
+    }
+  }
+  return null;
+}
+
+async function missingFiles(
+  loadArtifact: PreserveArtifactLoader,
+  names: readonly string[],
+): Promise<string[]> {
+  const missing: string[] = [];
+  for (const name of names) {
+    if ((await loadArtifact(name)) === null) missing.push(name);
+  }
+  return missing;
 }
 
 /**
  * Why `step` cannot run against `state` right now, or null when it can.
  *
  * The run's rule, in gate order: the available regions are dumped and
- * persisted (backup) before the patch is built; the patch summary exists
- * before anything write-shaped; the commit exists before anything that reads
- * the patched part; and the restore exists before the verify that proves it.
- * A step that is already `done` always refuses — re-running a completed step
- * is never what a resume wants.
+ * persisted (backup) before the patch is built; the banks are chosen and
+ * their patches exist before anything write-shaped; the commit exists before
+ * anything that reads the patched part; and the restore exists before the
+ * verify that proves it. A step that is already `done` always refuses —
+ * re-running a completed step is never what a resume wants.
  *
  * `options.allowJump` relaxes exactly the three ORDERING gates past the
  * commit (drain/restore without a completed commit, verify without a
@@ -510,15 +549,12 @@ function routeRefusal(state: PreserveRunState): string | null {
  * file gates stay absolute (a jump cannot fabricate a restore source), the
  * commit step's own gates never relax, and the wire stays protected by the
  * step-level checks that remain (the commit pre-check, the restore
- * already-original detection, verify's 0-diff proof). Both front ends gate
- * the override behind their loudest interaction — the CLI's `--from-step`
- * with its WARNING line, the web's danger dialog.
+ * already-original detection, verify's 0-diff proof).
  *
  * `options.powerCycled` is the same shape of honesty on the backup's retry:
  * a FAILED backup record re-runs only past an explicit assertion that the
  * camera was power-cycled since the failure. Core cannot observe a power
- * cycle — the flag is an assertion by the front end (the CLI asks on a
- * terminal, or `--yes` asserts it), and the gate's text says so.
+ * cycle — the flag is an assertion by the front end.
  */
 export async function describeStepGate(
   step: PreserveStepId,
@@ -585,15 +621,24 @@ export async function describeStepGate(
       if (!isDone(state, 'patch')) {
         return 'commit runs after the patch step, which records what it stages';
       }
-      if (state.detection === undefined) {
-        return 'commit needs the slot detection the backup step recorded, and the state has none';
+      const targets = targetsRefusal(state, 'commit');
+      if (targets !== null) return targets;
+      const unpatched = (state.targets ?? []).filter(
+        (key) => state.banks?.[key].patch === undefined,
+      );
+      if (unpatched.length > 0) {
+        return (
+          `commit needs the patch of ${unpatched.map(bankWordsOf).join(', ')}, and the patch ` +
+          'step recorded none — run the patch step again'
+        );
       }
-      const route = routeRefusal(state);
-      if (route !== null) return route;
-      const missing: string[] = [];
-      for (const name of [PRESERVE_BACKUP_FILE, PRESERVE_BANK_CAPTURE_FILE]) {
-        if ((await loadArtifact(name)) === null) missing.push(name);
-      }
+      const missing = await missingFiles(loadArtifact, [
+        PRESERVE_BACKUP_FILE,
+        ...(state.targets ?? []).flatMap((key) => [
+          preserveCaptureFile(key),
+          preservePlainFile(key),
+        ]),
+      ]);
       if (missing.length > 0) {
         return (
           'commit requires the backup files in the run directory and they are missing: ' +
@@ -611,48 +656,48 @@ export async function describeStepGate(
           'its checkpoint.'
         );
       }
-      if (state.detection === undefined) {
-        return 'drain needs the slot detection the backup step recorded, and the state has none';
-      }
+      const targets = targetsRefusal(state, 'drain');
+      if (targets !== null) return targets;
       /* The capability table, consulted where it bites: a build with no
        * whole-part drain gets the documented reason, not a stall on the wire
        * (the 1.0.3.2 builds' EP0 sessions die at ~64-81 KB). */
       if (state.capability !== undefined && !state.capability.wholePart) {
-        return (
-          `the drain step refuses on ${state.buildId ?? state.buildFamily ?? 'the detected build'}: ` +
-          state.capability.note
-        );
+        return `the drain step refuses on ${buildNameOf(state)}: ${state.capability.note}`;
       }
       /* THE MODE-2 HAZARD ORDERING: on the builds whose factory mode-2 row
        * arms *(0x14000000), the nop that makes the arm safe is part of the
-       * patch — the drain arms mode 2 only after the reset into the PATCHED
-       * image, and this gate holds the run state to that order: the recorded
-       * patch summary must carry the hazard site, or the arm is refused
-       * before it can fault the camera. */
+       * patch — every chosen bank's recorded patch must carry the hazard
+       * site, or the arm is refused before it can fault the camera. */
       const hazardSites = state.capability?.modeTwoHazardSites;
       if (hazardSites !== undefined && hazardSites.length > 0) {
-        const recorded = new Set((state.patch?.sites ?? []).map((site) => site.offset));
-        const missing = hazardSites.filter((offset) => !recorded.has(offset));
-        if (missing.length > 0) {
-          return (
-            `the drain step refuses on ${state.buildId ?? state.buildFamily ?? 'the detected build'}: ` +
-            'arming mode 2 on this build’s UNPATCHED image faults the camera — the factory ' +
-            'mode-2 row loads the word stored AT 0x14000000 (the bootloader vector’s initial ' +
-            'SP, not a flash window) and an armed read walks off SRAM (measured on the ' +
-            'emulator: 32 KiB served, then the guest faulted; FW-V1 doc 36.3.1). The nop that ' +
-            'makes the arm safe is patch site ' +
-            missing.map((offset) => hexUp(offset)).join(', ') +
-            ', and it is NOT among the patch sites this run recorded — run the patch step (and ' +
-            'land the commit) before any mode-2 arm.'
+        for (const key of state.targets ?? []) {
+          const recorded = new Set(
+            (state.banks?.[key].patch?.sites ?? []).map((site) => site.offset),
           );
+          const missing = hazardSites.filter((offset) => !recorded.has(offset));
+          if (missing.length > 0) {
+            return (
+              `the drain step refuses on ${buildNameOf(state)}: ` +
+              'arming mode 2 on this build’s UNPATCHED image faults the camera — the factory ' +
+              'mode-2 row loads the word stored AT 0x14000000 (the bootloader vector’s initial ' +
+              'SP, not a flash window) and an armed read walks off SRAM (measured on the ' +
+              'emulator: 32 KiB served, then the guest faulted; FW-V1 doc 36.3.1). The nop that ' +
+              'makes the arm safe is patch site ' +
+              missing.map((offset) => hexUp(offset)).join(', ') +
+              `, and it is NOT among the patch sites this run recorded for ${bankWordsOf(key)} — ` +
+              'run the patch step (and land the commit) before any mode-2 arm.'
+            );
+          }
         }
       }
-      const route = routeRefusal(state);
-      if (route !== null) return route;
-      if ((await loadArtifact(PRESERVE_BANK_CAPTURE_FILE)) === null) {
+      const missing = await missingFiles(
+        loadArtifact,
+        (state.targets ?? []).map(preserveCaptureFile),
+      );
+      if (missing.length > 0) {
         return (
-          `drain needs ${PRESERVE_BANK_CAPTURE_FILE} (the delivered dump is post-processed ` +
-          'with it) and it is not in the run directory'
+          `drain needs ${missing.join(', ')} (the delivered dump is post-processed with each ` +
+          'written bank’s capture) and it is not in the run directory'
         );
       }
       return null;
@@ -660,26 +705,21 @@ export async function describeStepGate(
     case 'restore': {
       if (!isDone(state, 'commit') && !jump) {
         return (
-          'restore puts the original bank back over the patch, and this run has no completed ' +
+          'restore puts the original banks back over the patch, and this run has no completed ' +
           'commit — there is nothing it can be reverting. Run (or resume at) the commit ' +
           'first, or jump explicitly (allowJump) to restore an already-patched camera.'
         );
       }
-      if (state.detection === undefined) {
-        return 'restore needs the slot detection the backup step recorded, and the state has none';
-      }
-      const route = routeRefusal(state);
-      if (route !== null) return route;
-      if (state.patch === undefined) {
-        return 'restore needs the patch summary (for the staged length) — run the patch step first';
+      const targets = targetsRefusal(state, 'restore');
+      if (targets !== null) return targets;
+      if ((state.targets ?? []).some((key) => state.banks?.[key].patch === undefined)) {
+        return 'restore needs each written bank’s patch summary (for the staged length) — run the patch step first';
       }
       if (state.restoreForm === 'none') {
         return (
-          `the restore step refuses on ${
-            state.buildId ?? state.buildFamily ?? 'the detected build'
-          }: no staged form ` +
-          'of the factory image passes the running app\u2019s own acceptance while ' +
-          'transforming back to the original slot bytes \u2014 accept1 reads sum(P ^ ksD), ' +
+          `the restore step refuses on ${buildNameOf(state)}: no staged form ` +
+          'of the factory image passes the running app’s own acceptance while ' +
+          'transforming back to the original slot bytes — accept1 reads sum(P ^ ksD), ' +
           'the factory image carries 0xB7AB9D17 there (measured), not the 0xFFFF the app ' +
           'demands. This run ends with the delivered dump in hand and the patch in place; ' +
           'the original content can only go back with a full-flash programmer.'
@@ -689,21 +729,19 @@ export async function describeStepGate(
        * staged form (the commit's own transform turns it back into the
        * original slot bytes) — so it needs the derived plaintext, which the
        * 'plain' families never do (they stage the capture verbatim). */
-      if (state.stagedForm !== undefined && state.stagedForm !== 'plain') {
-        if ((await loadArtifact(PRESERVE_PLAIN_NAME)) === null) {
-          return (
-            `restore stages the original image in this build's staged form ` +
-            `(${state.stagedForm}), which is derived from the factory plaintext — and the run ` +
-            `directory does not hold ${PRESERVE_PLAIN_NAME} (the backup step wrote it there, ` +
-            'derived from the camera’s own active slot). Put the file back from your copy ' +
-            'of the run zip.'
-          );
-        }
-      }
-      if ((await loadArtifact(PRESERVE_BANK_CAPTURE_FILE)) === null) {
+      const needsPlain = state.stagedForm !== undefined && state.stagedForm !== 'plain';
+      const missing = await missingFiles(
+        loadArtifact,
+        (state.targets ?? []).flatMap((key) =>
+          needsPlain
+            ? [preserveCaptureFile(key), preservePlainFile(key)]
+            : [preserveCaptureFile(key)],
+        ),
+      );
+      if (missing.length > 0) {
         return (
-          `restore needs ${PRESERVE_BANK_CAPTURE_FILE} (it stages that capture verbatim) and ` +
-          'it is not in the run directory'
+          `restore needs ${missing.join(', ')} (the original of each written bank, from the ` +
+          'backup step) and it is not in the run directory'
         );
       }
       return null;
@@ -844,6 +882,17 @@ function applyReaderOp(device: SeekDevice, version: string | null | undefined): 
   device.windowReadOp = legacyReaderOp(version ?? null);
 }
 
+/**
+ * The active-slot word: GetFirmwareInfo selector 10 returns the firmware's
+ * roots record, and its +8 is the bank the bootloader entered at this start
+ * (0 A, 1 B, 2 R; TESTING.md 42.53, 42.56). Not a window read. Null when the
+ * camera does not answer the selector.
+ */
+async function readActiveSlotWord(device: SeekDevice): Promise<number | null> {
+  const roots = await device.tryFwInfo(10, 64, 'the active-slot word (firmware info roots)');
+  return roots !== null && roots.length >= 12 ? viewOf(roots).getUint32(8, true) : null;
+}
+
 function expectedPrefixOf(state: PreserveRunState): Uint8Array | undefined {
   return state.expectedSlotPrefix === undefined ? undefined : hexToBytes(state.expectedSlotPrefix);
 }
@@ -892,8 +941,21 @@ async function withSession<T>(
   }
 }
 
+function bankOf(key: BankKey): (typeof BANKS)[number] {
+  const bank = BANKS.find((entry) => entry.key === key);
+  if (bank === undefined) fail(`no bank ${key}`);
+  return bank;
+}
+
+/** The banks a list names, as a sentence fragment ("slot A and recovery R"). */
+function bankList(keys: readonly BankKey[]): string {
+  const words = keys.map(bankWordsOf);
+  if (words.length <= 1) return words.join('');
+  return `${words.slice(0, -1).join(', ')} and ${words.at(-1) ?? ''}`;
+}
+
 /* ==================================================================== *
- * backup — the 31 windows, the capture, and the pre-flash dump archive
+ * backup — the 31 windows, every bank, and the pre-flash dump archive
  * ==================================================================== */
 
 /** The backup, assembled at its flash addresses into a whole-part image (the
@@ -921,10 +983,6 @@ export function backupResultFromImage(image: Uint8Array): BackupResult {
   }
   return { windows, byAddress, bytes: windows.length * WINDOW_BYTES };
 }
-
-/* ==================================================================== *
- * backup — the 31 windows, the double-read capture, the derived image
- * ==================================================================== */
 
 /** One arm of the double read: arm `entry` and serve the whole 64 KiB through
  *  the drain path. A stall here is the dead-reader wire answer; the caller's
@@ -1029,8 +1087,14 @@ export function spentReaderSignature(capture: Uint8Array): string | null {
   return null;
 }
 
+interface Derived {
+  readonly plain: Uint8Array;
+  readonly patch: V1Patch;
+  readonly method: string;
+}
+
 /**
- * The factory plaintext, derived from the agreed capture — the ruling's whole
+ * The factory plaintext, derived from an agreed capture — the ruling's whole
  * mechanism, in one function. The candidate order is fixed: the identity
  * solve first (the 2014 chain's banks hold the image as-is), then each cipher
  * family's solver in table order. EVERY candidate is pushed through the full
@@ -1039,13 +1103,10 @@ export function spentReaderSignature(capture: Uint8Array): string | null {
  * table's detect hooks, the before-byte site gates — which refuse an
  * already-patched bank — and the family word-sum/acceptance rule). The first
  * candidate that passes all of them IS the factory plaintext; a capture for
- * which none passes refuses the run, and nothing is recorded, let alone
- * written.
+ * which none passes refuses, and nothing is recorded, let alone written.
  */
-function deriveFactoryImage(
-  capture: Uint8Array,
-  cameraVersion: string,
-): { plain: Uint8Array; patch: V1Patch; method: string } {
+function deriveFactoryImage(capture: Uint8Array, cameraVersion: string, bank: BankKey): Derived {
+  const words = bankWordsOf(bank);
   const attempts: { plain: Uint8Array; method: string }[] = [];
   const reasons: string[] = [];
   /* The spent-reader check comes FIRST: a capture carrying one of those
@@ -1062,7 +1123,7 @@ function deriveFactoryImage(
      * the one external fact here, and the derived image must agree with it. */
     const says = parseImageHeader(attempt.plain)?.versionStr;
     if (says !== undefined && says !== cameraVersion) {
-      reasons.push(`the camera reports ${cameraVersion} but the active slot's image says ${says}`);
+      reasons.push(`the camera reports ${cameraVersion} but the image in ${words} says ${says}`);
       continue;
     }
     try {
@@ -1086,67 +1147,77 @@ function deriveFactoryImage(
    * ruled out above. What failed is every derivation's gate set, so the first
    * line says that, and the list says which gate. */
   fail(
-    'both reads of the active slot agree, but no candidate derivation of the factory ' +
-      'plaintext from them passes every gate below, so this run has no image it can patch and ' +
-      'refuses rather than write over the slot. Every candidate was tried:\n  - ' +
+    `both reads of ${words} agree, but no candidate derivation of the factory ` +
+      'plaintext from them passes every gate below, so this run has no image it can patch there ' +
+      'and refuses rather than write over it. Every candidate was tried:\n  - ' +
       reasons.join('\n  - '),
   );
 }
 
-/** One capture-and-derive pass, against the bank `detection` names: the
- *  double read under the serve budget (the sweep's row + ONE fresh arm — the
- *  active slot is served exactly twice per boot), the verified-arm ladder on
- *  those reads, the expected-prefix gate (when the slot key is known), and
- *  the derivation with its gate set. The FF route's re-point runs this twice —
- *  the first pass names the build, the second captures the bank that runs. */
-async function captureAndDerive(
+/** One bank's read on its own admitted boot: a full 64 KiB drain completes
+ *  the window (which poisons the reader for the rest of that boot —
+ *  TESTING.md sec. 34), so the segment ends with the wire reboot the next
+ *  probe sends. */
+async function readBankOnFreshBoot(
+  opener: SessionOpener,
+  bank: BankKey,
+  version: string,
+  reporter: Reporter,
+  signal: AbortSignal | undefined,
+  label: string,
+): Promise<Uint8Array> {
+  const [bankEntry] = doubleReadWindows(bank);
+  const { device } = await openProbedSession(opener, reporter, signal, label, (d) => {
+    applyReaderOp(d, version);
+  });
+  try {
+    return await armAndDrainSlot(device, bankEntry, label, signal);
+  } finally {
+    /* No eager reset: the next segment's probe detects the poisoned boot and
+     * reboots by command itself. */
+    await opener.close(device);
+  }
+}
+
+interface AnchorCapture {
+  readonly capture: Uint8Array;
+  readonly slotReadShas: readonly [string, string];
+  readonly readModes: readonly [number, number];
+  readonly byAddress: ReadonlyMap<number, Uint8Array>;
+  readonly serveNote: string;
+  readonly derived: Derived;
+}
+
+/** The anchor bank's capture-and-derive pass: the double read under the
+ *  serve budget (the sweep's row + ONE fresh arm), the verified-arm ladder on
+ *  those reads, the expected-prefix gate (when the slot key is known), and the
+ *  derivation with its gate set. Any failure here refuses the backup. */
+async function captureAnchor(
   opener: SessionOpener,
   byAddress: ReadonlyMap<number, Uint8Array>,
-  detection: SlotDetection,
+  bank: BankKey,
   version: string,
   expectedPrefix: Uint8Array | undefined,
   reporter: Reporter,
   signal: AbortSignal | undefined,
-): Promise<{
-  detection: SlotDetection;
-  capture: Uint8Array;
-  slotReadShas: readonly [string, string];
-  readModes: readonly [number, number];
-  byAddress: ReadonlyMap<number, Uint8Array>;
-  serveNote: string;
-  derived: ReturnType<typeof deriveFactoryImage>;
-}> {
-  const sweepRow = byAddress.get(detection.bankAddress);
+): Promise<AnchorCapture> {
+  const words = bankWordsOf(bank);
+  const address = bankOf(bank).address;
+  const sweepRow = byAddress.get(address);
   if (sweepRow === undefined) {
     fail(
-      `the backup does not hold the active bank ` +
-        `${detection.bankAddress.toString(16)} — the stock windows cannot serve it`,
+      `the backup does not hold ${words} (${hexUp(address, 8)}) — the stock windows cannot serve it`,
     );
   }
-  const [bankEntry, planEntry] = doubleReadWindows(detection.bank);
-
-  /* THE ACTIVE SLOT'S SECOND READ, one admitted boot of its own: a full
-   * 64 KiB drain completes the window (which poisons the reader for the rest
-   * of that boot — TESTING.md sec. 34), so the segment ends with the wire
-   * reboot. The FIRST read is the sweep's own captured row at the bank
-   * address, served on its own boot. */
-  const readBankOnFreshBoot = async (label: string): Promise<Uint8Array> => {
-    const { device } = await openProbedSession(opener, reporter, signal, label, (d) => {
-      applyReaderOp(d, version);
-    });
-    try {
-      return await armAndDrainSlot(device, bankEntry, label, signal);
-    } finally {
-      /* No eager reset: the next segment's probe detects the poisoned boot
-       * and reboots by command itself. */
-      await opener.close(device);
-    }
-  };
-
+  const [bankEntry, planEntry] = doubleReadWindows(bank);
   const fresh = await readBankOnFreshBoot(
-    `the active slot’s fresh-boot read (the bank window, mode ${String(bankEntry.subcmd)})`,
+    opener,
+    bank,
+    version,
+    reporter,
+    signal,
+    `${words}’s fresh-boot read (the bank window, mode ${String(bankEntry.subcmd)})`,
   );
-  const freshMode = bankEntry.subcmd;
 
   /* THE VERIFIED-ARM LADDER on the slot reads. `sweepRow` is the first read
    * (the sweep's own boot); `fresh` is the second (its own admitted boot).
@@ -1157,18 +1228,30 @@ async function captureAndDerive(
   let capture = sweepRow;
   let verifiedSecond: Uint8Array = fresh;
   let serveNote = 'both reads agree';
+  const disagree = (sha1: string, sha2: string): never =>
+    fail(
+      `the two reads of ${words} disagree (sha256 ${sha1} vs ${sha2}) — a camera that cannot ` +
+        'serve the bank it runs twice in a row is not a camera to write to; the capture is the ' +
+        'restore source and the patch’s derivation input',
+    );
   if (!slotReadIsPlausible(sweepRow)) {
     if (!slotReadIsPlausible(fresh)) {
       /* Both boots served garbage. One more admitted boot for the sweep row's
        * side: the sweep's own boot may have been the swallowed one. */
       const rescued = await readBankOnFreshBoot(
-        'the active slot’s re-read after two garbage reads (the bank window)',
+        opener,
+        bank,
+        version,
+        reporter,
+        signal,
+        `${words}’s re-read after two garbage reads (the bank window)`,
       );
       if (!slotReadIsPlausible(rescued)) {
         fail(
           spentReaderRefusal(
-            `the active slot’s reads served garbage on three boots (${slotGarbageNoun(sweepRow)}; ` +
-              `${slotGarbageNoun(fresh)}; then ${slotGarbageNoun(rescued)})`,
+            `the reads of ${words}, the bank the camera runs, served garbage on three boots ` +
+              `(${slotGarbageNoun(sweepRow)}; ${slotGarbageNoun(fresh)}; then ` +
+              `${slotGarbageNoun(rescued)})`,
           ),
         );
       }
@@ -1192,7 +1275,12 @@ async function captureAndDerive(
     if (!slotReadIsPlausible(fresh)) {
       /* The fresh boot was swallowed: one more admitted boot. */
       const again = await readBankOnFreshBoot(
-        'the active slot’s re-read (the fresh boot served garbage)',
+        opener,
+        bank,
+        version,
+        reporter,
+        signal,
+        `${words}’s re-read (the fresh boot served garbage)`,
       );
       if (equalBytes(again, sweepRow)) {
         verifiedSecond = again;
@@ -1202,23 +1290,15 @@ async function captureAndDerive(
       } else if (!slotReadIsPlausible(again)) {
         fail(
           spentReaderRefusal(
-            `the active slot’s fresh-boot reads served garbage twice (${slotGarbageNoun(fresh)}; ` +
+            `the fresh-boot reads of ${words} served garbage twice (${slotGarbageNoun(fresh)}; ` +
               `then ${slotGarbageNoun(again)})`,
           ),
         );
       } else {
-        fail(
-          `the two reads of the active slot disagree (sha256 ${sha1} vs ${sha2}) — a camera ` +
-            'that cannot serve its own slot twice in a row is not a camera to write to; the ' +
-            'capture is the restore source and the patch’s derivation input',
-        );
+        disagree(sha1, sha2);
       }
     } else {
-      fail(
-        `the two reads of the active slot disagree (sha256 ${sha1} vs ${sha2}) — a camera ` +
-          'that cannot serve its own slot twice in a row is not a camera to write to; the ' +
-          'capture is the restore source and the patch’s derivation input',
-      );
+      disagree(sha1, sha2);
     }
   }
 
@@ -1227,16 +1307,16 @@ async function captureAndDerive(
     await sha256hex(verifiedSecond),
   ];
   reporter.log(
-    `the active slot served on two admitted boots (the sweep’s own boot, mode ` +
+    `${words} served on two admitted boots (the sweep’s own boot, mode ` +
       `${String(planEntry.subcmd)}, + one fresh boot of the bank window, mode ` +
-      `${String(freshMode)}): ${serveNote} (sha256 ${slotReadShas[1]})`,
+      `${String(bankEntry.subcmd)}): ${serveNote} (sha256 ${slotReadShas[1]})`,
     'detail',
   );
   /* The archive's row at the bank address is the verified capture when the
    * sweep's own row was the swallowed one — the assembled backup must agree
    * with the capture the run derives from and verify compares against. */
   const archiveRows: ReadonlyMap<number, Uint8Array> =
-    capture === sweepRow ? byAddress : new Map(byAddress).set(detection.bankAddress, capture);
+    capture === sweepRow ? byAddress : new Map(byAddress).set(address, capture);
 
   /* The strongest keyless gate that survives, when the slot key is known
    * (the emulator's donor): the capture must be the factory image as the
@@ -1246,15 +1326,27 @@ async function captureAndDerive(
     !equalBytes(capture.subarray(0, expectedPrefix.length), expectedPrefix)
   ) {
     fail(
-      'the active slot does not hold the factory image as this build’s cipher stores it ' +
+      `${words} does not hold the factory image as this build’s cipher stores it ` +
         '(the expected image prefix does not match the capture) — refusing before anything ' +
         'is recorded, let alone written',
     );
   }
 
-  const derived = deriveFactoryImage(capture, version);
+  const derived = deriveFactoryImage(capture, version, bank);
+  await logDerived(reporter, bank, derived);
+  return {
+    capture,
+    slotReadShas,
+    readModes: [planEntry.subcmd, bankEntry.subcmd] as const,
+    byAddress: archiveRows,
+    serveNote,
+    derived,
+  };
+}
+
+async function logDerived(reporter: Reporter, bank: BankKey, derived: Derived): Promise<void> {
   reporter.log(
-    `the factory plaintext derived from the capture: ${derived.method} ` +
+    `${bankWordsOf(bank)}: the factory plaintext derived from the capture: ${derived.method} ` +
       `(${String(derived.plain.length)} B, sha256 ${await sha256hex(derived.plain)}); ` +
       `build ${derived.patch.buildId} (family ${derived.patch.family})`,
     'detail',
@@ -1262,7 +1354,7 @@ async function captureAndDerive(
   const edit = derived.patch.derivation;
   if (edit !== null) {
     reporter.log(
-      `the slot's image is the ${derived.patch.buildId} factory image with ` +
+      `${bankWordsOf(bank)}: the image is the ${derived.patch.buildId} factory image with ` +
         `${edit.derivation.label} (${edit.derivation.id}): ` +
         `${String(edit.derivation.site.after.length)} bytes at ` +
         `${hexUp(edit.derivation.site.offset)}, balanced through the adjust word at 0x238 ` +
@@ -1271,15 +1363,108 @@ async function captureAndDerive(
       'detail',
     );
   }
-  return {
-    detection,
-    capture,
-    slotReadShas,
-    readModes: [planEntry.subcmd, freshMode] as const,
-    byAddress: archiveRows,
-    serveNote,
-    derived,
-  };
+}
+
+/** Another bank's two reads and derivation: never refuses the backup. */
+interface OtherCapture {
+  readonly holds: BankHolds;
+  readonly bytes: Uint8Array;
+  readonly slotReadShas: readonly [string, string] | null;
+  readonly derived: Derived | null;
+  /** Why the run cannot write this bank, before the build and key rules. */
+  readonly refused: string | null;
+}
+
+async function captureOther(
+  opener: SessionOpener,
+  byAddress: ReadonlyMap<number, Uint8Array>,
+  bank: BankKey,
+  version: string,
+  reporter: Reporter,
+  signal: AbortSignal | undefined,
+): Promise<OtherCapture> {
+  const words = bankWordsOf(bank);
+  const row = byAddress.get(bankOf(bank).address) ?? new Uint8Array(WINDOW_BYTES).fill(0xff);
+  let fresh: Uint8Array;
+  try {
+    fresh = await readBankOnFreshBoot(
+      opener,
+      bank,
+      version,
+      reporter,
+      signal,
+      `${words}’s fresh-boot read (the bank window, mode ${String(bankOf(bank).mode)})`,
+    );
+  } catch (error) {
+    if (error instanceof CancelledError) throw error;
+    const why = error instanceof Error ? error.message : String(error);
+    reporter.log(`${words}: the second read failed (${why})`, 'warn');
+    return {
+      holds: 'unsettled',
+      bytes: row,
+      slotReadShas: null,
+      derived: null,
+      refused: `its second read failed (${why})`,
+    };
+  }
+  const shas: readonly [string, string] = [await sha256hex(row), await sha256hex(fresh)];
+  if (!equalBytes(row, fresh)) {
+    reporter.log(
+      `${words}: the two reads disagree (sha256 ${shas[0]} vs ${shas[1]}) — it is not written`,
+      'warn',
+    );
+    return {
+      holds: 'unsettled',
+      bytes: row,
+      slotReadShas: shas,
+      derived: null,
+      refused: `its two reads disagree (sha256 ${shas[0]} vs ${shas[1]})`,
+    };
+  }
+  const holds = bankHoldsOf(row);
+  if (holds !== 'image') {
+    const mark = warmBootMarkOf(row);
+    const refused =
+      holds === 'erased'
+        ? 'it is erased'
+        : mark !== null
+          ? `its header word at +0x200 holds ${hexUp(mark)}, the mark the bootloader writes ` +
+            'over a bank after a watchdog reset early in a start; the bootloader no longer ' +
+            'takes this bank, and the run has no image to patch there'
+          : 'it holds no image header at +0x200';
+    reporter.log(`${words}: ${refused}`, 'detail');
+    return { holds, bytes: row, slotReadShas: shas, derived: null, refused };
+  }
+  try {
+    const derived = deriveFactoryImage(row, version, bank);
+    await logDerived(reporter, bank, derived);
+    return { holds, bytes: row, slotReadShas: shas, derived, refused: null };
+  } catch (error) {
+    if (error instanceof CancelledError) throw error;
+    const why = error instanceof Error ? error.message : String(error);
+    reporter.log(`${words}: no image the run can patch (${why})`, 'detail');
+    return { holds, bytes: row, slotReadShas: shas, derived: null, refused: why };
+  }
+}
+
+/** The boot word from the backup's boot-config row: an SRAM-shaped word is a
+ *  spent reader serving the bootloader vector, never a record. */
+function bootHeadOf(cfgRow: Uint8Array): Uint8Array {
+  const head = cfgRow.subarray(0, BOOT_CONFIG_BYTES);
+  if (head.length < BOOT_CONFIG_BYTES) {
+    fail(`boot-config read is ${String(head.length)} B, want ${String(BOOT_CONFIG_BYTES)}`);
+  }
+  const word = viewOf(head).getUint32(0, true);
+  if (isStaleDescriptorWord(word)) {
+    fail(
+      spentReaderRefusal(
+        `cfg[0]=${hexUp(word)} is an SRAM-shaped word — the bootloader vector’s initial SP ` +
+          'served through a stale reader descriptor, not a record the bootloader wrote — and ' +
+          'no bank can be named from it; nothing is written',
+      ),
+    );
+  }
+  return head;
 }
 
 async function runBackupStep(
@@ -1294,8 +1479,9 @@ async function runBackupStep(
   /* THE VERSION GATE, its own small-read session: GetFirmwareInfo is not the
    * window reader and answers on any boot. No gate yet — the camera's own
    * report is the version the run expects from here on. The derived image's
-   * header must agree with it (below). */
-  const version = await withSession(opener, async (device) => {
+   * header must agree with it (below). The active-slot word rides along: the
+   * bank the camera entered is the bank whose image runs now. */
+  const { version, activeSlotWord } = await withSession(opener, async (device) => {
     assertLive(signal);
     const v = await readVersion(device);
     /* THE LINE GATE, before a single window is armed or read: a 4.x or Nano build is
@@ -1307,95 +1493,178 @@ async function runBackupStep(
      * this run refuses with that evidence instead of reading anything. */
     const tooOld = preWideningRefusal(v);
     if (tooOld !== null) fail(tooOld);
-    return v;
+    return { version: v, activeSlotWord: await readActiveSlotWord(device) };
   });
-  /* THE SWEEP + CAPTURE: one admitted boot per window (each segment's probe
-   * read IS the boot-config record), the capture on its own admitted boot —
-   * and each completing read ends with the wire reboot that clears the reader
-   * poison (TESTING.md sec. 34). */
-  const read = await (async (): Promise<{
-    version: string;
-    detection: SlotDetection;
-    capture: Uint8Array;
-    slotReadShas: readonly [string, string];
-    readModes: readonly [number, number];
-    serveNote: string;
-    derived: ReturnType<typeof deriveFactoryImage>;
-    repointed: boolean;
-    assembled: Uint8Array;
-  }> => {
-    reporter.log(`camera reports firmware ${version}`, 'detail');
-    const prepareReader = (device: SeekDevice): void => {
-      applyReaderOp(device, version);
-    };
+  reporter.log(`camera reports firmware ${version}`, 'detail');
+  const entered = bankOfActiveSlotWord(activeSlotWord);
+  reporter.log(
+    activeSlotWord === null
+      ? 'the active-slot word could not be read, so the bank the camera entered is not known'
+      : entered === null
+        ? `the active-slot word is ${String(activeSlotWord)}, which names no bank`
+        : `the camera reports it entered ${bankWordsOf(entered)} at this start (active-slot word ` +
+          `${String(activeSlotWord)})`,
+    'detail',
+  );
 
-    /* THE SWEEP: one admitted boot per window, each segment's probe read IS the
-     * boot-config record, and each completing read ends with the wire reboot
-     * that clears the reader poison (TESTING.md sec. 34). */
-    const backup = await backupWindows(opener, reporter, READ_CHUNK, signal, prepareReader);
-    const byAddress = backup.byAddress;
-    const cfgRow = byAddress.get(0x14010000);
-    if (cfgRow === undefined) fail('the backup does not hold the boot-config block');
-    const detection = effectiveDetection(
-      state,
-      detectActiveSlotFromHead(cfgRow.subarray(0, BOOT_CONFIG_BYTES)),
+  /* THE SWEEP: one admitted boot per window, each segment's probe read IS the
+   * boot-config record, and each completing read ends with the wire reboot
+   * that clears the reader poison (TESTING.md sec. 34). */
+  const backup = await backupWindows(opener, reporter, READ_CHUNK, signal, (device) => {
+    applyReaderOp(device, version);
+  });
+  const cfgRow = backup.byAddress.get(BOOT_CONFIG_ADDRESS);
+  if (cfgRow === undefined) fail('the backup does not hold the boot-config block');
+  const cfgHead = bootHeadOf(cfgRow);
+  const word = viewOf(cfgHead).getUint32(0, true) >>> 0;
+
+  /* THE ANCHOR: the bank the camera runs — the one it reports it entered,
+   * else the first the boot word names. Its image is captured and derived in
+   * full, with every refusal the run had before 42.92. */
+  let anchor: BankKey = entered ?? lockedBootOrder(word)[0];
+  let anchorRead = await captureAnchor(
+    opener,
+    backup.byAddress,
+    anchor,
+    version,
+    expectedPrefix,
+    reporter,
+    signal,
+  );
+  /* THE RECOVERY RE-POINT. A build whose route is recovery-only (the FF
+   * build) cannot run from slot A or B: the 2014 bootloader rejects its
+   * 0xFFFF-sum image there and boots recovery R UNCHECKED (doc 35.3). The
+   * route is only KNOWN once a capture has been derived, so the first pass
+   * may derive from A or B; then R is the bank that truly runs, and it is
+   * captured and derived in full. */
+  let repointed = false;
+  if (anchorRead.derived.patch.route === 'recovery-only' && anchor !== 'r') {
+    reporter.log(
+      `${bankWordsOf(anchor)} holds ${anchorRead.derived.patch.label}, which runs only from ` +
+        'recovery R — the run takes R as the bank the camera runs',
+      'detail',
     );
-    reporter.log(`slot: ${detection.verdict}`, 'detail');
-
-    let didRepoint = false;
-    let read2 = await captureAndDerive(
+    anchor = 'r';
+    anchorRead = await captureAnchor(
       opener,
-      byAddress,
-      detection,
+      anchorRead.byAddress,
+      anchor,
       version,
       expectedPrefix,
       reporter,
       signal,
     );
-    /* The archive rows may have been repaired by the verified-arm ladder (a
-     * swallowed sweep row is replaced by the verified capture). */
-    let archiveRows: ReadonlyMap<number, Uint8Array> = read2.byAddress;
-    /* THE RECOVERY RE-POINT, IN-STEP. A build whose route is recovery-only
-     * (the FF build) cannot run from the cfg-named bank: the 2014 bootloader
-     * rejects its 0xFFFF-sum image at slots A/B and boots the recovery bank
-     * UNCHECKED (doc 35.3) — so the bank that truly runs is recovery, and
-     * the capture that matters is recovery's. The route is only KNOWN once a
-     * capture has been derived, so the first pass may derive from the
-     * cfg-named bank; if it names a recovery-only route, the detection is
-     * re-pointed and the bank that runs is captured and derived in full. */
-    if (read2.derived.patch.route === 'recovery-only' && read2.detection.bank !== 'r') {
-      const repointed = effectiveDetection({ ...state, route: 'recovery-only' }, detection);
-      reporter.log(`slot re-pointed: ${repointed.verdict}`, 'detail');
-      read2 = await captureAndDerive(
-        opener,
-        archiveRows,
-        repointed,
-        version,
-        expectedPrefix,
-        reporter,
-        signal,
-      );
-      archiveRows = read2.byAddress;
-      didRepoint = true;
+    repointed = true;
+  }
+  const anchorPatch = anchorRead.derived.patch;
+
+  /* EVERY OTHER BANK, read twice and derived where it holds an image. None of
+   * these refuses the backup: a bank the run cannot write is recorded with
+   * the reason. */
+  const others = new Map<BankKey, OtherCapture>();
+  for (const key of BANK_KEYS) {
+    if (key === anchor) continue;
+    assertLive(signal);
+    others.set(
+      key,
+      await captureOther(opener, anchorRead.byAddress, key, version, reporter, signal),
+    );
+  }
+
+  /* THE BOOT FACTS: each bank's check, and the bank the next start enters. */
+  const reads = {} as Record<BankKey, PreserveBankRead>;
+  for (const key of BANK_KEYS) {
+    const other = others.get(key);
+    reads[key] =
+      other === undefined
+        ? { key, bytes: anchorRead.capture, holds: 'image' }
+        : { key, bytes: other.bytes, holds: other.holds };
+  }
+  const boot = preserveBootFactsOf({
+    cfgHead,
+    activeSlotWord,
+    line: anchorPatch.family === 'compact-2016' ? '2016' : '2014',
+    banks: reads,
+  });
+  reporter.log(
+    `boot-config word ${hexUp(boot.word)} — ${boot.rule}; next start: ` +
+      (boot.nextStart === null ? 'not known' : bankWordsOf(boot.nextStart)) +
+      ` (${boot.why})`,
+    'detail',
+  );
+
+  /* WHICH BANKS THE RUN CAN WRITE. The anchor always (its build is the
+   * run's); another bank when its image derived as the same build, the
+   * build's route allows it, and on the 2016 line the bootloader's check does
+   * not refuse it (a bank under another key than the camera stores under
+   * cannot be put back byte for byte through the camera). */
+  const records = {} as Record<BankKey, PreserveBankRecord>;
+  const artifacts: Artifact[] = [];
+  const derivedPlains = new Map<BankKey, Uint8Array>();
+  for (const key of BANK_KEYS) {
+    const entry = bankOf(key);
+    const base = { key, address: entry.address, mode: entry.mode };
+    const other = others.get(key);
+    const derived = other === undefined ? anchorRead.derived : other.derived;
+    let refused: string | null = other === undefined ? null : other.refused;
+    if (refused === null && derived !== null && derived.patch.buildId !== anchorPatch.buildId) {
+      refused =
+        `it holds ${derived.patch.label} (${derived.patch.buildId}), not the build the camera ` +
+        `runs (${anchorPatch.label})`;
     }
-    return {
-      version,
-      detection: read2.detection,
-      capture: read2.capture,
-      slotReadShas: read2.slotReadShas,
-      readModes: read2.readModes,
-      serveNote: read2.serveNote,
-      derived: read2.derived,
-      repointed: didRepoint,
-      assembled: assembleBackupImage(archiveRows),
+    if (refused === null && anchorPatch.route === 'recovery-only' && key !== 'r') {
+      refused = `this build runs only from recovery R: ${anchorPatch.routeNote ?? ''}`;
+    }
+    if (
+      refused === null &&
+      other !== undefined &&
+      anchorPatch.family === 'compact-2016' &&
+      boot.verdicts[key] === false
+    ) {
+      refused =
+        'the bootloader’s check refuses it: it is stored under another key than the one this ' +
+        'camera’s bootloader checks banks under, and a write through the camera would store ' +
+        'it under that key, so the restore could not put its exact bytes back';
+    }
+    const capture = other === undefined ? anchorRead.capture : other.bytes;
+    const shas = other === undefined ? anchorRead.slotReadShas : other.slotReadShas;
+    const holds: BankHolds = other === undefined ? 'image' : other.holds;
+    records[key] = {
+      ...base,
+      holds,
+      refused,
+      ...(shas === null ? {} : { slotReadShas: shas }),
+      ...(derived === null
+        ? {}
+        : {
+            imageSha256: await sha256hex(derived.plain),
+            buildId: derived.patch.buildId,
+            buildLabel: derived.patch.label,
+            ...(derived.patch.derivation === null
+              ? {}
+              : {
+                  imageDerivation: {
+                    id: derived.patch.derivation.derivation.id,
+                    label: derived.patch.derivation.derivation.label,
+                    balanceWord: derived.patch.derivation.balanceWord,
+                  },
+                }),
+          }),
     };
-  })();
+    if (refused === null && derived !== null) {
+      artifacts.push(named(preserveCaptureFile(key), capture));
+      artifacts.push(named(preservePlainFile(key), derived.plain));
+      derivedPlains.set(key, derived.plain);
+    }
+  }
+
+  const assembled = assembleBackupImage(anchorRead.byAddress);
 
   /* THE PRE-FLASH DUMP ARCHIVE, offline from the assembled backup: the same
    * decrypt/report path the `decrypt` command runs on a dump file — the
    * camera is not read twice for it. */
   const archive = await decryptDump(
-    read.assembled,
+    assembled,
     'preserve_backup',
     {
       dumpPath: `${state.runId}/${PRESERVE_BACKUP_FILE}`,
@@ -1412,50 +1681,48 @@ async function runBackupStep(
     finishedAt: new Date().toISOString(),
     source: {
       fileName: PRESERVE_BACKUP_FILE,
-      size: read.assembled.length,
-      sha256: await sha256hex(read.assembled),
+      size: assembled.length,
+      sha256: await sha256hex(assembled),
     },
     flashBase: profile.memory.flashBase,
     decryption: archive.summary,
     profile: profileInfoOf(profile, archive.detection),
   });
 
-  /* The run's checkpoint files — the derived factory plaintext among them,
-   * so a resume never needs an external image — then the archive as it came. */
-  const artifacts: Artifact[] = [
-    named(PRESERVE_BACKUP_FILE, read.assembled),
-    named(PRESERVE_BANK_CAPTURE_FILE, read.capture),
-    named(PRESERVE_PLAIN_NAME, read.derived.plain),
+  const allArtifacts: Artifact[] = [
+    named(PRESERVE_BACKUP_FILE, assembled),
+    ...artifacts,
     ...archive.artifacts.map((a) => named(a.name, a.data)),
     named(PRESERVE_DUMP_MANIFEST_FILE, utf8(manifestToJson(manifest))),
     named(PRESERVE_DUMP_README_FILE, utf8(makeOfflineDecryptReadme(manifest))),
   ];
-  const shas = await shasOf(artifacts);
-  const patch = read.derived.patch;
+  const shas = await shasOf(allArtifacts);
+
+  const facts: Pick<PreserveRunState, 'boot' | 'banks'> = { boot, banks: records };
+  const resolved = preserveChoiceOf(facts, state.choice);
+  const bankNotes = BANK_KEYS.map((key) => {
+    const refused = records[key].refused;
+    return `${bankWordsOf(key)}: ${
+      refused === null
+        ? `${records[key].buildLabel ?? 'an image'} — the run can write it`
+        : `not written — ${refused}`
+    }`;
+  }).join('; ');
   const nextState: PreserveRunState = {
     ...state,
-    /* The run's build facts, recorded by the step that derived them. */
-    buildFamily: patch.family,
-    imageSha256: shas.get(PRESERVE_PLAIN_NAME) ?? '',
-    expectedVersion: read.version,
-    slotReadShas: read.slotReadShas,
-    buildId: patch.buildId,
-    buildLabel: patch.label,
-    ...(patch.derivation === null
-      ? {}
-      : {
-          imageDerivation: {
-            id: patch.derivation.derivation.id,
-            label: patch.derivation.derivation.label,
-            balanceWord: patch.derivation.balanceWord,
-          },
-        }),
-    stagedForm: patch.stagedForm,
-    restoreForm: patch.restoreForm,
-    route: patch.route,
-    routeNote: patch.routeNote,
-    capability: patch.capability,
-    detection: read.detection,
+    anchor,
+    boot,
+    banks: records,
+    ...(resolved.banks === null ? {} : { targets: resolved.banks }),
+    buildFamily: anchorPatch.family,
+    expectedVersion: version,
+    buildId: anchorPatch.buildId,
+    buildLabel: anchorPatch.label,
+    stagedForm: anchorPatch.stagedForm,
+    restoreForm: anchorPatch.restoreForm,
+    route: anchorPatch.route,
+    routeNote: anchorPatch.routeNote,
+    capability: anchorPatch.capability,
     nextStep: nextStepAfter('backup'),
     steps: {
       ...state.steps,
@@ -1463,25 +1730,30 @@ async function runBackupStep(
         startedAt,
         `${String(BACKUP_WINDOW_COUNT)} windows (${String(
           BACKUP_WINDOW_COUNT * WINDOW_BYTES,
-        )} B) backed up; ${read.detection.verdict}; the active slot served twice (the sweep’s ` +
-          `plan-window row, mode ${String(read.readModes[0])}, + one fresh arm of the bank ` +
-          `window, mode ${String(read.readModes[1])}), ${read.serveNote} ` +
-          `(sha256 ${read.slotReadShas[1]}); ` +
-          'the factory plaintext derived from the ' +
-          `capture (${read.derived.method}, ${String(read.derived.plain.length)} B) and gated; ` +
-          `build ${patch.buildId}` +
-          (patch.derivation === null
-            ? ''
-            : ` with ${patch.derivation.derivation.label} (${patch.derivation.derivation.id})`) +
-          (read.repointed
-            ? '; the capture re-pointed at the recovery bank (the build boots recovery unchecked)'
+        )} B) backed up; boot-config word ${hexUp(boot.word)} (${boot.rule}); ` +
+          (boot.entered === null
+            ? 'the bank the camera entered is not known'
+            : `the camera reports it entered ${bankWordsOf(boot.entered)}`) +
+          `; next start: ${boot.nextStart === null ? 'not known' : bankWordsOf(boot.nextStart)} ` +
+          `(${boot.why}); ${bankWordsOf(anchor)}, the bank the camera runs, served twice ` +
+          `(the sweep’s row, mode ${String(anchorRead.readModes[0])}, + one fresh arm of the ` +
+          `bank window, mode ${String(anchorRead.readModes[1])}), ${anchorRead.serveNote} ` +
+          `(sha256 ${anchorRead.slotReadShas[1]}); the factory plaintext derived from the ` +
+          `capture (${anchorRead.derived.method}, ${String(anchorRead.derived.plain.length)} B) ` +
+          `and gated; build ${anchorPatch.buildId}` +
+          (repointed
+            ? '; the run took recovery R as the bank the camera runs (the build boots it unchecked)'
             : '') +
+          `; ${bankNotes}; ` +
+          (resolved.banks === null
+            ? `no banks chosen: ${resolved.what}`
+            : `banks to write: ${bankList(resolved.banks)} (${resolved.what})`) +
           `; dump archive: ${String(archive.slots.length)} slot(s) decrypted`,
         shas,
       ),
     },
   };
-  return { state: nextState, artifacts };
+  return { state: nextState, artifacts: allArtifacts };
 }
 
 /* ==================================================================== *
@@ -1496,45 +1768,55 @@ async function runPatchStep(
   startedAt: string,
 ): Promise<PreserveStepOutcome> {
   assertLive(signal);
-  const plain = await loadPlain(state, loadArtifact);
-  const patch = buildV1Patch(plain); /* the before-byte gates refuse here */
+  const banks = state.banks;
+  if (banks === undefined) fail('the run state carries no banks — the backup step has not run');
+  const writable = BANK_KEYS.filter((key) => banks[key].refused === null);
+  if (writable.length === 0) fail('the backup found no bank the run can write');
 
-  const patchedSha = await sha256hex(patch.patched);
-  const summary: PreservePatchSummary = {
-    sites: patch.sites.map((site) => ({
-      name: site.what.split(' (')[0] ?? site.what,
-      offset: site.offset,
-      before: [...site.before],
-      after: [...site.after],
-    })),
-    rebalanceWord: patch.rebalanceWord,
-    stagedLength: plain.length,
-    chunkCount: Math.ceil(plain.length / STAGE_CHUNK),
-    patchedSha256: patchedSha,
-    diffCount: patch.diffOffsets.length,
-    armResetsCursor: patch.armResetsCursor,
-  };
-  const artifacts: Artifact[] = [named(PRESERVE_PATCHED_FILE, patch.patched)];
+  const artifacts: Artifact[] = [];
+  const records: Record<BankKey, PreserveBankRecord> = { ...banks };
+  const notes: string[] = [];
+  for (const key of writable) {
+    const plain = await loadPlain(state, loadArtifact, key);
+    const patch = buildV1Patch(plain); /* the before-byte gates refuse here */
+    const summary: PreservePatchSummary = {
+      sites: patch.sites.map((site) => ({
+        name: site.what.split(' (')[0] ?? site.what,
+        offset: site.offset,
+        before: [...site.before],
+        after: [...site.after],
+      })),
+      rebalanceWord: patch.rebalanceWord,
+      stagedLength: plain.length,
+      chunkCount: Math.ceil(plain.length / STAGE_CHUNK),
+      patchedSha256: await sha256hex(patch.patched),
+      diffCount: patch.diffOffsets.length,
+      armResetsCursor: patch.armResetsCursor,
+    };
+    artifacts.push(named(preservePatchedFile(key), patch.patched));
+    records[key] = { ...banks[key], patch: summary };
+    reporter.log(
+      `${bankWordsOf(key)}: patch built: ${String(summary.sites.length)} instruction site(s), ` +
+        `${String(patch.diffOffsets.length)} byte(s) move, ${String(summary.chunkCount)} ` +
+        'staging chunk(s)',
+      'detail',
+    );
+    notes.push(
+      `${bankWordsOf(key)}: ${String(patch.diffOffsets.length)} byte(s) differ (rebalance word ` +
+        `${patch.rebalanceWord.toString(16)}), staged length ${String(summary.stagedLength)} B in ` +
+        `${String(summary.chunkCount)} chunk(s)`,
+    );
+  }
   const shas = await shasOf(artifacts);
-  reporter.log(
-    `patch built: ${String(summary.sites.length)} instruction site(s), ` +
-      `${String(patch.diffOffsets.length)} byte(s) move on the part, ` +
-      `${String(summary.chunkCount)} staging chunk(s)`,
-    'detail',
-  );
-
   const nextState: PreserveRunState = {
     ...state,
-    patch: summary,
+    banks: records,
     nextStep: nextStepAfter('patch'),
     steps: {
       ...state.steps,
       patch: stepRecord(
         startedAt,
-        `patch built offline from the factory plaintext: ` +
-          `${String(patch.diffOffsets.length)} byte(s) differ (rebalance word ` +
-          `${patch.rebalanceWord.toString(16)}), staged length ${String(summary.stagedLength)} B ` +
-          `in ${String(summary.chunkCount)} chunk(s)`,
+        `patches built offline from each writable bank's factory plaintext: ${notes.join('; ')}`,
         shas,
       ),
     },
@@ -1547,23 +1829,20 @@ async function runPatchStep(
  * ==================================================================== */
 
 /**
- * How much of the bank's head the pre-checks read, and at what ask size —
+ * How much of a bank's head the pre-checks read, and at what ask size —
  * both measured constraints, not choices.
  *
  * THE ASK SIZE: 64 B, the shape where serve == ask on this reader (TESTING.md
  * sec. 23.3). At a 512-ask the RE-ARMED bank window serves short (~192-256 B)
  * while its cursor advances by the full ask, so the delivered stream is
- * SPARSE — measured on the emulator: live vs capture heads byte-identical for
- * 24 B, divergent within the first 1 KiB, and a 47,768 B sequential read
- * stalled permanently at 28,544 B. At a 64-ask serve == ask always, and
+ * SPARSE — measured on the emulator. At a 64-ask serve == ask always, and
  * sixteen asks deliver a contiguous, byte-accurate 1 KiB.
  *
  * THE LENGTH: 1 KiB is ENOUGH — the rebalance word at 0x238 (568) is among
  * the patch bytes: 0 on a factory image (or a known derivation's balance) and
  * a different value on the patched one, which buildV1Patch guarantees — so
  * the head alone distinguishes original from patched, which is the only
- * question the pre-checks exist to answer. The instruction-site bytes
- * (0x3C1C..0x3DC7) lie beyond it and are NOT checked live.
+ * question the pre-checks exist to answer.
  */
 const BANK_HEAD_BYTES = 0x400;
 const BANK_HEAD_ASK = 64;
@@ -1577,32 +1856,30 @@ async function readBankHead(device: SeekDevice, bank: BankKey, label: string): P
   });
 }
 
-async function runCommitStep(
+/** One chosen bank's write: what the wire stages, what the bank holds before
+ *  and after. */
+interface BankWrite {
+  readonly key: BankKey;
+  readonly capture: Uint8Array;
+  readonly patch: V1Patch;
+  readonly payload: Uint8Array;
+  readonly patchedSlot: Uint8Array;
+}
+
+async function bankWriteOf(
   state: PreserveRunState,
-  opener: SessionOpener,
   loadArtifact: PreserveArtifactLoader,
-  reporter: Reporter,
-  signal: AbortSignal | undefined,
-  startedAt: string,
-): Promise<PreserveStepOutcome> {
-  const plain = await loadPlain(state, loadArtifact);
+  key: BankKey,
+): Promise<BankWrite> {
+  const plain = await loadPlain(state, loadArtifact, key);
   const patch = buildV1Patch(plain);
-  const capture = await loadCheckpoint(state, loadArtifact, PRESERVE_BANK_CAPTURE_FILE, 'backup');
-  /* The gate checked the windows file's presence; loading verifies its sha. */
-  await loadCheckpoint(state, loadArtifact, PRESERVE_BACKUP_FILE, 'backup');
-  const detection = state.detection;
-  if (detection === undefined) fail('the run state carries no slot detection');
-  /* THE CAPTURE IS ALREADY ANCHORED: the backup step read it twice, required
-   * byte agreement, and derived the plaintext this patch is built from THROUGH
-   * it — and `loadCheckpoint` just proved the file still is those bytes. The
-   * wire-side protection that remains at write time is the bank head
-   * pre-check below, against the capture and the patched expectation. */
+  const capture = await loadCheckpoint(state, loadArtifact, preserveCaptureFile(key), 'backup');
   /* THE STAGED PAYLOAD, per family. On the plaintext 2014 banks it is the
    * conjugated capture (the keystream is zero, so the conjugation is its own
    * identity). On the cipher families the wire-80 bytes are the STAGED form
    * of the PATCHED PLAINTEXT — the commit's own two-stream transform, not the
    * host, produces the slot bytes — and the conjugated capture is what the
-   * bank is expected to hold AFTER the write (the pre-check below). */
+   * bank is expected to hold AFTER the write (the pre-check). */
   const payload =
     patch.stagedForm === 'plain'
       ? conjugateCapture(capture, patch)
@@ -1614,9 +1891,25 @@ async function runCommitStep(
         'reject after the erase',
     );
   }
-  /* What the bank will hold once the commit lands, in every family: the
-   * capture with the plaintext diff folded through — the keystream cancels. */
-  const patchedSlot = conjugateCapture(capture, patch);
+  return { key, capture, patch, payload, patchedSlot: conjugateCapture(capture, patch) };
+}
+
+async function runCommitStep(
+  state: PreserveRunState,
+  opener: SessionOpener,
+  loadArtifact: PreserveArtifactLoader,
+  reporter: Reporter,
+  signal: AbortSignal | undefined,
+  startedAt: string,
+): Promise<PreserveStepOutcome> {
+  const targets = state.targets ?? [];
+  const boot = state.boot;
+  if (boot === undefined) fail('the run state carries no boot facts');
+  /* The gate checked the windows file's presence; loading verifies its sha. */
+  await loadCheckpoint(state, loadArtifact, PRESERVE_BACKUP_FILE, 'backup');
+  const order = commitOrderOf(targets, boot.word);
+  const writes: BankWrite[] = [];
+  for (const key of order) writes.push(await bankWriteOf(state, loadArtifact, key));
 
   /* The commit session is ADMITTED like every read session (the mode-3 probe
    * first — a boot that comes up page-shifted or unreadable is rebooted by
@@ -1625,7 +1918,7 @@ async function runCommitStep(
    * belongs to the drain step's own first session. The probe is a window
    * read, so it runs on the run's reader wire: it comes BEFORE the version
    * gate that would otherwise set it, and on a 0.7.x build wire 79 stalls. */
-  const commit = await (async () => {
+  const outcomes = await (async () => {
     const { device } = await openProbedSession(
       opener,
       reporter,
@@ -1640,40 +1933,63 @@ async function runCommitStep(
       const version = await gateVersion(device, state);
       reporter.log(`camera reports firmware ${version}`, 'detail');
 
-      /* THE PRE-COMMIT READ-BACK (one ask at the bank's head): what is in the
-       * bank RIGHT NOW decides what may be written. A crash between the commit
-       * transfer and its checkpoint leaves this run at nextStep `commit`;
-       * re-running it must never stage a second commit blind. The head carries
-       * the rebalance word (0x238), which differs between the original and the
-       * patched bytes (BANK_HEAD_BYTES) — enough to tell the two apart. The
-       * comparison is against SLOT bytes (what the reader serves): the patched
-       * expectation is the conjugated capture, which is the payload itself on
-       * the plaintext families. */
-      const live = await readBankHead(
-        device,
-        detection.bank,
-        'commit pre-check (the active bank head as it lies)',
-      );
-      if (equalBytes(live, patchedSlot.subarray(0, BANK_HEAD_BYTES))) {
-        fail(
-          'the active bank already holds the patched bytes — the commit landed in a previous ' +
-            'attempt and must not be replayed. Resume at the drain step (--resume), which ' +
-            'boots the patched image and continues from there.',
-        );
+      /* THE PRE-COMMIT READ-BACK, every chosen bank BEFORE any is written:
+       * what is in each bank RIGHT NOW decides what may be written. A crash
+       * between a commit transfer and its checkpoint leaves this run at
+       * nextStep `commit`; re-running it must never stage a commit blind. The
+       * head carries the rebalance word (0x238), which differs between the
+       * original and the patched bytes (BANK_HEAD_BYTES). The comparison is
+       * against SLOT bytes (what the reader serves). */
+      const landed = new Set<BankKey>();
+      for (const write of writes) {
+        const words = bankWordsOf(write.key);
+        const live = await readBankHead(device, write.key, `commit pre-check (${words}'s head)`);
+        if (equalBytes(live, write.patchedSlot.subarray(0, BANK_HEAD_BYTES))) {
+          landed.add(write.key);
+          continue;
+        }
+        if (!equalBytes(live, write.capture.subarray(0, BANK_HEAD_BYTES))) {
+          fail(
+            `${words}'s head changed since the backup (it holds neither the original capture ` +
+              'nor the patched bytes) — refusing to write over an unknown bank state; nothing ' +
+              `was written. Head hex: live ${bytesToHex(live, 24)} vs capture ` +
+              bytesToHex(write.capture.subarray(0, 24)),
+          );
+        }
       }
-      if (!equalBytes(live, capture.subarray(0, BANK_HEAD_BYTES))) {
+      if (landed.size === writes.length) {
         fail(
-          'the active bank head changed since the backup (it holds neither the original capture ' +
-            'nor the patched bytes) — refusing to write over an unknown bank state. Head hex: ' +
-            `live ${bytesToHex(live, 24)} vs capture ${bytesToHex(capture.subarray(0, 24))}`,
+          `${bankList(order)} already ${writes.length === 1 ? 'holds' : 'hold'} the patched ` +
+            'bytes — the commit landed in a previous attempt and must not be replayed. Resume ' +
+            'at the drain step (--resume), which boots the patched image and continues from ' +
+            'there.',
         );
       }
 
-      return await commitToBank(device, detection.bank, payload, {
-        label: 'preserve commit',
-        reporter,
-        ...(signal === undefined ? {} : { signal }),
-      });
+      const done: string[] = [];
+      for (const write of writes) {
+        const words = bankWordsOf(write.key);
+        if (landed.has(write.key)) {
+          reporter.log(
+            `${words} already holds the patch (a previous attempt landed) — not written again`,
+            'detail',
+          );
+          done.push(`${words}: already held the patch (a previous attempt landed); not written`);
+          continue;
+        }
+        assertLive(signal);
+        const commit = await commitToBank(device, write.key, write.payload, {
+          label: `preserve commit (${words})`,
+          reporter,
+          ...(signal === undefined ? {} : { signal }),
+        });
+        done.push(
+          `${words}: ${String(commit.chunks)} chunks staged (${String(write.payload.length)} B, ` +
+            `image length only), commit status ${commit.status.toString(16)}, sum16 ` +
+            commit.sum16.toString(16),
+        );
+      }
+      return done;
     } finally {
       await opener.close(device);
     }
@@ -1689,10 +2005,8 @@ async function runCommitStep(
         startedAt,
         finishedAt: new Date().toISOString(),
         notes:
-          `${String(commit.chunks)} chunks staged (${String(payload.length)} B, image length ` +
-          `only), commit status ${commit.status.toString(16)}, sum16 ` +
-          `${commit.sum16.toString(16)}; the bank was read back and verified against the ` +
-          'backup before writing; no reset sent in this session',
+          `written in this order: ${outcomes.join('; ')}; every bank was read back and checked ` +
+          'against the backup before any was written; no reset sent in this session',
       },
     },
   };
@@ -1700,8 +2014,29 @@ async function runCommitStep(
 }
 
 /* ==================================================================== *
- * drain — reset, then the whole part on its own single arm
+ * drain — reset, the bank the start entered, then the whole part on one arm
  * ==================================================================== */
+
+/** The refusal a drain gives when the start after its reset entered a bank
+ *  this run did not patch. */
+function enteredUnpatchedRefusal(
+  entered: BankKey,
+  word: number,
+  targets: readonly BankKey[],
+  boot: PreserveBootFacts | undefined,
+): string {
+  return (
+    `after the restart the camera reports it entered ${bankWordsOf(entered)} (active-slot word ` +
+    `${String(word)}), which this run did not patch (it patched ${bankList(targets)}). ` +
+    'The whole-flash read runs only through the patched image, so nothing was armed or read. ' +
+    (boot === undefined
+      ? ''
+      : `The backup read the boot-config word as ${hexUp(boot.word)} (${boot.rule}); a start ` +
+        'that enters another bank means the word or a bank changed since, or the bootloader ' +
+        'refused the patched bank. ') +
+    'The patched banks still hold the patch: the restore step puts every written bank back.'
+  );
+}
 
 async function runDrainStep(
   state: PreserveRunState,
@@ -1711,21 +2046,28 @@ async function runDrainStep(
   signal: AbortSignal | undefined,
   startedAt: string,
 ): Promise<PreserveStepOutcome> {
-  const capture = await loadCheckpoint(state, loadArtifact, PRESERVE_BANK_CAPTURE_FILE, 'backup');
-  const detection = state.detection;
-  if (detection === undefined) fail('the run state carries no slot detection');
+  const targets = state.targets ?? [];
+  const captures = new Map<BankKey, Uint8Array>();
+  for (const key of targets) {
+    captures.set(
+      key,
+      await loadCheckpoint(state, loadArtifact, preserveCaptureFile(key), 'backup'),
+    );
+  }
+  /* The bank the start after the reset is expected to enter: the next start
+   * the backup read, else the bank the camera ran then. */
+  const expected: BankKey | undefined = state.boot?.nextStart ?? state.anchor;
 
   /* THE ROTATION, resolved BEFORE anything touches the camera: on the 0.7.0.7
    * the widened mode-2 window serves the part from the A/B slot the
    * active-slot word does NOT name (measured slot B 0x14060000 on the donor's
    * blank record; doc 36.10 item 3), so the served bytes fold back through the
-   * NOR's own alias decode. The window's probe expectation and the delivered
-   * dump both read at layout addresses, so the base is resolved here — and a
-   * detection whose base this walk cannot name (recovery) refuses before the
-   * reset, not after it. */
+   * NOR's own alias decode. A start expected in recovery, whose base this walk
+   * cannot name, refuses before the reset, not after it. */
   let rotationBase: number | null = null;
   if (state.capability?.rotation !== undefined) {
-    rotationBase = rotatedDrainBase(detection);
+    if (expected === undefined) fail('the run state names no bank the start is expected to enter');
+    rotationBase = rotatedDrainBase(expected);
     reporter.log(
       `the widened window serves the part rotated from ${hexUp(rotationBase, 8)} — ` +
         'the drain will unrotate before delivery',
@@ -1734,18 +2076,15 @@ async function runDrainStep(
   }
 
   /* The reset, ONCE, on its own first session: after it the camera boots the
-   * patched image, and the session that sent it holds the reset's own
-   * orphaned URB. Nothing else reads before the drain — the reader's per-arm
-   * budget is consumed in asks (TESTING.md sec. 23.3).
+   * bank the bootloader picks, and the session that sent it holds the reset's
+   * own orphaned URB. Nothing reads a window before the drain — the reader's
+   * per-arm budget is consumed in asks (TESTING.md sec. 23.3).
    *
    * A reset the HOST refused never left (a WebUSB SecurityError: a browser
    * policy, or the e2e write guard), so the camera still runs the image it
    * booted with — the committed patch is in flash and not running. The drain
-   * must not go on: the widened window only exists in the patched image, a
-   * stock 2016 or 1.3.0.8-FF guard refuses mode 2 and every other build serves
-   * its stock 64 KiB (a "wedge" after a reset that never happened), and on
-   * 0.8.0.0 / 0.7.0.8 the unpatched mode-2 row faults the camera. Nothing has
-   * been read, so the step stops here and can simply run again. */
+   * must not go on. Nothing has been read, so the step stops here and can
+   * simply run again. */
   await withSession(opener, async (device) => {
     assertLive(signal);
     const version = await gateVersion(device, state);
@@ -1766,6 +2105,7 @@ async function runDrainStep(
 
   const attempts = state.postResetAttempts ?? 2;
   let rawDump: Uint8Array | null = null;
+  let drainEntered: BankKey | null = null;
   let lastError = 'not attempted';
   for (let n = 1; n <= attempts && rawDump === null; n++) {
     const device = await opener.open();
@@ -1773,6 +2113,39 @@ async function runDrainStep(
      * it); the reader op comes from the state's pinned version. */
     applyReaderOp(device, state.expectedVersion);
     try {
+      /* THE BANK THE START ENTERED, before a single window is armed: the
+       * active-slot word is the bootloader's own record (TESTING.md 42.56). A
+       * start that entered a bank this run did not patch runs a stock image,
+       * whose mode 2 serves one 64 KiB window and stalls (the 2014 chain),
+       * refuses the arm (the 2016 guard), or faults the camera (0.8.0.0 and
+       * 0.7.0.8, TESTING.md 42.92 §1) — so the step stops here. A word that
+       * cannot be read says nothing either way, and the drain goes on as it
+       * always has. */
+      const slotWord = await readActiveSlotWord(device);
+      const entered = bankOfActiveSlotWord(slotWord);
+      if (entered === null) {
+        reporter.log(
+          'the bank the camera entered after the restart could not be read (the active-slot ' +
+            'word did not answer or names no bank) — the drain goes on',
+          'warn',
+        );
+      } else if (!targets.includes(entered)) {
+        throw new SeekError(
+          'pipeline/refused',
+          enteredUnpatchedRefusal(entered, slotWord ?? 0, targets, state.boot),
+          { detail: { entered, targets: [...targets] } },
+        );
+      } else {
+        reporter.log(
+          `after the restart the camera reports it entered ${bankWordsOf(entered)}, which holds ` +
+            'the patch',
+          'detail',
+        );
+        if (state.capability?.rotation !== undefined && entered !== expected) {
+          rotationBase = rotatedDrainBase(entered);
+        }
+      }
+      drainEntered = entered;
       rawDump = await drainWholePart(device, reporter, {
         chunk: state.drainChunk ?? READ_CHUNK,
         ...(signal === undefined ? {} : { signal }),
@@ -1780,9 +2153,8 @@ async function runDrainStep(
       /* THE PAGE-SHIFT CHECK (TESTING.md sec. 34): a page-shifted boot serves
        * the widened window one 64 KiB page up, so the dump would start with
        * the boot-config block's `00 00 00 00` instead of a vector's segment
-       * SP (the bootloader's 0x10018000 unrotated, the image's 0x10008000
-       * rotated). No legitimate part image starts with four zero bytes. The
-       * bias re-rolls per boot, so the camera is rebooted by command and the
+       * SP. No legitimate part image starts with four zero bytes. The bias
+       * re-rolls per boot, so the camera is rebooted by command and the
        * attempt loop takes another boot. */
       if (rawDump[0] === 0 && rawDump[1] === 0 && rawDump[2] === 0 && rawDump[3] === 0) {
         reporter.log(
@@ -1790,8 +2162,6 @@ async function runDrainStep(
             'boot-config block, not a vector) — rebooting by command and taking another boot',
           'warn',
         );
-        /* A refused reboot re-rolls nothing: the next attempt would drain the
-         * same shifted boot, so the step stops instead. */
         if ((await resetDevice(device)) === 'refused') {
           fail(
             'the drain came back one page high, and the reboot that takes another boot was ' +
@@ -1810,10 +2180,6 @@ async function runDrainStep(
       try {
         const backupImage = await loadArtifact(PRESERVE_BACKUP_FILE);
         if (backupImage !== null) {
-          /* The window offset PROBE_OFFSET reads LAYOUT address
-           * (rotationBase ?? FLASH_BASE) + PROBE_OFFSET, so the expectation
-           * is cut there — the rotated build compares against the rotated
-           * address's true bytes, exactly as the ip4 rotated compare did. */
           const probeFlash = (rotationBase ?? FLASH_BASE) + PROBE_OFFSET - READ_CHUNK - FLASH_BASE;
           const probeBytes = backupSlice(
             backupResultFromImage(backupImage),
@@ -1828,7 +2194,7 @@ async function runDrainStep(
       }
     } catch (error) {
       if (error instanceof CancelledError) throw error;
-      /* the refused reboot above: another attempt would read the same boot */
+      /* the refusals above: another attempt would read the same boot */
       if (error instanceof SeekError && error.code === 'pipeline/refused') throw error;
       lastError = `attempt ${String(n)}: ${error instanceof Error ? error.message : String(error)}`;
       reporter.log(`drain attempt failed: ${lastError}`, 'warn');
@@ -1846,11 +2212,16 @@ async function runDrainStep(
   }
 
   /* The served bytes become the part in LAYOUT order here: the post-write
-   * artifact is the state the commits produced (the same invariant every
-   * build's run carries), and the delivered dump swaps the active bank back
-   * from the backup on top of it. */
+   * artifact is the state the commits produced, and the delivered dump swaps
+   * every written bank back from its capture on top of it. */
   const layout = rotationBase === null ? rawDump : unrotateDump(rawDump, rotationBase);
-  const delivered = postProcessDump(layout, detection.bankAddress, capture);
+  const delivered = postProcessDump(
+    layout,
+    targets.map((key) => ({
+      address: bankOf(key).address,
+      bytes: captures.get(key) ?? new Uint8Array(),
+    })),
+  );
   const artifacts: Artifact[] = [
     named(PRESERVE_DUMP_POSTWRITE_FILE, layout),
     named(PRESERVE_DUMP_ORIGINAL_FILE, delivered),
@@ -1865,6 +2236,7 @@ async function runDrainStep(
         `(sha256 ${await sha256hex(rawDump)}), unrotated to layout order (sha256 ${rawSha})`;
   const nextState: PreserveRunState = {
     ...state,
+    drainEntered,
     rawDumpSha256: rawSha,
     deliveredSha256: deliveredSha,
     nextStep: nextStepAfter('drain'),
@@ -1872,7 +2244,10 @@ async function runDrainStep(
       ...state.steps,
       drain: stepRecord(
         startedAt,
-        `${servedNote}; delivered dump (the active bank swapped back from the backup) ` +
+        (drainEntered === null
+          ? 'the bank the start entered was not read; '
+          : `the start after the reset entered ${bankWordsOf(drainEntered)}, which holds the patch; `) +
+          `${servedNote}; delivered dump (${bankList(targets)} swapped back from the backup) ` +
           `sha256 ${deliveredSha}`,
         shas,
       ),
@@ -1882,7 +2257,7 @@ async function runDrainStep(
 }
 
 /* ==================================================================== *
- * restore — the original bank back, then a reset
+ * restore — the original banks back, then a reset
  * ==================================================================== */
 
 async function runRestoreStep(
@@ -1893,38 +2268,44 @@ async function runRestoreStep(
   signal: AbortSignal | undefined,
   startedAt: string,
 ): Promise<PreserveStepOutcome> {
-  const capture = await loadCheckpoint(state, loadArtifact, PRESERVE_BANK_CAPTURE_FILE, 'backup');
-  const detection = state.detection;
-  if (detection === undefined) fail('the run state carries no slot detection');
-  const stagedLength = state.patch?.stagedLength;
-  if (stagedLength === undefined) fail('the run state carries no patch summary (staged length)');
-  if (capture.length < stagedLength) fail('the bank capture is shorter than the staged length');
-  /* The bank's ORIGINAL content, as the reader serves it (slot bytes) — the
-   * pre-check compares against this, and the 'plain' families stage it back
-   * verbatim. */
-  const original = capture.subarray(0, stagedLength);
-  /* A cipher family stages the FACTORY image in the build's staged form: the
-   * commit's own two-stream transform turns it back into the original slot
-   * bytes. Staging the slot bytes themselves would fail the app's acceptance
-   * (they are not a valid staged form). */
-  let payload = original;
-  if (state.stagedForm !== undefined && state.stagedForm !== 'plain') {
-    const plain = await loadPlain(state, loadArtifact);
-    payload = stagedFormOf(buildV1Patch(plain), plain);
+  const targets = state.targets ?? [];
+  const boot = state.boot;
+  if (boot === undefined) fail('the run state carries no boot facts');
+  const order = restoreOrderOf(targets, boot.word);
+
+  /* Each bank's ORIGINAL content, as the reader serves it (slot bytes) — the
+   * pre-check compares against it, and the 'plain' families stage it back
+   * verbatim. A cipher family stages the FACTORY image in the build's staged
+   * form: the commit's own two-stream transform turns it back into the
+   * original slot bytes. */
+  const restores: { key: BankKey; original: Uint8Array; payload: Uint8Array }[] = [];
+  for (const key of order) {
+    const capture = await loadCheckpoint(state, loadArtifact, preserveCaptureFile(key), 'backup');
+    const stagedLength = state.banks?.[key].patch?.stagedLength;
+    if (stagedLength === undefined)
+      fail(`the run state carries no patch summary for ${bankWordsOf(key)}`);
+    if (capture.length < stagedLength) {
+      fail(`${bankWordsOf(key)}'s capture is shorter than its staged length`);
+    }
+    const original = capture.subarray(0, stagedLength);
+    let payload = original;
+    if (state.stagedForm !== undefined && state.stagedForm !== 'plain') {
+      const plain = await loadPlain(state, loadArtifact, key);
+      payload = stagedFormOf(buildV1Patch(plain), plain);
+    }
+    restores.push({ key, original, payload });
   }
 
   /* The restore session is ADMITTED like every read session. After a drain
    * the patched reader's position sits at its 4 MiB limit, which the arm's
    * halfword reset cannot clear, so every read stalls (TESTING.md sec.
    * 35.4) — unless the patch carries the arm tail's cursor reset (sec. 36),
-   * when the probe reads on the drain's own boot. The probe's
-   * reboot-and-retry loop was meant to clear the stall by command, but on
-   * silicon it has not: four wire reboots in a row with no disconnect
-   * between them (the reboot never took). The web wizard therefore asks for
-   * a replug after a drain on a patch without the reset (TESTING.md secs.
-   * 28.4, 35, 36). The loop stays (it is free when it works, and a resumed
-   * run may not have replugged); its refusal names the power cycle. */
-  const restored = await (async () => {
+   * when the probe reads on the drain's own boot. The web wizard asks for a
+   * replug after a drain on a patch without the reset (TESTING.md secs.
+   * 28.4, 35, 36). The probe's reboot-and-retry loop stays (it is free when
+   * it works, and a resumed run may not have replugged); its refusal names
+   * the power cycle. */
+  const result = await (async () => {
     const { device, cfgHead } = await openProbedSession(
       opener,
       reporter,
@@ -1939,77 +2320,93 @@ async function runRestoreStep(
       assertLive(signal);
       const version = await gateVersion(device, state);
       reporter.log(`camera reports firmware ${version}`, 'detail');
+      const wordNow = viewOf(cfgHead).getUint32(0, true) >>> 0;
+      const wordNote =
+        wordNow === boot.word
+          ? null
+          : `the boot-config word now reads ${hexUp(wordNow)}, and the backup read ` +
+            `${hexUp(boot.word)} — the restore puts the written banks back, and nothing here ` +
+            'writes the word, so the verify will show the difference';
+      if (wordNote !== null) reporter.log(`restore: ${wordNote}`, 'warn');
 
-      const now = effectiveDetection(state, detectActiveSlotFromHead(cfgHead));
-      if (now.bank !== detection.bank || now.bankAddress !== detection.bankAddress) {
-        fail(
-          `the active slot changed between the backup (${detection.bankAddress.toString(16)}) ` +
-            `and now (${now.bankAddress.toString(16)}) — refusing to restore over a different ` +
-            'bank than the one this run patched',
+      /* Head reads, every bank before any is written (see BANK_HEAD_BYTES):
+       * the rebalance word at 0x238 differs between the original and the
+       * patched bytes. */
+      const already = new Set<BankKey>();
+      for (const item of restores) {
+        const live = await readBankHead(
+          device,
+          item.key,
+          `restore pre-check (${bankWordsOf(item.key)}'s head)`,
         );
+        if (equalBytes(live, item.original.subarray(0, BANK_HEAD_BYTES))) already.add(item.key);
       }
-
-      /* Head read (see BANK_HEAD_BYTES): the rebalance word at 0x238 differs
-       * between the original and the patched bytes. */
-      const live = await readBankHead(
-        device,
-        detection.bank,
-        'restore pre-check (the active bank head as it lies)',
-      );
-      if (equalBytes(live, original.subarray(0, BANK_HEAD_BYTES))) {
-        /* A previous restore landed and its checkpoint did not: the recovery is
-         * to mark the step done, not to erase and reprogram the same bytes. */
+      const notes: string[] = [];
+      let wrote = false;
+      for (const item of restores) {
+        const words = bankWordsOf(item.key);
+        if (already.has(item.key)) {
+          /* A previous restore landed and its checkpoint did not: the
+           * recovery is to say so, not to erase and reprogram the same bytes. */
+          reporter.log(
+            `restore: ${words} already holds its original content — nothing to stage`,
+            'detail',
+          );
+          notes.push(
+            `${words}: already held its original content (a previous restore landed); not written`,
+          );
+          continue;
+        }
         reporter.log(
-          'restore: the bank already holds the original content — nothing to stage',
+          `restore: ${words} holds something other than its original content — staging the ` +
+            'backup over it (the backup is the authority this run restores from)',
           'detail',
         );
-        return 'already original' as const;
+        assertLive(signal);
+        await commitToBank(device, item.key, item.payload, {
+          label: `preserve restore (${words})`,
+          reporter,
+          ...(signal === undefined ? {} : { signal }),
+        });
+        wrote = true;
+        notes.push(
+          `${words}: original content staged back (${String(item.payload.length)} B${
+            item.payload === item.original
+              ? ', the capture verbatim'
+              : `, the ${state.stagedForm ?? ''} staged form`
+          }) and committed`,
+        );
       }
-      reporter.log(
-        'restore: the bank holds something other than the original content — staging the backup ' +
-          'over it (the backup is the authority this run restores from)',
-        'detail',
-      );
-      await commitToBank(device, detection.bank, payload, {
-        label: 'preserve restore',
-        reporter,
-        ...(signal === undefined ? {} : { signal }),
-      });
-      /* The commit LANDED (status 0): the bank holds the original. The reset
-       * only boots it. One the host refused (a SecurityError: a browser
+      if (!wrote) return { notes, outcome: 'already original' as const, wordNote };
+      /* The commits LANDED (status 0): the banks hold the original. The reset
+       * only boots them. One the host refused (a SecurityError: a browser
        * policy or a test guard) left the camera running the patched image
        * from RAM, which is harmless to the flash and ends at its next
        * power-up — so the restore is done, and the record says the reboot is
-       * owed instead of "reset sent". Failing the step would not help: its
-       * re-run finds the original in the bank and stages nothing, and sends
-       * no reset either. */
+       * owed instead of "reset sent". */
       if ((await resetDevice(device)) === 'refused') {
         reporter.log(
-          'restore: the bank holds the original content, but the reboot command was REFUSED by ' +
-            'the host before it left (a SecurityError: a browser policy or a test guard) — the ' +
-            'camera still runs the patched image from RAM; unplug it and plug it back in to boot ' +
-            'the restored bank',
+          'restore: the banks hold their original content, but the reboot command was REFUSED ' +
+            'by the host before it left (a SecurityError: a browser policy or a test guard) — ' +
+            'the camera still runs the patched image from RAM; unplug it and plug it back in to ' +
+            'boot the restored bank',
           'warn',
         );
-        return 'restored, reboot refused' as const;
+        return { notes, outcome: 'restored, reboot refused' as const, wordNote };
       }
-      return 'restored' as const;
+      return { notes, outcome: 'restored' as const, wordNote };
     } finally {
       await opener.close(device);
     }
   })();
 
-  const staged = `original bank content staged back (${String(payload.length)} B${
-    payload === original ? ', the capture verbatim' : `, the ${state.stagedForm ?? ''} staged form`
-  }) and committed`;
-  const notes =
-    restored === 'restored'
-      ? `${staged}; reset sent`
-      : restored === 'restored, reboot refused'
-        ? `${staged}; the reset was REFUSED by the host, so the camera still runs the patched ` +
-          'image until it is unplugged and plugged back in (the bank holds the original)'
-        : 'the bank already held the original content (a previous restore landed) — nothing ' +
-          'staged, no reset sent';
+  const tail =
+    result.outcome === 'restored'
+      ? 'reset sent'
+      : result.outcome === 'restored, reboot refused'
+        ? 'the reset was REFUSED by the host, so the camera still runs the patched image until ' +
+          'it is unplugged and plugged back in (the banks hold their original content)'
+        : 'nothing staged, no reset sent';
   const nextState: PreserveRunState = {
     ...state,
     nextStep: nextStepAfter('restore'),
@@ -2019,8 +2416,10 @@ async function runRestoreStep(
         status: 'done',
         startedAt,
         finishedAt: new Date().toISOString(),
-        notes,
-        ...(restored === 'restored, reboot refused' ? { rebootRefused: true } : {}),
+        notes:
+          `${result.notes.join('; ')}; ${tail}` +
+          (result.wordNote === null ? '' : `; ${result.wordNote}`),
+        ...(result.outcome === 'restored, reboot refused' ? { rebootRefused: true } : {}),
       },
     },
   };
@@ -2060,10 +2459,31 @@ async function runVerifyStep(
     badWindows: [] as number[],
     readBack: new Map<number, Uint8Array>(),
   };
+  /* The windows that came back different, by address — every bank is one of
+   * them, and the boot-config block too. */
+  const differing: number[] = [];
+  for (const [address, bytes] of result.readBack) {
+    const want = backup.byAddress.get(address);
+    if (want !== undefined && !equalBytes(bytes, want)) differing.push(address);
+  }
   if (result.diffBytes !== 0 || result.badWindows.length > 0) {
     fail(
       `the verify read ${String(result.diffBytes)} differing byte(s) over ` +
         `${String(result.windowsRead)}/${String(BACKUP_WINDOW_COUNT)} windows` +
+        (differing.length > 0
+          ? ` (in ${differing
+              .map((address) => {
+                const bank = BANKS.find((entry) => entry.address === address);
+                const what =
+                  bank !== undefined
+                    ? bankWordsOf(bank.key)
+                    : address === BOOT_CONFIG_ADDRESS
+                      ? 'the boot-config block'
+                      : 'a data block';
+                return `${what} ${hexUp(address, 8)}`;
+              })
+              .join(', ')})`
+          : '') +
         (result.badWindows.length > 0 ? ` (short windows: ${result.badWindows.join(',')})` : '') +
         ' — the part does not re-read byte-identical to the backup',
     );
@@ -2090,7 +2510,8 @@ async function runVerifyStep(
           : 'a fresh boot re-read ') +
           `${String(result.windowsRead)}/` +
           `${String(BACKUP_WINDOW_COUNT)} windows at ${String(result.diffBytes)} differing ` +
-          "byte(s) — the camera's flash is byte-identical to the backup",
+          "byte(s), slot A, slot B and recovery R among them — the camera's flash is " +
+          'byte-identical to the backup',
         shas,
       ),
     },

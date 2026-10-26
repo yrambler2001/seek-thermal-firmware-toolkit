@@ -159,13 +159,32 @@ export function lockedLineWindows(): FakeWindowSpec[] {
   return windows;
 }
 
+/** GetFirmwareInfo selector 10's reply: the boot record, whose +8 is the bank the bootloader entered
+ *  (0 A, 1 B, 2 R; TESTING.md 42.56). */
+export function rootsReply(slot: number): Uint8Array {
+  const reply = new Uint8Array(64);
+  new DataView(reply.buffer).setUint32(8, slot, true);
+  return reply;
+}
+
+/** The selectors the fake 1.0.3.0 camera answers: the version, and the boot record naming `entered`
+ *  (null: no answer to selector 10). A test can change the entry between steps, as a restart would. */
+export function cp1030FwInfo(entered: number | null = 0): Map<number, Uint8Array> {
+  const info = new Map<number, Uint8Array>([[0, Uint8Array.from([1, 0, 3, 0, 0, 0, 0, 0])]]);
+  if (entered !== null) info.set(10, rootsReply(entered));
+  return info;
+}
+
 /** The fake bench camera on Compact PRO 1.0.3.0. */
-export function cp1030Camera(flash: Uint8Array = cp1030Flash()): FakeCamera {
+export function cp1030Camera(
+  flash: Uint8Array = cp1030Flash(),
+  fwInfo: Map<number, Uint8Array> = cp1030FwInfo(),
+): FakeCamera {
   return new FakeCamera({
     flash,
     windows: lockedLineWindows(),
     authBanks: [3, 4, 5, 6, 7, 8, 9],
-    fwInfo: new Map([[0, Uint8Array.from([1, 0, 3, 0, 0, 0, 0, 0])]]),
+    fwInfo,
     commitTransform: app2016Commit,
   });
 }

@@ -46,23 +46,23 @@ import { SeekDevice } from '../../src/protocol/client.js';
 import { OP } from '../../src/protocol/ops.js';
 import {
   BOOT_CONFIG_BYTES,
-  PRESERVE_BANK_CAPTURE_FILE,
   PRESERVE_BACKUP_FILE,
   PRESERVE_DUMP_ORIGINAL_FILE,
   PRESERVE_DUMP_POSTWRITE_FILE,
-  PRESERVE_PATCHED_FILE,
-  PRESERVE_PLAIN_NAME,
   PRESERVE_STEP_IDS,
   PRESERVE_VERIFY_FILE,
   backupResultFromImage,
+  choosePreserveBanks,
   classifyReaderBoot,
   createPreserveRun,
   describeStepGate,
-  detectActiveSlotFromHead,
   doubleReadWindows,
   drainLeavesReaderReadable,
   openProbedSession,
-  parseBootConfig,
+  preserveCaptureFile,
+  preservePatchedFile,
+  preserveChoiceOf,
+  preservePlainFile,
   resetDevice,
   RESET_OP,
   planWindowAt,
@@ -95,7 +95,10 @@ import {
   boardPatched,
   cp1030Camera,
   cp1030Flash,
+  cp1030FwInfo,
+  rootsReply,
 } from './fixtures-2016.js';
+import { bankRecordOf, handRunState, patchSummaryOf, withoutPatch } from './run-state-fixtures.js';
 
 /* ---- the synthetic factory plaintext (the patch sites included) --------- */
 
@@ -183,6 +186,9 @@ interface V1CameraOptions {
   readonly flash?: Uint8Array;
   /** The version word wire 0x4E reports (default: the fixture's 1.3.0.0). */
   readonly version?: readonly number[];
+  /** The selectors the camera answers beyond the version; a test can change
+   *  them between steps, as a restart would (selector 10: `rootsReply`). */
+  readonly fwInfo?: Map<number, Uint8Array>;
 }
 
 /** A stock-shaped v1 camera: blank cfg, factory plaintext in bank A. */
@@ -199,7 +205,11 @@ function v1Camera(plain: Uint8Array, options: V1CameraOptions = {}): FakeCamera 
     flash,
     windows: v1WindowMap(),
     authBanks: [3, 4, 5, 6, 7, 8, 9] /* the token form; any 18-byte payload matches */,
-    fwInfo: new Map([[0, Uint8Array.from(options.version ?? [1, 3, 0, 0, 0, 0, 0, 0])]]),
+    fwInfo: (() => {
+      const info = options.fwInfo ?? new Map<number, Uint8Array>();
+      info.set(0, Uint8Array.from(options.version ?? [1, 3, 0, 0, 0, 0, 0, 0]));
+      return info;
+    })(),
   });
 }
 
@@ -374,21 +384,24 @@ async function step(
 
 describe('createPreserveRun — the checkpoint document', () => {
   it(
-    'builds the version-2 state — self-sourced, with nothing derived yet',
+    'builds the version-3 state — self-sourced, the default choice, nothing read yet',
     { timeout: 120_000 },
     async () => {
       const { state } = await createPreserveRun();
-      expect(state.version).toBe(2);
-      expect(state.imageSource).toBe('device');
+      expect(state.version).toBe(3);
       expect(state.runId).toMatch(/^preserve-\d{4}-\d{2}-\d{2}T/);
       expect(state.nextStep).toBe('backup');
       expect(state.steps).toEqual({});
-      /* The build facts do not exist yet: the backup step derives them from
-       * the camera. */
+      expect(state.choice).toBe('next-start');
+      /* The build facts and the banks do not exist yet: the backup step reads
+       * them from the camera. */
       expect(state.buildFamily).toBeUndefined();
-      expect(state.imageSha256).toBeUndefined();
       expect(state.expectedVersion).toBeUndefined();
-      expect(state.patch).toBeUndefined();
+      expect(state.boot).toBeUndefined();
+      expect(state.banks).toBeUndefined();
+      expect(state.targets).toBeUndefined();
+      /* A choice given at creation is recorded as asked. */
+      expect((await createPreserveRun({ banks: 'all' })).state.choice).toBe('all');
     },
   );
 
@@ -439,12 +452,12 @@ describe('runPreserveStep(backup) — the double read and the derived-image gate
       silentReporter,
     ).catch((e: unknown) => e);
     expect(error).toBeInstanceOf(SeekError);
-    expect((error as Error).message).toMatch(/the two reads of the active slot disagree/);
+    expect((error as Error).message).toMatch(/the two reads of slot A disagree/);
     /* Nothing was recorded: the refusal precedes every artifact. */
     const failed = recordStepFailure(created.state, 'backup', error);
     expect(failed.steps.backup?.status).toBe('failed');
-    expect(failed.detection).toBeUndefined();
-    expect(failed.slotReadShas).toBeUndefined();
+    expect(failed.boot).toBeUndefined();
+    expect(failed.banks).toBeUndefined();
   });
 
   it(
@@ -496,7 +509,7 @@ describe('runPreserveStep(backup) — the double read and the derived-image gate
       );
       expect(error).toBeInstanceOf(SeekError);
       expect((error as Error).message).toMatch(
-        /the camera reports 1\.3\.0\.0 but the active slot's image says 1\.2\.0\.0/,
+        /the camera reports 1\.3\.0\.0 but the image in slot A says 1\.2\.0\.0/,
       );
     },
   );
@@ -532,36 +545,51 @@ describe('runPreserveStep(backup) — the double read and the derived-image gate
       const created = await createPreserveRun({ runId: 'derive' });
       const state = await step('backup', camera, created.state, store);
 
-      expect(state.version).toBe(2);
-      expect(state.imageSource).toBe('device');
+      expect(state.version).toBe(3);
       expect(state.buildFamily).toBe('v1-2014');
       expect(state.buildId).toBe('v1-2014');
       expect(state.expectedVersion).toBe(EXPECTED_VERSION);
+      /* The camera does not answer selector 10, so the bank it runs is the
+       * first the blank word names: A. */
+      expect(state.anchor).toBe('a');
+      expect(state.boot?.entered).toBeNull();
       /* The two reads agreed: both shas recorded, and they are the same. */
-      expect(state.slotReadShas).toHaveLength(2);
-      expect(state.slotReadShas?.[0]).toBe(state.slotReadShas?.[1]);
+      const bankA = state.banks?.a;
+      expect(bankA?.slotReadShas).toHaveLength(2);
+      expect(bankA?.slotReadShas?.[0]).toBe(bankA?.slotReadShas?.[1]);
       /* The derived plaintext is a first-class artifact, and its sha is the
-       * run's image sha. */
-      const derived = await store.load(PRESERVE_PLAIN_NAME);
+       * bank's image sha. */
+      const derived = await store.load(preservePlainFile('a'));
       expect(derived).not.toBeNull();
-      expect(await sha256hex(derived!)).toBe(state.imageSha256);
+      expect(await sha256hex(derived!)).toBe(bankA?.imageSha256);
       expect([...derived!]).toEqual([...plain]);
       expect(state.steps.backup?.notes).toMatch(/both reads agree/);
       expect(state.steps.backup?.notes).toMatch(
-        /served twice \(the sweep’s plan-window row, mode 7, \+ one fresh arm of the bank window, mode 7\)/,
+        /slot A, the bank the camera runs, served twice \(the sweep’s row, mode 7, \+ one fresh arm of the bank window, mode 7\)/,
       );
       expect(state.steps.backup?.notes).toMatch(/identity/);
-      /* THE SERVE BUDGET, on the wire: mode 7 went out TWICE — the sweep's arm
-       * (whose row is read #1) and the fresh arm (read #2) — and the capture
-       * segment's probe twice: the fake's record is unprogrammed fill and its
-       * mode-4 window is fill too (no device block), so the device-block check
-       * fails and the two-boot rule admits the second boot (3, 4; 3, 4; 7). */
-      expect(camera.arms.slice(-5)).toEqual([3, 4, 3, 4, 7]);
+      /* THE BOOT FACTS: the blank word tries A first, A passes the 2014 check
+       * (its stored words sum to 0), B and R are erased. */
+      expect(state.boot?.word).toBe(0xffffffff);
+      expect(state.boot?.verdicts).toEqual({ a: true, b: false, r: false });
+      expect(state.boot?.nextStart).toBe('a');
+      expect(state.banks?.b.refused).toBe('it is erased');
+      expect(state.banks?.r.refused).toBe('it is erased');
+      expect(state.targets).toEqual(['a']);
+      expect(state.steps.backup?.notes).toMatch(/banks to write: slot A/);
+      /* THE SERVE BUDGET, on the wire: each bank went out TWICE — the sweep's
+       * arm (whose row is read #1) and one fresh arm (read #2) — each fresh
+       * arm on its own admitted session, whose probe reads twice: the fake's
+       * record is unprogrammed fill and its mode-4 window is fill too (no
+       * device block), so the device-block check fails and the two-boot rule
+       * admits the second boot (3, 4; 3, 4; bank). */
+      expect(camera.arms.slice(-15)).toEqual([3, 4, 3, 4, 7, 3, 4, 3, 4, 8, 3, 4, 3, 4, 9]);
       expect(camera.arms.filter((mode) => mode === 7)).toHaveLength(2);
-      /* The capture, as before, is the bank verbatim. */
-      const capture = await store.load(PRESERVE_BANK_CAPTURE_FILE);
+      /* The capture, as before, is the bank verbatim; erased banks get none. */
+      const capture = await store.load(preserveCaptureFile('a'));
       expect(capture?.length).toBe(0x10000);
       expect([...(capture?.subarray(0, plain.length) ?? [])]).toEqual([...plain]);
+      expect(await store.load(preserveCaptureFile('b'))).toBeNull();
     },
   );
 
@@ -591,19 +619,24 @@ describe('runPreserveStep(backup) — the double read and the derived-image gate
 
       expect(state.buildId).toBe('compact-1.3.0.8-ff');
       expect(state.route).toBe('recovery-only');
-      /* The detection and the capture act on RECOVERY, not on the A the blank
-       * record named. */
-      expect(state.detection?.bank).toBe('r');
-      expect(state.detection?.bankAddress).toBe(0x14070000);
-      const capture = (await store.load(PRESERVE_BANK_CAPTURE_FILE))!;
+      /* The run acts on RECOVERY, not on the A the blank record named: the
+       * 2014 check refuses the 0xFFFF sum at A (B is erased), so the start
+       * falls through to R, which it enters unchecked. */
+      expect(state.anchor).toBe('r');
+      expect(state.boot?.verdicts).toEqual({ a: false, b: false, r: false });
+      expect(state.boot?.nextStart).toBe('r');
+      expect(state.targets).toEqual(['r']);
+      expect(state.banks?.a.refused).toMatch(/runs only from recovery R/);
+      const capture = (await store.load(preserveCaptureFile('r')))!;
       expect([...capture.subarray(0, ff.length)]).toEqual([...ff]);
-      expect(state.imageSha256).toBe(await sha256hex(ff));
+      expect(state.banks?.r.imageSha256).toBe(await sha256hex(ff));
+      expect(await store.load(preserveCaptureFile('a'))).toBeNull();
       /* The double-read proof is the RECOVERY capture's, both reads. */
       const window = new Uint8Array(0x10000).fill(0xff);
       window.set(ff, 0);
-      expect(state.slotReadShas?.[0]).toBe(await sha256hex(window));
-      expect(state.slotReadShas?.[1]).toBe(state.slotReadShas?.[0]);
-      expect(state.steps.backup?.notes).toMatch(/re-pointed at the recovery bank/);
+      expect(state.banks?.r.slotReadShas?.[0]).toBe(await sha256hex(window));
+      expect(state.banks?.r.slotReadShas?.[1]).toBe(state.banks?.r.slotReadShas?.[0]);
+      expect(state.steps.backup?.notes).toMatch(/took recovery R as the bank the camera runs/);
     },
   );
 
@@ -648,15 +681,18 @@ describe('runPreserveStep(backup) — the double read and the derived-image gate
       const state = outcome.state;
 
       /* The capture is the fresh arm's read: the real image. */
-      const capture = (await store.load(PRESERVE_BANK_CAPTURE_FILE))!;
+      const capture = (await store.load(preserveCaptureFile('a')))!;
       expect([...capture.subarray(0, plain.length)]).toEqual([...plain]);
-      expect(state.imageSha256).toBe(await sha256hex(plain));
+      expect(state.banks?.a.imageSha256).toBe(await sha256hex(plain));
       /* slotReadShas record what actually happened: the garbage sweep row
        * first, the verified capture second. */
       const ffRow = new Uint8Array(0x10000).fill(0xff);
-      expect(state.slotReadShas?.[0]).toBe(await sha256hex(ffRow));
-      expect(state.slotReadShas?.[1]).toBe(await sha256hex(capture));
-      expect(state.slotReadShas?.[0]).not.toBe(state.slotReadShas?.[1]);
+      const shas = state.banks?.a.slotReadShas;
+      expect(shas?.[0]).toBe(await sha256hex(ffRow));
+      expect(shas?.[1]).toBe(await sha256hex(capture));
+      expect(shas?.[0]).not.toBe(shas?.[1]);
+      /* The repaired row is what the boot facts read: A passes its check. */
+      expect(state.boot?.nextStart).toBe('a');
       /* The note names the verification. */
       expect(state.steps.backup?.notes).toMatch(
         /the sweep’s row served garbage and was re-verified — the fresh boot’s read is the capture/,
@@ -726,8 +762,8 @@ describe('runPreserveStep(backup) — the double read and the derived-image gate
         'no window read may go out on wire 79 against a 0.7.x build',
       ).toBe(false);
       /* The reads served: the derived plaintext is the synthetic image. */
-      expect(await store.load(PRESERVE_PLAIN_NAME)).not.toBeNull();
-      expect(state.imageSha256).toBe(await sha256hex(plain));
+      expect(await store.load(preservePlainFile('a'))).not.toBeNull();
+      expect(state.banks?.a.imageSha256).toBe(await sha256hex(plain));
 
       /* THE COMMIT SESSION TOO: its admission probe is a window read that runs
        * BEFORE the version gate, so it must take the run's reader wire from
@@ -889,7 +925,7 @@ describe('the spent-reader refusals and the two-arm double read', () => {
         silentReporter,
       );
       store.add(outcome);
-      const capture = (await store.load(PRESERVE_BANK_CAPTURE_FILE))!;
+      const capture = (await store.load(preserveCaptureFile('a')))!;
       expect([...capture.subarray(0, plain.length)]).toEqual([...plain]);
       /* The repaired row is in the assembled backup too. */
       const windows = (await store.load(PRESERVE_BACKUP_FILE))!;
@@ -927,32 +963,63 @@ describe('the spent-reader refusals and the two-arm double read', () => {
     },
   );
 
-  it('a boot-config read served as the bootloader’s SP refuses with the remedy, not the slot table', () => {
-    /* parseBootConfig on the incident's stale bytes: cfg[0]=0x10018000. The
-     * refusal leads with the remedy and never presents the word as a
-     * boot-config puzzle. */
-    const block = new Uint8Array(BOOT_CONFIG_BYTES).fill(0xff);
-    new DataView(block.buffer).setUint32(0, 0x10018000, true);
-    const error: unknown = (() => {
-      try {
-        parseBootConfig(block);
-        return null;
-      } catch (e: unknown) {
-        return e;
+  it(
+    'a boot-config row served as the bootloader’s SP refuses with the remedy, not the slot table',
+    { timeout: 120_000 },
+    async () => {
+      /* The sweep's boot-config row carries the incident's stale word,
+       * cfg[0]=0x10018000, while the probe's own read of the record is a
+       * written word (the probe admits the boot). The backup refuses with the
+       * remedy and never presents the word as a boot-config puzzle. */
+      const flash = new Uint8Array(FLASH_SIZE).fill(0xff);
+      new DataView(flash.buffer).setUint32(BOOT_CFG_OFFSET, 0, true);
+      flash.set(plain, BANK_A_OFFSET);
+      const camera = v1Camera(plain, { flash });
+      const store = memoryStore();
+      const created = await createPreserveRun({ runId: 'stale-word' });
+      class StaleCfgRowDevice extends SeekDevice {
+        private mode = -1;
+        private served = 0;
+        override async armWindow(...args: Parameters<SeekDevice['armWindow']>): Promise<void> {
+          this.mode = args[0].subcmd;
+          this.served = 0;
+          return super.armWindow(...args);
+        }
+        override async readArmed(
+          ...args: Parameters<SeekDevice['readArmed']>
+        ): ReturnType<SeekDevice['readArmed']> {
+          const read = await super.readArmed(...args);
+          if (this.mode !== 3 || read.data.length < 0x10000) return read;
+          const data = new Uint8Array(read.data);
+          new DataView(data.buffer).setUint32(0, 0x10018000, true);
+          this.served += data.length;
+          return { ...read, data };
+        }
       }
-    })();
-    expect(error).toBeInstanceOf(SeekError);
-    expect(
-      (error as Error).message.startsWith('the camera’s window reader is budgeted per boot'),
-    ).toBe(true);
-    expect((error as Error).message).toMatch(/initial SP/);
-    expect((error as Error).message).toMatch(/preserve --resume/);
-    expect((error as Error).message).not.toMatch(/names no slot/);
-    /* A genuinely unknown selector word keeps the slot-table refusal. */
-    const other = new Uint8Array(BOOT_CONFIG_BYTES).fill(0xff);
-    new DataView(other.buffer).setUint32(0, 5, true);
-    expect(() => parseBootConfig(other)).toThrow(/names no slot/);
-  });
+      const opener: SessionOpener = {
+        open: async () => {
+          await camera.open();
+          return new StaleCfgRowDevice(camera, { reporter: silentReporter });
+        },
+        close: async () => {
+          await camera.close();
+        },
+      };
+      const error: unknown = await runPreserveStep(
+        'backup',
+        opener,
+        created.state,
+        store.load,
+        silentReporter,
+      ).catch((e: unknown) => e);
+      expect(error).toBeInstanceOf(SeekError);
+      const message = (error as Error).message;
+      expect(message.startsWith('the camera’s window reader is budgeted per boot')).toBe(true);
+      expect(message).toMatch(/initial SP/);
+      expect(message).toMatch(/preserve --resume/);
+      expect(message).toMatch(/no bank can be named from it/);
+    },
+  );
 
   it('a real bank capture is not mistaken for a stale descriptor: the app image’s own SP word differs', () => {
     /* The guard against false refusals: a real 1.3.0.0 bank capture starts
@@ -1029,8 +1096,7 @@ describe('the segment probe — reader-boot classification and admission', () =>
       'test',
     );
     expect(boots).toBe(1);
-    expect(detectActiveSlotFromHead(cfgHead).cfg0).toBe(0);
-    expect(detectActiveSlotFromHead(cfgHead).bank).toBe('a');
+    expect(new DataView(cfgHead.buffer, cfgHead.byteOffset).getUint32(0, true)).toBe(0);
     await opener.close(device);
   });
 
@@ -1044,7 +1110,7 @@ describe('the segment probe — reader-boot classification and admission', () =>
       'test',
     );
     expect(boots).toBe(2);
-    expect(detectActiveSlotFromHead(cfgHead).bank).toBe('b');
+    expect(new DataView(cfgHead.buffer, cfgHead.byteOffset).getUint32(0, true)).toBe(1);
     await opener.close(device);
   });
 
@@ -1205,15 +1271,6 @@ describe('a reset the host refused', () => {
 describe('describeStepGate — every prerequisite refusal', () => {
   const plain = syntheticPlain();
 
-  const patchSummary = (length: number): NonNullable<PreserveRunState['patch']> => ({
-    sites: [],
-    rebalanceWord: 1,
-    stagedLength: length,
-    chunkCount: Math.ceil(length / 64),
-    patchedSha256: 'ab',
-    diffCount: 10,
-  });
-
   /** A state advanced by actually RUNNING the named steps against a fresh
    *  camera, artifacts filed into the returned store. */
   async function stateThrough(
@@ -1249,12 +1306,27 @@ describe('describeStepGate — every prerequisite refusal', () => {
       const withPatch: PreserveRunState = {
         ...afterBackup,
         nextStep: 'commit',
-        patch: patchSummary(plain.length),
+        banks: {
+          ...afterBackup.banks!,
+          a: { ...afterBackup.banks!.a, patch: patchSummaryOf({ stagedLength: plain.length }) },
+        },
         steps: { ...afterBackup.steps, patch: { status: 'done', notes: 'patch built' } },
       };
-      /* Satisfy the type checker the way the runtime already works: the gate
-       * reads `patch === undefined`, so absence — not an undefined value. */
       expect(await describeStepGate('commit', withPatch, store.load)).toBeNull();
+      /* A recorded patch step with no patch for a chosen bank refuses. */
+      const unpatched: PreserveRunState = {
+        ...withPatch,
+        banks: { ...withPatch.banks!, a: withoutPatch(withPatch.banks!.a) },
+      };
+      expect(await describeStepGate('commit', unpatched, store.load)).toMatch(
+        /needs the patch of slot A/,
+      );
+      /* No chosen banks: the commit says why the choice did not resolve. */
+      const unchosen: PreserveRunState = { ...withPatch };
+      delete unchosen.targets;
+      expect(await describeStepGate('commit', unchosen, store.load)).toMatch(
+        /no banks are chosen for this run/,
+      );
       /* The same state against an EMPTY run directory: the commit's restore
        * source is gone, so it refuses with the file names. */
       expect(await describeStepGate('commit', withPatch, never)).toMatch(
@@ -1281,8 +1353,13 @@ describe('describeStepGate — every prerequisite refusal', () => {
       );
 
       const { state: throughCommit, store } = await stateThrough(['backup', 'patch', 'commit']);
-      const noSummary: PreserveRunState = { ...throughCommit };
-      delete noSummary.patch; /* absence, not an undefined value */
+      const noSummary: PreserveRunState = {
+        ...throughCommit,
+        banks: {
+          ...throughCommit.banks!,
+          a: withoutPatch(throughCommit.banks!.a),
+        },
+      };
       expect(await describeStepGate('restore', noSummary, store.load)).toMatch(/patch summary/);
       expect(await describeStepGate('restore', throughCommit, store.load)).toBeNull();
     },
@@ -1300,9 +1377,9 @@ describe('describeStepGate — every prerequisite refusal', () => {
       };
       const withoutPlain: PreserveRunState = { ...cipher };
       expect(await describeStepGate('restore', cipher, store.load)).toBeNull();
-      /* The artifact's name is in the refusal, with the remedy. */
+      /* The artifacts' names are in the refusal. */
       expect(await describeStepGate('restore', withoutPlain, never)).toMatch(
-        /preserve_image_plain\.bin[\s\S]*run zip/,
+        /preserve_bank_a_capture\.bin, preserve_bank_a_plain\.bin/,
       );
     },
   );
@@ -1369,7 +1446,7 @@ describe('describeStepGate — every prerequisite refusal', () => {
        * restore source. */
       for (const step of ['drain', 'restore'] as const) {
         const refusal = await describeStepGate(step, throughPatch, never, { allowJump: true });
-        expect(refusal).toMatch(/preserve_bank_capture\.bin/);
+        expect(refusal).toMatch(/preserve_bank_a_capture\.bin/);
       }
       expect(await describeStepGate('verify', throughPatch, never, { allowJump: true })).toMatch(
         /verify needs preserve_backup_windows\.bin/,
@@ -1464,8 +1541,8 @@ describe('runPreserveStep — the recovery behaviours', () => {
       const state = await step('backup', camera, created.state, store);
 
       expect(state.nextStep).toBe('patch');
-      expect(state.detection?.bank).toBe('a');
-      expect(state.detection?.blank).toBe(true);
+      expect(state.anchor).toBe('a');
+      expect(state.boot?.word).toBe(0xffffffff);
       expect(state.steps.backup?.status).toBe('done');
       expect(state.steps.backup?.notes).toMatch(/31 windows/);
       expect(state.steps.backup?.notes).toMatch(/dump archive/);
@@ -1473,7 +1550,7 @@ describe('runPreserveStep — the recovery behaviours', () => {
       /* The checkpoint files, loadable through the store the test keeps. */
       const windows = await store.load(PRESERVE_BACKUP_FILE);
       expect(windows?.length).toBe(FLASH_SIZE);
-      const capture = await store.load(PRESERVE_BANK_CAPTURE_FILE);
+      const capture = await store.load(preserveCaptureFile('a'));
       expect(capture?.length).toBe(0x10000);
       /* The capture IS the factory plaintext (the 2014 banks hold the image). */
       expect([...(capture?.subarray(0, plain.length) ?? [])]).toEqual([...plain]);
@@ -1503,10 +1580,13 @@ describe('runPreserveStep — the recovery behaviours', () => {
       const afterPatch = await step('patch', camera, afterBackup, store);
 
       expect(afterPatch.nextStep).toBe('commit');
-      expect(afterPatch.patch?.stagedLength).toBe(plain.length);
-      expect(afterPatch.patch?.diffCount).toBe(13);
-      expect(afterPatch.patch?.chunkCount).toBe(Math.ceil(plain.length / 64));
-      const patched = await store.load(PRESERVE_PATCHED_FILE);
+      const summary = afterPatch.banks?.a.patch;
+      expect(summary?.stagedLength).toBe(plain.length);
+      expect(summary?.diffCount).toBe(13);
+      expect(summary?.chunkCount).toBe(Math.ceil(plain.length / 64));
+      /* An erased bank gets no patch. */
+      expect(afterPatch.banks?.b.patch).toBeUndefined();
+      const patched = await store.load(preservePatchedFile('a'));
       expect(patched?.length).toBe(plain.length);
       /* Exactly the thirteen enumerated bytes differ. */
       let diffs = 0;
@@ -1528,10 +1608,9 @@ describe('runPreserveStep — the recovery behaviours', () => {
       const store = memoryStore();
       const created = await createPreserveRun({ runId: 'lost-plain' });
       const afterBackup = await step('backup', camera, created.state, store);
-      /* The derived artifact vanishes — the version-1 migration shape, where
-       * the plaintext lived outside the run directory. */
+      /* The derived artifact vanishes from the run directory. */
       const empty: PreserveArtifactLoader = (name) =>
-        name === PRESERVE_PLAIN_NAME ? Promise.resolve(null) : store.load(name);
+        name === preservePlainFile('a') ? Promise.resolve(null) : store.load(name);
       const error: unknown = await runPreserveStep(
         'patch',
         fakeOpener(camera),
@@ -1540,8 +1619,8 @@ describe('runPreserveStep — the recovery behaviours', () => {
         silentReporter,
       ).catch((e: unknown) => e);
       expect(error).toBeInstanceOf(SeekError);
-      expect((error as Error).message).toMatch(/preserve_image_plain\.bin/);
-      expect((error as Error).message).toMatch(/version-1 run/);
+      expect((error as Error).message).toMatch(/preserve_bank_a_plain\.bin/);
+      expect((error as Error).message).toMatch(/which the backup step writes/);
     },
   );
 
@@ -1658,11 +1737,12 @@ describe('runPreserveStep — the recovery behaviours', () => {
       expect(state.nextStep).toBe('restore');
 
       /* The crash-after-restore case: the bank already holds the original. */
-      const capture = (await store.load(PRESERVE_BANK_CAPTURE_FILE))!;
+      const capture = (await store.load(preserveCaptureFile('a')))!;
       camera.flash.set(capture.subarray(0, plain.length), BANK_A_OFFSET);
       const outcome = await step('restore', camera, state, store);
       expect(outcome.steps.restore?.status).toBe('done');
-      expect(outcome.steps.restore?.notes).toMatch(/already held the original content/);
+      expect(outcome.steps.restore?.notes).toMatch(/slot A: already held its original content/);
+      expect(outcome.steps.restore?.notes).toMatch(/nothing staged, no reset sent/);
     },
   );
 
@@ -1777,6 +1857,7 @@ describe('runPreserveStep — the recovery behaviours', () => {
       ).catch((e: unknown) => e);
       expect(error).toBeInstanceOf(Error);
       expect((error as Error).message).toMatch(/differing byte\(s\)/);
+      expect((error as Error).message).toMatch(/in slot A 0x14050000/);
       /* The caller checkpoints the failure; the state it keeps is unchanged. */
       const failed = recordStepFailure(state, 'verify', error);
       expect(failed.steps.verify?.status).toBe('failed');
@@ -1819,17 +1900,10 @@ describe('runPreserveStep — the recovery behaviours', () => {
 describe('the mode-2 hazard ordering, in the drain gate', () => {
   /** A state advanced to the post-commit shape the drain gate reads, with a
    *  recorded patch summary that carries or lacks the hazard site. */
-  const hazardState = (sites: readonly number[]): PreserveRunState => {
-    const base: PreserveRunState = {
-      version: 2,
-      imageSource: 'device',
-      slotReadShas: ['aa', 'aa'],
+  const hazardState = (sites: readonly number[]): PreserveRunState =>
+    handRunState({
       runId: 'hazard',
-      imageSha256: 'ab',
       expectedVersion: '0.8.0.0',
-      createdAt: '2026-10-02T00:00:00Z',
-      nextStep: 'drain',
-      buildFamily: 'v1-2014',
       buildId: 'compact-0.8.0.0',
       capability: {
         wholePart: true,
@@ -1837,36 +1911,24 @@ describe('the mode-2 hazard ordering, in the drain gate', () => {
         modeTwoHazardSites: [0x3ce4],
         note: 'the factory mode 2 arms *(0x14000000) — the nop site must be committed first',
       },
-      detection: {
-        cfgHex: '00000000',
-        cfg0: 0,
-        blank: true,
-        bank: 'a',
-        bankAddress: 0x14050000,
-        bankMode: 7,
-        verdict: 'blank -> bank A',
+      banks: {
+        a: bankRecordOf('a', {
+          buildId: 'compact-0.8.0.0',
+          patch: patchSummaryOf({
+            sites: sites.map((offset) => ({
+              name: 'site',
+              offset,
+              before: [0x1b, 0x68],
+              after: [0x00, 0xbf],
+            })),
+            rebalanceWord: 0x30000b5b,
+            diffCount: 12,
+          }),
+        }),
+        b: handRunState().banks!.b,
+        r: handRunState().banks!.r,
       },
-      patch: {
-        sites: sites.map((offset) => ({
-          name: 'site',
-          offset,
-          before: [0x1b, 0x68],
-          after: [0x00, 0xbf],
-        })),
-        rebalanceWord: 0x30000b5b,
-        stagedLength: 0x4000,
-        chunkCount: 256,
-        patchedSha256: 'ab',
-        diffCount: 12,
-      },
-      steps: {
-        backup: { status: 'done', notes: 'backup done' },
-        patch: { status: 'done', notes: 'patch done' },
-        commit: { status: 'done', notes: 'commit done' },
-      },
-    };
-    return base;
-  };
+    });
 
   it('refuses a run whose recorded patch lacks the nop site, before any mode-2 arm', async () => {
     const refusal = await describeStepGate('drain', hazardState([0x3d64]), never);
@@ -1888,22 +1950,12 @@ describe('the mode-2 hazard ordering, in the drain gate', () => {
   });
 });
 
-describe('the 0.7.0.7 rotation — the base from the detection, and the algebra', () => {
-  const detection = (bank: 'a' | 'b' | 'r'): NonNullable<PreserveRunState['detection']> => ({
-    cfgHex: '00000000',
-    cfg0: 0,
-    blank: bank === 'a',
-    bank,
-    bankAddress: bank === 'a' ? 0x14050000 : bank === 'b' ? 0x14060000 : 0x14070000,
-    bankMode: bank === 'a' ? 7 : bank === 'b' ? 8 : 9,
-    verdict: 'test',
-  });
-
-  it('the walk serves the A/B slot the detection does not name; recovery refuses', () => {
-    expect(rotatedDrainBase(detection('a'))).toBe(0x14060000);
-    expect(rotatedDrainBase(detection('b'))).toBe(0x14050000);
-    expect(() => rotatedDrainBase(detection('r'))).toThrow(/recovery-named record/);
-    expect(() => rotatedDrainBase(detection('r'))).toThrow(/doc 36\.10/);
+describe('the 0.7.0.7 rotation — the base from the bank the start entered, and the algebra', () => {
+  it('the walk serves the A/B slot the entered bank is not; recovery refuses', () => {
+    expect(rotatedDrainBase('a')).toBe(0x14060000);
+    expect(rotatedDrainBase('b')).toBe(0x14050000);
+    expect(() => rotatedDrainBase('r')).toThrow(/never measured against a recovery start/);
+    expect(() => rotatedDrainBase('r')).toThrow(/doc 36\.10/);
   });
 
   it('unrotateDump folds the served bytes back to part layout order', { timeout: 120_000 }, () => {
@@ -2087,18 +2139,27 @@ describe('Compact PRO 1.0.3.0 with the board patch — the fake bench camera', (
       const created = await createPreserveRun({ runId: 'cp1030' });
       const state = await step('backup', camera, created.state, store);
       expect(resetsSent(camera)).toBe(0);
-      expect(state.detection?.blank).toBe(true);
-      expect(state.detection?.bank).toBe('a');
+      expect(state.boot?.word).toBe(0xffffffff);
+      expect(state.boot?.entered).toBe('a');
+      expect(state.anchor).toBe('a');
       expect(state.expectedVersion).toBe(CP1030_VERSION);
       expect(state.buildFamily).toBe('compact-2016');
       expect(state.buildId).toBe('compact-pro-1.0.3.0');
-      expect(state.imageDerivation?.id).toBe('compact-pro-1.0.3.0-accept-pn297');
-      expect(state.imageDerivation?.balanceWord).toBe(
+      /* The 2016 check: the key is named from A (entered first in the blank
+       * word's order, so checked), and every bank is under it. */
+      expect(state.boot?.checkKeyUnnamed).toBeNull();
+      expect(state.boot?.verdicts).toEqual({ a: true, b: true, r: true });
+      expect(state.boot?.nextStart).toBe('a');
+      expect(state.targets).toEqual(['a']);
+      for (const key of ['a', 'b', 'r'] as const) {
+        expect(state.banks?.[key].refused).toBeNull();
+        expect(state.banks?.[key].imageDerivation?.id).toBe('compact-pro-1.0.3.0-accept-pn297');
+      }
+      expect(state.banks?.a.imageDerivation?.balanceWord).toBe(
         new DataView(boardPatched().buffer).getUint32(REBALANCE_WORD_OFFSET, true),
       );
-      expect(state.steps.backup?.notes).toMatch(/with the Compact \(PN297\) board patch/);
       /* the derived image is the slot's: the factory image WITH the board patch */
-      const plain = await store.load(PRESERVE_PLAIN_NAME);
+      const plain = await store.load(preservePlainFile('a'));
       expect(plain).toEqual(boardPatched());
     },
   );
@@ -2115,9 +2176,9 @@ describe('Compact PRO 1.0.3.0 with the board patch — the fake bench camera', (
 
       const image = boardPatched();
       const patch = buildV1Patch(image);
-      expect(state.patch?.armResetsCursor).toBe(true);
-      expect(drainLeavesReaderReadable(state.patch)).toBe(true);
-      expect(state.patch?.rebalanceWord).toBe(patch.rebalanceWord);
+      expect(state.banks?.a.patch?.armResetsCursor).toBe(true);
+      expect(drainLeavesReaderReadable(state)).toBe(true);
+      expect(state.banks?.a.patch?.rebalanceWord).toBe(patch.rebalanceWord);
 
       state = await step('commit', camera, state, store);
       /* Bank A now decrypts to the patched image: the guard, the widen and
@@ -2278,6 +2339,311 @@ describe('Compact PRO 1.0.3.0 with the board patch — the fake bench camera', (
       expect(error).toBeInstanceOf(SeekError);
       expect((error as Error).message).toMatch(/one page high, and the reboot .* was REFUSED/);
       expect(opens).toBe(2); /* the reset session, then ONE drain attempt — no second */
+    },
+  );
+});
+
+/* ==================================================================== *
+ * the bank choice (TESTING.md 42.92): which bank the next start enters,
+ * one bank by name, every bank, and a start that entered a bank the run
+ * did not patch
+ * ==================================================================== */
+
+describe('the banks a run writes — the next start, one bank, every bank', () => {
+  const plain = syntheticPlain();
+  const R_OFFSET = RECOVERY_OFFSET;
+
+  /** A 2014 part: the boot word, and what each bank holds (null: erased). */
+  function v1Flash(
+    word: number,
+    banks: { a?: Uint8Array; b?: Uint8Array; r?: Uint8Array },
+  ): Uint8Array {
+    const flash = new Uint8Array(FLASH_SIZE).fill(0xff);
+    new DataView(flash.buffer).setUint32(BOOT_CFG_OFFSET, word >>> 0, true);
+    if (banks.a !== undefined) flash.set(banks.a, BANK_A_OFFSET);
+    if (banks.b !== undefined) flash.set(banks.b, 0x60000);
+    if (banks.r !== undefined) flash.set(banks.r, R_OFFSET);
+    return flash;
+  }
+
+  /** The bytes of `flash` that differ from `before`, by 64 KiB bank. */
+  function changedBanks(before: Uint8Array, after: Uint8Array): string[] {
+    const out = new Set<string>();
+    for (let i = 0; i < before.length; i++) {
+      if (before[i] === after[i]) continue;
+      out.add(
+        i >= 0x50000 && i < 0x60000
+          ? 'a'
+          : i >= 0x60000 && i < 0x70000
+            ? 'b'
+            : i >= 0x70000 && i < 0x80000
+              ? 'r'
+              : `0x${i.toString(16)}`,
+      );
+    }
+    return [...out].sort();
+  }
+
+  it(
+    'word 2: the next start is recovery R, the default writes R only, and every bank can be chosen',
+    { timeout: 180_000 },
+    async () => {
+      const fwInfo = new Map<number, Uint8Array>([[10, rootsReply(2)]]);
+      const camera = v1Camera(plain, { flash: v1Flash(2, { a: plain, r: plain }), fwInfo });
+      const asBooted = new Uint8Array(camera.flash);
+      const store = memoryStore();
+      let state = (await createPreserveRun({ runId: 'word2' })).state;
+      state = await step('backup', camera, state, store);
+
+      expect(state.boot?.word).toBe(2);
+      expect(state.boot?.rule).toBe('recovery R first, then A, then B');
+      expect(state.boot?.entered).toBe('r');
+      expect(state.anchor).toBe('r');
+      expect(state.boot?.verdicts).toEqual({ a: true, b: false, r: true });
+      expect(state.boot?.nextStart).toBe('r');
+      expect(state.boot?.why).toMatch(
+        /tries recovery R first, and it holds an image the bootloader accepts/,
+      );
+      expect(state.targets).toEqual(['r']);
+      /* Both image banks can be written; every bank is A and R. */
+      expect(state.banks?.a.refused).toBeNull();
+      expect(await store.load(preserveCaptureFile('a'))).not.toBeNull();
+
+      for (const id of ['patch', 'commit'] as const) state = await step(id, camera, state, store);
+      /* The commit wrote recovery R and nothing else. */
+      expect(changedBanks(asBooted, camera.flash)).toEqual(['r']);
+      for (const id of ['drain', 'restore', 'verify'] as const) {
+        state = await step(id, camera, state, store);
+      }
+      expect(state.drainEntered).toBe('r');
+      expect(state.steps.drain?.notes).toMatch(/entered recovery R, which holds the patch/);
+      expect(await sha256hex((await store.load(PRESERVE_DUMP_ORIGINAL_FILE))!)).toBe(
+        await sha256hex(asBooted),
+      );
+      expect(state.verify).toEqual({ diffBytes: 0, windowsRead: 31, badWindows: [] });
+      expect(camera.flash).toEqual(asBooted);
+    },
+  );
+
+  it(
+    'every bank: the commit writes the bank tried last first, the drain swaps every bank back, the restore puts all of them back',
+    { timeout: 180_000 },
+    async () => {
+      const fwInfo = new Map<number, Uint8Array>([[10, rootsReply(2)]]);
+      const camera = v1Camera(plain, { flash: v1Flash(2, { a: plain, r: plain }), fwInfo });
+      const asBooted = new Uint8Array(camera.flash);
+      const store = memoryStore();
+      let state = (await createPreserveRun({ runId: 'all', banks: 'all' })).state;
+      state = await step('backup', camera, state, store);
+      /* B is erased: every bank that holds an image is A and R. */
+      expect(state.choice).toBe('all');
+      expect(state.targets).toEqual(['a', 'r']);
+      state = await step('patch', camera, state, store);
+      expect(state.banks?.a.patch?.diffCount).toBe(13);
+      expect(state.banks?.r.patch?.diffCount).toBe(13);
+
+      state = await step('commit', camera, state, store);
+      /* Word 2 tries R, then A, then B: the commit writes A (tried after R)
+       * before R. */
+      expect(state.steps.commit?.notes).toMatch(/written in this order: slot A: .*; recovery R: /);
+      expect(changedBanks(asBooted, camera.flash)).toEqual(['a', 'r']);
+
+      state = await step('drain', camera, state, store);
+      const raw = (await store.load(PRESERVE_DUMP_POSTWRITE_FILE))!;
+      expect(changedBanks(asBooted, raw)).toEqual(['a', 'r']);
+      expect(await sha256hex((await store.load(PRESERVE_DUMP_ORIGINAL_FILE))!)).toBe(
+        await sha256hex(asBooted),
+      );
+      expect(state.steps.drain?.notes).toMatch(/slot A and recovery R swapped back/);
+
+      state = await step('restore', camera, state, store);
+      /* The restore puts R (tried first) back before A. */
+      expect(state.steps.restore?.notes).toMatch(
+        /recovery R: original content staged back .*; slot A: original content staged back .*; reset sent/,
+      );
+      state = await step('verify', camera, state, store);
+      expect(state.verify).toEqual({ diffBytes: 0, windowsRead: 31, badWindows: [] });
+      expect(state.steps.verify?.notes).toMatch(/slot A, slot B and recovery R among them/);
+      expect(camera.flash).toEqual(asBooted);
+    },
+  );
+
+  it(
+    'a start that enters a bank the run did not patch stops the drain before it arms anything; the restore still puts the bank back',
+    { timeout: 180_000 },
+    async () => {
+      /* Word 0: slot A first, and A passes. The person chose recovery R. */
+      const fwInfo = new Map<number, Uint8Array>([[10, rootsReply(0)]]);
+      const camera = v1Camera(plain, { flash: v1Flash(0, { a: plain, r: plain }), fwInfo });
+      const asBooted = new Uint8Array(camera.flash);
+      const store = memoryStore();
+      let state = (await createPreserveRun({ runId: 'wrong-bank', banks: 'r' })).state;
+      state = await step('backup', camera, state, store);
+      expect(state.boot?.nextStart).toBe('a');
+      expect(state.targets).toEqual(['r']);
+      /* The choice is offered, with the warning a person reads before the
+       * commit — never a gate. */
+      const verdict = preserveChoiceOf(state, 'r');
+      expect(verdict.banks).toEqual(['r']);
+      expect(verdict.warnings).toHaveLength(1);
+      expect(verdict.warnings[0]).toMatch(
+        /The next start enters slot A .* and this choice does not patch it/,
+      );
+      for (const id of ['patch', 'commit'] as const) state = await step(id, camera, state, store);
+      expect(changedBanks(asBooted, camera.flash)).toEqual(['r']);
+
+      const armsBefore = camera.arms.length;
+      const error: unknown = await runPreserveStep(
+        'drain',
+        fakeOpener(camera),
+        state,
+        store.load,
+        silentReporter,
+      ).catch((e: unknown) => e);
+      expect(error).toBeInstanceOf(SeekError);
+      expect((error as SeekError).code).toBe('pipeline/refused');
+      const message = (error as Error).message;
+      expect(message).toMatch(
+        /after the restart the camera reports it entered slot A \(active-slot word 0\), which this run did not patch \(it patched recovery R\)/,
+      );
+      expect(message).toMatch(/nothing was armed or read/);
+      expect(message).toMatch(/the restore step puts every written bank back/);
+      expect(message).not.toMatch(/power-cycle the camera/);
+      expect((error as SeekError).detail).toEqual({ entered: 'a', targets: ['r'] });
+      /* No window was armed after the reset: not the widened one, not any. */
+      expect(camera.arms.slice(armsBefore)).toEqual([]);
+
+      /* The run goes on to the restore, which needs no jump: the commit is on
+       * record. */
+      const failed = recordStepFailure(state, 'drain', error);
+      expect(await describeStepGate('restore', failed, store.load)).toBeNull();
+      state = await step('restore', camera, failed, store);
+      state = await step('verify', camera, state, store);
+      expect(state.verify).toEqual({ diffBytes: 0, windowsRead: 31, badWindows: [] });
+      expect(camera.flash).toEqual(asBooted);
+    },
+  );
+
+  it(
+    'a default the run cannot write is said, a bank it cannot write is refused, and the choice is fixed once the commit has run',
+    { timeout: 180_000 },
+    async () => {
+      /* Word 1: slot B first. B holds a 1.2.0.0 image (it passes the 2014
+       * check), while the camera runs 1.3.0.0 from A. */
+      const other = syntheticPlain();
+      const dv = new DataView(other.buffer);
+      dv.setUint32(0x20c, 0x0000_0201, true); /* -> "1.2.0.0" */
+      dv.setUint32(0x3ff0, 0, true);
+      dv.setUint32(0x3ff0, (0 - wordSum(other)) >>> 0, true);
+      const fwInfo = new Map<number, Uint8Array>([[10, rootsReply(0)]]);
+      const camera = v1Camera(plain, { flash: v1Flash(1, { a: plain, b: other }), fwInfo });
+      const store = memoryStore();
+      let state = (await createPreserveRun({ runId: 'unresolved' })).state;
+      state = await step('backup', camera, state, store);
+
+      expect(state.boot?.nextStart).toBe('b');
+      expect(state.banks?.b.refused).toMatch(
+        /the camera reports 1\.3\.0\.0 but the image in slot B says 1\.2\.0\.0/,
+      );
+      expect(state.targets).toBeUndefined();
+      expect(state.steps.backup?.notes).toMatch(
+        /no banks chosen: the next start enters slot B .* and the run cannot write it/,
+      );
+      state = await step('patch', camera, state, store);
+      expect(await describeStepGate('commit', state, store.load)).toMatch(
+        /no banks are chosen for this run: the next start enters slot B/,
+      );
+      expect(() => choosePreserveBanks(state, 'b')).toThrow(/slot B cannot be written: /);
+      expect(() => choosePreserveBanks(state, 'all')).toThrow(/slot B cannot/);
+      const chosen = choosePreserveBanks(state, 'a');
+      expect(chosen.choice).toBe('a');
+      expect(chosen.targets).toEqual(['a']);
+      expect(preserveChoiceOf(chosen, 'a').warnings[0]).toMatch(/The next start enters slot B/);
+      expect(await describeStepGate('commit', chosen, store.load)).toBeNull();
+      state = await step('commit', camera, chosen, store);
+      expect(() => choosePreserveBanks(state, 'next-start')).toThrow(
+        /cannot change once the commit has run/,
+      );
+    },
+  );
+
+  it(
+    'a bank the bootloader marked after a warm boot reads as no image, and the start falls through to recovery R',
+    { timeout: 180_000 },
+    async () => {
+      /* The 2014 bootloader's warm-boot path (image.c boot_select_image):
+       * the entered bank's header word becomes the reboot request's mark, the
+       * word becomes 2, and recovery R runs. */
+      const marked = new Uint8Array(plain);
+      new DataView(marked.buffer).setUint32(0x200, 0xaa55ff01, true);
+      const fwInfo = new Map<number, Uint8Array>([[10, rootsReply(2)]]);
+      const camera = v1Camera(plain, { flash: v1Flash(2, { a: marked, r: plain }), fwInfo });
+      const store = memoryStore();
+      const state = await step('backup', camera, (await createPreserveRun()).state, store);
+      expect(state.banks?.a.holds).toBe('other');
+      expect(state.banks?.a.refused).toMatch(
+        /0xAA55FF01, the mark the bootloader writes over a bank after a watchdog reset/,
+      );
+      expect(state.boot?.verdicts).toEqual({ a: false, b: false, r: true });
+      expect(state.boot?.nextStart).toBe('r');
+      expect(state.targets).toEqual(['r']);
+      expect(() => choosePreserveBanks(state, 'a')).toThrow(
+        /slot A cannot be written: .*0xAA55FF01/,
+      );
+    },
+  );
+
+  it(
+    'the 2016 line, every bank: three commits stored under the camera’s key, the drain, the restore, verify',
+    { timeout: 240_000 },
+    async () => {
+      const camera = cp1030Camera();
+      const asBooted = new Uint8Array(camera.flash);
+      const store = memoryStore();
+      let state = (await createPreserveRun({ runId: 'cp1030-all', banks: 'all' })).state;
+      for (const id of ['backup', 'patch', 'commit'] as const) {
+        state = await step(id, camera, state, store);
+      }
+      expect(state.targets).toEqual(['a', 'b', 'r']);
+      /* The blank word tries A, B, R: the commit writes R, then B, then A. */
+      expect(state.steps.commit?.notes).toMatch(
+        /written in this order: recovery R: .*; slot B: .*; slot A: /,
+      );
+      const patch = buildV1Patch(boardPatched());
+      for (const offset of [0x50000, 0x60000, 0x70000]) {
+        expect(decryptBank(camera.flash.subarray(offset), patch.patched.length)).toEqual(
+          patch.patched,
+        );
+      }
+      for (const id of ['drain', 'restore', 'verify'] as const) {
+        state = await step(id, camera, state, store);
+      }
+      expect(await store.load(PRESERVE_DUMP_ORIGINAL_FILE)).toEqual(asBooted);
+      expect(camera.flash).toEqual(asBooted);
+      expect(state.verify).toEqual({ diffBytes: 0, windowsRead: 31, badWindows: [] });
+    },
+  );
+
+  it(
+    'the 2016 line: a camera that entered the bank its word leaves to last names no key — the next start is not known, and the default is every bank',
+    { timeout: 180_000 },
+    async () => {
+      const camera = cp1030Camera(cp1030Flash(), cp1030FwInfo(2));
+      const store = memoryStore();
+      const state = await step('backup', camera, (await createPreserveRun()).state, store);
+      expect(state.boot?.entered).toBe('r');
+      expect(state.boot?.checkKeyUnnamed).toMatch(/leaves to last/);
+      expect(state.boot?.verdicts).toEqual({ a: null, b: null, r: null });
+      expect(state.boot?.nextStart).toBeNull();
+      expect(state.boot?.why).toMatch(/the key its bootloader checks a bank under was not named/);
+      expect(state.targets).toEqual(['a', 'b', 'r']);
+      expect(preserveChoiceOf(state, 'next-start').what).toMatch(
+        /every bank that holds an image \(slot A, slot B and recovery R\): which bank the next start enters is not known/,
+      );
+      /* One bank by name says the next start is not known, as a warning. */
+      expect(preserveChoiceOf(state, 'a').warnings[0]).toMatch(
+        /Which bank the next start enters is not known/,
+      );
     },
   );
 });

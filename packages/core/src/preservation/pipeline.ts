@@ -1,45 +1,47 @@
 /**
  * The full-flash preservation pipeline for the v1 locked line (Compact
- * 1.0.0.0 / 1.2.0.0 / 1.3.0.0): read everything the camera can serve, patch
- * the booted bank IN PLACE, dump the whole part through the widened window,
- * put the original bank back — and prove, byte for byte, that the delivered
- * image is the camera's own flash content.
+ * 1.0.0.0 / 1.2.0.0 / 1.3.0.0 and the other builds the patch table covers):
+ * read everything the camera can serve, patch the chosen banks IN PLACE (by
+ * default the bank the next start enters), dump the whole part through the
+ * widened window, put the original banks back — and prove, byte for byte,
+ * that the delivered image is the camera's own flash content.
  *
  * The four phases, and what each one is allowed to touch:
  *
  *   P1  backup — the 31 stock windows (modes 3..9 with the 18-byte token,
  *       0x0A..0x21 plain), 64 KiB each, 0x14010000..0x141FFFFF. Read-only.
  *       Every window must come back complete: this is the copy the pipeline
- *       restores from, and a short one is refused, not gap-filled. The
- *       active bank is read TWICE — two independent captures that must agree
- *       byte for byte — and the factory plaintext is DERIVED from the agreed
- *       capture (`solve.ts`): there is no manual image input anywhere.
+ *       restores from, and a short one is refused, not gap-filled. Every
+ *       bank is read TWICE — two independent captures that must agree byte
+ *       for byte — and each bank's factory plaintext is DERIVED from its
+ *       agreed capture (`solve.ts`): there is no manual image input anywhere.
+ *       The boot-config record (mode 3), the active-slot word and each bank's
+ *       check name the bank the next start enters (`banks.ts`).
  *
- *   P2  in-place patch — read the 28-byte boot-config record (mode 3) and
- *       name the ACTIVE slot; the captured bank's image was already gated
- *       (the build table's detect hooks and before-bytes) BEFORE anything is
+ *   P2  in-place patch — every chosen bank's image was already gated (the
+ *       build table's detect hooks and before-bytes) BEFORE anything is
  *       written; conjugate the plaintext patch into the ciphertext capture
  *       (`patch.ts`); stage IMAGE LENGTH ONLY in 64-byte chunks (the commit
  *       erases the whole 64 KiB block and programs exactly the staged bytes,
  *       and a full 64 KiB stage would overrun the descriptor's staging
- *       buffer); commit (0x51 with the u16 sum); wire-89 reset — the same
- *       session, the proven patch shape. NO bootcfg write, NO other-slot
- *       write: the part's only change is the enumerated patch bytes inside
- *       the one active bank.
+ *       buffer); commit (0x51 with the u16 sum). NO bootcfg write: the part's
+ *       only change is the enumerated patch bytes inside the chosen banks.
  *
- *   P3  full dump — after the warm reset the camera boots the PATCHED image,
- *       whose mode-2 window now spans the whole 4 MiB part. A fresh session
- *       (the post-reset quirk: re-enumerate, probe once, then drain — retry
- *       once on a still-dead window and NEVER re-send the commit) drains the
- *       part at 64 B per call (READ_CHUNK; sec. 28.3). The RAW dump equals
- *       the post-write part; the
- *       DELIVERED dump has the active bank's 64 KiB replaced from the P1
- *       backup, so it is the camera's original flash content, byte-clean.
+ *   P3  full dump — after the warm reset the camera boots the bank the
+ *       bootloader picks; the active-slot word says which, and a bank this
+ *       run did not patch stops the phase before anything is armed. The
+ *       PATCHED image's mode-2 window spans the whole 4 MiB part. A fresh
+ *       session (the post-reset quirk: re-enumerate, probe once, then drain —
+ *       retry once on a still-dead window and NEVER re-send the commit)
+ *       drains the part at 64 B per call (READ_CHUNK; sec. 28.3). The RAW dump
+ *       equals the post-write part; the DELIVERED dump has every written
+ *       bank's 64 KiB replaced from the P1 backup, so it is the camera's
+ *       original flash content, byte-clean.
  *
- *   P4  restore — commit the ORIGINAL bank content back over the same bank
- *       (the patched image still runs from SRAM, so the write is inert to the
- *       running code), reset, then re-read the 31 windows and compare every
- *       one against the P1 backup.
+ *   P4  restore — commit each bank's ORIGINAL content back (the patched image
+ *       still runs from SRAM, so the write is inert to the running code),
+ *       reset, then re-read the 31 windows and compare every one against the
+ *       P1 backup.
  *
  * The same operation also exists as SIX RESUMABLE STEPS (`steps.ts`), and
  * `runPreservationPipeline` at the bottom of this file is composed from them.
@@ -51,14 +53,15 @@
  *
  * ---- The honest risk -------------------------------------------------------
  *
- * P2 and P4 write the ACTIVE slot on whatever camera runs them. On real
- * hardware an interrupted write there has NO bootable fallback — the boot
- * loader's other slots name other banks, and the recovery slot is not written
- * by this pipeline. The pipeline mitigates what it can (P1's backup exists
- * before the first write; P4 puts the original back; the delivered dump is
- * post-processed to the original content), but a power loss mid-commit on
- * silicon is unrecoverable without an SPI programmer. The emulator's
- * copy-on-write overlay is a safety net real flash does not have.
+ * P2 and P4 write boot banks on whatever camera runs them. On real hardware a
+ * bank whose write is interrupted fails the bootloader's check, and the start
+ * then falls to the next bank of the boot word's order; the last one is
+ * entered unchecked. The pipeline mitigates what it can (P1's backup exists
+ * before the first write; P2 writes the bank the bootloader tries first last,
+ * and P4 restores it first; P4 puts every original back; the delivered dump
+ * is post-processed to the original content), but a power loss mid-commit on
+ * silicon can still need an SPI programmer. The emulator's copy-on-write
+ * overlay is a safety net real flash does not have.
  */
 
 import { hexUp, isoStamp, sha256hex } from '../bytes.js';
@@ -69,14 +72,15 @@ import { u16Payload } from '../protocol/client.js';
 import { commitStatusMeaning } from '../protocol/commit-status.js';
 import { OP, EP0_BUF, USB_COMMIT_TIMEOUT_MS } from '../protocol/ops.js';
 import { FLASH_BASE, FLASH_SIZE } from '../profiles/modern-4x.js';
+import type { PreserveBankChoice, PreserveBootFacts } from './banks.js';
 import {
   PRESERVE_BACKUP_FILE,
-  PRESERVE_BANK_CAPTURE_FILE,
-  PRESERVE_PLAIN_NAME,
   PRESERVE_DUMP_ORIGINAL_FILE,
   PRESERVE_DUMP_POSTWRITE_FILE,
   backupResultFromImage,
   createPreserveRun,
+  preserveCaptureFile,
+  preservePlainFile,
   runPreserveStep,
   type PreserveArtifactLoader,
   type PreserveRunState,
@@ -94,14 +98,12 @@ import {
   isDeviceBlockHead,
   isPageShiftedHead,
   isStaleDescriptorWord,
-  parseBootConfig,
   preservationWindows,
   spentReaderRefusal,
   widenedWindow,
   BOOT_CONFIG_BYTES,
   WINDOW_BYTES,
   type BankKey,
-  type SlotDetection,
 } from './windows.js';
 
 /** Wire-79 drain unit: ONE EP0 packet, the ask where serve == ask — measured
@@ -559,16 +561,8 @@ export async function backupWindows(
  * P2 — detect, verify, conjugate, commit
  * ==================================================================== */
 
-/**
- * Name the active slot from a probe head already in hand — the mode-3 read
- * `openProbedSession` admits every session with. Read-only, no wire.
- */
-export function detectActiveSlotFromHead(cfgHead: Uint8Array): SlotDetection {
-  return parseBootConfig(cfgHead);
-}
-
 /** Which of the three known shapes a 28-byte boot-config read carries:
- *  'written' (parses toward parseBootConfig as served), 'unprogrammed'
+ *  'written' (a record as served), 'unprogrammed'
  *  (0xFF-fill — suspect, verified by re-arm), 'stale' (an SRAM-shaped
  *  selector word — suspect, verified by re-arm). */
 function cfgRecordShape(block: Uint8Array): 'written' | 'unprogrammed' | 'stale' {
@@ -866,24 +860,28 @@ export function backupSlice(backup: BackupResult, start: number, length: number)
 }
 
 /**
- * The delivered image: the raw post-write dump with the active bank's 64 KiB
- * replaced from the P1 backup — the camera's original flash content.
+ * The delivered image: the raw post-write dump with every written bank's
+ * 64 KiB replaced from the P1 backup — the camera's original flash content.
  */
 export function postProcessDump(
   dump: Uint8Array,
-  bankAddress: number,
-  originalBank: Uint8Array,
+  banks: readonly { readonly address: number; readonly bytes: Uint8Array }[],
 ): Uint8Array {
   if (dump.length !== FLASH_SIZE) {
     throw new Error(
       `post-process: the dump is ${String(dump.length)} B, want ${String(FLASH_SIZE)}`,
     );
   }
-  if (originalBank.length !== WINDOW_BYTES) {
-    throw new Error(`post-process: the backup bank is ${String(originalBank.length)} B`);
-  }
   const out = new Uint8Array(dump);
-  out.set(originalBank, bankAddress - 0x14000000);
+  for (const bank of banks) {
+    if (bank.bytes.length !== WINDOW_BYTES) {
+      throw new Error(
+        `post-process: the backup of the bank at ${hexUp(bank.address, 8)} is ` +
+          `${String(bank.bytes.length)} B`,
+      );
+    }
+    out.set(bank.bytes, bank.address - 0x14000000);
+  }
   return out;
 }
 
@@ -900,18 +898,17 @@ export function postProcessDump(
  */
 
 /** The flash address the 0.7.0.7 widened window's offset 0 serves, from the
- *  slot detection: the A/B bank the detection does NOT name — bank A (or a
- *  blank record, which names A) serves from slot B, bank B from slot A. The
- *  measured donor case is the blank record serving from 0x14060000. A record
- *  naming RECOVERY was never measured on this walk and refuses rather than
- *  guess the base. */
-export function rotatedDrainBase(detection: SlotDetection): number {
-  if (detection.bank === 'a') return 0x14060000;
-  if (detection.bank === 'b') return 0x14050000;
+ *  bank the start entered: the A/B bank it does NOT name — bank A serves from
+ *  slot B, bank B from slot A. The measured donor case is the blank record
+ *  (bank A) serving from 0x14060000. A start that entered RECOVERY was never
+ *  measured on this walk and refuses rather than guess the base. */
+export function rotatedDrainBase(entered: BankKey): number {
+  if (entered === 'a') return 0x14060000;
+  if (entered === 'b') return 0x14050000;
   throw new SeekError(
     'pipeline/refused',
-    `the active slot is recovery (${hexUp(detection.bankAddress, 8)}) and the 0.7.0.7 mode-2 ` +
-      'walk was never measured against a recovery-named record — the rotation base of the ' +
+    `the start enters recovery R (${hexUp(0x14070000, 8)}) and the 0.7.0.7 mode-2 ` +
+      'walk was never measured against a recovery start — the rotation base of the ' +
       'widened window is unknown, so the drain refuses rather than deliver a wrongly-folded ' +
       'part (doc 36.10 item 3)',
   );
@@ -1034,17 +1031,18 @@ export interface PipelineRecord {
 export interface PipelineArtifacts {
   /** P1's windows, keyed by address (the restore source). */
   readonly backupByAddress: ReadonlyMap<number, Uint8Array>;
-  /** The active-bank capture from P1 (ciphertext, as served) — the original bank. */
-  readonly bankCapture: Uint8Array;
-  /** The factory plaintext the BACKUP step derived from that capture — the
-   *  image the patch was built from. There is no other input: the run
-   *  self-sources. */
-  readonly plain: Uint8Array;
-  /** The slot verdict P2 and P4 acted on. */
-  readonly detection: SlotDetection;
+  /** The boot facts the backup read: the word, each bank's check, the next start. */
+  readonly boot: PreserveBootFacts;
+  /** The banks the run wrote and put back. */
+  readonly targets: readonly BankKey[];
+  /** Each written bank's capture from P1 (as served) — its original content. */
+  readonly captures: ReadonlyMap<BankKey, Uint8Array>;
+  /** Each written bank's factory plaintext, DERIVED by the backup step from its
+   *  capture — the image its patch was built from. There is no other input. */
+  readonly plains: ReadonlyMap<BankKey, Uint8Array>;
   /** P3's raw dump == the post-write part. */
   readonly rawDump: Uint8Array;
-  /** P3's dump with the active bank replaced from the backup — the delivered image. */
+  /** P3's dump with every written bank replaced from the backup — the delivered image. */
   readonly processedDump: Uint8Array;
   /** P4's verify pass. */
   readonly verify: { diffBytes: number; windowsRead: number; badWindows: readonly number[] };
@@ -1053,6 +1051,8 @@ export interface PipelineArtifacts {
 
 export interface PipelineOptions {
   readonly opener: SessionOpener;
+  /** Which banks the run writes. Default: the bank the next start enters. */
+  readonly banks?: PreserveBankChoice;
   /** The bank's expected as-booted image prefix (plain XOR keystream) when the
    *  slot key is known — the emulator's donor case. When absent, the run
    *  relies on the double-read agreement and the derived-image gates. */
@@ -1087,6 +1087,7 @@ export async function runPreservationPipeline(
 ): Promise<PipelineArtifacts> {
   const { opener, reporter, signal } = options;
   const { state: initialState } = await createPreserveRun({
+    ...(options.banks === undefined ? {} : { banks: options.banks }),
     ...(options.expectedSlotPrefix === undefined
       ? {}
       : { expectedSlotPrefix: options.expectedSlotPrefix }),
@@ -1124,33 +1125,43 @@ export async function runPreservationPipeline(
   };
 
   const afterBackup = await runStep('backup');
-  const detection = afterBackup.detection;
-  if (detection === undefined) throw new Error('the backup step recorded no slot detection');
+  const boot = afterBackup.boot;
+  if (boot === undefined) throw new Error('the backup step recorded no boot facts');
+  const targets = afterBackup.targets;
+  if (targets === undefined) {
+    throw new Error(
+      `the backup step resolved no banks to write: ${afterBackup.steps.backup?.notes ?? ''}`,
+    );
+  }
   const backupImage = store.get(PRESERVE_BACKUP_FILE);
   if (backupImage === undefined) throw new Error('the backup step produced no backup image');
   const backup = backupResultFromImage(backupImage);
-  const bankCapture = store.get(PRESERVE_BANK_CAPTURE_FILE);
-  if (bankCapture === undefined) throw new Error('the backup step produced no bank capture');
-  const plain = store.get(PRESERVE_PLAIN_NAME);
-  if (plain === undefined) {
-    throw new Error('the backup step derived no factory plaintext from the capture');
+  const captures = new Map<BankKey, Uint8Array>();
+  const plains = new Map<BankKey, Uint8Array>();
+  for (const key of targets) {
+    const capture = store.get(preserveCaptureFile(key));
+    const plain = store.get(preservePlainFile(key));
+    if (capture === undefined || plain === undefined) {
+      throw new Error(`the backup step produced no capture or plaintext for bank ${key}`);
+    }
+    captures.set(key, capture);
+    plains.set(key, plain);
   }
   record(
     'P1',
     '31-window backup complete',
     true,
-    `${String(backup.windows.length)} windows, ${String(backup.bytes)} B`,
+    `${String(backup.windows.length)} windows, ${String(backup.bytes)} B; next start ` +
+      `${boot.nextStart ?? 'not known'}; banks to write ${targets.join(', ')}`,
   );
 
   await runStep('patch');
   const afterCommit = await runStep('commit');
   record(
     'P2',
-    'in-place patch committed into the active slot',
+    'in-place patch committed into the chosen banks',
     true,
-    afterCommit.steps.commit?.notes ??
-      `bank ${hexUp(detection.bankAddress, 8)} (mode ${String(detection.bankMode)})` +
-        '; no bootcfg write, no other-slot write (the raw path writes no record)',
+    afterCommit.steps.commit?.notes ?? `banks ${targets.join(', ')}; no boot-config write`,
   );
 
   /* P3: the drain step sends the wire-89 reset on its own first session and
@@ -1167,7 +1178,7 @@ export async function runPreservationPipeline(
     'P3',
     'full 4 MiB drained through the widened window',
     true,
-    `raw sha256 ${afterDrain.rawDumpSha256 ?? 'unknown'}; delivered (bank swapped back) ` +
+    `raw sha256 ${afterDrain.rawDumpSha256 ?? 'unknown'}; delivered (banks swapped back) ` +
       `sha256 ${afterDrain.deliveredSha256 ?? 'unknown'}`,
   );
 
@@ -1191,9 +1202,10 @@ export async function runPreservationPipeline(
 
   return {
     backupByAddress: backup.byAddress,
-    bankCapture,
-    plain,
-    detection,
+    boot,
+    targets,
+    captures,
+    plains,
     rawDump,
     processedDump,
     verify,

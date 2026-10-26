@@ -46,6 +46,8 @@ import {
   type StagedFormId,
 } from '../../src/preservation/patch.js';
 import { describeStepGate, type PreserveRunState } from '../../src/preservation/steps.js';
+import type { BankKey } from '../../src/preservation/windows.js';
+import { bankRecordOf, handRunState } from './run-state-fixtures.js';
 import { emulatorDir } from '../emulator/harness.js';
 import { BOARD_PATCH, boardPatched, cp1030Plain } from './fixtures-2016.js';
 import facts from '../firmware/facts.json' with { type: 'json' };
@@ -466,53 +468,33 @@ function bytesEqual(a: Uint8Array, b: Uint8Array): boolean {
  * the gates: capability table and commit route
  * ==================================================================== */
 
-function handState(fields: {
-  buildFamily: PreserveFamilyId;
-  buildId?: string;
-  stagedForm?: StagedFormId;
-  restoreForm?: RestoreFormId;
-  route?: CommitRouteId;
-  routeNote?: string | null;
-  capability?: DrainCapability;
-  detection: NonNullable<PreserveRunState['detection']>;
-}): PreserveRunState {
-  return {
-    version: 2,
-    imageSource: 'device',
-    slotReadShas: ['aa', 'aa'],
-    runId: 'families',
-    imageSha256: 'ab',
-    expectedVersion: '1.3.0.8',
-    createdAt: '2026-10-01T00:00:00Z',
-    nextStep: 'commit',
-    steps: {
-      backup: { status: 'done', notes: 'backup done' },
-      patch: { status: 'done', notes: 'patch done' },
-      /* The ordering gates sit in front of the capability/route checks; a
-       * state past the commit is the one that reaches them. */
-      commit: { status: 'done', notes: 'commit done' },
-    },
-    patch: {
-      sites: [],
-      rebalanceWord: 0x3000,
-      stagedLength: 0x4000,
-      chunkCount: 256,
-      patchedSha256: 'ab',
-      diffCount: 10,
-    },
-    ...fields,
+/** A hand-built state past the commit, writing `targets`, with the build facts `fields` names. */
+function handState(
+  fields: {
+    buildFamily: PreserveFamilyId;
+    buildId?: string;
+    stagedForm?: StagedFormId;
+    restoreForm?: RestoreFormId;
+    route?: CommitRouteId;
+    routeNote?: string | null;
+    capability?: DrainCapability;
+  },
+  targets: readonly BankKey[] = ['a'],
+): PreserveRunState {
+  const banks = {
+    a: bankRecordOf('a'),
+    b: bankRecordOf('b'),
+    r: bankRecordOf('r'),
   };
+  return handRunState({
+    runId: 'families',
+    expectedVersion: '1.3.0.8',
+    nextStep: 'commit',
+    targets,
+    banks,
+    ...fields,
+  });
 }
-
-const DETECTED_A: NonNullable<PreserveRunState['detection']> = {
-  cfgHex: '00000000',
-  cfg0: 0,
-  blank: true,
-  bank: 'a',
-  bankAddress: 0x14050000,
-  bankMode: 7,
-  verdict: 'blank -> bank A',
-};
 
 const neverLoader = (): Promise<Uint8Array | null> => Promise.resolve(null);
 
@@ -528,7 +510,6 @@ describe('the capability table and the commit route, in the gates', () => {
       buildFamily: 'compact-2016',
       buildId: 'compact-pro-1.0.3.2-9hz',
       capability: { wholePart: false, losslessReadUnit: 128, maxPerArmReach: 0x13c00, note },
-      detection: DETECTED_A,
     });
     const refusal = await describeStepGate('drain', state, neverLoader);
     expect(refusal).toMatch(/no whole-part single-arm drain exists on this build/);
@@ -541,50 +522,40 @@ describe('the capability table and the commit route, in the gates', () => {
     }
   });
 
-  it('a recovery-only route refuses A/B, and stays silent when recovery is detected', async () => {
-    const onBankA = handState({
-      buildFamily: 'v1-2014-ff',
+  it('a recovery-only route refuses writing A or B, and stays silent when the run writes R', async () => {
+    const ff = {
+      buildFamily: 'v1-2014-ff' as const,
       buildId: 'compact-1.3.0.8-ff',
-      route: 'recovery-only',
+      route: 'recovery-only' as const,
       routeNote: 'the 2014 bootloader rejects the 0xFFFF sum at slots A/B',
-      detection: DETECTED_A,
-    });
+    };
+    const onBankA = handState(ff, ['a']);
     /* The commit gate's own "already done" check sits in front of the route
      * check, so the commit case runs on the pre-commit state. */
     const pendingCommit: PreserveRunState = JSON.parse(JSON.stringify(onBankA)) as PreserveRunState;
     delete pendingCommit.steps.commit;
-    expect(await describeStepGate('commit', pendingCommit, neverLoader)).toMatch(
-      /RECOVERY slot only \(mode 9\)/,
-    );
-    expect(await describeStepGate('commit', pendingCommit, neverLoader)).toMatch(/named bank a/);
-    for (const step of ['drain', 'restore'] as const) {
-      const refusal = await describeStepGate(step, onBankA, neverLoader);
-      expect(refusal).toMatch(/RECOVERY slot only \(mode 9\)/);
-      expect(refusal).toMatch(/named bank a/);
+    for (const [step, state] of [
+      ['commit', pendingCommit],
+      ['drain', onBankA],
+      ['restore', onBankA],
+    ] as const) {
+      const refusal = await describeStepGate(step, state, neverLoader);
+      expect(refusal).toMatch(/boots from recovery R only/);
+      expect(refusal).toMatch(/would write slot A, where the bootloader never runs it/);
     }
-    /* The same run against a cfg that selects recovery: no route refusal (any
-     * remaining refusal is an ordinary prerequisite one). */
-    const onRecovery: PreserveRunState = {
-      ...onBankA,
-      detection: {
-        ...DETECTED_A,
-        blank: false,
-        cfg0: 2,
-        bank: 'r',
-        bankAddress: 0x14070000,
-        bankMode: 9,
-      },
-    };
+    /* The same run writing recovery R: no route refusal (any remaining
+     * refusal is an ordinary prerequisite one). */
+    const onRecovery = handState(ff, ['r']);
     const recoveryPending: PreserveRunState = JSON.parse(
       JSON.stringify(onRecovery),
     ) as PreserveRunState;
     delete recoveryPending.steps.commit;
     expect((await describeStepGate('commit', recoveryPending, neverLoader)) ?? '').not.toMatch(
-      /RECOVERY slot only/,
+      /recovery R only/,
     );
     for (const step of ['drain', 'restore'] as const) {
       const refusal = await describeStepGate(step, onRecovery, neverLoader);
-      expect(refusal ?? '').not.toMatch(/RECOVERY slot only/);
+      expect(refusal ?? '').not.toMatch(/recovery R only/);
     }
   });
 
@@ -601,19 +572,14 @@ describe('the capability table and the commit route, in the gates', () => {
       expect(accept1).toBe(0xb7ab9d17);
       expect(accept1).not.toBe(0xffff);
     }
-    const state = handState({
-      buildFamily: 'v1-2014-ff',
-      buildId: 'compact-1.3.0.8-ff',
-      restoreForm: 'none',
-      detection: {
-        ...DETECTED_A,
-        blank: false,
-        cfg0: 2,
-        bank: 'r',
-        bankAddress: 0x14070000,
-        bankMode: 9,
+    const state = handState(
+      {
+        buildFamily: 'v1-2014-ff',
+        buildId: 'compact-1.3.0.8-ff',
+        restoreForm: 'none',
       },
-    });
+      ['r'],
+    );
     const refusal = await describeStepGate('restore', state, neverLoader);
     expect(refusal).toMatch(/the restore step refuses on compact-1\.3\.0\.8-ff/);
     expect(refusal).toMatch(/0xB7AB9D17/);
@@ -624,18 +590,17 @@ describe('the capability table and the commit route, in the gates', () => {
       buildFamily: 'compact-2016',
       buildId: 'compact-pro-1.0.3.0',
       stagedForm: 'xor-ks0',
-      detection: DETECTED_A,
     });
     const refusal = await describeStepGate('restore', cipher, neverLoader);
-    expect(refusal).toMatch(/staged form \(xor-ks0\)[\s\S]*factory plaintext/);
+    expect(refusal).toMatch(/preserve_bank_a_plain\.bin/);
 
     const plainOnly = handState({
       buildFamily: 'v1-2014',
       stagedForm: 'plain',
-      detection: DETECTED_A,
     });
     const plainRefusal = await describeStepGate('restore', plainOnly, neverLoader);
-    expect(plainRefusal ?? '').not.toMatch(/factory plaintext/);
+    expect(plainRefusal).toMatch(/restore needs preserve_bank_a_capture\.bin \(/);
+    expect(plainRefusal ?? '').not.toMatch(/plain\.bin/);
   });
 });
 
