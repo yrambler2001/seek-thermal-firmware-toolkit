@@ -22,7 +22,7 @@ import {
   UNVERIFIED_STAGING_REASON,
 } from '../slots/capability-family.js';
 import type { StagingForm } from '../slots/types.js';
-import { slotWriteRefusals } from '../slots/write-keys.js';
+import { deriveWriteKeys, slotWriteRefusals } from '../slots/write-keys.js';
 import { storeKeyDescription } from './device-info.js';
 import type { CheckKey, DeviceState } from './types.js';
 
@@ -148,12 +148,21 @@ const STAGED_CLAUSE: Readonly<Record<StagingForm, string>> = {
   'key-a-ciphertext': 'staged under keys derived from the booted bank and the running application',
 };
 
+/** The staging clause on a 1.3.0.8 FF camera with no bank stored plain (write-keys.ts `FF_VENDOR_STAGED`). */
+const FF_VENDOR_CLAUSE =
+  'staged as the vendor app stages the 16 Hz FF image (the image XOR its own key block 0), stored by the ' +
+  'camera under Key B';
+
 export function bankWritingOf(state: DeviceState): BankWriting {
   const verdict = classifyBuild(state.profile, state.version);
   const staging = stagingFor(verdict.family);
   const refusals = slotWriteRefusals(state);
   if (verdict.refusal !== null || staging === null) {
     return { staged: null, refusals: [verdict.refusal ?? UNVERIFIED_STAGING_REASON, ...refusals] };
+  }
+  /* The 1.3.0.8 FF build with no bank stored plain stages the FF image in the vendor's form. */
+  if (deriveWriteKeys(state).form === 'ff-vendor') {
+    return { staged: FF_VENDOR_CLAUSE, refusals };
   }
   return { staged: STAGED_CLAUSE[staging], refusals };
 }

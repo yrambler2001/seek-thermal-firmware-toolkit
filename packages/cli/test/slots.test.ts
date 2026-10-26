@@ -15,6 +15,8 @@ import {
   APPLICATION_KEY_PAIRS,
   buildSlotPlan,
   equalBytes,
+  FF_VENDOR_STAGED,
+  FF_VENDOR_STORED,
   fpsBootWarningOf,
   getProfile,
   hexToBytes,
@@ -1757,6 +1759,29 @@ describe('the 2014 plaintext chain', () => {
     expect(text).toContain('every bank is stored plain, so none holds a key');
     expect(text).not.toContain('derived from the booted bank');
     expect(listResult(bench).writeKeys).toMatchObject({ refused: null, form: 'plain' });
+  });
+
+  /* The 1.3.0.8 FF build on a camera with no bank stored plain (TESTING.md 42.89): the list said its write
+   * keys were "refused" (the Key A derivation, which this build does not use) while the writer offers the FF
+   * image in the vendor's form. The list, the JSON and the page now say that form, in core's words. */
+  it('the 1.3.0.8 FF build with no bank stored plain: the write keys are the vendor form, not "refused"', () => {
+    const ff = onLockedPlain(reportOf({ booted: null }));
+    expect(ff.state.plainChain).toBe(false);
+    const text = writeKeyLines(ff, false).join('\n');
+    expect(text).not.toMatch(/^\s+refused\s/m);
+    expect(text).not.toContain('refused');
+    expect(text).toMatch(
+      /staged as\s+the 1\.3\.0\.8 FF \(16 Hz\) image as the vendor app stages it/,
+    );
+    expect(text).toContain(FF_VENDOR_STAGED);
+    expect(text).toMatch(/stored as\s+Key B: the camera re-keys the upload with key block 1/);
+    expect(text).toContain(FF_VENDOR_STORED);
+    expect(text).toContain('UNTESTED');
+    expect(listResult(ff).writeKeys).toMatchObject({
+      refused: null,
+      form: 'ff-vendor',
+      key: 'Key B',
+    });
   });
 
   it('the list shows a plain bank as stored plain, not under a key nobody knows', () => {

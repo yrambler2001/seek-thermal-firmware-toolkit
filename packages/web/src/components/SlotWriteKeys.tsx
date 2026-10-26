@@ -2,11 +2,12 @@
  * The keys the slot writes use, said before anything is picked, in the form
  * the line uses (core's `WriteKeyForm`): the 2014 plaintext chain's image as it
  * is; the 2016 Compact PRO's image under its own key block 0, which the camera
- * stores under the key its bootloader checks; or the key the booted bank holds,
- * from which every bank's keys are derived. And the measured reason when the
- * camera cannot be written. The verdict is core's (`deriveWriteKeys`,
+ * stores under the key its bootloader checks; the 1.3.0.8 FF image in the
+ * vendor's form, which the camera stores under Key B; or the key the booted
+ * bank holds, from which every bank's keys are derived. And the measured reason
+ * when the camera cannot be written. The verdict is core's (`deriveWriteKeys`,
  * `slotWriteRefusal`); this component only shows it. The CLI's `slots list`
- * prints the same verdict (`writeKeyLines`).
+ * prints the same verdict, row for row (`writeKeyLines`).
  * ==================================================================== */
 
 import type { ReactElement } from 'react';
@@ -14,8 +15,9 @@ import { KeyRound } from 'lucide-react';
 import {
   derivedKeyLine,
   deriveWriteKeys,
+  FF_VENDOR_STAGED,
+  FF_VENDOR_STORED,
   STAGED_UNDER_IMAGE_BLOCK_0,
-  stagesUnderCameraKey,
   storedUnderCheckKey,
   writeBannerOf,
   type SlotsReport,
@@ -32,14 +34,15 @@ export interface WriteKeysVerdict {
   /**
    * How the keys are chosen: 'plain' on the 2014 plaintext chain (no key is derived; not a refusal),
    * 'image-block-0' on the 2016 Compact PRO (the image's own key block 0; the camera stores under the key its
-   * bootloader checks), 'derived' on the modern line.
+   * bootloader checks), 'ff-vendor' on a 1.3.0.8 FF camera with no bank stored plain (the vendor's form, stored
+   * under Key B), 'derived' on the modern line.
    */
   readonly form: WriteKeyForm;
   /**
-   * Whether this build's writes are sent under the camera's own key (the modern Key A line). False on the 2016
-   * keystream line and the 1.3.0.8 FF build, which stage each image under the key pair it carries.
+   * Why the derivation names no key, when it does not ('derived' only): the row the CLI prints as "refused".
+   * Not the banner (`refusal`), which is camera-wide.
    */
-  readonly underCameraKey: boolean;
+  readonly keysRefusal: string | null;
   /** The booted bank's name, as the page shows it ("slot A"), or null when none is named. */
   readonly bootedName: string | null;
   /**
@@ -67,7 +70,7 @@ export function writeKeysVerdictOf(report: SlotsReport): WriteKeysVerdict {
     /* The banner's text is core's (writeBannerOf): the same words the CLI's JSON carries. */
     refusal: writeBannerOf(report.state),
     form: keys.form,
-    underCameraKey: stagesUnderCameraKey(report.state),
+    keysRefusal: keys.refusal,
     bootedName: booted,
     keyName: keys.atRest?.name ?? null,
     bootedKeyName: keys.bootedKeyName,
@@ -137,22 +140,37 @@ export function SlotWriteKeys({ verdict }: SlotWriteKeysProps): ReactElement {
       </Panel>
     );
   }
-  if (!verdict.underCameraKey) {
-    /* The 1.3.0.8 FF build with no bank stored plain: the camera's key is not used, so the derivation's
-     * evidence (which describes the booted bank's key) is not shown: it would describe a write this build
-     * does not make. */
+  if (verdict.form === 'ff-vendor') {
+    /* The 1.3.0.8 FF build with no bank stored plain: the FF image in the vendor's form, stored by the camera
+     * under Key B (core's rows, the CLI's `staged as` and `stored as`; TESTING.md 42.89). */
     return (
       <Panel className="mt-3">
         <PanelTitle icon={<KeyRound />}>Keys for the writes</PanelTitle>
         <KeyValue
           rows={[
-            ['Chain', 'this build stages each image under the key pair the image carries'],
-            [
-              'Written as',
-              'the image under its own key pair, found in the image, to any bank; the camera’s keys are not used',
-            ],
+            ['Staged as', FF_VENDOR_STAGED],
+            ['Stored as', FF_VENDOR_STORED],
           ]}
         />
+        {verdict.evidence.length > 0 && (
+          <Prose>
+            <ul>
+              {verdict.evidence.map((line) => (
+                <li key={line}>{line}</li>
+              ))}
+            </ul>
+          </Prose>
+        )}
+      </Panel>
+    );
+  }
+  if (verdict.keyName === null && verdict.keysRefusal !== null) {
+    /* The derivation names no key, but nothing refuses the camera as a whole (the banner is not shown): the
+     * row says why, as the CLI's "refused" row does. */
+    return (
+      <Panel className="mt-3">
+        <PanelTitle icon={<KeyRound />}>Keys for the writes</PanelTitle>
+        <KeyValue rows={[['Refused', verdict.keysRefusal]]} />
       </Panel>
     );
   }

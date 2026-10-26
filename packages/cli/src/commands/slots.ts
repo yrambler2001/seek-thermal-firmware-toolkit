@@ -42,6 +42,8 @@ import {
   derivedKeyLine,
   deriveWriteKeys,
   dumpSlot,
+  FF_VENDOR_STAGED,
+  FF_VENDOR_STORED,
   flashSlot,
   fpsBootWarningOf,
   fpsPlanOfBank,
@@ -501,9 +503,9 @@ export function emptyBankNote(report: SlotsReport, view: SlotView): string {
 /**
  * The keys every bank is written under (write-keys.ts), in the form the line uses: the 2014 plaintext
  * chain's image as it is; the 2016 Compact PRO's image under its own key block 0, which the camera stores
- * under the key its bootloader checks; or the modern line's keys derived from the booted bank and the
- * running application. A refusal names the measurement that failed. The page's `SlotWriteKeys` shows the
- * same verdict.
+ * under the key its bootloader checks; the 1.3.0.8 FF image in the vendor's form, stored under Key B; or the
+ * modern line's keys derived from the booted bank and the running application. A refusal names the
+ * measurement that failed. The page's `SlotWriteKeys` shows the same verdict.
  */
 export function writeKeyLines(report: SlotsReport, color: boolean): string[] {
   const refusal = slotWriteRefusal(report.state);
@@ -524,6 +526,17 @@ export function writeKeyLines(report: SlotsReport, color: boolean): string[] {
       table([
         ['  staged as', STAGED_UNDER_IMAGE_BLOCK_0],
         ['  stored as', storedUnderCheckKey(keys)],
+      ]),
+    );
+    for (const line of keys.evidence) lines.push(`  · ${line}`);
+    return lines;
+  }
+  /* The 1.3.0.8 FF build with no bank stored plain: the vendor's form, not a refusal (TESTING.md 42.89). */
+  if (refusal === null && keys.form === 'ff-vendor') {
+    lines.push(
+      table([
+        ['  staged as', FF_VENDOR_STAGED],
+        ['  stored as', FF_VENDOR_STORED],
       ]),
     );
     for (const line of keys.evidence) lines.push(`  · ${line}`);
@@ -720,7 +733,8 @@ export function listResult(report: SlotsReport): CommandResult {
       key: keys.atRest?.name ?? null,
       /* How the keys are chosen (core's `WriteKeyForm`): 'plain' on the 2014 plaintext chain (no key),
        * 'image-block-0' on the 2016 Compact PRO (the image's own key block 0; `key` is the key the camera
-       * stores under), 'derived' on the modern line. */
+       * stores under), 'ff-vendor' on a 1.3.0.8 FF camera with no bank stored plain (`key` Key B),
+       * 'derived' on the modern line. */
       form: keys.form,
     },
     product: report.state.description.productName,

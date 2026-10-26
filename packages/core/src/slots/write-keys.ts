@@ -55,7 +55,10 @@
  * as it is. The 2016 Compact PRO stages each image under its own key block 0, found in the image by value
  * (write-image.ts `buildSlotKeystreamPayload`), and its application re-keys the upload into the key its
  * bootloader checks a bank under (device-info.ts `checkKeyOf`), so no key of this camera builds the upload.
- * Each has its own `form` below, and neither reads the booted bank's key or the application pair.
+ * Each has its own `form` below, and neither reads the booted bank's key or the application pair. Nor does
+ * the 1.3.0.8 FF (16 Hz) build on a camera with no bank stored plain: its image is staged in the vendor's
+ * form, the image XOR its own key block 0, and the camera stores it under Key B (`ffVendorKeys`; the form is
+ * ff-form.ts's).
  * ==================================================================== */
 
 import { bytesToHex, equalBytes, findAll, hexToBytes, hexUp } from '../bytes.js';
@@ -65,8 +68,9 @@ import { bankWordsOf } from '../profiles/locked-boot.js';
 import type { CipherProfile, SlotKey } from '../profiles/types.js';
 import type { DerivedKey } from './types.js';
 import type { DeviceState } from '../workflows/types.js';
+import { KEY_PAIRS } from '../preservation/patch.js';
 import { APPLICATION_KEY_PAIRS } from './application-pairs.js';
-import { classifyBuild, stagingFor } from './capability-family.js';
+import { classifyBuild, FF_1308_VERSION, stagingFor } from './capability-family.js';
 
 /** A named key and its 16 bytes. */
 export interface KeyRef {
@@ -102,6 +106,13 @@ export type WriteKeyForm =
    * refusal here: the write does not need it. `application`, `store` and `masks` are null or empty.
    */
   | 'image-block-0'
+  /**
+   * The 1.3.0.8 FF (16 Hz) build on a camera with no bank stored plain (TESTING.md 42.12, 42.89): an upload is
+   * the FF image as the vendor app stages it, the image XOR its own key block 0 (Key A), and the camera stores
+   * the image under Key B. `atRest` is Key B; `application`, `store` and `masks` are null or empty. Not a
+   * refusal: the write is offered with its UNTESTED warning (write.ts `ffStagingWords`).
+   */
+  | 'ff-vendor'
   /**
    * The modern Key A line: the keys are derived from the booted bank and the running application (the
    * header). A null `atRest` is a refusal, and `refusal` says why.
@@ -242,6 +253,40 @@ export function cameraWriteRefusal(state: DeviceState): string | null {
   return `this camera cannot be written from here: ${state.bankWriteRefusals.join('; ')}`;
 }
 
+/** How a 1.3.0.8 FF upload is staged, as the page's "Staged as" row and the CLI's `staged as` row say it. */
+export const FF_VENDOR_STAGED =
+  'the 1.3.0.8 FF (16 Hz) image as the vendor app stages it: the image XOR its own key block 0 (Key A), ' +
+  "header window verbatim, to any bank; this camera's keys are not used";
+
+/** What a 1.3.0.8 FF bank is stored as after a write, as the page's "Stored as" row and the CLI's say it. */
+export const FF_VENDOR_STORED =
+  'Key B: the camera re-keys the upload with key block 1 and stores the image under it';
+
+/**
+ * The keys of a 1.3.0.8 FF write on a camera with no bank stored plain: the FF image in the vendor's form,
+ * stored under Key B (ff-form.ts). Nothing is derived from the camera, and nothing is refused here: the
+ * writer decides on the image and the running build (write.ts `ffRunningGate`).
+ */
+function ffVendorKeys(state: DeviceState): WriteKeys {
+  return {
+    refusal: null,
+    form: 'ff-vendor',
+    booted: state.boot?.booted ?? null,
+    bootedKeyName: null,
+    atRest: { name: 'Key B', key: hexToBytes(KEY_PAIRS.ff1308.block1) },
+    application: null,
+    store: null,
+    masks: [],
+    evidence: [
+      'the 1.3.0.8 FF (16 Hz) build: no bank this read opened is stored plain, so the camera is not shown ' +
+        'to be on the 2014 plaintext chain; the FF image is written in its vendor form, raw bytes are sent ' +
+        'as given, and a plain 8 Hz image is not written',
+      'a write of the FF image is offered with its UNTESTED warning: no genuine bootloader for this build ' +
+        'is in the corpus, so whether the written bank boots is not measured (TESTING.md 42.12)',
+    ],
+  };
+}
+
 /** How a 2016 upload is staged, as the page's "Staged as" row and the CLI's `staged as` row say it. */
 export const STAGED_UNDER_IMAGE_BLOCK_0 =
   "the image under its own key block 0 (found in the image by value), to any bank; this camera's keys are not used";
@@ -340,10 +385,15 @@ export function deriveWriteKeys(state: DeviceState): WriteKeys {
   /* The 2016 Compact PRO: the image's own key block 0 stages it and the camera re-keys it; the booted bank's
    * key is not read for an upload, and the camera's key table (refused on this line) is not needed. Keyed on
    * the build's staging form, so a 2016 camera read under legacy-auth is not sent down the derivation either. */
-  if (
-    stagingFor(classifyBuild(state.profile, state.version).family) === 'slot-keystream-ciphertext'
-  ) {
+  const family = classifyBuild(state.profile, state.version).family;
+  if (stagingFor(family) === 'slot-keystream-ciphertext') {
     return imageBlockZeroKeys(state);
+  }
+
+  /* The 1.3.0.8 FF build with no bank stored plain: the FF image stages from its own key pair, so the
+   * derivation (the Key A line's) does not apply to it (TESTING.md 42.89). */
+  if (family === 'locked-plain' && state.version === FF_1308_VERSION) {
+    return ffVendorKeys(state);
   }
 
   const boot = state.boot;

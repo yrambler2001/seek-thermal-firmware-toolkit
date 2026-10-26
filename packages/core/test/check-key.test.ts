@@ -291,6 +291,15 @@ describe('the report rows off the 2016 line', () => {
     expect(bootedReportOf(state, nameOf)).toBe('App image bank a');
     /* the slot writer stages a 1.0.3.x image under its own key block 0 whichever profile read it */
     expect(bankWritingOf(state).staged).toBe("staged under its image's own key block 0");
+    /* a 1.3.0.8 camera with no bank stored plain writes the FF image in the vendor's form */
+    expect(bankWritingOf({ ...state, version: '1.3.0.8' }).staged).toBe(
+      'staged as the vendor app stages the 16 Hz FF image (the image XOR its own key block 0), stored by ' +
+        'the camera under Key B',
+    );
+    /* and on the plain chain, plain */
+    expect(bankWritingOf({ ...state, version: '1.3.0.8', plainChain: true }).staged).toBe(
+      'staged plain (the image as it is, with no key)',
+    );
     expect(unknownBootabilityWhy(state)).toBe(
       "the bootloader's key table was not read, so the keys it tries cannot be named",
     );

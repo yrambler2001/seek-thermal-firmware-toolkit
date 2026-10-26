@@ -6,11 +6,12 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { equalBytes, hexToBytes } from '../../src/bytes.js';
+import { bytesToHex, equalBytes, hexToBytes } from '../../src/bytes.js';
 import { cryptBytes } from '../../src/crypto/cipher.js';
 import { keyFilenameSuffix, stateFromKey, type PickedKeyTable } from '../../src/crypto/keys.js';
 import { buildBankPayload, setAcceptSum } from '../../src/image/bank.js';
 import { IMAGE_MAGIC, LENGTH_OFFSET, parseImageHeader } from '../../src/image/header.js';
+import { KEY_PAIRS } from '../../src/preservation/patch.js';
 import { getProfile } from '../../src/profiles/registry.js';
 import type { SlotKey } from '../../src/profiles/types.js';
 import type { DeviceState, SlotState } from '../../src/workflows/types.js';
@@ -26,6 +27,8 @@ import {
   cancelPairs,
   checksUploadUnderOwnKeys,
   deriveWriteKeys,
+  FF_VENDOR_STAGED,
+  FF_VENDOR_STORED,
   slotWriteRefusal,
   slotWriteRefusals,
   STAGED_UNDER_IMAGE_BLOCK_0,
@@ -739,5 +742,46 @@ describe('the placeholder name is not a key on a keyed camera either', () => {
     const refusal = refusalOf(camera({ bootedBootable: true, bootedKey: 'unknown key' }));
     expect(refusal).toMatch(/decrypts under no key the bootloader tries/);
     expect(refusal).not.toMatch(/unknown key/);
+  });
+});
+
+/* ==================================================================== *
+ * The 1.3.0.8 FF (16 Hz) build on a camera with no bank stored plain (TESTING.md 42.12, 42.89). The FF image
+ * is staged as the vendor app stages it (the image XOR its own key block 0) and stored by the camera under
+ * Key B; the writer offers it with its UNTESTED warning. The list said its write keys were "refused" (the
+ * Key A line's derivation, which this build does not use); the page said the image was staged "under the key
+ * pair the image carries". Both now say the vendor form, in core's words.
+ * ==================================================================== */
+
+describe('the 1.3.0.8 FF build with no bank stored plain: the vendor form, not a refusal', () => {
+  const ff = (): DeviceState =>
+    plainChainCamera({ version: '1.3.0.8', plainChain: false, boot: null });
+
+  it('names the vendor form and Key B, derives nothing from the camera, and refuses nothing', () => {
+    const keys = deriveWriteKeys(ff());
+    expect(keys.form).toBe('ff-vendor');
+    expect(keys.refusal).toBeNull();
+    expect(keys.atRest?.name).toBe('Key B');
+    expect(bytesToHex(keys.atRest?.key ?? new Uint8Array())).toBe(KEY_PAIRS.ff1308.block1);
+    expect(keys.application).toBeNull();
+    expect(keys.masks).toEqual([]);
+    expect(keys.evidence.join(' ')).toContain('no bank this read opened is stored plain');
+    expect(keys.evidence.join(' ')).toContain('UNTESTED');
+    expect(slotWriteRefusal(ff())).toBeNull();
+    expect(writeBannerOf(ff())).toBeNull();
+  });
+
+  it('says how the upload is staged and what the bank is stored under, in the words the page and the CLI show', () => {
+    expect(FF_VENDOR_STAGED).toBe(
+      'the 1.3.0.8 FF (16 Hz) image as the vendor app stages it: the image XOR its own key block 0 (Key A), ' +
+        "header window verbatim, to any bank; this camera's keys are not used",
+    );
+    expect(FF_VENDOR_STORED).toBe(
+      'Key B: the camera re-keys the upload with key block 1 and stores the image under it',
+    );
+  });
+
+  it('keeps a 1.3.0.8 camera whose banks are stored plain on the plain chain', () => {
+    expect(deriveWriteKeys(plainChainCamera({ version: '1.3.0.8' })).form).toBe('plain');
   });
 });

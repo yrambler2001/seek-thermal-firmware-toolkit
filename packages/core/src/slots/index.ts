@@ -50,6 +50,8 @@ export {
   derivedKeyLine,
   deriveWriteKeys,
   cameraWriteRefusal,
+  FF_VENDOR_STAGED,
+  FF_VENDOR_STORED,
   slotWriteRefusal,
   slotWriteRefusals,
   STAGED_UNDER_IMAGE_BLOCK_0,

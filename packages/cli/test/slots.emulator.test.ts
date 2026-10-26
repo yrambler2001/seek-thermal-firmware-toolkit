@@ -667,7 +667,7 @@ describe.skipIf(!available)(
         return bank;
       }
 
-      it('slots list --json: 1.3.0.8 on legacy-auth, three banks, and the FF image is said to be untested on the bench', () => {
+      it('slots list --json: 1.3.0.8 on legacy-auth, three banks, the FF image said to be untested, the write keys the vendor form', () => {
         const list = seq.current.list;
         expect(list?.code, list?.stderr ?? seq.current.setup ?? '').toBe(EXIT_OK);
         expect(list?.json).toMatchObject({
@@ -680,6 +680,13 @@ describe.skipIf(!available)(
         });
         const notes = (list?.json?.notes as string[] | undefined) ?? [];
         expect(notes.join('\n')).toMatch(/UNTESTED/);
+        /* No bank of this camera is stored plain: the write keys are the FF vendor form, not "refused"
+         * (TESTING.md 42.89). */
+        expect(list?.json?.writeKeys).toMatchObject({
+          refused: null,
+          form: 'ff-vendor',
+          key: 'Key B',
+        });
         const slots = (list?.json?.slots as Json[] | undefined) ?? [];
         expect(slots.map((slot) => slot.bank)).toEqual(['a', 'b', 'r']);
         for (const slot of slots) expect(slot.staging, String(slot.bank)).toBe('plain');

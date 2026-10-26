@@ -6,6 +6,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
+import { FF_VENDOR_STAGED, FF_VENDOR_STORED } from '@seek-fw/core';
 import { SlotWriteKeys, writeKeysVerdictOf, type WriteKeysVerdict } from './SlotWriteKeys';
 import { render } from '../test-helpers';
 import { fakeDeviceState } from '../test-fixtures';
@@ -16,7 +17,7 @@ const STORE: WriteKeysVerdict = {
   refusal: null,
   form: 'derived',
   storedAs: null,
-  underCameraKey: true,
+  keysRefusal: null,
   bootedName: 'slot A',
   keyName: 'Key B',
   bootedKeyName: 'Key A',
@@ -31,7 +32,7 @@ const SAME: WriteKeysVerdict = {
   refusal: null,
   form: 'derived',
   storedAs: null,
-  underCameraKey: true,
+  keysRefusal: null,
   bootedName: 'slot A',
   keyName: 'Key A',
   bootedKeyName: 'Key A',
@@ -43,7 +44,7 @@ const REFUSED: WriteKeysVerdict = {
     'the running application (bank A, firmware 4.16.1.7) checks an upload under its own keys before it programs it',
   form: 'derived',
   storedAs: null,
-  underCameraKey: true,
+  keysRefusal: null,
   bootedName: 'slot A',
   keyName: null,
   bootedKeyName: 'Key A',
@@ -55,7 +56,7 @@ const PLAIN: WriteKeysVerdict = {
   refusal: null,
   form: 'plain',
   storedAs: null,
-  underCameraKey: false,
+  keysRefusal: null,
   bootedName: 'slot A',
   keyName: null,
   bootedKeyName: null,
@@ -105,6 +106,38 @@ describe('SlotWriteKeys', () => {
     expect(text).not.toContain('No bank of this camera can be written');
     expect(text).not.toContain('derived from the booted');
     expect(text).not.toContain('unknown key');
+    unmount();
+  });
+
+  it('shows the 1.3.0.8 FF vendor form in core’s words, with no refusal (TESTING.md 42.89)', () => {
+    const ff: WriteKeysVerdict = {
+      ...PLAIN,
+      form: 'ff-vendor',
+      keyName: 'Key B',
+      evidence: ['a write of the FF image is offered with its UNTESTED warning'],
+    };
+    const { container, unmount } = render(<SlotWriteKeys verdict={ff} />);
+    const text = container.textContent;
+    expect(text).toContain('Staged as');
+    expect(text).toContain(FF_VENDOR_STAGED);
+    expect(text).toContain('Stored as');
+    expect(text).toContain(FF_VENDOR_STORED);
+    expect(text).toContain('UNTESTED');
+    expect(text).not.toContain('No bank of this camera can be written');
+    expect(text).not.toContain('the key pair the image carries');
+    unmount();
+  });
+
+  it('shows the derivation’s reason as a row when it names no key and nothing refuses the camera', () => {
+    const { container, unmount } = render(
+      <SlotWriteKeys
+        verdict={{ ...STORE, keyName: null, keysRefusal: 'the booted bank could not be named' }}
+      />,
+    );
+    const text = container.textContent;
+    expect(text).toContain('Refused');
+    expect(text).toContain('the booted bank could not be named');
+    expect(text).not.toContain('No bank of this camera can be written');
     unmount();
   });
 
