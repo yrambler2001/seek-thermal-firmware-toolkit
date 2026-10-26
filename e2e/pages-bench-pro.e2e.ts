@@ -48,6 +48,10 @@
  * the booted bank's row and once in R's (not in R's note and under each flash button); the staging form in
  * words in the write log, not its code name; the boot note naming no front end; a write plan saying the
  * acknowledgement once.
+ * And 42.88's: a write plan's "Read before writing" lists its warnings and only this write's own notes, not
+ * the camera's notes shown above it (no "Note: Staged: …" there); the key recovery's verdict in words in the
+ * read-back and dump lines ("key verified by the acceptance sum 0x00000000", never "VERIFIED(profile)"); the
+ * frame-rate dialog naming no row by its record or link code names.
  * ==================================================================== */
 
 import { createHash } from 'node:crypto';
@@ -197,7 +201,15 @@ const CODE_NAMES = [
   'KEY_PAIRS',
   'capabilities.flash',
   'slot-keystream-ciphertext',
+  /* The key recovery's verdict and the frame-rate row's code names (TESTING.md 42.88). */
+  'VERIFIED(',
+  'confidence ',
+  'self-loop',
+  'r2016',
 ];
+/** The key recovery's verdict in the read-back and dump lines, in words (core's `keyCheckText`; 42.88). */
+const KEY_VERIFIED = 'key verified by the acceptance sum 0x00000000';
+const READ_BACK_VERIFIED = `under the keystream recovered from the read-back (${KEY_VERIFIED})`;
 /** The camera's staging note, said once on the page, not on each bank row (TESTING.md 42.87). */
 const STAGING_NOTE =
   /Staged: the image, XORed with the xorshift128 keystream of its OWN key block 0/g;
@@ -208,6 +220,8 @@ const BOOT_NOTE =
 const STAGED_WORDS = "staged under the image's own key";
 /** The extra confirmation a row says a write asks for: once in A's row and R's, never in B's. */
 const ASKS = /extra confirmation|acknowledge/gi;
+/** The same, for one line. */
+const ASKS_ONE = /extra confirmation|acknowledge/i;
 
 /** One write of one bank: the stage chunks of a whole bank (64 B each) plus slack, and one commit. */
 const STAGE_BUDGET = Math.ceil(BANK_BYTES / 64) + 64;
@@ -274,6 +288,17 @@ function bankLine(text: string, letter: BankLetter): string | null {
 function count(text: string, pattern: RegExp): number {
   return [...text.matchAll(new RegExp(pattern.source, `${pattern.flags.replace('g', '')}g`))]
     .length;
+}
+
+/** The prepared-write panel's "Read before writing" items (innerText): its lines up to the panel's next part. */
+function readBeforeWriting(planText: string): string[] {
+  const lines = linesOf(planText);
+  const at = lines.indexOf('Read before writing:');
+  if (at < 0) return [];
+  const end = lines.findIndex(
+    (line, index) => index > at && line.startsWith('Nothing has been sent'),
+  );
+  return lines.slice(at + 1, end < 0 ? undefined : end);
 }
 
 /* ---------------------------------------------------------------------------------- */
@@ -464,6 +489,17 @@ describe.skipIf(!RUNNABLE)(
       if (saved.decrypted !== null) {
         keepBytes(`dump-${tag}-${letter}-decrypted.bin`, saved.decrypted.bytes);
       }
+      /* TESTING.md 42.88: the dump's note says the key recovery's verdict in words. */
+      const log = await wizard.text('#slotsrun-log');
+      writeFileSync(path.join(OUT, `dump-${tag}-${letter}-log.txt`), log);
+      const recovered = linesOf(log).filter((line) =>
+        line.includes('key recovered from this bank'),
+      );
+      say(`dump ${letter.toUpperCase()} (${tag}) note: ${recovered.join(' | ') || '(none)'}`);
+      expect(recovered.join('\n'), 'the dump note: the verdict in words').toContain(
+        `(${KEY_VERIFIED}`,
+      );
+      for (const codeName of CODE_NAMES) expect(log, codeName).not.toContain(codeName);
       return saved.raw.bytes;
     }
 
@@ -625,13 +661,22 @@ describe.skipIf(!RUNNABLE)(
           await keep(`undo-${undo.letter}-plan`, plan?.text ?? '(no prepared plan)');
           expect(picked, 'the page takes the saved decrypted file').toMatch(/^Ready — /);
           /* TESTING.md 42.87: the plan says what the file is and how it is staged, each once, and the
-           * acknowledgement once. */
+           * acknowledgement once. 42.88: "Read before writing" lists the warnings and only this write's
+           * own notes; the camera's notes (the staging note among them) stay above the device panel. */
           const planText = plan?.text ?? '';
           expect(valueUnder(planText, 'Read as'), 'Read as').toBe('a decrypted image');
-          expect(count(planText, STAGING_NOTE), 'the staging note, once in the plan').toBe(1);
+          expect(count(planText, STAGING_NOTE), 'the staging note, not again in the plan').toBe(0);
+          expect(count(planText, /^Note: /gm), 'no camera or bank note in the plan').toBe(0);
           expect(count(planText, ASKS), 'the acknowledgement, once in the plan').toBe(
             undo.letter === 'b' ? 0 : 1,
           );
+          const readFirst = readBeforeWriting(planText);
+          say(`read before writing (undo ${L}): ${JSON.stringify(readFirst)}`);
+          expect(readFirst, 'Read before writing: the acknowledgement alone').toEqual(
+            undo.letter === 'b' ? [] : [expect.stringMatching(ASKS_ONE)],
+          );
+          const sectionNow = await wizard.text(SLOTS_SECTION);
+          expect(count(sectionNow, STAGING_NOTE), 'the staging note, once in the section').toBe(1);
           await openWriteConfirm(wizard, page, name);
           const dialog = await page.$eval(CONFIRM_DIALOG, (el) => (el as HTMLElement).innerText);
           await keep(`undo-${undo.letter}-dialog`, dialog);
@@ -673,6 +718,9 @@ describe.skipIf(!RUNNABLE)(
         expect(log, 'the commit line in words').toMatch(
           new RegExp(`to ${name} at 0x[0-9A-F]+, ${STAGED_WORDS}; commit status 0x0`),
         );
+        expect(log, 'the read-back line: the verdict in words (42.88)').toContain(
+          READ_BACK_VERIFIED,
+        );
         for (const codeName of CODE_NAMES) expect(log, codeName).not.toContain(codeName);
         expect(count(log, /unplug and replug/i), 'the replug line, once in the log').toBe(1);
         expect(count(section, /NOW UNPLUG AND REPLUG THE CAMERA\./), 'the prompt, once').toBe(1);
@@ -710,6 +758,8 @@ describe.skipIf(!RUNNABLE)(
           expect(dialog, 'the 2014 chain’s word sentence is not said on 2016').not.toContain(
             'active-slot word names',
           );
+          /* TESTING.md 42.88: no row named by its record or link code names. */
+          for (const codeName of CODE_NAMES) expect(dialog, codeName).not.toContain(codeName);
           /* The dialog's warning is for the bank it patches (fpsBootWarningOf with the target): a bank
            * other than A while A holds no patch. */
           const warned = letter !== 'a' && !patched.has('a');
@@ -809,7 +859,11 @@ describe.skipIf(!RUNNABLE)(
         expect(log, 'the write line in words').toContain(
           `from the decrypted image, ${STAGED_WORDS} — checksum`,
         );
+        expect(log, 'the read-back line: the verdict in words (42.88)').toContain(
+          READ_BACK_VERIFIED,
+        );
         for (const codeName of CODE_NAMES) expect(log, codeName).not.toContain(codeName);
+        for (const codeName of CODE_NAMES) expect(section, codeName).not.toContain(codeName);
         expect(replugLog, 'the replug line, once in the log').toBe(1);
         expect(count(section, /NOW UNPLUG AND REPLUG THE CAMERA\./), 'the prompt, once').toBe(1);
         expect(log, 'the log keeps the record, not the capitalised prompt').not.toContain(
