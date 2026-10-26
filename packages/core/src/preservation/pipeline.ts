@@ -66,6 +66,7 @@ import { CancelledError, errorMessage, SeekError } from '../errors.js';
 import type { Reporter } from '../events.js';
 import type { SeekDevice } from '../protocol/client.js';
 import { u16Payload } from '../protocol/client.js';
+import { commitStatusMeaning } from '../protocol/commit-status.js';
 import { OP, EP0_BUF, USB_COMMIT_TIMEOUT_MS } from '../protocol/ops.js';
 import { FLASH_BASE, FLASH_SIZE } from '../profiles/modern-4x.js';
 import {
@@ -653,9 +654,11 @@ export async function commitToBank(
     status === 0 ? 'ok' : 'error',
   );
   if (status !== 0) {
+    /* Decoded as the slot writer decodes it (protocol/commit-status.ts): a 0x0004000N is the erase stage,
+     * nothing programmed, and only the program and verify stages (or no status) may leave a partial image. */
     throw new Error(
       `${label}: CompleteMemoryUpgrade returned ` +
-        `${status === null ? 'no status' : hexUp(status)} — flash may be partially written`,
+        `${status === null ? 'no status' : hexUp(status)} (${commitStatusMeaning(status, `bank ${bank.toUpperCase()}`)})`,
     );
   }
   return { chunks, sum16: checksum, status, ms };

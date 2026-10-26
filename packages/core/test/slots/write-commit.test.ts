@@ -10,6 +10,10 @@
  *
  * Driven over a recording device with no camera. The emulator's refusals on the
  * 2016 chimera are in write.emulator.test.ts.
+ *
+ * The decoder is protocol/commit-status.ts, which the preservation pipeline's
+ * `commitToBank` decodes with too (TESTING.md 42.84: a 0x00040005 said "flash may
+ * be partially written" there and "the erase stage" here); its last block pins that.
  * ==================================================================== */
 
 import { describe, expect, it } from 'vitest';
@@ -21,10 +25,11 @@ import type { WindowEntry } from '../../src/profiles/types.js';
 import type { SeekDevice } from '../../src/protocol/client.js';
 import type { WorkflowContext } from '../../src/workflows/types.js';
 import type { SlotEntry } from '../../src/slots/types.js';
-import { flashInvalidatesAnalysis } from '../../src/slots/write-commit.js';
+import { commitToBank } from '../../src/preservation/pipeline.js';
+import { classifyCommitStatus, commitStatusMeaning } from '../../src/protocol/commit-status.js';
 import {
-  classifyCommitStatus,
   commitRefusal,
+  flashInvalidatesAnalysis,
   stageAndCommit,
 } from '../../src/slots/write-commit.js';
 
@@ -217,5 +222,53 @@ describe('commitRefusal', () => {
     for (const status of [0x00070000, 0x00040005, 0x00040100, null]) {
       expect(commitRefusal('slot B', status).message).toContain('slot B');
     }
+  });
+});
+
+describe('the preservation commit decodes a status as the slot writer does (protocol/commit-status.ts)', () => {
+  /** Runs `commitToBank` against the recording device; resolves to the message it throws. */
+  async function preservationCommit(afterCommit: number | null): Promise<string> {
+    const { device } = deviceAnswering(afterCommit);
+    const live = Object.assign(device, { assertNotCancelled: () => undefined });
+    try {
+      await commitToBank(live, 'a', PAYLOAD, { label: 'step 04', reporter: silentReporter });
+    } catch (error) {
+      return error instanceof Error ? error.message : String(error);
+    }
+    return '(no error)';
+  }
+
+  it('says an erase-stage failure programmed nothing and may have partly erased the bank, not "partially written"', async () => {
+    for (const status of ERASE_STAGE) {
+      const message = await preservationCommit(status);
+      expect(message, `0x${status.toString(16)}`).toContain(
+        'the erase stage failed: nothing was programmed, but the erase may have started, so bank A ' +
+          'may be partly erased',
+      );
+      expect(message).not.toContain('partially written');
+    }
+  });
+
+  it('says the bank is unchanged for a status returned before programming, and may be partial otherwise', async () => {
+    expect(await preservationCommit(0x00070000)).toContain(
+      'refused before programming; bank A is unchanged',
+    );
+    expect(await preservationCommit(0x00040100)).toContain(
+      'the program stage failed — bank A may be partially written',
+    );
+    expect(await preservationCommit(null)).toContain(
+      'the status could not be read, so bank A may be partially written',
+    );
+  });
+
+  it('is one decoder: the same clause for every class, whoever names the bank', () => {
+    expect(commitStatusMeaning(0x00040005, 'slot B')).toBe(
+      'the erase stage failed: nothing was programmed, but the erase may have started, so slot B may ' +
+        'be partly erased',
+    );
+    expect(commitStatusMeaning(0x00050000, 'slot B')).toBe(
+      "the image did not decrypt under the camera's keys, or the data type is refused: refused " +
+        'before programming; slot B is unchanged',
+    );
   });
 });
