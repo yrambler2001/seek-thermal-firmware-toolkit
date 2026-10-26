@@ -2646,4 +2646,34 @@ describe('the banks a run writes — the next start, one bank, every bank', () =
       );
     },
   );
+
+  it(
+    'a camera that answered the active-slot word at the backup and does not after the restart is not ready: the drain arms nothing on that attempt',
+    { timeout: 180_000 },
+    async () => {
+      const fwInfo = cp1030FwInfo(0);
+      const camera = cp1030Camera(cp1030Flash(), fwInfo);
+      const store = memoryStore();
+      let state = (await createPreserveRun({ runId: 'not-ready' })).state;
+      for (const id of ['backup', 'patch', 'commit'] as const) {
+        state = await step(id, camera, state, store);
+      }
+      expect(state.boot?.activeSlotWord).toBe(0);
+      /* After the restart the selector does not answer, on every attempt. */
+      fwInfo.delete(10);
+      const armsBefore = camera.arms.length;
+      const error: unknown = await runPreserveStep(
+        'drain',
+        fakeOpener(camera),
+        state,
+        store.load,
+        silentReporter,
+      ).catch((e: unknown) => e);
+      expect((error as Error).name).toBe('PostResetWedgeError');
+      expect((error as Error).message).toMatch(
+        /did not answer the active-slot word after the restart \(it did at the backup\)/,
+      );
+      expect(camera.arms.slice(armsBefore)).toEqual([]);
+    },
+  );
 });

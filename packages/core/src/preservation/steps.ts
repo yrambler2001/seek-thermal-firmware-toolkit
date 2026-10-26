@@ -2136,6 +2136,8 @@ async function runDrainStep(
   });
 
   const attempts = state.postResetAttempts ?? 2;
+  /* Whether this camera answers the active-slot word at all: the backup asked. */
+  const slotWordAnswered = bankOfActiveSlotWord(state.boot?.activeSlotWord ?? null) !== null;
   let rawDump: Uint8Array | null = null;
   let drainEntered: BankKey | null = null;
   let lastError = 'not attempted';
@@ -2150,11 +2152,20 @@ async function runDrainStep(
        * start that entered a bank this run did not patch runs a stock image,
        * whose mode 2 serves one 64 KiB window and stalls (the 2014 chain),
        * refuses the arm (the 2016 guard), or faults the camera (0.8.0.0 and
-       * 0.7.0.8, TESTING.md 42.92 §1) — so the step stops here. A word that
-       * cannot be read says nothing either way, and the drain goes on as it
-       * always has. */
+       * 0.7.0.8, TESTING.md 42.92 §1) — so the step stops here. On a camera
+       * that did not answer the word at the backup either, it says nothing
+       * either way, and the drain goes on as it always has. */
       const slotWord = await readActiveSlotWord(device);
       const entered = bankOfActiveSlotWord(slotWord);
+      if (entered === null && slotWordAnswered) {
+        /* The camera answered the word at the backup, so a missing answer now
+         * is a camera still starting: this attempt ends, and the next one
+         * asks again before anything is armed. */
+        throw new Error(
+          'the camera did not answer the active-slot word after the restart (it did at the ' +
+            'backup), so it is not ready yet',
+        );
+      }
       if (entered === null) {
         reporter.log(
           'the bank the camera entered after the restart could not be read (the active-slot ' +
