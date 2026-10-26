@@ -993,7 +993,7 @@ describe('preserve — --bank: the bank the next start enters, one bank, every b
   );
 
   it(
-    '--bank r while the next start enters A: the plan warns, the drain stops before it reads, and --from-step restore puts R back',
+    '--bank r while the next start enters A: the plan warns, the drain stops before it reads, and a plain --resume puts R back',
     { timeout: 180_000 },
     async () => {
       const plain = syntheticPlain();
@@ -1009,19 +1009,28 @@ describe('preserve — --bank: the bank the next start enters, one bank, every b
       expect(first.stderr.text).toMatch(
         /the camera reports it entered slot A \(active-slot word 0\), which this run did not patch \(it patched recovery R\)/,
       );
-      expect(first.stdout.text).toMatch(/--resume .* --from-step restore/);
+      /* The planned stop in words, and a plain resume: core records the restore as next
+       * (TESTING.md 42.98; it used to say --from-step restore, which then warned of a jump). */
+      expect(first.stdout.text).toMatch(/drain stopped: after the restart the camera reports/);
+      expect(first.stdout.text).toMatch(
+        /Stopped before the whole-flash read: .* Continue with: seek-fw preserve --resume \S+/,
+      );
+      expect(first.stdout.text).not.toMatch(/--from-step|Fix the cause/);
       const torn = await loadState();
       expect(torn.steps.commit?.status).toBe('done');
       expect(torn.steps.drain?.status).toBe('failed');
+      expect(torn.nextStep).toBe('restore');
+      expect(torn.drainEntered).toBe('a');
 
       const restored = testIo({ backend: backendOf(camera) });
-      expect(
-        await run(
-          ['preserve', '--resume', runDir(), '--from-step', 'restore', '--yes'],
-          restored.io,
-          signal(),
-        ),
-      ).toBe(EXIT_OK);
+      expect(await run(['preserve', '--resume', runDir(), '--yes'], restored.io, signal())).toBe(
+        EXIT_OK,
+      );
+      expect(restored.stdout.text + restored.stderr.text).not.toMatch(/WARNING: jumping/);
+      expect(restored.stdout.text).toContain(
+        'Done — the camera is back as it was; there is no complete image. The whole-flash read ' +
+          'did not run',
+      );
       expect((await loadState()).verify?.diffBytes).toBe(0);
       expect(await sha256hex(camera.flash)).toBe(await sha256hex(asBooted));
     },
@@ -1157,6 +1166,11 @@ describe('preserve — a bank that holds an unknown image is refused in plain wo
       );
       expect(code).toBe(EXIT_FAILED);
       expect(test.stderr.text).toContain(unknownImageRefusal('a', EXPECTED_VERSION));
+      /* A refusal, not a failure to fix and resume: the words say to start a new run (TESTING.md 42.98). */
+      expect(test.stdout.text).toMatch(
+        /backup refused: Slot A holds an unknown image .* nothing was written to the camera\./,
+      );
+      expect(test.stdout.text).not.toMatch(/Fix the cause and resume/);
       expect(await sha256hex(camera.flash)).toBe(await sha256hex(asBooted));
     },
   );

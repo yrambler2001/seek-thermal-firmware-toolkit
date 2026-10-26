@@ -48,6 +48,8 @@ import {
   type BankKey,
   type PreserveBankRecord,
   type PreserveChoiceVerdict,
+  bankChoiceWritesWords,
+  preserveDoneWords,
 } from '@seek-fw/core';
 import { Panel, PanelTitle } from '@/components/Panel';
 import { Prose } from '@/components/Prose';
@@ -392,6 +394,8 @@ function notReadyLine(
 ): string | null {
   if (gate.ok || gate.jumpable || gate.needsPowerCycle) return null;
   if (state === null) return 'Available after step 02 — it starts the run.';
+  /* The run is over: nothing is waiting, so there is nothing to explain (TESTING.md 42.98). */
+  if (state.nextStep === 'done') return null;
   const previous = PRESERVE_PHASES[index - 1];
   if (previous?.steps.some((step) => state.steps[step]?.status !== 'done')) {
     return `Available after step ${stepNumber(index - 1)} (${previous.label}).`;
@@ -831,7 +835,7 @@ function BankChoice({ state, busy, chooseBanks }: BankChoiceProps): ReactElement
       <p className="text-[0.85rem]" data-testid="preserve-banks-to-write">
         {targets === undefined
           ? `No bank is chosen yet: ${chosen.what}. Choose a bank by name above.`
-          : `Step 03 writes ${bankListWords(targets)}: ${chosen.what}.`}
+          : `Step 03 writes ${bankChoiceWritesWords(chosen)}.`}
       </p>
       {fixed && (
         <p className="text-[0.8rem] text-muted-foreground">
@@ -1084,11 +1088,12 @@ function PhaseConfirm({ request, state, onConfirm, onCancel }: PhaseConfirmProps
             <>
               <span className="block">
                 {writing
-                  ? `This writes a small patch into ${banks}${inOrder} — the bank the camera ` +
-                    'tries first goes last. Step 04 puts the originals back. The dump that ' +
-                    'follows only reads.'
-                  : `This writes your original firmware back into ${banks}${inOrder} — the bank ` +
-                    'the camera tries first goes first.'}
+                  ? `This writes a small patch into ${banks}${inOrder}` +
+                    (order.length > 1 ? ' — the bank the camera tries first goes last' : '') +
+                    '. Step 04 puts the originals back. The dump that follows only reads.'
+                  : `This writes your original firmware back into ${banks}${inOrder}` +
+                    (order.length > 1 ? ' — the bank the camera tries first goes first' : '') +
+                    '.'}
               </span>
               {warnings.map((warning) => (
                 <span key={warning} className="block font-medium text-warn">
@@ -1152,13 +1157,14 @@ function deliveredVerdict(check: DeliveredCheck | null): ReactNode {
 }
 
 function VerifySummary({ state, check, busy, onSave }: VerifySummaryProps): ReactElement {
+  const done = preserveDoneWords(state);
   return (
     <Section
       id="preserve-done"
       tone="ok"
-      title="Done — your firmware is preserved"
+      title={done.title}
       icon={<CircleCheck />}
-      description="The complete image is the camera's whole original flash, and the camera itself is back exactly as it was."
+      description={done.detail}
     >
       <Panel>
         <PanelTitle icon={<CircleCheck />}>The proof</PanelTitle>

@@ -76,6 +76,7 @@ export {
   PRESERVE_BANK_CHOICES,
   WARM_BOOT_MARKS,
   bankChoiceWords,
+  bankChoiceWritesWords,
   bankHoldsOf,
   bankListWords,
   bankRecordWords,
@@ -157,6 +158,9 @@ export {
   preservePatchedFile,
   preservePlainFile,
   recordStepFailure,
+  PRESERVE_UNPATCHED_START_STOP,
+  preserveDoneWords,
+  unpatchedStartOf,
   runPreserveStep,
   spentReaderSignature,
 } from './steps.js';

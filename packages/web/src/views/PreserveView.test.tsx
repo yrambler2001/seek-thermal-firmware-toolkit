@@ -323,9 +323,7 @@ describe('PreserveView', () => {
     );
     expect(row.textContent).toContain('0x14070000');
     expect(row.textContent).toContain('not written — it is erased');
-    expect(row.textContent).toContain(
-      'Step 03 writes slot A: slot A, the bank the next start enters',
-    );
+    expect(row.textContent).toContain('Step 03 writes slot A, the bank the next start enters');
     /* An erased bank is not offered, with the reason. */
     expect(row.textContent).toContain(
       'Slot B: not offered — slot B cannot be written: it is erased',

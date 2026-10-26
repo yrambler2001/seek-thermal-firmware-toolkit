@@ -55,6 +55,9 @@ import {
   type PreserveBankChoice,
   type SessionOpener,
   type WebUsbTransport,
+  PRESERVE_UNPATCHED_START_STOP,
+  SeekError,
+  unpatchedStartOf,
 } from '@seek-fw/core';
 import { errorMessage } from '@seek-fw/core';
 import { reportInUseElsewhere } from '../lib/camera-lock';
@@ -801,7 +804,18 @@ export function usePreservePanel(params: PreservePanelParams): PreservePanelApi 
             rep.log(`ERROR: ${errorMessage(error)}`, 'error');
             logHint(rep.log, error);
             if (isPowerCycleRefusal(error)) setPrompt({ phase, kind: 'power-cycle' });
-            rep.setStatus('Failed — see the log above.');
+            /* The drain's planned stop (the start entered a bank the run did not patch) is
+             * not a failure: core's words say what happened and that the restore comes next. */
+            /* A backup that refuses the camera wrote nothing, and its words say what to do. */
+            rep.setStatus(
+              unpatchedStartOf(error) !== null
+                ? PRESERVE_UNPATCHED_START_STOP
+                : stepInFlight === 'backup' &&
+                    error instanceof SeekError &&
+                    error.code === 'pipeline/refused'
+                  ? 'Refused — nothing was written. See the log above.'
+                  : 'Failed — see the log above.',
+            );
             /* A failed STEP is a fact about the run: record it so a resume
              * sees it, and refresh the file. A CANCELLED step is not
              * recorded — the previous checkpoint stands (core's rule). The

@@ -78,6 +78,9 @@ import {
   type PreserveRunState,
   type PreserveStepId,
   type SessionOpener,
+  PRESERVE_UNPATCHED_START_STOP,
+  preserveDoneWords,
+  unpatchedStartOf,
 } from '@seek-fw/core';
 import type { CommandContext, CommandResult } from '../cli.js';
 import { CliError } from '../errors.js';
@@ -746,18 +749,29 @@ async function runSteps(
           'warn',
         );
       }
-      ctx.reporter.log(
-        `${step} failed: ${error instanceof Error ? error.message : String(error)} — ` +
-          `recorded in ${runDir}/${PRESERVE_RUN_STATE_FILE}; ` +
-          'the previous checkpoint stands. Fix the cause and resume.',
-        'error',
-      );
       /* THE START THAT ENTERED AN UNPATCHED BANK: another drain would read the
-       * same bank, so the way on is the restore. */
-      if (step === 'drain' && error instanceof SeekError && error.detail?.entered !== undefined) {
+       * same bank, so core records the run's next step as the restore, and a plain
+       * resume goes on there (no jump past a step, no warning). */
+      const stopped = step === 'drain' && unpatchedStartOf(error) !== null;
+      /* A backup that refuses the camera (an unknown image, another build) wrote nothing, and its
+       * words say what to do; "fix the cause and resume" contradicted "start a new run". */
+      const refused =
+        step === 'backup' && error instanceof SeekError && error.code === 'pipeline/refused';
+      ctx.reporter.log(
+        stopped
+          ? `${step} stopped: ${error instanceof Error ? error.message : String(error)} — ` +
+              `recorded in ${runDir}/${PRESERVE_RUN_STATE_FILE}`
+          : refused
+            ? `${step} refused: ${error.message} — recorded in ${runDir}/` +
+              `${PRESERVE_RUN_STATE_FILE}; nothing was written to the camera.`
+            : `${step} failed: ${error instanceof Error ? error.message : String(error)} — ` +
+              `recorded in ${runDir}/${PRESERVE_RUN_STATE_FILE}; ` +
+              'the previous checkpoint stands. Fix the cause and resume.',
+        stopped ? 'warn' : 'error',
+      );
+      if (stopped) {
         ctx.reporter.log(
-          'the restore puts every written bank back without the dump: ' +
-            `seek-fw preserve --resume ${runDir} --from-step restore`,
+          `${PRESERVE_UNPATCHED_START_STOP} Continue with: seek-fw preserve --resume ${runDir}`,
           'warn',
         );
       }
@@ -842,6 +856,10 @@ function runResult(
       ctx.out(`${id} ${mark}: ${record?.notes ?? record?.error ?? ''}`);
     }
     ctx.out(`run ${state.runId}: next step ${state.nextStep}`);
+    if (state.nextStep === 'done') {
+      const done = preserveDoneWords(state);
+      ctx.out(`${done.title}. ${done.detail}`);
+    }
     if (state.targets !== undefined) {
       ctx.out(`banks written: ${bankListWords(state.targets)} (--bank ${state.choice})`);
     }

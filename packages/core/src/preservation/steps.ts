@@ -833,8 +833,12 @@ export function recordStepFailure(
   error: unknown,
 ): PreserveRunState {
   const previous = state.steps[step];
+  /* A drain that stopped because the start entered a bank the run did not patch: another drain
+   * would enter the same bank, so the run goes on to the restore (TESTING.md 42.98). */
+  const entered = step === 'drain' ? unpatchedStartOf(error) : null;
   return {
     ...state,
+    ...(entered === null ? {} : { nextStep: 'restore' as const, drainEntered: entered }),
     steps: {
       ...state.steps,
       [step]: {
@@ -845,6 +849,49 @@ export function recordStepFailure(
         ...(step === 'backup' ? { powerCycleRequired: true } : {}),
       },
     },
+  };
+}
+
+/**
+ * The bank a drain's error says the start entered, when the drain stopped before it armed anything
+ * because the run did not patch that bank (`enteredUnpatchedRefusal`); null for any other error.
+ */
+export function unpatchedStartOf(error: unknown): BankKey | null {
+  if (!(error instanceof SeekError)) return null;
+  const entered = error.detail?.entered;
+  return entered === 'a' || entered === 'b' || entered === 'r' ? entered : null;
+}
+
+/** What a front end says of that stop, in place of a failure: the run planned for it. */
+export const PRESERVE_UNPATCHED_START_STOP =
+  'Stopped before the whole-flash read: the camera started a bank this run did not patch, so ' +
+  'nothing was read. The restore puts every written bank back.';
+
+/**
+ * The run's ending, for the last screen and the last lines: a run whose whole-flash read ran
+ * delivered the complete image; one whose drain stopped (the start entered a bank it did not
+ * patch) put the banks back and has no complete image, and says so.
+ */
+export function preserveDoneWords(state: PreserveRunState): {
+  readonly title: string;
+  readonly detail: string;
+} {
+  if (state.deliveredSha256 !== undefined) {
+    return {
+      title: 'Done — your firmware is preserved',
+      detail:
+        "The complete image is the camera's whole original flash, and the camera itself is back " +
+        'exactly as it was.',
+    };
+  }
+  const blocks = state.verify === undefined ? '' : ` ${String(state.verify.windowsRead)}`;
+  return {
+    title: 'Done — the camera is back as it was; there is no complete image',
+    detail:
+      'The whole-flash read did not run, so this run has no complete image of the flash. Every ' +
+      `written bank was put back, and a fresh read of the${blocks} blocks a normal dump reaches ` +
+      'matches the backup. For the complete image, start a new run with a choice that includes ' +
+      'the bank the next start enters.',
   };
 }
 

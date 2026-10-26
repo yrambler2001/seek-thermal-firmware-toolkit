@@ -459,6 +459,19 @@ export function preserveChoiceOf(
     : refused(`${bankWordsOf(choice)} cannot be written: ${bank.refused}`);
 }
 
+/**
+ * The banks a choice writes, and why, each bank named once: "slot A, the bank the next start enters: …",
+ * "every bank that holds an image: …", or "recovery R, the bank chosen by name" (the `what` of a choice by
+ * name is the bank alone, so "writes recovery R: recovery R" said it twice). A choice not offered gives its
+ * reason.
+ */
+export function bankChoiceWritesWords(verdict: PreserveChoiceVerdict): string {
+  if (verdict.banks === null || verdict.choice === 'next-start' || verdict.choice === 'all') {
+    return verdict.what;
+  }
+  return `${bankListWords(verdict.banks)}, the bank chosen by name`;
+}
+
 /** Every choice, in the order the page and the CLI list them. */
 export function preserveChoicesOf(facts: PreserveChoiceFacts): readonly PreserveChoiceVerdict[] {
   return PRESERVE_BANK_CHOICES.map((choice) => preserveChoiceOf(facts, choice));
