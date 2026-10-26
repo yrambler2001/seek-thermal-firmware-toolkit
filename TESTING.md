@@ -14413,7 +14413,7 @@ The run file keeps every detail [test]: the backup's notes keep the method id (`
 | e2e offline: `bench-lib`, `bench-verdict`, `supervised-gate`, `camera-bus`, `bench-paths` | 5 files, 173 passed, 6 skipped |
 | `npm run typecheck` (all seven projects, the bench rigs included) | exit 0 |
 | eslint and prettier on every changed file | clean |
-| emulator, one at a time with `SEEK_EMU_DIR=…/FW-V1/emu`: `resume.emulator`, `packages/cli/test/emulator-cli.test.ts`, `emulator.e2e` | running at the handoff (the 150-call budget): `chain.log` gets one `<suite> exit <code>` line per suite, in `/private/tmp/claude-501/-Users-yrambler2001-things-a-noindex-seek-seek-thermal-firmware-backup/82174575-1341-45d6-a306-7518156cd978/scratchpad/42101-chain.log`; the suites' logs are `42101-resume.log`, `42101-emucli.log`, `42101-e2e-emu.log` beside it |
+| emulator, one at a time with `SEEK_EMU_DIR=…/FW-V1/emu`: `resume.emulator`, `packages/cli/test/emulator-cli.test.ts`, `emulator.e2e` | all three passed after the handoff (`42101-chain.log`: each exit 0): `resume.emulator` 1 passed; `emulator-cli` 1 passed; `emulator.e2e` 2 files, 19 passed, 1 skipped |
 
 `banks.emulator` and `families.emulator` are the orchestrator's, after the merge (one pin in `families.emulator.test.ts` was moved to the new restore refusal).
 
@@ -14424,6 +14424,6 @@ The run file keeps every detail [test]: the backup's notes keep the method id (`
 - O4. Not seen on a camera: the words are pinned by unit tests and the fakes. The next bench run of Preserve (42.95 §7) shows them on the board.
 - O5. `docs/` keeps the old words until the bundle is rebuilt.
 - O6. On the 2014 chain each single session (the second read of each bank, the write session, the restore session) still logs one `…: the reader came up unreadable … — rebooting by command and retrying` warning when the reader needs its restart: one line per session, not per block, but not yet in plain words.
-- O7. Handoff: the three emulator suites above were running when the budget ran out; read `42101-chain.log`.
+- O7. Closed: the three emulator suites above finished after the handoff and passed (the orchestrator read `42101-chain.log`).
 
 **6. Commits** (branch `worktree-agent-a391f887d3740c871`, on `refactor/all-firmware-profiles` `74e747e`; not merged, not pushed): `8541565` (core, page, CLI, tests, the bench rig), and this section.
