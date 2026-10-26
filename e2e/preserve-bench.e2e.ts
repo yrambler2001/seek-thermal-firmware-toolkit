@@ -1,7 +1,8 @@
 /* ====================================================================
- * Preserve (steps 02, 03 and 04) with its bank choice on the REAL bench Compact PRO board running
- * 1.0.3.0 (the FF board, serial 090BB12PR939, bootloader 1.2.0.0), through Electron and real WebUSB
- * (TESTING.md 42.95 section 7, run in 42.98). One window, as a person uses the page: Connect, the
+ * Preserve (steps 02, 03 and 04) with its bank choice on a REAL bench camera of either chain, through
+ * Electron and real WebUSB: the Compact PRO FF board on 1.0.3.0 (TESTING.md 42.98) or the Compact on
+ * 1.3.0.0 (42.102). Nothing here names a build: the words checked are core's for any camera.
+ * One window, as a person uses the page: Connect, the
  * Preserve tab's step 02, the "Banks to patch" menu, step 03 (its dialog, the commit, the drain) and
  * step 04 (the restore and the verify). Every page text, dialog, log and run file is kept.
  *
@@ -11,13 +12,15 @@
  *   SEEK_E2E_PRESERVE_EXPECT=<what>  run (default): 02, 03 and 04 run, and the verify matches;
  *                                    stop: 03's drain stops before it arms anything (the start entered a
  *                                    bank the run did not patch), then 04 puts the written banks back;
- *                                    refuse: 02 refuses (an unknown image), and nothing is written
+ *                                    refuse: 02 refuses (slot A holds an unknown image, for example
+ *                                    a frame-rate patch), and nothing is written
  *   SEEK_E2E_PRESERVE_OUT=<dir>      where the page text, screenshots and run files are kept
  *   SEEK_E2E_SOURCE=docs|dev         the hosted bundle or the Vite dev server
  *
  * The page guard is the slots bench's (`benchGuardScript`: the Info read's selectors let out by
- * shape; the stage and commit budgets 0 except inside the phase the test opens). The J-Link reads
- * before and after are the operator's (FW-V1's runner); nothing here touches the J-Link.
+ * shape; the stage and commit budgets 0 except inside the phase the test opens). Resets are capped
+ * per phase but not tight: the 2014 chain's reader restarts before each block it reads. The J-Link
+ * reads before and after are the operator's (FW-V1's runner); nothing here touches the J-Link.
  * ==================================================================== */
 
 import { mkdirSync, writeFileSync } from 'node:fs';
@@ -40,7 +43,7 @@ import { phaseSection, type PhaseId, type PhaseRun, type UiGuard } from './lib/w
 
 const SCRATCH =
   process.env.SEEK_E2E_SCRATCH ??
-  path.join(tmpdir(), `seek-e2e-preserve-bench-pro-${String(process.pid)}`);
+  path.join(tmpdir(), `seek-e2e-preserve-bench-${String(process.pid)}`);
 const OUT = process.env.SEEK_E2E_PRESERVE_OUT ?? path.join(SCRATCH, 'out');
 const SOURCE: 'docs' | 'dev' = process.env.SEEK_E2E_SOURCE === 'dev' ? 'dev' : 'docs';
 const CHOICE = process.env.SEEK_E2E_PRESERVE_BANK ?? 'next-start';
@@ -54,6 +57,8 @@ if (!['run', 'stop', 'refuse'].includes(EXPECT)) {
 
 /** One whole 64 KiB bank in 64-byte chunks, plus slack, per bank a phase writes. */
 const STAGES_PER_BANK = Math.ceil(0x10000 / 64) + 64;
+/** Resets a phase may send: a restart before each of the 31 blocks a sweep reads, plus slack. */
+const RESETS_PER_PHASE = 40;
 
 /** Preserve's own steps and their confirmation; the Flash view, the forget button and the jumps stay refused. */
 const PRESERVE_BENCH_UI: UiGuard = {
@@ -69,7 +74,7 @@ const PRESERVE_BENCH_UI: UiGuard = {
 const gate = await approveWrite('camera', () =>
   Promise.resolve({
     describe:
-      `Preserve on the bench Compact PRO 1.0.3.0 with the choice "${CHOICE}" (expect: ${EXPECT}): ` +
+      `Preserve on the bench camera with the choice "${CHOICE}" (expect: ${EXPECT}): ` +
       'step 02 reads; step 03 commits the patch into the chosen banks and drains; step 04 puts them back.',
   }),
 );
@@ -81,12 +86,12 @@ const UNAVAILABLE = unavailable();
 const RUNNABLE = gate.approved && UNAVAILABLE === null;
 if (!RUNNABLE) {
   process.stderr.write(
-    `\n[skip] Preserve on the bench Compact PRO: ${gate.approved ? (UNAVAILABLE ?? '') : gate.reason}.\n`,
+    `\n[skip] Preserve on the bench camera: ${gate.approved ? (UNAVAILABLE ?? '') : gate.reason}.\n`,
   );
 }
 
 describe.skipIf(!RUNNABLE)(
-  `Preserve on the bench Compact PRO 1.0.3.0 (choice ${CHOICE}, expect ${EXPECT})`,
+  `Preserve on the bench camera (choice ${CHOICE}, expect ${EXPECT})`,
   () => {
     let target: TargetHandle | null = null;
     let banks = 0;
@@ -220,7 +225,11 @@ describe.skipIf(!RUNNABLE)(
       const { page, wizard } = live();
       await wizard.openPreserve();
       const before = await wire();
-      const { run, error } = await inPhase('read-build', { stages: 0, commits: 0, resets: 2 });
+      const { run, error } = await inPhase('read-build', {
+        stages: 0,
+        commits: 0,
+        resets: RESETS_PER_PHASE,
+      });
       const sent = wireSince(before, await wire());
       say(`step 02 wire: ${describeWire(sent)}`);
       await keep('02-section', await sectionText('read-build'));
@@ -232,7 +241,7 @@ describe.skipIf(!RUNNABLE)(
         say(`step 02 ended: ${error ?? 'done'}`);
         expect(error, 'step 02 refuses').not.toBeNull();
         const shown = await sectionText('read-build');
-        expect(shown).toMatch(/Slot A holds an unknown image \(not the stock 1\.0\.3\.0 firmware/);
+        expect(shown).toMatch(/Slot A holds an unknown image \(not the stock [\d.]+ firmware/);
         expect(shown).toContain('a frame-rate patch is not one');
         expect(shown).toContain(
           'To preserve this camera, write the stock image back to slot A first',
@@ -287,7 +296,7 @@ describe.skipIf(!RUNNABLE)(
       const { run, error } = await inPhase('patch-dump', {
         stages: banks * STAGES_PER_BANK,
         commits: banks,
-        resets: 6,
+        resets: RESETS_PER_PHASE,
       });
       const sent = wireSince(before, await wire());
       say(`step 03 wire: ${describeWire(sent)}`);
@@ -321,7 +330,7 @@ describe.skipIf(!RUNNABLE)(
       const { run, error } = await inPhase('restore-verify', {
         stages: banks * STAGES_PER_BANK,
         commits: banks,
-        resets: 6,
+        resets: RESETS_PER_PHASE,
       });
       const sent = wireSince(before, await wire());
       say(`step 04 wire: ${describeWire(sent)}`);
