@@ -1109,6 +1109,10 @@ function deriveFactoryImage(capture: Uint8Array, cameraVersion: string, bank: Ba
   const words = bankWordsOf(bank);
   const attempts: { plain: Uint8Array; method: string }[] = [];
   const reasons: string[] = [];
+  /* What each failure was, for a short reason on a bank that is not the
+   * anchor: the version the image says, and the first build-gate refusal. */
+  let imageVersion: string | null = null;
+  let buildGate: string | null = null;
   /* The spent-reader check comes FIRST: a capture carrying one of those
    * shapes is a reader state, not an image, and the refusal must say the one
    * thing that un-blocks the camera before any cipher talk. */
@@ -1124,34 +1128,54 @@ function deriveFactoryImage(capture: Uint8Array, cameraVersion: string, bank: Ba
     const says = parseImageHeader(attempt.plain)?.versionStr;
     if (says !== undefined && says !== cameraVersion) {
       reasons.push(`the camera reports ${cameraVersion} but the image in ${words} says ${says}`);
+      imageVersion ??= says;
       continue;
     }
     try {
       return { plain: attempt.plain, patch: buildV1Patch(attempt.plain), method: attempt.method };
     } catch (error) {
-      reasons.push(
-        `the ${attempt.method} candidate failed its build gates: ` +
-          (error instanceof Error ? error.message : String(error)),
-      );
+      const why = error instanceof Error ? error.message : String(error);
+      reasons.push(`the ${attempt.method} candidate failed its build gates: ${why}`);
+      buildGate ??= why;
     }
   }
+  const detail = { reasons, imageVersion, buildGate };
   if (spent !== null) {
-    fail(
+    throw new SeekError(
+      'pipeline/refused',
       spentReaderRefusal(
         `${spent} — no factory plaintext can be derived from these bytes. Every candidate was ` +
           `tried:\n  - ${reasons.join('\n  - ')}`,
       ),
+      { detail },
     );
   }
   /* The reads are not the problem here — they agreed, and a spent reader was
    * ruled out above. What failed is every derivation's gate set, so the first
    * line says that, and the list says which gate. */
-  fail(
+  throw new SeekError(
+    'pipeline/refused',
     `both reads of ${words} agree, but no candidate derivation of the factory ` +
       'plaintext from them passes every gate below, so this run has no image it can patch there ' +
       'and refuses rather than write over it. Every candidate was tried:\n  - ' +
       reasons.join('\n  - '),
+    { detail },
   );
+}
+
+/** A bank's derivation failure in one clause, for the plan: the firmware it
+ *  holds when that is another build's, else the build gate that refused it. */
+function derivationRefusalOf(error: unknown, cameraVersion: string): string {
+  const detail = error instanceof SeekError ? error.detail : undefined;
+  const imageVersion = detail?.imageVersion;
+  if (typeof imageVersion === 'string') {
+    return `it holds firmware ${imageVersion}, not the ${cameraVersion} the camera runs`;
+  }
+  const buildGate = detail?.buildGate;
+  if (typeof buildGate === 'string') {
+    return `its image cannot be patched: ${buildGate}`;
+  }
+  return `no image the run can patch derives from it (${error instanceof Error ? error.message : String(error)})`;
 }
 
 /** One bank's read on its own admitted boot: a full 64 KiB drain completes
@@ -1441,9 +1465,17 @@ async function captureOther(
     return { holds, bytes: row, slotReadShas: shas, derived, refused: null };
   } catch (error) {
     if (error instanceof CancelledError) throw error;
-    const why = error instanceof Error ? error.message : String(error);
-    reporter.log(`${words}: no image the run can patch (${why})`, 'detail');
-    return { holds, bytes: row, slotReadShas: shas, derived: null, refused: why };
+    reporter.log(
+      `${words}: no image the run can patch (${error instanceof Error ? error.message : String(error)})`,
+      'detail',
+    );
+    return {
+      holds,
+      bytes: row,
+      slotReadShas: shas,
+      derived: null,
+      refused: derivationRefusalOf(error, version),
+    };
   }
 }
 

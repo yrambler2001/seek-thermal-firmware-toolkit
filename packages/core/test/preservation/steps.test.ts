@@ -2543,7 +2543,7 @@ describe('the banks a run writes — the next start, one bank, every bank', () =
 
       expect(state.boot?.nextStart).toBe('b');
       expect(state.banks?.b.refused).toMatch(
-        /the camera reports 1\.3\.0\.0 but the image in slot B says 1\.2\.0\.0/,
+        /it holds firmware 1\.2\.0\.0, not the 1\.3\.0\.0 the camera runs/,
       );
       expect(state.targets).toBeUndefined();
       expect(state.steps.backup?.notes).toMatch(
