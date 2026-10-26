@@ -336,6 +336,7 @@ export {
   identityRefusal,
   isCancelled,
   keyReportRows,
+  lastStartReportOf,
   nextStartReportOf,
   planForDevice,
   predatesDumpProtocol,

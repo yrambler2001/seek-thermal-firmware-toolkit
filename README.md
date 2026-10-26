@@ -578,6 +578,10 @@ bootloader entered it without its check but still runs it under that key, so the
 the row and `--json` (`keys.checkKey.inferred`) say it is inferred (TESTING.md 42.89). On 4.x it is
 the bank the boot-config word predicts, and there the camera's own answer also sets the upgrade target,
 overriding the prediction.
+The **last start** row (`seek-fw info`, the Info tab and `seek-fw slots list`) gives the active-slot word
+itself, in the same words on every line that reports it: the 2014 chain, the 2016 Compact PRO and 4.9.x
+(4.8.x answers 0 whatever runs, so it shows none; TESTING.md 42.56, 42.89). `--json` carries the bank it
+names as `boot.reportedBooted`.
 
 The Writing section says how the camera can be written. On every line the banks are written one at a
 time on the Slots tab (`seek-fw slots flash` or `patch-fps`), each staged in its line's form (plain on

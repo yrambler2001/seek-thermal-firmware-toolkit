@@ -6,7 +6,9 @@ export {
   bootRuleKnown,
   bootWordRuleOf,
   CHECK_KEY_UNNAMED_VERDICT,
+  lastStartOf,
   reportedBootedOf,
+  reportsActiveSlotWord,
   type BootChoice,
 } from './boot-choice.js';
 export {

@@ -163,7 +163,9 @@ const OFFER_LABEL = `Make ${String(TO_HZ)} FPS`;
 /** The check key the read names: the 1.0.3.x 9 Hz pair's key block 1 (the bootloader block holds it at 0x2ACC). */
 const CHECK_KEY = 'faacb3c6f1412469bd122fb82d78160d';
 const BOOTED_A =
-  'App image bank 0x14050000 — the bank the bootloader entered at this start, as it records it (active-slot word 0)';
+  'App image bank 0x14050000 — the bank the bootloader entered at this start, as it records it';
+/** The active-slot word, the Last start row's, in the CLI's words (TESTING.md 42.89). */
+const LAST_START_A = 'the camera reports it entered slot A (active-slot word 0)';
 const NEXT_START_WHY =
   'the boot-config word is 0xFFFFFFFF, so the bootloader tries slot A first, and it holds an image the bootloader accepts';
 /** The Info tab names a bank by its read name, the slots page by its row name. */
@@ -388,6 +390,7 @@ describe.skipIf(!RUNNABLE)(
       expect(valueUnder(text, 'Bootloader'), 'bootloader').toBe('1.2.0.0 Jun 26 2016');
       expect(valueUnder(text, 'cfg[0]'), 'cfg[0]').toMatch(/^0xFFFFFFFF /);
       expect(valueUnder(text, 'Booted'), 'Booted: the bootloader’s record').toBe(BOOTED_A);
+      expect(valueUnder(text, 'Last start'), 'Last start: the active-slot word').toBe(LAST_START_A);
       expect(valueUnder(text, 'Next start'), 'Next start: slot A').toBe(NEXT_START_A);
       expect(text, 'the check key').toContain(CHECK_KEY);
       for (const letter of LETTERS) {

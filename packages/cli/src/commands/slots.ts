@@ -50,6 +50,7 @@ import {
   fpsPlanOfBank,
   hexUp,
   inspectSlots,
+  lastStartReportOf,
   patchBankFps,
   prepareSlotFlash,
   runningApplicationOf,
@@ -571,12 +572,8 @@ export function bootLines(
   if (!bootRuleKnown(report.state)) return [];
   const choice = bootChoiceOf(report.state);
   const lines: string[] = ['', heading('Boot', color)];
-  const lastStart =
-    report.state.activeSlotWord === null
-      ? 'not read'
-      : choice.reportedBooted === null
-        ? `the camera reports ${String(report.state.activeSlotWord)}, which names no bank`
-        : `the camera reports it entered ${bankWordsOf(choice.reportedBooted)} (active-slot word ${String(report.state.activeSlotWord)})`;
+  /* The same words as `seek-fw info` and the Info tab (core's `lastStartReportOf`, TESTING.md 42.89). */
+  const lastStart = lastStartReportOf(report.state) ?? 'not read';
   lines.push(
     table([
       [

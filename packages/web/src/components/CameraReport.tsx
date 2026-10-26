@@ -14,6 +14,7 @@ import {
   detectedReportOf,
   hexUp,
   keyReportRows,
+  lastStartReportOf,
   nextStartReportOf,
   runningApplicationOf,
   upgradeTargetWarning,
@@ -165,6 +166,7 @@ export function CameraReport({ state }: CameraReportProps): ReactElement {
                 : `${hexUp(state.cfg0)} — ${state.profile.boot.describeCfg0(state.cfg0)}`,
             ],
             ['Booted', bootedReportOf(state, nameOf)],
+            ['Last start', lastStartReportOf(state)],
             ['Running (1.3.0.8)', running],
             ['Next start', nextStartReportOf(state, nameOf)],
             [

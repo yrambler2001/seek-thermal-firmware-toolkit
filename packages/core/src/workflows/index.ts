@@ -90,6 +90,7 @@ export {
   detectedReportOf,
   keyReportRows,
   KEY_TABLE_REFUSED_2016,
+  lastStartReportOf,
   nextStartReportOf,
   type BankWriting,
   type ReportRow,

@@ -19,6 +19,8 @@ import {
   hex,
   hexUp,
   keyReportRows,
+  lastStartOf,
+  lastStartReportOf,
   listProfiles,
   bootableDescription,
   nextStartReportOf,
@@ -135,6 +137,9 @@ export function stateJson(state: DeviceState): Record<string, unknown> {
       cfg0Meaning: state.cfg0 === null ? null : state.profile.boot.describeCfg0(state.cfg0),
       cfgSlots: state.cfgSlots === null ? null : state.cfgSlots.map((word) => hexUp(word)),
       activeSlotWord: state.activeSlotWord === null ? null : hexUp(state.activeSlotWord),
+      /* The bank the active-slot word names, on every line core reports the word for (the 2014 chain, the
+       * 2016 line and 4.9.x); null elsewhere, as `slots list --json` has it (TESTING.md 42.89). */
+      reportedBooted: lastStartOf(state),
       booted: state.boot?.booted ?? null,
       /* The bank the next start runs, where the boot rule and the bank check are decoded (the 2014 plaintext
        * chain and the 2016 Compact PRO, TESTING.md 42.84); null on every other line. */
@@ -239,6 +244,7 @@ export function renderState(ctx: CommandContext, state: DeviceState): void {
         : `${hexUp(state.cfg0)} — ${state.profile.boot.describeCfg0(state.cfg0)}`,
     ],
     ['booted', bootedReportOf(state, nameOf(state)) ?? '(not replayed)'],
+    ...lastStartRows(state),
     ...runningRows(state),
     ...nextStartRows(state),
     [
@@ -317,6 +323,15 @@ function slotName(state: DeviceState, key: string): string {
 /** A bank by the name the profile gives it ("App image bank 0x14050000"), as the slot table names it. */
 function nameOf(state: DeviceState): (key: SlotKey) => string {
   return (key) => slotName(state, key);
+}
+
+/**
+ * The last-start row, on every line core reports the active-slot word for (core's `lastStartReportOf`: the 2014
+ * chain, the 2016 line and 4.9.x; TESTING.md 42.89).
+ */
+function lastStartRows(state: DeviceState): [string, string][] {
+  const last = lastStartReportOf(state);
+  return last === null ? [] : [['last start', last]];
 }
 
 /** The next-start row, on a line whose boot rule is decoded (core's `nextStartReportOf`). */

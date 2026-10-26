@@ -193,6 +193,18 @@ describe('seek-fw info: the upgrade target when it is the bank the camera booted
     expect(sent.has(OP.SET_FEATURED_FIRMWARE_DATA)).toBe(false);
   });
 
+  it('prints the active-slot word on 4.9.x, in the words the locked lines use, and carries it in the JSON (TESTING.md 42.89)', async () => {
+    const { io, stdout } = testIo({ backend: fixedBackend([sameBankCamera(1, 0)]) });
+    expect(await run(['info'], io, signal())).toBe(EXIT_OK);
+    expect(stdout.text).toMatch(
+      /last start\s+the camera reports it entered slot A \(active-slot word 0\)/,
+    );
+    const json = testIo({ backend: fixedBackend([sameBankCamera(1, 0)]) });
+    expect(await run(['info', '--json'], json.io, signal())).toBe(EXIT_OK);
+    const boot = (JSON.parse(json.stdout.text) as { boot: Record<string, unknown> }).boot;
+    expect(boot).toMatchObject({ activeSlotWord: '0x00000000', reportedBooted: 'a' });
+  });
+
   it('gives the replay line as a prediction, and names the target the camera confirms', async () => {
     const camera = sameBankCamera(1, 0);
     /* The run's log lines go to stdout, as `info` prints them. */
@@ -383,7 +395,10 @@ describe('seek-fw info on a 2016 Compact PRO that names the bank it entered (TES
       /detected\s+compact-2016 \(score \d\.\d\d after the read, from the evidence below\)/,
     );
     expect(text).toMatch(
-      /booted\s+App image bank 0x14050000 — the bank the bootloader entered at this start, as it records it \(active-slot word 0\)/,
+      /booted\s+App image bank 0x14050000 — the bank the bootloader entered at this start, as it records it\n/,
+    );
+    expect(text).toMatch(
+      /last start\s+the camera reports it entered slot A \(active-slot word 0\)/,
     );
     expect(text).toMatch(
       /next start\s+App image bank 0x14050000 — the boot-config word is 0xFFFFFFFF, so the bootloader tries slot A first, and it holds an image the bootloader accepts/,

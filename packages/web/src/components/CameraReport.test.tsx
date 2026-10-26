@@ -4,7 +4,13 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { detectedReportOf, keyReportRows, type DeviceState } from '@seek-fw/core';
+import {
+  detectedReportOf,
+  getProfile,
+  keyReportRows,
+  lastStartReportOf,
+  type DeviceState,
+} from '@seek-fw/core';
 import { render } from '@/test-helpers';
 import { fakeDeviceState } from '../test-fixtures';
 import { BLOCK_1_2016, deviceState2016 } from '../test-slots';
@@ -51,14 +57,50 @@ describe('CameraReport: the upgrade target warning', () => {
   });
 });
 
+describe('CameraReport: the active-slot word on 4.9.x (TESTING.md 42.89)', () => {
+  it('shows the Last start row on a 4.9.x read, as seek-fw info prints it', async () => {
+    const state = await fakeDeviceState();
+    const read: DeviceState = {
+      ...state,
+      profile: getProfile('modern-4x'),
+      version: '4.9.1.15',
+      activeSlotWord: 2,
+    };
+    const { container, unmount } = render(<CameraReport state={read} />);
+    expect(container.textContent).toContain('Last start');
+    expect(container.textContent).toContain(lastStartReportOf(read) ?? 'missing');
+    expect(lastStartReportOf(read)).toBe(
+      'the camera reports it entered recovery R (active-slot word 2)',
+    );
+    unmount();
+  });
+
+  it('shows none on 4.8.x, whose word is 0 whatever runs', async () => {
+    const state = await fakeDeviceState();
+    const read: DeviceState = {
+      ...state,
+      profile: getProfile('modern-4x'),
+      version: '4.8.2.1',
+      activeSlotWord: 0,
+    };
+    const { container, unmount } = render(<CameraReport state={read} />);
+    expect(container.textContent).not.toContain('Last start');
+    unmount();
+  });
+});
+
 describe('CameraReport on the 2016 Compact PRO (TESTING.md 42.84)', () => {
   it('says the booted bank is the bootloader’s record, and names the next start', async () => {
     const state = deviceState2016(await fakeDeviceState());
     const { container, unmount } = render(<CameraReport state={state} />);
     const text = container.textContent;
     expect(text).toContain(
-      'App image bank 0x14050000 — the bank the bootloader entered at this start, as it records it (active-slot word 0)',
+      'App image bank 0x14050000 — the bank the bootloader entered at this start, as it records it',
     );
+    /* The word is the Last start row's, in the CLI's words (TESTING.md 42.89). */
+    expect(text).toContain('Last start');
+    expect(text).toContain('the camera reports it entered slot A (active-slot word 0)');
+    expect(text).not.toContain('as it records it (active-slot word');
     expect(text).toContain('Next start');
     expect(text).toContain(
       'App image bank 0x14050000 — the boot-config word is 0xFFFFFFFF, so the bootloader tries slot A first, and it holds an image the bootloader accepts',

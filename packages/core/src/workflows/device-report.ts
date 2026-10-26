@@ -13,9 +13,9 @@
  * ==================================================================== */
 
 import { bytesToHex, hexUp } from '../bytes.js';
-import { bankWordsOf } from '../profiles/locked-boot.js';
+import { bankOfActiveSlotWord, bankWordsOf } from '../profiles/locked-boot.js';
 import type { DetectionResult, SlotKey } from '../profiles/types.js';
-import { bootChoiceOf, bootRuleKnown } from '../slots/boot-choice.js';
+import { bootChoiceOf, bootRuleKnown, reportsActiveSlotWord } from '../slots/boot-choice.js';
 import {
   classifyBuild,
   stagingFor,
@@ -46,7 +46,8 @@ export function detectedReportOf(detection: DetectionResult): string {
 /**
  * The booted row's value, or null when the read names no booted bank. On the locked line where the bank
  * comes from the active-slot word, the row says it is the bootloader's record of this start: 42.56 measured
- * the word as the bank that ran on 1.3.0.0 and 1.0.3.0, for boot words 0, 1 and 2.
+ * the word as the bank that ran on 1.3.0.0 and 1.0.3.0, for boot words 0, 1 and 2. The word itself is the
+ * last-start row's (`lastStartReportOf`), so it is said once.
  */
 export function bootedReportOf(
   state: DeviceState,
@@ -55,10 +56,26 @@ export function bootedReportOf(
   if (state.boot === null) return null;
   const name = nameOf(state.boot.booted);
   if (!bootRuleKnown(state) || state.activeSlotWord === null) return name;
-  return (
-    `${name} — the bank the bootloader entered at this start, as it records it (active-slot word ` +
-    `${String(state.activeSlotWord)})`
-  );
+  return `${name} — the bank the bootloader entered at this start, as it records it`;
+}
+
+/**
+ * The last-start row's value: the bank the camera reports it entered at this start, from the active-slot word
+ * (GetFirmwareInfo selector 10, the roots record's +8), on every line core reports that word for
+ * (slots/boot-choice.ts `reportsActiveSlotWord`: the 2014 plaintext chain, the 2016 Compact PRO and the 4.9.x
+ * Compact PRO, TESTING.md 42.56); null on the others (4.8.x, whose word is 0 whatever runs). The same words
+ * on every line, in `seek-fw info`, the Info tab and `seek-fw slots list` (TESTING.md 42.89).
+ */
+export function lastStartReportOf(
+  state: Pick<DeviceState, 'activeSlotWord' | 'profile' | 'version'>,
+): string | null {
+  if (!reportsActiveSlotWord(state.profile, state.version)) return null;
+  const word = state.activeSlotWord;
+  if (word === null) return 'not read';
+  const bank = bankOfActiveSlotWord(word);
+  return bank === null
+    ? `the camera reports ${String(word)}, which names no bank`
+    : `the camera reports it entered ${bankWordsOf(bank)} (active-slot word ${String(word)})`;
 }
 
 /**

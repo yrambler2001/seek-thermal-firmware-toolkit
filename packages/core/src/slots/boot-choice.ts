@@ -94,7 +94,7 @@ export interface BootChoice {
  * 42.50, 42.56). The 4.x line is split by the minor number of the parsed version, the same parse classifyBuild
  * makes; the profile must be modern-4x, or the build is refused and not reported.
  */
-function reportsActiveSlotWord(profile: FirmwareProfile, version: string | null): boolean {
+export function reportsActiveSlotWord(profile: FirmwareProfile, version: string | null): boolean {
   if (onPlaintextChain(profile, version)) return true;
   const verdict = classifyBuild(profile, version);
   if (verdict.family === 'locked-2016') return true;
@@ -142,6 +142,20 @@ export function bootChoiceOf(
     unnamed ? CHECK_KEY_UNNAMED_VERDICT : undefined,
   );
   return { word, runs: selection.runs, reportedBooted, why: selection.why };
+}
+
+/**
+ * The bank the camera reports it entered at its last start, from the active-slot word, on every line that
+ * reports the word (`reportsActiveSlotWord`: the 2014 chain, the 2016 line, the 4.9.x Compact PRO); null on
+ * the others, and when the word is unread or names no bank. `bootChoiceOf`'s `reportedBooted`, without the
+ * boot-config rule, so a 4.x read has it too.
+ */
+export function lastStartOf(
+  state: Pick<DeviceState, 'activeSlotWord' | 'profile' | 'version'>,
+): SlotKey | null {
+  return reportsActiveSlotWord(state.profile, state.version)
+    ? reportedBootedOf(state.activeSlotWord)
+    : null;
 }
 
 /** The boot-config word as the CLI prints it, with the rule it sets. */

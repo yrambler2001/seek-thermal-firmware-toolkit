@@ -20,6 +20,7 @@ import { stateFromKey } from '../src/crypto/keys.js';
 import { KEY_PAIRS } from '../src/preservation/patch.js';
 import { compact2016 } from '../src/profiles/compact-2016.js';
 import { legacyAuth } from '../src/profiles/legacy-auth.js';
+import { getProfile } from '../src/profiles/registry.js';
 import type { FirmwareProfile, SlotKey } from '../src/profiles/types.js';
 import {
   checkKeyNameOf,
@@ -32,6 +33,7 @@ import {
   bankWritingOf,
   bootedReportOf,
   checkKeyReportOf,
+  lastStartReportOf,
   keyReportRows,
   nextStartReportOf,
 } from '../src/workflows/device-report.js';
@@ -248,7 +250,10 @@ describe('the report rows on the 2016 line (seek-fw info and the Info tab)', () 
   it('says the booted bank is the bootloader’s record of this start, and names the next start', () => {
     const state = state2016();
     expect(bootedReportOf(state, nameOf)).toBe(
-      'App image bank a — the bank the bootloader entered at this start, as it records it (active-slot word 0)',
+      'App image bank a — the bank the bootloader entered at this start, as it records it',
+    );
+    expect(lastStartReportOf(state)).toBe(
+      'the camera reports it entered slot A (active-slot word 0)',
     );
     expect(nextStartReportOf(state, nameOf)).toBe(
       'App image bank a — the boot-config word is 0xFFFFFFFF, so the bootloader tries slot A first, ' +
@@ -309,6 +314,37 @@ describe('the report rows on the 2016 line (seek-fw info and the Info tab)', () 
       staged: "staged under its image's own key block 0",
       refusals: ['no slot decrypts to the 0x00000000 acceptance sum'],
     });
+  });
+});
+
+describe('the last-start row: the active-slot word, in the same words on every line that reports it (TESTING.md 42.89)', () => {
+  const modern = getProfile('modern-4x');
+  it('says the bank the word names on the 2014 chain, the 2016 line and 4.9.x', () => {
+    const words = 'the camera reports it entered recovery R (active-slot word 2)';
+    expect(lastStartReportOf({ profile: legacyAuth, version: '1.3.0.0', activeSlotWord: 2 })).toBe(
+      words,
+    );
+    expect(lastStartReportOf({ profile: compact2016, version: '1.0.3.0', activeSlotWord: 2 })).toBe(
+      words,
+    );
+    expect(lastStartReportOf({ profile: modern, version: '4.9.1.15', activeSlotWord: 2 })).toBe(
+      words,
+    );
+  });
+
+  it('says nothing on 4.8.x, whose word is 0 whatever runs (TESTING.md 42.56)', () => {
+    expect(
+      lastStartReportOf({ profile: modern, version: '4.8.2.1', activeSlotWord: 0 }),
+    ).toBeNull();
+  });
+
+  it('says when the word was not read, or names no bank', () => {
+    expect(lastStartReportOf({ profile: modern, version: '4.9.2.0', activeSlotWord: null })).toBe(
+      'not read',
+    );
+    expect(lastStartReportOf({ profile: compact2016, version: '1.0.3.0', activeSlotWord: 7 })).toBe(
+      'the camera reports 7, which names no bank',
+    );
   });
 });
 
