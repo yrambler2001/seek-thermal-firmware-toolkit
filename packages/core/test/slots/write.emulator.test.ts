@@ -254,6 +254,14 @@ function blankRun(): Run {
   };
 }
 
+/**
+ * What a plan says beside it, for the run's log: its warnings, then its notes with where each comes from
+ * (this write's, the bank's, the camera's), as the CLI prints them since TESTING.md 42.88 (42.89).
+ */
+function planWords(plan: SlotFlashPlan): string[] {
+  return [...plan.warnings, ...plan.notes.map((note) => `${note.source} note: ${note.text}`)];
+}
+
 function reasonOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
@@ -427,7 +435,7 @@ async function runFirmware(subject: Subject, row: RowEmulators, run: Run): Promi
           bytes: srcSlot.plain,
           fileName: nameFor(),
         });
-        run.bWrite.notes.push(...planB.warnings);
+        run.bWrite.notes.push(...planWords(planB));
         const result: FlashSlotResult = await flashSlot(ctx, report, planB, {
           acknowledgeRisk: booted === 'b' || booted === null,
         });
@@ -477,7 +485,7 @@ async function runFirmware(subject: Subject, row: RowEmulators, run: Run): Promi
           bytes: stagedA.payload,
           fileName: 'raw.bin',
         });
-        run.rWrite.notes.push(...planR.warnings);
+        run.rWrite.notes.push(...planWords(planR));
         run.rWrite.sentLength = planR.payload.length;
         const result = await flashSlot(ctx, report, planR, { acknowledgeRisk: true });
         run.rWrite.notes.push(...result.notes);
@@ -544,7 +552,7 @@ async function runFirmware(subject: Subject, row: RowEmulators, run: Run): Promi
             bytes: bootedSlot.plain,
             fileName: nameFor(),
           });
-          run.bootedWrite.notes.push(...planBooted.warnings);
+          run.bootedWrite.notes.push(...planWords(planBooted));
           plannedPayload = planBooted.payload;
           const result = await flashSlot(ctx, report, planBooted, { acknowledgeRisk: true });
           run.bootedWrite.notes.push(...result.notes);
