@@ -1178,7 +1178,9 @@ describe('the 0.x line — the eight builds doc 36 reached, pinned to the RE rec
     () => {
       const pre = readImage(PRE_0502_IMAGE);
       expect(() => buildV1Patch(pre)).toThrow(/predates the widening route/);
-      expect(() => buildV1Patch(pre)).toThrow(/0x400000/);
+      expect(() => buildV1Patch(pre)).toThrow(
+        /the size the patch would change is stored in a different way/,
+      );
       expect(() => buildV1Patch(pre)).toThrow(/measured on 0\.3\.0\.1/);
     },
   );
