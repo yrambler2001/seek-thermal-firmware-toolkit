@@ -85,20 +85,19 @@ describe('the frame-rate patch confirmation', () => {
     unmount();
   });
 
-  it('prints the measured 4.9.1.15 rate as 17.7, in the title and the body', () => {
+  it('prints the 4.9.1.15 rate as 18, in the title and the body', () => {
     const measured = {
       ...OFFER,
       patch: { id: 'compact_pro-4.9.1.15' },
       fromHz: 9,
-      toHz: 17.7,
+      toHz: 18,
     } as unknown as FpsOffer;
     const { unmount } = setup({ slotName: 'slot A', version: '4.9.1.15', offer: measured });
     const text = dialog().textContent;
-    expect(text).toContain('Make slot A run at 17.7 FPS?');
+    expect(text).toContain('Make slot A run at 18 FPS?');
     expect(text).toContain(
-      'slot A holds firmware 4.9.1.15, and this makes its image run at 17.7 Hz instead of 9 Hz.',
+      'slot A holds firmware 4.9.1.15, and this makes its image run at 18 Hz instead of 9 Hz.',
     );
-    expect(text).not.toContain('17.700000001');
     unmount();
   });
 

@@ -37,7 +37,7 @@ Merge routine: check each report and diff; cherry-pick the commits onto the bran
 - Owner decisions in force:
   - no deprecated names and no backward-compatible CLI;
   - the "Make N FPS" button stays enabled and is never gated; it shows the boot-word warning text when the patch would not take effect (42.27 section 6);
-  - a build that is patched but not measured is offered exactly like a measured one, with no "not measured" note; a measured rate different from the target is named (`FPS_MEASURED_HZ`: Compact PRO 4.9.1.15 at 17.7, 42.32);
+  - a build that is patched but not measured is offered exactly like a measured one, with no "not measured" note; a measured rate different from the target can be named (`FPS_MEASURED_HZ`, empty since the owner set the Compact PRO 4.9.1.15 offer to 18 fps on 2026-10-26);
   - the page and the CLI warn, never gate;
   - the page and the CLI display the same information (the Info tab reads as `seek-fw info`, 42.64);
   - the slots bench judges each subject by the shared verdict table (42.29);
@@ -46,7 +46,7 @@ Merge routine: check each report and diff; cherry-pick the commits onto the bran
 
 ## 1. Frame rate
 
-Every 8 and 9 fps build with a table entry is offered except the FF entries and 0.7.0.8: stage one (2014 plain chain), stage two (Key A: the Compact 4.8.x and the Compact PRO 4.9.1.15 at 17.7, 4.9.2.0 at 18) and stage three (the Compact PRO 2016 keystream line 1.0.3.0, 1.0.3.2). Bank A, B and R writes are proven on the emulator for all nine stage-two and stage-three builds (42.36). Principle and per-build table: `TESTING.md` 42.27 to 42.29 and `FPS_32HZ.md`.
+Every 8 and 9 fps build with a table entry is offered except the FF entries and 0.7.0.8: stage one (2014 plain chain), stage two (Key A: the Compact 4.8.x and the Compact PRO 4.9.1.15 and 4.9.2.0 at 18) and stage three (the Compact PRO 2016 keystream line 1.0.3.0, 1.0.3.2). Bank A, B and R writes are proven on the emulator for all nine stage-two and stage-three builds (42.36). Principle and per-build table: `TESTING.md` 42.27 to 42.29 and `FPS_32HZ.md`.
 
 - [?] Mode 4 streams about 32 fps on stock firmware with no flash write (42.54: stock 1.3.0.0 32.10, 32.20, 26.75 fps over 20 s; stock 1.3.0.8 28.65, 29.35, 31.90; status-0 frames, which the checker now counts, 42.55). Picture (42.58, no scene visible): level like Normal, low temporal noise, no shutter steps in 3.7 s, and a fixed pattern unlike Normal's shutter frame, so a host-side mode-4 stream would need its own flat-field reference. Owner (2026-10-19): not now. Mode 7 has no capture program.
 - [ ] Builds whose table patch never ran on a camera: 4.8.1.7, 4.8.1.9, 4.16.1.7 FF, 1.3.0.8 FF, the Compact PRO 4.9.2.0, and the Compact 4.8.2.1 (the XR was measured in 42.24; same image, 42.34). Owner: other units after everything else; there will be no Compact PRO 1.0.x unit, so 1.0.3.0 and 1.0.3.2 stay emulator-only. The 4.8.1.7 and 4.8.1.9 Key A path (rate, dumps, the Electron button, the restore) is emulator-only too.

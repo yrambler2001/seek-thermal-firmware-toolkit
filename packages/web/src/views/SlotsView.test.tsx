@@ -933,10 +933,10 @@ describe('SlotsView: the frame-rate row action', () => {
     unmount();
   });
 
-  it('offers Make 17.7 FPS for the measured Compact PRO 4.9.1.15 rate, with its note and its confirmation', () => {
+  it('offers Make 18 FPS for the Compact PRO 4.9.1.15, with its note and its confirmation', () => {
     const measured = (): FpsPlan =>
       ({
-        ...offer(17.7),
+        ...offer(18),
         patch: { id: 'compact_pro-4.9.1.15' },
         fromHz: 9,
       }) as unknown as FpsPlan;
@@ -945,14 +945,14 @@ describe('SlotsView: the frame-rate row action', () => {
       panel({ plan: slotPlan(true), report: slotReport(base), planFps }),
     );
     const rows = bankRows(container);
-    expect(buttonsIn(rows[1] as HTMLElement)).toContain('Make 17.7 FPS');
+    expect(buttonsIn(rows[1] as HTMLElement)).toContain('Make 18 FPS');
     expect(rows[1]?.textContent).toContain(
-      'Raises this bank from 9 Hz to 17.7 Hz by editing its bytes.',
+      'Raises this bank from 9 Hz to 18 Hz by editing its bytes.',
     );
     act(() => {
-      buttonByText(rows[1] as HTMLElement, 'Make 17.7 FPS').click();
+      buttonByText(rows[1] as HTMLElement, 'Make 18 FPS').click();
     });
-    expect(dialog()?.textContent).toContain('Make slot B run at 17.7 FPS?');
+    expect(dialog()?.textContent).toContain('Make slot B run at 18 FPS?');
     unmount();
   });
 

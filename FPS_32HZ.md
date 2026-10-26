@@ -145,7 +145,7 @@ patched  81 08 | 39 27 | 00 00 | 00 00 | 00 00     op 3 copy + publish (hdr 3, g
 
 The Compact PRO captures at 17.68 Hz and publishes every **second** capture, so it runs at 9 fps. The patch makes the steady row publish
 every capture by removing its leading unarmed substep (the row's count goes from 2 to 1 and the armed substep moves to slot 0; the other slot
-is zeroed, or left in place where a count of 1 never reads it, as in 4.9.1.15). The four entries are in the table. Three are offered at 18 Hz, and 4.9.1.15 is offered at its measured 17.7 Hz (corrected in 42.32). The two 4.9.x entries (4.9.1.15, 4.9.2.0) are stage two (TESTING.md 42.28): their banks are staged under Key A like the 4.8 Compact. The two 1.0.3.x entries (1.0.3.0, 1.0.3.2) are stage three (TESTING.md 42.29): their banks are staged under the image's own stage key and stored under key block 1, and the write is checked on the read-back decrypted. The write of each is proven on the emulator. The owner decided on 2026-10-19 that a patched build which is not measured is offered. The 4.9.1.15 rate is measured (corrected in 42.32): experiment A of FW-V1 `FRAME_RATE.md` sec.6.3 read 17.70 fps on a Compact PRO 4.9.1.15 camera, slot B, against 8.85 fps for the unmodified control on the same unit. 4.9.2.0, 1.0.3.0 and 1.0.3.2 have no camera measurement. Measured in the emulator: Normal 8.84 to
+is zeroed, or left in place where a count of 1 never reads it, as in 4.9.1.15). The four entries are in the table. All four are offered at 18 Hz (owner, 2026-10-26). The two 4.9.x entries (4.9.1.15, 4.9.2.0) are stage two (TESTING.md 42.28): their banks are staged under Key A like the 4.8 Compact. The two 1.0.3.x entries (1.0.3.0, 1.0.3.2) are stage three (TESTING.md 42.29): their banks are staged under the image's own stage key and stored under key block 1, and the write is checked on the read-back decrypted. The write of each is proven on the emulator. The owner decided on 2026-10-19 that a patched build which is not measured is offered. The 4.9.1.15 rate is measured (corrected in 42.32): experiment A of FW-V1 `FRAME_RATE.md` sec.6.3 read 17.70 fps on a Compact PRO 4.9.1.15 camera, slot B, against 8.85 fps for the unmodified control on the same unit. 4.9.2.0, 1.0.3.0 and 1.0.3.2 have no camera measurement. Measured in the emulator: Normal 8.84 to
 17.68 Hz, with the picture level unchanged within a few per cent. `FRAME_RATE.md` in FW-V1 has the clock and row analysis.
 
 ## 7. How to apply it
@@ -159,9 +159,9 @@ node packages/cli/dist/bin.js slots patch-fps a --write --yes --acknowledge-risk
 
 `--write` first saves bank A as stored and decrypted into `--dump-dir`, then writes the patched image and reads it back; the read-back
 must differ from the saved dump only at the planned bytes. Or press **Make 32 FPS** on the Firmware slots page (**Make 18 FPS** on a
-Compact PRO, and **Make 17.7 FPS** on a 4.9.1.15 Compact PRO, measured in 42.32). The page and the CLI offer the entries in stage one (the plain 2014 chain: 0.8.0.0, 0.9.0.2, 0.9.0.6, 0.9.0.7, 0.9.1.0,
+Compact PRO). The page and the CLI offer the entries in stage one (the plain 2014 chain: 0.8.0.0, 0.9.0.2, 0.9.0.6, 0.9.0.7, 0.9.1.0,
 0.10.0.0, 1.0.0.0, 1.2.0.0, 1.3.0.0, 1.3.0.8), stage two (the Key A 4.x line: 4.8.1.7, 4.8.1.9, 4.8.2.1 at 32 Hz, and the Compact PRO
-4.9.1.15 at 17.7 Hz, measured in 42.32, and 4.9.2.0 at 18 Hz) and stage three (the Compact PRO 2016 keystream line: 1.0.3.0 and 1.0.3.2 at 18 Hz). A build outside those
+4.9.1.15 and 4.9.2.0 at 18 Hz) and stage three (the Compact PRO 2016 keystream line: 1.0.3.0 and 1.0.3.2 at 18 Hz). A build outside those
 sets is refused with the reason.
 
 **Then power-cycle the camera**: a bank only runs after the next boot. And check the boot-config word (section 9).
