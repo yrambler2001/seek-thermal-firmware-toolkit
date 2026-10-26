@@ -151,11 +151,18 @@ export class TerminalReporter implements Reporter {
     this.clearBar();
   }
 
-  /** Writes a line to the log sink with no level decoration. */
+  /**
+   * Writes a line (or a block of lines) to the log sink with no level decoration. A blank line right after
+   * a blank log line is not written either, nor a block's opening blank line: `info`'s report, the slots
+   * list and the plans each open with one, after the read's log has just ended on one, and the two printed
+   * as two blank lines (TESTING.md 42.87).
+   */
   write(text: string): void {
-    this.lastLogBlank = false;
+    if (text === '' && this.lastLogBlank) return;
+    const body = this.lastLogBlank && text.startsWith('\n') ? text.slice(1) : text;
+    this.lastLogBlank = body === '' || body.endsWith('\n\n');
     this.clearBar();
-    this.logSink.write(text.endsWith('\n') ? text : `${text}\n`);
+    this.logSink.write(body.endsWith('\n') ? body : `${body}\n`);
   }
 
   private plainLine(done: number, total: number): string {

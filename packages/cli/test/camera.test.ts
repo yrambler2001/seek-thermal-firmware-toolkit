@@ -393,6 +393,9 @@ describe('seek-fw info on a 2016 Compact PRO that names the bank it entered (TES
     expect(text).toContain('a whole-image write is not available on this line');
     /* The CLI names its own commands, not the page (TESTING.md 42.87). */
     expect(text).not.toMatch(/the page|Slots tab/);
+    /* One blank line between sections: the report's opening blank after the log's, and the Writing
+     * section's closing blank before Tabs, each printed two (TESTING.md 42.87). */
+    expect(text).not.toContain('\n\n\n');
     expect(text).not.toContain('not available for a whole-image write:');
     expect(text).not.toContain('flashing disabled');
     expect(text).not.toContain('not a boot record');

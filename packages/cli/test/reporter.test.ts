@@ -75,6 +75,33 @@ describe('TerminalReporter', () => {
     mixed.reporter.write('table');
     mixed.reporter.log('');
     expect(mixed.log.text).toBe('\ntable\n\n');
+
+    /* A blank written line right after a blank log line is the same run: `info`'s report opens with one
+     * after the read's log ended on one, and printed two (TESTING.md 42.87). */
+    const report = reporterOn();
+    report.reporter.log('bank line', 'ok');
+    report.reporter.log('');
+    report.reporter.write('');
+    report.reporter.write('Camera');
+    report.reporter.write('');
+    report.reporter.write('');
+    report.reporter.write('Tabs');
+    expect(report.log.text).toBe('bank line\n\nCamera\n\nTabs\n');
+
+    /* A block that opens with a blank line (the slots list, a plan: lines joined from ['', heading, …])
+     * after a blank log line: one blank line. */
+    const block = reporterOn();
+    block.reporter.log('bank line', 'ok');
+    block.reporter.log('');
+    block.reporter.write(['', 'Frame-rate patch plan', '  bank  B', ''].join('\n'));
+    block.reporter.log('dry run');
+    expect(block.log.text).toBe('bank line\n\nFrame-rate patch plan\n  bank  B\ndry run\n');
+
+    /* Not after a line that is not blank: the block keeps its opening blank line. */
+    const after = reporterOn();
+    after.reporter.log('--yes given');
+    after.reporter.write(['', 'Slot flash plan'].join('\n'));
+    expect(after.log.text).toBe('--yes given\n\nSlot flash plan\n');
   });
 
   it('--quiet suppresses logs and the progress bar', () => {
