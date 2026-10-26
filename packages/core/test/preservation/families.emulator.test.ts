@@ -44,7 +44,6 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import { silentReporter, type Reporter } from '../../src/events.js';
-import { SeekError } from '../../src/errors.js';
 import { SeekDevice } from '../../src/protocol/client.js';
 import { WebUsbTransport } from '../../src/protocol/webusb.js';
 import { FLASH_SIZE } from '../../src/profiles/modern-4x.js';
@@ -57,8 +56,9 @@ import {
   drainExact,
   openProbedSession,
   readVersion,
+  preserveChoiceOf,
   runPreserveStep,
-  unknownImageRefusal,
+  unknownImageWords,
   type CreatedPreserveRun,
   type PreserveArtifactLoader,
   type PreserveRunState,
@@ -793,7 +793,7 @@ describe.skipIf(
     );
 
     it(
-      'one flipped capture byte: the solve refuses at the sum rule and nothing write-shaped is sent',
+      'one flipped capture byte in slot A: A holds an unknown image, is not written, and nothing write-shaped is sent',
       { timeout: 1_800_000 },
       async () => {
         /* A copy of the same dump with ONE byte of the bank-A image
@@ -802,8 +802,8 @@ describe.skipIf(
          * validation). The expected-prefix oracle is deliberately absent so
          * the SOLVER's own refusal is what fires, not the capture gate. The
          * identity candidate dies on the build gates (the ciphered bytes
-         * are not balanced), both cipher families die on the sum rule, and
-         * the run refuses before anything is recorded or written. */
+         * are not balanced) and both cipher families die on the sum rule, so
+         * A holds an unknown image; the backup is read-only. */
         const corruptedPath = scratchFile('families_1030_corrupted.bin');
         writeFileSync(corruptedPath, readFileSync(DUMP_1030!));
         const corrupted = new Uint8Array(readFileSync(corruptedPath));
@@ -818,9 +818,9 @@ describe.skipIf(
           /* The step is read-only, so a first-session stall (doc 35.4) can
            * be retried on a fresh session; the SOLVER refusal is the
            * expected answer and ends the ladder. */
-          let error: unknown = null;
+          let outcome: unknown = null;
           for (let attempt = 0; attempt < 2; attempt++) {
-            error = await row
+            outcome = await row
               .guard(emu, () =>
                 runPreserveStep(
                   'backup',
@@ -831,26 +831,22 @@ describe.skipIf(
                 ),
               )
               .catch((e: unknown) => e);
-            if (error instanceof SeekError && error.message.includes('holds an unknown image')) {
-              break;
-            }
+            if (!(outcome instanceof Error)) break;
             process.stderr.write(
               `[families] 1030 corrupt attempt ${String(attempt)} failed with ` +
-                `${error instanceof Error ? error.message : String(error)}; retrying\n`,
+                `${outcome.message}; retrying\n`,
             );
           }
-          expect(error).toBeInstanceOf(SeekError);
-          /* A bank no candidate derives from is an unknown image, in plain words
-           * (TESTING.md 42.95); each candidate's gate is in the detail. */
-          expect((error as Error).message).toBe(unknownImageRefusal('a', '1.0.3.0'));
-          const reasons = ((error as SeekError).detail?.reasons as string[]).join('\n');
-          /* The identity candidate got as far as the build gates (the
-           * verbatim header window parses straight through the cipher)... */
-          expect(reasons).toMatch(/failed its build gates/);
-          /* ...and both cipher families refuse on the sum rule. */
-          expect(reasons).toMatch(/v1-2014-ff/);
-          expect(reasons).toMatch(/compact-2016/);
-          expect(reasons).toMatch(/word sum is 0x/);
+          if (outcome instanceof Error) throw outcome;
+          /* The camera started from slot B (A fails the bootloader's check), so
+           * the run is built on B, and A is recorded as a bank that holds an
+           * unknown image (TESTING.md 42.92, 42.95): not written, not offered. */
+          const state = (outcome as { state: PreserveRunState }).state;
+          expect(state.anchor).not.toBe('a');
+          expect(state.banks?.a.holds).toBe('image');
+          expect(state.banks?.a.refused).toBe(unknownImageWords('1.0.3.0'));
+          expect(preserveChoiceOf(state, 'a').banks).toBeNull();
+          expect(state.targets ?? []).not.toContain('a');
         } catch (error) {
           process.stderr.write(
             `--- emulator log tail after the corrupt-byte refusal ---\n${emu.log(80)}\n`,
@@ -860,8 +856,8 @@ describe.skipIf(
           await emu.stop(120_000);
         }
         await assertDelivery(row);
-        /* NOTHING WRITE-SHAPED went out: the refusal precedes every stage and
-         * every commit, on the wire ledger of the whole server. */
+        /* NOTHING WRITE-SHAPED went out: the backup is read-only, and A is
+         * written by no step it ran, on the wire ledger of the whole server. */
         const requests = emu.ledger.snapshot().requests;
         for (const opcode of ['0x50', '0x81', '0x59']) {
           expect(
