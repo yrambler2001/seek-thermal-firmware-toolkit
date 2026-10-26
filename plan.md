@@ -5,8 +5,10 @@ Done work is in `TESTING.md` (sections 42.x; the latest merged is 42.82), `FPS_3
 
 ## 0. Orchestration state (2026-10-20)
 
-Running (2026-10-26):
-- [~] 42.83 (Haiku 5.5 xhigh): the bench now holds the owner's Compact PRO FF board (serial `090BB12PR939`, normally 4.18.2.0) with a 1.0.3.0 whole-flash image the owner wrote (`SEEK_DUMPS/firmwares/Compact Pro/2016.07.06-17.04.49-1.0.3.0/0C21A1M5KP15/1.0.3.0 on 4.18.2.0.bin`). The page's frame-rate patch failed at the commit with `CompleteMemoryUpgrade` 0x00040005 (the bank-A code the emulator gives when the 2016 application's flash driver does not know the chip; the 41.3 camera writes were on the Compact board's Spansion 010215). The agent dumps the flash with the J-Link and compares it with the owner's file, reads the chip id, confirms the cause in the 1.0.3.0 source and on the emulator, checks that 1.0.3.0 streams on this board, and if so writes the patched bank with the J-Link and measures it. No product code changes in it.
+Nothing is running (2026-10-26).
+- 42.83 was stopped by the owner after its first step. Its J-Link dump of the Compact PRO FF board (`090BB12PR939`) equals the owner's `1.0.3.0 on 4.18.2.0.bin` (`d2ee76b4…`), so the failed frame-rate patch (commit 0x00040005) wrote nothing. Cause (FW-V1 `targets/compact_pro_9hz_1_0_3_0/target_linker_aliases.ld:156-183`): 1.0.3.0 links only NXP spifi's Spansion family; the other ten chip families (Macronix, Winbond, GigaDevice …) are `BX LR` stubs, so it cannot erase this board's chip. The board's chip id was not read.
+- [ ] The page and the CLI say "flash may be partially written" for 0x0004000N; on 1.0.3.x it means the driver refused the erase before any command. Proposal, not started.
+- 2026-10-26, at the owner's word I built (no agent, no hardware) `SEEK_DUMPS/firmwares/Compact Pro/2019.03.14-09.18.41-4.9.1.15/1C0EZ0KTAMA5/4.9.1.15 on 4.18.2.0.bin` (`9c4df4cf…`): the 4.9.1.15 donor dump (bootloader, boot config, banks) with this board's own per-unit data from its 4.18.2.0 dump (`a042bb71…`): 0x14020000 +0..0x13FF (identity, shutter polarity 0 instead of the donor's 1, factory blob), 0x14080000, and 0x14180000..0x142BFFFF (calibration pages and the 4.x thermography tables). Fallback `… (donor page 4).bin` (`b862bb93…`) keeps the donor's page 4 and its copy, as the 1.0.3.0 image had to (FW-V1 `docs/PRO_FF_ON_1030.md` §5). Not flashed or booted.
 
 Bench in its home state: flash `50e900c2…` (checked after 42.81; 42.82 did not use the bench), boot word 0, booted A; switch channel 1 (J-Link) off, channel 2 (camera) on.
 
