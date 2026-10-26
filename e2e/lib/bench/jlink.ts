@@ -48,13 +48,15 @@ import {
 } from './types.js';
 
 /**
- * The FW-V1 target directory the recipe runs in (TESTING.md 41.5): the 2014 Compact 1.3.0.8 board's
- * (bank A at 0x14050000). FW-V1 named it `compact_32k_1_3_0_8` before it renamed its targets by
- * product, delivered rate and version; no FW-V1 checkout has that name any more, so the bench names
- * only this one (TESTING.md 42.98). The FF board's 1.3.0.8 is `compact_ff_16hz_1_3_0_8`, a separate
- * target a caller names with `target`.
+ * The FW-V1 target directory the recipe runs in: the bench camera's own, the 2014 Compact PIR206 that
+ * runs 1.3.0.0 (serial 101310HSNEA2). Its runner reads this camera's bootloader as "the 2014 Compact
+ * bootloader 0.9.0.0, bank map 2014 (A 0x14050000, B 0x14060000, R 0x14070000), this target's own", and
+ * it carries `flash-factory-4m-2` (the block-diff restore) and `read-bank-map`, which the 1.3.0.8
+ * target's runner lacks (TESTING.md 42.81, 42.103). FW-V1 names targets by product, delivered rate and
+ * version (no `compact_32k_*` any more, TESTING.md 42.98). Another board is a separate target a caller
+ * names with `target`: the 1.3.0.8 Compact is `compact_8hz_1_3_0_8`, the FF board's `compact_ff_16hz_1_3_0_8`.
  */
-export const DEFAULT_TARGET = 'compact_8hz_1_3_0_8';
+export const DEFAULT_TARGET = 'compact_8hz_1_3_0_0';
 /** True when the target's runner has `flash-factory-4m-2` (which then also disables `flash-factory-4m`). */
 function runnerHasFlash4m2(targetDir: string): boolean {
   try {
@@ -210,7 +212,7 @@ export interface JlinkBenchOptions {
   readonly serial?: string;
   /** The target device (default SEEK_E2E_JLINK_DEVICE, else LPC4330_M4). */
   readonly device?: string;
-  /** The FW-V1 target directory under targets/ (default `DEFAULT_TARGET`, compact_8hz_1_3_0_8). */
+  /** The FW-V1 target directory under targets/ (default `DEFAULT_TARGET`, compact_8hz_1_3_0_0). */
   readonly target?: string;
   /** Runs every command (default: spawn). */
   readonly exec?: Exec;

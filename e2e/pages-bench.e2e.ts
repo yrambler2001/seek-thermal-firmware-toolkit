@@ -70,11 +70,6 @@ const SCRATCH =
   path.join(tmpdir(), `seek-e2e-pages-bench-${String(process.pid)}`);
 const KEEP = process.env.SEEK_E2E_KEEP === '1';
 
-/**
- * The bench's 1.3.0.0 target. Its runner carries `flash-factory-4m-2`, the block-diff write the
- * end restore uses; the default target (compact_8hz_1_3_0_8) has no such command (TESTING.md 42.81).
- */
-const PAGES_TARGET = 'compact_8hz_1_3_0_0';
 const FLASH_BASE = 0x14000000;
 const FLASH_BYTES = 0x400000;
 /** One 64 KiB block of the flash, and the two the end check names on their own. */
@@ -276,7 +271,9 @@ describe.skipIf(!RUNNABLE)('the web app pages on the bench camera (1.3.0.0, real
   beforeAll(async () => {
     mkdirSync(SCRATCH, { recursive: true });
     say(`scratch: ${SCRATCH}`);
-    jlink = createJlinkBench({ gate, target: PAGES_TARGET });
+    /* The default target is the bench camera's, compact_8hz_1_3_0_0: its runner carries
+     * `flash-factory-4m-2`, the block-diff write the end restore uses (TESTING.md 42.81, 42.103). */
+    jlink = createJlinkBench({ gate });
     camera = createBenchCamera({ gate });
     /* Part 0: the whole flash, halted, is the run's start image. It is written to the scratch folder
      * before anything else is sent to the camera: that file is the restore image (TESTING.md 42.81). */
