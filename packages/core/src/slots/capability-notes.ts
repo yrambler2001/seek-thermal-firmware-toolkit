@@ -90,9 +90,9 @@ const LOCKED_2016_STAGING_NOTE =
 export function profileFlashNote(profileId: string): string {
   return (
     `A whole-image write is not available on this line (profile ${profileId} offers none), and the ` +
-    'device info says so. The banks are written here one at a time instead, each staged under its ' +
-    'own image’s key, the path the backup already ran on 1.0.3.0 cameras, so this page does not ' +
-    'refuse a bank for that reason.'
+    'device info says so. The banks are written one at a time instead (the Slots tab, `seek-fw ' +
+    'slots`), each staged under its own image’s key, the path the backup already ran on 1.0.3.0 ' +
+    'cameras, so a bank write is not refused for that reason.'
   );
 }
 

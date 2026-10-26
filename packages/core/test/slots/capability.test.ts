@@ -426,6 +426,8 @@ describe('the facts a person is shown with the plan', () => {
     expect(plan.notes.join('\n')).toMatch(
       /A whole-image write is not available on this line \(profile compact-2016 offers none\)/,
     );
+    /* Shared by the page and the CLI, so it names neither as "this page" (TESTING.md 42.86). */
+    expect(plan.notes.join('\n')).not.toMatch(/this page|the slot page/);
   });
 
   it('names no code identifier in a note a person reads (TESTING.md 42.86)', () => {
