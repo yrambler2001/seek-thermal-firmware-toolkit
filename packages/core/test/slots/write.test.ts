@@ -634,6 +634,9 @@ describe('prepareSlotFlash builds each staging form', () => {
     image.set(hexToBytes(pair.block1), 0x3100);
     const out = prepareSlotFlash(report, 'a', { kind: 'plain', bytes: image, fileName: 'x' });
     expect(out.staging).toBe('slot-keystream-ciphertext');
+    /* TESTING.md 42.93: afterwards the bank is under key block 1 (the store key), as the read after a write shows. */
+    expect(JSON.stringify(out)).toContain('key block 1: the camera stores the image under it');
+    expect(JSON.stringify(out)).not.toContain('the stage key (key block 0 of the image)');
     /* The bootloader decrypts with key block 0 and checks the word sum: that is the stage key. */
     const decrypted = xorWindowVerbatim(
       out.payload,

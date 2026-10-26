@@ -616,7 +616,10 @@ function stageImage(
     const staged = buildSlotKeystreamPayload(input.bytes, cipher);
     return {
       staged,
-      keyAfter: 'the stage key (key block 0 of the image)',
+      /* What the bank is keyed by afterwards: the store key, not the stage key it was sent under (TESTING.md
+       * 42.93: the FF board's banks read "key block 1" after every write, and the plan had said key block 0). */
+      keyAfter:
+        'key block 1: the camera stores the image under it (it is sent under key block 0, the stage key)',
       derivedFrom: null,
       /* The 2016 device decrypts with the stage key and stores the image under its
        * own store key (key block 1 of the pair), so the staged bytes are not what
