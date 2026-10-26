@@ -27,7 +27,10 @@
  *                                    separated by ';': `copy a b` (the row's "Copy to slot B"),
  *                                    `restore <bank> <stock|patched> <file>` ("Restore from full flash
  *                                    backup" with a 4 MiB file; the word says what the bank holds after),
- *                                    `every` ("Make 18 FPS in every bank"). Each one checks its plan, its
+ *                                    `every` ("Make 18 FPS in every bank"), `cancel <bank> <file>` (that
+ *                                    restore, confirmed, then the section's Cancel at once: the status
+ *                                    "Cancelled — nothing was written.", no commit, the bank unchanged
+ *                                    after the replug). Each write checks its plan, its
  *                                    backup zip (its name, and that its files are the bank as it was) and
  *                                    its result, then the replug and the reads. Default: none
  *   SEEK_E2E_PRO_OUT=<dir>           where the page text, screenshots and dumps are kept (default: the
@@ -158,7 +161,8 @@ type Step =
       readonly holds: 'stock' | 'patched';
       readonly file: string;
     }
-  | { readonly kind: 'every' };
+  | { readonly kind: 'every' }
+  | { readonly kind: 'cancel'; readonly letter: BankLetter; readonly file: string };
 
 function letterOf(text: string | undefined): BankLetter {
   const letter = (text ?? '').toLowerCase();
@@ -177,6 +181,8 @@ function stepsOf(raw: string | undefined): Step[] {
       const [word, ...rest] = part.split(/\s+/);
       if (word === 'copy') return { kind: 'copy', from: letterOf(rest[0]), to: letterOf(rest[1]) };
       if (word === 'every') return { kind: 'every' };
+      if (word === 'cancel')
+        return { kind: 'cancel', letter: letterOf(rest[0]), file: rest.slice(1).join(' ') };
       if (word === 'restore') {
         const holds = rest[1];
         if (holds !== 'stock' && holds !== 'patched') throw new Error(`restore: "${part}"`);
@@ -1189,6 +1195,77 @@ describe.skipIf(!RUNNABLE)(
             `Dump ${L} equals the backup's bank ${L}`,
           ).toBe(true);
         });
+      } else if (step.kind === 'cancel') {
+        const { letter, file } = step;
+        const L = letter.toUpperCase();
+        const tag = `step-${n}-cancel-${letter}`;
+        const name = SLOT_NAME[letter];
+        it(`step ${n}: a restore of ${L} cancelled right after Yes: "Cancelled — nothing was written."`, async () => {
+          const { wizard, page } = live();
+          await wizard.route('#/slots');
+          const input = (await page.$(
+            `#slot-${letter}-restore-file`,
+          )) as ElementHandle<HTMLInputElement> | null;
+          if (input === null) throw new Error(`no restore picker for bank ${L}`);
+          const moved = await wizard.watchStatus('#slotsrun-status');
+          await input.uploadFile(file);
+          await moved();
+          expect(await prepared(), 'the restore is prepared').toMatch(/^Ready — /);
+          await openWriteConfirm(wizard, page, name);
+          if ((await page.$(ACK_BOX)) !== null) await page.click(ACK_BOX);
+          /* The commit budget stays 0: a commit that went out would be refused and named. */
+          await setGuard(page, {
+            allowReset: false,
+            resetBudget: null,
+            stageBudget: STAGE_BUDGET,
+            commitBudget: 0,
+            commitSum16: null,
+          });
+          const startedAt = Date.now();
+          let status: string;
+          try {
+            await wizard.click(CONFIRM_DIALOG, `Yes — write to ${name}`);
+            await page.waitForFunction(
+              (section: string, dialog: string) =>
+                document.querySelector(dialog) === null &&
+                [...(document.querySelector(section)?.querySelectorAll('button') ?? [])].some(
+                  (button) => button.textContent.trim() === 'Cancel' && !button.disabled,
+                ),
+              { timeout: 10_000, polling: 50 },
+              SLOTS_SECTION,
+              CONFIRM_DIALOG,
+            );
+            const before = await wizard.text('#slotsrun-status');
+            say(
+              `${tag}: Cancel pressed ${String(Date.now() - startedAt)} ms after Yes, status "${before}"`,
+            );
+            status = await wizard.cancel('slotsrun', SLOTS_SECTION, 120_000);
+          } finally {
+            await setGuard(page, {
+              allowReset: false,
+              resetBudget: null,
+              stageBudget: 0,
+              commitBudget: 0,
+              commitSum16: null,
+            }).catch(() => undefined);
+          }
+          const log = await wizard.text('#slotsrun-log');
+          writeFileSync(path.join(OUT, `${tag}-log.txt`), log);
+          await keep(`${tag}-after`, await wizard.text(SLOTS_SECTION));
+          say(`${tag}: "${status}" after ${String(Date.now() - startedAt)} ms`);
+          expect(status, 'the cancel before the commit').toBe('Cancelled — nothing was written.');
+          expect(count(log, /committing, CompleteMemoryUpgrade/g), 'no commit').toBe(0);
+          expect(await refusalsOf(live()), 'nothing refused by the guards').toEqual([]);
+        });
+        it(`step ${n}: after the replug, ${L} is as it was`, async () => {
+          await replugAndRead([], `after-${tag}`);
+          const raw = await dumpOf(letter, `after-${tag}-again`);
+          const was = now.get(letter);
+          expect(
+            was !== undefined && Buffer.from(raw).equals(Buffer.from(was)),
+            `Dump ${L} equals the bank before the cancelled write`,
+          ).toBe(true);
+        });
       } else {
         const tag = `step-${n}-every`;
         let order: BankLetter[] = [];
@@ -1210,8 +1287,12 @@ describe.skipIf(!RUNNABLE)(
             expect(dialog).toContain(
               `They are written in this order: ${order.map((letter) => SLOT_NAME[letter]).join(', then ')}.`,
             );
+            /* The zip lists the banks A, B, R (core `patchEveryBankFps`); the dialog says the write order. */
             expect(dialog).toContain(
-              `_bank-${order.map((letter) => letter.toUpperCase()).join('-')}_before-fps-patch-every-bank.zip`,
+              `_bank-${[...order]
+                .sort((x, y) => 'abr'.indexOf(x) - 'abr'.indexOf(y))
+                .map((letter) => letter.toUpperCase())
+                .join('-')}_before-fps-patch-every-bank.zip`,
             );
             for (const codeName of CODE_NAMES) expect(dialog, codeName).not.toContain(codeName);
           } catch (error) {
