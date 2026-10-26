@@ -705,11 +705,13 @@ The bootloader's `image_try_keys()` tries exactly two keys: the store key (the p
 decrypts perfectly, passes its acceptance sum, has a valid footer — and is still skipped at boot,
 because the bootloader has no way to derive that key.
 
-That is not hypothetical. On a camera with a 2019 bootloader running a downgraded 4.9.2.0
-application, the application re-encrypts every upgrade under a key that is in neither the
-bootloader's table nor the per-device slot nor anywhere in flash. Each USB upgrade landed correctly
-in the target slot and was then skipped, and the camera carried on booting the other bank — the
-write succeeded and nothing changed.
+The dumps hold one such bank. A Compact PRO dump with the 2019 bootloader runs 4.9.1.15 from banks A
+and R. Its bank B holds the 1.0.3.2 application (January 2017) under a key found nowhere in that
+flash: not in the bootloader's key table, not in the per-device slot (blank on that unit), and not
+in any image. The bootloader cannot read that bank, and the camera ran 4.9.1.15. The dump does not
+show how bank B came to be written. The two 4.9.2.0 dumps on the same bootloader have nothing of the
+kind: every bank is under the bootloader's Key A, and the 4.9.2.0 application holds the
+bootloader's own key pair.
 
 So the Info tab, the Slots tab and `seek-fw info` report decryptability and bootability as separate
 things. A slot is only marked bootable when the key that encrypted it is one the bootloader will
@@ -765,12 +767,18 @@ The rules for each bank on each build are in [Firmware slots](#firmware-slots-li
 The packaging was checked against real hardware artifacts and in the emulator. The hardware runs are
 under **What has been run** in the Firmware slots section.
 
-- **Byte-identical rebuild.** For ten real 4 MiB dumps across four device generations, decrypting a slot
-  and running the plaintext back through the packaging reproduces the bank on the flash, byte for byte:
-  image, padding and footer.
-- **Agreement with the reference tool.** The cipher, acceptance-sum repair, bank payload, footer offset
-  and transfer checksum are byte-identical to `seek_fw_tool.mjs`, the implementation known to have booted
-  a real Compact PRO FF, including for resized images.
+- **Byte-identical rebuild.** The FW-V1 corpus holds 16 real 4 MiB dumps, with bootloaders from 2014,
+  2016, 2018, 2019 and 2021 (Compact, Compact PRO and PRO FF, Compact XR, Mosaic, Nano). Each of their
+  48 banks was decrypted and its plaintext run back through the packaging under that bank's own key,
+  and every bank came out byte for byte as it is on the flash. On the 37 banks with a footer that is
+  the image, the padding and the footer; on the 11 without one (the 2014 and 2016 lines, and two banks
+  of the 4.9.1.15 dump) it is the image, with `0xFF` to the end of the block.
+- **Agreement with the reference tool.** On those 37 banks, at their own size and grown by 4, 0x200
+  and 0x1000 bytes and to the next 16 KiB boundary, the cipher, acceptance-sum repair, bank payload,
+  footer offset and transfer checksum are byte-identical to FW-V1's `seek_fw_tool.mjs`: 183 of 185
+  cases. In the other 2 both refuse the same 0x14000-byte payload as larger than the 64 KiB window.
+  `seek_fw_tool.mjs` is the tool whose USB upload booted a real Compact PRO FF (FW-V1
+  `docs/FIXED_BUGS.md`).
 - **Emulator.** The slot path runs against the emulator in `packages/core/test/slots/`. A raw write to
   bank R reads back identical (`write.emulator.test.ts`). A raw dump matches the emulator's flash
   (`dump.emulator.test.ts`). The boot choice follows `cfg[0]` (`upgrade-target.emulator.test.ts`).
