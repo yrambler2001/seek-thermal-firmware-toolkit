@@ -267,7 +267,8 @@ export const FPS_PATCHES: readonly FpsPatch[] = FPS_PATCH_TABLE.map((source) => 
  * median of that image is 32.2 fps, and 42.20's tool reads it at 26.3 to 26.9 fps over the whole run
  * (TESTING.md 42.37 sec.3a). The table's entry is the plain-copy form (image 5313f107): 42.27 measured it on the
  * camera at 32.16 to 32.20 fps by per-second medians, and its whole-run rate has not been measured, so it names
- * its target (32 Hz).
+ * its target (32 Hz). Since 42.97 the entry also carries the no-skip branch (image 18972f32); the branch does not
+ * change the capture program, and 5313f107 is the stock image of compact_32k-1.3.0.8-to32-add-noskip.
  */
 export const FPS_MEASURED_HZ: ReadonlyMap<string, number> = new Map<string, number>([]);
 
