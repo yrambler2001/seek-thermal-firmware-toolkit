@@ -13983,3 +13983,82 @@ Each step's plan, dialog, result and log, the bank table (`slots-*.txt/.png`) an
 **For the orchestrator (words, not done here).** The Slots page's `fpsOffNote` (`packages/web/src/components/SlotTable.tsx`, the `at-rate` branch) says "No frame-rate patch needed: this build already runs at 32 Hz." for every `at-rate` plan, which is wrong for an earlier patch. Suggested: when `plan.earlierPatch === true`, "This bank holds an earlier 32 Hz patch without the USB fix. Restore the stock image, then Make 32 FPS." (or `Frame-rate patch not offered: ${plan.reason}`); otherwise as now. The CLI prints the plan's reason, so it needs nothing.
 
 **Commits** (branches `fps-noskip`, not merged, not pushed). FW-V1 (rebased by the orchestrator onto `docs/noskip` `0ccd4dbc7`): `5b0966300` and `2d36cb369` (the first version), `0a6d4070d` (add-noskip removed, `EARLIER_32HZ` / `EARLIER_PATCHES`, unit tests), `6cf22e0b7` (docs). Seek: `0573f7c`, `ffd37e8`, `1c580ac`, `fc1094e` (the first version), `04eb853` (core: add-noskip removed, `earlierPatch`), `b5006b0` (FPS_32HZ.md), and this section's update. Notes and logs: `/private/tmp/claude-501/-Users-yrambler2001-things-a-noindex-seek-APK-IPA-apk-Seek-Thermal-2-3-4-APKPure-decompiled-sources/64d29224-b844-4b36-944e-ae1b6f48a505/scratchpad/fwpatch3/`.
+
+### 42.98 Preserve's bank choice on the Compact PRO FF board: R alone stops before the read and is put back, R first drains through R, every bank drains through A, the 18 Hz image is refused; the board ends byte-identical (2026-10-26)
+
+**Summary.** Agent 42.98 (Opus 5.5), on `worktree-agent-a6e773b3fd4780227`, reset to `refactor/all-firmware-profiles` (`590a333`), the only actor on the bench. It ran TESTING.md 42.95 §7 on the Compact PRO FF board (serial `090BB12PR939`, 1.0.3.0, bootloader 1.2.0.0): each step on the page in Electron (real WebUSB, from source, through a new rig) and with the CLI. Every Preserve write committed with status 0; every restore verified 31/31 windows at 0 differing bytes; every J-Link read between steps was the image the step had to leave. The delivered whole-flash images equal the J-Link reads byte for byte. The 18 Hz end image is refused on the page and by `--backup-only` in core's unknown-image words, and nothing was written. The camera showed seven things wrong or unclear, all words; they are fixed in core, the page and the CLI with tests (§6). One rig bug of mine let a run commit one bank of three; the J-Link put it back before anything else (§4). The final halted read is `28060916…`, byte-identical to the end image; switch `1=off 2=on`; the camera boots slot A. FW-V1 was not edited; nothing was pushed or merged.
+
+**Tags.** [measured]: run here, on the camera, the J-Link or the switch. [source]: read from the file named. [inferred]: follows, not run.
+
+**1. Setup.** `npm ci` (the `@seek-fw/{core,cli,web}` links are relative and point at this worktree; Electron's `dist` was not downloaded by `npm ci` here, so it was cloned from the main checkout with `cp -cR`), `npm run build` of core and the CLI. The bench folder is `SEEK_DUMPS/…/0C21A1M5KP15/bench-42.98/` (below: `B/`): `scripts/bench.mjs` (42.96's helper, which ran as `bench-42.93/`, repointed; new verb `ppage`), `scripts/jl.sh` (idle check, `on 1`, wait for the J-Link, a runner command, the halted read saved as `B/<tag>.bin` and hashed, `off 1`, `cycle 2`, wait for the camera), `waitusb.mjs`, `zipcheck.mjs`; logs in `B/logs/`, the page runs in `B/s*-page-*/`, the CLI in `B/cli/`. Idle check 17:23 (orchestrator) and before every J-Link session (`B/logs/idle-checks.log`): no J-Link process.
+
+**2. The rig** [source, measured]. `pages-bench-pro.e2e.ts` has no Preserve step and `camera-write.e2e.ts` is held to 1.3.0.0's expectation rows, so a new spec drives Preserve: `e2e/preserve-bench-pro.e2e.ts`. One Electron window: Connect, step 02, the "Banks to patch" menu (`SEEK_E2E_PRESERVE_BANK` = next-start, a, b, r or all), step 03, step 04, with `SEEK_E2E_PRESERVE_EXPECT` = run, stop (the drain stops before it reads, then step 04) or refuse (step 02 refuses with the unknown-image words, nothing staged or committed). The page guard is the slots bench's (`benchGuardScript`): the stage and commit budgets are 0 except inside the phase the test opens, with one bank's chunks plus slack per bank. Each step's section text, screenshot, log, write dialog (read while open, before Yes) and run file are kept.
+
+**3. The J-Link runner** [measured, source]. FW-V1's regenerated runner (`targets/compact_pro_ff_18hz_4_18_2_0/tools/jlink/jlink-runner.js`, FW-V1 local main `54eee5c3a`), its first use on hardware:
+- `dump-spifi-4m-halted`: 9 reads, all `O.K.`, each 4,194,304 B.
+- `flash-factory-4m-2`: 4 writes. Each compares first and writes only the 64 KiB blocks that differ ("plan: 2 of 64 blocks differ -> 0x14050000, 0x14070000"; "1 of 64 … 0x14010000"; "1 of 64 … 0x14070000"; "2 of 64 … A and R"), each block "attempt 1: verified".
+- `set-boot-recovery` with `BOOT_CFG_TEMPLATE=B/s1-stock.bin`: "cfg[0]=2 (bank R 0x14070000)", 64 KiB loadbin (no erase needed: 0xFFFFFFFF to 2 only clears bits), "Verify successful", `14010000 = 00000002 FFFFFFFF …`. The halted read differs from the stock image in those 4 bytes only.
+- No J-Link GUI window opened (`-NoGui 1`); no fallback to `e89df737e` was needed.
+- Finding [source]: this target's `BANK_BASES` is the 4.x map, `{ A: 0x14030000, B: 0x14050000, R: 0x14070000 }`. On this board (1.0.3.0, bootloader 1.2.0.0) A is 0x14050000 and B 0x14060000. So `set-boot-slot-a` would print "bank A 0x14030000" and `set-boot-slot-b` "bank B 0x14050000"; R's line is right only because R is at 0x14070000 in both maps. The word written is right either way (cfg[0] only). `flash-bank`'s guard (`GUARDED_BANK_BASES`) would treat 0x14050000 as B and refuse 0x14060000. Not changed here (FW-V1 is not this run's to edit).
+
+**4. The run** [measured] (CET; the e2e log prints UTC).
+
+| Step | J-Link | Page | CLI |
+|---|---|---|---|
+| start | 17:30 halted read `B/start.bin` = `28060916…` (the restore image) | | |
+| 1 stock | `flash-factory-4m-2` of `bench-42.85-start (stock, R not patched).bin` (A and R differed); read `B/s1-stock.bin` = `d2ee76b4…` | | |
+| 2 word A first, choice R | after page and CLI: `B/s2-after.bin` = `d2ee76b4…` | `B/s2-page-r/`: the plan warns (below); commit R 811 chunks, sum16 0x11B1, status 0; after the reset "the camera reports it entered slot A (active-slot word 0), which this run did not patch (it patched recovery R) … so nothing was armed or read" (step 03's wire: 18 reads); step 04 restores R (sum16 0x104F), verify 31/31 at 0 | `B/cli/s2-cli-r*`: the same plan, `!` warning, commit R, "drain failed: …", exit 1; `--resume … --from-step restore` then printed "WARNING: jumping from drain to restore, skipping: drain", restored R, "verify ok: … 31/31 windows at 0 differing byte(s)" |
+| 3 word R first (J-Link cfg[0]=2), default choice | `set-boot-recovery`, read `B/s3-bootR.bin` = `0c9e1c61…`; after: `flash-factory-4m-2` stock found only 0x14010000 different, read `B/s3-after-stock.bin` = `d2ee76b4…` | `B/s3-page-default/`: "Boot-config word 0x00000002 — recovery R first, then A, then B"; "Last start recovery R … (active-slot word 2)"; "Next start recovery R — the boot-config word is 2, so the bootloader tries recovery R first, and it holds an image the bootloader accepts"; dialog "Patch & dump — write to recovery R?"; drain "after the restart the camera reports it entered recovery R, which holds the patch", 4 MiB in 39.0 s; restore, verify 0; 3/3 | `B/cli/s3-cli-default*`: "banks to write recovery R (--bank next-start)"; "drain ok: the start after the reset entered recovery R …; delivered dump … sha256 0c9e1c61…" (= the J-Link read); verify ok; exit 0 |
+| 4 every bank | first page try (rig bug, below) put back by J-Link: only 0x14070000 differed, read `B/s4-restore1.bin` = `d2ee76b4…`; after page and CLI: `B/s4-after.bin` = `d2ee76b4…` | `B/s4-page-all-2/`: "Step 03 writes every bank that holds an image: slot A, slot B and recovery R."; dialog "Patch & dump — write to recovery R, slot B and slot A? … in that order — the bank the camera tries first goes last."; commits R, B, A, each status 0; drain entered A; restore dialog "Restore & verify — write to slot A, slot B and recovery R?"; restore A, B, R; final "Complete image (4 MiB) d2ee76b4… matches the backup on all 31 blocks"; 3/3 | `B/cli/s4-cli-all*`: "banks to write slot A, slot B and recovery R (--bank all)"; commits R, B, A; drain entered A; restore A, B, R; verify ok; exit 0 |
+| 5 end image, the added check | `flash-factory-4m-2` of `B/start.bin` (A and R differed), read `B/s5-end.bin` = `28060916…` | `B/s5-page-refuse/`: step 02 ends with "ERROR: Slot A holds an unknown image (not the stock 1.0.3.0 firmware, nor a change to it that Preserve knows; a frame-rate patch is not one), so Preserve does not patch it or put it back. … To preserve this camera, write the stock image back to slot A first (…), then start a new run."; step 03 not offered; wire: no stage, no commit; 1 passed, 2 skipped | `B/cli/s5-cli-backup-only*`: "backup failed: Slot A holds an unknown image (…) … — recorded in …; the previous checkpoint stands. Fix the cause and resume.", exit 1 |
+| end | 17:55 halted read `B/final.bin` = `28060916…`; `info --json`: serial `090BB12PR939`, `cfg0 0xFFFFFFFF`, `activeSlotWord 0x00000000`, `booted a`, `nextStart.runs a`; `cycle 2`; switch at 17:56:16 `1=off 2=on` | | |
+
+Step 2's warning, the same on the page and in the CLI: "The next start enters slot A (the boot-config word is 0xFFFFFFFF, so the bootloader tries slot A first, and it holds an image the bootloader accepts), and this choice does not patch it: after the restart the camera runs that bank's own image, so the whole-flash read stops before it reads anything. The restore still puts every written bank back."
+
+The rig bug (step 4, first page try, `B/s4-page-all/`). The spec counted the banks for its budgets from the sentence "Step 03 writes …", which the new wording (§6 W1, then already live in the dev server) begins "every bank that holds an image". It opened one bank's budget: R committed (status 0), and the guard refused B's 1,089th chunk, so B and A were not written. Step 04 did not start (the page asked for a replug). The J-Link restored the stock image at once (only R's block differed). The spec now counts the writable banks from the bank table for "every bank" (`af1b030`); the rerun passed 3/3.
+
+**5. What was wrong or unclear** [measured, on the camera].
+- W1. Step 02 said "Step 03 writes recovery R: recovery R." for a choice by name, and "Step 03 writes recovery R: recovery R, the bank the next start enters: …" for the default.
+- W2. Step 03's planned stop (the start entered a bank the run did not patch) showed "Failed — see the log above.", the badge "Stopped — see the log" and "Try patch & dump again". The CLI said "drain failed: …" and told the person to resume with `--from-step restore`, which then warned "WARNING: jumping from drain to restore, skipping: drain".
+- W3. After step 2's restore the last screen said "Done — your firmware is preserved. The complete image is the camera's whole original flash, …" while its own row said "Complete image (4 MiB) not produced".
+- W4. Under step 03, once the run was done: "Not ready yet — needs this run is done — every phase completed."
+- W5. The one-bank dialogs said "This writes a small patch into recovery R — the bank the camera tries first goes last." and "… back into recovery R — the bank the camera tries first goes first."
+- W6. A refused step 02 (the 18 Hz image) showed "Failed — see the log above."; the CLI's `--backup-only` said "backup failed: … the previous checkpoint stands. Fix the cause and resume." after core's own "then start a new run".
+- Not changed (open, §8): the step logs still show code names ("r16-state-from-crib+keyblock-verify", "family compact-2016", "the xor-ks0 staged form", "mode 7"), each of the 31 window lines repeats "the boot-config record is unprogrammed, and this boot serves the device-identity block at 0x14020000 — admitted, no reboot", and the restore says "holds something other than its original content" for the patch the run wrote.
+
+**6. Fixes.**
+
+| | Fix | Where | Commit |
+|---|---|---|---|
+| W1 | core `bankChoiceWritesWords`: "recovery R, the bank chosen by name"; the next start's and every bank's own words otherwise. The page: "Step 03 writes <that>." | core `banks.ts`, page | `88a8642` |
+| W2 | core `recordStepFailure` records the drain's stop on an unpatched start with `nextStep: 'restore'` and `drainEntered`, so a plain resume goes on to the restore; `unpatchedStartOf(error)` and `PRESERVE_UNPATCHED_START_STOP` ("Stopped before the whole-flash read: the camera started a bank this run did not patch, so nothing was read. The restore puts every written bank back."). The page's status uses it; the CLI says "drain stopped: …" and "… Continue with: seek-fw preserve --resume <dir>" | core `steps.ts`, page, CLI | `88a8642` |
+| W3 | core `preserveDoneWords(state)`: with no complete image, "Done — the camera is back as it was; there is no complete image" and why; the page's last screen and the CLI's last line use it | core, page, CLI | `88a8642` |
+| W4 | no "Not ready yet" line once the run is done | page | `88a8642` |
+| W5 | the write-order clause only when more than one bank is written | page | `88a8642` |
+| W6 | a refused backup: the page's status "Refused — nothing was written. See the log above."; the CLI "backup refused: … nothing was written to the camera." | page, CLI | `88a8642` |
+| rig | `e2e/preserve-bench-pro.e2e.ts` (new); the budgets count the writable banks for every bank | e2e | `af1b030` |
+| J-Link | `e2e/lib/bench/jlink.ts`: `LEGACY_TARGET = 'compact_32k_1_3_0_8'` was only a fallback target name, used when a FW-V1 checkout had that directory and not `compact_8hz_1_3_0_8`. FW-V1 renamed it to `compact_8hz_1_3_0_8`, the default, so the fallback named a target no checkout has. It is removed; the bench names `DEFAULT_TARGET` or the caller's `target`, and the doc comments say so | e2e | `af1b030` |
+
+The CLI run of step 3 already printed W3's new line ("Done — your firmware is preserved. …"), and the page run of step 4 already showed W1's ("Step 03 writes every bank that holds an image: …"). W2, W4, W5 and W6 were seen in their old form on the camera; their new form is pinned by tests, not seen on the camera.
+
+**7. Tests** [measured; files named, never a whole vitest].
+
+| Run | Result |
+|---|---|
+| core `preservation/stop-words.test.ts` (new), `banks.test.ts`, `steps.test.ts` | 3 files, 101 passed |
+| web `--project web` (35 files) | 431 passed |
+| CLI `test/preserve.test.ts` (the `--bank r` test now resumes without `--from-step`, checks "drain stopped", `nextStep: restore` and the new last line; the unknown-image test checks "backup refused … nothing was written") | 28 passed |
+| e2e `bench-lib.e2e.ts` (new: a checkout with only `compact_32k_1_3_0_8` is refused) | 110 passed, 4 skipped |
+| `npm run typecheck` | exit 0 |
+| eslint and prettier on every changed file | clean |
+| the rig on the camera | s2 2/3 (the arm check, since replaced), s3 3/3, s4 first try 1/3 (rig bug), s4 3/3, s5 1/1 (2 skipped by design) |
+
+**8. Not done, and open.**
+- The page and the CLI were not rerun on the camera after W2, W4, W5 and W6 (the board was back at the end image by then).
+- No emulator suite was run (`banks.emulator`, `resume.emulator`, `pipeline.emulator`, the e2e emulator specs); W2 changes the run state a stopped drain leaves (`nextStep: restore`), which the emulator resume tests may assert. Run `resume.emulator.test.ts` and `banks.emulator.test.ts` alone on an idle machine.
+- O1. FW-V1's `compact_pro_ff_18hz_4_18_2_0` runner names the 4.x bank map (§3) on a board that runs 1.0.3.0; its `set-boot-slot-a`/`-b` lines and `flash-bank`'s guard are wrong for this board. For the FW-V1 owner.
+- O2. The step logs' code names and the 31 repeated window lines (§5).
+- O3. On the page, the planned stop still shows the badge "Stopped — see the log" and the button "Try patch & dump again"; the next useful action is step 04.
+- O4. `docs/` keeps the old words until the bundle is rebuilt.
+
+**9. Commits** (branch `worktree-agent-a6e773b3fd4780227`, on `refactor/all-firmware-profiles` `590a333`; not merged, not pushed): `af1b030` (the rig, the J-Link target name), `88a8642` (the words, core, page, CLI, tests), and this section.
