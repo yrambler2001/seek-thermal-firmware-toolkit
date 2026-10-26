@@ -189,20 +189,20 @@ function gateOf(source: FpsPatchSource): FpsGate {
       enabled: false,
       reason:
         `firmware ${source.version} is older than 0.8.0.0: its RPC table has no read handler for ` +
-        'GetFeaturedFirmwareData, the only command a bank is read with, so the slots code refuses the ' +
-        'build and the page does not offer this patch (slots/capability-family.ts FIRST_SUPPORTED_VERSION)',
+        'GetFeaturedFirmwareData, the only command a bank is read with, so no bank of the build is ' +
+        'read or written, and the patch is not offered',
     };
   }
   let why: string;
   if (source.version.endsWith('-FF')) {
     why =
       'stage two: the 16 Hz FF build is staged as the vendor app stages it (the image XOR Key A, ' +
-      'stored under Key B), not as plain bytes, so its staging check is not done and the page does ' +
-      'not offer this patch yet';
+      'stored under Key B), not as plain bytes, so its staging check is not done and the patch is not ' +
+      'offered yet';
   } else {
     why =
       'stage two: this entry is not in the stage-two set, so its staging check is not done and the ' +
-      'page does not offer this patch yet';
+      'patch is not offered yet';
   }
   return { enabled: false, reason: why };
 }

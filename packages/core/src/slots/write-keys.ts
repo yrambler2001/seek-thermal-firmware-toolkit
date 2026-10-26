@@ -489,8 +489,9 @@ export function deriveWriteKeys(state: DeviceState): WriteKeys {
         : ` (the bootloader's Key A occurs ${String(findAll(plain, table.keyA).length)} time(s), ` +
           `its Key B ${String(findAll(plain, table.keyB).length)})`;
     return refused(
-      `the running application (${bootedName}, firmware ${version ?? '?'}) carries none of the key ` +
-        `pairs this page knows, each half exactly once, so its Key A cannot be located in its image${counted}`,
+      `the running application (${bootedName}, firmware ${version ?? '?'}) carries none of the known key ` +
+        "pairs (the bootloader's and the decoded application pairs), each half exactly once, so its Key A " +
+        `cannot be located in its image${counted}`,
     );
   }
   evidence.push(
@@ -566,7 +567,7 @@ export function deriveWriteKeys(state: DeviceState): WriteKeys {
     if (other.key === boot.booted || other.unread || other.plain === null) continue;
     evidence.push(
       `bank ${other.key.toUpperCase()} decrypts under ` +
-        `${other.keyName === null || other.keyName === UNNAMED_KEY ? 'no key this page knows' : other.keyName}; ` +
+        `${other.keyName === null || other.keyName === UNNAMED_KEY ? 'no known key' : other.keyName}; ` +
         `it is written under ${atRest.name} by the same rule, and read back to check`,
     );
   }

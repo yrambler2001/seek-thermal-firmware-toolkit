@@ -93,7 +93,7 @@ export function commitStatusCause(status: number): string {
     if (detail === PROGRAM_DETAIL) return 'the program stage failed';
     if (detail === VERIFY_DETAIL) return 'the verify stage failed';
   }
-  return 'a status this page does not recognise';
+  return 'a status not known here';
 }
 
 /**

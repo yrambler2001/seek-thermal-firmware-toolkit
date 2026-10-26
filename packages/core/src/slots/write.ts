@@ -113,12 +113,12 @@ export function writeWindowOf(entry: SlotEntry): WindowEntry {
   }
   if (entry.commitEffect !== 'bank-only') {
     throw slotRefused(
-      `${entry.name}'s commit also rewrites the boot configuration; this page does not offer that`,
+      `${entry.name}'s commit also rewrites the boot configuration; a slot write does not do that`,
     );
   }
   if (entry.write.subcmd === 0) {
     throw slotRefused(
-      'subcommand 0 is the upgrade-target selector, and arming it rewrites cfg[0]; this page ' +
+      'subcommand 0 is the upgrade-target selector, and arming it rewrites cfg[0]; a slot write ' +
         'never arms it',
     );
   }

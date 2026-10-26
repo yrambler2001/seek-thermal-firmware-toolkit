@@ -287,7 +287,7 @@ describe('deriveWriteKeys: the booted bank gives the key, the running applicatio
       /key table does not carry that key/,
     );
     expect(refusalOf(camera({ bootedPlain: imageWith([]) }))).toMatch(
-      /carries none of the key pairs this page knows/,
+      /carries none of the known key pairs \(the bootloader's and the decoded application pairs\)/,
     );
   });
 

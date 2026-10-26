@@ -171,7 +171,7 @@ export function compareReadBack(
     notes: [
       kind === 'raw'
         ? 'raw bytes: read-back reported, not compared (the bytes do not decrypt to a plain image ' +
-          'this page can predict on this form, and the device re-encrypts what it keeps)'
+          'that can be predicted on this form, and the device re-encrypts what it keeps)'
         : 'no comparison was possible: the plan predicts neither the stored bytes nor the plain image',
     ],
   };
