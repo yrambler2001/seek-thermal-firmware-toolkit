@@ -674,6 +674,13 @@ describe.skipIf(!RUNNABLE)('the web app pages on the bench camera (1.3.0.0, real
           true,
         );
         expect(written.ackShown, 'bank B is not booted: no extra tick').toBe(false);
+        /* The image is the build the camera runs (1.3.0.0), so the plan's image-build warning (TESTING.md
+         * 42.104) is not in the dialog; another build would be its first warning. */
+        say(`write dialog: ${JSON.stringify(written.dialog)}`);
+        expect(written.dialog, 'the dialog was read').not.toBe('');
+        expect(written.dialog, 'no image-build warning for the build the camera runs').not.toMatch(
+          /This image is firmware|names no firmware version|the camera runs/,
+        );
         expect(await need().banner(), 'no write banner after an allowed write').toBeNull();
         /* A write clears the page's bank table until the banks are read again. */
         await need().readSlots();
