@@ -23,6 +23,13 @@
  *   SEEK_E2E_PRO_UNDO=a=<file>       before the patches: "Flash decrypted image" of <file> on that bank,
  *                                    the undo the frame-rate dialog names (the decrypted dump the patch
  *                                    saved first). The bank then holds no patch. Default: no undo
+ *   SEEK_E2E_PRO_STEPS=<steps>       after the patches: the bank actions of TESTING.md 42.91, in order,
+ *                                    separated by ';': `copy a b` (the row's "Copy to slot B"),
+ *                                    `restore <bank> <stock|patched> <file>` ("Restore from full flash
+ *                                    backup" with a 4 MiB file; the word says what the bank holds after),
+ *                                    `every` ("Make 18 FPS in every bank"). Each one checks its plan, its
+ *                                    backup zip (its name, and that its files are the bank as it was) and
+ *                                    its result, then the replug and the reads. Default: none
  *   SEEK_E2E_PRO_OUT=<dir>           where the page text, screenshots and dumps are kept (default: the
  *                                    scratch folder's `out`)
  *   SEEK_E2E_SOURCE=docs|dev         the hosted bundle (`docs/`, default: the page the owner opens) or
@@ -52,9 +59,13 @@
  * the camera's notes shown above it (no "Note: Staged: …" there); the key recovery's verdict in words in the
  * read-back and dump lines ("key verified by the acceptance sum 0x00000000", never "VERIFIED(profile)"); the
  * frame-rate dialog naming no row by its record or link code names.
+ * And 42.91's: every write saves its bank first as one zip download (no save dialog), named with the time,
+ * the serial, the firmware, the bank and the write; each row's "Copy to …" and "Restore from full flash
+ * backup…"; "Make 18 FPS in every bank".
  * ==================================================================== */
 
 import { createHash } from 'node:crypto';
+import { basename } from 'node:path';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -63,6 +74,7 @@ import type { ElementHandle } from 'puppeteer-core';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { say } from './lib/browser.js';
+import { waitForBackupZip, type BackupZip } from './lib/backup-zip.js';
 import { describeWire } from './lib/checks.js';
 import { countsOf, guardOf, setGuard } from './lib/electron-camera.js';
 import { electronBinary } from './lib/electron.js';
@@ -80,6 +92,7 @@ import {
   SLOTS_TABLE_ROWS,
   bankRows,
   confirmWrite,
+  copyLabel,
   dumpBank,
   openWriteConfirm,
   outcomeAlert,
@@ -135,6 +148,45 @@ function undoOf(
 }
 
 const UNDO = undoOf(process.env.SEEK_E2E_PRO_UNDO);
+
+/** One bank action of SEEK_E2E_PRO_STEPS (TESTING.md 42.91). */
+type Step =
+  | { readonly kind: 'copy'; readonly from: BankLetter; readonly to: BankLetter }
+  | {
+      readonly kind: 'restore';
+      readonly letter: BankLetter;
+      readonly holds: 'stock' | 'patched';
+      readonly file: string;
+    }
+  | { readonly kind: 'every' };
+
+function letterOf(text: string | undefined): BankLetter {
+  const letter = (text ?? '').toLowerCase();
+  if (letter !== 'a' && letter !== 'b' && letter !== 'r')
+    throw new Error(`"${String(text)}" is not a bank`);
+  return letter;
+}
+
+function stepsOf(raw: string | undefined): Step[] {
+  if (raw === undefined || raw.trim() === '') return [];
+  return raw
+    .split(';')
+    .map((part) => part.trim())
+    .filter((part) => part !== '')
+    .map((part): Step => {
+      const [word, ...rest] = part.split(/\s+/);
+      if (word === 'copy') return { kind: 'copy', from: letterOf(rest[0]), to: letterOf(rest[1]) };
+      if (word === 'every') return { kind: 'every' };
+      if (word === 'restore') {
+        const holds = rest[1];
+        if (holds !== 'stock' && holds !== 'patched') throw new Error(`restore: "${part}"`);
+        return { kind: 'restore', letter: letterOf(rest[0]), holds, file: rest.slice(2).join(' ') };
+      }
+      throw new Error(`SEEK_E2E_PRO_STEPS: unknown step "${part}"`);
+    });
+}
+
+const STEPS = stepsOf(process.env.SEEK_E2E_PRO_STEPS);
 
 /* ---------------------------------------------------------------------------------- */
 /* What the board is (TESTING.md 42.84 section 4, 42.85)                              */
@@ -228,12 +280,10 @@ const ASKS_ONE = /extra confirmation|acknowledge/i;
 /** One write of one bank: the stage chunks of a whole bank (64 B each) plus slack, and one commit. */
 const STAGE_BUDGET = Math.ceil(BANK_BYTES / 64) + 64;
 
-/**
- * Hides the File System Access picker, so the frame-rate patch saves its two dumps as downloads (the
- * path the page takes where it has no picker), which the spec reads from the window's download folder.
- */
-const HIDE_FILE_PICKER =
-  'try { delete globalThis.showSaveFilePicker; } catch (error) { void error; }';
+/** The every-bank action's label (TESTING.md 42.91). */
+const EVERY_LABEL = `Make ${String(TO_HZ)} FPS in every bank`;
+/** The restore button's label. */
+const RESTORE_LABEL = 'Restore from full flash backup…';
 
 /* ---------------------------------------------------------------------------------- */
 
@@ -315,6 +365,8 @@ describe.skipIf(!RUNNABLE)(
     const patched = new Set<BankLetter>(PATCHED_AT_START);
     /** The banks this run wrote: their dumps are no longer compared with the start image. */
     const written = new Set<BankLetter>();
+    /** Each bank's stored bytes as last dumped: what a backup zip saved before a write must hold. */
+    const now = new Map<BankLetter, Uint8Array>();
 
     const live = (): TargetHandle => {
       if (target === null) throw new Error('the window is not open (an earlier step failed)');
@@ -457,6 +509,19 @@ describe.skipIf(!RUNNABLE)(
         expect(row.booted, `${row.name} booted`).toBe(row.letter === 'a');
         expect(row.firmware, `${row.name} firmware`).toContain(VERSION);
         const offer = row.buttons.find((button) => button.label === OFFER_LABEL);
+        /* TESTING.md 42.91: each row copies its image to the two other banks and restores from a full
+         * flash backup; every bank holds an image here, so each is on. */
+        for (const label of [
+          ...LETTERS.filter((other) => other !== row.letter).map(copyLabel),
+          RESTORE_LABEL,
+        ]) {
+          const button = row.buttons.find((candidate) => candidate.label === label);
+          expect(button?.enabled, `${row.name}: "${label}" is offered and enabled`).toBe(true);
+        }
+        expect(
+          row.buttons.some((candidate) => candidate.label.startsWith('Use ')),
+          `${row.name}: no "Use … image" button any more`,
+        ).toBe(false);
         if (patched.has(row.letter)) {
           /* A bank that runs the patched image is not offered it again, and says so. */
           expect(offer, `${row.name}: no "${OFFER_LABEL}" on a patched bank`).toBeUndefined();
@@ -469,6 +534,19 @@ describe.skipIf(!RUNNABLE)(
           expect(offer?.enabled, `${row.name}: "${OFFER_LABEL}" is offered and enabled`).toBe(true);
         }
       }
+      /* "Make 18 FPS in every bank" beside the per-bank buttons, whenever some bank offers the patch. */
+      const every = await page.evaluate(
+        (sel: string, label: string) =>
+          [...(document.querySelector(sel)?.querySelectorAll('button') ?? [])]
+            .filter((button) => button.textContent.trim() === label)
+            .map((button) => !button.disabled),
+        SLOTS_SECTION,
+        EVERY_LABEL,
+      );
+      expect(every, `"${EVERY_LABEL}" when a bank offers the patch, enabled`).toEqual(
+        LETTERS.every((letter) => patched.has(letter)) ? [] : [true],
+      );
+      expect(text, 'no save-file dialog wording').not.toMatch(/choose where|save dialog/i);
       const warned = !patched.has('a') && (patched.has('b') || patched.has('r'));
       if (warned) {
         expect(text, 'the warning names the bank that runs').toContain(WARNING_NAMES_A);
@@ -521,7 +599,11 @@ describe.skipIf(!RUNNABLE)(
      * TESTING.md 42.85), then Info and Read slots, checked for the banks that hold the patch now, and the
      * dumps: the written bank kept, the others still the start image's.
      */
-    async function replugAndRead(letter: BankLetter, tag: string): Promise<void> {
+    async function replugAndRead(
+      wrote: BankLetter | readonly BankLetter[],
+      tag: string,
+    ): Promise<void> {
+      const letters: readonly BankLetter[] = typeof wrote === 'string' ? [wrote] : wrote;
       const { wizard, page } = live();
       if (camera === null) throw new Error('the bench camera is not open');
       const eventsBefore = (await guardOf(page)).usbEvents.length;
@@ -550,7 +632,7 @@ describe.skipIf(!RUNNABLE)(
       checkInfo(info);
       const text = await readSlotsPage(tag);
       await checkSlots(text);
-      await dumpOf(letter, tag);
+      for (const letter of letters) now.set(letter, await dumpOf(letter, tag));
       for (const other of LETTERS.filter((l) => !written.has(l))) {
         const raw = await dumpOf(other, tag);
         expect(
@@ -559,6 +641,99 @@ describe.skipIf(!RUNNABLE)(
         ).toBe(true);
       }
       expect(await refusalsOf(live()), 'nothing refused by the guards').toEqual([]);
+    }
+
+    /**
+     * The backup zip a write downloaded first (TESTING.md 42.91): one folder of the zip's name, the text file
+     * naming the camera, the firmware and each bank, and each bank's stored file equal to the bank as it was
+     * last dumped (`now`). The zip is kept in OUT.
+     */
+    function checkBackupZip(zip: BackupZip, letters: readonly BankLetter[], tag: string): void {
+      keepBytes(`${tag}-${zip.name}`, zip.bytes);
+      writeFileSync(path.join(OUT, `${tag}-README.txt`), zip.text);
+      say(`backup zip ${zip.name}: ${zip.entries.map((entry) => entry.name).join(', ')}`);
+      expect(zip.text, 'the text file names the camera').toContain(
+        `serial ${SERIAL}, firmware ${VERSION}`,
+      );
+      for (const letter of letters) {
+        const bank = zip.bank(letter);
+        const was = now.get(letter);
+        expect(bank.raw, `${zip.name}: bank ${letter.toUpperCase()} as stored`).not.toBeNull();
+        expect(
+          was !== undefined && bank.raw !== null && Buffer.from(bank.raw).equals(Buffer.from(was)),
+          `${zip.name}: bank ${letter.toUpperCase()}'s stored file is the bank as it was`,
+        ).toBe(true);
+        expect(bank.decrypted?.length, `${zip.name}: bank ${letter.toUpperCase()} decrypted`).toBe(
+          IMAGE_BYTES,
+        );
+        expect(zip.text, `the text file names bank ${letter.toUpperCase()}`).toContain(
+          `${SLOT_NAME[letter]} at 0x${BANK_ADDRESS[letter].toString(16).toUpperCase()}`,
+        );
+        if (bank.raw !== null) {
+          expect(zip.text, 'the text file gives the stored file’s sha256').toContain(
+            sha256(bank.raw),
+          );
+        }
+      }
+    }
+
+    /** Opens the write confirmation of the prepared plan, keeps it, ticks it when asked, writes, and keeps the result. */
+    async function writePrepared(
+      letter: BankLetter,
+      tag: string,
+    ): Promise<{ status: string; log: string; section: string; outcome: string | null }> {
+      const { wizard, page } = live();
+      const name = SLOT_NAME[letter];
+      await openWriteConfirm(wizard, page, name);
+      const dialog = await page.$eval(CONFIRM_DIALOG, (el) => (el as HTMLElement).innerText);
+      await keep(`${tag}-dialog`, dialog);
+      expect(dialog, 'the dialog names the zip saved first').toMatch(
+        /Before anything is sent, .+ is read again and saved as one zip download: seek_backup_<time>_/,
+      );
+      const ackShown = (await page.$(ACK_BOX)) !== null;
+      expect(ackShown, 'A (booted) and R (recovery) ask the acknowledgement').toBe(letter !== 'b');
+      await setGuard(page, {
+        allowReset: false,
+        resetBudget: null,
+        stageBudget: STAGE_BUDGET,
+        commitBudget: 1,
+        commitSum16: null,
+      });
+      let status: string;
+      try {
+        status = await confirmWrite(wizard, page, name, ackShown);
+      } finally {
+        await setGuard(page, {
+          allowReset: false,
+          resetBudget: null,
+          stageBudget: 0,
+          commitBudget: 0,
+          commitSum16: null,
+        }).catch(() => undefined);
+      }
+      written.add(letter);
+      const log = await wizard.text('#slotsrun-log');
+      const section = await wizard.text(SLOTS_SECTION);
+      writeFileSync(path.join(OUT, `${tag}-log.txt`), log);
+      await keep(`${tag}-after`, section);
+      const outcome = await outcomeAlert(page);
+      say(`${tag}: "${status}"; outcome: ${outcome ?? '(none)'}`);
+      for (const codeName of CODE_NAMES) expect(log, codeName).not.toContain(codeName);
+      expect(count(log, /unplug and replug/i), 'the replug line, once in the log').toBe(1);
+      expect(count(section, /NOW UNPLUG AND REPLUG THE CAMERA\./), 'the prompt, once').toBe(1);
+      return { status, log, section, outcome };
+    }
+
+    /** Waits for the prepare to end: "Ready — review the plan" or "Rejected — …". */
+    async function prepared(): Promise<string> {
+      const { wizard, page } = live();
+      await page.waitForFunction(
+        (sel: string) =>
+          /^(Ready|Rejected)/.test(document.querySelector<HTMLElement>(sel)?.innerText ?? ''),
+        { timeout: 60_000, polling: 250 },
+        '#slotsrun-status',
+      );
+      return wizard.text('#slotsrun-status');
     }
 
     beforeAll(async () => {
@@ -581,7 +756,7 @@ describe.skipIf(!RUNNABLE)(
         source: SOURCE,
         sharedServer: SOURCE === 'dev',
         uiGuard: SLOTS_BENCH_UI,
-        preloadSource: `${benchGuardScript()}\n${HIDE_FILE_PICKER}\n`,
+        preloadSource: `${benchGuardScript()}\n`,
         headed: HEADED,
       });
       target = opened;
@@ -631,6 +806,7 @@ describe.skipIf(!RUNNABLE)(
       await checkSlots(text);
       for (const letter of LETTERS) {
         const raw = await dumpOf(letter, 'before');
+        now.set(letter, raw);
         expect(
           Buffer.from(raw).equals(Buffer.from(startBank(letter))),
           `Dump ${letter.toUpperCase()} equals the start image's bank`,
@@ -872,26 +1048,17 @@ describe.skipIf(!RUNNABLE)(
         expect(log, 'the log keeps the record, not the capitalised prompt').not.toContain(
           REPLUG_PROMPT,
         );
-        expect(count(log, /before-fps-patch-raw-/), 'the saved files, named once in the log').toBe(
+        expect(count(log, /saved first, as a download: seek_backup_/), 'the zip, named once').toBe(
           1,
         );
         expect(outcome ?? '', 'the result panel names the firmware, not the table id').toContain(
           `Slot ${L} — patched from ${String(FROM_HZ)} Hz to ${String(TO_HZ)} Hz (firmware ${VERSION}).`,
         );
-        const raw = await downloads.waitFor(
-          (file) => /before-fps-patch-raw-[0-9a-f]+\.bin$/.test(file),
-          60_000,
-          `the ${L} raw dump saved before the patch`,
+        const { zip } = await waitForBackupZip(downloads, [letter], 'before-fps-patch');
+        checkBackupZip(zip, [letter], `fps-${letter}`);
+        expect(outcome ?? '', 'the result names the zip').toContain(
+          `Saved first, as a download: ${zip.name}`,
         );
-        const plain = await downloads.waitFor(
-          (file) => /before-fps-patch-decrypted-[0-9a-f]+\.bin$/.test(file),
-          60_000,
-          `the ${L} decrypted dump saved before the patch`,
-        );
-        keepBytes(`fps-${letter}-saved-${raw.name}`, raw.bytes);
-        keepBytes(`fps-${letter}-saved-${plain.name}`, plain.bytes);
-        expect(raw.bytes.length, 'the saved raw dump is the bank').toBe(BANK_BYTES);
-        expect(plain.bytes.length, 'the saved decrypted dump is the image').toBe(IMAGE_BYTES);
         expect(await refusalsOf(live()), 'nothing refused by the guards').toEqual([]);
       });
 
@@ -900,6 +1067,224 @@ describe.skipIf(!RUNNABLE)(
         patched.add(letter);
         await replugAndRead(letter, `after-${letter}`);
       });
+    }
+
+    for (const [index, step] of STEPS.entries()) {
+      const n = String(index + 1);
+      if (step.kind === 'copy') {
+        const { from, to } = step;
+        const tag = `step-${n}-copy-${from}-${to}`;
+        it(`step ${n}: "${copyLabel(to)}" on ${from.toUpperCase()}'s row: the plan, the zip saved first, the write`, async () => {
+          const { wizard, page, downloads } = live();
+          await wizard.route('#/slots');
+          const moved = await wizard.watchStatus('#slotsrun-status');
+          await wizard.click(await rowHandle(from), copyLabel(to));
+          await moved();
+          const ready = await prepared();
+          const plan = await preparedView(page);
+          await keep(`${tag}-plan`, plan?.text ?? '(no prepared plan)');
+          say(`${tag} plan: ${(plan?.text ?? '').replace(/\s+/g, ' ')}`);
+          expect(ready, 'the copy is prepared').toMatch(/^Ready — /);
+          const planText = plan?.text ?? '';
+          expect(valueUnder(planText, 'Image taken from'), 'where the image comes from').toBe(
+            `${SLOT_NAME[from]} at 0x${BANK_ADDRESS[from].toString(16).toUpperCase()}, firmware ${VERSION}, as the slots read decrypted it`,
+          );
+          expect(valueUnder(planText, 'Saved first') ?? '', 'the zip saved first').toMatch(
+            new RegExp(
+              `_bank-${to.toUpperCase()}_before-copy-from-${from.toUpperCase()}\\.zip\\. The zip is downloaded automatically`,
+            ),
+          );
+          const done = await writePrepared(to, tag);
+          expect(done.status, `the copy into ${to.toUpperCase()}`).toBe(WRITTEN_STATUS);
+          expect(done.log, 'the read-back in words').toContain(READ_BACK_VERIFIED);
+          const { zip } = await waitForBackupZip(
+            downloads,
+            [to],
+            `before-copy-from-${from.toUpperCase()}`,
+          );
+          checkBackupZip(zip, [to], tag);
+          expect(done.outcome ?? '', 'the result names the zip').toContain(
+            `Saved first, as a download: ${zip.name}`,
+          );
+          if (patched.has(from)) patched.add(to);
+          else patched.delete(to);
+          expect(await refusalsOf(live()), 'nothing refused by the guards').toEqual([]);
+        });
+        it(`step ${n}: after the replug, ${to.toUpperCase()} holds ${from.toUpperCase()}'s image`, async () => {
+          if (!written.has(to)) throw new Error(`the copy into ${to.toUpperCase()} did not run`);
+          await replugAndRead(to, `after-${tag}`);
+          const source = now.get(from);
+          const target = now.get(to);
+          say(
+            `${tag}: Dump ${to.toUpperCase()} sha256 ${target === undefined ? '-' : sha256(target)}; ` +
+              `Dump ${from.toUpperCase()} sha256 ${source === undefined ? '-' : sha256(source)}`,
+          );
+          await dumpOf(from, `after-${tag}`).then((raw) => now.set(from, raw));
+        });
+      } else if (step.kind === 'restore') {
+        const { letter, holds, file } = step;
+        const L = letter.toUpperCase();
+        const tag = `step-${n}-restore-${letter}`;
+        it(`step ${n}: "${RESTORE_LABEL}" on ${L} with ${basename(file)}: the plan, the zip saved first, the write, the read-back against the backup`, async () => {
+          const { wizard, page, downloads } = live();
+          await wizard.route('#/slots');
+          const full = new Uint8Array(readFileSync(file));
+          const offset = BANK_ADDRESS[letter] - FLASH_BASE;
+          const backupBank = full.subarray(offset, offset + BANK_BYTES);
+          say(`${tag}: ${file} sha256 ${sha256(full)}; its bank ${L} sha256 ${sha256(backupBank)}`);
+          const input = (await page.$(
+            `#slot-${letter}-restore-file`,
+          )) as ElementHandle<HTMLInputElement> | null;
+          if (input === null) throw new Error(`no restore picker for bank ${L}`);
+          const moved = await wizard.watchStatus('#slotsrun-status');
+          await input.uploadFile(file);
+          await moved();
+          const ready = await prepared();
+          const plan = await preparedView(page);
+          await keep(`${tag}-plan`, plan?.text ?? '(no prepared plan)');
+          say(`${tag} plan: ${(plan?.text ?? '').replace(/\s+/g, ' ')}`);
+          expect(ready, 'the restore is prepared').toMatch(/^Ready — /);
+          const planText = plan?.text ?? '';
+          expect(
+            valueUnder(planText, 'Image taken from') ?? '',
+            'where the image comes from',
+          ).toContain(`in the full flash backup ${basename(file)}, firmware ${VERSION}`);
+          expect(planText, 'this camera’s backup: no other-camera warning').not.toContain(
+            'looks like another camera',
+          );
+          expect(valueUnder(planText, 'Saved first') ?? '').toMatch(
+            new RegExp(`_bank-${L}_before-restore\\.zip\\. The zip is downloaded automatically`),
+          );
+          const done = await writePrepared(letter, tag);
+          expect(done.status, `the restore of ${L}`).toBe(WRITTEN_STATUS);
+          const { zip } = await waitForBackupZip(downloads, [letter], 'before-restore');
+          checkBackupZip(zip, [letter], tag);
+          /* Measured: whether the bank reads back as the backup stores it (the 2016 line re-encrypts under key
+           * block 1 of the image's pair, so the bytes are expected to come back equal). */
+          const verdict = (done.outcome ?? '')
+            .split('\n')
+            .find((line) => line.startsWith(`Slot ${L} reads back`));
+          say(`${tag}: restore verdict: ${verdict ?? '(none)'}`);
+          expect(
+            verdict,
+            'the restore says how the read-back compares with the backup',
+          ).toBeDefined();
+          writeFileSync(path.join(OUT, `${tag}-verdict.txt`), `${verdict ?? ''}\n`);
+          if (holds === 'patched') patched.add(letter);
+          else patched.delete(letter);
+          expect(await refusalsOf(live()), 'nothing refused by the guards').toEqual([]);
+        });
+        it(`step ${n}: after the replug, ${L} is the backup's bank`, async () => {
+          if (!written.has(letter)) throw new Error(`the restore of ${L} did not run`);
+          await replugAndRead(letter, `after-${tag}`);
+          const full = new Uint8Array(readFileSync(file));
+          const offset = BANK_ADDRESS[letter] - FLASH_BASE;
+          const backupBank = full.subarray(offset, offset + BANK_BYTES);
+          const dumped = now.get(letter);
+          say(
+            `${tag}: Dump ${L} sha256 ${dumped === undefined ? '-' : sha256(dumped)}; the backup's ${L} ${sha256(backupBank)}`,
+          );
+          expect(
+            dumped !== undefined && Buffer.from(dumped).equals(Buffer.from(backupBank)),
+            `Dump ${L} equals the backup's bank ${L}`,
+          ).toBe(true);
+        });
+      } else {
+        const tag = `step-${n}-every`;
+        let order: BankLetter[] = [];
+        it(`step ${n}: "${EVERY_LABEL}": one confirmation, one zip of every bank it patches, each written and read back`, async () => {
+          const { wizard, page, downloads } = live();
+          await wizard.route('#/slots');
+          order = LETTERS.filter((letter) => !patched.has(letter));
+          await wizard.click(SLOTS_SECTION, EVERY_LABEL);
+          await page.waitForSelector(CONFIRM_DIALOG, { timeout: 10_000 });
+          const dialog = await page.$eval(CONFIRM_DIALOG, (el) => (el as HTMLElement).innerText);
+          await keep(`${tag}-dialog`, dialog);
+          say(`${tag} dialog: ${dialog.replace(/\s+/g, ' ')}`);
+          /* The write order: B, then R, then A (the booted bank last), of the banks that offer it. */
+          const rank: Record<BankLetter, number> = { b: 0, r: 1, a: 2 };
+          order.sort((x, y) => rank[x] - rank[y]);
+          const confirm = `Yes — patch ${String(order.length)} bank${order.length === 1 ? '' : 's'}`;
+          try {
+            expect(dialog).toContain(`Make every bank run at ${String(TO_HZ)} FPS?`);
+            expect(dialog).toContain(
+              `They are written in this order: ${order.map((letter) => SLOT_NAME[letter]).join(', then ')}.`,
+            );
+            expect(dialog).toContain(
+              `_bank-${order.map((letter) => letter.toUpperCase()).join('-')}_before-fps-patch-every-bank.zip`,
+            );
+            for (const codeName of CODE_NAMES) expect(dialog, codeName).not.toContain(codeName);
+          } catch (error) {
+            await wizard.click(CONFIRM_DIALOG, 'Cancel');
+            throw error;
+          }
+          const ack = await page.$('#slot-fps-every-ack');
+          expect(ack !== null, 'the tick, when A or R is among them').toBe(
+            order.includes('a') || order.includes('r'),
+          );
+          if (ack !== null) {
+            expect(
+              await wizard.isEnabled(CONFIRM_DIALOG, confirm),
+              'Yes is off before the tick',
+            ).toBe(false);
+            await page.$eval('#slot-fps-every-ack', (el) => {
+              (el as HTMLInputElement).click();
+            });
+          }
+          await setGuard(page, {
+            allowReset: false,
+            resetBudget: null,
+            stageBudget: STAGE_BUDGET * order.length,
+            commitBudget: order.length,
+            commitSum16: null,
+          });
+          let status: string;
+          const startedAt = Date.now();
+          try {
+            status = await runAndSettle(
+              wizard,
+              page,
+              () => wizard.click(CONFIRM_DIALOG, confirm),
+              /^(Patched|Stopped|Failed|Cancelled)/,
+              60 * 60_000,
+            );
+          } finally {
+            await setGuard(page, {
+              allowReset: false,
+              resetBudget: null,
+              stageBudget: 0,
+              commitBudget: 0,
+              commitSum16: null,
+            }).catch(() => undefined);
+          }
+          for (const letter of order) written.add(letter);
+          const log = await wizard.text('#slotsrun-log');
+          const section = await wizard.text(SLOTS_SECTION);
+          writeFileSync(path.join(OUT, `${tag}-log.txt`), log);
+          await keep(`${tag}-after`, section);
+          say(`${tag}: "${status}" after ${String(Date.now() - startedAt)} ms`);
+          expect(status).toBe(
+            `Patched ${String(order.length)} bank${order.length === 1 ? '' : 's'}. Each reads back as planned.`,
+          );
+          for (const codeName of CODE_NAMES) expect(log, codeName).not.toContain(codeName);
+          expect(count(log, /unplug and replug/i), 'the replug line, once in the log').toBe(1);
+          expect(count(log, /committing, CompleteMemoryUpgrade/g), 'one commit per bank').toBe(
+            order.length,
+          );
+          const { zip } = await waitForBackupZip(
+            downloads,
+            [...order].sort((x, y) => 'abr'.indexOf(x) - 'abr'.indexOf(y)),
+            'before-fps-patch-every-bank',
+          );
+          checkBackupZip(zip, order, tag);
+          for (const letter of order) patched.add(letter);
+          expect(await refusalsOf(live()), 'nothing refused by the guards').toEqual([]);
+        });
+        it(`step ${n}: after the replug, every bank is patched`, async () => {
+          if (order.length === 0) throw new Error('the every-bank patch did not run');
+          await replugAndRead(order, `after-${tag}`);
+        });
+      }
     }
   },
 );

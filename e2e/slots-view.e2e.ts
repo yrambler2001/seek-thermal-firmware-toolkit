@@ -52,6 +52,7 @@ import {
   bankRows,
   confirmEnabled,
   confirmWrite,
+  copyLabel,
   dumpBank,
   outcomeAlert,
   openWriteConfirm,
@@ -323,21 +324,28 @@ for (const subject of SUPPORTED) {
             if (row.firmware.startsWith(subject.version)) {
               expect(row.sha256, `${row.name} sha256`).toMatch(/^[0-9a-f]{64}$/);
             }
-            /* Per-op support: a read bank can be dumped and both flash actions are offered. */
+            /* Per-op support: a read bank can be dumped and both flash actions are offered. Each row
+             * copies its image to the other two banks, filled or empty, and restores from a full
+             * flash backup (TESTING.md 42.91); an empty bank has no image to copy, so its copy
+             * buttons are off. */
             const labels = row.buttons.map((button) => button.label);
-            /* An empty bank is also offered the running firmware's own image (the booted bank
-             * holds one on every build this spec reads). */
+            const copies = (['a', 'b', 'r'] as const)
+              .filter((other) => other !== row.letter)
+              .map(copyLabel);
             expect(labels, `${row.name} actions`).toEqual([
               'Dump',
               'Flash decrypted image…',
               'Flash raw bytes…',
-              ...(holdsImage ? [] : ["Use the booted bank's image"]),
+              ...copies,
+              'Restore from full flash backup…',
               ...(holdsImage && subject.makeFps !== undefined
                 ? [`Make ${String(subject.makeFps)} FPS`]
                 : []),
             ]);
             for (const button of row.buttons) {
-              expect(button.enabled, `${row.name}: ${button.label}`).toBe(true);
+              expect(button.enabled, `${row.name}: ${button.label}`).toBe(
+                holdsImage || !button.label.startsWith('Copy to '),
+              );
             }
           }
           expect(rows.filter((row) => row.booted)).toHaveLength(1);

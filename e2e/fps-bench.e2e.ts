@@ -25,7 +25,8 @@ import path from 'node:path';
 import type { ElementHandle } from 'puppeteer-core';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { say, type Download } from './lib/browser.js';
+import { say } from './lib/browser.js';
+import { waitForBackupZip } from './lib/backup-zip.js';
 import { SLOTS_BENCH_UI, benchGuardScript, checkChooserEntry } from './lib/bench/spec-page.js';
 import { setGuard } from './lib/electron-camera.js';
 import { HEADED } from './lib/spec.js';
@@ -79,14 +80,6 @@ if (MODE !== 'i-understand' && MODE !== 'dry-run') {
   );
 }
 
-/**
- * Hides the File System Access picker from the page, so it saves the two dumps as downloads (the
- * path the page takes where it has no picker). A picker needs a person to choose a folder; the
- * downloads land in the window's download folder, where the spec reads them.
- */
-const HIDE_FILE_PICKER =
-  'try { delete globalThis.showSaveFilePicker; } catch (error) { void error; }';
-
 /** The page's stage budget for one write of a bank image: its chunks, plus slack. */
 function stagesFor(length: number): number {
   return Math.ceil(Math.max(length, BANK_BYTES) / CHUNK_BYTES) + CHUNK_SLACK;
@@ -105,12 +98,6 @@ async function pressFpsButton(rows: readonly ElementHandle[], index: number): Pr
     return true;
   });
   if (!pressed) throw new Error(`row ${String(index)} has no enabled "Make N FPS" button`);
-}
-
-/** The name the page gives a dump saved before a frame-rate patch: raw or decrypted. */
-function beforePatchName(kind: 'raw' | 'decrypted'): (name: string) => boolean {
-  const pattern = new RegExp(`before-fps-patch-${kind}-[0-9a-f]+\\.bin$`);
-  return (name) => pattern.test(name);
 }
 
 describe.skipIf(MODE !== 'i-understand' && MODE !== 'dry-run')(
@@ -143,7 +130,7 @@ describe.skipIf(MODE !== 'i-understand' && MODE !== 'dry-run')(
         scratchDir: scratch,
         source: 'dev',
         uiGuard: SLOTS_BENCH_UI,
-        preloadSource: `${benchGuardScript()}\n${HIDE_FILE_PICKER}`,
+        preloadSource: benchGuardScript(),
         headed: HEADED,
         /* One dev server for the run, not one per window: a server per window kept its modules in the
          * worker's heap (TESTING.md 42.45). The run's afterAll stops it. */
@@ -272,23 +259,19 @@ describe.skipIf(MODE !== 'i-understand' && MODE !== 'dry-run')(
           'Patched. The bank reads back as planned.',
         );
 
-        /* The two dumps the page saved before the write: bank A as stored, and decrypted. */
-        const raw: Download = await handle.downloads.waitFor(
-          beforePatchName('raw'),
-          60_000,
-          'the bank A raw dump, saved before the patch',
+        /* The one zip the page saved before the write: bank A as stored, and decrypted (TESTING.md 42.91). */
+        const { download, zip } = await waitForBackupZip(
+          handle.downloads,
+          ['a'],
+          'before-fps-patch',
         );
-        const decrypted: Download = await handle.downloads.waitFor(
-          beforePatchName('decrypted'),
-          60_000,
-          'the bank A decrypted dump, saved before the patch',
-        );
-        expect(raw.bytes.length, 'the raw dump is the whole bank').toBe(BANK_BYTES);
-        expect(decrypted.bytes.length, `the decrypted dump is the ${BUILD} image`).toBe(
+        const saved = zip.bank('a');
+        expect(saved.raw?.length, 'the stored file is the whole bank').toBe(BANK_BYTES);
+        expect(saved.decrypted?.length, `the decrypted file is the ${BUILD} image`).toBe(
           IMAGE_BYTES,
         );
         await snap(handle.page, SHOT_DIR, 'fps-bench-after');
-        say(`saved before the patch: ${raw.path} ; ${decrypted.path}`);
+        say(`saved before the patch: ${download.path}`);
       },
       45 * 60_000,
     );

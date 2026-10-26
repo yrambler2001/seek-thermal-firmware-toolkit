@@ -99,10 +99,10 @@ export interface BenchPage {
    */
   write(letter: BankLetter, image: PageImage, acknowledge: boolean): Promise<PageWrite>;
   /**
-   * Presses the bank's own "Use the booted bank's image" (or "Use Bank X's image") button, confirms
-   * the write, and returns the page's verdict, as `write` does. The image is the page's own: the
-   * caller checks the read-back against the image it expects the page to have used. Throws when the
-   * row offers no such button, or when the page does not reach "Written".
+   * Presses "Copy to <bank>" on the booted bank's row (or on the first other bank that offers it),
+   * confirms the write, and returns the page's verdict, as `write` does. The image is the page's own:
+   * the caller checks the read-back against the image it expects the page to have used. Throws when no
+   * row offers the copy, or when the page does not reach "Written".
    */
   fill(letter: BankLetter, acknowledge: boolean): Promise<PageWrite>;
   /** Every request the write guard refused in this window, and every REFUSED line. */

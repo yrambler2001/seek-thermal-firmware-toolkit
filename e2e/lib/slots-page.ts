@@ -239,28 +239,40 @@ export async function dumpBank(
   return { raw, decrypted, status };
 }
 
+/** The page's label for a copy into `to` (web useSlotsPanel `copyLabel`). */
+export function copyLabel(to: BankLetter): string {
+  return to === 'r' ? 'Copy to recovery slot R' : `Copy to slot ${to.toUpperCase()}`;
+}
+
 /**
- * Presses a bank row's own "Use … image" button (the empty bank's fill, from the booted bank or
- * another bank that holds an image) and waits for the plan to be prepared: "Ready — review the
- * plan" or "Rejected — …". Returns the button's label and the status line.
+ * Fills bank `letter` with the firmware another bank holds, as a person does on the page: the source
+ * row's "Copy to …" button (TESTING.md 42.91), the source being the booted bank when it holds an image,
+ * else the first other bank whose copy button is on. Waits for the plan to be prepared: "Ready — review
+ * the plan" or "Rejected — …". Returns the button's label, the source and the status line.
  */
 export async function fillFromBank(
   w: Wizard,
   page: Page,
   letter: BankLetter,
-): Promise<{ readonly label: string; readonly status: string }> {
-  const row = await rowOf(page, letter);
-  const button = row.buttons.find((candidate) => candidate.label.startsWith('Use '));
-  if (button === undefined) {
+): Promise<{ readonly label: string; readonly from: BankLetter; readonly status: string }> {
+  const label = copyLabel(letter);
+  const rows = (await bankRows(page)).filter((row) => row.letter !== letter);
+  const offers = (row: BankRowView): boolean =>
+    row.buttons.some((candidate) => candidate.label === label && candidate.enabled);
+  const source = rows.find((row) => row.booted && offers(row)) ?? rows.find(offers);
+  if (source === undefined) {
     throw new Error(
-      `bank ${letter.toUpperCase()} offers no "Use … image" button (its buttons: ${row.buttons
-        .map((candidate) => candidate.label)
-        .join(', ')})`,
+      `no bank offers "${label}" (rows: ${rows
+        .map(
+          (row) =>
+            `${row.name}: ${row.buttons.map((b) => `${b.label}${b.enabled ? '' : ' (off)'}`).join(', ')}`,
+        )
+        .join(' | ')})`,
     );
   }
-  const handle = await rowHandle(page, letter);
+  const handle = await rowHandle(page, source.letter);
   const moved = await w.watchStatus(SLOTS_STATUS);
-  await w.click(handle, button.label);
+  await w.click(handle, label);
   await moved();
   await page.waitForFunction(
     (sel: string) =>
@@ -268,7 +280,7 @@ export async function fillFromBank(
     { timeout: 60_000, polling: 250 },
     SLOTS_STATUS,
   );
-  return { label: button.label, status: await w.text(SLOTS_STATUS) };
+  return { label, from: source.letter, status: await w.text(SLOTS_STATUS) };
 }
 
 /**
