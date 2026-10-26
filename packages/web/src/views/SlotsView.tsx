@@ -71,10 +71,13 @@ function verdict(verified: boolean | null): string {
  * read-back is the check that only the planned bytes changed. It says what was NOT proven: the rate.
  */
 /** The zip a write saved first, in the result panel: its name, and where to look for it. */
-function backupLine(backup: WriteBackup): string {
+export function backupLine(backup: WriteBackup): string {
   return (
-    `Saved first, as a download: ${backup.fileName}. The decrypted file in it is the way back ` +
-    '("Flash decrypted image" on the same bank). Check your downloads folder for it.'
+    `Saved first, as a download: ${backup.fileName}. ` +
+    (backup.banks.length > 1
+      ? 'The decrypted files in it are the way back ("Flash decrypted image" on each bank). '
+      : 'The decrypted file in it is the way back ("Flash decrypted image" on the same bank). ') +
+    'Check your downloads folder for it.'
   );
 }
 

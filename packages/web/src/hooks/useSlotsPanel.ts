@@ -1070,8 +1070,10 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
             setCurrentReport(current);
           }
           if (error instanceof CancelledError) {
-            log(`cancelled: ${error.message}`, 'warn');
-            setStatus(cancelledStatus(commit.sent ? [ready?.key ?? 'a'] : [], current));
+            /* The log says what the status says, not the error's own word ("cancelled: cancelled", TESTING.md 42.93). */
+            const said = cancelledStatus(commit.sent ? [ready?.key ?? 'a'] : [], current);
+            log(said, 'warn');
+            setStatus(said);
           } else {
             log(`ERROR: ${errorMessage(error)}`, 'error');
             logHint(log, error);
@@ -1191,8 +1193,10 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
             setCurrentReport(current);
           }
           if (error instanceof CancelledError) {
-            log(`cancelled: ${error.message}`, 'warn');
-            setStatus(cancelledStatus(commit.sent ? [key] : [], current));
+            /* The log says what the status says, not the error's own word ("cancelled: cancelled", TESTING.md 42.93). */
+            const said = cancelledStatus(commit.sent ? [key] : [], current);
+            log(said, 'warn');
+            setStatus(said);
           } else {
             log(`ERROR: ${errorMessage(error)}`, 'error');
             logHint(log, error);
@@ -1307,8 +1311,10 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
             setCurrentReport(current);
           }
           if (error instanceof CancelledError) {
-            log(`cancelled: ${error.message}`, 'warn');
-            setStatus(cancelledStatus(committed, current));
+            /* The log says what the status says, not the error's own word ("cancelled: cancelled", TESTING.md 42.93). */
+            const said = cancelledStatus(committed, current);
+            log(said, 'warn');
+            setStatus(said);
           } else {
             log(`ERROR: ${errorMessage(error)}`, 'error');
             logHint(log, error);

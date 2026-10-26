@@ -62,7 +62,7 @@ import type {
   WriteAction,
   WriteBackup,
 } from '@seek-fw/core';
-import { SlotsView } from './SlotsView';
+import { SlotsView, backupLine } from './SlotsView';
 
 /** What a prepared write from a picked file is, for the backup's name. */
 const FLASH_ACTION: WriteAction = { kind: 'flash', input: 'plain', fileName: 'fw.bin' };
@@ -1411,6 +1411,15 @@ describe('SlotsView: the frame-rate row action', () => {
     expect(text).not.toContain('UNTESTED on hardware');
     expect(text).toContain('The decrypted file in it is the way back');
     unmount();
+  });
+
+  it('says "files" when the zip saved first holds several banks (the every-bank patch, TESTING.md 42.93)', () => {
+    expect(backupLine(BACKUP)).toContain('The decrypted file in it is the way back');
+    /* Only the count matters to the sentence. */
+    const three = { ...BACKUP, banks: [{}, {}, {}] as unknown as WriteBackup['banks'] };
+    expect(backupLine(three)).toContain(
+      'The decrypted files in it are the way back ("Flash decrypted image" on each bank).',
+    );
   });
 
   /** A patch's outcome as the page holds it: the read-back is the only thing these tests vary. */

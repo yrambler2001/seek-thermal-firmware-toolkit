@@ -1003,6 +1003,10 @@ describe('useSlotsPanel: a cancel says "partly written" only once a commit was s
     });
     expect(mocks.flash).not.toHaveBeenCalled();
     expect(result.current.panel.reporter.progress.text).toBe('Cancelled — nothing was written.');
+    /* TESTING.md 42.93: the log says the status's words, not "cancelled: cancelled". */
+    const lines = result.current.panel.reporter.lines;
+    expect(lineIncludes(lines, 'Cancelled — nothing was written.')).toBe(true);
+    expect(lineIncludes(lines, 'cancelled: cancelled')).toBe(false);
     expect(result.current.panel.report).toBe(read);
     unmount();
   });
