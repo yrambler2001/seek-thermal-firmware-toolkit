@@ -26,6 +26,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
   BENCH_FLASH_BASE,
   BENCH_FLASH_BYTES,
+  DEFAULT_TARGET,
   DRY_RUN_READ,
   NO_GUI_ARGS,
   benchRoot,
@@ -563,6 +564,15 @@ describe('createJlinkBench: the gate and the required settings', () => {
         exec,
       }),
     ).toThrow(new RegExp(TARGET));
+  });
+
+  it("names FW-V1's current target only: a checkout with just the old name compact_32k_1_3_0_8 is refused", () => {
+    expect(DEFAULT_TARGET).toBe('compact_8hz_1_3_0_8');
+    const old = path.join(scratch, 'fw-v1-old-names');
+    mkdirSync(path.join(old, 'targets', 'compact_32k_1_3_0_8'), { recursive: true });
+    expect(() =>
+      createJlinkBench({ gate: APPROVED, env: {}, fwv1Dir: old, serial: SN, exec }),
+    ).toThrow(/no FW-V1 target directory .*compact_8hz_1_3_0_8/);
   });
 });
 

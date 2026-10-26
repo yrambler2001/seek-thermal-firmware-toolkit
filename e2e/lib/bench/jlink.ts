@@ -47,9 +47,14 @@ import {
   type JlinkBench,
 } from './types.js';
 
-/** The FW-V1 target directory the recipe runs in (TESTING.md 41.5). */
+/**
+ * The FW-V1 target directory the recipe runs in (TESTING.md 41.5): the 2014 Compact 1.3.0.8 board's
+ * (bank A at 0x14050000). FW-V1 named it `compact_32k_1_3_0_8` before it renamed its targets by
+ * product, delivered rate and version; no FW-V1 checkout has that name any more, so the bench names
+ * only this one (TESTING.md 42.98). The FF board's 1.3.0.8 is `compact_ff_16hz_1_3_0_8`, a separate
+ * target a caller names with `target`.
+ */
 export const DEFAULT_TARGET = 'compact_8hz_1_3_0_8';
-/** The same target's name before FW-V1 renamed its targets (product, delivered rate, version). */
 /** True when the target's runner has `flash-factory-4m-2` (which then also disables `flash-factory-4m`). */
 function runnerHasFlash4m2(targetDir: string): boolean {
   try {
@@ -63,7 +68,6 @@ function runnerHasFlash4m2(targetDir: string): boolean {
 
 /** The runner script, relative to the target directory. */
 export const RUNNER_SCRIPT = 'tools/jlink/jlink-runner.js';
-export const LEGACY_TARGET = 'compact_32k_1_3_0_8';
 
 /** The SWD speed and interface the recipe uses (kilohertz for `-speed`). */
 const INTERFACE = 'SWD';
@@ -206,7 +210,7 @@ export interface JlinkBenchOptions {
   readonly serial?: string;
   /** The target device (default SEEK_E2E_JLINK_DEVICE, else LPC4330_M4). */
   readonly device?: string;
-  /** The FW-V1 target directory under targets/ (default compact_8hz_1_3_0_8, or its old name compact_32k_1_3_0_8 when only that exists). */
+  /** The FW-V1 target directory under targets/ (default `DEFAULT_TARGET`, compact_8hz_1_3_0_8). */
   readonly target?: string;
   /** Runs every command (default: spawn). */
   readonly exec?: Exec;
@@ -276,12 +280,7 @@ export function createJlinkBench(options: JlinkBenchOptions): JlinkBench {
   const device = nonEmpty(options.device ?? env.SEEK_E2E_JLINK_DEVICE) ?? DEFAULT_DEVICE;
   const targetsDir = path.join(path.resolve(fwv1Dir), 'targets');
   const asked = nonEmpty(options.target);
-  const target =
-    asked ??
-    (existsSync(path.join(targetsDir, DEFAULT_TARGET)) ||
-    !existsSync(path.join(targetsDir, LEGACY_TARGET))
-      ? DEFAULT_TARGET
-      : LEGACY_TARGET);
+  const target = asked ?? DEFAULT_TARGET;
   const targetDir = path.join(targetsDir, target);
   if (!existsSync(targetDir)) {
     throw new Error(

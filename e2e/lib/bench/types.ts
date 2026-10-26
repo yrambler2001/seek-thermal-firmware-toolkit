@@ -170,7 +170,7 @@ export interface PatchedBuildString {
  *   SEEK_BENCH_CAMERA          'Compact' (default) or 'Compact Pro'
  *   SEEK_BENCH_ONLY            run only subjects whose version/folder contains this
  *   SEEK_E2E_FWV1_DIR          the FW-V1 checkout (required): the runner lives at
- *                              targets/compact_32k_1_3_0_8 (make jlink-run)
+ *                              targets/compact_8hz_1_3_0_8 (make jlink-run)
  *   SEEK_E2E_JLINK_SN          the J-Link serial number (required)
  *   SEEK_E2E_JLINK_DEVICE      default LPC4330_M4
  *   SEEK_E2E_SWITCH_DIR / SEEK_E2E_SWITCH_CHANNEL (must be 2)   as power-switch.ts
