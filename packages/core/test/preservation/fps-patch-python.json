@@ -11,12 +11,14 @@
      "patch": "compact_32k-4.8.1.7-to32",
      "target": 32,
      "version": "4.8.1.7",
-     "outputSha256": "51c6f0d57c89d4cadd2a2d46c0ac0f22ddb21570d0f01f80b0748fd1fb4314e0",
+     "outputSha256": "9b24dbc2ef87d41fb42d9a03a151babdfd714f28b936f7230b8664a6d0c335d6",
      "changed": [
       568,
       569,
       570,
       571,
+      12374,
+      12375,
       38766,
       38771,
       38772,
@@ -32,7 +34,8 @@
      ]
     }
    ],
-   "known": null
+   "known": null,
+   "earlierPatch": false
   },
   {
    "inputSha256": "13db63815bce911fb9388277cc6a177498df1023e9713994dd116e6eef6f84bb",
@@ -54,14 +57,55 @@
      ]
     }
    ],
-   "known": null
+   "known": null,
+   "earlierPatch": false
+  },
+  {
+   "inputSha256": "14e259603487af8b8db1769b144b8fcc41ec09fc8965f835becdb296bb42e495",
+   "length": 48800,
+   "pythonState": "known-32hz",
+   "outputs": [],
+   "known": "compact-4.8.1.9-to32-without-noskip",
+   "earlierPatch": true,
+   "derivedFrom": {
+    "inputSha256": "2c5eedec97ba168b5defba3b5065c0d50e058102725c577a33ff29d270c3cdd5",
+    "length": 48800,
+    "patch": "compact_32k-4.8.1.9-to32"
+   }
+  },
+  {
+   "inputSha256": "1814e5acf445c2e4d33aad565881e844baa0d7634794695c0981b8552dd5c53d",
+   "length": 47368,
+   "pythonState": "known-32hz",
+   "outputs": [],
+   "known": "compact-0.9.1.0-to32-without-noskip",
+   "earlierPatch": true,
+   "derivedFrom": {
+    "inputSha256": "f0ff04d53111b858c17affefd64dee2fa12d3320f14b6ca3260581f49917a62d",
+    "length": 47368,
+    "patch": "compact_32k-0.9.1.0-to32"
+   }
   },
   {
    "inputSha256": "196560c05096369165c8858f6a3f66239b6651ad73ff84f26a3fccdcf8c193d3",
    "length": 51728,
    "pythonState": "known-18hz",
    "outputs": [],
-   "known": "compact_pro-1.0.3.2-FF"
+   "known": "compact_pro-1.0.3.2-FF",
+   "earlierPatch": false
+  },
+  {
+   "inputSha256": "1ad41e1e06f339cfeea264fda4d6b34db7f96e9b6380c8b115eb38253606cc32",
+   "length": 47352,
+   "pythonState": "known-32hz",
+   "outputs": [],
+   "known": "compact-0.9.0.7-to32-without-noskip",
+   "earlierPatch": true,
+   "derivedFrom": {
+    "inputSha256": "f3ecc810260a1ddf96e25bf9f9d0c405d8bce9975ef47497f6f2e7c4da020182",
+    "length": 47352,
+    "patch": "compact_32k-0.9.0.7-to32"
+   }
   },
   {
    "inputSha256": "2969d0df5bfeac74b88e6ee608ee8b2657fecf2e0234e9ce2731add2408f3d1c",
@@ -72,12 +116,14 @@
      "patch": "compact_32k-1.3.0.8-to32",
      "target": 32,
      "version": "1.3.0.8",
-     "outputSha256": "5313f107b81d99a1ac033fbfe9ecda9bd3664d2f669237876ffac1e3a01377a4",
+     "outputSha256": "18972f321f6df59b5ad22e85057ec40099738420160aec896906eec898895def",
      "changed": [
       568,
       569,
       570,
       571,
+      25196,
+      25197,
       46928,
       46933,
       46934,
@@ -93,7 +139,8 @@
      ]
     }
    ],
-   "known": null
+   "known": null,
+   "earlierPatch": false
   },
   {
    "inputSha256": "2c5eedec97ba168b5defba3b5065c0d50e058102725c577a33ff29d270c3cdd5",
@@ -104,12 +151,14 @@
      "patch": "compact_32k-4.8.1.9-to32",
      "target": 32,
      "version": "4.8.1.9",
-     "outputSha256": "14e259603487af8b8db1769b144b8fcc41ec09fc8965f835becdb296bb42e495",
+     "outputSha256": "30f65476179393d9fba001aed0b1e38961b1f5d03441dfe8840942f27e107cb7",
      "changed": [
       568,
       569,
       570,
       571,
+      12362,
+      12363,
       38310,
       38315,
       38316,
@@ -125,7 +174,8 @@
      ]
     }
    ],
-   "known": null
+   "known": null,
+   "earlierPatch": false
   },
   {
    "inputSha256": "30f8737b511dcc4ae8aa950615c88d70b4625ee0b704cf22f2de4e651bd97fe3",
@@ -136,12 +186,14 @@
      "patch": "compact_32k-1.0.0.0-to32",
      "target": 32,
      "version": "1.0.0.0",
-     "outputSha256": "d55ccb473dea99dd4e5d9507ae4920113b1fdcbaf769dabf9f9e57c8d40ef391",
+     "outputSha256": "a184dbabcf92a74f57e1cbf57ef7b1b0963ea19f7c6b8229a7b9126096d4becd",
      "changed": [
       568,
       569,
       570,
       571,
+      24964,
+      24965,
       47078,
       47080,
       47081,
@@ -154,7 +206,8 @@
      ]
     }
    ],
-   "known": null
+   "known": null,
+   "earlierPatch": false
   },
   {
    "inputSha256": "38a9036ae44b9fcaca31a7432257f4aa2cf71d7715a964f1c4b9553dfabfea01",
@@ -165,12 +218,14 @@
      "patch": "compact_32k-1.2.0.0-to32",
      "target": 32,
      "version": "1.2.0.0",
-     "outputSha256": "547d0e853af87068ace1936b443af06b59636d9ac560db24e38dbff4d8001c90",
+     "outputSha256": "785a9f147025ee655550c2f50bb679b27da8d3ec7bb499a7413ec68f245de3c1",
      "changed": [
       568,
       569,
       570,
       571,
+      24960,
+      24961,
       47256,
       47258,
       47259,
@@ -183,7 +238,8 @@
      ]
     }
    ],
-   "known": null
+   "known": null,
+   "earlierPatch": false
   },
   {
    "inputSha256": "3c597b72f5f4081d5f76e9348cc0d6a1d46a13453a2ca9c5005b117930df57d8",
@@ -194,12 +250,14 @@
      "patch": "compact_32k-0.9.0.2-to32",
      "target": 32,
      "version": "0.9.0.2",
-     "outputSha256": "e41610e30bfee1fa6ca862eccc7c5fe8773f05cd958b190a9e22de09c7ac7eb8",
+     "outputSha256": "4dfcdcd295e54fd5772e7f57c306e349d97be4d124ab14a4ff7859af5b601287",
      "changed": [
       568,
       569,
       570,
       571,
+      24988,
+      24989,
       47094,
       47096,
       47097,
@@ -212,14 +270,68 @@
      ]
     }
    ],
-   "known": null
+   "known": null,
+   "earlierPatch": false
   },
   {
    "inputSha256": "48f0ebfd3f55d1dc4aee16f693eedd11c2d5cbbe88f4ca200a90c8ea1b19e735",
    "length": 44808,
    "pythonState": "known-18hz",
    "outputs": [],
-   "known": "compact_pro-4.18.2.0-FF"
+   "known": "compact_pro-4.18.2.0-FF",
+   "earlierPatch": false
+  },
+  {
+   "inputSha256": "51c6f0d57c89d4cadd2a2d46c0ac0f22ddb21570d0f01f80b0748fd1fb4314e0",
+   "length": 49888,
+   "pythonState": "known-32hz",
+   "outputs": [],
+   "known": "compact-4.8.1.7-to32-without-noskip",
+   "earlierPatch": true,
+   "derivedFrom": {
+    "inputSha256": "04d9e1559d63463cf6c0c29ddc21f64af093bc3fe4d4e769ba41d4d8b0798419",
+    "length": 49888,
+    "patch": "compact_32k-4.8.1.7-to32"
+   }
+  },
+  {
+   "inputSha256": "5313f107b81d99a1ac033fbfe9ecda9bd3664d2f669237876ffac1e3a01377a4",
+   "length": 49128,
+   "pythonState": "known-32hz",
+   "outputs": [],
+   "known": "compact-1.3.0.8-to32-without-noskip",
+   "earlierPatch": true,
+   "derivedFrom": {
+    "inputSha256": "2969d0df5bfeac74b88e6ee608ee8b2657fecf2e0234e9ce2731add2408f3d1c",
+    "length": 49128,
+    "patch": "compact_32k-1.3.0.8-to32"
+   }
+  },
+  {
+   "inputSha256": "547d0e853af87068ace1936b443af06b59636d9ac560db24e38dbff4d8001c90",
+   "length": 47768,
+   "pythonState": "known-32hz",
+   "outputs": [],
+   "known": "compact-1.2.0.0-to32-without-noskip",
+   "earlierPatch": true,
+   "derivedFrom": {
+    "inputSha256": "38a9036ae44b9fcaca31a7432257f4aa2cf71d7715a964f1c4b9553dfabfea01",
+    "length": 47768,
+    "patch": "compact_32k-1.2.0.0-to32"
+   }
+  },
+  {
+   "inputSha256": "54d383ad72882075f21963689fa7c69debb1359f5c7254a02b203e5ee12152ea",
+   "length": 47156,
+   "pythonState": "known-32hz",
+   "outputs": [],
+   "known": "compact-0.9.0.6-to32-without-noskip",
+   "earlierPatch": true,
+   "derivedFrom": {
+    "inputSha256": "c07c3c3f913415bbfe3aed926a8fda94dd91ea2b8fbb023a02c1b958d26abdab",
+    "length": 47156,
+    "patch": "compact_32k-0.9.0.6-to32"
+   }
   },
   {
    "inputSha256": "5e1f3f24c8bc1e85bcb67e73e0ee23f301864ee7839a48135598fca961373e26",
@@ -244,7 +356,8 @@
      ]
     }
    ],
-   "known": null
+   "known": null,
+   "earlierPatch": false
   },
   {
    "inputSha256": "68b314052b80d40f0b28dd8c91f3530a9c1bdba5585f4f2c02b4fe98ba69d988",
@@ -255,12 +368,14 @@
      "patch": "compact_32k-0.10.0.0-to32",
      "target": 32,
      "version": "0.10.0.0",
-     "outputSha256": "efd72e1ca423f5697b74885aa1863f3f935c42d4553ba1f62397394bc0becd65",
+     "outputSha256": "28371ca792c54a80076da0bb2c600d9beb8483db05a017547bc31e0e81d4e57c",
      "changed": [
       568,
       569,
       570,
       571,
+      24988,
+      24989,
       47094,
       47096,
       47097,
@@ -273,7 +388,8 @@
      ]
     }
    ],
-   "known": null
+   "known": null,
+   "earlierPatch": false
   },
   {
    "inputSha256": "6bac46abf3023d02cf0ba8a43bfbebdd7a85c77ffbedbab08d53e2f297a3e1ea",
@@ -284,12 +400,14 @@
      "patch": "compact_32k-0.7.0.8-to32",
      "target": 32,
      "version": "0.7.0.8",
-     "outputSha256": "c519427649dd4d7f962bc1412ed1fb085a21195404910607ea27f7bce2e83c8e",
+     "outputSha256": "f08d84bdda1f7036468da6d45ebcd475fe085646df19d2b8f9e1e118001c35b9",
      "changed": [
       568,
       569,
       570,
       571,
+      24472,
+      24473,
       46356,
       46358,
       46359,
@@ -302,14 +420,16 @@
      ]
     }
    ],
-   "known": null
+   "known": null,
+   "earlierPatch": false
   },
   {
    "inputSha256": "6f06b3334c0c7243ca09753fda471f660d766db183963cb0ce8d5516bfe89682",
    "length": 51932,
    "pythonState": "known-18hz",
    "outputs": [],
-   "known": "compact_pro-1.0.3.0-FF"
+   "known": "compact_pro-1.0.3.0-FF",
+   "earlierPatch": false
   },
   {
    "inputSha256": "862717a8a605021def7858ac0c04ad4aa1abe23d357d6c2417699939137f481c",
@@ -320,12 +440,14 @@
      "patch": "compact_32k-1.3.0.0-to32",
      "target": 32,
      "version": "1.3.0.0",
-     "outputSha256": "ef90c94a448b69feea06421026c5765eceb1685d6806e7a48714c76c3d0ed273",
+     "outputSha256": "edeabb713319472f7ec8bc9fc43aa911f3395afeeeb04ddd2c890371ca583c02",
      "changed": [
       568,
       569,
       570,
       571,
+      24976,
+      24977,
       47256,
       47258,
       47259,
@@ -338,7 +460,21 @@
      ]
     }
    ],
-   "known": null
+   "known": null,
+   "earlierPatch": false
+  },
+  {
+   "inputSha256": "9b2c6f89a8f1dd4af056669bc38cf83c657d44a49e1c8bce57c6d85fed611c73",
+   "length": 47188,
+   "pythonState": "known-32hz",
+   "outputs": [],
+   "known": "compact-0.8.0.0-to32-without-noskip",
+   "earlierPatch": true,
+   "derivedFrom": {
+    "inputSha256": "9f5d9006f8bce9539e3f913ab5aad55e7ca6bc84e55839d1fe8d48c1c7463836",
+    "length": 47188,
+    "patch": "compact_32k-0.8.0.0-to32"
+   }
   },
   {
    "inputSha256": "9f5d9006f8bce9539e3f913ab5aad55e7ca6bc84e55839d1fe8d48c1c7463836",
@@ -349,12 +485,14 @@
      "patch": "compact_32k-0.8.0.0-to32",
      "target": 32,
      "version": "0.8.0.0",
-     "outputSha256": "9b2c6f89a8f1dd4af056669bc38cf83c657d44a49e1c8bce57c6d85fed611c73",
+     "outputSha256": "e6da35233e005a159c238965f4d679b30130bb4828d2f7e6162924fc3a36d74d",
      "changed": [
       568,
       569,
       570,
       571,
+      24848,
+      24849,
       46916,
       46918,
       46919,
@@ -367,7 +505,21 @@
      ]
     }
    ],
-   "known": null
+   "known": null,
+   "earlierPatch": false
+  },
+  {
+   "inputSha256": "aec5364181696416e33d75cb8fb64277998ba81d9b5e4823daba1a479588b9e6",
+   "length": 49896,
+   "pythonState": "known-32hz",
+   "outputs": [],
+   "known": "compact-4.16.1.7-FF-to32-without-noskip",
+   "earlierPatch": true,
+   "derivedFrom": {
+    "inputSha256": "b1016ea14f2e830fb3691afbd60cd679035c7700a99c777a8a3c276e034f6ca1",
+    "length": 49896,
+    "patch": "compact_32k-4.16.1.7-FF-to32"
+   }
   },
   {
    "inputSha256": "b1016ea14f2e830fb3691afbd60cd679035c7700a99c777a8a3c276e034f6ca1",
@@ -378,12 +530,14 @@
      "patch": "compact_32k-4.16.1.7-FF-to32",
      "target": 32,
      "version": "4.16.1.7-FF",
-     "outputSha256": "aec5364181696416e33d75cb8fb64277998ba81d9b5e4823daba1a479588b9e6",
+     "outputSha256": "44f3245a1c7b6d35b273929947ce4400560afb99d7606b9ca0d7baed3da3f8c6",
      "changed": [
       568,
       569,
       570,
       571,
+      12378,
+      12379,
       38774,
       38779,
       38780,
@@ -393,7 +547,8 @@
      ]
     }
    ],
-   "known": null
+   "known": null,
+   "earlierPatch": false
   },
   {
    "inputSha256": "b8d069f1cedfea80b0f15448a84d148ddc63aba0f0b2c77e10f9a79a7b5d8c0e",
@@ -419,7 +574,8 @@
      ]
     }
    ],
-   "known": null
+   "known": null,
+   "earlierPatch": false
   },
   {
    "inputSha256": "b97ced91fff9f0949a02f35fceab697634cc109a0fe2a2fbbfe6ccfadb7d4d16",
@@ -430,12 +586,14 @@
      "patch": "compact_32k-1.3.0.8-FF-to32",
      "target": 32,
      "version": "1.3.0.8-FF",
-     "outputSha256": "bf99816f8bd36a5af33f2bb9196cf9088d9bb58f5d9a45472d40e351d34d677f",
+     "outputSha256": "1be28033401381b28015c163f7fff99b556e67bdae3214be4fb8ed62831c972b",
      "changed": [
       568,
       569,
       570,
       571,
+      25732,
+      25733,
       47108,
       47113,
       47114,
@@ -445,7 +603,21 @@
      ]
     }
    ],
-   "known": null
+   "known": null,
+   "earlierPatch": false
+  },
+  {
+   "inputSha256": "bf99816f8bd36a5af33f2bb9196cf9088d9bb58f5d9a45472d40e351d34d677f",
+   "length": 49308,
+   "pythonState": "known-32hz",
+   "outputs": [],
+   "known": "compact-1.3.0.8-FF-to32-without-noskip",
+   "earlierPatch": true,
+   "derivedFrom": {
+    "inputSha256": "b97ced91fff9f0949a02f35fceab697634cc109a0fe2a2fbbfe6ccfadb7d4d16",
+    "length": 49308,
+    "patch": "compact_32k-1.3.0.8-FF-to32"
+   }
   },
   {
    "inputSha256": "c07c3c3f913415bbfe3aed926a8fda94dd91ea2b8fbb023a02c1b958d26abdab",
@@ -456,12 +628,14 @@
      "patch": "compact_32k-0.9.0.6-to32",
      "target": 32,
      "version": "0.9.0.6",
-     "outputSha256": "54d383ad72882075f21963689fa7c69debb1359f5c7254a02b203e5ee12152ea",
+     "outputSha256": "9727a08c08450908bc57831f55b22df4b88254ae2a6b918d61580749d8d35f9c",
      "changed": [
       568,
       569,
       570,
       571,
+      24988,
+      24989,
       46866,
       46868,
       46869,
@@ -474,7 +648,21 @@
      ]
     }
    ],
-   "known": null
+   "known": null,
+   "earlierPatch": false
+  },
+  {
+   "inputSha256": "c519427649dd4d7f962bc1412ed1fb085a21195404910607ea27f7bce2e83c8e",
+   "length": 46616,
+   "pythonState": "known-32hz",
+   "outputs": [],
+   "known": "compact-0.7.0.8-to32-without-noskip",
+   "earlierPatch": true,
+   "derivedFrom": {
+    "inputSha256": "6bac46abf3023d02cf0ba8a43bfbebdd7a85c77ffbedbab08d53e2f297a3e1ea",
+    "length": 46616,
+    "patch": "compact_32k-0.7.0.8-to32"
+   }
   },
   {
    "inputSha256": "c776924773ed42468957de742284636461e9dafef8d4ab431f5627795b5cfa0c",
@@ -499,14 +687,81 @@
      ]
     }
    ],
-   "known": null
+   "known": null,
+   "earlierPatch": false
   },
   {
    "inputSha256": "d43f8de589fca3802f58cc919d5121e60da7a9148f3e4ddd40ae924cd82d42ce",
    "length": 43336,
    "pythonState": "known-32hz",
    "outputs": [],
-   "known": "nano_200-42.32.3.10"
+   "known": "nano_200-42.32.3.10",
+   "earlierPatch": false
+  },
+  {
+   "inputSha256": "d55ccb473dea99dd4e5d9507ae4920113b1fdcbaf769dabf9f9e57c8d40ef391",
+   "length": 47352,
+   "pythonState": "known-32hz",
+   "outputs": [],
+   "known": "compact-1.0.0.0-to32-without-noskip",
+   "earlierPatch": true,
+   "derivedFrom": {
+    "inputSha256": "30f8737b511dcc4ae8aa950615c88d70b4625ee0b704cf22f2de4e651bd97fe3",
+    "length": 47352,
+    "patch": "compact_32k-1.0.0.0-to32"
+   }
+  },
+  {
+   "inputSha256": "d64d91b0fa87f699c32c255b2365db3e9308c6d783b0c95b48ab31f9624c10d5",
+   "length": 42680,
+   "pythonState": "known-32hz",
+   "outputs": [],
+   "known": "compact-4.8.2.1-to32-without-noskip",
+   "earlierPatch": true,
+   "derivedFrom": {
+    "inputSha256": "f96ac57eda75bca22791acc3ed21c80bde96c1f538f0ddd2aea6ffe447752882",
+    "length": 42680,
+    "patch": "compact_32k-4.8.2.1-to32"
+   }
+  },
+  {
+   "inputSha256": "e41610e30bfee1fa6ca862eccc7c5fe8773f05cd958b190a9e22de09c7ac7eb8",
+   "length": 47368,
+   "pythonState": "known-32hz",
+   "outputs": [],
+   "known": "compact-0.9.0.2-to32-without-noskip",
+   "earlierPatch": true,
+   "derivedFrom": {
+    "inputSha256": "3c597b72f5f4081d5f76e9348cc0d6a1d46a13453a2ca9c5005b117930df57d8",
+    "length": 47368,
+    "patch": "compact_32k-0.9.0.2-to32"
+   }
+  },
+  {
+   "inputSha256": "ef90c94a448b69feea06421026c5765eceb1685d6806e7a48714c76c3d0ed273",
+   "length": 47768,
+   "pythonState": "known-32hz",
+   "outputs": [],
+   "known": "compact-1.3.0.0-to32-without-noskip",
+   "earlierPatch": true,
+   "derivedFrom": {
+    "inputSha256": "862717a8a605021def7858ac0c04ad4aa1abe23d357d6c2417699939137f481c",
+    "length": 47768,
+    "patch": "compact_32k-1.3.0.0-to32"
+   }
+  },
+  {
+   "inputSha256": "efd72e1ca423f5697b74885aa1863f3f935c42d4553ba1f62397394bc0becd65",
+   "length": 47368,
+   "pythonState": "known-32hz",
+   "outputs": [],
+   "known": "compact-0.10.0.0-to32-without-noskip",
+   "earlierPatch": true,
+   "derivedFrom": {
+    "inputSha256": "68b314052b80d40f0b28dd8c91f3530a9c1bdba5585f4f2c02b4fe98ba69d988",
+    "length": 47368,
+    "patch": "compact_32k-0.10.0.0-to32"
+   }
   },
   {
    "inputSha256": "f0ff04d53111b858c17affefd64dee2fa12d3320f14b6ca3260581f49917a62d",
@@ -517,12 +772,14 @@
      "patch": "compact_32k-0.9.1.0-to32",
      "target": 32,
      "version": "0.9.1.0",
-     "outputSha256": "1814e5acf445c2e4d33aad565881e844baa0d7634794695c0981b8552dd5c53d",
+     "outputSha256": "f1f9057fc00c4a0436a86b49e4738dec7ef381a05b565df38528ff8af302974e",
      "changed": [
       568,
       569,
       570,
       571,
+      24988,
+      24989,
       47094,
       47096,
       47097,
@@ -535,7 +792,8 @@
      ]
     }
    ],
-   "known": null
+   "known": null,
+   "earlierPatch": false
   },
   {
    "inputSha256": "f3ecc810260a1ddf96e25bf9f9d0c405d8bce9975ef47497f6f2e7c4da020182",
@@ -546,12 +804,14 @@
      "patch": "compact_32k-0.9.0.7-to32",
      "target": 32,
      "version": "0.9.0.7",
-     "outputSha256": "1ad41e1e06f339cfeea264fda4d6b34db7f96e9b6380c8b115eb38253606cc32",
+     "outputSha256": "71fe108e2edfdc9bce2cc5e2511619590e954c1a8882a7f350a1499402b3ddbb",
      "changed": [
       568,
       569,
       570,
       571,
+      24964,
+      24965,
       47078,
       47080,
       47081,
@@ -564,7 +824,8 @@
      ]
     }
    ],
-   "known": null
+   "known": null,
+   "earlierPatch": false
   },
   {
    "inputSha256": "f96ac57eda75bca22791acc3ed21c80bde96c1f538f0ddd2aea6ffe447752882",
@@ -575,11 +836,13 @@
      "patch": "compact_32k-4.8.2.1-to32",
      "target": 32,
      "version": "4.8.2.1",
-     "outputSha256": "d64d91b0fa87f699c32c255b2365db3e9308c6d783b0c95b48ab31f9624c10d5",
+     "outputSha256": "526124fc64ca2abe7aad917b7c07612006c00958122d63e8347bde7561f06ee1",
      "changed": [
       569,
       570,
       571,
+      8838,
+      8839,
       37106,
       37111,
       37112,
@@ -596,7 +859,8 @@
      ]
     }
    ],
-   "known": null
+   "known": null,
+   "earlierPatch": false
   }
  ],
  "banks": [
@@ -609,12 +873,14 @@
    "storedPlain": true,
    "pythonAction": "patch applies",
    "patch": "compact_32k-1.3.0.0-to32",
-   "outputSha256": "ef90c94a448b69feea06421026c5765eceb1685d6806e7a48714c76c3d0ed273",
+   "outputSha256": "edeabb713319472f7ec8bc9fc43aa911f3395afeeeb04ddd2c890371ca583c02",
    "changed": [
     568,
     569,
     570,
     571,
+    24976,
+    24977,
     47256,
     47258,
     47259,
@@ -635,12 +901,14 @@
    "storedPlain": true,
    "pythonAction": "patch applies",
    "patch": "compact_32k-1.2.0.0-to32",
-   "outputSha256": "547d0e853af87068ace1936b443af06b59636d9ac560db24e38dbff4d8001c90",
+   "outputSha256": "785a9f147025ee655550c2f50bb679b27da8d3ec7bb499a7413ec68f245de3c1",
    "changed": [
     568,
     569,
     570,
     571,
+    24960,
+    24961,
     47256,
     47258,
     47259,
@@ -661,12 +929,14 @@
    "storedPlain": true,
    "pythonAction": "patch applies",
    "patch": "compact_32k-1.2.0.0-to32",
-   "outputSha256": "547d0e853af87068ace1936b443af06b59636d9ac560db24e38dbff4d8001c90",
+   "outputSha256": "785a9f147025ee655550c2f50bb679b27da8d3ec7bb499a7413ec68f245de3c1",
    "changed": [
     568,
     569,
     570,
     571,
+    24960,
+    24961,
     47256,
     47258,
     47259,
@@ -687,12 +957,14 @@
    "storedPlain": true,
    "pythonAction": "patch applies",
    "patch": "compact_32k-0.10.0.0-to32",
-   "outputSha256": "efd72e1ca423f5697b74885aa1863f3f935c42d4553ba1f62397394bc0becd65",
+   "outputSha256": "28371ca792c54a80076da0bb2c600d9beb8483db05a017547bc31e0e81d4e57c",
    "changed": [
     568,
     569,
     570,
     571,
+    24988,
+    24989,
     47094,
     47096,
     47097,
@@ -713,12 +985,14 @@
    "storedPlain": true,
    "pythonAction": "patch applies",
    "patch": "compact_32k-0.10.0.0-to32",
-   "outputSha256": "efd72e1ca423f5697b74885aa1863f3f935c42d4553ba1f62397394bc0becd65",
+   "outputSha256": "28371ca792c54a80076da0bb2c600d9beb8483db05a017547bc31e0e81d4e57c",
    "changed": [
     568,
     569,
     570,
     571,
+    24988,
+    24989,
     47094,
     47096,
     47097,
@@ -739,12 +1013,14 @@
    "storedPlain": true,
    "pythonAction": "patch applies",
    "patch": "compact_32k-1.3.0.0-to32",
-   "outputSha256": "ef90c94a448b69feea06421026c5765eceb1685d6806e7a48714c76c3d0ed273",
+   "outputSha256": "edeabb713319472f7ec8bc9fc43aa911f3395afeeeb04ddd2c890371ca583c02",
    "changed": [
     568,
     569,
     570,
     571,
+    24976,
+    24977,
     47256,
     47258,
     47259,
@@ -765,12 +1041,14 @@
    "storedPlain": true,
    "pythonAction": "patch applies",
    "patch": "compact_32k-1.3.0.0-to32",
-   "outputSha256": "ef90c94a448b69feea06421026c5765eceb1685d6806e7a48714c76c3d0ed273",
+   "outputSha256": "edeabb713319472f7ec8bc9fc43aa911f3395afeeeb04ddd2c890371ca583c02",
    "changed": [
     568,
     569,
     570,
     571,
+    24976,
+    24977,
     47256,
     47258,
     47259,
@@ -791,12 +1069,14 @@
    "storedPlain": true,
    "pythonAction": "patch applies",
    "patch": "compact_32k-1.3.0.0-to32",
-   "outputSha256": "ef90c94a448b69feea06421026c5765eceb1685d6806e7a48714c76c3d0ed273",
+   "outputSha256": "edeabb713319472f7ec8bc9fc43aa911f3395afeeeb04ddd2c890371ca583c02",
    "changed": [
     568,
     569,
     570,
     571,
+    24976,
+    24977,
     47256,
     47258,
     47259,
@@ -817,12 +1097,14 @@
    "storedPlain": true,
    "pythonAction": "patch applies",
    "patch": "compact_32k-1.3.0.0-to32",
-   "outputSha256": "ef90c94a448b69feea06421026c5765eceb1685d6806e7a48714c76c3d0ed273",
+   "outputSha256": "edeabb713319472f7ec8bc9fc43aa911f3395afeeeb04ddd2c890371ca583c02",
    "changed": [
     568,
     569,
     570,
     571,
+    24976,
+    24977,
     47256,
     47258,
     47259,
@@ -843,12 +1125,14 @@
    "storedPlain": true,
    "pythonAction": "patch applies",
    "patch": "compact_32k-0.9.0.7-to32",
-   "outputSha256": "1ad41e1e06f339cfeea264fda4d6b34db7f96e9b6380c8b115eb38253606cc32",
+   "outputSha256": "71fe108e2edfdc9bce2cc5e2511619590e954c1a8882a7f350a1499402b3ddbb",
    "changed": [
     568,
     569,
     570,
     571,
+    24964,
+    24965,
     47078,
     47080,
     47081,
@@ -869,12 +1153,14 @@
    "storedPlain": true,
    "pythonAction": "patch applies",
    "patch": "compact_32k-0.9.0.7-to32",
-   "outputSha256": "1ad41e1e06f339cfeea264fda4d6b34db7f96e9b6380c8b115eb38253606cc32",
+   "outputSha256": "71fe108e2edfdc9bce2cc5e2511619590e954c1a8882a7f350a1499402b3ddbb",
    "changed": [
     568,
     569,
     570,
     571,
+    24964,
+    24965,
     47078,
     47080,
     47081,
@@ -895,12 +1181,14 @@
    "storedPlain": true,
    "pythonAction": "patch applies",
    "patch": "compact_32k-1.3.0.0-to32",
-   "outputSha256": "ef90c94a448b69feea06421026c5765eceb1685d6806e7a48714c76c3d0ed273",
+   "outputSha256": "edeabb713319472f7ec8bc9fc43aa911f3395afeeeb04ddd2c890371ca583c02",
    "changed": [
     568,
     569,
     570,
     571,
+    24976,
+    24977,
     47256,
     47258,
     47259,
@@ -921,12 +1209,14 @@
    "storedPlain": true,
    "pythonAction": "patch applies",
    "patch": "compact_32k-1.3.0.0-to32",
-   "outputSha256": "ef90c94a448b69feea06421026c5765eceb1685d6806e7a48714c76c3d0ed273",
+   "outputSha256": "edeabb713319472f7ec8bc9fc43aa911f3395afeeeb04ddd2c890371ca583c02",
    "changed": [
     568,
     569,
     570,
     571,
+    24976,
+    24977,
     47256,
     47258,
     47259,
@@ -947,12 +1237,14 @@
    "storedPlain": true,
    "pythonAction": "patch applies",
    "patch": "compact_32k-1.0.0.0-to32",
-   "outputSha256": "d55ccb473dea99dd4e5d9507ae4920113b1fdcbaf769dabf9f9e57c8d40ef391",
+   "outputSha256": "a184dbabcf92a74f57e1cbf57ef7b1b0963ea19f7c6b8229a7b9126096d4becd",
    "changed": [
     568,
     569,
     570,
     571,
+    24964,
+    24965,
     47078,
     47080,
     47081,
@@ -973,12 +1265,14 @@
    "storedPlain": true,
    "pythonAction": "patch applies",
    "patch": "compact_32k-1.0.0.0-to32",
-   "outputSha256": "d55ccb473dea99dd4e5d9507ae4920113b1fdcbaf769dabf9f9e57c8d40ef391",
+   "outputSha256": "a184dbabcf92a74f57e1cbf57ef7b1b0963ea19f7c6b8229a7b9126096d4becd",
    "changed": [
     568,
     569,
     570,
     571,
+    24964,
+    24965,
     47078,
     47080,
     47081,
@@ -999,12 +1293,14 @@
    "storedPlain": true,
    "pythonAction": "patch applies",
    "patch": "compact_32k-0.9.1.0-to32",
-   "outputSha256": "1814e5acf445c2e4d33aad565881e844baa0d7634794695c0981b8552dd5c53d",
+   "outputSha256": "f1f9057fc00c4a0436a86b49e4738dec7ef381a05b565df38528ff8af302974e",
    "changed": [
     568,
     569,
     570,
     571,
+    24988,
+    24989,
     47094,
     47096,
     47097,
@@ -1025,12 +1321,14 @@
    "storedPlain": true,
    "pythonAction": "patch applies",
    "patch": "compact_32k-0.9.1.0-to32",
-   "outputSha256": "1814e5acf445c2e4d33aad565881e844baa0d7634794695c0981b8552dd5c53d",
+   "outputSha256": "f1f9057fc00c4a0436a86b49e4738dec7ef381a05b565df38528ff8af302974e",
    "changed": [
     568,
     569,
     570,
     571,
+    24988,
+    24989,
     47094,
     47096,
     47097,
@@ -1051,12 +1349,14 @@
    "storedPlain": true,
    "pythonAction": "patch applies",
    "patch": "compact_32k-1.3.0.8-to32",
-   "outputSha256": "5313f107b81d99a1ac033fbfe9ecda9bd3664d2f669237876ffac1e3a01377a4",
+   "outputSha256": "18972f321f6df59b5ad22e85057ec40099738420160aec896906eec898895def",
    "changed": [
     568,
     569,
     570,
     571,
+    25196,
+    25197,
     46928,
     46933,
     46934,
@@ -1080,12 +1380,14 @@
    "storedPlain": true,
    "pythonAction": "patch applies",
    "patch": "compact_32k-1.3.0.8-to32",
-   "outputSha256": "5313f107b81d99a1ac033fbfe9ecda9bd3664d2f669237876ffac1e3a01377a4",
+   "outputSha256": "18972f321f6df59b5ad22e85057ec40099738420160aec896906eec898895def",
    "changed": [
     568,
     569,
     570,
     571,
+    25196,
+    25197,
     46928,
     46933,
     46934,
@@ -1109,12 +1411,14 @@
    "storedPlain": true,
    "pythonAction": "patch applies",
    "patch": "compact_32k-0.8.0.0-to32",
-   "outputSha256": "9b2c6f89a8f1dd4af056669bc38cf83c657d44a49e1c8bce57c6d85fed611c73",
+   "outputSha256": "e6da35233e005a159c238965f4d679b30130bb4828d2f7e6162924fc3a36d74d",
    "changed": [
     568,
     569,
     570,
     571,
+    24848,
+    24849,
     46916,
     46918,
     46919,
@@ -1135,12 +1439,14 @@
    "storedPlain": true,
    "pythonAction": "patch applies",
    "patch": "compact_32k-0.8.0.0-to32",
-   "outputSha256": "9b2c6f89a8f1dd4af056669bc38cf83c657d44a49e1c8bce57c6d85fed611c73",
+   "outputSha256": "e6da35233e005a159c238965f4d679b30130bb4828d2f7e6162924fc3a36d74d",
    "changed": [
     568,
     569,
     570,
     571,
+    24848,
+    24849,
     46916,
     46918,
     46919,
@@ -1161,12 +1467,14 @@
    "storedPlain": true,
    "pythonAction": "patch applies",
    "patch": "compact_32k-0.7.0.8-to32",
-   "outputSha256": "c519427649dd4d7f962bc1412ed1fb085a21195404910607ea27f7bce2e83c8e",
+   "outputSha256": "f08d84bdda1f7036468da6d45ebcd475fe085646df19d2b8f9e1e118001c35b9",
    "changed": [
     568,
     569,
     570,
     571,
+    24472,
+    24473,
     46356,
     46358,
     46359,
@@ -1187,12 +1495,14 @@
    "storedPlain": true,
    "pythonAction": "patch applies",
    "patch": "compact_32k-0.7.0.8-to32",
-   "outputSha256": "c519427649dd4d7f962bc1412ed1fb085a21195404910607ea27f7bce2e83c8e",
+   "outputSha256": "f08d84bdda1f7036468da6d45ebcd475fe085646df19d2b8f9e1e118001c35b9",
    "changed": [
     568,
     569,
     570,
     571,
+    24472,
+    24473,
     46356,
     46358,
     46359,
@@ -1213,12 +1523,14 @@
    "storedPlain": true,
    "pythonAction": "patch applies",
    "patch": "compact_32k-0.9.0.2-to32",
-   "outputSha256": "e41610e30bfee1fa6ca862eccc7c5fe8773f05cd958b190a9e22de09c7ac7eb8",
+   "outputSha256": "4dfcdcd295e54fd5772e7f57c306e349d97be4d124ab14a4ff7859af5b601287",
    "changed": [
     568,
     569,
     570,
     571,
+    24988,
+    24989,
     47094,
     47096,
     47097,
@@ -1239,12 +1551,14 @@
    "storedPlain": true,
    "pythonAction": "patch applies",
    "patch": "compact_32k-0.9.0.2-to32",
-   "outputSha256": "e41610e30bfee1fa6ca862eccc7c5fe8773f05cd958b190a9e22de09c7ac7eb8",
+   "outputSha256": "4dfcdcd295e54fd5772e7f57c306e349d97be4d124ab14a4ff7859af5b601287",
    "changed": [
     568,
     569,
     570,
     571,
+    24988,
+    24989,
     47094,
     47096,
     47097,
@@ -1265,12 +1579,14 @@
    "storedPlain": true,
    "pythonAction": "patch applies",
    "patch": "compact_32k-0.9.0.6-to32",
-   "outputSha256": "54d383ad72882075f21963689fa7c69debb1359f5c7254a02b203e5ee12152ea",
+   "outputSha256": "9727a08c08450908bc57831f55b22df4b88254ae2a6b918d61580749d8d35f9c",
    "changed": [
     568,
     569,
     570,
     571,
+    24988,
+    24989,
     46866,
     46868,
     46869,
@@ -1291,12 +1607,14 @@
    "storedPlain": true,
    "pythonAction": "patch applies",
    "patch": "compact_32k-0.9.0.6-to32",
-   "outputSha256": "54d383ad72882075f21963689fa7c69debb1359f5c7254a02b203e5ee12152ea",
+   "outputSha256": "9727a08c08450908bc57831f55b22df4b88254ae2a6b918d61580749d8d35f9c",
    "changed": [
     568,
     569,
     570,
     571,
+    24988,
+    24989,
     46866,
     46868,
     46869,
@@ -1317,12 +1635,14 @@
    "storedPlain": true,
    "pythonAction": "patch applies",
    "patch": "compact_32k-1.3.0.0-to32",
-   "outputSha256": "ef90c94a448b69feea06421026c5765eceb1685d6806e7a48714c76c3d0ed273",
+   "outputSha256": "edeabb713319472f7ec8bc9fc43aa911f3395afeeeb04ddd2c890371ca583c02",
    "changed": [
     568,
     569,
     570,
     571,
+    24976,
+    24977,
     47256,
     47258,
     47259,
@@ -1343,12 +1663,14 @@
    "storedPlain": true,
    "pythonAction": "patch applies",
    "patch": "compact_32k-1.3.0.0-to32",
-   "outputSha256": "ef90c94a448b69feea06421026c5765eceb1685d6806e7a48714c76c3d0ed273",
+   "outputSha256": "edeabb713319472f7ec8bc9fc43aa911f3395afeeeb04ddd2c890371ca583c02",
    "changed": [
     568,
     569,
     570,
     571,
+    24976,
+    24977,
     47256,
     47258,
     47259,

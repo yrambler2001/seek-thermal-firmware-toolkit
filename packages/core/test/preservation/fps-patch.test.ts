@@ -13,6 +13,7 @@ import { SeekError } from '../../src/errors.js';
 import { IMAGE_MAGIC } from '../../src/image/header.js';
 import { wordSum32 } from '../../src/image/bank.js';
 import {
+  FPS_KNOWN_BUILDS,
   FPS_MEASURED_HZ,
   FPS_NO_PATCH_4821_REASON,
   FPS_OFFER_WITHHELD,
@@ -21,6 +22,7 @@ import {
   FPS_STAGE_THREE_IDS,
   FPS_STAGE_TWO_IDS,
   applyFpsPatch,
+  fpsEarlierPatchReason,
   fpsExpectedChanges,
   fpsImageLength,
   identifyFpsImage,
@@ -275,6 +277,86 @@ describe('the stages: which entries are offered (pinned, so a change is delibera
       expect(patch?.gate.enabled, id).toBe(true);
       expect(patch?.targetHz, id).toBe(18);
     }
+  });
+});
+
+describe('the no-skip branch in the 32 Hz entries, and the earlier 32 Hz images (TESTING.md 42.97)', () => {
+  /** A 2-byte Thumb B.N (unconditional branch), as the no-skip edit writes it. */
+  const isBranch = (bytes: Uint8Array): boolean =>
+    bytes.length === 2 && ((bytes[1] ?? 0) & 0xf8) === 0xe0;
+  /** The images the 32 Hz entries wrote before the branch joined them (FW-V1 fps_patch.EARLIER_32HZ). */
+  const EARLIER_32HZ = [
+    '5313f107b81d99a1ac033fbfe9ecda9bd3664d2f669237876ffac1e3a01377a4',
+    '51c6f0d57c89d4cadd2a2d46c0ac0f22ddb21570d0f01f80b0748fd1fb4314e0',
+    '14e259603487af8b8db1769b144b8fcc41ec09fc8965f835becdb296bb42e495',
+    'ef90c94a448b69feea06421026c5765eceb1685d6806e7a48714c76c3d0ed273',
+    'c519427649dd4d7f962bc1412ed1fb085a21195404910607ea27f7bce2e83c8e',
+    '9b2c6f89a8f1dd4af056669bc38cf83c657d44a49e1c8bce57c6d85fed611c73',
+    'e41610e30bfee1fa6ca862eccc7c5fe8773f05cd958b190a9e22de09c7ac7eb8',
+    '54d383ad72882075f21963689fa7c69debb1359f5c7254a02b203e5ee12152ea',
+    '1ad41e1e06f339cfeea264fda4d6b34db7f96e9b6380c8b115eb38253606cc32',
+    '1814e5acf445c2e4d33aad565881e844baa0d7634794695c0981b8552dd5c53d',
+    'efd72e1ca423f5697b74885aa1863f3f935c42d4553ba1f62397394bc0becd65',
+    'd55ccb473dea99dd4e5d9507ae4920113b1fdcbaf769dabf9f9e57c8d40ef391',
+    '547d0e853af87068ace1936b443af06b59636d9ac560db24e38dbff4d8001c90',
+    'bf99816f8bd36a5af33f2bb9196cf9088d9bb58f5d9a45472d40e351d34d677f',
+    'aec5364181696416e33d75cb8fb64277998ba81d9b5e4823daba1a479588b9e6',
+    'd64d91b0fa87f699c32c255b2365db3e9308c6d783b0c95b48ab31f9624c10d5',
+  ];
+
+  it('ends every 32 Hz Compact entry with the branch, and leaves the Compact PRO entries frame-rate only', () => {
+    for (const patch of FPS_PATCHES) {
+      const last = patch.edits[patch.edits.length - 1];
+      expect(last, patch.id).toBeDefined();
+      if (last === undefined) continue;
+      if (patch.family === 'compact_32k') {
+        expect(patch.targetHz, patch.id).toBe(32);
+        expect(isBranch(last.after), patch.id).toBe(true);
+        expect((last.before[1] ?? 0) & 0xfd, `${patch.id}: a cbz`).toBe(0xb1);
+      } else {
+        expect(patch.targetHz, patch.id).toBe(18);
+        for (const edit of patch.edits) expect(isBranch(edit.after), patch.id).toBe(false);
+      }
+    }
+    expect(FPS_PATCHES.filter((patch) => patch.family === 'compact_32k')).toHaveLength(16);
+    expect(FPS_PATCHES).toHaveLength(20);
+  });
+
+  it('writes the image the bench Compact runs for 1.3.0.0', () => {
+    expect(FPS_PATCHES.find((p) => p.id === 'compact_32k-1.3.0.0-to32')?.patchedSha256).toBe(
+      'edeabb713319472f7ec8bc9fc43aa911f3395afeeeb04ddd2c890371ca583c02',
+    );
+  });
+
+  it('knows each earlier 32 Hz image as an earlier patch at 32 Hz, and no entry takes a patched image', () => {
+    for (const sha of EARLIER_32HZ) {
+      expect(FPS_KNOWN_BUILDS.get(sha), sha).toMatchObject({ hz: 32, earlierPatch: true });
+    }
+    const earlier = [...FPS_KNOWN_BUILDS]
+      .filter(([, build]) => build.earlierPatch)
+      .map(([sha]) => sha);
+    // the 16 earlier images, the 1.3.0.0 bench image with the mode-6 edit, and the five op-5 forms
+    expect(earlier).toHaveLength(22);
+    expect(
+      FPS_KNOWN_BUILDS.get('d91284c65a5dfde608e1c221b66a7ada487f3d42e6f49f01d09c2c7d643b59a9')
+        ?.earlierPatch,
+    ).toBe(true);
+    for (const patch of FPS_PATCHES) {
+      expect(FPS_KNOWN_BUILDS.get(patch.stockSha256)?.earlierPatch ?? false, patch.id).toBe(false);
+      expect(earlier, patch.id).not.toContain(patch.patchedSha256);
+    }
+    // builds made at their rate are not earlier patches
+    for (const [, build] of FPS_KNOWN_BUILDS) {
+      if (/-FF$|^nano_200-/.test(build.name)) expect(build.earlierPatch, build.name).toBe(false);
+    }
+  });
+
+  it('words the earlier-patch reason apart from a build made at its rate', () => {
+    expect(fpsEarlierPatchReason(32)).toBe(
+      'this image holds an earlier 32 Hz frame-rate patch without the USB fix, and a patch is never applied to a ' +
+        'patched image: restore the stock image, then patch it',
+    );
+    expect(fpsEarlierPatchReason(32)).not.toMatch(/already runs at/);
   });
 });
 

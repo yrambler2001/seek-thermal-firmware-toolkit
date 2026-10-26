@@ -13,6 +13,13 @@
  * is found by its hash, and the TypeScript output of every entry is compared with the Python's
  * byte for byte (sha256 of the whole patched image) and offset for offset (the changed bytes).
  * A case whose file is not found FAILS, so an incomplete corpus cannot pass silently.
+ *
+ * THE EARLIER 32 Hz IMAGES (TESTING.md 42.97). The images the 32 Hz entries wrote before the no-skip
+ * branch joined them are known 32 Hz builds that a patch wrote (`earlierPatch`), and no corpus holds
+ * them. Their cases carry `derivedFrom` (the entry's stock image) and are rebuilt here from that corpus
+ * image: the entry applied, its last edit (the branch) put back, the adjust word moved so the sum is the
+ * stock sum. The Python rebuilds them the other way round (fps_patch.earlier_image: the entry's other
+ * edits only), and the hashes must agree. No patch takes them; the plan gives the earlier-patch reason.
  * ==================================================================== */
 
 import { createHash } from 'node:crypto';
@@ -20,7 +27,9 @@ import { readFileSync, readdirSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
+import { wordSum32 } from '../../src/image/bank.js';
 import {
+  FPS_ADJUST_OFFSET,
   FPS_KNOWN_BUILDS,
   FPS_PATCHES,
   FPS_OFFER_WITHHELD,
@@ -29,6 +38,7 @@ import {
   FPS_STAGE_THREE_IDS,
   FPS_STAGE_TWO_IDS,
   applyFpsPatch,
+  fpsEarlierPatchReason,
   fpsImageLength,
   identifyFpsImage,
   planFpsPatch,
@@ -51,6 +61,14 @@ interface PythonImageCase {
   readonly pythonState: string;
   readonly known: string | null;
   readonly outputs: readonly PythonOutput[];
+  /** True for a known row a patch wrote (fps_patch.EARLIER_PATCHES). */
+  readonly earlierPatch: boolean;
+  /** An earlier 32 Hz image no corpus holds: rebuilt from this stock image and table entry. */
+  readonly derivedFrom?: {
+    readonly inputSha256: string;
+    readonly length: number;
+    readonly patch: string;
+  };
 }
 
 interface PythonBankCase {
@@ -148,6 +166,7 @@ describe('the table against the Python table (no corpus needed)', () => {
     for (const image of known) {
       const build = FPS_KNOWN_BUILDS.get(image.inputSha256);
       expect(build?.name).toBe(image.known);
+      expect(build?.earlierPatch, image.known ?? '').toBe(image.earlierPatch);
     }
   });
 });
@@ -192,12 +211,40 @@ function findByHash(size: number, wanted: string, prefix: number | null): Uint8A
   return null;
 }
 
+/**
+ * An earlier 32 Hz image: `entry` applied to its stock image, its last edit (the no-skip branch) put back to the old
+ * bytes, and the adjust word moved so the acceptance sum is the stock image's again (fps_patch.earlier_image's image).
+ */
+function earlierImage(stock: Uint8Array, entry: FpsPatch): Uint8Array {
+  const out = applyFpsPatch(stock, entry).slice();
+  const branch = entry.edits[entry.edits.length - 1];
+  if (branch === undefined) throw new Error(`${entry.id} has no edits`);
+  out.set(branch.before, branch.offset);
+  const view = new DataView(out.buffer, out.byteOffset, out.byteLength);
+  const delta = (wordSum32(out, stock.length) - wordSum32(stock, stock.length)) >>> 0;
+  view.setUint32(FPS_ADJUST_OFFSET, (view.getUint32(FPS_ADJUST_OFFSET, true) - delta) >>> 0, true);
+  return out;
+}
+
+/** A fixture image's bytes: the corpus file, or for a `derivedFrom` case the image rebuilt from its stock image. */
+function imageOf(image: PythonImageCase): Uint8Array | null {
+  const from = image.derivedFrom;
+  if (from === undefined) return findByHash(image.length, image.inputSha256, image.length);
+  const bytes = findByHash(from.length, from.inputSha256, from.length);
+  return bytes === null
+    ? null
+    : earlierImage(bytes.subarray(0, from.length), entryNamed(from.patch));
+}
+
 const corpusDescribe = CORPUS_ROOTS.length > 0 ? describe : describe.skip;
 
 corpusDescribe('the table against the Python tool, over the corpus (SEEK_FPS_CORPUS)', () => {
   it('finds every fixture image in the corpus roots', () => {
     const missing = FIXTURE.images
-      .filter((image) => findByHash(image.length, image.inputSha256, image.length) === null)
+      .filter((image) => {
+        const bytes = imageOf(image);
+        return bytes === null || sha256(bytes.subarray(0, image.length)) !== image.inputSha256;
+      })
       .map((image) => `${image.inputSha256.slice(0, 12)} (${String(image.length)} B)`);
     expect(missing, 'images not found under SEEK_FPS_CORPUS').toEqual([]);
   });
@@ -205,7 +252,7 @@ corpusDescribe('the table against the Python tool, over the corpus (SEEK_FPS_COR
   it('applies every entry to its image exactly as the Python does (sha256 and changed offsets)', () => {
     let compared = 0;
     for (const image of FIXTURE.images) {
-      const bytes = findByHash(image.length, image.inputSha256, image.length);
+      const bytes = imageOf(image);
       expect(bytes, `image ${image.inputSha256.slice(0, 12)}`).not.toBeNull();
       if (bytes === null) continue;
       const stock = bytes.subarray(0, image.length);
@@ -222,13 +269,14 @@ corpusDescribe('the table against the Python tool, over the corpus (SEEK_FPS_COR
       }
     }
     expect(compared).toBe(20);
+    expect(FIXTURE.images.filter((image) => image.derivedFrom !== undefined)).toHaveLength(16);
   });
 
   it.skipIf(!FPS_OFFER_WITHHELD)(
     'withholds every stage-one offer after the bench run, and refuses the stage-two builds too',
     () => {
       for (const image of FIXTURE.images.filter((candidate) => candidate.pythonState === 'stock')) {
-        const bytes = findByHash(image.length, image.inputSha256, image.length);
+        const bytes = imageOf(image);
         if (bytes === null) continue;
         const stock = bytes.subarray(0, image.length);
         const top = [...image.outputs].sort((a, b) => (b.target ?? 0) - (a.target ?? 0))[0];
@@ -251,7 +299,7 @@ corpusDescribe('the table against the Python tool, over the corpus (SEEK_FPS_COR
       // The rate the page names: the table's target, except where FPS_MEASURED_HZ names another (none now; the
       // 1.3.0.8 32 Hz entry is the unmeasured plain-copy form and names its target).
       for (const image of FIXTURE.images.filter((candidate) => candidate.pythonState === 'stock')) {
-        const bytes = findByHash(image.length, image.inputSha256, image.length);
+        const bytes = imageOf(image);
         if (bytes === null) continue;
         const stock = bytes.subarray(0, image.length);
         const top = [...image.outputs].sort((a, b) => (b.target ?? 0) - (a.target ?? 0))[0];
@@ -286,14 +334,32 @@ corpusDescribe('the table against the Python tool, over the corpus (SEEK_FPS_COR
     },
   );
 
-  it('plans the same verdict as the Python for every known build', () => {
+  it('plans the same verdict as the Python for every known build, an earlier patch with its own reason', () => {
+    let earlier = 0;
     for (const image of FIXTURE.images.filter((candidate) => candidate.known !== null)) {
-      const bytes = findByHash(image.length, image.inputSha256, image.length);
+      const bytes = imageOf(image);
       expect(bytes).not.toBeNull();
       if (bytes === null) continue;
-      const plan = planFpsPatch(bytes.subarray(0, image.length), '1.0.3.2');
+      const stock = bytes.subarray(0, image.length);
+      const plan = planFpsPatch(stock, '1.0.3.2');
       expect(plan.status).toBe('at-rate');
+      if (plan.status !== 'at-rate') continue;
+      expect(plan.earlierPatch === true, image.known ?? '').toBe(image.earlierPatch);
+      if (image.earlierPatch) {
+        earlier++;
+        expect(plan.reason).toBe(fpsEarlierPatchReason(plan.hz));
+        // the camera's own build does not change it: a patched image is never a patch input
+        const entry =
+          image.derivedFrom === undefined ? undefined : entryNamed(image.derivedFrom.patch);
+        if (entry !== undefined) {
+          expect(planFpsPatch(stock, entry.version.replace(/-FF$/, '')).status).toBe('at-rate');
+          expect(() => applyFpsPatch(stock, entry)).toThrow(/not the stock image/);
+        }
+      } else {
+        expect(plan.reason).toMatch(/already runs at \d+ Hz without a patch/);
+      }
     }
+    expect(earlier).toBe(16);
   });
 
   it('applies every plain-stored bank of the corpus dumps exactly as the Python does', () => {
