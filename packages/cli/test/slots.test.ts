@@ -329,6 +329,7 @@ function fakePlan(
     expectedStored: bytes,
     compare: [{ field: 'version', before: '4.9.5.0', after: '4.9.6.0' }],
     warnings: kind === 'raw' ? ['raw bytes are sent verbatim; nothing checks their content'] : [],
+    imageBuild: null,
     notes: [],
     serial: 'SN-1',
     firmwareVersion: '4.9.5.0',
@@ -1131,6 +1132,60 @@ describe('slots command', () => {
         { source: 'camera', text: 'a camera-wide note' },
       ],
     });
+  });
+
+  it('an image that is not the build the camera runs: the plan prints the warning in words, --json carries it with its code, and the write is not held back (TESTING.md 42.104)', async () => {
+    const { ops, log } = fakeOps(reportOf({ booted: 'a' }));
+    const text =
+      'This image is firmware 4.9.4.0; the camera runs 4.9.5.0. Whether this camera takes a ' +
+      'different build, and runs it, has not been checked.';
+    const imageBuild = {
+      code: 'other-version' as const,
+      image: '4.9.4.0',
+      camera: '4.9.5.0',
+      text,
+    };
+    const other: SlotOps = {
+      ...ops,
+      prepare: (report, key, input) => ({
+        ...ops.prepare(report, key, input),
+        warnings: [text],
+        imageBuild,
+      }),
+    };
+    await writeFile(join(temp.path, 'other.bin'), new Uint8Array(0x100).fill(7));
+    const args = ['slots', 'flash', 'b', join(temp.path, 'other.bin'), '--no-probe'];
+
+    const human = cameraIo();
+    await slotsCommandWith(other)(contextFor([...args, '--dry-run'], human));
+    expect(human.stdout.text).toContain(`! ${text}`);
+    expect(human.stdout.text).not.toContain('other-version');
+
+    const machine = cameraIo();
+    const json = await slotsCommandWith(other)(contextFor([...args, '--json', '--yes'], machine));
+    expect(json).toMatchObject({
+      action: 'flash',
+      bank: 'b',
+      written: true,
+      warnings: [text],
+      imageBuild,
+    });
+    /* The plan is still shown in words (the CLI logs it to stderr under --json; this harness's reporter logs
+     * to its stdout sink). */
+    expect(machine.stdout.text).toContain(`! ${text}`);
+    expect(log.flashed).toEqual([{ key: 'b', options: { verify: true, acknowledgeRisk: false } }]);
+  });
+
+  it('the same build: --json says imageBuild null', async () => {
+    const { ops } = fakeOps(reportOf({ booted: 'a' }));
+    await writeFile(join(temp.path, 'same.bin'), new Uint8Array(0x100).fill(7));
+    const json = await slotsCommandWith(ops)(
+      contextFor(
+        ['slots', 'flash', 'b', join(temp.path, 'same.bin'), '--dry-run', '--json', '--no-probe'],
+        cameraIo(),
+      ),
+    );
+    expect(json).toMatchObject({ dryRun: true, imageBuild: null });
   });
 
   it('without --acknowledge-risk the FF image is not written to recovery R, and nothing is prepared', async () => {

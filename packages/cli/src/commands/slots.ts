@@ -1213,6 +1213,8 @@ async function runPlannedWrite(
     targetEmpty: plan.targetEmpty === true,
     expectedSha256,
     warnings: [...plan.warnings],
+    /* The image may not be the build the camera runs: its code is for JSON only; the text is also in warnings. */
+    imageBuild: plan.imageBuild,
     planNotes: planNotesJson(plan),
   };
 
