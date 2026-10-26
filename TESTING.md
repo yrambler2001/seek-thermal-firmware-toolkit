@@ -13531,6 +13531,117 @@ Not run: the Chrome-on-emulator page specs (`slots-view`, `slots-quality`, `page
 
 **Tags.** [measured] a phone log, trace or camera read, named in `PHONE_SKIPS.md`; [source] the 1.3.0.0 reconstruction (`FW-V1/targets/compact_8hz_1_3_0_0/src/`).
 
+### 42.94 FW-V1: the Compact PRO 1.0.3.x bank in the form its bootloader stores, built by build_flash, the runner and both hand tools; the ten managed runner forks render from the shared runner (no hardware, 2026-10-26)
+
+**Summary.** Agent 42.94 (Opus 5.5), on `worktree-agent-ae2b1b7751d97627a`, reset to `refactor/all-firmware-profiles` (`9d90e24`). FW-V1 work is on branch `fwv1-4294` in the worktree `/private/tmp/claude-501/fwv1-4294`, cut from FW-V1 main `e89df737e`; five commits (section 6), not merged, not pushed. FW-V1's main checkout was not touched. No camera, J-Link or USB switch was used. The two follow-ups to 42.90:
+
+1. On the four Compact PRO and PRO FF 1.0.3.x targets, `build_flash.mjs`, `seek_fw_tool.mjs bank-payload` and `package_image.py --bank-payload` now build the bank as the 2016 bootloader stores it: the stamped image XORed with the xorshift128 keystream of the line's key block 1 (header in clear), `0xFF` to 64 KiB, no footer. The key block is read off the factory flash reference, not typed in. The built bank equals the factory banks A, B and R of both 1.0.3.0 camera dumps and of both 1.0.3.2 donor references, byte for byte; on the emulator a part holding only that bank, in B, boots from B and streams at the factory rate. The runner takes it through a new `codegen.bank_map` "2016". The 2014 Compact and the 4.x targets build byte-identical to before.
+2. The ten managed targets drop their runner fork and render the canonical runner; `gen --check` is clean. Against a logging `JLinkExe` stand-in, every bench command and every bank and boot-config address give the same J-Link scripts as the forks; the only differences are the designed ones (`-NoGui` on every run, `BANK_FORM` handling).
+
+**Tags.** [measured] was run here. [source] was read from the file named. [inferred] follows from those and was not run.
+
+**1. Setup** [measured]. `git reset --hard refactor/all-firmware-profiles` gave `9d90e24`. `git -C FW-V1 worktree add /private/tmp/claude-501/fwv1-4294 -b fwv1-4294 main` (main `e89df737e`). The toolkit worktree got a `node_modules` of links to the main checkout's, with `@seek-fw/{core,cli,web}` pointing at this worktree's packages, and `npx tsc --build packages/core/tsconfig.build.json` (3 s). The emulator ran from FW-V1 main's `emu` (its `.venv` Python, `SEEK_EMU_PYTHON` for `build_flash.mjs`).
+
+**2. Task 1: the stored form.**
+
+2.1 What the bootloader reads [source: FW-V1 `targets/compact_pro_9hz_1_0_3_0_bootloader/src/crypto.c`, `src/hand_spifi.c`, `src/image.c`]. `boot_select_image` takes a bank only through `image_sum_ok_device_seeded`: magic `0xA1B2C3D4` at 0x200, `header.length` below 0x10000, and the words over `header.length`, XORed with the xorshift128 (11, 19, 8) stream seeded by `prng_seed_device_or_key`, summing to 0; the 64-byte header (words 0x80..0x8F) is not XORed but the generator steps over it. That seed is key block 1 verbatim with no whitening (seed[3] = block[0], seed[0..2] = block[1..3]); only a bootloader whose own version word is 1.1.0.0 or below seeds from the chip's OTP words XOR block 0.
+
+2.2 What the factory banks are [measured, scratch `t9/analyze.py`]. Bank A against the factory image: the first four words XOR the image are four keystream words, the generator's state, and the step is invertible, so four steps back give the seed.
+
+| flash | bank A, B, R | key block 1 (from the seed) | in the bootloader block | in the image | bank = image under that stream, then raw `0xFF` |
+|---|---|---|---|---|---|
+| PRO 1.0.3.0 camera dump (`db4efc84`) | all three `44bc591d` | `faacb3c6f1412469bd122fb82d78160d` | once, at 0x2ACC | once, at 0xBE4C, block 0 (`67a3ea21…`) right before it | yes, 13688 B of `0xFF` after |
+| PRO FF 1.0.3.0 camera dump (`e6a3354f`) | all three `eafaeb4f` | `6da05a33f540100034e2c8947d05708c` | once, at 0x290C | once, at 0xBE5C, block 0 (`58d6abe5…`) before it | yes, 13604 B |
+| PRO 1.0.3.2 donor reference (`55b1bbf0`) | all three `926fa96c` | the 9 Hz block | once | once, at 0xBEBC | yes, 13808 B |
+| PRO FF 1.0.3.2 donor reference (`ec62b059`) | all three `55e04fa7` | the FF block | once | once, at 0xBEBC | yes, 13808 B |
+
+The 9 Hz block is the one the toolkit's core names (`KEY_PAIRS.cp103.block1`, `packages/core/src/preservation/patch.ts`), the FF block is `cp1032ff.block1`. Each factory image's word sum over `header.length` is already 0.
+
+2.3 The change (FW-V1 `8f851c36e`, `8c6c79761`, `06f9c14ae`).
+- `build_flash.mjs` (the 20 copies that shared the text, the `.BIN` variant of PRO 9 Hz 1.0.3.0, and the codegen copies of 1.3.0.0 and PRO 9 Hz 1.0.3.0). Where 42.90 stopped on an encrypted reference, `bankForm()` now reads the key block off the reference and uses it only when (1) bank A's 64-byte header is the factory image's, (2) the seed re-encrypts the whole factory image to bank A, and (3) the block occurs exactly once in the reference's bootloader block. `packageStoredBank()` also requires the block once in the built image, stamps `header.length` and the adjust word at 0x238 as the plain bank does, XORs the stream, pads `0xFF`, and re-checks the decrypted sum. `--flash` passes `BANK_FORM=stored-2016` and `BANK_KEY_BLOCK1`. The plain path is untouched.
+- The runner: `bank_maps.json` gains "2016", the 2014 addresses with the stored form. `flash-bank` takes `BANK_FORM=stored-2016` with `BANK_KEY_BLOCK1` (checks magic, length, decrypted word sum, `0xFF` tail), refuses `BANK_FORM=plain-2014` (that bootloader does not boot it), and keeps the "CODE" guard when unset. The four PRO 1.0.3.x application targets declare it; the three pending ones get the "2016" render through `render_tool.mjs` (+312/-47 each against their old `580dfcc1` runner, all four PRO renders `259de568`: they also gain `flash-factory-4m-2` and `-NoGui`, as 42.90 §4 listed for every pending 2014 runner). The "2014" render is unchanged (the `9aa4211b…` pin holds); `test_gen.mjs` asserts the "2016" render (same table as 2014, stored validator, no plain one) and refuses "2019" where it refused "2016": 85 passed, 0 failed.
+- The hand tools (harness, the 32 and 31 copies that equalled it, the 1.3.0.8 variants by patch): `bank-payload` and `--bank-payload` find the reference as `build_flash.mjs` does (the dump in `BASE_DIR`, else `build/factory_flash_reference.bin` when its sha256 is the declared pin, else the declaration's `bank_storage`), read the form off its bank A, and on an encrypted one build the stored bank under the block read off it, with the same three checks and the image check.
+
+2.4 Byte for byte [measured, scratch `t9/step3_pro.sh`]. A real `make` through `build_flash.mjs` (build only), then both hand tools on the built image:
+
+| target | reference | `build_flash.mjs` | image | stored bank | = reference A, B, R | `seek_fw_tool.mjs bank-payload` / `package_image.py --bank-payload` |
+|---|---|---|---|---|---|---|
+| compact_pro_9hz_1_0_3_0 | the camera's dump | exit 0, 31 s | 5e1f3f24, byte-exact | 44bc591d | equal, equal, equal | exit 0 / exit 0, both = build_flash's |
+| compact_pro_ff_18hz_1_0_3_0 | the camera's dump | exit 0, 30 s | 6f06b333, byte-exact | eafaeb4f | equal, equal, equal | exit 0 / exit 0, both = build_flash's |
+| compact_pro_9hz_1_0_3_2 | donor reference, built and pinned (`55b1bbf0`) | exit 0, 24 s | c7769247, byte-exact | 926fa96c | equal, equal, equal | exit 0 / exit 0, both = build_flash's |
+| compact_pro_ff_18hz_1_0_3_2 | donor reference (`ec62b059`) | exit 0, 20 s | 196560c0, byte-exact | 55e04fa7 | equal, equal, equal | exit 0 / exit 0, both = build_flash's |
+
+`build_flash.mjs` prints `bank form: the 2016 stored form, under key block 1 faacb3c6… (read off the reference's bank A and found in its bootloader)` and `bank ok: 2016 stored bank 0x10000 B, header.length 0xca88, decrypted word sum 0 under key block 1, no footer` (9 Hz 1.0.3.0). The 1.0.3.0 rows are the camera's own banks, so they show the form is the factory's, not only the emulator's.
+
+2.5 On the emulator [measured, scratch `t9/emu_run.sh`]. Each part is the reference with banks A and R erased (`0xFF`), the stored bank in B and boot word 1, so only bank B can start. "Enumerates" and the boot record (0x10000208, the bank the bootloader entered, 42.53) are from `seek_emu.py --flash <part> --flash-entry <entry> --enumerate --dump-sram`; the checker is `node --import ./e2e/lib/bench/seek-fps/register.mjs e2e/lib/bench/seek-fps/seek-fps.ts --fps --emulator <entry> --emulator-flash <part> --mode normal --no-hifps` from this worktree with `SEEK_EMU_DIR=…/FW-V1/emu`. The camera reports the reference's serial and chip id (not copied here).
+
+| target | part: reference with A and R erased, boot word 1, bank B = | `seek_emu.py --enumerate` | checker (`seek-fps --fps ... --mode normal --no-hifps`) |
+|---|---|---|---|
+| compact_pro_9hz_1_0_3_0 | own dump db4efc84; B 44bc591d; part e94d96d0 | PIR324 Thermal Camera enumerates in 0 s; boot record 1 (bank B entered) | exit 0 after 357 s; firmware 1.0.3.0; per-second medians 8.85; overall mean 7.20 fps, 36 frames in 5 s |
+| compact_pro_ff_18hz_1_0_3_0 | own dump e6a3354f; B eafaeb4f; part 8f6ab921 | PIR324 Thermal Camera enumerates in 0 s; boot record 1 (bank B entered) | exit 0 after 345 s; firmware 1.0.3.0; per-second medians 17.54; overall mean 15.00 fps, 75 frames in 5 s |
+| compact_pro_9hz_1_0_3_2 | donor reference 55b1bbf0; B 926fa96c; part afe754ab | PIR324 Thermal Camera enumerates in 1 s; boot record 1 (bank B entered) | exit 0 after 249 s; firmware 1.0.3.2; per-second medians 8.85; overall mean 7.20 fps, 36 frames in 5 s |
+| compact_pro_ff_18hz_1_0_3_2 | donor reference ec62b059; B 55e04fa7; part 2441fd88 | PIR324 Thermal Camera enumerates in 1 s; boot record 1 (bank B entered) | exit 0 after 241 s; firmware 1.0.3.2; per-second medians 17.54; overall mean 14.60 fps, 73 frames in 5 s |
+42.90 measured the same parts with the plain bank in B: nothing enumerated and the instruction budget ran out in the bootloader (PC 0x14000412 for 9 Hz, 0x14000406 for FF). The 1.0.3.2 parts here are byte-identical to 42.90's "factory form" parts (`afe754ab…`, `2441fd88…`), because the stored bank is the reference's bank A. The per-second means (4 to 18 fps) are the checker's single-skip behaviour of 42.62 and 42.70, as in 42.90.
+
+2.6 The flash path, dry [measured, scratch `t9/flash_dry.sh`]. `build_flash.mjs --flash --no-dump --no-boot-flip` on each of the four with `JLINKEXE` pointed at a logging stand-in (it plays a 4 MB part: the reference with A, B and R erased): exit 0; the runner printed `Validated 2016 stored bank …: 0x10000 B, header.length 0xca88, decrypted word sum 0 under key block 1, no footer`; the J-Link scripts were `loadbin "<root>/build/bank_payload.bin", 0x14060000 | verifybin … | q`, then `r | g | q`, then `read-boot-slots`; bank B of the part afterwards equals the stored bank.
+
+2.7 Refusals [measured]. On `compact_pro_9hz_1_0_3_2` with `build/factory_flash_reference.bin` moved aside, both hand tools exit 2: `this target's factory flash reference stores its banks encrypted (…/factory_flash_reference.json), and …/build/factory_flash_reference.bin is not built yet: run node tools/build_flash.mjs once (it builds the reference), then again`. On `compact_pro_ff_18hz_1_0_3_0` given the 9 Hz 1.0.3.0 image: exit 2, `the image holds key block 1 6da05a33… 0 times, not once: the factory images carry their line's key pair, so this is not an image of the line the reference is from`. The runner with the 9 Hz stored bank and the FF key: exit 2, `not a 2016 stored bank under key block 1 6da05a33… (… decrypted word sum 0xbb9b8892 …)`.
+
+2.8 The 2014 Compact and the 4.x targets, byte-identical [measured, scratch `t9/ident.sh`].
+- Hand tools, main's (`git show e89df737e:…`, placed beside the new ones under other names and removed after) against this branch's, on each target's factory image: on the 17 2014-chain Compact targets `bank-payload` and `--bank-payload` give the same bank (exit 0 both); on the 12 4.x targets `bank-payload`, `encrypt`, `package_image.py IN OUT` and `--bank-payload` give the same output and exit code (`seek_fw_tool.mjs` exits 3 on 8 of them on both sides, at its vector check). 29 of 29 targets equal.
+- `build_flash.mjs` with a real `make` on the 17 Compact targets: exit 0, byte-exact, no stored-form line, and the bank equals the hand tools' and, on the 16 donor targets, the bank 42.90 measured with main's `build_flash.mjs` (its table, `93add3e5` … `8a11b0dc`); 1.3.0.0's bank (`5cbbdd0f`) equals its dump's banks A and R.
+- Files [measured, `git diff e89df737e`]: the 4.x `build_flash.mjs` copies (harness and nine managed) and the three pending 4.x targets' tools are unchanged (their `SEEK_FW_TOOL_README.md` copies take the README text below); none of the 20 runners on the "2014" map changed.
+
+2.9 Docs. FW-V1 `docs/FACTORY_FLASH_REFERENCES.md`: section 4's two 1.0.3.2 rows and section 5's end say what changed, new section 8 has the form, the key source, the byte table and the emulator table. `SEEK_FW_TOOL_README.md` (harness and its 36 copies): the 2014-chain section describes the stored bank instead of "stages no bank". `targets/compact_pro_9hz_1_0_3_0/README.md` said `build` packages a Key-A bank with a "CODE" footer (stale since 42.66) and now describes the stored bank; the `tools/jlink/README.md` `flash-bank` row of the four PRO 1.0.3.x targets names `BANK_FORM=stored-2016` instead of `plain-2014`.
+
+**3. Task 2: the ten forks (FW-V1 `1d0f04245`).**
+
+3.1 The change. The ten targets' `own_tools` row loses `tools/jlink/jlink-runner.js` (the README stays owned; PRO 9 Hz 1.0.3.0 keeps its `build_flash.mjs`), its reason records why, and `codegen/targets/<t>/tools/jlink/jlink-runner.js` is deleted. `gen.mjs --target <t>` on every managed target, then `--check`: all exit 0. `compact_8hz_1_3_0_8`'s runner (pending, its 42.49 footer formula) is untouched.
+
+3.2 Old fork against new render [measured, `diff -u`]:
+
+| target | bank_map | old (fork) | new (render) | diff | what changed |
+|---|---|---|---|---|---|
+| compact_ff_16hz_1_3_0_8, compact_pro_9hz_4_9_1_15, compact_pro_9hz_4_9_2_0, compact_pro_ff_18hz_4_18_2_0 (the bench's), compact_xr_8hz_4_8_2_1, mosaic_18hz_10_9_1_31, mosaic_ff_27hz_2_27_1_33, nano_200_32hz_42_32_3_10, nano_300_27hz_44_27_3_10 | 4x | `cac4d14f` | `cd6bb11d` | +30/-12 each | `withNoGui()` on every `JLinkExe` spawn (the forks had `-NoGui 1` only in `flash-factory-4m-2`'s sessions); `BANK_FORM` read and refused by `flash-bank`; `SLOT_BASES {0,1,2}` becomes `BANK_BASES {A,B,R}` plus `BANK_OF_WORD` and `GUARDED_BANK_BASES`, the same three addresses 0x14030000, 0x14050000, 0x14070000; `set-boot` prints the bank's name |
+| compact_pro_9hz_1_0_3_0 | 2016 | `cf6508ca` | `259de568` | +56/-27 | `withNoGui()`; the bank table comment; the 2016 form note with `BANK_KEY_BLOCK1`; the stored-bank validator in place of the plain-bank one; the usage lines; the form dispatch; the same addresses 0x14050000, 0x14060000, 0x14070000 (and 0x14030000 in the guard list, as before) |
+
+3.3 The J-Link scripts, old against new [measured, scratch `t9/jl/compare.py`]. Each runner was copied with its target's `tools/jlink/` into a sandbox and run with `JLINKEXE` pointed at a logging stand-in that plays a 4 MB part (`savebin` reads it, `loadbin` writes it, `verifybin` compares), from the same starting part each time; compared per case: the command-file lines, the `JLinkExe` arguments without `-NoGui 1`, the exit code and the part afterwards.
+
+| case | 4x targets (9) | compact_pro_9hz_1_0_3_0 (2016) |
+|---|---|---|
+| `dump-spifi-4m`, `dump-spifi-4m-halted` (savebin 0x14000000, 0x400000) | same | same |
+| `flash-factory-4m-2` (FACTORY_IMAGE differing in blocks 0, 1, 5, 6, 7): 7 J-Link runs, 0x14050000+0x30000, then 0x14010000, then 0x14000000 last, re-read | same, part equal | same, part equal |
+| `flash-factory-4m-2` with `F4M2_DRY=1` | same | same |
+| `set-boot` with `BOOT_SLOT` 0, 1, 2 and `set-boot-slot-b` (boot-config block 0x14010000) | same, part equal | same, part equal |
+| `flash-bank`, a "CODE"-footer bank, at each bank of the map | same (0x14030000, 0x14050000, 0x14070000 written) | same (0x14050000, 0x14060000, 0x14070000 written) |
+| `flash-bank` at a non-bank address | same, both refuse (0x14040000, 0x14060000) | 0x14040000 both refuse; 0x14030000 both accept (section 7) |
+| `flash-bank` with `BANK_FORM=plain-2014` | DIFFERENT by design: the fork ignored `BANK_FORM` and wrote; the render refuses (exit 2) | DIFFERENT by design: the fork wrote the plain bank; the render refuses it |
+| `flash-bank` `BANK_FORM=stored-2016`, the right key | n/a | DIFFERENT by design: the fork refused; the render validates and writes 0x14060000 |
+| `flash-bank` `BANK_FORM=stored-2016`, the wrong key | n/a | both refuse |
+| `read-boot-slots`, `reset-go` | same | same |
+
+151 of 162 cases are the same in every compared respect; the 11 that differ are the `BANK_FORM` rows above (one per 4x target, two on the PRO 9 Hz 1.0.3.0). `-NoGui 1` is on every run of the renders; on the forks it was on the `flash-factory-4m-2` sessions only.
+
+**4. Commands and checks** [measured].
+- `node codegen/engine/test_gen.mjs`: 85 passed, 0 failed (84 before; the 2016 assertion added).
+- `node --check` on the 72 changed JS files, `py_compile` on the 33 changed Python files, `json.load` on the 25 changed JSON files: 0 failures. `python3 -m unittest codegen.harness.tools.test_target_paths`: OK, 1 skipped.
+- `gen.mjs --target <t>` then `--check` on the 18 managed targets, after the Task 1 commits and after the Task 2 commit: every one exit 0.
+- `build_flash.mjs` (build only, real make) on 21 targets: 21 exit 0. `build_flash.mjs --flash` against the stand-in on 4.
+- Emulator: 4 `seek_emu.py --enumerate` runs and 4 checker runs.
+
+**5. Not done, and for the owner.**
+- No camera. The stored bank equals the factory banks of both 1.0.3.0 cameras byte for byte and boots on the emulator; `build_flash.mjs --flash` with it was run only against the stand-in. The next bench run checks the new bench runner (`compact_pro_ff_18hz_4_18_2_0`) with J-Link reads; its scripts are unchanged, its arguments gain `-NoGui 1` on every run.
+- The two PRO bootloader targets (`compact_pro_9hz_1_0_3_0_bootloader`, `compact_pro_ff_18hz_1_0_3_0_bootloader`) still declare "2014", so their pending runners take `BANK_FORM=plain-2014`, which a 2016 bootloader does not boot. Whether they move to "2016" is the owner's call; their `build_flash.mjs` refuses before make either way.
+- On the "2014" and "2016" maps `flash-bank` accepts `BANK_ADDR=0x14030000` (it is in `GUARDED_BANK_BASES`, kept for `flash-region`'s guard), which neither bootloader boots from; unchanged from the forks and the 1.3.0.0 runner, not changed here.
+- `read-boot-slots` on the 2014/2016 maps reads the 4.x footer positions (0x1403BFC0 and so on); unchanged, cosmetic.
+- The toolkit's own slot writer was not touched; it already stages the 2016 form its own way (42.84 to 42.88).
+- `compact_8hz_1_3_0_8`'s footer formula (42.49) is intact: its runner and tools take only the README text and the hand-tool change.
+
+**6. Commits.**
+- FW-V1, branch `fwv1-4294` (worktree `/private/tmp/claude-501/fwv1-4294`, on main `e89df737e`; not merged, not pushed): `8f851c36e` (build_flash: the 2016 stored bank on an encrypted reference), `8c6c79761` (codegen: the "2016" bank map), `06f9c14ae` (hand tools: bank-payload builds the 2016 stored bank), `1d0f04245` (codegen: the ten managed runner forks render from the shared runner), `b33efdeee` (docs).
+- Seek: this section, on `worktree-agent-ae2b1b7751d97627a`, reset to `refactor/all-firmware-profiles` (`9d90e24`).
+- Scratch (not committed): `/private/tmp/claude-501/-Users-yrambler2001-things-a-noindex-seek-seek-thermal-firmware-backup/82174575-1341-45d6-a306-7518156cd978/scratchpad/t9/` (`analyze.py`, `step3_pro.sh` and `pro/`, `emu_run.sh` and `emu/`, `flash_dry.sh` and `fd/`, `ident.sh` and `ident/`, `jl/` the stand-in, `compare.py` and `report.json`, `r/` the runner renders and diffs).
+
 ### 42.96 42.91's Slots features on the Compact PRO FF board (2026-10-26)
 
 **Summary.** Agent 42.96 (Opus 5.5), on `worktree-agent-ac353fa918dff2f6c`, reset to `refactor/all-firmware-profiles` (`989d0f2`), the only actor on the bench. It ran 42.91's copy, restore, every-bank patch and cancel on the Compact PRO FF board (serial `090BB12PR939`, 1.0.3.0, bootloader 1.2.0.0) through the page in Electron (from source, `SEEK_E2E_SOURCE=dev`) and through the CLI. Every write committed with status 0 and read back as planned; every restore read back byte for byte as the backup stores it; every zip held the bank as it was before the write. The camera showed six things wrong, all words or names, none in the bytes written; each is fixed with tests (§5). The J-Link reads before and after are both `28060916…`, byte-identical to the end image; no `flash-factory-4m-2` was run. Switch: `1=off 2=on`. Nothing was pushed or merged; `plan.md` and `docs/` untouched; no other agent started.
