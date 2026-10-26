@@ -37,6 +37,11 @@ export interface SlotWriteConfirmProps {
   readonly ffImage?: boolean;
   /** The bank holds no image: the write overwrites no firmware. */
   readonly targetEmpty?: boolean;
+  /**
+   * The image may not be the build the camera runs (core's `SlotFlashPlan.imageBuild`, its text). Said here
+   * again, above the confirm, because it is about what is written; the write stays allowed.
+   */
+  readonly imageBuild?: string | null;
   /** The key the image is written under and the bank it was derived from, when there is one. */
   readonly keyLine?: string | null;
   /** The backup zip's name as the plan shows it (the time still to come): the bank is saved there first. */
@@ -53,6 +58,7 @@ export function SlotWriteConfirm({
   risk,
   ffImage = false,
   targetEmpty = false,
+  imageBuild = null,
   keyLine,
   backupName,
   onConfirm,
@@ -105,6 +111,15 @@ export function SlotWriteConfirm({
         {!risk.booted && !risk.recovery && risk.bootUnnamed && (
           <p className="rounded-md border border-destructive/40 bg-destructive/8 px-3 py-2 text-[0.85rem] font-medium text-destructive">
             {`The camera does not say which bank it boots, so ${slotName} is treated as the bank it boots now. Writing it can replace the firmware the camera is running.`}
+          </p>
+        )}
+
+        {imageBuild !== null && (
+          <p
+            id="slot-write-confirm-build"
+            className="rounded-md border border-warn/40 bg-warn/8 px-3 py-2 text-[0.85rem] font-medium text-foreground"
+          >
+            {imageBuild}
           </p>
         )}
 

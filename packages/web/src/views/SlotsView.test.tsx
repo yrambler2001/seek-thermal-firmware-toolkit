@@ -423,6 +423,74 @@ describe('SlotsView', () => {
     unmount();
   });
 
+  it('an image that is not the build the camera runs: the warning is in "Read before writing" and in the dialog, and the write stays allowed (TESTING.md 42.104)', () => {
+    const report = slotReport(base);
+    const text =
+      'This image is firmware 4.9.1.6; the camera runs 4.9.1.5. Whether this camera takes a ' +
+      'different build, and runs it, has not been checked.';
+    const api = panel({
+      plan: slotPlan(true),
+      report,
+      pending: {
+        key: 'b',
+        kind: 'plain',
+        what: 'other-build.bin',
+        plan: {
+          ...preparedSlot('b', 'plain', new Uint8Array(0x10000)),
+          warnings: [text],
+          imageBuild: { code: 'other-version', image: '4.9.1.6', camera: '4.9.1.5', text },
+        },
+        report,
+        source: null,
+        action: FLASH_ACTION,
+        restore: null,
+      },
+    });
+    const { container, unmount } = view(api);
+
+    const readFirst = [...container.querySelectorAll('li')].map((li) => li.textContent);
+    expect(readFirst).toContain(text);
+    act(() => {
+      buttonByText(container, 'Write to slot B…').click();
+    });
+    const node = dialog();
+    expect(node?.querySelector('#slot-write-confirm-build')?.textContent).toBe(text);
+    /* People's words only: the code name is for JSON. */
+    expect(node?.textContent).not.toContain('other-version');
+    /* Warned, never gated: bank B needs no tick, and the confirm writes. */
+    const confirm = buttonByText(document.body, 'Yes — write to slot B');
+    expect(confirm.disabled).toBe(false);
+    act(() => {
+      confirm.click();
+    });
+    expect(api.write).toHaveBeenCalledWith(false);
+    unmount();
+  });
+
+  it('the same build: the dialog has no build line', () => {
+    const report = slotReport(base);
+    const api = panel({
+      plan: slotPlan(true),
+      report,
+      pending: {
+        key: 'b',
+        kind: 'plain',
+        what: 'same-build.bin',
+        plan: preparedSlot('b', 'plain', new Uint8Array(0x10000)),
+        report,
+        source: null,
+        action: FLASH_ACTION,
+        restore: null,
+      },
+    });
+    const { container, unmount } = view(api);
+    act(() => {
+      buttonByText(container, 'Write to slot B…').click();
+    });
+    expect(dialog()?.querySelector('#slot-write-confirm-build')).toBeNull();
+    unmount();
+  });
+
   it('shows the 1.3.0.8 FF image as writable to recovery R: its staging in words, what is stored, and why only R', () => {
     const report = slotReport(base);
     const api = panel({

@@ -34,7 +34,7 @@ import type { SeekDevice } from '../../src/protocol/client.js';
 import type { DeviceState, SlotState, WorkflowContext } from '../../src/workflows/types.js';
 import { onPlaintextChain } from '../../src/slots/running.js';
 import { bootsNowOf } from '../../src/slots/booted-words.js';
-import { prepareSlotFlash, flashSlot } from '../../src/slots/write.js';
+import { checkSlotFlash, prepareSlotFlash, flashSlot } from '../../src/slots/write.js';
 import { retargetImageKeys } from '../../src/slots/write-image.js';
 import { reportFor } from './write-fixtures.js';
 import { buildSlotPlan } from '../../src/slots/capability.js';
@@ -87,6 +87,12 @@ function imageOf(length: number, seed: number): Uint8Array {
   dv.setUint32(0x200, IMAGE_MAGIC, true);
   dv.setUint32(LENGTH_OFFSET, length, true);
   return out;
+}
+
+/** Stamp the header's version word (0x20C), low byte first as the camera reports it: '1.0.3.0' is 01 00 03 00. */
+function withVersion(image: Uint8Array, version: string): Uint8Array {
+  image.set(version.split('.').map(Number), 0x20c);
+  return image;
 }
 
 const modern = getProfile('modern-4x');
@@ -949,7 +955,8 @@ describe('prepareSlotFlash warnings', () => {
      * "Note: Recovery bank, mode 9, token form. A write asks you to acknowledge the risk. …". Then (42.87)
      * the warnings carried all six camera notes as "Note: …"; they are notes now, by source (42.88). */
     const plan = buildSlotPlan(compact2016, '1.0.3.0');
-    const image = imageOf(0x6000, 4);
+    /* The camera's own build, so no warning says the image is another one (TESTING.md 42.104). */
+    const image = withVersion(imageOf(0x6000, 4), '1.0.3.0');
     image.set(hexToBytes(KEY_PAIRS.cp103.block0), 0x3000);
     image.set(hexToBytes(KEY_PAIRS.cp103.block1), 0x3100);
     const slots = (['a', 'b', 'r'] as const).map((k) =>
@@ -1022,6 +1029,138 @@ describe('prepareSlotFlash warnings', () => {
 /* ==================================================================== *
  * flashSlot: the gates, the sequence, and the read-back
  * ==================================================================== */
+
+describe('prepareSlotFlash: an image that is not the build the camera runs is warned of, never refused (TESTING.md 42.104)', () => {
+  /** A 2014-chain camera on 1.3.0.0 (the bench Compact's build), booting A; B is the target. */
+  function chainReport(): SlotsReport {
+    const slots = (['a', 'b', 'r'] as const).map((k) =>
+      slotState({ key: k, present: true, accepts: true }),
+    );
+    return reportFor(
+      stateFor(legacy, { version: '1.3.0.0', slots, booted: 'a' }),
+      buildSlotPlan(legacy, '1.3.0.0'),
+    );
+  }
+  const plain = (bytes: Uint8Array) => ({ kind: 'plain' as const, bytes, fileName: 'image.bin' });
+
+  it('the same build: no warning, and the plan carries none', () => {
+    const out = prepareSlotFlash(
+      chainReport(),
+      'b',
+      plain(withVersion(imageOf(0x6000, 61), '1.3.0.0')),
+    );
+    expect(out.imageBuild).toBeNull();
+    expect(out.warnings).toEqual([]);
+  });
+
+  it('another build on the 2014 chain: the warning first, in plain words, with what follows; the write is still planned and passes its checks', () => {
+    const report = chainReport();
+    const out = prepareSlotFlash(report, 'b', plain(withVersion(imageOf(0x6000, 62), '1.2.0.0')));
+    const text =
+      'This image is firmware 1.2.0.0; the camera runs 1.3.0.0. On this line the camera checks only ' +
+      'that an image is well formed (its header and word sum), not its version, so it takes this ' +
+      'image, and when it starts from this bank it runs 1.2.0.0.';
+    expect(out.imageBuild).toEqual({
+      code: 'other-version',
+      image: '1.2.0.0',
+      camera: '1.3.0.0',
+      text,
+    });
+    expect(out.warnings).toEqual([text]);
+    /* Warned, never gated: the plan is built and every check before a send passes. */
+    expect(out.staging).toBe('plain');
+    expect(() => checkSlotFlash(report, out, { acknowledgeRisk: false })).not.toThrow();
+    /* People's words carry no code name. */
+    expect(text).not.toContain('other-version');
+  });
+
+  it('an image whose header names no version: the build cannot be told, so it warns (the choice: warn, not stay silent)', () => {
+    const image = imageOf(0x6000, 63);
+    new DataView(image.buffer).setUint32(0x20c, 0, true);
+    const out = prepareSlotFlash(chainReport(), 'b', plain(image));
+    expect(out.imageBuild).toEqual({
+      code: 'no-version',
+      image: null,
+      camera: '1.3.0.0',
+      text:
+        "This image's header names no firmware version, so whether it is the build the camera runs " +
+        '(1.3.0.0) cannot be told. Check that it is the image you mean to write.',
+    });
+    expect(out.warnings[0]).toBe(out.imageBuild?.text);
+  });
+
+  it('raw bytes: an image header of another build warns as an image does; bytes with no image header say nothing more', () => {
+    const report = chainReport();
+    const image = withVersion(imageOf(0x6000, 64), '1.2.0.0');
+    const out = prepareSlotFlash(report, 'b', { kind: 'raw', bytes: image, fileName: 'raw.bin' });
+    expect(out.imageBuild?.code).toBe('other-version');
+    expect(out.warnings[0]).toMatch(
+      /^This image is firmware 1\.2\.0\.0; the camera runs 1\.3\.0\.0\./,
+    );
+    const noHeader = bytesOf(0x6000, 65);
+    const outRaw = prepareSlotFlash(report, 'b', {
+      kind: 'raw',
+      bytes: noHeader,
+      fileName: 'raw.bin',
+    });
+    expect(outRaw.imageBuild).toBeNull();
+  });
+
+  it('the 2016 stage-key form and Key A ciphertext warn too, and say the other build is not checked there', () => {
+    const notChecked =
+      'Whether this camera takes a different build, and runs it, has not been checked.';
+    const pro = reportFor(
+      stateFor(compact2016, {
+        version: '1.0.3.0',
+        slots: [slotState({ key: 'b', present: true, accepts: true })],
+      }),
+      buildSlotPlan(compact2016, '1.0.3.0'),
+    );
+    const image2016 = withVersion(imageOf(0x6000, 66), '1.0.3.2');
+    image2016.set(hexToBytes(KEY_PAIRS.cp103.block0), 0x3000);
+    image2016.set(hexToBytes(KEY_PAIRS.cp103.block1), 0x3100);
+    const out2016 = prepareSlotFlash(pro, 'b', plain(image2016));
+    expect(out2016.staging).toBe('slot-keystream-ciphertext');
+    expect(out2016.imageBuild).toEqual({
+      code: 'other-version',
+      image: '1.0.3.2',
+      camera: '1.0.3.0',
+      text: `This image is firmware 1.0.3.2; the camera runs 1.0.3.0. ${notChecked}`,
+    });
+
+    const modernReport = reportFor(
+      stateFor(modern, {
+        version: '4.8.1.9',
+        slots: [slotState({ key: 'b', present: true, accepts: true }), bootedWithApp()],
+        keyA: KEY_A,
+        keyB: KEY_B,
+      }),
+      buildSlotPlan(modern, '4.8.1.9'),
+    );
+    const imageKeyA = withVersion(imageOf(0x5000, 67), '4.8.1.7');
+    imageKeyA.set(SRC_A, 0x4000);
+    imageKeyA.set(SRC_B, 0x4020);
+    const name = `img${keyFilenameSuffix(SRC_A, SRC_B)}.bin`;
+    const outKeyA = prepareSlotFlash(modernReport, 'b', {
+      kind: 'plain',
+      bytes: imageKeyA,
+      fileName: name,
+    });
+    expect(outKeyA.staging).toBe('key-a-ciphertext');
+    expect(outKeyA.imageBuild?.text).toBe(
+      `This image is firmware 4.8.1.7; the camera runs 4.8.1.9. ${notChecked}`,
+    );
+    expect(outKeyA.warnings[0]).toBe(outKeyA.imageBuild?.text);
+    /* The same build under Key A: nothing. */
+    const same = withVersion(imageOf(0x5000, 68), '4.8.1.9');
+    same.set(SRC_A, 0x4000);
+    same.set(SRC_B, 0x4020);
+    expect(
+      prepareSlotFlash(modernReport, 'b', { kind: 'plain', bytes: same, fileName: name })
+        .imageBuild,
+    ).toBeNull();
+  });
+});
 
 describe('flashSlot gates', () => {
   const plan = buildSlotPlan(legacy, '1.3.0.0');

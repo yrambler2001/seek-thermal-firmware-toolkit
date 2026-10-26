@@ -67,6 +67,7 @@ export {
   type WriteBackup,
 } from './backup.js';
 export { copySourceRefusal, planSlotCopy, type SlotCopyPlan } from './copy.js';
+export { imageBuildWarningOf, type ImageBuildForm } from './image-build.js';
 export {
   FLASH_BASE,
   FULL_FLASH_BYTES,
