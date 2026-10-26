@@ -9,11 +9,12 @@
  */
 
 import { readFile, readdir, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   APPLICATION_KEY_PAIRS,
   buildSlotPlan,
+  buildZip,
   equalBytes,
   FF_VENDOR_STAGED,
   FF_VENDOR_STORED,
@@ -29,12 +30,14 @@ import {
   writeBannerOf,
   type DeviceState,
   type DumpedSlot,
-  type FlashSlotOptions,
   type FlashSlotResult,
+  type FpsEveryBankResult,
   type FpsPatchResult,
   type FpsPlan,
-  type FpsPreDump,
   type ImageHeader,
+  type SlotRestorePlan,
+  type WriteAction,
+  type WriteBackup,
   type SlotEntry,
   type SlotFlashPlan,
   type SlotInputKind,
@@ -66,7 +69,8 @@ import {
   parseBank,
   parseSlotsArgs,
   readBackLines,
-  saveFpsDump,
+  backupDirOf,
+  saveBackupInto,
   slotsCommandWith,
   writeKeyLines,
   type SlotOps,
@@ -335,15 +339,63 @@ interface OpsLog {
   inspected: number;
   dumped: SlotKey[];
   prepared: { key: SlotKey; kind: SlotInputKind; fileName: string; bytes: Uint8Array }[];
-  flashed: { key: SlotKey; options: FlashSlotOptions }[];
+  /** Each write: its bank and the two options a write always had. */
+  flashed: { key: SlotKey; options: { verify?: boolean; acknowledgeRisk: boolean } }[];
+  /** The action each write named for its backup. */
+  actions: WriteAction[];
+  /** The backups the writes saved (only with `behaviour.save`). */
+  saved: WriteBackup[];
 }
 
-/** Core's four calls, faked. The log says what the command asked for. */
+/** The backup zip core builds before a write, for the bank and the write given: one text file in it. */
+function backupOf(keys: readonly SlotKey[], action: WriteAction): WriteBackup {
+  const label =
+    action.kind === 'copy'
+      ? `before-copy-from-${action.from.toUpperCase()}`
+      : action.kind === 'restore'
+        ? 'before-restore'
+        : action.kind === 'flash'
+          ? action.input === 'raw'
+            ? 'before-flash-raw'
+            : 'before-flash'
+          : action.kind === 'fps-patch'
+            ? 'before-fps-patch'
+            : 'before-fps-patch-every-bank';
+  const name = `seek_backup_2026-10-26T12-00-00Z_SN-1_v4.9.5.0_bank-${keys.map((key) => key.toUpperCase()).join('-')}_${label}`;
+  const zip = buildZip([{ name: `${name}/README.txt`, data: new TextEncoder().encode('backup') }]);
+  return {
+    name,
+    fileName: `${name}.zip`,
+    savedAt: '2026-10-26T12:00:00.000Z',
+    serial: 'SN-1',
+    firmware: '4.9.5.0',
+    action,
+    follows: 'the write',
+    banks: [],
+    textName: 'README.txt',
+    text: 'backup',
+    zip,
+  };
+}
+
+/** Core's calls, faked. The log says what the command asked for. */
 function fakeOps(
   report: SlotsReport,
-  behaviour: { readonly verified?: boolean | null; readonly decrypts?: boolean } = {},
+  behaviour: {
+    readonly verified?: boolean | null;
+    readonly decrypts?: boolean;
+    /** The write saves its backup through the command's save (into --dump-dir), as core's does. */
+    readonly save?: boolean;
+  } = {},
 ): { readonly ops: SlotOps; readonly log: OpsLog } {
-  const log: OpsLog = { inspected: 0, dumped: [], prepared: [], flashed: [] };
+  const log: OpsLog = {
+    inspected: 0,
+    dumped: [],
+    prepared: [],
+    flashed: [],
+    actions: [],
+    saved: [],
+  };
   const verified = behaviour.verified === undefined ? true : behaviour.verified;
   const ops: SlotOps = {
     inspect: () => {
@@ -360,16 +412,28 @@ function fakeOps(
       const empty = findView(report, key)?.content === 'empty';
       return fakePlan(key, input.kind, input.bytes, empty);
     },
-    flash: (_ctx, _report, plan, options) => {
-      log.flashed.push({ key: plan.key, options });
-      const result: FlashSlotResult = {
+    write: async (_ctx, _report, plan, options) => {
+      log.flashed.push({
+        key: plan.key,
+        options: {
+          ...(options.verify === undefined ? {} : { verify: options.verify }),
+          acknowledgeRisk: options.acknowledgeRisk,
+        },
+      });
+      log.actions.push(options.action);
+      const backup = backupOf([plan.key], options.action);
+      if (behaviour.save === true) {
+        if (!(await options.saveBackup(backup))) throw new Error('not saved');
+        log.saved.push(backup);
+      }
+      const written: FlashSlotResult = {
         key: plan.key,
         commitStatus: 0,
         verified: options.verify === false ? null : verified,
         after: options.verify === false ? null : plan.payload,
         notes: [],
       };
-      return Promise.resolve(result);
+      return { written, backup };
     },
   };
   return { ops, log };
@@ -987,9 +1051,9 @@ describe('slots command', () => {
       /* Core's flashSlot ends on this progress line (slots/write.ts); the CLI gives the instruction. */
       const withProgress: SlotOps = {
         ...ops,
-        flash: (ctx, report, plan, options) => {
+        write: (ctx, report, plan, options) => {
           ctx.reporter.progress(1, 1, 'Written.');
-          return ops.flash(ctx, report, plan, options);
+          return ops.write(ctx, report, plan, options);
         },
       };
       await writeFile(join(temp.path, 'image.bin'), new Uint8Array(0x100).fill(7));
@@ -1340,8 +1404,7 @@ describe('empty banks', () => {
       expect(text).toContain('It can be written. an empty bank is written like a used one');
       /* The booted bank holds an image, so the note names it as the source. */
       expect(text).toContain('To give it the firmware bank A holds');
-      expect(text).toContain('`seek-fw slots dump a`');
-      expect(text).toContain('`seek-fw slots flash b <the -decrypted file>`');
+      expect(text).toContain('`seek-fw slots copy a b`');
     });
 
     it('says an empty bank cannot be written where the plan says so, with the plan’s reason', () => {
@@ -1922,14 +1985,11 @@ describe('slots flash on a Mosaic-shaped camera: the page’s key derivation, th
       ops: {
         ...ops,
         prepare: prepareSlotFlash,
-        flash: (_ctx, _report, plan) => {
+        write: (_ctx, _report, plan, options) => {
           plans.push(plan);
           return Promise.resolve({
-            key: plan.key,
-            commitStatus: 0,
-            verified: null,
-            after: null,
-            notes: [],
+            written: { key: plan.key, commitStatus: 0, verified: null, after: null, notes: [] },
+            backup: backupOf([plan.key], options.action),
           });
         },
       },
@@ -2028,35 +2088,32 @@ function offerOf(): OfferPlan {
 }
 
 /** The result core returns for a written patch, with every check passing. */
-function writtenResult(pre: FpsPreDump): FpsPatchResult {
+function writtenResult(backup: WriteBackup, key: SlotKey = 'a'): FpsPatchResult {
+  const plain = new Uint8Array(0xbaa8).fill(0x22);
   return {
-    key: 'a',
+    key,
     patch: offerOf().patch,
     fromHz: 8,
     toHz: 32,
-    pre,
-    patched: pre.plain,
+    backup,
+    patched: plain,
     changed: [0xb898, 0x238],
-    plan: fakePlan('a', 'plain', pre.plain),
-    written: { key: 'a', commitStatus: 0, verified: true, after: pre.raw, notes: [] },
+    plan: fakePlan(key, 'plain', plain),
+    written: {
+      key,
+      commitStatus: 0,
+      verified: true,
+      after: new Uint8Array(0x10000).fill(0x11),
+      notes: [],
+    },
     readBack: { checked: true, differing: [0xb898, 0x238], missing: [], unexpected: [], ok: true },
-    notes: ['saved the pre-patch dump'],
+    notes: ['committed 47768 B to Bank A'],
   };
 }
 
-function preDump(): FpsPreDump {
-  return {
-    key: 'a',
-    bank: 'Bank A',
-    version: '1.3.0.0',
-    address: 0x14050000,
-    raw: new Uint8Array(0x10000).fill(0x11),
-    rawSha256: 'aa',
-    rawName: 'seek-slot-A-v1.3.0.0-before-fps-patch-raw-aa.bin',
-    plain: new Uint8Array(0xbaa8).fill(0x22),
-    plainSha256: 'bb',
-    plainName: 'seek-slot-A-v1.3.0.0-before-fps-patch-decrypted-bb.bin',
-  };
+/** The patch's backup, as core builds it for bank A. */
+function patchBackup(key: SlotKey = 'a'): WriteBackup {
+  return backupOf([key], { kind: 'fps-patch' });
 }
 
 describe('patch-fps', () => {
@@ -2084,9 +2141,13 @@ describe('patch-fps', () => {
     expect(() => parseSlotsArgs(['list'], { ...flags, dumpDir: null })).toThrow(
       /--write applies only to 'slots patch-fps'/,
     );
-    expect(() => parseSlotsArgs(['flash', 'a', 'x'], { ...flags, write: false })).toThrow(
-      /--dump-dir applies only to 'slots patch-fps'/,
+    expect(() => parseSlotsArgs(['dump', 'a'], { ...flags, write: false })).toThrow(
+      /--dump-dir applies only to 'slots flash', 'slots copy', 'slots restore', 'slots patch-fps'/,
     );
+    expect(parseSlotsArgs(['patch-fps', 'ALL'], { ...flags, raw: false })).toEqual({
+      action: 'patch-fps',
+      key: 'all',
+    });
     expect(() => parseSlotsArgs(['patch-fps'], flags)).toThrow(/needs a bank/);
   });
 
@@ -2198,11 +2259,11 @@ describe('patch-fps', () => {
         ...ops,
         fpsPlan: () => offerOf(),
         patchFps: async (ctx, _report, _key, options) => {
-          const dump = preDump();
-          await options.saveDump(dump);
+          const backup = patchBackup();
+          await options.saveBackup(backup);
           /* Core's flashSlot ends on this progress line (slots/write.ts). */
           ctx.reporter.progress(1, 1, 'Written.');
-          return writtenResult(dump);
+          return writtenResult(backup);
         },
       };
       const stderr = new MemorySink({ isTty });
@@ -2244,9 +2305,9 @@ describe('patch-fps', () => {
       patchFps: async (_ctx, _report, key, options) => {
         keys.push(key);
         expect(options.acknowledgeRisk).toBe(true);
-        const dump = preDump();
-        await options.saveDump(dump);
-        return writtenResult(dump);
+        const backup = patchBackup('r');
+        await options.saveBackup(backup);
+        return writtenResult(backup, 'r');
       },
     };
     const refused = await slotsCommandWith(withPatch)(
@@ -2294,27 +2355,29 @@ describe('patch-fps', () => {
     const test = cameraIo();
     await slotsCommandWith(withPlan)(contextFor(['slots', 'patch-fps', 'a', '--no-probe'], test));
     const text = test.stdout.text + test.stderr.text;
-    expect(text).toContain('Add --write --dump-dir <folder> --acknowledge-risk to patch bank A.');
+    expect(text).toContain('Add --write --acknowledge-risk to patch bank A.');
     const unbooted = cameraIo();
     await slotsCommandWith(withPlan)(
       contextFor(['slots', 'patch-fps', 'b', '--no-probe'], unbooted),
     );
-    expect(unbooted.stdout.text + unbooted.stderr.text).toContain(
-      'Add --write --dump-dir <folder> to patch bank B.',
-    );
+    expect(unbooted.stdout.text + unbooted.stderr.text).toContain('Add --write to patch bank B.');
   });
 
   it('the plan names the undo for recovery R without "if the camera boots" it', () => {
-    const lines = fpsPlanLines('r', offerOf(), 0x14070000, '1.3.0.0', false, null).join('\n');
+    const lines = fpsPlanLines('r', offerOf(), 0x14070000, '1.3.0.0', false, 'saved first').join(
+      '\n',
+    );
     expect(lines).toContain('(add --acknowledge-risk as for every write to recovery R).');
     expect(lines).not.toContain('if the camera boots bank R');
-    expect(fpsPlanLines('a', offerOf(), 0x14050000, '1.3.0.0', false, null).join('\n')).toContain(
-      '(add --acknowledge-risk if the camera boots bank A).',
-    );
+    expect(
+      fpsPlanLines('a', offerOf(), 0x14050000, '1.3.0.0', false, 'saved first').join('\n'),
+    ).toContain('(add --acknowledge-risk if the camera boots bank A).');
   });
 
   it('names the row in words; the JSON keeps the table’s own label as row.detail (TESTING.md 42.88)', () => {
-    const text = fpsPlanLines('b', offerOf(), 0x14050000, '1.3.0.0', false, null).join('\n');
+    const text = fpsPlanLines('b', offerOf(), 0x14050000, '1.3.0.0', false, 'saved first').join(
+      '\n',
+    );
     expect(text).toMatch(/^ {2}row\s+the steady frame row \(row 8\)$/m);
     expect(text).not.toContain('mode-8 capture program');
     expect(fpsPlanJson(offerOf())).toMatchObject({
@@ -2328,18 +2391,12 @@ describe('patch-fps', () => {
     expect(fpsPlanJson({ status: 'refused', reason: 'no entry' })).toMatchObject({ row: null });
   });
 
-  it('refuses --write without --dump-dir before the camera is opened', async () => {
-    const { ops, log } = fakeOps(reportOf({ booted: 'b' }));
-    const withPlan: SlotOps = { ...ops, fpsPlan: () => offerOf() };
-    const error = await slotsCommandWith(withPlan)(
-      contextFor(['slots', 'patch-fps', 'a', '--write', '--yes', '--no-probe'], cameraIo()),
-    ).catch((caught: unknown) => caught);
-    expect((error as CliError).code).toBe('slots/refused');
-    expect((error as CliError).message).toMatch(/needs --dump-dir/);
-    expect(log.inspected).toBe(0);
+  it('without --dump-dir, a write saves its backup into the current directory, as the page needs no question', () => {
+    expect(backupDirOf({ ...NO_FLAGS, dumpDir: null })).toBe(resolve('.'));
+    expect(backupDirOf({ ...NO_FLAGS, dumpDir: 'here' })).toBe(resolve('here'));
   });
 
-  it('saves the pre-patch dump first, then writes, and the files are on disk', async () => {
+  it('saves the backup zip first, then writes, and the zip is on disk under core’s name', async () => {
     const { ops } = fakeOps(reportOf({ booted: 'b' }));
     const dir = join(temp.path, 'before');
     const order: string[] = [];
@@ -2348,10 +2405,10 @@ describe('patch-fps', () => {
       fpsPlan: () => offerOf(),
       patchFps: async (_ctx, _report, _key, options) => {
         order.push('patch');
-        const dump = preDump();
-        expect(await options.saveDump(dump)).toBe(true);
+        const backup = patchBackup();
+        expect(await options.saveBackup(backup)).toBe(true);
         order.push('written');
-        return writtenResult(dump);
+        return writtenResult(backup);
       },
     };
     const result = await slotsCommandWith(withPatch)(
@@ -2367,19 +2424,31 @@ describe('patch-fps', () => {
       dryRun: false,
       commitStatus: 0,
     });
-    expect((await readdir(dir)).sort()).toEqual([
-      'seek-slot-A-v1.3.0.0-before-fps-patch-decrypted-bb.bin',
-      'seek-slot-A-v1.3.0.0-before-fps-patch-raw-aa.bin',
-    ]);
-    expect(
-      (await readFile(join(dir, 'seek-slot-A-v1.3.0.0-before-fps-patch-raw-aa.bin'))).length,
-    ).toBe(0x10000);
+    const name = patchBackup().fileName;
+    expect(await readdir(dir)).toEqual([name]);
+    expect(new Uint8Array(await readFile(join(dir, name)))).toEqual(patchBackup().zip);
+    expect(result).toMatchObject({
+      backup: { directory: dir, file: join(dir, name), fileName: name },
+    });
   });
 
-  it('never replaces a pre-patch dump that already exists', async () => {
+  it('never replaces a backup that already exists: a second one of the same second is saved beside it', async () => {
     const dir = join(temp.path, 'twice');
-    expect(await saveFpsDump(dir, preDump())).toBe(true);
-    await expect(saveFpsDump(dir, preDump())).rejects.toMatchObject({ code: 'EEXIST' });
+    const reporter = new TerminalReporter({
+      log: new MemorySink(),
+      progress: new MemorySink(),
+      color: false,
+      quiet: false,
+      verbose: false,
+    });
+    const first = await readdir(dir).catch(() => []);
+    expect(first).toEqual([]);
+    expect(await saveBackupInto(dir, reporter)(patchBackup())).toBe(true);
+    expect(await saveBackupInto(dir, reporter)(patchBackup())).toBe(true);
+    expect((await readdir(dir)).sort()).toEqual([
+      `${patchBackup().name}-2.zip`,
+      patchBackup().fileName,
+    ]);
   });
 
   it('fails the run with a non-zero exit when the read-back does not match the plan', async () => {
@@ -2388,10 +2457,10 @@ describe('patch-fps', () => {
       ...ops,
       fpsPlan: () => offerOf(),
       patchFps: async (_ctx, _report, _key, options) => {
-        const dump = preDump();
-        await options.saveDump(dump);
+        const backup = patchBackup();
+        await options.saveBackup(backup);
         return {
-          ...writtenResult(dump),
+          ...writtenResult(backup),
           readBack: {
             checked: true,
             differing: [0xb964, 0x9000],
@@ -2418,6 +2487,344 @@ describe('patch-fps', () => {
     for (const bank of list.slots as readonly { readonly patch: { readonly status: string } }[]) {
       expect(bank.patch.status).toBe('refused');
     }
+  });
+});
+
+/* ==================================================================== *
+ * The backup every write saves first, copy, restore, and patch-fps all (TESTING.md 42.91)
+ * ==================================================================== */
+
+/** Core's planSlotCopy, faked: the target prepared as a decrypted image of the source's. */
+function withCopy(ops: SlotOps): SlotOps {
+  return {
+    ...ops,
+    copy: (_report, from, to) => ({
+      from,
+      to,
+      fileName: `seek-slot-${from}-4.9.5.0-deadbeef-decrypted.bin`,
+      source: `slot ${from.toUpperCase()} at ${ADDRESS[from].toString(16)}, firmware 4.9.5.0, as the slots read decrypted it`,
+      plan: fakePlan(to, 'plain', new Uint8Array(0x1000).fill(0x01)),
+    }),
+  };
+}
+
+/** Core's planSlotRestore, faked: bank `key` of a full flash file, with the stored bytes the read-back is compared with. */
+function restorePlanOf(key: SlotKey, stored: Uint8Array, name: string): SlotRestorePlan {
+  const plain = new Uint8Array(0x1000).fill(0x01);
+  return {
+    key,
+    backup: {
+      fileName: name,
+      flash: new Uint8Array(0),
+      sha256: 'ab'.repeat(32),
+      from: 'flash-file',
+      entry: null,
+      identity: { serial: 'SN-1', chipId: '090BE9B6D4E4' },
+    },
+    stored,
+    storedSha256: 'cd'.repeat(32),
+    sameAsNow: false,
+    sameCamera: true,
+    version: '4.9.5.0',
+    decryption: { plain, plainSha256: 'ef'.repeat(32) } as unknown as SlotRestorePlan['decryption'],
+    fileName: `seek-slot-${key}-4.9.5.0-cdcdcdcd-decrypted.bin`,
+    source: `the backup's slot ${key.toUpperCase()} in the full flash backup ${name}, firmware 4.9.5.0`,
+    plan: fakePlan(key, 'plain', stored),
+  };
+}
+
+describe('every write saves its bank first, as the page’s zip', () => {
+  let temp: { path: string; cleanup: () => Promise<void> };
+  beforeEach(async () => {
+    temp = await tempDir();
+  });
+  afterEach(async () => {
+    await temp.cleanup();
+  });
+
+  it('slots flash saves the zip into --dump-dir before the write, under core’s name, and the JSON says where', async () => {
+    const { ops, log } = fakeOps(reportOf({ booted: 'a' }), { save: true });
+    const image = join(temp.path, 'image.bin');
+    await writeFile(image, new Uint8Array(0x100).fill(7));
+    const dir = join(temp.path, 'saved');
+    const test = cameraIo();
+    const result = await slotsCommandWith(ops)(
+      contextFor(['slots', 'flash', 'b', image, '--dump-dir', dir, '--yes', '--no-probe'], test),
+    );
+    const name = backupOf(['b'], { kind: 'flash', input: 'plain', fileName: 'image.bin' }).fileName;
+    expect(name).toBe('seek_backup_2026-10-26T12-00-00Z_SN-1_v4.9.5.0_bank-B_before-flash.zip');
+    expect(await readdir(dir)).toEqual([name]);
+    expect(log.actions).toEqual([{ kind: 'flash', input: 'plain', fileName: 'image.bin' }]);
+    expect(result).toMatchObject({
+      action: 'flash',
+      written: true,
+      backup: { directory: dir, file: join(dir, name), fileName: name },
+    });
+    const text = test.stdout.text + test.stderr.text;
+    expect(text).toContain(`saved first: ${join(dir, name)}`);
+    expect(text).toMatch(
+      /saved first\s+Before anything is written, slot B \(as stored[;,].*\) is read again/,
+    );
+    expect(text).toContain(`Into ${dir}.`);
+  });
+
+  it('the dry run names the zip with the time still to come, and saves nothing', async () => {
+    const { ops, log } = fakeOps(reportOf({ booted: 'a' }), { save: true });
+    const image = join(temp.path, 'image.bin');
+    await writeFile(image, new Uint8Array(0x100).fill(7));
+    const dir = join(temp.path, 'dry');
+    const result = await slotsCommandWith(ops)(
+      contextFor(
+        ['slots', 'flash', 'b', image, '--raw', '--dump-dir', dir, '--dry-run', '--no-probe'],
+        cameraIo(),
+      ),
+    );
+    expect(log.flashed).toEqual([]);
+    expect(result).toMatchObject({
+      dryRun: true,
+      backup: {
+        directory: dir,
+        fileName: 'seek_backup_<time>_SN-1_v4.9.5.0_bank-B_before-flash-raw.zip',
+      },
+    });
+    await expect(readdir(dir)).rejects.toThrow();
+  });
+});
+
+describe('slots copy', () => {
+  let temp: { path: string; cleanup: () => Promise<void> };
+  beforeEach(async () => {
+    temp = await tempDir();
+  });
+  afterEach(async () => {
+    await temp.cleanup();
+  });
+
+  it('parses copy, and refuses a copy onto itself', () => {
+    expect(parseSlotsArgs(['copy', 'A', 'b'], NO_FLAGS)).toEqual({
+      action: 'copy',
+      from: 'a',
+      to: 'b',
+    });
+    expect(() => parseSlotsArgs(['copy', 'a', 'a'], NO_FLAGS)).toThrow(/not copied onto itself/);
+    expect(() => parseSlotsArgs(['copy', 'a'], NO_FLAGS)).toThrow(/needs two banks/);
+    expect(() => parseSlotsArgs(['copy', 'a', 'b'], { ...NO_FLAGS, raw: true })).toThrow(
+      /--raw applies only to 'slots flash'/,
+    );
+  });
+
+  it('the dry run shows the plan with where the image comes from and what is saved first', async () => {
+    const { ops, log } = fakeOps(withPlain(reportOf({ booted: 'a' })));
+    const test = cameraIo();
+    const result = await slotsCommandWith(withCopy(ops))(
+      contextFor(['slots', 'copy', 'a', 'b', '--dry-run', '--no-probe'], test),
+    );
+    expect(log.flashed).toEqual([]);
+    expect(result).toMatchObject({ action: 'copy', from: 'a', bank: 'b', dryRun: true });
+    const text = test.stdout.text + test.stderr.text;
+    expect(text).toContain('image taken from');
+    expect(text).toContain('slot A at 14030000, firmware 4.9.5.0, as the slots read decrypted it');
+    expect(text).toContain('_bank-B_before-copy-from-A.zip');
+  });
+
+  it('writes after the plan, saving the target first, with the copy named in the zip', async () => {
+    const { ops, log } = fakeOps(withPlain(reportOf({ booted: 'a' })), { save: true });
+    const dir = join(temp.path, 'copy');
+    const result = await slotsCommandWith(withCopy(ops))(
+      contextFor(['slots', 'copy', 'a', 'b', '--dump-dir', dir, '--yes', '--no-probe'], cameraIo()),
+    );
+    expect(log.actions).toEqual([{ kind: 'copy', from: 'a' }]);
+    expect(await readdir(dir)).toEqual([
+      'seek_backup_2026-10-26T12-00-00Z_SN-1_v4.9.5.0_bank-B_before-copy-from-A.zip',
+    ]);
+    expect(result).toMatchObject({ action: 'copy', written: true, verified: true });
+  });
+
+  it('refuses the booted bank as a target without --acknowledge-risk, and an empty source, with nothing sent', async () => {
+    const { ops, log } = fakeOps(withPlain(reportOf({ booted: 'a', empty: ['b'] })));
+    const booted = await slotsCommandWith(withCopy(ops))(
+      contextFor(['slots', 'copy', 'r', 'a', '--yes', '--no-probe'], cameraIo()),
+    ).catch((caught: unknown) => caught);
+    expect((booted as CliError).message).toMatch(/^refusing to write bank A: bank A is the bank/);
+    const empty = await slotsCommandWith(withCopy(ops))(
+      contextFor(
+        ['slots', 'copy', 'b', 'r', '--acknowledge-risk', '--yes', '--no-probe'],
+        cameraIo(),
+      ),
+    ).catch((caught: unknown) => caught);
+    expect((empty as CliError).message).toBe('slot B is empty: there is no image to copy');
+    expect(log.flashed).toEqual([]);
+  });
+});
+
+describe('slots restore', () => {
+  let temp: { path: string; cleanup: () => Promise<void> };
+  beforeEach(async () => {
+    temp = await tempDir();
+  });
+  afterEach(async () => {
+    await temp.cleanup();
+  });
+
+  it('parses restore', () => {
+    expect(parseSlotsArgs(['restore', 'b', 'whole.bin'], NO_FLAGS)).toEqual({
+      action: 'restore',
+      key: 'b',
+      file: 'whole.bin',
+    });
+    expect(() => parseSlotsArgs(['restore', 'b'], NO_FLAGS)).toThrow(
+      /needs a bank and a full flash backup/,
+    );
+  });
+
+  it('writes the bank cut from the backup, saves the target first, and says whether the read-back equals the backup', async () => {
+    const { ops, log } = fakeOps(reportOf({ booted: 'a' }), { save: true });
+    const stored = new Uint8Array(0x1000).fill(0x01);
+    const file = join(temp.path, 'whole.bin');
+    await writeFile(file, new Uint8Array(16));
+    const dir = join(temp.path, 'restore');
+    const withRestore: SlotOps = {
+      ...ops,
+      restore: (_report, key, picked) => Promise.resolve(restorePlanOf(key, stored, picked.name)),
+    };
+    const test = cameraIo();
+    const result = await slotsCommandWith(withRestore)(
+      contextFor(['slots', 'restore', 'b', file, '--dump-dir', dir, '--yes', '--no-probe'], test),
+    );
+    expect(log.actions).toEqual([{ kind: 'restore', fileName: 'whole.bin' }]);
+    expect(result).toMatchObject({
+      action: 'restore',
+      bank: 'b',
+      written: true,
+      restoreReadBack: { compared: true, equal: true, differing: 0 },
+      fullFlash: { serial: 'SN-1', sameCamera: true },
+    });
+    const text = test.stdout.text + test.stderr.text;
+    expect(text).toContain('restore: bank B reads back byte for byte as the backup stores it.');
+    expect(text).toMatch(
+      /image taken from\s+the backup's slot B in the full flash backup whole\.bin/,
+    );
+    expect(await readdir(dir)).toEqual([
+      'seek_backup_2026-10-26T12-00-00Z_SN-1_v4.9.5.0_bank-B_before-restore.zip',
+    ]);
+  });
+});
+
+describe('slots patch-fps all', () => {
+  let temp: { path: string; cleanup: () => Promise<void> };
+  beforeEach(async () => {
+    temp = await tempDir();
+  });
+  afterEach(async () => {
+    await temp.cleanup();
+  });
+
+  /** A report whose every bank offers the patch (core's fpsEveryBankPlan reads fpsPlanOfBank). */
+  function everyOps(
+    report: SlotsReport,
+    done?: (
+      options: Parameters<NonNullable<SlotOps['patchEveryFps']>>[2],
+    ) => Promise<FpsEveryBankResult>,
+  ): SlotOps {
+    const { ops } = fakeOps(report);
+    return {
+      ...ops,
+      patchEveryFps: (_ctx, _report, options) =>
+        done === undefined ? Promise.reject(new Error('a dry run must not patch')) : done(options),
+    };
+  }
+
+  it('refuses when no bank offers the patch, with each bank’s reason', async () => {
+    const error = await slotsCommandWith(everyOps(reportOf({ booted: 'b' })))(
+      contextFor(['slots', 'patch-fps', 'all', '--no-probe'], cameraIo()),
+    ).catch((caught: unknown) => caught);
+    expect((error as CliError).code).toBe('slots/refused');
+    expect((error as CliError).message).toMatch(/^no bank offers the frame-rate patch \(A: /);
+  });
+
+  it('the dry run shows each bank, the order (the booted bank last) and the one zip, and saves nothing', async () => {
+    const ops: SlotOps = { ...everyOps(reportOf({ booted: 'a' })), fpsPlan: () => offerOf() };
+    const test = cameraIo();
+    const result = await slotsCommandWith(ops)(
+      contextFor(['slots', 'patch-fps', 'all', '--no-probe'], test),
+    );
+    expect(result).toMatchObject({
+      action: 'patch-fps',
+      bank: 'all',
+      order: ['b', 'r', 'a'],
+      dryRun: true,
+      written: false,
+      backup: {
+        fileName: 'seek_backup_<time>_SN-1_v4.9.5.0_bank-B-R-A_before-fps-patch-every-bank.zip',
+      },
+    });
+    const text = test.stdout.text + test.stderr.text;
+    expect(text).toContain('Frame-rate patch plan, every bank');
+    expect(text).toMatch(/order\s+B, then R, then A \(the bank the camera boots now last\)/);
+    expect(text).toContain('Add --write --acknowledge-risk to patch every bank that offers it.');
+  });
+
+  it('refuses without --acknowledge-risk when the booted bank or R is among them, before anything is saved', async () => {
+    const dir = join(temp.path, 'refused');
+    const ops: SlotOps = { ...everyOps(reportOf({ booted: 'a' })), fpsPlan: () => offerOf() };
+    const error = await slotsCommandWith(ops)(
+      contextFor(
+        ['slots', 'patch-fps', 'all', '--write', '--dump-dir', dir, '--yes', '--no-probe'],
+        cameraIo(),
+      ),
+    ).catch((caught: unknown) => caught);
+    expect((error as CliError).message).toMatch(
+      /^refusing to patch bank R: bank R is the recovery bank/,
+    );
+    await expect(readdir(dir)).rejects.toThrow();
+  });
+
+  it('writes every bank in one run after one save, and fails the run where it stopped', async () => {
+    const dir = join(temp.path, 'every');
+    const backup = backupOf(['a', 'b', 'r'], { kind: 'fps-patch-every-bank' });
+    const ops: SlotOps = {
+      ...everyOps(reportOf({ booted: 'a' }), async (options) => {
+        expect(await options.saveBackup(backup)).toBe(true);
+        options.onCommit?.('b');
+        return {
+          backup,
+          order: ['b', 'r', 'a'],
+          results: [writtenResult(backup, 'b')],
+          stopped: {
+            key: 'r',
+            reason: 'Recovery bank R: CompleteMemoryUpgrade returned 0x00040005',
+          },
+          unwritten: ['a'],
+        };
+      }),
+      fpsPlan: () => offerOf(),
+    };
+    const test = cameraIo();
+    const error = await slotsCommandWith(ops)(
+      contextFor(
+        [
+          'slots',
+          'patch-fps',
+          'all',
+          '--write',
+          '--acknowledge-risk',
+          '--dump-dir',
+          dir,
+          '--yes',
+          '--no-probe',
+        ],
+        test,
+      ),
+    ).catch((caught: unknown) => caught);
+    expect((error as CliError).code).toBe('slots/verify-failed');
+    expect((error as CliError).message).toBe(
+      'stopped at bank R: Recovery bank R: CompleteMemoryUpgrade returned 0x00040005',
+    );
+    expect(await readdir(dir)).toEqual([backup.fileName]);
+    const text = test.stdout.text + test.stderr.text;
+    expect(text).toContain('bank B: commit status 0x0000');
+    expect(text).toContain('not written: bank A');
+    expect(text.match(/plug it back in/g)).toHaveLength(1);
   });
 });
 
@@ -2534,14 +2941,20 @@ describe('the boot word and the frame-rate warning', () => {
   it('puts the warning in the patch-fps plan as "!" lines, and keeps the saved-file line', () => {
     const { report, heldBy } = chainReport({ cfg0: 2, activeSlotWord: 2 });
     const warning = fpsBootWarningOf(report, { heldBy, patchBlock: () => null, target: 'a' });
-    const text = fpsPlanLines('a', offerOf(), 0x14050000, '1.3.0.0', false, null, warning).join(
-      '\n',
-    );
+    const text = fpsPlanLines(
+      'a',
+      offerOf(),
+      0x14050000,
+      '1.3.0.0',
+      false,
+      'saved first',
+      warning,
+    ).join('\n');
     expect(text).toContain(
       '! Patching slot A would not make it run, because the camera boots recovery R instead.',
     );
     expect(text).toContain('! Patch recovery R too (the bank that runs)');
-    expect(text).toContain('The saved decrypted file is the only way back.');
+    expect(text).toContain('The decrypted file in the backup zip is the way back.');
   });
 
   it('patch-fps dry run: the JSON names the warning for the bank being patched', async () => {
@@ -2579,7 +2992,7 @@ describe('the Compact PRO 4.9.1.15 rate, as the CLI prints it', () => {
       fromHz: 9,
       toHz: 18,
     };
-    const text = fpsPlanLines('a', plan, 0x14030000, '4.9.1.15', false, null).join('\n');
+    const text = fpsPlanLines('a', plan, 0x14030000, '4.9.1.15', false, 'saved first').join('\n');
     expect(text).toContain('9 Hz -> 18 Hz');
     /* The build in words; the table id stays in the JSON's `patch` for scripts (TESTING.md 42.87). */
     expect(text).toMatch(/build\s+firmware 4\.9\.1\.15$/m);

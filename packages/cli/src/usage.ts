@@ -33,9 +33,10 @@ Commands: one for each tab of the web app
                          (--all-selectors probes every selector instead)
   decrypt file <dump>    Decrypt File/Slot: decrypt a dump you already have, no camera needed
   decrypt slot <file>    Decrypt File/Slot: decrypt one 64 KiB firmware bank from a file, no camera
-  slots list|dump|flash|patch-fps
-                         Work with firmware slots: identify, dump, write, or raise the frame
-                         rate of one bank (A, B or R)
+  slots list|dump|flash|copy|restore|patch-fps
+                         Work with firmware slots: identify, dump, write, copy one bank into
+                         another, restore one from a full flash backup, or raise the frame
+                         rate of one bank (A, B or R) or of every bank
 
 Run \`seek-fw <command> --help\` for the options each command takes.
 
@@ -222,9 +223,13 @@ Usage
   seek-fw slots list [--serial <id>] [--json]
   seek-fw slots dump <a|b|r> [--out <dir> | --zip <file>] [options]
   seek-fw slots flash <a|b|r> <file> [--raw] [--yes] [--acknowledge-risk]
-                                     [--no-verify] [--dry-run] [options]
-  seek-fw slots patch-fps <a|b|r> [--dump-dir <dir>] [--write] [--yes]
-                                  [--acknowledge-risk] [--no-verify] [options]
+                                     [--no-verify] [--dry-run] [--dump-dir <dir>] [options]
+  seek-fw slots copy <from> <to> [--yes] [--acknowledge-risk] [--no-verify]
+                                 [--dry-run] [--dump-dir <dir>] [options]
+  seek-fw slots restore <a|b|r> <full-flash-file> [--yes] [--acknowledge-risk]
+                                 [--no-verify] [--dry-run] [--dump-dir <dir>] [options]
+  seek-fw slots patch-fps <a|b|r|all> [--write] [--yes] [--acknowledge-risk]
+                                      [--no-verify] [--dump-dir <dir>] [options]
 
 Banks: the locked 0.x/1.x line (the 2014 chain, and the 2016 keystream line of
 1.0.3.0 and 1.0.3.2) has A 0x14050000, B 0x14060000 and R 0x14070000. The 4.x line
@@ -241,29 +246,46 @@ tried. The bootloader and the boot-config block are not banks and are never writ
            way that bank's firmware needs; --raw sends the bytes verbatim. The
            plan is shown and the write asked for, unless --yes. It writes the bank
            you name and does not repoint the camera's boot choice
+  copy     write bank <to> with the firmware bank <from> holds, as the slots read
+           decrypted it, staged as any decrypted image is; whatever <to> holds now
+  restore  write one bank as a full flash backup holds it: the 4 MiB image a
+           J-Link reads, or a Preserve run file that holds the whole flash. The
+           bank is cut out at its address, decrypted, planned and written, and the
+           read-back is compared with the backup's stored bytes. A backup from
+           another camera, or of another firmware, is a warning; a bank that is
+           empty in the backup cannot be restored by a write
   patch-fps  raise the bank's frame rate by editing its bytes. To 32 fps: the Compact 0.8.0.0,
            0.9.0.2, 0.9.0.6, 0.9.0.7, 0.9.1.0, 0.10.0.0, 1.0.0.0, 1.2.0.0, 1.3.0.0 and 1.3.0.8
            builds on the plain 2014 chain, and the Compact 4.8.1.7, 4.8.1.9 and 4.8.2.1 (the
            Compact XR 4.8.2.1 too) builds under Key A. To 18 fps: the Compact PRO 4.9.1.15
            and 4.9.2.0 builds under Key A, and the Compact PRO 1.0.3.0 and 1.0.3.2 builds on
            the 2016 keystream line. Other lines
-           refuse with the reason. A dry run unless --write: it prints the plan and sends nothing. --write saves the bank (raw and decrypted) into
-           --dump-dir FIRST, then writes the patched image and reads it back (on Key A and on
-           the 2016 keystream line, the read-back is checked as the decrypted image).
+           refuse with the reason. 'all' patches every bank that offers it, in one
+           confirmation, the bank the camera boots now last; the first failure stops
+           the rest. A dry run unless --write: it prints the plan and sends nothing.
+           --write writes the patched image and reads it back (on Key A and on the
+           2016 keystream line, the read-back is checked as the decrypted image).
 
-  --dump-dir <dir>       patch-fps: the folder the pre-patch dump is saved into (required with
-                         --write; an existing dump there is never replaced)
+Every write (flash, copy, restore, patch-fps --write) saves its bank first, as
+one zip: seek_backup_<time>_<serial>_v<firmware>_bank-<bank>_<write>.zip, the
+same zip the page downloads, holding the bank as stored, its decrypted image and
+a note of what each file is. The write waits for the zip to be on disk.
+
+  --dump-dir <dir>       flash, copy, restore, patch-fps: the folder the backup zip is saved
+                         into before the write (default: the current directory; an existing
+                         file is never replaced)
   --write                patch-fps: send the patch. Without it the command is a dry run
   --raw                  flash: the file is prepared bytes, staged verbatim
-  --acknowledge-risk     flash: needed to write the bank the camera boots now, or bank R.
-                         Without it the write is refused, and nothing is sent
-  --no-verify            flash, patch-fps: skip the read-back after the commit
-  --dry-run              flash: print the plan and send nothing to the bank
-  --running-16hz         flash: say the camera runs the 16 Hz FF 1.3.0.8 build; used only
-                         when its own answers cannot say which build runs. A wrong choice is
-                         refused by the camera (0x70100) before anything is programmed
-  --yes                  flash, patch-fps --write: skip the confirmation (required when stdin
-                         is not a tty)
+  --acknowledge-risk     flash, copy, restore, patch-fps: needed to write the bank the camera
+                         boots now, or bank R. Without it the write is refused, and nothing
+                         is sent
+  --no-verify            flash, copy, restore, patch-fps: skip the read-back after the commit
+  --dry-run              flash, copy, restore: print the plan and send nothing to the bank
+  --running-16hz         flash, copy, restore: say the camera runs the 16 Hz FF 1.3.0.8 build;
+                         used only when its own answers cannot say which build runs. A wrong
+                         choice is refused by the camera (0x70100) before anything is programmed
+  --yes                  flash, copy, restore, patch-fps --write: skip the confirmation
+                         (required when stdin is not a tty)
   --profile <id>         act under this family instead of the one the camera answers for
   --out <dir> | --zip <file>  dump: where the bank goes
 
@@ -271,8 +293,8 @@ An EMPTY bank (its header window reads as all 0xFF, as on many 2014 cameras'
 bank B) is a state, not an error. list shows it as 'empty'; dump returns the raw
 64 KiB of 0xFF (seek-slot-<bank>-empty-<sha8>.bin) and says there is nothing to
 decrypt; flash writes it like any other bank, and the plan says nothing is
-overwritten. To give it the firmware another bank holds, dump that bank and
-flash the -decrypted file it writes.
+overwritten. To give it the firmware another bank holds, copy that bank into it
+(seek-fw slots copy <from> <to>).
 
 After a flash, unplug the camera and plug it back in: a bank is only used when
 the camera boots, so the new image runs after the next start.

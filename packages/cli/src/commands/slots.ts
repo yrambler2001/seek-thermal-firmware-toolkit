@@ -4,6 +4,9 @@
  *   slots list                     identify the camera and each bank, and what this build can do
  *   slots dump <a|b|r>             read one bank as stored, and its decrypted image when a key recovers
  *   slots flash <a|b|r> <file>     write one bank: a decrypted image (the default), or --raw bytes
+ *   slots copy <from> <to>         write one bank with another bank's image, as the slots read decrypted it
+ *   slots restore <bank> <file>    write one bank as a full flash backup (4 MiB, or a Preserve run file) holds it
+ *   slots patch-fps <a|b|r|all>    the frame-rate patch of one bank, or of every bank that offers it
  *
  * Core decides everything that makes a write correct: the build's capability matrix, the staging
  * that encrypts a decrypted image for the bank, the commit and the read-back. This file adds what
@@ -22,7 +25,11 @@
  *     into it is planned, confirmed and read back like any other, the plan saying nothing is
  *     overwritten;
  *   - the plan is printed and the person is asked, unless --yes; without a terminal and without
- *     --yes there is nobody to ask, so the command refuses.
+ *     --yes there is nobody to ask, so the command refuses;
+ *   - every write saves its target bank first, as the same zip the page downloads (core's backup,
+ *     owner 2026-10-26), into --dump-dir, or the current directory when none is given, as the page's
+ *     download needs no question either. The write waits for the zip to be on disk at its full size;
+ *     an existing file is never replaced.
  *
  * And after the write, a read-back that does not match is a failed run with a non-zero exit, not a
  * line of text that a script would walk past.
@@ -32,7 +39,7 @@
  */
 
 import { mkdir, readFile, stat, writeFile } from 'node:fs/promises';
-import { basename, join } from 'node:path';
+import { basename, join, resolve } from 'node:path';
 import {
   bankWordsOf,
   bootChoiceOf,
@@ -42,17 +49,28 @@ import {
   checkKeyReportOf,
   derivedKeyLine,
   deriveWriteKeys,
+  backupFileNameShown,
+  backupPlanText,
+  copySourceRefusal,
   dumpSlot,
   FF_VENDOR_STAGED,
   FF_VENDOR_STORED,
   flashSlot,
+  flashSlotWithBackup,
   fpsBootWarningOf,
+  fpsEveryBankPlan,
   fpsPlanOfBank,
+  fullFlashOf,
   hexUp,
   inspectSlots,
   lastStartReportOf,
   patchBankFps,
+  patchEveryBankFps,
+  planSlotCopy,
+  planSlotRestore,
   prepareSlotFlash,
+  restoreReadBack,
+  restoreReadBackText,
   runningApplicationOf,
   sha256hex,
   slotDumpNames,
@@ -64,14 +82,22 @@ import {
   writeBannerOf,
   type Artifact,
   type DumpedSlot,
-  type FlashSlotOptions,
   type FlashSlotResult,
   type FpsBootWarning,
+  type FpsEveryBankPlan,
+  type FpsEveryBankResult,
   type FpsPatchOptions,
   type FpsPatchResult,
   type FpsPlan,
-  type FpsPreDump,
   type Reporter,
+  type RestoreReadBack,
+  type SaveBackup,
+  type SlotCopyPlan,
+  type SlotRestorePlan,
+  type SlotWriteOptions,
+  type SlotWriteResult,
+  type WriteAction,
+  type WriteBackup,
   type SlotFlashInput,
   type PrepareSlotFlashOptions,
   type SlotFlashPlan,
@@ -100,8 +126,8 @@ import {
  * ==================================================================== */
 
 /**
- * The core calls this command makes. The defaults are core's own functions. `fpsPlan` and `patchFps`
- * are optional so a test that does not reach the frame-rate patch need not answer them.
+ * The core calls this command makes. The defaults are core's own functions. The frame-rate, copy and
+ * restore calls are optional so a test that does not reach them need not answer them.
  */
 export interface SlotOps {
   inspect(ctx: WorkflowContext): Promise<SlotsReport>;
@@ -112,12 +138,13 @@ export interface SlotOps {
     input: SlotFlashInput,
     options?: PrepareSlotFlashOptions,
   ): SlotFlashPlan;
-  flash(
+  /** Saves the target bank first (the backup zip), then writes and reads it back: core `flashSlotWithBackup`. */
+  write(
     ctx: WorkflowContext,
     report: SlotsReport,
     plan: SlotFlashPlan,
-    options: FlashSlotOptions,
-  ): Promise<FlashSlotResult>;
+    options: SlotWriteOptions,
+  ): Promise<SlotWriteResult>;
   fpsPlan?(report: SlotsReport, key: SlotKey): FpsPlan;
   patchFps?(
     ctx: WorkflowContext,
@@ -125,15 +152,36 @@ export interface SlotOps {
     key: SlotKey,
     options: FpsPatchOptions,
   ): Promise<FpsPatchResult>;
+  patchEveryFps?(
+    ctx: WorkflowContext,
+    report: SlotsReport,
+    options: FpsPatchOptions,
+  ): Promise<FpsEveryBankResult>;
+  copy?(
+    report: SlotsReport,
+    from: SlotKey,
+    to: SlotKey,
+    options?: PrepareSlotFlashOptions,
+  ): SlotCopyPlan;
+  restore?(
+    report: SlotsReport,
+    key: SlotKey,
+    file: { readonly bytes: Uint8Array; readonly name: string },
+    options?: PrepareSlotFlashOptions,
+  ): Promise<SlotRestorePlan>;
 }
 
 export const CORE_SLOT_OPS: SlotOps = {
   inspect: inspectSlots,
   dump: dumpSlot,
   prepare: prepareSlotFlash,
-  flash: flashSlot,
+  write: flashSlotWithBackup,
   fpsPlan: fpsPlanOfBank,
   patchFps: patchBankFps,
+  patchEveryFps: patchEveryBankFps,
+  copy: planSlotCopy,
+  restore: async (report, key, file, options) =>
+    planSlotRestore(report, key, await fullFlashOf(file.bytes, file.name), options),
 };
 
 /* ==================================================================== *
@@ -149,7 +197,12 @@ export type SlotsRequest =
       readonly file: string;
       readonly kind: SlotInputKind;
     }
-  | { readonly action: 'patch-fps'; readonly key: SlotKey };
+  | { readonly action: 'copy'; readonly from: SlotKey; readonly to: SlotKey }
+  | { readonly action: 'restore'; readonly key: SlotKey; readonly file: string }
+  | { readonly action: 'patch-fps'; readonly key: SlotKey | 'all' };
+
+/** The subcommands, as the flag checks name them. */
+type Subcommand = 'list' | 'dump' | 'flash' | 'copy' | 'restore' | 'patch-fps';
 
 /** The flags a command without `slots` never sees: all of them default to "not asked for". */
 const NO_SLOT_FLAGS: SlotFlags = {
@@ -177,38 +230,41 @@ function unexpected(extra: readonly string[], subcommand: string): UsageError {
 
 /**
  * A flag that a subcommand does not use is refused there, so it never looks like it did something.
- * `--write` and `--dump-dir` belong to `patch-fps`; the write flags belong to `flash`; the rest to a
- * flash too, and `patch-fps` takes only the acknowledgement and the read-back switch of those.
+ * The writes that are flashes (`flash`, `copy`, `restore`) write unless --dry-run; `patch-fps` is a dry run
+ * unless --write. Every write saves its bank first into --dump-dir (the current directory by default).
  */
-function refuseUnusedFlags(
-  flags: SlotFlags,
-  subcommand: 'list' | 'dump' | 'flash' | 'patch-fps',
-): void {
-  /* Each flag, whether it is on, and the subcommand it belongs to. */
-  const flagged: readonly {
-    readonly on: boolean;
-    readonly name: string;
-    readonly owner: 'flash' | 'patch-fps';
-  }[] = [
-    { on: flags.raw, name: '--raw', owner: 'flash' },
-    { on: flags.acknowledgeRisk, name: '--acknowledge-risk', owner: 'flash' },
-    { on: !flags.verify, name: '--no-verify', owner: 'flash' },
-    { on: flags.dryRun, name: '--dry-run', owner: 'flash' },
-    { on: flags.running16Hz, name: '--running-16hz', owner: 'flash' },
-    { on: flags.write === true, name: '--write', owner: 'patch-fps' },
-    { on: (flags.dumpDir ?? null) !== null, name: '--dump-dir', owner: 'patch-fps' },
+function refuseUnusedFlags(flags: SlotFlags, subcommand: Subcommand): void {
+  /* Each flag, and whether it is on. */
+  const flagged: readonly { readonly on: boolean; readonly name: string }[] = [
+    { on: flags.raw, name: '--raw' },
+    { on: flags.acknowledgeRisk, name: '--acknowledge-risk' },
+    { on: !flags.verify, name: '--no-verify' },
+    { on: flags.dryRun, name: '--dry-run' },
+    { on: flags.running16Hz, name: '--running-16hz' },
+    { on: flags.write === true, name: '--write' },
+    { on: (flags.dumpDir ?? null) !== null, name: '--dump-dir' },
   ];
-  /* patch-fps is a dry run unless --write is given, so it takes no --dry-run of its own. */
-  const usedBy: Readonly<Record<'list' | 'dump' | 'flash' | 'patch-fps', readonly string[]>> = {
+  const writes = ['--acknowledge-risk', '--no-verify', '--dump-dir'];
+  const usedBy: Readonly<Record<Subcommand, readonly string[]>> = {
     list: [],
     dump: [],
-    flash: ['--raw', '--acknowledge-risk', '--no-verify', '--dry-run', '--running-16hz'],
-    'patch-fps': ['--acknowledge-risk', '--no-verify', '--write', '--dump-dir'],
+    flash: ['--raw', ...writes, '--dry-run', '--running-16hz'],
+    copy: [...writes, '--dry-run', '--running-16hz'],
+    restore: [...writes, '--dry-run', '--running-16hz'],
+    'patch-fps': [...writes, '--write'],
   };
   const unused = flagged.filter((flag) => flag.on && !usedBy[subcommand].includes(flag.name));
   if (unused.length > 0) {
     const names = unused.map((flag) => flag.name).join(', ');
-    const owners = [...new Set(unused.map((flag) => `'slots ${flag.owner}'`))].join(' or ');
+    const owners = [
+      ...new Set(
+        unused.flatMap((flag) =>
+          (Object.keys(usedBy) as Subcommand[])
+            .filter((name) => usedBy[name].includes(flag.name))
+            .map((name) => `'slots ${name}'`),
+        ),
+      ),
+    ].join(', ');
     throw new UsageError(
       `${names} ${unused.length === 1 ? 'applies' : 'apply'} only to ${owners}`,
       `'slots ${subcommand}' does not use ${unused.length === 1 ? 'it' : 'them'}.`,
@@ -222,7 +278,8 @@ export function parseSlotsArgs(args: readonly string[], flags: SlotFlags): Slots
   if (action === undefined) {
     throw new UsageError(
       'slots needs a subcommand',
-      'Use one of: slots list | slots dump <a|b|r> | slots flash <a|b|r> <file>.',
+      'Use one of: slots list | slots dump <a|b|r> | slots flash <a|b|r> <file> | ' +
+        'slots copy <from> <to> | slots restore <a|b|r> <full-flash-file> | slots patch-fps <a|b|r|all>.',
     );
   }
   if (action === 'list') {
@@ -248,16 +305,40 @@ export function parseSlotsArgs(args: readonly string[], flags: SlotFlags): Slots
     refuseUnusedFlags(flags, 'flash');
     return { action: 'flash', key, file, kind: flags.raw ? 'raw' : 'plain' };
   }
+  if (action === 'copy') {
+    const [from, to, ...extra] = rest;
+    if (from === undefined || to === undefined) {
+      throw new UsageError('slots copy needs two banks: slots copy <from> <to>');
+    }
+    if (extra.length > 0) throw unexpected(extra, 'slots copy');
+    const source = parseBank(from);
+    const target = parseBank(to);
+    if (source === target)
+      throw new UsageError(`slots copy: bank ${from} is not copied onto itself`);
+    refuseUnusedFlags(flags, 'copy');
+    return { action: 'copy', from: source, to: target };
+  }
+  if (action === 'restore') {
+    const [bank, file, ...extra] = rest;
+    if (bank === undefined || file === undefined) {
+      throw new UsageError(
+        'slots restore needs a bank and a full flash backup: slots restore <a|b|r> <file>',
+      );
+    }
+    if (extra.length > 0) throw unexpected(extra, 'slots restore');
+    refuseUnusedFlags(flags, 'restore');
+    return { action: 'restore', key: parseBank(bank), file };
+  }
   if (action === 'patch-fps') {
     const [bank, ...extra] = rest;
-    if (bank === undefined) throw new UsageError('slots patch-fps needs a bank: a, b or r');
+    if (bank === undefined) throw new UsageError('slots patch-fps needs a bank: a, b, r or all');
     if (extra.length > 0) throw unexpected(extra, 'slots patch-fps');
     refuseUnusedFlags(flags, 'patch-fps');
-    return { action: 'patch-fps', key: parseBank(bank) };
+    return { action: 'patch-fps', key: bank.toLowerCase() === 'all' ? 'all' : parseBank(bank) };
   }
   throw new UsageError(
     `unknown slots subcommand '${action}'`,
-    'Use one of: list, dump, flash, patch-fps.',
+    'Use one of: list, dump, flash, copy, restore, patch-fps.',
   );
 }
 
@@ -492,8 +573,7 @@ export function emptyBankNote(report: SlotsReport, view: SlotView): string {
     source === null
       ? ''
       : ` To give it the firmware bank ${bankName(source.entry.key)} holds: ` +
-        `\`seek-fw slots dump ${source.entry.key}\`, then ` +
-        `\`seek-fw slots flash ${view.entry.key} <the -decrypted file>\`.`;
+        `\`seek-fw slots copy ${source.entry.key} ${view.entry.key}\`.`;
   return `${head} It can be written. ${view.entry.emptyBank.why}${how}`;
 }
 
@@ -755,6 +835,12 @@ export function flashPlanLines(
   fileName: string,
   expectedSha256: string | null,
   color: boolean,
+  extra: {
+    /** Where the image comes from when it is not a file: another bank, or a bank of a full flash backup. */
+    readonly source?: string | null;
+    /** What the write saves first, and where (core's `backupPlanText` and the folder). */
+    readonly savedFirst?: string | null;
+  } = {},
 ): string[] {
   const lines: string[] = [''];
   /* What the input is; the staging row says how it is sent, in core's words (`stagingDetail`), so the two
@@ -778,6 +864,7 @@ export function flashPlanLines(
         ? [['  target', 'empty — the bank holds no image, so nothing is overwritten']]
         : []),
       ['  image', `${fileName} — ${kind}`],
+      ...(extra.source == null ? [] : [['  image taken from', extra.source]]),
       ['  staging', stagingDetail(plan.staging)],
       ...(runningBasis === null ? [] : [['  running build', runningBasis]]),
       ...(plan.derivedFrom
@@ -788,6 +875,7 @@ export function flashPlanLines(
       ['  firmware', plan.firmwareVersion ?? '(unknown)'],
       ['  serial', plan.serial ?? '(unknown)'],
       ['  afterwards', expectedSha256 === null ? 'not predicted' : `sha256 ${expectedSha256}`],
+      ...(extra.savedFirst == null ? [] : [['  saved first', extra.savedFirst]]),
     ]),
   );
 
@@ -899,6 +987,87 @@ export function dumpArtifacts(
 }
 
 /* ==================================================================== *
+ * The backup every write saves first (core: slots/backup.ts)
+ * ==================================================================== */
+
+/** The folder every write saves its backup zip into: --dump-dir, or the current directory. */
+export function backupDirOf(flags: SlotFlags): string {
+  return resolve(flags.dumpDir ?? '.');
+}
+
+/**
+ * Saves the backup zip into `dir` under core's name, the same zip the page downloads. A file that already
+ * exists is never replaced (`wx`): a second zip of the same second is saved as `<name>-2.zip`, as a
+ * browser keeps both downloads. True only once the zip is on disk at its full size; the save is logged with
+ * its path, before anything is sent.
+ */
+export function saveBackupInto(
+  dir: string,
+  reporter: Reporter,
+  saved: (path: string) => void = () => undefined,
+): SaveBackup {
+  return async (backup: WriteBackup): Promise<boolean> => {
+    await mkdir(dir, { recursive: true });
+    let path = join(dir, backup.fileName);
+    for (let copy = 2; ; copy++) {
+      try {
+        await writeFile(path, backup.zip, { flag: 'wx' });
+        break;
+      } catch (error) {
+        if ((error as { code?: unknown }).code !== 'EEXIST' || copy > 99) throw error;
+        path = join(dir, `${backup.name}-${String(copy)}.zip`);
+      }
+    }
+    const info = await stat(path);
+    if (info.size !== backup.zip.length) return false;
+    reporter.log(`saved first: ${path} (${String(info.size)} B)`, 'ok');
+    saved(path);
+    return true;
+  };
+}
+
+/** The plan's "saved first" row: core's sentence, and the folder. */
+export function savedFirstText(
+  report: SlotsReport,
+  keys: readonly SlotKey[],
+  action: WriteAction,
+  dir: string,
+): string {
+  return `${backupPlanText(report, keys, action)} Into ${dir}.`;
+}
+
+/** The backup as the JSON carries it: where it is and what it holds (the file names and their sha256). */
+export function backupJson(backup: WriteBackup, path: string | null): Record<string, unknown> {
+  return {
+    file: path,
+    fileName: backup.fileName,
+    bytes: backup.zip.length,
+    savedAt: backup.savedAt,
+    banks: backup.banks.map((bank) => ({
+      bank: bank.key,
+      address: hexUp(bank.address),
+      content: bank.content,
+      version: bank.version,
+      stored: bank.stored,
+      decrypted: bank.decrypted,
+      notes: [...bank.notes],
+    })),
+  };
+}
+
+/** The read-back of a restore against the backup's stored bank bytes, as the JSON carries it. */
+function restoreJson(check: RestoreReadBack | null): Record<string, unknown> | null {
+  return check === null
+    ? null
+    : {
+        compared: check.compared,
+        equal: check.equal,
+        differing: check.differing,
+        firstDiffering: check.firstDiffering === null ? null : hexUp(check.firstDiffering),
+      };
+}
+
+/* ==================================================================== *
  * The commands
  * ==================================================================== */
 
@@ -979,6 +1148,156 @@ async function dumpAction(ctx: CommandContext, ops: SlotOps, key: SlotKey): Prom
   }
 }
 
+/** Nobody to ask: refused before the camera is opened, so a script that forgot --yes fails at once. */
+function refuseUnattended(ctx: CommandContext, writes: boolean, what: string): void {
+  if (writes && !ctx.options.yes && !ctx.io.stdinIsTty) {
+    throw new CliError(
+      `refusing to ${what} without confirmation: stdin is not a terminal, so there is nobody to ask`,
+      {
+        code: 'slots/refused',
+        hint: 'Pass --yes to confirm non-interactively, or run it on a terminal to read the plan.',
+      },
+    );
+  }
+}
+
+/** One write a flash, a copy or a restore has planned, ready to be shown, saved first, sent and read back. */
+interface PlannedWrite {
+  /** The JSON's `action`: 'flash', 'copy' or 'restore'. */
+  readonly command: 'flash' | 'copy' | 'restore';
+  readonly plan: SlotFlashPlan;
+  /** The image's name in the plan and the question. */
+  readonly fileName: string;
+  /** What the question says is written ("x.bin", "bank A's image"). */
+  readonly what: string;
+  readonly action: WriteAction;
+  /** Where the image comes from when it is not a file. */
+  readonly source: string | null;
+  readonly restore: SlotRestorePlan | null;
+  /** The JSON's own keys for this command (the file, the source bank). */
+  readonly json: Record<string, unknown>;
+}
+
+/**
+ * The part every flash, copy and restore shares, once the plan is made: the plan shown (always, even under
+ * --json, on stderr), the dry run's stop, the question, the backup zip saved into the dump folder, the write
+ * and its read-back, and a non-zero exit when the read-back does not match.
+ */
+async function runPlannedWrite(
+  ctx: CommandContext,
+  ops: SlotOps,
+  report: SlotsReport,
+  workflow: WorkflowContext,
+  planned: PlannedWrite,
+): Promise<CommandResult> {
+  const flags = ctx.slotFlags ?? NO_SLOT_FLAGS;
+  const { plan } = planned;
+  const dir = backupDirOf(flags);
+  const expectedSha256 = plan.expectedStored === null ? null : await sha256hex(plan.expectedStored);
+  ctx.reporter.write(
+    flashPlanLines(plan, planned.fileName, expectedSha256, ctx.color, {
+      source: planned.source,
+      savedFirst: savedFirstText(report, [plan.key], planned.action, dir),
+    }).join('\n'),
+  );
+  const common = {
+    action: planned.command,
+    bank: plan.key,
+    address: hexUp(plan.address),
+    ...planned.json,
+    kind: plan.kind,
+    staging: plan.staging,
+    payloadBytes: plan.payload.length,
+    sum16: hexUp(plan.sum16, 4),
+    targetEmpty: plan.targetEmpty === true,
+    expectedSha256,
+    warnings: [...plan.warnings],
+    planNotes: planNotesJson(plan),
+  };
+
+  /* --dry-run stops here: the plan is the whole output; nothing is saved, the bank is never armed. */
+  if (flags.dryRun) {
+    return {
+      ...common,
+      notes: [],
+      backup: { directory: dir, fileName: backupFileNameShown(report, [plan.key], planned.action) },
+      written: false,
+      dryRun: true,
+    };
+  }
+
+  if (!ctx.options.yes) {
+    const confirmed = await ctx.io.confirm(flashQuestion(report, plan, planned.what));
+    if (!confirmed) {
+      throw new CliError('aborted at the confirmation prompt — nothing was written', {
+        code: 'slots/refused',
+      });
+    }
+  } else {
+    ctx.reporter.log('--yes given: skipping the confirmation', 'warn');
+  }
+
+  const saved: { path: string | null } = { path: null };
+  const done = await ops.write({ ...workflow, reporter: loud(ctx.reporter) }, report, plan, {
+    verify: flags.verify,
+    acknowledgeRisk: flags.acknowledgeRisk,
+    action: planned.action,
+    saveBackup: saveBackupInto(dir, ctx.reporter, (path) => {
+      saved.path = path;
+    }),
+    ...(ctx.io.now === undefined ? {} : { now: () => ctx.io.now?.() ?? new Date() }),
+  });
+  const result: FlashSlotResult = done.written;
+  const storedSha256 = result.after === null ? null : await sha256hex(result.after);
+  const check =
+    planned.restore === null ? null : restoreReadBack(planned.restore.stored, result.after);
+  const lines = readBackLines(result, storedSha256, ctx.color);
+  if (check !== null) {
+    lines.splice(-1, 0, `restore: ${restoreReadBackText(check, `bank ${bankName(plan.key)}`)}`);
+  }
+  ctx.reporter.write(lines.join('\n'));
+
+  if (result.verified === false) {
+    throw new CliError(
+      `the read-back of bank ${bankName(plan.key)} does not match the staged image`,
+      {
+        code: 'slots/verify-failed',
+        hint:
+          `The backup is ${saved.path ?? done.backup.fileName}. Run \`seek-fw slots list\` once the ` +
+          `camera is back. Do not rely on bank ${bankName(plan.key)} until a read matches.`,
+      },
+    );
+  }
+
+  return {
+    ...common,
+    commitStatus: result.commitStatus,
+    verified: result.verified,
+    storedSha256,
+    restoreReadBack: restoreJson(check),
+    notes: [...result.notes],
+    backup: { directory: dir, ...backupJson(done.backup, saved.path) },
+    written: true,
+  };
+}
+
+/** Opens the camera, reads the banks, and runs `body` with them; the session is closed after. */
+async function withReport(
+  ctx: CommandContext,
+  ops: SlotOps,
+  body: (report: SlotsReport, workflow: WorkflowContext) => Promise<CommandResult>,
+): Promise<CommandResult> {
+  const session = await openSession(ctx);
+  try {
+    const choice = await chooseProfileByProbe(ctx, session);
+    const workflow = workflowContext(session, choice.profile, choice.detection, ctx);
+    const report = await ops.inspect(workflow);
+    return await body(report, workflow);
+  } finally {
+    await session.close();
+  }
+}
+
 async function flashAction(
   ctx: CommandContext,
   ops: SlotOps,
@@ -986,117 +1305,110 @@ async function flashAction(
   path: string,
   kind: SlotInputKind,
 ): Promise<CommandResult> {
-  /* (1) Nobody to ask. Checked before the image is read and before the camera is opened, so a
-   * script that forgot --yes fails at once. */
-  const dryRun = ctx.slotFlags?.dryRun ?? false;
-  if (!dryRun && !ctx.options.yes && !ctx.io.stdinIsTty) {
-    throw new CliError(
-      'refusing to flash without confirmation: stdin is not a terminal, so there is nobody to ask',
-      {
-        code: 'slots/refused',
-        hint: 'Pass --yes to confirm non-interactively, or run it on a terminal to read the plan.',
-      },
-    );
-  }
-
+  const flags = ctx.slotFlags ?? NO_SLOT_FLAGS;
+  refuseUnattended(ctx, !flags.dryRun, 'flash');
   const fileName = basename(path);
   const bytes = await readImage(path);
-  const acknowledgeRisk = ctx.slotFlags?.acknowledgeRisk ?? false;
-  const verify = ctx.slotFlags?.verify ?? true;
-
-  const session = await openSession(ctx);
-  try {
-    const choice = await chooseProfileByProbe(ctx, session);
-    const workflow = workflowContext(session, choice.profile, choice.detection, ctx);
-    const report = await ops.inspect(workflow);
-
-    /* (2) Refused before anything is prepared or sent: the build, the bank, the read, and the
-     * booted or recovery bank without the acknowledgement. */
-    refuse(flashRefusal(report, key, kind, acknowledgeRisk));
-
+  return withReport(ctx, ops, async (report, workflow) => {
+    /* Refused before anything is prepared or sent: the build, the bank, the read, and the booted or
+     * recovery bank without the acknowledgement. */
+    refuse(flashRefusal(report, key, kind, flags.acknowledgeRisk));
     const plan = ops.prepare(
       report,
       key,
       { kind, bytes, fileName },
-      { running16Hz: ctx.slotFlags?.running16Hz ?? false },
+      { running16Hz: flags.running16Hz },
     );
-    const expectedSha256 =
-      plan.expectedStored === null ? null : await sha256hex(plan.expectedStored);
-
-    /* (3) The plan is always shown, even under --json (where it lands on stderr): nobody is asked
-     * to confirm a write they were not shown. */
-    ctx.reporter.write(flashPlanLines(plan, fileName, expectedSha256, ctx.color).join('\n'));
-
-    /* --dry-run stops here: the plan is the whole output, the bank is never armed. */
-    if (dryRun) {
-      return {
-        action: 'flash',
-        bank: key,
-        address: hexUp(plan.address),
-        file: fileName,
-        kind: plan.kind,
-        staging: plan.staging,
-        payloadBytes: plan.payload.length,
-        sum16: hexUp(plan.sum16, 4),
-        targetEmpty: plan.targetEmpty === true,
-        expectedSha256,
-        notes: [],
-        warnings: [...plan.warnings],
-        planNotes: planNotesJson(plan),
-        written: false,
-        dryRun: true,
-      };
-    }
-
-    if (!ctx.options.yes) {
-      const confirmed = await ctx.io.confirm(flashQuestion(report, plan, fileName));
-      if (!confirmed) {
-        throw new CliError('aborted at the confirmation prompt — nothing was written', {
-          code: 'slots/refused',
-        });
-      }
-    } else {
-      ctx.reporter.log('--yes given: skipping the confirmation', 'warn');
-    }
-
-    const result = await ops.flash({ ...workflow, reporter: loud(ctx.reporter) }, report, plan, {
-      verify,
-      acknowledgeRisk,
+    return runPlannedWrite(ctx, ops, report, workflow, {
+      command: 'flash',
+      plan,
+      fileName,
+      what: fileName,
+      action: { kind: 'flash', input: kind, fileName },
+      source: null,
+      restore: null,
+      json: { file: fileName },
     });
-    const storedSha256 = result.after === null ? null : await sha256hex(result.after);
-    ctx.reporter.write(readBackLines(result, storedSha256, ctx.color).join('\n'));
+  });
+}
 
-    if (result.verified === false) {
-      throw new CliError(`the read-back of bank ${bankName(key)} does not match the staged image`, {
-        code: 'slots/verify-failed',
-        hint:
-          `Run \`seek-fw slots list\` once the camera is back. Do not rely on bank ${bankName(key)} ` +
-          'until a read matches.',
-      });
-    }
+async function copyAction(
+  ctx: CommandContext,
+  ops: SlotOps,
+  from: SlotKey,
+  to: SlotKey,
+): Promise<CommandResult> {
+  const flags = ctx.slotFlags ?? NO_SLOT_FLAGS;
+  refuseUnattended(ctx, !flags.dryRun, 'copy');
+  return withReport(ctx, ops, async (report, workflow) => {
+    /* The target's own rules first, as for any decrypted image; then the source's. */
+    refuse(flashRefusal(report, to, 'plain', flags.acknowledgeRisk));
+    const why = copySourceRefusal(report, from);
+    if (why !== null) refuse({ message: why, hint: NOTHING_SENT });
+    const copy = (ops.copy ?? planSlotCopy)(report, from, to, { running16Hz: flags.running16Hz });
+    return runPlannedWrite(ctx, ops, report, workflow, {
+      command: 'copy',
+      plan: copy.plan,
+      fileName: copy.fileName,
+      what: `bank ${bankName(from)}'s image`,
+      action: { kind: 'copy', from },
+      source: copy.source,
+      restore: null,
+      json: { from },
+    });
+  });
+}
 
-    return {
-      action: 'flash',
-      bank: key,
-      address: hexUp(plan.address),
-      file: fileName,
-      kind: plan.kind,
-      staging: plan.staging,
-      payloadBytes: plan.payload.length,
-      sum16: hexUp(plan.sum16, 4),
-      commitStatus: result.commitStatus,
-      verified: result.verified,
-      targetEmpty: plan.targetEmpty === true,
-      expectedSha256,
-      storedSha256,
-      notes: [...result.notes],
-      warnings: [...plan.warnings],
-      planNotes: planNotesJson(plan),
-      written: true,
-    };
-  } finally {
-    await session.close();
-  }
+async function restoreAction(
+  ctx: CommandContext,
+  ops: SlotOps,
+  key: SlotKey,
+  path: string,
+): Promise<CommandResult> {
+  const flags = ctx.slotFlags ?? NO_SLOT_FLAGS;
+  refuseUnattended(ctx, !flags.dryRun, 'restore');
+  const name = basename(path);
+  const bytes = await readImage(path);
+  return withReport(ctx, ops, async (report, workflow) => {
+    refuse(flashRefusal(report, key, 'plain', flags.acknowledgeRisk));
+    const restore = await (
+      ops.restore ??
+      (async (r: SlotsReport, k: SlotKey, f: { bytes: Uint8Array; name: string }) =>
+        planSlotRestore(r, k, await fullFlashOf(f.bytes, f.name)))
+    )(report, key, { bytes, name }, { running16Hz: flags.running16Hz });
+    const backup = restore.backup;
+    ctx.reporter.log(
+      `${name}: ${backup.from === 'preserve-run' ? `the whole flash in a Preserve run file (${backup.entry ?? ''})` : 'a 4 MiB flash image'}, ` +
+        `sha256 ${backup.sha256}; its identity block names ${backup.identity.serial ?? 'no serial'}`,
+      'info',
+    );
+    return runPlannedWrite(ctx, ops, report, workflow, {
+      command: 'restore',
+      plan: restore.plan,
+      fileName: restore.fileName,
+      what: `bank ${bankName(key)} of ${name}`,
+      action: { kind: 'restore', fileName: name },
+      source: restore.source,
+      restore,
+      json: {
+        file: name,
+        fullFlash: {
+          from: backup.from,
+          entry: backup.entry,
+          sha256: backup.sha256,
+          serial: backup.identity.serial,
+          chipId: backup.identity.chipId,
+          sameCamera: restore.sameCamera,
+        },
+        backupBank: {
+          storedSha256: restore.storedSha256,
+          version: restore.version,
+          plainSha256: restore.decryption.plainSha256,
+          sameAsNow: restore.sameAsNow,
+        },
+      },
+    });
+  });
 }
 
 /* ==================================================================== *
@@ -1143,7 +1455,7 @@ export function fpsPlanLines(
   address: number,
   version: string | null,
   color: boolean,
-  dumpDir: string | null,
+  savedFirst: string,
   bootWarning: FpsBootWarning | null = null,
 ): string[] {
   const bank = bankName(key);
@@ -1163,12 +1475,7 @@ export function fpsPlanLines(
       ],
       /* The row in words; the JSON's `row.detail` keeps the table's own label (TESTING.md 42.88). */
       ['  row', plan.patch.row.name],
-      [
-        '  saved first',
-        dumpDir === null
-          ? 'the bank as stored and its decrypted image, into --dump-dir (needed to write)'
-          : `the bank as stored and its decrypted image, into ${dumpDir}, before any byte is sent`,
-      ],
+      ['  saved first', savedFirst],
     ]),
   );
   if (bootWarning !== null) {
@@ -1178,17 +1485,18 @@ export function fpsPlanLines(
     }
   }
   lines.push('');
-  lines.push(
-    paint(
-      `  ! The saved decrypted file is the only way back. To undo the patch, flash it again: ` +
-        `seek-fw slots flash ${key} <the -decrypted file> --yes (add --acknowledge-risk ` +
-        `${key === 'r' ? 'as for every write to recovery R' : `if the camera boots bank ${bank}`}).`,
-      'yellow',
-      color,
-    ),
-  );
+  lines.push(paint(`  ! ${undoLine(key)}`, 'yellow', color));
   lines.push('');
   return lines;
+}
+
+/** The way back after a patch: the decrypted file in the backup zip, written with `slots flash`. */
+function undoLine(key: SlotKey): string {
+  return (
+    `The decrypted file in the backup zip is the way back. To undo the patch, unzip it and write it: ` +
+    `seek-fw slots flash ${key} <the -decrypted file> --yes (add --acknowledge-risk ` +
+    `${key === 'r' ? 'as for every write to recovery R' : `if the camera boots bank ${bankName(key)}`}).`
+  );
 }
 
 /** The yes/no question for a patch write. */
@@ -1207,19 +1515,66 @@ export function fpsQuestion(
   );
 }
 
+/** The read-back of one patched bank, in words. */
+function patchReadBackLine(result: FpsPatchResult, color: boolean): string {
+  const readBack = result.readBack;
+  const bank = bankName(result.key);
+  if (!readBack.checked) return 'read-back: skipped (--no-verify)';
+  return readBack.ok === true
+    ? paint(
+        `read-back: bank ${bank} differs from the saved bank only at the ` +
+          `${String(result.changed.length)} planned byte(s), the sites and the sum word`,
+        'green',
+        color,
+      )
+    : paint(
+        `read-back: bank ${bank} does NOT differ only as planned (unexpected ` +
+          `${String(readBack.unexpected.length)}, missing ${String(readBack.missing.length)})`,
+        'red',
+        color,
+      );
+}
+
+/** One patched bank as the JSON carries it. */
+function patchResultJson(result: FpsPatchResult): Record<string, unknown> {
+  return {
+    bank: result.key,
+    fromHz: result.fromHz,
+    toHz: result.toHz,
+    commitStatus: result.written.commitStatus,
+    verified: result.written.verified,
+    readBack: {
+      checked: result.readBack.checked,
+      ok: result.readBack.ok,
+      differing: [...result.readBack.differing],
+      missing: [...result.readBack.missing],
+      unexpected: [...result.readBack.unexpected],
+    },
+    changedOffsets: [...result.changed],
+    notes: [...result.notes],
+  };
+}
+
 /**
- * Saves the pre-patch dump into `dir`, as the write waits for it. A file that already exists is never
- * replaced (`wx`): a second run into the same folder is refused rather than overwriting a dump.
- * True only once both files are on disk at their full size.
+ * The booted bank and recovery R need --acknowledge-risk, as `slots flash` does. Refused before the plan, the
+ * question and the backup: core's own refusal is worded for a library caller (TESTING.md 42.86).
  */
-export async function saveFpsDump(dir: string, dump: FpsPreDump): Promise<boolean> {
-  await mkdir(dir, { recursive: true });
-  const rawPath = join(dir, dump.rawName);
-  const plainPath = join(dir, dump.plainName);
-  await writeFile(rawPath, dump.raw, { flag: 'wx' });
-  await writeFile(plainPath, dump.plain, { flag: 'wx' });
-  const [rawInfo, plainInfo] = await Promise.all([stat(rawPath), stat(plainPath)]);
-  return rawInfo.size === dump.raw.length && plainInfo.size === dump.plain.length;
+function refusePatchRisk(
+  report: SlotsReport,
+  keys: readonly SlotKey[],
+  write: boolean,
+  acknowledgeRisk: boolean,
+): void {
+  if (!write || acknowledgeRisk) return;
+  for (const key of keys) {
+    const risk = bootRisk(report, requireView(report, key));
+    if (risk !== null) {
+      throw new CliError(`refusing to patch bank ${bankName(key)}: ${risk}`, {
+        code: 'slots/refused',
+        hint: `Pass --acknowledge-risk to patch it anyway. ${NOTHING_SENT}`,
+      });
+    }
+  }
 }
 
 async function patchFpsAction(
@@ -1229,33 +1584,9 @@ async function patchFpsAction(
 ): Promise<CommandResult> {
   const flags = ctx.slotFlags ?? NO_SLOT_FLAGS;
   const write = flags.write === true;
-  const dumpDir = flags.dumpDir ?? null;
-  const acknowledgeRisk = flags.acknowledgeRisk;
-  const verify = flags.verify;
-  /* A write that cannot keep its dump is not started: the dump is the only way back. Checked before the
-   * camera is opened. */
-  if (write && dumpDir === null) {
-    throw new CliError(
-      'slots patch-fps --write needs --dump-dir: the bank is saved there before the patch is written, ' +
-        'and that dump is the only way back',
-      { code: 'slots/refused', hint: `Pass --dump-dir <a new folder>. ${NOTHING_SENT}` },
-    );
-  }
-  if (write && !ctx.options.yes && !ctx.io.stdinIsTty) {
-    throw new CliError(
-      'refusing to patch without confirmation: stdin is not a terminal, so there is nobody to ask',
-      {
-        code: 'slots/refused',
-        hint: 'Pass --yes to confirm non-interactively, or run it on a terminal to read the plan.',
-      },
-    );
-  }
-
-  const session = await openSession(ctx);
-  try {
-    const choice = await chooseProfileByProbe(ctx, session);
-    const workflow = workflowContext(session, choice.profile, choice.detection, ctx);
-    const report = await ops.inspect(workflow);
+  refuseUnattended(ctx, write, 'patch');
+  const dir = backupDirOf(flags);
+  return withReport(ctx, ops, async (report, workflow) => {
     const plan = ops.fpsPlan === undefined ? fpsPlanOfBank(report, key) : ops.fpsPlan(report, key);
     const view = requireView(report, key);
     if (plan.status !== 'offer') {
@@ -1264,39 +1595,42 @@ async function patchFpsAction(
         hint: NOTHING_SENT,
       });
     }
-    /* The booted bank and recovery R need --acknowledge-risk, as `slots flash` does. Refused here, before
-     * the plan, the question and the saved dump: core's own refusal comes only after the dump is saved,
-     * and it is worded for a library caller (TESTING.md 42.86). */
-    const risk = bootRisk(report, view);
-    if (write && risk !== null && !acknowledgeRisk) {
-      throw new CliError(`refusing to patch bank ${bankName(key)}: ${risk}`, {
-        code: 'slots/refused',
-        hint: `Pass --acknowledge-risk to patch it anyway. ${NOTHING_SENT}`,
-      });
-    }
+    refusePatchRisk(report, [key], write, flags.acknowledgeRisk);
     const version = report.state.version;
     /* The warning is about the bank being patched: it counts as holding the patch once written. */
     const bootWarning = fpsBootWarningOf(report, { target: key });
+    const action: WriteAction = { kind: 'fps-patch' };
     ctx.reporter.write(
-      fpsPlanLines(key, plan, view.entry.address, version, ctx.color, dumpDir, bootWarning).join(
-        '\n',
-      ),
+      fpsPlanLines(
+        key,
+        plan,
+        view.entry.address,
+        version,
+        ctx.color,
+        savedFirstText(report, [key], action, dir),
+        bootWarning,
+      ).join('\n'),
     );
+    const common = {
+      action: 'patch-fps',
+      bank: key,
+      address: hexUp(view.entry.address),
+      version,
+      ...fpsPlanJson(plan),
+      bootWarning: bootWarning === null ? null : [...bootWarning.paragraphs],
+    };
 
     /* The dry run stops here: the plan is the whole output and nothing is saved or sent. */
     if (!write) {
-      const needs = risk === null || acknowledgeRisk ? '' : ' --acknowledge-risk';
+      const needs =
+        bootRisk(report, view) === null || flags.acknowledgeRisk ? '' : ' --acknowledge-risk';
       ctx.reporter.log(
-        `dry run: nothing was saved and nothing was written. Add --write --dump-dir <folder>${needs} to patch bank ${bankName(key)}.`,
+        `dry run: nothing was saved and nothing was written. Add --write${needs} to patch bank ${bankName(key)}.`,
         'info',
       );
       return {
-        action: 'patch-fps',
-        bank: key,
-        address: hexUp(view.entry.address),
-        version,
-        ...fpsPlanJson(plan),
-        bootWarning: bootWarning === null ? null : [...bootWarning.paragraphs],
+        ...common,
+        backup: { directory: dir, fileName: backupFileNameShown(report, [key], action) },
         written: false,
         dryRun: true,
         notes: [],
@@ -1314,80 +1648,238 @@ async function patchFpsAction(
       ctx.reporter.log('--yes given: skipping the confirmation', 'warn');
     }
 
-    const saveDir = dumpDir;
-    if (saveDir === null) {
-      throw new CliError('no --dump-dir for the write', {
-        code: 'slots/refused',
-        hint: NOTHING_SENT,
-      });
-    }
-    const patchOptions = {
-      acknowledgeRisk,
-      verify,
-      saveDump: (dump: FpsPreDump) => saveFpsDump(saveDir, dump),
+    const saved: { path: string | null } = { path: null };
+    const patchOptions: FpsPatchOptions = {
+      acknowledgeRisk: flags.acknowledgeRisk,
+      verify: flags.verify,
+      saveBackup: saveBackupInto(dir, ctx.reporter, (path) => {
+        saved.path = path;
+      }),
+      ...(ctx.io.now === undefined ? {} : { now: () => ctx.io.now?.() ?? new Date() }),
     };
     const patchWorkflow = { ...workflow, reporter: loud(ctx.reporter) };
     const result =
       ops.patchFps === undefined
         ? await patchBankFps(patchWorkflow, report, key, patchOptions)
         : await ops.patchFps(patchWorkflow, report, key, patchOptions);
-    const readBack = result.readBack;
-    const lines = [
-      `commit status: ${hexUp(result.written.commitStatus, 4)}`,
-      readBack.checked
-        ? readBack.ok === true
-          ? paint(
-              `read-back: bank ${bankName(key)} differs from the saved dump only at the ` +
-                `${String(result.changed.length)} planned byte(s), the sites and the sum word`,
-              'green',
-              ctx.color,
-            )
-          : paint(
-              `read-back: bank ${bankName(key)} does NOT differ only as planned (unexpected ` +
-                `${String(readBack.unexpected.length)}, missing ${String(readBack.missing.length)})`,
-              'red',
-              ctx.color,
-            )
-        : 'read-back: skipped (--no-verify)',
-      REPLUG_LINE_PATCH,
-    ];
-    ctx.reporter.write(lines.join('\n'));
-    if (readBack.ok === false || result.written.verified === false) {
+    ctx.reporter.write(
+      [
+        `commit status: ${hexUp(result.written.commitStatus, 4)}`,
+        patchReadBackLine(result, ctx.color),
+        REPLUG_LINE_PATCH,
+      ].join('\n'),
+    );
+    if (result.readBack.ok === false || result.written.verified === false) {
       throw new CliError(
         `the read-back of bank ${bankName(key)} does not match the patched image as planned`,
         {
           code: 'slots/verify-failed',
           hint:
-            `The saved dump is in ${saveDir}. Run \`seek-fw slots list\` once the camera is back. ` +
-            'Do not rely on the bank until a read matches.',
+            `The backup is ${saved.path ?? result.backup.fileName}. Run \`seek-fw slots list\` once the ` +
+            'camera is back. Do not rely on the bank until a read matches.',
+        },
+      );
+    }
+    const one = patchResultJson(result);
+    return {
+      ...common,
+      written: true,
+      dryRun: false,
+      backup: { directory: dir, ...backupJson(result.backup, saved.path) },
+      commitStatus: one.commitStatus,
+      verified: one.verified,
+      readBack: one.readBack,
+      changedOffsets: one.changedOffsets,
+      notes: one.notes,
+    };
+  });
+}
+
+/** The every-bank plan as a person reads it: each bank, the order, the banks left, what is saved first. */
+export function fpsEveryPlanLines(
+  report: SlotsReport,
+  plan: FpsEveryBankPlan,
+  color: boolean,
+  savedFirst: string,
+): string[] {
+  const lines: string[] = ['', heading('Frame-rate patch plan, every bank', color)];
+  const role = (key: SlotKey): string => {
+    const view = findView(report, key);
+    if (view?.active === true) return '; the bank the camera boots now';
+    if (key === 'r') return '; the recovery bank';
+    return '';
+  };
+  lines.push(
+    table([
+      ...plan.offers.map((offer) => [
+        `  ${bankName(offer.key)}`,
+        `${hexUp(findView(report, offer.key)?.entry.address ?? 0)}: firmware ${report.state.version ?? offer.plan.patch.version}, ` +
+          `${String(offer.plan.fromHz)} Hz -> ${String(offer.plan.toHz)} Hz, ` +
+          `${String(offer.plan.sites.length)} byte(s) and the sum word${role(offer.key)}`,
+      ]),
+      [
+        '  order',
+        `${plan.order.map(bankName).join(', then ')} (the bank the camera boots now last)`,
+      ],
+      ...plan.others.map((other) => [
+        `  ${bankName(other.key)}`,
+        `left as it is: ${'reason' in other.plan ? other.plan.reason : 'no offer'}`,
+      ]),
+      ['  saved first', savedFirst],
+    ]),
+  );
+  lines.push(
+    '',
+    paint(
+      '  ! Each bank is read back before the next is written; the first failure stops the rest.',
+      'yellow',
+      color,
+    ),
+  );
+  lines.push(
+    paint(
+      '  ! The decrypted files in the backup zip are the way back. To undo the patch of a bank, unzip its file ' +
+        'and write it: seek-fw slots flash <bank> <the -decrypted file> --yes (add --acknowledge-risk for ' +
+        'the bank the camera boots and for recovery R).',
+      'yellow',
+      color,
+    ),
+  );
+  lines.push('');
+  return lines;
+}
+
+/** `slots patch-fps all`: every bank that offers the patch, in one confirmation (core `patchEveryBankFps`). */
+async function patchEveryAction(ctx: CommandContext, ops: SlotOps): Promise<CommandResult> {
+  const flags = ctx.slotFlags ?? NO_SLOT_FLAGS;
+  const write = flags.write === true;
+  refuseUnattended(ctx, write, 'patch');
+  const dir = backupDirOf(flags);
+  return withReport(ctx, ops, async (report, workflow) => {
+    const plan = fpsEveryBankPlan(report, (r, k) =>
+      ops.fpsPlan === undefined ? fpsPlanOfBank(r, k) : ops.fpsPlan(r, k),
+    );
+    if (plan.order.length === 0) {
+      throw new CliError(
+        `no bank offers the frame-rate patch (${plan.others
+          .map(
+            (other) =>
+              `${bankName(other.key)}: ${'reason' in other.plan ? other.plan.reason : 'no offer'}`,
+          )
+          .join('; ')})`,
+        { code: 'slots/refused', hint: NOTHING_SENT },
+      );
+    }
+    refusePatchRisk(report, plan.order, write, flags.acknowledgeRisk);
+    const action: WriteAction = { kind: 'fps-patch-every-bank' };
+    ctx.reporter.write(
+      fpsEveryPlanLines(
+        report,
+        plan,
+        ctx.color,
+        savedFirstText(report, plan.order, action, dir),
+      ).join('\n'),
+    );
+    const common = {
+      action: 'patch-fps',
+      bank: 'all',
+      version: report.state.version,
+      order: [...plan.order],
+      banks: plan.offers.map((offer) => ({ bank: offer.key, ...fpsPlanJson(offer.plan) })),
+      others: plan.others.map((other) => ({ bank: other.key, ...fpsPlanJson(other.plan) })),
+    };
+
+    if (!write) {
+      const needs =
+        flags.acknowledgeRisk ||
+        plan.order.every((key) => bootRisk(report, requireView(report, key)) === null)
+          ? ''
+          : ' --acknowledge-risk';
+      ctx.reporter.log(
+        `dry run: nothing was saved and nothing was written. Add --write${needs} to patch every bank that offers it.`,
+        'info',
+      );
+      return {
+        ...common,
+        backup: { directory: dir, fileName: backupFileNameShown(report, plan.order, action) },
+        written: false,
+        dryRun: true,
+        results: [],
+        stopped: null,
+        unwritten: [...plan.order],
+      };
+    }
+
+    if (!ctx.options.yes) {
+      const product = report.state.description.productName ?? 'this camera';
+      const serial = report.state.serial === null ? '' : ` (${report.state.serial})`;
+      const confirmed = await ctx.io.confirm(
+        `Patch ${plan.order.map((key) => `bank ${bankName(key)}`).join(', then ')} on ${product}${serial}? ` +
+          'The banks are saved first, in one zip. [y/N] ',
+      );
+      if (!confirmed) {
+        throw new CliError('aborted at the confirmation prompt — nothing was written', {
+          code: 'slots/refused',
+        });
+      }
+    } else {
+      ctx.reporter.log('--yes given: skipping the confirmation', 'warn');
+    }
+
+    const saved: { path: string | null } = { path: null };
+    const options: FpsPatchOptions = {
+      acknowledgeRisk: flags.acknowledgeRisk,
+      verify: flags.verify,
+      saveBackup: saveBackupInto(dir, ctx.reporter, (path) => {
+        saved.path = path;
+      }),
+      ...(ctx.io.now === undefined ? {} : { now: () => ctx.io.now?.() ?? new Date() }),
+    };
+    const everyWorkflow = { ...workflow, reporter: loud(ctx.reporter) };
+    const done =
+      ops.patchEveryFps === undefined
+        ? await patchEveryBankFps(everyWorkflow, report, options)
+        : await ops.patchEveryFps(everyWorkflow, report, options);
+    const lines: string[] = [];
+    for (const one of done.results) {
+      lines.push(
+        `bank ${bankName(one.key)}: commit status ${hexUp(one.written.commitStatus, 4)}`,
+        patchReadBackLine(one, ctx.color),
+      );
+    }
+    if (done.stopped !== null)
+      lines.push(paint(`stopped: ${done.stopped.reason}`, 'red', ctx.color));
+    if (done.unwritten.length > 0) {
+      lines.push(`not written: ${done.unwritten.map((key) => `bank ${bankName(key)}`).join(', ')}`);
+    }
+    lines.push(REPLUG_LINE_PATCH);
+    ctx.reporter.write(lines.join('\n'));
+    const failed =
+      done.stopped !== null ||
+      done.results.some((one) => one.readBack.ok === false || one.written.verified === false);
+    if (failed) {
+      throw new CliError(
+        done.stopped === null
+          ? 'a patched bank does not read back as planned'
+          : `stopped at bank ${bankName(done.stopped.key)}: ${done.stopped.reason}`,
+        {
+          code: 'slots/verify-failed',
+          hint:
+            `The backup is ${saved.path ?? done.backup.fileName}. Run \`seek-fw slots list\` once the ` +
+            'camera is back. Do not rely on a bank until a read matches.',
         },
       );
     }
     return {
-      action: 'patch-fps',
-      bank: key,
-      address: hexUp(view.entry.address),
-      version,
-      ...fpsPlanJson(plan),
-      bootWarning: bootWarning === null ? null : [...bootWarning.paragraphs],
+      ...common,
       written: true,
       dryRun: false,
-      saved: { directory: dumpDir, rawName: result.pre.rawName, plainName: result.pre.plainName },
-      commitStatus: result.written.commitStatus,
-      verified: result.written.verified,
-      readBack: {
-        checked: readBack.checked,
-        ok: readBack.ok,
-        differing: [...readBack.differing],
-        missing: [...readBack.missing],
-        unexpected: [...readBack.unexpected],
-      },
-      changedOffsets: [...result.changed],
-      notes: [...result.notes],
+      backup: { directory: dir, ...backupJson(done.backup, saved.path) },
+      results: done.results.map(patchResultJson),
+      stopped: done.stopped,
+      unwritten: [...done.unwritten],
     };
-  } finally {
-    await session.close();
-  }
+  });
 }
 
 /**
@@ -1404,8 +1896,14 @@ export function slotsCommandWith(ops: SlotOps): Command {
         return dumpAction(ctx, ops, request.key);
       case 'flash':
         return flashAction(ctx, ops, request.key, request.file, request.kind);
+      case 'copy':
+        return copyAction(ctx, ops, request.from, request.to);
+      case 'restore':
+        return restoreAction(ctx, ops, request.key, request.file);
       case 'patch-fps':
-        return patchFpsAction(ctx, ops, request.key);
+        return request.key === 'all'
+          ? patchEveryAction(ctx, ops)
+          : patchFpsAction(ctx, ops, request.key);
     }
   };
 }

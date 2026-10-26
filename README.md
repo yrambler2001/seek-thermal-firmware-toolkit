@@ -118,10 +118,11 @@ Common options:
 --quiet, --verbose, --no-color
 ```
 
-`seek-fw slots flash` writes one bank. It shows the plan and asks first unless `--yes` is given. It
-takes no full-flash backup before it writes, so take `seek-fw dump` or `seek-fw slots dump <bank>`
-first when the bank matters. TESTING.md 42.16 lists what the removed whole-image `flash` did that
-`slots flash` does not.
+`seek-fw slots flash` writes one bank. It shows the plan and asks first unless `--yes` is given.
+Every bank write (`slots flash`, `copy`, `restore`, `patch-fps --write`) saves the bank it is about
+to change first, as one zip in `--dump-dir` (the current directory by default); that is the bank
+only, not the whole flash, so take `seek-fw dump` first when the rest matters. TESTING.md 42.16
+lists what the removed whole-image `flash` did that `slots flash` does not.
 
 On Linux the CLI needs permission to talk to the device — see [the udev rule](#linux-udev-rule)
 below, which applies to both the CLI and the browser.
@@ -745,9 +746,13 @@ bank is good. The dangerous case is an image that passes those checks but does n
 keeps booting it, and the bootloader has no USB. Recovering from that means writing your dump back with
 an SPI programmer or over SWD/J-Link.
 
-So dump the bank before you write it, and keep the file. **Dump** on the Slots tab and
-`seek-fw slots dump` save it. `seek-fw slots flash` takes no backup for you. **Make N FPS** saves the
-bank before it writes.
+So keep a copy of the bank you write. Every write on the Slots tab and in `seek-fw slots` saves it
+first, as one zip named with the time, the camera's serial, the firmware, the bank and the write
+(`seek_backup_<time>_<serial>_v<firmware>_bank-B_before-copy-from-A.zip`): the bank as stored, its
+decrypted image when a key opens it, and a note of what each file is. The page downloads it before
+anything is sent, and the CLI writes it into `--dump-dir`. To go back, write the zip's decrypted
+file with **Flash decrypted image** (`seek-fw slots flash`). A browser cannot tell when a download
+reaches the disk, so check your downloads folder.
 
 Bank R, the recovery bank, can be written too. It is the last image the camera has, and R runs only when
 A and B hold nothing the bootloader takes. Writing R, or the bank the camera boots now, needs an explicit
@@ -816,7 +821,10 @@ seek-fw slots dump r --out ./banks                  # the bank as stored, plus t
 seek-fw slots flash b my-image.bin --dry-run        # print the plan, send nothing
 seek-fw slots flash b my-image.bin                  # decrypted image, encrypted for THAT bank
 seek-fw slots flash r prepared.bin --raw --acknowledge-risk   # raw staged bytes, verbatim
+seek-fw slots copy a b --dump-dir ./backups                   # bank A's image into bank B
+seek-fw slots restore b whole-flash.bin --dry-run             # bank B as a 4 MiB flash backup holds it
 seek-fw slots patch-fps a                                     # frame-rate patch: prints the plan, sends nothing
+seek-fw slots patch-fps all --write --acknowledge-risk        # every bank that offers it, booted bank last
 ```
 
 - **Flash a decrypted image.** The page stamps the length, balances the acceptance sum and encrypts
@@ -844,8 +852,11 @@ seek-fw slots patch-fps a                                     # frame-rate patch
   0.9.0.7, 0.9.1.0, 0.10.0.0, 1.0.0.0, 1.2.0.0, 1.3.0.0 and 1.3.0.8 builds on the plain 2014 chain,
   and for the Compact 4.8.1.7, 4.8.1.9 and 4.8.2.1 (the Compact XR 4.8.2.1 too) under Key A. It
   offers 18 fps for the Compact PRO 4.9.1.15, 4.9.2.0, 1.0.3.0 and 1.0.3.2. Other builds are refused, with the reason. The bank is saved
-  first. A bank runs only after a boot, so power-cycle the camera afterwards. On the 2014 chain the
-  page and `seek-fw slots list` also warn when a patched bank is one the camera will not run.
+  first. **Make N FPS in every bank** (`patch-fps all`) patches every bank that offers it in one
+  confirmation, one zip of them all saved first, the bank the camera boots now written last: a warm
+  reset can start another bank than the one patched. A bank runs only after a boot, so power-cycle the
+  camera afterwards. The page and `seek-fw slots list` also warn when a patched bank is one the camera
+  will not run.
   [FPS_32HZ.md](FPS_32HZ.md) has how each build is patched and what was measured.
 - **Writes arm bank 7/8/9 and nothing else.** They program that bank and leave the boot config
   alone, so there is no "select the active slot": the protocol has no such command. Writing the bank
@@ -863,9 +874,15 @@ seek-fw slots patch-fps a                                     # frame-rate patch
 - **Empty banks.** A bank whose image-header window reads as all `0xFF` (many 2014 cameras' bank B)
   is listed as `empty`, not as an error: it dumps as the raw 64 KiB of `0xFF` with nothing to
   decrypt, and it is written, confirmed and read back like any other bank, the plan saying nothing
-  is overwritten. On the page, **Use the booted bank's image** fills an empty bank with the
-  firmware the camera already runs, so a second slot with the same firmware exists. The risk
-  acknowledgement rules do not change (`TESTING.md` §42.8).
+  is overwritten. The risk acknowledgement rules do not change (`TESTING.md` §42.8).
+- **Copy and restore.** **Copy to slot A / B / recovery slot R** (`seek-fw slots copy <from> <to>`)
+  writes one bank's image, as the read decrypted it, into another bank, filled or empty, staged as any
+  decrypted image is. **Restore from full flash backup** (`seek-fw slots restore <bank> <file>`) takes
+  the 4 MiB image a J-Link reads, or a Preserve run file that holds the whole flash, cuts the bank out
+  at its address, decrypts it, plans it, and after the write says whether the bank reads back as the
+  backup stores it. A backup that looks like another camera's (the serial in its identity block at
+  `0x14020000`), or of another firmware, is a warning; a bank that is empty in the backup cannot be
+  restored by a write (`TESTING.md` §42.91).
 
 What has been run: the whole path on the emulator for every build from 0.8.0.0 in the corpus
 (`TESTING.md` §41). On **real** hardware: a Compact PRO 1.0.3.0 on a Compact board, a dump of all three

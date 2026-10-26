@@ -34,7 +34,8 @@
  * ==================================================================== */
 
 import { createHash } from 'node:crypto';
-import { copyFileSync, readFileSync } from 'node:fs';
+import { copyFileSync, mkdtempSync, readFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -109,6 +110,16 @@ interface CliRun {
   readonly sent: ReadonlyMap<number, number>;
 }
 
+/** Where every write's backup zip goes (TESTING.md 42.91): a folder of this run's own, never the working directory. */
+const BACKUP_DIR = mkdtempSync(path.join(tmpdir(), 'seek-fw-cli-backups-'));
+
+/** A slots write saves its bank first, into --dump-dir; the suite names its own folder unless the test does. */
+function withBackupDir(argv: readonly string[]): readonly string[] {
+  const writes =
+    argv[0] === 'slots' && ['flash', 'copy', 'restore', 'patch-fps'].includes(argv[1] ?? '');
+  return writes && !argv.includes('--dump-dir') ? [...argv, '--dump-dir', BACKUP_DIR] : argv;
+}
+
 /** Runs one `seek-fw` command line under `--json`, over the emulated camera. */
 async function cli(
   argv: readonly string[],
@@ -124,7 +135,7 @@ async function cli(
       clock: device.usbip.deadlineClock,
     });
   const { io, stdout, stderr } = testIo({ backend });
-  const code = await run([...argv, '--json'], io, new AbortController().signal);
+  const code = await run([...withBackupDir(argv), '--json'], io, new AbortController().signal);
   const text = stdout.text.trim();
   const json = text === '' ? null : (JSON.parse(text) as Json);
   return { code, json, stderr: stderr.text, sent: difference(before, sentByOpcode(emu)) };
