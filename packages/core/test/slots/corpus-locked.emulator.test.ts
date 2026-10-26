@@ -349,12 +349,9 @@ describe.skipIf(!available)(
             expect(run.booted, run.blockedBy.join(' | ')).not.toBeNull();
           });
         } else {
-          const why =
-            subject.staging !== 'plain'
-              ? "1.0.3.x's boot prediction is not reconstructed (legacy-auth selectBootSlot throws profile/unsupported)"
-              : ffImage
-                ? "the 16 Hz image has word sum 0xFFFF, so no bank is the 2014 chain's plain form and its active-slot replay does not apply"
-                : "0.8.0.0's mode 1 is boot-config, so the mode-0 row that arms the upgrade target is not decoded on this build";
+          const why = ffImage
+            ? "the 16 Hz image has word sum 0xFFFF, so no bank is the 2014 chain's plain form and its active-slot replay does not apply"
+            : "0.8.0.0's mode 1 is boot-config, so the mode-0 row that arms the upgrade target is not decoded on this build";
           it(`PINNED GAP: the booted bank is not named on this build, so every bank needs acknowledgement (${why})`, () => {
             expect(run.booted, 'the booted bank').toBeNull();
             expect(run.blockedBy.length, 'the page gives its reason').toBeGreaterThan(0);

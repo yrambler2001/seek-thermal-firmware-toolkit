@@ -217,7 +217,14 @@ function infoBlock(version: readonly number[], date: string): Uint8Array {
  * GetFirmwareInfo never answers.
  */
 export function compactPro1030Camera(
-  options: { readonly fwInfo?: FakeCameraOptions['fwInfo'] } = {},
+  options: {
+    readonly fwInfo?: FakeCameraOptions['fwInfo'];
+    /**
+     * The active-slot word GetFirmwareInfo selector 10 answers with (the roots record's +8, the bootloader's
+     * record of the bank it entered, TESTING.md 42.56). Omitted: selector 10 does not answer.
+     */
+    readonly activeSlotWord?: number;
+  } = {},
 ): ReturnType<typeof fakeCamera> {
   const image = buildPlainImage();
   viewOf(image).setUint32(HEADER_OFFSET + 12, 0x0003_0001, true); /* version 1.0.3.0 */
@@ -239,8 +246,18 @@ export function compactPro1030Camera(
       new Map([
         [0, infoBlock([1, 0, 3, 0], 'Jul  6 2016')],
         [1, infoBlock([1, 2, 0, 0], 'Jun 26 2016')],
+        ...(options.activeSlotWord === undefined
+          ? []
+          : [[10, rootsWith(options.activeSlotWord)] as [number, Uint8Array]]),
       ]),
   });
+}
+
+/** GetFirmwareInfo selector 10: the roots record, with `word` at +8. */
+function rootsWith(word: number): Uint8Array {
+  const roots = new Uint8Array(64);
+  viewOf(roots).setUint32(8, word, true);
+  return roots;
 }
 
 /** A `UsbBackend` that hands out exactly the transports it was given. */

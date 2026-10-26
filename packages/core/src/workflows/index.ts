@@ -9,6 +9,7 @@
  */
 
 export type {
+  CheckKey,
   DecryptResult,
   DecryptedSlot,
   DeviceState,
@@ -70,13 +71,27 @@ export {
   type DecryptOptions,
 } from './decrypt.js';
 export {
+  BANKS_ONLY_WRITING,
   bootedSlot,
+  cameraWideBlocks,
+  checkKeyNameOf,
   profileToRereadUnder,
   bootableDescription,
   readDeviceInfo,
   storeKeyDescription,
   targetSlot,
+  unknownBootabilityWhy,
   upgradeTargetIsBooted,
   upgradeTargetWarning,
   upgradeTargetWhileRecovery,
 } from './device-info.js';
+export {
+  bankWritingOf,
+  bootedReportOf,
+  checkKeyReportOf,
+  keyReportRows,
+  KEY_TABLE_REFUSED_2016,
+  nextStartReportOf,
+  type BankWriting,
+  type ReportRow,
+} from './device-report.js';

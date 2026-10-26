@@ -10,21 +10,26 @@
  */
 
 import {
+  bankWritingOf,
+  bootChoiceOf,
+  bootedReportOf,
+  bootRuleKnown,
   bytesToHex,
   hex,
   hexUp,
+  keyReportRows,
   listProfiles,
-  onPlaintextChain,
   bootableDescription,
+  nextStartReportOf,
   readDeviceInfo,
   runningApplicationOf,
-  storeKeyDescription,
   upgradeTargetIsBooted,
   upgradeTargetWarning,
   upgradeTargetWhileRecovery,
   type CapabilityName,
   type DeviceState,
   type FirmwareProfile,
+  type SlotKey,
   type SlotState,
 } from '@seek-fw/core';
 import { summarizeDevice } from '../backend.js';
@@ -33,6 +38,7 @@ import { permissionHint } from '../errors.js';
 import {
   backendFor,
   betterProfile,
+  checkKeyJson,
   chooseProfileByProbe,
   cipherDiffers,
   dumpOptionsFrom,
@@ -129,6 +135,9 @@ export function stateJson(state: DeviceState): Record<string, unknown> {
       cfgSlots: state.cfgSlots === null ? null : state.cfgSlots.map((word) => hexUp(word)),
       activeSlotWord: state.activeSlotWord === null ? null : hexUp(state.activeSlotWord),
       booted: state.boot?.booted ?? null,
+      /* The bank the next start runs, where the boot rule and the bank check are decoded (the 2014 plaintext
+       * chain and the 2016 Compact PRO, TESTING.md 42.84); null on every other line. */
+      nextStart: nextStartJson(state),
       upgradeTarget: state.boot?.target ?? null,
       /* TESTING.md 42.50: the upgrade target is the bank the camera booted from. A warning, never a gate. */
       upgradeTargetBooted: upgradeTargetIsBooted(state),
@@ -138,6 +147,9 @@ export function stateJson(state: DeviceState): Record<string, unknown> {
       targetConfirmed: state.targetConfirmed,
     },
     keys: {
+      /* The 2016 line: the key its bootloader checks a bank under, named from the bank the camera entered;
+       * null on every other line. */
+      checkKey: checkKeyJson(state.checkKey ?? null),
       keyA: state.keyTable === null ? null : bytesToHex(state.keyTable.keyA),
       keyB: state.keyTable === null ? null : bytesToHex(state.keyTable.keyB),
       tableOffset: state.keyTable === null ? null : hexUp(state.keyTable.offset),
@@ -155,14 +167,31 @@ export function stateJson(state: DeviceState): Record<string, unknown> {
     plainChain: state.plainChain,
     canFlash: state.canFlash,
     flashBlockedBy: [...state.flashBlockedBy],
+    /* The 2016 line: banks are written one at a time, and no whole-image write exists (`canFlash` and
+     * `flashBlockedBy` are the whole-image gate). `refusedBy` lists what refuses every bank for the slot
+     * writer, the slot page's own gate. Null on every other line. */
+    bankWrites: bankWritesJson(state),
   };
+}
+
+/** The next start as `--json` carries it, or null where the boot rule is not decoded. */
+function nextStartJson(state: DeviceState): Record<string, unknown> | null {
+  if (!bootRuleKnown(state)) return null;
+  const choice = bootChoiceOf(state);
+  return { runs: choice.runs, why: choice.why };
+}
+
+/** How a 2016 camera's banks are written, for `--json`; null on every other line. */
+function bankWritesJson(state: DeviceState): Record<string, unknown> | null {
+  const writing = bankWritingOf(state);
+  return writing === null ? null : { oneAtATime: true, refusedBy: [...writing.refusals] };
 }
 
 function pairs(ctx: CommandContext, rows: readonly (readonly [string, string])[]): void {
   ctx.out(table(rows.map((row) => [`  ${row[0]}`, row[1]])));
 }
 
-/** The human report. Also used by `flash`, which shows it before it asks. */
+/** The human report: the same sections, in the same order, as the page's Info tab (TESTING.md 42.64). */
 export function renderState(ctx: CommandContext, state: DeviceState): void {
   ctx.out('');
   ctx.out(heading('Camera', ctx.color));
@@ -214,8 +243,9 @@ export function renderState(ctx: CommandContext, state: DeviceState): void {
         ? '(unreadable)'
         : `${hexUp(state.cfg0)} — ${state.profile.boot.describeCfg0(state.cfg0)}`,
     ],
-    ['booted', bootedText(state)],
+    ['booted', bootedReportOf(state, nameOf(state)) ?? '(not replayed)'],
     ...runningRows(state),
+    ...nextStartRows(state),
     [
       'upgrade target',
       state.boot === null
@@ -230,18 +260,7 @@ export function renderState(ctx: CommandContext, state: DeviceState): void {
 
   ctx.out('');
   ctx.out(heading('Keys', ctx.color));
-  pairs(ctx, [
-    ['key A', state.keyTable === null ? '(not identified)' : bytesToHex(state.keyTable.keyA)],
-    ['key B', state.keyTable === null ? '(not identified)' : bytesToHex(state.keyTable.keyB)],
-    [
-      'table at',
-      state.keyTable === null
-        ? `${String(state.keyTableCandidates)} candidate(s), none confirmed`
-        : `${hexUp(state.keyTable.offset)} in the bootloader block, confirmed against a slot`,
-    ],
-    ['whitening K', hexUp(state.keyWhiteningK)],
-    ['store key', storeKeyDescription(state)],
-  ]);
+  pairs(ctx, keyReportRows(state));
 
   ctx.out('');
   ctx.out(heading('Slots', ctx.color));
@@ -268,30 +287,51 @@ export function renderState(ctx: CommandContext, state: DeviceState): void {
 
   ctx.out('');
   ctx.out(heading('Writing', ctx.color));
-  if (state.canFlash) {
-    ctx.out('  available — `seek-fw slots flash <a|b|r> <file>` can write a bank of this camera');
-  } else {
-    ctx.out('  not available for a whole-image write:');
-    for (const reason of state.flashBlockedBy) ctx.out(`    · ${reason}`);
-  }
+  for (const line of writingLines(state)) ctx.out(line);
   ctx.out('');
+}
+
+/**
+ * The Writing section. The 2016 line writes its banks one at a time through the slot writer, and has no
+ * whole-image write at all, so it says that and lists only what refuses every bank (core's `bankWritingOf`,
+ * the slot page's own gate). Every other line says whether the whole-image gate is open, and why not.
+ */
+export function writingLines(state: DeviceState): string[] {
+  const banks = bankWritingOf(state);
+  if (banks !== null) {
+    const lines = [
+      '  one bank at a time — `seek-fw slots flash <a|b|r> <file>` or `seek-fw slots patch-fps <a|b|r>` ' +
+        "(the page's Slots tab), each bank staged under its image's own key block 0",
+      '  a whole-image write is not available on this line',
+    ];
+    if (banks.refusals.length > 0) {
+      lines.push('  the slot writer refuses every bank of this camera:');
+      for (const reason of banks.refusals) lines.push(`    · ${reason}`);
+    }
+    return lines;
+  }
+  if (state.canFlash) {
+    return ['  available — `seek-fw slots flash <a|b|r> <file>` can write a bank of this camera'];
+  }
+  return [
+    '  not available for a whole-image write:',
+    ...state.flashBlockedBy.map((reason) => `    · ${reason}`),
+  ];
 }
 
 function slotName(state: DeviceState, key: string): string {
   return state.slots.find((slot) => slot.key === key)?.name ?? key;
 }
 
-/**
- * The booted row. On the 2014 plaintext chain the bank is named from the camera's active-slot word,
- * which is not a boot record: recovery R runs when A and B hold nothing the bootloader takes
- * (TESTING.md 42.10), so the row does not present the name as authoritative there.
- */
-function bootedText(state: DeviceState): string {
-  if (state.boot === null) return '(not replayed)';
-  const name = slotName(state, state.boot.booted);
-  return onPlaintextChain(state.profile, state.version)
-    ? `${name} (named by the active-slot word; not a boot record on this line)`
-    : name;
+/** A bank by the name the profile gives it ("App image bank 0x14050000"), as the slot table names it. */
+function nameOf(state: DeviceState): (key: SlotKey) => string {
+  return (key) => slotName(state, key);
+}
+
+/** The next-start row, on a line whose boot rule is decoded (core's `nextStartReportOf`). */
+function nextStartRows(state: DeviceState): [string, string][] {
+  const next = nextStartReportOf(state, nameOf(state));
+  return next === null ? [] : [['next start', next]];
 }
 
 /**

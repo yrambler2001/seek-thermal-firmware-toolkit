@@ -266,3 +266,115 @@ export function preparedSlot(
 export function flashedSlot(key: SlotKey, verified: boolean | null = true): FlashSlotResult {
   return { key, commitStatus: 0, verified, after: null, notes: [] };
 }
+
+/* ---- the 2016 Compact PRO (TESTING.md 42.84) --------------------------------------------------- */
+
+/** Key block 1 of the Compact PRO 1.0.3.x 9 Hz pair (core's preservation/patch.ts KEY_PAIRS.cp103). */
+export const BLOCK_1_2016 = 'faacb3c6f1412469bd122fb82d78160d';
+
+/** The decrypted image recovery R holds in the 2016 fixture: the bank a test may call patched. */
+export const PLAIN_R_2016: Uint8Array = new Uint8Array(0x100).fill(0x18);
+
+function hexBytes(hex: string): Uint8Array {
+  return Uint8Array.from(hex.match(/../g) ?? [], (pair) => Number.parseInt(pair, 16));
+}
+
+/**
+ * A Compact PRO 1.0.3.0 read under compact-2016, built on a real read's shape (`base`): cfg[0] erased
+ * (0xFFFFFFFF), the camera reports it entered slot A, and the key its bootloader checks a bank under is
+ * named from slot A (key block 1), so every bank stored under it is bootable. With `checkKeyNamed` false
+ * the active-slot word is unread and no bank has a verdict. The whole-image writer's reasons stay in the
+ * gate, as the read leaves them (`classicWriterBlockedBy`).
+ */
+export function deviceState2016(
+  base: DeviceState,
+  options: { readonly checkKeyNamed?: boolean } = {},
+): DeviceState {
+  const named = options.checkKeyNamed ?? true;
+  const header: ImageHeader = { ...SLOT_HEADER, length: 51848, versionStr: '1.0.3.0' };
+  const slots = (['a', 'b', 'r'] as const).map((key) =>
+    readSlotState(base, key, {
+      name: `App image bank 0x${SLOT_ADDRESS[key].toString(16).toUpperCase()}`,
+      raw: new Uint8Array(0x10000),
+      blank: false,
+      plain: key === 'r' ? PLAIN_R_2016 : SLOT_PLAIN,
+      header,
+      plainHeader: header,
+      keyName: named ? 'key block 1' : 'unknown key',
+      bootable: named,
+      bootability: named ? 'bootable' : 'unknown',
+      footerOk: false,
+    }),
+  );
+  const classic = [
+    "this camera's key table could not be confirmed",
+    '2016 Compact Pro does not support flashing: the classic write path has nothing for its banks',
+  ];
+  return {
+    ...base,
+    profile: getProfile('compact-2016'),
+    version: '1.0.3.0',
+    bootloaderVersion: '1.2.0.0',
+    plainChain: false,
+    cfg0: 0xffffffff,
+    activeSlotWord: named ? 0 : null,
+    slots,
+    byKey: new Map(slots.map((slot) => [slot.key, slot])),
+    boot: named ? { booted: 'a', target: 'b' } : null,
+    targetConfirmed: null,
+    keyTable: null,
+    keyTableCandidates: 0,
+    keyWhiteningK: 0,
+    deviceKeySlot: null,
+    storeKey: {
+      name: named ? 'key block 1' : 'the key its bootloader checks a bank under',
+      key: named ? hexBytes(BLOCK_1_2016) : null,
+      programmed: false,
+    },
+    checkKey: named
+      ? {
+          name: 'key block 1',
+          key: hexBytes(BLOCK_1_2016),
+          from: 'a',
+          pair: 'the Compact PRO 1.0.3.x 9 Hz pair',
+          unnamedWhy: null,
+          why: 'check key: key block 1',
+        }
+      : {
+          name: null,
+          key: null,
+          from: null,
+          pair: null,
+          unnamedWhy:
+            "the camera's active-slot word (fw info roots, selector 10) could not be read",
+          why: 'check key not named',
+        },
+    canFlash: false,
+    flashBlockedBy: classic,
+    classicWriterBlockedBy: classic,
+    upgradeBlockedBy: named ? [] : ['the slot an upgrade would write could not be determined'],
+    appKeysBlock: null,
+  };
+}
+
+/** The slots report of `deviceState2016`: its three banks, staged under each image's own key block 0. */
+export function slotReport2016(
+  base: DeviceState,
+  options: { readonly checkKeyNamed?: boolean } = {},
+): SlotsReport {
+  const state = deviceState2016(base, options);
+  const entries = (['a', 'b', 'r'] as const).map((key) =>
+    slotEntry(key, { staging: 'slot-keystream-ciphertext' }),
+  );
+  return {
+    state,
+    plan: slotPlan(true, { profileId: 'compact-2016', firmwareVersion: '1.0.3.0', slots: entries }),
+    slots: entries.map((entry): SlotView => ({
+      entry,
+      state: state.byKey.get(entry.key) ?? null,
+      unreadReason: null,
+      content: 'image',
+      active: state.boot?.booted === entry.key,
+    })),
+  };
+}

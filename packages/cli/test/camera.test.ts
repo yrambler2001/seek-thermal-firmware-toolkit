@@ -289,17 +289,18 @@ describe('seek-fw info: the upgrade target written while the camera runs recover
 });
 
 describe('seek-fw info on a 2016 Compact PRO (1.0.3.0)', () => {
-  /* The probe picks legacy-auth here by design (the two share every
-   * selector). The slots then name compact-2016, whose cipher differs, so the
-   * analysis is redone under it rather than reporting every slot as failing
-   * legacy-auth's 0xFFFF target (FINDINGS 2026-10-06). */
-  it('judges the slots under the detected profile, not the one the probe acted under', async () => {
+  /* The probe's version picks compact-2016 before any slot is read (TESTING.md 42.84): the two profiles
+   * share every selector, and under legacy-auth the first read reported every slot failing its 0xFFFF
+   * target and was then redone (FINDINGS 2026-10-06). So the read is made once, under compact-2016. */
+  it('judges the slots under compact-2016 from the first read, with nothing to re-read', async () => {
     const camera = compactPro1030Camera();
     const { io, stdout, stderr } = testIo({ backend: fixedBackend([camera]) });
     const code = await run(['info', '--json'], io, signal());
 
     expect(code).toBe(EXIT_OK);
-    expect(stderr.text).toContain('re-reading under it');
+    expect(stderr.text).not.toContain('re-reading under it');
+    expect(stderr.text).not.toContain('acceptance FAILS');
+    expect(stderr.text).not.toContain('flashing disabled');
     const parsed = JSON.parse(stdout.text) as {
       profile: { actedUnder: { id: string }; detected: { id: string; ambiguous: boolean } };
       firmware: { bootloaderVersion: string | null };
@@ -339,12 +340,75 @@ describe('seek-fw info on a 2016 Compact PRO (1.0.3.0)', () => {
     expect(await run(['info'], io, signal())).toBe(EXIT_OK);
     const text = stdout.text;
     /* "Key B (no per-device key programmed)" was printed with Key B itself
-     * "(not identified)" two lines up and the per-device slot never read */
-    expect(text).toMatch(/store key\s+unknown — the bootloader block holding the per-device key/);
+     * "(not identified)" two lines up and the per-device slot never read. On this line the store key
+     * is the key its bootloader checks a bank under, which this camera (no active-slot word) does not
+     * name. */
+    expect(text).toMatch(
+      /store key\s+the key its bootloader checks a bank under \(not named on this read\): the application stores every bank it writes under that key/,
+    );
+    expect(text).toMatch(
+      /check key\s+not named — the camera's active-slot word \(fw info roots, selector 10\) could not be read/,
+    );
     expect(text).not.toContain('no per-device key programmed');
     /* the footer column says it does not apply; bootability says unknown */
     const row = text.split('\n').find((line) => line.startsWith('App image bank 0x14050000 '));
     expect(row).toMatch(/\byes\s+n\/a\s+unknown\b/);
+  });
+});
+
+describe('seek-fw info on a 2016 Compact PRO that names the bank it entered (TESTING.md 42.84)', () => {
+  /** The camera reports it entered slot A (active-slot word 0); its boot-config record is erased. */
+  function namedCamera(): ReturnType<typeof compactPro1030Camera> {
+    return compactPro1030Camera({ activeSlotWord: 0 });
+  }
+
+  it('prints the boot rows, the check key, and the Writing section the 2016 line has', async () => {
+    const { io, stdout } = testIo({ backend: fixedBackend([namedCamera()]) });
+    expect(await run(['info'], io, signal())).toBe(EXIT_OK);
+    const text = stdout.text;
+    expect(text).toMatch(/cfg\[0\]\s+0xFFFFFFFF — slot A first, then B, then recovery R/);
+    expect(text).toMatch(
+      /booted\s+App image bank 0x14050000 — the bank the bootloader entered at this start, as it records it \(active-slot word 0\)/,
+    );
+    expect(text).toMatch(
+      /next start\s+App image bank 0x14050000 — the boot-config word is 0xFFFFFFFF, so the bootloader tries slot A first, and it holds an image the bootloader accepts/,
+    );
+    expect(text).toMatch(/check key\s+key block 1 [0-9a-f]{32}, named from slot A/);
+    expect(text).toMatch(
+      /key table\s+not read — the bootloader block \(0x14000000\) is refused on every channel on this line/,
+    );
+    expect(text).toMatch(
+      /store key\s+key block 1: the application stores every bank it writes under the key its bootloader checks/,
+    );
+    expect(text).not.toMatch(/key A\s+\(not identified\)/);
+    expect(text).toContain('one bank at a time — `seek-fw slots flash <a|b|r> <file>`');
+    expect(text).toContain('a whole-image write is not available on this line');
+    expect(text).not.toContain('not available for a whole-image write:');
+    expect(text).not.toContain('flashing disabled');
+    expect(text).not.toContain('not a boot record');
+    const row = text.split('\n').find((line) => line.startsWith('App image bank 0x14050000 '));
+    expect(row).toMatch(/key block 1\s+yes\s+n\/a\s+yes\b/);
+  });
+
+  it('carries the check key, the next start and the bank writes in --json', async () => {
+    const { io, stdout } = testIo({ backend: fixedBackend([namedCamera()]) });
+    expect(await run(['info', '--json'], io, signal())).toBe(EXIT_OK);
+    const parsed = JSON.parse(stdout.text) as {
+      boot: { booted: string; nextStart: { runs: string; why: string } | null };
+      keys: { checkKey: { name: string; from: string; key: string } | null };
+      bankWrites: { oneAtATime: boolean; refusedBy: string[] } | null;
+      slots: { bootability: string; key_name: string }[];
+    };
+    expect(parsed.boot.booted).toBe('a');
+    expect(parsed.boot.nextStart?.runs).toBe('a');
+    expect(parsed.keys.checkKey).toMatchObject({ name: 'key block 1', from: 'a' });
+    expect(parsed.keys.checkKey?.key).toMatch(/^[0-9a-f]{32}$/);
+    expect(parsed.bankWrites).toEqual({ oneAtATime: true, refusedBy: [] });
+    expect(parsed.slots.map((slot) => slot.bootability)).toEqual([
+      'bootable',
+      'bootable',
+      'bootable',
+    ]);
   });
 });
 

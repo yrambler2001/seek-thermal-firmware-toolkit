@@ -14,6 +14,7 @@ import {
   SLOT_BYTES,
   hexUp,
   onPlaintextChain,
+  unknownBootabilityWhy,
   writeBannerOf,
   type FpsPlan,
   type SlotInputKind,
@@ -79,7 +80,8 @@ export function fpsOffNote(plan: FpsPlan, supported: boolean): string | null {
   return `Frame-rate patch not offered: ${plan.reason}`;
 }
 
-function bootability(view: SlotView): ReactNode {
+/** A bank's bootability cell. `unknownWhy` is core's reason a verdict is unknown on this camera (`unknownBootabilityWhy`). */
+function bootability(view: SlotView, unknownWhy: string): ReactNode {
   const state = view.state;
   if (state === null) return '—';
   /* An empty bank holds nothing the bootloader could take: "not bootable" would read as a
@@ -99,12 +101,13 @@ function bootability(view: SlotView): ReactNode {
       </span>
     );
   }
-  return <span>unknown — the bootloader&apos;s key table was not read</span>;
+  return <span>unknown — {unknownWhy}</span>;
 }
 
 /**
- * The words for the booted bank. On the 2014 plaintext chain the camera's active-slot word names
- * it, and that is not a boot record: recovery R can run instead (TESTING.md 42.10).
+ * The words for the booted bank. On the 2014 plaintext chain the camera's active-slot word names it: the
+ * bootloader's record of the bank it entered (TESTING.md 42.56), and the next start can run another bank
+ * when this one fails its check (TESTING.md 42.10), so the words name the word.
  */
 function riskNote(risk: WriteRisk, byWord: boolean): string | null {
   const booted = byWord ? 'Named booted by the active-slot word' : 'Booted now';
@@ -276,7 +279,9 @@ export function SlotTable({
                 {state?.keyName ?? (state?.plain == null ? '—' : 'none (plaintext)')}
               </TableCell>
 
-              <TableCell label="Bootable">{bootability(view)}</TableCell>
+              <TableCell label="Bootable">
+                {bootability(view, unknownBootabilityWhy(report.state))}
+              </TableCell>
 
               <TableCell label="SHA-256 of plaintext">
                 <span className="font-mono text-[0.72rem] [overflow-wrap:anywhere]">

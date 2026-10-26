@@ -45,8 +45,10 @@ import {
   preparedSlot,
   readSlotState,
   slotEntry,
+  PLAIN_R_2016,
   slotPlan,
   slotReport,
+  slotReport2016,
   slotView,
 } from '../test-slots';
 import { buildSlotPlan, getProfile } from '@seek-fw/core';
@@ -197,7 +199,7 @@ describe('SlotsView', () => {
     };
     const verdict = writeKeysVerdictOf(report);
     expect(verdict.refusal).toBeNull();
-    expect(verdict.plainChain).toBe(true);
+    expect(verdict.form).toBe('plain');
 
     const { container, unmount } = view(panel({ plan: slotPlan(true), report }));
     const text = container.textContent;
@@ -981,6 +983,50 @@ describe('SlotsView: the frame-rate row action', () => {
     expect(open.textContent).toContain('Patch recovery R too (the bank that runs)');
     /* The warning states; the confirmation is not gated by it. */
     expect(buttonByText(open, 'Yes — patch slot B').disabled).toBe(false);
+    unmount();
+  });
+
+  it('on a 2016 Compact PRO, warns that recovery R’s 18 Hz patch does not run while the blank record runs slot A', async () => {
+    /* The owner's 1.0.3.0 camera (TESTING.md 42.84): R patched to 18 Hz from this page, cfg[0] 0xFFFFFFFF,
+     * slot A entered; the camera stayed at 9 Hz and the page said nothing. The warning is core's own
+     * function on this report, with only "which image holds a patch" seamed (no patched 1.0.3.0 image is
+     * in the repo). */
+    const actual = await vi.importActual<typeof CoreModule>('@seek-fw/core');
+    const report = slotReport2016(base);
+    bootWarning.value = actual.fpsBootWarningOf(report, {
+      heldBy: (plain) => (plain === PLAIN_R_2016 ? { hz: 18, what: 'compact_pro-1.0.3.0' } : null),
+      patchBlock: () => null,
+    });
+    const planFps = vi.fn((): FpsPlan => offer(18));
+    const { container, unmount } = view(panel({ plan: report.plan, report, planFps }));
+    const text = container.textContent;
+    expect(text).toContain(
+      'The camera boots slot A. The boot-config word is 0xFFFFFFFF, so the bootloader tries slot A first, and it holds an image the bootloader accepts.',
+    );
+    expect(text).toContain(
+      'Recovery R holds a frame-rate patch, but it does not run, so the patch does not take effect.',
+    );
+    expect(text).toContain(
+      'Patch slot A too (the bank that runs): that is what makes the frame-rate patch take effect.',
+    );
+    /* The device panel names the next start; the write keys are the 2016 form, never the banner. */
+    expect(text).toContain(
+      'Bank A — the boot-config word is 0xFFFFFFFF, so the bootloader tries slot A first, and it holds an image the bootloader accepts',
+    );
+    expect(text).toContain('Staged as');
+    expect(text).not.toContain('No bank of this camera can be written');
+    /* Each bank's verdict comes from the check key: bootable, not "unknown". */
+    expect(bankRows(container)[2]?.textContent).toContain('bootable — the bootloader can key it');
+    unmount();
+  });
+
+  it('on a 2016 Compact PRO whose check key is not named, says why each bank’s bootability is unknown', () => {
+    const report = slotReport2016(base, { checkKeyNamed: false });
+    const { container, unmount } = view(panel({ plan: report.plan, report }));
+    expect(bankRows(container)[0]?.textContent).toContain(
+      'unknown — the key its bootloader checks a bank under was not named on this read',
+    );
+    expect(container.textContent).not.toContain("the bootloader's key table was not read");
     unmount();
   });
 

@@ -180,7 +180,10 @@ describe('SlotsView: the keys panel says what the write is keyed by, on each lin
     };
     const { container, unmount } = view(panel({ plan: slotPlan(true), report: slotReport(state) }));
     const text = container.textContent;
-    expect(text).toContain('the camera’s keys are not used');
+    /* The 2016 form (core's STAGED_UNDER_IMAGE_BLOCK_0, TESTING.md 42.84): staged under the image's own
+     * key block 0, stored by the camera under the key its bootloader checks. */
+    expect(text).toContain("this camera's keys are not used");
+    expect(text).toContain('Stored as');
     expect(text).not.toContain('derived from the booted bank');
     expect(text).not.toContain('No bank of this camera can be written');
     unmount();

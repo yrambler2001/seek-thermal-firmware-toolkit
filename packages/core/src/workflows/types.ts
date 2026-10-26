@@ -400,21 +400,24 @@ export interface DeviceState {
 
 /**
  * The key a 2016 bootloader checks a bank under: `image_sum_ok_device_seeded` decrypts the bank under the
- * device-seeded stream and wants a zero word sum. From bootloader 1.1.0.0 on that stream is seeded from the
- * bootloader's own key block 1 (FW-V1 targets/compact_pro_9hz_1_0_3_0_bootloader/src/crypto.c). The
- * bootloader block is refused on every channel on this line, so the key is read from the bank the
- * bootloader checked and entered, not from the table.
+ * device-seeded stream and wants a zero word sum. On a bootloader whose version word is above 1.1.0.0 (the
+ * 1.0.3.0 9 Hz and FF bootloaders are 1.2.0.0) that stream is seeded from the bootloader's own key block 1 (FW-V1
+ * targets/compact_pro_9hz_1_0_3_0_bootloader/src/crypto.c:233-249). The bootloader block is refused on every
+ * channel on this line, so the key is read from the bank the bootloader checked and entered, not from a
+ * table (device-info.ts `checkKeyOf`).
  */
 export interface CheckKey {
   /** How the page names it ("key block 1"), or null when the read could not name it. */
   readonly name: string | null;
   /** The 16 key bytes, or null when not named. */
   readonly key: Uint8Array | null;
-  /** The bank that named it: the one the camera reports it entered. */
+  /** The bank that named it: the one the camera reports it entered. Null when not named. */
   readonly from: SlotKey | null;
   /** The image pair whose block 1 it is, when it is a known one (preservation/patch.ts KEY_PAIRS). */
   readonly pair: string | null;
-  /** One sentence: the key and how it was named, or why it was not. */
+  /** Why the key could not be named, as a clause ("the camera's active-slot word … could not be read"); null when named. */
+  readonly unnamedWhy: string | null;
+  /** One sentence for the read's log: the key and how it was named, or why it was not. */
   readonly why: string;
 }
 

@@ -28,7 +28,9 @@ import {
   deriveWriteKeys,
   gateWithoutAppKeys,
   slotWriteRefusal,
+  STAGED_UNDER_IMAGE_BLOCK_0,
   stagesUnderCameraKey,
+  storedUnderCheckKey,
   uploadLandsUnder,
   writeBannerOf,
   type KeyRef,
@@ -456,6 +458,138 @@ describe('the 2016 line stages from the image alone', () => {
   });
 });
 
+/* ==================================================================== *
+ * The 2016 Compact PRO (TESTING.md 42.84). Its writes stage each image under the image's own key
+ * block 0, and the camera re-keys the upload into the key its bootloader checks a bank under
+ * (device-info.ts `checkKeyOf`). Since the read names the booted bank on this line (`state.boot`), the
+ * derivation used to run on it and refused: "the booted bank A decrypts under key block 1, but this
+ * camera's key table does not carry that key".
+ * ==================================================================== */
+
+/** A 1.0.3.0 camera read under compact-2016, with its check key named from slot A, or not. */
+function camera2016(options: { readonly checkKeyNamed?: boolean } = {}): DeviceState {
+  const named = options.checkKeyNamed ?? true;
+  const keyName = named ? 'key block 1' : 'unknown key';
+  const banks = (['a', 'b', 'r'] as const).map((key) =>
+    slot({
+      key,
+      plain: imageWith([]),
+      keyName,
+      bootable: named,
+      bootability: named ? 'bootable' : 'unknown',
+    }),
+  );
+  const checkKey = named
+    ? {
+        name: 'key block 1',
+        key: BOOT_B,
+        from: 'a' as const,
+        pair: null,
+        unnamedWhy: null,
+        why: 'check key: key block 1',
+      }
+    : {
+        name: null,
+        key: null,
+        from: null,
+        pair: null,
+        unnamedWhy: "the camera's active-slot word (fw info roots, selector 10) could not be read",
+        why: 'check key not named',
+      };
+  const classic = [
+    "this camera's key table could not be confirmed",
+    '2016 Compact Pro does not support flashing: the classic write path has nothing for its banks',
+  ];
+  return {
+    version: '1.0.3.0',
+    serial: null,
+    profile: getProfile('compact-2016'),
+    slots: banks,
+    byKey: new Map(banks.map((s) => [s.key, s])),
+    boot: named ? { booted: 'a', target: 'b' } : null,
+    keyTable: null,
+    keyWhiteningK: 0,
+    storeKey: {
+      name: checkKey.name ?? 'the key its bootloader checks a bank under',
+      key: checkKey.key,
+      programmed: false,
+    },
+    deviceKeySlot: null,
+    canFlash: false,
+    flashBlockedBy: classic,
+    classicWriterBlockedBy: classic,
+    upgradeBlockedBy: [],
+    appKeysBlock: null,
+    plainChain: false,
+    checkKey,
+  } as unknown as DeviceState;
+}
+
+describe('the 2016 line: the image under its own key block 0, stored by the camera under the check key', () => {
+  it('derives nothing from the camera and refuses nothing, though the booted bank is named', () => {
+    const state = camera2016();
+    const keys = deriveWriteKeys(state);
+    expect(keys.refusal).toBeNull();
+    expect(keys.form).toBe('image-block-0');
+    expect(keys.booted).toBe('a');
+    expect(keys.bootedKeyName).toBe('key block 1');
+    expect(keys.atRest?.name).toBe('key block 1');
+    expect(equalBytes(keys.atRest?.key ?? new Uint8Array(), BOOT_B)).toBe(true);
+    expect(keys.application).toBeNull();
+    expect(keys.store).toBeNull();
+    expect(keys.masks).toEqual([]);
+    expect(keys.evidence.join(' ')).not.toContain('key table does not carry that key');
+    expect(keys.evidence[0]).toBe(
+      'the 2016 Compact PRO line: an upload is the image XORed with the keystream of its own key ' +
+        'block 0, found in the image by value, so no key of this camera builds it',
+    );
+    expect(keys.evidence[1]).toContain(
+      'the key its bootloader checks a bank under (named from slot A, the bank the camera reports it entered)',
+    );
+    expect(slotWriteRefusal(state)).toBeNull();
+    expect(writeBannerOf(state)).toBeNull();
+  });
+
+  it('says the stored key is not named, and still refuses nothing, when the read could not name it', () => {
+    const state = camera2016({ checkKeyNamed: false });
+    const keys = deriveWriteKeys(state);
+    expect(keys.refusal).toBeNull();
+    expect(keys.form).toBe('image-block-0');
+    expect(keys.atRest).toBeNull();
+    expect(keys.evidence[1]).toBe(
+      'the camera decrypts the upload with that key and re-encrypts it under the key its bootloader ' +
+        "checks a bank under; that key was not named on this read (the camera's active-slot word (fw " +
+        'info roots, selector 10) could not be read), and the write does not need it: the bank is read ' +
+        'back as the image it decrypts to',
+    );
+    expect(writeBannerOf(state)).toBeNull();
+  });
+
+  it('says how the upload is staged and what the bank is stored under, in the words the page and the CLI show', () => {
+    expect(STAGED_UNDER_IMAGE_BLOCK_0).toBe(
+      "the image under its own key block 0 (found in the image by value), to any bank; this camera's keys are not used",
+    );
+    expect(storedUnderCheckKey(deriveWriteKeys(camera2016()))).toBe(
+      'key block 1, the key its bootloader checks a bank under; the camera re-encrypts the upload under it',
+    );
+    expect(storedUnderCheckKey(deriveWriteKeys(camera2016({ checkKeyNamed: false })))).toBe(
+      'the key its bootloader checks a bank under (not named on this read); the camera re-encrypts the upload under it',
+    );
+  });
+
+  it('is the same form on a 2016 camera read under legacy-auth, where no check key is named', () => {
+    const state = {
+      ...camera2016(),
+      profile: getProfile('legacy-auth'),
+      checkKey: null,
+    } as DeviceState;
+    const keys = deriveWriteKeys(state);
+    expect(keys.form).toBe('image-block-0');
+    expect(keys.refusal).toBeNull();
+    expect(keys.atRest).toBeNull();
+  });
+});
+
 describe('the 2016 staging note says what staging needs', () => {
   it('no longer claims the keystream comes from the target bank', async () => {
     const { bankNotes } = await import('../../src/slots/capability-notes.js');
@@ -616,7 +750,7 @@ describe('the 2014 plaintext chain: no key is derived, so no bank is refused for
     const state = plainChainCamera();
     const keys = deriveWriteKeys(state);
     expect(keys.refusal).toBeNull();
-    expect(keys.plainChain).toBe(true);
+    expect(keys.form).toBe('plain');
     expect(keys.atRest).toBeNull();
     expect(keys.masks).toEqual([]);
     expect(slotWriteRefusal(state)).toBeNull();

@@ -286,7 +286,7 @@ for (const subject of rows) {
         const keys = deriveWriteKeys(report.state);
         diagnose(
           subject.name,
-          `banner: ${banner ?? '(none)'}; keys: plainChain=${String(keys.plainChain)} atRest=${keys.atRest?.name ?? '(none)'}`,
+          `banner: ${banner ?? '(none)'}; keys: form=${keys.form} atRest=${keys.atRest?.name ?? '(none)'}`,
         );
         if (subject.banner === 'none') {
           expect(banner, `${subject.name}: the banner`).toBeNull();

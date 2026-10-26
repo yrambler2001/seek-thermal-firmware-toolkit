@@ -220,7 +220,8 @@ describe('predatesDumpProtocol', () => {
 
 describe('evidenceFromChannelProbe', () => {
   it('turns a refused plain arm into the evidence that names legacy-auth', async () => {
-    const camera = cameraFor([1, 0, 3, 0], {
+    /* A Compact build (1.3.0.8): the locked handler, and a version on the 2014 Compact's line. */
+    const camera = cameraFor([1, 3, 0, 8], {
       authBanks: [PROBE_PROTECTED_SUBCMD],
       authToken: OLD_FW_UNLOCK_TOKEN,
     });
@@ -231,6 +232,22 @@ describe('evidenceFromChannelProbe', () => {
     expect(evidence.authSelectorWorks).toBe(true);
     const detection = detectProfile(evidence);
     expect(detection.best.profile.id).toBe('legacy-auth');
+    expect(detection.ambiguous).toBe(false);
+  });
+
+  it('names compact-2016 for the same channel answers on the 2016 Compact PRO 1.0.3.x line', async () => {
+    /* The two share the locked handler, so the channel answers are the same; the version picks the cipher
+     * the first read checks the banks against (TESTING.md 42.84). */
+    const camera = cameraFor([1, 0, 3, 0], {
+      authBanks: [PROBE_PROTECTED_SUBCMD],
+      authToken: OLD_FW_UNLOCK_TOKEN,
+    });
+    await camera.open();
+    const evidence = evidenceFromChannelProbe(await probeSelectorChannel(new SeekDevice(camera)));
+
+    expect(evidence.plainSelectorRefused).toBe(true);
+    const detection = detectProfile(evidence);
+    expect(detection.best.profile.id).toBe('compact-2016');
     expect(detection.ambiguous).toBe(false);
   });
 
@@ -280,7 +297,8 @@ describe('identifyCamera: detection on an attached camera, for any front end', (
       plainSelectorRefused: true,
       authSelectorWorks: true,
     });
-    expect(identification.detection.best.profile.id).toBe('legacy-auth');
+    /* 1.0.3.0 is the 2016 Compact PRO's line: its version picks compact-2016 at the probe (TESTING.md 42.84). */
+    expect(identification.detection.best.profile.id).toBe('compact-2016');
     expect(identification.detection).toEqual(detectProfile(identification.evidence));
   });
 

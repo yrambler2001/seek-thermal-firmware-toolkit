@@ -12,12 +12,13 @@ import type { ReactElement } from 'react';
 import { KeyRound, Microchip } from 'lucide-react';
 import {
   bootedSlot,
-  onPlaintextChain,
   bytesToHex,
   hexUp,
+  nextStartReportOf,
   targetSlot,
   upgradeTargetWarning,
   type DeviceState,
+  type SlotKey,
   type SlotState,
 } from '@seek-fw/core';
 import { KeyValue, type KeyValueRow } from './KeyValue';
@@ -30,7 +31,12 @@ import { Alert } from './ui/alert';
  * "slot A"; the same bank must carry the same name on the same page (TESTING.md 42.19).
  */
 function bankLabel(slot: SlotState): string {
-  return slot.key === 'r' ? 'Recovery bank R' : `Bank ${slot.key.toUpperCase()}`;
+  return bankLabelOf(slot.key);
+}
+
+/** The same name, from the bank's key alone. */
+function bankLabelOf(key: SlotKey): string {
+  return key === 'r' ? 'Recovery bank R' : `Bank ${key.toUpperCase()}`;
 }
 
 function perDeviceKey(state: DeviceState): string | null {
@@ -82,11 +88,12 @@ export function DeviceInfoPanel({ state }: DeviceInfoPanelProps): ReactElement {
     ['Serial', state.serial],
     ['USB link', state.usbSpeed],
     ['Boot config', cfg0Text],
-    /* On the 2014 plaintext chain the name is the active-slot word's, not a boot record (TESTING.md 42.10). */
-    [
-      onPlaintextChain(state.profile, state.version) ? 'Named booted' : 'Booted from',
-      booted === null ? null : bankLabel(booted),
-    ],
+    /* On the locked line the bank is the active-slot word's, which is the bootloader's own record of the
+     * bank it entered (TESTING.md 42.53, 42.56: measured on 1.3.0.0 and 1.0.3.0 for boot words 0, 1, 2). */
+    ['Booted from', booted === null ? null : bankLabel(booted)],
+    /* The bank the next start runs, where the boot rule and each bank's check are decoded (core's
+     * `nextStartReportOf`: the 2014 plaintext chain and the 2016 Compact PRO); hidden elsewhere. */
+    ['Next start', nextStartReportOf(state, bankLabelOf)],
     /* The camera's own upgrade choice. This page writes the bank it is given, not this one. */
     [
       'Upgrade target (its own upgrade)',

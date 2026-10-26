@@ -7,6 +7,7 @@ import { describe, expect, it } from 'vitest';
 import type { DeviceState } from '@seek-fw/core';
 import { render } from '@/test-helpers';
 import { fakeDeviceState } from '../test-fixtures';
+import { deviceState2016 } from '../test-slots';
 import { DeviceInfoPanel } from './DeviceInfoPanel';
 
 const WARNING = 'nothing here stops an upgrade';
@@ -61,6 +62,27 @@ describe('DeviceInfoPanel: the upgrade target that is the booted bank', () => {
     );
     expect(container.textContent).toContain(WARNING);
     expect(container.textContent).not.toContain('is both the bank the camera booted from');
+    unmount();
+  });
+});
+
+describe('DeviceInfoPanel on the locked line: the booted bank and the next start (TESTING.md 42.84)', () => {
+  it('names the bank the 2016 camera entered, and the bank its next start runs, with the page labels', async () => {
+    const state = deviceState2016(await fakeDeviceState());
+    const { container, unmount } = render(<DeviceInfoPanel state={state} />);
+    const text = container.textContent;
+    expect(text).toMatch(/Booted from\W*Bank A/);
+    expect(text).toContain(
+      'Bank A — the boot-config word is 0xFFFFFFFF, so the bootloader tries slot A first, and it holds an image the bootloader accepts',
+    );
+    expect(text).not.toContain('Named booted');
+    unmount();
+  });
+
+  it('shows no next start where the boot rule is not decoded (the modern line)', async () => {
+    const state = await fakeDeviceState();
+    const { container, unmount } = render(<DeviceInfoPanel state={state} />);
+    expect(container.textContent).not.toContain('Next start');
     unmount();
   });
 });

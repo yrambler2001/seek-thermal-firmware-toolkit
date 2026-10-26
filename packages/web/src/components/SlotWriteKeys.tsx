@@ -1,9 +1,12 @@
 /* ====================================================================
- * The keys the slot writes use, said before anything is picked: the key the
- * booted bank holds, that every other bank is written the same way (derived
- * from the booted bank), and the measured reason when the camera cannot be
- * written under those keys. The verdict is core's (`deriveWriteKeys`,
- * `slotWriteRefusal`); this component only shows it.
+ * The keys the slot writes use, said before anything is picked, in the form
+ * the line uses (core's `WriteKeyForm`): the 2014 plaintext chain's image as it
+ * is; the 2016 Compact PRO's image under its own key block 0, which the camera
+ * stores under the key its bootloader checks; or the key the booted bank holds,
+ * from which every bank's keys are derived. And the measured reason when the
+ * camera cannot be written. The verdict is core's (`deriveWriteKeys`,
+ * `slotWriteRefusal`); this component only shows it. The CLI's `slots list`
+ * prints the same verdict (`writeKeyLines`).
  * ==================================================================== */
 
 import type { ReactElement } from 'react';
@@ -11,9 +14,12 @@ import { KeyRound } from 'lucide-react';
 import {
   derivedKeyLine,
   deriveWriteKeys,
+  STAGED_UNDER_IMAGE_BLOCK_0,
   stagesUnderCameraKey,
+  storedUnderCheckKey,
   writeBannerOf,
   type SlotsReport,
+  type WriteKeyForm,
 } from '@seek-fw/core';
 import { KeyValue } from './KeyValue';
 import { Panel, PanelTitle } from './Panel';
@@ -23,8 +29,12 @@ import { Alert } from './ui/alert';
 export interface WriteKeysVerdict {
   /** The measured reason no bank can be written, or null. */
   readonly refusal: string | null;
-  /** The 2014 plaintext chain: every bank is stored plain, so no upload key is derived (not a refusal). */
-  readonly plainChain: boolean;
+  /**
+   * How the keys are chosen: 'plain' on the 2014 plaintext chain (no key is derived; not a refusal),
+   * 'image-block-0' on the 2016 Compact PRO (the image's own key block 0; the camera stores under the key its
+   * bootloader checks), 'derived' on the modern line.
+   */
+  readonly form: WriteKeyForm;
   /**
    * Whether this build's writes are sent under the camera's own key (the modern Key A line). False on the 2016
    * keystream line and the 1.3.0.8 FF build, which stage each image under the key pair it carries.
@@ -32,10 +42,15 @@ export interface WriteKeysVerdict {
   readonly underCameraKey: boolean;
   /** The booted bank's name, as the page shows it ("slot A"), or null when none is named. */
   readonly bootedName: string | null;
-  /** The key every bank is written under (e.g. "Key B"). */
+  /**
+   * The key every bank is stored under (e.g. "Key B"); on the 2016 line the key its bootloader checks a bank
+   * under ("key block 1"), or null when the read did not name it.
+   */
   readonly keyName: string | null;
   /** The key the booted bank holds (e.g. "Key A"), or null when the page cannot name it. */
   readonly bootedKeyName: string | null;
+  /** The 2016 line: what a written bank is stored under, in core's words (`storedUnderCheckKey`); else null. */
+  readonly storedAs: string | null;
   /** One line per fact the derivation relied on. */
   readonly evidence: readonly string[];
 }
@@ -51,11 +66,12 @@ export function writeKeysVerdictOf(report: SlotsReport): WriteKeysVerdict {
   return {
     /* The banner's text is core's (writeBannerOf): the same words the CLI's JSON carries. */
     refusal: writeBannerOf(report.state),
-    plainChain: keys.plainChain,
+    form: keys.form,
     underCameraKey: stagesUnderCameraKey(report.state),
     bootedName: booted,
     keyName: keys.atRest?.name ?? null,
     bootedKeyName: keys.bootedKeyName,
+    storedAs: keys.form === 'image-block-0' ? storedUnderCheckKey(keys) : null,
     evidence: keys.evidence,
   };
 }
@@ -75,7 +91,7 @@ export function SlotWriteKeys({ verdict }: SlotWriteKeysProps): ReactElement {
       </Alert>
     );
   }
-  if (verdict.plainChain) {
+  if (verdict.form === 'plain') {
     return (
       <Panel className="mt-3">
         <PanelTitle icon={<KeyRound />}>Keys for the writes</PanelTitle>
@@ -97,8 +113,32 @@ export function SlotWriteKeys({ verdict }: SlotWriteKeysProps): ReactElement {
       </Panel>
     );
   }
+  if (verdict.form === 'image-block-0') {
+    /* The 2016 Compact PRO: staged under the image's own key block 0, stored by the camera under the key its
+     * bootloader checks a bank under (core's evidence names it, and the bank it was named from). */
+    return (
+      <Panel className="mt-3">
+        <PanelTitle icon={<KeyRound />}>Keys for the writes</PanelTitle>
+        <KeyValue
+          rows={[
+            ['Staged as', STAGED_UNDER_IMAGE_BLOCK_0],
+            ['Stored as', verdict.storedAs ?? storedUnderCheckKey({ atRest: null })],
+          ]}
+        />
+        {verdict.evidence.length > 0 && (
+          <Prose>
+            <ul>
+              {verdict.evidence.map((line) => (
+                <li key={line}>{line}</li>
+              ))}
+            </ul>
+          </Prose>
+        )}
+      </Panel>
+    );
+  }
   if (!verdict.underCameraKey) {
-    /* The 2016 keystream line and the 1.3.0.8 FF build: the camera's key is not used, so the derivation's
+    /* The 1.3.0.8 FF build with no bank stored plain: the camera's key is not used, so the derivation's
      * evidence (which describes the booted bank's key) is not shown: it would describe a write this build
      * does not make. */
     return (

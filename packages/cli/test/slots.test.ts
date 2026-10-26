@@ -142,7 +142,15 @@ function deviceStateFake(serial: string | null = 'SN-1'): DeviceState {
     | 'storeKey'
     | 'deviceKeySlot'
     | 'keyTable'
+    | 'profile'
+    | 'version'
+    | 'plainChain'
   > = {
+    /* The fixtures' camera reports 4.9.5.0 under the `generic` profile: no slot family, so none of the
+     * line-specific verdicts (the locked line's boot section, the 2016 staging) applies to it. */
+    profile: getProfile('generic'),
+    version: '4.9.5.0',
+    plainChain: false,
     description: {
       vendorId: 0x289d,
       productId: 0x0001,
@@ -1626,7 +1634,7 @@ describe('the 2014 plaintext chain', () => {
     expect(text).not.toContain('No bank');
     expect(text).toContain('every bank is stored plain, so none holds a key');
     expect(text).not.toContain('derived from the booted bank');
-    expect(listResult(bench).writeKeys).toMatchObject({ refused: null, plainChain: true });
+    expect(listResult(bench).writeKeys).toMatchObject({ refused: null, form: 'plain' });
   });
 
   it('the list shows a plain bank as stored plain, not under a key nobody knows', () => {
@@ -2175,7 +2183,7 @@ describe('the boot word and the frame-rate warning', () => {
     );
   });
 
-  it('prints no boot section on a line that is not the 2014 plaintext chain', () => {
+  it('prints no boot section on a line whose boot rule is not decoded', () => {
     const plain = reportOf({ booted: 'a' });
     expect(listLines(plain, false, null).join('\n')).not.toContain('boot-config word');
     expect(bootLines(plain, false, null)).toEqual([]);
@@ -2254,5 +2262,197 @@ describe('the Compact PRO 4.9.1.15 rate, as the CLI prints it', () => {
     expect(fpsQuestion(reportOf({ booted: 'b' }), 'a', plan)).toContain(
       'from 9 Hz to 18 Hz? The bank is saved first. [y/N] ',
     );
+  });
+});
+
+/* ==================================================================== *
+ * The 2016 Compact PRO (TESTING.md 42.84): the Boot section, the frame-rate warning and the write keys,
+ * which `slots list` printed only for the 2014 chain (the Boot section) or as a refusal (the write keys)
+ * ==================================================================== */
+
+/** The key the 2016 fixture's check key holds: key block 1 of the 1.0.3.x 9 Hz pair. */
+const BLOCK_1_HEX = 'faacb3c6f1412469bd122fb82d78160d';
+
+/**
+ * A 1.0.3.0 camera read under compact-2016, as the analysis would report it: the banks' verdicts from the
+ * check key (named from slot A, or not), the boot-config word and the active-slot word, and the banks in
+ * `patched` holding a marker the test's seam reads as a frame-rate patch.
+ */
+function report2016(options: {
+  readonly cfg0: number | null;
+  readonly activeSlotWord?: number | null;
+  readonly checkKeyNamed?: boolean;
+  readonly patched?: readonly SlotKey[];
+}): {
+  readonly report: SlotsReport;
+  readonly heldBy: (plain: Uint8Array | null) => { hz: number; what: string } | null;
+} {
+  const named = options.checkKeyNamed ?? true;
+  const base = reportOf({
+    booted: named ? 'a' : null,
+    entries: {
+      a: { staging: 'slot-keystream-ciphertext' },
+      b: { staging: 'slot-keystream-ciphertext' },
+      r: { staging: 'slot-keystream-ciphertext' },
+    },
+  });
+  const patchedImages = new Set<Uint8Array>();
+  const byKey = new Map<SlotKey, SlotState>();
+  const slots = base.slots.map((view): SlotView => {
+    const key = view.entry.key;
+    const plain = new Uint8Array(8);
+    if (options.patched?.includes(key) === true) patchedImages.add(plain);
+    const state = {
+      ...(view.state ?? {}),
+      key,
+      raw: new Uint8Array(0x10000),
+      blank: false,
+      unread: false,
+      plain,
+      keyName: named ? 'key block 1' : 'unknown key',
+      bootable: named,
+      bootability: named ? 'bootable' : 'unknown',
+    } as unknown as SlotState;
+    byKey.set(key, state);
+    return { ...view, state, content: 'image' };
+  });
+  const checkKey = named
+    ? {
+        name: 'key block 1',
+        key: Uint8Array.from(BLOCK_1_HEX.match(/../g) ?? [], (h) => Number.parseInt(h, 16)),
+        from: 'a',
+        pair: 'the Compact PRO 1.0.3.x 9 Hz pair',
+        unnamedWhy: null,
+        why: 'check key: key block 1',
+      }
+    : {
+        name: null,
+        key: null,
+        from: null,
+        pair: null,
+        unnamedWhy: "the camera's active-slot word (fw info roots, selector 10) could not be read",
+        why: 'check key not named',
+      };
+  const state = {
+    ...base.state,
+    profile: getProfile('compact-2016'),
+    plainChain: false,
+    version: '1.0.3.0',
+    cfg0: options.cfg0,
+    activeSlotWord: options.activeSlotWord === undefined ? 0 : options.activeSlotWord,
+    byKey,
+    slots: [...byKey.values()],
+    boot: named ? { booted: 'a', target: 'b' } : null,
+    checkKey,
+    upgradeBlockedBy: [],
+    classicWriterBlockedBy: [],
+  } as unknown as DeviceState;
+  const heldBy = (plain: Uint8Array | null) =>
+    plain !== null && patchedImages.has(plain) ? { hz: 18, what: 'marker' } : null;
+  return { report: { ...base, state, slots }, heldBy };
+}
+
+describe('slots list on the 2016 Compact PRO', () => {
+  it('prints the Boot section: the word, the next start, the last start and the check key', () => {
+    const { report } = report2016({ cfg0: 0xffffffff });
+    const text = bootLines(report, false, null).join('\n');
+    expect(text).toMatch(/boot-config word\s+0xFFFFFFFF — slot A first, then B, then recovery R/);
+    expect(text).toMatch(/next start runs\s+slot A/);
+    expect(text).toMatch(
+      /last start\s+the camera reports it entered slot A \(active-slot word 0\)/,
+    );
+    expect(text).toMatch(
+      new RegExp(
+        `check key\\s+key block 1 ${BLOCK_1_HEX} \\(the Compact PRO 1\\.0\\.3\\.x 9 Hz pair's block 1\\), named from slot A`,
+      ),
+    );
+    expect(text).toContain(
+      '· the boot-config word is 0xFFFFFFFF, so the bootloader tries slot A first, and it holds an image the bootloader accepts.',
+    );
+  });
+
+  it('warns when recovery R holds the 18 Hz patch and the blank record runs slot A', () => {
+    const { report, heldBy } = report2016({ cfg0: 0xffffffff, patched: ['r'] });
+    const warning = fpsBootWarningOf(report, { heldBy, patchBlock: () => null });
+    const text = listLines(report, false, warning).join('\n');
+    expect(text).toContain('! The camera boots slot A.');
+    expect(text).toContain(
+      '! Recovery R holds a frame-rate patch, but it does not run, so the patch does not take effect.',
+    );
+    expect(text).toContain(
+      '! Patch slot A too (the bank that runs): that is what makes the frame-rate patch take effect.',
+    );
+  });
+
+  it('says the next start is not known, and why, when the check key was not named', () => {
+    const { report } = report2016({ cfg0: 0xffffffff, checkKeyNamed: false, activeSlotWord: null });
+    const text = bootLines(report, false, null).join('\n');
+    expect(text).toMatch(/next start runs\s+not known/);
+    expect(text).toMatch(/last start\s+not read/);
+    expect(text).toMatch(
+      /check key\s+not named — the camera's active-slot word \(fw info roots, selector 10\) could not be read/,
+    );
+  });
+
+  it('prints the write keys as staged under the image’s key block 0 and stored under the check key, never refused', () => {
+    const { report } = report2016({ cfg0: 0xffffffff });
+    const text = writeKeyLines(report, false).join('\n');
+    expect(text).toMatch(
+      /staged as\s+the image under its own key block 0 \(found in the image by value\), to any bank; this camera's keys are not used/,
+    );
+    expect(text).toMatch(
+      /stored as\s+key block 1, the key its bootloader checks a bank under; the camera re-encrypts the upload under it/,
+    );
+    expect(text).not.toContain('refused');
+    expect(text).not.toContain('key table does not carry that key');
+    const unnamed = writeKeyLines(
+      report2016({ cfg0: 0xffffffff, checkKeyNamed: false }).report,
+      false,
+    );
+    expect(unnamed.join('\n')).toMatch(
+      /stored as\s+the key its bootloader checks a bank under \(not named on this read\)/,
+    );
+  });
+
+  it('carries the boot choice, the check key and the write-key form in the list JSON', () => {
+    const { report } = report2016({ cfg0: 0xffffffff });
+    const list = listResult(report);
+    expect(list.boot).toMatchObject({
+      word: '0xFFFFFFFF',
+      rule: 'slot A first, then B, then recovery R',
+      runs: 'a',
+      reportedBooted: 'a',
+      checkKey: {
+        name: 'key block 1',
+        key: BLOCK_1_HEX,
+        from: 'a',
+        pair: 'the Compact PRO 1.0.3.x 9 Hz pair',
+        unnamedWhy: null,
+      },
+    });
+    expect(list.writeKeys).toMatchObject({
+      refused: null,
+      booted: 'a',
+      key: 'key block 1',
+      form: 'image-block-0',
+    });
+  });
+
+  it('asks for the acknowledgement on the booted bank A, and keeps it on recovery R', () => {
+    const { report } = report2016({ cfg0: 0xffffffff });
+    const viewA = report.slots.find((view) => view.entry.key === 'a');
+    const viewB = report.slots.find((view) => view.entry.key === 'b');
+    const viewR = report.slots.find((view) => view.entry.key === 'r');
+    if (viewA === undefined || viewB === undefined || viewR === undefined)
+      throw new Error('no view');
+    const active = {
+      ...report,
+      slots: report.slots.map((v) => ({ ...v, active: v.entry.key === 'a' })),
+    };
+    expect(bootRisk(active, { ...viewA, active: true })).toBe(
+      'bank A is the bank the camera boots now; a bad write there can stop the camera booting',
+    );
+    expect(bootRisk(active, { ...viewB, active: false })).toBeNull();
+    expect(bootRisk(active, { ...viewR, active: false })).toMatch(/bank R is the recovery bank/);
   });
 });

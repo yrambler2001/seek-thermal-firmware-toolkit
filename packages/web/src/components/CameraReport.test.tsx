@@ -4,9 +4,10 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import type { DeviceState } from '@seek-fw/core';
+import { keyReportRows, type DeviceState } from '@seek-fw/core';
 import { render } from '@/test-helpers';
 import { fakeDeviceState } from '../test-fixtures';
+import { BLOCK_1_2016, deviceState2016 } from '../test-slots';
 import { CameraReport } from './CameraReport';
 
 const WARNING = 'nothing here stops an upgrade';
@@ -46,6 +47,88 @@ describe('CameraReport: the upgrade target warning', () => {
     const otherBank = { ...state, boot: { booted: 'a', target: 'b' } } as DeviceState;
     const { container, unmount } = render(<CameraReport state={otherBank} />);
     expect(container.textContent).not.toContain(WARNING);
+    unmount();
+  });
+});
+
+describe('CameraReport on the 2016 Compact PRO (TESTING.md 42.84)', () => {
+  it('says the booted bank is the bootloader’s record, and names the next start', async () => {
+    const state = deviceState2016(await fakeDeviceState());
+    const { container, unmount } = render(<CameraReport state={state} />);
+    const text = container.textContent;
+    expect(text).toContain(
+      'App image bank 0x14050000 — the bank the bootloader entered at this start, as it records it (active-slot word 0)',
+    );
+    expect(text).toContain('Next start');
+    expect(text).toContain(
+      'App image bank 0x14050000 — the boot-config word is 0xFFFFFFFF, so the bootloader tries slot A first, and it holds an image the bootloader accepts',
+    );
+    expect(text).not.toContain('not a boot record');
+    unmount();
+  });
+
+  it('names the check key, says the key table is refused, and says the store key is the check key', async () => {
+    const state = deviceState2016(await fakeDeviceState());
+    const { container, unmount } = render(<CameraReport state={state} />);
+    const text = container.textContent;
+    expect(text).toContain('Check key');
+    expect(text).toContain(
+      `key block 1 ${BLOCK_1_2016} (the Compact PRO 1.0.3.x 9 Hz pair's block 1), named from slot A, the bank the camera reports it entered after the bootloader's check`,
+    );
+    expect(text).toContain(
+      'not read — the bootloader block (0x14000000) is refused on every channel on this line',
+    );
+    expect(text).toContain(
+      'key block 1: the application stores every bank it writes under the key its bootloader checks',
+    );
+    /* The page's rows are core's rows, labelled with a capital: the CLI prints the same words. */
+    for (const [label, value] of keyReportRows(state)) {
+      expect(text).toContain(label.charAt(0).toUpperCase() + label.slice(1));
+      expect(text).toContain(value);
+    }
+    expect(text).not.toContain('Key A');
+    expect(text).not.toContain('candidate(s), none confirmed');
+    unmount();
+  });
+
+  it('says the banks are written one at a time, and no whole-image write exists, with no "flashing disabled"', async () => {
+    const state = deviceState2016(await fakeDeviceState());
+    const { container, unmount } = render(<CameraReport state={state} />);
+    const text = container.textContent;
+    expect(text).toContain(
+      "One bank at a time: the Slots tab writes or patches one bank of this camera, each staged under its image's own key block 0, and each write asks first. A whole-image write is not available on this line.",
+    );
+    expect(text).not.toContain('Not available for a whole-image write');
+    expect(text).not.toContain('does not support flashing');
+    expect(text).not.toContain('key table could not be confirmed');
+    expect(text).not.toContain('The Slots tab refuses every bank');
+    unmount();
+  });
+
+  it('lists a reason that refuses every bank for the slot writer, and only that one', async () => {
+    const base = deviceState2016(await fakeDeviceState());
+    const refused = {
+      ...base,
+      flashBlockedBy: [...base.flashBlockedBy, 'no slot decrypts to the 0x00000000 acceptance sum'],
+    } as DeviceState;
+    const { container, unmount } = render(<CameraReport state={refused} />);
+    const text = container.textContent;
+    expect(text).toContain('The Slots tab refuses every bank of this camera:');
+    expect(text).toContain('no slot decrypts to the 0x00000000 acceptance sum');
+    expect(text).not.toContain('does not support flashing');
+    unmount();
+  });
+
+  it('says why, when the camera does not say which bank it entered', async () => {
+    const state = deviceState2016(await fakeDeviceState(), { checkKeyNamed: false });
+    const { container, unmount } = render(<CameraReport state={state} />);
+    const text = container.textContent;
+    expect(text).toContain(
+      "not named — the camera's active-slot word (fw info roots, selector 10) could not be read",
+    );
+    expect(text).toContain(
+      'not known — the boot-config word is 0xFFFFFFFF, so the bootloader tries slot A first, but slot A could not be checked: the key its bootloader checks a bank under was not named, so the bank that runs is not known',
+    );
     unmount();
   });
 });

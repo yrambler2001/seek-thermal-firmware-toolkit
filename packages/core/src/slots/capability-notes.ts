@@ -25,16 +25,32 @@ export const FF_1308_NOTE =
 /**
  * What the booted bank means on the 2014 plaintext chain. The page names one from the camera's
  * active-slot word (device-info.ts, `chainReplay`): the bank the bootloader entered at the last start,
- * which the bootloader writes at every start (0 slot A, 1 slot B, 2 recovery R). The NEXT start is set by
- * the boot-config word, and recovery R runs whenever A and B hold nothing the bootloader takes
- * (TESTING.md 42.10; boot-choice.ts).
+ * which the bootloader writes at every start (0 slot A, 1 slot B, 2 recovery R; TESTING.md 42.53, 42.56).
+ * The NEXT start is set by the boot-config word (profiles/locked-boot.ts), and recovery R runs whenever A
+ * and B hold nothing the bootloader takes (TESTING.md 42.10; boot-choice.ts).
  */
 const LOCKED_BOOT_WORD_NOTE =
   'Where the page names a booted bank on this line, it is the bank the camera entered at its last start, ' +
   'as the active-slot word records it (0 slot A, 1 slot B, 2 recovery R). The next start is set by the ' +
-  'boot-config word: 0 or 1 choose A or B first, any other value recovery R first. Recovery R runs ' +
-  'whenever A and B hold nothing the 2014 bootloader takes (a stored word sum of 0), whatever R holds ' +
-  '(TESTING.md 42.10).';
+  'boot-config word: 0 or 0xFFFFFFFF choose A first, 1 B first, any other value recovery R first. ' +
+  'Recovery R runs whenever A and B hold nothing the 2014 bootloader takes (a stored word sum of 0), ' +
+  'whatever R holds (TESTING.md 42.10).';
+
+/**
+ * The same for the 2016 Compact PRO line. Its bootloader records the bank it enters the same way
+ * (TESTING.md 42.56: the word is the bank that ran, for words 0, 1 and 2 on 1.0.3.0), and chooses by the
+ * same rule (FW-V1 targets/compact_pro_9hz_1_0_3_0_bootloader/src/image.c:1076-1109), but its check is
+ * `image_sum_ok_device_seeded`: the bank decrypted under the key it checks a bank under must sum to 0.
+ * The read names that key from the bank the camera entered (device-info.ts `checkKeyOf`).
+ */
+const LOCKED_2016_BOOT_WORD_NOTE =
+  'Where the page names a booted bank on this line, it is the bank the camera entered at its last start, ' +
+  'as the bootloader records it in the active-slot word (0 slot A, 1 slot B, 2 recovery R). The next ' +
+  'start is set by the boot-config word: 0 or 0xFFFFFFFF choose A first, 1 B first, any other value ' +
+  'recovery R first. The 2016 bootloader takes a bank only when it decrypts to a word sum of 0 under the ' +
+  'key it checks a bank under (key block 1 on its 1.2.0.0 bootloader), and the last bank of that order ' +
+  'runs unchecked when the other two fail. The read names that key from the bank the camera entered, ' +
+  'because the bootloader block that holds it is refused on every channel (TESTING.md 42.56, 42.84).';
 
 /** Compact Pro 1.0.3.2: the EP0 limit that keeps a whole-part dump from running. */
 export const EP0_1032_NOTE =
@@ -57,22 +73,25 @@ const LOCKED_PLAIN_STAGING_NOTE =
 const LOCKED_2016_STAGING_NOTE =
   'Staged: the image, XORed with the xorshift128 keystream of its OWN key block 0 (the stage ' +
   'key, found in the image by value), image length only (at most 0xE000 bytes). The device ' +
-  'decrypts the payload with that key and stores it under the bank’s own key (block 1), so the ' +
-  'stored bytes are not the staged ones. Nothing is read from the target bank to stage it: the ' +
-  'bank’s keystream is used only to read the bank back.';
+  'decrypts the payload with that key and stores it under the key its bootloader checks a bank ' +
+  'under (key block 1), so the stored bytes are not the staged ones. Nothing is read from the ' +
+  'target bank to stage it: the bank’s keystream is used only to read the bank back.';
 
 /**
- * This profile declares no flash capability of its own (its capabilities.flash says why), so the
- * device-info read (the Info tab, `seek-fw info`) calls the camera not flashable. The slot write is
- * the keystream-staged path the preservation pipeline ran on 1.0.3.0, so the slot page does not gate
- * it on that refusal, and the note says so instead of hiding the refusal.
+ * This profile declares no flash capability of its own (its capabilities.flash says why), so no
+ * whole-image write is offered for the camera. The device-info read (the Info tab, `seek-fw info`) says
+ * so in one line and names the slot page as the way banks are written (device-info.ts
+ * `BANKS_ONLY_WRITING`, TESTING.md 42.84). The slot write is the keystream-staged path the preservation
+ * pipeline ran on 1.0.3.0, so the slot page does not gate it on that refusal, and the note says so
+ * instead of hiding the refusal.
  */
 export function profileFlashNote(profileId: string): string {
   return (
     `Profile ${profileId} declares no flash capability of its own (its capabilities.flash, see ` +
-    'compact-2016.ts), so the device info calls this camera not flashable. The slot write is the ' +
-    'keystream-staged path the preservation pipeline ran on 1.0.3.0, so the slot page does not ' +
-    'gate it on that refusal.'
+    'compact-2016.ts), so a whole-image write is not available on this line, and the device info ' +
+    'says so. The banks are written here one at a time instead: the slot write is the ' +
+    'keystream-staged path the preservation pipeline ran on 1.0.3.0, so the slot page does not gate ' +
+    'it on that refusal.'
   );
 }
 
@@ -182,6 +201,7 @@ export function planNotes(family: SlotFamily, version: FirmwareVersion): string[
       break;
     case 'locked-2016':
       notes.push(TOKEN_NOTE);
+      notes.push(LOCKED_2016_BOOT_WORD_NOTE);
       notes.push(
         'The 9 Hz builds of 1.0.3.0 and 1.0.3.2 share one key pair, and the FF builds share ' +
           'another (patch.ts KEY_PAIRS). The version string does not tell them apart, so the ' +

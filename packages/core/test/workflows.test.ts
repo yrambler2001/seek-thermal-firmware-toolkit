@@ -1084,37 +1084,66 @@ describe('detectProfileForDump', () => {
 });
 
 /* ==================================================================== *
- * The 2016 Compact PRO, read and judged (FINDINGS 2026-10-06)
+ * The 2016 Compact PRO, read and judged (FINDINGS 2026-10-06, TESTING.md 42.84)
  * ==================================================================== */
+
+interface Camera2016Options {
+  /**
+   * The active-slot word GetFirmwareInfo selector 10 reports (roots +8, TESTING.md 42.56). Omitted: the
+   * selector does not answer, so the bank the camera entered is not known.
+   */
+  readonly activeSlotWord?: number;
+  /** cfg[0] at 0x14010000. Omitted: the record is erased, 0xFFFFFFFF. */
+  readonly cfg0?: number;
+  /** One bank stored under another key than the other two (a key its bootloader does not check under). */
+  readonly otherKeyBank?: 'a' | 'b' | 'r';
+}
+
+/** The key the fixture's banks are stored under: the key its bootloader checks a bank under. */
+const CHECK_KEY_2016 = makeKey(60);
 
 /**
  * A camera shaped like the bench part on Compact PRO 1.0.3.0: that build's own
  * window table (the bootloader block refused on every channel, the protected
  * banks behind the token), three banks holding one 2016 cipher-chain image —
  * keyed xorshift128 under K=0, decrypting to a word sum of 0, and NO "CODE"
- * footer — an erased boot-config record, and bootloader 1.2.0.0 on
- * GetFirmwareInfo selector 1.
+ * footer — an erased boot-config record unless one is given, and bootloader
+ * 1.2.0.0 on GetFirmwareInfo selector 1.
  */
-function compactPro1030Camera(): FakeCamera {
+function compactPro1030Camera(options: Camera2016Options = {}): FakeCamera {
   const flash = new Uint8Array(FLASH_SIZE).fill(0xff);
-  const keyA = makeKey(60);
-  const plain = makePlainImage(keyA, makeKey(61), compact2016);
-  const cipher = cryptBytes(plain, stateFromKey(keyA, 0), compact2016.cipher);
-  for (const offset of [0x50000, 0x60000, 0x70000]) flash.set(cipher, offset);
+  const plain = makePlainImage(CHECK_KEY_2016, makeKey(61), compact2016);
+  const under = (key: Uint8Array): Uint8Array =>
+    cryptBytes(plain, stateFromKey(key, 0), compact2016.cipher);
+  for (const [bank, offset] of [
+    ['a', 0x50000],
+    ['b', 0x60000],
+    ['r', 0x70000],
+  ] as const) {
+    flash.set(under(options.otherKeyBank === bank ? makeKey(62) : CHECK_KEY_2016), offset);
+  }
+  if (options.cfg0 !== undefined) viewOf(flash).setUint32(0x10000, options.cfg0 >>> 0, true);
   const rows = legacySelectorRows('1.0.3.0') ?? [];
   const live = rows.filter((r) => r.address !== null && r.channel !== 'refused');
   const bootloader = new Uint8Array(36);
   bootloader.set([1, 2, 0, 0], 0);
   bootloader.set(new TextEncoder().encode('Jun 26 2016'), 4);
+  const fwInfo = new Map<number, Uint8Array>([
+    [0, buildBlock('1.0.3.0')],
+    [1, bootloader],
+  ]);
+  if (options.activeSlotWord !== undefined) {
+    /* Selector 10: the roots record; its +8 is the bootloader's record of the bank it entered. */
+    const roots = new Uint8Array(64);
+    viewOf(roots).setUint32(8, options.activeSlotWord, true);
+    fwInfo.set(10, roots);
+  }
   return fakeCamera({
     flash,
     windows: live.map((r) => ({ subcmd: r.subcmd, offset: (r.address ?? 0) - FLASH_BASE })),
     authBanks: live.filter((r) => r.channel === 'auth').map((r) => r.subcmd),
     authToken: OLD_FW_UNLOCK_TOKEN,
-    fwInfo: new Map([
-      [0, buildBlock('1.0.3.0')],
-      [1, bootloader],
-    ]),
+    fwInfo,
   });
 }
 
@@ -1138,72 +1167,164 @@ function logOf(reporter: { readonly events: readonly RunEvent[] }): string {
 }
 
 describe('a 2016 Compact PRO (1.0.3.0), read and judged', () => {
-  it('is read under legacy-auth, then detected as compact-2016 with the probe kept', async () => {
+  it('is read under compact-2016 from the probe on, with the probe kept and nothing to re-read', async () => {
     const reporter = collectingReporter();
     const { ctx, state } = await probeThenRead(compactPro1030Camera(), reporter);
 
-    /* the probe's pick, by design: the two share every selector */
-    expect(ctx.profile.id).toBe('legacy-auth');
+    /* The 1.0.3.x version picks compact-2016 before any slot is read (TESTING.md 42.84): under
+     * legacy-auth the first read reported every bank failing and was then repeated. */
+    expect(ctx.profile.id).toBe('compact-2016');
     /* the probe's refused plain arm survives into the read's evidence ... */
     expect(state.evidence.plainSelectorRefused).toBe(true);
     expect(state.evidence.bootloaderVersion).toBe('1.2.0.0');
     expect(state.evidence.observedSlots?.every((s) => s.chain === 'cipher')).toBe(true);
-    /* ... and the slots settle the cipher: not a coin toss at 0.90 to 0.85 */
+    /* ... and the slots agree with the probe: no re-read */
     expect(state.detection.best.profile.id).toBe('compact-2016');
     expect(state.detection.ambiguous).toBe(false);
     expect(state.detection.ranked.find((m) => m.profile.id === 'legacy-auth')?.score).toBe(0);
-    /* so the read under the wrong cipher says so, and asks to be redone */
+    expect(profileToRereadUnder(state, false)).toBeNull();
+    const log = logOf(reporter);
+    expect(log).not.toContain('probably a different firmware family');
+    expect(log).not.toContain('acceptance FAILS');
+  }, 60_000);
+
+  it('read under legacy-auth by hand, it says the evidence names compact-2016 and asks to be read again', async () => {
+    const camera = compactPro1030Camera();
+    const ctx = await contextFor(legacyAuth, camera);
+    const state = await readDeviceInfo(ctx, { chunk: 4096 });
+
+    expect(state.detection.best.profile.id).toBe('compact-2016');
     expect(state.flashBlockedBy.join(' ')).toContain(
       'the evidence says this camera is 2016 Compact Pro',
     );
     expect(profileToRereadUnder(state, false)?.id).toBe('compact-2016');
     expect(profileToRereadUnder(state, true)).toBeNull();
+    /* no check key is named under the 2014 line's profile: its banks are not checked that way */
+    expect(state.checkKey ?? null).toBeNull();
   }, 60_000);
 
-  it('judges its slots under compact-2016: they accept, need no footer, and are not "NOT bootable"', async () => {
-    const camera = compactPro1030Camera();
-    const { ctx, state: first } = await probeThenRead(camera, collectingReporter());
+  it('names the check key from the bank the camera entered, and every bank under it is bootable', async () => {
     const reporter = collectingReporter();
-    const state = await readDeviceInfo(
-      { ...ctx, reporter, profile: compact2016, detection: first.detection },
-      { chunk: 4096 },
+    const { state } = await probeThenRead(
+      compactPro1030Camera({ activeSlotWord: 0, cfg0: 0xffffffff }),
+      reporter,
     );
+    const log = logOf(reporter);
+
+    expect(state.profile.id).toBe('compact-2016');
+    expect(state.checkKey?.name).toBe('key block 1');
+    expect(state.checkKey?.from).toBe('a');
+    expect(bytesToHex(state.checkKey?.key ?? new Uint8Array())).toBe(bytesToHex(CHECK_KEY_2016));
+    /* the fixture's key is no corpus pair, so no pair is claimed for it */
+    expect(state.checkKey?.pair).toBeNull();
+    expect(state.slots.map((slot) => slot.bootability)).toEqual([
+      'bootable',
+      'bootable',
+      'bootable',
+    ]);
+    expect(state.slots.every((slot) => slot.keyName === 'key block 1')).toBe(true);
+    /* the store key is the check key on this line, not "Key B" */
+    expect(state.storeKey.name).toBe('key block 1');
+    /* both starts, from the bootloader's record and the rule */
+    expect(state.boot).toEqual({ booted: 'a', target: 'b' });
+    expect(log).toContain('check key: key block 1 ');
+    expect(log).toContain(
+      "last start: the camera reports it entered slot A (active-slot word 0, the bootloader's record)",
+    );
+    expect(log).toContain(
+      'next start: slot A — the boot-config word is 0xFFFFFFFF, so the bootloader tries slot A first, ' +
+        'and it holds an image the bootloader accepts',
+    );
+    expect(log).toContain("the camera's own upgrade (mode 0) writes App image bank 0x14060000");
+    /* the stale lines this line used to print are gone */
+    expect(log).not.toContain('boot prediction unavailable');
+    expect(log).not.toContain("could not confirm this camera's key table");
+    expect(log).not.toContain('never decoded');
+    expect(log).not.toContain('unknown key');
+    /* the whole-image writer's reasons are one line; nothing refuses the banks */
+    expect(log).toContain(
+      "writing: the Slots tab (`seek-fw slots`) writes this camera's banks one at a time",
+    );
+    expect(log).not.toContain('flashing disabled');
+    /* the whole-image gate keeps its reasons, for the JSON */
+    expect(state.canFlash).toBe(false);
+    expect(state.classicWriterBlockedBy?.length).toBeGreaterThan(0);
+  }, 60_000);
+
+  it('calls a bank under another key not bootable, and the next start passes it over', async () => {
+    const reporter = collectingReporter();
+    const { state } = await probeThenRead(
+      compactPro1030Camera({ activeSlotWord: 1, cfg0: 1, otherKeyBank: 'a' }),
+      reporter,
+    );
+    const log = logOf(reporter);
+
+    /* B was entered under word 1, checked first: B names the key */
+    expect(state.checkKey?.from).toBe('b');
+    expect(state.slots.map((slot) => slot.bootability)).toEqual([
+      'not-bootable',
+      'bootable',
+      'bootable',
+    ]);
+    expect(state.byKey.get('a')?.keyName).toBe('unknown key');
+    expect(log).toContain(
+      'it decrypts and checksums under its own key, but the 2016 bootloader checks a bank only under ' +
+        'key block 1 — so it will be skipped at boot',
+    );
+    expect(log).toContain('next start: slot B — the boot-config word is 1');
+  }, 60_000);
+
+  it('judges its slots "unknown", not "NOT bootable", when the camera does not say which bank it entered', async () => {
+    const camera = compactPro1030Camera();
+    const reporter = collectingReporter();
+    const { state } = await probeThenRead(camera, reporter);
     const log = logOf(reporter);
 
     expect(state.slots.every((slot) => slot.present && slot.accepts)).toBe(true);
     expect(state.slots.every((slot) => !slot.footerOk)).toBe(true);
-    /* the bootloader block is refused, so the keys it tries cannot be named:
-     * that is "unknown", not the "NOT bootable" the footer used to force */
+    /* the bootloader block is refused, and no active-slot word names the key: "unknown", not the
+     * "NOT bootable" the footer used to force */
     expect(state.keyTable).toBeNull();
+    expect(state.checkKey?.key).toBeNull();
+    expect(state.checkKey?.unnamedWhy).toBe(
+      "the camera's active-slot word (fw info roots, selector 10) could not be read",
+    );
     expect(state.slots.map((slot) => slot.bootability)).toEqual(['unknown', 'unknown', 'unknown']);
     expect(log).not.toContain('NOT bootable');
     expect(log).not.toContain('footer BAD');
     expect(log).toContain('no footer check');
-    /* the boot note names the profile the read acted under, not "Legacy" */
-    expect(log).toContain('boot prediction unavailable under 2016 Compact Pro');
+    expect(log).toContain(
+      'bootable unknown: the key its bootloader checks a bank under was not named on this read',
+    );
+    expect(log).toContain(
+      'next start: not known — the boot-config word is 0xFFFFFFFF, so the bootloader tries slot A first, but slot A could not be checked: the key its bootloader checks a bank under was not named, so the bank that runs is not known',
+    );
     expect(log).not.toContain('Legacy locked firmware:');
 
-    /* detection agrees with the profile now, and the gate stays shut for the
-     * profile's own, honest reason */
+    /* detection agrees with the profile, and the whole-image gate stays shut for the profile's own,
+     * honest reason, which the read says once instead of as "flashing disabled" */
     expect(state.detection.best.profile.id).toBe('compact-2016');
     expect(state.canFlash).toBe(false);
     const blocked = state.flashBlockedBy.join(' ');
     expect(blocked).not.toContain('the evidence says');
     expect(blocked).toContain("shares legacy-auth's locked BeginFirmwareUpgrade handler");
     expect(blocked).not.toContain('different BeginFirmwareUpgrade selector map');
+    expect(log).not.toContain('flashing disabled');
     expect(camera.calls.some((c) => c.op === 0x50 || c.op === 0x51)).toBe(false);
   }, 60_000);
 
-  it('a dump of it decrypts under compact-2016, not the profile the read acted under', async () => {
+  it('a dump of it read under legacy-auth by hand decrypts under compact-2016', async () => {
     const camera = compactPro1030Camera();
     await camera.open();
     const reporter = collectingReporter();
     const device = new SeekDevice(camera, { reporter });
     const { detection } = await identifyCamera(device);
-    expect(detection.best.profile.id).toBe('legacy-auth');
+    /* The probe picks compact-2016 now; the dump below is made under legacy-auth on purpose, to show
+     * the decrypt still names the camera's own family. */
+    expect(detection.best.profile.id).toBe('compact-2016');
 
     const result = await runDump(
-      { device, profile: detection.best.profile, detection, reporter },
+      { device, profile: legacyAuth, detection, reporter },
       { chunk: 4096 },
     );
 

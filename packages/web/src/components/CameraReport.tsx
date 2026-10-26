@@ -1,20 +1,23 @@
 /**
  * The camera report the Info tab shows once it has read the camera: the same fields, in the same order, as
- * `seek-fw info` prints (TESTING.md 42.64). Camera, firmware, profile, boot, keys, every bank, and whether a
- * whole-image write is available. The values come from the same core functions the CLI uses; the words are
- * the CLI's, except where the page's own tabs are named.
+ * `seek-fw info` prints (TESTING.md 42.64). Camera, firmware, profile, boot, keys, every bank, and how the
+ * camera can be written. The values come from the same core functions the CLI uses (the boot and key rows
+ * and the 2016 writing verdict are core's workflows/device-report.ts, TESTING.md 42.84); the words are the
+ * CLI's, except where the page's own tabs are named.
  */
 
 import type { ReactElement } from 'react';
 import {
+  bankWritingOf,
   bootableDescription,
-  bytesToHex,
+  bootedReportOf,
   hexUp,
-  onPlaintextChain,
+  keyReportRows,
+  nextStartReportOf,
   runningApplicationOf,
-  storeKeyDescription,
   upgradeTargetWarning,
   type DeviceState,
+  type ReportRow,
   type SlotKey,
   type SlotState,
 } from '@seek-fw/core';
@@ -45,13 +48,9 @@ function slotName(state: DeviceState, key: SlotKey): string {
   return state.byKey.get(key)?.name ?? key;
 }
 
-/** The booted row. On the 2014 plaintext chain the bank is named from the active-slot word, not a boot record. */
-function bootedText(state: DeviceState): string {
-  if (state.boot === null) return '(not replayed)';
-  const name = slotName(state, state.boot.booted);
-  return onPlaintextChain(state.profile, state.version)
-    ? `${name} (named by the active-slot word; not a boot record on this line)`
-    : name;
+/** A row of core's report (`keyReportRows`), labelled as the page labels it: the CLI's words, capitalised. */
+function pageRow([label, value]: ReportRow): [string, string] {
+  return [label.charAt(0).toUpperCase() + label.slice(1), value];
 }
 
 /** The running row, on 1.3.0.8 only: the build the camera's own per-bank answers name, or why not. */
@@ -94,7 +93,9 @@ export function CameraReport({ state }: CameraReportProps): ReactElement {
   const warning = upgradeTargetWarning(state);
   const running = runningText(state);
   const best = state.detection.best;
-  const keyTable = state.keyTable;
+  const nameOf = (key: SlotKey): string => slotName(state, key);
+  /* The 2016 line writes its banks one at a time, and has no whole-image write (core's `bankWritingOf`). */
+  const bankWriting = bankWritingOf(state);
 
   return (
     <>
@@ -167,8 +168,9 @@ export function CameraReport({ state }: CameraReportProps): ReactElement {
                 ? '(unreadable)'
                 : `${hexUp(state.cfg0)} — ${state.profile.boot.describeCfg0(state.cfg0)}`,
             ],
-            ['Booted', state.boot === null ? null : bootedText(state)],
+            ['Booted', bootedReportOf(state, nameOf)],
             ['Running (1.3.0.8)', running],
+            ['Next start', nextStartReportOf(state, nameOf)],
             [
               'Upgrade target',
               state.boot === null
@@ -188,20 +190,7 @@ export function CameraReport({ state }: CameraReportProps): ReactElement {
 
       <Panel>
         <PanelTitle>Keys</PanelTitle>
-        <KeyValue
-          rows={[
-            ['Key A', keyTable === null ? '(not identified)' : bytesToHex(keyTable.keyA)],
-            ['Key B', keyTable === null ? '(not identified)' : bytesToHex(keyTable.keyB)],
-            [
-              'Table at',
-              keyTable === null
-                ? `${String(state.keyTableCandidates)} candidate(s), none confirmed`
-                : `${hexUp(keyTable.offset)} in the bootloader block, confirmed against a slot`,
-            ],
-            ['Whitening K', hexUp(state.keyWhiteningK)],
-            ['Store key', storeKeyDescription(state)],
-          ]}
-        />
+        <KeyValue rows={keyReportRows(state).map(pageRow)} />
       </Panel>
 
       <Panel>
@@ -263,7 +252,25 @@ export function CameraReport({ state }: CameraReportProps): ReactElement {
 
       <Panel>
         <PanelTitle>Writing</PanelTitle>
-        {state.canFlash ? (
+        {bankWriting !== null ? (
+          <Prose>
+            <p>
+              One bank at a time: the Slots tab writes or patches one bank of this camera, each
+              staged under its image&apos;s own key block 0, and each write asks first. A
+              whole-image write is not available on this line.
+            </p>
+            {bankWriting.refusals.length > 0 && (
+              <>
+                <p>The Slots tab refuses every bank of this camera:</p>
+                <ul>
+                  {bankWriting.refusals.map((reason) => (
+                    <li key={reason}>{reason}</li>
+                  ))}
+                </ul>
+              </>
+            )}
+          </Prose>
+        ) : state.canFlash ? (
           <Prose>
             <p>
               Available: the Slots tab can write one bank of this camera, and each write asks first.

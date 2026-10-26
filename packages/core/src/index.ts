@@ -312,10 +312,17 @@ export type {
 
 /* ---- the four read workflows ------------------------------------------ */
 export {
+  BANKS_ONLY_WRITING,
   DEFAULT_DUMP_OPTIONS,
+  KEY_TABLE_REFUSED_2016,
+  bankWritingOf,
   bootableDescription,
+  bootedReportOf,
   bootedSlot,
+  cameraWideBlocks,
   channelEvidenceOf,
+  checkKeyNameOf,
+  checkKeyReportOf,
   decryptDump,
   describeDevice,
   detectProfileForDump,
@@ -327,6 +334,8 @@ export {
   identityGate,
   identityRefusal,
   isCancelled,
+  keyReportRows,
+  nextStartReportOf,
   planForDevice,
   predatesDumpProtocol,
   predatesDumpProtocolReason,
@@ -342,6 +351,7 @@ export {
   storeKeyDescription,
   targetSlot,
   transportInfoOf,
+  unknownBootabilityWhy,
   unlockTokenOf,
   upgradeTargetIsBooted,
   upgradeTargetWarning,
@@ -354,7 +364,9 @@ export {
   VERSION_READ_STARTUP_WINDOW_MS,
 } from './workflows/index.js';
 export type {
+  BankWriting,
   CameraIdentification,
+  CheckKey,
   DecryptOptions,
   SelectorChannelProbe,
   DecryptResult,
@@ -364,6 +376,7 @@ export type {
   DumpResult,
   IdentityGate,
   PlannedOperation,
+  ReportRow,
   SlotState,
   SweepResult,
   WorkflowContext,

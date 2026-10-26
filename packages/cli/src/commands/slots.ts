@@ -36,7 +36,9 @@ import { basename, join } from 'node:path';
 import {
   bankWordsOf,
   bootChoiceOf,
+  bootRuleKnown,
   bootWordRuleOf,
+  checkKeyReportOf,
   derivedKeyLine,
   deriveWriteKeys,
   dumpSlot,
@@ -52,6 +54,8 @@ import {
   sha256hex,
   slotDumpNames,
   slotWriteRefusal,
+  STAGED_UNDER_IMAGE_BLOCK_0,
+  storedUnderCheckKey,
   withLevelMap,
   writeBannerOf,
   type Artifact,
@@ -78,6 +82,7 @@ import type { Command, CommandContext, CommandResult, SlotFlags } from '../cli.j
 import { CliError, UsageError } from '../errors.js';
 import { paint } from '../ansi.js';
 import {
+  checkKeyJson,
   chooseProfileByProbe,
   heading,
   openSession,
@@ -320,8 +325,9 @@ export function bootRisk(report: SlotsReport, view: SlotView): string | null {
     return 'bank R is the recovery bank; a bad write there can leave the camera with no image it can boot';
   }
   if (view.active) {
-    /* On the 2014 plaintext chain the named bank comes from the active-slot word, which is not a
-     * boot record: recovery R can run instead (TESTING.md 42.10), so the words say so. */
+    /* On the 2014 plaintext chain the named bank comes from the active-slot word, the bootloader's record
+     * of the bank it entered (TESTING.md 42.56); the next start can run another bank when this one fails
+     * its check (TESTING.md 42.10), so the words name the word rather than promise the next start. */
     if (onPlaintextChain(report.state.profile, report.state.version)) {
       return `bank ${bank} is the bank the camera's active-slot word names as booted; a bad write there can stop the camera booting`;
     }
@@ -491,21 +497,32 @@ export function emptyBankNote(report: SlotsReport, view: SlotView): string {
   return `${head} It can be written. ${view.entry.emptyBank.why}${how}`;
 }
 
-/** The `slots list` report: the camera, its banks, what each bank can take, and why not. */
 /**
- * The keys every bank is written under, from the booted bank and the running application
- * (write-keys.ts): which key the booted bank holds, that the other banks are written the same way,
- * and the measured reason when a bank cannot be written.
+ * The keys every bank is written under (write-keys.ts), in the form the line uses: the 2014 plaintext
+ * chain's image as it is; the 2016 Compact PRO's image under its own key block 0, which the camera stores
+ * under the key its bootloader checks; or the modern line's keys derived from the booted bank and the
+ * running application. A refusal names the measurement that failed. The page's `SlotWriteKeys` shows the
+ * same verdict.
  */
 export function writeKeyLines(report: SlotsReport, color: boolean): string[] {
   const refusal = slotWriteRefusal(report.state);
   const keys = deriveWriteKeys(report.state);
   const lines: string[] = ['', heading('Write keys', color)];
-  if (refusal === null && keys.plainChain) {
+  if (refusal === null && keys.form === 'plain') {
     lines.push(
       table([
         ['  chain', 'the 2014 plaintext chain: every bank is stored plain, so none holds a key'],
         ['  written as', 'the image as it is, with no key, to any bank'],
+      ]),
+    );
+    for (const line of keys.evidence) lines.push(`  · ${line}`);
+    return lines;
+  }
+  if (refusal === null && keys.form === 'image-block-0') {
+    lines.push(
+      table([
+        ['  staged as', STAGED_UNDER_IMAGE_BLOCK_0],
+        ['  stored as', storedUnderCheckKey(keys)],
       ]),
     );
     for (const line of keys.evidence) lines.push(`  · ${line}`);
@@ -530,17 +547,18 @@ export function writeKeyLines(report: SlotsReport, color: boolean): string[] {
 }
 
 /**
- * The boot choice of the 2014 plaintext chain, as `list` shows it: the boot-config word, the bank the next
- * start runs, what the camera reports it entered at its last start, and the frame-rate warning when a
- * patched bank would not run (core's `fpsBootWarningOf`, the same text the page shows). Empty on any other
- * line, whose boot word is not read this way.
+ * The boot choice of a locked-line camera whose boot rule is decoded (core's `bootRuleKnown`: the 2014
+ * plaintext chain and the 2016 Compact PRO), as `list` shows it: the boot-config word, the bank the next
+ * start runs, what the camera reports it entered at its last start, on 2016 the key its bootloader checks a
+ * bank under, and the frame-rate warning when a patched bank would not run (core's `fpsBootWarningOf`, the
+ * same text the page shows). Empty on any other line, whose boot word is not read this way.
  */
 export function bootLines(
   report: SlotsReport,
   color: boolean,
   warning: FpsBootWarning | null,
 ): string[] {
-  if (!report.state.plainChain) return [];
+  if (!bootRuleKnown(report.state)) return [];
   const choice = bootChoiceOf(report.state);
   const lines: string[] = ['', heading('Boot', color)];
   const lastStart =
@@ -559,6 +577,9 @@ export function bootLines(
       ],
       ['  next start runs', choice.runs === null ? 'not known' : bankWordsOf(choice.runs)],
       ['  last start', lastStart],
+      ...(report.state.checkKey == null
+        ? []
+        : [['  check key', checkKeyReportOf(report.state.checkKey)]]),
     ]),
   );
   lines.push(`  · ${choice.why}.`);
@@ -571,9 +592,9 @@ export function bootLines(
   return lines;
 }
 
-/** The boot choice as `--json` carries it, or null on a line that is not the 2014 plaintext chain. */
+/** The boot choice as `--json` carries it, or null on a line whose boot rule is not decoded. */
 function bootJsonOf(state: SlotsReport['state']): Record<string, unknown> | null {
-  if (!state.plainChain) return null;
+  if (!bootRuleKnown(state)) return null;
   const choice = bootChoiceOf(state);
   return {
     word: choice.word === null ? null : hexUp(choice.word),
@@ -582,6 +603,8 @@ function bootJsonOf(state: SlotsReport['state']): Record<string, unknown> | null
     reportedBooted: choice.reportedBooted,
     activeSlotWord: state.activeSlotWord === null ? null : hexUp(state.activeSlotWord),
     why: choice.why,
+    /* The 2016 line: the key its bootloader checks a bank under; null on the 2014 chain. */
+    checkKey: checkKeyJson(state.checkKey ?? null),
   };
 }
 
@@ -690,8 +713,10 @@ export function listResult(report: SlotsReport): CommandResult {
       refused: writeBannerOf(report.state),
       booted: keys.booted,
       key: keys.atRest?.name ?? null,
-      /* The 2014 plaintext chain: no upload key is derived, and no bank is refused for one. */
-      plainChain: keys.plainChain,
+      /* How the keys are chosen (core's `WriteKeyForm`): 'plain' on the 2014 plaintext chain (no key),
+       * 'image-block-0' on the 2016 Compact PRO (the image's own key block 0; `key` is the key the camera
+       * stores under), 'derived' on the modern line. */
+      form: keys.form,
     },
     product: report.state.description.productName,
     serial: report.state.serial,

@@ -50,14 +50,21 @@
  * unknown build is treated as checking. Measured: the 10.9.1.31 composite is accepted
  * by the bootloader on the emulator (accept.emulator.test.ts); the 4.16.1.7 composite is
  * refused with 0x50000 before erasing (corpus-modern.emulator.test.ts).
+ *
+ * THE LINES THAT DERIVE NOTHING. The 2014 plaintext chain stores every bank plain, so an upload is the image
+ * as it is. The 2016 Compact PRO stages each image under its own key block 0, found in the image by value
+ * (write-image.ts `buildSlotKeystreamPayload`), and its application re-keys the upload into the key its
+ * bootloader checks a bank under (device-info.ts `checkKeyOf`), so no key of this camera builds the upload.
+ * Each has its own `form` below, and neither reads the booted bank's key or the application pair.
  * ==================================================================== */
 
 import { bytesToHex, equalBytes, findAll, hexToBytes, hexUp } from '../bytes.js';
 import { cryptBytes } from '../crypto/cipher.js';
 import { findEmbeddedKeyTable, stateFromKey, UNNAMED_KEY } from '../crypto/keys.js';
+import { bankWordsOf } from '../profiles/locked-boot.js';
 import type { CipherProfile, SlotKey } from '../profiles/types.js';
 import type { DerivedKey } from './types.js';
-import { unreadSlotBlock } from '../workflows/device-info.js';
+import { cameraWideBlocks } from '../workflows/device-info.js';
 import type { DeviceState } from '../workflows/types.js';
 import { APPLICATION_KEY_PAIRS } from './application-pairs.js';
 import { classifyBuild, stagingFor } from './capability-family.js';
@@ -82,20 +89,39 @@ export interface ApplicationKeys {
   readonly keyBAt: number | null;
 }
 
+/** How the keys of a write are chosen on this camera. */
+export type WriteKeyForm =
+  /**
+   * The 2014 plaintext chain: every bank is stored plain, so there is no key to derive. An upload is the
+   * image as it is (staging 'plain'), and `atRest`, `application`, `store` and `masks` are null or empty.
+   */
+  | 'plain'
+  /**
+   * The 2016 Compact PRO: an upload is the image under its own key block 0 (staging
+   * 'slot-keystream-ciphertext'), and the camera stores it under the key its bootloader checks a bank
+   * under. `atRest` is that key when the read named it (`DeviceState.checkKey`), else null, which is not a
+   * refusal here: the write does not need it. `application`, `store` and `masks` are null or empty.
+   */
+  | 'image-block-0'
+  /**
+   * The modern Key A line: the keys are derived from the booted bank and the running application (the
+   * header). A null `atRest` is a refusal, and `refusal` says why.
+   */
+  | 'derived';
+
 export interface WriteKeys {
   /** Why no bank can be written from this camera, stated with the measurement; null when derived. */
   readonly refusal: string | null;
-  /**
-   * The 2014 plaintext chain: every bank is stored plain, so there is no key to derive. An upload is
-   * the image as it is (staging 'plain'), and `atRest`, `application`, `store` and `masks` are null or
-   * empty. A null `atRest` with `plainChain` false is a refusal, never this.
-   */
-  readonly plainChain: boolean;
+  /** How the keys are chosen: see `WriteKeyForm`. */
+  readonly form: WriteKeyForm;
   /** The booted bank the at-rest key was read from, or null. */
   readonly booted: SlotKey | null;
   /** The key the booted bank decrypts under, by the bootloader's name for it ("Key A"), or null. */
   readonly bootedKeyName: string | null;
-  /** K: the key every bank is written under: the store key, or the booted bank's key (see deriveWriteKeys). */
+  /**
+   * K: the key every bank is stored under: the store key, or the booted bank's key (see deriveWriteKeys);
+   * on the 2016 line the key its bootloader checks a bank under, which the camera itself re-keys into.
+   */
   readonly atRest: KeyRef | null;
   readonly application: ApplicationKeys | null;
   /** The application's store key: the per-device key when programmed, else its own Key B. */
@@ -208,25 +234,74 @@ function keyBytesNamed(state: DeviceState, name: string): Uint8Array | null {
  *     own reasons (`classicWriterBlockedBy`: the key table, the 2014-only line). The 2014-only reason is not
  *     a camera-wide one there (the 1.3.0.8 FF image stages in its vendor form on a camera with no plain
  *     bank), so the writer applies it where it stages an image plain (write.ts `refusePlainStaging`).
- * Null when nothing else refuses. Every other reason still refuses the whole camera, and says which.
+ * Null when nothing else refuses. Every other reason still refuses the whole camera, and says which. The
+ * filter is device-info.ts `cameraWideBlocks`, which the device-info read prints from on the 2016 line, so
+ * the read and the page name the same reasons.
  */
 export function gateWithoutAppKeys(state: DeviceState): string | null {
-  const unread = new Set(state.slots.filter((slot) => slot.unread).map(unreadSlotBlock));
-  const upgrade = new Set(state.upgradeBlockedBy ?? []);
   /* The classic writer's own reasons refuse only the lines that write under the camera's key; the 2016 and
    * FF lines do not stage under it, so they never see those reasons. */
-  const classic = stagesUnderCameraKey(state)
-    ? new Set<string>()
-    : new Set(state.classicWriterBlockedBy ?? []);
-  const others = state.flashBlockedBy.filter(
-    (why) =>
-      why !== (state.appKeysBlock ?? null) &&
-      !unread.has(why) &&
-      !upgrade.has(why) &&
-      !classic.has(why),
-  );
+  const others = cameraWideBlocks(state, !stagesUnderCameraKey(state));
   if (others.length === 0) return null;
   return `this camera cannot be written from here: ${others.join('; ')}`;
+}
+
+/** How a 2016 upload is staged, as the page's "Staged as" row and the CLI's `staged as` row say it. */
+export const STAGED_UNDER_IMAGE_BLOCK_0 =
+  "the image under its own key block 0 (found in the image by value), to any bank; this camera's keys are not used";
+
+/**
+ * What a 2016 bank is stored under after a write, as the page's "Stored as" row and the CLI's `stored as`
+ * row say it: the key its bootloader checks a bank under, by name when the read named it.
+ */
+export function storedUnderCheckKey(keys: Pick<WriteKeys, 'atRest'>): string {
+  return keys.atRest === null
+    ? 'the key its bootloader checks a bank under (not named on this read); the camera re-encrypts the upload under it'
+    : `${keys.atRest.name}, the key its bootloader checks a bank under; the camera re-encrypts the upload under it`;
+}
+
+/**
+ * The keys of a 2016 write: the image under its own key block 0, stored by the camera under the key its
+ * bootloader checks a bank under (`DeviceState.checkKey`). Nothing here is derived from the camera, and an
+ * unnamed check key refuses nothing: the writer stages from the image alone and reads the bank back as the
+ * image it decrypts to (write.ts, write-verify.ts).
+ */
+function imageBlockZeroKeys(state: DeviceState): WriteKeys {
+  const booted = state.boot?.booted ?? null;
+  const bootedSlot = booted === null ? undefined : state.byKey.get(booted);
+  const bootedKeyName =
+    bootedSlot?.keyName == null || bootedSlot.keyName === UNNAMED_KEY ? null : bootedSlot.keyName;
+  const checkKey = state.checkKey ?? null;
+  const named =
+    checkKey?.name != null && checkKey.key !== null
+      ? { name: checkKey.name, key: checkKey.key, from: checkKey.from }
+      : null;
+  const evidence = [
+    'the 2016 Compact PRO line: an upload is the image XORed with the keystream of its own key ' +
+      'block 0, found in the image by value, so no key of this camera builds it',
+    named === null
+      ? 'the camera decrypts the upload with that key and re-encrypts it under the key its ' +
+        'bootloader checks a bank under; that key was not named on this read' +
+        (checkKey?.unnamedWhy == null ? '' : ` (${checkKey.unnamedWhy})`) +
+        ', and the write does not need it: the bank is read back as the image it decrypts to'
+      : `the camera decrypts the upload with that key and re-encrypts it under ${named.name} ` +
+        `${bytesToHex(named.key)}, the key its bootloader checks a bank under` +
+        (named.from === null
+          ? ''
+          : ` (named from ${bankWordsOf(named.from)}, the bank the camera reports it entered)`) +
+        ', so every bank it writes is stored the way the bootloader takes it',
+  ];
+  return {
+    refusal: null,
+    form: 'image-block-0',
+    booted,
+    bootedKeyName,
+    atRest: named === null ? null : { name: named.name, key: named.key },
+    application: null,
+    store: null,
+    masks: [],
+    evidence,
+  };
 }
 
 /**
@@ -237,7 +312,7 @@ export function deriveWriteKeys(state: DeviceState): WriteKeys {
   const evidence: string[] = [];
   const refused = (refusal: string): WriteKeys => ({
     refusal,
-    plainChain: false,
+    form: 'derived',
     booted: null,
     bootedKeyName: null,
     atRest: null,
@@ -252,7 +327,7 @@ export function deriveWriteKeys(state: DeviceState): WriteKeys {
   if (state.plainChain) {
     return {
       refusal: null,
-      plainChain: true,
+      form: 'plain',
       booted: state.boot?.booted ?? null,
       bootedKeyName: null,
       atRest: null,
@@ -264,6 +339,15 @@ export function deriveWriteKeys(state: DeviceState): WriteKeys {
           'the upload is the image as it is',
       ],
     };
+  }
+
+  /* The 2016 Compact PRO: the image's own key block 0 stages it and the camera re-keys it; the booted bank's
+   * key is not read for an upload, and the camera's key table (refused on this line) is not needed. Keyed on
+   * the build's staging form, so a 2016 camera read under legacy-auth is not sent down the derivation either. */
+  if (
+    stagingFor(classifyBuild(state.profile, state.version).family) === 'slot-keystream-ciphertext'
+  ) {
+    return imageBlockZeroKeys(state);
   }
 
   const boot = state.boot;
@@ -439,7 +523,7 @@ export function deriveWriteKeys(state: DeviceState): WriteKeys {
 
   return {
     refusal: null,
-    plainChain: false,
+    form: 'derived',
     booted: boot.booted,
     bootedKeyName,
     atRest,

@@ -5,14 +5,17 @@ export {
   bootChoiceOf,
   bootRuleKnown,
   bootWordRuleOf,
-  fpsBootWarningOf,
-  fpsPatchHeldBy,
+  CHECK_KEY_UNNAMED_VERDICT,
   reportedBootedOf,
   type BootChoice,
+} from './boot-choice.js';
+export {
+  fpsBootWarningOf,
+  fpsPatchHeldBy,
   type FpsBootOptions,
   type FpsBootWarning,
   type PatchHeld,
-} from './boot-choice.js';
+} from './fps-boot-warning.js';
 export {
   inspectSlots,
   slotContentOf,
@@ -34,6 +37,7 @@ export { prepareSlotFlash, flashSlot, type PrepareSlotFlashOptions } from './wri
 export { flashInvalidatesAnalysis } from './write-commit.js';
 export {
   ffBankVerdict,
+  onCompactPro2016Line,
   onPlaintextChain,
   plainBankVerdict,
   runningApplicationOf,
@@ -46,11 +50,14 @@ export {
   deriveWriteKeys,
   gateWithoutAppKeys,
   slotWriteRefusal,
+  STAGED_UNDER_IMAGE_BLOCK_0,
   stagesUnderCameraKey,
+  storedUnderCheckKey,
   writeBannerOf,
   uploadLandsUnder,
   type ApplicationKeys,
   type KeyRef,
+  type WriteKeyForm,
   type WriteKeys,
 } from './write-keys.js';
 export { APPLICATION_KEY_PAIRS, type ApplicationKeyPair } from './application-pairs.js';

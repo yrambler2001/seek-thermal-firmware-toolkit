@@ -1,11 +1,14 @@
 /* ==================================================================== *
- * Which bank the 2014 plaintext chain runs at its next start (`bootChoiceOf`), and the frame-rate
- * patch warning a bank that does not run leaves (`fpsBootWarningOf`), slots/boot-choice.ts.
+ * Which bank a locked-line camera runs at its next start (`bootChoiceOf`, slots/boot-choice.ts), and the
+ * frame-rate patch warning a bank that does not run leaves (`fpsBootWarningOf`, slots/fps-boot-warning.ts),
+ * on the 2014 plaintext chain and the 2016 Compact PRO (TESTING.md 42.84).
  *
- * No camera here. Each bank is a synthetic 64 KiB image: the magic at +0x200, a length, and a word
+ * No camera here. Each 2014 bank is a synthetic 64 KiB image: the magic at +0x200, a length, and a word
  * sum over that length that is 0 when the bootloader accepts it (image_sum_ok, bootloader src/crypto.c),
- * or 1 when it does not. "Patched" is decided by a test seam (`heldBy`), because the real patched
- * images are not in the repo; `fpsPatchHeldBy` is tested on bytes that hold no patch.
+ * or 1 when it does not. A 2016 bank's verdict is the read's own (`SlotState.bootability`, from the key
+ * its bootloader checks a bank under, device-info.ts `checkKeyOf`), so the fixture sets it. "Patched" is
+ * decided by a test seam (`heldBy`), because the real patched images are not in the repo; `fpsPatchHeldBy`
+ * is tested on bytes that hold no patch.
  * ==================================================================== */
 
 import { describe, expect, it } from 'vitest';
@@ -19,14 +22,15 @@ import {
 import {
   bankWordsOf,
   bootChoiceOf,
+  bootRuleKnown,
   bootWordRuleOf,
-  fpsBootWarningOf,
-  fpsPatchHeldBy,
+  CHECK_KEY_UNNAMED_VERDICT,
   reportedBootedOf,
 } from '../../src/slots/boot-choice.js';
+import { fpsBootWarningOf, fpsPatchHeldBy } from '../../src/slots/fps-boot-warning.js';
 import { getProfile } from '../../src/profiles/registry.js';
 import type { SlotKey, SlotsReport } from '../../src/slots/types.js';
-import type { DeviceState, SlotState } from '../../src/workflows/types.js';
+import type { CheckKey, DeviceState, SlotState } from '../../src/workflows/types.js';
 
 const BANK = 0x10000;
 const LENGTH = 0x4000;
@@ -59,21 +63,57 @@ interface BankSpec {
   readonly unread?: boolean;
 }
 
-/** One bank as the analysis reports it. `plain` is a marker the test seam recognises. */
-function stateOf(key: SlotKey, spec: BankSpec, patchedMarkers: Set<Uint8Array>): SlotState {
+/**
+ * One bank as the analysis reports it. `plain` is a marker the test seam recognises. `bootability` is the
+ * read's verdict, which is what a 2016 bank's check is: 'bootable' or 'not-bootable' from `accepted` when the
+ * check key is named, 'unknown' when it is not.
+ */
+function stateOf(
+  key: SlotKey,
+  spec: BankSpec,
+  patchedMarkers: Set<Uint8Array>,
+  checkKeyNamed: boolean,
+): SlotState {
   const plain = new Uint8Array(8);
   if (spec.patched === true) patchedMarkers.add(plain);
   const unread = spec.unread === true;
   const erased = spec.erased === true;
   let raw: Uint8Array | null = null;
   if (!unread) raw = erased ? new Uint8Array(BANK).fill(0xff) : imageBank(spec.accepted !== false);
+  const bootability = !checkKeyNamed
+    ? 'unknown'
+    : spec.accepted === false
+      ? 'not-bootable'
+      : 'bootable';
   return {
     key,
     unread,
     blank: erased,
     raw,
     plain: unread ? null : plain,
+    bootability,
   } as unknown as SlotState;
+}
+
+/** The 2016 read's check key: named from slot A, or not named. */
+function checkKeyFixture(named: boolean): CheckKey {
+  return named
+    ? {
+        name: 'key block 1',
+        key: new Uint8Array(16).fill(0x5a),
+        from: 'a',
+        pair: null,
+        unnamedWhy: null,
+        why: 'check key: key block 1',
+      }
+    : {
+        name: null,
+        key: null,
+        from: null,
+        pair: null,
+        unnamedWhy: "the camera's active-slot word (fw info roots, selector 10) could not be read",
+        why: 'check key not named',
+      };
 }
 
 interface Fixture {
@@ -89,17 +129,24 @@ function reportWith(options: {
   /** The acting profile and the build's version. Default: legacy-auth on 1.3.0.0, the 2014 chain. */
   readonly profile?: string;
   readonly version?: string;
+  /** The 2016 read's check key: named (default) or not. Only set on a compact-2016 fixture. */
+  readonly checkKeyNamed?: boolean;
 }): Fixture {
   const patched = new Set<Uint8Array>();
   const byKey = new Map<SlotKey, SlotState>();
-  for (const key of KEYS) byKey.set(key, stateOf(key, options.banks[key] ?? {}, patched));
+  const line2016 = options.profile === 'compact-2016';
+  const named = options.checkKeyNamed ?? true;
+  for (const key of KEYS) {
+    byKey.set(key, stateOf(key, options.banks[key] ?? {}, patched, !line2016 || named));
+  }
   const state = {
     cfg0: options.cfg0,
     activeSlotWord: options.activeSlotWord ?? null,
-    plainChain: options.plainChain ?? true,
+    plainChain: options.plainChain ?? !line2016,
     profile: getProfile(options.profile ?? 'legacy-auth'),
     version: options.version ?? '1.3.0.0',
     byKey,
+    checkKey: line2016 ? checkKeyFixture(named) : null,
   } as unknown as DeviceState;
   const slots = KEYS.map((key) => ({
     entry: { key },
@@ -406,5 +453,155 @@ describe('fpsBootWarningOf: a frame-rate patch the next start does not run', () 
   it('holds no patch for a stock image, read from its own bytes', () => {
     expect(fpsPatchHeldBy(null)).toBeNull();
     expect(fpsPatchHeldBy(imageBank(true))).toBeNull();
+  });
+});
+
+/* ---- the 2016 Compact PRO (TESTING.md 42.84) ---------------------------------------------------- */
+
+/** A 2016 camera read under compact-2016: 1.0.3.0, the banks' verdicts from the check key. */
+function report2016(options: {
+  readonly cfg0: number | null;
+  readonly banks: Partial<Record<SlotKey, BankSpec>>;
+  readonly activeSlotWord?: number | null;
+  readonly checkKeyNamed?: boolean;
+}): Fixture {
+  return reportWith({ ...options, profile: 'compact-2016', version: '1.0.3.0' });
+}
+
+describe('bootRuleKnown: the lines whose boot rule and bank check are decoded', () => {
+  it('is the 2014 plaintext chain and the 2016 Compact PRO read under compact-2016, and nothing else', () => {
+    const known = (state: DeviceState): boolean => bootRuleKnown(state);
+    expect(known(reportWith({ cfg0: 0, banks: ALL_OK }).report.state)).toBe(true);
+    expect(known(report2016({ cfg0: 0, banks: ALL_OK }).report.state)).toBe(true);
+    expect(known(report2016({ cfg0: 0, banks: ALL_OK, checkKeyNamed: false }).report.state)).toBe(
+      true,
+    );
+    /* A 1.3.0.x camera whose read found no bank stored plain (the 1.3.0.8 FF build): its banks are not
+     * checked by the 2014 rule, and the FF bootloader is not decoded for that form (TESTING.md 42.12). */
+    expect(
+      known(
+        reportWith({ cfg0: 0, banks: ALL_OK, plainChain: false, version: '1.3.0.8' }).report.state,
+      ),
+    ).toBe(false);
+    /* A 1.0.3.0 camera read under legacy-auth: its banks were compared against the 2014 line's target. */
+    expect(
+      known(
+        reportWith({
+          cfg0: 0,
+          banks: ALL_OK,
+          plainChain: false,
+          profile: 'legacy-auth',
+          version: '1.0.3.0',
+        }).report.state,
+      ),
+    ).toBe(false);
+    expect(
+      known(
+        reportWith({
+          cfg0: 0,
+          banks: ALL_OK,
+          plainChain: false,
+          profile: 'modern-4x',
+          version: '4.9.1.15',
+        }).report.state,
+      ),
+    ).toBe(false);
+  });
+});
+
+describe('bootChoiceOf on the 2016 Compact PRO: the same rule, over the device-seeded check', () => {
+  it('word 0xFFFFFFFF (a blank record) tries slot A first, and slot A runs when its check passes', () => {
+    const choice = bootChoiceOf(
+      report2016({ cfg0: 0xffffffff, banks: ALL_OK, activeSlotWord: 0 }).report.state,
+    );
+    expect(choice.runs).toBe('a');
+    expect(choice.reportedBooted).toBe('a');
+    expect(choice.why).toBe(
+      'the boot-config word is 0xFFFFFFFF, so the bootloader tries slot A first, and it holds an image the bootloader accepts',
+    );
+  });
+
+  it('passes over a bank under another key (not bootable), and enters the last bank unchecked', () => {
+    expect(
+      bootChoiceOf(report2016({ cfg0: 0, banks: { a: { accepted: false } } }).report.state).runs,
+    ).toBe('b');
+    const last = bootChoiceOf(
+      report2016({ cfg0: 0, banks: { a: { accepted: false }, b: { accepted: false } } }).report
+        .state,
+    );
+    expect(last.runs).toBe('r');
+    expect(last.why).toContain('boots recovery R, which it does not check');
+    expect(bootChoiceOf(report2016({ cfg0: 1, banks: ALL_OK }).report.state).runs).toBe('b');
+    expect(bootChoiceOf(report2016({ cfg0: 2, banks: ALL_OK }).report.state).runs).toBe('r');
+  });
+
+  it('names no bank, and says why, when the key its bootloader checks a bank under was not named', () => {
+    const choice = bootChoiceOf(
+      report2016({ cfg0: 0xffffffff, banks: ALL_OK, checkKeyNamed: false }).report.state,
+    );
+    expect(choice.runs).toBeNull();
+    expect(choice.why).toBe(
+      `the boot-config word is 0xFFFFFFFF, so the bootloader tries slot A first, but slot A ${CHECK_KEY_UNNAMED_VERDICT}, so the bank that runs is not known`,
+    );
+  });
+
+  it('still says an erased bank is refused when the check key is not named: it holds no image header', () => {
+    const choice = bootChoiceOf(
+      report2016({
+        cfg0: 0,
+        banks: { a: { erased: true }, b: { erased: true } },
+        checkKeyNamed: false,
+      }).report.state,
+    );
+    expect(choice.runs).toBe('r');
+  });
+});
+
+describe('fpsBootWarningOf on the 2016 Compact PRO', () => {
+  it('warns when recovery R holds the 18 Hz patch and the blank record runs slot A: patch slot A too', () => {
+    /* The owner's 1.0.3.0 camera (TESTING.md 42.84): R patched to 18 Hz from the slots page, cfg[0]
+     * 0xFFFFFFFF, slot A entered. The camera stayed at 9 Hz and the page said nothing. */
+    const fixture = report2016({
+      cfg0: 0xffffffff,
+      activeSlotWord: 0,
+      banks: { a: {}, b: {}, r: { patched: true } },
+    });
+    const warning = warningOf(fixture);
+    expect(warning?.runs).toBe('a');
+    expect(warning?.word).toBe(0xffffffff);
+    expect(warning?.idle).toEqual(['r']);
+    expect(warning?.paragraphs).toEqual([
+      'The camera boots slot A. The boot-config word is 0xFFFFFFFF, so the bootloader tries slot A first, and it holds an image the bootloader accepts.',
+      'Recovery R holds a frame-rate patch, but it does not run, so the patch does not take effect.',
+      'Patch slot A too (the bank that runs): that is what makes the frame-rate patch take effect.',
+    ]);
+  });
+
+  it('warns before the patch of a bank that would not run, and is silent for the bank that runs', () => {
+    const fixture = report2016({ cfg0: 0xffffffff, banks: ALL_OK });
+    expect(warningOf(fixture, { target: 'r' })?.paragraphs).toContain(
+      'Patching recovery R would not make it run, because the camera boots slot A instead.',
+    );
+    expect(warningOf(fixture, { target: 'a' })).toBeNull();
+  });
+
+  it('is silent when the check key was not named: the bank that runs is not known', () => {
+    const fixture = report2016({
+      cfg0: 0xffffffff,
+      banks: { r: { patched: true } },
+      checkKeyNamed: false,
+    });
+    expect(warningOf(fixture)).toBeNull();
+  });
+
+  it('is silent on a 1.0.3.0 camera read under legacy-auth, whose bank verdicts are not this check', () => {
+    const fixture = reportWith({
+      cfg0: 0xffffffff,
+      banks: { r: { patched: true } },
+      plainChain: false,
+      profile: 'legacy-auth',
+      version: '1.0.3.0',
+    });
+    expect(warningOf(fixture)).toBeNull();
   });
 });

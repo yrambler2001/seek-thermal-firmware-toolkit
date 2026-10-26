@@ -335,11 +335,12 @@ export const LOCKED_SUBJECTS: readonly LockedSubject[] = [
  *     1.3.0.8 (the 16 Hz build refuses it, the 8 Hz arms it, one version string), and
  *     `refused` on 1.0.3.x (the `mode == 2` test runs first). Only the other 2014
  *     builds expose it.
- *   - the booted bank is named from the 2014 plaintext chain's active-slot word, which
- *     needs a mode-0 row this build decodes (`legacyUpgradeTargetBuild`): not on
- *     0.8.0.0 (`modeOne` boot-config), and not for the 16 Hz FF build (one version
- *     string with the 8 Hz build, whose prediction is blocked). The 1.0.3.x line's
- *     selectBootSlot is not reconstructed (`profile/unsupported`).
+ *   - the booted bank is named from the active-slot word, the bootloader's record of the
+ *     bank it entered (TESTING.md 42.56), with a mode-0 row this build decodes
+ *     (`legacyUpgradeTargetBuild`): on the 2014 plaintext chain, not on 0.8.0.0 (`modeOne`
+ *     boot-config), and not for the 16 Hz FF build (one version string with the 8 Hz
+ *     build, whose prediction is blocked); and on the 1.0.3.x line read under compact-2016,
+ *     whose mode 0 reads the same word (TESTING.md 42.84).
  */
 export function bootloaderIsRead(subject: LockedSubject): boolean {
   if (subject.staging !== 'plain') return false;
@@ -347,7 +348,7 @@ export function bootloaderIsRead(subject: LockedSubject): boolean {
 }
 
 export function bootedIsNamed(subject: LockedSubject): boolean {
-  if (subject.staging !== 'plain') return false;
+  if (subject.staging !== 'plain') return subject.profileId === 'compact-2016';
   return subject.version !== '0.8.0.0' && subject.variant !== 'ff';
 }
 

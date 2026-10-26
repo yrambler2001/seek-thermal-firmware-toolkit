@@ -6,13 +6,16 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { SlotWriteKeys, type WriteKeysVerdict } from './SlotWriteKeys';
+import { SlotWriteKeys, writeKeysVerdictOf, type WriteKeysVerdict } from './SlotWriteKeys';
 import { render } from '../test-helpers';
+import { fakeDeviceState } from '../test-fixtures';
+import { slotReport2016 } from '../test-slots';
 
 /** The store key is written, and the booted bank holds Key A, which the bootloader accepts too. */
 const STORE: WriteKeysVerdict = {
   refusal: null,
-  plainChain: false,
+  form: 'derived',
+  storedAs: null,
   underCameraKey: true,
   bootedName: 'slot A',
   keyName: 'Key B',
@@ -26,7 +29,8 @@ const STORE: WriteKeysVerdict = {
 /** The booted bank's own key is written. */
 const SAME: WriteKeysVerdict = {
   refusal: null,
-  plainChain: false,
+  form: 'derived',
+  storedAs: null,
   underCameraKey: true,
   bootedName: 'slot A',
   keyName: 'Key A',
@@ -37,7 +41,8 @@ const SAME: WriteKeysVerdict = {
 const REFUSED: WriteKeysVerdict = {
   refusal:
     'the running application (bank A, firmware 4.16.1.7) checks an upload under its own keys before it programs it',
-  plainChain: false,
+  form: 'derived',
+  storedAs: null,
   underCameraKey: true,
   bootedName: 'slot A',
   keyName: null,
@@ -48,7 +53,8 @@ const REFUSED: WriteKeysVerdict = {
 /** The 2014 plaintext chain: every bank is stored plain, so there is no key to derive and no refusal. */
 const PLAIN: WriteKeysVerdict = {
   refusal: null,
-  plainChain: true,
+  form: 'plain',
+  storedAs: null,
   underCameraKey: false,
   bootedName: 'slot A',
   keyName: null,
@@ -110,6 +116,43 @@ describe('SlotWriteKeys', () => {
     );
     const text = container.textContent;
     expect(text).toContain('the booted bank holds a key the page cannot name');
+    unmount();
+  });
+});
+
+describe('SlotWriteKeys on the 2016 Compact PRO (TESTING.md 42.84)', () => {
+  it('stages the image under its own key block 0 and says the camera stores it under the check key, with no refusal', async () => {
+    const verdict = writeKeysVerdictOf(slotReport2016(await fakeDeviceState()));
+    expect(verdict.refusal).toBeNull();
+    expect(verdict.form).toBe('image-block-0');
+    expect(verdict.keyName).toBe('key block 1');
+    const { container, unmount } = render(<SlotWriteKeys verdict={verdict} />);
+    const text = container.textContent;
+    expect(text).toContain('Keys for the writes');
+    expect(text).toContain('Staged as');
+    expect(text).toContain(
+      "the image under its own key block 0 (found in the image by value), to any bank; this camera's keys are not used",
+    );
+    expect(text).toContain('Stored as');
+    expect(text).toContain(
+      'key block 1, the key its bootloader checks a bank under; the camera re-encrypts the upload under it',
+    );
+    expect(text).toContain('named from slot A, the bank the camera reports it entered');
+    expect(text).not.toContain('No bank of this camera can be written');
+    expect(text).not.toContain('key table does not carry that key');
+    unmount();
+  });
+
+  it('says the stored key is not named, and refuses nothing, when the read could not name it', async () => {
+    const verdict = writeKeysVerdictOf(
+      slotReport2016(await fakeDeviceState(), { checkKeyNamed: false }),
+    );
+    expect(verdict.refusal).toBeNull();
+    const { container, unmount } = render(<SlotWriteKeys verdict={verdict} />);
+    expect(container.textContent).toContain(
+      'the key its bootloader checks a bank under (not named on this read); the camera re-encrypts the upload under it',
+    );
+    expect(container.textContent).not.toContain('No bank of this camera can be written');
     unmount();
   });
 });

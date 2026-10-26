@@ -53,12 +53,14 @@ export function plainBankVerdict(bank: Uint8Array): Verdict | null {
  * One bank's boot check on the locked line, as its bootloader makes it (profiles/locked-boot.ts): true
  * when it passes, false when it refuses, null when not known. An unread bank has no verdict; an erased
  * one holds no image header, so the bootloader refuses it. The 2014 plaintext chain: image_sum_ok on the
- * stored bytes. The 2016 line: the device-seeded check the read made (`SlotState.bootability`), which is
- * unknown when the read could not name the key the bootloader checks under.
+ * stored bytes. The 2016 line: the device-seeded check the read made (`SlotState.bootability`, from the
+ * check key, device-info.ts `checkKeyOf`), which is unknown when the read could not name that key.
  */
 export function lockedBankVerdict(slot: SlotState | undefined, line2016: boolean): boolean | null {
   if (slot === undefined || slot.unread) return null;
-  if (slot.raw == null) return slot.blank === true ? false : null;
+  /* Erased: no magic at +0x200, which both bootloaders' checks test first, whatever the key. */
+  if (slot.blank === true) return false;
+  if (slot.raw == null) return null;
   if (line2016) {
     if (slot.bootability === 'bootable') return true;
     if (slot.bootability === 'not-bootable') return false;
@@ -200,8 +202,20 @@ export function runningApplicationOf(state: DeviceState): RunningApplication {
 
 /**
  * Whether this build is on the 2014 plaintext chain, where the page's booted bank comes from
- * the camera's active-slot word and recovery R can run instead (device-info.ts `chainReplay`).
+ * the camera's active-slot word, the bootloader's record of the bank it entered (device-info.ts
+ * `chainReplay`, TESTING.md 42.56).
  */
 export function onPlaintextChain(profile: FirmwareProfile, version: string | null): boolean {
   return classifyBuild(profile, version).family === 'locked-plain';
+}
+
+/**
+ * Whether this build is the 2016 Compact PRO line (1.0.3.0, 1.0.3.2 and their FF builds) read under its
+ * own profile, compact-2016. Its bootloader's boot rule and bank check are decoded (profiles/locked-boot.ts,
+ * device-info.ts `checkKeyOf`), so the read names the key its banks are checked under and both starts.
+ * Under legacy-auth the banks are compared against the 2014 line's target, so no bank verdict of that read
+ * describes this bootloader's check, and this is false.
+ */
+export function onCompactPro2016Line(profile: FirmwareProfile, version: string | null): boolean {
+  return profile.id === 'compact-2016' && classifyBuild(profile, version).family === 'locked-2016';
 }

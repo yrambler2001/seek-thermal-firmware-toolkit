@@ -6,12 +6,14 @@
 
 import {
   SeekDevice,
+  bytesToHex,
   detectProfile,
   getProfile,
   hex,
   UNLOCK_POWER_CYCLE_NOTE,
   identifyCamera,
   type Artifact,
+  type CheckKey,
   type DetectionResult,
   type DeviceEvidence,
   type DumpOptions,
@@ -223,6 +225,24 @@ export function uniqueArtifacts(artifacts: readonly Artifact[]): readonly Artifa
   const byName = new Map<string, Artifact>();
   for (const artifact of artifacts) byName.set(artifact.name, artifact);
   return [...byName.values()];
+}
+
+/* ---- JSON helpers ---------------------------------------------------- */
+
+/**
+ * The 2016 line's check key (core's `CheckKey`) as `info --json` and `slots list --json` carry it: the
+ * key's name and bytes, the bank that named it and the pair it belongs to, or why it was not named. Null
+ * on every other line.
+ */
+export function checkKeyJson(checkKey: CheckKey | null): Record<string, unknown> | null {
+  if (checkKey === null) return null;
+  return {
+    name: checkKey.name,
+    key: checkKey.key === null ? null : bytesToHex(checkKey.key),
+    from: checkKey.from,
+    pair: checkKey.pair,
+    unnamedWhy: checkKey.unnamedWhy,
+  };
 }
 
 /* ---- text helpers ---------------------------------------------------- */

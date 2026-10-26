@@ -260,7 +260,7 @@ describe('the 2014 plaintext chain on the normal flash path', () => {
     expect(state.byKey.get('a')?.keyName).toBeNull();
     expect(state.byKey.get('r')?.keyName).toBeNull();
     expect(slotWriteRefusal(state)).toBeNull();
-    expect(deriveWriteKeys(state).plainChain).toBe(true);
+    expect(deriveWriteKeys(state).form).toBe('plain');
   }, 60_000);
 
   it('stages the plain image verbatim — no cipher, no footer, no keys', async () => {
