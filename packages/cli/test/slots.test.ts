@@ -323,6 +323,7 @@ function fakePlan(
     expectedStored: bytes,
     compare: [{ field: 'version', before: '4.9.5.0', after: '4.9.6.0' }],
     warnings: kind === 'raw' ? ['raw bytes are sent verbatim; nothing checks their content'] : [],
+    notes: [],
     serial: 'SN-1',
     firmwareVersion: '4.9.5.0',
   };
@@ -759,6 +760,42 @@ describe('the flash plan and read-back', () => {
     expect(text).not.toContain('slot-keystream-ciphertext');
   });
 
+  it('prints the plan’s notes under Notes, not as "! Note:" warnings, and its warnings alone under Warnings (TESTING.md 42.88)', () => {
+    const plan: SlotFlashPlan = {
+      ...fakePlan('a', 'plain', new Uint8Array(0xca88)),
+      staging: 'slot-keystream-ciphertext',
+      warnings: [
+        'bank A is the bank the camera boots now: writing it asks you to acknowledge the risk',
+      ],
+      notes: [
+        { source: 'write', text: 'how this write is checked' },
+        { source: 'bank', text: 'the bank’s own note' },
+        { source: 'camera', text: 'Staged: the image, XORed with its own key block 0' },
+      ],
+    };
+    const lines = flashPlanLines(plan, 'image.bin', null, false);
+    const text = lines.join('\n');
+    expect(text).not.toContain('Note: ');
+    const warnings = lines.indexOf('Warnings');
+    const notes = lines.indexOf('Notes');
+    expect(warnings).toBeGreaterThan(0);
+    expect(notes).toBeGreaterThan(warnings);
+    expect(lines.slice(warnings + 1, notes).filter((line) => line.startsWith('  !'))).toEqual([
+      '  ! bank A is the bank the camera boots now: writing it asks you to acknowledge the risk',
+    ]);
+    /* The CLI shows the camera's notes nowhere else before a write, so all three kinds are printed. */
+    expect(lines.slice(notes + 1).filter((line) => line.startsWith('  ·'))).toEqual([
+      '  · how this write is checked',
+      '  · the bank’s own note',
+      '  · Staged: the image, XORed with its own key block 0',
+    ]);
+  });
+
+  it('prints no Notes heading for a plan with none', () => {
+    const text = flashPlanLines(fakePlan('b', 'plain', new Uint8Array(4)), 'x.bin', null, false);
+    expect(text).not.toContain('Notes');
+  });
+
   it('says the 1.3.0.8 FF image is staged as the vendor app stages it, stored under Key B, and who said the build', () => {
     const plan: SlotFlashPlan = {
       ...fakePlan('r', 'plain', new Uint8Array(0x6000)),
@@ -984,6 +1021,10 @@ describe('slots command', () => {
         staging: 'key-a-keystream',
         storedForm: 'key-b-ciphertext',
         warnings: ['UNTESTED: the boot of the written bank is not measured'],
+        notes: [
+          { source: 'write', text: 'the bank holds the image XOR Key B' },
+          { source: 'camera', text: 'a camera-wide note' },
+        ],
       }),
     };
     await writeFile(join(temp.path, 'ff.bin'), new Uint8Array(0x100).fill(7));
@@ -1008,12 +1049,21 @@ describe('slots command', () => {
       /staging\s+the 1\.3\.0\.8 FF image as the vendor app stages it/,
     );
     expect(test.stdout.text).toContain('! UNTESTED: the boot of the written bank is not measured');
+    expect(test.stdout.text).toContain('  · the bank holds the image XOR Key B');
+    expect(test.stdout.text).not.toContain('! Note:');
+    /* The JSON: `warnings` the plan's warnings, `planNotes` its notes with their source, `notes` the write's
+     * own (TESTING.md 42.88). */
     expect(result).toMatchObject({
       action: 'flash',
       bank: 'r',
       staging: 'key-a-keystream',
       written: true,
       verified: true,
+      warnings: ['UNTESTED: the boot of the written bank is not measured'],
+      planNotes: [
+        { source: 'write', text: 'the bank holds the image XOR Key B' },
+        { source: 'camera', text: 'a camera-wide note' },
+      ],
     });
   });
 
@@ -1492,7 +1542,13 @@ describe('empty banks', () => {
           cameraIo(),
         ),
       );
-      expect(result).toMatchObject({ written: false, dryRun: true, targetEmpty: true });
+      expect(result).toMatchObject({
+        written: false,
+        dryRun: true,
+        targetEmpty: true,
+        warnings: [],
+        planNotes: [],
+      });
       expect(log.flashed).toEqual([]);
     });
 
@@ -1944,7 +2000,12 @@ function offerOf(): OfferPlan {
       version: '1.3.0.0',
       fromHz: 8,
       targetHz: 32,
-      row: { label: 'mode-8 capture program, block 8', offset: 0xb898, length: 34 },
+      row: {
+        name: 'the steady frame row (row 8)',
+        detail: 'mode-8 capture program, block 8',
+        offset: 0xb898,
+        length: 34,
+      },
     } as unknown as OfferPlan['patch'],
     fromHz: 8,
     toHz: 32,
@@ -2237,6 +2298,21 @@ describe('patch-fps', () => {
     expect(fpsPlanLines('a', offerOf(), 0x14050000, '1.3.0.0', false, null).join('\n')).toContain(
       '(add --acknowledge-risk if the camera boots bank A).',
     );
+  });
+
+  it('names the row in words; the JSON keeps the table’s own label as row.detail (TESTING.md 42.88)', () => {
+    const text = fpsPlanLines('b', offerOf(), 0x14050000, '1.3.0.0', false, null).join('\n');
+    expect(text).toMatch(/^ {2}row\s+the steady frame row \(row 8\)$/m);
+    expect(text).not.toContain('mode-8 capture program');
+    expect(fpsPlanJson(offerOf())).toMatchObject({
+      row: {
+        name: 'the steady frame row (row 8)',
+        detail: 'mode-8 capture program, block 8',
+        offset: '0xB898',
+        length: 34,
+      },
+    });
+    expect(fpsPlanJson({ status: 'refused', reason: 'no entry' })).toMatchObject({ row: null });
   });
 
   it('refuses --write without --dump-dir before the camera is opened', async () => {

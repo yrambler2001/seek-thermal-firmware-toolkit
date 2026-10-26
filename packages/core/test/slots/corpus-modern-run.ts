@@ -917,7 +917,7 @@ async function checkFlashB(
       bytes: before.plain,
       fileName: imageFileName(report),
     });
-    notes.push(...plan.warnings.filter((w) => !w.startsWith('Note: ')).map((w) => `B plan: ${w}`));
+    notes.push(...plan.warnings.map((w) => `B plan: ${w}`));
     notes.push(`B upload: ${uploadFormNote(report, before.plain, plan.payload)}`);
     const result = await flashSlot(ctx, report, plan, { acknowledgeRisk });
     const back = await dumpSlot(ctx, report, 'b');
@@ -962,7 +962,7 @@ async function checkRawR(
   const before = dumps.r?.raw ?? null;
   try {
     const plan = prepareSlotFlash(report, 'r', { kind: 'raw', bytes: a.raw, fileName: 'raw.bin' });
-    notes.push(...plan.warnings.filter((w) => !w.startsWith('Note: ')).map((w) => `R plan: ${w}`));
+    notes.push(...plan.warnings.map((w) => `R plan: ${w}`));
     const result = await flashSlot(ctx, report, plan, { acknowledgeRisk: true });
     const after = result.after;
     if (after === null) return fail('recovery R was not read back');

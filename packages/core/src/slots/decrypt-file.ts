@@ -26,6 +26,7 @@
 import { hexToBytes, hexUp, sha256hex, viewOf } from '../bytes.js';
 import { SeekError } from '../errors.js';
 import { decryptImage } from '../crypto/cipher.js';
+import { keyCheckText, keyConfidencePhrase } from '../crypto/confidence-words.js';
 import { identifyKey, resolveWhitening, type KeyPair } from '../crypto/keys.js';
 import { CANDIDATE_K, recoverKeyInfo, slotChainOf, type KeyConfidence } from '../crypto/recover.js';
 import type { Xorshift128State } from '../crypto/xorshift128.js';
@@ -71,6 +72,7 @@ export interface SlotFileKey {
   readonly whiteningEvidence: 'plaintext' | 'profile-default' | null;
   /** The 16-byte key in the form the image holds, in hex (cryptanalytic only). */
   readonly key: string | null;
+  /** The key recovery's verdict, as a code for scripts (cryptanalytic only); people read `keyConfidencePhrase`. */
   readonly confidence: KeyConfidence | null;
   /** The acceptance sum of the decrypted image (cryptanalytic only). */
   readonly acceptanceSum: number | null;
@@ -241,7 +243,7 @@ export async function decryptSlotFile(
   if (!recovered.sane) {
     notes.push(
       'key not recovered: the image decrypts to a reset vector that is not a Cortex-M entry ' +
-        `(confidence ${recovered.confidence}); nothing is decrypted`,
+        `(key ${keyConfidencePhrase(recovered.confidence)}); nothing is decrypted`,
     );
     return finish('not-decrypted', headerOf(header), null, null);
   }
@@ -275,8 +277,7 @@ export async function decryptSlotFile(
   const named = applicationKeyName(recovered.state, recovered.matchesProfile, whitening.whiteningK);
   notes.push(
     `decrypted ${String(plain.length)} B under the key recovered from this bank ` +
-      `(confidence ${recovered.confidence}, acceptance sum ${hexUp(recovered.checksum)}, ` +
-      `${recovered.matchesProfile ? 'matches' : 'does not match'} the profile` +
+      `(${keyCheckText(recovered.confidence, recovered.checksum)}` +
       (named === null ? '' : `; it is ${named}`) +
       ')',
   );
@@ -339,7 +340,11 @@ export function slotFileReport(result: SlotFileDecryption, fileName: string): st
       lines.push(
         `  acceptance  : ${hexUp(key.acceptanceSum ?? 0)} (${
           key.matchesProfile === true ? 'the profile target' : 'not the profile target'
-        }); confidence ${key.confidence ?? 'n/a'}`,
+        })`,
+      );
+      /* The verdict in words; the JSON's `key.confidence` keeps the code (TESTING.md 42.88). */
+      lines.push(
+        `  check       : ${key.confidence === null ? 'not made' : `key ${keyConfidencePhrase(key.confidence)}`}`,
       );
     }
     lines.push(

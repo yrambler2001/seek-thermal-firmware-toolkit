@@ -634,11 +634,30 @@ describe('decryptDump', () => {
     expect(text).toContain('key evidence   :');
     expect(text).toContain("this exact key is in the image's own plaintext");
     expect(text).toContain('Embedded key table : yes');
+    /* The verdict in words, in the report, the key record and the summary; the manifest keeps the code
+     * (TESTING.md 42.88). */
+    expect(text).toContain('Key check      : verified by the acceptance sum\n');
+    expect(text).toContain('key check      : verified by the acceptance sum\n');
+    expect(text).not.toMatch(/VERIFIED|Confidence|confidence/);
+    const summary = new TextDecoder().decode(
+      result.artifacts.find((a) => a.name === 'decrypted/decryption_report.txt')?.data,
+    );
+    expect(summary).toContain('[key verified by the acceptance sum]');
+    expect(summary).toContain(`  ${bytesToHex(keyA)}  [`);
+    expect(summary).toMatch(/\]\s+\(key verified by the acceptance sum\)$/m);
+    expect(summary).not.toContain('VERIFIED');
+    const keysLog = new TextDecoder().decode(
+      result.artifacts.find((a) => a.name.endsWith('_keys.log'))?.data,
+    );
+    expect(keysLog).not.toContain('VERIFIED');
 
     if (result.summary.attempted) {
       expect(result.summary.images).toHaveLength(1);
       expect(result.summary.keys).toHaveLength(1);
       expect(result.summary.images[0]?.key).toBe(bytesToHex(keyA));
+      /* The manifest is for scripts: it keeps the code. */
+      expect(result.summary.images[0]?.confidence).toBe('VERIFIED(profile)');
+      expect(result.summary.keys[0]?.confidence).toBe('VERIFIED(profile)');
     } else {
       throw new Error('expected an attempted decryption summary');
     }
@@ -1341,7 +1360,8 @@ describe('a 2016 Compact PRO (1.0.3.0), read and judged', () => {
       'Profile   : 2016 Compact Pro [compact-2016] (detected from this dump and the camera; ' +
         'the read acted under legacy-auth)',
     );
-    expect(report).toContain('[VERIFIED(profile)]');
+    expect(report).toContain('[key verified by the acceptance sum]');
+    expect(report).not.toContain('VERIFIED(profile)');
     expect(report).not.toContain('unknown profile');
     /* the read itself is still legacy-auth's: the manifest says what it acted under */
     expect(result.manifest.profile.id).toBe('legacy-auth');

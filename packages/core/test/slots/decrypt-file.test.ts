@@ -182,6 +182,15 @@ describe('slotFileReport', () => {
     expect(text).toContain(`Decrypted   : ${String(LENGTH)} B, sha256 ${result.plainSha256 ?? ''}`);
     expect(text).toContain(`named       : Key A of ${pair.builds}`);
     expect(text).toContain(`key         : ${bytesToHex(hexToBytes(pair.keyA))}`);
+    /* The key recovery's verdict in words; the result keeps the code for scripts (TESTING.md 42.88). */
+    expect(text).toContain('check       : key verified by the acceptance sum');
+    expect(text).not.toContain('VERIFIED');
+    expect(text).not.toMatch(/confidence/i);
+    expect(result.key?.confidence).toBe('VERIFIED(profile)');
+    expect(result.notes.join('\n')).toContain(
+      'under the key recovered from this bank (key verified by the acceptance sum 0x0000FFFF; it is Key A of',
+    );
+    expect(result.notes.join('\n')).not.toContain('VERIFIED');
   });
 
   it('says what an erased bank is, with no key and no decrypted size', async () => {

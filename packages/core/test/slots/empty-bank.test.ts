@@ -21,7 +21,10 @@ import { createHash } from 'node:crypto';
 import { describe, expect, it, vi } from 'vitest';
 
 import { equalBytes, hexToBytes } from '../../src/bytes.js';
-import { keyFilenameSuffix } from '../../src/crypto/keys.js';
+import { cryptBytes } from '../../src/crypto/cipher.js';
+import { keyFilenameSuffix, stateFromKey } from '../../src/crypto/keys.js';
+import { CHECK_ZERO_IDX, KNOWN_ZERO_IDX } from '../../src/crypto/recover.js';
+import { setAcceptSum } from '../../src/image/bank.js';
 import { SeekError } from '../../src/errors.js';
 import { collectingReporter, silentReporter, type LogEvent } from '../../src/events.js';
 import {
@@ -497,6 +500,31 @@ describe('dumpSlot on an empty bank', () => {
     const { dumped } = await dumpOf(flashWith(() => undefined));
     expect(dumped.empty).toBe(false);
     expect(dumped.notes.join('\n')).toMatch(/no image header/);
+  });
+
+  it('a bank that holds an image decrypts, and says the key recovery’s verdict in words (TESTING.md 42.88)', async () => {
+    /* An image the solve recovers: the reserved vectors zero, the sum at the line's target, under a key. */
+    const image = imageOf(0x2000, 9);
+    const dv = new DataView(image.buffer);
+    for (const index of [...KNOWN_ZERO_IDX, CHECK_ZERO_IDX]) dv.setUint32(4 * index, 0, true);
+    const plain = setAcceptSum(image, modern4x.cipher).image;
+    const stored = cryptBytes(
+      plain,
+      stateFromKey(KEY_A, modern4x.cipher.whiteningK),
+      modern4x.cipher,
+    );
+    const { dumped } = await dumpOf(
+      flashWith((f) => {
+        f.set(stored, BANK_AT);
+      }),
+    );
+
+    expect(equalBytes(dumped.plain ?? new Uint8Array(0), plain)).toBe(true);
+    const notes = dumped.notes.join('\n');
+    expect(notes).toContain(
+      `decrypted ${String(plain.length)} B under the key recovered from this bank (key verified by the acceptance sum 0x0000FFFF)`,
+    );
+    expect(notes).not.toMatch(/VERIFIED|confidence|the profile/);
   });
 });
 

@@ -23,6 +23,7 @@
 
 import { equalBytes, hex, hexUp, viewOf } from '../bytes.js';
 import { decryptImage } from '../crypto/cipher.js';
+import { keyCheckText } from '../crypto/confidence-words.js';
 import { recoverKeyInfo } from '../crypto/recover.js';
 import { HEADER_OFFSET, HEADER_SIZE, IMAGE_MAGIC, parseImageHeader } from '../image/header.js';
 import type { CipherProfile } from '../profiles/types.js';
@@ -142,9 +143,11 @@ export function compareReadBack(
     const view = viewOf(after);
     const recovered = recoverKeyInfo(view, 0, length, cipher);
     const decrypted = decryptImage(view, 0, length, recovered.state, cipher);
-    const recoveredNote =
-      `keystream recovered from the read-back (confidence ${recovered.confidence}, acceptance sum ` +
-      `${hexUp(recovered.checksum)})`;
+    /* The verdict in words (TESTING.md 42.88): "key verified by the acceptance sum 0x00000000". */
+    const recoveredNote = `keystream recovered from the read-back (${keyCheckText(
+      recovered.confidence,
+      recovered.checksum,
+    )})`;
     if (equalBytes(decrypted, plain)) {
       return {
         verified: true,

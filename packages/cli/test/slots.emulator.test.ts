@@ -734,9 +734,15 @@ describe.skipIf(!available)(
         expect(dry?.json?.payloadBytes).toBe(seq.current.image?.length);
         /* The plan says the bank will hold the solved image, then erased, by its digest. */
         expect(dry?.json?.expectedSha256).toBe(sha256Hex(expectedBank()));
+        /* What the image is and what the bank will hold are this write's notes; the untested boot warns
+         * (TESTING.md 42.88). */
         const warnings = (dry?.json?.warnings as string[] | undefined) ?? [];
-        expect(warnings.join('\n')).toMatch(/block 0 \(Key A\)/);
-        expect(warnings.join('\n')).toMatch(/under Key B/);
+        const planNotes =
+          (dry?.json?.planNotes as { source: string; text: string }[] | undefined) ?? [];
+        const writeNotes = planNotes.filter((note) => note.source === 'write').map((n) => n.text);
+        expect(writeNotes.join('\n')).toMatch(/block 0 \(Key A\)/);
+        expect(writeNotes.join('\n')).toMatch(/under Key B/);
+        expect(warnings.join('\n')).toMatch(/UNTESTED/);
         for (const opcode of [STAGE_OP, COMMIT_OP, RESET_OP]) {
           expect(sentOf(dry?.sent ?? new Map(), opcode), `opcode ${String(opcode)}`).toBe(0);
         }

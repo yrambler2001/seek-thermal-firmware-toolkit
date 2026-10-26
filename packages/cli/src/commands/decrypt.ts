@@ -24,6 +24,7 @@ import {
   decryptSlotFile,
   getProfile,
   hexUp,
+  keyConfidencePhrase,
   makeOfflineDecryptReadme,
   manifestToJson,
   profileInfoOf,
@@ -142,7 +143,8 @@ async function decryptFileCommand(ctx: CommandContext, path: string): Promise<Co
           result.slots.map((slot) => [
             hexUp(slot.flash),
             `${String(slot.length)} B`,
-            slot.recovered.confidence,
+            /* The verdict in words; the JSON's `confidence` keeps the code (TESTING.md 42.88). */
+            keyConfidencePhrase(slot.recovered.confidence),
             hexUp(slot.recovered.checksum),
             hexUp(slot.whitening.whiteningK),
             slot.duplicateOf === null ? '' : `copy of ${hexUp(slot.duplicateOf)}`,

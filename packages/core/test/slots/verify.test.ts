@@ -439,6 +439,11 @@ describe('the read-back verdict on each staging form, against a device that prog
     expect(result.verified, result.notes.join('\n')).toBe(true);
     expect(result.notes.join('\n')).toContain('decrypts to the expected image');
     expect(result.notes.join('\n')).not.toContain('does NOT');
+    /* The key recovery's verdict in words, not its code name (TESTING.md 42.88). */
+    expect(result.notes.join('\n')).toMatch(
+      /under the keystream recovered from the read-back \(key verified by the acceptance sum 0x[0-9A-F]{8}\)/,
+    );
+    expect(result.notes.join('\n')).not.toMatch(/VERIFIED|confidence/);
   });
 
   it('a re-encrypting 2016 device stores bytes that differ from the payload, and the verdict is still true', async () => {

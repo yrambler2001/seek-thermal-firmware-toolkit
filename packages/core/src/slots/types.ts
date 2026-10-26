@@ -199,6 +199,20 @@ export interface SlotFlashInput {
   readonly fileName: string;
 }
 
+/**
+ * Where a write plan's note comes from:
+ *  - 'write'  this write's own: how it is staged or checked, or what the bank will hold;
+ *  - 'bank'   the bank's own notes (`SlotEntry.notes`), the same for every write to it;
+ *  - 'camera' the camera's notes (`SlotPlan.notes`), the same for every bank.
+ */
+export type PlanNoteSource = 'write' | 'bank' | 'camera';
+
+/** One note beside a write plan. */
+export interface PlanNote {
+  readonly source: PlanNoteSource;
+  readonly text: string;
+}
+
 /** Everything a person is shown, and a write is checked against, before a send. */
 export interface SlotFlashPlan {
   readonly key: SlotKey;
@@ -243,8 +257,17 @@ export interface SlotFlashPlan {
    * before the field existed reads as false.
    */
   readonly targetEmpty?: boolean;
-  /** Things to say loudly (writing the booted slot, writing recovery, a raw payload). */
+  /**
+   * Things to say loudly: a risk the write takes, or a check that is not made (writing the booted slot,
+   * writing recovery, a raw payload, a payload the bootloader would reject). Notes are not here: see `notes`.
+   */
   readonly warnings: readonly string[];
+  /**
+   * What is worth knowing beside the plan and is not a risk, each with where it comes from: this write's own
+   * notes first, then the bank's, then the camera's. A front end that already shows the camera's notes and the
+   * bank's row need not repeat those two here (TESTING.md 42.88).
+   */
+  readonly notes: readonly PlanNote[];
   /** The device analysis this plan was built from. `flashSlot` re-checks it. */
   readonly serial: string | null;
   readonly firmwareVersion: string | null;

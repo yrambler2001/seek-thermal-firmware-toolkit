@@ -43,6 +43,7 @@ import { ADJUST_OFFSET, HEADER_OFFSET, IMAGE_MAGIC, LENGTH_OFFSET } from '../ima
 import { wordSum32 } from '../image/bank.js';
 import { sha256Sync } from '../slots/write-sha.js';
 import { FPS_KNOWN_RATE, FPS_PATCH_TABLE, type FpsPatchSource } from './fps-patch-table.js';
+import { fpsRowName } from './fps-row-words.js';
 
 export { FPS_NOT_PATCHED_NOTES } from './fps-patch-table.js';
 
@@ -67,9 +68,15 @@ export interface FpsSibling {
   readonly length: number;
 }
 
-/** The steady-state record the edit lives in, for the page to name. */
+/** The steady-state record the edit lives in. */
 export interface FpsRow {
-  readonly label: string;
+  /** The row in words, for people: "the steady frame row (row 14)" (fps-row-words.ts). */
+  readonly name: string;
+  /**
+   * The table's own label, in the reconstruction's record and link names: "row 14, the steady self-loop (row
+   * link ee: next = alt = 14), 68-byte r2016 record". For developers and the JSON, not for people.
+   */
+  readonly detail: string;
   readonly offset: number;
   readonly length: number;
 }
@@ -215,7 +222,12 @@ export const FPS_PATCHES: readonly FpsPatch[] = FPS_PATCH_TABLE.map((source) => 
     before: hexToBytes(edit.before),
     after: hexToBytes(edit.after),
   })),
-  row: { ...source.row },
+  row: {
+    name: fpsRowName(source.id),
+    detail: source.row.label,
+    offset: source.row.offset,
+    length: source.row.length,
+  },
   sibling: source.sibling === null ? null : { ...source.sibling },
   gate: gateOf(source),
 }));

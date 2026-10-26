@@ -83,7 +83,12 @@ function entryFor(
       before: hexToBytes(edit.before),
       after: hexToBytes(edit.after),
     })),
-    row: { label: 'synthetic', offset: edits[0]?.offset ?? 0, length: 8 },
+    row: {
+      name: 'the steady frame row',
+      detail: 'synthetic',
+      offset: edits[0]?.offset ?? 0,
+      length: 8,
+    },
     sibling: null,
     gate: { enabled: true, reason: null },
   };

@@ -1,6 +1,7 @@
 /* OWNER: reader agent. See ./types.ts. */
 import { hex, hexUp, sha256hex, viewOf } from '../bytes.js';
 import { decryptImage } from '../crypto/cipher.js';
+import { keyCheckText, keyConfidencePhrase } from '../crypto/confidence-words.js';
 import { findEmbeddedKeyTable, keyFilenameSuffix, type KeyPair } from '../crypto/keys.js';
 import { recoverKeyInfo } from '../crypto/recover.js';
 import { errorMessage, CancelledError, SeekError } from '../errors.js';
@@ -202,15 +203,15 @@ export async function dumpSlot(
       } else if (!recovered.sane) {
         notes.push(
           'key not recovered: the image decrypts to a reset vector that is not a Cortex-M ' +
-            `entry (confidence ${recovered.confidence})`,
+            `entry (key ${keyConfidencePhrase(recovered.confidence)})`,
         );
       } else {
         plain = decryptImage(view, 0, header.length, recovered.state, cipher);
         const keyName = report.state.byKey.get(key)?.keyName ?? null;
+        /* The verdict in words, which also says whether the sum is the line's (TESTING.md 42.88). */
         notes.push(
           `decrypted ${String(plain.length)} B under the key recovered from this bank ` +
-            `(confidence ${recovered.confidence}, acceptance sum ${hexUp(recovered.checksum)}` +
-            (recovered.matchesProfile ? ', matches the profile' : ', does not match the profile') +
+            `(${keyCheckText(recovered.confidence, recovered.checksum)}` +
             (keyName === null ? '' : `; the analysis names it '${keyName}'`) +
             ')',
         );

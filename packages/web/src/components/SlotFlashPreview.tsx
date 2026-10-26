@@ -72,6 +72,10 @@ export function SlotFlashPreview({
   onDiscard,
 }: SlotFlashPreviewProps): ReactElement {
   const chunks = Math.ceil(plan.payload.length / CHUNK);
+  /* Only this write's own notes join the warnings: the camera's notes are above the device panel and the
+   * bank's own are on its row, both in this section already (TESTING.md 42.88). */
+  const writeNotes = plan.notes.filter((note) => note.source === 'write');
+  const readFirst = [...plan.warnings, ...writeNotes.map((note) => `Note: ${note.text}`)];
   const rows: readonly KeyValueRow[] = [
     ['File', fileName],
     ...(source === null ? [] : [['Image taken from', source] satisfies KeyValueRow]),
@@ -148,14 +152,14 @@ export function SlotFlashPreview({
         </div>
       )}
 
-      {plan.warnings.length > 0 && (
+      {readFirst.length > 0 && (
         <Alert tone="warn" className="mt-3">
           <p>
             <strong>Read before writing:</strong>
           </p>
           <ul>
-            {plan.warnings.map((warning) => (
-              <li key={warning}>{warning}</li>
+            {readFirst.map((line) => (
+              <li key={line}>{line}</li>
             ))}
           </ul>
         </Alert>

@@ -613,7 +613,7 @@ the tool does the packaging:
    footer keeps the image id, version and model string from the footer already on the device, and only
    the length is patched;
 5. shows the plan before anything is sent: the bank, the new image next to what the bank holds now, the
-   payload size in 64-byte chunks, the transfer checksum and any warnings;
+   payload size in 64-byte chunks, the transfer checksum, and any warnings and notes;
 6. streams the payload in 64-byte chunks, commits it, and reads the bank back to compare it with the
    image that was sent.
 

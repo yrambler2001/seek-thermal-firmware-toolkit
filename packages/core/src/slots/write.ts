@@ -39,6 +39,7 @@ import {
   type FlashSlotOptions,
   type FFRunningBasis,
   type FlashSlotResult,
+  type PlanNote,
   type PlanStaging,
   type SlotEntry,
   type SlotFlashInput,
@@ -215,28 +216,37 @@ function ffRunningGate(
   throw ffRunningUnknownRefusal(running);
 }
 
+/** What is said beside a plan: its warnings (a risk, or a check not made) and this write's own notes. */
+interface PlanWords {
+  readonly warnings: readonly string[];
+  readonly notes: readonly string[];
+}
+
 /**
- * What is said beside an FF image's plan: what it is, what is stored, the basis for the running
- * build, and the untested boot. The payload is not the stored bytes, and no genuine bootloader for
- * this build is in the corpus, so nothing here claims the written bank boots.
+ * What is said beside an FF image's plan: what it is and what is stored, and how the running build was
+ * decided, as notes; the untested boot, and a running build the person chose, as warnings. The payload is
+ * not the stored bytes, and no genuine bootloader for this build is in the corpus, so nothing here claims
+ * the written bank boots.
  */
-function ffStagingWarnings(args: {
+function ffStagingWords(args: {
   readonly running: RunningApplication;
   readonly basis: FFRunningBasis;
-}): string[] {
+}): PlanWords {
   const { running, basis } = args;
   const warnings = [
+    'UNTESTED: no genuine bootloader for the 1.3.0.8 FF build is in the corpus, so whether the ' +
+      'written bank boots is not measured. On the 0.9.0.0 bootloader the old plain form booted from ' +
+      'recovery R; this form will not, because recovery runs the bank unchecked and does not decrypt it ' +
+      '(TESTING.md 42.12). Nothing here claims the camera boots it.',
+  ];
+  const notes = [
     'This is the 1.3.0.8 FF (16 Hz) image, staged as the vendor app stages it: the image XOR key ' +
       'block 0 (Key A), header window verbatim. The camera re-keys it with key block 1 and stores ' +
       'the image under Key B, so the bank holds the image XOR Key B, not the plain image and not ' +
       'the payload.',
-    'UNTESTED: no genuine bootloader for the 1.3.0.8 FF build is in the corpus, so whether the ' +
-      'written bank boots is not measured. On the 0.9.0.0 bootloader the old plain form booted from ' +
-      'recovery R; this form will not, because recovery runs the bank unchecked and does not decrypt it ' +
-      '(TESTING.md 42.12). The page does not claim the camera boots it.',
   ];
   if (basis === 'camera') {
-    warnings.push(`The camera's own answers say it runs the 16 Hz FF build: ${running.why}.`);
+    notes.push(`The camera's own answers say it runs the 16 Hz FF build: ${running.why}.`);
   } else {
     warnings.push(
       `The camera's own answers did not say which build it runs (${running.why}). You said it runs ` +
@@ -244,7 +254,7 @@ function ffStagingWarnings(args: {
         '0x00070100 and leaves the bank unchanged, which is what happens when the choice is wrong.',
     );
   }
-  return warnings;
+  return { warnings, notes };
 }
 
 /**
@@ -318,6 +328,9 @@ export function prepareSlotFlash(
   const bankBytes = Math.min(entry.length, SLOT_BYTES);
   const cipher = state.profile.cipher;
   const warnings: string[] = [];
+  /* This write's own notes: how it is staged or checked, or what the bank will hold. Not a risk, so not a
+   * warning (TESTING.md 42.88). */
+  const writeNotes: string[] = [];
 
   let body: Body;
   if (input.kind === 'raw') {
@@ -367,12 +380,12 @@ export function prepareSlotFlash(
       ...(folded === null ? {} : { storedForm: 'key-b-ciphertext' as const }),
       ffRunning: ffRaw === null ? null : ffRaw.basis,
     };
-    warnings.push(
-      'Raw payload: sent exactly as given. This page does not check that it is bootable.',
-    );
+    warnings.push('Raw payload: sent exactly as given. Nothing here checks that it is bootable.');
     if (folded !== null && ffRaw !== null) {
-      warnings.push(...ffStagingWarnings(ffRaw));
-      warnings.push(
+      const ff = ffStagingWords(ffRaw);
+      warnings.push(...ff.warnings);
+      writeNotes.push(...ff.notes);
+      writeNotes.push(
         'This payload is the 1.3.0.8 FF staged form (the image XOR key block 0, word sum 0xFFFF). ' +
           'The camera stores the image under Key B, so the read-back is checked against those bytes.',
       );
@@ -382,7 +395,7 @@ export function prepareSlotFlash(
       );
     } else {
       if (entry.staging !== 'plain') {
-        warnings.push(
+        writeNotes.push(
           'The device decodes this payload and re-encrypts what it keeps, so the stored bytes are ' +
             'not predicted. The read-back is checked as the image it decrypts to, where that can be said.',
         );
@@ -435,7 +448,8 @@ export function prepareSlotFlash(
         `${entry.name} already holds an image the bootloader cannot take. This write lands in the same state.`,
       );
     }
-    warnings.push(...(staged.warnings ?? []));
+    warnings.push(...(staged.words?.warnings ?? []));
+    writeNotes.push(...(staged.words?.notes ?? []));
   }
 
   if (body.payload.length > bankBytes) {
@@ -453,7 +467,14 @@ export function prepareSlotFlash(
       `${risk}: writing it asks you to acknowledge the risk, and the camera runs whatever it holds after the next power cycle.`,
     );
   }
-  for (const note of [...plan.notes, ...entry.notes]) warnings.push(`Note: ${note}`);
+  /* This write's notes, then the bank's own, then the camera's. None is a risk, so none is a warning. A front
+   * end that already shows the camera's notes and the bank's row need not say those two again (TESTING.md
+   * 42.88). */
+  const notes: PlanNote[] = [
+    ...writeNotes.map((text) => ({ source: 'write' as const, text })),
+    ...entry.notes.map((text) => ({ source: 'bank' as const, text })),
+    ...plan.notes.map((text) => ({ source: 'camera' as const, text })),
+  ];
 
   const compare = compareRows(
     { header: slot.plainHeader, sha256: slot.sha256, keyName: slot.keyName },
@@ -479,6 +500,7 @@ export function prepareSlotFlash(
     compare,
     targetEmpty,
     warnings,
+    notes,
     serial: state.serial,
     firmwareVersion: state.version,
   };
@@ -496,8 +518,8 @@ interface StagedImage {
   readonly staging?: PlanStaging;
   /** How the stored bytes relate to the payload, when not 'as-sent'. */
   readonly storedForm?: StoredForm;
-  /** Extra words beside the plan. */
-  readonly warnings?: readonly string[];
+  /** Extra words beside the plan: its warnings and this write's notes. */
+  readonly words?: PlanWords;
   /** For an FF image: how the running build was decided. */
   readonly ffRunning?: FFRunningBasis;
 }
@@ -623,7 +645,7 @@ function stageImage(
       staging: 'key-a-keystream',
       storedForm: 'key-b-ciphertext',
       ffRunning: gate.basis,
-      warnings: ffStagingWarnings(gate),
+      words: ffStagingWords(gate),
     };
   }
   refusePlainStaging(report.state);

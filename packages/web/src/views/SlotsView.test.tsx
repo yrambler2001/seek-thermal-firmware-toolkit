@@ -402,8 +402,17 @@ describe('SlotsView', () => {
           storedForm: 'key-b-ciphertext',
           expectedStored: new Uint8Array(0x10000),
           warnings: [
-            'This is the 1.3.0.8 FF (16 Hz) image. It is staged as the vendor app stages it (XOR Key A).',
             'UNTESTED: no genuine bootloader for this build is in the corpus, so the boot is not measured.',
+          ],
+          /* As core splits them (TESTING.md 42.88): what the image is, a note of this write; the bank's and
+           * the camera's notes, shown elsewhere in the section, not again here. */
+          notes: [
+            {
+              source: 'write',
+              text: 'This is the 1.3.0.8 FF (16 Hz) image. It is staged as the vendor app stages it (XOR Key A).',
+            },
+            { source: 'bank', text: 'Recovery bank note.' },
+            { source: 'camera', text: 'Camera-wide note.' },
           ],
         },
         report,
@@ -421,6 +430,14 @@ describe('SlotsView', () => {
       '65,536 B predicted — the image XOR Key B, not the payload itself',
     );
     expect(container.textContent).toContain('UNTESTED: no genuine bootloader');
+    /* "Read before writing" lists the warnings, then this write's own note as a note; the bank's and the
+     * camera's notes are not repeated there (TESTING.md 42.88). */
+    const readFirst = [...container.querySelectorAll('li')].map((li) => li.textContent);
+    expect(readFirst).toContain(
+      'Note: This is the 1.3.0.8 FF (16 Hz) image. It is staged as the vendor app stages it (XOR Key A).',
+    );
+    expect(readFirst.filter((text) => text.includes('Recovery bank note.'))).toEqual([]);
+    expect(readFirst.filter((text) => text.includes('Camera-wide note.'))).toEqual([]);
 
     act(() => {
       buttonByText(container, 'Write to recovery R…').click();
@@ -1050,6 +1067,73 @@ describe('SlotsView: the frame-rate row action', () => {
     expect(text).toContain('The booted bank named on this line is the bank the camera entered');
     expect(text).not.toContain('Where the page names');
     unmount();
+  });
+
+  it('on a 2016 Compact PRO, a write plan’s "Read before writing" repeats none of the camera’s or the bank’s notes (TESTING.md 42.88)', () => {
+    /* Core's real 1.0.3.0 plan, and a write plan carrying its notes as core gives them: the camera's six and
+     * the bank's own, with the one warning the booted bank's write has. Before, the list carried all of them
+     * as "Note: …" while the same notes sat above the device panel. */
+    const fixture = slotReport2016(base);
+    const plan = buildSlotPlan(getProfile('compact-2016'), '1.0.3.0');
+    const report: SlotsReport = {
+      ...fixture,
+      plan,
+      slots: fixture.slots.map((slotView) => ({
+        ...slotView,
+        entry: plan.slots.find((entry) => entry.key === slotView.entry.key) ?? slotView.entry,
+      })),
+    };
+    const pendingFor = (key: SlotKey, warnings: readonly string[]) => ({
+      key,
+      kind: 'plain' as const,
+      fileName: 'stock-a.bin',
+      source: null,
+      report,
+      plan: {
+        ...preparedSlot(key, 'plain', new Uint8Array(0xca88)),
+        staging: 'slot-keystream-ciphertext' as const,
+        warnings,
+        notes: [
+          ...(plan.slots.find((entry) => entry.key === key)?.notes ?? []).map((text) => ({
+            source: 'bank' as const,
+            text,
+          })),
+          ...plan.notes.map((text) => ({ source: 'camera' as const, text })),
+        ],
+      },
+    });
+    const warning =
+      'bank A is the bank the camera boots now: writing it asks you to acknowledge the risk, and the camera runs whatever it holds after the next power cycle.';
+    const booted = view(panel({ plan, report, pending: pendingFor('a', [warning]) }));
+    const text = booted.container.textContent;
+    expect(plan.notes.length).toBeGreaterThan(0);
+    expect(text).toContain('Read before writing:');
+    const items = [...booted.container.querySelectorAll('[data-slot="alert"] li')].map(
+      (li) => li.textContent,
+    );
+    expect(items).toEqual([warning]);
+    /* Each camera note is on the page once: above the device panel, not again in the plan. */
+    for (const note of plan.notes) expect(text.split(note)).toHaveLength(2);
+    expect(text).not.toContain('Note: ');
+    booted.unmount();
+
+    /* Recovery R: its own note is on its row, so the plan does not say it again either. */
+    const recovery = view(
+      panel({
+        plan,
+        report,
+        pending: pendingFor('r', ['Recovery bank R: writing it asks you to acknowledge the risk.']),
+      }),
+    );
+    const rNote = plan.slots.find((entry) => entry.key === 'r')?.notes[0] ?? '';
+    expect(rNote).toContain('Recovery bank, mode 9, token form.');
+    expect(recovery.container.textContent.split(rNote)).toHaveLength(2);
+    recovery.unmount();
+
+    /* B: no warning and no note of its own write, so no "Read before writing" at all. */
+    const unbooted = view(panel({ plan, report, pending: pendingFor('b', []) }));
+    expect(unbooted.container.textContent).not.toContain('Read before writing:');
+    unbooted.unmount();
   });
 
   it('on a 2016 Compact PRO whose check key is not named, says why each bank’s bootability is unknown', () => {

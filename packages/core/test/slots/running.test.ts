@@ -13,16 +13,22 @@ import { describe, expect, it } from 'vitest';
 import { hexToBytes } from '../../src/bytes.js';
 import { SeekError } from '../../src/errors.js';
 import { wordSum32 } from '../../src/image/bank.js';
-import { IMAGE_MAGIC, LENGTH_OFFSET, parseImageHeader, type ImageHeader } from '../../src/image/header.js';
-import { KEY_PAIRS, keyWordsOf, keystream, xorWindowVerbatim } from '../../src/preservation/patch.js';
+import {
+  IMAGE_MAGIC,
+  LENGTH_OFFSET,
+  parseImageHeader,
+  type ImageHeader,
+} from '../../src/image/header.js';
+import {
+  KEY_PAIRS,
+  keyWordsOf,
+  keystream,
+  xorWindowVerbatim,
+} from '../../src/preservation/patch.js';
 import { getProfile } from '../../src/profiles/registry.js';
 import { stageFFVendor } from '../../src/slots/ff-form.js';
 import { buildSlotPlan } from '../../src/slots/capability.js';
-import {
-  ffBankVerdict,
-  plainBankVerdict,
-  runningApplicationOf,
-} from '../../src/slots/running.js';
+import { ffBankVerdict, plainBankVerdict, runningApplicationOf } from '../../src/slots/running.js';
 import type { SlotKey } from '../../src/slots/types.js';
 import { prepareSlotFlash } from '../../src/slots/write.js';
 import type { BankVerdicts, DeviceState, SlotState } from '../../src/workflows/types.js';
@@ -181,7 +187,11 @@ function stateOf(
   } as unknown as DeviceState;
 }
 
-const EIGHT_HZ_BANKS = [presentBank('a', plainImage(PLAIN_LENGTH, 31)), emptyBank('b'), presentBank('r', plainImage(PLAIN_LENGTH, 31))];
+const EIGHT_HZ_BANKS = [
+  presentBank('a', plainImage(PLAIN_LENGTH, 31)),
+  emptyBank('b'),
+  presentBank('r', plainImage(PLAIN_LENGTH, 31)),
+];
 /** The answers the 8 Hz build gives for those banks: A 1, B 0, R 1. */
 const EIGHT_HZ_ANSWERS: BankVerdicts = { a: 1, b: 0, r: 1 };
 
@@ -248,7 +258,11 @@ describe('runningApplicationOf: the camera’s answers decide the build', () => 
 
   it('the 16 Hz build with its stored form in A: the FF answers name it', () => {
     const ff = ffFileImage(53);
-    const banks = [presentBank('a', ffStored(ff)), emptyBank('b'), presentBank('r', plainImage(PLAIN_LENGTH, 54))];
+    const banks = [
+      presentBank('a', ffStored(ff)),
+      emptyBank('b'),
+      presentBank('r', plainImage(PLAIN_LENGTH, 54)),
+    ];
     const app = runningApplicationOf(stateOf(banks, { a: 1, b: 0, r: 0 }));
     expect(app.build).toBe('ff-1308');
   });
@@ -279,7 +293,11 @@ describe('runningApplicationOf: the camera’s answers decide the build', () => 
   });
 
   it('a bank the verdicts depend on was not read: unknown', () => {
-    const banks = [presentBank('a', plainImage(PLAIN_LENGTH, 61)), unreadBank('b'), presentBank('r', plainImage(PLAIN_LENGTH, 61))];
+    const banks = [
+      presentBank('a', plainImage(PLAIN_LENGTH, 61)),
+      unreadBank('b'),
+      presentBank('r', plainImage(PLAIN_LENGTH, 61)),
+    ];
     const app = runningApplicationOf(stateOf(banks, EIGHT_HZ_ANSWERS));
     expect(app.build).toBeNull();
     expect(app.why).toMatch(/was not read/);
@@ -287,7 +305,11 @@ describe('runningApplicationOf: the camera’s answers decide the build', () => 
 
   it('an erased bank read clean, which keeps no bytes past its header window, answers both builds 0 and does not block the decision', () => {
     const erased = { ...emptyBank('b'), raw: null };
-    const banks = [presentBank('a', plainImage(PLAIN_LENGTH, 31)), erased, presentBank('r', plainImage(PLAIN_LENGTH, 31))];
+    const banks = [
+      presentBank('a', plainImage(PLAIN_LENGTH, 31)),
+      erased,
+      presentBank('r', plainImage(PLAIN_LENGTH, 31)),
+    ];
     const app = runningApplicationOf(stateOf(banks, EIGHT_HZ_ANSWERS));
     expect(app.build).toBe('plain');
     expect(app.predicted.plain).toEqual(EIGHT_HZ_ANSWERS);
@@ -304,7 +326,11 @@ describe('prepareSlotFlash: the FF image follows the running build', () => {
   const plan = buildSlotPlan(legacy, '1.3.0.8');
   const image = ffFileImage(71);
   const write = { kind: 'plain' as const, bytes: image, fileName: 'compact-16hz.bin' };
-  const ff16Banks = (): SlotState[] => [emptyBank('a'), emptyBank('b'), presentBank('r', ffStored(image))];
+  const ff16Banks = (): SlotState[] => [
+    emptyBank('a'),
+    emptyBank('b'),
+    presentBank('r', ffStored(image)),
+  ];
   const ff16Answers: BankVerdicts = { a: 0, b: 0, r: 1 };
   const unknownBanks = (): SlotState[] => [emptyBank('a'), emptyBank('b'), presentBank('r', image)];
   const unknownAnswers: BankVerdicts = { a: 0, b: 0, r: 0 };
@@ -314,7 +340,9 @@ describe('prepareSlotFlash: the FF image follows the running build', () => {
     for (const key of ['a', 'b', 'r'] as const) {
       expect(() => prepareSlotFlash(report, key, write)).toThrow(SeekError);
     }
-    expect(() => prepareSlotFlash(report, 'a', write)).toThrow(/the camera runs the 8 Hz 1\.3\.0\.8 application/);
+    expect(() => prepareSlotFlash(report, 'a', write)).toThrow(
+      /the camera runs the 8 Hz 1\.3\.0\.8 application/,
+    );
     expect(() => prepareSlotFlash(report, 'a', write)).toThrow(/0x00070100/);
     expect(() => prepareSlotFlash(report, 'a', write)).toThrow(/Nothing was sent/);
   });
@@ -342,6 +370,15 @@ describe('prepareSlotFlash: the FF image follows the running build', () => {
       expect(planned.staging).toBe('key-a-keystream');
       expect(planned.storedForm).toBe('key-b-ciphertext');
       expect(planned.warnings.join('\n')).toMatch(/UNTESTED/);
+      /* The camera's own answer is the basis, not a risk: a note of this write (TESTING.md 42.88). */
+      expect(
+        planned.notes.some(
+          (note) =>
+            note.source === 'write' &&
+            note.text.includes('own answers say it runs the 16 Hz FF build'),
+        ),
+      ).toBe(true);
+      expect(planned.warnings.join('\n')).not.toMatch(/own answers say it runs/);
     }
   });
 
@@ -355,7 +392,11 @@ describe('prepareSlotFlash: the FF image follows the running build', () => {
 
   it('a raw payload in the vendor form is gated on the running build the same way', () => {
     const report = reportFor(stateOf(EIGHT_HZ_BANKS, EIGHT_HZ_ANSWERS), plan);
-    const raw = { kind: 'raw' as const, bytes: stageFFVendor(image).staged, fileName: 'vendor.bin' };
+    const raw = {
+      kind: 'raw' as const,
+      bytes: stageFFVendor(image).staged,
+      fileName: 'vendor.bin',
+    };
     expect(() => prepareSlotFlash(report, 'a', raw)).toThrow(/8 Hz/);
   });
 });

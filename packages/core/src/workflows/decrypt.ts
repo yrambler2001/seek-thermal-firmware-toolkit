@@ -30,6 +30,7 @@ import {
   type KeySummary,
 } from '../archive/manifest.js';
 import { decryptImage } from '../crypto/cipher.js';
+import { keyConfidencePhrase } from '../crypto/confidence-words.js';
 import {
   findEmbeddedKeyTable,
   findKeyCandidates,
@@ -253,6 +254,8 @@ export async function decryptDump(
   const slots: DecryptedSlot[] = [];
   const imageSummaries: ImageSummary[] = [];
   const keySummaries: KeySummary[] = [];
+  /* The report's line for each key in `keySummaries`, its verdict in words. */
+  const keyLines: string[] = [];
 
   const view = viewOf(bytes);
   const len = bytes.length;
@@ -423,11 +426,13 @@ export async function decryptDump(
         : `no key form occurs in this image's plaintext, so ${profile.name}'s ` +
           `K=${hexUp(whitening.whiteningK)} is assumed (K is unidentifiable from ciphertext alone)`;
 
+    /* The key recovery's verdict in words; the manifest keeps the code (TESTING.md 42.88). */
+    const checkWords = keyConfidencePhrase(confidence);
     const keyRecord =
       `slot           : flash ${hexUp(flash)}  (file ${hexUp(image.base)}, ` +
       `len ${hexUp(image.len)})\n` +
-      `confidence     : ${confidence}\n` +
-      `recovered state: ${stateHex}   (x y z w; the actual decryption secret)\n` +
+      `key check      : ${checkWords}\n` +
+      `recovered state:${stateHex}   (x y z w; the actual decryption secret)\n` +
       `derived TARGET : ${hexUp(checksum)}` +
       `${matchesProfile ? '  (matches known profile)' : '  (no known TARGET matched)'}\n` +
       `self-check     : word13 decrypts to ${word13 === null ? 'n/a' : hexUp(word13)}` +
@@ -451,7 +456,7 @@ export async function decryptDump(
       `Image slot     : flash ${hexUp(flash)}   (file offset ${hexUp(image.base)})\n` +
       `Image length   : ${String(image.len)} bytes (${hexUp(image.len)})\n` +
       '\n' +
-      `Confidence     : ${confidence}\n` +
+      `Key check      : ${checkWords}\n` +
       'Key recovery   : cryptanalytic — xorshift128 linear GF(2) solve from ciphertext\n' +
       '                 (no key search; the stored key slot is never read)\n' +
       `  known-plaintext: image words ${KNOWN_ZERO_IDX.join(',')} ` +
@@ -496,7 +501,7 @@ export async function decryptDump(
       confidence === 'UNVERIFIED' ? 'warn' : 'ok',
     );
     reporter.log(
-      `         [${confidence}] ${named ? `key=${keyHex}` : `state=${stateHex}`}  [${profileName}]`,
+      `         [key ${checkWords}] ${named ? `key=${keyHex}` : `state=${stateHex}`}  [${profileName}]`,
       'detail',
     );
     reporter.log(
@@ -516,7 +521,7 @@ export async function decryptDump(
     }
 
     reportLines.push(
-      `${tag}: [${confidence}] ${named ? `key=${keyHex}` : `state=${stateHex}`}  [${profileName}]`,
+      `${tag}: [key ${checkWords}] ${named ? `key=${keyHex}` : `state=${stateHex}`}  [${profileName}]`,
       `      SP=${hexUp(sp)} entry=${hexUp(entry)}  plain-sha256=${plainHash}${dupNote}`,
       `      -> ${binName}`,
       '',
@@ -560,6 +565,7 @@ export async function decryptDump(
           confidence,
         }),
       );
+      keyLines.push(`  ${keyHex}  [${profileName}]  (key ${checkWords})`);
     }
 
     slots.push({
@@ -580,9 +586,7 @@ export async function decryptDump(
   }
 
   reportLines.push(`Keys recovered (cryptanalytic): ${String(keySummaries.length)}`);
-  for (const key of keySummaries) {
-    reportLines.push(`  ${key.key}  [${key.profile}]  (${key.confidence})`);
-  }
+  reportLines.push(...keyLines);
   reportLines.push('');
 
   pushArtifact(artifacts, reporter, {
@@ -597,8 +601,8 @@ export async function decryptDump(
         'The STATE is the true decryption secret. Which whitening constant K names it is\n' +
         "decided by the image's own plaintext, not by the acceptance TARGET — the two are\n" +
         'independent axes. When no key form occurs in the plaintext, nominal keys under\n' +
-        'each candidate K are listed and the slot is flagged UNVERIFIED (still valid\n' +
-        'plaintext).\n' +
+        'each candidate K are listed under "key UNKNOWN-K" (the plaintext is still\n' +
+        'valid).\n' +
         '================================================================================\n\n' +
         keyLog.join(
           '\n--------------------------------------------------------------------------------\n',

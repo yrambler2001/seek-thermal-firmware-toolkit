@@ -376,7 +376,7 @@ async function writeStep(
   const mark = sent.length;
   try {
     const plan: SlotFlashPlan = prepareSlotFlash(report, key, input, options);
-    row.notes.push(...plan.warnings.filter((w) => !w.startsWith('Note:')));
+    row.notes.push(...plan.warnings);
     const result: FlashSlotResult = await flashSlot(ctx, report, plan, { acknowledgeRisk });
     row.commitStatus = result.commitStatus;
     row.verified = result.verified;

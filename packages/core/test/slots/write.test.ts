@@ -699,9 +699,15 @@ describe('prepareSlotFlash builds each staging form', () => {
         (w) => w.includes('would reject this payload') && w.includes('no footer at'),
       ),
     ).toBe(true);
-    /* Key A line: the device decodes and re-encrypts, so the stored bytes are not predicted. */
+    /* Key A line: the device decodes and re-encrypts, so the stored bytes are not predicted. That is how
+     * the write is checked, not a risk: a note of this write (TESTING.md 42.88). */
     expect(out.expectedStored).toBeNull();
-    expect(out.warnings.some((w) => w.includes('re-encrypts what it keeps'))).toBe(true);
+    expect(
+      out.notes.some(
+        (note) => note.source === 'write' && note.text.includes('re-encrypts what it keeps'),
+      ),
+    ).toBe(true);
+    expect(out.warnings.some((w) => w.includes('re-encrypts what it keeps'))).toBe(false);
     /* No Key A on this camera's state, so not even the plain image can be said. */
     expect(out.expectedPlain).toBeNull();
   });
@@ -825,12 +831,17 @@ describe('prepareSlotFlash warnings', () => {
     expect(outA.warnings.some((w) => w.includes('bank A is the bank the camera boots now'))).toBe(
       true,
     );
-    expect(outA.warnings.some((w) => w === 'Note: build note one')).toBe(true);
+    /* The camera's notes and the bank's own are notes, not warnings, each with where it comes from
+     * (TESTING.md 42.88). */
+    expect(outA.notes).toContainEqual({ source: 'camera', text: 'build note one' });
+    expect(outA.warnings.some((w) => w.includes('build note one'))).toBe(false);
 
     const recovery = reportFor(stateFor(modern, { slots, booted: 'a' }), withNotes);
     const outR = prepareSlotFlash(recovery, 'r', { kind: 'raw', bytes: image, fileName: 'x' });
     expect(outR.warnings.some((w) => w.includes('Recovery bank R'))).toBe(true);
-    expect(outR.warnings.some((w) => w === 'Note: recovery-only note')).toBe(true);
+    expect(outR.notes).toContainEqual({ source: 'bank', text: 'recovery-only note' });
+    expect(outR.notes).toContainEqual({ source: 'camera', text: 'build note one' });
+    expect(outA.notes.some((note) => note.text === 'recovery-only note')).toBe(false);
 
     const unnamed = reportFor(stateFor(modern, { slots, booted: null }), withNotes);
     const outB = prepareSlotFlash(unnamed, 'b', { kind: 'raw', bytes: image, fileName: 'x' });
@@ -900,9 +911,10 @@ describe('prepareSlotFlash warnings', () => {
     expect(out.warnings.some((w) => w.includes(REKEY_WARNING))).toBe(false);
   });
 
-  it('a 2016 write plan says the acknowledgement once, and the staging note once (TESTING.md 42.87)', () => {
+  it('a 2016 write plan says the acknowledgement once as a warning, and the camera’s and bank’s notes as notes (TESTING.md 42.87, 42.88)', () => {
     /* Before: R's plan said "Recovery bank R: writing it asks you to acknowledge the risk. …" and again
-     * "Note: Recovery bank, mode 9, token form. A write asks you to acknowledge the risk. …". */
+     * "Note: Recovery bank, mode 9, token form. A write asks you to acknowledge the risk. …". Then (42.87)
+     * the warnings carried all six camera notes as "Note: …"; they are notes now, by source (42.88). */
     const plan = buildSlotPlan(compact2016, '1.0.3.0');
     const image = imageOf(0x6000, 4);
     image.set(hexToBytes(KEY_PAIRS.cp103.block0), 0x3000);
@@ -921,17 +933,56 @@ describe('prepareSlotFlash warnings', () => {
         `${key}: the acknowledgement, once`,
       ).toHaveLength(1);
       expect(
-        out.warnings.filter((w) => w.startsWith('Note: Staged: ')),
-        `${key}: the staging note, once`,
-      ).toHaveLength(1);
+        out.notes.filter((note) => note.text.startsWith('Staged: ')),
+        `${key}: the staging note, once, as the camera's`,
+      ).toEqual([expect.objectContaining({ source: 'camera' })]);
+      /* No note is a warning: the warnings are the acknowledgement alone. */
+      expect(out.warnings, `${key}: only the acknowledgement warns`).toHaveLength(1);
+      expect(out.warnings.some((w) => w.startsWith('Note: '))).toBe(false);
+      /* Every camera note, in the camera's order, after the bank's own; this write has none of its own. */
+      expect(out.notes.filter((note) => note.source === 'camera').map((note) => note.text)).toEqual(
+        plan.notes,
+      );
+      expect(out.notes.filter((note) => note.source === 'write')).toEqual([]);
     }
     const outR = prepareSlotFlash(report, 'r', { kind: 'plain', bytes: image, fileName: 'x.bin' });
-    expect(outR.warnings).toContain(
-      'Note: Recovery bank, mode 9, token form. Measured on a Compact PRO 1.0.3.0: R took its own ' +
+    expect(outR.notes[0]).toEqual({
+      source: 'bank',
+      text:
+        'Recovery bank, mode 9, token form. Measured on a Compact PRO 1.0.3.0: R took its own ' +
         'image, a one-byte change and the raw staged bytes, each with commit status 0 (TESTING.md 41.3).',
-    );
+    });
     const outB = prepareSlotFlash(report, 'b', { kind: 'plain', bytes: image, fileName: 'x.bin' });
     expect(outB.warnings.filter((w) => w.includes('acknowledge'))).toEqual([]);
+    expect(outB.warnings).toEqual([]);
+  });
+
+  it('a raw 2016 payload: the checks not made warn, how the read-back is checked is this write’s note (TESTING.md 42.88)', () => {
+    const plan = buildSlotPlan(compact2016, '1.0.3.0');
+    const slots = (['a', 'b', 'r'] as const).map((k) =>
+      slotState({ key: k, present: true, accepts: true }),
+    );
+    const report = reportFor(
+      stateFor(compact2016, { version: '1.0.3.0', slots, booted: 'a' }),
+      plan,
+    );
+    const out = prepareSlotFlash(report, 'b', {
+      kind: 'raw',
+      bytes: imageOf(0x2000, 7),
+      fileName: 'raw.bin',
+    });
+    expect(out.warnings).toContain(
+      'Raw payload: sent exactly as given. Nothing here checks that it is bootable.',
+    );
+    expect(out.warnings.join('\n')).toContain('is not in raw bytes');
+    expect(out.notes.filter((note) => note.source === 'write').map((note) => note.text)).toEqual([
+      'The device decodes this payload and re-encrypts what it keeps, so the stored bytes are not ' +
+        'predicted. The read-back is checked as the image it decrypts to, where that can be said.',
+    ]);
+    /* Shared text names no front end (TESTING.md 42.87). */
+    expect([...out.warnings, ...out.notes.map((note) => note.text)].join('\n')).not.toMatch(
+      /this page|the page/i,
+    );
   });
 });
 
@@ -1166,15 +1217,21 @@ describe('the 1.3.0.8 FF image on the slot writer', () => {
     expect(out.sum16).toBe(transferSum16(out.payload));
   });
 
-  it('says what it does: Key A, Key B, that the boot is untested, and that the user said the 16 Hz build', () => {
+  it('says what it does: Key A, Key B (notes), that the boot is untested and that the user said the 16 Hz build (warnings)', () => {
     const out = prepareSlotFlash(reportOn(), 'a', input(ffImage()), asRunning16);
     const text = out.warnings.join('\n');
-    expect(text).toMatch(/1\.3\.0\.8 FF \(16 Hz\) image/);
-    expect(text).toMatch(/block 0 \(Key A\)/);
-    expect(text).toMatch(/under Key B/);
+    const notes = out.notes
+      .filter((note) => note.source === 'write')
+      .map((note) => note.text)
+      .join('\n');
+    expect(notes).toMatch(/1\.3\.0\.8 FF \(16 Hz\) image/);
+    expect(notes).toMatch(/block 0 \(Key A\)/);
+    expect(notes).toMatch(/under Key B/);
     expect(text).toMatch(/UNTESTED/);
     expect(text).toMatch(/0\.9\.0\.0 bootloader the old plain form booted from/);
+    expect(text).toMatch(/Nothing here claims the camera boots it\./);
     expect(text).toMatch(/You said it runs the 16 Hz build/);
+    expect(text).not.toMatch(/The page does not claim/);
   });
 
   it('the 8 Hz image is unchanged: plain staging into A, B and R alike, with no running question', () => {
@@ -1211,7 +1268,9 @@ describe('the 1.3.0.8 FF image on the slot writer', () => {
     expect(raw.storedForm).toBe('key-b-ciphertext');
     expect(equalBytes(raw.expectedPlain!, staged.expectedPlain!)).toBe(true);
     expect(equalBytes(raw.expectedStored!, staged.expectedStored!)).toBe(true);
-    expect(raw.warnings.some((w) => w.includes('vendor'))).toBe(true);
+    expect(raw.notes.some((note) => note.source === 'write' && note.text.includes('vendor'))).toBe(
+      true,
+    );
     /* No 2014 sum-0 complaint: the FF form is judged by its own gate. */
     expect(raw.warnings.some((w) => w.includes('the 2014 bootloader needs 0'))).toBe(false);
   });

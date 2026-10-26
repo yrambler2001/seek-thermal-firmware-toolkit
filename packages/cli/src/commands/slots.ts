@@ -804,8 +804,22 @@ export function flashPlanLines(
     lines.push('', paint(heading('Warnings', color), 'yellow', color));
     for (const warning of plan.warnings) lines.push(paint(`  ! ${warning}`, 'yellow', color));
   }
+  /* The notes are not warnings, so they are said as notes: this write's, the bank's and the camera's. The
+   * plan is the only place the CLI shows them before a write, so all three are printed (TESTING.md 42.88). */
+  if (plan.notes.length > 0) {
+    lines.push('', heading('Notes', color));
+    for (const note of plan.notes) lines.push(`  · ${note.text}`);
+  }
   lines.push('');
   return lines;
+}
+
+/**
+ * The plan's notes for the flash JSON, each with where it comes from ('write', 'bank' or 'camera'). The JSON's
+ * `warnings` are the plan's warnings only, and its `notes` are what the write itself reported.
+ */
+export function planNotesJson(plan: SlotFlashPlan): { source: string; text: string }[] {
+  return plan.notes.map((note) => ({ source: note.source, text: note.text }));
 }
 
 /** The yes/no question. It says which bank, and whether the camera boots it now. */
@@ -1027,6 +1041,7 @@ async function flashAction(
         expectedSha256,
         notes: [],
         warnings: [...plan.warnings],
+        planNotes: planNotesJson(plan),
         written: false,
         dryRun: true,
       };
@@ -1075,6 +1090,7 @@ async function flashAction(
       storedSha256,
       notes: [...result.notes],
       warnings: [...plan.warnings],
+      planNotes: planNotesJson(plan),
       written: true,
     };
   } finally {
@@ -1097,6 +1113,14 @@ export function fpsPlanJson(plan: FpsPlan): Record<string, unknown> {
       toHz: plan.toHz,
       changedBytes: plan.sites.length,
       sumWord: hexUp(plan.sumWord.offset, 4),
+      /* The row the patch changes: in words (`name`, what the text plan prints), and as the table labels it
+       * (`detail`), with where it is in the decrypted image. */
+      row: {
+        name: plan.patch.row.name,
+        detail: plan.patch.row.detail,
+        offset: hexUp(plan.patch.row.offset, 4),
+        length: plan.patch.row.length,
+      },
     };
   }
   return {
@@ -1107,6 +1131,7 @@ export function fpsPlanJson(plan: FpsPlan): Record<string, unknown> {
     toHz: null,
     changedBytes: null,
     sumWord: null,
+    row: null,
   };
 }
 
@@ -1135,7 +1160,8 @@ export function fpsPlanLines(
         `${String(plan.sites.length)} byte(s) of the decrypted image change; the acceptance-sum word at ` +
           `${hexUp(plan.sumWord.offset, 4)} moves so the sum is kept; the key pair is not touched`,
       ],
-      ['  row', plan.patch.row.label],
+      /* The row in words; the JSON's `row.detail` keeps the table's own label (TESTING.md 42.88). */
+      ['  row', plan.patch.row.name],
       [
         '  saved first',
         dumpDir === null

@@ -82,6 +82,9 @@ describe('seek-fw decrypt file', () => {
 
     expect(stdout.text).toContain('wrote');
     expect(stdout.text).toContain('14030000');
+    /* The slot table says the key recovery's verdict in words; the JSON keeps the code (TESTING.md 42.88). */
+    expect(stdout.text).toMatch(/0x14030000\s+\d+ B\s+verified by the acceptance sum\s+0x/);
+    expect(stdout.text).not.toContain('VERIFIED');
   });
 
   it('emits one JSON document on stdout and keeps logs on stderr', async () => {

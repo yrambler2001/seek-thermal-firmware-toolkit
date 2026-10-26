@@ -68,6 +68,8 @@ export {
   findKeyCandidates,
   identifyKey,
   isEncryptedWord,
+  keyCheckText,
+  keyConfidencePhrase,
   keyFilenameSuffix,
   keyFromState,
   keyTableWhere,
