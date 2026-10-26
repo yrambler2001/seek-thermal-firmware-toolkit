@@ -105,12 +105,12 @@ function FpsOutcomePanel({ result }: { readonly result: FpsPatchResult }): React
 }
 
 function OutcomePanel({ outcome }: { readonly outcome: SlotFlashOutcome }): ReactElement {
-  const { key, fileName, result } = outcome;
+  const { key, what, result } = outcome;
   const tone = result.verified === true ? 'ok' : result.verified === false ? 'err' : 'warn';
   return (
     <Alert tone={tone} className="mt-3">
       <p>
-        <strong>{`Slot ${key.toUpperCase()} — ${fileName}: ${verdict(result.verified)}`}</strong>
+        <strong>{`Slot ${key.toUpperCase()} — ${what}: ${verdict(result.verified)}`}</strong>
       </p>
       <p>{`The camera's commit returned status ${hexUp(result.commitStatus, 4)}.`}</p>
       {outcome.targetEmpty === true && (
@@ -438,7 +438,7 @@ export function SlotsView({ slots, connected, busy }: SlotsViewProps): ReactElem
           <SlotFlashPreview
             slotName={pendingView.entry.name}
             address={pendingView.entry.address}
-            fileName={pending.fileName}
+            what={pending.what}
             kind={pending.kind}
             plan={pending.plan}
             busy={busy}
@@ -455,7 +455,7 @@ export function SlotsView({ slots, connected, busy }: SlotsViewProps): ReactElem
         {pending !== null && pendingView !== null && (
           <SlotWriteConfirm
             open={confirming}
-            fileName={pending.fileName}
+            what={pending.what}
             slotName={pendingView.entry.name}
             slotAddress={hexUp(pendingView.entry.address)}
             risk={writeRisk(pending.report, pending.key)}

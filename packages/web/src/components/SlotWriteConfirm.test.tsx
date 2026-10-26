@@ -25,7 +25,7 @@ function setup(
     <SlotWriteConfirm
       backupName={BACKUP}
       open={overrides.open ?? true}
-      fileName="fw_decrypted.bin"
+      what="fw_decrypted.bin"
       slotName="slot B"
       slotAddress="0x14060000"
       risk={overrides.risk ?? { booted: false, recovery: false, bootUnnamed: false }}
@@ -250,7 +250,7 @@ describe('SlotWriteConfirm', () => {
           <SlotWriteConfirm
             backupName={BACKUP}
             open={open}
-            fileName="fw_decrypted.bin"
+            what="fw_decrypted.bin"
             slotName="slot B"
             slotAddress="0x14060000"
             risk={{ booted: true, recovery: false, bootUnnamed: false }}
@@ -295,7 +295,7 @@ describe('the key line of the confirmation', () => {
       <SlotWriteConfirm
         backupName={BACKUP}
         open
-        fileName="fw_decrypted.bin"
+        what="fw_decrypted.bin"
         slotName="slot B"
         slotAddress="0x14050000"
         risk={{ booted: false, recovery: false, bootUnnamed: false }}
@@ -314,7 +314,7 @@ describe('the key line of the confirmation', () => {
       <SlotWriteConfirm
         backupName={BACKUP}
         open
-        fileName="raw.bin"
+        what="raw.bin"
         slotName="slot B"
         slotAddress="0x14050000"
         risk={{ booted: false, recovery: false, bootUnnamed: false }}

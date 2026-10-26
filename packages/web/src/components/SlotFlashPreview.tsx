@@ -47,7 +47,8 @@ function storedText(plan: SlotFlashPlan): string {
 export interface SlotFlashPreviewProps {
   readonly slotName: string;
   readonly address: number;
-  readonly fileName: string;
+  /** What is written, in words (`PendingSlotFlash.what`): shown as the File row when the person picked a file. */
+  readonly what: string;
   readonly kind: SlotInputKind;
   readonly plan: SlotFlashPlan;
   readonly busy: boolean;
@@ -64,7 +65,7 @@ export interface SlotFlashPreviewProps {
 export function SlotFlashPreview({
   slotName,
   address,
-  fileName,
+  what,
   kind,
   plan,
   busy,
@@ -80,8 +81,8 @@ export function SlotFlashPreview({
   const writeNotes = plan.notes.filter((note) => note.source === 'write');
   const readFirst = [...plan.warnings, ...writeNotes.map((note) => `Note: ${note.text}`)];
   const rows: readonly KeyValueRow[] = [
-    ['File', fileName],
-    ...(source === null ? [] : [['Image taken from', source] satisfies KeyValueRow]),
+    /* A copy or a restore names its source instead of a file the person does not have (TESTING.md 42.93). */
+    source === null ? ['File', what] : ['Image taken from', source],
     ...(targetEmpty
       ? [
           [

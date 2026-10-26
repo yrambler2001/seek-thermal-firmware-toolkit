@@ -397,11 +397,22 @@ function summarise(report: SlotsReport): string {
 
 /* ---- the hook ---------------------------------------------------------- */
 
+/** A bank's name as the page shows it ("Bank A"). */
+function bankNameOf(report: SlotsReport, key: SlotKey): string {
+  return (
+    report.slots.find((view) => view.entry.key === key)?.entry.name ?? `Bank ${key.toUpperCase()}`
+  );
+}
+
 /** A prepared write, held until it is confirmed or discarded. */
 export interface PendingSlotFlash {
   readonly key: SlotKey;
   readonly kind: SlotInputKind;
-  readonly fileName: string;
+  /**
+   * What is written, in words: the picked file's name, or for a copy and a restore the image's source
+   * ("Bank A's image", "Bank B of <backup file>"), never a file name the person does not have.
+   */
+  readonly what: string;
   readonly plan: SlotFlashPlan;
   /** The report the plan was checked against. Only that report may send it. */
   readonly report: SlotsReport;
@@ -420,7 +431,8 @@ export interface PendingSlotFlash {
 /** What the last write did, kept on screen until the next run starts. */
 export interface SlotFlashOutcome {
   readonly key: SlotKey;
-  readonly fileName: string;
+  /** What was written, in words (`PendingSlotFlash.what`). */
+  readonly what: string;
   readonly result: SlotWriteResult['written'];
   /** The bank held no image before this write, so no firmware was overwritten. */
   readonly targetEmpty?: boolean;
@@ -790,7 +802,7 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
       kind: SlotInputKind,
       load: (current: SlotsReport) => Promise<{
         readonly plan: SlotFlashPlan;
-        readonly fileName: string;
+        readonly what: string;
         readonly bytes: number;
         readonly source: string | null;
         readonly action: WriteAction;
@@ -822,13 +834,13 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
               );
             }
             const input = await load(current);
-            log(`${input.fileName} — ${input.bytes.toLocaleString()} bytes`, 'detail');
+            log(`${input.what} — ${input.bytes.toLocaleString()} bytes`, 'detail');
             if (input.source !== null) log(`image taken from ${input.source}`, 'detail');
             const prepared = input.plan;
             setCurrentPending({
               key,
               kind,
-              fileName: input.fileName,
+              what: input.what,
               plan: prepared,
               report: current,
               source: input.source,
@@ -873,7 +885,7 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
               { kind, bytes, fileName: file.name },
               { running16Hz },
             ),
-            fileName: file.name,
+            what: file.name,
             bytes: bytes.length,
             source: null,
             action: { kind: 'flash', input: kind, fileName: file.name },
@@ -897,7 +909,7 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
           const copy = (backend.copy ?? planSlotCopy)(current, from, to, { running16Hz });
           return Promise.resolve({
             plan: copy.plan,
-            fileName: copy.fileName,
+            what: `${bankNameOf(current, from)}'s image`,
             bytes: copy.plan.expectedPlain?.length ?? copy.plan.payload.length,
             source: copy.source,
             action: { kind: 'copy', from } as const,
@@ -930,7 +942,7 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
           );
           return {
             plan: restore.plan,
-            fileName: restore.fileName,
+            what: `${bankNameOf(current, key)} of ${file.name}`,
             bytes: restore.decryption.plain?.length ?? 0,
             source: restore.source,
             action: { kind: 'restore', fileName: file.name } as const,
@@ -1003,7 +1015,7 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
           /* The record of what was written: it names the file and the bank. */
           const view = current.slots.find((candidate) => candidate.entry.key === ready.key);
           log(
-            `slot ${ready.key.toUpperCase()} at ${hexUp(view?.entry.address ?? 0)} <- ${ready.fileName}` +
+            `slot ${ready.key.toUpperCase()} at ${hexUp(view?.entry.address ?? 0)} <- ${ready.what}` +
               (ready.plan.targetEmpty === true ? ' (an empty bank: nothing is overwritten)' : ''),
             'ok',
           );
@@ -1035,7 +1047,7 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
             ready.restore === null ? null : restoreReadBack(ready.restore.stored, written.after);
           setOutcome({
             key: ready.key,
-            fileName: ready.fileName,
+            what: ready.what,
             result: written,
             targetEmpty: ready.plan.targetEmpty === true,
             backup: done.backup,

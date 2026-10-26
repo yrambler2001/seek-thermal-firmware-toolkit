@@ -1080,6 +1080,9 @@ describe('useSlotsPanel: copying a bank into another', () => {
     expect(pending?.key).toBe('b');
     expect(pending?.action).toEqual({ kind: 'copy', from: 'a' });
     expect(pending?.source).toContain('slot A');
+    /* TESTING.md 42.93: the dialog and the result name the source bank, not a made-up file name. */
+    expect(pending?.what).toMatch(/A's image$/);
+    expect(pending?.what).not.toContain('.bin');
     expect(pending?.plan.targetEmpty).toBe(true);
     expect(mocks.flash).not.toHaveBeenCalled();
     expect(mocks.dump).not.toHaveBeenCalled();
@@ -1213,6 +1216,8 @@ describe('useSlotsPanel: restoring a bank from a full flash backup', () => {
       fileName: 'whole.bin',
     });
     expect(result.current.panel.pending?.source).toContain('full flash backup whole.bin');
+    /* TESTING.md 42.93: the backup's bank and the file the person picked, not the decrypted file's name. */
+    expect(result.current.panel.pending?.what).toMatch(/B of whole\.bin$/);
     expect(mocks.flash).not.toHaveBeenCalled();
 
     await act(async () => {

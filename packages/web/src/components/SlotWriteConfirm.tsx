@@ -25,7 +25,8 @@ import { needsRiskAck, type WriteRisk } from '@/hooks/useSlotsPanel';
 
 export interface SlotWriteConfirmProps {
   readonly open: boolean;
-  readonly fileName: string;
+  /** What is written, in words: the file's name, or "Bank A's image" for a copy (`PendingSlotFlash.what`). */
+  readonly what: string;
   readonly slotName: string;
   readonly slotAddress: string;
   readonly risk: WriteRisk;
@@ -46,7 +47,7 @@ export interface SlotWriteConfirmProps {
 
 export function SlotWriteConfirm({
   open,
-  fileName,
+  what,
   slotName,
   slotAddress,
   risk,
@@ -88,7 +89,7 @@ export function SlotWriteConfirm({
           >
             <Flame className="size-4" />
           </span>
-          <AlertDialogTitle>{`Write ${fileName} to ${slotName} at ${slotAddress}?`}</AlertDialogTitle>
+          <AlertDialogTitle>{`Write ${what} to ${slotName} at ${slotAddress}?`}</AlertDialogTitle>
         </div>
 
         {risk.booted && (
