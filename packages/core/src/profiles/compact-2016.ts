@@ -44,13 +44,13 @@
  * refused selectors on 2 MiB of address space this generation does not decode.
  * It now uses the map its firmware has, with the token on the protected banks.
  *
- * AND WHY IT BARELY MATTERS WHICH OF THE TWO A LIVE CAMERA IS READ UNDER. They
- * share a selector map, so the DUMP is the same either way; the only thing the
- * choice decides is which acceptance sum a decrypted slot is compared against.
- * On a camera the capability probe has no slots to offer and `legacy-auth`
- * wins on the channel answers, by design: the read is the same 31 windows.
- * Once the slots are read, detection has to tell the two apart, and that is
- * the cipher's job, not the selector map's.
+ * WHICH OF THE TWO A LIVE CAMERA IS READ UNDER. They share a selector map, so
+ * the DUMP is the same either way; the choice decides which acceptance sum a
+ * decrypted slot is compared against, and so every bank verdict the read
+ * reports. The capability probe has no slots to offer, so the version line
+ * decides it (2026-10-26; it used to be legacy-auth on the channel answers,
+ * which reported a 1.0.3.0 camera's banks as failing and then read it again).
+ * Once the slots are read, the cipher tells the two apart.
  *
  * WHAT IS STILL ITS OWN, and why this is not simply `legacy-auth`: the cipher.
  * A 1.0.3.x part decrypts to a 0x00000000 acceptance sum, a 1.3.0.8 Compact to
@@ -128,8 +128,12 @@ const SCORE_DECISIVE = 0.9;
 const SCORE_CORROBORATED = 0.96;
 /** What each further independent signal adds when it agrees: the version line, the bootloader. */
 const SCORE_AGREES = 0.01;
-/** The Compact PRO's 1.0.3.x version line with no slot read: the probe's view, below legacy-auth's. */
-const SCORE_VERSION_LINE = 0.45;
+/**
+ * The Compact PRO's 1.0.3.x version line with no slot read: the probe's view. It outranks legacy-auth's
+ * channel answers on the same camera (legacy-auth.ts `detectLegacy` caps itself on this line), so the
+ * first read is made under this cipher; the slots overrule it once read.
+ */
+const SCORE_VERSION_LINE = 0.85;
 /** A 0.x/1.x version on no known line: the locked Compact firmware is numbered so too. */
 const SCORE_WEAK = 0.35;
 
@@ -229,9 +233,9 @@ function detectCompact2016(evidence: DeviceEvidence): DetectionVerdict {
   }
 
   /* THE VERSION LINE. The two lines share this handler, so a version decides
-   * no read; it is evidence about the cipher (`legacyVersionLine`). Alone it
-   * stays under legacy-auth's channel scores, which is what keeps the probe's
-   * pick for the read itself. */
+   * no selector; it is evidence about the cipher (`legacyVersionLine`), and with
+   * no slot read it is the best evidence there is: it picks this profile for the
+   * first read, so the banks are checked against this generation's target. */
   if (version !== null) {
     const said =
       `${versionSource(evidence) === 'dump' ? 'the image header says' : 'the camera reports'} ` +

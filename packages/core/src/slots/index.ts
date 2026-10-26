@@ -3,6 +3,7 @@ export { buildSlotPlan } from './capability.js';
 export {
   bankWordsOf,
   bootChoiceOf,
+  bootRuleKnown,
   bootWordRuleOf,
   fpsBootWarningOf,
   fpsPatchHeldBy,

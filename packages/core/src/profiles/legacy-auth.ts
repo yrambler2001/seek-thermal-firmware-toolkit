@@ -93,6 +93,7 @@ import type {
   WindowPlan,
 } from './types.js';
 import { SUPPORTED } from './types.js';
+import { lockedBootRule } from './locked-boot.js';
 import { agreedRows, buildWindowPlan } from './plan.js';
 import { primaryVersion, versionSource } from './version.js';
 import { FLASH_BASE, FLASH_SIZE, HDR_HI, HDR_LO, WINDOW_SIZE } from './modern-4x.js';
@@ -569,11 +570,13 @@ export const LEGACY_SLOTS: readonly SlotDescriptor[] = [
 export const LEGACY_SWEEP_RANGE: readonly [number, number] = [0, 0x41];
 
 /**
- * No replayable boot policy: this generation's `select_boot_slot()` has not
- * been reconstructed into this profile, so `selectBootSlot` refuses rather than
- * replaying the 4.x one over a bootloader it was not read from — a fabricated
- * "booted A, would write B" is exactly the kind of confident wrong answer that
- * costs someone a camera.
+ * The locked line's boot policy. Its rule is decoded (profiles/locked-boot.ts: boot_select_image in the
+ * 2014 and the 2016 bootloader, the same rule in both), so `describeCfg0` says what a word does. But
+ * `selectBootSlot` refuses: the bank the bootloader ENTERED is the camera's own answer, the active-slot
+ * word, which this policy has no argument for. `readDeviceInfo` names both starts from that word on the
+ * builds where it is established (the 2014 plaintext chain and the 2016 line, TESTING.md 42.56) and never
+ * calls this; a replay of the rule over guessed verdicts would be the confident wrong answer that costs
+ * someone a camera.
  *
  * THE WRITE PATH DOES NOT NEED THE REPLAY. On the 2014 plaintext chain the
  * camera answers for itself: `fw_update_slot_address()` — mode 0, the selector
@@ -595,7 +598,7 @@ export const LEGACY_BOOT: BootPolicy = {
   checksFooter: false,
 
   describeCfg0(cfg0: number): string {
-    return `cfg0 ${String(cfg0 >>> 0)}: the legacy bootloader's boot-config layout was never decoded`;
+    return lockedBootRule(cfg0);
   },
 
   /* Shared by legacy-auth, compact-2016 and compact-2014, so the refusal names
@@ -603,10 +606,9 @@ export const LEGACY_BOOT: BootPolicy = {
   selectBootSlot(): BootPrediction {
     throw new SeekError(
       'profile/unsupported',
-      "the locked line's bootloader select_boot_slot() has not been reconstructed, so the " +
-        'booted slot cannot be replayed from cfg[0]. On the 2014 plaintext chain the write ' +
-        "path does not replay it — the camera's own active-slot word names both ends of an " +
-        'upgrade (mode 0, fw_update_slot_address()).',
+      "the locked line's boot rule is decoded, but the bank its bootloader entered is the " +
+        "camera's own active-slot word, not a replay of cfg[0]: the device-info read names both " +
+        'starts from that word on the 2014 plaintext chain and the 2016 Compact PRO (TESTING.md 42.56)',
       { detail: { capability: 'flash' } },
     );
   },
@@ -670,7 +672,39 @@ const SCORE_WEAK = 0.3;
  */
 const LEGACY_MAJORS: readonly number[] = [0, 1];
 
+/** The 2016 Compact PRO's version with no slot of this line's own chains read: a candidate, not the pick. */
+const SCORE_PRO_LINE = 0.5;
+
+/**
+ * THE 2016 COMPACT PRO'S VERSION LINE, over the channel — added 2026-10-26. Its handler is this line's,
+ * so the channel answers score a 1.0.3.x camera here exactly as they score a 2014 Compact; but its banks
+ * are compact-2016's cipher, which this profile's acceptance check fails, so a read under this profile
+ * reported every bank "NOT bootable" and was then repeated under compact-2016. With no slot of this
+ * line's own chains read, the version now decides the probe: this profile stays a candidate below
+ * compact-2016, and the slots overrule both once they are read.
+ */
 function detectLegacy(evidence: DeviceEvidence): DetectionVerdict {
+  const verdict = scoreLegacy(evidence);
+  if (verdict.score === 0) return verdict;
+  const version = primaryVersion(evidence);
+  if (version === null || legacyVersionLine(version.text) !== 'compact-pro-2016') return verdict;
+  const ownChain = (evidence.observedSlots ?? []).some(
+    (s) =>
+      (s.chain === 'plain' && s.acceptanceSum >>> 0 === 0) ||
+      (s.chain === 'cipher' && s.acceptanceSum >>> 0 === LEGACY_CIPHER.acceptanceSum),
+  );
+  if (ownChain) return verdict;
+  return {
+    score: Math.min(verdict.score, SCORE_PRO_LINE),
+    reasons: [
+      ...verdict.reasons,
+      `but firmware ${version.text} is the 2016 Compact PRO's 1.0.3.x line, whose banks are ` +
+        "compact-2016's cipher: this profile's acceptance check would fail every one of them",
+    ],
+  };
+}
+
+function scoreLegacy(evidence: DeviceEvidence): DetectionVerdict {
   const reasons: string[] = [];
 
   /* FIRST, BEFORE ANY CHANNEL EVIDENCE. A 0.7.0.x camera refuses the plain arm

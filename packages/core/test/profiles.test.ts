@@ -610,8 +610,12 @@ describe('legacy-auth boot policy', () => {
     }
   });
 
-  it('still describes cfg0 without throwing, so reports can print something', () => {
-    expect(legacyAuth.boot.describeCfg0(0)).toMatch(/never decoded/i);
+  it('describes cfg0 by the rule both locked-line bootloaders share (boot_select_image)', () => {
+    expect(legacyAuth.boot.describeCfg0(0)).toBe('slot A first, then B, then recovery R');
+    expect(legacyAuth.boot.describeCfg0(0xffffffff)).toBe('slot A first, then B, then recovery R');
+    expect(legacyAuth.boot.describeCfg0(1)).toBe('slot B first, then A, then recovery R');
+    expect(legacyAuth.boot.describeCfg0(2)).toBe('recovery R first, then A, then B');
+    expect(compact2016.boot.describeCfg0(0xffffffff)).toBe('slot A first, then B, then recovery R');
   });
 });
 
@@ -662,10 +666,14 @@ describe('detection', () => {
     expect(result.ambiguous).toBe(true);
   });
 
-  it('lets a 1.x version and a working authenticated selector settle legacy-auth', () => {
-    const result = detectProfile({ authSelectorWorks: true, firmwareVersion: '1.0.3.0' });
-    expect(result.best.profile.id).toBe('legacy-auth');
-    expect(result.ambiguous).toBe(false);
+  it('lets a 1.x version and a working authenticated selector settle the locked line', () => {
+    /* A Compact build is legacy-auth's; the 2016 Compact PRO's 1.0.3.x line is compact-2016's. */
+    const compact = detectProfile({ authSelectorWorks: true, firmwareVersion: '1.3.0.8' });
+    expect(compact.best.profile.id).toBe('legacy-auth');
+    expect(compact.ambiguous).toBe(false);
+    const pro = detectProfile({ authSelectorWorks: true, firmwareVersion: '1.0.3.0' });
+    expect(pro.best.profile.id).toBe('compact-2016');
+    expect(pro.ambiguous).toBe(false);
   });
 
   it('does not rule modern-4x out on an authenticated selector that merely worked', () => {
@@ -697,10 +705,14 @@ describe('detection', () => {
     expect(detectProfile({ plainSelectorWorks: true }).ambiguous).toBe(true);
   });
 
-  it('treats the 1.x numbering line as legacy, not as an older 4.x', () => {
-    for (const version of ['1.0.3.0', '1.0.3.2', '1.3.0.8']) {
+  it('treats the 1.x numbering line as the locked line, not as an older 4.x', () => {
+    for (const [version, profile] of [
+      ['1.0.3.0', 'compact-2016'],
+      ['1.0.3.2', 'compact-2016'],
+      ['1.3.0.8', 'legacy-auth'],
+    ] as const) {
       const result = detectProfile({ firmwareVersion: version });
-      expect(result.best.profile.id).toBe('legacy-auth');
+      expect(result.best.profile.id, version).toBe(profile);
       const modernMatch = result.ranked.find((m) => m.profile.id === 'modern-4x');
       expect(modernMatch?.score).toBe(0);
     }
@@ -730,11 +742,12 @@ describe('detection', () => {
   });
 
   it('calls contradictory evidence ambiguous instead of picking a winner', () => {
-    // A 1.x version on the authenticated channel says legacy; a zero acceptance
-    // sum says 2016. Neither wins.
+    // A Compact build on the authenticated channel says legacy; a zero acceptance
+    // sum, with no chain to tell the 2014 plain banks from the 2016 cipher, says
+    // 2016. Neither wins.
     const result = detectProfile({
       authSelectorWorks: true,
-      firmwareVersion: '1.0.3.0',
+      firmwareVersion: '1.3.0.8',
       observedAcceptanceSums: [0],
     });
     expect(result.ambiguous).toBe(true);
@@ -809,13 +822,27 @@ describe('detection: compact-2016 against legacy-auth', () => {
     expect(result.evidence?.plainSelectorRefused).toBe(true);
   });
 
-  it('leaves the probe alone: with no slot read, legacy-auth still acts on 1.0.3.0', () => {
-    /* By design (compact-2016.ts): the two share every selector, so the read
-     * is the same; the slots decide the cipher afterwards. */
+  it('lets the 1.0.3.x version pick compact-2016 at the probe, before any slot is read', () => {
+    /* The two share every selector, so the read is the same; the version picks the cipher the banks are
+     * checked against. Under legacy-auth a 1.0.3.0 camera's first read reported every bank failing and
+     * was then repeated (2026-10-26). legacy-auth stays a candidate, below. */
     const result = detectProfile(PROBE_1030);
-    expect(result.best.profile.id).toBe('legacy-auth');
+    expect(result.best.profile.id).toBe('compact-2016');
     expect(result.ambiguous).toBe(false);
-    expect(score(PROBE_1030, 'compact-2016')).toBeLessThan(result.best.score);
+    expect(score(PROBE_1030, 'legacy-auth')).toBeGreaterThan(0);
+    expect(result.ranked.find((m) => m.profile.id === 'legacy-auth')?.reasons.join(' ')).toMatch(
+      /2016 Compact PRO's 1\.0\.3\.x line/,
+    );
+  });
+
+  it('keeps a 1.0.3.x camera on legacy-auth when a slot decrypts to its 0xFFFF target', () => {
+    /* The version is a prior; a bank decrypting to 0xFFFF (Compact 1.3.0.8's cipher) overrules it. */
+    const evidence: DeviceEvidence = {
+      ...PROBE_1030,
+      observedAcceptanceSums: [0xffff],
+      observedSlots: [{ acceptanceSum: 0xffff, chain: 'cipher' }],
+    };
+    expect(detectProfile(evidence).best.profile.id).toBe('legacy-auth');
   });
 
   it('keeps the 2014 Compact on legacy-auth: a bank stored plain is not the 2016 cipher', () => {

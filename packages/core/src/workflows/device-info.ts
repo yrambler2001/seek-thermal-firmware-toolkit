@@ -16,13 +16,24 @@
  * keeps those apart, and nothing here re-conflates them.
  * ==================================================================== */
 
-import { asciiz, bytesToHex, findAll, hex, hexUp, sha256hex, viewOf } from '../bytes.js';
+import {
+  asciiz,
+  bytesToHex,
+  findAll,
+  hex,
+  hexToBytes,
+  hexUp,
+  sha256hex,
+  viewOf,
+} from '../bytes.js';
 import { CancelledError, errorMessage } from '../errors.js';
 import { decryptImage } from '../crypto/cipher.js';
 import {
   findKeyCandidates,
   identifyKey,
+  keyFromState,
   pickKeyTable,
+  stateFromKey,
   storeKeyOf,
   UNNAMED_KEY,
   type KeyIdentity,
@@ -47,16 +58,26 @@ import {
 import { WINDOW_SIZE } from '../protocol/ops.js';
 import type { SeekDevice } from '../protocol/client.js';
 import { wordSum32 } from '../image/bank.js';
-import { locateFFKeys } from '../preservation/patch.js';
-import { FF_1308_VERSION } from '../slots/capability-family.js';
+import { identifyFpsImage } from '../preservation/fps-patch.js';
+import { KEY_PAIRS, locateFFKeys } from '../preservation/patch.js';
+import { classifyBuild, FF_1308_VERSION } from '../slots/capability-family.js';
 import { ffKeyBPlainOf } from '../slots/ff-form.js';
+import { lockedBankVerdict } from '../slots/running.js';
 /* The stale-descriptor predicate, shared with the preservation pipeline's
  * boot-config check rather than re-worded: a spent reader serves the same
  * shape into any window. `preservation/windows.ts` imports nothing from
  * `workflows/`, so this edge is acyclic. Its `spentReaderRefusal` TEXT is not
  * reused — that remedy names `preserve --resume`, which is wrong advice here. */
 import { isStaleDescriptorWord } from '../preservation/windows.js';
-import { legacyUpgradeTargetBuild } from '../profiles/legacy-auth.js';
+import { LEGACY_BOOT, legacyUpgradeTargetBuild } from '../profiles/legacy-auth.js';
+import {
+  bankOfActiveSlotWord,
+  bankWordsOf,
+  enteredChecked,
+  selectLockedBoot,
+  type BootVerdict,
+} from '../profiles/locked-boot.js';
+import { parseVersion } from '../profiles/version.js';
 import { detectProfile, requireCapability } from '../profiles/registry.js';
 import type {
   BootPrediction,
@@ -71,6 +92,7 @@ import {
   entryForAddress,
   resolveDumpOptions,
   type BankVerdicts,
+  type CheckKey,
   type DeviceState,
   type DumpOptions,
   type SlotState,
@@ -493,6 +515,178 @@ async function confirmUpgradeTarget(
 
 /* ---- the read -------------------------------------------------------- */
 
+/* ---- the locked line's boot, and the 2016 line's check key ------------- */
+
+/** What the read says about writing a 2016 camera, where the slot page writes the banks one at a time. */
+export const BANKS_ONLY_WRITING =
+  "writing: the Firmware slots page (`seek-fw slots`) writes this camera's banks, one at a time, each " +
+  "staged under its image's own key block 0; a whole-image flash (`seek-fw flash`) has no write path " +
+  'on the 2016 line';
+
+/** The known 2016 image pairs, by the name the log gives them (preservation/patch.ts KEY_PAIRS). */
+const PAIRS_2016: readonly (readonly [string, string])[] = [
+  ['the Compact PRO 1.0.3.x pair', KEY_PAIRS.cp103.block1],
+  ['the Compact PRO FF 1.0.3.x pair', KEY_PAIRS.cp1032ff.block1],
+];
+
+/**
+ * The key a 2016 bootloader checks a bank under, read from the bank it entered. The bootloader block is
+ * refused on every channel on this line, so the key table is not there to read; but the bootloader
+ * enters a bank only after `image_sum_ok_device_seeded` passes on it (unless the bank is the last of the
+ * word's order, entered unchecked), and the camera reports which bank that was (the active-slot word,
+ * TESTING.md 42.56). That bank's own keystream is therefore the device-seeded stream. From bootloader
+ * 1.1.0.0 on the stream is seeded from the bootloader's key block 1 (FW-V1 crypto.c), and the application
+ * stores every bank it writes under the same key, so a bank written by the camera passes the check.
+ */
+function checkKeyOf(input: {
+  readonly cfg0: number | null;
+  readonly activeSlotWord: number | null;
+  readonly bootloaderVersion: string | null;
+  readonly whiteningK: number;
+  readonly slotOf: (key: SlotKey) => AnalysedSlot | undefined;
+}): CheckKey {
+  const unnamed = (why: string): CheckKey => ({
+    name: null,
+    key: null,
+    from: null,
+    pair: null,
+    why:
+      `the key the bootloader checks a bank under is not named: ${why}, so whether it takes ` +
+      'each bank stays unknown',
+  });
+  const entered = bankOfActiveSlotWord(input.activeSlotWord);
+  if (input.activeSlotWord === null) {
+    return unnamed("the camera's active-slot word (fw info roots, selector 10) could not be read");
+  }
+  if (entered === null) {
+    return unnamed(
+      `the camera's active-slot word is ${String(input.activeSlotWord)}, which names no bank`,
+    );
+  }
+  const bank = bankWordsOf(entered);
+  if (input.cfg0 === null) {
+    return unnamed(
+      `the boot-config word was not read, so whether the bootloader checked ${bank} before it entered it is not known`,
+    );
+  }
+  if (!enteredChecked(input.cfg0, entered)) {
+    return unnamed(
+      `the camera entered ${bank}, which the boot-config word ${hexUp(input.cfg0)} leaves to last ` +
+        'and the bootloader enters without its check',
+    );
+  }
+  const slot = input.slotOf(entered);
+  const state = slot?.recovered?.state ?? null;
+  if (slot === undefined || !slot.present || state === null || !slot.accepts) {
+    return unnamed(
+      `the camera reports it entered ${bank}, but ${bank} does not decrypt to the 2016 zero sum on ` +
+        'this read',
+    );
+  }
+  const key = keyFromState(state, input.whiteningK);
+  const pair =
+    PAIRS_2016.find(([, block1]) => sameState(state, stateFromKey(hexToBytes(block1), input.whiteningK)))?.[0] ?? null;
+  const loader = parseVersion(input.bootloaderVersion ?? undefined);
+  const blockOne = loader === null || loader.major > 1 || (loader.major === 1 && loader.minor >= 1);
+  const name = blockOne ? 'key block 1' : 'the device-seeded key';
+  return {
+    name,
+    key,
+    from: entered,
+    pair,
+    why:
+      `${name} ${bytesToHex(key)}${pair === null ? '' : ` (${pair}'s block 1)`}: the 2016 bootloader ` +
+      `checks every bank under it, and ${bank}, which the camera reports it entered after that check, is ` +
+      'stored under it',
+  };
+}
+
+/** Which key a 2016 bank is stored under, against the check key, and whether the bootloader takes it. */
+function checkKeyIdentity(slot: AnalysedSlot, checkKey: CheckKey, whiteningK: number): KeyIdentity {
+  const state = slot.recovered?.state ?? null;
+  if (state === null) return { name: null, bootable: false };
+  if (checkKey.key === null || checkKey.name === null) return { name: UNNAMED_KEY, bootable: false };
+  const same = sameState(state, stateFromKey(checkKey.key, whiteningK));
+  return { name: same ? checkKey.name : UNNAMED_KEY, bootable: same && slot.accepts };
+}
+
+/** The frame rate a decrypted image carries, for its bank's line: a patched table entry or a faster build. */
+function frameRateNote(plain: Uint8Array | null): string {
+  if (plain === null) return '';
+  const identity = identifyFpsImage(plain);
+  const patched = identity.patchedEntries[0];
+  if (patched !== undefined) return `, frame-rate patch ${String(patched.targetHz)} Hz`;
+  if (identity.known !== null) return `, a ${String(identity.known.hz)} Hz build`;
+  return '';
+}
+
+/**
+ * The locked line's two boot lines: the bank the camera reports it entered at this start, and the bank
+ * the next start runs, from the boot-config word and each bank's check (profiles/locked-boot.ts). Only
+ * the 2014 plaintext chain and the 2016 line name them; the line's other builds get one line saying why.
+ */
+function lockedBootLines(input: {
+  readonly cfg0: number | null;
+  readonly activeSlotWord: number | null;
+  readonly byKey: ReadonlyMap<SlotKey, SlotState>;
+  readonly line2016: boolean;
+  readonly plainChain: boolean;
+  readonly checkKey: CheckKey | null;
+  readonly version: string | null;
+}): (readonly [string, 'detail' | 'warn'])[] {
+  if (!input.plainChain && !input.line2016) {
+    return [
+      [
+        `boot prediction unavailable on firmware ${input.version ?? '(unread)'}: the bank this ` +
+          "line's bootloader enters is named from the camera's active-slot word, and that word is " +
+          'established as the bank that ran on the 2014 plaintext chain and the 2016 Compact PRO ' +
+          'only (TESTING.md 42.56)',
+        'warn',
+      ],
+    ];
+  }
+  const lines: (readonly [string, 'detail' | 'warn'])[] = [];
+  const entered = bankOfActiveSlotWord(input.activeSlotWord);
+  if (input.activeSlotWord === null) {
+    lines.push([
+      "last start: not known — the camera's active-slot word (fw info roots, selector 10) could not be read",
+      'warn',
+    ]);
+  } else if (entered === null) {
+    lines.push([
+      `last start: not known — the camera's active-slot word is ${String(input.activeSlotWord)}, which names no bank`,
+      'warn',
+    ]);
+  } else {
+    lines.push([
+      `last start: the camera reports it entered ${bankWordsOf(entered)} (active-slot word ` +
+        `${String(input.activeSlotWord)})`,
+      'detail',
+    ]);
+  }
+  if (input.cfg0 === null) {
+    lines.push(['next start: not known — the boot-config word (cfg[0]) was not read', 'warn']);
+    return lines;
+  }
+  const verdicts: Record<SlotKey, BootVerdict> = {
+    a: lockedBankVerdict(input.byKey.get('a'), input.line2016),
+    b: lockedBankVerdict(input.byKey.get('b'), input.line2016),
+    r: lockedBankVerdict(input.byKey.get('r'), input.line2016),
+  };
+  const unnamed = input.line2016 && input.checkKey?.key == null;
+  const next = selectLockedBoot(
+    input.cfg0,
+    verdicts,
+    unnamed ? 'could not be checked: the key its bootloader checks a bank under was not named' : undefined,
+  );
+  lines.push(
+    next.runs === null
+      ? [`next start: not known — ${next.why}`, 'warn']
+      : [`next start: ${bankWordsOf(next.runs)} — ${next.why}`, 'detail'],
+  );
+  return lines;
+}
+
 /**
  * Read and analyse everything the flash path depends on.
  *
@@ -545,6 +739,12 @@ export async function readDeviceInfo(
    * the chain has been identified from the slots. */
   const entries = plan.windows;
   let updateTargetSubcmd = upgradeSelectorIn(plan, profile);
+  /* The 2016 Compact PRO line, read under its own profile: its bootloader's check and its boot record are
+   * decoded (profiles/locked-boot.ts), so this read names the key the banks are checked under and both
+   * starts. Under legacy-auth its banks are compared against the 2014 line's target, and the detection
+   * below says so instead. */
+  const line2016 =
+    profile.id === 'compact-2016' && classifyBuild(profile, version).family === 'locked-2016';
   warnIfRecipientFellBack(ctx);
 
   reporter.log('firmware info selectors ...', 'detail');
@@ -603,7 +803,14 @@ export async function readDeviceInfo(
   let candidates: ReturnType<typeof findKeyCandidates> = [];
   const bootEntry = entryForAddress(entries, profile.memory.flashBase);
   reporter.log('');
-  if (bootEntry === null) {
+  if (bootEntry === null && line2016) {
+    reporter.log(
+      `the bootloader block at ${hex(profile.memory.flashBase, 8)} is refused on every channel on ` +
+        "the 2016 builds, so its key table is not read; the bank the camera booted names the key its " +
+        'bootloader checks a bank under instead (below)',
+      'detail',
+    );
+  } else if (bootEntry === null) {
     reporter.log(
       `no selector reaches the bootloader block at ${hex(profile.memory.flashBase, 8)} on ` +
         `${profile.name} — this camera's key table cannot be confirmed`,
@@ -752,12 +959,27 @@ export async function readDeviceInfo(
      * upgrade reads a key — not the arm, not the staging, not the commit. */
     reporter.log('');
     reporter.log('no key table — none is involved on the plaintext chain', 'detail');
-  } else {
+  } else if (!line2016) {
     reporter.log('');
     reporter.log("could not confirm this camera's key table — flashing is disabled", 'error');
   }
 
   const storeKey: StoreKey = storeKeyOf(deviceKeySlot, keyTable);
+
+  /* ---- the 2016 line: the key its bootloader checks a bank under -------- */
+  const checkKey: CheckKey | null = line2016
+    ? checkKeyOf({
+        cfg0,
+        activeSlotWord,
+        bootloaderVersion,
+        whiteningK: profile.cipher.whiteningK,
+        slotOf: (key) => analysed[descriptors.findIndex((d) => d.key === key)],
+      })
+    : null;
+  if (checkKey !== null) {
+    reporter.log('');
+    reporter.log(checkKey.why, checkKey.key === null ? 'warn' : 'ok');
+  }
 
   /* ---- per-slot identification -------------------------------------- */
   const byKeyAnalysed = new Map<SlotKey, AnalysedSlot>();
@@ -773,12 +995,16 @@ export async function readDeviceInfo(
     const identity: KeyIdentity =
       slot.ffKeyB === true
         ? { name: 'Key B', bootable: false }
-        : identifyKey(
-            { state: slot.recovered?.state ?? null, accepts: slot.accepts },
-            keyTable,
-            storeKey,
-            keyWhiteningK,
-          );
+        : checkKey !== null
+          ? checkKeyIdentity(slot, checkKey, profile.cipher.whiteningK)
+          : identifyKey(
+              { state: slot.recovered?.state ?? null, accepts: slot.accepts },
+              keyTable,
+              storeKey,
+              keyWhiteningK,
+            );
+    /* The 2016 check key, when named, settles a bank either way: the bootloader tries no other. */
+    const keyKnown = keyTable !== null || checkKey?.key != null;
     /* THE FOOTER IS THE BOOTLOADER'S QUESTION, NOT EVERY ONE'S. This used to
      * require a "CODE" footer of every slot, and so called a 2016 part's
      * running bank "NOT bootable": that bootloader checks none, and the bank
@@ -791,7 +1017,7 @@ export async function readDeviceInfo(
         : ffFormInRecovery(descriptor.key, slot, bootloaderVersion)
           ? /* recovery runs it when A and B hold nothing the bootloader takes: not a skipped slot */
             'recovery-only'
-          : slot.present && slot.accepts && footerPasses && keyTable === null
+          : slot.present && slot.accepts && footerPasses && !keyKnown
             ? /* everything but the key checks out, and the key cannot be named */ 'unknown'
             : 'not-bootable';
     const bootable = bootability === 'bootable';
@@ -835,7 +1061,7 @@ export async function readDeviceInfo(
        * from a cipher's. */
       reporter.log(
         `${descriptor.name}: firmware ${slot.plainHeader?.versionStr ?? '?'}, ` +
-          `${String(slot.header?.length ?? 0)} B, plaintext chain, ` +
+          `${String(slot.header?.length ?? 0)} B${frameRateNote(slot.plain)}, plaintext chain, ` +
           `stored word sum ${String(slot.recovered?.checksum ?? 0)} — valid`,
         'ok',
       );
@@ -847,14 +1073,17 @@ export async function readDeviceInfo(
         bootability === 'bootable'
           ? 'bootable'
           : bootability === 'unknown'
-            ? "bootable unknown: the bootloader's key table was not read, so the keys it tries " +
-              'cannot be named'
+            ? checkKey !== null
+              ? 'bootable unknown: the key its bootloader checks a bank under was not named on this read'
+              : "bootable unknown: the bootloader's key table was not read, so the keys it tries " +
+                'cannot be named'
             : bootability === 'recovery-only'
               ? 'recovery only: R runs when A and B hold nothing the bootloader takes'
               : 'NOT bootable';
       reporter.log(
         `${descriptor.name}: firmware ${slot.plainHeader?.versionStr ?? '?'}, ` +
-          `${String(slot.header?.length ?? 0)} B, ${identity.name ?? UNNAMED_KEY}, ` +
+          `${String(slot.header?.length ?? 0)} B${frameRateNote(slot.plain)}, ` +
+          `${identity.name ?? UNNAMED_KEY}, ` +
           `acceptance ${slot.accepts ? 'ok' : 'FAILS'}, ${footer} -> ${verdict}`,
         bootable
           ? 'ok'
@@ -864,8 +1093,11 @@ export async function readDeviceInfo(
       );
       if (bootability === 'not-bootable' && slot.accepts && footerPasses) {
         reporter.log(
-          '    it decrypts and checksums under its own key, but the bootloader only tries ' +
-            `${storeKey.name} and Key A — so it will be skipped at boot`,
+          checkKey?.name != null
+            ? '    it decrypts and checksums under its own key, but the bootloader checks a bank ' +
+                `only under ${checkKey.name} — so it will be skipped at boot`
+            : '    it decrypts and checksums under its own key, but the bootloader only tries ' +
+                `${storeKey.name} and Key A — so it will be skipped at boot`,
           'error',
         );
       }
@@ -875,7 +1107,27 @@ export async function readDeviceInfo(
   /* ---- boot prediction ---------------------------------------------- */
   let prediction: BootPrediction | null = null;
   let targetConfirmed: SlotKey | null = null;
-  if (cfg0 !== null) {
+  /* THE LOCKED LINE is not replayed through `selectBootSlot`. Its rule is decoded
+   * (profiles/locked-boot.ts), but the bank its bootloader ENTERED is the camera's
+   * own answer, the active-slot word, and that word is established as the bank that
+   * ran on the 2014 plaintext chain and the 2016 line only (TESTING.md 42.56). Those
+   * two name both starts here; the line's other builds say why they cannot. */
+  const lockedLine = profile.boot === LEGACY_BOOT;
+  if (lockedLine) {
+    reporter.log('');
+    for (const [text, level] of lockedBootLines({
+      cfg0,
+      activeSlotWord,
+      byKey,
+      line2016,
+      plainChain,
+      checkKey,
+      version,
+    })) {
+      reporter.log(text, level);
+    }
+  }
+  if (cfg0 !== null && !lockedLine) {
     try {
       prediction = profile.boot.selectBootSlot(cfg0, (key) => byKey.get(key)?.bootable === true);
     } catch (error) {
@@ -938,11 +1190,23 @@ export async function readDeviceInfo(
     }
   }
 
+  /* The 2016 line: the same camera answer names both ends. The bootloader records the bank it entered
+   * (the active-slot word, TESTING.md 42.56), and this build's mode-0 row is fw_update_slot_address()
+   * over that word, as on the 2014 chain (`legacyUpgradeTargetBuild`): 0 -> slot B, anything else ->
+   * slot A. Nothing is armed to confirm the target: the whole-image write it serves is refused on this
+   * line, and the slot page writes the bank it names through that bank's own window. */
+  if (line2016 && prediction === null) {
+    const booted = bankOfActiveSlotWord(activeSlotWord);
+    if (booted !== null && legacyUpgradeTargetBuild(version) !== null) {
+      prediction = { booted, target: activeSlotWord === 0 ? 'b' : 'a' };
+    }
+  }
+
   if (prediction !== null) {
     /* The replay's target is a prediction, and the camera's own answers below can overrule it (on
      * 4.8.2.1 with cfg[0] 1 or 2 they do: TESTING.md 42.50). So the line says it is predicted, and
      * the "an upgrade writes" line after the checks is the one that states the target. */
-    if (!chainReplay) {
+    if (!chainReplay && !lockedLine) {
       reporter.log('');
       reporter.log(
         `boot config replay: booted ${byKey.get(prediction.booted)?.name ?? prediction.booted}, ` +
@@ -1186,9 +1450,20 @@ export async function readDeviceInfo(
     );
   }
 
-  if (blocked.length > 0) {
+  /* THE 2016 LINE IS WRITTEN BANK BY BANK. The slot page stages each bank under its image's own key
+   * block 0 (slots/write.ts), so the whole-image writer's reasons (its key table, its 2014-only staging,
+   * this profile's flash capability, the upgrade target) say once that the whole-image path is not this
+   * line's, and only the reasons left over refuse the camera. They stay in `flashBlockedBy` for the
+   * whole-image gate. */
+  const classicOnly = new Set([...classicWriter, ...upgradeOnly]);
+  const bankBlocks = line2016 ? blocked.filter((reason) => !classicOnly.has(reason)) : blocked;
+  if (line2016) {
     reporter.log('');
-    for (const reason of blocked) reporter.log(`flashing disabled: ${reason}`, 'error');
+    reporter.log(BANKS_ONLY_WRITING, 'detail');
+  }
+  if (bankBlocks.length > 0) {
+    if (!line2016) reporter.log('');
+    for (const reason of bankBlocks) reporter.log(`flashing disabled: ${reason}`, 'error');
   }
 
   const state: DeviceState = {
@@ -1225,12 +1500,13 @@ export async function readDeviceInfo(
     upgradeBlockedBy: upgradeOnly,
     classicWriterBlockedBy: classicWriter,
     appKeysBlock: keysBlock,
+    checkKey,
   };
 
   reporter.progress(
     1,
     1,
-    state.canFlash
+    state.canFlash || (line2016 && bankBlocks.length === 0)
       ? `Read. ${String(slots.filter((s) => s.present).length)}/${String(descriptors.length)} slots readable.`
       : 'Read, but this camera cannot be flashed from here — see the log.',
   );

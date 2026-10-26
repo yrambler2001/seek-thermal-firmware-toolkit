@@ -1,6 +1,7 @@
 /* ==================================================================== *
- * Which bank the 2014 plaintext chain runs at its next start, and what a frame-rate patch in a
- * bank that does not run leaves behind. Pure: it reads what the slots read already made.
+ * Which bank a locked-line camera (the 2014 plaintext chain and the 2016 Compact PRO 1.0.3.x) runs at its
+ * next start, and what a frame-rate patch in a bank that does not run leaves behind. Pure: it reads what
+ * the slots read already made.
  *
  * WHAT USB CAN SAY, read-only:
  *   - cfg[0], the boot-config word at 0x14010000. The analysis arms the mode-3 window on every read
@@ -18,20 +19,25 @@
  *         record was not found, and the cell 0x1000AED0 reads 0 there.
  *     Bank values: 0 is slot A, 1 is slot B, 2 is recovery R. The lines that report it are below.
  *
- * WHICH BANK A START RUNS, from the word (bootloader src/image.c, boot_select_image):
- *   0 or 0xFFFFFFFF: A if it passes the check, else B if it does, else R, which is not checked.
- *   1:               B if it passes, else A if it does, else R, which is not checked.
- *   any other word:  R if it passes, else A if it does, else B, which is not checked.
- * The check is image_sum_ok (bootloader src/crypto.c): the magic at +0x200, a length under 0x10000,
- * and the word sum over that length is 0. That is plainBankVerdict (running.ts), on the stored bytes.
+ * WHICH BANK A START RUNS: the rule both locked-line bootloaders share (profiles/locked-boot.ts), over one
+ * verdict per bank. On the 2014 chain the verdict is image_sum_ok on the stored bytes (plainBankVerdict,
+ * running.ts). On the 2016 line it is the device-seeded check the read already made (device-info.ts: the
+ * bank decrypts to a zero sum under the key the bank the camera booted is stored under).
  * ==================================================================== */
 
 import { identifyFpsImage, FPS_MEASURED_HZ } from '../preservation/fps-patch.js';
+import {
+  bankOfActiveSlotWord,
+  bankWordsOf,
+  lockedBootRule,
+  selectLockedBoot,
+  type BootVerdict,
+} from '../profiles/locked-boot.js';
 import type { FirmwareProfile, SlotKey } from '../profiles/types.js';
-import type { DeviceState, SlotState } from '../workflows/types.js';
+import type { DeviceState } from '../workflows/types.js';
 import { classifyBuild } from './capability-family.js';
 import { fpsPlanOfBank } from './fps-patch.js';
-import { onPlaintextChain, plainBankVerdict } from './running.js';
+import { lockedBankVerdict, onPlaintextChain } from './running.js';
 import type { SlotsReport } from './types.js';
 
 /** The banks, in the order the page and the CLI list them. */
@@ -39,15 +45,32 @@ const KEYS: readonly SlotKey[] = ['a', 'b', 'r'];
 
 /**
  * The stock frame rate of the 2014 chain's Compact builds (1.3.0.0 and 1.3.0.8). A corpus build that
- * runs above it (FPS_KNOWN_RATE) holds a frame-rate patch as much as a patched table entry does.
+ * runs above it (FPS_KNOWN_RATE) holds a frame-rate patch as much as a patched table entry does. The
+ * 2016 Compact PRO's stock builds run at 9 Hz and none of them is in FPS_KNOWN_RATE (its builds there
+ * are the 18 Hz FF ones), so the one threshold serves both lines.
  */
 const STOCK_HZ = 8;
 
-/** A bank as the page and the CLI name it, lower case: "slot A", "slot B", "recovery R". */
-export function bankWordsOf(key: SlotKey): string {
-  if (key === 'a') return 'slot A';
-  if (key === 'b') return 'slot B';
-  return 'recovery R';
+export { bankWordsOf };
+
+/**
+ * Whether this build's boot rule and bank check are decoded, so the page and the CLI name the bank the
+ * next start runs and warn about a frame-rate patch that will not: the 2014 plaintext chain and the 2016
+ * Compact PRO line (profiles/locked-boot.ts).
+ */
+export function bootRuleKnown(state: Pick<DeviceState, 'profile' | 'version'>): boolean {
+  return classifyBuild(state.profile, state.version).family === 'locked-plain' || on2016Line(state);
+}
+
+/**
+ * The 2016 Compact PRO line, read under its own profile. Under legacy-auth its banks are checked against
+ * the 2014 line's target, so no bank verdict of that read describes this bootloader's check.
+ */
+function on2016Line(state: Pick<DeviceState, 'profile' | 'version'>): boolean {
+  return (
+    state.profile.id === 'compact-2016' &&
+    classifyBuild(state.profile, state.version).family === 'locked-2016'
+  );
 }
 
 /**
@@ -55,14 +78,8 @@ export function bankWordsOf(key: SlotKey): string {
  * when unread. This is the mapping only; bootChoiceOf decides which lines it is reported on.
  */
 export function reportedBootedOf(activeSlotWord: number | null): SlotKey | null {
-  if (activeSlotWord === 0) return 'a';
-  if (activeSlotWord === 1) return 'b';
-  if (activeSlotWord === 2) return 'r';
-  return null;
+  return bankOfActiveSlotWord(activeSlotWord);
 }
-
-/** true: the bootloader's check passes. false: it refuses. null: the bank was not read, so no check is known. */
-type Verdict = boolean | null;
 
 export interface BootChoice {
   /** cfg[0] as read, or null when the word was not read. */
@@ -78,72 +95,6 @@ export interface BootChoice {
   readonly reportedBooted: SlotKey | null;
   /** One sentence: the word's rule and the bank it gives, or what could not be checked. */
   readonly why: string;
-}
-
-function wordText(word: number): string {
-  return word === 0xffffffff ? '0xFFFFFFFF' : String(word);
-}
-
-function acceptsOf(slot: SlotState | undefined): Verdict {
-  if (slot === undefined || slot.unread) return null;
-  /* An erased bank holds no image header, so the bootloader refuses it: a clean read is a verdict. */
-  if (slot.raw == null) return slot.blank === true ? false : null;
-  const verdict = plainBankVerdict(slot.raw);
-  return verdict === null ? null : verdict === 1;
-}
-
-interface Selection {
-  readonly runs: SlotKey | null;
-  readonly why: string;
-}
-
-function unchecked(key: SlotKey, head: string): Selection {
-  return {
-    runs: null,
-    why: `${head}, but ${bankWordsOf(key)} was not read, so the bank that runs is not known`,
-  };
-}
-
-/** boot_select_image(), over the word and each bank's verdict. Pure. */
-function selectRunning(word: number, accepts: Readonly<Record<SlotKey, Verdict>>): Selection {
-  const text = `the boot-config word is ${wordText(word)}`;
-  if (word === 0 || word === 0xffffffff || word === 1) {
-    const first: SlotKey = word === 1 ? 'b' : 'a';
-    const second: SlotKey = word === 1 ? 'a' : 'b';
-    const head = `${text}, so the bootloader tries ${bankWordsOf(first)} first`;
-    const firstOk = accepts[first];
-    if (firstOk === null) return unchecked(first, head);
-    if (firstOk)
-      return { runs: first, why: `${head}, and it holds an image the bootloader accepts` };
-    const secondOk = accepts[second];
-    if (secondOk === null) return unchecked(second, head);
-    if (secondOk) {
-      return {
-        runs: second,
-        why: `${head}; ${bankWordsOf(first)} holds no image the bootloader accepts, so it takes ${bankWordsOf(second)}`,
-      };
-    }
-    return {
-      runs: 'r',
-      why: `${head}; neither slot A nor slot B holds an image the bootloader accepts, so it boots recovery R, which it does not check`,
-    };
-  }
-  const head = `${text}, so the bootloader tries recovery R first`;
-  const rOk = accepts.r;
-  if (rOk === null) return unchecked('r', head);
-  if (rOk) return { runs: 'r', why: `${head}, and it holds an image the bootloader accepts` };
-  const aOk = accepts.a;
-  if (aOk === null) return unchecked('a', head);
-  if (aOk) {
-    return {
-      runs: 'a',
-      why: `${head}; recovery R holds no image the bootloader accepts, so it takes slot A`,
-    };
-  }
-  return {
-    runs: 'b',
-    why: `${head}; neither recovery R nor slot A holds an image the bootloader accepts, so it takes slot B, which it does not check`,
-  };
 }
 
 /**
@@ -166,7 +117,10 @@ function reportsActiveSlotWord(profile: FirmwareProfile, version: string | null)
  * word asks for it or when A and B both fail, whatever R holds.
  */
 export function bootChoiceOf(
-  state: Pick<DeviceState, 'cfg0' | 'activeSlotWord' | 'byKey' | 'profile' | 'version'>,
+  state: Pick<
+    DeviceState,
+    'cfg0' | 'activeSlotWord' | 'byKey' | 'profile' | 'version' | 'checkKey'
+  >,
 ): BootChoice {
   /* The word is reported as a bank where it is established as one: the 2014 line (where the page names
    * the booted bank from it, device-info.ts chainReplay), the 2016 line and the 4.9.x Compact PRO (42.50,
@@ -183,12 +137,18 @@ export function bootChoiceOf(
     };
   }
   const word = state.cfg0 >>> 0;
-  const accepts: Record<SlotKey, Verdict> = {
-    a: acceptsOf(state.byKey.get('a')),
-    b: acceptsOf(state.byKey.get('b')),
-    r: acceptsOf(state.byKey.get('r')),
+  const line2016 = on2016Line(state);
+  const accepts: Record<SlotKey, BootVerdict> = {
+    a: lockedBankVerdict(state.byKey.get('a'), line2016),
+    b: lockedBankVerdict(state.byKey.get('b'), line2016),
+    r: lockedBankVerdict(state.byKey.get('r'), line2016),
   };
-  const selection = selectRunning(word, accepts);
+  const unnamed = line2016 && state.checkKey?.key == null;
+  const selection = selectLockedBoot(
+    word,
+    accepts,
+    unnamed ? 'could not be checked: the key its bootloader checks a bank under was not named' : undefined,
+  );
   return { word, runs: selection.runs, reportedBooted, why: selection.why };
 }
 
@@ -255,8 +215,8 @@ function joinBanks(keys: readonly SlotKey[]): string {
 /**
  * The warning for a frame-rate patch that will not take effect: a patched bank (or the bank about to be
  * patched) that the next start does not run. Null when the bank that runs holds the patch, or will hold
- * it once the planned patch is written, or when nothing that holds a patch is idle. Only the 2014
- * plaintext chain has a boot word this reads; any other line gets null.
+ * it once the planned patch is written, or when nothing that holds a patch is idle. Only the lines whose
+ * boot rule is decoded (`bootRuleKnown`: the 2014 plaintext chain and the 2016 Compact PRO) get one.
  *
  * The fix the warning names is the bank that runs: a patch there is what makes the camera run it.
  */
@@ -264,7 +224,7 @@ export function fpsBootWarningOf(
   report: SlotsReport,
   options: FpsBootOptions = {},
 ): FpsBootWarning | null {
-  if (!report.state.plainChain) return null;
+  if (!bootRuleKnown(report.state)) return null;
   const choice = bootChoiceOf(report.state);
   if (choice.word === null || choice.runs === null) return null;
   const runs = choice.runs;
@@ -307,7 +267,5 @@ export function fpsBootWarningOf(
 
 /** The boot-config word as the CLI prints it, with the rule it sets. */
 export function bootWordRuleOf(word: number): string {
-  if (word === 0 || word === 0xffffffff) return 'slot A first, then B, then recovery R';
-  if (word === 1) return 'slot B first, then A, then recovery R';
-  return 'recovery R first, then A, then B';
+  return lockedBootRule(word);
 }

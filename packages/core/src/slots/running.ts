@@ -50,6 +50,25 @@ export function plainBankVerdict(bank: Uint8Array): Verdict | null {
 }
 
 /**
+ * One bank's boot check on the locked line, as its bootloader makes it (profiles/locked-boot.ts): true
+ * when it passes, false when it refuses, null when not known. An unread bank has no verdict; an erased
+ * one holds no image header, so the bootloader refuses it. The 2014 plaintext chain: image_sum_ok on the
+ * stored bytes. The 2016 line: the device-seeded check the read made (`SlotState.bootability`), which is
+ * unknown when the read could not name the key the bootloader checks under.
+ */
+export function lockedBankVerdict(slot: SlotState | undefined, line2016: boolean): boolean | null {
+  if (slot === undefined || slot.unread) return null;
+  if (slot.raw == null) return slot.blank === true ? false : null;
+  if (line2016) {
+    if (slot.bootability === 'bootable') return true;
+    if (slot.bootability === 'not-bootable') return false;
+    return null;
+  }
+  const verdict = plainBankVerdict(slot.raw);
+  return verdict === null ? null : verdict === 1;
+}
+
+/**
  * The 16 Hz FF build's answer for a bank (`image_sum_ok_r32k`, the device-seeded walk): the same
  * guards, and the word sum of (word XOR the Key B keystream, header window verbatim) is 0xFFFF.
  * Null when the bank cannot be walked.
