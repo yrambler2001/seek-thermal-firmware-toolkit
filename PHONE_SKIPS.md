@@ -102,8 +102,9 @@ chunk sits unread more than about 23 ms (the chunks are sent straight from the f
 ## Bench state after this work, and what is open
 
 - The Compact `101310HSNEA2`: banks A, B and R hold `edeabb71` (the 32 Hz image + no-skip), boot word 0, booted A. (`plan.md` section 2
-  said A `ef90c94a`, B and R `d91284c6` until 42.93.) The J-Link was moved to this camera by the owner for the flash.
+  said A `ef90c94a`, B and R `d91284c6` until 42.93.) The J-Link was moved to this camera for the flash only; the owner has it back on the Compact PRO.
 - Phones: the Pixel back on its 0.9.0 build, the Redmi on 0.9.0; `debug.seekprobe` cleared on both.
-- Open: a tear check (probe app, last chunk held 15-30 ms, a moving scene, look at the chunk seams at rows 38/39, 77/78, 116/117); a 30-minute
-  soak (shutter cycles, pause / resume, phone sleep, replug); the 4.x / XR rows are a table only.
+- Open: a 30-minute soak (shutter cycles, pause / resume, phone sleep, replug). The owner skips the tear check (2026-10-26).
+  Owner request: "Make 32 FPS" applies the frame-rate edit and the no-skip branch as one patch; the 4.x / XR rows and Nano 200
+  are emulator-verified only (FW-V1 doc).
 - The run record is `TESTING.md` 42.93.
