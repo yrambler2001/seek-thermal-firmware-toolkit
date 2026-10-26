@@ -74,7 +74,7 @@ Every 8 and 9 fps build with a table entry is offered except the FF entries and 
 
 ## 4. Repo state
 
-- [?] `refactor/all-firmware-profiles` (42.27 to 42.79 merged on it; the hosted bundle from 42.73 matches the current page) is local; pushing it and merging to main need the owner's word.
+- [?] `refactor/all-firmware-profiles` (42.27 to 42.88 merged on it; the hosted bundle from 42.88, `index-BYaOA_-2.js`, matches the current page) is local; pushing it and merging to main need the owner's word.
 - [ ] The FF vendor-form write on bootloader 2.0.2.3 stays open (owner: keep it open); not measured on a 2.0.2.3 camera.
 
 ## 5. The slots bench and older items
