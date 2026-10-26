@@ -104,7 +104,20 @@ import {
   rootsReply,
 } from './fixtures-2016.js';
 import { bankRecordOf, handRunState, patchSummaryOf, withoutPatch } from './run-state-fixtures.js';
-import { bankImageRefusal } from '../../src/preservation/steps.js';
+import {
+  bankImageRefusal,
+  PRESERVE_UNPATCHED_START_NEXT,
+  preserveStoppedForRestore,
+} from '../../src/preservation/steps.js';
+import {
+  blockSweepWords,
+  derivationWords,
+  patchSiteWords,
+  PRESERVE_CODE_NAMES,
+  preserveStepResultWords,
+  restoreFormWords,
+  stagedFormWords,
+} from '../../src/preservation/words.js';
 
 /* ---- the synthetic factory plaintext (the patch sites included) --------- */
 
@@ -824,8 +837,8 @@ describe('runPreserveStep(backup) — the double read and the derived-image gate
       );
       expect(error).toBeInstanceOf(SeekError);
       expect((error as Error).message).toMatch(/predates the widening route/);
-      expect((error as Error).message).toMatch(/0x400000/);
-      expect((error as Error).message).toMatch(/sec\. 36\.7/);
+      expect((error as Error).message).toMatch(/turns away every way of starting the read/);
+      expect((error as Error).message).toMatch(/measured on 0\.3\.0\.1/);
       expect(
         camera.calls.some((c) => c.op === OP.BEGIN_FIRMWARE_UPGRADE),
         'no window arm may be sent against the stopped generation',
@@ -1945,21 +1958,21 @@ describe('the mode-2 hazard ordering, in the drain gate', () => {
 
   it('refuses a run whose recorded patch lacks the nop site, before any mode-2 arm', async () => {
     const refusal = await describeStepGate('drain', hazardState([0x3d64]), never);
-    expect(refusal).toMatch(/the drain step refuses on compact-0\.8\.0\.0/);
-    expect(refusal).toMatch(/faults the camera/);
+    expect(refusal).toMatch(/the drain step refuses on [^:]+: starting the whole-flash read/);
+    expect(refusal).toMatch(/crashes the camera/);
     expect(refusal).toMatch(/0x00003CE4/);
     expect(refusal).toMatch(/run the patch step/);
     /* The other write steps are not mode-2 arms; they keep their ordinary
      * refusals, not this one. */
     for (const step of ['commit', 'restore'] as const) {
       const other = await describeStepGate(step, hazardState([0x3d64]), never);
-      expect(other ?? '').not.toMatch(/faults the camera/);
+      expect(other ?? '').not.toMatch(/crashes the camera/);
     }
   });
 
   it('lets the drain through once the patch summary carries the nop site', async () => {
     const refusal = await describeStepGate('drain', hazardState([0x3d64, 0x3ce4]), never);
-    expect(refusal ?? '').not.toMatch(/faults the camera/);
+    expect(refusal ?? '').not.toMatch(/crashes the camera/);
   });
 });
 
@@ -1967,8 +1980,8 @@ describe('the 0.7.0.7 rotation — the base from the bank the start entered, and
   it('the walk serves the A/B slot the entered bank is not; recovery refuses', () => {
     expect(rotatedDrainBase('a')).toBe(0x14060000);
     expect(rotatedDrainBase('b')).toBe(0x14050000);
-    expect(() => rotatedDrainBase('r')).toThrow(/never measured against a recovery start/);
-    expect(() => rotatedDrainBase('r')).toThrow(/doc 36\.10/);
+    expect(() => rotatedDrainBase('r')).toThrow(/never measured from a recovery start/);
+    expect(() => rotatedDrainBase('r')).toThrow(/where the rotated read begins is not known/);
   });
 
   it('unrotateDump folds the served bytes back to part layout order', { timeout: 120_000 }, () => {
@@ -2060,7 +2073,7 @@ describe('Compact PRO 1.0.3.0 with the board patch — the fake bench camera', (
   it('the probe: an erased record is admitted on the boot that serves the device block, with no reboot', async () => {
     const camera = cp1030Camera();
     const reporter = collectingReporter();
-    const { cfgHead, boots } = await openProbedSession(
+    const { cfgHead, boots, admission } = await openProbedSession(
       fakeOpener(camera),
       reporter,
       undefined,
@@ -2071,10 +2084,11 @@ describe('Compact PRO 1.0.3.0 with the board patch — the fake bench camera', (
     expect(resetsSent(camera)).toBe(0);
     /* the check armed the plan's mode-4 window, the device-identity block */
     expect(camera.arms).toEqual([3, 4]);
+    /* The admission's words go to the run file's notes, not the log: a sweep says it once
+     * (TESTING.md 42.101). */
+    expect(admission).toMatch(/device-identity block .* admitted, no reboot/);
     const lines = reporter.events.map((e) => (e.type === 'log' ? e.message : ''));
-    expect(lines.some((line) => /device-identity block .* admitted, no reboot/.test(line))).toBe(
-      true,
-    );
+    expect(lines.some((line) => line.includes('admitted, no reboot'))).toBe(false);
     await camera.close();
   });
 
@@ -2815,6 +2829,180 @@ describe('an unknown image — refused in plain words, per bank and as the run (
     expect(bankImageRefusal(cp1030Bank(boardPatched()), CP1030_VERSION, 'r')).toBeNull();
     expect(bankImageRefusal(cp1030Bank(unknown), CP1030_VERSION, 'r')).toBe(
       unknownImageWords(CP1030_VERSION),
+    );
+  });
+});
+
+/* ==================================================================== *
+ * People's words — TESTING.md 42.101: plain words in the log and the
+ * results, code names only in the run file; one line for a block sweep
+ * ==================================================================== */
+
+/** Every line a person sees while `ids` run: the log lines and the progress texts. */
+async function peopleLinesOf(
+  camera: FakeCamera,
+  ids: readonly PreserveStepId[],
+  runId: string,
+): Promise<{ lines: string[]; state: PreserveRunState }> {
+  const store = memoryStore();
+  const reporter = collectingReporter();
+  let state = (await createPreserveRun({ runId })).state;
+  for (const id of ids) {
+    const outcome = await runPreserveStep(id, fakeOpener(camera), state, store.load, reporter);
+    store.add(outcome);
+    state = outcome.state;
+  }
+  const lines = reporter.events.flatMap((e) =>
+    e.type === 'log' ? [e.message] : e.type === 'progress' && e.text !== undefined ? [e.text] : [],
+  );
+  return { lines, state };
+}
+
+function codeNamesIn(lines: readonly string[]): string[] {
+  return lines.filter((line) => PRESERVE_CODE_NAMES.some((name) => name.test(line)));
+}
+
+const ALL_STEPS: readonly PreserveStepId[] = [
+  'backup',
+  'patch',
+  'commit',
+  'drain',
+  'restore',
+  'verify',
+];
+
+describe('people’s words — one line per sweep, no code names (TESTING.md 42.101)', () => {
+  it('blockSweepWords: one line for the sweep, a block that took a restart named', () => {
+    const blocks = Array.from({ length: 31 }, (_, i) => ({
+      address: 0x14010000 + i * 0x10000,
+      boots: 1,
+    }));
+    expect(blockSweepWords('Backup', blocks)).toEqual([
+      'Backup: 31 blocks read, no restart needed.',
+    ]);
+    expect(blockSweepWords('Check', blocks)).toEqual([
+      'Check: 31 blocks read again, no restart needed.',
+    ]);
+    /* the 2014 chain: a restart before every block is the usual case, said once */
+    expect(
+      blockSweepWords(
+        'Backup',
+        blocks.map((b) => ({ ...b, boots: 2 })),
+      ),
+    ).toEqual(['Backup: 31 blocks read, one restart before each.']);
+    /* a block that differs from the rest keeps its own line */
+    const one = blocks.map((b) => (b.address === 0x14050000 ? { ...b, boots: 3 } : b));
+    expect(blockSweepWords('Backup', one)).toEqual([
+      'Backup: 31 blocks read, no restart needed but 1:',
+      'Backup: block 0x14050000 took 2 restarts before it.',
+    ]);
+  });
+
+  it('the words for each id: no code name reaches them', () => {
+    const lines = [
+      derivationWords(
+        'r16-state-from-crib+keyblock-verify (the at-rest device stream, key block 1)',
+      ),
+      derivationWords('r16-state-from-crib+keyblock-verify (the two-stream store, key blocks 0+1)'),
+      derivationWords('identity — the 2014 chain stores the image in its slot as-is'),
+      ...(['plain', 'xor-ks0', 'xor-ks0-ksD'] as const).map(stagedFormWords),
+      ...(['capture-verbatim', 'factory-staged', 'none'] as const).map(restoreFormWords),
+      ...V1_2014_PATCH_SITES.map((site) => patchSiteWords(site.what.split(' (')[0] ?? '')),
+      patchSiteWords('mode-2 guard: bne.n -> b.n at the cmp r3,#2 — mode 2 falls through'),
+      patchSiteWords(
+        'widen: mov.w r3,#0x10000 -> #0x400000 — one constant feeds the d4 AND dc window-length ' +
+          'stores, the wire-79 window becomes [0x14000000, 0x14400000)',
+      ),
+    ];
+    expect(codeNamesIn(lines)).toEqual([]);
+    expect(lines[0]).toBe(
+      "the camera's key was worked out from the backup and checked against its key block",
+    );
+    expect(stagedFormWords('xor-ks0')).toMatch(/^in the form the camera stores it/);
+    expect(lines.at(-1)).toBe(
+      "lets the camera's read command reach the whole 4 MiB flash, not just the first 64 KiB",
+    );
+  });
+
+  it(
+    'the 2016 line (Compact PRO 1.0.3.0): the six steps say what happened in plain words',
+    { timeout: 180_000 },
+    async () => {
+      const { lines, state } = await peopleLinesOf(cp1030Camera(), ALL_STEPS, 'words-2016');
+      expect(state.nextStep).toBe('done');
+      expect(codeNamesIn(lines)).toEqual([]);
+      /* the sweep and the check: one line each, not one per block */
+      expect(lines.filter((line) => /^Backup: \d+ blocks read/.test(line))).toEqual([
+        'Backup: 31 blocks read, no restart needed.',
+      ]);
+      expect(lines.filter((line) => /^Check: \d+ blocks read again/.test(line))).toEqual([
+        'Check: 31 blocks read again, no restart needed.',
+      ]);
+      expect(lines.some((line) => line.includes('admitted, no reboot'))).toBe(false);
+      expect(lines).toContain(
+        "Slot A decrypted: the camera's key was worked out from the backup and checked against " +
+          `its key block. It holds ${state.buildLabel ?? ''}.`,
+      );
+      expect(
+        lines.some((line) =>
+          line.startsWith('Slot A read again after a fresh start: both reads agree'),
+        ),
+      ).toBe(true);
+      /* the run file keeps every detail */
+      expect(state.steps.backup?.notes).toMatch(/r16-state-from-crib\+keyblock-verify/);
+      expect(state.steps.backup?.notes).toMatch(
+        /window boots: 31 window\(s\): the boot-config record is unprogrammed/,
+      );
+      expect(state.steps.restore?.notes).toMatch(/xor-ks0 staged form/);
+      /* each step's result, as the CLI's last lines and the page's rows say it */
+      const results = ALL_STEPS.map((id) => preserveStepResultWords(state, id) ?? '');
+      expect(codeNamesIn(results)).toEqual([]);
+      expect(results[4]).toBe(
+        'Restore: slot A written back in the form the camera stores it ' +
+          "(encrypted under the camera's key).",
+      );
+      expect(results[5]).toBe(
+        "Check: 31 blocks read again, 0 bytes differ — the camera's flash is byte-identical " +
+          'to the backup.',
+      );
+    },
+  );
+
+  it(
+    'the 2014 chain (1.3.0.0): the same plain words, nothing to decrypt',
+    { timeout: 180_000 },
+    async () => {
+      const { lines, state } = await peopleLinesOf(
+        v1Camera(syntheticPlain()),
+        ALL_STEPS,
+        'words-2014',
+      );
+      expect(state.nextStep).toBe('done');
+      expect(codeNamesIn(lines)).toEqual([]);
+      expect(lines.filter((line) => /^Backup: \d+ blocks read/.test(line))).toHaveLength(1);
+      expect(
+        lines.some((line) =>
+          line.startsWith(
+            'Slot A read: the camera stores its firmware as is, so there was nothing to decrypt.',
+          ),
+        ),
+      ).toBe(true);
+      const results = ALL_STEPS.map((id) => preserveStepResultWords(state, id) ?? '');
+      expect(codeNamesIn(results)).toEqual([]);
+    },
+  );
+
+  it('the planned stop: the next step is the restore, in words a front end shows', () => {
+    const base = handRunState();
+    const stopped: PreserveRunState = {
+      ...base,
+      nextStep: 'restore',
+      steps: { ...base.steps, drain: { status: 'failed', error: 'stopped' } },
+    };
+    expect(preserveStoppedForRestore(stopped)).toBe(true);
+    expect(preserveStoppedForRestore({ ...stopped, nextStep: 'drain' })).toBe(false);
+    expect(PRESERVE_UNPATCHED_START_NEXT).toMatch(
+      /^Next: the restore puts every written bank back/,
     );
   });
 });

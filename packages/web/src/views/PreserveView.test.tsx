@@ -300,8 +300,38 @@ describe('PreserveView', () => {
     expect(row.textContent).toContain('Compact 1.3.0.8 (8 Hz)');
     expect(row.textContent).toContain('two agreeing reads');
     expect(row.textContent).toContain('Bytes that move on the part');
-    expect(row.textContent).toContain('mov.w');
+    /* Each change in plain words; the instruction text stays in the run file (42.101). */
+    expect(row.textContent).toContain(
+      "lets the camera's read command reach the whole 4 MiB flash, not just the first 64 KiB",
+    );
+    expect(row.textContent).not.toContain('mov.w');
+    expect(row.textContent).not.toMatch(/\bfamily\b|staged form|Staged form/);
     unmount();
+  });
+
+  it('the planned stop of the whole-flash read leads to the restore, not another try (42.101)', () => {
+    const ran: [PreservePhaseId, PreservePhaseRunOptions][] = [];
+    const state = runState(
+      { backup: 'done', patch: 'done', commit: 'done', drain: 'failed' },
+      { nextStep: 'restore', drainEntered: 'a' },
+    );
+    const view = renderPreserve({ state, connected: true }, ran);
+    const row = phaseRow(view.container, 'Patch & dump');
+    expect(row.textContent).toContain('Stopped as planned — the restore is next');
+    expect(row.textContent).toContain('Next: the restore puts every written bank back.');
+    expect(row.textContent).not.toContain('Try patch & dump again');
+    expect(row.textContent).not.toContain('Stopped — see the log');
+    const go = [...row.querySelectorAll('button')].find(
+      (button) => button.textContent.trim() === 'Go on to step 04: restore the banks',
+    );
+    expect(go?.disabled).toBe(false);
+    act(() => {
+      go?.click();
+    });
+    expect(document.body.querySelector('[role="alertdialog"]')?.textContent).toContain(
+      'Restore & verify',
+    );
+    view.unmount();
   });
 
   it('after step 02: the next start and why, every bank, the choice, and what step 03 writes', () => {

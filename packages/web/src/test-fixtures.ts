@@ -232,7 +232,14 @@ export function preservePatchOf(
   overrides: Partial<PreservePatchSummary> = {},
 ): PreservePatchSummary {
   return {
-    sites: [{ name: 'mov.w', offset: 0x3db4, before: [1, 2, 3, 4], after: [5, 6, 7, 8] }],
+    sites: [
+      {
+        name: 'mov.w r3,#0x10000 -> #0x400000',
+        offset: 0x3db4,
+        before: [1, 2, 3, 4],
+        after: [5, 6, 7, 8],
+      },
+    ],
     rebalanceWord: 0x30006240,
     stagedLength: 0x4000,
     chunkCount: 256,

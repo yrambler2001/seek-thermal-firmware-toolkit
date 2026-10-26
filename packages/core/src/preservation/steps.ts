@@ -113,6 +113,7 @@ import {
   type PreserveBootFacts,
 } from './banks.js';
 import {
+  admissionNotesOf,
   PostResetWedgeError,
   PROBE_OFFSET,
   READ_CHUNK,
@@ -151,6 +152,7 @@ import {
   type V1Patch,
 } from './patch.js';
 import { solvePlainFromCapture } from './solve.js';
+import { bankDerivedWords, sentence, stagedFormWords } from './words.js';
 import {
   BACKUP_WINDOW_COUNT,
   BANKS,
@@ -495,7 +497,12 @@ const isDone = (state: PreserveRunState, id: PreserveStepId): boolean =>
   state.steps[id]?.status === 'done';
 
 function buildNameOf(state: PreserveRunState): string {
-  return state.buildId ?? state.buildFamily ?? 'the detected build';
+  return (
+    state.buildLabel ??
+    (state.expectedVersion === undefined
+      ? 'the detected build'
+      : `firmware ${state.expectedVersion}`)
+  );
 }
 
 /** Why the chosen banks cannot be written, or null. Shared by the steps that
@@ -680,14 +687,13 @@ export async function describeStepGate(
           if (missing.length > 0) {
             return (
               `the drain step refuses on ${buildNameOf(state)}: ` +
-              'arming mode 2 on this build’s UNPATCHED image faults the camera — the factory ' +
-              'mode-2 row loads the word stored AT 0x14000000 (the bootloader vector’s initial ' +
-              'SP, not a flash window) and an armed read walks off SRAM (measured on the ' +
-              'emulator: 32 KiB served, then the guest faulted; FW-V1 doc 36.3.1). The nop that ' +
-              'makes the arm safe is patch site ' +
+              'starting the whole-flash read on this build’s unpatched firmware crashes the ' +
+              'camera (it reads from a value that is not a flash address; measured on the ' +
+              'emulator: 32 KiB served, then the camera faulted). The change that makes the read ' +
+              'safe is at ' +
               missing.map((offset) => hexUp(offset)).join(', ') +
-              `, and it is NOT among the patch sites this run recorded for ${bankWordsOf(key)} — ` +
-              'run the patch step (and land the commit) before any mode-2 arm.'
+              `, and it is not among the changes this run recorded for ${bankWordsOf(key)} — ` +
+              'run the patch step (and land the write) before the whole-flash read.'
             );
           }
         }
@@ -719,12 +725,11 @@ export async function describeStepGate(
       }
       if (state.restoreForm === 'none') {
         return (
-          `the restore step refuses on ${buildNameOf(state)}: no staged form ` +
-          'of the factory image passes the running app’s own acceptance while ' +
-          'transforming back to the original slot bytes — accept1 reads sum(P ^ ksD), ' +
-          'the factory image carries 0xB7AB9D17 there (measured), not the 0xFFFF the app ' +
-          'demands. This run ends with the delivered dump in hand and the patch in place; ' +
-          'the original content can only go back with a full-flash programmer.'
+          `the restore step refuses on ${buildNameOf(state)}: no form of the original ` +
+          'firmware passes the camera’s own check and also stores back as the original ' +
+          'bytes — the original firmware’s check sum is 0xB7AB9D17 (measured), not the ' +
+          '0xFFFF the camera demands. This run ends with the complete image in hand and the ' +
+          'patch in place; the original content can only go back with a full-flash programmer.'
         );
       }
       /* A cipher family's restore stages the FACTORY image in the build's
@@ -866,6 +871,20 @@ export function unpatchedStartOf(error: unknown): BankKey | null {
 export const PRESERVE_UNPATCHED_START_STOP =
   'Stopped before the whole-flash read: the camera started a bank this run did not patch, so ' +
   'nothing was read. The restore puts every written bank back.';
+
+/**
+ * Whether the run's whole-flash read stopped as planned (the start entered a bank the run did
+ * not patch): the next step is the restore, and running the read again would enter the same
+ * bank. A front end offers the restore here, not another try (TESTING.md 42.101).
+ */
+export function preserveStoppedForRestore(state: PreserveRunState): boolean {
+  return state.steps.drain?.status === 'failed' && state.nextStep === 'restore';
+}
+
+/** The action after that stop, in words: the restore, not the read again. */
+export const PRESERVE_UNPATCHED_START_NEXT =
+  'Next: the restore puts every written bank back. The whole-flash read is not tried again: ' +
+  'the camera would start the same bank.';
 
 /**
  * The run's ending, for the last screen and the last lines: a run whose whole-flash read ran
@@ -1319,7 +1338,7 @@ async function captureAnchor(
     version,
     reporter,
     signal,
-    `${words}’s fresh-boot read (the bank window, mode ${String(bankEntry.subcmd)})`,
+    `${words}’s second read, after a fresh start`,
   );
 
   /* THE VERIFIED-ARM LADDER on the slot reads. `sweepRow` is the first read
@@ -1347,7 +1366,7 @@ async function captureAnchor(
         version,
         reporter,
         signal,
-        `${words}’s re-read after two garbage reads (the bank window)`,
+        `${words}’s third read, after a fresh start`,
       );
       if (!slotReadIsPlausible(rescued)) {
         fail(
@@ -1383,7 +1402,7 @@ async function captureAnchor(
         version,
         reporter,
         signal,
-        `${words}’s re-read (the fresh boot served garbage)`,
+        `${words}’s read again, after a fresh start`,
       );
       if (equalBytes(again, sweepRow)) {
         verifiedSecond = again;
@@ -1410,10 +1429,12 @@ async function captureAnchor(
     await sha256hex(verifiedSecond),
   ];
   reporter.log(
-    `${words} served on two admitted boots (the sweep’s own boot, mode ` +
-      `${String(planEntry.subcmd)}, + one fresh boot of the bank window, mode ` +
-      `${String(bankEntry.subcmd)}): ${serveNote} (sha256 ${slotReadShas[1]})`,
-    'detail',
+    `${sentence(words)} read again after a fresh start: ` +
+      (serveNote === 'both reads agree'
+        ? 'both reads agree'
+        : 'one read came back unusable and was read once more; the reads the run uses agree') +
+      ` (sha256 ${slotReadShas[1]}).`,
+    'info',
   );
   /* The archive's row at the bank address is the verified capture when the
    * sweep's own row was the swallowed one — the assembled backup must agree
@@ -1445,7 +1466,7 @@ async function captureAnchor(
     }
     throw error;
   }
-  await logDerived(reporter, bank, derived);
+  logDerived(reporter, bank, derived);
   return {
     capture,
     slotReadShas,
@@ -1456,23 +1477,18 @@ async function captureAnchor(
   };
 }
 
-async function logDerived(reporter: Reporter, bank: BankKey, derived: Derived): Promise<void> {
-  reporter.log(
-    `${bankWordsOf(bank)}: the factory plaintext derived from the capture: ${derived.method} ` +
-      `(${String(derived.plain.length)} B, sha256 ${await sha256hex(derived.plain)}); ` +
-      `build ${derived.patch.buildId} (family ${derived.patch.family})`,
-    'detail',
-  );
+/** The step-02 line for a bank whose firmware the run recovered: plain words (`words.ts`); the
+ *  method id, the build and family ids and the edit's id stay in the run file. */
+function logDerived(reporter: Reporter, bank: BankKey, derived: Derived): void {
+  reporter.log(bankDerivedWords(bank, derived.method, derived.patch.label), 'info');
   const edit = derived.patch.derivation;
   if (edit !== null) {
     reporter.log(
-      `${bankWordsOf(bank)}: the image is the ${derived.patch.buildId} factory image with ` +
-        `${edit.derivation.label} (${edit.derivation.id}): ` +
-        `${String(edit.derivation.site.after.length)} bytes at ` +
-        `${hexUp(edit.derivation.site.offset)}, balanced through the adjust word at 0x238 ` +
-        `(${hexUp(edit.balanceWord)}). The patch balances on top of it, and the restore puts ` +
-        'this image back, edit included.',
-      'detail',
+      `${sentence(bankWordsOf(bank))} holds ${derived.patch.label} with ` +
+        `${edit.derivation.label} (${String(edit.derivation.site.after.length)} bytes at ` +
+        `${hexUp(edit.derivation.site.offset)}): the run patches on top of it, and the restore ` +
+        'puts it back with that change.',
+      'info',
     );
   }
 }
@@ -1505,7 +1521,7 @@ async function captureOther(
       version,
       reporter,
       signal,
-      `${words}’s fresh-boot read (the bank window, mode ${String(bankOf(bank).mode)})`,
+      `${words}’s second read, after a fresh start`,
     );
   } catch (error) {
     if (error instanceof CancelledError) throw error;
@@ -1533,6 +1549,10 @@ async function captureOther(
       refused: `its two reads disagree (sha256 ${shas[0]} vs ${shas[1]})`,
     };
   }
+  reporter.log(
+    `${sentence(words)} read again after a fresh start: both reads agree (sha256 ${shas[1]}).`,
+    'info',
+  );
   const holds = bankHoldsOf(row);
   if (holds !== 'image') {
     const mark = warmBootMarkOf(row);
@@ -1549,7 +1569,7 @@ async function captureOther(
   }
   try {
     const derived = deriveFactoryImage(row, version, bank);
-    await logDerived(reporter, bank, derived);
+    logDerived(reporter, bank, derived);
     return { holds, bytes: row, slotReadShas: shas, derived, refused: null };
   } catch (error) {
     if (error instanceof CancelledError) throw error;
@@ -1792,7 +1812,23 @@ async function runBackupStep(
       dumpPath: `${state.runId}/${PRESERVE_BACKUP_FILE}`,
       ...(signal === undefined ? {} : { signal }),
     },
-    reporter,
+    /* The decrypt's own lines name profiles, scores and key words: they stay in the archive's
+     * decryption report (02-read-build/decrypted/), and people get one line (TESTING.md 42.101). */
+    {
+      /* A front end's reporter may be a class: its methods are called, not spread. */
+      log: () => undefined,
+      progress: (done, total, text, unit) => {
+        reporter.progress(done, total, text, unit);
+      },
+      artifact: (artifact) => {
+        reporter.artifact(artifact);
+      },
+    },
+  );
+  reporter.log(
+    `Dump archive: ${String(archive.slots.length)} bank(s) decrypted from the backup into the ` +
+      'run’s decrypted folder; its decryption report keeps every detail.',
+    'info',
   );
   const profile = archive.detection?.best.profile ?? getProfile('generic');
   const manifest = buildOfflineDecryptManifest({
@@ -1870,7 +1906,10 @@ async function runBackupStep(
           (resolved.banks === null
             ? `no banks chosen: ${resolved.what}`
             : `banks to write: ${bankList(resolved.banks)} (${resolved.what})`) +
-          `; dump archive: ${String(archive.slots.length)} slot(s) decrypted`,
+          `; dump archive: ${String(archive.slots.length)} slot(s) decrypted` +
+          (backup.admissions === undefined
+            ? ''
+            : `; window boots: ${admissionNotesOf(backup.admissions)}`),
         shas,
       ),
     },
@@ -1918,10 +1957,9 @@ async function runPatchStep(
     artifacts.push(named(preservePatchedFile(key), patch.patched));
     records[key] = { ...banks[key], patch: summary };
     reporter.log(
-      `${bankWordsOf(key)}: patch built: ${String(summary.sites.length)} instruction site(s), ` +
-        `${String(patch.diffOffsets.length)} byte(s) move, ${String(summary.chunkCount)} ` +
-        'staging chunk(s)',
-      'detail',
+      `${sentence(bankWordsOf(key))}: patch built — ${String(summary.sites.length)} ` +
+        `instruction(s) change, ${String(patch.diffOffsets.length)} bytes differ from the original.`,
+      'info',
     );
     notes.push(
       `${bankWordsOf(key)}: ${String(patch.diffOffsets.length)} byte(s) differ (rebalance word ` +
@@ -2008,9 +2046,9 @@ async function bankWriteOf(
       : stagedFormOf(patch, patch.patched);
   if (patch.family === 'v1-2014-ff' && stagedAcceptanceSum(patch, payload) !== 0xffff) {
     fail(
-      'the staged payload does not satisfy the FF build collapsed acceptance ' +
-        '(sum(staged ^ ks0) must be 0xFFFF) — refusing to stage a payload the app would ' +
-        'reject after the erase',
+      'the patched firmware, in the form the camera stores it, does not pass this build’s own ' +
+        'check (its sum must be 0xFFFF) — refusing to send a bank the camera would reject ' +
+        'after the erase',
     );
   }
   return { key, capture, patch, payload, patchedSlot: conjugateCapture(capture, patch) };
@@ -2045,7 +2083,7 @@ async function runCommitStep(
       opener,
       reporter,
       signal,
-      'the commit session',
+      'the write session',
       (d) => {
         applyReaderOp(d, state.expectedVersion);
       },
@@ -2101,7 +2139,7 @@ async function runCommitStep(
         }
         assertLive(signal);
         const commit = await commitToBank(device, write.key, write.payload, {
-          label: `preserve commit (${words})`,
+          label: `Writing ${words}`,
           reporter,
           ...(signal === undefined ? {} : { signal }),
         });
@@ -2491,13 +2529,13 @@ async function runRestoreStep(
           continue;
         }
         reporter.log(
-          `restore: ${words} holds something other than its original content — staging the ` +
-            'backup over it (the backup is the authority this run restores from)',
-          'detail',
+          `Restore: ${words} is not as the backup read it — writing its original back ` +
+            `${state.stagedForm === undefined ? 'as the backup holds it' : stagedFormWords(state.stagedForm)}.`,
+          'info',
         );
         assertLive(signal);
         await commitToBank(device, item.key, item.payload, {
-          label: `preserve restore (${words})`,
+          label: `Restoring ${words}`,
           reporter,
           ...(signal === undefined ? {} : { signal }),
         });

@@ -159,11 +159,27 @@ export {
   preservePlainFile,
   recordStepFailure,
   PRESERVE_UNPATCHED_START_STOP,
+  PRESERVE_UNPATCHED_START_NEXT,
+  preserveStoppedForRestore,
   preserveDoneWords,
   unpatchedStartOf,
   runPreserveStep,
   spentReaderSignature,
 } from './steps.js';
+export {
+  bankDerivedWords,
+  blockSweepWords,
+  derivationWords,
+  drainCapabilityWords,
+  PRESERVE_CODE_NAMES,
+  patchSiteLine,
+  patchSiteWords,
+  preserveBuildWords,
+  preserveStepResultWords,
+  restoreFormWords,
+  stagedFormWords,
+} from './words.js';
+export type { PreserveBlockAdmission, PreserveWordsState } from './words.js';
 export type {
   CreatePreserveRunOptions,
   CreatedPreserveRun,

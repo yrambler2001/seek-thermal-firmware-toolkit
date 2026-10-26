@@ -598,7 +598,7 @@ async function runFullInPlace(spec: {
     /* The FF build: the delivered dump IS the run's product. The restore
      * gate refuses with the measured acceptance fact; nothing writes. */
     const refusal = await describeStepGate('restore', state, store.load);
-    expect(refusal).toMatch(/the restore step refuses on compact-1\.3\.0\.8-ff/);
+    expect(refusal).toMatch(/the restore step refuses on [^:]+: no form of the original firmware/);
     expect(refusal).toMatch(/0xB7AB9D17/);
     process.stderr.write(`[families] ${spec.label} restore refused as documented; run ends\n`);
     return;

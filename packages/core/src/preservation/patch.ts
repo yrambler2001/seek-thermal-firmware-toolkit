@@ -1394,18 +1394,11 @@ export function preWideningRefusal(version: string | null): string | null {
   if (Number.isNaN(minor) || minor >= 7) return null;
   return (
     `firmware ${version ?? '(unreadable)'} predates the widening route, and the run refuses ` +
-    'rather than write over a slot it cannot serve. The generation was investigated and ' +
-    'STOPPED (FW-V1 doc 36, sec. 36.7): every BeginFirmwareUpgrade arm shape — modes 0/2/7, ' +
-    'plain 2-byte and token 18-byte — refuses with status 0x400000, a code outside even the ' +
-    'reconstruction’s own status taxonomy (measured on the 0.3.0.1 chimera); its mode-2 ' +
-    'row is not the 0x14000000-named window the widened drain reads through; and its window ' +
-    'constant is not the patchable two-store immediate (0.3.0.1 pools FLASH_BLOCK_BYTES as ' +
-    '-O0 constants, and the two 4ff48033 immediates the 0.5.x/0.6.0.4 images do carry belong ' +
-    'to settings-op stagers, not the upgrade path). There is no standard dump path on this ' +
-    'generation either — it has no read handler a dump can use (before 0.7.0.7 the reader ' +
-    'row does not exist at all). The widening campaign records this generation as its ' +
-    'boundary; reaching it would need the pre-0.7 dispatcher’s argument convention, the ' +
-    'real mode table, and the window-constant encoding derived first.'
+    'rather than write over a bank it cannot read back. On this generation the camera turns ' +
+    'away every way of starting the read the route needs (measured on 0.3.0.1), its read ' +
+    'command does not reach the start of the flash, and the size the patch would change is ' +
+    'stored in a different way. It has no read a standard dump can use either. Nothing was ' +
+    'read beyond the version.'
   );
 }
 

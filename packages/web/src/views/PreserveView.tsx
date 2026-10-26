@@ -50,6 +50,14 @@ import {
   type PreserveChoiceVerdict,
   bankChoiceWritesWords,
   preserveDoneWords,
+  preserveBuildWords,
+  preserveStepResultWords,
+  preserveStoppedForRestore,
+  PRESERVE_UNPATCHED_START_NEXT,
+  patchSiteWords,
+  stagedFormWords,
+  restoreFormWords,
+  drainCapabilityWords,
 } from '@seek-fw/core';
 import { Panel, PanelTitle } from '@/components/Panel';
 import { Prose } from '@/components/Prose';
@@ -111,46 +119,6 @@ function stepNumber(index: number): string {
 
 function bytesHex(bytes: readonly number[]): string {
   return bytes.map((byte) => byte.toString(16).padStart(2, '0')).join(' ');
-}
-
-/* ---- the plan lines, in words (the CLI's plan print, web-shaped) -------- */
-
-type StagedForm = NonNullable<PreserveRunState['stagedForm']>;
-type RestoreForm = NonNullable<PreserveRunState['restoreForm']>;
-type DrainCapability = NonNullable<PreserveRunState['capability']>;
-
-function stagedFormLine(form: StagedForm): string {
-  switch (form) {
-    case 'plain':
-      return 'plain — the bank holds the image as stored; the wire payload is the conjugated capture';
-    case 'xor-ks0':
-      return 'patched plain XOR keystream (block 0) — the two-keystream cipher form';
-    case 'xor-ks0-ksD':
-      return 'patched plain XOR keystream (block 0) XOR keystream (block 1) — the FF build form';
-  }
-}
-
-function restoreFormLine(form: RestoreForm): string {
-  switch (form) {
-    case 'capture-verbatim':
-      return 'the backup capture, staged verbatim';
-    case 'factory-staged':
-      return 'the factory image in the staged form — the commit transform reproduces the slot bytes';
-    case 'none':
-      return (
-        'REFUSED on this build — no staged form transforms back to the original slot bytes; ' +
-        'the run ends with the delivered dump and the patch in place'
-      );
-  }
-}
-
-function capabilityLine(capability: DrainCapability): string {
-  if (capability.wholePart) {
-    return `whole part: yes — one widened-window arm, lossless read unit ${String(
-      capability.losslessReadUnit,
-    )} B`;
-  }
-  return `REFUSED on this build — ${capability.note}`;
 }
 
 export interface PreserveViewProps {
@@ -264,6 +232,9 @@ export function PreserveView({
           onConnect={onConnect}
           onArm={(jump) => {
             setConfirming({ phase: meta.id, jump });
+          }}
+          onArmRestore={() => {
+            setConfirming({ phase: 'restore-verify', jump: false });
           }}
         />
       ))}
@@ -383,6 +354,8 @@ interface PhaseSectionProps {
   readonly onConnect: (() => void) | undefined;
   /** Opens the confirmation dialog; `jump` marks the past-commit variant. */
   readonly onArm: (jump: boolean) => void;
+  /** Opens step 04's dialog: the action after the planned stop of the whole-flash read. */
+  readonly onArmRestore: () => void;
 }
 
 /** Why the start button is dark, in words — or null when there is nothing to
@@ -413,6 +386,7 @@ function PhaseSection({
   busy,
   onConnect,
   onArm,
+  onArmRestore,
 }: PhaseSectionProps): ReactElement {
   const phase = meta.id;
   const gate = canRunPhase({ state, phase, has: preserve.hasCheckpoint });
@@ -431,7 +405,12 @@ function PhaseSection({
   const needsCamera = pending.some((step) => step !== 'patch');
   const cameraMissing = needsCamera && !connected;
 
-  const phaseFailed = pending.some((step) => state?.steps[step]?.status === 'failed');
+  /* The whole-flash read stopped as planned (the start entered a bank the run did not patch):
+   * another try would enter the same bank, so this section's action is the restore (42.101). */
+  const plannedStop =
+    state !== null && meta.steps.includes('drain') && preserveStoppedForRestore(state);
+  const phaseFailed =
+    !plannedStop && pending.some((step) => state?.steps[step]?.status === 'failed');
   const upNext = state !== null && state.nextStep !== 'done' && startStep === state.nextStep;
 
   const ask: PreservePrompt['kind'] | 'power-cycle-assert' | null =
@@ -447,12 +426,14 @@ function PhaseSection({
   };
 
   const jumpOnly = gate.jumpable && !gate.ok;
-  const startLabel = jumpOnly
-    ? 'Run past the unrecorded commit'
-    : phaseFailed
-      ? `Try ${meta.label.toLowerCase()} again`
-      : `Start ${meta.label.toLowerCase()}`;
-  const notReady = phaseDone ? null : notReadyLine(gate, state, index);
+  const startLabel = plannedStop
+    ? 'Go on to step 04: restore the banks'
+    : jumpOnly
+      ? 'Run past the unrecorded commit'
+      : phaseFailed
+        ? `Try ${meta.label.toLowerCase()} again`
+        : `Start ${meta.label.toLowerCase()}`;
+  const notReady = phaseDone || plannedStop ? null : notReadyLine(gate, state, index);
 
   const status = active ? (
     <Badge tone="accent">
@@ -464,6 +445,8 @@ function PhaseSection({
       <CircleCheck />
       Done
     </Badge>
+  ) : plannedStop ? (
+    <Badge tone="accent">Stopped as planned — the restore is next</Badge>
   ) : phaseFailed ? (
     <Badge tone="warn">Stopped — see the log</Badge>
   ) : upNext ? (
@@ -494,9 +477,14 @@ function PhaseSection({
       <Toolbar label={`${meta.label} actions`}>
         <Button
           variant="default"
-          disabled={(!gate.ok && !gate.jumpable) || busy || cameraMissing || gate.needsPowerCycle}
+          disabled={
+            plannedStop
+              ? busy || !connected
+              : (!gate.ok && !gate.jumpable) || busy || cameraMissing || gate.needsPowerCycle
+          }
           onClick={() => {
-            run(jumpOnly);
+            if (plannedStop) onArmRestore();
+            else run(jumpOnly);
           }}
         >
           <Play />
@@ -538,6 +526,9 @@ function PhaseSection({
       )}
 
       {notReady !== null && <p className="text-[0.8rem] text-muted-foreground">{notReady}</p>}
+      {plannedStop && (
+        <p className="text-[0.8rem] text-muted-foreground">{PRESERVE_UNPATCHED_START_NEXT}</p>
+      )}
       {gate.pastCommit && (
         <p className="text-[0.8rem] font-medium text-warn">
           Concerns the patched part while the commit is not on record — the camera may already be
@@ -881,32 +872,28 @@ function PlanFromState({ state }: { readonly state: PreserveRunState }): ReactEl
       </p>
       <KeyValue
         rows={[
-          [
-            'Build',
-            `${state.buildLabel ?? state.buildId ?? '?'} — family ${state.buildFamily ?? '?'}`,
-          ],
+          ['Build', preserveBuildWords(state)],
           ['Firmware version', state.expectedVersion ?? '?'],
           ...(state.stagedForm === undefined
             ? []
-            : [['Staged form', stagedFormLine(state.stagedForm)] as const]),
+            : [['Written', stagedFormWords(state.stagedForm)] as const]),
           ...(state.route === 'recovery-only' && state.routeNote != null
             ? ([['Commit route', state.routeNote]] as const)
             : []),
           ...(state.restoreForm === undefined
             ? []
-            : [['Restore', restoreFormLine(state.restoreForm)] as const]),
+            : [['Restore', restoreFormWords(state.restoreForm)] as const]),
           ...(state.capability === undefined
             ? []
-            : [['Drain', capabilityLine(state.capability)] as const]),
+            : [['Whole-flash read', drainCapabilityWords(state.capability)] as const]),
         ]}
       />
       {keys.map((key) => (
         <BankPlan key={key} bank={key} state={state} chosen={targets.includes(key)} />
       ))}
       <p>
-        On the part these bytes land as the XOR-difference against the bank capture (the keystream
-        cancels), so the camera&apos;s decrypted image changes by exactly this diff and nothing
-        else.
+        In the form the camera stores, the same bytes change and no others, so the camera&apos;s
+        firmware changes by exactly this difference and nothing else.
       </p>
     </Disclosure>
   );
@@ -969,7 +956,7 @@ function BankPlan({
         <TableCaption>The exact bytes the patch moves in {bankWordsOf(key)}</TableCaption>
         <TableHeader>
           <TableRow>
-            <TableHead className="w-[40%]">Site</TableHead>
+            <TableHead className="w-[40%]">What it changes</TableHead>
             <TableHead>Offset</TableHead>
             <TableHead>Before</TableHead>
             <TableHead>After</TableHead>
@@ -978,7 +965,7 @@ function BankPlan({
         <TableBody>
           {patch.sites.map((site) => (
             <TableRow key={site.offset}>
-              <TableRowHeader>{site.name}</TableRowHeader>
+              <TableRowHeader>{patchSiteWords(site.name)}</TableRowHeader>
               <TableCell label="Offset">
                 <code>{hexUp(site.offset)}</code>
               </TableCell>
@@ -1201,16 +1188,7 @@ function VerifySummary({ state, check, busy, onSave }: VerifySummaryProps): Reac
                   state.banks?.[key].imageSha256 ?? 'not produced',
                 ] as const,
             ),
-            [
-              'Verify',
-              state.verify === undefined
-                ? (state.steps.verify?.notes ?? null)
-                : `${String(state.verify.windowsRead)}/31 windows re-read at ` +
-                  `${String(state.verify.diffBytes)} differing byte(s)` +
-                  (state.verify.badWindows.length > 0
-                    ? ` (short windows: ${state.verify.badWindows.join(',')})`
-                    : ''),
-            ],
+            ['Verify', preserveStepResultWords(state, 'verify')],
           ]}
         />
       </Panel>

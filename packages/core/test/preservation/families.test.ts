@@ -593,7 +593,7 @@ describe('the capability table and the commit route, in the gates', () => {
       ['r'],
     );
     const refusal = await describeStepGate('restore', state, neverLoader);
-    expect(refusal).toMatch(/the restore step refuses on compact-1\.3\.0\.8-ff/);
+    expect(refusal).toMatch(/the restore step refuses on [^:]+: no form of the original firmware/);
     expect(refusal).toMatch(/0xB7AB9D17/);
   });
 
@@ -1179,7 +1179,7 @@ describe('the 0.x line — the eight builds doc 36 reached, pinned to the RE rec
       const pre = readImage(PRE_0502_IMAGE);
       expect(() => buildV1Patch(pre)).toThrow(/predates the widening route/);
       expect(() => buildV1Patch(pre)).toThrow(/0x400000/);
-      expect(() => buildV1Patch(pre)).toThrow(/sec\. 36\.7/);
+      expect(() => buildV1Patch(pre)).toThrow(/measured on 0\.3\.0\.1/);
     },
   );
 });

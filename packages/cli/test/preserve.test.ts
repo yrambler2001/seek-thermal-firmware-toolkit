@@ -33,6 +33,7 @@ import {
   preservePlainFile,
   REBALANCE_WORD_OFFSET,
   V1_2014_PATCH_SITES,
+  PRESERVE_CODE_NAMES,
   sha256hex,
   unknownImageRefusal,
   unknownImageWords,
@@ -182,6 +183,37 @@ function v1Flash(
  * ==================================================================== */
 
 describe('preserve — a fresh run, checkpointed after every step', () => {
+  it(
+    'says each step in plain words: one line per block sweep, no code names (TESTING.md 42.101)',
+    { timeout: 180_000 },
+    async () => {
+      const camera = v1Camera(syntheticPlain());
+      const test = testIo({ backend: backendOf(camera) });
+      expect(await run(['preserve', '--out', runDir(), '--yes'], test.io, signal())).toBe(EXIT_OK);
+      const lines = test.stdout.text.split('\n');
+      /* The 2014 chain's reader needs a restart before each block: one line says so. */
+      expect(lines.filter((line) => line.startsWith('Backup: 31 blocks'))).toEqual([
+        'Backup: 31 blocks read, one restart before each.',
+      ]);
+      expect(
+        lines.filter((line) => /^(backup|check) block .*rebooting by command/.test(line)),
+      ).toEqual([]);
+      expect(lines.filter((line) => line.startsWith('Check: 31 blocks read again'))).toEqual([
+        'Check: 31 blocks read again, one restart before each.',
+        "Check: 31 blocks read again, 0 bytes differ — the camera's flash is byte-identical to the backup.",
+      ]);
+      expect(test.stdout.text).toMatch(
+        /Slot A read: the camera stores its firmware as is, so there was nothing to decrypt\./,
+      );
+      expect(test.stdout.text).toMatch(/^Restore: slot A written back as the camera stores it/m);
+      expect(test.stdout.text).not.toMatch(/^decrypt: /m);
+      const coded = lines.filter((line) => PRESERVE_CODE_NAMES.some((name) => name.test(line)));
+      expect(coded).toEqual([]);
+      /* the run file keeps every detail */
+      expect((await loadState()).steps.backup?.notes).toMatch(/the sweep’s row, mode \d/);
+    },
+  );
+
   it(
     'runs all six steps self-sourced and leaves a complete run directory',
     { timeout: 180_000 },
@@ -445,9 +477,7 @@ describe('preserve — Compact PRO 1.0.3.0 with the board patch', () => {
 
       /* The derived plan names the edit and the word it shares. */
       expect(test.stdout.text).toMatch(/Compact Pro 1\.0\.3\.0 \(9 Hz\)/);
-      expect(test.stdout.text).toMatch(
-        /image edit\s+slot A: the Compact \(PN297\) board patch \(compact-pro-1\.0\.3\.0-accept-pn297\)/,
-      );
+      expect(test.stdout.text).toMatch(/image edit\s+slot A: the Compact \(PN297\) board patch\n/);
       expect(test.stdout.text).toMatch(/its balance 0x6322E32A is in the/);
       expect(test.stdout.text).toMatch(
         /rebalance word\s+slot A: 0x5423132A at 0x00000238 \(was 0x6322E32A, the edit's balance\)/,
@@ -495,7 +525,7 @@ describe('preserve — the power-cycle retry gate on a failed backup', () => {
       expect(first.stdout.text).toMatch(
         /window reader is spent for this boot — power-cycle the camera .* before any retry/,
       );
-      expect(first.stderr.text).toMatch(/error: P1: backup window 0x14020000 .* did not answer/);
+      expect(first.stderr.text).toMatch(/error: backup block 0x14020000 .* did not answer/);
       expect(first.stdout.text).toMatch(/backup failed: .*0x14020000/);
       const torn = await loadState();
       expect(torn.nextStep).toBe('backup');
@@ -1013,7 +1043,7 @@ describe('preserve — --bank: the bank the next start enters, one bank, every b
        * (TESTING.md 42.98; it used to say --from-step restore, which then warned of a jump). */
       expect(first.stdout.text).toMatch(/drain stopped: after the restart the camera reports/);
       expect(first.stdout.text).toMatch(
-        /Stopped before the whole-flash read: .* Continue with: seek-fw preserve --resume \S+/,
+        /Stopped before the whole-flash read: .* Next: the restore puts every written bank back\. .* Continue with the restore: seek-fw preserve --resume \S+/,
       );
       expect(first.stdout.text).not.toMatch(/--from-step|Fix the cause/);
       const torn = await loadState();

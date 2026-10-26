@@ -65,8 +65,9 @@
  */
 
 import { hexUp, isoStamp, sha256hex } from '../bytes.js';
+import { blockSweepWords } from './words.js';
 import { CancelledError, errorMessage, SeekError } from '../errors.js';
-import type { Reporter } from '../events.js';
+import type { LogLevel, Reporter } from '../events.js';
 import type { SeekDevice } from '../protocol/client.js';
 import { u16Payload } from '../protocol/client.js';
 import { commitStatusMeaning } from '../protocol/commit-status.js';
@@ -180,6 +181,43 @@ export interface BackupResult {
   /** Window bytes keyed by flash address. */
   readonly byAddress: ReadonlyMap<number, Uint8Array>;
   readonly bytes: number;
+  /** How each window's session came up (the sweep's own; absent on a backup rebuilt from an
+   *  image). The step's notes in the run file keep the words; people see one line. */
+  readonly admissions?: readonly ProbedAdmission[];
+}
+
+/** How one probed session came up: its boots, and the opener's words when the boot-config
+ *  record was not a healthy one (null for a healthy record). For the run file, not the log. */
+export interface ProbedAdmission {
+  readonly address: number;
+  readonly boots: number;
+  readonly admission: string | null;
+  /** The opener's retry lines before the block came up (held, not logged). */
+  readonly retries?: readonly string[];
+}
+
+/** The run file's sentence for a sweep's admissions: the distinct reasons, each with its count. */
+export function admissionNotesOf(admissions: readonly ProbedAdmission[]): string {
+  const counts = new Map<string, number>();
+  for (const entry of admissions) {
+    const why = entry.admission ?? 'the boot-config record read healthy';
+    counts.set(why, (counts.get(why) ?? 0) + 1);
+  }
+  const restarted = admissions.filter((entry) => entry.boots > 1);
+  const retries = [
+    ...new Set(
+      admissions
+        .flatMap((entry) => entry.retries ?? [])
+        .map((line) => line.replace(/^(?:backup|check) block 0x[0-9A-F]{8}: /, '')),
+    ),
+  ];
+  return (
+    [...counts].map(([why, n]) => `${String(n)} window(s): ${why}`).join('; ') +
+    (restarted.length === 0
+      ? '; every window on its first boot'
+      : `; rebooted: ${restarted.map((e) => `${hexUp(e.address, 8)} (${String(e.boots)} boots)`).join(', ')}`) +
+    (retries.length === 0 ? '' : `; the restarts said: ${retries.join(' | ')}`)
+  );
 }
 
 /* ==================================================================== *
@@ -309,7 +347,26 @@ export async function openProbedSession(
   signal: AbortSignal | undefined,
   label: string,
   prepare?: (device: SeekDevice) => void,
-): Promise<{ device: SeekDevice; cfgHead: Uint8Array; boots: number }> {
+  /** A sweep's own block reads: the retry lines are held here instead of logged, and logged
+   *  only when the session fails. The sweep says how many restarts each block took in one line
+   *  (`blockSweepWords`), and the run file keeps these words (TESTING.md 42.101). */
+  held?: { message: string; level: LogLevel }[],
+): Promise<{
+  device: SeekDevice;
+  cfgHead: Uint8Array;
+  boots: number;
+  /** Why an unprogrammed record was admitted (for the run file); null on a healthy record. */
+  admission: string | null;
+}> {
+  const say = (message: string, level: LogLevel): void => {
+    if (held === undefined) reporter.log(message, level);
+    else held.push({ message, level });
+  };
+  /* A failed session shows every line it held: the person needs the why. */
+  const flush = (): void => {
+    for (const line of held ?? []) reporter.log(line.message, line.level);
+    held?.splice(0);
+  };
   let blankBoots = 0;
   /* What the HOST refused along the way (a SecurityError: the probe's own
    * request, or a reboot command). Then the failed boots say nothing about the
@@ -357,7 +414,7 @@ export async function openProbedSession(
        * exhausted (TESTING.md secs. 28.4, 35), so the log names the probe's
        * own failure and the reboot's outcome: every attempt must say what the
        * wire answered, not only that it failed. */
-      reporter.log(
+      say(
         `${label}: the reader probe ${refused ? 'was REFUSED by the host' : 'stalled'} ` +
           `(${errorMessage(error)}) — rebooting by command and retrying`,
         'warn',
@@ -370,9 +427,9 @@ export async function openProbedSession(
          * over real WebUSB, 2026-10-05). The next open tells whether it took. */
         if (outcome === 'refused') {
           hostRefused.add('the reboot command');
-          reporter.log(resetRefusedLine(label), 'warn');
+          say(resetRefusedLine(label), 'warn');
         } else {
-          reporter.log(
+          say(
             `${label}: reboot command ${
               outcome === 'sent'
                 ? 'acknowledged'
@@ -384,13 +441,13 @@ export async function openProbedSession(
         await opener.close(reboot);
       } catch (rebootError) {
         /* the camera may already be down; the next open's ladder rides it */
-        reporter.log(`${label}: reboot command not sent (${errorMessage(rebootError)})`, 'detail');
+        say(`${label}: reboot command not sent (${errorMessage(rebootError)})`, 'detail');
       }
       continue;
     }
     const boot = classifyReaderBoot(head);
     if (boot === 'healthy') {
-      return { device, cfgHead: head, boots: attempt };
+      return { device, cfgHead: head, boots: attempt, admission: null };
     }
     if (
       boot === 'blank' &&
@@ -398,12 +455,16 @@ export async function openProbedSession(
        * genuinely unprogrammed record does */
     ) {
       if (await servesDeviceBlock(device, label, signal)) {
-        reporter.log(
-          `${label}: the boot-config record is unprogrammed, and this boot serves the ` +
-            `device-identity block at ${hexUp(DEVICE_BLOCK_ADDRESS, 8)} — admitted, no reboot`,
-          'detail',
-        );
-        return { device, cfgHead: head, boots: attempt };
+        /* Not logged: a sweep says it once for every window (`blockSweepWords`), and the
+         * words go to the step's notes in the run file (TESTING.md 42.101). */
+        return {
+          device,
+          cfgHead: head,
+          boots: attempt,
+          admission:
+            'the boot-config record is unprogrammed, and the boot serves the device-identity ' +
+            `block at ${hexUp(DEVICE_BLOCK_ADDRESS, 8)} — admitted, no reboot`,
+        };
       }
       blankBoots += 1;
       if (blankBoots >= 2) {
@@ -411,15 +472,17 @@ export async function openProbedSession(
          * blank-record camera. Proceed — the sweep's canary still refuses an
          * all-blank reader, and the window reads themselves are validated
          * downstream. */
-        reporter.log(
-          `${label}: the boot-config record reads as unprogrammed on two boots — ` +
-            'treating it as a genuinely blank record and proceeding',
-          'detail',
-        );
-        return { device, cfgHead: head, boots: attempt };
+        return {
+          device,
+          cfgHead: head,
+          boots: attempt,
+          admission:
+            'the boot-config record reads as unprogrammed on two boots — treated as a ' +
+            'genuinely blank record',
+        };
       }
     }
-    reporter.log(
+    say(
       `${label}: the reader came up ` +
         (boot === 'page-shifted'
           ? 'page-shifted (every window answers one page up)'
@@ -429,10 +492,11 @@ export async function openProbedSession(
     );
     if ((await resetDevice(device)) === 'refused') {
       hostRefused.add('the reboot command');
-      reporter.log(resetRefusedLine(label), 'warn');
+      say(resetRefusedLine(label), 'warn');
     }
     await opener.close(device);
   }
+  flush();
   if (hostRefused.size > 0) {
     throw new SeekError(
       'pipeline/refused',
@@ -479,21 +543,25 @@ export async function backupWindows(
    * check fires there. */
   let cfgRowBlank = false;
   const bankAAddress = BANKS[0].address;
+  const admissions: ProbedAdmission[] = [];
+  const held: { message: string; level: LogLevel }[] = [];
   for (const entry of windows) {
     assertLive(signal);
-    reporter.progress(
-      index,
-      windows.length,
-      `P1 backup window ${hexUp(entry.address, 8)}`,
-      'items',
-    );
-    const { device } = await openProbedSession(
+    reporter.progress(index, windows.length, `Backup: block ${hexUp(entry.address, 8)}`, 'items');
+    const { device, boots, admission } = await openProbedSession(
       opener,
       reporter,
       signal,
-      `P1 window ${hexUp(entry.address, 8)}`,
+      `backup block ${hexUp(entry.address, 8)}`,
       prepare,
+      held,
     );
+    admissions.push({
+      address: entry.address,
+      boots,
+      admission,
+      ...(held.length === 0 ? {} : { retries: held.splice(0).map((line) => line.message) }),
+    });
     let read: Awaited<ReturnType<SeekDevice['readArmed']>>;
     try {
       await device.armWindow(entry);
@@ -506,7 +574,7 @@ export async function backupWindows(
       await opener.close(device);
       const why = read.stopReason === null ? '' : ` (${read.stopReason})`;
       throw new Error(
-        `P1: backup window ${hexUp(entry.address, 8)} came back ` +
+        `backup block ${hexUp(entry.address, 8)} came back ` +
           `${String(read.data.length)}/${String(WINDOW_BYTES)} B` +
           why +
           ' — the backup must be complete before anything is written',
@@ -553,8 +621,9 @@ export async function backupWindows(
     await opener.close(device);
     index++;
   }
-  reporter.progress(windows.length, windows.length, 'P1 backup complete', 'items');
-  return { windows: out, byAddress, bytes: out.length * WINDOW_BYTES };
+  reporter.progress(windows.length, windows.length, 'Backup: every block read', 'items');
+  for (const line of blockSweepWords('Backup', admissions)) reporter.log(line, 'info');
+  return { windows: out, byAddress, bytes: out.length * WINDOW_BYTES, admissions };
 }
 
 /* ==================================================================== *
@@ -737,7 +806,7 @@ export async function drainExact(
         blk = null;
         if (attempt === retries) {
           throw new Error(
-            `${label}: wire-79 read failed at ${String(got)}/${String(bytes)} B after ` +
+            `${label}: the read failed at ${String(got)}/${String(bytes)} B after ` +
               `${String(retries + 1)} tries: ${errorMessage(error)}`,
             { cause: error },
           );
@@ -746,7 +815,7 @@ export async function drainExact(
       }
     }
     if (blk === null || blk.length === 0) {
-      throw new Error(`${label}: wire-79 returned no data at ${String(got)}/${String(bytes)} B`);
+      throw new Error(`${label}: the read returned no data at ${String(got)}/${String(bytes)} B`);
     }
     parts.push(blk);
     got += blk.length;
@@ -774,19 +843,23 @@ export async function drainWholePart(
   await device.armWindow(widenedWindow());
   const startedAt = Date.now();
   let last = 0;
-  const data = await drainExact(device, FLASH_SIZE, 'P3 full dump', {
+  const data = await drainExact(device, FLASH_SIZE, 'the whole-flash read', {
     chunk: options.chunk ?? READ_CHUNK,
     timeoutMs: options.timeoutMs ?? 20000,
     ...(options.signal === undefined ? {} : { signal: options.signal }),
     onChunk: (got) => {
       if (got - last >= 0x40000) {
         last = got;
-        reporter.progress(got, FLASH_SIZE, `P3 full dump ${String(got)}/${String(FLASH_SIZE)} B`);
+        reporter.progress(
+          got,
+          FLASH_SIZE,
+          `Whole-flash read: ${String(got)}/${String(FLASH_SIZE)} B`,
+        );
       }
     },
   });
   reporter.log(
-    `P3 dump: ${String(data.length)} B in ${((Date.now() - startedAt) / 1000).toFixed(1)} s, ` +
+    `Whole-flash read: ${String(data.length)} B in ${((Date.now() - startedAt) / 1000).toFixed(1)} s, ` +
       `sha256 ${await sha256hex(data)}`,
     'ok',
   );
@@ -847,7 +920,7 @@ export function backupSlice(backup: BackupResult, start: number, length: number)
     const bytes = backup.byAddress.get(0x14000000 + windowBase);
     if (bytes === undefined) {
       throw new Error(
-        `the P1 backup does not cover flash offset ${hexUp(flashOffset)} ` +
+        `the backup does not cover flash offset ${hexUp(flashOffset)} ` +
           '(the probe reference must lie inside the backed-up region)',
       );
     }
@@ -907,10 +980,9 @@ export function rotatedDrainBase(entered: BankKey): number {
   if (entered === 'b') return 0x14050000;
   throw new SeekError(
     'pipeline/refused',
-    `the start enters recovery R (${hexUp(0x14070000, 8)}) and the 0.7.0.7 mode-2 ` +
-      'walk was never measured against a recovery start — the rotation base of the ' +
-      'widened window is unknown, so the drain refuses rather than deliver a wrongly-folded ' +
-      'part (doc 36.10 item 3)',
+    `the start enters recovery R (${hexUp(0x14070000, 8)}), and on 0.7.0.7 the whole-flash ` +
+      'read was never measured from a recovery start — where the rotated read begins is not ' +
+      'known, so the read refuses rather than deliver the flash out of order',
   );
 }
 
@@ -959,8 +1031,11 @@ export async function verifyAgainstBackup(
   windowsRead: number;
   badWindows: readonly number[];
   readBack: ReadonlyMap<number, Uint8Array>;
+  admissions: readonly ProbedAdmission[];
 }> {
   const windows = preservationWindows();
+  const admissions: ProbedAdmission[] = [];
+  const held: { message: string; level: LogLevel }[] = [];
   let diffBytes = 0;
   let windowsRead = 0;
   const badWindows: number[] = [];
@@ -969,19 +1044,21 @@ export async function verifyAgainstBackup(
   for (const entry of windows) {
     index++;
     assertLive(signal);
-    reporter.progress(
-      index,
-      windows.length,
-      `P4 verify window ${hexUp(entry.address, 8)}`,
-      'items',
-    );
-    const { device } = await openProbedSession(
+    reporter.progress(index, windows.length, `Check: block ${hexUp(entry.address, 8)}`, 'items');
+    const { device, boots, admission } = await openProbedSession(
       opener,
       reporter,
       signal,
-      `P4 verify ${hexUp(entry.address, 8)}`,
+      `check block ${hexUp(entry.address, 8)}`,
       prepare,
+      held,
     );
+    admissions.push({
+      address: entry.address,
+      boots,
+      admission,
+      ...(held.length === 0 ? {} : { retries: held.splice(0).map((line) => line.message) }),
+    });
     let read: Awaited<ReturnType<SeekDevice['readArmed']>>;
     try {
       await device.armWindow(entry);
@@ -1006,8 +1083,9 @@ export async function verifyAgainstBackup(
       if (read.data[j] !== want[j]) diffBytes++;
     }
   }
-  reporter.progress(windows.length, windows.length, 'P4 verify pass done', 'items');
-  return { diffBytes, windowsRead, badWindows, readBack };
+  reporter.progress(windows.length, windows.length, 'Check: every block read', 'items');
+  for (const line of blockSweepWords('Check', admissions)) reporter.log(line, 'info');
+  return { diffBytes, windowsRead, badWindows, readBack, admissions };
 }
 
 /* ==================================================================== *

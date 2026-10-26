@@ -79,7 +79,14 @@ import {
   type PreserveStepId,
   type SessionOpener,
   PRESERVE_UNPATCHED_START_STOP,
+  PRESERVE_UNPATCHED_START_NEXT,
   preserveDoneWords,
+  preserveBuildWords,
+  preserveStepResultWords,
+  patchSiteWords,
+  stagedFormWords,
+  restoreFormWords,
+  drainCapabilityWords,
   unpatchedStartOf,
 } from '@seek-fw/core';
 import type { CommandContext, CommandResult } from '../cli.js';
@@ -96,61 +103,6 @@ import { openSession, type Session } from './shared.js';
 
 /** The artifacts land here when --out is not given. */
 const DEFAULT_OUT = 'preserve-run';
-
-/** The staged-form line of the plan print, in plain words. */
-function describeStagedForm(form: 'plain' | 'xor-ks0' | 'xor-ks0-ksD'): string {
-  switch (form) {
-    case 'plain':
-      return 'plain — the 2014 banks hold the image as stored; the wire payload is the conjugated capture';
-    case 'xor-ks0':
-      return 'staged = patched plain XOR keystream(key block 0) — the 2016 two-keystream cipher';
-    case 'xor-ks0-ksD':
-      return 'staged = patched plain XOR keystream(block 0) XOR keystream(block 1) — the FF build two-stream form';
-  }
-}
-
-/** The restore line of the plan print: can the run put the bank back? */
-function describeRestoreForm(form: 'capture-verbatim' | 'factory-staged' | 'none'): string {
-  switch (form) {
-    case 'capture-verbatim':
-      return 'each bank’s backup capture, staged verbatim (the plaintext banks hold the image)';
-    case 'factory-staged':
-      return 'each bank’s factory image in the staged form (the commit transform reproduces the bank)';
-    case 'none':
-      return (
-        'REFUSED on this build — no staged form of the factory image passes the running ' +
-        'app’s own acceptance while transforming back to the original slot bytes ' +
-        '(accept1 reads sum(P ^ ksD); the factory carries 0xB7AB9D17 there, not 0xFFFF). ' +
-        'The run ends with the delivered dump in hand and the patch in place.'
-      );
-  }
-}
-
-/** The drain line of the plan print: what this build's drain may promise.
- *  On a build whose capability carries per-build facts (the 0.x line's wire-88
- *  reader, the 0.7.0.7 rotation, the mode-2 hazard ordering) the note rides
- *  along — those lines are the honest capability statement, and the plan print
- *  is where an operator reads it before confirming the run. */
-function describeCapability(capability: {
-  wholePart: boolean;
-  losslessReadUnit: number;
-  maxPerArmReach?: number;
-  rotation?: { readonly walk: string; readonly measuredBase: number };
-  modeTwoHazardSites?: readonly number[];
-  note: string;
-}): string {
-  if (capability.wholePart) {
-    const perBuild =
-      capability.rotation !== undefined || capability.modeTwoHazardSites !== undefined
-        ? ` — ${capability.note}`
-        : '';
-    return (
-      `whole part: yes — one widened-window arm; lossless read unit ` +
-      `${String(capability.losslessReadUnit)} B${perBuild}`
-    );
-  }
-  return `REFUSED on this build — ${capability.note}`;
-}
 
 /** The banks a list names, as a sentence fragment ("slot A and recovery R"). */
 function sleep(ms: number): Promise<void> {
@@ -422,10 +374,7 @@ async function confirmDerivedPlan(
 
   say('');
   say(`preserve plan — derived from the camera (run ${state.runId})`);
-  say(
-    `  build              ${state.buildLabel ?? state.buildId ?? state.buildFamily ?? '?'} ` +
-      `(${state.buildId ?? '?'}, family ${state.buildFamily ?? '?'})`,
-  );
+  say(`  build              ${preserveBuildWords(state)}`);
   say(`  image version      ${state.expectedVersion ?? '?'}`);
   for (const line of bootAndBankLines(state)) say(line);
   for (const line of choiceLines(state, outDir)) say(line);
@@ -433,7 +382,7 @@ async function confirmDerivedPlan(
     const bank = state.banks?.[key];
     const edit = bank?.imageDerivation;
     if (edit !== undefined) {
-      say(`  image edit         ${bankWordsOf(key)}: ${edit.label} (${edit.id})`);
+      say(`  image edit         ${bankWordsOf(key)}: ${edit.label}`);
       say(
         `                     on the factory image; its balance ${hexUp(edit.balanceWord)} is in the`,
       );
@@ -442,8 +391,8 @@ async function confirmDerivedPlan(
     }
   }
   if (patch !== undefined) {
-    say(`  patch sites        ${String(patch.sites.length)} instruction edit(s)`);
-    for (const site of patch.sites) say(`    ${hexUp(site.offset)}  ${site.name}`);
+    say(`  patch sites        ${String(patch.sites.length)} changed instruction(s)`);
+    for (const site of patch.sites) say(`    ${hexUp(site.offset)}  ${patchSiteWords(site.name)}`);
   }
   for (const key of targets ?? []) {
     const bank = state.banks?.[key];
@@ -458,14 +407,14 @@ async function confirmDerivedPlan(
     );
   }
   if (state.stagedForm !== undefined)
-    say(`  staged form        ${describeStagedForm(state.stagedForm)}`);
+    say(`  written            ${stagedFormWords(state.stagedForm)}`);
   if (state.routeNote !== null && state.routeNote !== undefined) {
     say(`  commit route       ${state.routeNote}`);
   }
   if (state.restoreForm !== undefined)
-    say(`  restore            ${describeRestoreForm(state.restoreForm)}`);
+    say(`  restore            ${restoreFormWords(state.restoreForm)}`);
   if (state.capability !== undefined)
-    say(`  drain              ${describeCapability(state.capability)}`);
+    say(`  whole-flash read   ${drainCapabilityWords(state.capability)}`);
   if (targets !== undefined)
     say(`  next write         the commit step, into ${bankListWords(targets)}`);
   say(`  run directory      ${outDir}`);
@@ -771,7 +720,8 @@ async function runSteps(
       );
       if (stopped) {
         ctx.reporter.log(
-          `${PRESERVE_UNPATCHED_START_STOP} Continue with: seek-fw preserve --resume ${runDir}`,
+          `${PRESERVE_UNPATCHED_START_STOP} ${PRESERVE_UNPATCHED_START_NEXT} Continue with the ` +
+            `restore: seek-fw preserve --resume ${runDir}`,
           'warn',
         );
       }
@@ -850,10 +800,10 @@ function runResult(
 ): CommandResult {
   const stepIds = PRESERVE_STEP_IDS.filter((id) => state.steps[id] !== undefined);
   if (ctx.human) {
+    /* Each step's result in core's plain words; the run file keeps its full notes. */
     for (const id of stepIds) {
-      const record = state.steps[id];
-      const mark = record?.status === 'done' ? 'ok' : 'FAILED';
-      ctx.out(`${id} ${mark}: ${record?.notes ?? record?.error ?? ''}`);
+      const words = preserveStepResultWords(state, id);
+      if (words !== null) ctx.out(words);
     }
     ctx.out(`run ${state.runId}: next step ${state.nextStep}`);
     if (state.nextStep === 'done') {
@@ -921,13 +871,10 @@ async function printStateCommand(ctx: CommandContext, runDir: string): Promise<C
     say(`  created            ${state.createdAt}`);
     say(`  schema version     ${String(state.version)}`);
     say(`  expected version   ${state.expectedVersion ?? '(not derived yet)'}`);
-    say(
-      `  build              ${state.buildId ?? state.buildFamily ?? '(not derived yet)'}${
-        state.buildFamily === undefined ? '' : ` (family ${state.buildFamily}`
-      }${state.stagedForm === undefined ? '' : `, staged ${state.stagedForm}`}${
-        state.buildFamily === undefined ? '' : ')'
-      }`,
-    );
+    say(`  build              ${preserveBuildWords(state)}`);
+    if (state.stagedForm !== undefined) {
+      say(`  written            ${stagedFormWords(state.stagedForm)}`);
+    }
     for (const line of bootAndBankLines(state)) say(line);
     if (state.banks !== undefined) {
       for (const line of choiceLines(state, runDir)) say(line);
@@ -942,8 +889,8 @@ async function printStateCommand(ctx: CommandContext, runDir: string): Promise<C
         }
         if (bank.imageDerivation !== undefined) {
           say(
-            `  image edit         ${bankWordsOf(key)}: ${bank.imageDerivation.label} ` +
-              `(${bank.imageDerivation.id}), balance ${hexUp(bank.imageDerivation.balanceWord)}`,
+            `  image edit         ${bankWordsOf(key)}: ${bank.imageDerivation.label}, ` +
+              `balance ${hexUp(bank.imageDerivation.balanceWord)}`,
           );
         }
       }
@@ -951,7 +898,7 @@ async function printStateCommand(ctx: CommandContext, runDir: string): Promise<C
       say(`  banks to write     ${bankChoiceWords(state.choice)} (--bank ${state.choice})`);
     }
     if (state.capability !== undefined) {
-      say(`  drain              ${describeCapability(state.capability)}`);
+      say(`  whole-flash read   ${drainCapabilityWords(state.capability)}`);
     }
     if (state.drainEntered !== undefined) {
       say(
@@ -969,10 +916,7 @@ async function printStateCommand(ctx: CommandContext, runDir: string): Promise<C
         say(`  ${id.padEnd(8)} not run yet`);
         continue;
       }
-      say(
-        `  ${id.padEnd(8)} ${record.status}${record.error === undefined ? '' : `: ${record.error}`}`,
-      );
-      if (record.notes !== undefined) say(`           ${record.notes}`);
+      say(`  ${id.padEnd(8)} ${preserveStepResultWords(state, id) ?? record.status}`);
     }
     if (state.rawDumpSha256 !== undefined) say(`  raw dump sha256    ${state.rawDumpSha256}`);
     if (state.deliveredSha256 !== undefined) {

@@ -23,7 +23,12 @@
  * replaying a write that may already be on the camera.
  */
 
-import { bankWordsOf, preserveChoiceOf } from '@seek-fw/core';
+import {
+  bankWordsOf,
+  drainCapabilityWords,
+  preserveBuildWords,
+  preserveChoiceOf,
+} from '@seek-fw/core';
 import {
   NEEDS_CONFIRM,
   PRESERVE_BACKUP_FILE,
@@ -84,8 +89,7 @@ export interface PreserveGateInput {
 const done = (state: PreserveRunState, step: PreserveStepId): boolean =>
   state.steps[step]?.status === 'done';
 
-const buildName = (state: PreserveRunState): string =>
-  state.buildId ?? state.buildFamily ?? 'the detected build';
+const buildName = (state: PreserveRunState): string => preserveBuildWords(state);
 
 /** What the chosen banks lack, in core's order: the banks the backup read, a
  *  resolved choice, and each chosen bank writable (and, on a recovery-only
@@ -205,7 +209,9 @@ export function canRunPhase(input: PreserveGateInput): PreserveGate {
         want('commit', 'the commit (run or resume at it first)');
         missing.push(...targetGaps(state));
         if (state.capability !== undefined && !state.capability.wholePart) {
-          missing.push(`the drain refuses on ${buildName(state)} — ${state.capability.note}`);
+          missing.push(
+            `the drain refuses on ${buildName(state)} — ${drainCapabilityWords(state.capability)}`,
+          );
         }
         for (const key of targetsOf(state)) {
           if (!has(preserveCaptureFile(key))) missing.push(`${bankWordsOf(key)}’s capture`);
@@ -222,9 +228,9 @@ export function canRunPhase(input: PreserveGateInput): PreserveGate {
         }
         if (state.restoreForm === 'none') {
           missing.push(
-            `the restore refuses on ${buildName(state)} — no staged form of the factory ` +
-              'image transforms back to the original slot bytes; the run ends with the ' +
-              'delivered dump and the patch in place',
+            `the restore refuses on ${buildName(state)} — no form of the original firmware ` +
+              'stores back as the original bytes; the run ends with the complete image and ' +
+              'the patch in place',
           );
         }
         for (const key of targetsOf(state)) {
