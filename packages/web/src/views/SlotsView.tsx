@@ -469,6 +469,7 @@ export function SlotsView({ slots, connected, busy }: SlotsViewProps): ReactElem
             risk={writeRisk(pending.report, pending.key)}
             ffImage={pending.plan.staging === 'key-a-keystream'}
             targetEmpty={pending.plan.targetEmpty === true}
+            imageBuild={pending.plan.imageBuild?.text ?? null}
             keyLine={
               pending.plan.derivedFrom
                 ? `The image is written under ${derivedKeyLine(pending.plan.derivedFrom, `bank ${pending.plan.derivedFrom.bank.toUpperCase()}`)}. Every other bank is written the same way.`

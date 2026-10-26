@@ -258,6 +258,7 @@ export function preparedSlot(
       { field: 'image id', before: '0x00000011', after: '0x00000012' },
     ],
     warnings: key === 'b' ? [] : ['this write targets a bank that matters'],
+    imageBuild: null,
     notes: [],
     serial: null,
     firmwareVersion: '4.9.1.5',
