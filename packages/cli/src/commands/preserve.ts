@@ -60,17 +60,20 @@ import {
   PRESERVE_RUN_STATE_FILE,
   SeekError,
   bankChoiceWords,
+  bankListWords,
+  bankRecordWords,
   bankWordsOf,
   choosePreserveBanks,
   createPreserveRun,
   hexUp,
   isPreserveStepId,
+  lastStartWords,
+  nextStartWords,
   preserveChoiceOf,
   preserveChoicesOf,
   recordStepFailure,
   runPreserveStep,
   type Artifact,
-  type BankKey,
   type PreserveArtifactLoader,
   type PreserveRunState,
   type PreserveStepId,
@@ -147,12 +150,6 @@ function describeCapability(capability: {
 }
 
 /** The banks a list names, as a sentence fragment ("slot A and recovery R"). */
-function bankList(keys: readonly BankKey[]): string {
-  const words = keys.map(bankWordsOf);
-  if (words.length <= 1) return words.join('');
-  return `${words.slice(0, -1).join(', ')} and ${words.at(-1) ?? ''}`;
-}
-
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -368,32 +365,13 @@ function bootAndBankLines(state: PreserveRunState): string[] {
   if (boot === undefined || banks === undefined) return [];
   const lines = [
     `  boot-config word   ${hexUp(boot.word)} — ${boot.rule}`,
-    `  last start         ${
-      boot.entered === null
-        ? `not known — ${
-            boot.activeSlotWord === null
-              ? 'the active-slot word could not be read'
-              : `the active-slot word is ${String(boot.activeSlotWord)}, which names no bank`
-          }`
-        : `${bankWordsOf(boot.entered)}, as the camera records it (active-slot word ` +
-          `${String(boot.activeSlotWord)})`
-    }`,
-    `  next start         ${
-      boot.nextStart === null ? 'not known' : bankWordsOf(boot.nextStart)
-    } — ${boot.why}`,
+    `  last start         ${lastStartWords(boot)}`,
+    `  next start         ${nextStartWords(boot)}`,
     '  banks',
   ];
   for (const key of BANK_KEYS) {
     const bank = banks[key];
-    const what =
-      bank.refused === null
-        ? `${bank.buildLabel ?? 'an image'} — can be written` +
-          (bank.patch === undefined
-            ? ''
-            : `; the patch moves ${String(bank.patch.diffCount)} bytes`) +
-          (bank.imageDerivation === undefined ? '' : `; carries ${bank.imageDerivation.label}`)
-        : `not written — ${bank.refused}`;
-    lines.push(`    ${key.toUpperCase()}  ${hexUp(bank.address, 8)}  ${what}`);
+    lines.push(`    ${key.toUpperCase()}  ${hexUp(bank.address, 8)}  ${bankRecordWords(bank)}`);
   }
   return lines;
 }
@@ -412,7 +390,7 @@ function choiceLines(state: PreserveRunState, runDir: string): string[] {
   lines.push(
     state.targets === undefined
       ? `  banks to write     none — ${chosen.what}`
-      : `  banks to write     ${bankList(state.targets)} (--bank ${state.choice})`,
+      : `  banks to write     ${bankListWords(state.targets)} (--bank ${state.choice})`,
   );
   lines.push(
     `                     another choice: seek-fw preserve --resume ${runDir} --bank <choice>`,
@@ -485,7 +463,8 @@ async function confirmDerivedPlan(
     say(`  restore            ${describeRestoreForm(state.restoreForm)}`);
   if (state.capability !== undefined)
     say(`  drain              ${describeCapability(state.capability)}`);
-  if (targets !== undefined) say(`  next write         the commit step, into ${bankList(targets)}`);
+  if (targets !== undefined)
+    say(`  next write         the commit step, into ${bankListWords(targets)}`);
   say(`  run directory      ${outDir}`);
   say('');
 
@@ -501,7 +480,7 @@ async function confirmDerivedPlan(
   }
   if (ctx.options.yes) return;
   const confirmed = await ctx.io.confirm(
-    `Proceed to the commit — the first write, into ${bankList(targets)} of this camera ` +
+    `Proceed to the commit — the first write, into ${bankListWords(targets)} of this camera ` +
       `(${state.expectedVersion ?? '?'})? [y/N] `,
   );
   if (!confirmed) {
@@ -568,7 +547,7 @@ async function resumeCommand(ctx: CommandContext, runDir: string): Promise<Comma
     }
     await saveRunState(runDir, state);
     ctx.reporter.log(
-      `banks to write: ${bankList(state.targets ?? [])} (--bank ${state.choice})`,
+      `banks to write: ${bankListWords(state.targets ?? [])} (--bank ${state.choice})`,
       'info',
     );
   } else if (ctx.options.bank !== null) {
@@ -864,7 +843,7 @@ function runResult(
     }
     ctx.out(`run ${state.runId}: next step ${state.nextStep}`);
     if (state.targets !== undefined) {
-      ctx.out(`banks written: ${bankList(state.targets)} (--bank ${state.choice})`);
+      ctx.out(`banks written: ${bankListWords(state.targets)} (--bank ${state.choice})`);
     }
     ctx.out(`run directory: ${runDir}`);
     if (extra.backupOnly) {

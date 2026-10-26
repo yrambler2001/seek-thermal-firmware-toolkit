@@ -161,6 +161,8 @@ export function preserveBootFactsOf(input: {
   const verdicts: Record<BankKey, BootVerdict> = { a: null, b: null, r: null };
   let unknown = UNSETTLED_VERDICT;
   let checkKeyUnnamed: string | null = null;
+  /* 2016: the bank the key was inferred from, when the camera entered it without its check. */
+  let inferredFrom: BankKey | null = null;
   if (input.line === '2014') {
     for (const key of BANK_KEYS) verdicts[key] = verdict2014(input.banks[key]);
   } else {
@@ -195,6 +197,8 @@ export function preserveBootFactsOf(input: {
     if (checkKey.key === null) {
       unknown = CHECK_KEY_UNNAMED_VERDICT;
       checkKeyUnnamed = checkKey.unnamedWhy;
+    } else if (checkKey.inferred) {
+      inferredFrom = checkKey.from;
     }
     const want = checkKey.key === null ? null : stateFromKey(checkKey.key, cipher.whiteningK);
     for (const key of BANK_KEYS) {
@@ -221,7 +225,11 @@ export function preserveBootFactsOf(input: {
     entered,
     verdicts,
     nextStart: selection.runs,
-    why: selection.why,
+    why:
+      inferredFrom === null
+        ? selection.why
+        : `${selection.why} (the key the bootloader checks a bank under is inferred from ` +
+          `${bankWordsOf(inferredFrom)}, which it entered without its check) [inferred]`,
     checkKeyUnnamed,
   };
 }
@@ -270,10 +278,39 @@ export interface PreserveChoiceVerdict {
   readonly warnings: readonly string[];
 }
 
-function listOf(keys: readonly BankKey[]): string {
+/** Banks in words: "slot A, slot B and recovery R". */
+export function bankListWords(keys: readonly BankKey[]): string {
   const words = keys.map(bankWordsOf);
   if (words.length <= 1) return words.join('');
   return `${words.slice(0, -1).join(', ')} and ${words.at(-1) ?? ''}`;
+}
+
+/** The bank the camera reports it entered at the backup, in words. */
+export function lastStartWords(boot: PreserveBootFacts): string {
+  if (boot.entered !== null) {
+    return (
+      `${bankWordsOf(boot.entered)}, as the camera records it (active-slot word ` +
+      `${String(boot.activeSlotWord)})`
+    );
+  }
+  return boot.activeSlotWord === null
+    ? 'not known — the active-slot word could not be read'
+    : `not known — the active-slot word is ${String(boot.activeSlotWord)}, which names no bank`;
+}
+
+/** The bank the next start enters, and why, in words. */
+export function nextStartWords(boot: PreserveBootFacts): string {
+  return `${boot.nextStart === null ? 'not known' : bankWordsOf(boot.nextStart)} — ${boot.why}`;
+}
+
+/** One bank of the run in words: its build and that the run can write it, or why it cannot. */
+export function bankRecordWords(bank: PreserveBankRecord): string {
+  if (bank.refused !== null) return `not written — ${bank.refused}`;
+  return (
+    `${bank.buildLabel ?? 'an image'} — can be written` +
+    (bank.patch === undefined ? '' : `; the patch moves ${String(bank.patch.diffCount)} bytes`) +
+    (bank.imageDerivation === undefined ? '' : `; carries ${bank.imageDerivation.label}`)
+  );
 }
 
 /** The banks every-bank writes, or why it cannot. */
@@ -352,7 +389,7 @@ export function preserveChoiceOf(
   if (choice === 'all') {
     const every = everyBank(banks);
     return 'banks' in every
-      ? offered(every.banks, `every bank that holds an image: ${listOf(every.banks)}`)
+      ? offered(every.banks, `every bank that holds an image: ${bankListWords(every.banks)}`)
       : refused(every.why);
   }
   if (choice === 'next-start') {
@@ -372,7 +409,7 @@ export function preserveChoiceOf(
     return 'banks' in every
       ? offered(
           every.banks,
-          `every bank that holds an image (${listOf(every.banks)}): which bank the next start ` +
+          `every bank that holds an image (${bankListWords(every.banks)}): which bank the next start ` +
             `enters is not known (${boot.why})`,
         )
       : refused(

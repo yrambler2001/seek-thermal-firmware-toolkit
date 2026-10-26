@@ -2625,14 +2625,16 @@ describe('the banks a run writes — the next start, one bank, every bank', () =
   );
 
   it(
-    'the 2016 line: a camera that entered the bank its word leaves to last names no key — the next start is not known, and the default is every bank',
+    'the 2016 line: a camera whose active-slot word cannot be read names no key — the next start is not known, and the default is every bank',
     { timeout: 180_000 },
     async () => {
-      const camera = cp1030Camera(cp1030Flash(), cp1030FwInfo(2));
+      const fwInfo = cp1030FwInfo(0);
+      fwInfo.delete(10);
+      const camera = cp1030Camera(cp1030Flash(), fwInfo);
       const store = memoryStore();
       const state = await step('backup', camera, (await createPreserveRun()).state, store);
-      expect(state.boot?.entered).toBe('r');
-      expect(state.boot?.checkKeyUnnamed).toMatch(/leaves to last/);
+      expect(state.boot?.entered).toBeNull();
+      expect(state.boot?.checkKeyUnnamed).toMatch(/could not be read/);
       expect(state.boot?.verdicts).toEqual({ a: null, b: null, r: null });
       expect(state.boot?.nextStart).toBeNull();
       expect(state.boot?.why).toMatch(/the key its bootloader checks a bank under was not named/);
@@ -2644,6 +2646,24 @@ describe('the banks a run writes — the next start, one bank, every bank', () =
       expect(preserveChoiceOf(state, 'a').warnings[0]).toMatch(
         /Which bank the next start enters is not known/,
       );
+    },
+  );
+
+  it(
+    'the 2016 line: a camera that entered the bank its word leaves to last names the key as inferred from it, and the why says so',
+    { timeout: 180_000 },
+    async () => {
+      const camera = cp1030Camera(cp1030Flash(), cp1030FwInfo(2));
+      const store = memoryStore();
+      const state = await step('backup', camera, (await createPreserveRun()).state, store);
+      expect(state.boot?.entered).toBe('r');
+      expect(state.boot?.checkKeyUnnamed).toBeNull();
+      expect(state.boot?.verdicts).toEqual({ a: true, b: true, r: true });
+      expect(state.boot?.nextStart).toBe('a');
+      expect(state.boot?.why).toMatch(
+        /inferred from recovery R, which it entered without its check\) \[inferred\]$/,
+      );
+      expect(state.targets).toEqual(['a']);
     },
   );
 

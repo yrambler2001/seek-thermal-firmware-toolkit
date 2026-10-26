@@ -189,17 +189,39 @@ describe('the boot facts on the 2016 line: the key named from the entered bank',
     expect(facts.why).toMatch(/slot B holds no image the bootloader accepts, so it takes slot A/);
   });
 
-  it('entered the bank the word leaves to last (unchecked): no key, so the next start is not known', () => {
+  it('entered the bank the word leaves to last (unchecked): the key is inferred from it, and the why says so', () => {
     const facts = preserveBootFactsOf({
       cfgHead: cfg(0xffffffff),
       activeSlotWord: 2,
       line: '2016',
       banks: reads({ a: bank, b: bank, r: bank }),
     });
-    expect(facts.checkKeyUnnamed).toMatch(/leaves to last/);
-    expect(facts.verdicts).toEqual({ a: null, b: null, r: null });
-    expect(facts.nextStart).toBeNull();
-    expect(facts.why).toMatch(/the key its bootloader checks a bank under was not named/);
+    expect(facts.checkKeyUnnamed).toBeNull();
+    expect(facts.verdicts).toEqual({ a: true, b: true, r: true });
+    expect(facts.nextStart).toBe('a');
+    expect(facts.why).toMatch(
+      /inferred from recovery R, which it entered without its check\) \[inferred\]$/,
+    );
+  });
+
+  it('entered R unchecked, R under another key: A and B fail under the key inferred from R', () => {
+    const image = boardPatched();
+    const foreign = new Uint8Array(0x10000).fill(0xff);
+    foreign.set(
+      xorWindowVerbatim(
+        image,
+        keystream(keyWordsOf('5d7984797c47eb9354fa35898ab11701'), image.length >> 2),
+      ),
+    );
+    const facts = preserveBootFactsOf({
+      cfgHead: cfg(0xffffffff),
+      activeSlotWord: 2,
+      line: '2016',
+      banks: reads({ a: bank, b: bank, r: foreign }),
+    });
+    expect(facts.verdicts).toEqual({ a: false, b: false, r: true });
+    expect(facts.nextStart).toBe('r');
+    expect(facts.why).toMatch(/inferred from recovery R/);
   });
 
   it('no active-slot word: no key, and the start is not known', () => {
