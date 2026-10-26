@@ -390,7 +390,7 @@ describe('SlotsView', () => {
       pending: {
         key: 'a',
         kind: 'plain',
-        fileName: 'fw_decrypted.bin',
+        what: 'fw_decrypted.bin',
         plan: preparedSlot('a', 'plain', bytes),
         report,
         source: null,
@@ -431,7 +431,7 @@ describe('SlotsView', () => {
       pending: {
         key: 'r',
         kind: 'plain',
-        fileName: 'ff.bin',
+        what: 'ff.bin',
         source: null,
         action: FLASH_ACTION,
         restore: null,
@@ -508,7 +508,7 @@ describe('SlotsView', () => {
       pending: {
         key: 'r',
         kind: 'raw',
-        fileName: 'raw.bin',
+        what: 'raw.bin',
         source: null,
         action: FLASH_ACTION,
         restore: null,
@@ -553,7 +553,7 @@ describe('SlotsView', () => {
       pending: {
         key: 'b',
         kind: 'raw',
-        fileName: 'raw.bin',
+        what: 'raw.bin',
         plan: preparedSlot('b', 'raw', new Uint8Array(16)),
         report,
         source: null,
@@ -576,7 +576,7 @@ describe('SlotsView', () => {
       panel({
         plan: slotPlan(true),
         report: slotReport(base),
-        outcome: { key: 'b', fileName: 'fw.bin', result: flashedSlot('b', true), ...OUTCOME_EXTRA },
+        outcome: { key: 'b', what: 'fw.bin', result: flashedSlot('b', true), ...OUTCOME_EXTRA },
       }),
     );
 
@@ -593,7 +593,7 @@ describe('SlotsView', () => {
         report: slotReport(base),
         outcome: {
           key: 'b',
-          fileName: 'fw.bin',
+          what: 'fw.bin',
           result: flashedSlot('b', false),
           ...OUTCOME_EXTRA,
         },
@@ -609,7 +609,7 @@ describe('SlotsView', () => {
       panel({
         plan: slotPlan(true),
         report: slotReport(base),
-        outcome: { key: 'b', fileName: 'fw.bin', result: flashedSlot('b', true), ...OUTCOME_EXTRA },
+        outcome: { key: 'b', what: 'fw.bin', result: flashedSlot('b', true), ...OUTCOME_EXTRA },
       }),
     );
 
@@ -626,7 +626,7 @@ describe('SlotsView', () => {
         report: slotReport(base),
         outcome: {
           key: 'b',
-          fileName: 'fw.bin',
+          what: 'fw.bin',
           result: flashedSlot('b', false),
           ...OUTCOME_EXTRA,
         },
@@ -886,7 +886,7 @@ describe('SlotsView: an empty bank', () => {
       pending: {
         key: 'b',
         kind: 'plain',
-        fileName: 'seek-slot-a-4.9.1.5-eeeeeeee-decrypted.bin',
+        what: 'seek-slot-a-4.9.1.5-eeeeeeee-decrypted.bin',
         plan: preparedSlot('b', 'plain', new Uint8Array(0x100)),
         report,
         source: 'slot A at 0x14030000, firmware 4.9.1.5, as the slots read decrypted it',
@@ -919,7 +919,7 @@ describe('SlotsView: an empty bank', () => {
         report: slotReport(base),
         outcome: {
           key: 'b',
-          fileName: 'seek-slot-b-4.9.1.5-aaaaaaaa-decrypted.bin',
+          what: 'seek-slot-b-4.9.1.5-aaaaaaaa-decrypted.bin',
           result: flashedSlot('b', true),
           backup: BACKUP,
           action: { kind: 'restore', fileName: 'whole.bin' },
@@ -991,7 +991,7 @@ describe('SlotsView: an empty bank', () => {
       pending: {
         key: 'b',
         kind: 'plain',
-        fileName: 'seek-slot-a-4.9.1.5-eeeeeeee-decrypted.bin',
+        what: 'seek-slot-a-4.9.1.5-eeeeeeee-decrypted.bin',
         plan: preparedSlot('b', 'plain', new Uint8Array(0x10000), true),
         report,
         source: 'slot A, the bank the camera boots now (4.9.1.5)',
@@ -1031,7 +1031,7 @@ describe('SlotsView: an empty bank', () => {
       pending: {
         key: 'b',
         kind: 'plain',
-        fileName: 'image.bin',
+        what: 'image.bin',
         plan: preparedSlot('b', 'plain', new Uint8Array(0x10000), true),
         report,
         source: null,
@@ -1063,7 +1063,7 @@ describe('SlotsView: an empty bank', () => {
         report: slotReport(base),
         outcome: {
           key: 'b',
-          fileName: 'fw.bin',
+          what: 'fw.bin',
           result: flashedSlot('b', true),
           targetEmpty: true,
           ...OUTCOME_EXTRA,
@@ -1247,7 +1247,7 @@ describe('SlotsView: the frame-rate row action', () => {
     const pendingFor = (key: SlotKey, warnings: readonly string[]) => ({
       key,
       kind: 'plain' as const,
-      fileName: 'stock-a.bin',
+      what: 'stock-a.bin',
       source: null,
       action: FLASH_ACTION,
       restore: null,
