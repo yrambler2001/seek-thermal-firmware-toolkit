@@ -13516,6 +13516,110 @@ Not run: the Chrome-on-emulator page specs (`slots-view`, `slots-quality`, `page
 - O3. `web/src/lib/preserve/run-file.ts` keeps its own zip reader beside core's new `readZipEntries` (Preserve was not to be touched this round).
 - O4. A copy takes the source's image from the slots read (fresh after every commit); it is not read again before the plan.
 - O5. Whether the every-bank patch's single zip (one download for all its banks) is what the owner wants; one zip per bank would meet Chrome's prompt for a second automatic download in one click.
+### 42.92 Preserve chooses the banks it patches: the bank the next start enters by default, any one bank, or every bank, on the page and in the CLI (no hardware, 2026-10-26)
+
+The owner's concern: Preserve patched "the active bank" and then reset the camera (the wire-89 reset) so the patched image would run and drain the whole flash. If that start enters another bank, the patch never runs. On the 2014 chain a watchdog warm reset leaves the 0xAA55FF01 mark, sets the boot word to 2 and starts recovery R. On the 2016 line the boot word orders the banks (0 or 0xFFFFFFFF: A first; 1: B first; any other word: R first); the first two are checked, and the last is entered without its check.
+
+Two agent runs did this work. The first built the core and the CLI and was stopped before the page. The second (this one) built the page, brought the core's next start in line with 42.89's inferred check key, and ran the tests.
+
+**1. What Preserve did before** [source, measured on the emulator].
+- [source] Preserve wrote the bank the boot word names first (any other word was refused). It never checked whether that bank passes the bootloader's check. The 1.3.0.8 FF build always used R, and 4.x is refused.
+- [measured on the emulator] The first run committed A with the boot word set to 2, then ran the drain:
+  - on 1.3.0.0 the drain read 65,536 B and stalled (`wire-79 read failed at 65536/4194304 B … control IN 0x4f -> stall`);
+  - on 1.0.3.0 the mode-2 arm stalled (`BeginFirmwareUpgrade(0x2) failed: control OUT 0x52 -> stall`).
+  Both ended in `PostResetWedgeError` ("re-run the drain"). The restore then refused ("the active slot changed between the backup (14050000) and now (14070000)"), so A stayed patched. Logs: `/private/tmp/claude-501/-Users-yrambler2001-things-a-noindex-seek-seek-thermal-firmware-backup/82174575-1341-45d6-a306-7518156cd978/scratchpad/logs/step1-today.summary.txt`.
+
+**2. What Preserve does now** [source; tests in section 5].
+- The backup reads all three banks twice. It records the boot word, the bank the camera reports it entered (selector 10), each bank's check, the bank the next start enters and why, and, for each bank, whether the run can write it and why not.
+- The choices are: the bank the next start enters (the default), A, B, R, or every bank that holds an image.
+  - If the next start is not known, the default is every bank that holds an image, and the plan says why.
+  - A choice that leaves out the bank the next start enters runs, with a warning.
+  - A bank the run cannot write (erased, another build, two reads that disagree, stored under another key) is not offered, and the reason is shown.
+- The commit reads every chosen bank first. It writes the bank the camera tries first last.
+- The restore puts back every written bank, the one the camera tries first first.
+- After the drain's reset, the drain reads the active-slot word. If the start entered a bank without the patch, it stops before it arms anything.
+- The run state is version 3. No older version loads, on the page or in the CLI.
+- New this run [source]: since e5e2a0f (42.89), the 2016 Info read names the check key from a bank the camera entered without its check, as an inference. Preserve's boot facts now use that key too, and the next-start reason ends with "(the key the bootloader checks a bank under is inferred from recovery R, which it entered without its check) [inferred]". A camera whose active-slot word cannot be read still names no key, and the default is then every bank. The first run's tests expected "no key" in the unchecked case. They now expect the inferred key, and the "not known" path is tested with selector 10 missing.
+- Preserve still refuses a bank that holds the 18 Hz frame-rate patch (it is not a known derivation). That is for the owner to decide (section 6).
+
+**3. What people see** [source; the page is measured in section 5].
+
+The page, before: step 02 showed one plan, "Image source: the camera's active slot, two agreeing reads". Step 03's dialog said "Patch & dump — write to bank a at 0x14050000?" and "This writes a small patch into the firmware block the camera starts from." Nothing said which bank the next start enters.
+
+The page, after:
+- Step 02 shows a panel, "Which banks step 03 patches":
+  - Boot-config word: `0xFFFFFFFF — slot A first, then B, then recovery R`.
+  - Last start: `slot A, as the camera records it (active-slot word 0)`.
+  - Next start: `slot A — <why>`.
+  - A table of the three banks: bank (with a "next start" badge), address, and what it holds. For example `Compact 1.3.0.8 (8 Hz) — can be written; the patch moves 10 bytes`, or `not written — it is erased …`.
+  - A "Banks to patch" menu: `The bank the next start enters — slot A`, `Slot A`, `Slot B — not offered`, `Recovery R — not offered`, `Every bank — slot A`. A choice the run cannot do is greyed out, and its reason is listed under the menu.
+  - `Step 03 writes slot A: slot A, the bank the next start enters: <why>.` The choice's warnings show in amber.
+  - Once the commit has run, the menu is locked and the panel says "the choice is fixed: step 04 puts back exactly these banks".
+- The plan ("The plan — <build>, patches slot A") lists each bank that has a patch, chosen banks first. For each: the image source, image edit, shas, the bytes that move, the staged length, the rebalance word and the site table.
+- Step 03's dialog: "Patch & dump — write to slot A and recovery R?", then "This writes a small patch into slot A and recovery R, in that order — the bank the camera tries first goes last." It repeats the choice's warnings.
+- Step 04's dialog names the banks in the order the restore writes them.
+- The final screen lists `Firmware image (decrypted, slot A)` for each written bank.
+- The step texts say "firmware bank" instead of "firmware block", and step 03's text says "the firmware banks chosen in step 02 (by default the bank the camera starts from next)".
+
+The CLI, before: the plan printed one bank, `--bank` did not exist, and a resume ran straight on into the commit.
+
+The CLI, after (first run):
+- `seek-fw preserve --bank next-start|a|b|r|all`, on a fresh run, or on `--resume` before the commit.
+- The plan prints `boot-config word`, `last start`, `next start … — <why>`, a `banks` table (address, then `… — can be written` or `not written — <reason>`), `choices (--bank)` with `not offered — <reason>`, `banks to write`, and each warning as `! …`.
+- A resume that reaches the commit prints the plan and asks again on a terminal. This was accepted as is.
+- The CLI now takes those words from core (`lastStartWords`, `nextStartWords`, `bankRecordWords`, `bankListWords`), the same functions the page uses. The CLI text is unchanged.
+
+**4. The run file** [source, tests].
+- `preserve_run.json` is version 3. It holds `choice`, `targets`, `anchor`, `boot` and `banks` (one record per bank, its patch inside it) and `drainEntered`. It no longer holds the top-level `detection`, `patch`, `imageSha256`, `slotReadShas` or `imageDerivation`.
+- The checkpoints are per bank: `preserve_bank_<a|b|r>_capture.bin` and `…_plain.bin` (in `02-read-build/`), and `…_patched.bin` (also in `02-read-build/`, made by the patch step). `preserve_bank_capture.bin`, `preserve_image_plain.bin` and `preserve_patch_plain_patched.bin` are gone.
+- The page refuses a version 1 or 2 run file with "…a run of schema version N, saved before the run chose its firmware banks (version 3); this page reads version 3 only. Its backup is still a backup of that camera; start a new run to continue." It also refuses a file whose `choice` is missing or unknown.
+- The flat layout (every file at the top) no longer loads. A checkpoint outside its step folder is kept as an extra file and is not used as a checkpoint.
+- The README in the run file says `Banks written: slot A (the choice: the bank the next start enters).`, and the resume log says the same.
+
+**5. Tests** [measured].
+
+| what | file(s) | result |
+|---|---|---|
+| typecheck | `npm run typecheck` (all seven projects) | clean |
+| lint, format | eslint and prettier on every changed file | clean |
+| core | `packages/core/test/preservation/steps.test.ts` (the 2016 "unchecked" test split in two: selector 10 missing → not known, every bank; R entered unchecked → the key inferred from R, A written) | 70 passed |
+| core | `banks.test.ts` (one test changed to the inferred key, one added: R under another key → A and B fail, the next start is R) | 17 passed |
+| core | `families.test.ts` | 25 passed, 21 skipped |
+| cli | `packages/cli/test/preserve.test.ts`, `args.test.ts` | 66 passed |
+| web | `lib/preserve/run-file.test.ts` | 17 passed |
+| web | `lib/preserve/gating.test.ts` (3 new: an unresolved choice, a missing per-bank checkpoint, the recovery-only route) | 17 passed |
+| web | `lib/preserve/client.test.ts` | 9 passed |
+| web | `views/PreserveView.test.tsx` (4 new: the bank panel and menu, the warning in the panel and the dialog, the commit order in the dialog, the fixed choice) | 21 passed |
+| web | `hooks/usePreservePanel.adoption.test.tsx` (1 new: choose after step 02, a refusal with its reason, fixed after the commit) | 17 passed |
+| web | `safety-copy`, `unlock-seat`, `App`, `App.connect-unlock`, `a11y-parity` | 55 passed |
+| e2e, no camera | `phone-layout` (375 px, a v3 run file loaded to "done") | 1 passed, nothing wider than the screen |
+| emulator | `banks.emulator.test.ts`, 1.3.0.0: the boot word at R first (2) with the default writes R, the start enters R, and R is put back; every bank writes A and R (B is erased) and puts both back; the warm-boot state (cfg[0] = 2, A marked 0xAA55FF01) leaves A out, and the default writes R | 3 passed |
+| emulator | `banks.emulator.test.ts`, 1.0.3.0: the word at R first with the default writes R; every bank writes A, B and R and puts all three back; the word at A first with the choice R: the drain refuses after 17.9 s, before it arms anything ("after the restart the camera reports it entered slot A (active-slot word 0), which this run did not patch"), and the restore puts R back | 3 passed (the suite: 6 passed in 3,649 s; in every drained case the delivered dump equals the as-booted part) |
+| e2e, emulator | `emulator.e2e`, then `families.emulator.test.ts -t "the bench camera"` (the 1.0.3.0 board-patched row), then `pipeline.emulator.test.ts` (the 1.3.0.0 corpus row), one at a time | still running when this section was written; logs in `/private/tmp/claude-501/-Users-yrambler2001-things-a-noindex-seek-seek-thermal-firmware-backup/82174575-1341-45d6-a306-7518156cd978/scratchpad/logs4292/` (`e2e-emu.log`, `families-bench.log`, `pipeline.log`; `chain.log` has each exit code) |
+
+The e2e files that need a camera (`camera-write`, `pages-bench`) and the shared `lib/camera-flow.ts` were updated to the per-bank names and core's run-state type, and they typecheck. They were not run: there is no camera in this run. `camera-write` now expects the default choice to write one bank, the one the next start enters.
+
+**6. Not done, and for the owner.**
+- No hardware: 42.91 holds the bench.
+- Preserve refuses a bank that holds the 18 Hz frame-rate patch. This refusal stays until the owner decides: the image is a factory build plus a known edit, so it could be added as a derivation like the PN297 board patch.
+- The first run's core commits (`39a0953` … `4074dc7`) do not typecheck on the page on their own: the page was rebuilt in `675fd71`. Each commit in this run typechecks.
+- After the backup, the choice lives only in the run state. A person who closes the tab after changing it, without saving the run file again, gets the default choice back when they resume from step 02's file. "Save the run file again" keeps it.
+
+- Handoff (the run's 150-call budget): done are items 1 to 4 of the brief (the page, the web tests, typecheck, lint, the core, CLI and web tests, `banks.emulator.test.ts`). Still running at the handoff: `emulator.e2e`, then the families 1.0.3.0 bench row, then `pipeline.emulator.test.ts`, one at a time (`scratchpad/emu-chain-4292.sh`). To check them: `chain.log` in the logs folder named in section 5 gets one `<suite> exit <code>` line per suite, and each log ends with vitest's `Test Files` and `Tests` lines.
+- `TESTING.md` as a whole is not prettier-clean on `refactor/all-firmware-profiles` (a `--write` touches about 1,900 lines across older sections), so this section was not run through prettier.
+
+**7. The bench plan** (Compact PRO FF board, 1.0.3.0, `090BB12PR939`; J-Link on switch channel 1, camera on channel 2; FW-V1 jlink-runner only).
+Before each run, check the camera is free (42.91 is finished), and save a halted read with `dump-spifi-4m-halted`.
+1. Write the stock image `bench-42.85-start (stock, R not patched).bin` (sha256 `d2ee76b48c1fdefa43b66234f7dc2e56b5bab03ac7c33f5d1ba6ff34670538ce`, in `SEEK_DUMPS/firmwares/Compact Pro/2016.07.06-17.04.49-1.0.3.0/0C21A1M5KP15/`) with `flash-factory-4m-2`, then halt-read it back and check the sha. The boot word is 0xFFFFFFFF, so the camera tries A first.
+2. Boot word at A first, choice R only, on the page and with `seek-fw preserve --bank r`. The plan must warn that the next start enters slot A and that this choice does not patch it. The drain must stop before it arms anything ("an unpatched bank started"), and the restore must put R back. Then verify, and the halted read must equal `d2ee76b4…`.
+3. Boot word at R first, set by J-Link (cfg[0] = 2), with the default choice. The plan's next start must be recovery R, with its why. The default writes R, the drain must report that the start entered R, and the whole 4 MiB must drain. Then restore and verify. After the run, write cfg[0] back to 0xFFFFFFFF (or flash `d2ee76b4…` again) and check the halted read.
+4. Every bank (`--bank all`, and "Every bank" on the page). A, B and R are written, with A, the bank tried first, last. The drain must enter A, and the restore puts all three back. Then verify, and the halted read must equal `d2ee76b4…`.
+5. End: flash `bench-42.85-end (A and R 18 Hz).bin` back and confirm the halted read is byte-identical to sha256 `28060916b0fb3f93d2f12bbf9e708997d984c35ce0a3cef44cf1b64b10269c45`. That is the state the bench was in before this plan (A and R at 18 Hz, which Preserve refuses to write; see section 6).
+
+**8. Commits** (branch `worktree-agent-a2d58d1a5d037f2a5`, on `refactor/all-firmware-profiles` `e19b81e`; not merged, not pushed):
+- first run: `39a0953` (core: the banks a choice names), `f1109c5` (core: the one-clause refusal; `banks.emulator.test.ts`), `d92399c` (cli: `--bank` and the plan), `4074dc7` (core: the drain waits for the active-slot word);
+- this run: `34e0af6` (core, cli: the inferred check key in the next start; the bank words in core), `675fd71` (web: the bank choice, the run file v3, e2e), and this section. The first run's two WIP commits were replaced by `675fd71`.
+
 ### 42.93 Android phones lose every other frame to the endpoint-busy skip, not to a late credit: the Redmi 4X drains the last 16 KB transfer in 1.38 ms against the Pixel's 0.82 ms and a ~0.7 ms margin; the one-branch no-skip patch, flashed in banks A, B and R of the bench Compact, gives the Redmi 32 fps (bench, flash write, 2026-10-26)
 
 **Summary.** Not an orchestrated agent: the owner's apk-patches session (Claude Opus 5.5), with one read-only Opus 5.5 xhigh study agent for the firmware survey. Branch `docs/phone-skips` (this section, `PHONE_SKIPS.md`, `scripts/phone-skip/`); FW-V1 branch `docs/noskip` (`0ddd02e65`: `docs/NOSKIP_PATCH_ALL_FIRMWARES.md`, `emu/instruments/noskip/`). Neither merged nor pushed. The topical write-up with every table is `PHONE_SKIPS.md`; raw logs `SEEK_BENCH_WORK/phone_skip_2026-10-26/`.
