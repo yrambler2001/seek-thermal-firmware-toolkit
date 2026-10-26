@@ -103,3 +103,53 @@ export class FrameStats {
     this.stamps.length = 0;
   }
 }
+
+/** The non-picture frames by their header status, in words (camera.ts grabVisualFrame). */
+const STATUS_WORDS: Readonly<Record<number, string>> = {
+  1: 'shutter',
+  4: 'gain calibration',
+  6: 'reference',
+};
+
+/** The frames, by header status, that arrived between two snapshots of a camera's counts. */
+export function statusCountsSince(
+  before: ReadonlyMap<number, number>,
+  after: ReadonlyMap<number, number>,
+): Map<number, number> {
+  const out = new Map<number, number>();
+  for (const [status, count] of after) {
+    const n = count - (before.get(status) ?? 0);
+    if (n > 0) out.set(status, n);
+  }
+  return out;
+}
+
+/**
+ * The line `--fps` prints after "overall" when frames that are not pictures came during the measurement: they
+ * are the camera's own shutter calibration (a reference frame, status 6, then a shutter frame, status 1), which
+ * takes about 17 sensor fields (525 ms at 8 Hz) in which no picture is published. The per-second median is the
+ * picture rate between them; the frame count is lower by those gaps. On the stock 1.3.0.0 Compact in Normal
+ * mode the first 5 s of a stream hold four such calibrations, so 27 pictures, then one comes every 3 s
+ * (TESTING.md 42.103). Status 3 is a picture and status 0 has its own line, so neither is named here. Null when
+ * every frame was a picture.
+ */
+export function notPicturesLine(
+  counts: ReadonlyMap<number, number>,
+  seconds: number,
+): string | null {
+  const others = [...counts]
+    .filter(([status]) => status !== 3 && status !== 0)
+    .sort((a, b) => a[0] - b[0]);
+  if (others.length === 0) return null;
+  const all = [...counts.values()].reduce((sum, n) => sum + n, 0);
+  const named = others
+    .map(
+      ([status, n]) => `${String(n)} ${STATUS_WORDS[status] ?? 'other'} (status ${String(status)})`,
+    )
+    .join(', ');
+  return (
+    `not pictures, in the measurement: ${named}; all frames ${String(all)} ` +
+    `(${(all / seconds).toFixed(2)} fps). The median is the picture rate between them; ` +
+    'the count is lower by the time they take.'
+  );
+}

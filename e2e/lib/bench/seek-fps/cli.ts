@@ -7,7 +7,13 @@
  * image part, and the checker does not write images). Both say so and exit 1.
  * ==================================================================== */
 
-import { FrameStats, fpsWindows, type FpsWindow } from './stats.js';
+import {
+  FrameStats,
+  fpsWindows,
+  notPicturesLine,
+  statusCountsSince,
+  type FpsWindow,
+} from './stats.js';
 import {
   DEFAULT_SEEK_OPTIONS,
   SEEK_MODE,
@@ -393,6 +399,8 @@ export interface FpsMeasurement {
   readonly stats: FrameStats;
   /** Frames in the measured windows. */
   readonly frames: number;
+  /** Every frame read during the measurement, by header status (pictures and calibration frames). */
+  readonly statuses: ReadonlyMap<number, number>;
   readonly seconds: number;
 }
 
@@ -412,11 +420,13 @@ export async function measureFps(
   const stats = new FrameStats();
   await startStream(camera, mode, actions, stats, clock, t0);
   await waitForFrame(camera, stats, clock, 10);
+  const before = new Map(camera.statusCounts);
   stats.clearStamps();
   await waitUntil(clock, clock() + seconds + 0.05);
+  const statuses = statusCountsSince(before, camera.statusCounts);
   const windows = fpsWindows(stats.stamps, seconds);
   const frames = windows.reduce((sum, w) => sum + w.frames, 0);
-  return { windows, stats, frames, seconds };
+  return { windows, stats, frames, seconds, statuses };
 }
 
 async function runCommand(
@@ -482,6 +492,8 @@ async function runCommand(
   io.out(
     `overall: mean ${(total / args.seconds).toFixed(2)} fps over ${String(args.seconds)} s (${String(total)} frames)`,
   );
+  const others = notPicturesLine(measured.statuses, args.seconds);
+  if (others !== null) io.out(others);
   if (camera.untypedFrames > 0) {
     io.out(
       `status 0 (no header type): ${String(camera.untypedFrames)} frames, ` +
