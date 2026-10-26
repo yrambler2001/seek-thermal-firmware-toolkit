@@ -324,7 +324,7 @@ describe('SlotsView', () => {
     unmount();
   });
 
-  it('says the booted bank is named by the active-slot word on the 2014 plaintext chain', () => {
+  it('says the booted bank boots now on the 2014 plaintext chain, as on every line (TESTING.md 42.89)', () => {
     const locked = {
       ...base,
       version: '1.3.0.8',
@@ -335,12 +335,14 @@ describe('SlotsView', () => {
     );
 
     const rows = bankRows(container);
-    expect(rows[0]?.textContent).toContain('named booted');
-    expect(rows[0]?.textContent).not.toContain('booted now');
-    expect(rows[1]?.textContent).toContain('not named booted');
+    expect(rows[0]?.textContent).toContain('booted now');
+    expect(rows[1]?.textContent).toContain('not booted');
     expect(rows[0]?.textContent).toContain(
-      'Named booted by the active-slot word: writing it asks for an extra confirmation.',
+      'Booted now: writing it asks for an extra confirmation.',
     );
+    /* the 42.10 hedge is gone: 42.56 measured the active-slot word as the bank that ran */
+    expect(container.textContent).not.toContain('named booted');
+    expect(container.textContent).not.toContain('recovery R can run instead');
     unmount();
   });
 

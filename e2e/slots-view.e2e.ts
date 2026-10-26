@@ -226,20 +226,11 @@ function verdictFor(subject: SupportedCase): string {
 }
 
 /**
- * The bank table's rows. On the 2014 plain chain the page names the booted bank "named booted" (its
- * active-slot word, not a boot record: TESTING.md 42.10), so the row is booted for this spec too.
+ * The bank table's rows. The booted bank's badge is "booted now" on every line, the 2014 plain chain
+ * included (TESTING.md 42.89: 42.56 measured the active-slot word as the bank that ran).
  */
 async function rowsOf(page: Parameters<typeof bankRows>[0]): Promise<BankRowView[]> {
-  const rows = await bankRows(page);
-  const named = await page.$$eval(SLOTS_TABLE_ROWS, (trs) =>
-    /* The booted bank's badge is the line "named booted"; every other bank's is "not named booted". */
-    trs.map((tr) =>
-      (tr.querySelector('th')?.innerText ?? '')
-        .split('\n')
-        .some((line) => line.trim() === 'named booted'),
-    ),
-  );
-  return rows.map((row, index) => ({ ...row, booted: row.booted || (named[index] ?? false) }));
+  return bankRows(page);
 }
 
 /**
@@ -354,8 +345,8 @@ for (const subject of SUPPORTED) {
           const summary = await summaryRows(t.page);
           expect(summary.version).toBe(subject.version);
           expect(summary.profile, 'the profile the build reads under').not.toBe('');
-          /* "Booted from" on the post-2014 chain, "Named booted" on the 2014 plaintext one. */
-          expect(summary['booted from'] ?? summary['named booted']).toBe(booted.name);
+          /* "Booted from", on every line. */
+          expect(summary['booted from']).toBe(booted.name);
           say(
             `rows: ${rows.map((row) => `${row.name} ${row.address}${row.booted ? ' (booted)' : ''} key=${row.keyName} ${row.bootable}`).join(' | ')}`,
           );
@@ -507,9 +498,9 @@ for (const subject of SUPPORTED) {
           if (recovery === undefined) throw new Error('the table has no recovery row');
 
           /* The note under each flash action says why it asks for more. */
-          /* "Named booted by the active-slot word" on the 2014 plain chain (TESTING.md 42.10), "Booted now" elsewhere. */
+          /* "Booted now" on every line, the 2014 plain chain included (TESTING.md 42.89). */
           expect(booted.actionsText).toMatch(
-            /(Booted now|Named booted by the active-slot word): writing it asks for an extra confirmation\./,
+            /Booted now: writing it asks for an extra confirmation\./,
           );
           expect(recovery.actionsText).toContain(
             'Recovery bank: writing it asks for an extra confirmation.',
@@ -536,7 +527,7 @@ for (const subject of SUPPORTED) {
               (el) => (el as HTMLElement).innerText,
             );
             expect(alertText, `${name}: the dialog says why`).toMatch(
-              row.letter === 'r' ? /recovery bank/ : /boots now|active-slot word names/,
+              row.letter === 'r' ? /recovery bank/ : /boots now/,
             );
             await t.page.click(ACK_BOX);
             expect(await confirmEnabled(w, name), `${name}: Yes is on once ticked`).toBe(true);

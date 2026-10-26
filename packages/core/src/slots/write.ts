@@ -74,6 +74,7 @@ import {
   slotRefused,
   type StagedBytes,
 } from './write-image.js';
+import { bootsNowOf } from './booted-words.js';
 import { FF_1308_VERSION } from './capability-family.js';
 import { slotContentOf } from './inspect.js';
 import { runningApplicationOf, type RunningApplication } from './running.js';
@@ -151,7 +152,7 @@ function ackNeeded(report: SlotsReport, key: SlotKey): string | null {
   if (boot === null)
     return 'the booted bank could not be named, so this one is treated as the booted one';
   if (boot.booted === key)
-    return `${key === 'r' ? 'recovery bank R' : `bank ${key.toUpperCase()}`} is the bank the camera boots now`;
+    return bootsNowOf(key === 'r' ? 'recovery bank R' : `bank ${key.toUpperCase()}`);
   if (key === 'r') return 'recovery bank R is the last-resort copy the bootloader falls back to';
   return null;
 }

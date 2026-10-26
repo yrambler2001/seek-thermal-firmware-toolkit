@@ -1696,18 +1696,18 @@ function onLockedPlain(report: SlotsReport): SlotsReport {
 }
 
 describe('the 2014 plaintext chain', () => {
-  it('names the booted bank by the active-slot word in its risk words, and keeps "boots now" elsewhere', () => {
+  it('says the booted bank "boots now" in its risk words, as on every line (TESTING.md 42.89)', () => {
     const locked = onLockedPlain(reportOf({ booted: 'a' }));
-    expect(bootRisk(locked, view(locked, 'a'))).toContain(
-      "the bank the camera's active-slot word names as booted",
+    expect(bootRisk(locked, view(locked, 'a'))).toBe(
+      'bank A is the bank the camera boots now; a bad write there can stop the camera booting',
     );
-    expect(bootRisk(locked, view(locked, 'a'))).not.toContain('boots now');
     expect(flashRefusal(locked, 'a', 'plain', false)?.message).toContain(
-      'active-slot word names as booted',
+      'bank A is the bank the camera boots now',
     );
+    expect(flashRefusal(locked, 'a', 'plain', false)?.message).not.toContain('active-slot word');
 
     const modern = reportOf({ booted: 'a' });
-    expect(bootRisk(modern, view(modern, 'a'))).toContain('boots now');
+    expect(bootRisk(modern, view(modern, 'a'))).toBe(bootRisk(locked, view(locked, 'a')));
   });
 
   it('lists an FF image in R as recovery only, and says what the running build is', () => {

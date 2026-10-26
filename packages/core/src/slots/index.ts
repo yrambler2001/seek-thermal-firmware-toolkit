@@ -46,6 +46,7 @@ export {
   type Verdict,
 } from './running.js';
 export { ffKeyBPlainOf, ffPlainOfStaged, stageFFVendor, FF_ACCEPT_SUM } from './ff-form.js';
+export { BOOTED_NOW, bootsNowOf, NOT_BOOTED } from './booted-words.js';
 export {
   derivedKeyLine,
   deriveWriteKeys,

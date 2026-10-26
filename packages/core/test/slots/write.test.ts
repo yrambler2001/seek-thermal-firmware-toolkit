@@ -33,6 +33,7 @@ import type { FirmwareProfile, WindowEntry } from '../../src/profiles/types.js';
 import type { SeekDevice } from '../../src/protocol/client.js';
 import type { DeviceState, SlotState, WorkflowContext } from '../../src/workflows/types.js';
 import { onPlaintextChain } from '../../src/slots/running.js';
+import { bootsNowOf } from '../../src/slots/booted-words.js';
 import { prepareSlotFlash, flashSlot } from '../../src/slots/write.js';
 import { retargetImageKeys } from '../../src/slots/write-image.js';
 import { reportFor } from './write-fixtures.js';
@@ -870,6 +871,24 @@ describe('prepareSlotFlash warnings', () => {
       'Recovery bank R: writing it asks you to acknowledge the risk. Nothing here checks that the ' +
         'camera boots afterwards.',
     );
+  });
+
+  it('says the booted bank "boots now" on the 2014 plaintext chain too, in the words the 2016 line has (TESTING.md 42.89)', () => {
+    const slots = (['a', 'b', 'r'] as const).map((k) =>
+      slotState({ key: k, present: true, accepts: true }),
+    );
+    const image = imageOf(0x2000, 11);
+    const plain = reportFor(
+      stateFor(legacy, { version: '1.3.0.0', slots, booted: 'a', plainChain: true }),
+      buildSlotPlan(legacy, '1.3.0.0'),
+    );
+    const out = prepareSlotFlash(plain, 'a', { kind: 'raw', bytes: image, fileName: 'x' });
+    expect(out.warnings).toContain(
+      `${bootsNowOf('bank A')}: writing it asks you to acknowledge the risk, and the camera runs whatever ` +
+        'it holds after the next power cycle.',
+    );
+    expect(out.warnings.join('\n')).not.toContain('active-slot word');
+    expect(bootsNowOf('bank A')).toBe('bank A is the bank the camera boots now');
   });
 
   /* The rekey warning (write.ts, key-a branch; TESTING.md 42.50): the target accepts, has its footer, and

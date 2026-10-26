@@ -9,7 +9,7 @@
 
 import { useRef, useState, type ReactElement } from 'react';
 import { Gauge } from 'lucide-react';
-import type { FpsBootWarning, FpsPlan } from '@seek-fw/core';
+import { bootsNowOf, type FpsBootWarning, type FpsPlan } from '@seek-fw/core';
 import { Checkbox } from './ui/field';
 import {
   AlertDialog,
@@ -33,8 +33,6 @@ export interface SlotFpsConfirmProps {
   /** The build the bank's image is, as the camera reports it. */
   readonly version: string | null;
   readonly risk: WriteRisk;
-  /** Named by the active-slot word on the 2014 chain (the words differ; see SlotWriteConfirm). */
-  readonly namedByWord?: boolean;
   /**
    * The boot warning for this bank (core's fpsBootWarningOf): the bank the camera runs, and that a patch in
    * this bank would not run. Null, or left out, when the patch takes effect. It states; it does not gate.
@@ -52,7 +50,6 @@ export function SlotFpsConfirm({
   offer,
   version,
   risk,
-  namedByWord = false,
   bootWarning = null,
   saveMode,
   onConfirm,
@@ -93,9 +90,7 @@ export function SlotFpsConfirm({
 
         {risk.booted && (
           <p className="rounded-md border border-destructive/40 bg-destructive/8 px-3 py-2 text-[0.85rem] font-medium text-destructive">
-            {namedByWord
-              ? `${slotName} is the bank the camera's active-slot word names as booted. On this line recovery R can run instead, so it may not be the bank that runs.`
-              : `${slotName} is the bank this camera boots now. The patched image replaces the firmware it runs now.`}
+            {`${bootsNowOf(slotName)}. The patched image replaces the firmware it runs now.`}
           </p>
         )}
         {risk.recovery && (
@@ -149,9 +144,7 @@ export function SlotFpsConfirm({
             />
             <span>
               {risk.booted
-                ? namedByWord
-                  ? 'I understand the active-slot word names this bank as booted, and that a bad image can leave the camera unbootable.'
-                  : 'I understand this is the bank the camera boots now, and that a bad image can leave the camera unbootable.'
+                ? 'I understand this is the bank the camera boots now, and that a bad image can leave the camera unbootable.'
                 : risk.recovery
                   ? 'I understand this is the recovery bank, and that a bad image leaves the camera without a last-resort copy.'
                   : 'I understand the camera does not say which bank it boots, so this one is treated as the booted one.'}

@@ -37,6 +37,7 @@ import {
   bankWordsOf,
   bootChoiceOf,
   bootRuleKnown,
+  bootsNowOf,
   bootWordRuleOf,
   checkKeyReportOf,
   derivedKeyLine,
@@ -49,7 +50,6 @@ import {
   fpsPlanOfBank,
   hexUp,
   inspectSlots,
-  onPlaintextChain,
   patchBankFps,
   prepareSlotFlash,
   runningApplicationOf,
@@ -328,13 +328,9 @@ export function bootRisk(report: SlotsReport, view: SlotView): string | null {
     return 'bank R is the recovery bank; a bad write there can leave the camera with no image it can boot';
   }
   if (view.active) {
-    /* On the 2014 plaintext chain the named bank comes from the active-slot word, the bootloader's record
-     * of the bank it entered (TESTING.md 42.56); the next start can run another bank when this one fails
-     * its check (TESTING.md 42.10), so the words name the word rather than promise the next start. */
-    if (onPlaintextChain(report.state.profile, report.state.version)) {
-      return `bank ${bank} is the bank the camera's active-slot word names as booted; a bad write there can stop the camera booting`;
-    }
-    return `bank ${bank} is the bank the camera boots now; a bad write there can stop the camera booting`;
+    /* The same words on every line, core's (`bootsNowOf`): on the locked lines the bank is the active-slot
+     * word's, which TESTING.md 42.56 measured as the bank that ran (42.89). */
+    return `${bootsNowOf(`bank ${bank}`)}; a bad write there can stop the camera booting`;
   }
   if (!report.slots.some((other) => other.active)) {
     return `the camera's booted bank could not be determined, so bank ${bank} may be the one it boots`;

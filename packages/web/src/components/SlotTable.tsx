@@ -11,9 +11,11 @@
 import type { ReactElement, ReactNode } from 'react';
 import { Copy, Download, FileUp, Gauge } from 'lucide-react';
 import {
+  BOOTED_NOW,
+  bootsNowOf,
+  NOT_BOOTED,
   SLOT_BYTES,
   hexUp,
-  onPlaintextChain,
   unknownBootabilityWhy,
   writeBannerOf,
   type FpsPlan,
@@ -114,12 +116,11 @@ function bootability(view: SlotView, unknownWhy: string): ReactNode {
 }
 
 /**
- * The words for the booted bank. On the 2014 plaintext chain the camera's active-slot word names it: the
- * bootloader's record of the bank it entered (TESTING.md 42.56), and the next start can run another bank
- * when this one fails its check (TESTING.md 42.10), so the words name the word.
+ * The words for the booted bank, the same on every line (core's `BOOTED_NOW`, TESTING.md 42.89): on the
+ * locked lines the bank is the active-slot word's, which 42.56 measured as the bank that ran.
  */
-function riskNote(risk: WriteRisk, byWord: boolean): string | null {
-  const booted = byWord ? 'Named booted by the active-slot word' : 'Booted now';
+function riskNote(risk: WriteRisk): string | null {
+  const booted = BOOTED_NOW.charAt(0).toUpperCase() + BOOTED_NOW.slice(1);
   if (risk.booted && risk.recovery) {
     return `${booted}, and recovery: writing it asks for an extra confirmation.`;
   }
@@ -135,12 +136,10 @@ function riskNote(risk: WriteRisk, byWord: boolean): string | null {
  * What the "use the booted bank's image" button does, in words. The extra confirmation a write to this
  * bank asks for is said once in the row, under the write buttons (`riskNote`), not again here.
  */
-function fillNote(source: BankImageSource, byWord: boolean): string {
+function fillNote(source: BankImageSource): string {
   const version = source.version === null ? '' : ` (${source.version})`;
   const which = source.booted
-    ? byWord
-      ? 'That is the bank the active-slot word names as booted.'
-      : 'That is the bank the camera boots now.'
+    ? `${bootsNowOf('That')}.`
     : 'The camera does not say which bank it boots; this is the first bank that holds an image.';
   return [
     `Copies the firmware ${source.name} holds${version} into this empty bank, so the camera has a second slot with the same firmware.`,
@@ -182,8 +181,6 @@ export function SlotTable({
   planFps,
   onPatchFps,
 }: SlotTableProps): ReactElement {
-  /* On the 2014 plaintext chain the booted bank is the camera's active-slot word, so the words say "named". */
-  const byWord = onPlaintextChain(report.state.profile, report.state.version);
   /* The camera-wide refusal the banner shows, if any: it turns every flash control off (see slotActionGate). */
   const cameraRefusal = writeBannerOf(report.state);
   return (
@@ -215,7 +212,7 @@ export function SlotTable({
           const rawGate = gate('flash-raw');
           /* The extra confirmation a write asks for, said once in the row: under the write buttons when
            * one of them is on, not under each (TESTING.md 42.87). */
-          const note = riskNote(risk, byWord);
+          const note = riskNote(risk);
           const writable = plainGate.reason === null || rawGate.reason === null;
           const version = slotVersion(report, key);
           const empty = view.content === 'empty';
@@ -235,9 +232,9 @@ export function SlotTable({
                 </span>
                 <span className="mt-1 block">
                   {view.active ? (
-                    <Badge tone="ok">{byWord ? 'named booted' : 'booted now'}</Badge>
+                    <Badge tone="ok">{BOOTED_NOW}</Badge>
                   ) : (
-                    <Badge tone="neutral">{byWord ? 'not named booted' : 'not booted'}</Badge>
+                    <Badge tone="neutral">{NOT_BOOTED}</Badge>
                   )}
                 </span>
                 {entry.notes.map((text) => (
@@ -353,7 +350,7 @@ export function SlotTable({
                   )}
 
                   {source !== null && (
-                    <Action reason={plainGate.reason} note={fillNote(source, byWord)}>
+                    <Action reason={plainGate.reason} note={fillNote(source)}>
                       <Button
                         variant="outline"
                         disabled={!plainGate.enabled}

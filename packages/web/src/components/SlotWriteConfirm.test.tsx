@@ -11,9 +11,7 @@ import { SlotWriteConfirm, type SlotWriteConfirmProps } from './SlotWriteConfirm
 import { buttonByText, render } from '../test-helpers';
 
 function setup(
-  overrides: Partial<
-    Pick<SlotWriteConfirmProps, 'risk' | 'open' | 'ffImage' | 'targetEmpty'>
-  > = {},
+  overrides: Partial<Pick<SlotWriteConfirmProps, 'risk' | 'open' | 'ffImage' | 'targetEmpty'>> = {},
 ): ReturnType<typeof render> & {
   onConfirm: ReturnType<typeof vi.fn>;
   onCancel: ReturnType<typeof vi.fn>;
@@ -171,7 +169,7 @@ describe('SlotWriteConfirm', () => {
     });
     const confirm = buttonByText(document.body, 'Yes — write to slot B');
     expect(confirm.disabled).toBe(true);
-    expect(dialog().textContent).toContain('slot B is the bank this camera boots now.');
+    expect(dialog().textContent).toContain('slot B is the bank the camera boots now.');
 
     act(() => {
       checkbox()?.click();

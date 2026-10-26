@@ -765,7 +765,7 @@ describe.skipIf(!RUNNABLE)(
           const warned = letter !== 'a' && !patched.has('a');
           if (letter === 'a') {
             expect(dialog, 'A is the bank the camera boots now').toContain(
-              'Bank A is the bank this camera boots now. The patched image replaces the firmware it runs now.',
+              'Bank A is the bank the camera boots now. The patched image replaces the firmware it runs now.',
             );
           }
           if (letter === 'r') {

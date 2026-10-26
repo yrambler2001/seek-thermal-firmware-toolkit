@@ -13,7 +13,6 @@ import {
   derivedKeyLine,
   fpsBootWarningOf,
   hexUp,
-  onPlaintextChain,
   type FpsPatchResult,
   type SlotInputKind,
   type SlotKey,
@@ -339,10 +338,6 @@ export function SlotsView({ slots, connected, busy }: SlotsViewProps): ReactElem
             slotAddress={hexUp(pendingView.entry.address)}
             risk={writeRisk(pending.report, pending.key)}
             ffImage={pending.plan.staging === 'key-a-keystream'}
-            namedByWord={onPlaintextChain(
-              pending.report.state.profile,
-              pending.report.state.version,
-            )}
             targetEmpty={pending.plan.targetEmpty === true}
             keyLine={
               pending.plan.derivedFrom
@@ -369,9 +364,6 @@ export function SlotsView({ slots, connected, busy }: SlotsViewProps): ReactElem
               report === null
                 ? { booted: false, recovery: false, bootUnnamed: false }
                 : writeRisk(report, fpsKey)
-            }
-            namedByWord={
-              report === null ? false : onPlaintextChain(report.state.profile, report.state.version)
             }
             bootWarning={dialogBootWarning}
             saveMode={fpsSaveMode()}
