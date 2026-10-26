@@ -432,7 +432,7 @@ export async function decryptDump(
       `slot           : flash ${hexUp(flash)}  (file ${hexUp(image.base)}, ` +
       `len ${hexUp(image.len)})\n` +
       `key check      : ${checkWords}\n` +
-      `recovered state:${stateHex}   (x y z w; the actual decryption secret)\n` +
+      `recovered state: ${stateHex}   (x y z w; the actual decryption secret)\n` +
       `derived TARGET : ${hexUp(checksum)}` +
       `${matchesProfile ? '  (matches known profile)' : '  (no known TARGET matched)'}\n` +
       `self-check     : word13 decrypts to ${word13 === null ? 'n/a' : hexUp(word13)}` +
