@@ -801,7 +801,12 @@ export function usePreservePanel(params: PreservePanelParams): PreservePanelApi 
           );
         } catch (error) {
           if (!isCancelledStep(error)) {
-            rep.log(`ERROR: ${errorMessage(error)}`, 'error');
+            /* The drain's planned stop is logged as a stop, not an error (TESTING.md 42.102). */
+            if (unpatchedStartOf(error) !== null) {
+              rep.log(`Stopped: ${errorMessage(error)}`, 'warn');
+            } else {
+              rep.log(`ERROR: ${errorMessage(error)}`, 'error');
+            }
             logHint(rep.log, error);
             if (isPowerCycleRefusal(error)) setPrompt({ phase, kind: 'power-cycle' });
             /* The drain's planned stop (the start entered a bank the run did not patch) is
