@@ -1053,8 +1053,9 @@ const COMPACT_1308_FF_PROFILE: BuildPatchProfile = {
   acceptanceSum: 0xffff,
   route: 'recovery-only',
   routeNote:
-    'the 2014 bootloader rejects the 0xFFFF sum at slots A/B and boots the recovery bank ' +
-    '0x14070000 unchecked — the patch is committed into recovery (mode 9) and nowhere else',
+    'the 2014 bootloader does not take this build’s check sum in slot A or B, and starts ' +
+    'recovery R (0x14070000) without checking it, so the patch is written into recovery R and ' +
+    'nowhere else',
   capability: {
     wholePart: true,
     losslessReadUnit: 64,

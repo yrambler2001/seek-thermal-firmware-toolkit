@@ -352,7 +352,7 @@ describe('preserve — a fresh run, checkpointed after every step', () => {
       );
       expect(test.stderr.text).toMatch(/B {2}0x14060000 {2}not written — it is erased/);
       expect(test.stderr.text).toMatch(/banks to write\s+slot A \(--bank next-start\)/);
-      expect(test.stderr.text).toMatch(/bytes that move\s+slot A: 13, all inside that bank/);
+      expect(test.stderr.text).toMatch(/bytes that change\s+slot A: 13, all inside that bank/);
     },
   );
 

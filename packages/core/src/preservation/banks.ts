@@ -397,7 +397,7 @@ export function bankRecordWords(bank: PreserveBankRecord): string {
   if (bank.refused !== null) return `not written — ${bank.refused}`;
   return (
     `${bank.buildLabel ?? 'an image'} — can be written` +
-    (bank.patch === undefined ? '' : `; the patch moves ${String(bank.patch.diffCount)} bytes`) +
+    (bank.patch === undefined ? '' : `; the patch changes ${String(bank.patch.diffCount)} bytes`) +
     (bank.imageDerivation === undefined ? '' : `; carries ${bank.imageDerivation.label}`)
   );
 }

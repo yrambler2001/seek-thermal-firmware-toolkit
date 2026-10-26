@@ -895,7 +895,7 @@ function PlanFromState({ state }: { readonly state: PreserveRunState }): ReactEl
             ? []
             : [['Written', stagedFormWords(state.stagedForm)] as const]),
           ...(state.route === 'recovery-only' && state.routeNote != null
-            ? ([['Commit route', state.routeNote]] as const)
+            ? ([['Where it goes', state.routeNote]] as const)
             : []),
           ...(state.restoreForm === undefined
             ? []

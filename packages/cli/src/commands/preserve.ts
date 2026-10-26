@@ -404,13 +404,13 @@ async function confirmDerivedPlan(
         (edit === undefined ? '' : ` (was ${hexUp(edit.balanceWord)}, the edit's balance)`),
     );
     say(
-      `  bytes that move    ${bankWordsOf(key)}: ${String(bank.patch.diffCount)}, all inside that bank`,
+      `  bytes that change  ${bankWordsOf(key)}: ${String(bank.patch.diffCount)}, all inside that bank`,
     );
   }
   if (state.stagedForm !== undefined)
     say(`  written            ${stagedFormWords(state.stagedForm)}`);
   if (state.routeNote !== null && state.routeNote !== undefined) {
-    say(`  commit route       ${state.routeNote}`);
+    say(`  where it goes      ${state.routeNote}`);
   }
   if (state.restoreForm !== undefined)
     say(`  restore            ${restoreFormWords(state.restoreForm)}`);
