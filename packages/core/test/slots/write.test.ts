@@ -46,6 +46,7 @@ import {
 } from '../../src/preservation/patch.js';
 import { sha256Sync } from '../../src/slots/write-sha.js';
 import { stageFFVendor } from '../../src/slots/ff-form.js';
+import { stagingDetail } from '../../src/slots/staging-words.js';
 import {
   SLOT_BYTES,
   type SlotFlashPlan,
@@ -1246,16 +1247,22 @@ describe('the 1.3.0.8 FF image on the slot writer', () => {
     expect(out.sum16).toBe(transferSum16(out.payload));
   });
 
-  it('says what it does: Key A, Key B (notes), that the boot is untested and that the user said the 16 Hz build (warnings)', () => {
+  it('says what it does once: the staging row the vendor form and Key B, the boot untested and the user’s word (warnings)', () => {
     const out = prepareSlotFlash(reportOn(), 'a', input(ffImage()), asRunning16);
     const text = out.warnings.join('\n');
     const notes = out.notes
       .filter((note) => note.source === 'write')
       .map((note) => note.text)
       .join('\n');
-    expect(notes).toMatch(/1\.3\.0\.8 FF \(16 Hz\) image/);
-    expect(notes).toMatch(/block 0 \(Key A\)/);
-    expect(notes).toMatch(/under Key B/);
+    /* The plan's staging row says the vendor form and what the camera stores; no note says it again
+     * (TESTING.md 42.89: it was said in the row and in a note). */
+    expect(out.staging).toBe('key-a-keystream');
+    expect(out.storedForm).toBe('key-b-ciphertext');
+    expect(stagingDetail(out.staging)).toBe(
+      'the 1.3.0.8 FF image as the vendor app stages it (XOR Key A) — the camera stores it under Key B, not these bytes',
+    );
+    expect(notes).not.toMatch(/vendor app/);
+    expect(notes).not.toMatch(/block 0 \(Key A\)/);
     expect(text).toMatch(/UNTESTED/);
     expect(text).toMatch(/0\.9\.0\.0 bootloader the old plain form booted from/);
     expect(text).toMatch(/Nothing here claims the camera boots it\./);
@@ -1297,9 +1304,13 @@ describe('the 1.3.0.8 FF image on the slot writer', () => {
     expect(raw.storedForm).toBe('key-b-ciphertext');
     expect(equalBytes(raw.expectedPlain!, staged.expectedPlain!)).toBe(true);
     expect(equalBytes(raw.expectedStored!, staged.expectedStored!)).toBe(true);
-    expect(raw.notes.some((note) => note.source === 'write' && note.text.includes('vendor'))).toBe(
-      true,
-    );
+    /* the raw FF form is said once, in its own note: the staging row says only "sent as given" */
+    expect(
+      raw.notes.filter((note) => note.source === 'write' && note.text.includes('FF staged form')),
+    ).toHaveLength(1);
+    expect(
+      raw.notes.some((note) => note.source === 'write' && note.text.includes('vendor app')),
+    ).toBe(false);
     /* No 2014 sum-0 complaint: the FF form is judged by its own gate. */
     expect(raw.warnings.some((w) => w.includes('the 2014 bootloader needs 0'))).toBe(false);
   });

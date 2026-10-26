@@ -225,10 +225,12 @@ interface PlanWords {
 }
 
 /**
- * What is said beside an FF image's plan: what it is and what is stored, and how the running build was
- * decided, as notes; the untested boot, and a running build the person chose, as warnings. The payload is
- * not the stored bytes, and no genuine bootloader for this build is in the corpus, so nothing here claims
- * the written bank boots.
+ * What is said beside an FF image's plan: how the running build was decided, as a note; the untested boot,
+ * and a running build the person chose, as warnings. How the image is staged and stored is the plan's own
+ * rows' (its staging, `stagingDetail('key-a-keystream')`, and what the bank holds afterwards), so no note
+ * says it again (TESTING.md 42.89); a raw payload in the FF form says it in its own note. The payload is not
+ * the stored bytes, and no genuine bootloader for this build is in the corpus, so nothing here claims the
+ * written bank boots.
  */
 function ffStagingWords(args: {
   readonly running: RunningApplication;
@@ -241,12 +243,7 @@ function ffStagingWords(args: {
       'recovery R; this form will not, because recovery runs the bank unchecked and does not decrypt it ' +
       '(TESTING.md 42.12). Nothing here claims the camera boots it.',
   ];
-  const notes = [
-    'This is the 1.3.0.8 FF (16 Hz) image, staged as the vendor app stages it: the image XOR key ' +
-      'block 0 (Key A), header window verbatim. The camera re-keys it with key block 1 and stores ' +
-      'the image under Key B, so the bank holds the image XOR Key B, not the plain image and not ' +
-      'the payload.',
-  ];
+  const notes: string[] = [];
   if (basis === 'camera') {
     notes.push(`The camera's own answers say it runs the 16 Hz FF build: ${running.why}.`);
   } else {

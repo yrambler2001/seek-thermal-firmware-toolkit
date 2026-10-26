@@ -409,7 +409,7 @@ describe('SlotsView', () => {
           notes: [
             {
               source: 'write',
-              text: 'This is the 1.3.0.8 FF (16 Hz) image. It is staged as the vendor app stages it (XOR Key A).',
+              text: "The camera's own answers say it runs the 16 Hz FF build: the camera answers 0, 0, 1.",
             },
             { source: 'bank', text: 'Recovery bank note.' },
             { source: 'camera', text: 'Camera-wide note.' },
@@ -434,8 +434,10 @@ describe('SlotsView', () => {
      * camera's notes are not repeated there (TESTING.md 42.88). */
     const readFirst = [...container.querySelectorAll('li')].map((li) => li.textContent);
     expect(readFirst).toContain(
-      'Note: This is the 1.3.0.8 FF (16 Hz) image. It is staged as the vendor app stages it (XOR Key A).',
+      "Note: The camera's own answers say it runs the 16 Hz FF build: the camera answers 0, 0, 1.",
     );
+    /* The vendor form is the Staging row's alone (TESTING.md 42.89). */
+    expect(container.textContent.match(/as the vendor app stages it/g)).toHaveLength(1);
     expect(readFirst.filter((text) => text.includes('Recovery bank note.'))).toEqual([]);
     expect(readFirst.filter((text) => text.includes('Camera-wide note.'))).toEqual([]);
 

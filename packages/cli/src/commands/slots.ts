@@ -761,13 +761,7 @@ export function flashPlanLines(
    * rows do not say the same thing twice (TESTING.md 42.87). */
   const ff = plan.staging === 'key-a-keystream' || plan.storedForm === 'key-b-ciphertext';
   const kind =
-    plan.kind === 'plain'
-      ? ff
-        ? 'decrypted 1.3.0.8 FF image'
-        : 'decrypted image'
-      : ff
-        ? 'raw bytes in the 1.3.0.8 FF staged form (the camera stores the image under Key B)'
-        : 'raw bytes';
+    plan.kind === 'plain' ? (ff ? 'decrypted 1.3.0.8 FF image' : 'decrypted image') : 'raw bytes';
   const runningBasis =
     plan.ffRunning === 'camera'
       ? "the camera's own answers say it runs the 16 Hz FF build"
