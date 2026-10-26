@@ -35,6 +35,8 @@ export interface SlotFpsEveryConfirmProps {
   readonly riskOf: (key: SlotKey) => WriteRisk;
   /** Core's sentence for the backup the patch saves first (`backupPlanText`). */
   readonly backupText: string;
+  /** The order ends with the bank the camera boots now, after another bank (core's `everyBankBootedLast`). */
+  readonly bootedLast: boolean;
   readonly onConfirm: (acknowledged: boolean) => void;
   readonly onCancel: () => void;
 }
@@ -61,6 +63,7 @@ export function SlotFpsEveryConfirm({
   version,
   riskOf,
   backupText,
+  bootedLast,
   onConfirm,
   onCancel,
 }: SlotFpsEveryConfirmProps): ReactElement {
@@ -120,7 +123,9 @@ export function SlotFpsEveryConfirm({
             <span className="block">{`Left as they are: ${others.join(' ')}`}</span>
           )}
           <span className="block">
-            {`They are written in this order: ${order}. The bank the camera boots now goes last, so a failure stops before it. Each is read back before the next, and the first failure stops the rest.`}
+            {offers.length === 1
+              ? `It writes ${order} alone, and reads it back.`
+              : `They are written in this order: ${order}.${bootedLast ? ' The bank the camera boots now goes last, so a failure stops before it.' : ''} Each is read back before the next, and the first failure stops the rest.`}
           </span>
           <span className="block">{`${backupText} ${BACKUP_DOWNLOAD_NOTE}`}</span>
           <span className="block font-medium">

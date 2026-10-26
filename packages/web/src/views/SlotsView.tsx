@@ -10,6 +10,7 @@
 import { useMemo, useState, type ReactElement } from 'react';
 import { CircleStop, Gauge, Layers, ScanSearch, Send, ShieldAlert } from 'lucide-react';
 import {
+  everyBankBootedLast,
   backupFileNameShown,
   backupPlanText,
   derivedKeyLine,
@@ -255,7 +256,11 @@ function EveryBankAction({
       </Button>
       <span className="text-[0.8rem] leading-snug text-muted-foreground">
         {off?.reason ??
-          `Patches ${plan.offers.map((offer) => offer.name).join(', then ')} in one confirmation, the bank the camera boots now last; each is saved first, in one zip download, and read back.`}
+          `Patches ${plan.offers.map((offer) => offer.name).join(', then ')} in one confirmation` +
+            (everyBankBootedLast(report, plan.order)
+              ? ', the bank the camera boots now last'
+              : '') +
+            '; each is saved first, in one zip download, and read back.'}
       </span>
     </Toolbar>
   );
@@ -512,6 +517,7 @@ export function SlotsView({ slots, connected, busy }: SlotsViewProps): ReactElem
             plan={everyPlan}
             version={report.state.version}
             riskOf={(key) => writeRisk(report, key)}
+            bootedLast={everyPlan !== null && everyBankBootedLast(report, everyPlan.order)}
             backupText={
               everyPlan === null
                 ? ''
