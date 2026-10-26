@@ -435,6 +435,11 @@ describe('the facts a person is shown with the plan', () => {
     expect(buildSlotPlan(modern4x, '42.32.3.10').notes.join('\n')).toContain(
       'has no handler for data type 32',
     );
+    /* the 4.8.2.1 note names the products and the dumps the emulator measured, with the count */
+    expect(buildSlotPlan(modern4x, '4.8.2.1').notes.join('\n')).toContain(
+      'Compact 4.8.2.1 and Compact XR 4.8.2.1 (one image, TESTING.md 42.34): the modern 63-window map; ' +
+        'the emulator confirmed 63 of 63 windows on the Compact’s full dump and on the Compact XR’s.',
+    );
     expect(buildSlotPlan(modern4x, '44.27.3.10').notes.join('\n')).toContain(
       'refuses a data type past the span it accepts (0x7F) as a bad first argument',
     );

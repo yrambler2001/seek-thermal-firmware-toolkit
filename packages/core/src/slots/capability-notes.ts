@@ -121,8 +121,12 @@ const UNVERIFIED_NOTE =
 
 /** Product lines the corpus measured, keyed by the exact build version. */
 const PRODUCT_NOTES: Readonly<Record<string, string>> = {
+  /* The emulator corpus holds the Compact's full dump and the Compact XR's full dump and image; each confirmed
+   * 63 of 63 windows (test/emulator/expectations.rpc.json). The two products run
+   * one image (TESTING.md 42.34), so the note names both, and the dumps it was measured on (42.89). */
   '4.8.2.1':
-    'Compact XR 4.8.2.1: the modern 63-window map, measured confirming every window on the emulator.',
+    'Compact 4.8.2.1 and Compact XR 4.8.2.1 (one image, TESTING.md 42.34): the modern 63-window map; the ' +
+    'emulator confirmed 63 of 63 windows on the Compact’s full dump and on the Compact XR’s.',
   '10.9.1.31':
     'Mosaic 320x240 10.9.1.31: the modern 63-window map, measured confirming every window on the emulator.',
   '2.27.1.33':
