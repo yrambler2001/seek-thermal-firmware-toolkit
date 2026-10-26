@@ -270,7 +270,18 @@ describe.skipIf(!available)("the real hosts' give-up on emulated cameras (sec.22
             });
           for (const argv of [
             ['info', '--json'],
-            ['slots', 'flash', 'b', image, '--yes', '--acknowledge-risk', '--json'],
+            /* A write saves its bank first; into the test's folder, not the working directory. */
+            [
+              'slots',
+              'flash',
+              'b',
+              image,
+              '--yes',
+              '--acknowledge-risk',
+              '--json',
+              '--dump-dir',
+              out.path,
+            ],
           ]) {
             const { io, stderr } = testIo({ backend });
             const code = await run(argv, io, new AbortController().signal);
