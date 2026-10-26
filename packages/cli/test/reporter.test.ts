@@ -51,6 +51,32 @@ describe('TerminalReporter', () => {
     expect(loud.log.text).toBe('inner workings\n');
   });
 
+  it('prints one blank line where the detail lines between two sections are hidden', () => {
+    /* `info` without --verbose printed four blank lines in a row after its first line (TESTING.md 42.84). */
+    const quiet = reporterOn();
+    quiet.reporter.log('  running firmware 1.0.3.0', 'ok');
+    quiet.reporter.log('');
+    quiet.reporter.log('boot config at 0x14010000 ...', 'detail');
+    quiet.reporter.log('');
+    quiet.reporter.log('');
+    quiet.reporter.log('check key: key block 1', 'ok');
+    expect(quiet.log.text).toBe('  running firmware 1.0.3.0\n\ncheck key: key block 1\n');
+
+    const loud = reporterOn({ verbose: true });
+    loud.reporter.log('a');
+    loud.reporter.log('');
+    loud.reporter.log('b', 'detail');
+    loud.reporter.log('');
+    expect(loud.log.text).toBe('a\n\nb\n\n');
+
+    /* A plain write between two blank log lines ends the run of blanks. */
+    const mixed = reporterOn();
+    mixed.reporter.log('');
+    mixed.reporter.write('table');
+    mixed.reporter.log('');
+    expect(mixed.log.text).toBe('\ntable\n\n');
+  });
+
   it('--quiet suppresses logs and the progress bar', () => {
     const { reporter, log, progress } = reporterOn({ quiet: true, tty: true });
     reporter.log('hello');

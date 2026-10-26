@@ -91,6 +91,8 @@ export class TerminalReporter implements Reporter {
   private lastDrawAt = 0;
   private lastPctLine = -1;
   private lastText = '';
+  /** The last log line printed was blank: a second blank in a row is not printed. */
+  private lastLogBlank = false;
 
   constructor(options: ReporterOptions) {
     this.logSink = options.log;
@@ -104,6 +106,12 @@ export class TerminalReporter implements Reporter {
   log(message: string, level: LogLevel = 'info'): void {
     if (this.quiet) return;
     if (level === 'detail' && !this.verbose) return;
+    /* Core separates its sections with a blank line before each. Without --verbose the detail lines
+     * between two of them are not printed, and the blanks piled up (four in a row after `info`'s first
+     * line); one is printed for each run of them. */
+    const blank = message === '';
+    if (blank && this.lastLogBlank) return;
+    this.lastLogBlank = blank;
     this.clearBar();
     /* No prefix of our own: core's lines are the product of careful wording
      * ("NOW UNPLUG AND REPLUG THE CAMERA."), and a decorated copy is not the
@@ -145,6 +153,7 @@ export class TerminalReporter implements Reporter {
 
   /** Writes a line to the log sink with no level decoration. */
   write(text: string): void {
+    this.lastLogBlank = false;
     this.clearBar();
     this.logSink.write(text.endsWith('\n') ? text : `${text}\n`);
   }
