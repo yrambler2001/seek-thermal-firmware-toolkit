@@ -1015,10 +1015,11 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
             saveDump: save,
           });
           setFpsOutcome(done);
+          /* The saved files are named once, by core's own note just below ("saved the pre-patch dump: …"):
+           * this line named them too, two lines in a row on the camera (TESTING.md 42.86). */
           log(
             `slot ${name}: patched from ${String(done.fromHz)} Hz to ${String(done.toHz)} Hz ` +
-              `(firmware ${done.patch.version}); the dump was saved first as ${done.pre.rawName} and ` +
-              done.pre.plainName,
+              `(firmware ${done.patch.version})`,
             'ok',
           );
           for (const note of done.notes) log(note, 'detail');

@@ -1148,7 +1148,10 @@ function fpsResultOf(key: SlotKey): FpsPatchResult {
     changed: [0xb964, 0x238],
     written: { verified: true, commitStatus: 0, after: null, notes: [] },
     readBack: { checked: true, ok: true, differing: [0xb964, 0x238], missing: [], unexpected: [] },
-    notes: [],
+    /* Core's own note, as slots/fps-patch.ts writes it once the dump is saved. */
+    notes: [
+      `saved the pre-patch dump: ${fpsPreDumpOf(key).rawName} and ${fpsPreDumpOf(key).plainName}`,
+    ],
   } as unknown as FpsPatchResult;
 }
 
@@ -1285,12 +1288,14 @@ describe('useSlotsPanel: the frame-rate patch', () => {
     expect(replugLines(result.current.panel.reporter.lines)).toEqual([replugRecord('patch')]);
     expect(lineIncludes(result.current.panel.reporter.lines, 'NOW UNPLUG')).toBe(false);
     /* The patch is named by its firmware, not by the table's internal id. */
+    expect(result.current.panel.reporter.lines.map((line) => line.text)).toContain(
+      'slot B: patched from 8 Hz to 32 Hz (firmware 1.3.0.0)',
+    );
+    /* The saved files are named once in the log, by core's note, not again by the page's line. */
+    const raw = fpsPreDumpOf('b').rawName;
     expect(
-      lineIncludes(
-        result.current.panel.reporter.lines,
-        'slot B: patched from 8 Hz to 32 Hz (firmware 1.3.0.0); the dump was saved first as',
-      ),
-    ).toBe(true);
+      result.current.panel.reporter.lines.filter((line) => line.text.includes(raw)),
+    ).toHaveLength(1);
     expect(lineIncludes(result.current.panel.reporter.lines, 'compact_32k-')).toBe(false);
     unmount();
   });

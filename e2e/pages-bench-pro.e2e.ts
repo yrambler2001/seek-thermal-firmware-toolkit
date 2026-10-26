@@ -761,6 +761,9 @@ describe.skipIf(!RUNNABLE)(
         expect(log, 'the log keeps the record, not the capitalised prompt').not.toContain(
           REPLUG_PROMPT,
         );
+        expect(count(log, /before-fps-patch-raw-/), 'the saved files, named once in the log').toBe(
+          1,
+        );
         expect(outcome ?? '', 'the result panel names the firmware, not the table id').toContain(
           `Slot ${L} — patched from ${String(FROM_HZ)} Hz to ${String(TO_HZ)} Hz (firmware ${VERSION}).`,
         );
