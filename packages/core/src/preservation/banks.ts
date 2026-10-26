@@ -316,14 +316,17 @@ function unknownImageWhat(cameraVersion: string): string {
   );
 }
 
-/** What the person can do about a bank that holds an unknown image. */
-const UNKNOWN_IMAGE_REMEDY =
-  'write the stock image back to it first (for example from a full flash backup taken before ' +
-  'the change), then start a new run';
+/** What the person can do about a bank that holds an unknown image (`bank`: the bank, in words). */
+function unknownImageRemedy(bank: string): string {
+  return (
+    `write the stock image back to ${bank} first (for example from a full flash backup taken ` +
+    'before the change), then start a new run'
+  );
+}
 
 /** A bank that holds an unknown image, as the bank table and the choices say it. */
 export function unknownImageWords(cameraVersion: string): string {
-  return `it ${unknownImageWhat(cameraVersion)}. To include this bank, ${UNKNOWN_IMAGE_REMEDY}`;
+  return `it ${unknownImageWhat(cameraVersion)}. To include this bank, ${unknownImageRemedy('it')}`;
 }
 
 /** The run's refusal when the bank its build is taken from holds an unknown image: nothing is written. */
@@ -332,7 +335,7 @@ export function unknownImageRefusal(bank: BankKey, cameraVersion: string): strin
   return (
     `${words.charAt(0).toUpperCase()}${words.slice(1)} ${unknownImageWhat(cameraVersion)}. ` +
     'The run takes the firmware it patches from this bank, so it stops here, before anything is ' +
-    `written. To preserve this camera, ${UNKNOWN_IMAGE_REMEDY}.`
+    `written. To preserve this camera, ${unknownImageRemedy(words)}.`
   );
 }
 

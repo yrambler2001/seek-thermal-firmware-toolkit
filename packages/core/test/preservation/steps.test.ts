@@ -2764,7 +2764,7 @@ describe('an unknown image — refused in plain words, per bank and as the run (
       expect((error as Error).message).toMatch(
         /^Slot A holds an unknown image \(not the stock 1\.3\.0\.0 firmware, nor a change to it that Preserve knows; a frame-rate patch is not one\)/,
       );
-      expect((error as Error).message).toMatch(/write the stock image back to it first/);
+      expect((error as Error).message).toMatch(/write the stock image back to slot A first/);
       const failed = recordStepFailure(created.state, 'backup', error);
       expect(failed.banks).toBeUndefined();
     },
