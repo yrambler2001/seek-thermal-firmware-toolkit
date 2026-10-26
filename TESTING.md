@@ -12824,3 +12824,145 @@ The runs (the outputs are in `bench-42.85/page-*`):
 - The 1.3.0.0 `pages-bench.e2e` was not run.
 - 1.0.3.2 was not run.
 - `plan.md` was not edited. Nothing was pushed or merged.
+
+### 42.86 The 1.0.3.0 page's words, fixed and confirmed on the FF board: one replug prompt, no code names, a patched bank as a state, both detection scores labelled (2026-10-26)
+
+**Summary.** Agent 42.86 (Opus 5.5), on `worktree-agent-aae5eaa22432cebaf`, reset to `refactor/all-firmware-profiles` (`57d6cd0`, the commit that adds 42.85). It fixed the four wording findings 42.85 saw on the camera (its O1, O2, O3 and O5), with tests in core, the CLI and the web. It also fixed four smaller things of the same kind: code names in the 2016 notes, the saved file names said twice in the patch's log, a note that called itself "this page" in the CLI, and the CLI's undo hint for recovery R. It rebuilt the hosted bundle. Then, as the only actor on the bench, it ran the 42.85 rig twice on the Compact PRO FF board (serial `090BB12PR939`, 1.0.3.0). Each run undid the patch on A with the saved stock image and patched A again from the page. Every write committed with status 0, and the J-Link reads before, between and after the runs are byte-identical to the restore image. No other agent was started. Nothing was pushed or merged, and `plan.md` was not edited.
+
+**Tags.** [measured]: run here, on the camera, the J-Link or the switch. [source]: read from the file named. [inferred]: follows from those, and was not run.
+
+**1. Setup.** `git reset --hard refactor/all-firmware-profiles` gave HEAD `57d6cd0`. `node_modules` was cloned with `cp -cR` from the main checkout; its `@seek-fw/{core,cli,web}` links are relative, so they resolve to this worktree. Then `tsc --build packages/{core,cli}/tsconfig.build.json`.
+
+**2. The findings: old and new text.** The old text is 42.85's, seen on the camera. The new text was seen on the camera in run 2 (§5), unless marked.
+
+| # | Where | Old | New |
+|---|---|---|---|
+| 1 | after a patch: status line | "Patched. Unplug and replug, then read the slots again." | "Patched. The bank reads back as planned." (read-back not as planned: unchanged; not checked: "Patched. The read-back was not checked — see the result.") |
+| 1 | after a patch: log | "NOW UNPLUG AND REPLUG THE CAMERA." | "Unplug and replug the camera: no reset was sent, so the patch takes effect only at the next start. Then read the slots again: the version and the booted bank the camera reports settle it." |
+| 1 | after a patch: result panel | "NOW UNPLUG AND REPLUG THE CAMERA. No reset was sent. Then read the slots again." | unchanged: the one capitalised prompt |
+| 1 | after a write: status line | "Written. Unplug and replug, then read the slots again." | "Written. The bank reads back as written." (not compared: "Written. The read-back was not compared — see the result.") |
+| 1 | after a write: log | "NOW UNPLUG AND REPLUG THE CAMERA." and "No reset was sent, so the bank only takes effect after a real power cycle. Read the slots again after replugging: …" | the same line as for a patch, with "the write"; the second line is gone (the result panel says it) |
+| 1 | while the banks are read again | core's "Written. Unplug and replug, then re-read the device info." [source: `slots/write.ts`] | "Reading the banks again ..." (the page's own; core and the CLI unchanged) |
+| 2 | R's row and `slots list` Notes | "Recovery bank, mode 9, token form. A write needs acknowledgeRisk. Measured on a Compact PRO 1.0.3.0: …" | "Recovery bank, mode 9, token form. A write asks you to acknowledge the risk. Measured on a Compact PRO 1.0.3.0: …" (the 4.x, 2014 and 1.3.0.8 FF notes the same) |
+| 2 | a write plan to the booted bank (the undo) | "bank A is the bank the camera boots now: writing it needs acknowledgeRisk, and the camera runs whatever it holds after the next power cycle." | "bank A is the bank the camera boots now: writing it asks you to acknowledge the risk, and the camera runs whatever it holds after the next power cycle." |
+| 2 | a write plan to R [unit test] | "Recovery bank R: writing it needs acknowledgeRisk. Nothing here checks that the camera boots afterwards." | "Recovery bank R: writing it asks you to acknowledge the risk. Nothing here checks that the camera boots afterwards." |
+| 2 | `seek-fw slots patch-fps a --write --dump-dir d` on the booted bank, no `--acknowledge-risk` [source; unit test for the new] | the plan, the question and the saved dump, then core's "bank A is the bank the camera boots now. Writing it needs acknowledgeRisk: true. Nothing was sent." | refused before the plan: "refusing to patch bank A: bank A is the bank the camera boots now; a bad write there can stop the camera booting", hint "Pass --acknowledge-risk to patch it anyway. Nothing was sent to the camera." The dry run suggests "Add --write --dump-dir <folder> --acknowledge-risk to patch bank A." |
+| 3 | a patched bank's row (A and R) | "Frame-rate patch not offered: already patched: this image runs at 18 Hz (compact_pro-1.0.3.0), so no patch is offered" | "Frame-rate patch applied: this image runs at 18 Hz." |
+| 3 | a build made at the rate (the FF builds) [unit test] | "Frame-rate patch not offered: already runs at 18 Hz (compact_pro-1.0.3.0-FF), so no patch is offered" | "No frame-rate patch needed: this build already runs at 18 Hz." |
+| 3 | core's plan reason: `slots patch-fps` refusal, `slots list --json` `slots[].patch.reason` | "already patched: this image runs at 18 Hz (compact_pro-1.0.3.0), so no patch is offered" | "the frame-rate patch is already applied: this image runs at 18 Hz" (on the camera, A and R); at the rate: "this build already runs at 18 Hz without a patch" |
+| 3 | the result panel after a patch | "Slot A — patched from 9 Hz to 18 Hz (compact_pro-1.0.3.0)." | "Slot A — patched from 9 Hz to 18 Hz (firmware 1.0.3.0)." |
+| 3 | the patch's log line | "slot A: patched from 9 Hz to 18 Hz (compact_pro-1.0.3.0); the dump was saved first as <raw> and <decrypted>", then core's "saved the pre-patch dump: <raw> and <decrypted>" | "slot A: patched from 9 Hz to 18 Hz (firmware 1.0.3.0)", then core's line, so the names are said once (found on the camera in run 1, fixed before run 2) |
+| 3 | a known-rate build's bank line (Info, `info`, `slots list`) [unit test] | ", compact_pro-1.0.3.0-FF (18 Hz)" | ", runs at 18 Hz" |
+| 4 | Info log | "detected 2016 Compact Pro (compact-2016), confidence 0.85" | "probe: 2016 Compact Pro (compact-2016), score 0.85 from the answers above, before any bank is read" (the Slots and Dump tabs log the same line) |
+| 4 | Info's Profile panel and `seek-fw info` | "compact-2016 (score 0.98)" | "compact-2016 (score 0.98 after the read, from the evidence below)" (core `detectedReportOf`, one definition for both) |
+
+Where the two scores come from [source, `profiles/compact-2016.ts` `detectCompact2016`]:
+- 0.85 is the probe (`identifyCamera`): the version only, with no bank read, scores `SCORE_VERSION_LINE`.
+- 0.98 is `readDeviceInfo` scoring again with the banks: `SCORE_CORROBORATED` 0.96 (a slot under a real keystream sums to 0, and a protected bank refused the plain arm), plus 0.01 for the version line and 0.01 for bootloader 1.2.0.0.
+- Both numbers are right. Each now says what it measures. The CLI never printed the probe's score.
+
+Who sees core's flashSlot refusal [source]:
+- The page asks its own tick first, by the same rule (`writeRisk`/`needsRiskAck` = `ackNeeded`).
+- `slots flash` refuses first, on a superset of that rule (`bootRisk`).
+- `slots patch-fps` did not refuse first, so a person reached core's refusal, after the dump was saved. It now refuses first, like `slots flash`.
+- So only a library caller reaches core's refusal. It keeps the option name: "… Writing it needs acknowledgeRisk: true. Nothing was sent.". R's reason in it changes from "recovery bank R is written only with acknowledgeRisk" to "recovery bank R is the last-resort copy the bootloader falls back to".
+
+Also fixed (same kind, on the 1.0.3.0 path):
+- The 2016 notes on the page and in `slots list`:
+  - "the 16-byte token OLD_FW_UNLOCK_TOKEN" is now "with the line’s 16-byte unlock token";
+  - "(patch.ts KEY_PAIRS)" and "(scripts/patch-dump.mjs)" are dropped;
+  - "Profile compact-2016 declares no flash capability of its own (its capabilities.flash, see compact-2016.ts), … so the slot page does not gate it on that refusal." is now "A whole-image write is not available on this line (profile compact-2016 offers none), and the device info says so. The banks are written one at a time instead (the Slots tab, `seek-fw slots`), each staged under its own image’s key, the path the backup already ran on 1.0.3.0 cameras, so a bank write is not refused for that reason." On the camera this note still read "… so this page does not refuse a bank for that reason." That was wrong in the CLI, so it was changed after the runs (§5).
+- The CLI's patch plan said "(add --acknowledge-risk if the camera boots bank R)". It now says "(add --acknowledge-risk as for every write to recovery R)".
+
+**3. Commits** (on `worktree-agent-aae5eaa22432cebaf`, on `57d6cd0`, in order):
+- `8f459dc`: the fixes and their tests;
+- `5ede8ff`: the e2e expectations (`pages-bench-pro`, `fps-bench`, `slots-quality`);
+- `5e62ff7`: the saved names once in the log;
+- `3451f74`: the flash note;
+- `9770d47`: the bundle;
+- this section.
+
+**4. Tests** [measured; files named, never a whole vitest].
+
+| Run | Result |
+|---|---|
+| core: the 40 non-emulator files (`packages/core/test/*.test.ts`, `test/{preservation,slots}/*.test.ts` without `emulator`; new: `preservation/fps-plan-words.test.ts`, the plan reasons and the bank line on a mocked table) | 39 passed, 1 skipped (`fps-patch.differential`, no corpus root); 1218 passed, 46 skipped; 170 s. After `3451f74`: `slots/capability.test.ts` and `capability.test.ts` again, 387 passed, 1 skipped |
+| core emulator (`SEEK_EMU_DIR=…/FW-V1/emu`): `slots/page-expectations.emulator.test.ts`, `slots/fps-patch.pro-2016.emulator.test.ts` (the at-rate reason, the patched status, the 2016 patch on A, B and R) | 2 files, 221 passed, 278 s |
+| CLI: `slots`, `args`, `errors`, `reporter`, `output`, `surface`, `decrypt`, `preserve`, `interrupt`, `camera`, `node-usb` | 11 files, 307 passed (302 at 42.84; new: the patched refusal's words, patch-fps refused without `--acknowledge-risk` on A and on R before the plan and the dump, the dry run's suggestion, R's undo hint, the `info` detected row). After `3451f74`: `slots` and `camera` again, 153 passed |
+| web: all 35 test files, named | 35 files, 403 passed (399 at 42.84), at `5e62ff7`; `SlotsView` and `SlotsView.verdicts` again after `3451f74`, 58 passed |
+| `npx vitest run --config e2e/vitest.config.ts bench-lib.e2e bench-verdict.e2e supervised-gate.e2e camera-bus.e2e` | 4 files, 167 passed, 6 skipped |
+| `npm run typecheck` | exit 0 (final HEAD) |
+| `eslint` and `prettier --check` on the 28 changed source, test and e2e files | clean (`fps-bench.e2e.ts` had one line prettier had not wrapped; it is wrapped now) |
+| `npm run build:docs` | `index-Bo6v8znZ.js`, 752,428 B (was `index-CgFdzmiS.js`, 752,149 B); the CSS `index-BwTO31bJ.css` unchanged (`64d61e63…`). Against the old bundle: "NOW UNPLUG AND REPLUG THE CAMERA" 4 → 2 (the two result panels), "needs acknowledgeRisk" 7 → 1 (core's library refusal), "so no patch is offered" 2 → 0, "Unplug and replug, then read the slots again" 2 → 0, ", confidence" 2 → 0, "OLD_FW_UNLOCK_TOKEN (the same", "patch.ts KEY_PAIRS", "capabilities.flash, see" 1 → 0 each |
+
+Not run: `slots-quality.e2e`, `slots-view.e2e` and `pages-emu.e2e` (Chrome on the emulator; `slots-quality`'s no-offer expectation was widened to the two new state sentences), `fps-bench.e2e` and `pages-bench.e2e` (the 1.3.0.0 bench), the other emulator suites (`corpus-locked`, `empty-bank`, `write`; their refusal regexes still match core's unchanged refusal).
+
+**5. The bench** [measured]. The bench is the Compact PRO FF board `090BB12PR939` on switch channel 2, and J-Link CE S/N 69656086 on channel 1. J-Link steps used only the FW-V1 runner of `targets/compact_pro_ff_18hz_4_18_2_0`, `dump-spifi-4m-halted`; no `flash-factory-4m-2` was needed. The restore image is `bench-42.85-end (A and R 18 Hz).bin` (sha256 `28060916b0fb3f93d2f12bbf9e708997d984c35ce0a3cef44cf1b64b10269c45`).
+- Idle checks (`bench-42.86/logs/idle-checks.log`):
+  - At 07:36:12 there was no JLink, jlink-runner or bench Electron process; only the crashpad helpers of VS Code and the Claude app were running.
+  - `jlink_dumps`' newest file was 42.85's 07:01 halted read, whose sha256 is `28060916…`. `JLinkDLL.ini` was last written at 07:00:44.
+  - The check was repeated at 07:37:20, 07:41:30, 07:42:04 and 07:44:25. Each time it showed only this run's own mtimes.
+- 07:36: switch `on 1`. Halted read at 07:36:48: `bench-42.86/start (A and R 18 Hz).bin`, sha256 `28060916…`, byte-identical to the restore image (`cmp`). Then `cycle 2`.
+- Run 1, `page-1-undo-repatch-a` (07:37:25 to 07:39:20, bundle `index-D9dyZXqx.js`, the fixes before `5e62ff7`):
+  - Command: `npm run e2e:pages:bench:pro` with `SEEK_E2E_WRITE=i-understand SEEK_E2E_SOURCE=docs SEEK_E2E_SWITCH_DIR=…/usb-port-switch-rp2040 SEEK_E2E_SWITCH_CHANNEL=2 SEEK_E2E_START_IMAGE=<the restore image> SEEK_E2E_PRO_PATCHED=a,r SEEK_E2E_PRO_UNDO=a=bench-42.85/page-2-patch-a/fps-a-saved-seek-slot-A-v1.0.3.0-before-fps-patch-decrypted-5e1f3f24.bin SEEK_E2E_PRO_PATCH=a SEEK_E2E_PRO_OUT=bench-42.86/page-1-undo-repatch-a` (`bench-42.86/scripts/page-run.sh`).
+  - Result: 6/6 passed. The undo of A committed (checksum 0x104F, status 0) and the patch of A committed (0x1081, status 0, 4.96 s); each was followed by a replug.
+  - It showed the saved file names twice in the patch's log, which was fixed in `5e62ff7`.
+- Halted read at 07:41:50: `after-run1 (A and R 18 Hz).bin`, sha256 `28060916…`, byte-identical to the restore image. Then `cycle 2`.
+- Run 2, `page-2-undo-repatch-a` (07:42:08 to 07:44:04, bundle `index-CHhbHy5P.js`, which is `5e62ff7`): the same settings, and 6/6 passed.
+  - The undo committed with status 0 and read back `44bc591d028ebbd1…` (A's stock stored bytes); the patch committed with status 0 in 5.95 s and read back `33d91fcd50c82e18…`.
+  - After each replug: one Info read under compact-2016 in 2.07 s; Booted and Next start are Bank A; every bank is bootable; Dumps B and R equal the start image.
+  - The guards refused nothing.
+- Halted read at 07:44:45: `end (A and R 18 Hz).bin`, sha256 `28060916b0fb3f93d2f12bbf9e708997d984c35ce0a3cef44cf1b64b10269c45`, byte-identical to the restore image.
+- The committed bundle `index-Bo6v8znZ.js` differs from run 2's only in the flash note's last sentence and the source map's name. Checked by swapping both back: the files are then equal.
+
+The page text in run 2 (`bench-42.86/page-2-undo-repatch-a/`: `info-*.txt`, `slots-*.txt`, `undo-a-*.txt`, `fps-a-*.txt`, `*-log.txt`, 11 screenshots):
+- Finding 1: the patch.
+  - Status: "Patched. The bank reads back as planned."
+  - Log, in order:
+    - "slot A: patched from 9 Hz to 18 Hz (firmware 1.0.3.0)"
+    - "saved the pre-patch dump: seek-slot-A-v1.0.3.0-before-fps-patch-raw-44bc591d.bin and seek-slot-A-v1.0.3.0-before-fps-patch-decrypted-5e1f3f24.bin"
+    - …
+    - "Unplug and replug the camera: no reset was sent, so the patch takes effect only at the next start. Then read the slots again: the version and the booted bank the camera reports settle it."
+  - Result panel: "Slot A — patched from 9 Hz to 18 Hz (firmware 1.0.3.0)." / "The read-back differs from the saved dump only at the 9 planned byte(s), the sites and the sum word." / "The dump saved before the write: … The saved decrypted file is the only way back." / "NOW UNPLUG AND REPLUG THE CAMERA. No reset was sent. Then read the slots again."
+  - "unplug and replug" appears once in the log and twice in the section (that log line and the panel). The capitalised prompt appears once in the section and never in the log.
+  - The undo: the status is "Written. The bank reads back as written.", the log line is the same with "the write", and the panel says "NOW UNPLUG AND REPLUG THE CAMERA. No reset was sent, so the bank only takes effect after a real power cycle. …".
+- Finding 2:
+  - R's row: "Recovery bank, mode 9, token form. A write asks you to acknowledge the risk. Measured on a Compact PRO 1.0.3.0: …".
+  - The undo's plan: "bank A is the bank the camera boots now: writing it asks you to acknowledge the risk, and the camera runs whatever it holds after the next power cycle."
+  - The slots section shows none of `acknowledgeRisk`, `compact_pro-1.0.3.0`, `OLD_FW_UNLOCK_TOKEN`, `KEY_PAIRS` or `capabilities.flash` (checked by the spec on every read).
+- Finding 3: A and R before the undo, R after it, and A and R after the patch each read "Frame-rate patch applied: this image runs at 18 Hz.", with no "not offered". Each stock bank (B, and A after the undo) offers an enabled "Make 18 FPS".
+- Finding 4:
+  - Info log: "probe: 2016 Compact Pro (compact-2016), score 0.85 from the answers above, before any bank is read".
+  - Profile: "Detected / compact-2016 (score 0.98 after the read, from the evidence below)".
+  - No "confidence" appears in the Info log.
+
+**6. The camera's end state** [measured].
+- After `cycle 2`, `seek-fw info --json` (`bench-42.86/info-end.json`) reads:
+  - firmware 1.0.3.0, `boot.booted "a"`, `boot.activeSlotWord "0x00000000"`, `boot.nextStart.runs "a"`, `boot.cfg0 "0xFFFFFFFF"`;
+  - detected compact-2016 at 0.98, check key `faacb3c6…` from a;
+  - A and R image `d410b04cdaa10c34`, B `5e1f3f24c8bc1e85`, all bootable.
+- `seek-fw info` prints "detected    compact-2016 (score 0.98 after the read, from the evidence below)". `seek-fw slots list` prints the A and R bank lines with "frame-rate patch 18 Hz", and its JSON gives A and R `patch.status "patched"` with the new reason (`info-end.txt`, `slots-list-end.txt`, `slots-list-end.json`).
+- The CLI's reads send the token, so the camera was power-cycled once more (`cycle 2`), and then the switch was set `off 1`. Status at 07:45:41: `1=off 2=on`, and the camera is on the bus.
+- The flash is the restore image: A and R hold the 18 Hz 1.0.3.0 image, B is stock, and the camera boots A.
+- There were four writes (two undos, two patches), each with commit status 0. No retry and no restore was needed.
+
+**7. Open** (not fixed: each is bigger than a wording edit, or a decision). The exact text is from the camera.
+- The staging note is on every bank row of the slots table and printed three times in `slots list` Notes ("A: Staged: …", "B: Staged: …", "R: Staged: …"): "Staged: the image, XORed with the xorshift128 keystream of its OWN key block 0 (the stage key, found in the image by value), image length only (at most 0xE000 bytes). …". The 2014 and 4.x lines do the same. Saying it once is a change across all three families.
+- Staging enum names in the write log, on the page and in the CLI:
+  - "Bank A: writing 51848 B from the decrypted image, staged as slot-keystream-ciphertext — checksum 0x1081";
+  - "committed 51848 B to Bank A at 0x14050000 (slot-keystream-ciphertext); commit status 0x0";
+  - the write's detail line "  51848 B payload, staging slot-keystream-ciphertext, transfer checksum 0x104F".
+- R's row says the acknowledgement three times: the note "A write asks you to acknowledge the risk." and "Recovery bank: writing it asks for an extra confirmation." under both Flash decrypted image and Flash raw bytes. An R write plan says it twice: "Recovery bank R: writing it asks you to acknowledge the risk. …" and "Note: Recovery bank, mode 9, token form. A write asks you to acknowledge the risk. …".
+- The CLI's patch plan keeps "build  1.0.3.0 — the table entry compact_pro-1.0.3.0", and the JSON keeps `patch: "compact_pro-1.0.3.0"`. Both are labelled as the table entry, or are for scripts.
+- `slots list` prints the 2016 boot note's "Where the page names a booted bank on this line, …" (42.84's text).
+- The Dump tab's detection panel still labels the probe's score "Confidence … of 1.00" (not on the 1.0.3.0 Info or Slots path).
+- Core's end-of-write progress "Written. Unplug and replug, then re-read the device info." is unchanged for the CLI, as 42.84 left it. The page covers it. Whether the CLI prints it on a non-TTY was not checked.
+- 42.85's O4 (the seek-fps checker reads about 9 fps on the 18 Hz camera), O6 and O7 are unchanged.
+- Only Electron was run. 1.0.3.2 and the FF 1.0.3.0 build were not run (the at-rate words are unit-tested only).
+
+**8. Where everything is.** All of it is outside the repository, in `SEEK_DUMPS/firmwares/Compact Pro/2016.07.06-17.04.49-1.0.3.0/0C21A1M5KP15/bench-42.86/`:
+- the J-Link reads `start`, `after-run1` and `end (A and R 18 Hz).bin`;
+- `page-1-undo-repatch-a/` and `page-2-undo-repatch-a/`: the page texts, screenshots, dumps, saved downloads and `run.log`;
+- `info-end.*` and `slots-list-end.*`;
+- `logs/`: the runner logs, the idle checks and the page-run logs;
+- `scripts/`: `idle.sh`, `jl.sh` and `page-run.sh`.
