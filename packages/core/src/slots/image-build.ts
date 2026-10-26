@@ -67,11 +67,15 @@ export function imageBuildWarningOf(
   }
   const image = header.versionStr;
   if (image !== camera) {
-    const follows =
-      form === 'plain-chain'
-        ? 'On this line the camera checks only that an image is well formed (its header and word sum), not its version, so it takes this image, and when it starts from this bank it runs ' +
-          `${image}.`
-        : 'Whether this camera takes a different build, and runs it, has not been checked.';
+    /* On 1.3.0.8 the chain's own check is the 8 Hz build's; the 16 Hz build checks its FF form instead. */
+    const chainTakesIt =
+      form === 'plain-chain' &&
+      (camera !== FF_1308_VERSION || runningApplicationOf(state).build === 'plain');
+    const follows = chainTakesIt
+      ? 'On this line the camera checks only that an image is well formed (its header and word ' +
+        'sum), not its version, so it takes this image, and when it starts from this bank it ' +
+        `runs ${image}.`
+      : 'Whether this camera takes a different build, and runs it, has not been checked.';
     return {
       code: 'other-version',
       image,

@@ -460,4 +460,21 @@ describe('the 8 Hz 1.3.0.8 image against the build the camera runs: warned, neve
   it('the FF image is not held against the running build here: its own gate decides (write.ts ffRunningGate)', () => {
     expect(imageBuildWarningOf(ffFileImage(74), stateOf(EIGHT_HZ_BANKS, null), 'other')).toBeNull();
   });
+
+  it('another version on a 1.3.0.8 camera: what follows is the chain’s only while the 8 Hz build runs', () => {
+    const older = plainImage(PLAIN_LENGTH, 75);
+    older.set([1, 3, 0, 0], 0x20c);
+    const eightHz = imageBuildWarningOf(
+      older,
+      stateOf(EIGHT_HZ_BANKS, EIGHT_HZ_ANSWERS),
+      'plain-chain',
+    );
+    expect(eightHz?.code).toBe('other-version');
+    expect(eightHz?.text).toContain('so it takes this image, and when it starts from this bank');
+    const sixteenHz = imageBuildWarningOf(older, stateOf(ffBanks, ffAnswers), 'plain-chain');
+    expect(sixteenHz?.text).toBe(
+      'This image is firmware 1.3.0.0; the camera runs 1.3.0.8. Whether this camera takes a ' +
+        'different build, and runs it, has not been checked.',
+    );
+  });
 });
