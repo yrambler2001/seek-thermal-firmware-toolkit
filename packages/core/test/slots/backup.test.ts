@@ -34,7 +34,7 @@ import {
 } from '../../src/slots/backup.js';
 import { buildSlotPlan } from '../../src/slots/capability.js';
 import { copySourceRefusal, planSlotCopy } from '../../src/slots/copy.js';
-import { everyBankWriteOrder } from '../../src/slots/fps-patch.js';
+import { everyBankBootedLast, everyBankWriteOrder } from '../../src/slots/fps-patch.js';
 import {
   flashIdentityOf,
   fullFlashOf,
@@ -634,5 +634,15 @@ describe('the every-bank patch’s order', () => {
       'b',
       'r',
     ]);
+  });
+
+  it('says the booted bank goes last only when it is written after another (TESTING.md 42.93)', () => {
+    const bootsA = report({}, { booted: 'a' });
+    expect(everyBankBootedLast(bootsA, ['b', 'r', 'a'])).toBe(true);
+    /* The FF board's CLI run: R alone, with A and B patched already, was called "the bank the camera boots now". */
+    expect(everyBankBootedLast(bootsA, ['r'])).toBe(false);
+    expect(everyBankBootedLast(bootsA, ['b', 'r'])).toBe(false);
+    expect(everyBankBootedLast(bootsA, ['a'])).toBe(false);
+    expect(everyBankBootedLast(report({}, { booted: null }), ['a', 'b', 'r'])).toBe(false);
   });
 });

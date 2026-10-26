@@ -115,6 +115,7 @@ export { APPLICATION_KEY_PAIRS, type ApplicationKeyPair } from './application-pa
 export {
   checkReadBack,
   checkReadBackDecrypted,
+  everyBankBootedLast,
   everyBankWriteOrder,
   fpsEveryBankPlan,
   fpsPlanOfBank,
