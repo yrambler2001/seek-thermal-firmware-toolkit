@@ -13775,7 +13775,7 @@ No hardware was used: another agent had the bench.
 *c. Found in this run: the families suite's corrupt slot A* [measured on the emulator, caused by 42.92].
 - The 1.0.3.0 row with one byte of slot A flipped expected the backup to refuse. Since 42.92, the run is built on the bank the camera started from. That is B, because A fails the bootloader's check. So the backup completed, and the test's retry loop reported "[object Object]": the outcome, not an error.
 - The fix (`b3adcfa`): the backup completes, the run is not built on A, A holds an image with `refused` equal to `unknownImageWords('1.0.3.0')`, choice A is not offered, A is not a target, and nothing write-shaped goes out.
-- The rewritten row has not run yet (see the handoff).
+- The rewritten row, run alone on the emulator after the other suites: 1 passed.
 
 **3. An unknown image is refused in plain words: the owner's decision of 2026-10-26** [source; tests in section 4].
 
@@ -13819,6 +13819,8 @@ After (`f125750`, `26fe6f7`). There is one phrase in core (`unknownImageWords`, 
 | emulator | `pipeline.emulator.test.ts` at the branch head, after the gate fix | 5 passed, 23 skipped: the corpus row is green (P3, P4), and the J-Link rows skip with "the jlink dump 6.bin is not beside the emulator" |
 | emulator | `emulator.e2e` (the whole file, as `npm run e2e:emu` names it), at the head | 2 files passed, 19 passed, 1 skipped: the refusal spec, then steps 02, 03 and 04 through both restarts, with the camera back as booted |
 | emulator | `families.emulator.test.ts` at the head (started before `b3adcfa`) | 7 passed, 1 failed. Green rows: 1.3.0.8 8 Hz, 1.0.3.0 native, 1.0.3.0 bench, 1.3.0.8-FF, 0.9.0.7, 0.8.0.0, 0.7.0.7. The failure is "one flipped capture byte" (see below) |
+| emulator | `families.emulator.test.ts -t "one flipped capture byte"` (the rewritten row, alone) | 1 passed, 7 skipped |
+| emulator | `banks.emulator.test.ts` at the head | 6 passed, in 30 min |
 
 **5. Section 4 of the brief: one zip reader** (`0497d9b`).
 - The Preserve page's own store-only reader (`parseZipEntries` in `lib/preserve/run-file.ts`) did the same walk as core's `archive/zip-read.ts`. It is deleted, and `parseRunFile` now uses `readZipEntries`.
@@ -13867,10 +13869,7 @@ Before each run, check that the camera is free, and save a halted read with `dum
   - `b3adcfa`: the corrupt-slot row.
   - This section.
 
-- Handoff (the run's 150-call budget):
-  - Done: items 1 to 4 of the brief, every unit, offline e2e and typecheck check above, and the head runs of the pipeline, `emulator.e2e` and families suites.
-  - Still running when this was written, one at a time: `banks.emulator.test.ts` (about an hour in 42.92's run; `scratchpad/w4295/chain2.sh`), then the rewritten corrupt-slot row alone (`families.emulator.test.ts -t "one flipped capture byte"`; `scratchpad/w4295/chain3.sh`).
-  - To check them: `/private/tmp/claude-501/-Users-yrambler2001-things-a-noindex-seek-seek-thermal-firmware-backup/82174575-1341-45d6-a306-7518156cd978/scratchpad/logs4295/chain.log` gets a `head-banks exit <code>` line and a `head-corrupt exit <code>` line. Each suite's log (`head-banks.log`, `head-corrupt.log`) ends with vitest's `Test Files` and `Tests` lines.
+- Every emulator suite in the brief ran at the head, one at a time, after the other checks: the pipeline, `emulator.e2e`, families (with the rewritten row run alone) and `banks.emulator`. Logs: `/private/tmp/claude-501/-Users-yrambler2001-things-a-noindex-seek-seek-thermal-firmware-backup/82174575-1341-45d6-a306-7518156cd978/scratchpad/logs4295/` (`chain.log` has each exit code).
 
 ### 42.96 42.91's Slots features on the Compact PRO FF board (2026-10-26)
 
