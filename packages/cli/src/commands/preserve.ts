@@ -1,60 +1,76 @@
 /**
  * `seek-fw preserve` — the full-flash preservation pipeline for the v1
- * locked line (Compact 1.0.0.0 / 1.2.0.0 / 1.3.0.0), run as SIX RESUMABLE
- * STEPS with a checkpoint written after every one.
+ * locked line (Compact 1.0.0.0 / 1.2.0.0 / 1.3.0.0 and the other builds the
+ * patch table covers), run as SIX RESUMABLE STEPS with a checkpoint written
+ * after every one.
  *
  * THE HONEST RISK, STATED WHERE THE OPERATOR IS. The commit and restore steps
- * write the ACTIVE boot slot over the wire. On real hardware an interrupted
- * write there has NO bootable fallback: the other banks hold whatever they
- * hold, the recovery slot is not written by this pipeline, and a power loss
- * mid-commit is unrecoverable without an SPI programmer. The stepwise shape is
- * the CLI's share of the mitigation, and it exists for one measured reason:
- * the old write-at-the-end flow reached disk only after the whole run, so a
- * crash after the commit lost the restore source with the process. Now the
- * backup — and the standard dump archive built from it, the pre-flash dump of
- * every region the stock plan can read — is on disk BEFORE anything
- * write-shaped can possibly run, and every later step checkpoints behind it.
+ * write boot banks over the wire: by default the bank the next start enters,
+ * or the banks `--bank` names. A bank whose write is interrupted fails the
+ * bootloader's check, and a start then falls to the next bank of the boot
+ * word's order; a power loss mid-commit can still need an SPI programmer. The
+ * stepwise shape is the CLI's share of the mitigation, and it exists for one
+ * measured reason: the old write-at-the-end flow reached disk only after the
+ * whole run, so a crash after the commit lost the restore source with the
+ * process. Now the backup — and the standard dump archive built from it, the
+ * pre-flash dump of every region the stock plan can read — is on disk BEFORE
+ * anything write-shaped can possibly run, and every later step checkpoints
+ * behind it.
+ *
+ * WHICH BANKS. The backup reads every bank twice and says which bank the next
+ * start enters, and why (the boot-config word, the bank the camera reports it
+ * entered, each bank's check). The plan prints that before the first write;
+ * `--bank` chooses: next-start (the default), a, b, r, or all. A choice that
+ * leaves out the bank the next start enters is warned about and still runs;
+ * a bank the run cannot write is refused with the reason.
  *
  * THE IMAGE IS THE CAMERA'S OWN. There is no image argument anywhere: the
- * backup step reads the active slot's image TWICE, requires the two reads to
- * agree byte for byte, derives the factory plaintext from that capture
- * (identity on the 2014 plain chain; the build family's keystream solver on a
- * cipher family), and gates the derived image before anything is trusted —
- * the version cross-check against the camera's own report, the build table's
- * detect hooks and before-bytes (an already-patched bank refuses here). The
- * derived image is a run artifact, so `--resume` never needs any external
- * file.
+ * backup step reads each bank TWICE, requires the two reads to agree byte for
+ * byte, derives its factory plaintext (identity on the 2014 plain chain; the
+ * build family's keystream solver on a cipher family), and gates the derived
+ * image before anything is trusted. The derived images are run artifacts, so
+ * `--resume` never needs any external file.
  *
  * The commands:
  *
- *   seek-fw preserve [--out dir]           a full run; checkpoint after every
+ *   seek-fw preserve [--out dir] [--bank b] a full run; checkpoint after every
  *                                          step (preserve_run.json + files)
- *   seek-fw preserve --resume <dir>        continue from state.nextStep —
- *                                          no image, no other file
+ *   seek-fw preserve --resume <dir> [--bank b]  continue from state.nextStep;
+ *                                          --bank chooses again before the
+ *                                          commit has run
  *   seek-fw preserve --resume <dir> --from-step <id>  start at a chosen step
  *   seek-fw preserve --print-state <dir>   the run state, next step, and
  *                                          whether the checkpoint files
  *                                          still match what was recorded
  *
  * The steps refuse to run on a torn run directory (a gate per step, in core),
- * the commit step reads the bank back before it writes (a landed commit is
- * never replayed), and a Ctrl-C leaves the previous checkpoint standing — the
- * interrupted step is simply re-run on the next --resume.
+ * the commit step reads every chosen bank back before it writes any (a commit
+ * that already landed is never replayed), and a Ctrl-C leaves the previous
+ * checkpoint standing — the interrupted step is simply re-run on the next
+ * --resume.
  */
 
 import { readFile, stat } from 'node:fs/promises';
 import { resolve } from 'node:path';
 
 import {
+  BANK_KEYS,
   CancelledError,
   PRESERVE_STEP_IDS,
   PRESERVE_RUN_STATE_FILE,
+  SeekError,
+  bankChoiceWords,
+  bankWordsOf,
+  choosePreserveBanks,
   createPreserveRun,
   hexUp,
   isPreserveStepId,
+  preserveChoiceOf,
+  preserveChoicesOf,
   recordStepFailure,
   runPreserveStep,
   type Artifact,
+  type BankKey,
   type PreserveArtifactLoader,
   type PreserveRunState,
   type PreserveStepId,
@@ -91,9 +107,9 @@ function describeStagedForm(form: 'plain' | 'xor-ks0' | 'xor-ks0-ksD'): string {
 function describeRestoreForm(form: 'capture-verbatim' | 'factory-staged' | 'none'): string {
   switch (form) {
     case 'capture-verbatim':
-      return 'the backup capture, staged verbatim (the plaintext banks hold the image)';
+      return 'each bank’s backup capture, staged verbatim (the plaintext banks hold the image)';
     case 'factory-staged':
-      return 'the factory image in the staged form (the commit transform reproduces the slot)';
+      return 'each bank’s factory image in the staged form (the commit transform reproduces the bank)';
     case 'none':
       return (
         'REFUSED on this build — no staged form of the factory image passes the running ' +
@@ -128,6 +144,13 @@ function describeCapability(capability: {
     );
   }
   return `REFUSED on this build — ${capability.note}`;
+}
+
+/** The banks a list names, as a sentence fragment ("slot A and recovery R"). */
+function bankList(keys: readonly BankKey[]): string {
+  const words = keys.map(bankWordsOf);
+  if (words.length <= 1) return words.join('');
+  return `${words.slice(0, -1).join(', ')} and ${words.at(-1) ?? ''}`;
 }
 
 function sleep(ms: number): Promise<void> {
@@ -207,9 +230,10 @@ async function readImageOrNull(path: string): Promise<Uint8Array | null> {
 
 export async function preserveCommand(ctx: CommandContext): Promise<CommandResult> {
   if (ctx.options.printState !== null) {
-    if (ctx.options.backupOnly || ctx.options.zip !== null) {
+    if (ctx.options.backupOnly || ctx.options.zip !== null || ctx.options.bank !== null) {
       throw new CliError(
-        '--print-state touches no camera and writes no run, so it takes neither --backup-only nor --zip',
+        '--print-state touches no camera and writes no run, so it takes neither --backup-only, ' +
+          '--zip nor --bank',
         { code: 'cli/usage' },
       );
     }
@@ -259,17 +283,19 @@ async function freshCommand(ctx: CommandContext, outDir: string): Promise<Comman
       {
         code: 'flash/refused',
         hint:
-          'This pipeline WRITES the active boot slot (the commit and restore steps). Pass ' +
-          '--yes to confirm non-interactively after reading the plan on a terminal.',
+          'This pipeline WRITES boot banks (the commit and restore steps). Pass --yes to ' +
+          'confirm non-interactively after reading the plan on a terminal.',
       },
     );
   }
 
-  /* The run is created empty and self-sources: the backup step derives the
-   * image from the camera and records the build it finds. The detailed plan
-   * prints the moment it exists — after the patch step, before anything
+  /* The run is created empty and self-sources: the backup step reads every
+   * bank and records which the next start enters. The detailed plan prints
+   * the moment it exists — after the patch step, before anything
    * write-shaped runs — and an interactive run confirms again there. */
+  const choice = ctx.options.bank ?? 'next-start';
   const created = await createPreserveRun({
+    banks: choice,
     /* The global --chunk, where the drain step is given one; the default
      * (READ_CHUNK, 64) is the ask measured exact on silicon (TESTING.md
      * sec. 28.3). */
@@ -282,16 +308,17 @@ async function freshCommand(ctx: CommandContext, outDir: string): Promise<Comman
 
   say('');
   say('preserve plan — self-sourced from the camera');
-  say('  image source       read from the camera’s active slot, two agreeing reads');
-  say('  build              detected from the derived image after the backup step; the');
-  say('                     full plan (patch sites, commit route, restore, drain) prints');
-  say('                     then, before anything write-shaped runs');
+  say('  image source       read from each bank of the camera, two agreeing reads per bank');
+  say(`  banks to write     ${bankChoiceWords(choice)} (--bank ${choice}); the backup reads every`);
+  say('                     bank first, and the plan then says which bank the next start');
+  say('                     enters and why, before anything is written');
+  say('  build              detected from the derived images after the backup step; the');
+  say('                     full plan (banks, patch sites, restore, drain) prints then');
   say('  steps              backup -> patch -> commit -> drain -> restore -> verify');
   say('  run directory      each step checkpoints there; the backup (and the standard dump');
   say('                     archive built from it) is on disk BEFORE anything is written');
-  say('  RISK               commit and restore write a BOOT slot. On hardware an');
-  say('                     interrupted write there has no bootable fallback (an SPI');
-  say('                     programmer is the only way back).');
+  say('  RISK               commit and restore write BOOT banks. On hardware an interrupted');
+  say('                     write there can need an SPI programmer to undo.');
   say(`  interrupted?       seek-fw preserve --resume ${outDir}`);
   if (ctx.options.backupOnly) {
     say('  stop after         the backup: read-only, nothing is written to the camera');
@@ -303,8 +330,7 @@ async function freshCommand(ctx: CommandContext, outDir: string): Promise<Comman
       ctx.options.backupOnly
         ? 'Back this camera up (read-only)? Nothing is written to the camera. [y/N] '
         : 'Back this camera up (read-only), derive the patch from its own flash, and show the ' +
-            'plan before anything is written? The commit afterwards WILL write the active boot ' +
-            'slot. [y/N] ',
+            'plan before anything is written? The commit afterwards WILL write boot banks. [y/N] ',
     );
     if (!confirmed) {
       throw new CliError('aborted at the confirmation prompt — nothing was written', {
@@ -334,52 +360,120 @@ async function freshCommand(ctx: CommandContext, outDir: string): Promise<Comman
   return finishRun(ctx, outDir, finalState);
 }
 
+/** The boot lines and the banks table of a plan or a printed state: the word,
+ *  the bank the camera entered, the next start and why, and each bank. */
+function bootAndBankLines(state: PreserveRunState): string[] {
+  const boot = state.boot;
+  const banks = state.banks;
+  if (boot === undefined || banks === undefined) return [];
+  const lines = [
+    `  boot-config word   ${hexUp(boot.word)} — ${boot.rule}`,
+    `  last start         ${
+      boot.entered === null
+        ? `not known — ${
+            boot.activeSlotWord === null
+              ? 'the active-slot word could not be read'
+              : `the active-slot word is ${String(boot.activeSlotWord)}, which names no bank`
+          }`
+        : `${bankWordsOf(boot.entered)}, as the camera records it (active-slot word ` +
+          `${String(boot.activeSlotWord)})`
+    }`,
+    `  next start         ${
+      boot.nextStart === null ? 'not known' : bankWordsOf(boot.nextStart)
+    } — ${boot.why}`,
+    '  banks',
+  ];
+  for (const key of BANK_KEYS) {
+    const bank = banks[key];
+    const what =
+      bank.refused === null
+        ? `${bank.buildLabel ?? 'an image'} — can be written` +
+          (bank.patch === undefined
+            ? ''
+            : `; the patch moves ${String(bank.patch.diffCount)} bytes`) +
+          (bank.imageDerivation === undefined ? '' : `; carries ${bank.imageDerivation.label}`)
+        : `not written — ${bank.refused}`;
+    lines.push(`    ${key.toUpperCase()}  ${hexUp(bank.address, 8)}  ${what}`);
+  }
+  return lines;
+}
+
+/** The choices and the banks the run writes, with the choice's warnings. */
+function choiceLines(state: PreserveRunState, runDir: string): string[] {
+  const lines = ['  choices (--bank)'];
+  for (const verdict of preserveChoicesOf(state)) {
+    lines.push(
+      `    ${verdict.choice.padEnd(10)} ${
+        verdict.banks === null ? `not offered — ${verdict.what}` : verdict.what
+      }`,
+    );
+  }
+  const chosen = preserveChoiceOf(state, state.choice);
+  lines.push(
+    state.targets === undefined
+      ? `  banks to write     none — ${chosen.what}`
+      : `  banks to write     ${bankList(state.targets)} (--bank ${state.choice})`,
+  );
+  lines.push(
+    `                     another choice: seek-fw preserve --resume ${runDir} --bank <choice>`,
+  );
+  for (const warning of state.targets === undefined ? [] : chosen.warnings) {
+    lines.push(`  ! ${warning}`);
+  }
+  return lines;
+}
+
 /** The detailed plan, printed from the state the backup and patch steps
  *  recorded — the first moment the build's facts exist. An interactive run
- *  confirms here, at the last gate before the first write; --yes just prints. */
+ *  confirms here, at the last gate before the first write; --yes just prints.
+ *  A choice the run cannot resolve stops here, before anything is written. */
 async function confirmDerivedPlan(
   ctx: CommandContext,
   outDir: string,
   state: PreserveRunState,
 ): Promise<void> {
-  const patch = state.patch;
   const say = (text: string): void => {
     ctx.reporter.write(text);
   };
+  const targets = state.targets;
+  const first = targets?.[0];
+  const patch = first === undefined ? undefined : state.banks?.[first].patch;
 
   say('');
   say(`preserve plan — derived from the camera (run ${state.runId})`);
-  say('  image source       read from the camera’s active slot, two agreeing reads');
-  if (state.slotReadShas !== undefined)
-    say(`                     (sha256 ${state.slotReadShas[0]})`);
   say(
     `  build              ${state.buildLabel ?? state.buildId ?? state.buildFamily ?? '?'} ` +
       `(${state.buildId ?? '?'}, family ${state.buildFamily ?? '?'})`,
   );
-  say(
-    `  image version      ${state.expectedVersion ?? '?'} (${String(patch?.stagedLength ?? 0)} B)`,
-  );
-  const edit = state.imageDerivation;
-  if (edit !== undefined) {
-    say(`  image edit         ${edit.label} (${edit.id})`);
-    say(
-      `                     on the factory image; its balance ${hexUp(edit.balanceWord)} is in the`,
-    );
-    say('                     adjust word, the patch balances on top of it, and the restore');
-    say('                     puts the image back with the edit');
-  }
-  say(`  patch sites        ${String(patch?.sites.length ?? 0)} instruction edit(s)`);
-  for (const site of patch?.sites ?? []) {
-    say(`    ${hexUp(site.offset)}  ${site.name}`);
+  say(`  image version      ${state.expectedVersion ?? '?'}`);
+  for (const line of bootAndBankLines(state)) say(line);
+  for (const line of choiceLines(state, outDir)) say(line);
+  for (const key of targets ?? []) {
+    const bank = state.banks?.[key];
+    const edit = bank?.imageDerivation;
+    if (edit !== undefined) {
+      say(`  image edit         ${bankWordsOf(key)}: ${edit.label} (${edit.id})`);
+      say(
+        `                     on the factory image; its balance ${hexUp(edit.balanceWord)} is in the`,
+      );
+      say('                     adjust word, the patch balances on top of it, and the restore');
+      say('                     puts the image back with the edit');
+    }
   }
   if (patch !== undefined) {
+    say(`  patch sites        ${String(patch.sites.length)} instruction edit(s)`);
+    for (const site of patch.sites) say(`    ${hexUp(site.offset)}  ${site.name}`);
+  }
+  for (const key of targets ?? []) {
+    const bank = state.banks?.[key];
+    if (bank?.patch === undefined) continue;
+    const edit = bank.imageDerivation;
     say(
-      `  rebalance word     ${hexUp(patch.rebalanceWord)} at 0x00000238` +
+      `  rebalance word     ${bankWordsOf(key)}: ${hexUp(bank.patch.rebalanceWord)} at 0x00000238` +
         (edit === undefined ? '' : ` (was ${hexUp(edit.balanceWord)}, the edit's balance)`),
     );
     say(
-      `  bytes that move    ${String(patch.diffCount ?? 0)} on the part, all inside the ` +
-        (state.route === 'recovery-only' ? 'recovery bank' : 'active bank'),
+      `  bytes that move    ${bankWordsOf(key)}: ${String(bank.patch.diffCount)}, all inside that bank`,
     );
   }
   if (state.stagedForm !== undefined)
@@ -391,24 +485,30 @@ async function confirmDerivedPlan(
     say(`  restore            ${describeRestoreForm(state.restoreForm)}`);
   if (state.capability !== undefined)
     say(`  drain              ${describeCapability(state.capability)}`);
-  say(
-    `  next write         the commit step, into the ${
-      state.route === 'recovery-only' ? 'RECOVERY' : 'ACTIVE'
-    } bank`,
-  );
+  if (targets !== undefined) say(`  next write         the commit step, into ${bankList(targets)}`);
   say(`  run directory      ${outDir}`);
   say('');
 
+  if (targets === undefined) {
+    throw new CliError(
+      `no banks to write: ${preserveChoiceOf(state, state.choice).what} — nothing was written; ` +
+        `the backup and the derived plan are checkpointed in ${outDir}`,
+      {
+        code: 'flash/refused',
+        hint: `Choose the banks: seek-fw preserve --resume ${outDir} --bank <a|b|r|all>`,
+      },
+    );
+  }
   if (ctx.options.yes) return;
   const confirmed = await ctx.io.confirm(
-    `Proceed to the commit — the first write, into the ` +
-      `${state.route === 'recovery-only' ? 'RECOVERY' : 'ACTIVE'} boot bank of this camera ` +
+    `Proceed to the commit — the first write, into ${bankList(targets)} of this camera ` +
       `(${state.expectedVersion ?? '?'})? [y/N] `,
   );
   if (!confirmed) {
     throw new CliError(
       'aborted at the plan prompt — nothing was written; the backup and the derived plan are ' +
-        `checkpointed in ${outDir} (resume with --resume ${outDir}, or delete the directory)`,
+        `checkpointed in ${outDir} (resume with --resume ${outDir}, choose other banks with ` +
+        '--bank, or delete the directory)',
       { code: 'flash/refused' },
     );
   }
@@ -426,8 +526,8 @@ async function resumeCommand(ctx: CommandContext, runDir: string): Promise<Comma
       {
         code: 'flash/refused',
         hint:
-          'Resuming can WRITE the active boot slot (the commit and restore steps). Pass --yes ' +
-          'to confirm non-interactively.',
+          'Resuming can WRITE boot banks (the commit and restore steps). Pass --yes to ' +
+          'confirm non-interactively.',
       },
     );
   }
@@ -447,28 +547,55 @@ async function resumeCommand(ctx: CommandContext, runDir: string): Promise<Comma
   }
 
   /* No image is passed and none is needed: the run directory carries the
-   * derived factory plaintext (the backup step wrote it there), and the steps
-   * refuse with the remedy when a checkpoint file is missing. */
-  const state = await loadRunState(runDir);
+   * derived factory plaintexts (the backup step wrote them there), and the
+   * steps refuse with the remedy when a checkpoint file is missing. */
+  let state = await loadRunState(runDir);
 
-  if (state.nextStep === 'done') {
+  /* A NEW CHOICE OF BANKS, before the commit has run: core refuses it once
+   * the commit has run or been tried (a finished run included), and refuses a
+   * bank the run cannot write, each with the reason. Saved before anything
+   * else runs. */
+  if (ctx.options.bank !== null && state.steps.backup?.status === 'done') {
+    try {
+      state = choosePreserveBanks(state, ctx.options.bank);
+    } catch (error) {
+      if (error instanceof SeekError) {
+        throw new CliError(`--bank ${ctx.options.bank}: ${error.message}`, {
+          code: 'flash/refused',
+        });
+      }
+      throw error;
+    }
+    await saveRunState(runDir, state);
+    ctx.reporter.log(
+      `banks to write: ${bankList(state.targets ?? [])} (--bank ${state.choice})`,
+      'info',
+    );
+  } else if (ctx.options.bank !== null) {
+    /* No backup yet: the choice is recorded and resolved when the backup reads the banks. */
+    state = { ...state, choice: ctx.options.bank };
+    await saveRunState(runDir, state);
+  }
+
+  const nextStep = state.nextStep;
+  if (nextStep === 'done') {
     ctx.reporter.log(`run ${state.runId} is already done — nothing to resume`, 'warn');
     return finishRun(ctx, runDir, state);
   }
-  let start: PreserveStepId = state.nextStep;
-  if (fromStep !== null) start = fromStep;
+
+  const start: PreserveStepId = fromStep ?? nextStep;
 
   /* THE LOUD WARN. A forward jump skips steps this run never completed; past
    * the commit it asserts the camera is in the patched state, which is the
    * one assertion this tool will not make quietly. */
-  if (start !== state.nextStep) {
+  if (start !== nextStep) {
     const skipped = PRESERVE_STEP_IDS.slice(
-      PRESERVE_STEP_IDS.indexOf(state.nextStep),
+      PRESERVE_STEP_IDS.indexOf(nextStep),
       PRESERVE_STEP_IDS.indexOf(start),
     );
     if (skipped.length > 0) {
       ctx.reporter.log(
-        `WARNING: jumping from ${state.nextStep} to ${start}, skipping: ` + skipped.join(', '),
+        `WARNING: jumping from ${nextStep} to ${start}, skipping: ` + skipped.join(', '),
         'warn',
       );
     }
@@ -494,6 +621,10 @@ async function resumeCommand(ctx: CommandContext, runDir: string): Promise<Comma
       (ctx.options.fromStep === null ? '' : ' (--from-step)'),
     'detail',
   );
+  /* A resume that reaches the commit prints the plan first, and asks on a
+   * terminal: the same last gate a fresh run passes before its first write. */
+  const planBeforeCommit =
+    start === 'commit' || (start === 'patch' && state.steps.commit === undefined);
   const finalState = await runSteps(
     ctx,
     runDir,
@@ -509,6 +640,10 @@ async function resumeCommand(ctx: CommandContext, runDir: string): Promise<Comma
     {
       allowJump: fromStep !== null,
       ...(ctx.options.backupOnly ? { stopAfter: 'backup' as const } : {}),
+      ...(planBeforeCommit || state.steps.backup?.status !== 'done'
+        ? { onPlanReady: (s: PreserveRunState) => confirmDerivedPlan(ctx, runDir, s) }
+        : {}),
+      planReadyNow: start === 'commit',
     },
   );
   return finishRun(ctx, runDir, finalState);
@@ -535,10 +670,11 @@ async function runSteps(
     readonly allowJump?: boolean;
     /** `--backup-only`: the run stops before any step after this one. Nothing after it is started. */
     readonly stopAfter?: PreserveStepId;
-    /** Called once, after the step that first records the patch summary —
-     *  the first moment the derived plan exists (and still before anything
-     *  write-shaped runs). */
+    /** Called once, before the commit: after the patch step that records the
+     *  patches (the first moment the derived plan exists), or at once when
+     *  `planReadyNow` says the run already stands there. */
     readonly onPlanReady?: (state: PreserveRunState) => Promise<void>;
+    readonly planReadyNow?: boolean;
   } = {},
 ): Promise<PreserveRunState> {
   /* A fresh session per step boundary. After a wire-89 the camera
@@ -573,12 +709,16 @@ async function runSteps(
     },
   };
 
-  /* Every checkpoint — the derived factory plaintext included — is a run
+  /* Every checkpoint — the derived factory plaintexts included — is a run
    * directory file; core sha-checks each against the backup step's record. */
   const loadArtifact: PreserveArtifactLoader = (name) => readImageOrNull(`${runDir}/${name}`);
 
   let state = initialState;
   let planned = false;
+  if (options.planReadyNow === true && options.onPlanReady !== undefined) {
+    planned = true;
+    await options.onPlanReady(state);
+  }
   while (state.nextStep !== 'done') {
     const step: PreserveStepId = state.nextStep;
     if (
@@ -633,6 +773,15 @@ async function runSteps(
           'the previous checkpoint stands. Fix the cause and resume.',
         'error',
       );
+      /* THE START THAT ENTERED AN UNPATCHED BANK: another drain would read the
+       * same bank, so the way on is the restore. */
+      if (step === 'drain' && error instanceof SeekError && error.detail?.entered !== undefined) {
+        ctx.reporter.log(
+          'the restore puts every written bank back without the dump: ' +
+            `seek-fw preserve --resume ${runDir} --from-step restore`,
+          'warn',
+        );
+      }
       throw error;
     }
     /* Artifacts first, state second: a crash in between leaves the state
@@ -643,7 +792,7 @@ async function runSteps(
     }
     state = outcome.state;
     await saveRunState(runDir, state);
-    if (!planned && state.patch !== undefined) {
+    if (!planned && step === 'patch') {
       planned = true;
       if (options.onPlanReady !== undefined) await options.onPlanReady(state);
     }
@@ -689,6 +838,17 @@ async function finishRun(
   return runResult(ctx, runDir, state, { backupOnly: ctx.options.backupOnly, zip });
 }
 
+/** The choices a run offers, as the JSON carries them: the code names and the words. */
+function choicesJsonOf(state: PreserveRunState): unknown {
+  if (state.banks === undefined) return null;
+  return preserveChoicesOf(state).map((verdict) => ({
+    choice: verdict.choice,
+    banks: verdict.banks,
+    what: verdict.what,
+    warnings: verdict.warnings,
+  }));
+}
+
 function runResult(
   ctx: CommandContext,
   runDir: string,
@@ -703,6 +863,9 @@ function runResult(
       ctx.out(`${id} ${mark}: ${record?.notes ?? record?.error ?? ''}`);
     }
     ctx.out(`run ${state.runId}: next step ${state.nextStep}`);
+    if (state.targets !== undefined) {
+      ctx.out(`banks written: ${bankList(state.targets)} (--bank ${state.choice})`);
+    }
     ctx.out(`run directory: ${runDir}`);
     if (extra.backupOnly) {
       ctx.out(
@@ -712,32 +875,26 @@ function runResult(
     if (extra.zip !== null) ctx.out(`wrote ${extra.zip.zip ?? ''} (${String(extra.zip.bytes)} B)`);
   }
   return {
-    image: {
-      source: state.imageSource ?? 'user-file',
-      version: state.expectedVersion ?? null,
-      sha256: state.imageSha256 ?? null,
-    },
     run: {
       id: state.runId,
       directory: runDir,
       nextStep: state.nextStep,
       createdAt: state.createdAt,
     },
-    detection:
-      state.detection === undefined
+    version: state.expectedVersion ?? null,
+    build:
+      state.buildId === undefined
         ? null
-        : {
-            cfg0: state.detection.cfg0,
-            blank: state.detection.blank,
-            bankAddress: state.detection.bankAddress,
-            verdict: state.detection.verdict,
-          },
-    patch: state.patch ?? null,
+        : { id: state.buildId, family: state.buildFamily ?? null, label: state.buildLabel ?? null },
+    boot: state.boot ?? null,
+    choice: state.choice,
+    targets: state.targets ?? null,
+    choices: choicesJsonOf(state),
+    banks: state.banks ?? null,
+    drainEntered: state.drainEntered ?? null,
     steps: Object.fromEntries(stepIds.map((id) => [id, state.steps[id]])),
     verify: state.verify ?? null,
     sha256: {
-      image: state.imageSha256 ?? null,
-      slotReads: state.slotReadShas === undefined ? null : [...state.slotReadShas],
       rawDump: state.rawDumpSha256 ?? null,
       deliveredDump: state.deliveredSha256 ?? null,
     },
@@ -766,16 +923,6 @@ async function printStateCommand(ctx: CommandContext, runDir: string): Promise<C
     say(`  directory          ${runDir}`);
     say(`  created            ${state.createdAt}`);
     say(`  schema version     ${String(state.version)}`);
-    say(
-      state.imageSource === 'device'
-        ? '  image source       the camera’s active slot (two agreeing reads)'
-        : '  image source       a file the run was started with (version-1 schema)',
-    );
-    if (state.imageSha256 !== undefined) say(`  image sha256       ${state.imageSha256}`);
-    if (state.slotReadShas !== undefined) {
-      say(`  slot reads         ${state.slotReadShas[0]}`);
-      say(`                     ${state.slotReadShas[1]}`);
-    }
     say(`  expected version   ${state.expectedVersion ?? '(not derived yet)'}`);
     say(
       `  build              ${state.buildId ?? state.buildFamily ?? '(not derived yet)'}${
@@ -784,14 +931,39 @@ async function printStateCommand(ctx: CommandContext, runDir: string): Promise<C
         state.buildFamily === undefined ? '' : ')'
       }`,
     );
-    if (state.imageDerivation !== undefined) {
-      say(
-        `  image edit         ${state.imageDerivation.label} (${state.imageDerivation.id}), ` +
-          `balance ${hexUp(state.imageDerivation.balanceWord)}`,
-      );
+    for (const line of bootAndBankLines(state)) say(line);
+    if (state.banks !== undefined) {
+      for (const line of choiceLines(state, runDir)) say(line);
+      for (const key of BANK_KEYS) {
+        const bank = state.banks[key];
+        if (bank.slotReadShas !== undefined) {
+          say(`  ${bankWordsOf(key)} reads   ${bank.slotReadShas[0]}`);
+          say(`                     ${bank.slotReadShas[1]}`);
+        }
+        if (bank.imageSha256 !== undefined) {
+          say(`  ${bankWordsOf(key)} image   ${bank.imageSha256}`);
+        }
+        if (bank.imageDerivation !== undefined) {
+          say(
+            `  image edit         ${bankWordsOf(key)}: ${bank.imageDerivation.label} ` +
+              `(${bank.imageDerivation.id}), balance ${hexUp(bank.imageDerivation.balanceWord)}`,
+          );
+        }
+      }
+    } else {
+      say(`  banks to write     ${bankChoiceWords(state.choice)} (--bank ${state.choice})`);
     }
     if (state.capability !== undefined) {
       say(`  drain              ${describeCapability(state.capability)}`);
+    }
+    if (state.drainEntered !== undefined) {
+      say(
+        `  drain start        ${
+          state.drainEntered === null
+            ? 'the bank the start entered was not read'
+            : `entered ${bankWordsOf(state.drainEntered)}`
+        }`,
+      );
     }
     say(`  next step          ${state.nextStep}`);
     for (const id of PRESERVE_STEP_IDS) {
@@ -825,6 +997,7 @@ async function printStateCommand(ctx: CommandContext, runDir: string): Promise<C
       createdAt: state.createdAt,
     },
     state,
+    choices: choicesJsonOf(state),
     inventory,
   };
 }

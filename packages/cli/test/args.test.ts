@@ -49,6 +49,7 @@ describe('parseCli', () => {
       fromStep: null,
       printState: null,
       backupOnly: false,
+      bank: null,
     });
   });
 
@@ -119,6 +120,10 @@ describe('parseCli', () => {
       fromStep: 'drain',
     });
     expect(runOptions(['preserve', '--print-state', 'run']).options.printState).toBe('run');
+    for (const bank of ['next-start', 'a', 'b', 'r', 'all'] as const) {
+      expect(runOptions(['preserve', '--bank', bank]).options.bank).toBe(bank);
+    }
+    expect(runOptions(['preserve']).options.bank).toBeNull();
   });
 
   it('reads the info listings', () => {

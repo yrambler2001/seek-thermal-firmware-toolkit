@@ -86,50 +86,71 @@ ${EVERY_COMMAND}
   preserve: `seek-fw preserve — the Dump & decrypt tab for 0.x/1.x 2014/2016
 
 Usage
-  seek-fw preserve [--out <dir>] [--zip <file>] [--backup-only] [--yes] [options]
-  seek-fw preserve --resume <dir> [--from-step <id>] [--yes]
+  seek-fw preserve [--out <dir>] [--zip <file>] [--bank <choice>] [--backup-only] [--yes] [options]
+  seek-fw preserve --resume <dir> [--bank <choice>] [--from-step <id>] [--yes]
   seek-fw preserve --print-state <dir>
 
 The pipeline runs as SIX RESUMABLE STEPS, checkpointed after every one, for a
 v1 locked-line camera (Compact 1.0.0.0 / 1.2.0.0 / 1.3.0.0 and the other
 builds the patch table covers):
 
-  backup   read the 31 windows a stock camera can serve (read-only), name the
-           ACTIVE boot slot, read its image TWICE (two independent captures
-           that must agree byte for byte — a disagreement refuses the run),
-           derive the factory plaintext from that capture, gate it, and write
-           the backup AND the standard dump archive (decrypted slots, reports,
-           manifest) built from it. The user's pre-flash dump of every
-           reachable region — on disk before anything write-shaped can run.
-  patch    offline, no device: derive the in-place patch (the reader-window
-           widening and cursor fix, conjugated later into the slot's
-           ciphertext so exactly the enumerated bytes change).
-  commit   read the bank back (a commit that already landed is never
-           replayed), stage image-length-only, and commit — on a session
-           that never resets.
+  backup   read the 31 windows a stock camera can serve (read-only), then read
+           EVERY bank TWICE (two independent captures that must agree byte for
+           byte), derive each bank's factory plaintext and gate it, and say
+           which bank the next start enters and why: the boot-config word's
+           order, the bank the camera reports it entered, and each bank's
+           check. The backup AND the standard dump archive (decrypted slots,
+           reports, manifest) are on disk before anything write-shaped can run.
+  patch    offline, no device: derive the in-place patch for each bank the run
+           can write (the reader-window widening and cursor fix, conjugated
+           later into the bank's ciphertext so exactly the enumerated bytes
+           change).
+  commit   read every chosen bank back (a commit that already landed is never
+           replayed), stage image-length-only, and commit each — the bank the
+           bootloader tries first last — on a session that never resets.
   drain    the reset that boots the patched image (with its retry ladder for
-           the ~10 s of silence a reboot costs), then the whole 4 MiB through
-           the widened window, drained FIRST on its own single arm.
-  restore  stage the original bank content back, verbatim, and reset.
-  verify   a fresh boot re-reads the 31 windows: 0 differing bytes proves the
-           camera's flash came back byte-identical.
+           the ~10 s of silence a reboot costs); the bank the start entered,
+           from the camera's own record — a bank the run did not patch stops
+           the step before anything is read; then the whole 4 MiB through the
+           widened window, drained FIRST on its own single arm.
+  restore  stage every written bank's original content back, and reset.
+  verify   a fresh boot re-reads the 31 windows, every bank among them: 0
+           differing bytes proves the camera's flash came back byte-identical.
+
+WHICH BANKS (--bank). The patch only runs if the start after the drain's reset
+enters a patched bank, and the bootloader picks that bank: the boot-config word
+sets the order (0 or 0xFFFFFFFF: A, B, R; 1: B, A, R; any other word: R, A, B),
+the first two are checked and the last is entered unchecked. A watchdog reset
+early in a start makes the bootloader mark the bank it entered and set the word
+to 2, so recovery R runs. The plan prints the next start and why before the
+first write. The choices:
+  next-start   the bank the next start enters (the default); when that is not
+               known, every bank that holds an image
+  a, b, r      one bank by name
+  all          every bank that holds an image, so whichever the start enters
+               runs the patch; the restore puts all of them back
+A choice that leaves out the bank the next start enters is warned about and
+runs; a bank the run cannot write (erased, another build, the two reads
+disagree, stored under another key) is refused with the reason.
 
 THE IMAGE IS THE CAMERA'S OWN — there is no image argument anywhere. The
-backup step derives the factory plaintext from the camera's active slot
-(two agreeing reads; identity on the 2014 plain chain, the build family's
-keystream solver on a cipher family), checks the derived image's header
-version against what the camera reports, and refuses an already-patched bank
-at the before-byte gates. The derived image is a run artifact, so --resume
-needs no file but the run directory.
+backup step derives each bank's factory plaintext from the bank itself (two
+agreeing reads; identity on the 2014 plain chain, the build family's keystream
+solver on a cipher family), checks the derived image's header version against
+what the camera reports, and refuses an already-patched bank at the
+before-byte gates. The derived images are run artifacts, so --resume needs no
+file but the run directory.
 
-THE RISK, PLAINLY: commit and restore write the ACTIVE boot slot. On real
-hardware an interrupted write there has no bootable fallback — a power loss
-mid-commit needs an SPI programmer. The backup checkpoint (written before the
-first write) and the restore are the mitigation, not a guarantee. Run on mains
-power, keep the run directory.
+THE RISK, PLAINLY: commit and restore write BOOT banks. On real hardware a
+bank whose write is interrupted fails the bootloader's check; a power loss
+mid-commit can need an SPI programmer. The backup checkpoint (written before
+the first write) and the restore are the mitigation, not a guarantee. Run on
+mains power, keep the run directory.
 
-  --backup-only          run the read-only backup step and stop. Nothing is written to the
-                         camera. The run directory holds the backup; --zip saves it as one file
+  --bank <choice>        next-start (default), a, b, r or all — which banks the commit writes. With
+                         --resume, chooses again before the commit has run
+  --backup-only          run the read-only backup step and stop. Nothing is written to the camera. The
+                         run directory holds the backup; --zip saves it as one file
   --zip <file>           write the run as one zip: preserve_run.json and every checkpoint file
                          the run has produced, the way the web app saves its run file
   --out <dir>            the run directory (default ./preserve-run)
@@ -151,9 +172,10 @@ checkpoint standing, and exits 130. Re-run the same --resume command to
 continue; the interrupted step starts over.
 
 Artifacts in the run directory: preserve_run.json (the state, rewritten after
-every step), preserve_backup_windows.bin, preserve_bank_capture.bin,
-preserve_image_plain.bin (the factory plaintext derived from the capture),
-preserve_patch_plain_patched.bin, preserve_dump_postwrite.bin (the patched
+every step), preserve_backup_windows.bin, and per bank the run can write
+preserve_bank_<a|b|r>_capture.bin (its two agreeing reads),
+preserve_bank_<a|b|r>_plain.bin (the factory plaintext derived from it) and
+preserve_bank_<a|b|r>_patched.bin; preserve_dump_postwrite.bin (the patched
 part), preserve_dump_original.bin (the delivered, original-content image),
 manifest.json and README.md (the backup's dump archive) plus the decrypted
 slots under decrypted/.

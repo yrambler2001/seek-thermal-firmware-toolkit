@@ -21,6 +21,7 @@ import { dirname, join } from 'node:path';
 import {
   PRESERVE_RUN_STATE_FILE,
   PRESERVE_STEP_IDS,
+  isPreserveBankChoice,
   isPreserveStepId,
   sha256hex,
   type PreserveRunState,
@@ -73,15 +74,21 @@ export function parseRunState(text: string, file: string): PreserveRunState {
   }
   /* Inspected as unknown on purpose: the cast below is only honest after the
    * checks, and a document that fails them is refused, not trimmed to fit.
-   * Both schemas load: version 2 (the run derives its image from the camera)
-   * and version 1 (the older self-sourcing shape, where the caller handed
-   * over a plaintext file — its artifact set is identical, so every step
-   * works as long as the directory carries the derived plaintext artifact). */
+   * One schema loads: version 3 (the run reads every bank and writes the banks
+   * it chose). An older run directory is refused, with the remedy. */
   const loose = doc as Record<string, unknown>;
+  if (typeof doc === 'object' && doc !== null && (loose.version === 1 || loose.version === 2)) {
+    throw new CliError(
+      `${file} is a run state of schema version ${String(loose.version)}, written before the ` +
+        'run chose its banks (version 3) — this tool reads version 3 only. Its backup files ' +
+        'are still a backup of that camera; start a new run to continue.',
+      { code: 'preserve/state' },
+    );
+  }
   if (
     typeof doc !== 'object' ||
     doc === null ||
-    (loose.version !== 1 && loose.version !== 2) ||
+    loose.version !== 3 ||
     typeof loose.runId !== 'string' ||
     typeof loose.createdAt !== 'string' ||
     !(
@@ -89,26 +96,40 @@ export function parseRunState(text: string, file: string): PreserveRunState {
       (loose.nextStep === 'done' || isPreserveStepId(loose.nextStep))
     ) ||
     typeof loose.steps !== 'object' ||
-    loose.steps === null
+    loose.steps === null ||
+    typeof loose.choice !== 'string' ||
+    !isPreserveBankChoice(loose.choice)
   ) {
     throw new CliError(
-      `${file} is not a preserve run state this tool wrote (want schema version 1 or 2) — ` +
+      `${file} is not a preserve run state this tool wrote (want schema version 3) — ` +
         'this tool refuses to guess what a document it did not write means. Start a new ' +
         'run, or restore the file from a copy.',
       { code: 'preserve/state' },
     );
   }
-  /* The build facts a version-2 run records at the backup; a version-1 run
-   * recorded them at create time. Either way they are strings once present. */
-  for (const field of ['imageSha256', 'expectedVersion'] as const) {
-    const value = loose[field];
-    if (value !== undefined && typeof value !== 'string') {
-      throw new CliError(
-        `${file}: ${field} is present but not a string — the run state is damaged; restore ` +
-          'it from a copy or start a new run',
-        { code: 'preserve/state' },
-      );
-    }
+  /* The build facts the backup records are strings once present, and the
+   * banks it chose are a list of bank letters. */
+  const expectedVersion = loose.expectedVersion;
+  if (expectedVersion !== undefined && typeof expectedVersion !== 'string') {
+    throw new CliError(
+      `${file}: expectedVersion is present but not a string — the run state is damaged; ` +
+        'restore it from a copy or start a new run',
+      { code: 'preserve/state' },
+    );
+  }
+  const targets = loose.targets;
+  if (
+    targets !== undefined &&
+    !(
+      Array.isArray(targets) &&
+      targets.every((key: unknown) => key === 'a' || key === 'b' || key === 'r')
+    )
+  ) {
+    throw new CliError(
+      `${file}: targets is present but not a list of banks (a, b, r) — the run state is ` +
+        'damaged; restore it from a copy or start a new run',
+      { code: 'preserve/state' },
+    );
   }
   return doc as PreserveRunState;
 }

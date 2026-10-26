@@ -22,7 +22,10 @@
 
 import { parseArgs } from 'node:util';
 import {
+  PRESERVE_BANK_CHOICES,
   getProfile,
+  isPreserveBankChoice,
+  type PreserveBankChoice,
   type ProfileId,
   type RecipientPreference,
   type UsbBackend,
@@ -97,6 +100,8 @@ export interface GlobalOptions {
   readonly printState: string | null;
   /** `--backup-only`: run the read-only first step and stop. Nothing is written to the camera. */
   readonly backupOnly: boolean;
+  /** `--bank <choice>`: which banks the run writes (default: the bank the next start enters). */
+  readonly bank: PreserveBankChoice | null;
 }
 
 /**
@@ -167,6 +172,7 @@ const FLAG_COMMANDS: Readonly<Record<string, readonly CommandName[]>> = {
   'from-step': ['preserve'],
   'print-state': ['preserve'],
   'backup-only': ['preserve'],
+  bank: ['preserve'],
   raw: ['slots'],
   'acknowledge-risk': ['slots'],
   verify: ['slots'],
@@ -198,6 +204,15 @@ function bounded(name: string, value: number, min: number, max: number): number 
     );
   }
   return value;
+}
+
+function validBankChoice(text: string): PreserveBankChoice {
+  if (isPreserveBankChoice(text)) return text;
+  throw new UsageError(
+    `--bank takes ${PRESERVE_BANK_CHOICES.join(', ')}, got '${text}'`,
+    'next-start is the bank the next start enters (the default); a, b and r name one bank; all ' +
+      'is every bank that holds an image.',
+  );
 }
 
 function validProfileId(id: string): ProfileId {
@@ -266,6 +281,7 @@ export function parseCli(argv: readonly string[]): ParsedCli {
         'from-step': { type: 'string' },
         'print-state': { type: 'string' },
         'backup-only': { type: 'boolean', default: false },
+        bank: { type: 'string' },
         raw: { type: 'boolean', default: false },
         'acknowledge-risk': { type: 'boolean', default: false },
         verify: { type: 'boolean', default: true },
@@ -367,6 +383,7 @@ export function parseCli(argv: readonly string[]): ParsedCli {
     fromStep: values['from-step'] ?? null,
     printState: values['print-state'] ?? null,
     backupOnly: values['backup-only'],
+    bank: values.bank === undefined ? null : validBankChoice(values.bank),
   };
 
   if (options.quiet && options.verbose) {

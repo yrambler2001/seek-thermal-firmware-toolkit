@@ -10,11 +10,12 @@
  * `--print-state` that says which checkpoint files still match.
  *
  * THE RUN SELF-SOURCES: no test passes an image. The command takes no
- * positional at all — the backup step derives the factory plaintext from the
- * camera's active slot (two agreeing reads), writes it into the run directory
- * as `preserve_image_plain.bin`, and every later step loads it from there.
- * The migration shape a version-1 run directory left behind (its plaintext
- * lived outside the directory) is tested too.
+ * positional at all — the backup step derives each bank's factory plaintext
+ * from the bank itself (two agreeing reads), writes it into the run directory
+ * as `preserve_bank_<bank>_plain.bin`, and every later step loads it from
+ * there. Which banks the run writes is `--bank` (default: the bank the next
+ * start enters); the plan says which bank that is, and why, before the first
+ * write. An older run directory (schema 1 or 2) is refused with the remedy.
  */
 
 import { readdir, readFile, writeFile } from 'node:fs/promises';
@@ -23,13 +24,13 @@ import { OP } from '@seek-fw/core';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   FLASH_SIZE,
-  PRESERVE_BANK_CAPTURE_FILE,
   PRESERVE_BACKUP_FILE,
   PRESERVE_DUMP_ORIGINAL_FILE,
   PRESERVE_DUMP_POSTWRITE_FILE,
-  PRESERVE_PATCHED_FILE,
-  PRESERVE_PLAIN_NAME,
   PRESERVE_RUN_STATE_FILE,
+  preserveCaptureFile,
+  preservePatchedFile,
+  preservePlainFile,
   REBALANCE_WORD_OFFSET,
   V1_2014_PATCH_SITES,
   sha256hex,
@@ -38,7 +39,11 @@ import {
   type UsbBackend,
 } from '@seek-fw/core';
 import { FakeCamera, type FakeWindowSpec } from '../../core/test/fake-transport.js';
-import { boardPatched, cp1030Camera } from '../../core/test/preservation/fixtures-2016.js';
+import {
+  boardPatched,
+  cp1030Camera,
+  rootsReply,
+} from '../../core/test/preservation/fixtures-2016.js';
 import type { StallPoint } from '../../core/test/fake-transport.js';
 import { run } from '../src/cli.js';
 import { EXIT_CANCELLED, EXIT_FAILED, EXIT_OK, EXIT_USAGE } from '../src/errors.js';
@@ -110,6 +115,8 @@ function v1Camera(
     readonly flash?: Uint8Array;
     readonly stallDrain?: boolean;
     readonly stallAt?: readonly StallPoint[];
+    /** The bank the camera reports it entered (GetFirmwareInfo selector 10); undefined: no answer. */
+    readonly entered?: number;
   } = {},
 ): FakeCamera {
   const flash =
@@ -127,7 +134,10 @@ function v1Camera(
     flash,
     windows: v1WindowMap(),
     authBanks: [3, 4, 5, 6, 7, 8, 9],
-    fwInfo: new Map([[0, Uint8Array.from([1, 3, 0, 0, 0, 0, 0, 0])]]),
+    fwInfo: new Map([
+      [0, Uint8Array.from([1, 3, 0, 0, 0, 0, 0, 0])],
+      ...(options.entered === undefined ? [] : [[10, rootsReply(options.entered)] as const]),
+    ]),
     ...(stallAt === undefined ? {} : { stallAt }),
   });
 }
@@ -152,16 +162,17 @@ async function saveState(name: string, state: PreserveRunState): Promise<void> {
   );
 }
 
-/** The version-1 shape of a state document: the older schema, whose plaintext
- *  lived outside the run directory. */
-function asVersion1(state: PreserveRunState): PreserveRunState {
-  const v1: PreserveRunState & { imageSource?: unknown; slotReadShas?: unknown } = JSON.parse(
-    JSON.stringify(state),
-  );
-  v1.version = 1;
-  delete v1.imageSource;
-  delete v1.slotReadShas;
-  return v1;
+/** A 2014 part: the boot word, and what each bank holds (absent: erased). */
+function v1Flash(
+  word: number,
+  banks: { a?: Uint8Array; b?: Uint8Array; r?: Uint8Array },
+): Uint8Array {
+  const flash = new Uint8Array(FLASH_SIZE).fill(0xff);
+  new DataView(flash.buffer).setUint32(0x10000, word >>> 0, true);
+  if (banks.a !== undefined) flash.set(banks.a, 0x50000);
+  if (banks.b !== undefined) flash.set(banks.b, 0x60000);
+  if (banks.r !== undefined) flash.set(banks.r, 0x70000);
+  return flash;
 }
 
 /* ==================================================================== *
@@ -181,19 +192,18 @@ describe('preserve — a fresh run, checkpointed after every step', () => {
       expect(code).toBe(EXIT_OK);
 
       const state = await loadState();
-      expect(state.version).toBe(2);
-      expect(state.imageSource).toBe('device');
+      expect(state.version).toBe(3);
       expect(state.nextStep).toBe('done');
       expect(state.expectedVersion).toBe(EXPECTED_VERSION);
-      expect(state.imageSha256).toBe(await sha256hex(plain));
+      expect(state.banks?.a.imageSha256).toBe(await sha256hex(plain));
+      expect(state.choice).toBe('next-start');
+      expect(state.targets).toEqual(['a']);
       /* The double read: both shas recorded, and agreeing — the shas are of
        * the whole 64 KiB slot capture (the image plus its erased tail). */
       const bankWindow = new Uint8Array(0x10000).fill(0xff);
       bankWindow.set(plain, 0);
       const captureSha = await sha256hex(bankWindow);
-      expect(state.slotReadShas).toHaveLength(2);
-      expect(state.slotReadShas?.[0]).toBe(captureSha);
-      expect(state.slotReadShas?.[1]).toBe(captureSha);
+      expect(state.banks?.a.slotReadShas).toEqual([captureSha, captureSha]);
       for (const step of ['backup', 'patch', 'commit', 'drain', 'restore', 'verify'] as const) {
         expect(state.steps[step]?.status, `${step} done`).toBe('done');
       }
@@ -204,9 +214,9 @@ describe('preserve — a fresh run, checkpointed after every step', () => {
        * among them — and the shas are as recorded. */
       for (const name of [
         PRESERVE_BACKUP_FILE,
-        PRESERVE_BANK_CAPTURE_FILE,
-        PRESERVE_PLAIN_NAME,
-        PRESERVE_PATCHED_FILE,
+        preserveCaptureFile('a'),
+        preservePlainFile('a'),
+        preservePatchedFile('a'),
         PRESERVE_DUMP_POSTWRITE_FILE,
         PRESERVE_DUMP_ORIGINAL_FILE,
         'manifest.json',
@@ -222,7 +232,7 @@ describe('preserve — a fresh run, checkpointed after every step', () => {
         expect(await sha256hex(new Uint8Array(bytes)), name).toBe(recorded);
       }
       /* The derived plaintext artifact IS the camera's slot A content. */
-      const derived = await readFile(join(runDir(), PRESERVE_PLAIN_NAME));
+      const derived = await readFile(join(runDir(), preservePlainFile('a')));
       expect(await sha256hex(new Uint8Array(derived))).toBe(await sha256hex(plain));
       /* The dump archive's decrypted slots came along. */
       const decrypted = (await readdir(join(runDir(), 'decrypted'))).length;
@@ -234,29 +244,55 @@ describe('preserve — a fresh run, checkpointed after every step', () => {
       expect(await sha256hex(new Uint8Array(delivered))).toBe(await sha256hex(asBooted));
       expect(await sha256hex(camera.flash)).toBe(await sha256hex(asBooted));
 
-      /* The --json document names the run, its self-sourced image, and the
-       * double read's shas. */
+      /* The --json document names the run, the boot facts, the choice and the
+       * banks in code names, and the double read's shas per bank. */
       const document = JSON.parse(test.stdout.text) as {
-        image: { source: string; version: string; sha256: string };
+        version: string;
         run: { nextStep: string; id: string };
-        sha256: { slotReads: string[]; deliveredDump: string };
+        boot: { word: number; nextStart: string; why: string };
+        choice: string;
+        targets: string[];
+        choices: { choice: string; banks: string[] | null }[];
+        banks: Record<
+          string,
+          { slotReadShas?: string[]; imageSha256?: string; refused: string | null }
+        >;
+        sha256: { deliveredDump: string };
       };
       expect(document.run.nextStep).toBe('done');
-      expect(document.image).toEqual({
-        source: 'device',
-        version: EXPECTED_VERSION,
-        sha256: await sha256hex(plain),
-      });
-      expect(document.sha256.slotReads).toEqual([captureSha, captureSha]);
+      expect(document.version).toBe(EXPECTED_VERSION);
+      expect(document.boot.word).toBe(0xffffffff);
+      expect(document.boot.nextStart).toBe('a');
+      expect(document.choice).toBe('next-start');
+      expect(document.targets).toEqual(['a']);
+      expect(document.choices.map((c) => [c.choice, c.banks])).toEqual([
+        ['next-start', ['a']],
+        ['a', ['a']],
+        ['b', null],
+        ['r', null],
+        ['all', ['a']],
+      ]);
+      expect(document.banks.a?.slotReadShas).toEqual([captureSha, captureSha]);
+      expect(document.banks.a?.imageSha256).toBe(await sha256hex(plain));
+      expect(document.banks.b?.refused).toBe('it is erased');
       expect(document.sha256.deliveredDump).toBe(await sha256hex(asBooted));
 
       /* The plan prints twice — on the human stream (stderr under --json):
        * the generic one before the camera is touched, and the derived one
-       * after the patch step, before the first write. */
-      expect(test.stderr.text).toMatch(/read from the camera.s active slot, two agreeing reads/);
+       * after the patch step, before the first write: the next start and
+       * why, the banks, the choices, the banks to write. */
+      expect(test.stderr.text).toMatch(/read from each bank of the camera, two agreeing reads/);
       expect(test.stderr.text).toMatch(/derived from the camera/);
       expect(test.stderr.text).toMatch(/v1 2014 chain/);
-      expect(test.stderr.text).toMatch(/bytes that move\s+13 on the part/);
+      expect(test.stderr.text).toMatch(
+        /boot-config word\s+0xFFFFFFFF — slot A first, then B, then recovery R/,
+      );
+      expect(test.stderr.text).toMatch(
+        /next start\s+slot A — the boot-config word is 0xFFFFFFFF, so the bootloader tries slot A first, and it holds an image the bootloader accepts/,
+      );
+      expect(test.stderr.text).toMatch(/B {2}0x14060000 {2}not written — it is erased/);
+      expect(test.stderr.text).toMatch(/banks to write\s+slot A \(--bank next-start\)/);
+      expect(test.stderr.text).toMatch(/bytes that move\s+slot A: 13, all inside that bank/);
     },
   );
 
@@ -308,7 +344,7 @@ describe('preserve — a fresh run, checkpointed after every step', () => {
       const accepted = testIo({ backend: backendOf(camera), answer: true, stdinIsTty: true });
       expect(await run(['preserve', '--out', runDir()], accepted.io, signal())).toBe(EXIT_OK);
       expect(accepted.questions).toHaveLength(2);
-      expect(accepted.questions[1]).toMatch(/Proceed to the commit/);
+      expect(accepted.questions[1]).toMatch(/Proceed to the commit — the first write, into slot A/);
       expect((await loadState()).nextStep).toBe('done');
       const delivered = await readFile(join(runDir(), PRESERVE_DUMP_ORIGINAL_FILE));
       expect(await sha256hex(new Uint8Array(delivered))).toBe(await sha256hex(asBooted));
@@ -353,7 +389,7 @@ describe('preserve — a fresh run, checkpointed after every step', () => {
       expect(code).toBe(EXIT_CANCELLED);
       /* The initial checkpoint stands: a resume re-runs the whole run. */
       const state = await loadState();
-      expect(state.version).toBe(2);
+      expect(state.version).toBe(3);
       expect(state.nextStep).toBe('backup');
       expect(Object.keys(state.steps)).toEqual([]);
     },
@@ -392,10 +428,11 @@ describe('preserve — Compact PRO 1.0.3.0 with the board patch', () => {
       const state = await loadState();
       expect(state.nextStep).toBe('done');
       expect(state.buildId).toBe('compact-pro-1.0.3.0');
-      expect(state.imageDerivation?.id).toBe('compact-pro-1.0.3.0-accept-pn297');
+      expect(state.banks?.a.imageDerivation?.id).toBe('compact-pro-1.0.3.0-accept-pn297');
+      expect(state.targets).toEqual(['a']);
       expect(state.verify).toEqual({ diffBytes: 0, windowsRead: 31, badWindows: [] });
       /* The derived image is the slot's own, the board patch in it. */
-      const derived = await readFile(join(runDir(), PRESERVE_PLAIN_NAME));
+      const derived = await readFile(join(runDir(), preservePlainFile('a')));
       expect(await sha256hex(new Uint8Array(derived))).toBe(await sha256hex(boardPatched()));
       /* The part is the as-booted part again, and the delivered dump is it. */
       expect(await sha256hex(camera.flash)).toBe(await sha256hex(asBooted));
@@ -407,12 +444,15 @@ describe('preserve — Compact PRO 1.0.3.0 with the board patch', () => {
       /* The derived plan names the edit and the word it shares. */
       expect(test.stdout.text).toMatch(/Compact Pro 1\.0\.3\.0 \(9 Hz\)/);
       expect(test.stdout.text).toMatch(
-        /image edit\s+the Compact \(PN297\) board patch \(compact-pro-1\.0\.3\.0-accept-pn297\)/,
+        /image edit\s+slot A: the Compact \(PN297\) board patch \(compact-pro-1\.0\.3\.0-accept-pn297\)/,
       );
       expect(test.stdout.text).toMatch(/its balance 0x6322E32A is in the/);
       expect(test.stdout.text).toMatch(
-        /rebalance word\s+0x5423132A at 0x00000238 \(was 0x6322E32A, the edit's balance\)/,
+        /rebalance word\s+slot A: 0x5423132A at 0x00000238 \(was 0x6322E32A, the edit's balance\)/,
       );
+      /* The 2016 check key is named from slot A, so the next start is known. */
+      expect(test.stdout.text).toMatch(/last start\s+slot A, as the camera records it/);
+      expect(test.stdout.text).toMatch(/next start\s+slot A — /);
 
       /* --print-state names it too. */
       const printed = testIo({ backend: backendOf(camera) });
@@ -420,7 +460,7 @@ describe('preserve — Compact PRO 1.0.3.0 with the board patch', () => {
         EXIT_OK,
       );
       expect(printed.stderr.text + printed.stdout.text).toMatch(
-        /image edit\s+the Compact \(PN297\) board patch/,
+        /image edit\s+slot A: the Compact \(PN297\) board patch/,
       );
     },
   );
@@ -509,11 +549,19 @@ describe('preserve — the power-cycle retry gate on a failed backup', () => {
       /* The power cycle that revives the camera — the same part, reading now.
        * The retry (tty) is asked once, answers yes, and the whole run lands:
        * the gate exists to make the operator say the camera was cycled, not
-       * to keep a healthy run from finishing. */
+       * to keep a healthy run from finishing. The resume reaches the first
+       * write, so it prints the plan and asks there too, as a fresh run does. */
       const revived = v1Camera(plain, { flash: wedged.flash });
-      const recovered = testIo({ backend: backendOf(revived), stdinIsTty: true, answers: [true] });
+      const recovered = testIo({
+        backend: backendOf(revived),
+        stdinIsTty: true,
+        answers: [true, true],
+      });
       expect(await run(['preserve', '--resume', runDir()], recovered.io, signal())).toBe(EXIT_OK);
-      expect(recovered.questions).toHaveLength(1);
+      expect(recovered.questions).toHaveLength(2);
+      expect(recovered.questions[1]).toMatch(
+        /Proceed to the commit — the first write, into slot A/,
+      );
       expect((await loadState()).nextStep).toBe('done');
       const delivered = await readFile(join(runDir(), PRESERVE_DUMP_ORIGINAL_FILE));
       expect(await sha256hex(new Uint8Array(delivered))).toBe(await sha256hex(asBooted));
@@ -551,8 +599,8 @@ describe('preserve — resume from a run the drain killed', () => {
       expect(torn.steps.drain?.error).toMatch(/post-reset read window never came up/);
       /* The failure is recorded, the previous checkpoint stands, and the run
        * directory holds the restore source AND the derived plaintext. */
-      expect(await readFile(join(runDir(), PRESERVE_BANK_CAPTURE_FILE))).toBeTruthy();
-      expect(await readFile(join(runDir(), PRESERVE_PLAIN_NAME))).toBeTruthy();
+      expect(await readFile(join(runDir(), preserveCaptureFile('a')))).toBeTruthy();
+      expect(await readFile(join(runDir(), preservePlainFile('a')))).toBeTruthy();
 
       /* RESUME on the same part, healthy now: the drain runs, then restore and
        * verify, and the run reaches done — the commit is NOT replayed, and no
@@ -584,8 +632,7 @@ describe('preserve — resume from a run the drain killed', () => {
         signal(),
       );
       /* Rewind the state to just before the commit AND take the derived
-       * plaintext out of the run directory: the migration shape a version-1
-       * run left behind (its plaintext lived outside). */
+       * plaintext out of the run directory. */
       const state = await loadState();
       const rewound: PreserveRunState = { ...state, nextStep: 'commit' };
       delete rewound.steps.commit;
@@ -593,19 +640,18 @@ describe('preserve — resume from a run the drain killed', () => {
       delete rewound.steps.restore;
       delete rewound.steps.verify;
       await saveState('run', rewound);
-      const plainFile = await readFile(join(runDir(), PRESERVE_PLAIN_NAME));
+      const plainFile = await readFile(join(runDir(), preservePlainFile('a')));
       const { rm } = await import('node:fs/promises');
-      await rm(join(runDir(), PRESERVE_PLAIN_NAME));
+      await rm(join(runDir(), preservePlainFile('a')));
 
       const probe = testIo({ backend: backendOf(camera) });
       const code = await run(['preserve', '--resume', runDir(), '--yes'], probe.io, signal());
       expect(code).toBe(EXIT_FAILED);
-      expect(probe.stderr.text).toMatch(/preserve_image_plain\.bin/);
-      expect(probe.stderr.text).toMatch(/version-1 run/);
+      expect(probe.stderr.text).toMatch(/preserve_bank_a_plain\.bin/);
 
-      /* The file goes back under its artifact name (from the run zip, or the
-       * version-1 image copied there) and the same resume just works. */
-      await writeFile(join(runDir(), PRESERVE_PLAIN_NAME), plainFile);
+      /* The file goes back under its artifact name (from the run zip) and the
+       * same resume just works. */
+      await writeFile(join(runDir(), preservePlainFile('a')), plainFile);
       const retry = testIo({ backend: backendOf(camera) });
       expect(await run(['preserve', '--resume', runDir(), '--yes'], retry.io, signal())).toBe(
         EXIT_OK,
@@ -615,31 +661,28 @@ describe('preserve — resume from a run the drain killed', () => {
   );
 
   it(
-    'a version-1 run directory still loads: print-state and resume work on it',
+    'a run directory of an older schema is refused, with the remedy',
     { timeout: 180_000 },
     async () => {
-      const plain = syntheticPlain();
-      const camera = v1Camera(plain);
+      const camera = v1Camera(syntheticPlain());
       await run(
-        ['preserve', '--out', runDir(), '--yes'],
+        ['preserve', '--backup-only', '--out', runDir(), '--yes'],
         testIo({ backend: backendOf(camera) }).io,
         signal(),
       );
-      /* Downgrade the on-disk state to the version-1 schema. */
-      await saveState('run', asVersion1(await loadState()));
-
-      const printed = testIo();
-      expect(
-        await run(['preserve', '--print-state', runDir(), '--json'], printed.io, signal()),
-      ).toBe(EXIT_OK);
-      const document = JSON.parse(printed.stdout.text) as { state: PreserveRunState };
-      expect(document.state.version).toBe(1);
-
-      const done = testIo();
-      expect(await run(['preserve', '--resume', runDir(), '--yes'], done.io, signal())).toBe(
-        EXIT_OK,
-      );
-      expect(done.stdout.text).toMatch(/run .* is already done — nothing to resume/);
+      const older = { ...(await loadState()), version: 2 } as unknown as PreserveRunState;
+      await saveState('run', older);
+      for (const args of [
+        ['preserve', '--print-state', runDir()],
+        ['preserve', '--resume', runDir(), '--yes'],
+      ]) {
+        const test = testIo({ backend: backendOf(camera) });
+        expect(await run(args, test.io, signal())).toBe(EXIT_FAILED);
+        expect(test.stderr.text).toMatch(
+          /schema version 2, written before the run chose its banks/,
+        );
+        expect(test.stderr.text).toMatch(/start a new run to continue/);
+      }
     },
   );
 
@@ -682,7 +725,7 @@ describe('preserve — resume from a run the drain killed', () => {
        * 0 diffs — and the camera was never written. */
       const after = await loadState();
       expect(after.nextStep).toBe('done');
-      expect(after.steps.restore?.notes).toMatch(/already held the original content/);
+      expect(after.steps.restore?.notes).toMatch(/slot A: already held its original content/);
       expect(after.verify).toEqual({ diffBytes: 0, windowsRead: 31, badWindows: [] });
       const expectedFlash = new Uint8Array(v1Camera(plain).flash);
       expect(await sha256hex(camera.flash)).toBe(await sha256hex(expectedFlash));
@@ -792,11 +835,11 @@ describe('preserve — resume from a run the drain killed', () => {
         inventory: { name: string; present: boolean; shaMatches: boolean | null }[];
       };
       expect(document.run.nextStep).toBe('done');
-      expect(document.state.version).toBe(2);
-      expect(document.state.imageSource).toBe('device');
+      expect(document.state.version).toBe(3);
+      expect(document.state.targets).toEqual(['a']);
       const files = document.inventory.map((entry) => entry.name);
       expect(files).toContain(PRESERVE_BACKUP_FILE);
-      expect(files).toContain(PRESERVE_PLAIN_NAME);
+      expect(files).toContain(preservePlainFile('a'));
       expect(files).toContain(PRESERVE_DUMP_ORIGINAL_FILE);
       for (const entry of document.inventory) {
         expect(entry.present, entry.name).toBe(true);
@@ -804,12 +847,15 @@ describe('preserve — resume from a run the drain killed', () => {
       }
 
       /* A tampered checkpoint file is reported CHANGED, not silently ok. */
-      const patched = await readFile(join(runDir(), PRESERVE_PATCHED_FILE));
+      const patched = await readFile(join(runDir(), preservePatchedFile('a')));
       patched[9] = (patched[9] ?? 0) ^ 0xff;
-      await writeFile(join(runDir(), PRESERVE_PATCHED_FILE), patched);
+      await writeFile(join(runDir(), preservePatchedFile('a')), patched);
       const after = testIo();
       await run(['preserve', '--print-state', runDir()], after.io, signal());
-      expect(after.stdout.text).toMatch(/CHANGED\s+preserve_patch_plain_patched\.bin/);
+      expect(after.stdout.text).toMatch(/CHANGED\s+preserve_bank_a_patched\.bin/);
+      /* The printed state names the boot facts and the banks in words. */
+      expect(after.stdout.text).toMatch(/next start\s+slot A — /);
+      expect(after.stdout.text).toMatch(/banks to write\s+slot A \(--bank next-start\)/);
     },
   );
 });
@@ -833,7 +879,7 @@ describe('preserve — the read-only first step, and the zip of a run', () => {
       expect(state.steps.backup?.status).toBe('done');
       expect(state.steps.patch).toBeUndefined();
       expect(state.nextStep).toBe('patch');
-      await expect(readFile(join(runDir(), PRESERVE_PATCHED_FILE))).rejects.toThrow();
+      await expect(readFile(join(runDir(), preservePatchedFile('a')))).rejects.toThrow();
 
       const sent = new Set(camera.calls.map((call) => call.op));
       expect(sent.has(OP.SET_FEATURED_FIRMWARE_DATA)).toBe(false);
@@ -869,7 +915,7 @@ describe('preserve — the read-only first step, and the zip of a run', () => {
       expect(text).toContain(PRESERVE_RUN_STATE_FILE);
       expect(text).toContain(PRESERVE_BACKUP_FILE);
       expect(text).toContain('manifest.json');
-      expect(text).not.toContain(PRESERVE_PATCHED_FILE);
+      expect(text).not.toContain(preservePatchedFile('a'));
       expect(test.stdout.text).toContain(`wrote ${zip}`);
     },
   );
@@ -885,10 +931,13 @@ describe('preserve — the read-only first step, and the zip of a run', () => {
     expect(test.stderr.text).toContain('--backup-only runs the first step only');
   });
 
-  it('--print-state takes neither --backup-only nor --zip: neither writes a run', async () => {
+  it('--print-state takes neither --backup-only, --zip nor --bank: none of them writes a run', async () => {
     const test = testIo();
     expect(
       await run(['preserve', '--print-state', runDir(), '--backup-only'], test.io, signal()),
+    ).toBe(EXIT_USAGE);
+    expect(
+      await run(['preserve', '--print-state', runDir(), '--bank', 'a'], test.io, signal()),
     ).toBe(EXIT_USAGE);
     expect(
       await run(
@@ -907,5 +956,132 @@ describe('preserve — the read-only first step, and the zip of a run', () => {
     );
     expect(test.questions[0]).toContain('Nothing is written to the camera');
     expect(camera.calls).toHaveLength(0);
+  });
+});
+
+/* ==================================================================== *
+ * --bank: which banks the run writes (TESTING.md 42.92)
+ * ==================================================================== */
+
+describe('preserve — --bank: the bank the next start enters, one bank, every bank', () => {
+  it(
+    '--bank all on a word-2 part writes A and R, and puts both back',
+    { timeout: 180_000 },
+    async () => {
+      const plain = syntheticPlain();
+      const camera = v1Camera(plain, { flash: v1Flash(2, { a: plain, r: plain }), entered: 2 });
+      const asBooted = new Uint8Array(camera.flash);
+      const test = testIo({ backend: backendOf(camera) });
+      expect(
+        await run(['preserve', '--out', runDir(), '--bank', 'all', '--yes'], test.io, signal()),
+      ).toBe(EXIT_OK);
+      const state = await loadState();
+      expect(state.choice).toBe('all');
+      expect(state.targets).toEqual(['a', 'r']);
+      expect(state.steps.commit?.notes).toMatch(/slot A: .*; recovery R: /);
+      expect(await sha256hex(camera.flash)).toBe(await sha256hex(asBooted));
+      expect(test.stdout.text).toMatch(/banks to write\s+every bank/);
+      expect(test.stdout.text).toMatch(
+        /next start\s+recovery R — the boot-config word is 2, so the bootloader tries recovery R first, and it holds an image the bootloader accepts/,
+      );
+      expect(test.stdout.text).toMatch(/last start\s+recovery R, as the camera records it/);
+      expect(test.stdout.text).toMatch(/banks to write\s+slot A and recovery R \(--bank all\)/);
+      expect(test.stdout.text).toMatch(/banks written: slot A and recovery R \(--bank all\)/);
+    },
+  );
+
+  it(
+    '--bank r while the next start enters A: the plan warns, the drain stops before it reads, and --from-step restore puts R back',
+    { timeout: 180_000 },
+    async () => {
+      const plain = syntheticPlain();
+      const camera = v1Camera(plain, { flash: v1Flash(0, { a: plain, r: plain }), entered: 0 });
+      const asBooted = new Uint8Array(camera.flash);
+      const first = testIo({ backend: backendOf(camera) });
+      expect(
+        await run(['preserve', '--out', runDir(), '--bank', 'r', '--yes'], first.io, signal()),
+      ).toBe(EXIT_FAILED);
+      expect(first.stdout.text).toMatch(
+        /! The next start enters slot A \(.*\), and this choice does not patch it/,
+      );
+      expect(first.stderr.text).toMatch(
+        /the camera reports it entered slot A \(active-slot word 0\), which this run did not patch \(it patched recovery R\)/,
+      );
+      expect(first.stdout.text).toMatch(/--resume .* --from-step restore/);
+      const torn = await loadState();
+      expect(torn.steps.commit?.status).toBe('done');
+      expect(torn.steps.drain?.status).toBe('failed');
+
+      const restored = testIo({ backend: backendOf(camera) });
+      expect(
+        await run(
+          ['preserve', '--resume', runDir(), '--from-step', 'restore', '--yes'],
+          restored.io,
+          signal(),
+        ),
+      ).toBe(EXIT_OK);
+      expect((await loadState()).verify?.diffBytes).toBe(0);
+      expect(await sha256hex(camera.flash)).toBe(await sha256hex(asBooted));
+    },
+  );
+
+  it(
+    'a default the run cannot write stops before the commit; --resume --bank chooses, and is refused once the commit has run',
+    { timeout: 180_000 },
+    async () => {
+      /* Word 1 tries B first, and B holds a 1.2.0.0 image while the camera runs 1.3.0.0. */
+      const plain = syntheticPlain();
+      const other = syntheticPlain();
+      const dv = new DataView(other.buffer);
+      dv.setUint32(0x20c, 0x0000_0201, true);
+      dv.setUint32(0x3ff0, 0, true);
+      dv.setUint32(0x3ff0, (0 - wordSum(other)) >>> 0, true);
+      const camera = v1Camera(plain, { flash: v1Flash(1, { a: plain, b: other }), entered: 0 });
+      const first = testIo({ backend: backendOf(camera) });
+      expect(await run(['preserve', '--out', runDir(), '--yes'], first.io, signal())).toBe(
+        EXIT_FAILED,
+      );
+      expect(first.stdout.text).toMatch(/banks to write\s+none — the next start enters slot B/);
+      expect(first.stderr.text).toMatch(/no banks to write: the next start enters slot B/);
+      expect(first.stderr.text).toMatch(/--bank <a\|b\|r\|all>/);
+      expect((await loadState()).nextStep).toBe('commit');
+
+      const refusedB = testIo({ backend: backendOf(camera) });
+      expect(
+        await run(
+          ['preserve', '--resume', runDir(), '--bank', 'b', '--yes'],
+          refusedB.io,
+          signal(),
+        ),
+      ).toBe(EXIT_FAILED);
+      expect(refusedB.stderr.text).toMatch(
+        /--bank b: slot B cannot be written: it holds firmware 1\.2\.0\.0, not the 1\.3\.0\.0 the camera runs/,
+      );
+
+      const chosen = testIo({ backend: backendOf(camera) });
+      expect(
+        await run(['preserve', '--resume', runDir(), '--bank', 'a', '--yes'], chosen.io, signal()),
+      ).toBe(EXIT_OK); /* the fake keeps answering that it entered A, so its drain reads */
+      expect(chosen.stdout.text).toMatch(/banks to write: slot A \(--bank a\)/);
+      expect(chosen.stdout.text).toMatch(/! The next start enters slot B/);
+      const state = await loadState();
+      expect(state.choice).toBe('a');
+      expect(state.targets).toEqual(['a']);
+      expect(state.nextStep).toBe('done');
+
+      const late = testIo({ backend: backendOf(camera) });
+      expect(
+        await run(['preserve', '--resume', runDir(), '--bank', 'r', '--yes'], late.io, signal()),
+      ).toBe(EXIT_FAILED);
+      expect(late.stderr.text).toMatch(/cannot change once the commit has run/);
+    },
+  );
+
+  it('--bank takes next-start, a, b, r or all', async () => {
+    const test = testIo();
+    expect(
+      await run(['preserve', '--out', runDir(), '--bank', 'both', '--yes'], test.io, signal()),
+    ).toBe(EXIT_USAGE);
+    expect(test.stderr.text).toMatch(/--bank takes next-start, a, b, r, all, got 'both'/);
   });
 });
