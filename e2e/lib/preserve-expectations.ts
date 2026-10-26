@@ -110,7 +110,7 @@ const COMPACT_1300: PreserveRow = {
   version: '1.3.0.0',
   buildId: 'v1-2014',
   derivation: null,
-  buildLabel: 'v1 2014 chain',
+  buildLabel: 'Compact 1.x firmware (2014)',
   buildFamily: 'v1-2014',
   imageSha256: '862717a8a605021def7858ac0c04ad4aa1abe23d357d6c2417699939137f481c',
   stagedForm: 'plain',

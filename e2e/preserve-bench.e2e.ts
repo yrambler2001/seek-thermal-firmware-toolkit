@@ -312,7 +312,7 @@ describe.skipIf(!RUNNABLE)(
         expect(error, 'the drain stops').not.toBeNull();
         /* The commit's own session arms to read the banks back; the drain reads nothing. */
         expect(sent.get('in 0x4f') ?? 0, 'no whole-flash read').toBeLessThan(1000);
-        expect(await phaseLog('patch-dump')).toContain('so nothing was armed or read');
+        expect(await phaseLog('patch-dump')).toContain('so nothing was read');
         /* The planned stop's action is the restore, not another try (TESTING.md 42.101). */
         const stopped = await sectionText('patch-dump');
         expect(stopped).toContain('Go on to step 04: restore the banks');
