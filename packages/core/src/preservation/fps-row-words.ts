@@ -43,8 +43,18 @@ export function fpsSteadyRowIndex(id: string): number | null {
   return STEADY_ROW_INDEX[id] ?? null;
 }
 
-/** The row a patch changes, in words: "the steady frame row (row 14)". */
+/**
+ * The id suffix of the entries that add the no-skip branch alone to an image an earlier 32 Hz entry wrote
+ * (TESTING.md 42.97). Their one edit is code, the USB check at the start of each field, not a frame-program row.
+ */
+export const FPS_ADD_NOSKIP_SUFFIX = '-add-noskip';
+
+/** What an add-noskip entry changes, in words. */
+export const FPS_USB_CHECK_NAME = 'the USB check at the start of each field';
+
+/** The row a patch changes, in words: "the steady frame row (row 14)", or the USB check for an add-noskip entry. */
 export function fpsRowName(id: string): string {
+  if (id.endsWith(FPS_ADD_NOSKIP_SUFFIX)) return FPS_USB_CHECK_NAME;
   const index = fpsSteadyRowIndex(id);
   return index === null ? 'the steady frame row' : `the steady frame row (row ${String(index)})`;
 }

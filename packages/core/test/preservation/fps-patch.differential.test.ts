@@ -13,6 +13,12 @@
  * is found by its hash, and the TypeScript output of every entry is compared with the Python's
  * byte for byte (sha256 of the whole patched image) and offset for offset (the changed bytes).
  * A case whose file is not found FAILS, so an incomplete corpus cannot pass silently.
+ *
+ * THE EARLIER 32 Hz IMAGES (TESTING.md 42.97). The add-noskip entries start from images an earlier
+ * table wrote, which no corpus holds. Their cases carry `derivedFrom` (the base entry's stock image)
+ * and are rebuilt here from that corpus image: the base entry applied, its add-noskip edit put back,
+ * and the adjust word moved so the sum is the stock sum. The Python rebuilds them the other way
+ * round (fps_patch.earlier_image: the base entry's other edits only), and the hashes must agree.
  * ==================================================================== */
 
 import { createHash } from 'node:crypto';
@@ -20,7 +26,9 @@ import { readFileSync, readdirSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
+import { wordSum32 } from '../../src/image/bank.js';
 import {
+  FPS_ADJUST_OFFSET,
   FPS_KNOWN_BUILDS,
   FPS_PATCHES,
   FPS_OFFER_WITHHELD,
@@ -51,6 +59,12 @@ interface PythonImageCase {
   readonly pythonState: string;
   readonly known: string | null;
   readonly outputs: readonly PythonOutput[];
+  /** An earlier 32 Hz image no corpus holds: rebuilt from this stock image and table entry. */
+  readonly derivedFrom?: {
+    readonly inputSha256: string;
+    readonly length: number;
+    readonly patch: string;
+  };
 }
 
 interface PythonBankCase {
@@ -91,7 +105,7 @@ function entryNamed(id: string): FpsPatch {
 describe('the table against the Python table (no corpus needed)', () => {
   it('has the same entries as fps_patch.py, and the same stock and patched hashes', () => {
     expect(new Set(FPS_PATCHES.map((patch) => patch.id))).toEqual(PYTHON_IDS);
-    expect(FPS_PATCHES).toHaveLength(20);
+    expect(FPS_PATCHES).toHaveLength(36);
     for (const image of FIXTURE.images) {
       for (const output of image.outputs) {
         if (output.outputSha256 === undefined) continue;
@@ -104,22 +118,37 @@ describe('the table against the Python table (no corpus needed)', () => {
   });
 
   it('enables exactly the stage-one (plain 2014 chain) and stage-two (Key A, 4.8.x and 4.9.x Compact PRO) entries, and records a reason for every other', () => {
-    expect([...FPS_STAGE_ONE_IDS].sort()).toEqual([
-      'compact_32k-0.10.0.0-to32',
-      'compact_32k-0.8.0.0-to32',
-      'compact_32k-0.9.0.2-to32',
-      'compact_32k-0.9.0.6-to32',
-      'compact_32k-0.9.0.7-to32',
-      'compact_32k-0.9.1.0-to32',
-      'compact_32k-1.0.0.0-to32',
-      'compact_32k-1.2.0.0-to32',
-      'compact_32k-1.3.0.0-to32',
-      'compact_32k-1.3.0.8-to32',
-    ]);
+    expect([...FPS_STAGE_ONE_IDS].sort()).toEqual(
+      [
+        'compact_32k-0.10.0.0-to32',
+        'compact_32k-0.8.0.0-to32',
+        'compact_32k-0.9.0.2-to32',
+        'compact_32k-0.9.0.6-to32',
+        'compact_32k-0.9.0.7-to32',
+        'compact_32k-0.9.1.0-to32',
+        'compact_32k-1.0.0.0-to32',
+        'compact_32k-1.2.0.0-to32',
+        'compact_32k-1.3.0.0-to32',
+        'compact_32k-1.3.0.8-to32',
+        'compact_32k-0.10.0.0-to32-add-noskip',
+        'compact_32k-0.8.0.0-to32-add-noskip',
+        'compact_32k-0.9.0.2-to32-add-noskip',
+        'compact_32k-0.9.0.6-to32-add-noskip',
+        'compact_32k-0.9.0.7-to32-add-noskip',
+        'compact_32k-0.9.1.0-to32-add-noskip',
+        'compact_32k-1.0.0.0-to32-add-noskip',
+        'compact_32k-1.2.0.0-to32-add-noskip',
+        'compact_32k-1.3.0.0-to32-add-noskip',
+        'compact_32k-1.3.0.8-to32-add-noskip',
+      ].sort(),
+    );
     expect([...FPS_STAGE_TWO_IDS].sort()).toEqual([
       'compact_32k-4.8.1.7-to32',
+      'compact_32k-4.8.1.7-to32-add-noskip',
       'compact_32k-4.8.1.9-to32',
+      'compact_32k-4.8.1.9-to32-add-noskip',
       'compact_32k-4.8.2.1-to32',
+      'compact_32k-4.8.2.1-to32-add-noskip',
       'compact_pro-4.9.1.15',
       'compact_pro-4.9.2.0',
     ]);
@@ -136,7 +165,7 @@ describe('the table against the Python table (no corpus needed)', () => {
       } else {
         expect(entry.gate.enabled).toBe(false);
         expect(entry.gate.reason).toMatch(
-          entry.id === 'compact_32k-0.7.0.8-to32' ? /older than 0\.8\.0\.0/ : /^stage two: /,
+          entry.version === '0.7.0.8' ? /older than 0\.8\.0\.0/ : /^stage two: /,
         );
       }
     }
@@ -192,12 +221,38 @@ function findByHash(size: number, wanted: string, prefix: number | null): Uint8A
   return null;
 }
 
+/**
+ * An earlier 32 Hz image: `base` applied to its stock image, the `upgrade` edits put back to their old bytes, and
+ * the adjust word moved so the acceptance sum is the stock image's again (fps_patch.earlier_image's image).
+ */
+function earlierImage(stock: Uint8Array, base: FpsPatch, upgrade: FpsPatch): Uint8Array {
+  const out = applyFpsPatch(stock, base).slice();
+  for (const edit of upgrade.edits) out.set(edit.before, edit.offset);
+  const view = new DataView(out.buffer, out.byteOffset, out.byteLength);
+  const delta = (wordSum32(out, stock.length) - wordSum32(stock, stock.length)) >>> 0;
+  view.setUint32(FPS_ADJUST_OFFSET, (view.getUint32(FPS_ADJUST_OFFSET, true) - delta) >>> 0, true);
+  return out;
+}
+
+/** A fixture image's bytes: the corpus file, or for a `derivedFrom` case the image rebuilt from its stock image. */
+function imageOf(image: PythonImageCase): Uint8Array | null {
+  const from = image.derivedFrom;
+  if (from === undefined) return findByHash(image.length, image.inputSha256, image.length);
+  const bytes = findByHash(from.length, from.inputSha256, from.length);
+  const upgrade = image.outputs[0]?.patch;
+  if (bytes === null || upgrade === undefined) return null;
+  return earlierImage(bytes.subarray(0, from.length), entryNamed(from.patch), entryNamed(upgrade));
+}
+
 const corpusDescribe = CORPUS_ROOTS.length > 0 ? describe : describe.skip;
 
 corpusDescribe('the table against the Python tool, over the corpus (SEEK_FPS_CORPUS)', () => {
   it('finds every fixture image in the corpus roots', () => {
     const missing = FIXTURE.images
-      .filter((image) => findByHash(image.length, image.inputSha256, image.length) === null)
+      .filter((image) => {
+        const bytes = imageOf(image);
+        return bytes === null || sha256(bytes.subarray(0, image.length)) !== image.inputSha256;
+      })
       .map((image) => `${image.inputSha256.slice(0, 12)} (${String(image.length)} B)`);
     expect(missing, 'images not found under SEEK_FPS_CORPUS').toEqual([]);
   });
@@ -205,7 +260,7 @@ corpusDescribe('the table against the Python tool, over the corpus (SEEK_FPS_COR
   it('applies every entry to its image exactly as the Python does (sha256 and changed offsets)', () => {
     let compared = 0;
     for (const image of FIXTURE.images) {
-      const bytes = findByHash(image.length, image.inputSha256, image.length);
+      const bytes = imageOf(image);
       expect(bytes, `image ${image.inputSha256.slice(0, 12)}`).not.toBeNull();
       if (bytes === null) continue;
       const stock = bytes.subarray(0, image.length);
@@ -221,14 +276,15 @@ corpusDescribe('the table against the Python tool, over the corpus (SEEK_FPS_COR
         compared++;
       }
     }
-    expect(compared).toBe(20);
+    expect(compared).toBe(36);
+    expect(FIXTURE.images.filter((image) => image.derivedFrom !== undefined)).toHaveLength(16);
   });
 
   it.skipIf(!FPS_OFFER_WITHHELD)(
     'withholds every stage-one offer after the bench run, and refuses the stage-two builds too',
     () => {
       for (const image of FIXTURE.images.filter((candidate) => candidate.pythonState === 'stock')) {
-        const bytes = findByHash(image.length, image.inputSha256, image.length);
+        const bytes = imageOf(image);
         if (bytes === null) continue;
         const stock = bytes.subarray(0, image.length);
         const top = [...image.outputs].sort((a, b) => (b.target ?? 0) - (a.target ?? 0))[0];
@@ -251,7 +307,7 @@ corpusDescribe('the table against the Python tool, over the corpus (SEEK_FPS_COR
       // The rate the page names: the table's target, except where FPS_MEASURED_HZ names another (none now; the
       // 1.3.0.8 32 Hz entry is the unmeasured plain-copy form and names its target).
       for (const image of FIXTURE.images.filter((candidate) => candidate.pythonState === 'stock')) {
-        const bytes = findByHash(image.length, image.inputSha256, image.length);
+        const bytes = imageOf(image);
         if (bytes === null) continue;
         const stock = bytes.subarray(0, image.length);
         const top = [...image.outputs].sort((a, b) => (b.target ?? 0) - (a.target ?? 0))[0];
@@ -279,7 +335,7 @@ corpusDescribe('the table against the Python tool, over the corpus (SEEK_FPS_COR
           expect(plan.status, entry.id).toBe('refused');
           if (plan.status === 'refused')
             expect(plan.reason, entry.id).toMatch(
-              entry.id === 'compact_32k-0.7.0.8-to32' ? /older than 0\.8\.0\.0/ : /^stage two: /,
+              entry.version === '0.7.0.8' ? /older than 0\.8\.0\.0/ : /^stage two: /,
             );
         }
       }
@@ -288,7 +344,7 @@ corpusDescribe('the table against the Python tool, over the corpus (SEEK_FPS_COR
 
   it('plans the same verdict as the Python for every known build', () => {
     for (const image of FIXTURE.images.filter((candidate) => candidate.known !== null)) {
-      const bytes = findByHash(image.length, image.inputSha256, image.length);
+      const bytes = imageOf(image);
       expect(bytes).not.toBeNull();
       if (bytes === null) continue;
       const plan = planFpsPatch(bytes.subarray(0, image.length), '1.0.3.2');

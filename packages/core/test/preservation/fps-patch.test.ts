@@ -13,6 +13,7 @@ import { SeekError } from '../../src/errors.js';
 import { IMAGE_MAGIC } from '../../src/image/header.js';
 import { wordSum32 } from '../../src/image/bank.js';
 import {
+  FPS_KNOWN_BUILDS,
   FPS_MEASURED_HZ,
   FPS_NO_PATCH_4821_REASON,
   FPS_OFFER_WITHHELD,
@@ -28,6 +29,7 @@ import {
   verifyFpsPatchedImage,
   type FpsPatch,
 } from '../../src/preservation/fps-patch.js';
+import { FPS_ADD_NOSKIP_SUFFIX, FPS_USB_CHECK_NAME } from '../../src/preservation/fps-row-words.js';
 
 const sha = (bytes: Uint8Array): string => createHash('sha256').update(bytes).digest('hex');
 
@@ -218,24 +220,44 @@ describe('the rate the page names (the bench-measured rate, FPS_MEASURED_HZ)', (
   });
 });
 
+/** The stage-one 32 Hz entries; each has its add-noskip entry in the same stage (TESTING.md 42.97). */
+const STAGE_ONE_32 = [
+  'compact_32k-0.8.0.0-to32',
+  'compact_32k-0.9.0.2-to32',
+  'compact_32k-0.9.0.6-to32',
+  'compact_32k-0.9.0.7-to32',
+  'compact_32k-0.9.1.0-to32',
+  'compact_32k-0.10.0.0-to32',
+  'compact_32k-1.0.0.0-to32',
+  'compact_32k-1.2.0.0-to32',
+  'compact_32k-1.3.0.0-to32',
+  'compact_32k-1.3.0.8-to32',
+];
+
 describe('the stages: which entries are offered (pinned, so a change is deliberate)', () => {
   it('offers exactly the stage-one (plain 2014 chain) and stage-two (Key A, 4.8.x and 4.9.x Compact PRO) sets', () => {
-    expect([...FPS_STAGE_ONE_IDS].sort()).toEqual([
-      'compact_32k-0.10.0.0-to32',
-      'compact_32k-0.8.0.0-to32',
-      'compact_32k-0.9.0.2-to32',
-      'compact_32k-0.9.0.6-to32',
-      'compact_32k-0.9.0.7-to32',
-      'compact_32k-0.9.1.0-to32',
-      'compact_32k-1.0.0.0-to32',
-      'compact_32k-1.2.0.0-to32',
-      'compact_32k-1.3.0.0-to32',
-      'compact_32k-1.3.0.8-to32',
-    ]);
+    expect([...FPS_STAGE_ONE_IDS].sort()).toEqual(
+      [
+        'compact_32k-0.10.0.0-to32',
+        'compact_32k-0.8.0.0-to32',
+        'compact_32k-0.9.0.2-to32',
+        'compact_32k-0.9.0.6-to32',
+        'compact_32k-0.9.0.7-to32',
+        'compact_32k-0.9.1.0-to32',
+        'compact_32k-1.0.0.0-to32',
+        'compact_32k-1.2.0.0-to32',
+        'compact_32k-1.3.0.0-to32',
+        'compact_32k-1.3.0.8-to32',
+        ...STAGE_ONE_32.map((id) => `${id}-add-noskip`),
+      ].sort(),
+    );
     expect([...FPS_STAGE_TWO_IDS].sort()).toEqual([
       'compact_32k-4.8.1.7-to32',
+      'compact_32k-4.8.1.7-to32-add-noskip',
       'compact_32k-4.8.1.9-to32',
+      'compact_32k-4.8.1.9-to32-add-noskip',
       'compact_32k-4.8.2.1-to32',
+      'compact_32k-4.8.2.1-to32-add-noskip',
       'compact_pro-4.9.1.15',
       'compact_pro-4.9.2.0',
     ]);
@@ -256,7 +278,7 @@ describe('the stages: which entries are offered (pinned, so a change is delibera
         FPS_STAGE_THREE_IDS.has(patch.id);
       expect(patch.gate.enabled, patch.id).toBe(offered);
       if (offered) expect(patch.gate.reason, patch.id).toBeNull();
-      else if (patch.id === 'compact_32k-0.7.0.8-to32')
+      else if (patch.version === '0.7.0.8')
         expect(patch.gate.reason ?? '', patch.id).toMatch(/older than 0\.8\.0\.0/);
       else expect(patch.gate.reason ?? '', patch.id).toMatch(/^stage two: /);
     }
@@ -274,6 +296,62 @@ describe('the stages: which entries are offered (pinned, so a change is delibera
       expect(FPS_STAGE_THREE_IDS.has(id), id).toBe(true);
       expect(patch?.gate.enabled, id).toBe(true);
       expect(patch?.targetHz, id).toBe(18);
+    }
+  });
+});
+
+describe('the no-skip branch in the 32 Hz entries, and the earlier 32 Hz images (TESTING.md 42.97)', () => {
+  /** A 2-byte Thumb B.N (unconditional branch), as the no-skip edit writes it. */
+  const isBranch = (bytes: Uint8Array): boolean =>
+    bytes.length === 2 && ((bytes[1] ?? 0) & 0xf8) === 0xe0;
+  const fromStock = FPS_PATCHES.filter((patch) => !patch.id.endsWith(FPS_ADD_NOSKIP_SUFFIX));
+  const upgrades = FPS_PATCHES.filter((patch) => patch.id.endsWith(FPS_ADD_NOSKIP_SUFFIX));
+
+  it('ends every 32 Hz Compact entry with the branch, and leaves the Compact PRO entries frame-rate only', () => {
+    for (const patch of fromStock) {
+      const last = patch.edits[patch.edits.length - 1];
+      expect(last, patch.id).toBeDefined();
+      if (last === undefined) continue;
+      if (patch.family === 'compact_32k') {
+        expect(patch.targetHz, patch.id).toBe(32);
+        expect(isBranch(last.after), patch.id).toBe(true);
+        expect((last.before[1] ?? 0) & 0xfd, `${patch.id}: a cbz`).toBe(0xb1);
+      } else {
+        expect(patch.targetHz, patch.id).toBe(18);
+        for (const edit of patch.edits) expect(isBranch(edit.after), patch.id).toBe(false);
+      }
+    }
+    expect(fromStock.filter((patch) => patch.family === 'compact_32k')).toHaveLength(16);
+  });
+
+  it('writes the image the bench Compact runs for 1.3.0.0, and takes the earlier image ef90c94a there too', () => {
+    const bench = 'edeabb713319472f7ec8bc9fc43aa911f3395afeeeb04ddd2c890371ca583c02';
+    expect(FPS_PATCHES.find((p) => p.id === 'compact_32k-1.3.0.0-to32')?.patchedSha256).toBe(bench);
+    const upgrade = FPS_PATCHES.find((p) => p.id === 'compact_32k-1.3.0.0-to32-add-noskip');
+    expect(upgrade?.stockSha256).toBe(
+      'ef90c94a448b69feea06421026c5765eceb1685d6806e7a48714c76c3d0ed273',
+    );
+    expect(upgrade?.patchedSha256).toBe(bench);
+  });
+
+  it('gives each 32 Hz entry one add-noskip entry: the branch alone, 32 -> 32 Hz, the same image, the same gate', () => {
+    expect(upgrades).toHaveLength(16);
+    for (const upgrade of upgrades) {
+      const base = fromStock.find((patch) => `${patch.id}${FPS_ADD_NOSKIP_SUFFIX}` === upgrade.id);
+      expect(base, upgrade.id).toBeDefined();
+      if (base === undefined) continue;
+      expect(upgrade.patchedSha256, upgrade.id).toBe(base.patchedSha256);
+      expect(upgrade.version, upgrade.id).toBe(base.version);
+      expect([upgrade.fromHz, upgrade.targetHz], upgrade.id).toEqual([32, 32]);
+      expect(upgrade.edits, upgrade.id).toEqual([base.edits[base.edits.length - 1]]);
+      expect(upgrade.gate, upgrade.id).toEqual(base.gate);
+      expect(upgrade.row.name, upgrade.id).toBe(FPS_USB_CHECK_NAME);
+      // the earlier image still reads as a 32 Hz build (the Info line and the boot warning use this)
+      expect(FPS_KNOWN_BUILDS.get(upgrade.stockSha256)?.hz, upgrade.id).toBe(32);
+      expect(
+        FPS_PATCHES.filter((patch) => patch.stockSha256 === upgrade.stockSha256),
+        upgrade.id,
+      ).toEqual([upgrade]);
     }
   });
 });

@@ -3,7 +3,7 @@
 
     /Users/yrambler2001/things/a.noindex/seek/FW-V1/emu/.venv/bin/python scripts/gen-fps-table.py [--fw-v1 DIR]
 
-The Python table is the source of truth (PATCHES, KNOWN_RATE, NOT_PATCHED). This script rewrites the three
+The Python table is the source of truth (PATCHES and UPGRADES, KNOWN_RATE, NOT_PATCHED). This script rewrites the three
 data regions of the TypeScript file (the table, the known builds, the notes) and keeps the hand-written header
 and interface. Every entry gets its evidence as a plain-text comment, and every byte edit gets the explanation
 written above it in fps_patch.py (the comment lines directly above its Edit(...)), so the two files cannot
@@ -16,6 +16,11 @@ It also regenerates the differential fixture packages/core/test/preservation/fps
 Python tool, so the two cannot drift: the images (each table stock image, and each corpus build that already runs at a
 target rate) and the plain-stored stock banks of every 4 MiB dump under the corpus roots, with the Python's output for
 each. The roots are --corpus (colon-separated), else SEEK_FPS_CORPUS, else the list the differential test uses.
+
+The UPGRADES entries (TESTING.md 42.97: an image an earlier 32 Hz entry wrote, without the no-skip branch, to the image
+that entry writes now) start from images that are not in the corpus. Their cases are rebuilt by the Python
+(fps_patch.earlier_image) from the base entry's stock image, and carry `derivedFrom` (that stock image's sha256, length and
+the base entry) so the differential test rebuilds them the same way from the corpus.
 """
 import argparse
 import hashlib
@@ -134,29 +139,46 @@ def _walk_files(roots):
                 yield os.path.join(dp, name)
 
 
+def all_patches(F):
+    """The table's entries in table order: PATCHES, then UPGRADES (an older fps_patch.py has no UPGRADES)."""
+    return tuple(getattr(F, 'ALL_PATCHES', F.PATCHES))
+
+
 def image_cases(F, C, roots):
-    """One case per distinct decrypted image: each table stock image (it must be in the corpus manifest), and each
-    corpus build that already runs at a target rate (KNOWN_RATE; skipped when the manifest has no image of it)."""
+    """One case per distinct decrypted image: each table stock image (it must be in the corpus manifest, or be an
+    UPGRADES input, which is rebuilt from its base entry's stock image), and each corpus build that already runs at a
+    target rate (KNOWN_RATE; skipped when the manifest has no image of it and it is no UPGRADES input)."""
     by_sha = {e['sha256']: e for e in C.load()['entries']}
     stock = []
-    for p in F.PATCHES:
+    for p in all_patches(F):
         if p.stock_sha256 not in stock:
             stock.append(p.stock_sha256)
+    upgrade_of = {u.stock_sha256: u for u in getattr(F, 'UPGRADES', ())}
     cases = []
     for sha in sorted(set(stock) | set(F.KNOWN_RATE)):
         entry = by_sha.get(sha)
-        if entry is None:
+        derived = None
+        if entry is None and sha in upgrade_of:
+            base = F.base_of(upgrade_of[sha])
+            source = by_sha.get(base.stock_sha256)
+            if source is None:
+                raise SystemExit(f'stock image {base.stock_sha256[:12]} of {base.key} is not in the corpus manifest')
+            raw = C.resolve(source).read_bytes()
+            data = F.earlier_image(upgrade_of[sha], raw[:F.image_length(raw)])
+            derived = {'inputSha256': base.stock_sha256, 'length': base.length, 'patch': base.key}
+        elif entry is None:
             if sha in stock:
                 raise SystemExit(f'stock image {sha[:12]} of a table entry is not in the corpus manifest')
             continue
-        data = C.resolve(entry).read_bytes()
+        else:
+            data = C.resolve(entry).read_bytes()
         n = F.image_length(data)
         if n is None or hashlib.sha256(data[:n]).hexdigest() != sha:
             if sha in stock:
                 raise SystemExit(f'corpus file for stock image {sha[:12]} is not that image')
             continue
         outputs = []
-        for p in F.PATCHES:
+        for p in all_patches(F):
             if p.stock_sha256 != sha:
                 continue
             new = F.apply_patch(data[:n], p)
@@ -168,7 +190,7 @@ def image_cases(F, C, roots):
                 'changed': [i for i in range(n) if data[i] != new[i]],
             })
         state = F.identify(data[:n]).state
-        cases.append({
+        case = {
             'inputSha256': sha,
             'length': n,
             'pythonState': state,
@@ -176,7 +198,11 @@ def image_cases(F, C, roots):
             # the build's name only where the Python says it already runs at a rate (a stock image that is also a
             # KNOWN_RATE build, the 16 Hz FF images, is 'stock' to the Python: identify checks stock first)
             'known': F.KNOWN_RATE[sha][0] if state is not None and state.startswith('known-') else None,
-        })
+        }
+        if derived is not None:
+            # not in the corpus: the base entry's stock image with the base entry's edits except the upgrade's
+            case['derivedFrom'] = derived
+        cases.append(case)
     return cases
 
 
@@ -267,7 +293,7 @@ def main():
     a = ts.index('export const FPS_PATCH_TABLE: readonly FpsPatchSource[] = [')
     b = ts.index('\n];\n', a) + len('\n];\n')
     table = 'export const FPS_PATCH_TABLE: readonly FpsPatchSource[] = [\n'
-    table += '\n'.join(render_patch(p, comments.get(p.key, [])) for p in F.PATCHES) + '\n];\n'
+    table += '\n'.join(render_patch(p, comments.get(p.key, [])) for p in all_patches(F)) + '\n];\n'
     ts = ts[:a] + table + ts[b:]
     # known builds
     a = ts.index('export const FPS_KNOWN_RATE')
@@ -283,9 +309,9 @@ def main():
              + ''.join(f'  {q(n)},\n' for n in F.NOT_PATCHED) + '];')
     ts = ts[:a] + notes + ts[b:]
     open(TABLE, 'w').write(ts)
-    missing = [(p.key, k) for p in F.PATCHES for k, c in enumerate(comments.get(p.key, [])) if not c]
-    short = [p.key for p in F.PATCHES if len(comments.get(p.key, [])) != len(p.edits)]
-    print(f'wrote {TABLE}: {len(F.PATCHES)} entries, {len(F.KNOWN_RATE)} known builds, {len(F.NOT_PATCHED)} notes')
+    missing = [(p.key, k) for p in all_patches(F) for k, c in enumerate(comments.get(p.key, [])) if not c]
+    short = [p.key for p in all_patches(F) if len(comments.get(p.key, [])) != len(p.edits)]
+    print(f'wrote {TABLE}: {len(all_patches(F))} entries, {len(F.KNOWN_RATE)} known builds, {len(F.NOT_PATCHED)} notes')
     print('edits without a Python comment:', missing or 'none')
     print('entries whose Edit count differs from the comments found:', short or 'none')
     if not args.no_fixture:

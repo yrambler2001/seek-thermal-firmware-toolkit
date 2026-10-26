@@ -7,7 +7,12 @@
 import { describe, expect, it } from 'vitest';
 import { FPS_PATCHES } from '../../src/preservation/fps-patch.js';
 import { FPS_PATCH_TABLE } from '../../src/preservation/fps-patch-table.js';
-import { fpsRowName, fpsSteadyRowIndex } from '../../src/preservation/fps-row-words.js';
+import {
+  FPS_ADD_NOSKIP_SUFFIX,
+  FPS_USB_CHECK_NAME,
+  fpsRowName,
+  fpsSteadyRowIndex,
+} from '../../src/preservation/fps-row-words.js';
 
 /** The index the table's own label gives: "row 14", "record 20", "block 13", "page 13", or the self-link in a header. */
 function indexInLabel(label: string): number | null {
@@ -22,6 +27,12 @@ describe('the frame-rate rows in words', () => {
   it('names every table entry’s row, with the index its own label gives', () => {
     expect(FPS_PATCH_TABLE.length).toBeGreaterThan(0);
     for (const source of FPS_PATCH_TABLE) {
+      /* The add-noskip entries change code, not a row (TESTING.md 42.97): no index, and their label names none. */
+      if (source.id.endsWith(FPS_ADD_NOSKIP_SUFFIX)) {
+        expect(fpsSteadyRowIndex(source.id), source.id).toBeNull();
+        expect(indexInLabel(source.row.label), source.id).toBeNull();
+        continue;
+      }
       const index = fpsSteadyRowIndex(source.id);
       expect(index, source.id).not.toBeNull();
       expect(indexInLabel(source.row.label), `${source.id}: ${source.row.label}`).toBe(index);
@@ -33,7 +44,9 @@ describe('the frame-rate rows in words', () => {
       const source = FPS_PATCH_TABLE[i];
       expect(patch.id).toBe(source?.id);
       expect(patch.row.name).toBe(
-        `the steady frame row (row ${String(fpsSteadyRowIndex(patch.id))})`,
+        patch.id.endsWith(FPS_ADD_NOSKIP_SUFFIX)
+          ? FPS_USB_CHECK_NAME
+          : `the steady frame row (row ${String(fpsSteadyRowIndex(patch.id))})`,
       );
       expect(patch.row.detail).toBe(source?.row.label);
       expect(patch.row.offset).toBe(source?.row.offset);
@@ -51,6 +64,13 @@ describe('the frame-rate rows in words', () => {
     expect(patch?.row.detail).toBe(
       'row 14, the steady self-loop (row link ee: next = alt = 14), 68-byte r2016 record',
     );
+  });
+
+  it('names the add-noskip entries by the USB check they change (TESTING.md 42.97)', () => {
+    const patch = FPS_PATCHES.find((entry) => entry.id === 'compact_32k-1.3.0.0-to32-add-noskip');
+    expect(patch?.row.name).toBe('the USB check at the start of each field');
+    expect(patch?.row.offset).toBe(0x6190);
+    expect(fpsRowName('compact_32k-1.3.0.0-to32')).toBe('the steady frame row (row 8)');
   });
 
   it('an id the map does not hold still reads as words', () => {

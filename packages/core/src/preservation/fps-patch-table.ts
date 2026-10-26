@@ -163,14 +163,21 @@ export const FPS_PATCH_TABLE: readonly FpsPatchSource[] = [
     // to 32.20 fps (5 s medians; stock 8.04 to 8.05), 0 frozen pairs, level 5,760 against stock 5,739
     // (means of frames). The terminator selection 0x11 saturated the camera picture (67 % of samples at or
     // above 15000) and was rejected. Emulator, IP 8: 8.065 -> 32.258 Hz, level 6,801 -> 6,797. OPEN: a long
-    // stream may leave 32 Hz (docs/FPS_PATCH_LONG_STREAM.md).
+    // stream may leave 32 Hz (docs/FPS_PATCH_LONG_STREAM.md). NO-SKIP (TESTING.md 42.97): the entry also
+    // carries the no-skip branch (the last edit, image +0x626c), so one press writes the 32 Hz image with
+    // the USB fix, 18972f32. The image this entry wrote before (32 Hz only, 5313f107) is recognised
+    // (KNOWN_RATE) and is the stock image of compact_32k-1.3.0.8-to32-add-noskip, which adds the branch
+    // alone and gives the same image. Emulator (FW-V1 noskip study, the last chunk of each frame read
+    // late): the 32 Hz-only image skips about 110 of 120 field starts at 0.5, 2 and 5 ms late; this image
+    // skips none and tears none there, and tears only with a chunk held 30 ms. The branch has not been run
+    // on a camera of this build.
     id: 'compact_32k-1.3.0.8-to32',
     family: 'compact_32k',
     version: '1.3.0.8',
     fromHz: 8,
     targetHz: 32,
     stockSha256: '2969d0df5bfeac74b88e6ee608ee8b2657fecf2e0234e9ce2731add2408f3d1c',
-    patchedSha256: '5313f107b81d99a1ac033fbfe9ecda9bd3664d2f669237876ffac1e3a01377a4',
+    patchedSha256: '18972f321f6df59b5ad22e85057ec40099738420160aec896906eec898895def',
     length: 49128,
     edits: [
       // block 13 header count 04 -> 01: the self-loop block runs one step instead of four, so every capture
@@ -182,6 +189,14 @@ export const FPS_PATCH_TABLE: readonly FpsPatchSource[] = [
       // the delivery bit 0x20: frame_line_op_3 (image.c:1111) is a plain copy of the line, with no read of
       // the destination and no rescale. Header 23 (type 3, gpio 1) is stock.
       { offset: 0xb754, before: '130520130620130720112823', after: '132323000000000000000000' },
+      // the no-skip branch (docs/NOSKIP_PATCH_ALL_FIRMWARES.md; toolkit TESTING.md 42.93, 42.97): at the
+      // first DMA group of each field the capture loop skips the field while the USB IN queue still holds
+      // the previous frame's last chunk (app_init.c:1713: it logs "USB TX not complete - Skipping field",
+      // sets the skip flag (_10) and clears FLAG_D). On a slow host (an Android phone reads that chunk
+      // about 1 ms late) every other field is lost. The `cbz r0` over that block (20 b3) becomes `b.n` (24
+      // e0) to the same target, image +0x62b8, the path an idle endpoint always takes, so no field is
+      // skipped. A frame still starts only with the IN queue empty (:479), so the queue cannot overflow.
+      { offset: 0x626c, before: '20b3', after: '24e0' },
     ],
     row: {
       label:
@@ -200,14 +215,21 @@ export const FPS_PATCH_TABLE: readonly FpsPatchSource[] = [
     // (frame_chunk_seed, frame_chunk_ops_target.c:171). The terminator selection 0x10 froze the picture in
     // the emulator, so it is not used. Emulator, IP 8 Normal: 8.065 -> 32.258 Hz, level 6,797 -> 6,792, 0
     // frozen pairs; IP 9 the same rate. Not measured on a camera. OPEN: a long stream may leave 32 Hz
-    // (docs/FPS_PATCH_LONG_STREAM.md).
+    // (docs/FPS_PATCH_LONG_STREAM.md). NO-SKIP (TESTING.md 42.97): the entry also carries the no-skip
+    // branch (the last edit, image +0x3056), so one press writes the 32 Hz image with the USB fix,
+    // 9b24dbc2. The image this entry wrote before (32 Hz only, 51c6f0d5) is recognised (KNOWN_RATE) and is
+    // the stock image of compact_32k-4.8.1.7-to32-add-noskip, which adds the branch alone and gives the
+    // same image. Emulator (FW-V1 noskip study, the last chunk of each frame read late): the 32 Hz-only
+    // image skips about 110 of 120 field starts at 0.5, 2 and 5 ms late; this image skips none and tears
+    // none there, and tears only with a chunk held 30 ms. The branch has not been run on a camera of this
+    // build.
     id: 'compact_32k-4.8.1.7-to32',
     family: 'compact_32k',
     version: '4.8.1.7',
     fromHz: 8,
     targetHz: 32,
     stockSha256: '04d9e1559d63463cf6c0c29ddc21f64af093bc3fe4d4e769ba41d4d8b0798419',
-    patchedSha256: '51c6f0d57c89d4cadd2a2d46c0ac0f22ddb21570d0f01f80b0748fd1fb4314e0',
+    patchedSha256: '9b24dbc2ef87d41fb42d9a03a151babdfd714f28b936f7230b8664a6d0c335d6',
     length: 49888,
     edits: [
       // block 13 header count 04 -> 01: the self-loop block runs one step instead of four, so every capture
@@ -219,6 +241,16 @@ export const FPS_PATCH_TABLE: readonly FpsPatchSource[] = [
       // the delivery bit 0x20: frame_chunk_copy (frame_chunk_ops_target.c:669) is the plain copy of the
       // chunk (mem_copy_flashaware, no read of the destination, no rescale). Header 23 is stock.
       { offset: 0x9772, before: '110520110620110720102823', after: '112123000000000000000000' },
+      // the no-skip branch (docs/NOSKIP_PATCH_ALL_FIRMWARES.md; toolkit TESTING.md 42.93, 42.97): at the
+      // first DMA group of each field the capture loop skips the field while the USB IN queue still holds
+      // the previous frame's last chunk (isr.c:1911-1950: it logs "USB TX not complete - Skipping field",
+      // sets the skip flag, clears FLAG_D and sets frame_tx_flag (read only by frame_step_gpio_apply, to
+      // re-align the sensor GPIO after a skipped field)). On a slow host (an Android phone reads that chunk
+      // about 1 ms late) every other field is lost. The `cbz r0` over that block (40 b3) becomes `b.n` (28
+      // e0) to the same target, image +0x30aa, the path an idle endpoint always takes, so no field is
+      // skipped. A frame still starts only with the IN queue empty (capture_engine_target.c:721), so the
+      // queue cannot overflow.
+      { offset: 0x3056, before: '40b3', after: '28e0' },
     ],
     row: {
       label:
@@ -233,14 +265,21 @@ export const FPS_PATCH_TABLE: readonly FpsPatchSource[] = [
     // the same program). The block is the 4.8.1.7 block (the same bytes and handler table), so the step is
     // the same op 1 copy on selection 0x11; the 4.8.1.7 entry gives the op semantics and the rejected
     // selection. Emulator, IP 8 Normal: 8.065 -> 32.258 Hz, 0 frozen pairs; IP 9 the same rate. Not
-    // measured on a camera. OPEN: a long stream may leave 32 Hz (docs/FPS_PATCH_LONG_STREAM.md).
+    // measured on a camera. OPEN: a long stream may leave 32 Hz (docs/FPS_PATCH_LONG_STREAM.md). NO-SKIP
+    // (TESTING.md 42.97): the entry also carries the no-skip branch (the last edit, image +0x304a), so one
+    // press writes the 32 Hz image with the USB fix, 30f65476. The image this entry wrote before (32 Hz
+    // only, 14e25960) is recognised (KNOWN_RATE) and is the stock image of
+    // compact_32k-4.8.1.9-to32-add-noskip, which adds the branch alone and gives the same image. Emulator
+    // (FW-V1 noskip study, the last chunk of each frame read late): the 32 Hz-only image skips about 110 of
+    // 120 field starts at 2 ms late; this image skips none and tears none there, and tears only with a
+    // chunk held 30 ms. The branch has not been run on a camera of this build.
     id: 'compact_32k-4.8.1.9-to32',
     family: 'compact_32k',
     version: '4.8.1.9',
     fromHz: 8,
     targetHz: 32,
     stockSha256: '2c5eedec97ba168b5defba3b5065c0d50e058102725c577a33ff29d270c3cdd5',
-    patchedSha256: '14e259603487af8b8db1769b144b8fcc41ec09fc8965f835becdb296bb42e495',
+    patchedSha256: '30f65476179393d9fba001aed0b1e38961b1f5d03441dfe8840942f27e107cb7',
     length: 48800,
     edits: [
       // block 13 header count 04 -> 01: one step instead of four, every capture is published (as the
@@ -250,6 +289,15 @@ export const FPS_PATCH_TABLE: readonly FpsPatchSource[] = [
       // step 11 21 23 and zeros, the same bytes as the 4.8.1.7 patch: 11 is the seeds' selection, 21 is op
       // 1 (frame_chunk_copy) with the delivery bit, 23 the stock header (type 3, gpio 1)
       { offset: 0x95aa, before: '110520110620110720102823', after: '112123000000000000000000' },
+      // the no-skip branch (docs/NOSKIP_PATCH_ALL_FIRMWARES.md; toolkit TESTING.md 42.93, 42.97): at the
+      // first DMA group of each field the capture loop skips the field while the USB IN queue still holds
+      // the previous frame's last chunk (the 4.8.1.7 block: it logs "USB TX not complete - Skipping field",
+      // sets the skip flag, clears FLAG_D and sets frame_tx_flag (read only by frame_step_gpio_apply)). On
+      // a slow host (an Android phone reads that chunk about 1 ms late) every other field is lost. The `cbz
+      // r0` over that block (40 b3) becomes `b.n` (28 e0) to the same target, image +0x309e, the path an
+      // idle endpoint always takes, so no field is skipped. A frame still starts only with the IN queue
+      // empty (capture_engine_target.c:724), so the queue cannot overflow.
+      { offset: 0x304a, before: '40b3', after: '28e0' },
     ],
     row: {
       label:
@@ -269,14 +317,22 @@ export const FPS_PATCH_TABLE: readonly FpsPatchSource[] = [
     // per frame; Hi FPS (IP 3, stock one capture per frame) about 32 fps. The stock 1.3.0.0 picture was not
     // measured on the camera. Emulator, IP 8: 8.065 -> 32.258 Hz, level 6,798 -> 6,797. The unit first
     // carried the withdrawn mode-6 16 Hz edit as well (image d91284c6, KNOWN_RATE); that edit takes no part
-    // in the Normal or Hi FPS streams.
+    // in the Normal or Hi FPS streams. NO-SKIP (TESTING.md 42.97): the entry also carries the no-skip
+    // branch (the last edit, image +0x6190), so one press writes the 32 Hz image with the USB fix,
+    // edeabb71. The image this entry wrote before (32 Hz only, ef90c94a) is recognised (KNOWN_RATE) and is
+    // the stock image of compact_32k-1.3.0.0-to32-add-noskip, which adds the branch alone and gives the
+    // same image. Emulator (FW-V1 noskip study, the last chunk of each frame read late): the 32 Hz-only
+    // image skips about 110 of 120 field starts at 0.5, 2 and 5 ms late; this image skips none and tears
+    // none there, and tears only with a chunk held 30 ms. Camera: the bench Compact 101310HSNEA2 runs this
+    // image in banks A, B and R (TESTING.md 42.93); a Redmi 4X went from 84 to 88 % of frames skipped to
+    // 32/33 fps, a Pixel 8 Pro is unchanged in normal use.
     id: 'compact_32k-1.3.0.0-to32',
     family: 'compact_32k',
     version: '1.3.0.0',
     fromHz: 8,
     targetHz: 32,
     stockSha256: '862717a8a605021def7858ac0c04ad4aa1abe23d357d6c2417699939137f481c',
-    patchedSha256: 'ef90c94a448b69feea06421026c5765eceb1685d6806e7a48714c76c3d0ed273',
+    patchedSha256: 'edeabb713319472f7ec8bc9fc43aa911f3395afeeeb04ddd2c890371ca583c02',
     length: 47768,
     edits: [
       // mode-8 capture program (the processed "normal" stream), block 8 @ +0xB898, the steady self-loop
@@ -285,6 +341,14 @@ export const FPS_PATCH_TABLE: readonly FpsPatchSource[] = [
       // its steps @ +0xB89A..+0xB8A1: op 5 (seed) | op 6 | op 6 | op 7 (mean of four, push, hdr 3) 59 20 |
       // 69 20 | 69 20 | 79 27 -> op 3 (copy) with push, hdr 3, gpio 1: 39 27 | 00 x6
       { offset: 0xb89a, before: '5920692069207927', after: '3927000000000000' },
+      // the no-skip branch (docs/NOSKIP_PATCH_ALL_FIRMWARES.md; toolkit TESTING.md 42.93, 42.97): at the
+      // first DMA group of each field the capture loop skips the field while the USB IN queue still holds
+      // the previous frame's last chunk (app_init.c:952: it logs "USB TX not complete - Skipping field",
+      // sets the skip flag (_10) and clears FLAG_D). On a slow host (an Android phone reads that chunk
+      // about 1 ms late) every other field is lost. The `cbz r0` over that block (18 b3) becomes `b.n` (23
+      // e0) to the same target, image +0x61da, the path an idle endpoint always takes, so no field is
+      // skipped. A frame still starts only with the IN queue empty (:482), so the queue cannot overflow.
+      { offset: 0x6190, before: '18b3', after: '23e0' },
     ],
     row: {
       label:
@@ -305,14 +369,20 @@ export const FPS_PATCH_TABLE: readonly FpsPatchSource[] = [
     // B, 2026-10-19, P3): Normal 32.18 to 32.21 fps (5 s medians; stock 8.05), 0 frozen pairs, level 5,693
     // against stock 5,716 (same session), std 33.5 against 34.3. Emulator, IP 8: 8.065 -> 32.258 Hz, level
     // 6,008 -> 6,005. Slots refuse firmware older than 0.8.0.0, so the page does not offer it; flashing it
-    // needs the J-Link.
+    // needs the J-Link. NO-SKIP (TESTING.md 42.97): the entry also carries the no-skip branch (the last
+    // edit, image +0x5f98), so one press writes the 32 Hz image with the USB fix, f08d84bd. The image this
+    // entry wrote before (32 Hz only, c5194276) is recognised (KNOWN_RATE) and is the stock image of
+    // compact_32k-0.7.0.8-to32-add-noskip, which adds the branch alone and gives the same image. Emulator
+    // (FW-V1 noskip study, the last chunk of each frame read late): the 32 Hz-only image skips about 110 of
+    // 120 field starts at 2 ms late; this image skips none and tears none there, and tears only with a
+    // chunk held 30 ms. The branch has not been run on a camera of this build.
     id: 'compact_32k-0.7.0.8-to32',
     family: 'compact_32k',
     version: '0.7.0.8',
     fromHz: 8,
     targetHz: 32,
     stockSha256: '6bac46abf3023d02cf0ba8a43bfbebdd7a85c77ffbedbab08d53e2f297a3e1ea',
-    patchedSha256: 'c519427649dd4d7f962bc1412ed1fb085a21195404910607ea27f7bce2e83c8e',
+    patchedSha256: 'f08d84bdda1f7036468da6d45ebcd475fe085646df19d2b8f9e1e118001c35b9',
     length: 46616,
     edits: [
       // block 4 of the mode-8 program (14-byte blocks with 3-bit header fields; the self-loop at image
@@ -326,6 +396,14 @@ export const FPS_PATCH_TABLE: readonly FpsPatchSource[] = [
       // 1 and active as stock, the publish bit, header id 3 and gpio 1: 95 13. The stock steps after it are
       // zeroed (00 x 6).
       { offset: 0xb516, before: '25102d102d10b513', after: '9513000000000000' },
+      // the no-skip branch (docs/NOSKIP_PATCH_ALL_FIRMWARES.md; toolkit TESTING.md 42.93, 42.97): at the
+      // first DMA group of each field the capture loop skips the field while the USB IN queue still holds
+      // the previous frame's last chunk (app_init.c:963: a silent skip: no log; it sets the skip flag
+      // (session +0x15) and clears FLAG_D). On a slow host (an Android phone reads that chunk about 1 ms
+      // late) every other field is lost. The `cbz r0` over that block (a8 b1) becomes `b.n` (15 e0) to the
+      // same target, image +0x5fc6, the path an idle endpoint always takes, so no field is skipped. A frame
+      // still starts only with the IN queue empty (:500), so the queue cannot overflow.
+      { offset: 0x5f98, before: 'a8b1', after: '15e0' },
     ],
     row: {
       label:
@@ -342,14 +420,20 @@ export const FPS_PATCH_TABLE: readonly FpsPatchSource[] = [
     // the publish bit (frame_line_op_3, image.c:343: a row copy, no read of the destination, no scale),
     // header id 3, gpio 1, sel 1 as stock. Camera (owner's PIR206, bank B, E1): Normal 32.16 to 32.20 fps
     // (stock 8.04 to 8.05), 0 frozen pairs, level 5,829 against stock 5,814. Emulator, IP 8: 8.065 ->
-    // 32.258 Hz.
+    // 32.258 Hz. NO-SKIP (TESTING.md 42.97): the entry also carries the no-skip branch (the last edit,
+    // image +0x6110), so one press writes the 32 Hz image with the USB fix, e6da3523. The image this entry
+    // wrote before (32 Hz only, 9b2c6f89) is recognised (KNOWN_RATE) and is the stock image of
+    // compact_32k-0.8.0.0-to32-add-noskip, which adds the branch alone and gives the same image. Emulator
+    // (FW-V1 noskip study, the last chunk of each frame read late): the 32 Hz-only image skips about 110 of
+    // 120 field starts at 2 ms late; this image skips none and tears none there, and tears only with a
+    // chunk held 30 ms. The branch has not been run on a camera of this build.
     id: 'compact_32k-0.8.0.0-to32',
     family: 'compact_32k',
     version: '0.8.0.0',
     fromHz: 8,
     targetHz: 32,
     stockSha256: '9f5d9006f8bce9539e3f913ab5aad55e7ca6bc84e55839d1fe8d48c1c7463836',
-    patchedSha256: '9b2c6f89a8f1dd4af056669bc38cf83c657d44a49e1c8bce57c6d85fed611c73',
+    patchedSha256: 'e6da35233e005a159c238965f4d679b30130bb4828d2f7e6162924fc3a36d74d',
     length: 47188,
     edits: [
       // block 6 of the mode-8 program (14-byte blocks; the self-loop at image +0xb744), header byte 0
@@ -362,6 +446,14 @@ export const FPS_PATCH_TABLE: readonly FpsPatchSource[] = [
       // plain copy so the scale is the stock scale; the stock steps after it are zeroed (00 x 6), as the
       // 1.3.0.0 entry does.
       { offset: 0xb746, before: '5920692069207927', after: '3927000000000000' },
+      // the no-skip branch (docs/NOSKIP_PATCH_ALL_FIRMWARES.md; toolkit TESTING.md 42.93, 42.97): at the
+      // first DMA group of each field the capture loop skips the field while the USB IN queue still holds
+      // the previous frame's last chunk (app_init.c:951: a silent skip: no log; it sets the skip flag (_10)
+      // and clears FLAG_D). On a slow host (an Android phone reads that chunk about 1 ms late) every other
+      // field is lost. The `cbz r0` over that block (a8 b1) becomes `b.n` (15 e0) to the same target, image
+      // +0x613e, the path an idle endpoint always takes, so no field is skipped. A frame still starts only
+      // with the IN queue empty (:482), so the queue cannot overflow.
+      { offset: 0x6110, before: 'a8b1', after: '15e0' },
     ],
     row: {
       label:
@@ -377,14 +469,21 @@ export const FPS_PATCH_TABLE: readonly FpsPatchSource[] = [
     // op 5, op 6, op 6, op 7 with the publish bit become one copy, op 3 with the publish bit
     // (frame_line_op_3, a row copy with no scale), header id 3, gpio 1, sel 1 as stock. Camera (owner's
     // PIR206, bank B, E1): Normal 32.16 to 32.21 fps (stock 7.96 to 8.05), 0 frozen pairs, level 5,835
-    // against stock 5,836. Emulator, IP 8: 8.065 -> 32.258 Hz.
+    // against stock 5,836. Emulator, IP 8: 8.065 -> 32.258 Hz. NO-SKIP (TESTING.md 42.97): the entry also
+    // carries the no-skip branch (the last edit, image +0x619c), so one press writes the 32 Hz image with
+    // the USB fix, 4dfcdcd2. The image this entry wrote before (32 Hz only, e41610e3) is recognised
+    // (KNOWN_RATE) and is the stock image of compact_32k-0.9.0.2-to32-add-noskip, which adds the branch
+    // alone and gives the same image. Emulator (FW-V1 noskip study, the last chunk of each frame read
+    // late): the 32 Hz-only image skips about 110 of 120 field starts at 0.5, 2 and 5 ms late; this image
+    // skips none and tears none there, and tears only with a chunk held 30 ms. The branch has not been run
+    // on a camera of this build.
     id: 'compact_32k-0.9.0.2-to32',
     family: 'compact_32k',
     version: '0.9.0.2',
     fromHz: 8,
     targetHz: 32,
     stockSha256: '3c597b72f5f4081d5f76e9348cc0d6a1d46a13453a2ca9c5005b117930df57d8',
-    patchedSha256: 'e41610e30bfee1fa6ca862eccc7c5fe8773f05cd958b190a9e22de09c7ac7eb8',
+    patchedSha256: '4dfcdcd295e54fd5772e7f57c306e349d97be4d124ab14a4ff7859af5b601287',
     length: 47368,
     edits: [
       // block 7 of the mode-8 program (14-byte blocks; the self-loop at image +0xb7f6), header byte 0
@@ -397,6 +496,14 @@ export const FPS_PATCH_TABLE: readonly FpsPatchSource[] = [
       // plain copy so the scale is the stock scale; the stock steps after it are zeroed (00 x 6), as the
       // 1.3.0.0 entry does.
       { offset: 0xb7f8, before: '5920692069207927', after: '3927000000000000' },
+      // the no-skip branch (docs/NOSKIP_PATCH_ALL_FIRMWARES.md; toolkit TESTING.md 42.93, 42.97): at the
+      // first DMA group of each field the capture loop skips the field while the USB IN queue still holds
+      // the previous frame's last chunk (app_init.c:951: a silent skip: no log; it sets the skip flag (_10)
+      // and clears FLAG_D). On a slow host (an Android phone reads that chunk about 1 ms late) every other
+      // field is lost. The `cbz r0` over that block (a8 b1) becomes `b.n` (15 e0) to the same target, image
+      // +0x61ca, the path an idle endpoint always takes, so no field is skipped. A frame still starts only
+      // with the IN queue empty (:482), so the queue cannot overflow.
+      { offset: 0x619c, before: 'a8b1', after: '15e0' },
     ],
     row: {
       label:
@@ -412,14 +519,20 @@ export const FPS_PATCH_TABLE: readonly FpsPatchSource[] = [
     // op 5, op 6, op 6, op 7 with the publish bit become one copy, op 3 with the publish bit, header id 3,
     // gpio 1, sel 1 as stock. Camera (owner's PIR206, bank B, E1): Normal 32.10 to 32.20 fps (stock 8.04 to
     // 8.05), 0 frozen pairs, level 4,868 against stock 4,848 (a darker, noisier build). Emulator, IP 8:
-    // 8.065 -> 32.258 Hz.
+    // 8.065 -> 32.258 Hz. NO-SKIP (TESTING.md 42.97): the entry also carries the no-skip branch (the last
+    // edit, image +0x619c), so one press writes the 32 Hz image with the USB fix, 9727a08c. The image this
+    // entry wrote before (32 Hz only, 54d383ad) is recognised (KNOWN_RATE) and is the stock image of
+    // compact_32k-0.9.0.6-to32-add-noskip, which adds the branch alone and gives the same image. Emulator
+    // (FW-V1 noskip study, the last chunk of each frame read late): the 32 Hz-only image skips about 110 of
+    // 120 field starts at 2 ms late; this image skips none and tears none there, and tears only with a
+    // chunk held 30 ms. The branch has not been run on a camera of this build.
     id: 'compact_32k-0.9.0.6-to32',
     family: 'compact_32k',
     version: '0.9.0.6',
     fromHz: 8,
     targetHz: 32,
     stockSha256: 'c07c3c3f913415bbfe3aed926a8fda94dd91ea2b8fbb023a02c1b958d26abdab',
-    patchedSha256: '54d383ad72882075f21963689fa7c69debb1359f5c7254a02b203e5ee12152ea',
+    patchedSha256: '9727a08c08450908bc57831f55b22df4b88254ae2a6b918d61580749d8d35f9c',
     length: 47156,
     edits: [
       // block 7 of the mode-8 program (14-byte blocks; the self-loop at image +0xb712), header byte 0
@@ -432,6 +545,14 @@ export const FPS_PATCH_TABLE: readonly FpsPatchSource[] = [
       // plain copy so the scale is the stock scale; the stock steps after it are zeroed (00 x 6), as the
       // 1.3.0.0 entry does.
       { offset: 0xb714, before: '5920692069207927', after: '3927000000000000' },
+      // the no-skip branch (docs/NOSKIP_PATCH_ALL_FIRMWARES.md; toolkit TESTING.md 42.93, 42.97): at the
+      // first DMA group of each field the capture loop skips the field while the USB IN queue still holds
+      // the previous frame's last chunk (app_init.c:951: a silent skip: no log; it sets the skip flag (_10)
+      // and clears FLAG_D). On a slow host (an Android phone reads that chunk about 1 ms late) every other
+      // field is lost. The `cbz r0` over that block (a8 b1) becomes `b.n` (15 e0) to the same target, image
+      // +0x61ca, the path an idle endpoint always takes, so no field is skipped. A frame still starts only
+      // with the IN queue empty (:482), so the queue cannot overflow.
+      { offset: 0x619c, before: 'a8b1', after: '15e0' },
     ],
     row: {
       label:
@@ -447,14 +568,20 @@ export const FPS_PATCH_TABLE: readonly FpsPatchSource[] = [
     // op 5, op 6, op 6, op 7 with the publish bit become one copy, op 3 with the publish bit, header id 3,
     // gpio 1, sel 1 as stock. Camera (owner's PIR206, bank B, E1): Normal medians 30.73 to 32.19 fps, the
     // first seconds low (stock 7.19 to 8.09), 0 frozen pairs, level 5,833 against stock 5,826. Emulator, IP
-    // 8: 8.065 -> 32.258 Hz.
+    // 8: 8.065 -> 32.258 Hz. NO-SKIP (TESTING.md 42.97): the entry also carries the no-skip branch (the
+    // last edit, image +0x6184), so one press writes the 32 Hz image with the USB fix, 71fe108e. The image
+    // this entry wrote before (32 Hz only, 1ad41e1e) is recognised (KNOWN_RATE) and is the stock image of
+    // compact_32k-0.9.0.7-to32-add-noskip, which adds the branch alone and gives the same image. Emulator
+    // (FW-V1 noskip study, the last chunk of each frame read late): the 32 Hz-only image skips about 110 of
+    // 120 field starts at 2 ms late; this image skips none and tears none there, and tears only with a
+    // chunk held 30 ms. The branch has not been run on a camera of this build.
     id: 'compact_32k-0.9.0.7-to32',
     family: 'compact_32k',
     version: '0.9.0.7',
     fromHz: 8,
     targetHz: 32,
     stockSha256: 'f3ecc810260a1ddf96e25bf9f9d0c405d8bce9975ef47497f6f2e7c4da020182',
-    patchedSha256: '1ad41e1e06f339cfeea264fda4d6b34db7f96e9b6380c8b115eb38253606cc32',
+    patchedSha256: '71fe108e2edfdc9bce2cc5e2511619590e954c1a8882a7f350a1499402b3ddbb',
     length: 47352,
     edits: [
       // block 7 of the mode-8 program (14-byte blocks; the self-loop at image +0xb7e6), header byte 0
@@ -467,6 +594,14 @@ export const FPS_PATCH_TABLE: readonly FpsPatchSource[] = [
       // plain copy so the scale is the stock scale; the stock steps after it are zeroed (00 x 6), as the
       // 1.3.0.0 entry does.
       { offset: 0xb7e8, before: '5920692069207927', after: '3927000000000000' },
+      // the no-skip branch (docs/NOSKIP_PATCH_ALL_FIRMWARES.md; toolkit TESTING.md 42.93, 42.97): at the
+      // first DMA group of each field the capture loop skips the field while the USB IN queue still holds
+      // the previous frame's last chunk (app_init.c:951: a silent skip: no log; it sets the skip flag (_10)
+      // and clears FLAG_D). On a slow host (an Android phone reads that chunk about 1 ms late) every other
+      // field is lost. The `cbz r0` over that block (a8 b1) becomes `b.n` (15 e0) to the same target, image
+      // +0x61b2, the path an idle endpoint always takes, so no field is skipped. A frame still starts only
+      // with the IN queue empty (:482), so the queue cannot overflow.
+      { offset: 0x6184, before: 'a8b1', after: '15e0' },
     ],
     row: {
       label:
@@ -482,14 +617,21 @@ export const FPS_PATCH_TABLE: readonly FpsPatchSource[] = [
     // op 5, op 6, op 6, op 7 with the publish bit become one copy, op 3 with the publish bit, header id 3,
     // gpio 1, sel 1 as stock. Camera (owner's PIR206, bank B): the first run gave 27.8 to 30.8 fps and was
     // not reproduced; four reruns gave 32.16 to 32.23 fps (stock 8.04 to 8.05); 0 frozen pairs; level 5,842
-    // against stock 5,847. Emulator, IP 8: 8.065 -> 32.258 Hz.
+    // against stock 5,847. Emulator, IP 8: 8.065 -> 32.258 Hz. NO-SKIP (TESTING.md 42.97): the entry also
+    // carries the no-skip branch (the last edit, image +0x619c), so one press writes the 32 Hz image with
+    // the USB fix, f1f9057f. The image this entry wrote before (32 Hz only, 1814e5ac) is recognised
+    // (KNOWN_RATE) and is the stock image of compact_32k-0.9.1.0-to32-add-noskip, which adds the branch
+    // alone and gives the same image. Emulator (FW-V1 noskip study, the last chunk of each frame read
+    // late): the 32 Hz-only image skips about 110 of 120 field starts at 2 ms late; this image skips none
+    // and tears none there, and tears only with a chunk held 30 ms. The branch has not been run on a camera
+    // of this build.
     id: 'compact_32k-0.9.1.0-to32',
     family: 'compact_32k',
     version: '0.9.1.0',
     fromHz: 8,
     targetHz: 32,
     stockSha256: 'f0ff04d53111b858c17affefd64dee2fa12d3320f14b6ca3260581f49917a62d',
-    patchedSha256: '1814e5acf445c2e4d33aad565881e844baa0d7634794695c0981b8552dd5c53d',
+    patchedSha256: 'f1f9057fc00c4a0436a86b49e4738dec7ef381a05b565df38528ff8af302974e',
     length: 47368,
     edits: [
       // block 7 of the mode-8 program (14-byte blocks; the self-loop at image +0xb7f6), header byte 0
@@ -502,6 +644,14 @@ export const FPS_PATCH_TABLE: readonly FpsPatchSource[] = [
       // plain copy so the scale is the stock scale; the stock steps after it are zeroed (00 x 6), as the
       // 1.3.0.0 entry does.
       { offset: 0xb7f8, before: '5920692069207927', after: '3927000000000000' },
+      // the no-skip branch (docs/NOSKIP_PATCH_ALL_FIRMWARES.md; toolkit TESTING.md 42.93, 42.97): at the
+      // first DMA group of each field the capture loop skips the field while the USB IN queue still holds
+      // the previous frame's last chunk (app_init.c:951: a silent skip: no log; it sets the skip flag (_10)
+      // and clears FLAG_D). On a slow host (an Android phone reads that chunk about 1 ms late) every other
+      // field is lost. The `cbz r0` over that block (a8 b1) becomes `b.n` (15 e0) to the same target, image
+      // +0x61ca, the path an idle endpoint always takes, so no field is skipped. A frame still starts only
+      // with the IN queue empty (:482), so the queue cannot overflow.
+      { offset: 0x619c, before: 'a8b1', after: '15e0' },
     ],
     row: {
       label:
@@ -518,13 +668,20 @@ export const FPS_PATCH_TABLE: readonly FpsPatchSource[] = [
     // id 3, gpio 1, sel 1 as stock. Camera (owner's PIR206, bank B, E1): Normal 32.17 to 32.24 fps (stock
     // 7.87 to 8.05), 0 frozen pairs, level 5,838 against stock 5,847. Hi FPS (IP 3, the edit is in the
     // Normal program only) mean 23.4 against stock 27.4, not explained. Emulator, IP 8: 8.065 -> 32.258 Hz.
+    // NO-SKIP (TESTING.md 42.97): the entry also carries the no-skip branch (the last edit, image +0x619c),
+    // so one press writes the 32 Hz image with the USB fix, 28371ca7. The image this entry wrote before (32
+    // Hz only, efd72e1c) is recognised (KNOWN_RATE) and is the stock image of
+    // compact_32k-0.10.0.0-to32-add-noskip, which adds the branch alone and gives the same image. Emulator
+    // (FW-V1 noskip study, the last chunk of each frame read late): the 32 Hz-only image skips about 110 of
+    // 120 field starts at 2 ms late; this image skips none and tears none there, and tears only with a
+    // chunk held 30 ms. The branch has not been run on a camera of this build.
     id: 'compact_32k-0.10.0.0-to32',
     family: 'compact_32k',
     version: '0.10.0.0',
     fromHz: 8,
     targetHz: 32,
     stockSha256: '68b314052b80d40f0b28dd8c91f3530a9c1bdba5585f4f2c02b4fe98ba69d988',
-    patchedSha256: 'efd72e1ca423f5697b74885aa1863f3f935c42d4553ba1f62397394bc0becd65',
+    patchedSha256: '28371ca792c54a80076da0bb2c600d9beb8483db05a017547bc31e0e81d4e57c',
     length: 47368,
     edits: [
       // block 7 of the mode-8 program (14-byte blocks; the self-loop at image +0xb7f6), header byte 0
@@ -537,6 +694,14 @@ export const FPS_PATCH_TABLE: readonly FpsPatchSource[] = [
       // plain copy so the scale is the stock scale; the stock steps after it are zeroed (00 x 6), as the
       // 1.3.0.0 entry does.
       { offset: 0xb7f8, before: '5920692069207927', after: '3927000000000000' },
+      // the no-skip branch (docs/NOSKIP_PATCH_ALL_FIRMWARES.md; toolkit TESTING.md 42.93, 42.97): at the
+      // first DMA group of each field the capture loop skips the field while the USB IN queue still holds
+      // the previous frame's last chunk (app_init.c:951: a silent skip: no log; it sets the skip flag (_10)
+      // and clears FLAG_D). On a slow host (an Android phone reads that chunk about 1 ms late) every other
+      // field is lost. The `cbz r0` over that block (a8 b1) becomes `b.n` (15 e0) to the same target, image
+      // +0x61ca, the path an idle endpoint always takes, so no field is skipped. A frame still starts only
+      // with the IN queue empty (:482), so the queue cannot overflow.
+      { offset: 0x619c, before: 'a8b1', after: '15e0' },
     ],
     row: {
       label:
@@ -551,14 +716,21 @@ export const FPS_PATCH_TABLE: readonly FpsPatchSource[] = [
     // mean. Layout: 14-byte blocks, style b. Block 7 is the steady self-loop (first = next = 7): four steps
     // op 5, op 6, op 6, op 7 with the publish bit become one copy, op 3 with the publish bit, header id 3,
     // gpio 1, sel 1 as stock. Camera (owner's PIR206, bank B, E1): Normal 31.3 to 32.2 fps (stock 7.9 to
-    // 8.1), 0 frozen pairs, level 5,835 against stock 5,866. Emulator, IP 8: 8.065 -> 32.258 Hz.
+    // 8.1), 0 frozen pairs, level 5,835 against stock 5,866. Emulator, IP 8: 8.065 -> 32.258 Hz. NO-SKIP
+    // (TESTING.md 42.97): the entry also carries the no-skip branch (the last edit, image +0x6184), so one
+    // press writes the 32 Hz image with the USB fix, a184dbab. The image this entry wrote before (32 Hz
+    // only, d55ccb47) is recognised (KNOWN_RATE) and is the stock image of
+    // compact_32k-1.0.0.0-to32-add-noskip, which adds the branch alone and gives the same image. Emulator
+    // (FW-V1 noskip study, the last chunk of each frame read late): the 32 Hz-only image skips about 110 of
+    // 120 field starts at 0.5, 2 and 5 ms late; this image skips none and tears none there, and tears only
+    // with a chunk held 30 ms. The branch has not been run on a camera of this build.
     id: 'compact_32k-1.0.0.0-to32',
     family: 'compact_32k',
     version: '1.0.0.0',
     fromHz: 8,
     targetHz: 32,
     stockSha256: '30f8737b511dcc4ae8aa950615c88d70b4625ee0b704cf22f2de4e651bd97fe3',
-    patchedSha256: 'd55ccb473dea99dd4e5d9507ae4920113b1fdcbaf769dabf9f9e57c8d40ef391',
+    patchedSha256: 'a184dbabcf92a74f57e1cbf57ef7b1b0963ea19f7c6b8229a7b9126096d4becd',
     length: 47352,
     edits: [
       // block 7 of the mode-8 program (14-byte blocks; the self-loop at image +0xb7e6), header byte 0
@@ -571,6 +743,14 @@ export const FPS_PATCH_TABLE: readonly FpsPatchSource[] = [
       // plain copy so the scale is the stock scale; the stock steps after it are zeroed (00 x 6), as the
       // 1.3.0.0 entry does.
       { offset: 0xb7e8, before: '5920692069207927', after: '3927000000000000' },
+      // the no-skip branch (docs/NOSKIP_PATCH_ALL_FIRMWARES.md; toolkit TESTING.md 42.93, 42.97): at the
+      // first DMA group of each field the capture loop skips the field while the USB IN queue still holds
+      // the previous frame's last chunk (app_init.c:951: a silent skip: no log; it sets the skip flag (_10)
+      // and clears FLAG_D). On a slow host (an Android phone reads that chunk about 1 ms late) every other
+      // field is lost. The `cbz r0` over that block (a8 b1) becomes `b.n` (15 e0) to the same target, image
+      // +0x61b2, the path an idle endpoint always takes, so no field is skipped. A frame still starts only
+      // with the IN queue empty (:482), so the queue cannot overflow.
+      { offset: 0x6184, before: 'a8b1', after: '15e0' },
     ],
     row: {
       label:
@@ -587,14 +767,20 @@ export const FPS_PATCH_TABLE: readonly FpsPatchSource[] = [
     // image.c:350: a row copy, no scale) with the publish bit, header id 3, gpio 1, sel 1 as stock. Camera
     // (owner's PIR206, bank B, E1): Normal 32.18 to 32.20 fps (stock 7.81 to 8.19), 0 frozen pairs, level
     // 5,809 against stock 5,817. Emulator, IP 8: 8.065 -> 32.258 Hz. The 16 Hz patch of this build was
-    // removed (TESTING.md 42.26).
+    // removed (TESTING.md 42.26). NO-SKIP (TESTING.md 42.97): the entry also carries the no-skip branch
+    // (the last edit, image +0x6180), so one press writes the 32 Hz image with the USB fix, 785a9f14. The
+    // image this entry wrote before (32 Hz only, 547d0e85) is recognised (KNOWN_RATE) and is the stock
+    // image of compact_32k-1.2.0.0-to32-add-noskip, which adds the branch alone and gives the same image.
+    // Emulator (FW-V1 noskip study, the last chunk of each frame read late): the 32 Hz-only image skips
+    // about 110 of 120 field starts at 0.5, 2 and 5 ms late; this image skips none and tears none there,
+    // and tears only with a chunk held 30 ms. The branch has not been run on a camera of this build.
     id: 'compact_32k-1.2.0.0-to32',
     family: 'compact_32k',
     version: '1.2.0.0',
     fromHz: 8,
     targetHz: 32,
     stockSha256: '38a9036ae44b9fcaca31a7432257f4aa2cf71d7715a964f1c4b9553dfabfea01',
-    patchedSha256: '547d0e853af87068ace1936b443af06b59636d9ac560db24e38dbff4d8001c90',
+    patchedSha256: '785a9f147025ee655550c2f50bb679b27da8d3ec7bb499a7413ec68f245de3c1',
     length: 47768,
     edits: [
       // block 8 of the mode-8 program (34-byte blocks; the self-loop at image +0xB898, first = next = 8;
@@ -608,6 +794,14 @@ export const FPS_PATCH_TABLE: readonly FpsPatchSource[] = [
       // bit, header id 3, gpio 1 and sel 1 as the stock publish step (39 27); the stock steps after it are
       // zeroed (00 x 6), the 1.3.0.0 edit.
       { offset: 0xb89a, before: '5920692069207927', after: '3927000000000000' },
+      // the no-skip branch (docs/NOSKIP_PATCH_ALL_FIRMWARES.md; toolkit TESTING.md 42.93, 42.97): at the
+      // first DMA group of each field the capture loop skips the field while the USB IN queue still holds
+      // the previous frame's last chunk (app_init.c:962: a silent skip: no log; it sets the skip flag (_10)
+      // and clears FLAG_D). On a slow host (an Android phone reads that chunk about 1 ms late) every other
+      // field is lost. The `cbz r0` over that block (a8 b1) becomes `b.n` (15 e0) to the same target, image
+      // +0x61ae, the path an idle endpoint always takes, so no field is skipped. A frame still starts only
+      // with the IN queue empty (:482), so the queue cannot overflow.
+      { offset: 0x6180, before: 'a8b1', after: '15e0' },
     ],
     row: {
       label:
@@ -623,14 +817,20 @@ export const FPS_PATCH_TABLE: readonly FpsPatchSource[] = [
     // 1.3.0.8 entry. The earlier op 5 form (13 25 23) wrote 0xFFFF over every sample above 15000
     // (frame_line_op_5, image.c:1149) and was replaced. Emulator, IP 8 Normal: 16.129 -> 32.258 Hz, picture
     // level the same as stock (about 6,790 to 6,800). IP 9 the same. Not measured on a camera; not offered
-    // (FF stage two).
+    // (FF stage two). NO-SKIP (TESTING.md 42.97): the entry also carries the no-skip branch (the last edit,
+    // image +0x6484), so one press writes the 32 Hz image with the USB fix, 1be28033. The image this entry
+    // wrote before (32 Hz only, bf99816f) is recognised (KNOWN_RATE) and is the stock image of
+    // compact_32k-1.3.0.8-FF-to32-add-noskip, which adds the branch alone and gives the same image.
+    // Emulator (FW-V1 noskip study, the last chunk of each frame read late): the 32 Hz-only image skips
+    // about 110 of 120 field starts at 0.5, 2 and 5 ms late; this image skips none and tears none there,
+    // and tears only with a chunk held 30 ms. The branch has not been run on a camera of this build.
     id: 'compact_32k-1.3.0.8-FF-to32',
     family: 'compact_32k',
     version: '1.3.0.8-FF',
     fromHz: 16,
     targetHz: 32,
     stockSha256: 'b97ced91fff9f0949a02f35fceab697634cc109a0fe2a2fbbfe6ccfadb7d4d16',
-    patchedSha256: 'bf99816f8bd36a5af33f2bb9196cf9088d9bb58f5d9a45472d40e351d34d677f',
+    patchedSha256: '1be28033401381b28015c163f7fff99b556e67bdae3214be4fb8ed62831c972b',
     length: 49308,
     edits: [
       // the 16 Hz FF block 13 @ image +0xB804 (header 02 0d 0d 00, 2 steps): count 02 -> 01
@@ -640,6 +840,14 @@ export const FPS_PATCH_TABLE: readonly FpsPatchSource[] = [
       // (image.c:1111), a plain copy of the line (the FF build's op 8 fill goes); header 23 (type 3, gpio
       // 1) is stock.
       { offset: 0xb808, before: '130520112823', after: '132323000000' },
+      // the no-skip branch (docs/NOSKIP_PATCH_ALL_FIRMWARES.md; toolkit TESTING.md 42.93, 42.97): at the
+      // first DMA group of each field the capture loop skips the field while the USB IN queue still holds
+      // the previous frame's last chunk (app_init.c:1743: it logs "USB TX not complete - Skipping field",
+      // sets the skip flag (_10) and clears FLAG_D). On a slow host (an Android phone reads that chunk
+      // about 1 ms late) every other field is lost. The `cbz r0` over that block (20 b3) becomes `b.n` (24
+      // e0) to the same target, image +0x64d0, the path an idle endpoint always takes, so no field is
+      // skipped. A frame still starts only with the IN queue empty (:503), so the queue cannot overflow.
+      { offset: 0x6484, before: '20b3', after: '24e0' },
     ],
     row: {
       label:
@@ -655,14 +863,20 @@ export const FPS_PATCH_TABLE: readonly FpsPatchSource[] = [
     // frame_chunk_ops_target.c:669). The earlier op 5 form (11 25 23) wrote 0xFFFF over samples above 15000
     // (frame_chunk_seed, frame_chunk_ops_target.c:171) and was replaced. Emulator, IP 8 Normal: 16.129 ->
     // 32.258 Hz, picture level the same as stock (about 6,790 to 6,800). IP 9 the same. Not measured on a
-    // camera; not offered (FF stage two).
+    // camera; not offered (FF stage two). NO-SKIP (TESTING.md 42.97): the entry also carries the no-skip
+    // branch (the last edit, image +0x305a), so one press writes the 32 Hz image with the USB fix,
+    // 44f3245a. The image this entry wrote before (32 Hz only, aec53641) is recognised (KNOWN_RATE) and is
+    // the stock image of compact_32k-4.16.1.7-FF-to32-add-noskip, which adds the branch alone and gives the
+    // same image. Emulator (FW-V1 noskip study, the last chunk of each frame read late): the 32 Hz-only
+    // image skips about 110 of 120 field starts at 2 ms late; this image skips none and tears none there,
+    // and tears only with a chunk held 30 ms. The branch has not been run on a camera of this build.
     id: 'compact_32k-4.16.1.7-FF-to32',
     family: 'compact_32k',
     version: '4.16.1.7-FF',
     fromHz: 16,
     targetHz: 32,
     stockSha256: 'b1016ea14f2e830fb3691afbd60cd679035c7700a99c777a8a3c276e034f6ca1',
-    patchedSha256: 'aec5364181696416e33d75cb8fb64277998ba81d9b5e4823daba1a479588b9e6',
+    patchedSha256: '44f3245a1c7b6d35b273929947ce4400560afb99d7606b9ca0d7baed3da3f8c6',
     length: 49896,
     edits: [
       // the 16 Hz FF block 13 @ image +0x9776 (header 02 0d 0d 00, 2 steps): count 02 -> 01
@@ -671,6 +885,15 @@ export const FPS_PATCH_TABLE: readonly FpsPatchSource[] = [
       // selection (sel 1); 21 is op 1 with the delivery bit, frame_chunk_copy
       // (frame_chunk_ops_target.c:669), the plain copy of the chunk; header 23 (type 3, gpio 1) is stock.
       { offset: 0x977a, before: '110520102823', after: '112123000000' },
+      // the no-skip branch (docs/NOSKIP_PATCH_ALL_FIRMWARES.md; toolkit TESTING.md 42.93, 42.97): at the
+      // first DMA group of each field the capture loop skips the field while the USB IN queue still holds
+      // the previous frame's last chunk (the 4.8.1.7 block: it logs "USB TX not complete - Skipping field",
+      // sets the skip flag, clears FLAG_D and sets frame_tx_flag (read only by frame_step_gpio_apply)). On
+      // a slow host (an Android phone reads that chunk about 1 ms late) every other field is lost. The `cbz
+      // r0` over that block (40 b3) becomes `b.n` (28 e0) to the same target, image +0x30ae, the path an
+      // idle endpoint always takes, so no field is skipped. A frame still starts only with the IN queue
+      // empty (capture_engine_target.c:721), so the queue cannot overflow.
+      { offset: 0x305a, before: '40b3', after: '28e0' },
     ],
     row: {
       label:
@@ -691,14 +914,21 @@ export const FPS_PATCH_TABLE: readonly FpsPatchSource[] = [
     // interval is 31.07 to 31.25 ms (32.0 to 32.2 Hz), 0 frozen pairs, body mean 5.6k to 5.7k (stock
     // 5.67k), and the render looks like stock. The Compact (non-XR) 4.8.2.1 has not been measured on a
     // camera. Emulator, IP 8 Normal (Compact full dump): 8.065 -> 32.258 Hz, level 6,797 -> 6,805. The 16
-    // Hz form (TESTING.md 42.23, 62.1 ms steady) was removed (42.26).
+    // Hz form (TESTING.md 42.23, 62.1 ms steady) was removed (42.26). NO-SKIP (TESTING.md 42.97): the entry
+    // also carries the no-skip branch (the last edit, image +0x2286), so one press writes the 32 Hz image
+    // with the USB fix, 526124fc. The image this entry wrote before (32 Hz only, d64d91b0) is recognised
+    // (KNOWN_RATE) and is the stock image of compact_32k-4.8.2.1-to32-add-noskip, which adds the branch
+    // alone and gives the same image. Emulator (FW-V1 noskip study, the last chunk of each frame read
+    // late): the 32 Hz-only image skips about 110 of 120 field starts at 0.5, 2 and 5 ms late; this image
+    // skips none and tears none there, and tears only with a chunk held 30 ms. The branch has not been run
+    // on a camera of this build.
     id: 'compact_32k-4.8.2.1-to32',
     family: 'compact_32k',
     version: '4.8.2.1',
     fromHz: 8,
     targetHz: 32,
     stockSha256: 'f96ac57eda75bca22791acc3ed21c80bde96c1f538f0ddd2aea6ffe447752882',
-    patchedSha256: 'd64d91b0fa87f699c32c255b2365db3e9308c6d783b0c95b48ab31f9624c10d5',
+    patchedSha256: '526124fc64ca2abe7aad917b7c07612006c00958122d63e8347bde7561f06ee1',
     length: 42680,
     edits: [
       // steady page 13 @ image +0x90F2 (68-byte command page; n_substeps 4, next = alt = 13): count 04 ->
@@ -712,12 +942,485 @@ export const FPS_PATCH_TABLE: readonly FpsPatchSource[] = [
         before: '230700012308000123080001208a0301',
         after: '23810301000000000000000000000000',
       },
+      // the no-skip branch (docs/NOSKIP_PATCH_ALL_FIRMWARES.md; toolkit TESTING.md 42.93, 42.97): at the
+      // first DMA group of each field the capture loop skips the field while the USB IN queue still holds
+      // the previous frame's last chunk (the steady-page step: no log; it tests bit 5 of the substep,
+      // clears FLAG_D and sets the skip and restart flags). On a slow host (an Android phone reads that
+      // chunk about 1 ms late) every other field is lost. The `cbz r0` over that block (c0 b1) becomes
+      // `b.n` (18 e0) to the same target, image +0x22ba, the path an idle endpoint always takes, so no
+      // field is skipped. A frame still starts only with the IN queue empty (capture_engine_target.c:668),
+      // so the queue cannot overflow.
+      { offset: 0x2286, before: 'c0b1', after: '18e0' },
     ],
     row: {
       label:
         'steady self-loop command page 13 of the 68-byte frame program (n_substeps 4 -> 1, next = alt = 13; one copy with LAST per capture, so every capture is published)',
       offset: 0x90f2,
       length: 68,
+    },
+    sibling: null,
+  },
+  {
+    // compact_32k-1.3.0.8-to32-add-noskip. An image compact_32k-1.3.0.8-to32 wrote before the no-skip
+    // branch joined it (TESTING.md 42.97): 5313f107, the 32 Hz edits only. A camera that carries it is
+    // offered the branch alone, and the result is byte for byte the image the entry writes from the stock
+    // build (18972f32), so a bank patched before and a bank patched now end the same. The input is rebuilt
+    // from the stock image by earlier_image(). The rate does not change (32 Hz); the USB check at each
+    // field start stops skipping fields on slow hosts.
+    id: 'compact_32k-1.3.0.8-to32-add-noskip',
+    family: 'compact_32k',
+    version: '1.3.0.8',
+    fromHz: 32,
+    targetHz: 32,
+    stockSha256: '5313f107b81d99a1ac033fbfe9ecda9bd3664d2f669237876ffac1e3a01377a4',
+    patchedSha256: '18972f321f6df59b5ad22e85057ec40099738420160aec896906eec898895def',
+    length: 49128,
+    edits: [
+      // the no-skip branch alone (app_init.c:1713): the `cbz r0` (20 b3) over the field-skip block becomes
+      // `b.n` (24 e0) to the same target, image +0x62b8; the 32 Hz edits are already in this image, so the
+      // result is the image compact_32k-1.3.0.8-to32 writes from the stock build
+      { offset: 0x626c, before: '20b3', after: '24e0' },
+    ],
+    row: {
+      label:
+        'field-start USB check: the conditional branch over the skip-field code, made unconditional (code, not a frame-program row)',
+      offset: 0x626c,
+      length: 2,
+    },
+    sibling: null,
+  },
+  {
+    // compact_32k-4.8.1.7-to32-add-noskip. An image compact_32k-4.8.1.7-to32 wrote before the no-skip
+    // branch joined it (TESTING.md 42.97): 51c6f0d5, the 32 Hz edits only. A camera that carries it is
+    // offered the branch alone, and the result is byte for byte the image the entry writes from the stock
+    // build (9b24dbc2), so a bank patched before and a bank patched now end the same. The input is rebuilt
+    // from the stock image by earlier_image(). The rate does not change (32 Hz); the USB check at each
+    // field start stops skipping fields on slow hosts.
+    id: 'compact_32k-4.8.1.7-to32-add-noskip',
+    family: 'compact_32k',
+    version: '4.8.1.7',
+    fromHz: 32,
+    targetHz: 32,
+    stockSha256: '51c6f0d57c89d4cadd2a2d46c0ac0f22ddb21570d0f01f80b0748fd1fb4314e0',
+    patchedSha256: '9b24dbc2ef87d41fb42d9a03a151babdfd714f28b936f7230b8664a6d0c335d6',
+    length: 49888,
+    edits: [
+      // the no-skip branch alone (isr.c:1911-1950): the `cbz r0` (40 b3) over the field-skip block becomes
+      // `b.n` (28 e0) to the same target, image +0x30aa; the 32 Hz edits are already in this image, so the
+      // result is the image compact_32k-4.8.1.7-to32 writes from the stock build
+      { offset: 0x3056, before: '40b3', after: '28e0' },
+    ],
+    row: {
+      label:
+        'field-start USB check: the conditional branch over the skip-field code, made unconditional (code, not a frame-program row)',
+      offset: 0x3056,
+      length: 2,
+    },
+    sibling: null,
+  },
+  {
+    // compact_32k-4.8.1.9-to32-add-noskip. An image compact_32k-4.8.1.9-to32 wrote before the no-skip
+    // branch joined it (TESTING.md 42.97): 14e25960, the 32 Hz edits only. A camera that carries it is
+    // offered the branch alone, and the result is byte for byte the image the entry writes from the stock
+    // build (30f65476), so a bank patched before and a bank patched now end the same. The input is rebuilt
+    // from the stock image by earlier_image(). The rate does not change (32 Hz); the USB check at each
+    // field start stops skipping fields on slow hosts.
+    id: 'compact_32k-4.8.1.9-to32-add-noskip',
+    family: 'compact_32k',
+    version: '4.8.1.9',
+    fromHz: 32,
+    targetHz: 32,
+    stockSha256: '14e259603487af8b8db1769b144b8fcc41ec09fc8965f835becdb296bb42e495',
+    patchedSha256: '30f65476179393d9fba001aed0b1e38961b1f5d03441dfe8840942f27e107cb7',
+    length: 48800,
+    edits: [
+      // the no-skip branch alone (the 4.8.1.7 block): the `cbz r0` (40 b3) over the field-skip block
+      // becomes `b.n` (28 e0) to the same target, image +0x309e; the 32 Hz edits are already in this image,
+      // so the result is the image compact_32k-4.8.1.9-to32 writes from the stock build
+      { offset: 0x304a, before: '40b3', after: '28e0' },
+    ],
+    row: {
+      label:
+        'field-start USB check: the conditional branch over the skip-field code, made unconditional (code, not a frame-program row)',
+      offset: 0x304a,
+      length: 2,
+    },
+    sibling: null,
+  },
+  {
+    // compact_32k-1.3.0.0-to32-add-noskip. An image compact_32k-1.3.0.0-to32 wrote before the no-skip
+    // branch joined it (TESTING.md 42.97): ef90c94a, the 32 Hz edits only. A camera that carries it is
+    // offered the branch alone, and the result is byte for byte the image the entry writes from the stock
+    // build (edeabb71), so a bank patched before and a bank patched now end the same. The input is rebuilt
+    // from the stock image by earlier_image(). The rate does not change (32 Hz); the USB check at each
+    // field start stops skipping fields on slow hosts.
+    id: 'compact_32k-1.3.0.0-to32-add-noskip',
+    family: 'compact_32k',
+    version: '1.3.0.0',
+    fromHz: 32,
+    targetHz: 32,
+    stockSha256: 'ef90c94a448b69feea06421026c5765eceb1685d6806e7a48714c76c3d0ed273',
+    patchedSha256: 'edeabb713319472f7ec8bc9fc43aa911f3395afeeeb04ddd2c890371ca583c02',
+    length: 47768,
+    edits: [
+      // the no-skip branch alone (app_init.c:952): the `cbz r0` (18 b3) over the field-skip block becomes
+      // `b.n` (23 e0) to the same target, image +0x61da; the 32 Hz edits are already in this image, so the
+      // result is the image compact_32k-1.3.0.0-to32 writes from the stock build
+      { offset: 0x6190, before: '18b3', after: '23e0' },
+    ],
+    row: {
+      label:
+        'field-start USB check: the conditional branch over the skip-field code, made unconditional (code, not a frame-program row)',
+      offset: 0x6190,
+      length: 2,
+    },
+    sibling: null,
+  },
+  {
+    // compact_32k-0.7.0.8-to32-add-noskip. An image compact_32k-0.7.0.8-to32 wrote before the no-skip
+    // branch joined it (TESTING.md 42.97): c5194276, the 32 Hz edits only. A camera that carries it is
+    // offered the branch alone, and the result is byte for byte the image the entry writes from the stock
+    // build (f08d84bd), so a bank patched before and a bank patched now end the same. The input is rebuilt
+    // from the stock image by earlier_image(). The rate does not change (32 Hz); the USB check at each
+    // field start stops skipping fields on slow hosts.
+    id: 'compact_32k-0.7.0.8-to32-add-noskip',
+    family: 'compact_32k',
+    version: '0.7.0.8',
+    fromHz: 32,
+    targetHz: 32,
+    stockSha256: 'c519427649dd4d7f962bc1412ed1fb085a21195404910607ea27f7bce2e83c8e',
+    patchedSha256: 'f08d84bdda1f7036468da6d45ebcd475fe085646df19d2b8f9e1e118001c35b9',
+    length: 46616,
+    edits: [
+      // the no-skip branch alone (app_init.c:963): the `cbz r0` (a8 b1) over the field-skip block becomes
+      // `b.n` (15 e0) to the same target, image +0x5fc6; the 32 Hz edits are already in this image, so the
+      // result is the image compact_32k-0.7.0.8-to32 writes from the stock build
+      { offset: 0x5f98, before: 'a8b1', after: '15e0' },
+    ],
+    row: {
+      label:
+        'field-start USB check: the conditional branch over the skip-field code, made unconditional (code, not a frame-program row)',
+      offset: 0x5f98,
+      length: 2,
+    },
+    sibling: null,
+  },
+  {
+    // compact_32k-0.8.0.0-to32-add-noskip. An image compact_32k-0.8.0.0-to32 wrote before the no-skip
+    // branch joined it (TESTING.md 42.97): 9b2c6f89, the 32 Hz edits only. A camera that carries it is
+    // offered the branch alone, and the result is byte for byte the image the entry writes from the stock
+    // build (e6da3523), so a bank patched before and a bank patched now end the same. The input is rebuilt
+    // from the stock image by earlier_image(). The rate does not change (32 Hz); the USB check at each
+    // field start stops skipping fields on slow hosts.
+    id: 'compact_32k-0.8.0.0-to32-add-noskip',
+    family: 'compact_32k',
+    version: '0.8.0.0',
+    fromHz: 32,
+    targetHz: 32,
+    stockSha256: '9b2c6f89a8f1dd4af056669bc38cf83c657d44a49e1c8bce57c6d85fed611c73',
+    patchedSha256: 'e6da35233e005a159c238965f4d679b30130bb4828d2f7e6162924fc3a36d74d',
+    length: 47188,
+    edits: [
+      // the no-skip branch alone (app_init.c:951): the `cbz r0` (a8 b1) over the field-skip block becomes
+      // `b.n` (15 e0) to the same target, image +0x613e; the 32 Hz edits are already in this image, so the
+      // result is the image compact_32k-0.8.0.0-to32 writes from the stock build
+      { offset: 0x6110, before: 'a8b1', after: '15e0' },
+    ],
+    row: {
+      label:
+        'field-start USB check: the conditional branch over the skip-field code, made unconditional (code, not a frame-program row)',
+      offset: 0x6110,
+      length: 2,
+    },
+    sibling: null,
+  },
+  {
+    // compact_32k-0.9.0.2-to32-add-noskip. An image compact_32k-0.9.0.2-to32 wrote before the no-skip
+    // branch joined it (TESTING.md 42.97): e41610e3, the 32 Hz edits only. A camera that carries it is
+    // offered the branch alone, and the result is byte for byte the image the entry writes from the stock
+    // build (4dfcdcd2), so a bank patched before and a bank patched now end the same. The input is rebuilt
+    // from the stock image by earlier_image(). The rate does not change (32 Hz); the USB check at each
+    // field start stops skipping fields on slow hosts.
+    id: 'compact_32k-0.9.0.2-to32-add-noskip',
+    family: 'compact_32k',
+    version: '0.9.0.2',
+    fromHz: 32,
+    targetHz: 32,
+    stockSha256: 'e41610e30bfee1fa6ca862eccc7c5fe8773f05cd958b190a9e22de09c7ac7eb8',
+    patchedSha256: '4dfcdcd295e54fd5772e7f57c306e349d97be4d124ab14a4ff7859af5b601287',
+    length: 47368,
+    edits: [
+      // the no-skip branch alone (app_init.c:951): the `cbz r0` (a8 b1) over the field-skip block becomes
+      // `b.n` (15 e0) to the same target, image +0x61ca; the 32 Hz edits are already in this image, so the
+      // result is the image compact_32k-0.9.0.2-to32 writes from the stock build
+      { offset: 0x619c, before: 'a8b1', after: '15e0' },
+    ],
+    row: {
+      label:
+        'field-start USB check: the conditional branch over the skip-field code, made unconditional (code, not a frame-program row)',
+      offset: 0x619c,
+      length: 2,
+    },
+    sibling: null,
+  },
+  {
+    // compact_32k-0.9.0.6-to32-add-noskip. An image compact_32k-0.9.0.6-to32 wrote before the no-skip
+    // branch joined it (TESTING.md 42.97): 54d383ad, the 32 Hz edits only. A camera that carries it is
+    // offered the branch alone, and the result is byte for byte the image the entry writes from the stock
+    // build (9727a08c), so a bank patched before and a bank patched now end the same. The input is rebuilt
+    // from the stock image by earlier_image(). The rate does not change (32 Hz); the USB check at each
+    // field start stops skipping fields on slow hosts.
+    id: 'compact_32k-0.9.0.6-to32-add-noskip',
+    family: 'compact_32k',
+    version: '0.9.0.6',
+    fromHz: 32,
+    targetHz: 32,
+    stockSha256: '54d383ad72882075f21963689fa7c69debb1359f5c7254a02b203e5ee12152ea',
+    patchedSha256: '9727a08c08450908bc57831f55b22df4b88254ae2a6b918d61580749d8d35f9c',
+    length: 47156,
+    edits: [
+      // the no-skip branch alone (app_init.c:951): the `cbz r0` (a8 b1) over the field-skip block becomes
+      // `b.n` (15 e0) to the same target, image +0x61ca; the 32 Hz edits are already in this image, so the
+      // result is the image compact_32k-0.9.0.6-to32 writes from the stock build
+      { offset: 0x619c, before: 'a8b1', after: '15e0' },
+    ],
+    row: {
+      label:
+        'field-start USB check: the conditional branch over the skip-field code, made unconditional (code, not a frame-program row)',
+      offset: 0x619c,
+      length: 2,
+    },
+    sibling: null,
+  },
+  {
+    // compact_32k-0.9.0.7-to32-add-noskip. An image compact_32k-0.9.0.7-to32 wrote before the no-skip
+    // branch joined it (TESTING.md 42.97): 1ad41e1e, the 32 Hz edits only. A camera that carries it is
+    // offered the branch alone, and the result is byte for byte the image the entry writes from the stock
+    // build (71fe108e), so a bank patched before and a bank patched now end the same. The input is rebuilt
+    // from the stock image by earlier_image(). The rate does not change (32 Hz); the USB check at each
+    // field start stops skipping fields on slow hosts.
+    id: 'compact_32k-0.9.0.7-to32-add-noskip',
+    family: 'compact_32k',
+    version: '0.9.0.7',
+    fromHz: 32,
+    targetHz: 32,
+    stockSha256: '1ad41e1e06f339cfeea264fda4d6b34db7f96e9b6380c8b115eb38253606cc32',
+    patchedSha256: '71fe108e2edfdc9bce2cc5e2511619590e954c1a8882a7f350a1499402b3ddbb',
+    length: 47352,
+    edits: [
+      // the no-skip branch alone (app_init.c:951): the `cbz r0` (a8 b1) over the field-skip block becomes
+      // `b.n` (15 e0) to the same target, image +0x61b2; the 32 Hz edits are already in this image, so the
+      // result is the image compact_32k-0.9.0.7-to32 writes from the stock build
+      { offset: 0x6184, before: 'a8b1', after: '15e0' },
+    ],
+    row: {
+      label:
+        'field-start USB check: the conditional branch over the skip-field code, made unconditional (code, not a frame-program row)',
+      offset: 0x6184,
+      length: 2,
+    },
+    sibling: null,
+  },
+  {
+    // compact_32k-0.9.1.0-to32-add-noskip. An image compact_32k-0.9.1.0-to32 wrote before the no-skip
+    // branch joined it (TESTING.md 42.97): 1814e5ac, the 32 Hz edits only. A camera that carries it is
+    // offered the branch alone, and the result is byte for byte the image the entry writes from the stock
+    // build (f1f9057f), so a bank patched before and a bank patched now end the same. The input is rebuilt
+    // from the stock image by earlier_image(). The rate does not change (32 Hz); the USB check at each
+    // field start stops skipping fields on slow hosts.
+    id: 'compact_32k-0.9.1.0-to32-add-noskip',
+    family: 'compact_32k',
+    version: '0.9.1.0',
+    fromHz: 32,
+    targetHz: 32,
+    stockSha256: '1814e5acf445c2e4d33aad565881e844baa0d7634794695c0981b8552dd5c53d',
+    patchedSha256: 'f1f9057fc00c4a0436a86b49e4738dec7ef381a05b565df38528ff8af302974e',
+    length: 47368,
+    edits: [
+      // the no-skip branch alone (app_init.c:951): the `cbz r0` (a8 b1) over the field-skip block becomes
+      // `b.n` (15 e0) to the same target, image +0x61ca; the 32 Hz edits are already in this image, so the
+      // result is the image compact_32k-0.9.1.0-to32 writes from the stock build
+      { offset: 0x619c, before: 'a8b1', after: '15e0' },
+    ],
+    row: {
+      label:
+        'field-start USB check: the conditional branch over the skip-field code, made unconditional (code, not a frame-program row)',
+      offset: 0x619c,
+      length: 2,
+    },
+    sibling: null,
+  },
+  {
+    // compact_32k-0.10.0.0-to32-add-noskip. An image compact_32k-0.10.0.0-to32 wrote before the no-skip
+    // branch joined it (TESTING.md 42.97): efd72e1c, the 32 Hz edits only. A camera that carries it is
+    // offered the branch alone, and the result is byte for byte the image the entry writes from the stock
+    // build (28371ca7), so a bank patched before and a bank patched now end the same. The input is rebuilt
+    // from the stock image by earlier_image(). The rate does not change (32 Hz); the USB check at each
+    // field start stops skipping fields on slow hosts.
+    id: 'compact_32k-0.10.0.0-to32-add-noskip',
+    family: 'compact_32k',
+    version: '0.10.0.0',
+    fromHz: 32,
+    targetHz: 32,
+    stockSha256: 'efd72e1ca423f5697b74885aa1863f3f935c42d4553ba1f62397394bc0becd65',
+    patchedSha256: '28371ca792c54a80076da0bb2c600d9beb8483db05a017547bc31e0e81d4e57c',
+    length: 47368,
+    edits: [
+      // the no-skip branch alone (app_init.c:951): the `cbz r0` (a8 b1) over the field-skip block becomes
+      // `b.n` (15 e0) to the same target, image +0x61ca; the 32 Hz edits are already in this image, so the
+      // result is the image compact_32k-0.10.0.0-to32 writes from the stock build
+      { offset: 0x619c, before: 'a8b1', after: '15e0' },
+    ],
+    row: {
+      label:
+        'field-start USB check: the conditional branch over the skip-field code, made unconditional (code, not a frame-program row)',
+      offset: 0x619c,
+      length: 2,
+    },
+    sibling: null,
+  },
+  {
+    // compact_32k-1.0.0.0-to32-add-noskip. An image compact_32k-1.0.0.0-to32 wrote before the no-skip
+    // branch joined it (TESTING.md 42.97): d55ccb47, the 32 Hz edits only. A camera that carries it is
+    // offered the branch alone, and the result is byte for byte the image the entry writes from the stock
+    // build (a184dbab), so a bank patched before and a bank patched now end the same. The input is rebuilt
+    // from the stock image by earlier_image(). The rate does not change (32 Hz); the USB check at each
+    // field start stops skipping fields on slow hosts.
+    id: 'compact_32k-1.0.0.0-to32-add-noskip',
+    family: 'compact_32k',
+    version: '1.0.0.0',
+    fromHz: 32,
+    targetHz: 32,
+    stockSha256: 'd55ccb473dea99dd4e5d9507ae4920113b1fdcbaf769dabf9f9e57c8d40ef391',
+    patchedSha256: 'a184dbabcf92a74f57e1cbf57ef7b1b0963ea19f7c6b8229a7b9126096d4becd',
+    length: 47352,
+    edits: [
+      // the no-skip branch alone (app_init.c:951): the `cbz r0` (a8 b1) over the field-skip block becomes
+      // `b.n` (15 e0) to the same target, image +0x61b2; the 32 Hz edits are already in this image, so the
+      // result is the image compact_32k-1.0.0.0-to32 writes from the stock build
+      { offset: 0x6184, before: 'a8b1', after: '15e0' },
+    ],
+    row: {
+      label:
+        'field-start USB check: the conditional branch over the skip-field code, made unconditional (code, not a frame-program row)',
+      offset: 0x6184,
+      length: 2,
+    },
+    sibling: null,
+  },
+  {
+    // compact_32k-1.2.0.0-to32-add-noskip. An image compact_32k-1.2.0.0-to32 wrote before the no-skip
+    // branch joined it (TESTING.md 42.97): 547d0e85, the 32 Hz edits only. A camera that carries it is
+    // offered the branch alone, and the result is byte for byte the image the entry writes from the stock
+    // build (785a9f14), so a bank patched before and a bank patched now end the same. The input is rebuilt
+    // from the stock image by earlier_image(). The rate does not change (32 Hz); the USB check at each
+    // field start stops skipping fields on slow hosts.
+    id: 'compact_32k-1.2.0.0-to32-add-noskip',
+    family: 'compact_32k',
+    version: '1.2.0.0',
+    fromHz: 32,
+    targetHz: 32,
+    stockSha256: '547d0e853af87068ace1936b443af06b59636d9ac560db24e38dbff4d8001c90',
+    patchedSha256: '785a9f147025ee655550c2f50bb679b27da8d3ec7bb499a7413ec68f245de3c1',
+    length: 47768,
+    edits: [
+      // the no-skip branch alone (app_init.c:962): the `cbz r0` (a8 b1) over the field-skip block becomes
+      // `b.n` (15 e0) to the same target, image +0x61ae; the 32 Hz edits are already in this image, so the
+      // result is the image compact_32k-1.2.0.0-to32 writes from the stock build
+      { offset: 0x6180, before: 'a8b1', after: '15e0' },
+    ],
+    row: {
+      label:
+        'field-start USB check: the conditional branch over the skip-field code, made unconditional (code, not a frame-program row)',
+      offset: 0x6180,
+      length: 2,
+    },
+    sibling: null,
+  },
+  {
+    // compact_32k-1.3.0.8-FF-to32-add-noskip. An image compact_32k-1.3.0.8-FF-to32 wrote before the no-skip
+    // branch joined it (TESTING.md 42.97): bf99816f, the 32 Hz edits only. A camera that carries it is
+    // offered the branch alone, and the result is byte for byte the image the entry writes from the stock
+    // build (1be28033), so a bank patched before and a bank patched now end the same. The input is rebuilt
+    // from the stock image by earlier_image(). The rate does not change (32 Hz); the USB check at each
+    // field start stops skipping fields on slow hosts.
+    id: 'compact_32k-1.3.0.8-FF-to32-add-noskip',
+    family: 'compact_32k',
+    version: '1.3.0.8-FF',
+    fromHz: 32,
+    targetHz: 32,
+    stockSha256: 'bf99816f8bd36a5af33f2bb9196cf9088d9bb58f5d9a45472d40e351d34d677f',
+    patchedSha256: '1be28033401381b28015c163f7fff99b556e67bdae3214be4fb8ed62831c972b',
+    length: 49308,
+    edits: [
+      // the no-skip branch alone (app_init.c:1743): the `cbz r0` (20 b3) over the field-skip block becomes
+      // `b.n` (24 e0) to the same target, image +0x64d0; the 32 Hz edits are already in this image, so the
+      // result is the image compact_32k-1.3.0.8-FF-to32 writes from the stock build
+      { offset: 0x6484, before: '20b3', after: '24e0' },
+    ],
+    row: {
+      label:
+        'field-start USB check: the conditional branch over the skip-field code, made unconditional (code, not a frame-program row)',
+      offset: 0x6484,
+      length: 2,
+    },
+    sibling: null,
+  },
+  {
+    // compact_32k-4.16.1.7-FF-to32-add-noskip. An image compact_32k-4.16.1.7-FF-to32 wrote before the
+    // no-skip branch joined it (TESTING.md 42.97): aec53641, the 32 Hz edits only. A camera that carries it
+    // is offered the branch alone, and the result is byte for byte the image the entry writes from the
+    // stock build (44f3245a), so a bank patched before and a bank patched now end the same. The input is
+    // rebuilt from the stock image by earlier_image(). The rate does not change (32 Hz); the USB check at
+    // each field start stops skipping fields on slow hosts.
+    id: 'compact_32k-4.16.1.7-FF-to32-add-noskip',
+    family: 'compact_32k',
+    version: '4.16.1.7-FF',
+    fromHz: 32,
+    targetHz: 32,
+    stockSha256: 'aec5364181696416e33d75cb8fb64277998ba81d9b5e4823daba1a479588b9e6',
+    patchedSha256: '44f3245a1c7b6d35b273929947ce4400560afb99d7606b9ca0d7baed3da3f8c6',
+    length: 49896,
+    edits: [
+      // the no-skip branch alone (the 4.8.1.7 block): the `cbz r0` (40 b3) over the field-skip block
+      // becomes `b.n` (28 e0) to the same target, image +0x30ae; the 32 Hz edits are already in this image,
+      // so the result is the image compact_32k-4.16.1.7-FF-to32 writes from the stock build
+      { offset: 0x305a, before: '40b3', after: '28e0' },
+    ],
+    row: {
+      label:
+        'field-start USB check: the conditional branch over the skip-field code, made unconditional (code, not a frame-program row)',
+      offset: 0x305a,
+      length: 2,
+    },
+    sibling: null,
+  },
+  {
+    // compact_32k-4.8.2.1-to32-add-noskip. An image compact_32k-4.8.2.1-to32 wrote before the no-skip
+    // branch joined it (TESTING.md 42.97): d64d91b0, the 32 Hz edits only. A camera that carries it is
+    // offered the branch alone, and the result is byte for byte the image the entry writes from the stock
+    // build (526124fc), so a bank patched before and a bank patched now end the same. The input is rebuilt
+    // from the stock image by earlier_image(). The rate does not change (32 Hz); the USB check at each
+    // field start stops skipping fields on slow hosts.
+    id: 'compact_32k-4.8.2.1-to32-add-noskip',
+    family: 'compact_32k',
+    version: '4.8.2.1',
+    fromHz: 32,
+    targetHz: 32,
+    stockSha256: 'd64d91b0fa87f699c32c255b2365db3e9308c6d783b0c95b48ab31f9624c10d5',
+    patchedSha256: '526124fc64ca2abe7aad917b7c07612006c00958122d63e8347bde7561f06ee1',
+    length: 42680,
+    edits: [
+      // the no-skip branch alone (the steady-page step): the `cbz r0` (c0 b1) over the field-skip block
+      // becomes `b.n` (18 e0) to the same target, image +0x22ba; the 32 Hz edits are already in this image,
+      // so the result is the image compact_32k-4.8.2.1-to32 writes from the stock build
+      { offset: 0x2286, before: 'c0b1', after: '18e0' },
+    ],
+    row: {
+      label:
+        'field-start USB check: the conditional branch over the skip-field code, made unconditional (code, not a frame-program row)',
+      offset: 0x2286,
+      length: 2,
     },
     sibling: null,
   },
@@ -775,6 +1478,70 @@ export const FPS_KNOWN_RATE: Readonly<
     name: 'compact-4.16.1.7-FF-to32-op5',
     hz: 32,
   },
+  '5313f107b81d99a1ac033fbfe9ecda9bd3664d2f669237876ffac1e3a01377a4': {
+    name: 'compact-1.3.0.8-to32-without-noskip',
+    hz: 32,
+  },
+  '51c6f0d57c89d4cadd2a2d46c0ac0f22ddb21570d0f01f80b0748fd1fb4314e0': {
+    name: 'compact-4.8.1.7-to32-without-noskip',
+    hz: 32,
+  },
+  '14e259603487af8b8db1769b144b8fcc41ec09fc8965f835becdb296bb42e495': {
+    name: 'compact-4.8.1.9-to32-without-noskip',
+    hz: 32,
+  },
+  ef90c94a448b69feea06421026c5765eceb1685d6806e7a48714c76c3d0ed273: {
+    name: 'compact-1.3.0.0-to32-without-noskip',
+    hz: 32,
+  },
+  c519427649dd4d7f962bc1412ed1fb085a21195404910607ea27f7bce2e83c8e: {
+    name: 'compact-0.7.0.8-to32-without-noskip',
+    hz: 32,
+  },
+  '9b2c6f89a8f1dd4af056669bc38cf83c657d44a49e1c8bce57c6d85fed611c73': {
+    name: 'compact-0.8.0.0-to32-without-noskip',
+    hz: 32,
+  },
+  e41610e30bfee1fa6ca862eccc7c5fe8773f05cd958b190a9e22de09c7ac7eb8: {
+    name: 'compact-0.9.0.2-to32-without-noskip',
+    hz: 32,
+  },
+  '54d383ad72882075f21963689fa7c69debb1359f5c7254a02b203e5ee12152ea': {
+    name: 'compact-0.9.0.6-to32-without-noskip',
+    hz: 32,
+  },
+  '1ad41e1e06f339cfeea264fda4d6b34db7f96e9b6380c8b115eb38253606cc32': {
+    name: 'compact-0.9.0.7-to32-without-noskip',
+    hz: 32,
+  },
+  '1814e5acf445c2e4d33aad565881e844baa0d7634794695c0981b8552dd5c53d': {
+    name: 'compact-0.9.1.0-to32-without-noskip',
+    hz: 32,
+  },
+  efd72e1ca423f5697b74885aa1863f3f935c42d4553ba1f62397394bc0becd65: {
+    name: 'compact-0.10.0.0-to32-without-noskip',
+    hz: 32,
+  },
+  d55ccb473dea99dd4e5d9507ae4920113b1fdcbaf769dabf9f9e57c8d40ef391: {
+    name: 'compact-1.0.0.0-to32-without-noskip',
+    hz: 32,
+  },
+  '547d0e853af87068ace1936b443af06b59636d9ac560db24e38dbff4d8001c90': {
+    name: 'compact-1.2.0.0-to32-without-noskip',
+    hz: 32,
+  },
+  bf99816f8bd36a5af33f2bb9196cf9088d9bb58f5d9a45472d40e351d34d677f: {
+    name: 'compact-1.3.0.8-FF-to32-without-noskip',
+    hz: 32,
+  },
+  aec5364181696416e33d75cb8fb64277998ba81d9b5e4823daba1a479588b9e6: {
+    name: 'compact-4.16.1.7-FF-to32-without-noskip',
+    hz: 32,
+  },
+  d64d91b0fa87f699c32c255b2365db3e9308c6d783b0c95b48ab31f9624c10d5: {
+    name: 'compact-4.8.2.1-to32-without-noskip',
+    hz: 32,
+  },
 };
 
 /** What the Python tool does NOT patch, and why (NOT_PATCHED), kept for the record. */
@@ -786,4 +1553,6 @@ export const FPS_NOT_PATCHED_NOTES: readonly string[] = [
   'Compact 0.7.0.8 image 8b0f4781 (the 32 Hz entry as first written: operator 1, a plain word copy with no gain table): it runs at 32 Hz but its picture does not match stock (level +12 %, spread about 5x, measured on the bench) and it is not recognised here. A camera that carries it is an unknown image: restore the stock image first, then press Make 32 FPS.',
   'Mosaic 10.9.1.31: already an 18 Hz image (FRAME_RATE, emu/README.md LABEL_DECISIONS); not a 9 Hz target.',
   'Nano 200 42.32.3.10 already publishes every capture (32 Hz); Mosaic FF and Nano 300 are not 9 Hz targets.',
+  'The no-skip branch (TESTING.md 42.97) is in the 32 Hz Compact entries only. The Compact PRO 18 Hz entries carry no such edit: there the busy test is part of the frame-arm gate itself and is the only overlap guard, and NOPing it changed nothing in the emulator (docs/NOSKIP_PATCH_ALL_FIRMWARES.md), so no PRO no-skip edit is made.',
+  'The 32 Hz images that are known builds but not the output of a table entry (the 1.3.0.0 bench image d91284c6 with the withdrawn mode-6 edit, and the one-step op 5 forms) get no no-skip upgrade: they stay known 32 Hz builds and are left as they are. Restore the stock image and press Make 32 FPS to get the 32 Hz image with the USB fix.',
 ];

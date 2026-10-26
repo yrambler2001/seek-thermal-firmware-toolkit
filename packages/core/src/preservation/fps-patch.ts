@@ -32,6 +32,13 @@
  * Every other entry stays in the table with its gate recorded as "stage two: ...", so it can
  * be switched on after its own staging check.
  *
+ * THE NO-SKIP BRANCH (TESTING.md 42.97). Every 32 Hz Compact entry also makes the field-start USB check
+ * unconditional (FW-V1 docs/NOSKIP_PATCH_ALL_FIRMWARES.md), so one press writes the 32 Hz image with the USB fix.
+ * The images those entries wrote before the branch joined them are the stock images of the `<id>-add-noskip`
+ * entries, which add the branch alone (fromHz = targetHz = 32) and end at the same image; each is offered
+ * exactly where its entry is (it sits in the same stage set). Those earlier images are also known 32 Hz builds
+ * (FPS_KNOWN_BUILDS), so a bank that holds one still reads as 32 Hz. The Compact PRO entries carry no branch.
+ *
  * REFUSES, FAIL CLOSED: an image that is not a stock image of a table entry; an edit
  * site whose old bytes are not there; a patched image whose changed bytes are not the
  * documented ones; a sum that moved; an output that does not hash to the table.
@@ -133,6 +140,17 @@ export const FPS_STAGE_ONE_IDS: ReadonlySet<string> = new Set([
   'compact_32k-1.2.0.0-to32',
   'compact_32k-1.3.0.0-to32',
   'compact_32k-1.3.0.8-to32',
+  // the no-skip branch alone, on the image the entry above wrote before the branch joined it (TESTING.md 42.97)
+  'compact_32k-0.8.0.0-to32-add-noskip',
+  'compact_32k-0.9.0.2-to32-add-noskip',
+  'compact_32k-0.9.0.6-to32-add-noskip',
+  'compact_32k-0.9.0.7-to32-add-noskip',
+  'compact_32k-0.9.1.0-to32-add-noskip',
+  'compact_32k-0.10.0.0-to32-add-noskip',
+  'compact_32k-1.0.0.0-to32-add-noskip',
+  'compact_32k-1.2.0.0-to32-add-noskip',
+  'compact_32k-1.3.0.0-to32-add-noskip',
+  'compact_32k-1.3.0.8-to32-add-noskip',
 ]);
 
 /**
@@ -147,6 +165,10 @@ export const FPS_STAGE_TWO_IDS: ReadonlySet<string> = new Set([
   'compact_32k-4.8.2.1-to32',
   'compact_pro-4.9.1.15',
   'compact_pro-4.9.2.0',
+  // the no-skip branch alone (TESTING.md 42.97)
+  'compact_32k-4.8.1.7-to32-add-noskip',
+  'compact_32k-4.8.1.9-to32-add-noskip',
+  'compact_32k-4.8.2.1-to32-add-noskip',
 ]);
 
 /**
