@@ -14,29 +14,29 @@ the host has not yet read the previous frame's last chunk ("USB TX not complete 
 millisecond late and loses every other frame (42.93, `PHONE_SKIPS.md`, FW-V1 `docs/NOSKIP_PATCH_ALL_FIRMWARES.md`). Every 32 Hz Compact
 entry now ends with one more edit: the `cbz r0` over that skip becomes a `b.n` to the same target, and the sum word keeps the
 acceptance sum. So **Make 32 FPS** writes the 32 fps image with the fix in one step, on every Compact build it offers. The Compact PRO
-18 fps entries are unchanged (no PRO no-skip edit is made). A bank that holds an image an earlier table wrote (32 fps without the fix,
-e.g. the 1.3.0.0 `ef90c94a`) still reads as 32 fps and is offered the branch alone (the `<entry>-add-noskip` entry, 32 -> 32 Hz),
-which ends at the same image. The 1.3.0.0 image is the one the bench Compact runs (`edeabb71`, 42.93). In sections 3 to 5 the image
+18 fps entries are unchanged (no PRO no-skip edit is made). No patch takes a patched image as input (the owner): a bank that holds
+an image an earlier table wrote (32 fps without the fix, e.g. the 1.3.0.0 `ef90c94a`; also the bench image `d91284c6` and the op-5
+forms) still reads as 32 fps, is offered nothing, and its plan says to restore the stock image first, then patch. The 1.3.0.0 image is the one the bench Compact runs (`edeabb71`, 42.93). In sections 3 to 5 the image
 hashes named are the 32 fps images without the fix; the images the table writes now:
 
-| build                    | entry                          | branch (image offset)     | 32 Hz + no-skip image (patched sha256) | +0x238     | earlier 32 Hz-only image (now the add-noskip input) |
-| ------------------------ | ------------------------------ | ------------------------- | -------------------------------------- | ---------- | --------------------------------------------------- |
-| 0.7.0.8                  | `compact_32k-0.7.0.8-to32`     | 0x5F98 `a8 b1` -> `15 e0` | `f08d84bdda1f7036`                     | 0x0CBCF578 | `c5194276`                                          |
-| 0.8.0.0                  | `compact_32k-0.8.0.0-to32`     | 0x6110 `a8 b1` -> `15 e0` | `e6da35233e005a15`                     | 0x19891978 | `9b2c6f89`                                          |
-| 0.9.0.2                  | `compact_32k-0.9.0.2-to32`     | 0x619C `a8 b1` -> `15 e0` | `4dfcdcd295e54fd5`                     | 0x47E4EB1C | `e41610e3`                                          |
-| 0.9.0.6                  | `compact_32k-0.9.0.6-to32`     | 0x619C `a8 b1` -> `15 e0` | `9727a08c08450908`                     | 0x47E4EB1C | `54d383ad`                                          |
-| 0.9.0.7                  | `compact_32k-0.9.0.7-to32`     | 0x6184 `a8 b1` -> `15 e0` | `71fe108e2edfdc9b`                     | 0x47E4EB1C | `1ad41e1e`                                          |
-| 0.9.1.0                  | `compact_32k-0.9.1.0-to32`     | 0x619C `a8 b1` -> `15 e0` | `f1f9057fc00c4a04`                     | 0x47E4EB1C | `1814e5ac`                                          |
-| 0.10.0.0                 | `compact_32k-0.10.0.0-to32`    | 0x619C `a8 b1` -> `15 e0` | `28371ca792c54a80`                     | 0x47E4EB1C | `efd72e1c`                                          |
-| 1.0.0.0                  | `compact_32k-1.0.0.0-to32`     | 0x6184 `a8 b1` -> `15 e0` | `a184dbabcf92a74f`                     | 0x47E4EB1C | `d55ccb47`                                          |
-| 1.2.0.0                  | `compact_32k-1.2.0.0-to32`     | 0x6180 `a8 b1` -> `15 e0` | `785a9f147025ee65`                     | 0x19891978 | `547d0e85`                                          |
-| 1.3.0.0                  | `compact_32k-1.3.0.0-to32`     | 0x6190 `18 b3` -> `23 e0` | `edeabb713319472f`                     | 0x19891ADA | `ef90c94a`                                          |
-| 1.3.0.8                  | `compact_32k-1.3.0.8-to32`     | 0x626C `20 b3` -> `24 e0` | `18972f321f6df59b`                     | 0x3D37E625 | `5313f107`                                          |
-| 1.3.0.8-FF               | `compact_32k-1.3.0.8-FF-to32`  | 0x6484 `20 b3` -> `24 e0` | `1be28033401381b2`                     | 0x10FCD825 | `bf99816f`                                          |
-| 4.8.1.7                  | `compact_32k-4.8.1.7-to32`     | 0x3056 `40 b3` -> `28 e0` | `9b24dbc2ef87d41f`                     | 0xE7413B36 | `51c6f0d5`                                          |
-| 4.8.1.9                  | `compact_32k-4.8.1.9-to32`     | 0x304A `40 b3` -> `28 e0` | `30f65476179393d9`                     | 0xE7413B36 | `14e25960`                                          |
-| 4.16.1.7-FF              | `compact_32k-4.16.1.7-FF-to32` | 0x305A `40 b3` -> `28 e0` | `44f3245a1c7b6d35`                     | 0xDA410FFD | `aec53641`                                          |
-| 4.8.2.1 (XR and Compact) | `compact_32k-4.8.2.1-to32`     | 0x2286 `c0 b1` -> `18 e0` | `526124fc64ca2abe`                     | 0xF2110300 | `d64d91b0`                                          |
+| build                    | entry                          | branch (image offset)     | 32 Hz + no-skip image (patched sha256) | +0x238     | earlier 32 Hz-only image (an earlier patch, left as is) |
+| ------------------------ | ------------------------------ | ------------------------- | -------------------------------------- | ---------- | ------------------------------------------------------- |
+| 0.7.0.8                  | `compact_32k-0.7.0.8-to32`     | 0x5F98 `a8 b1` -> `15 e0` | `f08d84bdda1f7036`                     | 0x0CBCF578 | `c5194276`                                              |
+| 0.8.0.0                  | `compact_32k-0.8.0.0-to32`     | 0x6110 `a8 b1` -> `15 e0` | `e6da35233e005a15`                     | 0x19891978 | `9b2c6f89`                                              |
+| 0.9.0.2                  | `compact_32k-0.9.0.2-to32`     | 0x619C `a8 b1` -> `15 e0` | `4dfcdcd295e54fd5`                     | 0x47E4EB1C | `e41610e3`                                              |
+| 0.9.0.6                  | `compact_32k-0.9.0.6-to32`     | 0x619C `a8 b1` -> `15 e0` | `9727a08c08450908`                     | 0x47E4EB1C | `54d383ad`                                              |
+| 0.9.0.7                  | `compact_32k-0.9.0.7-to32`     | 0x6184 `a8 b1` -> `15 e0` | `71fe108e2edfdc9b`                     | 0x47E4EB1C | `1ad41e1e`                                              |
+| 0.9.1.0                  | `compact_32k-0.9.1.0-to32`     | 0x619C `a8 b1` -> `15 e0` | `f1f9057fc00c4a04`                     | 0x47E4EB1C | `1814e5ac`                                              |
+| 0.10.0.0                 | `compact_32k-0.10.0.0-to32`    | 0x619C `a8 b1` -> `15 e0` | `28371ca792c54a80`                     | 0x47E4EB1C | `efd72e1c`                                              |
+| 1.0.0.0                  | `compact_32k-1.0.0.0-to32`     | 0x6184 `a8 b1` -> `15 e0` | `a184dbabcf92a74f`                     | 0x47E4EB1C | `d55ccb47`                                              |
+| 1.2.0.0                  | `compact_32k-1.2.0.0-to32`     | 0x6180 `a8 b1` -> `15 e0` | `785a9f147025ee65`                     | 0x19891978 | `547d0e85`                                              |
+| 1.3.0.0                  | `compact_32k-1.3.0.0-to32`     | 0x6190 `18 b3` -> `23 e0` | `edeabb713319472f`                     | 0x19891ADA | `ef90c94a`                                              |
+| 1.3.0.8                  | `compact_32k-1.3.0.8-to32`     | 0x626C `20 b3` -> `24 e0` | `18972f321f6df59b`                     | 0x3D37E625 | `5313f107`                                              |
+| 1.3.0.8-FF               | `compact_32k-1.3.0.8-FF-to32`  | 0x6484 `20 b3` -> `24 e0` | `1be28033401381b2`                     | 0x10FCD825 | `bf99816f`                                              |
+| 4.8.1.7                  | `compact_32k-4.8.1.7-to32`     | 0x3056 `40 b3` -> `28 e0` | `9b24dbc2ef87d41f`                     | 0xE7413B36 | `51c6f0d5`                                              |
+| 4.8.1.9                  | `compact_32k-4.8.1.9-to32`     | 0x304A `40 b3` -> `28 e0` | `30f65476179393d9`                     | 0xE7413B36 | `14e25960`                                              |
+| 4.16.1.7-FF              | `compact_32k-4.16.1.7-FF-to32` | 0x305A `40 b3` -> `28 e0` | `44f3245a1c7b6d35`                     | 0xDA410FFD | `aec53641`                                              |
+| 4.8.2.1 (XR and Compact) | `compact_32k-4.8.2.1-to32`     | 0x2286 `c0 b1` -> `18 e0` | `526124fc64ca2abe`                     | 0xF2110300 | `d64d91b0`                                              |
 
 ## 0. Processing modes (what "mode" means here)
 
@@ -197,8 +197,8 @@ Compact PRO). The page and the CLI offer the entries in stage one (the plain 201
 4.9.1.15 and 4.9.2.0 at 18 Hz) and stage three (the Compact PRO 2016 keystream line: 1.0.3.0 and 1.0.3.2 at 18 Hz). A build outside those
 sets is refused with the reason.
 
-On a Compact the 32 fps image includes the USB no-skip fix (42.97). A bank already patched to 32 fps before 42.97 shows the button
-again: the plan is the `<entry>-add-noskip` entry, which changes only the 2-byte branch and the sum word (rate 32 -> 32 Hz).
+On a Compact the 32 fps image includes the USB no-skip fix (42.97). A bank already patched to 32 fps before 42.97 is not patched
+again (a patch never takes a patched image): restore its saved stock image (or the build's stock image) first, then patch it.
 
 **Then power-cycle the camera**: a bank only runs after the next boot. And check the boot-config word (section 9).
 
@@ -361,7 +361,7 @@ test (`packages/core/test/preservation/fps-patch.differential.test.ts`, run with
 fixture against the Python output byte for byte. Stage sets are in `packages/core/src/preservation/fps-patch.ts`
 (`FPS_STAGE_ONE_IDS`, `FPS_STAGE_TWO_IDS`, `FPS_STAGE_THREE_IDS`); a new entry is not offered until it is in one of them.
 
-The `UPGRADES` entries of `fps_patch.py` (`<entry>-add-noskip`, 42.97) are rendered into the same table after `PATCHES`. Their input
-images are not in any corpus: the script rebuilds each with `fps_patch.earlier_image` from the base entry's stock image and writes the
-case with `derivedFrom`, and the differential test rebuilds it the other way round (base entry applied, branch put back, sum word moved)
-and must reach the same hash. Each add-noskip id sits in the same stage set as its entry.
+The known rows carry `earlierPatch` (`fps_patch.EARLIER_PATCHES`, 42.97): an image a patch wrote, as against a build made at its
+rate; its plan gives `fpsEarlierPatchReason`. The 16 earlier 32 Hz images (`fps_patch.EARLIER_32HZ`) are in no corpus: the script
+rebuilds each with `fps_patch.earlier_image` from its entry's stock image and writes the case with `derivedFrom`, and the
+differential test rebuilds it the other way round (entry applied, branch put back, sum word moved) and must reach the same hash.
