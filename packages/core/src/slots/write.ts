@@ -17,6 +17,9 @@
  *   - write a plan whose camera, firmware or address no longer match the
  *     analysis it is checked against (`flashSlot`).
  *
+ * WHAT IT WARNS OF AND STILL WRITES: an image that is not the build the camera runs, or whose build
+ * cannot be told (`imageBuildWarningOf`, image-build.ts; owner's rule: warn, never gate).
+ *
  * Every window the page arms comes from the report's plan (SlotEntry.write), and
  * every read from SlotEntry.read; no subcommand or address is written here.
  * ==================================================================== */
@@ -39,6 +42,7 @@ import {
   type FlashSlotOptions,
   type FFRunningBasis,
   type FlashSlotResult,
+  type ImageBuildWarning,
   type PlanNote,
   type PlanStaging,
   type SlotEntry,
@@ -75,6 +79,7 @@ import {
   type StagedBytes,
 } from './write-image.js';
 import { bootsNowOf } from './booted-words.js';
+import { imageBuildWarningOf } from './image-build.js';
 import { FF_1308_VERSION } from './capability-family.js';
 import { slotContentOf } from './inspect.js';
 import { runningApplicationOf, type RunningApplication } from './running.js';
@@ -337,6 +342,8 @@ export function prepareSlotFlash(
   /* This write's own notes: how it is staged or checked, or what the bank will hold. Not a risk, so not a
    * warning (TESTING.md 42.88). */
   const writeNotes: string[] = [];
+  /* Whether the image is the build the camera runs: warned, never refused (image-build.ts). */
+  let imageBuild: ImageBuildWarning | null;
 
   let body: Body;
   if (input.kind === 'raw') {
@@ -386,6 +393,11 @@ export function prepareSlotFlash(
       ...(folded === null ? {} : { storedForm: 'key-b-ciphertext' as const }),
       ffRunning: ffRaw === null ? null : ffRaw.basis,
     };
+    imageBuild = imageBuildWarningOf(
+      payload,
+      state,
+      folded === null && entry.staging === 'plain' ? 'plain-chain' : 'other',
+    );
     warnings.push('Raw payload: sent exactly as given. Nothing here checks that it is bootable.');
     if (folded !== null && ffRaw !== null) {
       const ff = ffStagingWords(ffRaw);
@@ -449,6 +461,12 @@ export function prepareSlotFlash(
       ...(staged.storedForm === undefined ? {} : { storedForm: staged.storedForm }),
       ...(staged.ffRunning === undefined ? {} : { ffRunning: staged.ffRunning }),
     };
+    /* The FF image reports its own staging ('key-a-keystream'); only a plain-staged image is the chain's. */
+    imageBuild = imageBuildWarningOf(
+      input.bytes,
+      state,
+      staged.staging === undefined && entry.staging === 'plain' ? 'plain-chain' : 'other',
+    );
     if (staged.rekeyRisk) {
       warnings.push(
         `${entry.name} already holds an image the bootloader cannot take. This write lands in the same state.`,
@@ -461,6 +479,8 @@ export function prepareSlotFlash(
   if (body.payload.length > bankBytes) {
     throw slotRefused(`the payload is ${hex(body.payload.length)} B, past the ${entry.name} bank`);
   }
+  /* What the image is comes first: every other warning is about writing it. */
+  if (imageBuild !== null) warnings.unshift(imageBuild.text);
 
   if (key === 'r') {
     warnings.push(
@@ -506,6 +526,7 @@ export function prepareSlotFlash(
     compare,
     targetEmpty,
     warnings,
+    imageBuild,
     notes,
     serial: state.serial,
     firmwareVersion: state.version,

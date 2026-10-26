@@ -213,6 +213,28 @@ export interface PlanNote {
   readonly text: string;
 }
 
+/**
+ * Why the image a write takes may not be the build the camera runs (`image-build.ts`), for JSON only:
+ *  - 'other-version'          the image's header names another firmware version than the camera reports;
+ *  - 'no-version'             the image's header names no version (its version word is blank);
+ *  - 'other-build'            the 8 Hz 1.3.0.8 image, while the camera runs the 16 Hz 1.3.0.8 FF build;
+ *  - 'running-build-unknown'  the 8 Hz 1.3.0.8 image, and the camera's own answers do not say which
+ *                             of the two 1.3.0.8 builds it runs.
+ */
+export type ImageBuildCode =
+  'other-version' | 'no-version' | 'other-build' | 'running-build-unknown';
+
+/** The warning a plan carries when its image may not be the build the camera runs. It never refuses. */
+export interface ImageBuildWarning {
+  readonly code: ImageBuildCode;
+  /** The image's build in short form ('1.2.0.0', '1.3.0.8 8 Hz'), or null when its header names none. */
+  readonly image: string | null;
+  /** The camera's build in short form ('1.3.0.0', '1.3.0.8 16 Hz FF'), or its version when the build is not told. */
+  readonly camera: string | null;
+  /** The warning in people's words; the plan's `warnings` carry the same text. */
+  readonly text: string;
+}
+
 /** Everything a person is shown, and a write is checked against, before a send. */
 export interface SlotFlashPlan {
   readonly key: SlotKey;
@@ -262,6 +284,13 @@ export interface SlotFlashPlan {
    * writing recovery, a raw payload, a payload the bootloader would reject). Notes are not here: see `notes`.
    */
   readonly warnings: readonly string[];
+  /**
+   * The image may not be the build the camera runs: its header names another version (or none), or, on
+   * 1.3.0.8, it is the 8 Hz build and the camera runs the 16 Hz one or does not say. Null when the image is
+   * the camera's build, and for raw bytes with no image header. Its text is also in `warnings`; this field is
+   * for a front end that shows it again beside the confirmation, and for JSON (its `code`).
+   */
+  readonly imageBuild: ImageBuildWarning | null;
   /**
    * What is worth knowing beside the plan and is not a risk, each with where it comes from: this write's own
    * notes first, then the bank's, then the camera's. A front end that already shows the camera's notes and the

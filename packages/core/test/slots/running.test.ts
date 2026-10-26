@@ -28,6 +28,7 @@ import {
 import { getProfile } from '../../src/profiles/registry.js';
 import { stageFFVendor } from '../../src/slots/ff-form.js';
 import { buildSlotPlan } from '../../src/slots/capability.js';
+import { imageBuildWarningOf } from '../../src/slots/image-build.js';
 import { ffBankVerdict, plainBankVerdict, runningApplicationOf } from '../../src/slots/running.js';
 import type { SlotKey } from '../../src/slots/types.js';
 import { prepareSlotFlash } from '../../src/slots/write.js';
@@ -397,5 +398,66 @@ describe('prepareSlotFlash: the FF image follows the running build', () => {
       fileName: 'vendor.bin',
     };
     expect(() => prepareSlotFlash(report, 'a', raw)).toThrow(/8 Hz/);
+  });
+});
+
+describe('the 8 Hz 1.3.0.8 image against the build the camera runs: warned, never refused (TESTING.md 42.104)', () => {
+  /** The 16 Hz build answering for its stored form in A, with an 8 Hz image in R (so a bank is stored plain). */
+  const ffBanks = [
+    presentBank('a', ffStored(ffFileImage(71))),
+    emptyBank('b'),
+    presentBank('r', plainImage(PLAIN_LENGTH, 72)),
+  ];
+  const ffAnswers: BankVerdicts = { a: 1, b: 0, r: 0 };
+  /* An image the writer takes: an SRAM stack pointer and a Thumb reset vector (the stager balances the sum). */
+  const image = plainImage(PLAIN_LENGTH, 73);
+  new DataView(image.buffer).setUint32(0, 0x10001000, true);
+  new DataView(image.buffer).setUint32(4, 0x10000101, true);
+
+  it('the camera runs the 8 Hz build: no warning', () => {
+    expect(
+      imageBuildWarningOf(image, stateOf(EIGHT_HZ_BANKS, EIGHT_HZ_ANSWERS), 'plain-chain'),
+    ).toBeNull();
+  });
+
+  it('the camera runs the 16 Hz FF build: the warning names both builds, and the plan still stages the image plain', () => {
+    const state = { ...stateOf(ffBanks, ffAnswers), plainChain: true } as DeviceState;
+    expect(runningApplicationOf(state).build).toBe('ff-1308');
+    const report = reportFor(state, buildSlotPlan(legacy, '1.3.0.8'));
+    const plan = prepareSlotFlash(report, 'b', {
+      kind: 'plain',
+      bytes: image,
+      fileName: '8hz.bin',
+    });
+    expect(plan.staging).toBe('plain');
+    expect(plan.imageBuild).toEqual({
+      code: 'other-build',
+      image: '1.3.0.8 8 Hz',
+      camera: '1.3.0.8 16 Hz FF',
+      text:
+        'This image is the 8 Hz 1.3.0.8 build; the camera runs the 16 Hz 1.3.0.8 FF build. The 16 Hz ' +
+        'build checks a payload against its own FF form when it is committed and refuses one that ' +
+        'fails, before it erases the bank (from its source). Writing the 8 Hz build to it has not ' +
+        'been tried on a camera.',
+    });
+    expect(plan.warnings[0]).toBe(plan.imageBuild?.text);
+  });
+
+  it('the camera’s answers do not say which build runs: the build cannot be told, so it warns (the choice: warn)', () => {
+    const state = stateOf(EIGHT_HZ_BANKS, null);
+    expect(runningApplicationOf(state).build).toBeNull();
+    expect(imageBuildWarningOf(image, state, 'plain-chain')).toEqual({
+      code: 'running-build-unknown',
+      image: '1.3.0.8 8 Hz',
+      camera: '1.3.0.8',
+      text:
+        'This image is the 8 Hz 1.3.0.8 build. The camera runs 1.3.0.8, which comes as an 8 Hz and a ' +
+        '16 Hz FF build, and its own answers did not say which one it runs, so whether this is its ' +
+        'build cannot be told.',
+    });
+  });
+
+  it('the FF image is not held against the running build here: its own gate decides (write.ts ffRunningGate)', () => {
+    expect(imageBuildWarningOf(ffFileImage(74), stateOf(EIGHT_HZ_BANKS, null), 'other')).toBeNull();
   });
 });
