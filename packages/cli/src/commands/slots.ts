@@ -55,7 +55,6 @@ import {
   dumpSlot,
   FF_VENDOR_STAGED,
   FF_VENDOR_STORED,
-  flashSlot,
   flashSlotWithBackup,
   fpsBootWarningOf,
   fpsEveryBankPlan,

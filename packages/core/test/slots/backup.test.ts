@@ -137,8 +137,7 @@ function stateFor(
     keyWhiteningK: profile.cipher.whiteningK,
     storeKey: { name: 'Key B', key: null, programmed: false },
     deviceKeySlot: null,
-    canFlash: true,
-    flashBlockedBy: [],
+    bankWriteRefusals: [],
     plainChain: onPlaintextChain(profile, VERSION),
   } as unknown as DeviceState;
 }

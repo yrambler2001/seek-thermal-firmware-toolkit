@@ -98,7 +98,7 @@ export async function fullFlashOf(bytes: Uint8Array, fileName: string): Promise<
       entries = readZipEntries(bytes);
     } catch (error) {
       throw slotRefused(
-        `${fileName} is a ZIP this page cannot read (${error instanceof Error ? error.message : String(error)}). Nothing was written.`,
+        `${fileName} is a ZIP that cannot be read here (${error instanceof Error ? error.message : String(error)}). Nothing was written.`,
       );
     }
     const found = entries.find(
