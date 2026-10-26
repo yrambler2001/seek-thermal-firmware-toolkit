@@ -48,7 +48,8 @@ import {
   FLASH_BASE,
   SeekDevice,
   SEEK_VENDOR_ID,
-  bankWordsOf,
+  bankChoiceWords,
+  bankListWords,
   drainLeavesReaderReadable,
   preservationWindows,
   type PreserveBankChoice,
@@ -885,9 +886,9 @@ export function usePreservePanel(params: PreservePanelParams): PreservePanelApi 
             );
             rep.reporter.log(
               parsed.state.targets === undefined
-                ? `banks to write: not chosen yet (${parsed.state.choice})`
-                : `banks to write: ${parsed.state.targets.map(bankWordsOf).join(', ')} ` +
-                    `(${parsed.state.choice})`,
+                ? `banks to write: not chosen yet (the choice: ${bankChoiceWords(parsed.state.choice)})`
+                : `banks to write: ${bankListWords(parsed.state.targets)} ` +
+                    `(the choice: ${bankChoiceWords(parsed.state.choice)})`,
               'detail',
             );
             rep.reporter.log(

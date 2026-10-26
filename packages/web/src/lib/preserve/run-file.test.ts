@@ -161,7 +161,7 @@ describe('the run-file round trip', () => {
       parseZipEntries(zip).find((entry) => entry.name === RUN_README_FILE)?.data,
     );
     expect(readme).toContain('03-patch-dump/preserve_dump_original.bin');
-    expect(readme).toContain('Banks written: slot A (choice: next-start).');
+    expect(readme).toContain('Banks written: slot A (the choice: the bank the next start enters).');
     expect(readme).toContain('9'.repeat(64));
 
     /* The round trip finds every checkpoint by name, and the README is

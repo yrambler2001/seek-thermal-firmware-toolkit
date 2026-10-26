@@ -17,7 +17,15 @@
  * parses, with every entry verified against its CRC-32 before it is trusted.
  */
 
-import { BANK_KEYS, bankWordsOf, crc32, isPreserveBankChoice, utf8 } from '@seek-fw/core';
+import {
+  BANK_KEYS,
+  bankChoiceWords,
+  bankListWords,
+  bankWordsOf,
+  crc32,
+  isPreserveBankChoice,
+  utf8,
+} from '@seek-fw/core';
 import {
   CHECKPOINT_FILES,
   CHECKPOINT_STEP,
@@ -103,7 +111,7 @@ export function runReadme(
   }
   if (state.targets !== undefined) {
     lines.push(
-      `Banks written: ${state.targets.map(bankWordsOf).join(', ')} (choice: ${state.choice}).`,
+      `Banks written: ${bankListWords(state.targets)} (the choice: ${bankChoiceWords(state.choice)}).`,
       '',
     );
   }
