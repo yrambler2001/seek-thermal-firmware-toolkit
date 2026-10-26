@@ -81,7 +81,7 @@ export function SlotFlashPreview({
   const writeNotes = plan.notes.filter((note) => note.source === 'write');
   const readFirst = [...plan.warnings, ...writeNotes.map((note) => `Note: ${note.text}`)];
   const rows: readonly KeyValueRow[] = [
-    /* A copy or a restore names its source instead of a file the person does not have (TESTING.md 42.93). */
+    /* A copy or a restore names its source instead of a file the person does not have (TESTING.md 42.96). */
     source === null ? ['File', what] : ['Image taken from', source],
     ...(targetEmpty
       ? [

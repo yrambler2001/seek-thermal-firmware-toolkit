@@ -2623,7 +2623,7 @@ describe('slots copy', () => {
     expect(result).toMatchObject({ action: 'copy', from: 'a', bank: 'b', dryRun: true });
     const text = test.stdout.text + test.stderr.text;
     expect(text).toContain('image taken from');
-    /* TESTING.md 42.93: the image row names the source bank, not a made-up decrypted file name. */
+    /* TESTING.md 42.96: the image row names the source bank, not a made-up decrypted file name. */
     expect(text).toMatch(/image\s+bank A's image — /);
     expect(text).not.toContain('seek-slot-a-');
     expect(text).toContain('slot A at 14030000, firmware 4.9.5.0, as the slots read decrypted it');

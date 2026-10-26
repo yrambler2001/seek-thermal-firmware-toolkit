@@ -1003,7 +1003,7 @@ describe('useSlotsPanel: a cancel says "partly written" only once a commit was s
     });
     expect(mocks.flash).not.toHaveBeenCalled();
     expect(result.current.panel.reporter.progress.text).toBe('Cancelled — nothing was written.');
-    /* TESTING.md 42.93: the log says the status's words, not "cancelled: cancelled". */
+    /* TESTING.md 42.96: the log says the status's words, not "cancelled: cancelled". */
     const lines = result.current.panel.reporter.lines;
     expect(lineIncludes(lines, 'Cancelled — nothing was written.')).toBe(true);
     expect(lineIncludes(lines, 'cancelled: cancelled')).toBe(false);
@@ -1084,7 +1084,7 @@ describe('useSlotsPanel: copying a bank into another', () => {
     expect(pending?.key).toBe('b');
     expect(pending?.action).toEqual({ kind: 'copy', from: 'a' });
     expect(pending?.source).toContain('slot A');
-    /* TESTING.md 42.93: the dialog and the result name the source bank, not a made-up file name. */
+    /* TESTING.md 42.96: the dialog and the result name the source bank, not a made-up file name. */
     expect(pending?.what).toMatch(/A's image$/);
     expect(pending?.what).not.toContain('.bin');
     expect(pending?.plan.targetEmpty).toBe(true);
@@ -1220,7 +1220,7 @@ describe('useSlotsPanel: restoring a bank from a full flash backup', () => {
       fileName: 'whole.bin',
     });
     expect(result.current.panel.pending?.source).toContain('full flash backup whole.bin');
-    /* TESTING.md 42.93: the backup's bank and the file the person picked, not the decrypted file's name. */
+    /* TESTING.md 42.96: the backup's bank and the file the person picked, not the decrypted file's name. */
     expect(result.current.panel.pending?.what).toMatch(/B of whole\.bin$/);
     expect(mocks.flash).not.toHaveBeenCalled();
 

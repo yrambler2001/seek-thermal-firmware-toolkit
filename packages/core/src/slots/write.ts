@@ -617,7 +617,7 @@ function stageImage(
     return {
       staged,
       /* What the bank is keyed by afterwards: the store key, not the stage key it was sent under (TESTING.md
-       * 42.93: the FF board's banks read "key block 1" after every write, and the plan had said key block 0). */
+       * 42.96: the FF board's banks read "key block 1" after every write, and the plan had said key block 0). */
       keyAfter:
         'key block 1: the camera stores the image under it (it is sent under key block 0, the stage key)',
       derivedFrom: null,

@@ -1168,7 +1168,7 @@ interface PlannedWrite {
   readonly plan: SlotFlashPlan;
   /**
    * What is written, in the plan's image row and the question: the file's name, or for a copy and a restore
-   * the source in words ("bank A's image", "bank B of <file>"), never a made-up file name (TESTING.md 42.93).
+   * the source in words ("bank A's image", "bank B of <file>"), never a made-up file name (TESTING.md 42.96).
    */
   readonly what: string;
   readonly action: WriteAction;

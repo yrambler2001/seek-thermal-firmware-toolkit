@@ -1070,7 +1070,7 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
             setCurrentReport(current);
           }
           if (error instanceof CancelledError) {
-            /* The log says what the status says, not the error's own word ("cancelled: cancelled", TESTING.md 42.93). */
+            /* The log says what the status says, not the error's own word ("cancelled: cancelled", TESTING.md 42.96). */
             const said = cancelledStatus(commit.sent ? [ready?.key ?? 'a'] : [], current);
             log(said, 'warn');
             setStatus(said);
@@ -1193,7 +1193,7 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
             setCurrentReport(current);
           }
           if (error instanceof CancelledError) {
-            /* The log says what the status says, not the error's own word ("cancelled: cancelled", TESTING.md 42.93). */
+            /* The log says what the status says, not the error's own word ("cancelled: cancelled", TESTING.md 42.96). */
             const said = cancelledStatus(commit.sent ? [key] : [], current);
             log(said, 'warn');
             setStatus(said);
@@ -1311,7 +1311,7 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
             setCurrentReport(current);
           }
           if (error instanceof CancelledError) {
-            /* The log says what the status says, not the error's own word ("cancelled: cancelled", TESTING.md 42.93). */
+            /* The log says what the status says, not the error's own word ("cancelled: cancelled", TESTING.md 42.96). */
             const said = cancelledStatus(committed, current);
             log(said, 'warn');
             setStatus(said);

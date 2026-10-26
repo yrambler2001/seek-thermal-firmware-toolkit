@@ -1413,7 +1413,7 @@ describe('SlotsView: the frame-rate row action', () => {
     unmount();
   });
 
-  it('says "files" when the zip saved first holds several banks (the every-bank patch, TESTING.md 42.93)', () => {
+  it('says "files" when the zip saved first holds several banks (the every-bank patch, TESTING.md 42.96)', () => {
     expect(backupLine(BACKUP)).toContain('The decrypted file in it is the way back');
     /* Only the count matters to the sentence. */
     const three = { ...BACKUP, banks: [{}, {}, {}] as unknown as WriteBackup['banks'] };

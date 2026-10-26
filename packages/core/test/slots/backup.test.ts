@@ -261,7 +261,7 @@ describe('the backup zip’s name', () => {
     ).toBe(
       'seek_backup_2026-10-26T12-00-00Z_unknown-serial_vunknown_bank-A-B-R_before-fps-patch-every-bank',
     );
-    /* TESTING.md 42.93: the write order (B, R, A) does not change the name, so a plan shows the zip's own name. */
+    /* TESTING.md 42.96: the write order (B, R, A) does not change the name, so a plan shows the zip's own name. */
     expect(
       backupName({
         stamp: STAMP,
@@ -636,7 +636,7 @@ describe('the every-bank patch’s order', () => {
     ]);
   });
 
-  it('says the booted bank goes last only when it is written after another (TESTING.md 42.93)', () => {
+  it('says the booted bank goes last only when it is written after another (TESTING.md 42.96)', () => {
     const bootsA = report({}, { booted: 'a' });
     expect(everyBankBootedLast(bootsA, ['b', 'r', 'a'])).toBe(true);
     /* The FF board's CLI run: R alone, with A and B patched already, was called "the bank the camera boots now". */

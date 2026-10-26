@@ -166,7 +166,7 @@ export function backupName(args: {
   readonly action: WriteAction;
 }): string {
   /* Always A, B, R, whatever order the write goes in, so the name a plan shows before the save is the name of
-   * the zip it saves (TESTING.md 42.93: the every-bank plan listed them in the write order). */
+   * the zip it saves (TESTING.md 42.96: the every-bank plan listed them in the write order). */
   const banks = [...args.keys]
     .sort((x, y) => 'abr'.indexOf(x) - 'abr'.indexOf(y))
     .map((key) => key.toUpperCase())

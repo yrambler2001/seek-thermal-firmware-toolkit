@@ -457,7 +457,7 @@ function bootedBankOf(report: SlotsReport): SlotKey | null {
 
 /**
  * Whether the every-bank order ends with the bank the camera boots now after at least one other bank: only
- * then does a plan say the booted bank goes last (TESTING.md 42.93: a plan of R alone said it).
+ * then does a plan say the booted bank goes last (TESTING.md 42.96: a plan of R alone said it).
  */
 export function everyBankBootedLast(report: SlotsReport, order: readonly SlotKey[]): boolean {
   return order.length > 1 && order.at(-1) === bootedBankOf(report);
