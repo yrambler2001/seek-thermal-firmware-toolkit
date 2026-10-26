@@ -312,7 +312,61 @@ export function nextStartWords(boot: PreserveBootFacts): string {
 function unknownImageWhat(cameraVersion: string): string {
   return (
     `holds an unknown image (not the stock ${cameraVersion} firmware, nor a change to it that ` +
-    'Preserve knows; a frame-rate patch is not one), so Preserve does not patch it or put it back'
+    'Preserve knows), so Preserve does not patch it or put it back'
+  );
+}
+
+/**
+ * A bank whose image is a known frame-rate build: the stock firmware with the frame-rate patch,
+ * or with an earlier one (the frame-rate table, `fps-patch.ts`). Preserve never patches a patched
+ * image (the owner's rule, TESTING.md 42.97), so it is refused like an unknown image, by name.
+ */
+export interface FrameRateBuild {
+  /** The rate the image runs at. */
+  readonly hz: number;
+  /** True for an image an earlier frame-rate patch wrote (before the USB fix joined it). */
+  readonly earlierPatch: boolean;
+}
+
+function frameRateImageWhat(cameraVersion: string, build: FrameRateBuild): string {
+  return (
+    `holds a known frame-rate build: the stock ${cameraVersion} firmware with ` +
+    (build.earlierPatch
+      ? `an earlier ${String(build.hz)} Hz frame-rate patch (made before the USB fix joined it)`
+      : `the ${String(build.hz)} Hz frame-rate patch`) +
+    '. Preserve patches only the stock firmware, never a patched image, so it does not patch ' +
+    'this bank or put it back'
+  );
+}
+
+/** What the person can do about a bank that holds a frame-rate build (`bank`: the bank, in words). */
+function frameRateRemedy(bank: string): string {
+  return (
+    `write the stock image back to ${bank} first (for example from a full flash backup taken ` +
+    'before the frame-rate patch), then start a new run; the frame-rate patch can be made again ' +
+    'on the stock image afterwards'
+  );
+}
+
+/** A bank that holds a known frame-rate build, as the bank table and the choices say it. */
+export function frameRateImageWords(cameraVersion: string, build: FrameRateBuild): string {
+  return (
+    `it ${frameRateImageWhat(cameraVersion, build)}. To include this bank, ` +
+    frameRateRemedy('it')
+  );
+}
+
+/** The run's refusal when the bank its build is taken from holds a known frame-rate build. */
+export function frameRateImageRefusal(
+  bank: BankKey,
+  cameraVersion: string,
+  build: FrameRateBuild,
+): string {
+  const words = bankWordsOf(bank);
+  return (
+    `${words.charAt(0).toUpperCase()}${words.slice(1)} ${frameRateImageWhat(cameraVersion, build)}. ` +
+    'The run takes the firmware it patches from this bank, so it stops here, before anything is ' +
+    `written. To preserve this camera, ${frameRateRemedy(words)}.`
   );
 }
 

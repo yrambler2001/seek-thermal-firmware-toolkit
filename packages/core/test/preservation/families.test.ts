@@ -50,9 +50,13 @@ import {
   describeStepGate,
   type PreserveRunState,
 } from '../../src/preservation/steps.js';
-import { unknownImageWords } from '../../src/preservation/banks.js';
+import { frameRateImageWords, unknownImageWords } from '../../src/preservation/banks.js';
+import { wordSum32 } from '../../src/image/bank.js';
+import { PRESERVE_CODE_NAMES } from '../../src/preservation/words.js';
 import {
+  FPS_KNOWN_BUILDS,
   FPS_PATCHES,
+  type FpsPatch,
   applyFpsPatch,
   fpsImageLength,
   identifyFpsImage,
@@ -320,12 +324,12 @@ describe('the build table — detection by image properties', () => {
     expect(ten32.sites.length).toBe(3); /* the real hook gets its nop */
   });
 
-  it('a 2018+ modern/nano image refuses, pointed at the standard dump workflow', () => {
+  it('a 2018+ modern/nano image refuses, pointed at Dump & decrypt for 4.x and Nano', () => {
     /* A 4.x image with none of the shapes: the modern generation needs no
      * widening patch, and the refusal says so instead of mumbling about
      * before-bytes. */
     const modern = syntheticImage({ version: 0x0701_0804, targetSum: 0, ladder: false });
-    expect(() => buildV1Patch(modern)).toThrow(/standard dump workflow/);
+    expect(() => buildV1Patch(modern)).toThrow(/use Dump & decrypt for 4\.x and Nano instead/);
     expect(() => buildV1Patch(modern)).toThrow(/63 of the 64 flash windows/);
   });
 
@@ -1277,7 +1281,24 @@ function storedBank(image: Uint8Array, profile: BuildPatchProfile): Uint8Array {
   return bank;
 }
 
-describe('an unknown image on every family Preserve writes — the frame-rate patch', () => {
+/** The image an EARLIER frame-rate patch wrote from `image`: the entry's edits but one (the no-skip
+ *  branch joined the entries later, TESTING.md 42.97), the adjust word moved to keep the sum, when
+ *  that image is a known earlier patch (FPS_KNOWN_BUILDS); null when no such image is known. */
+function earlierPatchOf(image: Uint8Array, patch: FpsPatch): Uint8Array | null {
+  for (let skip = 0; skip < patch.edits.length; skip++) {
+    const out = image.slice();
+    patch.edits.forEach((edit, index) => {
+      if (index !== skip) out.set(edit.after, edit.offset);
+    });
+    const view = new DataView(out.buffer);
+    const delta = (wordSum32(out, out.length) - wordSum32(image, image.length)) >>> 0;
+    view.setUint32(0x238, (view.getUint32(0x238, true) - delta) >>> 0, true);
+    if (FPS_KNOWN_BUILDS.get(sha256(out))?.earlierPatch === true) return out;
+  }
+  return null;
+}
+
+describe('a known frame-rate build on every family Preserve writes — named, never patched (TESTING.md 42.105)', () => {
   const stock = stockImagesInCorpus();
   /* The table entries whose stock image Preserve builds a patch for: the families it writes. */
   const covered = FPS_PATCHES.flatMap((patch) => {
@@ -1307,6 +1328,10 @@ describe('an unknown image on every family Preserve writes — the frame-rate pa
         '1.2.0.0 32 Hz',
         '1.3.0.8-FF 32 Hz',
       ]);
+      /* The 1.3.0.0 bench image ef90c94a (32 Hz, no USB fix) is among the earlier patches named. */
+      const entry = covered.find(({ patch }) => patch.version === '1.3.0.0');
+      const earlier = entry === undefined ? null : earlierPatchOf(entry.image, entry.patch);
+      expect(earlier === null ? null : sha256(earlier).slice(0, 8)).toBe('ef90c94a');
       expect(new Set(covered.map(({ profile }) => profile.family))).toEqual(
         new Set(['v1-2014', 'v1-2014-ff', 'compact-2016']),
       );
@@ -1314,14 +1339,29 @@ describe('an unknown image on every family Preserve writes — the frame-rate pa
   );
 
   for (const { patch, image, profile } of covered) {
-    it(`${patch.version} (${profile.buildId}): the stock bank derives, the ${String(patch.targetHz)} Hz bank is an unknown image`, () => {
+    it(`${patch.version} (${profile.buildId}): the stock bank derives, the ${String(patch.targetHz)} Hz bank is a known frame-rate build`, () => {
       const version = parseImageHeader(image)?.versionStr ?? '';
       const patched = applyFpsPatch(image, patch);
       expect(identifyFpsImage(patched).patchedEntries.map((entry) => entry.id)).toContain(patch.id);
       expect(bankImageRefusal(storedBank(image, profile), version, 'a')).toBeNull();
-      expect(bankImageRefusal(storedBank(patched, profile), version, 'a')).toBe(
-        unknownImageWords(version),
+      const words = bankImageRefusal(storedBank(patched, profile), version, 'a');
+      expect(words).toBe(
+        frameRateImageWords(version, { hz: patch.targetHz, earlierPatch: false }),
       );
+      expect(words).not.toBe(unknownImageWords(version));
+      expect(words).toMatch(
+        new RegExp(
+          `^it holds a known frame-rate build: the stock ${version.replace(/\./g, '\\.')} firmware with the ${String(patch.targetHz)} Hz frame-rate patch\\. .* To include this bank, write the stock image back to it first`,
+        ),
+      );
+      for (const name of PRESERVE_CODE_NAMES) expect(words).not.toMatch(name);
+      /* An image an earlier frame-rate patch wrote is named too, as an earlier patch. */
+      const earlier = earlierPatchOf(image, patch);
+      if (earlier !== null) {
+        expect(bankImageRefusal(storedBank(earlier, profile), version, 'a')).toBe(
+          frameRateImageWords(version, { hz: patch.targetHz, earlierPatch: true }),
+        );
+      }
     });
   }
 });

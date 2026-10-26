@@ -103,10 +103,13 @@ import {
   preserveBootFactsOf,
   preserveChoiceOf,
   restoreOrderOf,
+  frameRateImageRefusal,
+  frameRateImageWords,
   unknownImageRefusal,
   unknownImageWords,
   warmBootMarkOf,
   type BankHolds,
+  type FrameRateBuild,
   type PreserveBankChoice,
   type PreserveBankRead,
   type PreserveBankRecord,
@@ -151,6 +154,7 @@ import {
   type StagedFormId,
   type V1Patch,
 } from './patch.js';
+import { FPS_MEASURED_HZ, identifyFpsImage } from './fps-patch.js';
 import { solvePlainFromCapture } from './solve.js';
 import { bankDerivedWords, sentence, stagedFormWords } from './words.js';
 import {
@@ -604,12 +608,11 @@ export async function describeStepGate(
       ) {
         return (
           'the previous backup attempt failed, and the camera must be POWER-CYCLED before ' +
-          'this step re-runs — a retry against the same boot can serve stale or blank window ' +
-          'bytes (measured: a retried backup served the bootloader vector’s initial-SP word ' +
-          'into the boot-config read). Power-cycle the camera (unplug and replug it, or use ' +
-          'its power switch), then re-run `preserve --resume <run-directory>`. Core cannot ' +
-          'observe the power cycle — the acknowledgement is an assertion by the front end ' +
-          '(the CLI asks on a terminal; --yes asserts it). The recorded failure: ' +
+          'this step runs again — a retry on the same start can read stale or blank bytes ' +
+          '(measured: a retried backup read the bootloader’s start-up word in place of the ' +
+          'boot-config record). Power-cycle the camera (unplug and replug it, or use its power ' +
+          'switch), then run the backup again and confirm the power cycle when asked: the run ' +
+          'cannot see it happen. The recorded failure: ' +
           (state.steps.backup.error ?? '(no error text)')
         );
       }
@@ -1173,33 +1176,67 @@ interface Derived {
  * candidate that passes all of them IS the factory plaintext; a capture for
  * which none passes refuses, and nothing is recorded, let alone written.
  */
+/** Each way the run tries to get a bank's firmware out of what the camera stores, in words
+ *  (the family ids stay in the error's `detail.codeReasons`). */
+const DERIVATION_WAY: Readonly<Record<'v1-2014' | 'v1-2014-ff' | 'compact-2016', string>> = {
+  'v1-2014': 'read as stored, unencrypted (as the 2014 Compact keeps its firmware)',
+  'v1-2014-ff': 'decrypted as the 16 Hz 1.3.0.8 FF build stores its firmware',
+  'compact-2016': 'decrypted as the 2016 Compact Pro stores its firmware',
+};
+
+/** The known frame-rate build `plain` is (the frame-rate patch's output, or an image an earlier
+ *  frame-rate patch wrote), or null (the frame-rate table, `fps-patch.ts`). */
+function frameRateBuildOf(plain: Uint8Array): FrameRateBuild | null {
+  const identity = identifyFpsImage(plain);
+  const patched = identity.patchedEntries[0];
+  if (patched !== undefined) {
+    return { hz: FPS_MEASURED_HZ.get(patched.id) ?? patched.targetHz, earlierPatch: false };
+  }
+  return identity.known?.earlierPatch === true
+    ? { hz: identity.known.hz, earlierPatch: true }
+    : null;
+}
+
 function deriveFactoryImage(capture: Uint8Array, cameraVersion: string, bank: BankKey): Derived {
   const words = bankWordsOf(bank);
-  const attempts: { plain: Uint8Array; method: string }[] = [];
+  const attempts: {
+    plain: Uint8Array;
+    method: string;
+    family: keyof typeof DERIVATION_WAY;
+  }[] = [];
+  /* Why each way failed, in words for the log, and in the code's own words for JSON. */
   const reasons: string[] = [];
+  const codeReasons: string[] = [];
   /* What each failure was, for a short reason on a bank that is not the
    * anchor: the version the image says, and the first build-gate refusal. */
   let imageVersion: string | null = null;
   let buildGate: string | null = null;
+  /* A known frame-rate build: the image is named, and its remedy given, instead of "unknown". */
+  let frameRate: FrameRateBuild | null = null;
   /* The spent-reader check comes FIRST: a capture carrying one of those
    * shapes is a reader state, not an image, and the refusal must say the one
    * thing that un-blocks the camera before any cipher talk. */
   const spent = spentReaderSignature(capture);
   for (const family of ['v1-2014', 'v1-2014-ff', 'compact-2016'] as const) {
     const solved = solvePlainFromCapture(family, capture);
-    if (solved.ok) attempts.push({ plain: solved.plain, method: solved.method });
-    else reasons.push(solved.reason);
+    if (solved.ok) attempts.push({ plain: solved.plain, method: solved.method, family });
+    else {
+      reasons.push(`${DERIVATION_WAY[family]}: it does not come out as firmware this way`);
+      codeReasons.push(solved.reason);
+    }
   }
   /* Whether any candidate's header names the camera's own version: then the
    * bank holds that firmware, changed (an unknown image), not another build. */
   let versionMatched = false;
   for (const attempt of attempts) {
+    const way = DERIVATION_WAY[attempt.family];
     /* The version cross-check, FIRST of the gates: the camera's own report is
      * the one external fact here, and the derived image must agree with it. */
     const says = parseImageHeader(attempt.plain)?.versionStr;
     if (says === cameraVersion) versionMatched = true;
     if (says !== undefined && says !== cameraVersion) {
-      reasons.push(`the camera reports ${cameraVersion} but the image in ${words} says ${says}`);
+      reasons.push(`${way}: it says firmware ${says}, not the ${cameraVersion} the camera runs`);
+      codeReasons.push(`the camera reports ${cameraVersion} but the image in ${words} says ${says}`);
       imageVersion ??= says;
       continue;
     }
@@ -1207,20 +1244,36 @@ function deriveFactoryImage(capture: Uint8Array, cameraVersion: string, bank: Ba
       return { plain: attempt.plain, patch: buildV1Patch(attempt.plain), method: attempt.method };
     } catch (error) {
       const why = error instanceof Error ? error.message : String(error);
-      reasons.push(`the ${attempt.method} candidate failed its build gates: ${why}`);
+      const known = frameRateBuildOf(attempt.plain);
+      frameRate ??= known;
+      reasons.push(
+        `${way}: it says firmware ${says ?? cameraVersion}, but ` +
+          (known === null
+            ? 'it is not the stock image this run can patch'
+            : `it is that firmware with ${known.earlierPatch ? 'an earlier' : 'the'} ` +
+              `${String(known.hz)} Hz frame-rate patch`),
+      );
+      codeReasons.push(`the ${attempt.method} candidate failed its build gates: ${why}`);
       buildGate ??= why;
     }
   }
   /* Another build's firmware when no candidate names the camera's version and
    * one names another; otherwise an image Preserve cannot name. */
   const otherFirmware = imageVersion !== null && !versionMatched;
-  const detail = { reasons, imageVersion, buildGate, unknownImage: !otherFirmware };
+  const detail = {
+    reasons,
+    codeReasons,
+    imageVersion,
+    buildGate,
+    unknownImage: !otherFirmware && frameRate === null,
+    ...(frameRate === null ? {} : { frameRate }),
+  };
   if (spent !== null) {
     throw new SeekError(
       'pipeline/refused',
       spentReaderRefusal(
-        `${spent} — no factory plaintext can be derived from these bytes. Every candidate was ` +
-          `tried:\n  - ${reasons.join('\n  - ')}`,
+        `${spent} — no factory plaintext can be derived from these bytes. Every way to read it ` +
+          `was tried:\n  - ${reasons.join('\n  - ')}`,
       ),
       { detail },
     );
@@ -1228,22 +1281,34 @@ function deriveFactoryImage(capture: Uint8Array, cameraVersion: string, bank: Ba
   /* The reads are not the problem here — they agreed, and a spent reader was
    * ruled out above. What failed is every derivation's gate set: the refusal
    * says what the bank holds in plain words, and `detail.reasons` (logged by
-   * the caller) says which gate each candidate failed. */
+   * the caller) says why each way failed. */
   throw new SeekError(
     'pipeline/refused',
     otherFirmware
       ? `${words.charAt(0).toUpperCase()}${words.slice(1)} holds firmware ${imageVersion ?? ''}, not ` +
           `the ${cameraVersion} the camera runs, so this run has no image it can patch there and ` +
           'refuses rather than write over it.'
-      : unknownImageRefusal(bank, cameraVersion),
+      : frameRate !== null
+        ? frameRateImageRefusal(bank, cameraVersion, frameRate)
+        : unknownImageRefusal(bank, cameraVersion),
     { detail },
   );
 }
 
-/** The candidates a refused derivation tried, each with the gate it failed, for the log. */
+/** The ways a refused derivation tried, each with why it failed, in words for the log; none when
+ *  the image is a known frame-rate build (its refusal names it, so the list adds nothing). */
 function derivationReasonsOf(error: unknown): readonly string[] {
-  const reasons = error instanceof SeekError ? error.detail?.reasons : undefined;
+  const detail = error instanceof SeekError ? error.detail : undefined;
+  if (frameRateOfDetail(detail?.frameRate) !== null) return [];
+  const reasons = detail?.reasons;
   return Array.isArray(reasons) ? reasons.filter((r): r is string => typeof r === 'string') : [];
+}
+
+/** The frame-rate build a refused derivation's detail names, or null. */
+function frameRateOfDetail(value: unknown): FrameRateBuild | null {
+  if (typeof value !== 'object' || value === null) return null;
+  const { hz, earlierPatch } = value as { hz?: unknown; earlierPatch?: unknown };
+  return typeof hz === 'number' && typeof earlierPatch === 'boolean' ? { hz, earlierPatch } : null;
 }
 
 /**
@@ -1268,6 +1333,8 @@ export function bankImageRefusal(
  *  or the firmware it holds when that is another build's. */
 function derivationRefusalOf(error: unknown, cameraVersion: string): string {
   const detail = error instanceof SeekError ? error.detail : undefined;
+  const frameRate = frameRateOfDetail(detail?.frameRate);
+  if (frameRate !== null) return frameRateImageWords(cameraVersion, frameRate);
   if (detail?.unknownImage === true) return unknownImageWords(cameraVersion);
   const imageVersion = detail?.imageVersion;
   if (typeof imageVersion === 'string') {
@@ -1462,7 +1529,10 @@ async function captureAnchor(
   } catch (error) {
     const reasons = derivationReasonsOf(error);
     if (reasons.length > 0) {
-      reporter.log(`${words}: every candidate was tried:\n  - ${reasons.join('\n  - ')}`, 'detail');
+      reporter.log(
+        `${sentence(words)}: every way to read it was tried:\n  - ${reasons.join('\n  - ')}`,
+        'detail',
+      );
     }
     throw error;
   }
@@ -1575,8 +1645,8 @@ async function captureOther(
     if (error instanceof CancelledError) throw error;
     const reasons = derivationReasonsOf(error);
     reporter.log(
-      `${words}: no image the run can patch (${error instanceof Error ? error.message : String(error)})` +
-        (reasons.length > 0 ? `; every candidate was tried:\n  - ${reasons.join('\n  - ')}` : ''),
+      `${sentence(words)}: no image the run can patch (${error instanceof Error ? error.message : String(error)})` +
+        (reasons.length > 0 ? `; every way to read it was tried:\n  - ${reasons.join('\n  - ')}` : ''),
       'detail',
     );
     return {
@@ -1682,9 +1752,9 @@ async function runBackupStep(
   let repointed = false;
   if (anchorRead.derived.patch.route === 'recovery-only' && anchor !== 'r') {
     reporter.log(
-      `${bankWordsOf(anchor)} holds ${anchorRead.derived.patch.label}, which runs only from ` +
-        'recovery R — the run takes R as the bank the camera runs',
-      'detail',
+      `${sentence(bankWordsOf(anchor))} holds ${anchorRead.derived.patch.label}, which runs only ` +
+        'from recovery R — the run takes R as the bank the camera runs.',
+      'info',
     );
     anchor = 'r';
     anchorRead = await captureAnchor(
@@ -2131,8 +2201,8 @@ async function runCommitStep(
         const words = bankWordsOf(write.key);
         if (landed.has(write.key)) {
           reporter.log(
-            `${words} already holds the patch (a previous attempt landed) — not written again`,
-            'detail',
+            `${sentence(words)} already holds the patch (a previous attempt landed) — not written again.`,
+            'info',
           );
           done.push(`${words}: already held the patch (a previous attempt landed); not written`);
           continue;
@@ -2199,7 +2269,8 @@ function enteredUnpatchedRefusal(
         : `The backup read the boot-config word as ${hexUp(boot.word)} (${boot.rule}); a start ` +
           'that enters another bank means the word or a bank changed since, or the bootloader ' +
           'refused the patched bank. ') +
-    'The patched banks still hold the patch: the restore step puts every written bank back.'
+    /* What comes next is the front end's line (`PRESERVE_UNPATCHED_START_NEXT`), said once. */
+    'The patched banks still hold the patch.'
   );
 }
 
@@ -2234,8 +2305,8 @@ async function runDrainStep(
     if (expected === undefined) fail('the run state names no bank the start is expected to enter');
     rotationBase = rotatedDrainBase(expected);
     reporter.log(
-      `the widened window serves the part rotated from ${hexUp(rotationBase, 8)} — ` +
-        'the drain will unrotate before delivery',
+      `Whole-flash read: on this build the read starts at ${hexUp(rotationBase, 8)} and wraps ` +
+        'around the flash; the run puts the bytes back in order before it saves them.',
       'detail',
     );
   }
@@ -2254,8 +2325,8 @@ async function runDrainStep(
     assertLive(signal);
     const version = await gateVersion(device, state);
     reporter.log(
-      `camera reports firmware ${version}; resetting so it boots the patched image`,
-      'detail',
+      `Restarting the camera so it starts the patched firmware (it reports firmware ${version}).`,
+      'info',
     );
     if ((await resetDevice(device)) === 'refused') {
       fail(
@@ -2263,7 +2334,7 @@ async function runDrainStep(
           'a browser policy or a test guard), so the camera still runs the image it booted ' +
           'with, not the committed patch. The drain reads only through the patched image’s ' +
           'widened window, so it stops before arming anything; nothing was read. Run the drain ' +
-          'again where the reset can go out (the CLI, or a browser that allows it).',
+          'again where the host lets the restart command through.',
       );
     }
   });
@@ -2313,9 +2384,9 @@ async function runDrainStep(
         );
       } else {
         reporter.log(
-          `after the restart the camera reports it entered ${bankWordsOf(entered)}, which holds ` +
-            'the patch',
-          'detail',
+          `After the restart the camera reports it entered ${bankWordsOf(entered)}, which holds ` +
+            'the patch.',
+          'info',
         );
         if (state.capability?.rotation !== undefined && entered !== expected) {
           rotationBase = rotatedDrainBase(entered);
@@ -2363,10 +2434,14 @@ async function runDrainStep(
             READ_CHUNK,
           );
           const probe = await probeWidenedWindow(device, probeBytes);
-          reporter.log(`drain probe, ${probe.detail}`, probe.live ? 'detail' : 'warn');
+          reporter.log(`Whole-flash read: ${probe.detail}.`, probe.live ? 'detail' : 'warn');
         }
       } catch {
-        reporter.log('drain probe skipped (the drain already proves the widened window)', 'detail');
+        reporter.log(
+          'Whole-flash read: the first read past the first 64 KiB was skipped; the read itself ' +
+            'shows whether it reaches the whole flash.',
+          'detail',
+        );
       }
     } catch (error) {
       if (error instanceof CancelledError) throw error;
@@ -2525,8 +2600,8 @@ async function runRestoreStep(
           /* A previous restore landed and its checkpoint did not: the
            * recovery is to say so, not to erase and reprogram the same bytes. */
           reporter.log(
-            `restore: ${words} already holds its original content — nothing to stage`,
-            'detail',
+            `Restore: ${words} already holds its original firmware — nothing to write.`,
+            'info',
           );
           notes.push(
             `${words}: already held its original content (a previous restore landed); not written`,

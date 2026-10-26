@@ -73,6 +73,8 @@ import {
   spentReaderSignature,
   unrotateDump,
   unknownImageRefusal,
+  frameRateImageRefusal,
+  frameRateImageWords,
   unknownImageWords,
   type PreserveArtifactLoader,
   type PreserveRunState,
@@ -531,9 +533,15 @@ describe('runPreserveStep(backup) — the double read and the derived-image gate
         'Slot A holds firmware 1.2.0.0, not the 1.3.0.0 the camera runs, so this run has no ' +
           'image it can patch there and refuses rather than write over it.',
       );
-      expect(((error as SeekError).detail?.reasons as string[]).join('\n')).toMatch(
+      expect(((error as SeekError).detail?.codeReasons as string[]).join('\n')).toMatch(
         /the camera reports 1\.3\.0\.0 but the image in slot A says 1\.2\.0\.0/,
       );
+      /* The log's list says each way in words; the code's own reasons stay in the detail. */
+      const said = ((error as SeekError).detail?.reasons as string[]).join('\n');
+      expect(said).toMatch(
+        /read as stored, unencrypted \(as the 2014 Compact keeps its firmware\): it says firmware 1\.2\.0\.0, not the 1\.3\.0\.0 the camera runs/,
+      );
+      for (const name of PRESERVE_CODE_NAMES) expect(said).not.toMatch(name);
     },
   );
 
@@ -556,9 +564,14 @@ describe('runPreserveStep(backup) — the double read and the derived-image gate
       /* An image Preserve cannot derive from a factory image is an unknown image, in plain
        * words (TESTING.md 42.95); the gate each candidate failed is in the detail and the log. */
       expect((error as Error).message).toBe(unknownImageRefusal('a', EXPECTED_VERSION));
-      const reasons = ((error as SeekError).detail?.reasons as string[]).join('\n');
+      const reasons = ((error as SeekError).detail?.codeReasons as string[]).join('\n');
       expect(reasons).toMatch(/does not carry the v1 2014 update machinery/);
       expect(reasons).toMatch(/failed its build gates/);
+      const said = ((error as SeekError).detail?.reasons as string[]).join('\n');
+      expect(said).toMatch(
+        /read as stored, unencrypted .*: it says firmware 1\.3\.0\.0, but it is not the stock image this run can patch/,
+      );
+      for (const name of PRESERVE_CODE_NAMES) expect(said).not.toMatch(name);
     },
   );
 
@@ -1288,7 +1301,7 @@ describe('a reset the host refused', () => {
       .filter((e) => e.type === 'log' && e.level === 'warn')
       .map((e) => (e.type === 'log' ? e.message : ''));
     expect(warnings).toHaveLength(4);
-    for (const line of warnings) expect(line).toMatch(/reader probe was REFUSED by the host/);
+    for (const line of warnings) expect(line).toMatch(/first read was REFUSED by the host/);
     expect((error as Error).message).toMatch(/the host REFUSED the reader probe before it left/);
     expect((error as Error).message).not.toMatch(/power-cycle the camera/);
   });
@@ -1510,8 +1523,9 @@ describe('describeStepGate — every prerequisite refusal', () => {
       expect(refusal).toMatch(
         /Power-cycle the camera \(unplug and replug it, or use its power switch\)/,
       );
-      expect(refusal).toMatch(/Core cannot observe the power cycle/);
-      expect(refusal).toMatch(/preserve --resume/);
+      expect(refusal).toMatch(/confirm the power cycle when asked: the run cannot see it happen/);
+      /* Core's text names neither front end (TESTING.md 42.105). */
+      expect(refusal).not.toMatch(/the CLI|--yes|preserve --resume/);
       expect(refusal).toMatch(/the camera came unplugged/);
       /* The acknowledgement opens it. */
       expect(await describeStepGate('backup', failed, never, { powerCycled: true })).toBeNull();
@@ -2539,7 +2553,9 @@ describe('the banks a run writes — the next start, one bank, every bank', () =
         /As the plan said, the next start enters slot A \(the boot-config word is 0x00000000: slot A first, then B, then recovery R\), and this run's choice left that bank out, so this stop was expected\./,
       );
       expect(message).not.toMatch(/changed since|refused the patched bank|armed/);
-      expect(message).toMatch(/the restore step puts every written bank back/);
+      /* The restore is the front end's next line (PRESERVE_UNPATCHED_START_NEXT), said once. */
+      expect(message).toMatch(/The patched banks still hold the patch\.$/);
+      expect(message).not.toMatch(/puts every written bank back/);
       expect(message).not.toMatch(/power-cycle the camera/);
       expect((error as SeekError).detail).toEqual({ entered: 'a', targets: ['r'] });
       /* No window was armed after the reset: not the widened one, not any. */
@@ -2781,7 +2797,7 @@ describe('an unknown image — refused in plain words, per bank and as the run (
       expect(error).toBeInstanceOf(SeekError);
       expect((error as Error).message).toBe(unknownImageRefusal('a', EXPECTED_VERSION));
       expect((error as Error).message).toMatch(
-        /^Slot A holds an unknown image \(not the stock 1\.3\.0\.0 firmware, nor a change to it that Preserve knows; a frame-rate patch is not one\)/,
+        /^Slot A holds an unknown image \(not the stock 1\.3\.0\.0 firmware, nor a change to it that Preserve knows\)/,
       );
       expect((error as Error).message).toMatch(/write the stock image back to slot A first/);
       const failed = recordStepFailure(created.state, 'backup', error);
@@ -3020,5 +3036,37 @@ describe('people’s words — one line per sweep, no code names (TESTING.md 42.
     expect(PRESERVE_UNPATCHED_START_NEXT).toMatch(
       /^Next: the restore puts every written bank back/,
     );
+    /* The result line says the stop in one clause, not the stop's words a third time (42.105). */
+    expect(
+      preserveStepResultWords({ ...stopped, targets: ['r'], drainEntered: 'a' }, 'drain'),
+    ).toBe(
+      'Whole-flash read: stopped as planned — the camera started slot A, which this run did ' +
+        'not patch, so nothing was read.',
+    );
+    /* Any other failed read keeps its recorded reason. */
+    expect(preserveStepResultWords({ ...stopped, targets: ['a'] }, 'drain')).toBe(
+      'Whole-flash read: stopped — stopped',
+    );
+  });
+
+  it('a known frame-rate build: named, with the stock image first, never offered a patch (42.105)', () => {
+    const now = frameRateImageRefusal('a', '1.3.0.0', { hz: 32, earlierPatch: false });
+    expect(now).toBe(
+      'Slot A holds a known frame-rate build: the stock 1.3.0.0 firmware with the 32 Hz ' +
+        'frame-rate patch. Preserve patches only the stock firmware, never a patched image, so ' +
+        'it does not patch this bank or put it back. The run takes the firmware it patches from ' +
+        'this bank, so it stops here, before anything is written. To preserve this camera, write ' +
+        'the stock image back to slot A first (for example from a full flash backup taken ' +
+        'before the frame-rate patch), then start a new run; the frame-rate patch can be made ' +
+        'again on the stock image afterwards.',
+    );
+    const earlier = frameRateImageWords('1.3.0.0', { hz: 32, earlierPatch: true });
+    expect(earlier).toMatch(
+      /^it holds a known frame-rate build: the stock 1\.3\.0\.0 firmware with an earlier 32 Hz frame-rate patch \(made before the USB fix joined it\)\. .* To include this bank, write the stock image back to it first/,
+    );
+    for (const text of [now, earlier]) {
+      expect(codeNamesIn([text])).toEqual([]);
+      expect(text).not.toMatch(/unknown image|Make \d+ FPS|seek-fw|the page|the CLI/);
+    }
   });
 });

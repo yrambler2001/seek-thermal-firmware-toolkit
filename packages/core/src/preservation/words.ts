@@ -261,6 +261,20 @@ export function preserveStepResultWords(
   if (record === undefined) return null;
   const label = STEP_LABEL[step];
   if (record.status === 'failed') {
+    /* The planned stop (the start entered a bank the run did not patch) was said in full when it
+     * happened; the result says it in one clause, not a third copy (TESTING.md 42.105). */
+    const entered = state.drainEntered;
+    if (
+      step === 'drain' &&
+      entered !== undefined &&
+      entered !== null &&
+      !(state.targets ?? []).includes(entered)
+    ) {
+      return (
+        `${label}: stopped as planned — the camera started ${bankWordsOf(entered)}, which this ` +
+        'run did not patch, so nothing was read.'
+      );
+    }
     return `${label}: stopped — ${record.error ?? 'no reason was recorded'}`;
   }
   const targets = state.targets ?? [];

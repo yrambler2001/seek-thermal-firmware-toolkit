@@ -491,6 +491,9 @@ export {
   wordSum,
   xorWindowVerbatim,
   unknownImageRefusal,
+  frameRateImageRefusal,
+  frameRateImageWords,
+  type FrameRateBuild,
   unknownImageWords,
 } from './preservation/index.js';
 export type {
