@@ -13441,7 +13441,6 @@ In all 36 renders the bank addresses equal the committed runner's [measured]. Th
 - Seek: `a84d3ea` (README: the three claims as measured) and this section, on `worktree-agent-a4e75ae64628b9f1c`, reset to `refactor/all-firmware-profiles` (`5762ecf`).
 - Scratch (not committed): `/private/tmp/claude-501/-Users-yrambler2001-things-a-noindex-seek-seek-thermal-firmware-backup/82174575-1341-45d6-a306-7518156cd978/scratchpad/` (`t1/` references, parts, emulator logs and `table.py`; `t2/` the hand-tool runs; `t3/` the runner renders and diffs; `t4/` the rebuild, the `seek_fw_tool.mjs` comparison and the key analysis).
 
-<<<<<<< HEAD
 ### 42.91 The bank saved first as one zip download; Copy to, Restore from full flash backup, Make N FPS in every bank; the cancel wording (code and emulator, the bench handed off) (2026-10-26)
 
 **Summary.** Agent 42.91 (Opus 5.5), on `worktree-agent-a8fcdf193dc5bf7bf`, reset to `refactor/all-firmware-profiles` (`5762ecf`). It did the owner's three Slots requests of 2026-10-26 in core, the page and the CLI, with tests at each layer and an emulator suite for copy, restore and the every-bank patch on 1.3.0.0, 1.0.3.0 and 4.9.2.0. The owner then asked to wrap up ("you spent too much tokens, wrap up and handoff"), so **the bench was not run**: no J-Link read, no page or CLI write on the FF board, no switch change. The rig for it is written and type-checks (§6). Nothing was pushed or merged, and `plan.md` was not edited. No other agent was started.
@@ -13517,7 +13516,6 @@ Not run: the Chrome-on-emulator page specs (`slots-view`, `slots-quality`, `page
 - O3. `web/src/lib/preserve/run-file.ts` keeps its own zip reader beside core's new `readZipEntries` (Preserve was not to be touched this round).
 - O4. A copy takes the source's image from the slots read (fresh after every commit); it is not read again before the plan.
 - O5. Whether the every-bank patch's single zip (one download for all its banks) is what the owner wants; one zip per bank would meet Chrome's prompt for a second automatic download in one click.
-=======
 ### 42.93 Android phones lose every other frame to the endpoint-busy skip, not to a late credit: the Redmi 4X drains the last 16 KB transfer in 1.38 ms against the Pixel's 0.82 ms and a ~0.7 ms margin; the one-branch no-skip patch, flashed in banks A, B and R of the bench Compact, gives the Redmi 32 fps (bench, flash write, 2026-10-26)
 
 **Summary.** Not an orchestrated agent: the owner's apk-patches session (Claude Opus 5.5), with one read-only Opus 5.5 xhigh study agent for the firmware survey. Branch `docs/phone-skips` (this section, `PHONE_SKIPS.md`, `scripts/phone-skip/`); FW-V1 branch `docs/noskip` (`0ddd02e65`: `docs/NOSKIP_PATCH_ALL_FIRMWARES.md`, `emu/instruments/noskip/`). Neither merged nor pushed. The topical write-up with every table is `PHONE_SKIPS.md`; raw logs `SEEK_BENCH_WORK/phone_skip_2026-10-26/`.
@@ -13532,4 +13530,3 @@ Not run: the Chrome-on-emulator page specs (`slots-view`, `slots-quality`, `page
 - **Open.** A 30-minute soak. The owner skips the tear check (2026-10-26). Owner request: the Slots page's "Make 32 FPS" applies the frame-rate edit and the no-skip branch as one patch (the Compact PRO's 18 Hz entries stay frame-rate only).
 
 **Tags.** [measured] a phone log, trace or camera read, named in `PHONE_SKIPS.md`; [source] the 1.3.0.0 reconstruction (`FW-V1/targets/compact_8hz_1_3_0_0/src/`).
->>>>>>> docs/phone-skips
