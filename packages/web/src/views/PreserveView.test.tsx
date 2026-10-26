@@ -107,10 +107,11 @@ function preserveStub(scenario: Scenario, ran: [PreservePhaseId, PreservePhaseRu
 function renderPreserve(
   scenario: Scenario,
   ran: [PreservePhaseId, PreservePhaseRunOptions][] = [],
+  stub: ReturnType<typeof preserveStub> = preserveStub(scenario, ran),
 ) {
   return render(
     <PreserveView
-      preserve={preserveStub(scenario, ran)}
+      preserve={stub}
       connected={scenario.connected}
       busy={scenario.busy === true}
       {...(scenario.onConnect === undefined ? {} : { onConnect: scenario.onConnect })}
@@ -146,6 +147,40 @@ afterEach(() => {
 });
 
 describe('PreserveView', () => {
+  it('a step log shows the detail lines only when asked, as the CLI does with --verbose (42.105)', () => {
+    const scenario: Scenario = { state: null, connected: true };
+    const base = preserveStub(scenario, []);
+    /* The handle as the hook renders it after two lines: one for people, one detail. */
+    const stub = {
+      ...base,
+      phaseReporters: {
+        ...base.phaseReporters,
+        'read-build': {
+          ...base.phaseReporters['read-build'],
+          lines: [
+            { seq: 1, level: 'info', text: 'Backup: 31 blocks read, no restart needed.' },
+            { seq: 2, level: 'detail', text: 'camera reports firmware 1.3.0.0' },
+          ] as const,
+        },
+      },
+    };
+    const { container, unmount } = renderPreserve(scenario, [], stub);
+    const log = (): string =>
+      container.querySelector('#preserve-phase-read-build-log')?.textContent ?? '';
+    expect(log()).toContain('Backup: 31 blocks read, no restart needed.');
+    expect(log()).not.toContain('camera reports firmware');
+    const toggle = container.querySelector<HTMLInputElement>('#preserve-phase-read-build-details');
+    expect(toggle?.checked).toBe(false);
+    expect(
+      container.querySelector('label[for="preserve-phase-read-build-details"]')?.textContent,
+    ).toBe('Show details in the log');
+    act(() => {
+      toggle?.click();
+    });
+    expect(log()).toContain('camera reports firmware 1.3.0.0');
+    unmount();
+  });
+
   it('shows the unlock note after a run that sent the token, and no note otherwise', () => {
     const quiet = renderPreserve({ state: null, connected: true });
     expect(quiet.container.textContent).not.toContain('stays unlocked');

@@ -527,7 +527,7 @@ describe('the reset is not a swap — the guard and the opener ladder cooperate'
     });
     await waitFor(() => current(mounted).panel.activePhase === null);
     const log = linesOf(current(mounted).panel, 'patch-dump');
-    expect(log).toContain('no replug needed');
+    expect(log).toContain('no replug is needed');
     expect(log).not.toContain('unplug the camera');
     expect(current(mounted).panel.state?.steps.drain?.status).toBe('done');
     expect(current(mounted).panel.phaseReporters['patch-dump'].progress.text).toContain(
@@ -564,7 +564,7 @@ describe('the reset is not a swap — the guard and the opener ladder cooperate'
     });
     await waitFor(() => current(mounted).panel.activePhase === null);
     const log = linesOf(current(mounted).panel, 'patch-dump');
-    expect(log).toContain('no replug needed');
+    expect(log).toContain('no replug is needed');
     expect(log).not.toContain('unplug the camera');
     expect(current(mounted).panel.prompt).toBeNull();
     expect(current(mounted).panel.state?.steps.drain?.status).toBe('done');
