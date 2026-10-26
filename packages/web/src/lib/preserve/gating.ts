@@ -23,10 +23,15 @@
  * replaying a write that may already be on the camera.
  */
 
+import { bankWordsOf, preserveChoiceOf } from '@seek-fw/core';
 import {
   NEEDS_CONFIRM,
+  PRESERVE_BACKUP_FILE,
   PRESERVE_STEPS,
   phaseMeta,
+  preserveCaptureFile,
+  preservePlainFile,
+  type BankKey,
   type CheckpointName,
   type PreservePhaseId,
   type PreserveRunState,
@@ -81,6 +86,32 @@ const done = (state: PreserveRunState, step: PreserveStepId): boolean =>
 
 const buildName = (state: PreserveRunState): string =>
   state.buildId ?? state.buildFamily ?? 'the detected build';
+
+/** What the chosen banks lack, in core's order: the banks the backup read, a
+ *  resolved choice, and each chosen bank writable (and, on a recovery-only
+ *  build, recovery R). */
+function targetGaps(state: PreserveRunState): string[] {
+  if (state.banks === undefined || state.boot === undefined) {
+    return ['the banks the backup reads'];
+  }
+  const targets = state.targets;
+  if (targets === undefined || targets.length === 0) {
+    return [`a choice of banks — ${preserveChoiceOf(state, state.choice).what}`];
+  }
+  const out: string[] = [];
+  for (const key of targets) {
+    const refused = state.banks[key].refused;
+    if (refused !== null) out.push(`${bankWordsOf(key)} cannot be written: ${refused}`);
+    if (state.route === 'recovery-only' && key !== 'r') {
+      out.push(
+        `the recovery-slot route (this build runs only from recovery R, not ${bankWordsOf(key)})`,
+      );
+    }
+  }
+  return out;
+}
+
+const targetsOf = (state: PreserveRunState): readonly BankKey[] => state.targets ?? [];
 
 export function canRunPhase(input: PreserveGateInput): PreserveGate {
   const { state, phase, has } = input;
@@ -153,33 +184,42 @@ export function canRunPhase(input: PreserveGateInput): PreserveGate {
       case 'commit': {
         want('backup', 'the flash backup');
         want('patch', 'the patch step');
-        if (state.detection === undefined) missing.push('the slot detection');
-        if (state.route === 'recovery-only' && state.detection?.bank !== 'r') {
-          missing.push('the recovery-slot route (the detection must name the recovery bank)');
+        if (effDone.has('backup')) missing.push(...targetGaps(state));
+        if (done(state, 'patch')) {
+          for (const key of targetsOf(state)) {
+            if (state.banks?.[key].patch === undefined) {
+              missing.push(`the patch of ${bankWordsOf(key)}`);
+            }
+          }
         }
-        if (!has('preserve_backup_windows.bin')) missing.push('the backup windows file');
-        if (!has('preserve_bank_capture.bin')) missing.push('the bank capture');
+        if (done(state, 'backup')) {
+          if (!has(PRESERVE_BACKUP_FILE)) missing.push('the backup windows file');
+          for (const key of targetsOf(state)) {
+            if (!has(preserveCaptureFile(key))) missing.push(`${bankWordsOf(key)}’s capture`);
+            if (!has(preservePlainFile(key))) missing.push(`${bankWordsOf(key)}’s derived image`);
+          }
+        }
         break;
       }
       case 'drain': {
         want('commit', 'the commit (run or resume at it first)');
-        if (state.detection === undefined) missing.push('the slot detection');
-        if (state.route === 'recovery-only' && state.detection?.bank !== 'r') {
-          missing.push('the recovery-slot route (the detection must name the recovery bank)');
-        }
+        missing.push(...targetGaps(state));
         if (state.capability !== undefined && !state.capability.wholePart) {
           missing.push(`the drain refuses on ${buildName(state)} — ${state.capability.note}`);
         }
-        if (!has('preserve_bank_capture.bin')) missing.push('the bank capture');
+        for (const key of targetsOf(state)) {
+          if (!has(preserveCaptureFile(key))) missing.push(`${bankWordsOf(key)}’s capture`);
+        }
         break;
       }
       case 'restore': {
         want('commit', 'the commit (run or resume at it first)');
-        if (state.detection === undefined) missing.push('the slot detection');
-        if (state.route === 'recovery-only' && state.detection?.bank !== 'r') {
-          missing.push('the recovery-slot route (the detection must name the recovery bank)');
+        missing.push(...targetGaps(state));
+        for (const key of targetsOf(state)) {
+          if (state.banks?.[key].patch === undefined) {
+            missing.push(`the patch summary of ${bankWordsOf(key)} (the staged length)`);
+          }
         }
-        if (state.patch === undefined) missing.push('the patch summary (the staged length)');
         if (state.restoreForm === 'none') {
           missing.push(
             `the restore refuses on ${buildName(state)} — no staged form of the factory ` +
@@ -187,19 +227,23 @@ export function canRunPhase(input: PreserveGateInput): PreserveGate {
               'delivered dump and the patch in place',
           );
         }
-        if (
-          state.stagedForm !== undefined &&
-          state.stagedForm !== 'plain' &&
-          !has('preserve_image_plain.bin')
-        ) {
-          missing.push('the factory plaintext (preserve_image_plain.bin, from the backup step)');
+        for (const key of targetsOf(state)) {
+          if (
+            state.stagedForm !== undefined &&
+            state.stagedForm !== 'plain' &&
+            !has(preservePlainFile(key))
+          ) {
+            missing.push(
+              `${bankWordsOf(key)}’s factory plaintext (${preservePlainFile(key)}, from the backup step)`,
+            );
+          }
+          if (!has(preserveCaptureFile(key))) missing.push(`${bankWordsOf(key)}’s capture`);
         }
-        if (!has('preserve_bank_capture.bin')) missing.push('the bank capture');
         break;
       }
       case 'verify': {
         want('restore', 'the restore (it runs first in this phase)');
-        if (!has('preserve_backup_windows.bin')) missing.push('the flash backup');
+        if (!has(PRESERVE_BACKUP_FILE)) missing.push('the flash backup');
         break;
       }
     }
@@ -250,7 +294,8 @@ export function canRunPhase(input: PreserveGateInput): PreserveGate {
     state.steps.commit?.status === 'failed' &&
     !done(state, 'drain') &&
     ok &&
-    has('preserve_bank_capture.bin');
+    targetsOf(state).length > 0 &&
+    targetsOf(state).every((key) => has(preserveCaptureFile(key)));
 
   return {
     ok,

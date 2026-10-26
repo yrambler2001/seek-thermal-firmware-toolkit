@@ -8,31 +8,39 @@
  * declared here.
  *
  * THE IMAGE IS THE CAMERA'S OWN: there is no manual plaintext-image
- * selection anywhere. A new run (`version: 2`) derives the factory plaintext
- * from the camera's active slot in the backup step, and the derived image is
- * a run artifact (`PRESERVE_PLAIN_NAME`) like the rest — so the run zip is
- * the only file a run ever needs, here or on a resume.
+ * selection anywhere. A run (`version: 3`) reads every bank in the backup
+ * step, derives each writable bank's factory plaintext, and says which bank
+ * the next start enters; the person then chooses the banks the commit writes
+ * (by default that bank). Every derived image is a run artifact
+ * (`preservePlainFile(bank)`) like the rest — so the run zip is the only file a
+ * run ever needs, here or on a resume.
  *
  * The run file is the ONLY memory a run has: the app holds no browser
  * storage, so closing the tab without the file ends the run.
  */
 
-import type { PreserveStepId } from '@seek-fw/core';
+import type { BankKey, PreserveStepId } from '@seek-fw/core';
 import {
+  BANK_KEYS,
   PRESERVE_BACKUP_FILE,
-  PRESERVE_BANK_CAPTURE_FILE,
   PRESERVE_DUMP_ORIGINAL_FILE,
   PRESERVE_DUMP_POSTWRITE_FILE,
-  PRESERVE_PATCHED_FILE,
-  PRESERVE_PLAIN_NAME,
   PRESERVE_RUN_STATE_FILE,
   PRESERVE_VERIFY_FILE,
+  preserveCaptureFile,
+  preservePatchedFile,
+  preservePlainFile,
 } from '@seek-fw/core';
 
 export type {
+  BankKey,
   CreatePreserveRunOptions,
   CreatedPreserveRun,
   PreserveArtifactLoader,
+  PreserveBankChoice,
+  PreserveBankRecord,
+  PreserveBootFacts,
+  PreserveChoiceVerdict,
   PreservePatchSummary,
   PreserveRunState,
   PreserveStepOutcome,
@@ -44,44 +52,54 @@ export type { PreserveStepId } from '@seek-fw/core';
  *  wizard's callers share one set of literals. */
 export {
   PRESERVE_BACKUP_FILE,
-  PRESERVE_BANK_CAPTURE_FILE,
   PRESERVE_DUMP_ORIGINAL_FILE,
   PRESERVE_DUMP_POSTWRITE_FILE,
-  PRESERVE_PATCHED_FILE,
-  PRESERVE_PLAIN_NAME,
   PRESERVE_RUN_STATE_FILE,
   PRESERVE_VERIFY_FILE,
+  preserveCaptureFile,
+  preservePatchedFile,
+  preservePlainFile,
 } from '@seek-fw/core';
 
 /** The run-state file, by its name inside the run ZIP. */
 export const RUN_STATE_FILE: string = PRESERVE_RUN_STATE_FILE;
 
-/** The binary checkpoints a run produces, in step order — the derived
- *  factory plaintext among them, from the backup step onward, and the
+/** One checkpoint the run can produce: the backup, each bank's capture,
+ *  derived image and patched image, the dumps and the verify's re-read. */
+export type CheckpointName = string;
+
+/** The binary checkpoints a run can produce, in step order — each bank's
+ *  derived factory plaintext among them, from the backup step onward, and the
  *  verify's re-read last. */
-export const CHECKPOINT_FILES = [
+export const CHECKPOINT_FILES: readonly CheckpointName[] = [
   PRESERVE_BACKUP_FILE,
-  PRESERVE_BANK_CAPTURE_FILE,
-  PRESERVE_PLAIN_NAME,
-  PRESERVE_PATCHED_FILE,
+  ...BANK_KEYS.flatMap((bank: BankKey) => [preserveCaptureFile(bank), preservePlainFile(bank)]),
+  ...BANK_KEYS.map(preservePatchedFile),
   PRESERVE_DUMP_POSTWRITE_FILE,
   PRESERVE_DUMP_ORIGINAL_FILE,
   PRESERVE_VERIFY_FILE,
-] as const;
-
-export type CheckpointName = (typeof CHECKPOINT_FILES)[number];
+];
 
 /** The step that writes each checkpoint — which decides its folder in the
  *  run file. */
 export const CHECKPOINT_STEP: Readonly<Record<CheckpointName, PreserveStepId>> = {
   [PRESERVE_BACKUP_FILE]: 'backup',
-  [PRESERVE_BANK_CAPTURE_FILE]: 'backup',
-  [PRESERVE_PLAIN_NAME]: 'backup',
-  [PRESERVE_PATCHED_FILE]: 'patch',
+  ...Object.fromEntries(
+    BANK_KEYS.flatMap((bank: BankKey) => [
+      [preserveCaptureFile(bank), 'backup'],
+      [preservePlainFile(bank), 'backup'],
+      [preservePatchedFile(bank), 'patch'],
+    ]),
+  ),
   [PRESERVE_DUMP_POSTWRITE_FILE]: 'drain',
   [PRESERVE_DUMP_ORIGINAL_FILE]: 'drain',
   [PRESERVE_VERIFY_FILE]: 'verify',
 };
+
+/** Whether a name is one of the run's checkpoints. */
+export function isCheckpointName(name: string): boolean {
+  return CHECKPOINT_FILES.includes(name);
+}
 
 /** Which steps put bytes on the wire's write path (the "do not unplug" set). */
 export const WRITES_FLASH: ReadonlySet<PreserveStepId> = new Set<PreserveStepId>([
@@ -108,26 +126,27 @@ export const PRESERVE_STEPS: readonly PreserveStepMeta[] = [
     id: 'backup',
     label: 'Back up the reachable flash',
     description:
-      'Reads all 31 windows a stock camera serves, 64 KiB each, reads the active bank a ' +
-      'SECOND time through a different reader shape, requires the two reads to agree byte ' +
-      'for byte, derives the factory plaintext from that capture and gates it — the dump ' +
-      "of the available regions, taken BEFORE anything is written. This is the run's " +
-      'only copy of this camera.',
+      'Reads all 31 windows a stock camera serves, 64 KiB each, then reads every bank a ' +
+      'SECOND time, requires the two reads of each to agree byte for byte, derives each ' +
+      'bank’s factory plaintext and gates it, and works out which bank the next start ' +
+      'enters — the dump of the available regions, taken BEFORE anything is written. This is ' +
+      "the run's only copy of this camera.",
   },
   {
     id: 'patch',
     label: 'Build the patched image',
     description:
-      'Offline. Applies the instruction edits and the checksum rebalance to the derived ' +
-      'factory plaintext and files the result as a checkpoint. No camera traffic.',
+      'Offline. Applies the instruction edits and the checksum rebalance to each writable ' +
+      'bank’s derived factory plaintext and files the results as checkpoints. No camera traffic.',
   },
   {
     id: 'commit',
-    label: 'Commit the patch into the active slot',
+    label: 'Commit the patch into the chosen banks',
     description:
-      'THE WRITE. Reads the active bank back, refuses unless it still holds exactly what the ' +
-      'backup recorded, stages the conjugated patch (image length only) and commits. No reset ' +
-      'in this session — the reset belongs to the drain step.',
+      'THE WRITE. Reads every chosen bank back, refuses unless each still holds exactly what ' +
+      'the backup recorded, stages the conjugated patch (image length only) and commits each ' +
+      '— the bank the camera tries first last. No reset in this session — the reset belongs ' +
+      'to the drain step.',
   },
   {
     id: 'drain',
@@ -135,16 +154,17 @@ export const PRESERVE_STEPS: readonly PreserveStepMeta[] = [
     description:
       'Resets the camera so it boots the patched image (it stays silent for roughly ten ' +
       'seconds while it boots — the wizard waits and re-adopts it when it re-enumerates), ' +
-      'then drains the whole 4 MiB part through the widened window and swaps the active ' +
-      'bank back from the backup to build the delivered, original-content image. Nothing ' +
-      'is written.',
+      'checks which bank it started from — a bank without the patch stops the step before ' +
+      'anything is read — then drains the whole 4 MiB part through the widened window and ' +
+      'swaps every written bank back from the backup to build the delivered, ' +
+      'original-content image. Nothing is written.',
   },
   {
     id: 'restore',
-    label: 'Restore the original bank',
+    label: 'Restore the original banks',
     description:
-      'THE OTHER WRITE. Stages the backup capture verbatim back over the active bank while ' +
-      'the patched image still runs from SRAM, then resets.',
+      'THE OTHER WRITE. Stages each written bank’s original content back while the patched ' +
+      'image still runs from SRAM, then resets.',
   },
   {
     id: 'verify',
@@ -191,9 +211,10 @@ export const PRESERVE_PHASES: readonly PreservePhaseMeta[] = [
     label: 'Read & build',
     description:
       'Reads everything a normal dump can reach — 31 blocks of 64 KiB — and keeps it as your ' +
-      'backup, then prepares the small patch the next step writes. Nothing is written to the ' +
-      'camera. Usually under a minute. If the camera needs a restart along the way, the page ' +
-      'asks you to press "Connect device" and pick it again — that is expected.',
+      'backup, reads each firmware bank a second time, works out which bank the camera ' +
+      'starts from next time, and prepares the small patch the next step writes. Nothing is ' +
+      'written to the camera. Usually under a minute. If the camera needs a restart along the ' +
+      'way, the page asks you to press "Connect device" and pick it again — that is expected.',
     steps: ['backup', 'patch'],
     resetsCamera: true,
     replugAfter: false,
@@ -202,10 +223,10 @@ export const PRESERVE_PHASES: readonly PreservePhaseMeta[] = [
     id: 'patch-dump',
     label: 'Patch & dump',
     description:
-      'Writes a small, temporary patch into the firmware block the camera starts from, so it ' +
-      'can read out all of its flash. Then the camera restarts — press "Connect device" and ' +
-      'pick it again when the page asks — and the whole 4 MiB is dumped. Step 04 puts the ' +
-      'original firmware back.',
+      'Writes a small, temporary patch into the firmware banks chosen in step 02 (by ' +
+      'default the bank the camera starts from next), so it can read out all of its flash. ' +
+      'Then the camera restarts — press "Connect device" and pick it again when the page asks ' +
+      '— and the whole 4 MiB is dumped. Step 04 puts the original firmware back.',
     steps: ['commit', 'drain'],
     resetsCamera: true,
     replugAfter: true,

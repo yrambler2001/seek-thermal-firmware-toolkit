@@ -36,6 +36,7 @@ import path from 'node:path';
 
 import type { Page } from 'puppeteer-core';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { bankWordsOf } from '@seek-fw/core';
 
 import { say } from './lib/browser.js';
 import {
@@ -387,24 +388,29 @@ describe.skipIf(reason !== null)(title, () => {
     expect(state.buildId).toBe(row.buildId);
     expect(state.buildLabel).toBe(row.buildLabel);
     expect(state.buildFamily).toBe(row.buildFamily);
-    expect(state.imageDerivation ?? null, 'the edit on the factory image').toEqual(row.derivation);
-    expect(state.imageSha256, "the slot's decrypted image").toBe(row.imageSha256);
+    /* The default choice writes one bank: the one the next start enters. */
+    const key = need(
+      state.targets?.length === 1 ? (state.targets[0] ?? null) : null,
+      'one bank to write (the default choice: the bank the next start enters)',
+    );
+    const boot = need(state.boot ?? null, 'the boot facts');
+    const bank = need(state.banks?.[key] ?? null, `the record of bank ${key}`);
+    expect(state.choice, 'the default choice').toBe('next-start');
+    expect(boot.nextStart, 'the run writes the bank the next start enters').toBe(key);
+    expect(bank.imageDerivation ?? null, 'the edit on the factory image').toEqual(row.derivation);
+    expect(bank.imageSha256, "the bank's decrypted image").toBe(row.imageSha256);
     expect(state.stagedForm).toBe(row.stagedForm);
     expect(state.restoreForm).toBe(row.restoreForm);
     expect(state.route).toBe('active-bank');
-    expect(state.slotReadShas?.[0], 'the two reads of the slot agree').toBe(
-      state.slotReadShas?.[1],
-    );
+    expect(bank.slotReadShas?.[0], 'the two reads of the bank agree').toBe(bank.slotReadShas?.[1]);
 
     /* The plan. */
-    const patch = need(state.patch ?? null, 'the patch summary');
+    const patch = need(bank.patch ?? null, 'the patch summary');
     expect(
       patch.sites.map(({ offset, before: b, after: a }) => ({ offset, before: b, after: a })),
       'the sites',
     ).toEqual(row.sites);
-    expect(hexWord(patch.rebalanceWord ?? -1), 'the rebalance word').toBe(
-      hexWord(row.rebalanceWord),
-    );
+    expect(hexWord(patch.rebalanceWord), 'the rebalance word').toBe(hexWord(row.rebalanceWord));
     expect(patch.stagedLength).toBe(row.stagedLength);
     expect(patch.chunkCount).toBe(row.chunkCount);
     expect(patch.patchedSha256).toBe(row.patchedSha256);
@@ -412,10 +418,13 @@ describe.skipIf(reason !== null)(title, () => {
     expect(patch.armResetsCursor, 'the drain leaves the reader readable: no replug').toBe(
       row.armResetsCursor,
     );
-    const plain = entry(run.entries, `${PHASE_FOLDER['read-build']}/preserve_image_plain.bin`);
+    const plain = entry(
+      run.entries,
+      `${PHASE_FOLDER['read-build']}/preserve_bank_${key}_plain.bin`,
+    );
     const patched = entry(
       run.entries,
-      `${PHASE_FOLDER['read-build']}/preserve_patch_plain_patched.bin`,
+      `${PHASE_FOLDER['read-build']}/preserve_bank_${key}_patched.bin`,
     );
     expect(sha256(plain)).toBe(row.imageSha256);
     expect(sha256(patched)).toBe(row.patchedSha256);
@@ -433,20 +442,17 @@ describe.skipIf(reason !== null)(title, () => {
     ).toBe(true);
 
     /* The bank, and on a known part its record and its backup. */
-    const detection = need(state.detection ?? null, 'the slot detection');
     const part = knownPartByDump(theImage.sha);
     say(
-      `detection: cfg[0]=${hexWord(detection.cfg0)}, bank ${detection.bank} ` +
-        `${hexWord(detection.bankAddress)} (mode ${String(detection.bankMode)})`,
+      `boot: cfg[0]=${hexWord(boot.word)}, next start ${String(boot.nextStart)} (${boot.why}); ` +
+        `bank ${key} ${hexWord(bank.address)} (mode ${String(bank.mode)})`,
     );
-    expect(detection.bankAddress).toBe(
-      { a: 0x14050000, b: 0x14060000, r: 0x14070000 }[detection.bank],
-    );
+    expect(bank.address).toBe({ a: 0x14050000, b: 0x14060000, r: 0x14070000 }[key]);
     if (part !== null) {
       expect(sha256(backup), `${part.name}: the backup`).toBe(part.backupImage);
-      expect(hexWord(detection.cfg0), 'the boot record').toBe(hexWord(part.cfg0));
+      expect(hexWord(boot.word), 'the boot record').toBe(hexWord(part.cfg0));
       expect(
-        { key: detection.bank, address: detection.bankAddress, mode: detection.bankMode },
+        { key, address: bank.address, mode: bank.mode },
         'the bank the record boots, the bank the run writes',
       ).toEqual(part.bank);
     }
@@ -458,9 +464,8 @@ describe.skipIf(reason !== null)(title, () => {
       (sel: string) => document.querySelector(`${sel} details`)?.textContent ?? '',
       phaseSection('read-build'),
     );
-    expect(shown).toContain(
-      `The plan — ${row.buildLabel}, ${String(row.moved.length)} bytes change`,
-    );
+    expect(shown).toContain(`The plan — ${row.buildLabel}, patches ${bankWordsOf(key)}`);
+    expect(shown).toContain(`Bytes that move on the part${String(row.moved.length)}`);
     expect(shown).toContain(`${String(row.stagedLength)} B in ${String(row.chunkCount)} chunks`);
     expect(shown).toContain(
       row.derivation === null
@@ -478,8 +483,8 @@ describe.skipIf(reason !== null)(title, () => {
         `; sites ${row.sites.map((s) => hexWord(s.offset)).join(' / ')}; rebalance ` +
         hexWord(row.rebalanceWord) +
         (row.derivation === null ? '' : ` (was ${hexWord(row.derivation.balanceWord)})`) +
-        `; ${String(row.moved.length)} bytes move in bank ${detection.bank} ` +
-        `${hexWord(detection.bankAddress)}: ${hexList(row.moved)}`,
+        `; ${String(row.moved.length)} bytes move in bank ${key} ` +
+        `${hexWord(bank.address)}: ${hexList(row.moved)}`,
     );
   });
 
@@ -488,7 +493,11 @@ describe.skipIf(reason !== null)(title, () => {
     const t = need(read, 'the target');
     const p = need(plan, 'the plan');
     const theImage = need(image, 'the image');
-    const bank = `bank ${p.state.detection?.bank ?? '?'} (${hexWord(p.state.detection?.bankAddress ?? 0)})`;
+    const written = p.state.targets?.[0];
+    const bank =
+      written === undefined
+        ? 'no bank'
+        : `bank ${written} (${hexWord(p.state.banks?.[written].address ?? 0)})`;
     const describe = [
       `camera ${product}: firmware ${version}, ${p.row.buildLabel}` +
         (p.row.derivation === null ? '' : ` carrying ${p.row.derivation.label}`) +
@@ -615,7 +624,8 @@ describe.skipIf(reason !== null)(title, () => {
     expect.soft(delivered.length).toBe(FLASH_BYTES);
     expect.soft(state.rawDumpSha256).toBe(rawSha);
     expect.soft(state.deliveredSha256).toBe(deliveredSha);
-    const bank = (p.state.detection?.bankAddress ?? 0) - FLASH_BASE;
+    const written = p.state.targets?.[0];
+    const bank = (written === undefined ? 0 : (p.state.banks?.[written].address ?? 0)) - FLASH_BASE;
     expect
       .soft(
         hexList(diffOffsets(raw, delivered)),

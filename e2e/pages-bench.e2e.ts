@@ -466,10 +466,10 @@ describe.skipIf(!RUNNABLE)('the web app pages on the bench camera (1.3.0.0, real
         );
         expect(outside, 'the backup differs from the flash outside the bootloader gap').toEqual([]);
         expect(notErased, 'inside the gap the backup is erased (0xFF)').toEqual([]);
-        const capture = byName('preserve_bank_capture.bin');
+        const capture = byName('preserve_bank_a_capture.bin');
         expect(capture.length, 'the bank capture is one 64 KiB bank').toBe(BANK_BYTES);
         expect(appearsIn(haystack, capture), 'the bank capture is a run of the flash').toBe(true);
-        const plain = byName('preserve_image_plain.bin');
+        const plain = byName('preserve_bank_a_plain.bin');
         expect(
           sameBytes(plain, imageOf(bankOf(flash, 'a'))),
           'the plain image is the booted bank’s own image',

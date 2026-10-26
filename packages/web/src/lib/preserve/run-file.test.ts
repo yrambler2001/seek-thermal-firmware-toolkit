@@ -1,64 +1,36 @@
 /**
  * The run-file round trip: state and checkpoints go into a ZIP, the same
  * state and the same bytes come back out — and a damaged or foreign archive
- * is refused rather than half-resumed. The version-2 state round-trips with
- * its self-sourcing fields, and the derived factory plaintext
- * (`preserve_image_plain.bin`) is a checkpoint like the rest. Each step's
- * files sit in that step's folder, and the older flat run files still load.
+ * is refused rather than half-resumed. The version-3 state round-trips with
+ * its boot facts, its banks and the banks it writes, and each bank's derived
+ * factory plaintext (`preserve_bank_<bank>_plain.bin`) is a checkpoint like
+ * the rest. Each step's files sit in that step's folder; a run file of an
+ * older schema is refused.
  */
 
 import { crc32, equalBytes, utf8 } from '@seek-fw/core';
 import { describe, expect, it } from 'vitest';
+import { preserveRunStateOf } from '../../test-fixtures';
 import { buildRunFile, parseRunFile, parseZipEntries, RUN_README_FILE } from './run-file';
 import { runFileName, type CheckpointName, type PreserveRunState } from './types';
 
 function state(overrides: Partial<PreserveRunState> = {}): PreserveRunState {
-  return {
-    version: 2,
-    runId: 'preserve-2026-10-01T10-00-00Z',
-    imageSource: 'device',
-    slotReadShas: ['4'.repeat(64), '5'.repeat(64)],
-    buildFamily: 'v1-2014',
-    buildId: 'compact-1.3.0.8-8hz',
-    buildLabel: 'Compact 1.3.0.8 (8 Hz)',
-    imageSha256: '1'.repeat(64),
-    expectedVersion: '1.3.0.8',
-    createdAt: '2026-10-01T10:00:00.000Z',
+  return preserveRunStateOf({
     nextStep: 'drain',
-    stagedForm: 'plain',
-    restoreForm: 'capture-verbatim',
-    route: 'active-bank',
     steps: {
-      backup: { status: 'done', notes: '31 windows; two agreeing slot reads' },
+      backup: { status: 'done', notes: '31 windows; every bank read twice' },
       patch: { status: 'done' },
       commit: { status: 'done', notes: 'reset sent' },
     },
-    detection: {
-      cfgHex: 'ff',
-      cfg0: 0,
-      blank: true,
-      bank: 'a',
-      bankAddress: 0x14050000,
-      bankMode: 7,
-      verdict: 'blank -> bank A',
-    },
-    patch: {
-      sites: [{ name: 'mov.w', offset: 0x3db4, before: [1, 2, 3, 4], after: [5, 6, 7, 8] }],
-      rebalanceWord: 0x30006240,
-      stagedLength: 0x4000,
-      chunkCount: 256,
-      patchedSha256: '2'.repeat(64),
-      diffCount: 10,
-    },
     rawDumpSha256: '3'.repeat(64),
     ...overrides,
-  };
+  });
 }
 
 const CHECKPOINTS: readonly (readonly [CheckpointName, Uint8Array])[] = [
   ['preserve_backup_windows.bin', utf8('31 windows of backup bytes')],
-  ['preserve_bank_capture.bin', new Uint8Array([0xde, 0xad, 0xbe, 0xef])],
-  ['preserve_image_plain.bin', utf8('the derived factory plaintext')],
+  ['preserve_bank_a_capture.bin', new Uint8Array([0xde, 0xad, 0xbe, 0xef])],
+  ['preserve_bank_a_plain.bin', utf8('the derived factory plaintext')],
 ];
 
 interface RawEntry {
@@ -138,11 +110,16 @@ describe('the run-file round trip', () => {
     expect(parsed.extra.size).toBe(0);
   });
 
-  it('a version-2 state survives JSON.stringify, self-sourcing fields included', () => {
-    const parsed = parseRunFile(buildRunFile(state(), new Map(CHECKPOINTS)));
-    expect(parsed.state.version).toBe(2);
-    expect(parsed.state.imageSource).toBe('device');
-    expect(parsed.state.slotReadShas).toEqual(['4'.repeat(64), '5'.repeat(64)]);
+  it('a version-3 state survives JSON.stringify: the boot facts, the banks and the choice', () => {
+    const parsed = parseRunFile(
+      buildRunFile(state({ choice: 'all', targets: ['a'] }), new Map(CHECKPOINTS)),
+    );
+    expect(parsed.state.version).toBe(3);
+    expect(parsed.state.choice).toBe('all');
+    expect(parsed.state.targets).toEqual(['a']);
+    expect(parsed.state.boot?.nextStart).toBe('a');
+    expect(parsed.state.banks?.a.slotReadShas).toEqual(['4'.repeat(64), '4'.repeat(64)]);
+    expect(parsed.state.banks?.b.refused).toMatch(/erased/);
     expect(parsed.state.buildLabel).toBe('Compact 1.3.0.8 (8 Hz)');
   });
 
@@ -153,14 +130,14 @@ describe('the run-file round trip', () => {
       'preserve_run.json',
       'README.md',
       '02-read-build/preserve_backup_windows.bin',
-      '02-read-build/preserve_bank_capture.bin',
+      '02-read-build/preserve_bank_a_capture.bin',
     ]);
   });
 
   it('files every checkpoint in its step’s folder, and the README names the complete image', () => {
     const all = new Map<CheckpointName, Uint8Array>([
       ...CHECKPOINTS,
-      ['preserve_patch_plain_patched.bin', utf8('patched')],
+      ['preserve_bank_a_patched.bin', utf8('patched')],
       ['preserve_dump_postwrite.bin', utf8('raw')],
       ['preserve_dump_original.bin', utf8('delivered')],
       ['preserve_verify_windows.bin', utf8('re-read')],
@@ -172,9 +149,9 @@ describe('the run-file round trip', () => {
       'preserve_run.json',
       'README.md',
       '02-read-build/preserve_backup_windows.bin',
-      '02-read-build/preserve_bank_capture.bin',
-      '02-read-build/preserve_image_plain.bin',
-      '02-read-build/preserve_patch_plain_patched.bin',
+      '02-read-build/preserve_bank_a_capture.bin',
+      '02-read-build/preserve_bank_a_plain.bin',
+      '02-read-build/preserve_bank_a_patched.bin',
       '03-patch-dump/preserve_dump_postwrite.bin',
       '03-patch-dump/preserve_dump_original.bin',
       '04-restore-verify/preserve_verify_windows.bin',
@@ -184,6 +161,7 @@ describe('the run-file round trip', () => {
       parseZipEntries(zip).find((entry) => entry.name === RUN_README_FILE)?.data,
     );
     expect(readme).toContain('03-patch-dump/preserve_dump_original.bin');
+    expect(readme).toContain('Banks written: slot A (choice: next-start).');
     expect(readme).toContain('9'.repeat(64));
 
     /* The round trip finds every checkpoint by name, and the README is
@@ -193,28 +171,15 @@ describe('the run-file round trip', () => {
     expect([...parsed.extra.keys()]).toEqual(['02-read-build/decrypted/slot.bin']);
   });
 
-  it('an older flat run file still loads, and re-saves in the folder layout', () => {
+  it('a checkpoint outside its step folder is not taken for one; it rides along in extra', () => {
     const json = utf8(JSON.stringify(state()));
     const flat = handZip([
       { name: 'preserve_run.json', data: json },
       { name: 'preserve_backup_windows.bin', data: utf8('31 windows') },
-      { name: 'decrypted/slot.bin', data: utf8('plain slot') },
-      { name: 'manifest.json', data: utf8('{}') },
-      { name: 'README.md', data: utf8('# Decrypted Seek Thermal Firmware') },
     ]);
     const parsed = parseRunFile(flat);
-    expect([...parsed.checkpoints.keys()]).toEqual(['preserve_backup_windows.bin']);
-    expect([...parsed.extra.keys()].sort()).toEqual([
-      '02-read-build/README.md',
-      '02-read-build/decrypted/slot.bin',
-      '02-read-build/manifest.json',
-    ]);
-    const names = parseZipEntries(buildRunFile(parsed.state, parsed.checkpoints, parsed.extra)).map(
-      (entry) => entry.name,
-    );
-    expect(names).toContain('02-read-build/preserve_backup_windows.bin');
-    expect(names).toContain('02-read-build/decrypted/slot.bin');
-    expect(names.filter((name) => name === 'README.md')).toHaveLength(1);
+    expect(parsed.checkpoints.size).toBe(0);
+    expect([...parsed.extra.keys()]).toEqual(['preserve_backup_windows.bin']);
   });
 
   it('unknown files ride along in extra and survive a rebuild', () => {
@@ -245,21 +210,34 @@ describe('parseRunFile refusals', () => {
     expect(() => parseRunFile(zip)).toThrow(/holds no preserve_run\.json/);
   });
 
-  it('reads version 1 — the older schema still loads', () => {
-    const legacy = {
-      ...state(),
-      version: 1,
-      imageSource: undefined,
-    } as unknown as PreserveRunState;
-    const parsed = parseRunFile(buildRunFile(legacy, new Map()));
-    expect(parsed.state.version).toBe(1);
-    /* With no step folder yet, the generated README is still recognised. */
+  it('reads version 3; with no step folder yet, the generated README is still recognised', () => {
+    const parsed = parseRunFile(buildRunFile(state(), new Map()));
+    expect(parsed.state.version).toBe(3);
     expect(parsed.extra.size).toBe(0);
   });
 
-  it('refuses a run state from a version the wizard does not read', () => {
-    const future = { ...state(), version: 3 } as unknown as PreserveRunState;
-    expect(() => parseRunFile(buildRunFile(future, new Map()))).toThrow(/reads version 1 and 2/);
+  it.each([1, 2])(
+    'refuses a run of schema version %i, saved before the run chose its banks',
+    (version) => {
+      const older = { ...state(), version } as unknown as PreserveRunState;
+      expect(() => parseRunFile(buildRunFile(older, new Map()))).toThrow(
+        new RegExp(
+          `schema version ${String(version)}, saved before the run chose its firmware banks`,
+        ),
+      );
+    },
+  );
+
+  it('refuses a run state from a version the page does not read', () => {
+    const future = { ...state(), version: 4 } as unknown as PreserveRunState;
+    expect(() => parseRunFile(buildRunFile(future, new Map()))).toThrow(
+      /this page reads version 3/,
+    );
+  });
+
+  it('refuses a run state that names no choice of banks', () => {
+    const odd = { ...state(), choice: 'bank-q' } as unknown as PreserveRunState;
+    expect(() => parseRunFile(buildRunFile(odd, new Map()))).toThrow(/names no choice of banks/);
   });
 
   it('refuses a truncated archive', () => {

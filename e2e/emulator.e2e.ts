@@ -224,18 +224,26 @@ describe.skipIf(UNAVAILABLE !== null)('the web app on the emulated camera (bridg
 
     const all = names(run.entries);
     expect(all.slice(0, 2)).toEqual(['preserve_run.json', 'README.md']);
+    const state = runState(run.entries);
+    expect(state.version).toBe(3);
+    /* The default choice: the bank the next start enters. */
+    expect(state.choice).toBe('next-start');
+    const written = state.targets ?? [];
+    expect(written).toEqual(state.boot?.nextStart == null ? written : [state.boot.nextStart]);
+    expect(written.length).toBeGreaterThan(0);
     for (const file of [
       'preserve_backup_windows.bin',
-      'preserve_bank_capture.bin',
-      'preserve_image_plain.bin',
-      'preserve_patch_plain_patched.bin',
+      ...written.flatMap((key) => [
+        `preserve_bank_${key}_capture.bin`,
+        `preserve_bank_${key}_plain.bin`,
+        `preserve_bank_${key}_patched.bin`,
+      ]),
       'manifest.json',
       'README.md',
     ]) {
       expect(all).toContain(`${PHASE_FOLDER['read-build']}/${file}`);
     }
     expect(all.filter((n) => /^0[34]-/.test(n))).toEqual([]);
-    const state = runState(run.entries);
     if (PART.version !== '') expect(state.expectedVersion).toBe(PART.version);
     expect(state.steps.backup?.status).toBe('done');
     expect(state.steps.patch?.status).toBe('done');

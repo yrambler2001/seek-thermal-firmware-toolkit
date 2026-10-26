@@ -8,6 +8,13 @@
  */
 
 import { describe, expect, it } from 'vitest';
+import {
+  preserveBankOf,
+  preserveBootOf,
+  preserveErasedBankOf,
+  preserveRunStateOf,
+  withoutPatch,
+} from '../../test-fixtures';
 import { canRunPhase } from './gating';
 import type { PreservePhaseId, PreserveRunState } from './types';
 
@@ -19,9 +26,10 @@ function runState(
     drain?: 'done' | 'failed';
     restore?: 'done' | 'failed';
     verify?: 'done' | 'failed';
-    detection?: boolean;
+    /** The backup's bank facts and the resolved choice; default: present once the backup is done. */
+    banks?: boolean;
     nextStep?: PreserveRunState['nextStep'];
-    /** The FF build: the restore refuses and the route is recovery-only. */
+    /** The FF build: the restore refuses and the route is recovery-only (recovery R written). */
     restoreNone?: boolean;
     /** A cipher family: the restore stages the derived plaintext. */
     ciphered?: boolean;
@@ -29,42 +37,19 @@ function runState(
 ): PreserveRunState {
   const step = (status: 'done' | 'failed' | undefined) =>
     status === undefined ? undefined : { status };
-  const detection = overrides.detection ?? (overrides.backup === 'done' ? true : false);
-  return {
-    version: 2,
+  const banks = overrides.banks ?? overrides.backup === 'done';
+  const ff = overrides.restoreNone === true;
+  const base = preserveRunStateOf({
     runId: 'preserve-test',
-    imageSource: 'device',
-    buildFamily: 'v1-2014',
-    buildId: 'compact-1.3.0.8-8hz',
-    buildLabel: 'Compact 1.3.0.8 (8 Hz)',
-    imageSha256: 'a'.repeat(64),
-    expectedVersion: '1.3.0.8',
-    createdAt: '2026-10-01T00:00:00Z',
     nextStep: overrides.nextStep ?? 'backup',
     stagedForm: overrides.ciphered === true ? 'xor-ks0' : 'plain',
-    restoreForm: overrides.restoreNone === true ? 'none' : 'capture-verbatim',
-    route: overrides.restoreNone === true ? 'recovery-only' : 'active-bank',
-    ...(detection
-      ? {
-          detection: {
-            cfgHex: 'ff',
-            cfg0: 0,
-            blank: true,
-            bank: overrides.restoreNone === true ? 'r' : 'a',
-            bankAddress: overrides.restoreNone === true ? 0x14070000 : 0x14050000,
-            bankMode: overrides.restoreNone === true ? 9 : 7,
-            verdict: 'test',
-          },
-        }
-      : {}),
-    patch: {
-      sites: [],
-      rebalanceWord: 0x30006240,
-      stagedLength: 0x4000,
-      chunkCount: 256,
-      patchedSha256: 'b'.repeat(64),
-      diffCount: 10,
-    },
+    restoreForm: ff ? 'none' : 'capture-verbatim',
+    route: ff ? 'recovery-only' : 'active-bank',
+    boot: preserveBootOf(ff ? { nextStart: 'r', entered: 'r', activeSlotWord: 2 } : {}),
+    banks: ff
+      ? { a: preserveErasedBankOf('a'), b: preserveErasedBankOf('b'), r: preserveBankOf('r') }
+      : { a: preserveBankOf('a'), b: preserveErasedBankOf('b'), r: preserveErasedBankOf('r') },
+    targets: ff ? ['r'] : ['a'],
     steps: {
       backup: step(overrides.backup),
       patch: step(overrides.patch),
@@ -72,8 +57,11 @@ function runState(
       drain: step(overrides.drain),
       restore: step(overrides.restore),
       verify: step(overrides.verify),
-    },
-  } as unknown as PreserveRunState;
+    } as PreserveRunState['steps'],
+  });
+  if (banks) return base;
+  const { boot: _boot, banks: _banks, targets: _targets, ...rest } = base;
+  return rest;
 }
 
 const NOTHING = (): boolean => false;
@@ -137,13 +125,17 @@ describe('canRunPhase — the run’s gate, as the buttons show it', () => {
     const second = gate(state, 'patch-dump');
     expect(second.ok).toBe(false);
     expect(second.pastCommit).toBe(false); /* a fresh run is not the anomalous case */
-    expect(second.missing).toEqual(['the flash backup', 'the patch step', 'the slot detection']);
+    expect(second.missing).toEqual([
+      'the flash backup',
+      'the patch step',
+      'the banks the backup reads',
+    ]);
 
     const third = gate(state, 'restore-verify');
     expect(third.ok).toBe(false);
     expect(third.pastCommit).toBe(false);
     expect(third.missing[0]).toContain('the commit');
-    expect(third.jumpable).toBe(false); /* detection and the patch summary are missing too */
+    expect(third.jumpable).toBe(false); /* the banks and their patches are missing too */
   });
 
   it('after phase ①: phase ② arms, phase ③ simply waits — the normal order is not an alarm', () => {
@@ -224,7 +216,61 @@ describe('canRunPhase — the run’s gate, as the buttons show it', () => {
     expect(g.ok).toBe(false);
     expect(g.jumpable).toBe(false); /* a jump cannot fabricate the capture */
     /* The capture is wanted by both the commit and the drain; named once. */
-    expect(g.missing).toEqual(['the backup windows file', 'the bank capture']);
+    expect(g.missing).toEqual([
+      'the backup windows file',
+      'slot A’s capture',
+      'slot A’s derived image',
+    ]);
+  });
+});
+
+describe('canRunPhase — the banks the commit writes', () => {
+  it('a choice the backup could not resolve keeps phase ② dark, with the choice’s own reason', () => {
+    const base = runState({ backup: 'done', patch: 'done', nextStep: 'commit' });
+    const { targets: _targets, ...unresolved } = base;
+    const state: PreserveRunState = {
+      ...unresolved,
+      boot: preserveBootOf({ nextStart: 'b', why: 'slot B is tried first and passes' }),
+    };
+    const g = gate(state, 'patch-dump');
+    expect(g.ok).toBe(false);
+    expect(g.missing.join(' ')).toMatch(/a choice of banks — the next start enters slot B/);
+  });
+
+  it('wants every chosen bank’s patch, capture and derived image, by name', () => {
+    const state: PreserveRunState = {
+      ...runState({ backup: 'done', patch: 'done', nextStep: 'commit' }),
+      choice: 'all',
+      targets: ['a', 'r'],
+      banks: {
+        a: preserveBankOf('a'),
+        b: preserveErasedBankOf('b'),
+        r: withoutPatch(preserveBankOf('r')),
+      },
+    };
+    const g = canRunPhase({
+      state,
+      phase: 'patch-dump',
+      has: (name) => !name.includes('bank_r'),
+    });
+    expect(g.ok).toBe(false);
+    expect(g.missing).toEqual([
+      'the patch of recovery R',
+      'recovery R’s capture',
+      'recovery R’s derived image',
+    ]);
+  });
+
+  it('the recovery-only build refuses a choice that writes another bank', () => {
+    const ff = runState({ backup: 'done', patch: 'done', nextStep: 'commit', restoreNone: true });
+    const state: PreserveRunState = {
+      ...ff,
+      targets: ['a'],
+      banks: { a: preserveBankOf('a'), b: preserveErasedBankOf('b'), r: preserveBankOf('r') },
+    };
+    const g = gate(state, 'patch-dump');
+    expect(g.ok).toBe(false);
+    expect(g.missing.join(' ')).toMatch(/runs only from recovery R, not slot A/);
   });
 });
 
@@ -287,10 +333,10 @@ describe('canRunPhase — the past-commit context and the jump', () => {
     const without = gate(
       runState(base),
       'restore-verify',
-      (name) => name !== 'preserve_image_plain.bin',
+      (name) => name !== 'preserve_bank_a_plain.bin',
     );
     expect(without.ok).toBe(false);
-    expect(without.missing.join(' ')).toContain('preserve_image_plain.bin');
+    expect(without.missing.join(' ')).toContain('preserve_bank_a_plain.bin');
 
     const withPlain = gate(runState(base), 'restore-verify');
     expect(withPlain.ok).toBe(true);

@@ -24,6 +24,13 @@ import type {
   PreserveStepId,
 } from '@/lib/preserve/types';
 import { buttonByText, render, renderHook } from '@/test-helpers';
+import {
+  preserveBankOf,
+  preserveBootOf,
+  preserveErasedBankOf,
+  preservePatchOf,
+  preserveRunStateOf,
+} from '@/test-fixtures';
 
 function fourReporters(): readonly ReporterHandle[] {
   const { result } = renderHook(() => Array.from({ length: 4 }, () => useReporter()));
@@ -36,43 +43,9 @@ function runState(
 ): PreserveRunState {
   const step = (status: 'done' | 'failed' | undefined) =>
     status === undefined ? undefined : { status };
-  const detection = steps.backup === 'done';
-  return {
-    version: 2,
+  const base = preserveRunStateOf({
     runId: 'preserve-render-test',
-    imageSource: 'device',
-    slotReadShas: ['4'.repeat(64), '5'.repeat(64)],
-    buildFamily: 'v1-2014',
-    buildId: 'compact-1.3.0.8-8hz',
-    buildLabel: 'Compact 1.3.0.8 (8 Hz)',
-    imageSha256: 'a'.repeat(64),
-    expectedVersion: '1.3.0.8',
-    createdAt: '2026-10-01T00:00:00Z',
     nextStep: 'backup',
-    stagedForm: 'plain',
-    restoreForm: 'capture-verbatim',
-    route: 'active-bank',
-    patch: {
-      sites: [{ name: 'mov.w', offset: 0x3db4, before: [1, 2, 3, 4], after: [5, 6, 7, 8] }],
-      rebalanceWord: 0x30006240,
-      stagedLength: 0x4000,
-      chunkCount: 256,
-      patchedSha256: 'b'.repeat(64),
-      diffCount: 10,
-    },
-    ...(detection
-      ? {
-          detection: {
-            cfgHex: 'ff',
-            cfg0: 0,
-            blank: true,
-            bank: 'a',
-            bankAddress: 0x14050000,
-            bankMode: 7,
-            verdict: 'blank -> bank A',
-          },
-        }
-      : {}),
     steps: {
       backup: step(steps.backup),
       patch: step(steps.patch),
@@ -80,9 +53,13 @@ function runState(
       drain: step(steps.drain),
       restore: step(steps.restore),
       verify: step(steps.verify),
-    },
+    } as PreserveRunState['steps'],
     ...extra,
-  } as unknown as PreserveRunState;
+  });
+  if (steps.backup === 'done') return base;
+  /* Before the backup the run has read no bank. */
+  const { boot: _boot, banks: _banks, targets: _targets, anchor: _anchor, ...rest } = base;
+  return rest;
 }
 
 const HAS_ALL = (_name: CheckpointName): boolean => true;
@@ -98,6 +75,7 @@ interface Scenario {
   readonly deliveredCheck?: DeliveredCheck | null;
   readonly unlockNote?: boolean;
   readonly onConnect?: () => void;
+  readonly chooseBanks?: PreservePanelApi['chooseBanks'];
 }
 
 function preserveStub(scenario: Scenario, ran: [PreservePhaseId, PreservePhaseRunOptions][]) {
@@ -118,6 +96,7 @@ function preserveStub(scenario: Scenario, ran: [PreservePhaseId, PreservePhaseRu
       ran.push([phase, options]);
       return Promise.resolve();
     },
+    chooseBanks: scenario.chooseBanks ?? ((): string | null => null),
     cancel: () => undefined,
     saveAgain: () => undefined,
     loadRunFile: (): Promise<void> => Promise.resolve(),
@@ -224,8 +203,8 @@ describe('PreserveView', () => {
       runButton(row).click();
     });
     const dialog = document.body.querySelector('[role="alertdialog"]');
-    expect(dialog?.textContent).toContain('write to bank a at 0x14050000');
-    expect(dialog?.textContent).toContain('writes a small patch into the firmware block');
+    expect(dialog?.textContent).toContain('Patch & dump — write to slot A?');
+    expect(dialog?.textContent).toContain('This writes a small patch into slot A');
     act(() => {
       dialogButton('Cancel')?.click();
     });
@@ -324,6 +303,101 @@ describe('PreserveView', () => {
     unmount();
   });
 
+  it('after step 02: the next start and why, every bank, the choice, and what step 03 writes', () => {
+    const chosen: string[] = [];
+    const { container, unmount } = renderPreserve({
+      state: runState({ backup: 'done', patch: 'done' }, { nextStep: 'commit' }),
+      connected: true,
+      chooseBanks: (choice) => {
+        chosen.push(choice);
+        return null;
+      },
+    });
+    const row = phaseRow(container, 'Read & build');
+    expect(row.textContent).toContain('Which banks step 03 patches');
+    expect(row.textContent).toContain('0xFFFFFFFF — slot A first, then B, then recovery R');
+    expect(row.textContent).toContain('slot A, as the camera records it (active-slot word 0)');
+    expect(row.textContent).toContain(
+      'slot A — the boot-config word 0xFFFFFFFF tries slot A first, and slot A passes its check',
+    );
+    expect(row.textContent).toContain('0x14070000');
+    expect(row.textContent).toContain('not written — it is erased');
+    expect(row.textContent).toContain(
+      'Step 03 writes slot A: slot A, the bank the next start enters',
+    );
+    /* An erased bank is not offered, with the reason. */
+    expect(row.textContent).toContain(
+      'Slot B: not offered — slot B cannot be written: it is erased',
+    );
+    const select = row.querySelector<HTMLSelectElement>('#preserveBankChoice');
+    expect(select?.value).toBe('next-start');
+    const offered = [...(select?.options ?? [])].filter((option) => !option.disabled);
+    expect(offered.map((option) => option.value)).toEqual(['next-start', 'a', 'all']);
+    act(() => {
+      if (select === null) return;
+      select.value = 'all';
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    expect(chosen).toEqual(['all']);
+    unmount();
+  });
+
+  it('a choice that leaves out the next start warns, and the dialog names the banks and the warning', () => {
+    const state = runState(
+      { backup: 'done', patch: 'done' },
+      {
+        nextStep: 'commit',
+        choice: 'r',
+        targets: ['r'],
+        banks: { a: preserveBankOf('a'), b: preserveErasedBankOf('b'), r: preserveBankOf('r') },
+      },
+    );
+    const { container, unmount } = renderPreserve({ state, connected: true });
+    const row = phaseRow(container, 'Read & build');
+    expect(row.textContent).toContain('The next start enters slot A');
+    expect(row.textContent).toContain('this choice does not patch it');
+    act(() => {
+      runButton(phaseRow(container, 'Patch & dump')).click();
+    });
+    const dialog = document.body.querySelector('[role="alertdialog"]');
+    expect(dialog?.textContent).toContain('Patch & dump — write to recovery R?');
+    expect(dialog?.textContent).toContain('this choice does not patch it');
+    unmount();
+  });
+
+  it('every bank: the dialog lists them in the order the commit writes them', () => {
+    const state = runState(
+      { backup: 'done', patch: 'done' },
+      {
+        nextStep: 'commit',
+        choice: 'all',
+        targets: ['a', 'r'],
+        boot: preserveBootOf({ word: 2, rule: 'recovery R first, then A, then B', nextStart: 'r' }),
+        banks: { a: preserveBankOf('a'), b: preserveErasedBankOf('b'), r: preserveBankOf('r') },
+      },
+    );
+    const { container, unmount } = renderPreserve({ state, connected: true });
+    act(() => {
+      runButton(phaseRow(container, 'Patch & dump')).click();
+    });
+    const dialog = document.body.querySelector('[role="alertdialog"]');
+    /* Word 2 tries R first, so R is written last. */
+    expect(dialog?.textContent).toContain('write to slot A and recovery R?');
+    expect(dialog?.textContent).toContain('in that order');
+    unmount();
+  });
+
+  it('once the commit has run, the choice is fixed', () => {
+    const { container, unmount } = renderPreserve({
+      state: runState({ backup: 'done', patch: 'done', commit: 'done' }, { nextStep: 'drain' }),
+      connected: true,
+    });
+    const row = phaseRow(container, 'Read & build');
+    expect(row.querySelector<HTMLSelectElement>('#preserveBankChoice')?.disabled).toBe(true);
+    expect(row.textContent).toContain('the choice is fixed');
+    unmount();
+  });
+
   it('a board-patched image: the plan names the edit and the adjust-word share it holds', () => {
     const { container, unmount } = renderPreserve({
       state: runState(
@@ -336,19 +410,27 @@ describe('PreserveView', () => {
           expectedVersion: '1.0.3.0',
           stagedForm: 'xor-ks0',
           restoreForm: 'factory-staged',
-          imageDerivation: {
-            id: 'compact-pro-1.0.3.0-accept-pn297',
-            label: 'the Compact (PN297) board patch',
-            balanceWord: 0x6322e32a,
-          },
-          patch: {
-            sites: [{ name: 'widen', offset: 0x3636, before: [1, 2, 3, 4], after: [5, 6, 7, 8] }],
-            rebalanceWord: 0x5423132a,
-            stagedLength: 51848,
-            chunkCount: 811,
-            patchedSha256: 'b'.repeat(64),
-            diffCount: 5,
-            armResetsCursor: true,
+          banks: {
+            a: preserveBankOf('a', {
+              buildId: 'compact-pro-1.0.3.0',
+              buildLabel: 'Compact Pro 1.0.3.0 (9 Hz)',
+              imageDerivation: {
+                id: 'compact-pro-1.0.3.0-accept-pn297',
+                label: 'the Compact (PN297) board patch',
+                balanceWord: 0x6322e32a,
+              },
+              patch: preservePatchOf({
+                sites: [
+                  { name: 'widen', offset: 0x3636, before: [1, 2, 3, 4], after: [5, 6, 7, 8] },
+                ],
+                rebalanceWord: 0x5423132a,
+                stagedLength: 51848,
+                chunkCount: 811,
+                diffCount: 5,
+              }),
+            }),
+            b: preserveErasedBankOf('b'),
+            r: preserveErasedBankOf('r'),
           },
         },
       ),
@@ -442,6 +524,7 @@ describe('PreserveView', () => {
     expect(container.textContent).toContain('Only in the full dump');
     expect(container.textContent).toContain('0x14000000');
     expect(container.textContent).toContain('Raw post-commit part');
+    expect(container.textContent).toContain('Firmware image (decrypted, slot A)');
     expect(buttonByText(container, 'Download the full archive (run file)')).toBeTruthy();
     unmount();
   });

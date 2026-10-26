@@ -7,8 +7,8 @@
  *  - `artifactLoader`: the checkpoint loader a browser runner serves. Every
  *    artifact a run needs is a RUN ARTIFACT: finished checkpoints from
  *    memory, then whatever the run zip carried beyond them (the backup
- *    step's decrypt archive). There is no picked file anywhere — the factory
- *    plaintext is `PRESERVE_PLAIN_NAME`, the backup step's own artifact, so
+ *    step's decrypt archive). There is no picked file anywhere — each bank's factory
+ *    plaintext is `preservePlainFile(bank)`, the backup step's own artifact, so
  *    it arrives through the same map as the rest. Core sha-checks whatever
  *    this serves against the run state.
  *
@@ -17,10 +17,12 @@
  */
 
 import {
+  choosePreserveBanks,
   createPreserveRun,
   describeStepGate,
   isPreserveStepId,
   nextStepAfter,
+  preserveChoicesOf,
   recordStepFailure,
   runPreserveStep,
   type PreserveArtifactLoader,
@@ -36,8 +38,10 @@ export type {
   PreserveStepOutcome,
 } from './types';
 export {
+  choosePreserveBanks,
   createPreserveRun,
   describeStepGate,
+  preserveChoicesOf,
   isPreserveStepId,
   nextStepAfter,
   recordStepFailure,

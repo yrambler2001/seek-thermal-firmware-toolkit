@@ -2,8 +2,10 @@
  * The preserve wizard, laid out like the dump view: the shared Connect step
  * is 01, and each of the three phases is its own numbered step (02–04) with
  * its start button on top, a plain-words description, and its own bar and
- * log. The image is never picked — step 02 reads it from the camera's own
- * active slot and the plan prints from what the camera produced.
+ * log. The image is never picked — step 02 reads every firmware bank, says
+ * which one the next start enters and why, and the person chooses the banks
+ * step 03 patches (by default that one); the plan prints from what the camera
+ * produced.
  *
  * The run's expected hand-offs — the "Connect device" pick after every
  * restart, the replug a pre-fix patch owes, the power cycle a spent reader
@@ -20,6 +22,7 @@ import {
   CircleStop,
   CircleX,
   HardDriveDownload,
+  Layers,
   ListChecks,
   Loader2,
   Play,
@@ -28,7 +31,24 @@ import {
   Save,
   ScanSearch,
 } from 'lucide-react';
-import { hexUp } from '@seek-fw/core';
+import {
+  bankChoiceWords,
+  bankListWords,
+  bankRecordWords,
+  bankWordsOf,
+  commitOrderOf,
+  hexUp,
+  isPreserveBankChoice,
+  lastStartWords,
+  nextStartWords,
+  preserveChoiceOf,
+  preserveChoicesOf,
+  restoreOrderOf,
+  BANK_KEYS,
+  type BankKey,
+  type PreserveBankRecord,
+  type PreserveChoiceVerdict,
+} from '@seek-fw/core';
 import { Panel, PanelTitle } from '@/components/Panel';
 import { Prose } from '@/components/Prose';
 import { RunPanel } from '@/components/RunPanel';
@@ -47,6 +67,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Disclosure } from '@/components/ui/disclosure';
+import { Field, Select } from '@/components/ui/field';
 import { KeyValue } from '@/components/KeyValue';
 import {
   Table,
@@ -152,10 +173,6 @@ export function PreserveView({
 }: PreserveViewProps): ReactElement {
   const [confirming, setConfirming] = useState<ConfirmRequest | null>(null);
   const { state } = preserve;
-  const bankLine =
-    state?.detection === undefined
-      ? null
-      : `bank ${state.detection.bank} at ${hexUp(state.detection.bankAddress, 8)}`;
 
   /* The one loud case: a commit attempt is on record as FAILED, so the write
    * may already be on the camera — the steps that concern the patched part are
@@ -189,6 +206,12 @@ export function PreserveView({
               the step carries on by itself once you do.
             </li>
             <li>There is no firmware file to pick: everything is read from the camera itself.</li>
+            <li>
+              The camera keeps its firmware in three <strong>banks</strong> (slot A, slot B and
+              recovery R). Step 02 reads all three and works out which one the camera starts from
+              next; the patch only works if that bank holds it. You choose the banks step 03 patches
+              — by default the one the next start enters — and step 04 puts every one of them back.
+            </li>
             <li>
               After every step your browser downloads a <strong>run file</strong> named after the
               run&apos;s start, the save time and the step it reached (
@@ -320,7 +343,7 @@ export function PreserveView({
 
       <PhaseConfirm
         request={confirming}
-        bankLine={bankLine}
+        state={state}
         onCancel={() => {
           setConfirming(null);
         }}
@@ -534,7 +557,12 @@ function PhaseSection({
         </p>
       )}
 
-      {phase === 'read-build' && state?.patch !== undefined && <PlanFromState state={state} />}
+      {phase === 'read-build' && state !== null && (
+        <BankChoice state={state} busy={busy} chooseBanks={preserve.chooseBanks} />
+      )}
+      {phase === 'read-build' && state !== null && patchedBanks(state).length > 0 && (
+        <PlanFromState state={state} />
+      )}
       {phase === 'restore-verify' && <VerifyVerdict state={state} />}
 
       <RunPanel
@@ -692,63 +720,168 @@ function StepChips({
   );
 }
 
+/* ---- the banks: which one the next start enters, and the choice --------- */
+
+/** The banks that carry a built patch, the chosen ones first, each group in
+ *  A, B, R order. */
+function patchedBanks(state: PreserveRunState): BankKey[] {
+  const banks = state.banks;
+  if (banks === undefined) return [];
+  const targets = state.targets ?? [];
+  const withPatch = BANK_KEYS.filter((key) => banks[key].patch !== undefined);
+  return [
+    ...withPatch.filter((key) => targets.includes(key)),
+    ...withPatch.filter((key) => !targets.includes(key)),
+  ];
+}
+
+function sentence(text: string): string {
+  return `${text.charAt(0).toUpperCase()}${text.slice(1)}`;
+}
+
+/** The choice as the menu names it: the banks it writes, or that it is not offered. */
+function choiceOption(verdict: PreserveChoiceVerdict): string {
+  const words = sentence(bankChoiceWords(verdict.choice));
+  if (verdict.banks === null) return `${words} — not offered`;
+  if (verdict.choice === 'next-start' || verdict.choice === 'all') {
+    return `${words} — ${bankListWords(verdict.banks)}`;
+  }
+  return words;
+}
+
+interface BankChoiceProps {
+  readonly state: PreserveRunState;
+  readonly busy: boolean;
+  readonly chooseBanks: PreservePanelApi['chooseBanks'];
+}
+
+/**
+ * What step 02 learned about the banks — the boot-config word, the bank the
+ * camera last started from, the bank the next start enters and why, each
+ * bank — and the choice of the banks step 03 patches, with its warnings. The
+ * same facts the CLI's plan prints.
+ */
+function BankChoice({ state, busy, chooseBanks }: BankChoiceProps): ReactElement | null {
+  const [refusal, setRefusal] = useState<string | null>(null);
+  const { boot, banks } = state;
+  if (boot === undefined || banks === undefined) return null;
+  const verdicts = preserveChoicesOf(state);
+  const chosen = preserveChoiceOf(state, state.choice);
+  const fixed = state.steps.commit !== undefined;
+  const targets = state.targets;
+  return (
+    <Panel>
+      <PanelTitle icon={<Layers />}>Which banks step 03 patches</PanelTitle>
+      <KeyValue
+        rows={[
+          ['Boot-config word', `${hexUp(boot.word)} — ${boot.rule}`],
+          ['Last start', lastStartWords(boot)],
+          ['Next start', nextStartWords(boot)],
+        ]}
+      />
+      <Table>
+        <TableCaption>The three firmware banks, as step 02 read them</TableCaption>
+        <TableHeader>
+          <TableRow>
+            <TableHead className="w-[22%]">Bank</TableHead>
+            <TableHead>Address</TableHead>
+            <TableHead>What it holds</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {BANK_KEYS.map((key) => {
+            const bank: PreserveBankRecord = banks[key];
+            return (
+              <TableRow key={key}>
+                <TableRowHeader>
+                  {sentence(bankWordsOf(key))}
+                  {boot.nextStart === key && (
+                    <>
+                      {' '}
+                      <Badge tone="accent">next start</Badge>
+                    </>
+                  )}
+                </TableRowHeader>
+                <TableCell label="Address">
+                  <code>{hexUp(bank.address, 8)}</code>
+                </TableCell>
+                <TableCell label="What it holds">{bankRecordWords(bank)}</TableCell>
+              </TableRow>
+            );
+          })}
+        </TableBody>
+      </Table>
+      <Field htmlFor="preserveBankChoice" label="Banks to patch">
+        <Select
+          id="preserveBankChoice"
+          value={state.choice}
+          disabled={busy || fixed}
+          onChange={(event) => {
+            const value = event.target.value;
+            if (isPreserveBankChoice(value)) setRefusal(chooseBanks(value));
+          }}
+        >
+          {verdicts.map((verdict) => (
+            <option key={verdict.choice} value={verdict.choice} disabled={verdict.banks === null}>
+              {choiceOption(verdict)}
+            </option>
+          ))}
+        </Select>
+      </Field>
+      <p className="text-[0.85rem]" data-testid="preserve-banks-to-write">
+        {targets === undefined
+          ? `No bank is chosen yet: ${chosen.what}. Choose a bank by name above.`
+          : `Step 03 writes ${bankListWords(targets)}: ${chosen.what}.`}
+      </p>
+      {fixed && (
+        <p className="text-[0.8rem] text-muted-foreground">
+          The commit has run, so the choice is fixed: step 04 puts back exactly these banks.
+        </p>
+      )}
+      {verdicts.some((verdict) => verdict.banks === null) && (
+        <ul className="list-disc pl-5 text-[0.8rem] text-muted-foreground">
+          {verdicts
+            .filter((verdict) => verdict.banks === null)
+            .map((verdict) => (
+              <li key={verdict.choice}>
+                {sentence(bankChoiceWords(verdict.choice))}: not offered — {verdict.what}.
+              </li>
+            ))}
+        </ul>
+      )}
+      {targets !== undefined &&
+        chosen.warnings.map((warning) => (
+          <Alert key={warning} tone="warn">
+            <p>{warning}</p>
+          </Alert>
+        ))}
+      {refusal !== null && <p className="text-[0.8rem] font-medium text-warn">{refusal}</p>}
+    </Panel>
+  );
+}
+
 /* ---- the plan, printed from what the camera produced -------------------- */
 
 function PlanFromState({ state }: { readonly state: PreserveRunState }): ReactElement {
-  const patch = state.patch;
-  if (patch === undefined) {
-    return <></>;
-  }
+  const keys = patchedBanks(state);
+  const targets = state.targets ?? [];
   return (
     <Disclosure
       summary={`The plan — ${state.buildLabel ?? state.buildId ?? 'your camera'}, ${
-        patch.diffCount === undefined ? 'the patch' : `${String(patch.diffCount)} bytes change`
+        targets.length === 0 ? 'no bank chosen yet' : `patches ${bankListWords(targets)}`
       }`}
     >
       <p>
         Printed from the camera&apos;s own bytes. Nothing is written until step 03 runs, and step 04
-        puts every one of these bytes back.
+        puts every byte it writes back.
       </p>
       <KeyValue
         rows={[
-          [
-            'Image source',
-            state.slotReadShas === undefined
-              ? 'the camera’s active slot'
-              : `the camera’s active slot, two agreeing reads (sha256 ${state.slotReadShas[0]})`,
-          ],
           [
             'Build',
             `${state.buildLabel ?? state.buildId ?? '?'} — family ${state.buildFamily ?? '?'}`,
           ],
           ['Firmware version', state.expectedVersion ?? '?'],
-          ...(state.imageDerivation === undefined
-            ? []
-            : [
-                [
-                  'Image edit',
-                  `${state.imageDerivation.label} (${state.imageDerivation.id}) on the factory ` +
-                    `image. Its balance, ${hexUp(state.imageDerivation.balanceWord)}, is in the ` +
-                    'adjust word; the patch balances on top of it, and step 04 puts the image ' +
-                    'back with the edit.',
-                ] as const,
-              ]),
-          ['Factory plaintext sha256', state.imageSha256 ?? '?'],
-          ['Patched sha256', patch.patchedSha256],
-          ...(patch.diffCount === undefined
-            ? []
-            : [['Bytes that move on the part', String(patch.diffCount)] as const]),
-          [
-            'Staged length',
-            `${String(patch.stagedLength)} B in ${String(patch.chunkCount)} chunks`,
-          ],
-          [
-            'Rebalance word',
-            state.imageDerivation === undefined
-              ? hexUp(patch.rebalanceWord)
-              : `${hexUp(patch.rebalanceWord)} (was ${hexUp(state.imageDerivation.balanceWord)}, ` +
-                'the edit’s balance)',
-          ],
           ...(state.stagedForm === undefined
             ? []
             : [['Staged form', stagedFormLine(state.stagedForm)] as const]),
@@ -763,8 +896,73 @@ function PlanFromState({ state }: { readonly state: PreserveRunState }): ReactEl
             : [['Drain', capabilityLine(state.capability)] as const]),
         ]}
       />
+      {keys.map((key) => (
+        <BankPlan key={key} bank={key} state={state} chosen={targets.includes(key)} />
+      ))}
+      <p>
+        On the part these bytes land as the XOR-difference against the bank capture (the keystream
+        cancels), so the camera&apos;s decrypted image changes by exactly this diff and nothing
+        else.
+      </p>
+    </Disclosure>
+  );
+}
+
+/** One bank's patch: its image, the bytes that move, and whether the run writes it. */
+function BankPlan({
+  bank: key,
+  state,
+  chosen,
+}: {
+  readonly bank: BankKey;
+  readonly state: PreserveRunState;
+  readonly chosen: boolean;
+}): ReactElement | null {
+  const bank = state.banks?.[key];
+  const patch = bank?.patch;
+  if (bank === undefined || patch === undefined) return null;
+  const derivation = bank.imageDerivation;
+  return (
+    <section aria-label={`The patch of ${bankWordsOf(key)}`} className="space-y-2">
+      <h4 className="text-[0.85rem] font-semibold text-foreground">
+        {sentence(bankWordsOf(key))} — {chosen ? 'written by this run' : 'not chosen'}
+      </h4>
+      <KeyValue
+        rows={[
+          [
+            'Image source',
+            bank.slotReadShas === undefined
+              ? `${bankWordsOf(key)} as stored`
+              : `${bankWordsOf(key)} as stored, two agreeing reads (sha256 ${bank.slotReadShas[0]})`,
+          ],
+          ...(derivation === undefined
+            ? []
+            : [
+                [
+                  'Image edit',
+                  `${derivation.label} (${derivation.id}) on the factory image. Its balance, ` +
+                    `${hexUp(derivation.balanceWord)}, is in the adjust word; the patch balances ` +
+                    'on top of it, and step 04 puts the image back with the edit.',
+                ] as const,
+              ]),
+          ['Factory plaintext sha256', bank.imageSha256 ?? '?'],
+          ['Patched sha256', patch.patchedSha256],
+          ['Bytes that move on the part', String(patch.diffCount)],
+          [
+            'Staged length',
+            `${String(patch.stagedLength)} B in ${String(patch.chunkCount)} chunks`,
+          ],
+          [
+            'Rebalance word',
+            derivation === undefined
+              ? hexUp(patch.rebalanceWord)
+              : `${hexUp(patch.rebalanceWord)} (was ${hexUp(derivation.balanceWord)}, the ` +
+                'edit’s balance)',
+          ],
+        ]}
+      />
       <Table>
-        <TableCaption>The exact bytes the patch moves</TableCaption>
+        <TableCaption>The exact bytes the patch moves in {bankWordsOf(key)}</TableCaption>
         <TableHeader>
           <TableRow>
             <TableHead className="w-[40%]">Site</TableHead>
@@ -790,12 +988,7 @@ function PlanFromState({ state }: { readonly state: PreserveRunState }): ReactEl
           ))}
         </TableBody>
       </Table>
-      <p>
-        On the part these bytes land as the XOR-difference against the bank capture (the keystream
-        cancels), so the camera&apos;s decrypted image changes by exactly this diff and nothing
-        else.
-      </p>
-    </Disclosure>
+    </section>
   );
 }
 
@@ -839,14 +1032,28 @@ function VerifyVerdict({
 
 interface PhaseConfirmProps {
   readonly request: ConfirmRequest | null;
-  readonly bankLine: string | null;
+  readonly state: PreserveRunState | null;
   readonly onConfirm: (request: ConfirmRequest) => void;
   readonly onCancel: () => void;
 }
 
-function PhaseConfirm({ request, bankLine, onConfirm, onCancel }: PhaseConfirmProps): ReactElement {
+/** The banks a write touches, in the order it writes them: the commit writes
+ *  the bank the camera tries first last, the restore puts it back first. */
+function writeOrder(state: PreserveRunState | null, phase: PreservePhaseId): BankKey[] {
+  const targets = state?.targets;
+  const word = state?.boot?.word;
+  if (targets === undefined || word === undefined) return [];
+  return phase === 'patch-dump' ? commitOrderOf(targets, word) : restoreOrderOf(targets, word);
+}
+
+function PhaseConfirm({ request, state, onConfirm, onCancel }: PhaseConfirmProps): ReactElement {
   const label = request === null ? '' : phaseMeta(request.phase).label;
   const writing = request !== null && request.phase === 'patch-dump' && !request.jump;
+  const order = request === null ? [] : writeOrder(state, request.phase);
+  const banks = order.length === 0 ? 'the chosen banks' : bankListWords(order);
+  const inOrder = order.length > 1 ? ', in that order' : '';
+  const warnings =
+    writing && state?.targets !== undefined ? preserveChoiceOf(state, state.choice).warnings : [];
   return (
     <AlertDialog
       open={request !== null}
@@ -858,7 +1065,7 @@ function PhaseConfirm({ request, bankLine, onConfirm, onCancel }: PhaseConfirmPr
         <AlertDialogTitle>
           {request?.jump === true
             ? `${label} — jump past the unrecorded commit?`
-            : `${label} — write to ${bankLine ?? 'the active bank'}?`}
+            : `${label} — write to ${banks}?`}
         </AlertDialogTitle>
         <AlertDialogDescription id="preserve-confirm-what" className="space-y-2">
           {request?.jump === true ? (
@@ -877,9 +1084,17 @@ function PhaseConfirm({ request, bankLine, onConfirm, onCancel }: PhaseConfirmPr
             <>
               <span className="block">
                 {writing
-                  ? 'This writes a small patch into the firmware block the camera starts from. Step 04 puts the original back. The dump that follows only reads.'
-                  : 'This writes your original firmware back over the patched block.'}
+                  ? `This writes a small patch into ${banks}${inOrder} — the bank the camera ` +
+                    'tries first goes last. Step 04 puts the originals back. The dump that ' +
+                    'follows only reads.'
+                  : `This writes your original firmware back into ${banks}${inOrder} — the bank ` +
+                    'the camera tries first goes first.'}
               </span>
+              {warnings.map((warning) => (
+                <span key={warning} className="block font-medium text-warn">
+                  {warning}
+                </span>
+              ))}
               <span className="block">
                 Keep the camera plugged in and the computer awake while it writes — an interrupted
                 write leaves a camera that only a hardware programmer (SPI or SWD/J-Link) can fix.
@@ -973,7 +1188,13 @@ function VerifySummary({ state, check, busy, onSave }: VerifySummaryProps): Reac
                 )}
               </>,
             ],
-            ['Firmware image (decrypted, from the boot slot)', state.imageSha256 ?? 'not produced'],
+            ...(state.targets ?? []).map(
+              (key) =>
+                [
+                  `Firmware image (decrypted, ${bankWordsOf(key)})`,
+                  state.banks?.[key].imageSha256 ?? 'not produced',
+                ] as const,
+            ),
             [
               'Verify',
               state.verify === undefined

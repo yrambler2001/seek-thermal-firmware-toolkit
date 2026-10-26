@@ -48,8 +48,10 @@ import {
   FLASH_BASE,
   SeekDevice,
   SEEK_VENDOR_ID,
+  bankWordsOf,
   drainLeavesReaderReadable,
   preservationWindows,
+  type PreserveBankChoice,
   type SessionOpener,
   type WebUsbTransport,
 } from '@seek-fw/core';
@@ -61,6 +63,7 @@ import { readOptions, type OptionsForm } from '../lib/options';
 import { getWebUsb } from '../lib/webusb';
 import {
   artifactLoader,
+  choosePreserveBanks,
   createPreserveRun,
   isCancelledStep,
   recordStepFailure,
@@ -69,7 +72,7 @@ import {
 import { canRunPhase, gateReason } from '../lib/preserve/gating';
 import { buildRunFile, parseRunFile } from '../lib/preserve/run-file';
 import {
-  CHECKPOINT_FILES,
+  isCheckpointName,
   PHASE_FOLDER,
   PRESERVE_BACKUP_FILE,
   PRESERVE_DUMP_ORIGINAL_FILE,
@@ -230,6 +233,12 @@ export interface PreservePanelApi {
    */
   readonly unlockNote: boolean;
   runPhase: (phase: PreservePhaseId, options?: PreservePhaseRunOptions) => Promise<void>;
+  /**
+   * Choose the banks step 03 writes (core's `choosePreserveBanks`): after step 02 has read them,
+   * until the commit has run or been tried. Returns null when the choice took, or why it did not.
+   * The choice rides in the run state, so the next run file records it.
+   */
+  chooseBanks: (choice: PreserveBankChoice) => string | null;
   cancel: () => void;
   saveAgain: () => void;
   loadRunFile: (file: File) => Promise<void>;
@@ -727,8 +736,8 @@ export function usePreservePanel(params: PreservePanelParams): PreservePanelApi 
             );
             stepInFlight = null;
             for (const artifact of outcome.artifacts) {
-              if ((CHECKPOINT_FILES as readonly string[]).includes(artifact.name)) {
-                checkpoints.current.set(artifact.name as CheckpointName, artifact.data);
+              if (isCheckpointName(artifact.name)) {
+                checkpoints.current.set(artifact.name, artifact.data);
               } else if (artifact.name !== RUN_STATE_FILE) {
                 /* Filed under the step that made it — the run file's folders. */
                 extra.current.set(`${PHASE_FOLDER[phase]}/${artifact.name}`, artifact.data);
@@ -746,7 +755,7 @@ export function usePreservePanel(params: PreservePanelParams): PreservePanelApi 
             meta.replugAfter &&
             lastStep !== undefined &&
             ran.has(lastStep) &&
-            !drainLeavesReaderReadable(current.patch);
+            !drainLeavesReaderReadable(current);
           if (meta.replugAfter && lastStep !== undefined && ran.has(lastStep) && !replugOwed) {
             /* The patched image's arm tail resets the whole cursor — by the
              * fifth site on the 2014 trio builds, by its own tail on 1.0.3.0:
@@ -870,11 +879,15 @@ export function usePreservePanel(params: PreservePanelParams): PreservePanelApi 
               rep.reporter.log(`firmware ${parsed.state.expectedVersion}`, 'detail');
             }
             rep.reporter.log(
-              parsed.state.imageSource === 'device'
-                ? 'the factory plaintext derives from the camera’s own active slot — the run ' +
-                    'file carries it; nothing else is needed'
-                : 'the run predates the self-sourcing schema; its steps work off the artifacts ' +
-                    'the file carries',
+              'the firmware images derive from the camera’s own banks — the run file carries ' +
+                'them; nothing else is needed',
+              'detail',
+            );
+            rep.reporter.log(
+              parsed.state.targets === undefined
+                ? `banks to write: not chosen yet (${parsed.state.choice})`
+                : `banks to write: ${parsed.state.targets.map(bankWordsOf).join(', ')} ` +
+                    `(${parsed.state.choice})`,
               'detail',
             );
             rep.reporter.log(
@@ -905,6 +918,21 @@ export function usePreservePanel(params: PreservePanelParams): PreservePanelApi 
       );
     },
     [applyState, loadReporter, phaseReporters, runner],
+  );
+
+  const chooseBanks = useCallback(
+    (choice: PreserveBankChoice): string | null => {
+      const current = stateRef.current;
+      if (current === null) return 'no run is active — step 02 starts one';
+      if (runner.busy) return 'a step is running — choose the banks once it has finished';
+      try {
+        applyState(choosePreserveBanks(current, choice));
+        return null;
+      } catch (error) {
+        return errorMessage(error);
+      }
+    },
+    [applyState, runner.busy],
   );
 
   const cancel = useCallback((): void => {
@@ -942,6 +970,7 @@ export function usePreservePanel(params: PreservePanelParams): PreservePanelApi 
       deliveredCheck,
       unlockNote,
       runPhase,
+      chooseBanks,
       cancel,
       saveAgain,
       loadRunFile,
@@ -957,6 +986,7 @@ export function usePreservePanel(params: PreservePanelParams): PreservePanelApi 
       deliveredCheck,
       unlockNote,
       runPhase,
+      chooseBanks,
       cancel,
       saveAgain,
       loadRunFile,

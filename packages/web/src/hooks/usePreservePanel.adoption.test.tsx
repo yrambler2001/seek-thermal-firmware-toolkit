@@ -42,6 +42,13 @@ import type {
   PreserveStepOutcome,
 } from '@/lib/preserve/types';
 import { renderHook, waitFor } from '@/test-helpers';
+import {
+  preserveBankOf,
+  preserveBootOf,
+  preserveErasedBankOf,
+  preservePatchOf,
+  withoutPatch,
+} from '@/test-fixtures';
 import { installLocks, removeLocks } from '@/test-locks';
 
 /* ---- the fakes ----------------------------------------------------------- */
@@ -82,8 +89,8 @@ function fakeOutcome(step: PreserveStepId, state: PreserveRunState): PreserveSte
     case 'backup':
       artifacts.push(
         { name: 'preserve_backup_windows.bin', data: utf8('windows') },
-        { name: 'preserve_bank_capture.bin', data: utf8('capture') },
-        { name: 'preserve_image_plain.bin', data: utf8('plain') },
+        { name: 'preserve_bank_a_capture.bin', data: utf8('capture') },
+        { name: 'preserve_bank_a_plain.bin', data: utf8('plain') },
       );
       return {
         state: {
@@ -91,36 +98,39 @@ function fakeOutcome(step: PreserveStepId, state: PreserveRunState): PreserveSte
           buildFamily: 'v1-2014',
           buildId: 'compact-1.3.0.8-8hz',
           buildLabel: 'Compact 1.3.0.8 (8 Hz)',
-          imageSha256: 'a'.repeat(64),
           expectedVersion: '1.3.0.8',
           stagedForm: 'plain',
           restoreForm: 'capture-verbatim',
           route: 'active-bank',
-          detection: {
-            cfgHex: 'ff',
-            cfg0: 0,
-            blank: true,
-            bank: 'a',
-            bankAddress: 0x14050000,
-            bankMode: 7,
-            verdict: 'blank -> bank A',
+          anchor: 'a',
+          boot: preserveBootOf(),
+          banks: {
+            a: withoutPatch(preserveBankOf('a', { imageSha256: 'a'.repeat(64) })),
+            b: preserveErasedBankOf('b'),
+            r: preserveErasedBankOf('r'),
           },
+          targets: ['a'],
         },
         artifacts,
       };
     case 'patch':
-      artifacts.push({ name: 'preserve_patch_plain_patched.bin', data: utf8('patched') });
+      artifacts.push({ name: 'preserve_bank_a_patched.bin', data: utf8('patched') });
       return {
         state: {
           ...base,
-          patch: {
-            sites: fakePatchSites,
-            rebalanceWord: 0x30006240,
-            stagedLength: 0x4000,
-            chunkCount: 256,
-            patchedSha256: 'b'.repeat(64),
-            diffCount: 10,
-            ...(fakeArmResetsCursor === undefined ? {} : { armResetsCursor: fakeArmResetsCursor }),
+          banks: {
+            ...(base.banks ?? {
+              a: preserveBankOf('a'),
+              b: preserveErasedBankOf('b'),
+              r: preserveErasedBankOf('r'),
+            }),
+            a: preserveBankOf('a', {
+              imageSha256: 'a'.repeat(64),
+              patch: preservePatchOf({
+                sites: fakePatchSites,
+                armResetsCursor: fakeArmResetsCursor ?? false,
+              }),
+            }),
           },
         },
         artifacts,
@@ -628,6 +638,40 @@ describe('the reset is not a swap — the guard and the opener ladder cooperate'
     mounted.unmount();
   });
 
+  it('the banks are chosen after step 02, refused with the reason, and fixed once the commit ran', async () => {
+    const mounted = mountPanel([]);
+    expect(current(mounted).panel.chooseBanks('a')).toMatch(/no run is active/);
+    await runTo(mounted, 'read-build', () => current(mounted).panel.state?.nextStep === 'commit');
+    expect(current(mounted).panel.state?.targets).toEqual(['a']);
+
+    let refusal: string | null = null;
+    act(() => {
+      refusal = current(mounted).panel.chooseBanks('b');
+    });
+    expect(refusal).toMatch(/slot B cannot be written/);
+    expect(current(mounted).panel.state?.choice).toBe('next-start');
+
+    act(() => {
+      refusal = current(mounted).panel.chooseBanks('all');
+    });
+    expect(refusal).toBeNull();
+    expect(current(mounted).panel.state?.choice).toBe('all');
+    expect(current(mounted).panel.state?.targets).toEqual(['a']);
+
+    await runTo(mounted, 'patch-dump', () => current(mounted).panel.state?.nextStep === 'restore');
+    act(() => {
+      current(mounted).panel.cancel();
+    });
+    await waitFor(() => current(mounted).panel.activePhase === null);
+    /* The commit ran: what it wrote is what the restore puts back. */
+    expect(handed.find(([step]) => step === 'commit')?.[1].choice).toBe('all');
+    act(() => {
+      refusal = current(mounted).panel.chooseBanks('a');
+    });
+    expect(refusal).toMatch(/cannot change once the commit has run/);
+    mounted.unmount();
+  });
+
   it('each core step is handed the state the previous one returned — a swap is caught downstream', async () => {
     const mounted = mountPanel([]);
     await runTo(mounted, 'read-build', () => current(mounted).panel.state?.nextStep === 'commit');
@@ -642,7 +686,7 @@ describe('the reset is not a swap — the guard and the opener ladder cooperate'
     expect(handed.map(([step]) => step)).toEqual(['backup', 'patch', 'commit', 'drain']);
     const [, patchedState] = handed.find(([step]) => step === 'commit')!;
     expect(patchedState.steps.backup?.status).toBe('done');
-    expect(patchedState.patch).toBeDefined();
+    expect(patchedState.banks?.a.patch).toBeDefined();
     const [, drainState] = handed.find(([step]) => step === 'drain')!;
     expect(drainState.steps.commit?.status).toBe('done');
     /* The commit and drain sessions re-check the version and the bank

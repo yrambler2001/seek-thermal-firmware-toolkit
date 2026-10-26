@@ -302,16 +302,21 @@ export function needsStep02(failure: string | null): string | null {
 export function checkStep02RunFile(run: PhaseRun): RunStateView {
   const all = names(run.entries);
   expect(all.slice(0, 2)).toEqual(['preserve_run.json', 'README.md']);
+  const state = runState(run.entries);
+  expect(state.version).toBe(3);
+  const written = state.targets ?? [];
+  expect(written.length, 'step 02 resolved the banks to write').toBeGreaterThan(0);
   for (const file of [
     'preserve_backup_windows.bin',
-    'preserve_bank_capture.bin',
-    'preserve_image_plain.bin',
-    'preserve_patch_plain_patched.bin',
+    ...written.flatMap((key) => [
+      `preserve_bank_${key}_capture.bin`,
+      `preserve_bank_${key}_plain.bin`,
+      `preserve_bank_${key}_patched.bin`,
+    ]),
   ]) {
     expect(all).toContain(`${PHASE_FOLDER['read-build']}/${file}`);
   }
   expect(all.filter((n) => /^0[34]-/.test(n))).toEqual([]);
-  const state = runState(run.entries);
   expect(state.steps.backup?.status).toBe('done');
   expect(state.steps.patch?.status).toBe('done');
   expect(state.steps.commit).toBeUndefined();

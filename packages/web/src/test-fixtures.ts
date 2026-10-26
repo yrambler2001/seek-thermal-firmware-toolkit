@@ -12,7 +12,12 @@ import {
   WebUsbTransport,
   getProfile,
   readDeviceInfo,
+  type BankKey,
   type DeviceState,
+  type PreserveBankRecord,
+  type PreserveBootFacts,
+  type PreservePatchSummary,
+  type PreserveRunState,
   type Reporter,
   type WebUsbDevice,
   type WebUsbInTransferResult,
@@ -211,4 +216,112 @@ export function scriptedCamera(options: ScriptedCameraOptions): ScriptedCamera {
     },
   };
   return { camera, calls };
+}
+
+/* ---- preserve run states (schema version 3) ------------------------------ */
+
+const PRESERVE_ADDRESS: Readonly<Record<BankKey, number>> = {
+  a: 0x14050000,
+  b: 0x14060000,
+  r: 0x14070000,
+};
+const PRESERVE_MODE: Readonly<Record<BankKey, number>> = { a: 7, b: 8, r: 9 };
+
+/** One bank's patch as the run state carries it after the patch step. */
+export function preservePatchOf(
+  overrides: Partial<PreservePatchSummary> = {},
+): PreservePatchSummary {
+  return {
+    sites: [{ name: 'mov.w', offset: 0x3db4, before: [1, 2, 3, 4], after: [5, 6, 7, 8] }],
+    rebalanceWord: 0x30006240,
+    stagedLength: 0x4000,
+    chunkCount: 256,
+    patchedSha256: '2'.repeat(64),
+    diffCount: 10,
+    armResetsCursor: true,
+    ...overrides,
+  };
+}
+
+/** A bank the run can write, its patch built. */
+export function preserveBankOf(
+  key: BankKey,
+  overrides: Partial<PreserveBankRecord> = {},
+): PreserveBankRecord {
+  return {
+    key,
+    address: PRESERVE_ADDRESS[key],
+    mode: PRESERVE_MODE[key],
+    holds: 'image',
+    refused: null,
+    slotReadShas: ['4'.repeat(64), '4'.repeat(64)],
+    imageSha256: '1'.repeat(64),
+    buildId: 'compact-1.3.0.8-8hz',
+    buildLabel: 'Compact 1.3.0.8 (8 Hz)',
+    patch: preservePatchOf(),
+    ...overrides,
+  };
+}
+
+/** An erased bank: nothing to write. */
+export function preserveErasedBankOf(key: BankKey): PreserveBankRecord {
+  return {
+    key,
+    address: PRESERVE_ADDRESS[key],
+    mode: PRESERVE_MODE[key],
+    holds: 'erased',
+    refused: 'it is erased: every byte reads 0xFF, so it holds no image',
+  };
+}
+
+/** The boot facts of a camera whose word tries slot A first and whose A passes. */
+export function preserveBootOf(overrides: Partial<PreserveBootFacts> = {}): PreserveBootFacts {
+  return {
+    cfgHex: 'ffffffff',
+    word: 0xffffffff,
+    rule: 'slot A first, then B, then recovery R',
+    activeSlotWord: 0,
+    entered: 'a',
+    verdicts: { a: true, b: false, r: false },
+    nextStart: 'a',
+    why: 'the boot-config word 0xFFFFFFFF tries slot A first, and slot A passes its check',
+    checkKeyUnnamed: null,
+    ...overrides,
+  };
+}
+
+/**
+ * A run past its patch step: the backup read A (an image, the next start) and
+ * erased B and R, and the run writes A. `overrides` replaces any field.
+ */
+export function preserveRunStateOf(overrides: Partial<PreserveRunState> = {}): PreserveRunState {
+  return {
+    version: 3,
+    runId: 'preserve-2026-10-01T10-00-00Z',
+    createdAt: '2026-10-01T10:00:00.000Z',
+    nextStep: 'commit',
+    steps: {
+      backup: { status: 'done', notes: '31 windows; every bank read twice' },
+      patch: { status: 'done' },
+    },
+    choice: 'next-start',
+    targets: ['a'],
+    anchor: 'a',
+    boot: preserveBootOf(),
+    banks: { a: preserveBankOf('a'), b: preserveErasedBankOf('b'), r: preserveErasedBankOf('r') },
+    buildFamily: 'v1-2014',
+    expectedVersion: '1.3.0.8',
+    buildId: 'compact-1.3.0.8-8hz',
+    buildLabel: 'Compact 1.3.0.8 (8 Hz)',
+    stagedForm: 'plain',
+    restoreForm: 'capture-verbatim',
+    route: 'active-bank',
+    ...overrides,
+  };
+}
+
+/** The same bank before the patch step: no patch recorded. */
+export function withoutPatch(record: PreserveBankRecord): PreserveBankRecord {
+  const { patch: _patch, ...rest } = record;
+  return rest;
 }
