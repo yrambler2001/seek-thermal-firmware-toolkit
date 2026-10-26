@@ -544,7 +544,8 @@ export function deriveWriteKeys(state: DeviceState): WriteKeys {
     if (!underStore && !underKeyA) {
       return refused(
         `the running application (${bootedName}, firmware ${version ?? '?'}) checks an upload under its ` +
-          `own keys before it programs it (image_try_keys, in the decoded source of this build), and ` +
+          'own keys before it programs it (the decoded source of this build tries the upload under its ' +
+          'Key A and its store key, as its bootloader tries a bank), and ' +
           `the key the writes store under, ${atRest.name} (${bytesToHex(atRest.key)}), is neither its ` +
           'Key A nor its store key, so the camera would refuse the upload with 0x50000 before erasing ' +
           'anything',

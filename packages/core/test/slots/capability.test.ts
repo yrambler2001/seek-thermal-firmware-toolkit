@@ -420,6 +420,26 @@ describe('the facts a person is shown with the plan', () => {
     expect(plan.slots[0]?.notes.join('\n')).not.toMatch(/not measured on the wire/);
   });
 
+  it('says in words what the 4.x firmware does, and names none of its functions (TESTING.md 42.89)', () => {
+    const identifiers = /cmd_|fw_\w|image_try_keys|BAD_ARG|case \d|_\w+\(\)/;
+    for (const version of ['4.8.2.1', '4.9.2.0', '10.9.1.31', '42.32.3.10', '44.27.3.10']) {
+      const plan = buildSlotPlan(modern4x, version);
+      const words = [...plan.notes, ...plan.slots.flatMap((slot) => slot.notes)].join('\n');
+      expect(words, version).not.toMatch(identifiers);
+    }
+    const staging = buildSlotPlan(modern4x, '4.9.2.0').notes.join('\n');
+    expect(staging).toContain(
+      'when the commit command (CompleteMemoryUpgrade) takes data type 7, 8 or 9, the application ' +
+        'decrypts the upload with its Key A, re-encrypts it under its store key and programs the bank',
+    );
+    expect(buildSlotPlan(modern4x, '42.32.3.10').notes.join('\n')).toContain(
+      'has no handler for data type 32',
+    );
+    expect(buildSlotPlan(modern4x, '44.27.3.10').notes.join('\n')).toContain(
+      'refuses a data type past the span it accepts (0x7F) as a bad first argument',
+    );
+  });
+
   it('says the 2016 keystream write is the preservation path, and carries the profile refusal', () => {
     const plan = buildSlotPlan(compact2016, '1.0.3.0');
     expect(plan.slots.every((slot) => slot.flashPlain.supported)).toBe(true);

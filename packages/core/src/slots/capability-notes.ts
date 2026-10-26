@@ -95,12 +95,14 @@ export function profileFlashNote(profileId: string): string {
   );
 }
 
+/* The firmware's own names stay in the code (cmd_CompleteMemoryUpgrade's data types 7 to 9 call
+ * fw_validate_decrypt_program); the note says what they do (TESTING.md 42.89). */
 const MODERN_STAGING_NOTE =
   'Staged: the whole 64 KiB bank, image + 0xFF pad + "CODE" footer. The image is XORed with the ' +
-  'keystreams that make the running application’s own two passes (its Key A, then its store key; ' +
-  'cmd_CompleteMemoryUpgrade, data types 7 to 9, call fw_validate_decrypt_program) land it under ' +
-  'the key the booted bank holds. The footer is what lets the bootloader take ' +
-  'the bank, so a bank short of it is refused.';
+  'keystreams that make the running application’s own two passes land it under the key the booted ' +
+  'bank holds: when the commit command (CompleteMemoryUpgrade) takes data type 7, 8 or 9, the ' +
+  'application decrypts the upload with its Key A, re-encrypts it under its store key and programs ' +
+  'the bank. The footer is what lets the bootloader take the bank, so a bank short of it is refused.';
 
 const MODERN_GAP_NOTE =
   'Bank B is 0x14050000 on this line (mode 8). No selector reaches 0x14060000 on any 2.x, 4.x, ' +
@@ -127,11 +129,12 @@ const PRODUCT_NOTES: Readonly<Record<string, string>> = {
     'Mosaic 320x240 FF 2.27.1.33: the modern 63-window map, measured confirming every window on the emulator.',
   '42.32.3.10':
     'Nano 200 42.32.3.10: the modern 63-window map, measured confirming every window on the emulator. ' +
-    'Its CompleteMemoryUpgrade has no case 32, which modes 7 to 9 do not reach.',
+    'Its commit command (CompleteMemoryUpgrade) has no handler for data type 32, which a write through ' +
+    'mode 7, 8 or 9 never asks for.',
   '44.27.3.10':
     'Nano 300 44.27.3.10: the modern 63-window map, measured confirming every window on the emulator. ' +
-    'Its BeginFirmwareUpgrade rejects a wider type span (0x7F, BAD_ARG0), and modes 7 to 9 are inside ' +
-    'the span it accepts.',
+    'Its arm command (BeginFirmwareUpgrade) refuses a data type past the span it accepts (0x7F) as a ' +
+    'bad first argument, and modes 7 to 9 are inside that span.',
 };
 
 /* ---- an empty bank ------------------------------------------------------ *

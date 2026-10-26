@@ -156,8 +156,8 @@ export function DeviceInfoPanel({ state }: DeviceInfoPanelProps): ReactElement {
                 orphans.length > 1 ? ' hold' : ' holds'
               } a valid firmware image encrypted with a key this camera's bootloader does not know.`}
             </strong>{' '}
-            The image is intact and its checksum is correct, but <code>image_try_keys()</code> only
-            tries {state.storeKey.name} and Key A, so the bootloader skips{' '}
+            The image is intact and its checksum is correct, but the bootloader only tries{' '}
+            {state.storeKey.name} and Key A when it checks a bank, so it skips{' '}
             {orphans.length > 1 ? 'them' : 'it'} and boots something else.
           </p>
           {targetIsOrphan && (

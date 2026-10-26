@@ -1216,9 +1216,10 @@ export async function readDeviceInfo(
     const mode0Row = plan.selectors.find((row) => row.subcmd === 0);
     if (chainBuild === null || mode0Row?.channel !== 'plain') {
       chainBlocked.push(
-        `the 2014 plaintext chain's write is decoded only for builds whose own mode-0 row is ` +
-          `fw_update_slot_address() — ${version ?? 'the version did not read back'} is not one ` +
-          'of them, so the selector that arms the upgrade target is not known on this build',
+        "the 2014 plaintext chain's booted bank and upgrade target are named only on builds whose own " +
+          "mode 0 arms the bank the active-slot word does not name (the firmware's upgrade-slot lookup) " +
+          `— ${version ?? 'the version did not read back'} is not one of them, so the selector that ` +
+          'arms the upgrade target is not known on this build',
       );
     } else if (activeSlotWord === null) {
       chainBlocked.push(
@@ -1241,8 +1242,8 @@ export async function readDeviceInfo(
       reporter.log('');
       reporter.log(
         `2014 plaintext chain: no boot replay — the camera's own active-slot word names ` +
-          `${byKey.get(target)?.name ?? target} as the slot an upgrade writes (mode 0, ` +
-          'fw_update_slot_address()); the booted bank stays untouched',
+          `${byKey.get(target)?.name ?? target} as the slot an upgrade writes (mode 0 arms the bank ` +
+          'the word does not name); the booted bank stays untouched',
         'detail',
       );
     }
