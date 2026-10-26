@@ -12639,3 +12639,188 @@ Setup: `git reset --hard cb40caf`; `node_modules` cloned with `cp -cR` from the 
 - The whole-image gate (`canFlash`, `flashBlockedBy`, `classicWriterBlockedBy`) is kept for the JSON and still carries the classic writer's reasons on 2016; the human outputs say them once as "a whole-image write is not available on this line". The 42.82 item on retiring that gate stays open.
 - 1.0.3.2 and the FF 1.0.3.0 build: the same family and the same bootloader 1.2.0.0, checked on the emulator only.
 - `plan.md` is not edited. Nothing pushed or merged.
+
+### 42.85 The 2016 Compact PRO's Info and Firmware slots pages on the real camera (the FF board, 1.0.3.0) in Electron over real WebUSB: R then A patched to 18 Hz from the page, the camera measured at 17.68 fps (2026-10-26)
+
+**Summary.** Agent 42.85 (Opus 5.5), on `worktree-agent-a8b144d08d195e9d0`, reset to `refactor/all-firmware-profiles` (`4089f71`). It was the only actor on the bench, and it started no other agent. The owner's words: "you can flash whatever you want i give you permission"; "I assume you would use the electron to test the page fully with 1.0.3.0"; "make it good … high quality for 1.0.3.0". The board did not hold what the brief said: its flash was byte-identical to `1.0.3.0 on 4.18.2.0.bin`, so recovery R was stock (§2). The owner's flow was therefore run from the start through the page. "Make 18 FPS" on R committed with status 0, and after the replug the camera still ran slot A at 8.84 fps while the page and the CLI showed the warning that names slot A. "Make 18 FPS" on A then committed with status 0, and after the replug the camera booted the patched A, with no warning. Every 42.84 claim held on the camera, and the CLI's output matches what 42.84 predicted from the dump, apart from the identity rows the fake camera could not serve (§4). The Info tab and the CLI agree on every field (§5). For a control, the undo the dialog names (Flash decrypted image of the saved file) was written to A and measured, and A was patched again. The patched camera delivers 17.68 fps against 8.84 fps for stock, measured with frames read back to back. The seek-fps checker itself reads about 9 fps on the patched camera, because it loses every other frame (§8). The 2016 app's selectors 6, 7 and 8 answer 0 for every bank on this unit, because it takes their addresses from the boot-config block (§9). No product code changed. The rig is new: `e2e/pages-bench-pro.e2e.ts`. End state: A and R at 18 Hz, B stock, the camera boots A, switch channel 1 (J-Link) is off and channel 2 (camera) is on (§11).
+
+**Tags.** [measured]: read on the camera, the J-Link or the switch in this run. [source]: read from the file named. [inferred]: follows from those, and was not run.
+
+**1. Setup and the idle check** [measured].
+- Worktree: `git reset --hard refactor/all-firmware-profiles`, HEAD `4089f71` (the old HEAD `cf5420b` is an ancestor of it). `node_modules` was cloned with `cp -cR` from the main checkout, the `@seek-fw/{core,cli,web}` links were made to this worktree's packages, and `tsc --build packages/{core,cli}/tsconfig.build.json` was run.
+- Bench: the Compact PRO FF board, USB `PIR324 Thermal Camera (289d:0011)`, serial `090BB12PR939`, chip id `090BE9B6D4E4`, bootloader 1.2.0.0. The rp2040 switch has channel 1 = J-Link CE S/N 69656086 and channel 2 = camera; both were on at the start. J-Link steps used only the FW-V1 runner of `targets/compact_pro_ff_18hz_4_18_2_0` (`dump-spifi-4m-halted`, read-only) through a logging wrapper. No `flash-factory-4m-2` was needed, and none was run.
+- Idle check at 06:28 CET: no `JLink`, `JLinkExe` or `jlink-runner` process. The target's `jlink_dumps` held twelve `flash_factory_4m_2_*.log` files (0 B each), from 2026-10-25 19:50 to 2026-10-26 04:19, not the seven the brief named. Its newest file was `spifi_14000000_4m_f4m2.bin` (04:19). `~/Library/Application Support/SEGGER/JLinkDLL.ini` was last written at 04:19. So nothing had changed for over two hours. The check was repeated before each J-Link read and each page write (06:29, 06:40, 06:43, 06:44, 06:47, 06:54, 06:56, 07:00). Each time it showed only this run's own mtimes. Log: `bench-42.85/logs/idle-checks.log`.
+
+**2. The start image, and the bench not as briefed** [measured].
+- `dump-spifi-4m-halted` at 06:29: `bench-42.85-start (stock, R not patched).bin`, sha256 `d2ee76b48c1fdefa43b66234f7dc2e56b5bab03ac7c33f5d1ba6ff34670538ce`.
+- Against `1.0.3.0 on 4.18.2.0.bin` (sha256 `d2ee76b4…38ce`, the same value), 0 of 64 blocks differ. Banks A, B and R hold the same stored bytes (raw sha256 `44bc591d028ebbd1…`, image `5e1f3f24c8bc1e85…`), and cfg[0] is `0xFFFFFFFF`. So recovery R did NOT hold the 18 Hz patch the brief expected.
+- The other session's last `flash-factory-4m-2` re-read (`spifi_14000000_4m_f4m2.bin`, 04:19) has the same sha256 `d2ee76b4…`. [inferred] That session wrote the file back after the owner's R patch, so the R patch was gone before this run.
+- The start image was named for what it holds, not "(R 18 Hz)". The owner's flow was run from the start: R first, then A.
+
+**3. The rig** (`e2e/pages-bench-pro.e2e.ts`, `npm run e2e:pages:bench:pro`; commit `65969ce`). The 1.3.0.0 `pages-bench.e2e.ts` is unchanged.
+- One Electron window over real WebUSB on the hosted bundle (`docs/`; `SEEK_E2E_SOURCE=dev` for the Vite server). It uses the slots bench's page guard (`benchGuardScript`: the Info read's selectors let out by shape, stage and commit budgets 0 outside the one write the test opens) and the slots bench's UI guard.
+- The flow: Connect; Info's "Read firmware version"; the Firmware slots tab's Read slots; Dump A, B and R, each compared with the bank of `SEEK_E2E_START_IMAGE`.
+- Optionally, `SEEK_E2E_PRO_UNDO=a=<file>`: "Flash decrypted image" of the file the patch saved.
+- Then, per bank in `SEEK_E2E_PRO_PATCH`: the row's "Make 18 FPS", its dialog, the tick, the write, its status and the replug lines. The replug is `powerCycle()` on channel 2 plus Connect device again. Info and Read slots are read again, and the dumps are kept.
+- `SEEK_E2E_PRO_PATCHED` says which banks hold the patch at the start, and so what each read must show.
+- The checks are those of 42.84: one read under compact-2016 with no legacy-auth read first; "Booted" as the bootloader's record and "Next start" slot A; the check key; every bank bootable, and the patched ones "frame-rate patch 18 Hz"; one Writing section; none of the stale lines. On the slots page: Booted from Bank A, Next start Bank A, and the warning exactly when a bank other than A holds the patch and A does not. A stock bank's offer is enabled; a patched bank says why it has none.
+- No J-Link runs inside the spec. Its start image is a file from the runner's halted read, and nothing is restored at the end. The J-Link reads before and after are the operator's, with the FF target's runner.
+- Electron keeps no grant across the re-enumeration: there is no permission handler in `e2e/electron/main.mjs`. So after each replug the page saw `disconnect` and no `connect`, showed "Device disconnected.", and was not given the camera back within 30 s. The spec presses Connect device (chooser #2), as a person would. Chrome was not tried. [source] The header of `e2e/electron/main.mjs` says Electron 44, like Chrome (`usb_chooser_context.cc`), keeps the grant of a device with NO serial number for one enumeration only. This camera has a serial (`090BB12PR939`), and Electron still sent no `connect`. `useDevice.ts` adopts a `connect` event of the same vid/pid, so where the browser keeps the grant (Chrome, for a device with a serial number) the page would take the camera back by itself [inferred, not run].
+
+The runs (the outputs are in `bench-42.85/page-*`):
+
+| Run | Start image | Patched at start | What it did | Result |
+|---|---|---|---|---|
+| page-0-readonly | start | none | reads and dumps only | first attempt: the spec expected the Info tab's bank name in the slots page's "Next start" (the slots page says "Bank A — …"), so the spec was corrected; then 2/2 pass, 11.6 s |
+| page-1-patch-r | start | none | Make 18 FPS on R, replug | first attempt: the spec expected the slots page's warning sentence in the dialog, which words it for the bank it patches ("Patching recovery R would not make it run …"). The dialog was cancelled, so nothing was written; the spec was corrected. Second attempt: R written (status 0, 5.5 s). After the replug every check passed except the spec's "offer on every bank": R, now patched, has no offer and says why, so the spec was corrected |
+| J-Link | | | `bench-42.85-mid (R 18 Hz).bin` | §6 |
+| page-2-patch-a | mid | r | Make 18 FPS on A, replug | 4/4 pass, 64.4 s |
+| J-Link | | | `bench-42.85/after-run2 (A and R 18 Hz).bin` | §10 |
+| page-3-undo-a | after-run2 | a, r | Flash decrypted image of the saved file on A (the dialog's undo), replug | 4/4 pass, 64.2 s |
+| page-4-repatch-a | mid | r | Make 18 FPS on A again, replug | 4/4 pass, 63.9 s; its "before" dumps equal the mid image's banks, so the undo had restored A's exact stored bytes |
+
+**4. The CLI, and 42.84's prediction** [measured]. `node packages/cli/dist/bin.js` was run with `info`, `info --json`, `slots list` and `slots list --json`, in each state: stock (`cli/2-before-*`), R patched (`cli/3-r-patched-*`) and A and R patched (`cli/7-after-*`); all exited 0.
+- The R-patched state is the one 42.84 §4 built on a fake camera. Its `info` and `slots list` were diffed against the text printed in §4.
+- They are identical, the patched R's image sha256 `d410b04cdaa10c34` included, except for:
+  - the Camera rows, which the real camera serves and the fake did not: `product PIR324 Thermal Camera`, `manufacturer Seek Thermal, Inc.`, `serial 090BB12PR939`, `platform 80k Platform`, `usb link high (480 Mbit/s)`, in place of "Seek Thermal Compact PRO", "Seek Thermal" and three "(unreadable)";
+  - `info`'s Tabs section and the unlock note at the end, and `slots list`'s unlock note, which §4 left out of its excerpt.
+- With R patched, `slots list` prints:
+  ```
+    ! The camera boots slot A. The boot-config word is 0xFFFFFFFF, so the bootloader tries slot A first, and it holds an image the bootloader accepts.
+    ! Recovery R holds a frame-rate patch, but it does not run, so the patch does not take effect.
+    ! Patch slot A too (the bank that runs): that is what makes the frame-rate patch take effect.
+  ```
+- In the stock state the outputs are the same with R's line and row stock and no warning. In the end state A's line reads `App image bank 0x14050000: firmware 1.0.3.0, 51848 B, frame-rate patch 18 Hz, key block 1, acceptance ok, no footer check (this bootloader generation reads none) -> bootable`. Both A and R show `d410b04cdaa10c34`, B shows `5e1f3f24c8bc1e85`, and there is no warning.
+- `info --json` in every state: `boot.booted "a"`, `boot.nextStart.runs "a"`, `keys.checkKey.key "faacb3c6f1412469bd122fb82d78160d"` (`from "a"`), `bankWrites {oneAtATime: true, refusedBy: []}`, `canFlash false`. `flashBlockedBy` still lists "this camera's key table could not be confirmed" and the classic writer's two reasons; this is 42.84's open item on the whole-image gate, not new.
+
+**5. The pages** [measured]. The texts and full-page screenshots are in each run's folder: `info-<tag>.txt/.png`, `info-<tag>-log.txt`, `slots-<tag>.txt/.png`, `fps-<bank>-dialog.txt/.png`, `fps-<bank>-after.txt/.png`, `fps-<bank>-log.txt`, and `undo-a-plan/dialog/after`. There are 27 screenshots.
+- **Info tab, every read (12 reads)**:
+  - "Read. Firmware 1.0.3.0." in 2.07 to 2.34 s. One read under compact-2016: the log's probe line is "detected 2016 Compact Pro (compact-2016), confidence 0.85", and the Profile panel says "compact-2016 (score 0.98)". There is no "re-reading under" and no legacy-auth.
+  - The read's wire: `in 0x35 x15, in 0x3d x7, in 0x4e x8, in 0x4f x3082, out 0x52 x7, out 0x55 x4, out 0x5a x1`.
+  - Booted: "App image bank 0x14050000 — the bank the bootloader entered at this start, as it records it (active-slot word 0)". Next start: "App image bank 0x14050000 — the boot-config word is 0xFFFFFFFF, so the bootloader tries slot A first, and it holds an image the bootloader accepts".
+  - The check key row names "key block 1 faacb3c6f1412469bd122fb82d78160d (the Compact PRO 1.0.3.x 9 Hz pair's block 1), named from slot A …".
+  - Each bank line ends "-> bootable", and a patched bank's line carries "frame-rate patch 18 Hz". There is one Writing panel ("One bank at a time: …").
+  - None of "flashing disabled", "could not confirm", "boot prediction unavailable", "never decoded", "bootable unknown", "acceptance FAILS", "NOT bootable" or "probably a different firmware family" appears.
+- **Info tab = CLI** (`scripts/agree.mjs`): all 17 label values (Product, Manufacturer, Serial, Platform, USB link, Running, Bootloader, Read under, Detected, cfg[0], Booted, Next start, Upgrade target, Check key, Key table, Whitening K, Store key), the three bank lines and the three slot-table rows are equal. This holds in the stock, the R-patched and the A-and-R-patched states: 0 differences each time.
+- **Firmware slots tab, every read**:
+  - "Read. 3/3 banks read." Booted from "Bank A"; Next start "Bank A — the boot-config word is 0xFFFFFFFF, …".
+  - Every row reads "bootable — the bootloader can key it", and only A reads "booted now". There is no "cannot be written" banner.
+  - A stock bank offers an enabled "Make 18 FPS" ("Raises this bank from 9 Hz to 18 Hz by editing its bytes. …"). A patched bank has no button and reads "Frame-rate patch not offered: already patched: this image runs at 18 Hz (compact_pro-1.0.3.0), so no patch is offered".
+  - With R patched and A stock (runs 1 after, 2 before, 3 after the undo, 4 before), the slots alert reads "The camera boots slot A. The boot-config word is 0xFFFFFFFF, so the bootloader tries slot A first, and it holds an image the bootloader accepts." / "Recovery R holds a frame-rate patch, but it does not run, so the patch does not take effect." / "Patch slot A too (the bank that runs): that is what makes the frame-rate patch take effect." It is absent when the camera is stock, and absent once A is patched.
+  - Dumps: every Dump of a bank the run had not written equals that bank of the run's start image, byte for byte.
+- **The R dialog** (run 1):
+  ```
+  Make Recovery bank R run at 18 FPS?
+  Recovery bank R is the recovery bank, the last-resort copy the bootloader falls back to.
+  The camera boots slot A. The boot-config word is 0xFFFFFFFF, so the bootloader tries slot A first, and it holds an image the bootloader accepts.
+  Patching recovery R would not make it run, because the camera boots slot A instead.
+  Patch slot A too (the bank that runs): that is what makes the frame-rate patch take effect.
+  Recovery bank R holds firmware 1.0.3.0, and this makes its image run at 18 Hz instead of 9 Hz.
+  ```
+  The dialog then gives the six-byte and sum-word sentence, the two downloads, "The saved decrypted file is the only way back …", "No reset is sent. …" and the tick "I understand this is the recovery bank, …". Yes was off until the tick.
+- **The A dialog** (runs 2 and 4): "Make Bank A run at 18 FPS?" / "Bank A is the bank this camera boots now. The patched image replaces the firmware it runs now." / "Bank A holds firmware 1.0.3.0, and this makes its image run at 18 Hz instead of 9 Hz." It has no frame-rate warning and none of the 2014 chain's "active-slot word names" wording. It asks the tick "I understand this is the bank the camera boots now, and that a bad image can leave the camera unbootable."
+- **The writes**, each with the guard's budget of one bank's chunks and one commit:
+
+  | Write | Log | Status |
+  |---|---|---|
+  | R patch | "Recovery bank R: committing, CompleteMemoryUpgrade(0x1081)" / "committed, commit status 0" | "Patched. Unplug and replug, then read the slots again." after 5.46 s |
+  | A patch (run 2) | "Bank A: writing 51848 B from the decrypted image, staged as slot-keystream-ciphertext — checksum 0x1081" / "streamed 51848 B in 1.0 s" / "committed, commit status 0" / "read back 65536 B, SHA-256 33d91fcd50c82e18…" / "the bank decrypts to the expected image (0xca88 B) under the keystream recovered from the read-back (confidence VERIFIED(profile), acceptance sum 0x00000000)" | the same, after 5.96 s (run 4: 5.46 s) |
+  | the undo of A | the plan: "51,848 B in 811 chunks of up to 64 B", "Transfer checksum 0x104F"; the dialog: "Bank A is the bank this camera boots now. Writing it replaces the firmware the camera is running now. …"; "commit status 0x0", "read back … SHA-256 44bc591d028ebbd1…", the original stored bytes | "Written. Unplug and replug, then read the slots again." |
+
+  The result panel after a patch reads "Slot A — patched from 9 Hz to 18 Hz (compact_pro-1.0.3.0). The read-back differs from the saved dump only at the 9 planned byte(s), the sites and the sum word. …". The two saved downloads are `seek-slot-A-v1.0.3.0-before-fps-patch-raw-44bc591d.bin` (65,536 B) and `…-decrypted-5e1f3f24.bin` (51,848 B).
+- **The replug prompt**:
+  - "NOW UNPLUG AND REPLUG THE CAMERA." is in the log once per write, as 42.84 made it.
+  - The section shows the request in three places: the status line "Patched. Unplug and replug, then read the slots again.", that log line (scrolled out of the 37-line log view in the screenshot), and the result panel "NOW UNPLUG AND REPLUG THE CAMERA. No reset was sent. Then read the slots again."
+  - So the capitalised prompt is on the page twice after one patch. This is open (O1).
+- **After each replug** (runs 1 to 4): the camera booted A (active-slot word 0), and next start is A. The written bank's line shows its new state, and the warning comes and goes as described above. No stale line appeared. The guard refused nothing in any run.
+
+**6. Recovery R patched: the state the owner had** [measured].
+- Halted read at 06:45: `bench-42.85-mid (R 18 Hz).bin`, sha256 `960af1657ec470fa1e01b9f396e0dc6e894f3b432074be0b8e02ff3fe56459c9`.
+- Against the start image only `0x14070000` differs: 9 bytes, from `0x14070238` (the sum word at +0x238) to `0x1407c2c7` (the row at +0xC2BC, FPS_32HZ.md). R's stored sha256 is `33d91fcd50c82e18…`, equal to the page's dump of R.
+- With R patched the camera still ran 8.84 fps (§8), which is what the warning says.
+
+**7. Step 5 (a failed commit)**: did not happen. All four writes committed with status 0, so no recovery read or retry was needed. The runner has no read-only JEDEC command, and none was read.
+
+**8. The frame rate** [measured]. Each measurement was taken with Electron closed, after a power cycle.
+- The seek-fps checker: `node --import ./e2e/lib/bench/seek-fps/register.mjs e2e/lib/bench/seek-fps/seek-fps.ts --camera --fps --mode normal --no-hifps` (Normal, Init Hi FPS off).
+- The fast reader: `bench-42.85/scripts/fastread.ts`, a scratch probe that is not committed. It does the checker's own connect and Normal init, then reads frames back to back with nothing between them, and records each frame's header status (byte 4) and the camera's frame counter (bytes 8..9).
+
+| Camera state | Checker, median per second (5 s) | Fast reader |
+|---|---|---|
+| stock (A, B, R) | 8.91, 8.77, 8.76, 8.81, 8.80; 36 frames | not run |
+| R patched, A stock (before run 2) | 8.76, 8.91, 8.81, 8.85, 8.48 | not run |
+| R patched, A stock (after the undo, run 3) | 8.87, 8.89, 8.78, 8.80, 8.74 | 15 s: images 113.1 ms apart (8.84 fps). Frame counter +2 between frames 108 times, +3 11 times, never +1; 17.68 counts/s |
+| A and R patched (run 2) | 17.13, 8.94, 9.18, 8.92, 9.95; three repeats 8.54 to 9.25 | 15 s: images 56.6 ms apart (17.68 fps); +1 between frames 132 times of 179; 17.68 counts/s |
+| A and R patched (run 4, the end state) | 8.93, 9.51, 8.80, 12.94, 8.73 | 30 s: images 56.6 ms apart (17.68 fps); +1 330 times of 401; images per second up to 18; 17.68 counts/s |
+
+- The camera's frame counter runs at 17.68 counts a second in every state. The stock image publishes every other one (+2), and the patched image publishes each one (+1).
+- So the patch takes effect: 17.68 fps against 8.84 fps on the same unit, the two rates the emulator gives (FPS_32HZ.md). The rate rose only when A, the bank that runs, was patched.
+- Frames are lost on the host: the per-second image counts dip to 7 or 8 (+2 to +4 steps), which is the skip-storm behaviour of `SKIP_STORMS.md`.
+- The checker loses every other frame on the patched camera: it credits a frame only after processing the last one, as `SKIP_STORMS.md` describes. Its first second after a boot read 17.13 fps once. Open (O4).
+
+**9. Selectors 6, 7 and 8** [measured; scratch `scripts/selectors.mjs` and `selectors-context.mjs` on core's `SeekDevice.readFwInfo`; GetFirmwareInfo reads only; raw replies in `cli/8-selectors-*.txt`].
+- After a power cycle, on the end state, the replies are `6 [00]`, `7 [00]`, `8 [00]`, each 1 B with error code 0. Read once more, they are the same.
+- For context:
+  - selector 10 (64 B) returns `0x14002958 0x14010000 0x00000000 …` (the handoff record at 0x10000200: the bootloader's build record, then `0x14010000`, then the active-slot word 0);
+  - selectors 3, 4 and 5 (64 B each) return 64 zero bytes.
+- [source] FW-V1 `targets/compact_pro_9hz_1_0_3_0/src/rpc_cmds.c:3154` (`FW_INFO_ROOTS_BANK` is the record's second word) and `:3215-3240`: cases 3 to 8 take their bank from `*(record[1] + 4/8/12)`.
+- [inferred] On this unit `record[1]` is the boot-config block, so the "banks" are cfg words 1 to 3. These are `0xFFFFFFFF` (`info --json` `cfgSlots`), so selectors 3 to 5 read nothing and 6 to 8 fail the magic check for every bank. All three banks are bootable: the bootloader entered A after its own check, and the read verifies all three.
+- So on 1.0.3.0 these selectors are not a per-bank verdict, and 42.84's [?] item is answered: do not use them on this line. No product code changed.
+
+**10. The end image** [measured].
+- Halted read at 07:01: `bench-42.85-end (A and R 18 Hz).bin`, sha256 `28060916b0fb3f93d2f12bbf9e708997d984c35ce0a3cef44cf1b64b10269c45`.
+- Against the start image, 2 blocks differ, `0x14050000` and `0x14070000`, 9 bytes each (`+0x238 … +0xC2C7`). The bootloader block, the boot-config block and bank B are equal. The brief allowed only bank A to differ; R differs because it was stock at the start (§2).
+- Against the mid image only `0x14050000` differs.
+- The end image is byte-identical to the read taken after run 2 (`bench-42.85/after-run2 (A and R 18 Hz).bin`), so the undo and the second patch gave the same bytes as the first patch.
+- Bank A equals the page's dump of A after the replug (`page-4-repatch-a/dump-after-a-a-raw.bin`, sha256 `33d91fcd50c82e18…`).
+- After `cycle 2`, `info --json`: running 1.0.3.0, `booted "a"`, active-slot word `0x00000000`, `nextStart.runs "a"`, cfg[0] `0xFFFFFFFF`; A and R image `d410b04cdaa10c34`, B `5e1f3f24c8bc1e85`, all bootable.
+
+**11. The camera's end state.**
+- The flash is the end image (A and R hold the 18 Hz 1.0.3.0 image, B is stock), and the camera boots A at 17.68 fps.
+- The camera was power-cycled last at 07:01, so it is not left unlocked. Switch status: `1=off 2=on`.
+- Nothing was restored: the start image is kept for a later restore (`FACTORY_IMAGE=<start image> … flash-factory-4m-2` would write blocks `0x14050000` and `0x14070000` back).
+
+**12. Findings.**
+- F1 [measured] The bench was not as briefed: R was stock, and the flash equalled the source file (§2).
+- F2 [measured] Every 42.84 claim holds on the camera, on the Info tab, the slots page and the CLI (§4, §5). The CLI equals 42.84's prediction except for the identity rows.
+- F3 [measured] The patch takes effect only in the bank that runs: R alone left the camera at 8.84 fps; A gave 17.68 fps (§8).
+- F4 [measured] The dialog's undo works: "Flash decrypted image" of the saved decrypted file restored A's original stored bytes (`44bc591d…`), and the camera booted it (run 3).
+- F5 [measured] Selectors 6, 7 and 8 answer 0 for every bank on this unit, because the app reads its bank table from the boot-config block (§9).
+- F6 [measured] The rig: Electron gives the page no `connect` event after the replug, so Connect device is pressed again (§3).
+- Open (not fixed: each is wording or a decision, not a wrong result):
+  - O1. After one patch the page shows the replug request three times: the status "Patched. Unplug and replug, then read the slots again.", the log line "NOW UNPLUG AND REPLUG THE CAMERA." and the result panel "NOW UNPLUG AND REPLUG THE CAMERA. No reset was sent. Then read the slots again." The log has it once. The undo write's log adds "No reset was sent, so the bank only takes effect after a real power cycle. Read the slots again after replugging: …". Which element should carry it is the owner's wording.
+  - O2. The page shows the API name `acknowledgeRisk` to a person:
+    - R's row: "Recovery bank, mode 9, token form. A write needs acknowledgeRisk. Measured on a Compact PRO 1.0.3.0: …";
+    - the undo plan: "bank A is the bank the camera boots now: writing it needs acknowledgeRisk, and the camera runs whatever it holds after the next power cycle."
+    The text comes from core's `slots/capability-notes.ts:254-272` and `slots/write.ts:446-452`, shared with the CLI.
+  - O3. A patched bank's row says "not offered" twice: "Frame-rate patch not offered: already patched: this image runs at 18 Hz (compact_pro-1.0.3.0), so no patch is offered". The page's prefix is in `SlotTable.tsx:80`, the reason in `preservation/fps-patch.ts:476`.
+  - O4. The seek-fps checker reads about 9 fps on the 18 Hz camera (§8). This is the `SKIP_STORMS.md` credit timing; the owner chose to document it only (42.79).
+  - O5. The Info tab shows two detection numbers: "confidence 0.85" in the log (the probe, from the version) and "score 0.98" in the Profile panel (after the banks were read).
+  - O6. The first page read after the seek-fps checker logged "the first read answered a different record (0.0.4.0), which an earlier command had left the firmware-info selector on — that read cleared it". The checker leaves the firmware-info selector set; the page handled it.
+  - O7. `info --json` `flashBlockedBy` (42.84 §7, 42.82) is unchanged.
+
+**13. Commands and checks.**
+- `npm run typecheck`: exit 0 (10.1 s).
+- `eslint` and `prettier --check` on `e2e/pages-bench-pro.e2e.ts`: clean. `prettier --check` on `package.json` and `FPS_32HZ.md`: clean.
+- No product code changed, so no unit test file was run and the hosted bundle was not rebuilt.
+- The spec itself is the test: the run logs are `bench-42.85/logs/page-*.log`.
+- Commits on `worktree-agent-a8b144d08d195e9d0`: `65969ce` (the rig and its npm script), `e1fcd6c` (FPS_32HZ.md: 1.0.3.0 measured), and this section.
+
+**14. Where everything is.** All of it is outside the repository, in `SEEK_DUMPS/firmwares/Compact Pro/2016.07.06-17.04.49-1.0.3.0/0C21A1M5KP15/`:
+- `bench-42.85-start (stock, R not patched).bin`, `bench-42.85-mid (R 18 Hz).bin` and `bench-42.85-end (A and R 18 Hz).bin`;
+- `bench-42.85/`:
+  - `page-0-readonly/`, `page-1-patch-r/`, `page-2-patch-a/`, `page-3-undo-a/`, `page-4-repatch-a/`: page texts, screenshots, dumps, saved downloads and run logs;
+  - `cli/`: CLI outputs and selector replies;
+  - `fps/`: checker and fast-reader outputs;
+  - `logs/`: J-Link runner logs, idle checks and block diffs;
+  - `scripts/`: the scratch probes and wrappers;
+  - `after-run2 (A and R 18 Hz).bin`.
+
+**15. Not done.**
+- The page in Chrome: only Electron was run.
+- Bank B was not written.
+- No `flash-factory-4m-2` was run and nothing was restored, by the owner's wish.
+- No JEDEC read (§7).
+- The 1.3.0.0 `pages-bench.e2e` was not run.
+- 1.0.3.2 was not run.
+- `plan.md` was not edited. Nothing was pushed or merged.
