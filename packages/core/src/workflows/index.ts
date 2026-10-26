@@ -89,6 +89,7 @@ export {
   bankWritingOf,
   bootedReportOf,
   checkKeyReportOf,
+  detectedReportOf,
   keyReportRows,
   KEY_TABLE_REFUSED_2016,
   nextStartReportOf,

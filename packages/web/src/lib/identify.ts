@@ -41,6 +41,22 @@ export interface ActingProfile {
 type Log = (text: string, level: LogLevel) => void;
 
 /**
+ * The probe's line in a run's log: the profile the camera's first answers (its version, the channel questions,
+ * the notes logged just above) point to, and the probe's score. It is taken before any bank is read, so it is
+ * not the score the Info tab's Profile panel shows, which is taken again once the banks are read (core's
+ * `detectedReportOf`). On a Compact PRO 1.0.3.0 the two were 0.85 and 0.98, shown unlabelled as "confidence"
+ * and "score" (TESTING.md 42.85 O5, 42.86).
+ */
+export function probeLine(detection: DetectionResult): string {
+  const best = detection.best;
+  return (
+    `probe: ${best.profile.name} (${best.profile.id}), score ${best.score.toFixed(2)} from the answers ` +
+    `above, before any bank is read` +
+    (detection.ambiguous ? ' — the evidence did not settle it, so this is a guess' : '')
+  );
+}
+
+/**
  * Asks the camera which family it is. When its identity gate stays shut — no
  * version came back, or the build predates the dump protocol — this throws the
  * same `SeekError` `planForDevice` would have thrown one step later, so the
@@ -60,11 +76,7 @@ export async function chooseActingProfile(
   if (!gate.permitsArming) {
     throw identityRefusal(gate, probe.firmwareVersion, operation, best.profile.id);
   }
-  log(
-    `detected ${best.profile.name} (${best.profile.id}), confidence ${best.score.toFixed(2)}` +
-      (detection.ambiguous ? ' — the evidence did not settle it, so this is a guess' : ''),
-    detection.ambiguous ? 'warn' : 'ok',
-  );
+  log(probeLine(detection), detection.ambiguous ? 'warn' : 'ok');
   return {
     profile: best.profile,
     detection,

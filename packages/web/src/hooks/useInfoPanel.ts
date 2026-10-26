@@ -25,6 +25,7 @@ import {
 } from '@seek-fw/core';
 import { reportInUseElsewhere } from '../lib/camera-lock';
 import { logHint } from '../lib/hints';
+import { probeLine } from '../lib/identify';
 import { readOptions, type OptionsForm } from '../lib/options';
 import { useReporter, type ReporterHandle } from './useReporter';
 import type { DeviceHandle } from './useDevice';
@@ -118,11 +119,7 @@ export function useInfoPanel(params: InfoPanelParams): InfoPanelApi {
         }
 
         const best = detection.best.profile;
-        reporter.log(
-          `detected ${best.name} (${best.id}), confidence ${detection.best.score.toFixed(2)}` +
-            (detection.ambiguous ? ' — the evidence did not settle it, so this is a guess' : ''),
-          detection.ambiguous ? 'warn' : 'ok',
-        );
+        reporter.log(probeLine(detection), detection.ambiguous ? 'warn' : 'ok');
         let state = await readDeviceInfo(
           { device: client, profile: best, detection, reporter: reporter.reporter, signal },
           {},

@@ -367,6 +367,11 @@ describe('seek-fw info on a 2016 Compact PRO that names the bank it entered (TES
     expect(await run(['info'], io, signal())).toBe(EXIT_OK);
     const text = stdout.text;
     expect(text).toMatch(/cfg\[0\]\s+0xFFFFFFFF — slot A first, then B, then recovery R/);
+    /* The score is the one taken after the read, and says so: the page's log also prints the probe's
+     * (TESTING.md 42.85 O5, 42.86). */
+    expect(text).toMatch(
+      /detected\s+compact-2016 \(score \d\.\d\d after the read, from the evidence below\)/,
+    );
     expect(text).toMatch(
       /booted\s+App image bank 0x14050000 — the bank the bootloader entered at this start, as it records it \(active-slot word 0\)/,
     );

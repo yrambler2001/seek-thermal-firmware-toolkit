@@ -471,16 +471,18 @@ export function planFpsPatch(image: Uint8Array, cameraVersion: string | null): F
     const entry = identity.patchedEntries[0];
     if (entry === undefined) throw new Error('unreachable: patched entries are not empty');
     const hz = FPS_MEASURED_HZ.get(entry.id) ?? entry.targetHz;
+    /* Said as the state it is, with no table id: the page words its own row from `hz`, and the CLI
+     * refuses a second patch with this reason (TESTING.md 42.86). */
     return {
       status: 'patched',
-      reason: `already patched: this image runs at ${String(hz)} Hz (${entry.id}), so no patch is offered`,
+      reason: `the frame-rate patch is already applied: this image runs at ${String(hz)} Hz`,
       hz,
     };
   }
   if (identity.known !== null) {
     return {
       status: 'at-rate',
-      reason: `already runs at ${String(identity.known.hz)} Hz (${identity.known.name}), so no patch is offered`,
+      reason: `this build already runs at ${String(identity.known.hz)} Hz without a patch`,
       hz: identity.known.hz,
     };
   }

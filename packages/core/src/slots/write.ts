@@ -149,7 +149,7 @@ function ackNeeded(report: SlotsReport, key: SlotKey): string | null {
     return 'the booted bank could not be named, so this one is treated as the booted one';
   if (boot.booted === key)
     return `${key === 'r' ? 'recovery bank R' : `bank ${key.toUpperCase()}`} is the bank the camera boots now`;
-  if (key === 'r') return 'recovery bank R is written only with acknowledgeRisk';
+  if (key === 'r') return 'recovery bank R is the last-resort copy the bootloader falls back to';
   return null;
 }
 
@@ -443,13 +443,13 @@ export function prepareSlotFlash(
 
   if (key === 'r') {
     warnings.push(
-      'Recovery bank R: writing it needs acknowledgeRisk. Nothing here checks that the camera boots afterwards.',
+      'Recovery bank R: writing it asks you to acknowledge the risk. Nothing here checks that the camera boots afterwards.',
     );
   }
   const risk = ackNeeded(report, key);
   if (risk !== null && key !== 'r') {
     warnings.push(
-      `${risk}: writing it needs acknowledgeRisk, and the camera runs whatever it holds after the next power cycle.`,
+      `${risk}: writing it asks you to acknowledge the risk, and the camera runs whatever it holds after the next power cycle.`,
     );
   }
   for (const note of [...plan.notes, ...entry.notes]) warnings.push(`Note: ${note}`);
@@ -704,6 +704,9 @@ export async function flashSlot(
   assertPlanIsCurrent(report, plan, entry);
 
   const risk = ackNeeded(report, plan.key);
+  /* This refusal names the option, because only a library caller reaches it: the page asks its own tick
+   * first (`useSlotsPanel` `needsRiskAck`, the same rule), and the CLI refuses `slots flash` and
+   * `slots patch-fps` without --acknowledge-risk before the plan (`bootRisk`, a superset of this rule). */
   if (risk !== null && !options.acknowledgeRisk) {
     throw slotRefused(`${risk}. Writing it needs acknowledgeRisk: true. Nothing was sent.`, {
       key: plan.key,

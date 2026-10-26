@@ -1068,10 +1068,44 @@ describe('SlotsView: the frame-rate row action', () => {
     unmount();
   });
 
+  it('says a bank that already holds the patch is patched: a state, with no "not offered" and no table id', () => {
+    const planFps = vi.fn((): FpsPlan => ({
+      status: 'patched',
+      reason: 'the frame-rate patch is already applied: this image runs at 18 Hz',
+      hz: 18,
+    }));
+    const { container, unmount } = view(
+      panel({ plan: slotPlan(true), report: slotReport(base), planFps }),
+    );
+    const text = bankRows(container)[0]?.textContent ?? '';
+    expect(
+      buttonsIn(bankRows(container)[0] as HTMLElement).some((b) => b.startsWith('Make ')),
+    ).toBe(false);
+    expect(text).toContain('Frame-rate patch applied: this image runs at 18 Hz.');
+    expect(text).not.toContain('not offered');
+    expect(text).not.toContain('compact_pro-');
+    unmount();
+  });
+
+  it('says a build made at the faster rate needs no patch, without calling it a refusal', () => {
+    const planFps = vi.fn((): FpsPlan => ({
+      status: 'at-rate',
+      reason: 'this build already runs at 18 Hz without a patch',
+      hz: 18,
+    }));
+    const { container, unmount } = view(
+      panel({ plan: slotPlan(true), report: slotReport(base), planFps }),
+    );
+    const text = bankRows(container)[0]?.textContent ?? '';
+    expect(text).toContain('No frame-rate patch needed: this build already runs at 18 Hz.');
+    expect(text).not.toContain('not offered');
+    unmount();
+  });
+
   it('keeps the outcome of a patch on screen: the rate, the read-back, the saved files, and the way back', () => {
     const outcome = {
       key: 'a',
-      patch: { id: 'compact_32k-1.3.0.0-to32' },
+      patch: { id: 'compact_32k-1.3.0.0-to32', version: '1.3.0.0' },
       fromHz: 8,
       toHz: 32,
       pre: { rawName: 'raw.bin', plainName: 'plain.bin' },
@@ -1089,7 +1123,10 @@ describe('SlotsView: the frame-rate row action', () => {
       panel({ plan: slotPlan(true), report: slotReport(base), fpsOutcome: outcome }),
     );
     const text = container.textContent;
-    expect(text).toContain('patched from 8 Hz to 32 Hz');
+    expect(text).toContain('Slot A — patched from 8 Hz to 32 Hz (firmware 1.3.0.0).');
+    expect(text).not.toContain('compact_32k-');
+    /* The capitalised replug prompt is the panel's, once (TESTING.md 42.86). */
+    expect(text.split('NOW UNPLUG AND REPLUG THE CAMERA.')).toHaveLength(2);
     expect(text).toContain('differs from the saved dump only at the 2 planned byte(s)');
     expect(text).toContain('raw.bin and plain.bin');
     expect(text).not.toContain('UNTESTED on hardware');
@@ -1101,7 +1138,7 @@ describe('SlotsView: the frame-rate row action', () => {
   function patchOutcome(readBackOk: boolean): FpsPatchResult {
     return {
       key: 'b',
-      patch: { id: 'compact_32k-1.3.0.0-to32' },
+      patch: { id: 'compact_32k-1.3.0.0-to32', version: '1.3.0.0' },
       fromHz: 8,
       toHz: 32,
       pre: { rawName: 'raw.bin', plainName: 'plain.bin' },

@@ -1132,7 +1132,8 @@ export function fpsPlanLines(
   lines.push(
     paint(
       `  ! The saved decrypted file is the only way back. To undo the patch, flash it again: ` +
-        `seek-fw slots flash ${key} <the -decrypted file> --yes (add --acknowledge-risk if the camera boots bank ${bank}).`,
+        `seek-fw slots flash ${key} <the -decrypted file> --yes (add --acknowledge-risk ` +
+        `${key === 'r' ? 'as for every write to recovery R' : `if the camera boots bank ${bank}`}).`,
       'yellow',
       color,
     ),
@@ -1214,6 +1215,16 @@ async function patchFpsAction(
         hint: NOTHING_SENT,
       });
     }
+    /* The booted bank and recovery R need --acknowledge-risk, as `slots flash` does. Refused here, before
+     * the plan, the question and the saved dump: core's own refusal comes only after the dump is saved,
+     * and it is worded for a library caller (TESTING.md 42.86). */
+    const risk = bootRisk(report, view);
+    if (write && risk !== null && !acknowledgeRisk) {
+      throw new CliError(`refusing to patch bank ${bankName(key)}: ${risk}`, {
+        code: 'slots/refused',
+        hint: `Pass --acknowledge-risk to patch it anyway. ${NOTHING_SENT}`,
+      });
+    }
     const version = report.state.version;
     /* The warning is about the bank being patched: it counts as holding the patch once written. */
     const bootWarning = fpsBootWarningOf(report, { target: key });
@@ -1225,8 +1236,9 @@ async function patchFpsAction(
 
     /* The dry run stops here: the plan is the whole output and nothing is saved or sent. */
     if (!write) {
+      const needs = risk === null || acknowledgeRisk ? '' : ' --acknowledge-risk';
       ctx.reporter.log(
-        `dry run: nothing was saved and nothing was written. Add --write --dump-dir <folder> to patch bank ${bankName(key)}.`,
+        `dry run: nothing was saved and nothing was written. Add --write --dump-dir <folder>${needs} to patch bank ${bankName(key)}.`,
         'info',
       );
       return {

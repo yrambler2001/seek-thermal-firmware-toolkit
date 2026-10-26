@@ -59,9 +59,11 @@ export const EP0_1032_NOTE =
   '(README: no single-arm drain exists; patch.ts cp1032 capability). The slot dump reads one ' +
   'bank at a time, in 64-byte asks.';
 
+/* The token is legacy-auth.ts OLD_FW_UNLOCK_TOKEN; the note names it for what it is, not by its code name
+ * (TESTING.md 42.86). */
 const TOKEN_NOTE =
   'Banks are protected on this line: a plain 2-byte arm of mode 7, 8 or 9 is refused, so a ' +
-  'slot arm carries the 18-byte payload, the 16-byte token OLD_FW_UNLOCK_TOKEN (the same bytes ' +
+  'slot arm carries the 18-byte payload with the line’s 16-byte unlock token (the same bytes ' +
   'in 22 corpus images). A camera with another token stalls on its banks.';
 
 const LOCKED_PLAIN_STAGING_NOTE =
@@ -87,11 +89,10 @@ const LOCKED_2016_STAGING_NOTE =
  */
 export function profileFlashNote(profileId: string): string {
   return (
-    `Profile ${profileId} declares no flash capability of its own (its capabilities.flash, see ` +
-    'compact-2016.ts), so a whole-image write is not available on this line, and the device info ' +
-    'says so. The banks are written here one at a time instead: the slot write is the ' +
-    'keystream-staged path the preservation pipeline ran on 1.0.3.0, so the slot page does not gate ' +
-    'it on that refusal.'
+    `A whole-image write is not available on this line (profile ${profileId} offers none), and the ` +
+    'device info says so. The banks are written here one at a time instead, each staged under its ' +
+    'own image’s key, the path the backup already ran on 1.0.3.0 cameras, so this page does not ' +
+    'refuse a bank for that reason.'
   );
 }
 
@@ -204,13 +205,13 @@ export function planNotes(family: SlotFamily, version: FirmwareVersion): string[
       notes.push(LOCKED_2016_BOOT_WORD_NOTE);
       notes.push(
         'The 9 Hz builds of 1.0.3.0 and 1.0.3.2 share one key pair, and the FF builds share ' +
-          'another (patch.ts KEY_PAIRS). The version string does not tell them apart, so the ' +
-          'keystream is recovered from the bank itself and the bank’s own image decides.',
+          'another. The version string does not tell them apart, so the keystream is recovered ' +
+          'from the bank itself and the bank’s own image decides.',
       );
       if (text === '1.0.3.0') {
         notes.push(
           'The 1.0.3.0 app reboots on any board but the Compact Pro’s, so a Compact board ' +
-            'runs it only with the board patch in its banks (scripts/patch-dump.mjs).',
+            'runs it only with the board patch in its banks.',
         );
       }
       if (text === '1.0.3.2') notes.push(EP0_1032_NOTE);
@@ -229,7 +230,7 @@ export function planNotes(family: SlotFamily, version: FirmwareVersion): string[
 const FF_1308_BANK_NOTES: Readonly<Record<SlotKey, string>> = {
   a: 'The 1.3.0.8 FF (16 Hz) image goes here in its vendor form, stored under Key B. The 2014 bootloader takes a bank only when its stored word sum is 0, so it passes this one over at boot; whether the FF build boots from A is UNTESTED (TESTING.md 42.12). The 8 Hz image is written as plain.',
   b: 'The 1.3.0.8 FF (16 Hz) image goes here in its vendor form, stored under Key B. The 2014 bootloader passes this bank over at boot (its stored word sum is not 0); whether the FF build boots from B is UNTESTED (TESTING.md 42.12). The 8 Hz image is written as plain.',
-  r: 'The 1.3.0.8 FF (16 Hz) image goes here in its vendor form, stored under Key B. Recovery runs its bank unchecked, and the 0.9.0.0 bootloader does not decrypt it, so this form may not boot: UNTESTED, and the earlier plain form did boot from here (TESTING.md 42.10, 42.12). Writing it needs acknowledgeRisk. The 8 Hz image is written as plain.',
+  r: 'The 1.3.0.8 FF (16 Hz) image goes here in its vendor form, stored under Key B. Recovery runs its bank unchecked, and the 0.9.0.0 bootloader does not decrypt it, so this form may not boot: UNTESTED, and the earlier plain form did boot from here (TESTING.md 42.10, 42.12). Writing it asks you to acknowledge the risk. The 8 Hz image is written as plain.',
 };
 
 /** Facts about one bank, shown beside it. `version` is the build's version string, when it is known. */
@@ -251,7 +252,7 @@ export function bankNotes(
       } else if (key === 'b') {
         notes.push('Mode 8 (0x14050000).');
       } else {
-        notes.push('Recovery bank, mode 9 (0x14070000). A write needs acknowledgeRisk.');
+        notes.push('Recovery bank, mode 9 (0x14070000). A write asks you to acknowledge the risk.');
       }
       break;
     case 'locked-plain':
@@ -261,7 +262,7 @@ export function bankNotes(
           ? 'Mode 7 (0x14050000), token form.'
           : key === 'b'
             ? 'Mode 8 (0x14060000), token form.'
-            : 'Recovery bank, mode 9 (0x14070000), token form. A write needs acknowledgeRisk.',
+            : 'Recovery bank, mode 9 (0x14070000), token form. A write asks you to acknowledge the risk.',
       );
       if (version === FF_1308_VERSION) notes.push(FF_1308_BANK_NOTES[key]);
       break;
@@ -269,7 +270,7 @@ export function bankNotes(
       notes.push(LOCKED_2016_STAGING_NOTE);
       if (key === 'r') {
         notes.push(
-          'Recovery bank, mode 9, token form. A write needs acknowledgeRisk. Measured on a Compact ' +
+          'Recovery bank, mode 9, token form. A write asks you to acknowledge the risk. Measured on a Compact ' +
             'PRO 1.0.3.0: R took its own image, a one-byte change and the raw staged bytes, each ' +
             'with commit status 0 (TESTING.md 41.3).',
         );

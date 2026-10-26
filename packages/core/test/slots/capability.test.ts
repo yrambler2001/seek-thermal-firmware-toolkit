@@ -424,8 +424,35 @@ describe('the facts a person is shown with the plan', () => {
     const plan = buildSlotPlan(compact2016, '1.0.3.0');
     expect(plan.slots.every((slot) => slot.flashPlain.supported)).toBe(true);
     expect(plan.notes.join('\n')).toMatch(
-      /Profile compact-2016 declares no flash capability of its own/,
+      /A whole-image write is not available on this line \(profile compact-2016 offers none\)/,
     );
+  });
+
+  it('names no code identifier in a note a person reads (TESTING.md 42.86)', () => {
+    const plans = [
+      buildSlotPlan(compact2016, '1.0.3.0'),
+      buildSlotPlan(compact2016, '1.0.3.2'),
+      buildSlotPlan(legacyAuth, '1.3.0.0'),
+      buildSlotPlan(legacyAuth, '1.3.0.8'),
+      buildSlotPlan(modern4x, '4.9.2.0'),
+    ];
+    for (const plan of plans) {
+      const notes = [...plan.notes, ...plan.slots.flatMap((slot) => slot.notes)].join('\n');
+      for (const name of [
+        'acknowledgeRisk',
+        'OLD_FW_UNLOCK_TOKEN',
+        'KEY_PAIRS',
+        'capabilities.flash',
+        'compact-2016.ts',
+        'patch-dump.mjs',
+      ]) {
+        expect(notes, `${plan.profileId} ${String(plan.firmwareVersion)}: ${name}`).not.toContain(
+          name,
+        );
+      }
+      const recovery = plan.slots.find((slot) => slot.key === 'r');
+      expect(recovery?.notes.join(' ')).toMatch(/asks you to acknowledge the risk/);
+    }
   });
 
   it('warns on 0.8.0.0 that mode 2 is a crash hazard the slot page never arms', () => {

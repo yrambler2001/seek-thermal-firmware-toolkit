@@ -326,6 +326,7 @@ export {
   decryptDump,
   describeDevice,
   detectProfileForDump,
+  detectedReportOf,
   deviceInfoOf,
   entryForAddress,
   evidenceFromChannelProbe,

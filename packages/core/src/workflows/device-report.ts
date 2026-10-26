@@ -14,13 +14,27 @@
 
 import { bytesToHex, hexUp } from '../bytes.js';
 import { bankWordsOf } from '../profiles/locked-boot.js';
-import type { SlotKey } from '../profiles/types.js';
+import type { DetectionResult, SlotKey } from '../profiles/types.js';
 import { bootChoiceOf, bootRuleKnown } from '../slots/boot-choice.js';
 import { cameraWideBlocks, storeKeyDescription } from './device-info.js';
 import type { CheckKey, DeviceState } from './types.js';
 
 /** One row of the report: the label (lower case, as the CLI prints it) and its value. */
 export type ReportRow = readonly [label: string, value: string];
+
+/**
+ * The detected row's value: the profile the read's own evidence names, and its score. The page's Info log
+ * also prints the probe's score, taken before any bank is read (1.0.3.x: 0.85 from the version line); this
+ * one is scored again once the banks are read (0.98 with the bank evidence on the bench 1.0.3.0 camera), so
+ * the row says which it is (TESTING.md 42.86).
+ */
+export function detectedReportOf(detection: DetectionResult): string {
+  const best = detection.best;
+  return (
+    `${best.profile.id} (score ${best.score.toFixed(2)} after the read, from the evidence below` +
+    `${detection.ambiguous ? '; ambiguous' : ''})`
+  );
+}
 
 /**
  * The booted row's value, or null when the read names no booted bank. On the locked line where the bank

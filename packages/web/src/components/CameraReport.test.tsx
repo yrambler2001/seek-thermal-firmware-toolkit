@@ -4,7 +4,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { keyReportRows, type DeviceState } from '@seek-fw/core';
+import { detectedReportOf, keyReportRows, type DeviceState } from '@seek-fw/core';
 import { render } from '@/test-helpers';
 import { fakeDeviceState } from '../test-fixtures';
 import { BLOCK_1_2016, deviceState2016 } from '../test-slots';
@@ -64,6 +64,11 @@ describe('CameraReport on the 2016 Compact PRO (TESTING.md 42.84)', () => {
       'App image bank 0x14050000 — the boot-config word is 0xFFFFFFFF, so the bootloader tries slot A first, and it holds an image the bootloader accepts',
     );
     expect(text).not.toContain('not a boot record');
+    /* The Profile panel's score is the one taken after the read, and says so (TESTING.md 42.86). */
+    expect(text).toContain(detectedReportOf(state.detection));
+    expect(detectedReportOf(state.detection)).toMatch(
+      /^[a-z0-9-]+ \(score \d\.\d\d after the read, from the evidence below(; ambiguous)?\)$/,
+    );
     unmount();
   });
 

@@ -15,6 +15,7 @@ import {
   bootedReportOf,
   bootRuleKnown,
   bytesToHex,
+  detectedReportOf,
   hex,
   hexUp,
   keyReportRows,
@@ -226,11 +227,7 @@ export function renderState(ctx: CommandContext, state: DeviceState): void {
   ctx.out(heading('Profile', ctx.color));
   pairs(ctx, [
     ['read under', `${state.profile.id} — ${state.profile.name}`],
-    [
-      'detected',
-      `${state.detection.best.profile.id} (score ${state.detection.best.score.toFixed(2)}` +
-        `${state.detection.ambiguous ? ', ambiguous' : ''})`,
-    ],
+    ['detected', detectedReportOf(state.detection)],
   ]);
   for (const reason of state.detection.best.reasons) ctx.out(`    · ${reason}`);
 

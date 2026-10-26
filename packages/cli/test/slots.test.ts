@@ -1999,6 +1999,136 @@ describe('patch-fps', () => {
     expect((error as CliError).message).toContain('not in the frame-rate patch table');
   });
 
+  it('refuses a patched bank in words that say its state, with no table id', async () => {
+    const { ops } = fakeOps(reportOf({ booted: 'b' }));
+    const withPlan: SlotOps = {
+      ...ops,
+      fpsPlan: () => ({
+        status: 'patched',
+        reason: 'the frame-rate patch is already applied: this image runs at 18 Hz',
+        hz: 18,
+      }),
+    };
+    const error = await slotsCommandWith(withPlan)(
+      contextFor(['slots', 'patch-fps', 'a', '--no-probe'], cameraIo()),
+    ).catch((caught: unknown) => caught);
+    expect((error as CliError).message).toBe(
+      'bank A: the frame-rate patch is already applied: this image runs at 18 Hz',
+    );
+  });
+
+  it('refuses to patch the booted bank without --acknowledge-risk, before the plan, the question and the dump (TESTING.md 42.86)', async () => {
+    const { ops, log } = fakeOps(reportOf({ booted: 'a' }));
+    let patched = 0;
+    const withPatch: SlotOps = {
+      ...ops,
+      fpsPlan: () => offerOf(),
+      patchFps: () => {
+        patched += 1;
+        return Promise.reject(new Error('must not be reached'));
+      },
+    };
+    const dir = join(temp.path, 'refused');
+    const test = cameraIo();
+    const error = await slotsCommandWith(withPatch)(
+      contextFor(
+        ['slots', 'patch-fps', 'a', '--write', '--dump-dir', dir, '--yes', '--no-probe'],
+        test,
+      ),
+    ).catch((caught: unknown) => caught);
+    expect(error).toBeInstanceOf(CliError);
+    expect((error as CliError).code).toBe('slots/refused');
+    expect((error as CliError).message).toBe(
+      'refusing to patch bank A: bank A is the bank the camera boots now; a bad write there can stop the camera booting',
+    );
+    expect((error as CliError).hint).toContain('Pass --acknowledge-risk to patch it anyway.');
+    expect((error as CliError).message + ((error as CliError).hint ?? '')).not.toContain(
+      'acknowledgeRisk',
+    );
+    expect(patched).toBe(0);
+    expect(log.flashed).toEqual([]);
+    expect(test.stdout.text).not.toContain('Frame-rate patch plan');
+    await expect(readdir(dir)).rejects.toThrow();
+  });
+
+  it('refuses to patch recovery R without --acknowledge-risk, and patches it with it', async () => {
+    const { ops } = fakeOps(reportOf({ booted: 'a' }));
+    const keys: SlotKey[] = [];
+    const withPatch: SlotOps = {
+      ...ops,
+      fpsPlan: () => offerOf(),
+      patchFps: async (_ctx, _report, key, options) => {
+        keys.push(key);
+        expect(options.acknowledgeRisk).toBe(true);
+        const dump = preDump();
+        await options.saveDump(dump);
+        return writtenResult(dump);
+      },
+    };
+    const refused = await slotsCommandWith(withPatch)(
+      contextFor(
+        [
+          'slots',
+          'patch-fps',
+          'r',
+          '--write',
+          '--dump-dir',
+          join(temp.path, 'r1'),
+          '--yes',
+          '--no-probe',
+        ],
+        cameraIo(),
+      ),
+    ).catch((caught: unknown) => caught);
+    expect((refused as CliError).message).toMatch(
+      /^refusing to patch bank R: bank R is the recovery bank/,
+    );
+    expect(keys).toEqual([]);
+    const result = await slotsCommandWith(withPatch)(
+      contextFor(
+        [
+          'slots',
+          'patch-fps',
+          'r',
+          '--write',
+          '--dump-dir',
+          join(temp.path, 'r2'),
+          '--yes',
+          '--acknowledge-risk',
+          '--no-probe',
+        ],
+        cameraIo(),
+      ),
+    );
+    expect(result).toMatchObject({ action: 'patch-fps', written: true });
+    expect(keys).toEqual(['r']);
+  });
+
+  it('the dry run on the booted bank names --acknowledge-risk in the command it suggests', async () => {
+    const { ops } = fakeOps(reportOf({ booted: 'a' }));
+    const withPlan: SlotOps = { ...ops, fpsPlan: () => offerOf() };
+    const test = cameraIo();
+    await slotsCommandWith(withPlan)(contextFor(['slots', 'patch-fps', 'a', '--no-probe'], test));
+    const text = test.stdout.text + test.stderr.text;
+    expect(text).toContain('Add --write --dump-dir <folder> --acknowledge-risk to patch bank A.');
+    const unbooted = cameraIo();
+    await slotsCommandWith(withPlan)(
+      contextFor(['slots', 'patch-fps', 'b', '--no-probe'], unbooted),
+    );
+    expect(unbooted.stdout.text + unbooted.stderr.text).toContain(
+      'Add --write --dump-dir <folder> to patch bank B.',
+    );
+  });
+
+  it('the plan names the undo for recovery R without "if the camera boots" it', () => {
+    const lines = fpsPlanLines('r', offerOf(), 0x14070000, '1.3.0.0', false, null).join('\n');
+    expect(lines).toContain('(add --acknowledge-risk as for every write to recovery R).');
+    expect(lines).not.toContain('if the camera boots bank R');
+    expect(fpsPlanLines('a', offerOf(), 0x14050000, '1.3.0.0', false, null).join('\n')).toContain(
+      '(add --acknowledge-risk if the camera boots bank A).',
+    );
+  });
+
   it('refuses --write without --dump-dir before the camera is opened', async () => {
     const { ops, log } = fakeOps(reportOf({ booted: 'b' }));
     const withPlan: SlotOps = { ...ops, fpsPlan: () => offerOf() };

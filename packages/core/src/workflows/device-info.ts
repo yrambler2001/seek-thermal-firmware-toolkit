@@ -670,14 +670,16 @@ export function unknownBootabilityWhy(state: Pick<DeviceState, 'checkKey'>): str
  * rate where one is recorded, as fps-boot-warning.ts `fpsPatchHeldBy` gives it) or a corpus build of a
  * known rate.
  */
-function frameRateNote(plain: Uint8Array | null): string {
+export function frameRateNote(plain: Uint8Array | null): string {
   if (plain === null) return '';
   const identity = identifyFpsImage(plain);
   const patched = identity.patchedEntries[0];
   if (patched !== undefined) {
     return `, frame-rate patch ${String(FPS_MEASURED_HZ.get(patched.id) ?? patched.targetHz)} Hz`;
   }
-  if (identity.known !== null) return `, ${identity.known.name} (${String(identity.known.hz)} Hz)`;
+  /* A corpus build of a known rate, said without its table name (compact_pro-1.0.3.0-FF is an id, not a
+   * name a person reads; TESTING.md 42.86). */
+  if (identity.known !== null) return `, runs at ${String(identity.known.hz)} Hz`;
   return '';
 }
 

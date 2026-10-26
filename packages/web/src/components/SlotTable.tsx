@@ -74,9 +74,18 @@ function fpsNote(plan: Extract<FpsPlan, { status: 'offer' }>): string {
  * build the page does not support, which has its own banner, or an offer). Every bank that is not offered
  * says why, an empty and an unread bank included: the plan's reason names the empty bank or the read that
  * failed. The words never say a write "cannot be written": that banner belongs to the keys verdict alone.
+ *
+ * A bank that already runs the faster rate is a state, not a refusal: it says what it holds (the patch, or a
+ * build made at that rate), from the plan's rate, with no table id (TESTING.md 42.85 O3, 42.86).
  */
 export function fpsOffNote(plan: FpsPlan, supported: boolean): string | null {
   if (!supported || plan.status === 'offer') return null;
+  if (plan.status === 'patched') {
+    return `Frame-rate patch applied: this image runs at ${String(plan.hz)} Hz.`;
+  }
+  if (plan.status === 'at-rate') {
+    return `No frame-rate patch needed: this build already runs at ${String(plan.hz)} Hz.`;
+  }
   return `Frame-rate patch not offered: ${plan.reason}`;
 }
 

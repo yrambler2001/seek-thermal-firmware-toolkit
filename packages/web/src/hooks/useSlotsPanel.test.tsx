@@ -50,9 +50,12 @@ import { UnlockSeat } from '../lib/unlock-seat';
 import {
   bankImageSource,
   needsRiskAck,
+  patchedStatus,
+  replugRecord,
   slotActionGate,
   useSlotsPanel,
   writeRisk,
+  writtenStatus,
   type SlotsBackend,
 } from './useSlotsPanel';
 import { useRunner } from './useRunner';
@@ -161,6 +164,11 @@ function file(name: string, bytes: Uint8Array): File {
 
 function lineIncludes(lines: readonly { readonly text: string }[], text: string): boolean {
   return lines.some((line) => line.text.includes(text));
+}
+
+/** The log lines that ask for the replug: there must be exactly one, and not the capitalised prompt. */
+function replugLines(lines: readonly { readonly text: string }[]): string[] {
+  return lines.map((line) => line.text).filter((text) => /unplug and replug/i.test(text));
 }
 
 /* ---- the hook -------------------------------------------------------- */
@@ -404,9 +412,13 @@ describe('useSlotsPanel: writing a bank', () => {
     /* The banks are read again after the write, so the table is not left empty. */
     expect(result.current.panel.report).not.toBeNull();
     expect(mocks.inspect).toHaveBeenCalledTimes(2);
-    expect(
-      lineIncludes(result.current.panel.reporter.lines, 'NOW UNPLUG AND REPLUG THE CAMERA.'),
-    ).toBe(true);
+    /* The log keeps one record of the replug; the capitalised prompt is the result panel's alone, and the
+     * status says how the write ended without asking again (TESTING.md 42.85 O1, 42.86). */
+    expect(replugLines(result.current.panel.reporter.lines)).toEqual([replugRecord('write')]);
+    expect(lineIncludes(result.current.panel.reporter.lines, 'NOW UNPLUG')).toBe(false);
+    expect(result.current.panel.reporter.progress.text).toBe(
+      'Written. The bank reads back as written.',
+    );
     unmount();
   });
 
@@ -441,7 +453,8 @@ describe('useSlotsPanel: writing a bank', () => {
     expect(
       lineIncludes(result.current.panel.reporter.lines, 'banks read again after the write'),
     ).toBe(true);
-    expect(result.current.panel.reporter.progress.text).toContain('Unplug and replug');
+    expect(result.current.panel.reporter.progress.text).toBe(writtenStatus(true));
+    expect(result.current.panel.reporter.progress.text).not.toMatch(/replug/i);
     unmount();
   });
 
@@ -496,7 +509,8 @@ describe('useSlotsPanel: writing a bank', () => {
         'the banks were not read again after the write',
       ),
     ).toBe(true);
-    expect(result.current.panel.reporter.progress.text).toContain('Unplug and replug');
+    expect(result.current.panel.reporter.progress.text).toBe(writtenStatus(true));
+    expect(replugLines(result.current.panel.reporter.lines)).toHaveLength(1);
     unmount();
   });
 
@@ -1127,7 +1141,7 @@ function fpsPreDumpOf(key: SlotKey): FpsPreDump {
 function fpsResultOf(key: SlotKey): FpsPatchResult {
   return {
     key,
-    patch: { id: 'compact_32k-1.3.0.0-to32' },
+    patch: { id: 'compact_32k-1.3.0.0-to32', version: '1.3.0.0' },
     fromHz: 8,
     toHz: 32,
     pre: fpsPreDumpOf(key),
@@ -1264,7 +1278,20 @@ describe('useSlotsPanel: the frame-rate patch', () => {
     expect(
       lineIncludes(result.current.panel.reporter.lines, 'banks read again after the patch'),
     ).toBe(true);
-    expect(result.current.panel.reporter.progress.text).toContain('Unplug and replug');
+    /* One replug record in the log, none in the status, and the capitalised prompt only in the panel. */
+    expect(result.current.panel.reporter.progress.text).toBe(
+      'Patched. The bank reads back as planned.',
+    );
+    expect(replugLines(result.current.panel.reporter.lines)).toEqual([replugRecord('patch')]);
+    expect(lineIncludes(result.current.panel.reporter.lines, 'NOW UNPLUG')).toBe(false);
+    /* The patch is named by its firmware, not by the table's internal id. */
+    expect(
+      lineIncludes(
+        result.current.panel.reporter.lines,
+        'slot B: patched from 8 Hz to 32 Hz (firmware 1.3.0.0); the dump was saved first as',
+      ),
+    ).toBe(true);
+    expect(lineIncludes(result.current.panel.reporter.lines, 'compact_32k-')).toBe(false);
     unmount();
   });
 
@@ -1321,7 +1348,8 @@ describe('useSlotsPanel: the frame-rate patch', () => {
         'the banks were not read again after the patch (the camera stopped answering)',
       ),
     ).toBe(true);
-    expect(result.current.panel.reporter.progress.text).toContain('Unplug and replug');
+    expect(result.current.panel.reporter.progress.text).toBe(patchedStatus(true));
+    expect(replugLines(result.current.panel.reporter.lines)).toHaveLength(1);
     unmount();
   });
 
@@ -1375,5 +1403,33 @@ describe('useSlotsPanel: the frame-rate patch', () => {
     expect(result.current.panel.report).toBe(read);
     expect(mocks.inspect).toHaveBeenCalledTimes(1);
     unmount();
+  });
+});
+
+describe('useSlotsPanel: the words after a write (TESTING.md 42.85 O1, 42.86)', () => {
+  it('the status says how the write or the patch ended, and never asks for the replug', () => {
+    const statuses = [
+      writtenStatus(true),
+      writtenStatus(false),
+      writtenStatus(null),
+      patchedStatus(true),
+      patchedStatus(false),
+      patchedStatus(null),
+    ];
+    for (const status of statuses) expect(status).not.toMatch(/replug|unplug/i);
+    expect(statuses.filter((status) => status.startsWith('Written'))).toHaveLength(3);
+    expect(statuses.filter((status) => status.startsWith('Patched'))).toHaveLength(3);
+    expect(writtenStatus(null)).toBe('Written. The read-back was not compared — see the result.');
+    expect(patchedStatus(null)).toBe('Patched. The read-back was not checked — see the result.');
+  });
+
+  it('the log record of the replug is one plain sentence, not the capitalised prompt', () => {
+    for (const what of ['write', 'patch'] as const) {
+      const record = replugRecord(what);
+      expect(record).toMatch(/^Unplug and replug the camera: no reset was sent/);
+      expect(record).toContain(`so the ${what} takes effect only at the next start`);
+      expect(record).not.toContain('NOW UNPLUG');
+      expect(record.match(/unplug and replug/gi)).toHaveLength(1);
+    }
   });
 });

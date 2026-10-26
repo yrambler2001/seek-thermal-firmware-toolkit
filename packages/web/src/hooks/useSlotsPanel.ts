@@ -163,6 +163,35 @@ export function needsRiskAck(risk: WriteRisk): boolean {
   return risk.booted || risk.recovery || risk.bootUnnamed;
 }
 
+/**
+ * The run log's one record of the replug a write or a patch owes. The result panel under the table gives the
+ * instruction, in capitals, and the status line says how the write ended without repeating it: after one
+ * patch on a Compact PRO 1.0.3.0 the request was on the page three times (TESTING.md 42.85 O1, 42.86). The
+ * log keeps this one line, because a pasted log is the record of the run.
+ */
+export function replugRecord(what: 'write' | 'patch'): string {
+  return (
+    `Unplug and replug the camera: no reset was sent, so the ${what} takes effect only at the next ` +
+    'start. Then read the slots again: the version and the booted bank the camera reports settle it.'
+  );
+}
+
+/** The status line after a write: how it ended. The result panel says what to do next. */
+export function writtenStatus(verified: boolean | null): string {
+  if (verified === false) return 'Written, but the read-back does not match — see the result.';
+  if (verified === true) return 'Written. The bank reads back as written.';
+  return 'Written. The read-back was not compared — see the result.';
+}
+
+/** The status line after a frame-rate patch: how it ended. The result panel says what to do next. */
+export function patchedStatus(readBackOk: boolean | null): string {
+  if (readBackOk === false) {
+    return 'Patched, but the read-back does not differ only as planned — see the result.';
+  }
+  if (readBackOk === true) return 'Patched. The bank reads back as planned.';
+  return 'Patched. The read-back was not checked — see the result.';
+}
+
 /** The three things a bank row can do. */
 export type SlotAction = 'dump' | 'flash-plain' | 'flash-raw';
 
@@ -475,6 +504,8 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
       signal: AbortSignal,
       what: 'write' | 'patch',
     ): Promise<void> => {
+      /* Over core's own end-of-write status, which names the Info tab's read, not this one. */
+      workflow.progress(1, 1, 'Reading the banks again ...');
       try {
         const version = written.state.version;
         const again = await backend.inspect(
@@ -876,21 +907,9 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
             targetEmpty: ready.plan.targetEmpty === true,
           });
           for (const note of written.notes) log(note, 'detail');
-          log('NOW UNPLUG AND REPLUG THE CAMERA.', 'warn');
-          log(
-            'No reset was sent, so the bank only takes effect after a real power cycle. Read the ' +
-              'slots again after replugging: the version and the active bank the camera reports ' +
-              'are the only thing that settles it.',
-            'detail',
-          );
+          log(replugRecord('write'), 'warn');
           await readAfterWrite(current, client, signal, 'write');
-          workflow.progress(
-            1,
-            1,
-            written.verified === false
-              ? 'Written, but the read-back does not match — see the result.'
-              : 'Written. Unplug and replug, then read the slots again.',
-          );
+          workflow.progress(1, 1, writtenStatus(written.verified));
         } catch (error) {
           if (error instanceof CancelledError) {
             log(`cancelled: ${error.message}`, 'warn');
@@ -998,19 +1017,14 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
           setFpsOutcome(done);
           log(
             `slot ${name}: patched from ${String(done.fromHz)} Hz to ${String(done.toHz)} Hz ` +
-              `(${done.patch.id}); the dump was saved first as ${done.pre.rawName} and ${done.pre.plainName}`,
+              `(firmware ${done.patch.version}); the dump was saved first as ${done.pre.rawName} and ` +
+              done.pre.plainName,
             'ok',
           );
           for (const note of done.notes) log(note, 'detail');
-          log('NOW UNPLUG AND REPLUG THE CAMERA.', 'warn');
+          log(replugRecord('patch'), 'warn');
           await readAfterWrite(current, client, signal, 'patch');
-          workflow.progress(
-            1,
-            1,
-            done.readBack.ok === false
-              ? 'Patched, but the read-back does not differ only as planned — see the result.'
-              : 'Patched. Unplug and replug, then read the slots again.',
-          );
+          workflow.progress(1, 1, patchedStatus(done.readBack.ok));
         } catch (error) {
           if (error instanceof CancelledError) {
             log(`cancelled: ${error.message}`, 'warn');

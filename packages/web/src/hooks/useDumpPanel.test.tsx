@@ -423,7 +423,7 @@ describe('useDumpPanel detects the camera instead of asking', () => {
     expect(downloads).toHaveLength(1);
     const lines = result.current.panel.reporter.lines.map((line) => line.text);
     expect(lines).toContain('asking the camera which firmware it runs ...');
-    expect(lines.some((line) => line.startsWith('detected ') && line.includes('(modern-4x)'))).toBe(
+    expect(lines.some((line) => line.startsWith('probe: ') && line.includes('(modern-4x)'))).toBe(
       true,
     );
     unmount();

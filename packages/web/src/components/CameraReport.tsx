@@ -11,6 +11,7 @@ import {
   bankWritingOf,
   bootableDescription,
   bootedReportOf,
+  detectedReportOf,
   hexUp,
   keyReportRows,
   nextStartReportOf,
@@ -139,12 +140,7 @@ export function CameraReport({ state }: CameraReportProps): ReactElement {
         <KeyValue
           rows={[
             ['Read under', `${state.profile.id} — ${state.profile.name}`],
-            [
-              'Detected',
-              `${best.profile.id} (score ${best.score.toFixed(2)}${
-                state.detection.ambiguous ? ', ambiguous' : ''
-              })`,
-            ],
+            ['Detected', detectedReportOf(state.detection)],
           ]}
         />
         {best.reasons.length > 0 && (

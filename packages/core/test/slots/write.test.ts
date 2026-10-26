@@ -835,6 +835,20 @@ describe('prepareSlotFlash warnings', () => {
     const unnamed = reportFor(stateFor(modern, { slots, booted: null }), withNotes);
     const outB = prepareSlotFlash(unnamed, 'b', { kind: 'raw', bytes: image, fileName: 'x' });
     expect(outB.warnings.some((w) => w.includes('could not be named'))).toBe(true);
+
+    /* The plan's warnings are read by people on the page and in the CLI: they name no option
+     * (TESTING.md 42.85 O2, 42.86). */
+    for (const out of [outA, outR, outB]) {
+      expect(out.warnings.join('\n')).not.toContain('acknowledgeRisk');
+    }
+    expect(outA.warnings).toContain(
+      'bank A is the bank the camera boots now: writing it asks you to acknowledge the risk, and the ' +
+        'camera runs whatever it holds after the next power cycle.',
+    );
+    expect(outR.warnings).toContain(
+      'Recovery bank R: writing it asks you to acknowledge the risk. Nothing here checks that the ' +
+        'camera boots afterwards.',
+    );
   });
 
   /* The rekey warning (write.ts, key-a branch; TESTING.md 42.50): the target accepts, has its footer, and

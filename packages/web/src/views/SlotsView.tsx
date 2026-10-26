@@ -67,7 +67,7 @@ function FpsOutcomePanel({ result }: { readonly result: FpsPatchResult }): React
     <Alert tone={tone} className="mt-3">
       <p>
         <strong>
-          {`Slot ${key.toUpperCase()} — patched from ${String(fromHz)} Hz to ${String(toHz)} Hz (${result.patch.id}).`}
+          {`Slot ${key.toUpperCase()} — patched from ${String(fromHz)} Hz to ${String(toHz)} Hz (firmware ${result.patch.version}).`}
         </strong>
       </p>
       <p>
