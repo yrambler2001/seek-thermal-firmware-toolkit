@@ -557,24 +557,27 @@ describe('compareReadBack states what it compared and why', () => {
     expect(short.notes.join('\n')).toContain('predicted');
   });
 
-  it('the FF build stores the image under Key B: the same byte compare, in the words of Key B', () => {
+  it('the FF build stores the image under Key B: the same byte compare, named in words', () => {
     const stored = new Uint8Array(0x100).fill(0xff);
     stored.set([9, 8, 7, 6], 0);
     const fold = { stored, plain: null, storedAs: 'key-b-ciphertext' as const };
     const same = compareReadBack(stored.slice(), fold, cipher, 'plain');
     expect(same.verified).toBe(true);
-    expect(same.notes.join('\n')).toMatch(/holds the image XOR Key B that the FF build stores/);
+    expect(same.notes.join('\n')).toMatch(
+      /holds the image as the 16 Hz build stores it \(not the bytes sent\)/,
+    );
+    expect(same.notes.join('\n')).not.toMatch(/XOR|Key B/);
     expect(same.notes.join('\n')).not.toMatch(/programs exactly what it is sent/);
     const wrong = stored.slice();
     wrong[0x10] = 0;
     const diff = compareReadBack(wrong, fold, cipher, 'plain');
     expect(diff.verified).toBe(false);
     expect(diff.notes.join('\n')).toMatch(
-      /does NOT match the image XOR Key B that the FF build stores \(first difference at 0x10\)/,
+      /does NOT match the bytes the plan predicted the bank would hold \(the image as the 16 Hz build stores it, not the bytes sent\) \(first difference at 0x10\)/,
     );
     const short = compareReadBack(stored.subarray(0, 0x80), fold, cipher, 'plain');
     expect(short.verified).toBe(false);
-    expect(short.notes.join('\n')).toMatch(/Key B/);
+    expect(short.notes.join('\n')).toMatch(/the image as the 16 Hz build stores it/);
     /* As-sent, spelled out or left off, keeps the 2014 chain's words. */
     const asSent = compareReadBack(
       stored.slice(),

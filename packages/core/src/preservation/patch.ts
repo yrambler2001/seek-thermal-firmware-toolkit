@@ -765,7 +765,7 @@ const ZERO_X_PROVEN =
 /** The arm tail's cursor reset joined the 0.x patch after doc 36's runs, so
  *  every sha doc 36 measured is the four-site set's. */
 const ZERO_X_FIFTH_SITE =
-  'The patch also carries the arm tail’s cursor reset (TESTING.md sec. 36), without which ' +
+  'The patch also carries the arm tail’s cursor reset, without which ' +
   'the drain leaves the reader dead until a power cycle; doc 36’s shas are the four-site ' +
   'set’s, and the five-site set is re-proven in place on the emulator on each layout’s ' +
   'representative (0.9.0.7, 0.8.0.0, 0.7.0.7).';
@@ -925,7 +925,7 @@ const PLAIN_BANK_CAPABILITY: DrainCapability = {
   note:
     'one widened-window arm drains the whole 4 MiB part; the unpatched budget is 64 KiB ' +
     'per arm and the reader budget is consumed in asks — byte-exact at the 64-byte ask ' +
-    '(one EP0 packet, serve == ask; TESTING.md 23.3)',
+    '(one EP0 packet, serve == ask)',
 };
 
 const CIPHER_2016_CAPABILITY: DrainCapability = {

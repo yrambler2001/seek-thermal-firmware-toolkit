@@ -389,7 +389,9 @@ describe('the facts a person is shown with the plan', () => {
     const plan = buildSlotPlan(legacyAuth, '1.3.0.8');
     expect(plan.notes.join('\n')).toMatch(/1\.3\.0\.8-FF/);
     expect(plan.notes.join('\n')).toMatch(/UNTESTED/);
-    expect(plan.notes.join('\n')).toMatch(/Key B/);
+    /* In words: the key it is stored under, not its name or the XOR (TESTING.md 42.110). */
+    expect(plan.notes.join('\n')).toMatch(/the camera stores it under its own key/);
+    expect(plan.notes.join('\n')).not.toMatch(/XOR|Key [AB]|0x00070100|GetFirmwareInfo|TESTING/);
   });
 
   it('gives the 1.0.3.2 EP0 limit on the 1.0.3.2 plan, and says a whole-part drain is refused', () => {
@@ -415,8 +417,10 @@ describe('the facts a person is shown with the plan', () => {
   it('says mode 7 on the modern line is a decoded alias, and names the camera write through it', () => {
     const plan = buildSlotPlan(modern4x, '4.9.2.0');
     expect(plan.slots[0]?.write?.subcmd).toBe(7);
-    expect(plan.slots[0]?.notes.join('\n')).toMatch(/decoded alias of mode 5/);
+    /* The window (mode 7, a decoded alias of mode 5) is the plan's `write` entry; the note says it in words. */
+    expect(plan.slots[0]?.notes.join('\n')).toMatch(/a bank arm the modern map leaves out/);
     expect(plan.slots[0]?.notes.join('\n')).toMatch(/Compact XR 4\.8\.2\.1 took a write/);
+    expect(plan.slots[0]?.notes.join('\n')).not.toMatch(/mode \d|0x1403|TESTING/);
     expect(plan.slots[0]?.notes.join('\n')).not.toMatch(/not measured on the wire/);
   });
 
@@ -437,7 +441,7 @@ describe('the facts a person is shown with the plan', () => {
     );
     /* the 4.8.2.1 note names the products and the dumps the emulator measured, with the count */
     expect(buildSlotPlan(modern4x, '4.8.2.1').notes.join('\n')).toContain(
-      'Compact 4.8.2.1 and Compact XR 4.8.2.1 (one image, TESTING.md 42.34): the modern 63-window map; ' +
+      'Compact 4.8.2.1 and Compact XR 4.8.2.1 (one image): the modern 63-window map; ' +
         'the emulator confirmed 63 of 63 windows on the Compact’s full dump and on the Compact XR’s.',
     );
     expect(buildSlotPlan(modern4x, '44.27.3.10').notes.join('\n')).toContain(
@@ -481,8 +485,13 @@ describe('the facts a person is shown with the plan', () => {
        * Notes line) and the write plan's to say once in its warnings; a note saying it too made three on
        * R's row and two in an R write plan (TESTING.md 42.87). */
       const recovery = plan.slots.find((slot) => slot.key === 'r');
-      expect(recovery?.notes.join(' ')).toMatch(/^Recovery bank, mode 9/);
       expect(recovery?.notes.join(' ')).not.toMatch(/acknowledge|confirmation/);
+      /* No bank note names its window: the mode and address are the plan's `write` entry (42.110). */
+      for (const slot of plan.slots) {
+        expect(slot.notes.join(' '), `${plan.profileId} ${slot.key}`).not.toMatch(
+          /\bmode \d|token form|0x140[3-7]0000/,
+        );
+      }
     }
   });
 
@@ -526,6 +535,10 @@ describe('the facts a person is shown with the plan', () => {
       const notes = [...plan.notes, ...plan.slots.flatMap((slot) => slot.notes)].join('\n');
       expect(notes, `${plan.profileId} ${String(plan.firmwareVersion)}`).not.toMatch(
         /\bpage\b|Slots tab|seek-fw|\.ts\)|patch\.ts|cp1032/,
+      );
+      /* A person cannot follow a TESTING.md section: a note says what was measured, in words (42.110). */
+      expect(notes, `${plan.profileId} ${String(plan.firmwareVersion)}`).not.toMatch(
+        /TESTING|\b4[0-2]\.\d{1,3}\)|18-byte|0x20002000|0x238\b/,
       );
     }
     const boot = buildSlotPlan(compact2016, '1.0.3.0').notes.find((note) =>

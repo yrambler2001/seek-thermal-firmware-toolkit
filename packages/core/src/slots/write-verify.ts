@@ -49,6 +49,31 @@ export interface ReadBackExpectation {
   readonly storedAs?: 'as-sent' | 'key-b-ciphertext';
 }
 
+/**
+ * Which of the plan's predictions a read-back is compared with, in people's words. The bank's bytes when the
+ * plan predicts them: as they were sent (the 2014 plain chain, and an FF payload a camera writes as sent), or
+ * the image as the 16 Hz build stores it under its own key (`storedForm` 'key-b-ciphertext'). Else the image
+ * the bank must decode to. Null when the plan predicts neither. The verdict's notes and each front end's
+ * read-back line name it, so a mismatch says what it was compared with (TESTING.md 42.110).
+ */
+export function readBackReferenceOf(plan: {
+  readonly expectedStored: Uint8Array | null;
+  readonly storedForm?: 'as-sent' | 'key-b-ciphertext';
+  readonly expectedPlain?: Uint8Array | null;
+}): string | null {
+  if (plan.expectedStored !== null) return storedReference(plan.storedForm ?? 'as-sent');
+  return (plan.expectedPlain ?? null) === null ? null : PLAIN_REFERENCE;
+}
+
+function storedReference(storedAs: 'as-sent' | 'key-b-ciphertext'): string {
+  return storedAs === 'key-b-ciphertext'
+    ? 'the bytes the plan predicted the bank would hold (the image as the 16 Hz build stores it, ' +
+        'not the bytes sent)'
+    : 'the bytes the plan predicted the bank would hold (the bytes as they were sent)';
+}
+
+const PLAIN_REFERENCE = 'the image the plan predicted the bank would decode to';
+
 /** The first offset at which two equal-length or longer arrays differ, or -1. */
 function firstDifference(a: Uint8Array, b: Uint8Array): number {
   const span = Math.min(a.length, b.length);
@@ -74,9 +99,7 @@ export function compareReadBack(
     const stored = expected.stored;
     /* The FF build stores the image under Key B, not the payload: say so. */
     const folded = expected.storedAs === 'key-b-ciphertext';
-    const predicted = folded
-      ? 'the image XOR Key B that the FF build stores'
-      : 'the bytes the plan predicted';
+    const predicted = storedReference(expected.storedAs ?? 'as-sent');
     if (after.length !== stored.length) {
       return {
         verified: false,
@@ -91,8 +114,8 @@ export function compareReadBack(
         verified: true,
         notes: [
           folded
-            ? 'the bank holds the image XOR Key B that the FF build stores (not the staged bytes), ' +
-              'and the rest of the bank is erased'
+            ? 'the bank holds the image as the 16 Hz build stores it (not the bytes sent), and the ' +
+              'rest of the bank is erased'
             : 'the bank matches the bytes the plan predicted (the 2014 plain chain programs exactly ' +
               'what it is sent)',
         ],

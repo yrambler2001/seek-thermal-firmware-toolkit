@@ -44,6 +44,7 @@ export {
   type SlotWriteOptions,
   type SlotWriteResult,
 } from './write.js';
+export { readBackReferenceOf } from './write-verify.js';
 export {
   BACKUP_TEXT_NAME,
   BACKUP_TIME_PLACEHOLDER,

@@ -608,7 +608,7 @@ export const LEGACY_BOOT: BootPolicy = {
       'profile/unsupported',
       "the locked line's boot rule is decoded, but the bank its bootloader entered is the " +
         "camera's own active-slot word, not a replay of cfg[0]: the device-info read names both " +
-        'starts from that word on the 2014 plaintext chain and the 2016 Compact PRO (TESTING.md 42.56)',
+        'starts from that word on the 2014 plaintext chain and the 2016 Compact PRO (measured on a camera)',
       { detail: { capability: 'flash' } },
     );
   },

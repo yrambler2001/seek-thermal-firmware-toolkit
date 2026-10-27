@@ -346,8 +346,10 @@ describe('prepareSlotFlash: the FF image follows the running build', () => {
     const text = prepareSlotFlash(report, 'a', write).warnings.join('\n');
     expect(text).toMatch(/The camera runs the 8 Hz 1\.3\.0\.8 build: the camera answers/);
     expect(text).toMatch(
-      /expected to refuse this write at commit with 0x00070100 before it writes anything \(measured on the earlier staged form/,
+      /expected to refuse this write before it writes anything \(a camera running that build refused an earlier form of this image the same way\)/,
     );
+    /* In words: no status code, no word sum, no section a person cannot follow (TESTING.md 42.110). */
+    expect(text).not.toMatch(/0x00070100|word sum|TESTING/);
     /* Nothing claims the boot of a bank the camera is expected not to write. */
     expect(text).not.toMatch(/UNTESTED/);
     /* The 8 Hz build's check fails this payload: the plain word sum of the vendor form is not 0. */
@@ -362,9 +364,10 @@ describe('prepareSlotFlash: the FF image follows the running build', () => {
     expect(text).toMatch(/The camera's own answers do not say which 1\.3\.0\.8 build it runs: /);
     expect(text).toMatch(/If it runs the 16 Hz FF build, it takes this payload\./);
     expect(text).toMatch(
-      /If it runs the 8 Hz build, that build checks the plain word sum .* expected to refuse this write at commit with 0x00070100/,
+      /If it runs the 8 Hz build, that build checks a payload before it erases a bank, and this payload fails that check, so it is expected to refuse this write before it writes anything/,
     );
     expect(text).toMatch(/UNTESTED/);
+    expect(text).not.toMatch(/0x00070100|TESTING|corpus/);
     expect(text).not.toMatch(/You said|confirm/);
   });
 
@@ -420,11 +423,12 @@ describe('prepareSlotFlash: the FF image follows the running build', () => {
     expect(planned.ffCommit).toBe('programs-as-sent');
     expect(planned.imageBuild?.code).toBe('other-version');
     expect(planned.warnings[0]).toBe('This image is firmware 1.3.0.8; the camera runs 1.3.0.0.');
+    /* In words (TESTING.md 42.110): what was measured, not where; no key name, no word sum. */
     expect(planned.warnings[1]).toBe(
-      'The 16 Hz FF image is staged in the form only the 16 Hz 1.3.0.8 build takes. This camera writes a ' +
-        'bank without checking the image (its source says so, and a 1.3.0.0 Compact did so, TESTING.md ' +
-        '42.109), so it is expected to program this payload as it is sent: the bank then holds the image ' +
-        'XOR Key A, which is not an image this camera can start (its plain word sum is not 0).',
+      'The 16 Hz FF image is sent in the form only the 16 Hz 1.3.0.8 build reads. This camera writes a ' +
+        'bank without checking the image (its firmware source says so, and a 1.3.0.0 Compact did so when ' +
+        'tried), so it is expected to write the bytes as they are sent: the bank then holds the image in ' +
+        'a form this camera cannot start.',
     );
     /* The plan predicts the payload as the bank's bytes, so the read-back of such a write verifies. */
     expect(planned.storedForm).toBeUndefined();

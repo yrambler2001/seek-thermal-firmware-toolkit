@@ -9,19 +9,32 @@ import type { SlotKey } from '../profiles/types.js';
 import type { FirmwareVersion } from '../profiles/version.js';
 import { FF_1308_VERSION, type SlotFamily } from './capability-family.js';
 
-/** The 1.3.0.8 16 Hz build, which shares the version string with the 8 Hz build. */
+/**
+ * Whether a written 1.3.0.8 FF bank starts, in people's words: the plan's UNTESTED warning and the camera's
+ * FF note both say it. No genuine bootloader for the FF build is in the corpus; on the 0.9.0.0 bootloader the
+ * earlier plain form ran from recovery R, and this form will not, because recovery runs its bank unchecked
+ * and does not decrypt it (TESTING.md 42.10, 42.12).
+ */
+export const FF_BOOT_UNTESTED =
+  'UNTESTED: no bootloader of the 16 Hz FF build has been read from a camera, so whether the written ' +
+  'bank starts is not known. On the 0.9.0.0 bootloader an earlier form of this image started from ' +
+  'recovery R; this form will not, because that bootloader starts recovery R as it is stored, without ' +
+  'decoding it.';
+
+/**
+ * The 1.3.0.8 16 Hz build, which shares the version string with the 8 Hz build. The read asks
+ * GetFirmwareInfo selectors 6, 7 and 8; the image is staged as the image XOR the Key A keystream with the
+ * header verbatim and stored under Key B; the 8 Hz build refuses it at commit with 0x00070100 (TESTING.md
+ * 42.10). The note says what each means, not the names.
+ */
 export const FF_1308_NOTE =
   '1.3.0.8-FF (16 Hz) reports the same version as the 8 Hz build. The read tells them apart from ' +
-  'the camera: GetFirmwareInfo selectors 6, 7 and 8 say, bank by bank, whether the application ' +
-  'takes it, and each build predicts its own answers from the banks. The FF ' +
-  'image is staged as the vendor app stages it, the image XOR the Key A keystream with the header ' +
-  'verbatim, and the camera stores it under Key B (the image XOR the Key B keystream). It goes to ' +
-  'A, B or R. The 8 Hz build is expected to refuse it at commit (0x00070100) before it writes ' +
-  "anything; while the camera's answers cannot tell the builds apart, the plan says what each build " +
-  'does with it. ' +
-  'UNTESTED: no genuine bootloader for this build is in the corpus, so whether the written bank boots ' +
-  'is not measured. On the 0.9.0.0 bootloader the earlier plain form booted from recovery R; this ' +
-  'form will not, because recovery runs its bank unchecked and does not decrypt it (TESTING.md 42.12).';
+  'the camera: the camera says, bank by bank, whether its application takes the bank, and each build ' +
+  'predicts its own answers from the banks. The FF image is sent in the form the vendor app sends it, ' +
+  'and the camera stores it under its own key. It goes to slot A, slot B or recovery R. The 8 Hz build ' +
+  "is expected to refuse it before it writes anything; while the camera's answers cannot tell the " +
+  'builds apart, the plan says what each build does with it. ' +
+  FF_BOOT_UNTESTED;
 
 /**
  * What the booted bank means on the 2014 plaintext chain. The read names one from the camera's
@@ -35,8 +48,8 @@ const LOCKED_BOOT_WORD_NOTE =
   'The booted bank named on this line is the bank the camera entered at its last start, ' +
   'as the active-slot word records it (0 slot A, 1 slot B, 2 recovery R). The next start is set by the ' +
   'boot-config word: 0 or 0xFFFFFFFF choose A first, 1 B first, any other value recovery R first. ' +
-  'Recovery R runs whenever A and B hold nothing the 2014 bootloader takes (a stored word sum of 0), ' +
-  'whatever R holds (TESTING.md 42.10).';
+  'Recovery R runs whenever A and B hold nothing the 2014 bootloader takes (a bank whose words sum to ' +
+  '0), whatever R holds (measured on a camera).';
 
 /**
  * The same for the 2016 Compact PRO line. Its bootloader records the bank it enters the same way
@@ -52,7 +65,7 @@ const LOCKED_2016_BOOT_WORD_NOTE =
   'recovery R first. The 2016 bootloader takes a bank only when it decrypts to a word sum of 0 under the ' +
   'key it checks a bank under (key block 1 on its 1.2.0.0 bootloader), and the last bank of that order ' +
   'runs unchecked when the other two fail. The read names that key from the bank the camera entered, ' +
-  'because the bootloader block that holds it is refused on every channel (TESTING.md 42.56, 42.84).';
+  'because the bootloader block that holds it is refused on every channel (measured on a camera).';
 
 /** Compact Pro 1.0.3.2: the EP0 limit that keeps a whole-part dump from running. */
 export const EP0_1032_NOTE =
@@ -61,18 +74,21 @@ export const EP0_1032_NOTE =
   '(README: no single-arm drain exists). The slot dump reads one ' +
   'bank at a time, in 64-byte asks.';
 
-/* The token is legacy-auth.ts OLD_FW_UNLOCK_TOKEN; the note names it for what it is, not by its code name
- * (TESTING.md 42.86). */
+/* The token is legacy-auth.ts OLD_FW_UNLOCK_TOKEN: a plain 2-byte arm of mode 7, 8 or 9 is refused, so a slot
+ * arm carries the 18-byte payload with the line's 16-byte token, the same bytes in 22 corpus images. The note
+ * says what it does, not its code name or its bytes (TESTING.md 42.86, 42.110). */
 const TOKEN_NOTE =
-  'Banks are protected on this line: a plain 2-byte arm of mode 7, 8 or 9 is refused, so a ' +
-  'slot arm carries the 18-byte payload with the line’s 16-byte unlock token (the same bytes ' +
-  'in 22 corpus images). A camera with another token stalls on its banks.';
+  'Banks are locked on this line: the camera opens a bank for a write only when it is asked with the ' +
+  'line’s unlock, which is the same in all 22 firmware images of this line on record. A camera with ' +
+  'another unlock refuses its banks.';
 
+/* The descriptor stages into 0x20002000 + 0xE000, so at most 0xE000 bytes; the stored word sum is balanced
+ * through the adjust word at 0x238 (image/bank.ts). The note says it in words (TESTING.md 42.110). */
 const LOCKED_PLAIN_STAGING_NOTE =
-  'Staged: the image length only, at most 0xE000 bytes (the descriptor stages into ' +
-  '0x20002000 + 0xE000). The commit erases the 64 KiB block and programs exactly those bytes, ' +
-  'and the rest of the bank reads 0xFF. The stored word sum must be 0; the staging balances it ' +
-  'through the adjust word at 0x238.';
+  'Staged: the image itself, at most 56 KiB (the most the camera takes in one write). The write erases ' +
+  'the 64 KiB bank and writes exactly those bytes, and the rest of the bank reads erased. The ' +
+  'bootloader starts a bank only when its words sum to 0, so the image is balanced to that sum before ' +
+  'it is sent.';
 
 const LOCKED_2016_STAGING_NOTE =
   'Staged: the image, XORed with the xorshift128 keystream of its OWN key block 0 (the stage ' +
@@ -111,10 +127,9 @@ const MODERN_GAP_NOTE =
   'bank sits there. The 0x14060000 layout belongs to the locked 0.x/1.x line.';
 
 const MODERN_NAMED_WRITE_NOTE =
-  'Named writes (modes 7 to 9) are decoded from the firmware. The emulator suites write A, B ' +
-  'and R through them on the 4.x builds (TESTING.md 42.7, 42.36), and on a camera slot A of a ' +
-  'Compact XR 4.8.2.1 was written through mode 7 by the frame-rate patch (42.24). A slot write ' +
-  'never arms mode 0, the upgrade target.';
+  'Named writes (modes 7 to 9) are decoded from the firmware. The emulator writes A, B and R ' +
+  'through them on the 4.x builds, and on a camera slot A of a Compact XR 4.8.2.1 was written ' +
+  'through mode 7 by the frame-rate patch. A slot write never arms mode 0, the upgrade target.';
 
 const UNVERIFIED_NOTE =
   'Read only. The bank layout is the locked line’s decoded table, but no staging form has ' +
@@ -126,7 +141,7 @@ const PRODUCT_NOTES: Readonly<Record<string, string>> = {
    * 63 of 63 windows (test/emulator/expectations.rpc.json). The two products run
    * one image (TESTING.md 42.34), so the note names both, and the dumps it was measured on (42.89). */
   '4.8.2.1':
-    'Compact 4.8.2.1 and Compact XR 4.8.2.1 (one image, TESTING.md 42.34): the modern 63-window map; the ' +
+    'Compact 4.8.2.1 and Compact XR 4.8.2.1 (one image): the modern 63-window map; the ' +
     'emulator confirmed 63 of 63 windows on the Compact’s full dump and on the Compact XR’s.',
   '10.9.1.31':
     'Mosaic 320x240 10.9.1.31: the modern 63-window map, measured confirming every window on the emulator.',
@@ -152,21 +167,21 @@ const PRODUCT_NOTES: Readonly<Record<string, string>> = {
 const EMPTY_PLAIN_WHY =
   'An empty bank takes an image exactly as a used one does. The plaintext chain stages the ' +
   'image bytes as they are, with no key, and the commit erases the block first, so nothing is ' +
-  'read from the target bank. Measured on the bench Compact: an image written into an empty ' +
-  'slot B read back identical, and B booted alone (TESTING.md 42.8).';
+  'read from the target bank. Measured on a Compact: an image written into an empty ' +
+  'slot B read back identical, and B booted alone.';
 
 const EMPTY_MODERN_WHY =
   'An empty bank takes an image exactly as a used one does. The payload is encrypted under keys ' +
   'derived from the booted bank and the running application, not from the target ' +
   'bank, and the device re-keys it and erases the block without reading it. The footer is copied ' +
   'from a bank that holds a valid one, else built blank. Proven on the emulator; not yet measured ' +
-  'on a real camera (TESTING.md 42.8).';
+  'on a camera.';
 
 const EMPTY_2016_WHY =
   'An empty bank takes an image exactly as a used one does. The stage key is key block 0 of the ' +
   'IMAGE’s own pair, not a key read from the target bank, and the device decrypts the payload ' +
   'with it, stores it under its own key and erases the block without reading it. Proven on the ' +
-  'emulator; not yet measured on a real camera (TESTING.md 42.8).';
+  'emulator; not yet measured on a camera.';
 
 /** Why an empty bank can be written on this family, in one sentence; null when the family has no write. */
 export function emptyBankWhy(family: SlotFamily): string | null {
@@ -233,11 +248,15 @@ export function planNotes(family: SlotFamily, version: FirmwareVersion): string[
   return notes;
 }
 
-/** What the 1.3.0.8 bank rows say about the FF image, beside the bank it can and cannot go to. */
+/**
+ * What the 1.3.0.8 bank rows say about the FF image, beside the bank it can and cannot go to. The image is
+ * stored under Key B (ff-form.ts); the 2014 bootloader takes a bank only when its stored word sum is 0, and
+ * runs recovery unchecked, without decrypting it (TESTING.md 42.10, 42.12).
+ */
 const FF_1308_BANK_NOTES: Readonly<Record<SlotKey, string>> = {
-  a: 'The 1.3.0.8 FF (16 Hz) image goes here in its vendor form, stored under Key B. The 2014 bootloader takes a bank only when its stored word sum is 0, so it passes this one over at boot; whether the FF build boots from A is UNTESTED (TESTING.md 42.12). The 8 Hz image is written as plain.',
-  b: 'The 1.3.0.8 FF (16 Hz) image goes here in its vendor form, stored under Key B. The 2014 bootloader passes this bank over at boot (its stored word sum is not 0); whether the FF build boots from B is UNTESTED (TESTING.md 42.12). The 8 Hz image is written as plain.',
-  r: 'The 1.3.0.8 FF (16 Hz) image goes here in its vendor form, stored under Key B. Recovery runs its bank unchecked, and the 0.9.0.0 bootloader does not decrypt it, so this form may not boot: UNTESTED, and the earlier plain form did boot from here (TESTING.md 42.10, 42.12). The 8 Hz image is written as plain.',
+  a: 'The 1.3.0.8 FF (16 Hz) image goes here in the form the vendor app sends it, and the camera stores it under its own key. The 2014 bootloader starts a bank only when its words sum to 0, so it passes this one over at boot; whether the 16 Hz build starts from slot A is UNTESTED. The 8 Hz image is written as it is.',
+  b: 'The 1.3.0.8 FF (16 Hz) image goes here in the form the vendor app sends it, and the camera stores it under its own key. The 2014 bootloader starts a bank only when its words sum to 0, so it passes this one over at boot; whether the 16 Hz build starts from slot B is UNTESTED. The 8 Hz image is written as it is.',
+  r: 'The 1.3.0.8 FF (16 Hz) image goes here in the form the vendor app sends it, and the camera stores it under its own key. The 0.9.0.0 bootloader starts recovery R as it is stored, without decoding it, so this form may not start: UNTESTED, and an earlier form of this image did start from here (measured on a camera). The 8 Hz image is written as it is.',
 };
 
 /**
@@ -273,35 +292,28 @@ export function bankNotes(
   version: string | null = null,
 ): string[] {
   const notes: string[] = [];
+  /* The window a bank is read and written through (its mode and address) is the plan's `write` entry, which
+   * the JSON keeps; a note says what a person needs, not the window (TESTING.md 42.110). */
   switch (family) {
     case 'modern':
       if (key === 'a') {
+        /* Read through mode 5 (0x14030000), written through mode 7, a decoded alias of mode 5 (TESTING.md
+         * 42.24: a Compact XR 4.8.2.1 took a write through it). */
         notes.push(
-          'Read through mode 5 (0x14030000). Written through mode 7, a decoded alias of mode 5 ' +
-            'that the modern map leaves out; a Compact XR 4.8.2.1 took a write through it on the ' +
-            'camera (TESTING.md 42.24).',
+          'Written through a bank arm the modern map leaves out; a Compact XR 4.8.2.1 took a write ' +
+            'through it on a camera.',
         );
-      } else if (key === 'b') {
-        notes.push('Mode 8 (0x14050000).');
-      } else {
-        notes.push('Recovery bank, mode 9 (0x14070000).');
       }
       break;
     case 'locked-plain':
-      notes.push(
-        key === 'a'
-          ? 'Mode 7 (0x14050000), token form.'
-          : key === 'b'
-            ? 'Mode 8 (0x14060000), token form.'
-            : 'Recovery bank, mode 9 (0x14070000), token form.',
-      );
       if (version === FF_1308_VERSION) notes.push(FF_1308_BANK_NOTES[key]);
       break;
     case 'locked-2016':
       if (key === 'r') {
+        /* Mode 9, token form; each with commit status 0 (TESTING.md 41.3). */
         notes.push(
-          'Recovery bank, mode 9, token form. Measured on a Compact PRO 1.0.3.0: R took its own image, ' +
-            'a one-byte change and the raw staged bytes, each with commit status 0 (TESTING.md 41.3).',
+          'Measured on a Compact PRO 1.0.3.0: recovery R took its own image, a one-byte change and the ' +
+            'raw bytes as they were sent, each written without an error.',
         );
       }
       break;

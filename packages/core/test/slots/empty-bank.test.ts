@@ -181,7 +181,7 @@ describe('the plan says an empty bank can be written, and why', () => {
       legacyAuth,
       '0.8.0.0',
       /plaintext chain stages the image bytes as they are/,
-      /bench Compact/,
+      /Measured on a Compact/,
     ],
     [
       'the Key A line',

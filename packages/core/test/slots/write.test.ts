@@ -989,8 +989,8 @@ describe('prepareSlotFlash warnings', () => {
     expect(outR.notes[0]).toEqual({
       source: 'bank',
       text:
-        'Recovery bank, mode 9, token form. Measured on a Compact PRO 1.0.3.0: R took its own ' +
-        'image, a one-byte change and the raw staged bytes, each with commit status 0 (TESTING.md 41.3).',
+        'Measured on a Compact PRO 1.0.3.0: recovery R took its own image, a one-byte change and the ' +
+        'raw bytes as they were sent, each written without an error.',
     });
     const outB = prepareSlotFlash(report, 'b', { kind: 'plain', bytes: image, fileName: 'x.bin' });
     expect(outB.warnings.filter((w) => w.includes('acknowledge'))).toEqual([]);
@@ -1405,8 +1405,12 @@ describe('the 1.3.0.8 FF image on the slot writer', () => {
     expect(notes).not.toMatch(/vendor app/);
     expect(notes).not.toMatch(/block 0 \(Key A\)/);
     expect(text).toMatch(/UNTESTED/);
-    expect(text).toMatch(/0\.9\.0\.0 bootloader the old plain form booted from/);
-    expect(text).toMatch(/Nothing here claims the camera boots it\./);
+    expect(text).toMatch(
+      /0\.9\.0\.0 bootloader an earlier form of this image started from recovery R/,
+    );
+    expect(text).toMatch(/Nothing here claims the camera starts it\./);
+    /* In words: no section a person cannot follow, no corpus, no key or status names (TESTING.md 42.110). */
+    expect(text).not.toMatch(/TESTING|corpus|0x00070100|XOR/);
     expect(text).toMatch(/do not say which 1\.3\.0\.8 build it runs/);
     expect(text).toMatch(/If it runs the 16 Hz FF build, it takes this payload/);
     expect(text).not.toMatch(/The page does not claim/);
@@ -1433,11 +1437,14 @@ describe('the 1.3.0.8 FF image on the slot writer', () => {
       /^This image is firmware [0-9.]+; the camera runs 1\.3\.0\.0\.$/,
     );
     expect(text).toMatch(/This camera writes a bank without checking the image/);
-    expect(text).toMatch(/expected to program this payload as it is sent/);
-    expect(text).not.toMatch(/0x00070100/);
+    expect(text).toMatch(/expected to write the bytes as they are sent/);
+    expect(text).toMatch(/the image in a form this camera cannot start/);
+    expect(text).not.toMatch(/0x00070100|XOR|Key A|TESTING/);
     /* What the bank holds afterwards is the payload as sent, not the 16 Hz build's Key B form (TESTING.md 42.109). */
     expect(out.storedForm).toBeUndefined();
-    expect(JSON.stringify(out.compare)).toContain('Key A, as sent');
+    expect(JSON.stringify(out.compare)).toContain(
+      'as sent (the camera writes the bytes as they arrive, in a form it cannot start)',
+    );
     expect(equalBytes(out.expectedStored!.subarray(0, out.payload.length), out.payload)).toBe(true);
   });
 
@@ -1500,7 +1507,7 @@ describe('the 1.3.0.8 FF image on the slot writer', () => {
         expect(result.commitStatus).toBe(0);
         expect(result.verified).toBe(true);
         expect(result.notes.join('\n')).toMatch(
-          /holds the image XOR Key B that the FF build stores/,
+          /holds the image as the 16 Hz build stores it \(not the bytes sent\)/,
         );
       },
     );
@@ -1527,7 +1534,7 @@ describe('the 1.3.0.8 FF image on the slot writer', () => {
       );
       expect(result.verified).toBe(false);
       expect(result.notes.join('\n')).toMatch(
-        /does NOT match the image XOR Key B that the FF build stores/,
+        /does NOT match the bytes the plan predicted the bank would hold \(the image as the 16 Hz build stores it/,
       );
     });
 
@@ -1549,12 +1556,15 @@ describe('the 1.3.0.8 notes say the FF image goes to A, B and R in its vendor fo
     const plan = buildSlotPlan(legacy, '1.3.0.8');
     const planText = plan.notes.join('\n');
     expect(planText).toMatch(/UNTESTED/);
-    expect(planText).toMatch(/Key B/);
+    expect(planText).toMatch(/the camera stores it under its own key/);
     expect(planText).not.toMatch(/refuses it for A and B/);
     const byKey = Object.fromEntries(plan.slots.map((s) => [s.key, s.notes.join('\n')]));
-    expect(byKey.a).toMatch(/vendor form, stored under Key B/);
-    expect(byKey.b).toMatch(/vendor form, stored under Key B/);
-    expect(byKey.r).toMatch(/vendor form, stored under Key B/);
+    for (const key of ['a', 'b', 'r'] as const) {
+      expect(byKey[key]).toMatch(
+        /in the form the vendor app sends it, and the camera stores it under its own key/,
+      );
+      expect(byKey[key]).not.toMatch(/Key B|TESTING|mode \d|token form/);
+    }
     const old = buildSlotPlan(legacy, '1.3.0.0');
     expect(old.slots.map((s) => s.notes.join('\n')).join('\n')).not.toMatch(/FF \(16 Hz\)/);
   });
