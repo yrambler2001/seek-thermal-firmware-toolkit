@@ -32,7 +32,7 @@ const STAGING_WORDS: Readonly<Record<PlanStaging, StagingWords>> = {
   'key-a-keystream': {
     phrase: 'staged as the vendor app stages the FF image (XOR Key A)',
     detail:
-      'the 1.3.0.8 FF image as the vendor app stages it (XOR Key A) — the camera stores it under Key B, not these bytes',
+      'the 1.3.0.8 FF image as the vendor app stages it (XOR Key A) — the 16 Hz build stores it under Key B, not these bytes',
   },
   verbatim: {
     phrase: 'sent as given',

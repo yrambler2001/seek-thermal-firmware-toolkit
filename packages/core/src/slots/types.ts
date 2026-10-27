@@ -75,12 +75,13 @@ export type StoredForm = 'as-sent' | 'key-b-ciphertext';
  * What the camera is expected to do at commit with a 1.3.0.8 FF image's payload (write.ts `ffCommitOf`). Each
  * case is written all the same, and the plan's warnings say it before the confirm (owner: warn, never gate):
  *  - 'takes': the camera's own answers name the 16 Hz FF build, whose commit check this form passes.
- *  - 'refuses': the camera runs a 2014-chain application whose commit check is the payload's plain word sum
- *    (`image_sum_ok`), and this payload fails it: it refuses at commit with 0x00070100 before it erases or
- *    writes anything. Measured on the 8 Hz 1.3.0.8 build for the earlier staged form (TESTING.md 42.10); from
- *    the source on the other 2014 versions (FW-V1 cmd_CompleteMemoryUpgrade, 0.8.0.0 to 1.3.0.0).
- *  - 'programs-as-sent': that check, and this payload passes it: the camera programs the bytes as they are,
- *    which its bootloader may not start from (not tried).
+ *  - 'refuses': the camera runs the 8 Hz 1.3.0.8 build, whose commit of a bank arm checks the payload's plain
+ *    word sum (`image_sum_ok`), and this payload fails it: it refuses at commit with 0x00070100 before it
+ *    erases or writes anything. Measured on that build for the earlier staged form (TESTING.md 42.10).
+ *  - 'programs-as-sent': the camera programs the bytes as they are: a 2014-chain application before 1.3.0.8,
+ *    which checks no image on a bank arm (FW-V1 cmd_CompleteMemoryUpgrade, 0.5.0.2 to 1.3.0.0; measured on
+ *    the 1.3.0.0 Compact, TESTING.md 42.109), or the 8 Hz 1.3.0.8 build with a payload that passes its check.
+ *    The plan predicts the payload as the bank's bytes.
  *  - 'build-unknown': the camera runs 1.3.0.8 and its own answers cannot say which build: 'takes' on the
  *    16 Hz build, the 8 Hz build's outcome ('refuses' or 'programs-as-sent') otherwise.
  */

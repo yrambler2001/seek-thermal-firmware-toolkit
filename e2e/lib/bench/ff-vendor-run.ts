@@ -64,7 +64,11 @@ export interface FfVendorBench {
 export interface CameraAnswers {
   /** The build the camera's answers name: 'plain' (8 Hz), 'ff-1308' (16 Hz), or null (not decided). */
   readonly build: string | null;
-  readonly camera: { readonly a: number | null; readonly b: number | null; readonly r: number | null } | null;
+  readonly camera: {
+    readonly a: number | null;
+    readonly b: number | null;
+    readonly r: number | null;
+  } | null;
   /** The predicted answers of each build from the banks the CLI read, as the CLI printed them. */
   readonly predictedPlain: readonly (number | null)[] | null;
   readonly predictedFf: readonly (number | null)[] | null;
@@ -81,6 +85,9 @@ export interface FfWriteRecord {
   readonly cliCode: number;
   readonly commitStatus: number | null;
   readonly cliVerified: boolean | null;
+  /** What the CLI's plan said the camera is expected to do at commit (`ffCommit`), and its warnings (TESTING.md 42.109). */
+  readonly ffCommit: string | null;
+  readonly warnings: readonly string[];
   readonly predictedSha256: string;
   readonly jlinkSha256: string;
   /** The J-Link read is the prediction, byte for byte. */
@@ -110,7 +117,8 @@ export interface FfVendorReport {
 }
 
 const sha256 = (bytes: Uint8Array): string => createHash('sha256').update(bytes).digest('hex');
-const FF_STAGED_NOTE = 'the staged payload is the vendor form (the image XOR Key A, header verbatim)';
+const FF_STAGED_NOTE =
+  'the staged payload is the vendor form (the image XOR Key A, header verbatim)';
 
 function fileSha(path: string): string {
   return sha256(new Uint8Array(readFileSync(path)));
@@ -133,15 +141,19 @@ export async function readAnswers(camera: BenchCamera): Promise<CameraAnswers> {
   }
   const firmware = (doc.firmware ?? {}) as Record<string, unknown>;
   const running = (doc.running ?? null) as Record<string, unknown> | null;
-  const cameraAnswers = running === null ? null : ((running.camera ?? null) as CameraAnswers['camera']);
-  const predicted = running === null ? null : ((running.predicted ?? null) as Record<string, unknown> | null);
+  const cameraAnswers =
+    running === null ? null : ((running.camera ?? null) as CameraAnswers['camera']);
+  const predicted =
+    running === null ? null : ((running.predicted ?? null) as Record<string, unknown> | null);
   /* The CLI writes `why` as text (core's RunningApplication.why is a string); anything else reads as empty. */
   const runningWhy = typeof running?.why === 'string' ? running.why : '';
   return {
     build: running === null ? null : ((running.build ?? null) as string | null),
     camera: cameraAnswers,
-    predictedPlain: predicted === null ? null : ((predicted.plain ?? null) as readonly (number | null)[] | null),
-    predictedFf: predicted === null ? null : ((predicted.ff ?? null) as readonly (number | null)[] | null),
+    predictedPlain:
+      predicted === null ? null : ((predicted.plain ?? null) as readonly (number | null)[] | null),
+    predictedFf:
+      predicted === null ? null : ((predicted.ff ?? null) as readonly (number | null)[] | null),
     why: running === null ? 'no running record (not 1.3.0.8)' : runningWhy,
     version: (firmware.version ?? null) as string | null,
     buildString: (firmware.build ?? null) as string | null,
@@ -225,18 +237,27 @@ export async function runFfVendor(
   const stagedMatchesVendor =
     files.vendorFile === null
       ? null
-      : equalBytesOf(staged.subarray(0, plain.length), new Uint8Array(readFileSync(files.vendorFile)));
+      : equalBytesOf(
+          staged.subarray(0, plain.length),
+          new Uint8Array(readFileSync(files.vendorFile)),
+        );
   /* The vendor file is the oracle for the corpus image only; another image has no vendor file to match. */
   if (files.plainFfSha256 === PLAIN_FF_SHA256 && stagedSha256 !== VENDOR_FF_SHA256) {
-    failures.push(`the predicted staged payload is ${stagedSha256}, not the vendor file ${VENDOR_FF_SHA256}`);
+    failures.push(
+      `the predicted staged payload is ${stagedSha256}, not the vendor file ${VENDOR_FF_SHA256}`,
+    );
   }
-  log(`staged payload: ${FF_STAGED_NOTE}; sha256 ${stagedSha256}; vendor file ${stagedMatchesVendor === null ? 'not given' : String(stagedMatchesVendor)}`);
+  log(
+    `staged payload: ${FF_STAGED_NOTE}; sha256 ${stagedSha256}; vendor file ${stagedMatchesVendor === null ? 'not given' : String(stagedMatchesVendor)}`,
+  );
 
   try {
     /* Step 0: the restore point, read halted and checked before anything is written. */
     const whole = await haltedRead(jlink, camera, 0x14000000, 0x400000);
     restoreOk = sha256(whole) === files.restoreSha256;
-    log(`restore point: halted read sha256 ${sha256(whole)} (${restoreOk ? 'the original' : 'NOT the original'})`);
+    log(
+      `restore point: halted read sha256 ${sha256(whole)} (${restoreOk ? 'the original' : 'NOT the original'})`,
+    );
     if (!restoreOk) {
       failures.push('the camera flash is not the original before the run, so nothing was written');
       return report();
@@ -268,7 +289,9 @@ export async function runFfVendor(
       return report();
     }
     answersFfInR = await readAnswers(camera);
-    log(`FF-in-R platform: ${answersFfInR.why}; camera answers ${JSON.stringify(answersFfInR.camera)}`);
+    log(
+      `FF-in-R platform: ${answersFfInR.why}; camera answers ${JSON.stringify(answersFfInR.camera)}`,
+    );
 
     /* Step (b): A, then B, then R, through the CLI (the core write path), each read back halted. */
     for (const letter of ['a', 'b', 'r'] as const) {
@@ -278,9 +301,15 @@ export async function runFfVendor(
       const predictedSha256 = sha256(predicted);
       const jlinkSha256 = sha256(readBack);
       const problems: string[] = [];
-      if (run.code !== 0) problems.push(`the CLI exited ${String(run.code)}: ${run.stderr.trim().slice(0, 300)}`);
-      const commitStatus = typeof run.result?.commitStatus === 'number' ? run.result.commitStatus : null;
+      if (run.code !== 0)
+        problems.push(`the CLI exited ${String(run.code)}: ${run.stderr.trim().slice(0, 300)}`);
+      const commitStatus =
+        typeof run.result?.commitStatus === 'number' ? run.result.commitStatus : null;
       const cliVerified = typeof run.result?.verified === 'boolean' ? run.result.verified : null;
+      const ffCommit = typeof run.result?.ffCommit === 'string' ? run.result.ffCommit : null;
+      const warnings = Array.isArray(run.result?.warnings)
+        ? run.result.warnings.filter((line): line is string => typeof line === 'string')
+        : [];
       if (cliVerified !== true) problems.push('the CLI did not report the bank as verified');
       if (jlinkSha256 !== predictedSha256) {
         problems.push(`the J-Link read ${jlinkSha256} is not the prediction ${predictedSha256}`);
@@ -291,6 +320,8 @@ export async function runFfVendor(
         cliCode: run.code,
         commitStatus,
         cliVerified,
+        ffCommit,
+        warnings,
         predictedSha256,
         jlinkSha256,
         matchesPrediction: jlinkSha256 === predictedSha256,
@@ -300,19 +331,28 @@ export async function runFfVendor(
         `write ${letter.toUpperCase()}: CLI exit ${String(run.code)}, commit ${commitStatus === null ? '(none)' : `0x${commitStatus.toString(16)}`}, ` +
           `verified ${String(cliVerified)}, J-Link ${jlinkSha256 === predictedSha256 ? 'equals' : 'DIFFERS FROM'} the prediction`,
       );
+      log(
+        `write ${letter.toUpperCase()}: the plan expected ${String(ffCommit)}; warnings ${JSON.stringify(warnings)}`,
+      );
       for (const problem of problems) failures.push(`write ${letter.toUpperCase()}: ${problem}`);
     }
 
     /* After the three writes, with the FF app still running from RAM: the camera's own answers. */
     answersAfterWrites = await readAnswers(camera);
-    log(`after the writes: ${answersAfterWrites.why}; camera answers ${JSON.stringify(answersAfterWrites.camera)}`);
+    log(
+      `after the writes: ${answersAfterWrites.why}; camera answers ${JSON.stringify(answersAfterWrites.camera)}`,
+    );
 
     /* The boot, recorded as observed. The expected outcome is that it does not run the vendor form. */
     if (await cycleAndWait(camera)) {
       bootAfterWrites = await readAnswers(camera);
-      log(`boot after the writes: the camera came back as ${String(bootAfterWrites.version)} ${String(bootAfterWrites.buildString)}`);
+      log(
+        `boot after the writes: the camera came back as ${String(bootAfterWrites.version)} ${String(bootAfterWrites.buildString)}`,
+      );
     } else {
-      log('boot after the writes: the camera did not come back on the bus (expected: no boot of the vendor form)');
+      log(
+        'boot after the writes: the camera did not come back on the bus (expected: no boot of the vendor form)',
+      );
     }
   } finally {
     /* The restore: the whole original flash, halted-read and checked, then a power cycle and the build. Nothing was
@@ -325,7 +365,9 @@ export async function runFfVendor(
           const back = await readAnswers(camera);
           restoredVersion = back.version;
           restored = back.version === '1.3.0.0';
-          log(`restore: the camera runs ${String(back.version)} ${String(back.buildString)} (${restored ? 'the original' : 'NOT the original'})`);
+          log(
+            `restore: the camera runs ${String(back.version)} ${String(back.buildString)} (${restored ? 'the original' : 'NOT the original'})`,
+          );
         } else {
           log('restore: the camera did not come back on the bus after the restore');
         }

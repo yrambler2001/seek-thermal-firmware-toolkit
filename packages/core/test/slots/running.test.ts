@@ -416,15 +416,20 @@ describe('prepareSlotFlash: the FF image follows the running build', () => {
       buildSlotPlan(legacy, '1.3.0.0'),
     );
     const planned = prepareSlotFlash(report, 'b', write);
-    expect(planned.ffCommit).toBe('refuses');
+    /* TESTING.md 42.109: the 1.3.0.0 Compact took this payload at commit (status 0) and kept it as sent. */
+    expect(planned.ffCommit).toBe('programs-as-sent');
     expect(planned.imageBuild?.code).toBe('other-version');
     expect(planned.warnings[0]).toBe('This image is firmware 1.3.0.8; the camera runs 1.3.0.0.');
     expect(planned.warnings[1]).toBe(
-      'The 16 Hz FF image is staged in the form only the 16 Hz 1.3.0.8 build takes, and writing it to a ' +
-        'camera on another version has not been tried. From its source, this camera checks the plain word ' +
-        'sum of a payload before it erases a bank, and this payload fails it, so it is expected to refuse ' +
-        'this write at commit with 0x00070100 before it writes anything.',
+      'The 16 Hz FF image is staged in the form only the 16 Hz 1.3.0.8 build takes. This camera writes a ' +
+        'bank without checking the image (its source says so, and a 1.3.0.0 Compact did so, TESTING.md ' +
+        '42.109), so it is expected to program this payload as it is sent: the bank then holds the image ' +
+        'XOR Key A, which is not an image this camera can start (its plain word sum is not 0).',
     );
+    /* The plan predicts the payload as the bank's bytes, so the read-back of such a write verifies. */
+    expect(planned.storedForm).toBeUndefined();
+    expect(planned.expectedStored?.subarray(0, planned.payload.length)).toEqual(planned.payload);
+    expect(planned.warnings.join('\n')).not.toMatch(/0x00070100|UNTESTED/);
     /* One statement: "has not been checked" is not said a second time by the version warning. */
     expect(planned.warnings.join('\n')).not.toMatch(/has not been checked/);
   });

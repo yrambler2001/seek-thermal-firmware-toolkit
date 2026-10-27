@@ -202,6 +202,9 @@ interface Body {
 /** The stored-form name the plan gives the Key B bank: the image XOR key block 1, header window verbatim. */
 const KEY_B_STORED_NAME =
   'Key B (the camera re-keys the payload with key block 1 and stores the image under it)';
+/** The stored-form name for an FF payload a camera programs as it is sent (TESTING.md 42.109). */
+const FF_AS_SENT_NAME =
+  'Key A, as sent (the camera programs the payload as it is sent and does not re-key it)';
 
 /** What is said beside a plan: its warnings (a risk, or a check not made) and this write's own notes. */
 interface PlanWords {
@@ -210,11 +213,11 @@ interface PlanWords {
 }
 
 /**
- * What a 2014-chain application does with an FF payload, said after "it": its commit check is the payload's
- * plain word sum (`image_sum_ok` on the staged bytes). `measured`: the 8 Hz 1.3.0.8 build's refusal was
- * measured on the earlier staged form; on the other versions it is from the source.
+ * What the 8 Hz 1.3.0.8 build does with an FF payload, said after "it": its commit of a bank arm checks the
+ * payload's plain word sum (`image_sum_ok` on the staged bytes). Its refusal was measured on the earlier
+ * staged form (TESTING.md 42.10).
  */
-function plainChainOutcome(plainTakes: boolean, measured: boolean): string {
+function plainChainOutcome(plainTakes: boolean): string {
   if (plainTakes) {
     return (
       'checks only the plain word sum of a payload before it erases a bank, and this payload passes it, so ' +
@@ -224,8 +227,8 @@ function plainChainOutcome(plainTakes: boolean, measured: boolean): string {
   }
   return (
     'checks the plain word sum of a payload before it erases a bank, and this payload fails it, so it is ' +
-    'expected to refuse this write at commit with 0x00070100 before it writes anything' +
-    (measured ? ' (measured on the earlier staged form, TESTING.md 42.10)' : '')
+    'expected to refuse this write at commit with 0x00070100 before it writes anything (measured on the ' +
+    'earlier staged form, TESTING.md 42.10)'
   );
 }
 
@@ -234,8 +237,10 @@ function plainChainOutcome(plainTakes: boolean, measured: boolean): string {
  * it in. Pure. NEVER A REFUSAL (owner, 2026-10-27: "turn into warnings"): every case is written, and the plan
  * says what is expected before the confirm. `plainTakes` is whether the payload passes the 2014 chain's commit
  * check (`plainBankVerdict`, the application's `image_sum_ok` on the staged bytes).
- *   (a) The camera reports another version: every 2014-chain application this page writes commits a bank
- *       only past that check (FW-V1 cmd_CompleteMemoryUpgrade, 0.8.0.0 to 1.3.0.0). Not tried on a camera.
+ *   (a) The camera reports another version: a 2014-chain application before 1.3.0.8 checks the image only on
+ *       its upgrade path (RamData selector 0); a bank arm (selectors 7 to 9, the arm this writer sends) is erased
+ *       and programmed with no check (FW-V1 cmd_CompleteMemoryUpgrade, 0.5.0.2 to 1.3.0.0). Measured on the
+ *       1.3.0.0 Compact (TESTING.md 42.109): commit status 0, and the bank holds the payload as it was sent.
  *       The version fact is the image's build warning (image-build.ts, form 'ff-vendor'); this says what follows.
  *   (b) Its answers name the 8 Hz build: the same check, measured on the earlier staged form.
  *   (c) Its answers cannot say: which outcome follows from which build.
@@ -255,11 +260,12 @@ export function ffCommitOf(
   const plainChain: FFCommitExpectation = plainTakes ? 'programs-as-sent' : 'refuses';
   if (state.version !== FF_1308_VERSION) {
     return {
-      expect: plainChain,
+      expect: 'programs-as-sent',
       warnings: [
-        `The 16 Hz FF image is staged in the form only the 16 Hz ${FF_1308_VERSION} build takes, and ` +
-          'writing it to a camera on another version has not been tried. From its source, this camera ' +
-          `${plainChainOutcome(plainTakes, false)}.`,
+        `The 16 Hz FF image is staged in the form only the 16 Hz ${FF_1308_VERSION} build takes. This camera ` +
+          'writes a bank without checking the image (its source says so, and a 1.3.0.0 Compact did so, ' +
+          'TESTING.md 42.109), so it is expected to program this payload as it is sent: the bank then holds ' +
+          'the image XOR Key A, which is not an image this camera can start (its plain word sum is not 0).',
       ],
       notes: [],
     };
@@ -277,7 +283,7 @@ export function ffCommitOf(
       expect: plainChain,
       warnings: [
         `The camera runs the 8 Hz ${FF_1308_VERSION} build: ${running.why}. That build ` +
-          `${plainChainOutcome(plainTakes, true)}.`,
+          `${plainChainOutcome(plainTakes)}.`,
       ],
       notes: [],
     };
@@ -287,7 +293,7 @@ export function ffCommitOf(
     warnings: [
       `The camera's own answers do not say which ${FF_1308_VERSION} build it runs: ${running.why}. If it ` +
         'runs the 16 Hz FF build, it takes this payload. If it runs the 8 Hz build, that build ' +
-        `${plainChainOutcome(plainTakes, true)}.`,
+        `${plainChainOutcome(plainTakes)}.`,
       untested,
     ],
     notes: [],
@@ -362,6 +368,7 @@ export function prepareSlotFlash(
      * only decides what the bank is said to hold, and which bank may take it. */
     const folded = entry.staging === 'plain' ? foldedFFPayload(payload) : null;
     const ff = folded === null ? null : ffCommitOf(state, plainBankVerdict(payload) === 1);
+    const asSent = ff?.expect === 'programs-as-sent';
     /* What the bank will hold depends on the form the device decodes the bytes
      * with. The 2014 plain chain programs them as sent (the FF build, the image they
      * fold to), so there the stored bytes are predicted; the encrypting forms
@@ -379,15 +386,16 @@ export function prepareSlotFlash(
               cipher,
             )),
       staging: 'verbatim',
-      keyAfter: folded === null ? 'as given (raw)' : KEY_B_STORED_NAME,
+      keyAfter: folded === null || asSent ? 'as given (raw)' : KEY_B_STORED_NAME,
       derivedFrom: null,
+      /* A camera that programs the FF form as sent keeps these bytes; the 16 Hz build re-keys them to Key B. */
       expectedStored:
-        folded !== null
+        folded !== null && !asSent
           ? bankImageOf(ffKeyBStoredOf(folded), bankBytes)
           : entry.staging === 'plain'
             ? bankImageOf(payload, bankBytes)
             : null,
-      ...(folded === null ? {} : { storedForm: 'key-b-ciphertext' as const }),
+      ...(folded === null || asSent ? {} : { storedForm: 'key-b-ciphertext' as const }),
       ...(ff === null ? {} : { ffCommit: ff.expect }),
     };
     imageBuild = imageBuildWarningOf(
@@ -657,6 +665,19 @@ function stageImage(
      * Each outcome is warned of, never refused (`ffCommitOf`). */
     const ff = buildFFPayload(input.bytes);
     const outcome = ffCommitOf(report.state, plainBankVerdict(ff.payload) === 1);
+    /* A camera that programs the payload as sent keeps the image XOR Key A (TESTING.md 42.109). */
+    if (outcome.expect === 'programs-as-sent') {
+      return {
+        staged: ff,
+        keyAfter: FF_AS_SENT_NAME,
+        derivedFrom: null,
+        expectedStored: (bankBytes) => bankImageOf(ff.payload, bankBytes),
+        rekeyRisk: false,
+        staging: 'key-a-keystream',
+        ffCommit: outcome.expect,
+        words: { warnings: outcome.warnings, notes: outcome.notes },
+      };
+    }
     return {
       staged: ff,
       keyAfter: KEY_B_STORED_NAME,

@@ -1400,7 +1400,7 @@ describe('the 1.3.0.8 FF image on the slot writer', () => {
     expect(out.staging).toBe('key-a-keystream');
     expect(out.storedForm).toBe('key-b-ciphertext');
     expect(stagingDetail(out.staging)).toBe(
-      'the 1.3.0.8 FF image as the vendor app stages it (XOR Key A) — the camera stores it under Key B, not these bytes',
+      'the 1.3.0.8 FF image as the vendor app stages it (XOR Key A) — the 16 Hz build stores it under Key B, not these bytes',
     );
     expect(notes).not.toMatch(/vendor app/);
     expect(notes).not.toMatch(/block 0 \(Key A\)/);
@@ -1423,19 +1423,22 @@ describe('the 1.3.0.8 FF image on the slot writer', () => {
     }
   });
 
-  it('an FF image for a camera on another version is planned, with what its source says follows (never refused)', () => {
+  it('an FF image for a camera on another version is planned: the camera programs the payload as sent (never refused)', () => {
     const out = prepareSlotFlash(reportOn('1.3.0.0'), 'r', input(ffImage()));
-    expect(out.ffCommit).toBe('refuses');
+    expect(out.ffCommit).toBe('programs-as-sent');
     expect(out.staging).toBe('key-a-keystream');
     const text = out.warnings.join('\n');
     /* The synthetic image's version word is arbitrary: the version warning says the fact alone, then this. */
     expect(out.warnings[0]).toMatch(
       /^This image is firmware [0-9.]+; the camera runs 1\.3\.0\.0\.$/,
     );
-    expect(text).toMatch(/writing it to a camera on another version has not been tried/);
-    expect(text).toMatch(
-      /expected to refuse this write at commit with 0x00070100 before it writes anything\./,
-    );
+    expect(text).toMatch(/This camera writes a bank without checking the image/);
+    expect(text).toMatch(/expected to program this payload as it is sent/);
+    expect(text).not.toMatch(/0x00070100/);
+    /* What the bank holds afterwards is the payload as sent, not the 16 Hz build's Key B form (TESTING.md 42.109). */
+    expect(out.storedForm).toBeUndefined();
+    expect(JSON.stringify(out.compare)).toContain('Key A, as sent');
+    expect(equalBytes(out.expectedStored!.subarray(0, out.payload.length), out.payload)).toBe(true);
   });
 
   it('a previously written FF bank is staged again to the same bytes', () => {
