@@ -36,7 +36,9 @@ describe('outsideLineRefusal: the Preserve run covers the 0.x and 1.x line', () 
       const refusal = outsideLineRefusal(version);
       expect(refusal, version).not.toBeNull();
       expect(refusal).toContain(version);
-      expect(refusal).toContain('Dump & decrypt 4.x/Nano');
+      expect(refusal).toContain('Dump & decrypt for 4.x and Nano');
+      /* Core's text names neither front end (TESTING.md 42.105). */
+      expect(refusal).not.toMatch(/seek-fw|the page|the CLI|tab\b/);
       expect(refusal).toContain('Nothing was read beyond the version');
     }
   });

@@ -1053,8 +1053,9 @@ const COMPACT_1308_FF_PROFILE: BuildPatchProfile = {
   acceptanceSum: 0xffff,
   route: 'recovery-only',
   routeNote:
-    'the 2014 bootloader rejects the 0xFFFF sum at slots A/B and boots the recovery bank ' +
-    '0x14070000 unchecked — the patch is committed into recovery (mode 9) and nowhere else',
+    'the 2014 bootloader does not take this build’s check sum in slot A or B, and starts ' +
+    'recovery R (0x14070000) without checking it, so the patch is written into recovery R and ' +
+    'nowhere else',
   capability: {
     wholePart: true,
     losslessReadUnit: 64,
@@ -1357,8 +1358,7 @@ const NO_MATCH_GUIDANCE =
   'image is already patched). If this is a 2018-or-later build (Compact/Compact PRO 4.x, ' +
   'Compact XR, Nano 200/300, Mosaic), no widening patch is needed: the modern stock plan ' +
   'already reads 63 of the 64 flash windows (the whole flash except 0x14060000, which no ' +
-  'selector can arm) — use the standard dump workflow (`seek-fw dump`, or the Dump view) ' +
-  'instead.';
+  'selector can arm) — use Dump & decrypt for 4.x and Nano instead.';
 
 /**
  * The 0.x and 1.x line only: this run's builds are the 2014 and 2016 cameras.
@@ -1374,8 +1374,8 @@ export function outsideLineRefusal(version: string | null): string | null {
   if (major <= 1) return null;
   return (
     `firmware ${version ?? ''} is not a 0.x or 1.x build, and this run covers only the 2014 and ` +
-    '2016 builds. Nothing was read beyond the version. For this camera use Dump & decrypt 4.x/Nano ' +
-    '(seek-fw dump).'
+    '2016 builds. Nothing was read beyond the version. Read this camera with Dump & decrypt for ' +
+    '4.x and Nano instead: it reads the whole flash without a patch.'
   );
 }
 

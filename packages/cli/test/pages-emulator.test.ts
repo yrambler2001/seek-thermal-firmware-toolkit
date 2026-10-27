@@ -381,7 +381,8 @@ describe.skipIf(!available)('preserve --backup-only through the CLI', () => {
       expect(message, `the refusal names the build (${r.stderr})`).toContain(
         'is not a 0.x or 1.x build',
       );
-      expect(message).toContain('seek-fw dump');
+      /* Core's refusal names neither front end (TESTING.md 42.105). */
+      expect(message).toContain('Dump & decrypt for 4.x and Nano');
       expect([...r.sent.keys()].filter((op) => op === WINDOW_READ || op === WINDOW_ARM)).toEqual(
         [],
       );

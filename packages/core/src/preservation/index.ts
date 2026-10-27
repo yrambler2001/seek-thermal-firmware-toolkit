@@ -89,6 +89,9 @@ export {
   preserveChoicesOf,
   restoreOrderOf,
   unknownImageRefusal,
+  frameRateImageRefusal,
+  frameRateImageWords,
+  type FrameRateBuild,
   unknownImageWords,
   warmBootMarkOf,
 } from './banks.js';
@@ -176,6 +179,7 @@ export {
   patchSiteWords,
   preserveBuildWords,
   preserveStepResultWords,
+  preserveStepLabel,
   restoreFormWords,
   stagedFormWords,
 } from './words.js';

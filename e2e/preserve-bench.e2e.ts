@@ -241,8 +241,11 @@ describe.skipIf(!RUNNABLE)(
         say(`step 02 ended: ${error ?? 'done'}`);
         expect(error, 'step 02 refuses').not.toBeNull();
         const shown = await sectionText('read-build');
-        expect(shown).toMatch(/Slot A holds an unknown image \(not the stock [\d.]+ firmware/);
-        expect(shown).toContain('a frame-rate patch is not one');
+        /* A frame-rate build (the 32 Hz no-skip image) is named since 42.105; any other image
+         * Preserve cannot derive is an unknown image. */
+        expect(shown).toMatch(
+          /Slot A holds (?:a known frame-rate build: the stock [\d.]+ firmware with (?:the|an earlier) \d+ Hz frame-rate patch|an unknown image \(not the stock [\d.]+ firmware)/,
+        );
         expect(shown).toContain(
           'To preserve this camera, write the stock image back to slot A first',
         );

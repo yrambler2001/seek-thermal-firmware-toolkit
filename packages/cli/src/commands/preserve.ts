@@ -78,11 +78,12 @@ import {
   type PreserveRunState,
   type PreserveStepId,
   type SessionOpener,
-  PRESERVE_UNPATCHED_START_STOP,
   PRESERVE_UNPATCHED_START_NEXT,
   preserveDoneWords,
   preserveBuildWords,
   preserveStepResultWords,
+  preserveStepLabel,
+  preserveStoppedForRestore,
   patchSiteWords,
   stagedFormWords,
   restoreFormWords,
@@ -403,13 +404,13 @@ async function confirmDerivedPlan(
         (edit === undefined ? '' : ` (was ${hexUp(edit.balanceWord)}, the edit's balance)`),
     );
     say(
-      `  bytes that move    ${bankWordsOf(key)}: ${String(bank.patch.diffCount)}, all inside that bank`,
+      `  bytes that change  ${bankWordsOf(key)}: ${String(bank.patch.diffCount)}, all inside that bank`,
     );
   }
   if (state.stagedForm !== undefined)
     say(`  written            ${stagedFormWords(state.stagedForm)}`);
   if (state.routeNote !== null && state.routeNote !== undefined) {
-    say(`  commit route       ${state.routeNote}`);
+    say(`  where it goes      ${state.routeNote}`);
   }
   if (state.restoreForm !== undefined)
     say(`  restore            ${restoreFormWords(state.restoreForm)}`);
@@ -657,12 +658,13 @@ async function runSteps(
       PRESERVE_STEP_IDS.indexOf(step) > PRESERVE_STEP_IDS.indexOf(options.stopAfter)
     ) {
       ctx.reporter.log(
-        `--backup-only: stopping after ${options.stopAfter}; ${step} and the steps after it are not run`,
+        `--backup-only: stopping after the ${preserveStepLabel(options.stopAfter)}; ` +
+          `${preserveStepLabel(step)} and the steps after it are not run`,
         'info',
       );
       break;
     }
-    ctx.reporter.log(`— ${step} —`, 'info');
+    ctx.reporter.log(`— ${preserveStepLabel(step)} —`, 'info');
     /* THE RETRY GATE: a failed backup re-runs only past the power-cycle
      * acknowledgement — core refuses it otherwise (describeStepGate), and the
      * flag passed here is this front end's assertion, asked for on a terminal
@@ -706,25 +708,25 @@ async function runSteps(
        * words say what to do; "fix the cause and resume" contradicted "start a new run". */
       const refused =
         step === 'backup' && error instanceof SeekError && error.code === 'pipeline/refused';
-      ctx.reporter.log(
-        stopped
-          ? `${step} stopped: ${error instanceof Error ? error.message : String(error)} — ` +
-              `recorded in ${runDir}/${PRESERVE_RUN_STATE_FILE}`
-          : refused
-            ? `${step} refused: ${error.message} — recorded in ${runDir}/` +
-              `${PRESERVE_RUN_STATE_FILE}; nothing was written to the camera.`
-            : `${step} failed: ${error instanceof Error ? error.message : String(error)} — ` +
-              `recorded in ${runDir}/${PRESERVE_RUN_STATE_FILE}; ` +
-              'the previous checkpoint stands. Fix the cause and resume.',
-        stopped ? 'warn' : 'error',
-      );
+      /* THE PLANNED STOP is said once, as the page says it ("Stopped: …"); the run's last lines
+       * give the next step, and the command ends with exit status 3, not an error (42.105). */
       if (stopped) {
         ctx.reporter.log(
-          `${PRESERVE_UNPATCHED_START_STOP} ${PRESERVE_UNPATCHED_START_NEXT} Continue with the ` +
-            `restore: seek-fw preserve --resume ${runDir}`,
+          `Stopped: ${error instanceof Error ? error.message : String(error)}`,
           'warn',
         );
+        return state;
       }
+      const label = preserveStepLabel(step);
+      ctx.reporter.log(
+        refused
+          ? `${label} refused: ${error.message} — recorded in ${runDir}/` +
+              `${PRESERVE_RUN_STATE_FILE}; nothing was written to the camera.`
+          : `${label} failed: ${error instanceof Error ? error.message : String(error)} — ` +
+              `recorded in ${runDir}/${PRESERVE_RUN_STATE_FILE}; ` +
+              'the previous checkpoint stands. Fix the cause and resume.',
+        'error',
+      );
       throw error;
     }
     /* Artifacts first, state second: a crash in between leaves the state
@@ -799,6 +801,9 @@ function runResult(
   extra: { readonly backupOnly: boolean; readonly zip: WrittenOutput | null },
 ): CommandResult {
   const stepIds = PRESERVE_STEP_IDS.filter((id) => state.steps[id] !== undefined);
+  /* The planned stop: the whole-flash read stopped before it read anything, and the run's next
+   * step is the restore. Exit status 3 (`EXIT_STOPPED`), not a failure. */
+  const stopped = preserveStoppedForRestore(state);
   if (ctx.human) {
     /* Each step's result in core's plain words; the run file keeps its full notes. */
     for (const id of stepIds) {
@@ -820,6 +825,12 @@ function runResult(
       );
     }
     if (extra.zip !== null) ctx.out(`wrote ${extra.zip.zip ?? ''} (${String(extra.zip.bytes)} B)`);
+    if (stopped) {
+      ctx.out(
+        `${PRESERVE_UNPATCHED_START_NEXT} Continue with the restore: ` +
+          `seek-fw preserve --resume ${runDir}`,
+      );
+    }
   }
   return {
     run: {
@@ -851,6 +862,14 @@ function runResult(
       zip: extra.zip?.zip ?? null,
     },
     backupOnly: extra.backupOnly,
+    stopped: stopped
+      ? {
+          step: 'drain',
+          entered: state.drainEntered ?? null,
+          message: state.steps.drain?.error ?? null,
+          next: state.nextStep,
+        }
+      : null,
   };
 }
 
@@ -902,9 +921,9 @@ async function printStateCommand(ctx: CommandContext, runDir: string): Promise<C
     }
     if (state.drainEntered !== undefined) {
       say(
-        `  drain start        ${
+        `  last restart       ${
           state.drainEntered === null
-            ? 'the bank the start entered was not read'
+            ? 'the bank the camera entered was not read'
             : `entered ${bankWordsOf(state.drainEntered)}`
         }`,
       );

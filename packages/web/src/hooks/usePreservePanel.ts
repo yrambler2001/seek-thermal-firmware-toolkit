@@ -669,13 +669,11 @@ export function usePreservePanel(params: PreservePanelParams): PreservePanelApi 
             rep.reporter.log(`run ${current.runId} created`, 'detail');
             /* THE BUILD STAMP: which JS asset this run is executing from. A
              * stale tab has masqueraded as the new code three times — Chrome
-             * caches the page hard — so every run names its bundle and a
-             * stale one is visible at a glance. */
-            rep.reporter.log(`wizard build: ${bundleTag()}`, 'detail');
-            rep.reporter.log(
-              'the image will be read from the camera’s own active slot — there is no ' +
-                'image file to pick anywhere in this wizard',
-              'detail',
+             * caches the page hard — so every run names its bundle. It is a
+             * file name, so it goes to the run file, not the log (42.105). */
+            extra.current.set(
+              `${PHASE_FOLDER['read-build']}/page-build.txt`,
+              new TextEncoder().encode(`${bundleTag()}\n`),
             );
           } catch (error) {
             rep.log(`cannot create the run: ${errorMessage(error)}`, 'error');
@@ -766,8 +764,8 @@ export function usePreservePanel(params: PreservePanelParams): PreservePanelApi 
              * the drain left the reader readable, and the restore reads on
              * this boot (TESTING.md secs. 36, 38). */
             rep.reporter.log(
-              'the patched firmware resets the reader’s cursor on every arm, so the drain left ' +
-                'it readable — no replug needed; the restore reads on this boot',
+              'The patched firmware leaves the camera readable after the whole-flash read, so ' +
+                'no replug is needed; the restore runs on this start.',
               'detail',
             );
           }

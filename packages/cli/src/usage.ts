@@ -53,7 +53,8 @@ Examples
 Under --json stdout carries exactly one JSON document, --help and --version
 included, and every human line goes to stderr.
 
-Exit codes: 0 success, 1 the operation failed, 2 bad usage, 130 interrupted.
+Exit codes: 0 success, 1 the operation failed, 2 bad usage, 3 stopped as planned
+(preserve: the run's next step is recorded; resume it), 130 interrupted.
 `;
 
 const COMMAND_USAGE: Record<CommandName, string> = {
@@ -90,35 +91,38 @@ Usage
   seek-fw preserve --resume <dir> [--bank <choice>] [--from-step <id>] [--yes]
   seek-fw preserve --print-state <dir>
 
-The pipeline runs as SIX RESUMABLE STEPS, checkpointed after every one, for a
-v1 locked-line camera (Compact 1.0.0.0 / 1.2.0.0 / 1.3.0.0 and the other
-builds the patch table covers):
+The run goes in SIX STEPS, saved after every one so it can be resumed, for a
+Compact on 0.x or 1.x firmware (2014) or a Compact Pro on 1.0.3.x (2016), the
+builds the patch table covers. Each step's id (for --from-step) and its name:
 
-  backup   read the 31 windows a stock camera can serve (read-only), then read
-           EVERY bank TWICE (two independent captures that must agree byte for
-           byte), derive each bank's factory plaintext and gate it, and say
-           which bank the next start enters and why: the boot-config word's
-           order, the bank the camera reports it entered, and each bank's
-           check. The backup AND the standard dump archive (decrypted slots,
-           reports, manifest) are on disk before anything write-shaped can run.
-  patch    offline, no device: derive the in-place patch for each bank the run
-           can write (the reader-window widening and cursor fix, conjugated
-           later into the bank's ciphertext so exactly the enumerated bytes
-           change).
-  commit   read every chosen bank back (a commit that already landed is never
-           replayed), stage image-length-only, and commit each — the bank the
-           bootloader tries first last — on a session that never resets.
-  drain    the reset that boots the patched image (with its retry ladder for
-           the ~10 s of silence a reboot costs); the bank the start entered,
-           from the camera's own record — a bank the run did not patch stops
-           the step before anything is read; then the whole 4 MiB through the
-           widened window, drained FIRST on its own single arm.
-  restore  stage every written bank's original content back, and reset.
-  verify   a fresh boot re-reads the 31 windows, every bank among them: 0
-           differing bytes proves the camera's flash came back byte-identical.
+  backup   Backup: read the 31 blocks a stock camera can read (read-only), then
+           read EVERY bank TWICE (the two reads must agree byte for byte), get
+           each bank's firmware out of what the camera stores (decrypted where
+           it is stored encrypted) and check it, and say which bank the next
+           start enters and why: the boot-config word's order, the bank the
+           camera reports it entered, and each bank's check. The backup AND the
+           dump archive (the banks as plain firmware, reports, manifest) are on
+           disk before anything is written.
+  patch    Patch: offline, no camera. Build the patch for each bank the run can
+           write: it lets the camera's read command reach the whole 4 MiB flash
+           and keep its read position, and it is written in the form the camera
+           stores it, so only the patch's own bytes change.
+  commit   Write: read every chosen bank back (a write that already landed is
+           never repeated), then write each one, the bank the bootloader tries
+           first last, without restarting the camera in between.
+  drain    Whole-flash read: restart the camera so it starts the patched
+           firmware (it is silent for about 10 s); the camera's own record says
+           which bank it entered, and a bank the run did not patch stops the
+           step before anything is read (a planned stop: exit status 3, and the
+           restore is next); then read the whole 4 MiB flash in one read.
+  restore  Restore: write every written bank's original firmware back, and
+           restart the camera.
+  verify   Check: after a fresh start, read the 31 blocks again, every bank
+           among them: 0 differing bytes proves the camera's flash is
+           byte-identical to the backup.
 
-WHICH BANKS (--bank). The patch only runs if the start after the drain's reset
-enters a patched bank, and the bootloader picks that bank: the boot-config word
+WHICH BANKS (--bank). The patch only runs if the start after the whole-flash
+read's restart enters a patched bank, and the bootloader picks that bank: the boot-config word
 sets the order (0 or 0xFFFFFFFF: A, B, R; 1: B, A, R; any other word: R, A, B),
 the first two are checked and the last is entered unchecked. A watchdog reset
 early in a start makes the bootloader mark the bank it entered and set the word
@@ -134,21 +138,22 @@ runs; a bank the run cannot write (erased, another build, the two reads
 disagree, stored under another key) is refused with the reason.
 
 THE IMAGE IS THE CAMERA'S OWN — there is no image argument anywhere. The
-backup step derives each bank's factory plaintext from the bank itself (two
-agreeing reads; identity on the 2014 plain chain, the build family's keystream
-solver on a cipher family), checks the derived image's header version against
-what the camera reports, and refuses an already-patched bank at the
-before-byte gates. The derived images are run artifacts, so --resume needs no
-file but the run directory.
+backup gets each bank's firmware from the bank itself (two agreeing reads; the
+2014 Compact stores it unencrypted, the others are decrypted with the camera's
+own key, worked out from the backup), checks that its version is the one the
+camera reports, and refuses a bank that holds anything but the stock firmware
+(a frame-rate build is named, and the stock image goes back first). The
+firmware it gets is kept in the run directory, so --resume needs no other
+file.
 
-THE RISK, PLAINLY: commit and restore write BOOT banks. On real hardware a
+THE RISK, PLAINLY: the write and the restore write BOOT banks. On real hardware a
 bank whose write is interrupted fails the bootloader's check; a power loss
-mid-commit can need an SPI programmer. The backup checkpoint (written before
+mid-write can need an SPI programmer. The backup checkpoint (written before
 the first write) and the restore are the mitigation, not a guarantee. Run on
 mains power, keep the run directory.
 
-  --bank <choice>        next-start (default), a, b, r or all — which banks the commit writes. With
-                         --resume, chooses again before the commit has run
+  --bank <choice>        next-start (default), a, b, r or all — which banks the run writes. With
+                         --resume, chooses again before the write step has run
   --backup-only          run the read-only backup step and stop. Nothing is written to the camera. The
                          run directory holds the backup; --zip saves it as one file
   --zip <file>           write the run as one zip: preserve_run.json and every checkpoint file
@@ -158,25 +163,38 @@ mains power, keep the run directory.
                          the camera is touched, and the one at the derived plan, before the first
                          write. --backup-only needs only the first
   --resume <dir>         continue the run in <dir> from its next step
-  --from-step <id>       with --resume: start at a chosen step. Refused when the step's files are
-                         missing from the run directory (commit without the backup files) or the step
-                         already completed; jumping past an incomplete commit warns loudly and then
-                         runs on your explicit assertion that the camera is in the patched state (the
-                         restore and verify keep their own wire-side checks)
+  --from-step <id>       with --resume: start at a chosen step (its id, above). Refused when the
+                         step's files are missing from the run directory (the write without the
+                         backup files) or the step already completed; jumping past an incomplete
+                         write warns loudly and then runs on your explicit assertion that the camera
+                         holds the patch (the restore and the check keep their own checks on the
+                         camera)
   --print-state <dir>    print the run's state, its next step, and whether the checkpoint files still
                          match what was recorded. Touches no camera
-  --serial, --recipient, --chunk  as for the other commands (--chunk sets the drain's read size)
+  --serial, --recipient, --chunk  as for the other commands (--chunk sets the whole-flash read's
+                         request size)
 
 Interrupted runs: Ctrl-C stops at the next safe point, leaves the previous
 checkpoint standing, and exits 130. Re-run the same --resume command to
 continue; the interrupted step starts over.
 
+A planned stop: when the start after the whole-flash read's restart enters a
+bank this run did not patch (a --bank choice that left out the bank the next
+start enters), the read stops before it reads anything, the run records the
+restore as its next step, and the command exits 3 (not 1: nothing failed).
+Continue with the restore: seek-fw preserve --resume <dir>.
+
+Exit status: 0 the run (or --backup-only's backup) finished, 1 a step failed or
+was refused, 2 bad usage, 3 stopped as planned (resume it to go on), 130
+interrupted.
+
 Artifacts in the run directory: preserve_run.json (the state, rewritten after
 every step), preserve_backup_windows.bin, and per bank the run can write
 preserve_bank_<a|b|r>_capture.bin (its two agreeing reads),
-preserve_bank_<a|b|r>_plain.bin (the factory plaintext derived from it) and
-preserve_bank_<a|b|r>_patched.bin; preserve_dump_postwrite.bin (the patched
-part), preserve_dump_original.bin (the delivered, original-content image),
+preserve_bank_<a|b|r>_plain.bin (its firmware, as plain bytes) and
+preserve_bank_<a|b|r>_patched.bin; preserve_dump_postwrite.bin (the whole flash
+as read, with the patch in it), preserve_dump_original.bin (the complete image,
+with the original firmware put back in),
 manifest.json and README.md (the backup's dump archive) plus the decrypted
 slots under decrypted/.
 

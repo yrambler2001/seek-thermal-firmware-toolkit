@@ -358,14 +358,32 @@ export async function openProbedSession(
   /** Why an unprogrammed record was admitted (for the run file); null on a healthy record. */
   admission: string | null;
 }> {
+  /* A single session holds its restart lines too (TESTING.md 42.105): on a camera whose reader
+   * is spent after each read (the 2014 chain) the restart before a read is routine, so a session
+   * that came up after one restart says so once, in one detail line; a session that needed more
+   * restarts, or failed, shows every line it held. */
+  const lines = held ?? [];
   const say = (message: string, level: LogLevel): void => {
-    if (held === undefined) reporter.log(message, level);
-    else held.push({ message, level });
+    lines.push({ message, level });
   };
   /* A failed session shows every line it held: the person needs the why. */
   const flush = (): void => {
-    for (const line of held ?? []) reporter.log(line.message, line.level);
-    held?.splice(0);
+    for (const line of lines) reporter.log(line.message, line.level);
+    lines.splice(0);
+  };
+  /* A session that came up on boot `boots`: a sweep's lines stay held (it says them in one
+   * line); a single session's one routine restart is one line; more show every line. */
+  const settle = (boots: number): void => {
+    if (held !== undefined || lines.length === 0) return;
+    if (boots === 2 && hostRefused.size === 0) {
+      lines.splice(0);
+      reporter.log(
+        `${label}: the camera was restarted once first, because its reader was not ready.`,
+        'detail',
+      );
+      return;
+    }
+    flush();
   };
   let blankBoots = 0;
   /* What the HOST refused along the way (a SecurityError: the probe's own
@@ -415,8 +433,8 @@ export async function openProbedSession(
        * own failure and the reboot's outcome: every attempt must say what the
        * wire answered, not only that it failed. */
       say(
-        `${label}: the reader probe ${refused ? 'was REFUSED by the host' : 'stalled'} ` +
-          `(${errorMessage(error)}) — rebooting by command and retrying`,
+        `${label}: the camera's first read ${refused ? 'was REFUSED by the host' : 'got no answer'} ` +
+          `(${errorMessage(error)}) — restarting the camera and trying again`,
         'warn',
       );
       try {
@@ -430,10 +448,10 @@ export async function openProbedSession(
           say(resetRefusedLine(label), 'warn');
         } else {
           say(
-            `${label}: reboot command ${
+            `${label}: restart command ${
               outcome === 'sent'
                 ? 'acknowledged'
-                : 'sent — no reply, as when the camera reboots before answering'
+                : 'sent — no reply, as when the camera restarts before answering'
             }`,
             'detail',
           );
@@ -441,12 +459,13 @@ export async function openProbedSession(
         await opener.close(reboot);
       } catch (rebootError) {
         /* the camera may already be down; the next open's ladder rides it */
-        say(`${label}: reboot command not sent (${errorMessage(rebootError)})`, 'detail');
+        say(`${label}: restart command not sent (${errorMessage(rebootError)})`, 'detail');
       }
       continue;
     }
     const boot = classifyReaderBoot(head);
     if (boot === 'healthy') {
+      settle(attempt);
       return { device, cfgHead: head, boots: attempt, admission: null };
     }
     if (
@@ -457,6 +476,7 @@ export async function openProbedSession(
       if (await servesDeviceBlock(device, label, signal)) {
         /* Not logged: a sweep says it once for every window (`blockSweepWords`), and the
          * words go to the step's notes in the run file (TESTING.md 42.101). */
+        settle(attempt);
         return {
           device,
           cfgHead: head,
@@ -472,6 +492,7 @@ export async function openProbedSession(
          * blank-record camera. Proceed — the sweep's canary still refuses an
          * all-blank reader, and the window reads themselves are validated
          * downstream. */
+        settle(attempt);
         return {
           device,
           cfgHead: head,
@@ -483,11 +504,11 @@ export async function openProbedSession(
       }
     }
     say(
-      `${label}: the reader came up ` +
+      `${label}: the camera's reader came up ` +
         (boot === 'page-shifted'
-          ? 'page-shifted (every window answers one page up)'
-          : 'unreadable (the probe served blank or garbage)') +
-        ' — rebooting by command and retrying',
+          ? 'shifted (every block answers one page up)'
+          : 'not ready (its first bytes came back blank or wrong)') +
+        ' — restarting the camera and trying again',
       'warn',
     );
     if ((await resetDevice(device)) === 'refused') {
@@ -602,9 +623,9 @@ export async function backupWindows(
         );
       }
       reporter.log(
-        `the sweep’s bank A row (${hexUp(bankAAddress, 8)}) served blank and was ` +
-          're-verified on a fresh arm — the re-read is the row (the measured single-arm ' +
-          'swallow, not a wedged reader: the boot-config row is blank because the record is)',
+        `Backup: block ${hexUp(bankAAddress, 8)} (slot A) came back blank on its first read ` +
+          'and was read again; the second read is kept (a known first-read loss, not a stuck ' +
+          'reader).',
         'detail',
       );
       out.push({ mode: entry.subcmd, address: entry.address, bytes: again.data });
@@ -701,7 +722,7 @@ export async function commitToBank(
   }
 
   const checksum = sum16(payload);
-  reporter.log(`${label}: committing, sum16 ${hexUp(checksum, 4)}`, 'detail');
+  reporter.log(`${label}: committing (check sum ${hexUp(checksum, 4)})`, 'detail');
   try {
     await device.completeMemoryUpgrade(checksum, options.commitTimeoutMs ?? USB_COMMIT_TIMEOUT_MS);
   } catch (error) {
@@ -891,19 +912,26 @@ export async function probeWidenedWindow(
     return {
       live: false,
       detail:
-        `read at window offset ${hexUp(PROBE_OFFSET - READ_CHUNK)} returned ` +
-        `${String(blk.length)} B (the stock window shape)`,
+        `a first read past the first 64 KiB (at ${hexUp(PROBE_OFFSET - READ_CHUNK)}) returned ` +
+        `${String(blk.length)} B, as the stock firmware's read does`,
     };
   }
   for (let i = 0; i < READ_CHUNK; i++) {
     if (blk[i] !== expected[i]) {
       return {
         live: false,
-        detail: 'bytes past 0x10000 do not match the reference (the cursor is still wrapping)',
+        detail:
+          'a first read past the first 64 KiB does not match the backup (the read still wraps ' +
+          'back to the start)',
       };
     }
   }
-  return { live: true, detail: 'bytes past 0x10000 match the reference (widened window live)' };
+  return {
+    live: true,
+    detail:
+      'a first read past the first 64 KiB matches the backup, so the patched read reaches the ' +
+      'whole flash',
+  };
 }
 
 /**

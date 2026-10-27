@@ -37,6 +37,7 @@ import {
   describeError,
   EXIT_CANCELLED,
   EXIT_OK,
+  EXIT_STOPPED,
   EXIT_USAGE,
   UsageError,
 } from './errors.js';
@@ -575,6 +576,8 @@ export async function run(argv: readonly string[], io: Io, signal: AbortSignal):
       io.stderr.write('\ninterrupted — what had been read was saved; the result is partial\n');
       return EXIT_CANCELLED;
     }
+    /* A planned stop is said by the command itself, once; its status tells it from a failure. */
+    if (result.stopped !== undefined && result.stopped !== null) return EXIT_STOPPED;
     return EXIT_OK;
   } catch (error) {
     reporter.finish();

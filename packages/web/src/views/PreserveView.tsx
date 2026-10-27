@@ -391,6 +391,10 @@ function PhaseSection({
   const phase = meta.id;
   const gate = canRunPhase({ state, phase, has: preserve.hasCheckpoint });
   const reporter = preserve.phaseReporters[phase];
+  /* The detail lines are the ones the CLI prints only with --verbose: off by default, so the
+   * page and the CLI show the same lines, and both show the details on request (TESTING.md
+   * 42.105). */
+  const [showDetails, setShowDetails] = useState(false);
   const active = preserve.activePhase === phase;
   const writes = meta.steps.some((step) => WRITES_FLASH.has(step));
   /* A phase needs the camera when any step it will actually run touches the
@@ -560,11 +564,24 @@ function PhaseSection({
       )}
       {phase === 'restore-verify' && <VerifyVerdict state={state} />}
 
+      <div className="flex items-center gap-2 text-[0.8rem] text-muted-foreground">
+        <input
+          type="checkbox"
+          id={`preserve-phase-${phase}-details`}
+          checked={showDetails}
+          onChange={(event) => {
+            setShowDetails(event.target.checked);
+          }}
+        />
+        <label htmlFor={`preserve-phase-${phase}-details`}>Show details in the log</label>
+      </div>
       <RunPanel
         id={`preserve-phase-${phase}`}
         label={meta.label}
         progress={reporter.progress}
-        lines={reporter.lines}
+        lines={
+          showDetails ? reporter.lines : reporter.lines.filter((line) => line.level !== 'detail')
+        }
         trimmed={reporter.trimmed}
       />
 
@@ -878,7 +895,7 @@ function PlanFromState({ state }: { readonly state: PreserveRunState }): ReactEl
             ? []
             : [['Written', stagedFormWords(state.stagedForm)] as const]),
           ...(state.route === 'recovery-only' && state.routeNote != null
-            ? ([['Commit route', state.routeNote]] as const)
+            ? ([['Where it goes', state.routeNote]] as const)
             : []),
           ...(state.restoreForm === undefined
             ? []
