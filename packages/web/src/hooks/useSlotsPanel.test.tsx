@@ -695,37 +695,43 @@ describe('useSlotsPanel: writing a bank', () => {
     unmount();
   });
 
-  /* The fake stands for a refusal core does make (write.ts ffRunningRefusal). Before 42.82 it said the FF
-   * image goes to R only, which core stopped saying in 42.12 (A, B and R take it). */
-  it('shows a core refusal of the FF image (the camera runs the 8 Hz build) and prepares nothing', async () => {
+  /* TESTING.md 42.107: the camera refuses a write at commit (the 1.3.0.8 FF image on the 8 Hz build is planned to
+   * expect it). The fake throws core's words for it (write-commit.ts commitRefusal, write.ts withBackupKept) after
+   * the backup was saved: the page logs them, keeps the download, drops the read, and adds no hint that
+   * contradicts them. */
+  it('a commit the camera refuses: says it refused, nothing was written, the backup is kept, and no false hint', async () => {
     const { backend, mocks } = makeBackend();
-    mocks.prepare.mockImplementation(() => {
-      throw new SeekError(
-        'slots/refused',
-        'this is the 1.3.0.8 FF (16 Hz) image, but the camera runs the 8 Hz 1.3.0.8 application. Nothing was sent.',
-      );
-    });
+    const refusedAtCommit =
+      'the camera refused the write to slot B at commit with 0x00070100: the image was refused by its ' +
+      'acceptance check before anything was erased (the check depends on the build). Nothing was written; ' +
+      'the bank is unchanged. Read the banks again before doing anything else. The backup saved before ' +
+      'the write is kept: it holds the bank as it was.';
+    mocks.flash.mockImplementation(() =>
+      Promise.reject(
+        new SeekError('flash/commit', refusedAtCommit, {
+          deviceCode: 0x70100,
+          detail: { dropAnalysis: true, backupKept: true },
+        }),
+      ),
+    );
     const { result, unmount } = setup(backend);
     await act(async () => {
       await result.current.panel.readSlots();
     });
     await act(async () => {
-      await result.current.panel.pickFile('a', 'plain', file('ff.bin', new Uint8Array(16)));
+      await result.current.panel.pickFile('b', 'plain', file('ff.bin', new Uint8Array(16)));
     });
-    expect(result.current.panel.pending).toBeNull();
-    expect(
-      lineIncludes(
-        result.current.panel.reporter.lines,
-        'cannot use this file: this is the 1.3.0.8 FF',
-      ),
-    ).toBe(true);
-    expect(
-      lineIncludes(
-        result.current.panel.reporter.lines,
-        'the camera runs the 8 Hz 1.3.0.8 application',
-      ),
-    ).toBe(true);
-    expect(mocks.flash).not.toHaveBeenCalled();
+    await act(async () => {
+      await result.current.panel.write(false);
+    });
+    const lines = result.current.panel.reporter.lines;
+    expect(lineIncludes(lines, 'saved first, as a download: ')).toBe(true);
+    expect(lineIncludes(lines, `ERROR: ${refusedAtCommit}`)).toBe(true);
+    expect(lineIncludes(lines, 'leaves the flash untouched')).toBe(false);
+    expect(result.current.panel.reporter.progress.text).toBe('Failed — see the log above.');
+    /* The commit was sent, so the read is dropped: the banks are read again before anything else. */
+    expect(result.current.panel.report).toBeNull();
+    expect(result.current.panel.outcome).toBeNull();
     unmount();
   });
 

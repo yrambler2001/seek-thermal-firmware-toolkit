@@ -77,9 +77,8 @@ describe('hintFor', () => {
 
   it('maps a SeekError code to what to try next', () => {
     expect(hintFor(new SeekError('usb/timeout', 'timed out'), MAC)).toContain('smaller chunk');
-    expect(hintFor(new SeekError('flash/commit', 'rejected'), MAC)).toContain(
-      'leaves the flash untouched',
-    );
+    /* A commit error's message says what happened to the bank; no hint claims the flash is untouched. */
+    expect(hintFor(new SeekError('flash/commit', 'rejected'), MAC)).toBeNull();
     expect(hintFor(new SeekError('image/key-table', 'wrong keys'), MAC)).toContain('name and all');
   });
 

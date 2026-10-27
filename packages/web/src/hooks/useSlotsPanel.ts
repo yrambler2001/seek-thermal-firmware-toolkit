@@ -44,7 +44,6 @@ import {
   restoreReadBackText,
   slotDumpNames,
   stagingPhrase,
-  type PrepareSlotFlashOptions,
   type FpsEveryBankPlan,
   type FpsEveryBankResult,
   type FpsPatchOptions,
@@ -118,18 +117,12 @@ export interface SlotsBackend {
   /** Saves the backup zip a write saves first. Resolves true once the download was started. */
   readonly saveBackup?: SaveBackup;
   /** Plans a copy of one bank's image into another (core `planSlotCopy`). Pure. Core's by default. */
-  readonly copy?: (
-    report: SlotsReport,
-    from: SlotKey,
-    to: SlotKey,
-    options?: PrepareSlotFlashOptions,
-  ) => SlotCopyPlan;
+  readonly copy?: (report: SlotsReport, from: SlotKey, to: SlotKey) => SlotCopyPlan;
   /** Plans a restore of one bank from a full flash backup file (core `fullFlashOf` + `planSlotRestore`). */
   readonly restore?: (
     report: SlotsReport,
     key: SlotKey,
     file: { readonly bytes: Uint8Array; readonly name: string },
-    options?: PrepareSlotFlashOptions,
   ) => Promise<SlotRestorePlan>;
   /** Asks the camera which build it runs and which family to act under. Read-only. */
   readonly identify: (
@@ -144,12 +137,7 @@ export interface SlotsBackend {
   readonly inspect: (ctx: WorkflowContext, firmware?: InspectFirmware) => Promise<SlotsReport>;
   readonly dump: (ctx: WorkflowContext, report: SlotsReport, key: SlotKey) => Promise<DumpedSlot>;
   /** Pure: builds the payload and sends nothing. */
-  readonly prepare: (
-    report: SlotsReport,
-    key: SlotKey,
-    input: SlotFlashInput,
-    options?: PrepareSlotFlashOptions,
-  ) => SlotFlashPlan;
+  readonly prepare: (report: SlotsReport, key: SlotKey, input: SlotFlashInput) => SlotFlashPlan;
   /** Saves the target bank first, then writes it and reads it back (core `flashSlotWithBackup`). */
   readonly write: (
     ctx: WorkflowContext,
@@ -164,15 +152,15 @@ export const CORE_SLOTS_BACKEND: SlotsBackend = {
   plan: (profile, firmwareVersion) => buildSlotPlan(profile, firmwareVersion),
   inspect: (ctx, firmware) => inspectSlots(ctx, firmware === undefined ? {} : { firmware }),
   dump: (ctx, report, key) => dumpSlot(ctx, report, key),
-  prepare: (report, key, input, options) => prepareSlotFlash(report, key, input, options),
+  prepare: (report, key, input) => prepareSlotFlash(report, key, input),
   write: (ctx, report, plan, options) => flashSlotWithBackup(ctx, report, plan, options),
   fpsPlan: (report, key) => fpsPlanOfBank(report, key),
   patchFps: (ctx, report, key, options) => patchBankFps(ctx, report, key, options),
   patchEveryFps: (ctx, report, options) => patchEveryBankFps(ctx, report, options),
   saveBackup: (backup) => saveBackupAsDownload(backup),
-  copy: (report, from, to, options) => planSlotCopy(report, from, to, options),
-  restore: async (report, key, file, options) =>
-    planSlotRestore(report, key, await fullFlashOf(file.bytes, file.name), options),
+  copy: (report, from, to) => planSlotCopy(report, from, to),
+  restore: async (report, key, file) =>
+    planSlotRestore(report, key, await fullFlashOf(file.bytes, file.name)),
 };
 
 /* ---- pure helpers, exported for the tests ----------------------------- */
@@ -478,12 +466,6 @@ export interface SlotsPanelApi {
   /** The last every-bank patch, kept on screen until the next run starts. */
   readonly fpsEveryOutcome: FpsEveryBankResult | null;
   /**
-   * The person says the camera runs the 16 Hz FF 1.3.0.8 build. Used only when the camera's own
-   * answers cannot say which build runs; it applies to the next image prepared.
-   */
-  readonly running16Hz: boolean;
-  setRunning16Hz: (value: boolean) => void;
-  /**
    * True once any panel's session on this camera sent the unlock token: the camera then stays unlocked until it is
    * swapped or power-cycled. The flag is the device's, shared by every panel (TESTING.md 42.59). The page says so;
    * nothing is gated on it.
@@ -527,7 +509,6 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
   const [outcome, setOutcome] = useState<SlotFlashOutcome | null>(null);
   const [fpsOutcome, setFpsOutcome] = useState<FpsPatchResult | null>(null);
   const [fpsEveryOutcome, setFpsEveryOutcome] = useState<FpsEveryBankResult | null>(null);
-  const [running16Hz, setRunning16Hz] = useState(false);
 
   /* A running task reads these, not the render's copy: it captures its inputs
    * when it starts, and a state value captured then is stale by the time a
@@ -879,12 +860,7 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
         async (current) => {
           const bytes = new Uint8Array(await file.arrayBuffer());
           return {
-            plan: backend.prepare(
-              current,
-              key,
-              { kind, bytes, fileName: file.name },
-              { running16Hz },
-            ),
+            plan: backend.prepare(current, key, { kind, bytes, fileName: file.name }),
             what: file.name,
             bytes: bytes.length,
             source: null,
@@ -894,7 +870,7 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
         },
         'pick the file again',
       ),
-    [backend, prepareFrom, running16Hz],
+    [backend, prepareFrom],
   );
 
   /* A copy: the source bank's image as this read decrypted it, staged for the target as any decrypted image
@@ -906,7 +882,7 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
         to,
         'plain',
         (current) => {
-          const copy = (backend.copy ?? planSlotCopy)(current, from, to, { running16Hz });
+          const copy = (backend.copy ?? planSlotCopy)(current, from, to);
           return Promise.resolve({
             plan: copy.plan,
             what: `${bankNameOf(current, from)}'s image`,
@@ -918,7 +894,7 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
         },
         'press the button again',
       ),
-    [backend, prepareFrom, running16Hz],
+    [backend, prepareFrom],
   );
 
   /* A restore: the bank cut out of a full flash backup at its address, decrypted and staged (core's
@@ -932,9 +908,9 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
           const bytes = new Uint8Array(await file.arrayBuffer());
           const restore = await (
             backend.restore ??
-            (async (report, bank, picked, options) =>
-              planSlotRestore(report, bank, await fullFlashOf(picked.bytes, picked.name), options))
-          )(current, key, { bytes, name: file.name }, { running16Hz });
+            (async (report, bank, picked) =>
+              planSlotRestore(report, bank, await fullFlashOf(picked.bytes, picked.name)))
+          )(current, key, { bytes, name: file.name });
           log(
             `${file.name}: a full flash backup (${restore.backup.from === 'preserve-run' ? `the whole flash in a Preserve run file, ${restore.backup.entry ?? ''}` : '4 MiB'}), sha256 ${restore.backup.sha256}; ` +
               `its identity block names ${restore.backup.identity.serial ?? 'no serial'}`,
@@ -951,7 +927,7 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
         },
         'pick the file again',
       ),
-    [backend, log, prepareFrom, running16Hz],
+    [backend, log, prepareFrom],
   );
 
   /* ---- write ---------------------------------------------------------- */
@@ -1369,8 +1345,6 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
       patchFps,
       planEveryFps,
       patchEveryFps,
-      running16Hz,
-      setRunning16Hz,
       unlockNote,
       reading: runner.active === SLOTS_READ_PANEL_ID,
       writing: runner.active === SLOTS_FLASH_PANEL_ID || runner.active === SLOTS_FPS_PANEL_ID,
@@ -1396,7 +1370,6 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
       patchFps,
       planEveryFps,
       patchEveryFps,
-      running16Hz,
       unlockNote,
       runner.active,
       readSlots,
