@@ -157,23 +157,19 @@ function slotVersionOf(view: SlotView): string | null {
 }
 
 /**
- * Runs `prepare` for a plain image into `letter`, returning the plan or the refusal text. The
- * 16 Hz choice is the page's box: it is ticked on the FF row, the one row whose image needs it when
- * the camera's own answers cannot say which build runs (42.12).
+ * Runs `prepare` for a plain image into `letter`, returning the plan or the refusal text.
  */
 function preparePlain(
   report: SlotsReport,
   letter: BankLetter,
   image: Uint8Array,
-  running16Hz: boolean,
 ): { readonly plan: SlotFlashPlan } | { readonly refusal: string } {
   try {
-    const plan = prepareSlotFlash(
-      report,
-      letter,
-      { kind: 'plain', bytes: image, fileName: 'image.bin' },
-      { running16Hz },
-    );
+    const plan = prepareSlotFlash(report, letter, {
+      kind: 'plain',
+      bytes: image,
+      fileName: 'image.bin',
+    });
     return { plan };
   } catch (error) {
     return { refusal: error instanceof Error ? error.message : String(error) };
@@ -307,12 +303,7 @@ for (const subject of rows) {
         const source = await sourceImageOf(booted);
         expect(source, `${subject.name}: a decrypted image to offer`).not.toBeNull();
         if (source === null) return;
-        const result = preparePlain(
-          report,
-          letter,
-          source.dumped.plain ?? new Uint8Array(),
-          subject.name.includes('1.3.0.8 FF'),
-        );
+        const result = preparePlain(report, letter, source.dumped.plain ?? new Uint8Array());
         diagnose(
           subject.name,
           `bank ${letter.toUpperCase()} (${view.content}, ${view.active ? 'booted' : 'not booted'}): ` +
@@ -381,7 +372,7 @@ for (const subject of rows) {
           `${subject.name}: bank ${own.bank.toUpperCase()} decrypts to its own image`,
         ).not.toBeNull();
         if (dumped.plain === null) return;
-        const result = preparePlain(booted.report, own.bank, dumped.plain, false);
+        const result = preparePlain(booted.report, own.bank, dumped.plain);
         expect(
           'plan' in result ? 'offered' : result.refusal,
           `${subject.name}: the page must refuse the bank's own image`,
@@ -396,12 +387,7 @@ for (const subject of rows) {
       const target: SlotKey = report.slots.find((view) => view.active)?.entry.key ?? 'a';
       const source = await sourceImageOf(booted);
       if (source === null) throw new Error(`${subject.name}: no decrypted image to test with`);
-      const prepared = preparePlain(
-        report,
-        target,
-        source.dumped.plain ?? new Uint8Array(),
-        subject.name.includes('1.3.0.8 FF'),
-      );
+      const prepared = preparePlain(report, target, source.dumped.plain ?? new Uint8Array());
       if (!('plan' in prepared)) {
         /* The page refuses this bank before any write is armed; the denial is that refusal. */
         expect(prepared.refusal.length).toBeGreaterThan(0);

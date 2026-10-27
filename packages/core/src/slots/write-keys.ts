@@ -265,7 +265,7 @@ export const FF_VENDOR_STORED =
 /**
  * The keys of a 1.3.0.8 FF write on a camera with no bank stored plain: the FF image in the vendor's form,
  * stored under Key B (ff-form.ts). Nothing is derived from the camera, and nothing is refused here: the
- * writer decides on the image and the running build (write.ts `ffRunningGate`).
+ * writer says what the running build does with the image (write.ts `ffCommitOf`).
  */
 function ffVendorKeys(state: DeviceState): WriteKeys {
   return {

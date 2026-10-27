@@ -72,12 +72,19 @@ export type PlanStaging = StagingForm | 'verbatim' | 'key-a-keystream';
 export type StoredForm = 'as-sent' | 'key-b-ciphertext';
 
 /**
- * How the page knows the camera runs the 16 Hz FF build, for an FF image's plan. 'camera': the
- * camera's own per-bank answers say so (running.ts). 'user': the answers could not decide, and
- * the person said the camera runs the 16 Hz build (a wrong choice is refused by the camera with
- * 0x00070100 before anything is programmed, TESTING.md 42.10). Null for an image that is not FF.
+ * What the camera is expected to do at commit with a 1.3.0.8 FF image's payload (write.ts `ffCommitOf`). Each
+ * case is written all the same, and the plan's warnings say it before the confirm (owner: warn, never gate):
+ *  - 'takes': the camera's own answers name the 16 Hz FF build, whose commit check this form passes.
+ *  - 'refuses': the camera runs a 2014-chain application whose commit check is the payload's plain word sum
+ *    (`image_sum_ok`), and this payload fails it: it refuses at commit with 0x00070100 before it erases or
+ *    writes anything. Measured on the 8 Hz 1.3.0.8 build for the earlier staged form (TESTING.md 42.10); from
+ *    the source on the other 2014 versions (FW-V1 cmd_CompleteMemoryUpgrade, 0.8.0.0 to 1.3.0.0).
+ *  - 'programs-as-sent': that check, and this payload passes it: the camera programs the bytes as they are,
+ *    which its bootloader may not start from (not tried).
+ *  - 'build-unknown': the camera runs 1.3.0.8 and its own answers cannot say which build: 'takes' on the
+ *    16 Hz build, the 8 Hz build's outcome ('refuses' or 'programs-as-sent') otherwise.
  */
-export type FFRunningBasis = 'camera' | 'user' | null;
+export type FFCommitExpectation = 'takes' | 'refuses' | 'programs-as-sent' | 'build-unknown';
 
 /**
  * The key a derived write stores under, the booted bank it was derived from, and the key that bank
@@ -254,8 +261,8 @@ export interface SlotFlashPlan {
    * it still type-check.
    */
   readonly storedForm?: StoredForm;
-  /** For an FF image's plan: how the running build was decided (see FFRunningBasis). */
-  readonly ffRunning?: FFRunningBasis;
+  /** For an FF image's plan: what the camera is expected to do with it at commit (see FFCommitExpectation). */
+  readonly ffCommit?: FFCommitExpectation;
   /**
    * The plain image the bank must decrypt to after the write: the image as its
    * staging builder stamped and balanced it (length, acceptance adjust word, key

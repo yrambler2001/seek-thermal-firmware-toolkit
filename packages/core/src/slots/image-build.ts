@@ -11,8 +11,9 @@
  *
  * ONE VERSION, TWO BUILDS. 1.3.0.8 is an 8 Hz build and a 16 Hz FF build. The image says which
  * (`plainChainBuildOf`), and the camera's own per-bank answers say which it runs
- * (`runningApplicationOf`). The FF image has its own gate (write.ts `ffRunningGate`), so only the
- * 8 Hz image is held against the running build here. The 2016 Compact PRO's 1.0.3.0 and 1.0.3.2
+ * (`runningApplicationOf`). What the camera does with the FF image is said by the writer (write.ts
+ * `ffCommitOf`), so only the 8 Hz image is held against the running build here, and for the FF image
+ * on another version this says the version fact alone (form 'ff-vendor'). The 2016 Compact PRO's 1.0.3.0 and 1.0.3.2
  * also come as a 9 Hz and an 18 Hz FF build under one version; nothing the camera answers tells
  * those two apart here, so on that line only the version is compared.
  *
@@ -31,9 +32,11 @@ import type { ImageBuildWarning } from './types.js';
 /**
  * How the bank takes the bytes: 'plain-chain' when the 2014 chain programs them as they are (a
  * decrypted image staged plain, or raw bytes on that chain that are not the FF form); 'other' for
- * every other form (Key A ciphertext, the 2016 stage-key form, the 1.3.0.8 FF vendor form).
+ * every other form (Key A ciphertext, the 2016 stage-key form); 'ff-vendor' for the 1.3.0.8 FF vendor
+ * form, whose outcome on a camera the writer says in its own warning (write.ts `ffCommitOf`), so the
+ * version warning does not say what follows.
  */
-export type ImageBuildForm = 'plain-chain' | 'other';
+export type ImageBuildForm = 'plain-chain' | 'other' | 'ff-vendor';
 
 /** A header version word that names no build: erased (all ones) or never set (zero). */
 function blankVersion(word: number): boolean {
@@ -72,15 +75,17 @@ export function imageBuildWarningOf(
       form === 'plain-chain' &&
       (camera !== FF_1308_VERSION || runningApplicationOf(state).build === 'plain');
     const follows = chainTakesIt
-      ? 'On this line the camera checks only that an image is well formed (its header and word ' +
+      ? ' On this line the camera checks only that an image is well formed (its header and word ' +
         'sum), not its version, so it takes this image, and when it starts from this bank it ' +
         `runs ${image}.`
-      : 'Whether this camera takes a different build, and runs it, has not been checked.';
+      : form === 'ff-vendor'
+        ? ''
+        : ' Whether this camera takes a different build, and runs it, has not been checked.';
     return {
       code: 'other-version',
       image,
       camera,
-      text: `This image is firmware ${image}; the camera runs ${camera}. ${follows}`,
+      text: `This image is firmware ${image}; the camera runs ${camera}.${follows}`,
     };
   }
   if (form !== 'plain-chain' || camera !== FF_1308_VERSION) return null;

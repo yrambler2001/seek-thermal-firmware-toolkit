@@ -4,7 +4,7 @@
  * The status is read after CompleteMemoryUpgrade, so it is the only evidence of
  * how far the commit got. These tests pin the three classes `classifyCommitStatus`
  * sorts the firmware's own return values into, and the words `commitRefusal`
- * uses for each: 'refused before programming; the bank is unchanged' is said for
+ * uses for each: 'Nothing was written; the bank is unchanged' is said for
  * the first class only, and 'may be partially written' for the others. Every
  * refusal carries `dropAnalysis`, whatever the class.
  *
@@ -140,7 +140,8 @@ describe('a commit that returns a status other than 0', () => {
     for (const status of REFUSED_BEFORE_PROGRAMMING) {
       const { error } = await commitAnswering(status);
       expect(error?.code, `0x${status.toString(16)}`).toBe('flash/commit');
-      expect(error?.message).toContain('refused before programming; the bank is unchanged');
+      expect(error?.message).toContain('the camera refused the write to');
+      expect(error?.message).toContain('Nothing was written; the bank is unchanged.');
       expect(error?.message).not.toContain('may be partially written');
       expect(error?.message).not.toContain('may be partly erased');
       expect(error?.deviceCode).toBe(status);

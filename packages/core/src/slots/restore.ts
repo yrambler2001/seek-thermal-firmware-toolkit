@@ -25,7 +25,7 @@ import { PRESERVE_DUMP_ORIGINAL_FILE } from '../preservation/steps.js';
 import { isDeviceBlockHead, DEVICE_BLOCK_ADDRESS } from '../preservation/windows.js';
 import { decryptSlotFile, type SlotFileDecryption } from './decrypt-file.js';
 import { slotDumpNames } from './dump.js';
-import { prepareSlotFlash, type PrepareSlotFlashOptions } from './write.js';
+import { prepareSlotFlash } from './write.js';
 import { slotRefused } from './write-image.js';
 import { sha256Sync } from './write-sha.js';
 import { SLOT_BYTES, type SlotFlashPlan, type SlotKey, type SlotsReport } from './types.js';
@@ -168,7 +168,6 @@ export async function planSlotRestore(
   report: SlotsReport,
   key: SlotKey,
   backup: FullFlashBackup,
-  options: PrepareSlotFlashOptions = {},
 ): Promise<SlotRestorePlan> {
   const entry = report.plan.slots.find((slot) => slot.key === key);
   if (entry === undefined) {
@@ -202,12 +201,7 @@ export async function planSlotRestore(
     report.state.keyTable,
   );
   const fileName = decrypted ?? `seek-slot-${key}-decrypted.bin`;
-  const prepared = prepareSlotFlash(
-    report,
-    key,
-    { kind: 'plain', bytes: plain, fileName },
-    options,
-  );
+  const prepared = prepareSlotFlash(report, key, { kind: 'plain', bytes: plain, fileName });
 
   const camera = report.state.serial;
   const theirs = backup.identity.serial;

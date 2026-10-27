@@ -13,7 +13,7 @@
  *         the Key B keystream outside the header window 0x200..0x23F, is 0xFFFF.
  * The page computes each build's three bytes from the bank bytes it read. The camera's three
  * bytes decide: they must equal exactly one build's. Otherwise the build is unknown, and the FF
- * write needs the user's own word (write.ts). TESTING.md 42.12 has the measured bytes.
+ * plan says what each build does with it (write.ts `ffCommitOf`). TESTING.md 42.12 has the measured bytes.
  * ==================================================================== */
 
 import { viewOf } from '../bytes.js';

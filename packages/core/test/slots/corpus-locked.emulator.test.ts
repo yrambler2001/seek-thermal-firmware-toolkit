@@ -317,12 +317,14 @@ describe.skipIf(!available)(
         }
 
         if (subject.version === '1.3.0.8') {
-          /* The FF image is prepared for R on this camera, and nothing is sent. Its verdict follows the
-           * build the camera runs: the 8 Hz build refuses it, the FF build takes it (TESTING.md 42.10). */
+          /* The FF image is prepared for R on this camera, and nothing is sent. What the plan expects follows
+           * the build the camera runs: the 8 Hz build is expected to refuse it at commit, the FF build takes it
+           * (TESTING.md 42.10). Neither is refused here (owner, 2026-10-27: warn, never gate). */
           if (ffImage) {
             it('prepares the FF image for R on the FF build, unrefused, and sends nothing', () => {
               expect(run.ffPrepare, 'the FF image was prepared').not.toBeNull();
               expect(run.ffPrepare?.refused, run.ffPrepare?.message ?? '').toBe(false);
+              expect(run.ffPrepare?.ffCommit).toBe('takes');
               expect(run.ffPrepare?.sent, 'requests sent while preparing').toBe(0);
             });
             it('labels the FF image in R recovery only, and does not call the FF image in A bootable', () => {
@@ -332,13 +334,13 @@ describe.skipIf(!available)(
               expect(run.bootability?.a).not.toBe('bootable');
             });
           } else {
-            it('refuses the FF image for R before anything is sent, because the 8 Hz build runs', () => {
+            it('plans the FF image for R on the 8 Hz build, warning of the refusal at commit, and sends nothing', () => {
               expect(run.ffPrepare, 'the FF image was prepared').not.toBeNull();
-              expect(run.ffPrepare?.refused, 'the page refused the FF image').toBe(true);
-              expect(run.ffPrepare?.message).toContain(
-                'the camera runs the 8 Hz 1.3.0.8 application: the camera answers',
-              );
-              expect(run.ffPrepare?.message).toContain('0x00070100');
+              expect(run.ffPrepare?.refused, run.ffPrepare?.message ?? '').toBe(false);
+              expect(run.ffPrepare?.ffCommit).toBe('refuses');
+              const text = run.ffPrepare?.warnings.join('\n') ?? '';
+              expect(text).toContain('The camera runs the 8 Hz 1.3.0.8 build: the camera answers');
+              expect(text).toContain('expected to refuse this write at commit with 0x00070100');
               expect(run.ffPrepare?.sent, 'requests sent while preparing').toBe(0);
             });
           }

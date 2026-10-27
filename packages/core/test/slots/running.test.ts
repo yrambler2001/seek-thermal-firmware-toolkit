@@ -11,7 +11,6 @@
 import { describe, expect, it } from 'vitest';
 
 import { hexToBytes } from '../../src/bytes.js';
-import { SeekError } from '../../src/errors.js';
 import { wordSum32 } from '../../src/image/bank.js';
 import {
   IMAGE_MAGIC,
@@ -335,30 +334,38 @@ describe('prepareSlotFlash: the FF image follows the running build', () => {
   const unknownBanks = (): SlotState[] => [emptyBank('a'), emptyBank('b'), presentBank('r', image)];
   const unknownAnswers: BankVerdicts = { a: 0, b: 0, r: 0 };
 
-  it('refuses the FF image for any bank before anything is sent when the camera runs the 8 Hz build', () => {
+  /* The owner's rule (2026-10-27, "turn into warnings"): each outcome is planned, and its warning says what is
+   * expected before the confirm (write.ts ffCommitOf). */
+  it('plans the FF image for any bank on the 8 Hz build, and warns the camera is expected to refuse it at commit', () => {
     const report = reportFor(stateOf(EIGHT_HZ_BANKS, EIGHT_HZ_ANSWERS), plan);
     for (const key of ['a', 'b', 'r'] as const) {
-      expect(() => prepareSlotFlash(report, key, write)).toThrow(SeekError);
+      const planned = prepareSlotFlash(report, key, write);
+      expect(planned.ffCommit).toBe('refuses');
+      expect(planned.staging).toBe('key-a-keystream');
     }
-    expect(() => prepareSlotFlash(report, 'a', write)).toThrow(
-      /the camera runs the 8 Hz 1\.3\.0\.8 application/,
+    const text = prepareSlotFlash(report, 'a', write).warnings.join('\n');
+    expect(text).toMatch(/The camera runs the 8 Hz 1\.3\.0\.8 build: the camera answers/);
+    expect(text).toMatch(
+      /expected to refuse this write at commit with 0x00070100 before it writes anything \(measured on the earlier staged form/,
     );
-    expect(() => prepareSlotFlash(report, 'a', write)).toThrow(/0x00070100/);
-    expect(() => prepareSlotFlash(report, 'a', write)).toThrow(/Nothing was sent/);
+    /* Nothing claims the boot of a bank the camera is expected not to write. */
+    expect(text).not.toMatch(/UNTESTED/);
+    /* The 8 Hz build's check fails this payload: the plain word sum of the vendor form is not 0. */
+    expect(plainBankVerdict(prepareSlotFlash(report, 'a', write).payload)).toBe(0);
   });
 
-  it('refuses it when the camera’s answers cannot say which build runs, unless the person says it is the 16 Hz build', () => {
+  it('plans it when the camera’s answers cannot say which build runs, and says which outcome follows from which build', () => {
     const report = reportFor(stateOf(unknownBanks(), unknownAnswers), plan);
-    expect(() => prepareSlotFlash(report, 'a', write)).toThrow(/could not be told/);
-    expect(() => prepareSlotFlash(report, 'a', write)).toThrow(/Nothing was sent/);
-  });
-
-  it('plans it with a warning when the person says the camera runs the 16 Hz build, and says what a wrong choice does', () => {
-    const report = reportFor(stateOf(unknownBanks(), unknownAnswers), plan);
-    const planned = prepareSlotFlash(report, 'a', write, { running16Hz: true });
-    expect(planned.ffRunning).toBe('user');
-    expect(planned.warnings.join('\n')).toMatch(/You said it runs the 16 Hz build/);
-    expect(planned.warnings.join('\n')).toMatch(/0x00070100/);
+    const planned = prepareSlotFlash(report, 'a', write);
+    expect(planned.ffCommit).toBe('build-unknown');
+    const text = planned.warnings.join('\n');
+    expect(text).toMatch(/The camera's own answers do not say which 1\.3\.0\.8 build it runs: /);
+    expect(text).toMatch(/If it runs the 16 Hz FF build, it takes this payload\./);
+    expect(text).toMatch(
+      /If it runs the 8 Hz build, that build checks the plain word sum .* expected to refuse this write at commit with 0x00070100/,
+    );
+    expect(text).toMatch(/UNTESTED/);
+    expect(text).not.toMatch(/You said|confirm/);
   });
 
   it('plans it, with no refusal, when the camera’s own answers name the 16 Hz build (A, B and R all allowed)', () => {
@@ -366,7 +373,7 @@ describe('prepareSlotFlash: the FF image follows the running build', () => {
       const banks = ff16Banks();
       const report = reportFor(stateOf(banks, ff16Answers), plan);
       const planned = prepareSlotFlash(report, key, write);
-      expect(planned.ffRunning).toBe('camera');
+      expect(planned.ffCommit).toBe('takes');
       expect(planned.staging).toBe('key-a-keystream');
       expect(planned.storedForm).toBe('key-b-ciphertext');
       expect(planned.warnings.join('\n')).toMatch(/UNTESTED/);
@@ -390,14 +397,36 @@ describe('prepareSlotFlash: the FF image follows the running build', () => {
     expect(planned.expectedStored?.subarray(0, staged.stored.length)).toEqual(staged.stored);
   });
 
-  it('a raw payload in the vendor form is gated on the running build the same way', () => {
+  it('a raw payload in the vendor form is warned of on the running build the same way, before the raw warning', () => {
     const report = reportFor(stateOf(EIGHT_HZ_BANKS, EIGHT_HZ_ANSWERS), plan);
     const raw = {
       kind: 'raw' as const,
       bytes: stageFFVendor(image).staged,
       fileName: 'vendor.bin',
     };
-    expect(() => prepareSlotFlash(report, 'a', raw)).toThrow(/8 Hz/);
+    const planned = prepareSlotFlash(report, 'a', raw);
+    expect(planned.ffCommit).toBe('refuses');
+    expect(planned.warnings[0]).toMatch(/The camera runs the 8 Hz 1\.3\.0\.8 build/);
+    expect(planned.warnings[1]).toMatch(/^Raw payload: sent exactly as given/);
+  });
+
+  it('a camera on another version: the image’s build warning says the versions, the next warning what follows', () => {
+    const report = reportFor(
+      stateOf(EIGHT_HZ_BANKS, EIGHT_HZ_ANSWERS, '1.3.0.0'),
+      buildSlotPlan(legacy, '1.3.0.0'),
+    );
+    const planned = prepareSlotFlash(report, 'b', write);
+    expect(planned.ffCommit).toBe('refuses');
+    expect(planned.imageBuild?.code).toBe('other-version');
+    expect(planned.warnings[0]).toBe('This image is firmware 1.3.0.8; the camera runs 1.3.0.0.');
+    expect(planned.warnings[1]).toBe(
+      'The 16 Hz FF image is staged in the form only the 16 Hz 1.3.0.8 build takes, and writing it to a ' +
+        'camera on another version has not been tried. From its source, this camera checks the plain word ' +
+        'sum of a payload before it erases a bank, and this payload fails it, so it is expected to refuse ' +
+        'this write at commit with 0x00070100 before it writes anything.',
+    );
+    /* One statement: "has not been checked" is not said a second time by the version warning. */
+    expect(planned.warnings.join('\n')).not.toMatch(/has not been checked/);
   });
 });
 
@@ -457,8 +486,10 @@ describe('the 8 Hz 1.3.0.8 image against the build the camera runs: warned, neve
     });
   });
 
-  it('the FF image is not held against the running build here: its own gate decides (write.ts ffRunningGate)', () => {
-    expect(imageBuildWarningOf(ffFileImage(74), stateOf(EIGHT_HZ_BANKS, null), 'other')).toBeNull();
+  it('the FF image is not held against the running build here: the writer says its outcome (write.ts ffCommitOf)', () => {
+    expect(
+      imageBuildWarningOf(ffFileImage(74), stateOf(EIGHT_HZ_BANKS, null), 'ff-vendor'),
+    ).toBeNull();
   });
 
   it('another version on a 1.3.0.8 camera: what follows is the chain’s only while the 8 Hz build runs', () => {

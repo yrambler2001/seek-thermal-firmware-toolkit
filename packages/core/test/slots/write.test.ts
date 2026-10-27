@@ -1328,8 +1328,9 @@ describe('flashSlot gates', () => {
 
 /* ==================================================================== *
  * The 1.3.0.8 FF (16 Hz) image: the vendor staged form, to A, B or R (TESTING.md 42.12).
- * The running build is the user's word here (no bank bytes are read in these fixtures);
- * the camera's own answers that decide it are tested in running.test.ts.
+ * The running build is unknown here (no bank bytes are read in these fixtures), so each plan
+ * warns which outcome follows from which build; the camera's own answers that decide it are
+ * tested in running.test.ts.
  * ==================================================================== */
 
 describe('the 1.3.0.8 FF image on the slot writer', () => {
@@ -1338,8 +1339,6 @@ describe('the 1.3.0.8 FF image on the slot writer', () => {
   const slots = (['a', 'b', 'r'] as const).map((k) =>
     slotState({ key: k, present: true, accepts: true }),
   );
-  const asRunning16 = { running16Hz: true };
-
   /** A synthetic FF image: the real key pair once each, word 142 solved to a plain sum of 0xFFFF. */
   function ffImage(): Uint8Array {
     const out = imageOf(0x6000, 71);
@@ -1368,10 +1367,10 @@ describe('the 1.3.0.8 FF image on the slot writer', () => {
     const image = ffImage();
     const staged = stageFFVendor(image);
     for (const key of ['a', 'b', 'r'] as const) {
-      const out = prepareSlotFlash(reportOn(), key, input(image), asRunning16);
+      const out = prepareSlotFlash(reportOn(), key, input(image));
       expect(out.staging).toBe('key-a-keystream');
       expect(out.storedForm).toBe('key-b-ciphertext');
-      expect(out.ffRunning).toBe('user');
+      expect(out.ffCommit).toBe('build-unknown');
       expect(out.key).toBe(key);
       expect(equalBytes(out.payload, staged.staged)).toBe(true);
       expect(out.expectedStored?.length).toBe(SLOT_BYTES);
@@ -1382,15 +1381,15 @@ describe('the 1.3.0.8 FF image on the slot writer', () => {
   });
 
   it('the payload is the image XOR Key A, and the app’s gate on it, sum(payload XOR Key A), is 0xFFFF', () => {
-    const out = prepareSlotFlash(reportOn(), 'r', input(ffImage()), asRunning16);
+    const out = prepareSlotFlash(reportOn(), 'r', input(ffImage()));
     const ks0 = keystream(keyWordsOf(KEY_PAIRS.ff1308.block0), 0x6000 >>> 2);
     expect(wordSum32(xorWindowVerbatim(out.payload, ks0), 0x6000)).toBe(0xffff);
     expect(out.payload.length).toBe(0x6000);
     expect(out.sum16).toBe(transferSum16(out.payload));
   });
 
-  it('says what it does once: the staging row the vendor form and Key B, the boot untested and the user’s word (warnings)', () => {
-    const out = prepareSlotFlash(reportOn(), 'a', input(ffImage()), asRunning16);
+  it('says what it does once: the staging row the vendor form and Key B, the boot untested and each build’s outcome (warnings)', () => {
+    const out = prepareSlotFlash(reportOn(), 'a', input(ffImage()));
     const text = out.warnings.join('\n');
     const notes = out.notes
       .filter((note) => note.source === 'write')
@@ -1408,7 +1407,8 @@ describe('the 1.3.0.8 FF image on the slot writer', () => {
     expect(text).toMatch(/UNTESTED/);
     expect(text).toMatch(/0\.9\.0\.0 bootloader the old plain form booted from/);
     expect(text).toMatch(/Nothing here claims the camera boots it\./);
-    expect(text).toMatch(/You said it runs the 16 Hz build/);
+    expect(text).toMatch(/do not say which 1\.3\.0\.8 build it runs/);
+    expect(text).toMatch(/If it runs the 16 Hz FF build, it takes this payload/);
     expect(text).not.toMatch(/The page does not claim/);
   });
 
@@ -1418,29 +1418,36 @@ describe('the 1.3.0.8 FF image on the slot writer', () => {
       const out = prepareSlotFlash(reportOn(), key, input(eight));
       expect(out.staging).toBe('plain');
       expect(out.storedForm).toBeUndefined();
-      expect(out.ffRunning).toBeUndefined();
+      expect(out.ffCommit).toBeUndefined();
       expect(wordSum32(out.payload, out.payload.length)).toBe(0);
     }
   });
 
-  it('an FF image is only staged for a camera that reports 1.3.0.8', () => {
-    const error = refusalOf(() =>
-      prepareSlotFlash(reportOn('1.3.0.0'), 'r', input(ffImage()), asRunning16),
+  it('an FF image for a camera on another version is planned, with what its source says follows (never refused)', () => {
+    const out = prepareSlotFlash(reportOn('1.3.0.0'), 'r', input(ffImage()));
+    expect(out.ffCommit).toBe('refuses');
+    expect(out.staging).toBe('key-a-keystream');
+    const text = out.warnings.join('\n');
+    /* The synthetic image's version word is arbitrary: the version warning says the fact alone, then this. */
+    expect(out.warnings[0]).toMatch(
+      /^This image is firmware [0-9.]+; the camera runs 1\.3\.0\.0\.$/,
     );
-    expect(error.code).toBe('slots/refused');
-    expect(error.message).toContain('this camera reports 1.3.0.0');
+    expect(text).toMatch(/writing it to a camera on another version has not been tried/);
+    expect(text).toMatch(
+      /expected to refuse this write at commit with 0x00070100 before it writes anything\./,
+    );
   });
 
   it('a previously written FF bank is staged again to the same bytes', () => {
-    const first = prepareSlotFlash(reportOn(), 'b', input(ffImage()), asRunning16);
-    const second = prepareSlotFlash(reportOn(), 'b', input(first.expectedPlain!), asRunning16);
+    const first = prepareSlotFlash(reportOn(), 'b', input(ffImage()));
+    const second = prepareSlotFlash(reportOn(), 'b', input(first.expectedPlain!));
     expect(equalBytes(second.payload, first.payload)).toBe(true);
     expect(equalBytes(second.expectedStored!, first.expectedStored!)).toBe(true);
   });
 
   it('raw: the vendor payload is sent as given, and the bank is predicted as the Key B image it holds', () => {
-    const staged = prepareSlotFlash(reportOn(), 'a', input(ffImage()), asRunning16);
-    const raw = prepareSlotFlash(reportOn(), 'a', input(staged.payload, 'raw'), asRunning16);
+    const staged = prepareSlotFlash(reportOn(), 'a', input(ffImage()));
+    const raw = prepareSlotFlash(reportOn(), 'a', input(staged.payload, 'raw'));
     expect(raw.staging).toBe('verbatim');
     expect(equalBytes(raw.payload, staged.payload)).toBe(true);
     expect(raw.storedForm).toBe('key-b-ciphertext');
@@ -1468,7 +1475,7 @@ describe('the 1.3.0.8 FF image on the slot writer', () => {
 
     function readyPlan(key: SlotKey): { report: SlotsReport; flash: SlotFlashPlan } {
       const report = reportOn();
-      return { report, flash: prepareSlotFlash(report, key, input(ffImage()), asRunning16) };
+      return { report, flash: prepareSlotFlash(report, key, input(ffImage())) };
     }
 
     it.each([
