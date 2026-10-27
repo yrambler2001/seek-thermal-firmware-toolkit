@@ -12,7 +12,8 @@
  *     with `empty` set, no decrypted image and the note "empty, nothing to decrypt";
  *   - a decrypted image written into it commits with status 0 and verifies, and the
  *     plan says the target was empty; the acknowledgement rule is the same as for a
- *     used bank (needed exactly where the camera names no booted bank, and for R);
+ *     used bank (needed for the booted bank and R, and for every bank where the camera
+ *     names no booted bank): an unticked write to such a bank sends nothing;
  *   - a bank that is still empty afterwards dumps as empty again, unchanged;
  *   - a RAW payload into an empty recovery bank reads back as sent;
  *   - the boot-config block is unchanged and ResetDevice is never sent.
@@ -94,8 +95,12 @@ interface Scenario {
    * 'foreign', which is not 'empty'. Everything else is expected to be an image.
    */
   readonly foreign?: readonly SlotKey[];
-  /** The camera names a booted bank (then a write to a non-booted application bank needs no tick). */
-  readonly bootedNamed: boolean;
+  /**
+   * The bank the camera names as booted (then a write to a non-booted application bank needs no tick,
+   * and the booted one does), or null where it names none (then every bank needs the tick). The 2014
+   * chain and, since TESTING.md 42.84, the 2016 line name it from the camera's active-slot word.
+   */
+  readonly booted: SlotKey | null;
   /** The bank the empty write targets, and the bank whose image is written into it. */
   readonly target: SlotKey;
   readonly source: SlotKey;
@@ -114,7 +119,7 @@ const SCENARIOS: readonly Scenario[] = [
     erase: ['b', 'r'],
     offsets: LOCKED_OFFSETS,
     empty: ['b', 'r'],
-    bootedNamed: true,
+    booted: 'a',
     target: 'b',
     source: 'a',
   },
@@ -128,7 +133,7 @@ const SCENARIOS: readonly Scenario[] = [
     erase: [],
     offsets: LOCKED_OFFSETS,
     empty: ['b'],
-    bootedNamed: false,
+    booted: null,
     target: 'b',
     source: 'a',
   },
@@ -141,7 +146,7 @@ const SCENARIOS: readonly Scenario[] = [
     erase: ['b'],
     offsets: MODERN_OFFSETS,
     empty: ['b'],
-    bootedNamed: true,
+    booted: 'a',
     target: 'b',
     source: 'a',
   },
@@ -154,7 +159,7 @@ const SCENARIOS: readonly Scenario[] = [
     erase: ['b'],
     offsets: LOCKED_OFFSETS,
     empty: ['b'],
-    bootedNamed: false,
+    booted: 'a',
     target: 'b',
     source: 'a',
   },
@@ -172,7 +177,7 @@ const SCENARIOS: readonly Scenario[] = [
     offsets: LOCKED_OFFSETS,
     empty: ['a'],
     foreign: ['b'],
-    bootedNamed: false,
+    booted: 'r',
     target: 'a',
     source: 'r',
   },
@@ -229,7 +234,7 @@ interface Run {
   contents: Record<SlotKey, SlotContent> | null;
   booted: SlotKey | null;
   dumpsBefore: Partial<Record<SlotKey, DumpRecord>>;
-  /** The write into the empty target without the tick, when the camera names no booted bank. */
+  /** The write without the tick into the booted bank, or into the empty target when no booted bank is named. */
   untickedWrite: WriteRecord | null;
   write: WriteRecord;
   dumpAfterTarget: { empty: boolean; decryptsToSource: boolean | null } | null;
@@ -410,12 +415,11 @@ async function runScenario(scenario: Scenario, row: RowEmulators, run: Run): Pro
         return { payload };
       };
 
-      /* Where the camera names no booted bank every bank needs the tick, an empty one too. */
-      if (!scenario.bootedNamed) {
-        run.untickedWrite = blankWrite();
-        await write(scenario.target, input, false, run.untickedWrite);
-      }
-      const ticked = !scenario.bootedNamed;
+      /* The tick guards the booted bank and R; where the camera names no booted bank it guards every
+       * bank, an empty one too. The unticked write goes to the bank it guards and must send nothing. */
+      run.untickedWrite = blankWrite();
+      await write(scenario.booted ?? scenario.target, input, false, run.untickedWrite);
+      const ticked = scenario.booted === null;
       const done = await write(scenario.target, input, ticked, run.write);
 
       /* ---- the target now holds the image; the other empty banks are untouched ---- */
@@ -514,14 +518,21 @@ describe.skipIf(!available)('an empty bank on the emulated cameras', () => {
         }
       });
 
-      if (!scenario.bootedNamed) {
-        it('with no booted bank named, an empty bank still needs the tick: refused, nothing sent', () => {
+      it(`names the booted bank the camera reports: ${scenario.booted?.toUpperCase() ?? 'none'}`, () => {
+        expect(run.booted).toBe(scenario.booted);
+      });
+
+      it(
+        scenario.booted === null
+          ? 'with no booted bank named, an empty bank still needs the tick: refused, nothing sent'
+          : `the booted bank ${scenario.booted.toUpperCase()} needs the tick: refused, nothing sent`,
+        () => {
           const w = run.untickedWrite;
           expect(w?.code, w?.error ?? 'the write went through').toBe('slots/refused');
           expect(w?.error).toMatch(/acknowledgeRisk/);
           expect(w?.requests, 'requests the camera received').toBe(0);
-        });
-      }
+        },
+      );
 
       it('writes the source bank image into the empty target: plan says empty, commit 0, verified', () => {
         const w = run.write;
