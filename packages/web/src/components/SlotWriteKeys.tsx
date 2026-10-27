@@ -13,6 +13,7 @@
 import type { ReactElement } from 'react';
 import { KeyRound } from 'lucide-react';
 import {
+  bankNameOf,
   derivedKeyLine,
   deriveWriteKeys,
   FF_VENDOR_STAGED,
@@ -65,7 +66,7 @@ export function writeKeysVerdictOf(report: SlotsReport): WriteKeysVerdict {
     keys.booted === null
       ? null
       : (report.slots.find((view) => view.entry.key === keys.booted)?.entry.name ??
-        `slot ${keys.booted.toUpperCase()}`);
+        bankNameOf(keys.booted));
   return {
     /* The banner's text is core's (writeBannerOf): the same words the CLI's JSON carries. */
     refusal: writeBannerOf(report.state),

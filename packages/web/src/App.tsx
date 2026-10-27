@@ -155,7 +155,7 @@ export function App({ support }: AppProps = {}): ReactElement {
             </p>
           ) : route === 'slots' ? (
             <p>
-              Reads the camera&apos;s three firmware banks — A, B and the recovery bank R — and
+              Reads the camera&apos;s three firmware banks — slot A, slot B and recovery R — and
               shows what each holds, which one the camera boots, and what this build can do with it,
               with the device&apos;s running firmware and keys beside them. Everything runs locally
               in your browser. <strong>This tab writes to flash:</strong> it can flash one bank from

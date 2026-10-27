@@ -85,7 +85,7 @@ const TABS: readonly TabGuide[] = [
   {
     route: 'slots',
     does:
-      'Reads the three firmware banks (A, B and the recovery bank R), shows what each holds and ' +
+      'Reads the three firmware banks (slot A, slot B and recovery R), shows what each holds and ' +
       'which one the camera boots, and can dump or write one bank at a time.',
     cameras: 'Cameras on 0.8.0.0 and newer firmware.',
     writes: 'Yes, one bank at a time, and each write asks first.',

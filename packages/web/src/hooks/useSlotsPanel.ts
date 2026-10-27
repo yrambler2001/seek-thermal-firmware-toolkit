@@ -22,6 +22,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  bankNameOf,
+  bankWordsOf,
   CancelledError,
   SeekDevice,
   SeekError,
@@ -238,7 +240,7 @@ export function everyPatchedStatus(done: FpsEveryBankResult): string {
   const n = done.results.length;
   const banks = `${String(n)} bank${n === 1 ? '' : 's'}`;
   if (done.stopped !== null) {
-    return `Stopped at slot ${done.stopped.key.toUpperCase()} — ${banks} patched; see the result.`;
+    return `Stopped at ${bankWordsOf(done.stopped.key)} — ${banks} patched; see the result.`;
   }
   if (done.results.some((one) => one.readBack.ok !== true)) {
     return `Patched ${banks}, but a read-back was not checked as planned — see the result.`;
@@ -253,7 +255,7 @@ export function everyPatchedStatus(done: FpsEveryBankResult): string {
 export function cancelledStatus(committed: readonly SlotKey[], report: SlotsReport | null): string {
   if (committed.length === 0) return 'Cancelled — nothing was written.';
   const name = (key: SlotKey): string =>
-    report?.slots.find((view) => view.entry.key === key)?.entry.name ?? `Bank ${key.toUpperCase()}`;
+    report?.slots.find((view) => view.entry.key === key)?.entry.name ?? bankNameOf(key);
   if (committed.length === 1) {
     return `Cancelled after the commit to ${name(committed[0] ?? 'a')} was sent — the bank may be partly written. Read it before relying on it.`;
   }
@@ -372,7 +374,7 @@ function capitalised(text: string): string {
 
 /** The button's words for a copy target: "Copy to slot A", "Copy to slot B", "Copy to recovery slot R". */
 export function copyLabel(to: SlotKey): string {
-  return to === 'r' ? 'Copy to recovery slot R' : `Copy to slot ${to.toUpperCase()}`;
+  return `Copy to ${bankWordsOf(to)}`;
 }
 
 function contextOf(
@@ -397,11 +399,9 @@ function summarise(report: SlotsReport): string {
 
 /* ---- the hook ---------------------------------------------------------- */
 
-/** A bank's name as the page shows it ("Bank A"). */
-function bankNameOf(report: SlotsReport, key: SlotKey): string {
-  return (
-    report.slots.find((view) => view.entry.key === key)?.entry.name ?? `Bank ${key.toUpperCase()}`
-  );
+/** A bank's name as the page shows it ("Slot A"). */
+function pageBankName(report: SlotsReport, key: SlotKey): string {
+  return report.slots.find((view) => view.entry.key === key)?.entry.name ?? bankNameOf(key);
 }
 
 /** A prepared write, held until it is confirmed or discarded. */
@@ -410,7 +410,7 @@ export interface PendingSlotFlash {
   readonly kind: SlotInputKind;
   /**
    * What is written, in words: the picked file's name, or for a copy and a restore the image's source
-   * ("Bank A's image", "Bank B of <backup file>"), never a file name the person does not have.
+   * ("Slot A's image", "Slot B of <backup file>"), never a file name the person does not have.
    */
   readonly what: string;
   readonly plan: SlotFlashPlan;
@@ -710,9 +710,9 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
 
   const dump = useCallback(
     async (key: SlotKey): Promise<void> => {
-      const name = key.toUpperCase();
+      const name = bankWordsOf(key);
       const result = await runner.start(SLOTS_DUMP_PANEL_ID, async (signal) => {
-        reset(`Dumping slot ${name} ...`);
+        reset(`Dumping ${name} ...`);
         const current = reportRef.current;
         let transport: ReturnType<DeviceHandle['makeTransport']> | null = null;
         let usedClient: SeekDevice | null = null;
@@ -744,9 +744,9 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
           downloadBytes(dumped.raw, names.raw);
           log(
             dumped.empty
-              ? `slot ${name} is empty — nothing to decrypt: ${String(dumped.raw.length)} B of 0xFF, ` +
+              ? `${bankNameOf(key)} is empty — nothing to decrypt: ${String(dumped.raw.length)} B of 0xFF, ` +
                   `sha256 ${dumped.sha256}`
-              : `slot ${name} as stored — ${String(dumped.raw.length)} B, sha256 ${dumped.sha256}`,
+              : `${bankNameOf(key)} as stored — ${String(dumped.raw.length)} B, sha256 ${dumped.sha256}`,
             'ok',
           );
           if (dumped.empty) {
@@ -758,17 +758,17 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
           ) {
             downloadBytes(dumped.plain, names.decrypted);
             log(
-              `slot ${name} decrypted — ${String(dumped.plain.length)} B, sha256 ${dumped.plainSha256}`,
+              `${bankNameOf(key)} decrypted — ${String(dumped.plain.length)} B, sha256 ${dumped.plainSha256}`,
               'ok',
             );
           } else {
             log(
-              `slot ${name} has no decrypted image: no key this page recovered opens it`,
+              `${bankNameOf(key)} has no decrypted image: no key this page recovered opens it`,
               'detail',
             );
           }
           for (const note of dumped.notes) log(note, 'detail');
-          workflow.progress(1, 1, `Dumped slot ${name}.`);
+          workflow.progress(1, 1, `Dumped ${name}.`);
         } catch (error) {
           if (error instanceof CancelledError) {
             log('cancelled', 'warn');
@@ -829,7 +829,7 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
             if (view?.state == null) {
               throw new SeekError(
                 'slots/refused',
-                `slot ${key.toUpperCase()} was not read (${view?.unreadReason ?? 'no read'}) — ` +
+                `${bankNameOf(key)} was not read (${view?.unreadReason ?? 'no read'}) — ` +
                   'read the slots again before preparing a write to it.',
               );
             }
@@ -848,7 +848,7 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
               restore: input.restore,
             });
             log(
-              `prepared ${String(prepared.payload.length)} B for slot ${key.toUpperCase()}, ` +
+              `prepared ${String(prepared.payload.length)} B for ${bankWordsOf(key)}, ` +
                 `transfer checksum ${hexUp(prepared.sum16, 4)}`,
               'ok',
             );
@@ -909,7 +909,7 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
           const copy = (backend.copy ?? planSlotCopy)(current, from, to, { running16Hz });
           return Promise.resolve({
             plan: copy.plan,
-            what: `${bankNameOf(current, from)}'s image`,
+            what: `${pageBankName(current, from)}'s image`,
             bytes: copy.plan.expectedPlain?.length ?? copy.plan.payload.length,
             source: copy.source,
             action: { kind: 'copy', from } as const,
@@ -942,7 +942,7 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
           );
           return {
             plan: restore.plan,
-            what: `${bankNameOf(current, key)} of ${file.name}`,
+            what: `${pageBankName(current, key)} of ${file.name}`,
             bytes: restore.decryption.plain?.length ?? 0,
             source: restore.source,
             action: { kind: 'restore', fileName: file.name } as const,
@@ -997,7 +997,7 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
           if (needsRiskAck(risk) && !acknowledged) {
             throw new SeekError(
               'slots/refused',
-              `slot ${ready.key.toUpperCase()} needs the risk acknowledgement before it can be ` +
+              `${bankNameOf(ready.key)} needs the risk acknowledgement before it can be ` +
                 'written. Nothing was written.',
             );
           }
@@ -1015,7 +1015,7 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
           /* The record of what was written: it names the file and the bank. */
           const view = current.slots.find((candidate) => candidate.entry.key === ready.key);
           log(
-            `slot ${ready.key.toUpperCase()} at ${hexUp(view?.entry.address ?? 0)} <- ${ready.what}` +
+            `${bankNameOf(ready.key)} at ${hexUp(view?.entry.address ?? 0)} <- ${ready.what}` +
               (ready.plan.targetEmpty === true ? ' (an empty bank: nothing is overwritten)' : ''),
             'ok',
           );
@@ -1057,7 +1057,7 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
           for (const note of written.notes) log(note, 'detail');
           if (restore !== null) {
             log(
-              restoreReadBackText(restore, view?.entry.name ?? `Bank ${ready.key.toUpperCase()}`),
+              restoreReadBackText(restore, view?.entry.name ?? bankNameOf(ready.key)),
               restore.equal === true ? 'ok' : 'warn',
             );
           }
@@ -1133,9 +1133,9 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
    */
   const patchFps = useCallback(
     async (key: SlotKey, acknowledged: boolean): Promise<void> => {
-      const name = key.toUpperCase();
+      const name = bankWordsOf(key);
       const result = await runner.start(SLOTS_FPS_PANEL_ID, async (signal) => {
-        reset(`Patching slot ${name} ...`);
+        reset(`Patching ${name} ...`);
         setFpsOutcome(null);
         setFpsEveryOutcome(null);
         const current = reportRef.current;
@@ -1154,7 +1154,7 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
           if (needsRiskAck(risk) && !acknowledged) {
             throw new SeekError(
               'slots/refused',
-              `slot ${name} needs the risk acknowledgement before it can be patched. Nothing was written.`,
+              `${bankNameOf(key)} needs the risk acknowledgement before it can be patched. Nothing was written.`,
             );
           }
           const options = readOptions(form);
@@ -1180,7 +1180,7 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
           });
           setFpsOutcome(done);
           log(
-            `slot ${name}: patched from ${String(done.fromHz)} Hz to ${String(done.toHz)} Hz ` +
+            `${bankNameOf(key)}: patched from ${String(done.fromHz)} Hz to ${String(done.toHz)} Hz ` +
               `(firmware ${done.patch.version})`,
             'ok',
           );
@@ -1260,7 +1260,7 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
           if (needs.length > 0 && !acknowledged) {
             throw new SeekError(
               'slots/refused',
-              `${needs.map((key) => `slot ${key.toUpperCase()}`).join(' and ')} need the risk ` +
+              `${capitalised(needs.map(bankWordsOf).join(' and '))} need the risk ` +
                 'acknowledgement before they can be patched. Nothing was written.',
             );
           }
@@ -1288,7 +1288,7 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
           setFpsEveryOutcome(done);
           for (const one of done.results) {
             log(
-              `slot ${one.key.toUpperCase()}: patched from ${String(one.fromHz)} Hz to ${String(one.toHz)} Hz ` +
+              `${bankNameOf(one.key)}: patched from ${String(one.fromHz)} Hz to ${String(one.toHz)} Hz ` +
                 `(firmware ${one.patch.version})`,
               'ok',
             );
@@ -1296,10 +1296,7 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
           }
           if (done.stopped !== null) log(`stopped: ${done.stopped.reason}`, 'warn');
           if (done.unwritten.length > 0) {
-            log(
-              `not written: ${done.unwritten.map((key) => `slot ${key.toUpperCase()}`).join(', ')}`,
-              'warn',
-            );
+            log(`not written: ${done.unwritten.map(bankWordsOf).join(', ')}`, 'warn');
           }
           if (committed.length > 0) {
             log(replugRecord('patch'), 'warn');

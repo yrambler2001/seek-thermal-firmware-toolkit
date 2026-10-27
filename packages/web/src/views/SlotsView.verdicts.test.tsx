@@ -152,12 +152,12 @@ describe('SlotsView: the camera-wide refusal reaches every row', () => {
 });
 
 describe('SlotsView: the device info names a bank as the table does', () => {
-  it('says "Booted from Bank X" with the same name the bank table gives that bank', () => {
+  it('says "Booted from Slot X" with the same name the bank table gives that bank', () => {
     const report = slotReport(base);
     const { container, unmount } = view(panel({ plan: slotPlan(true), report }));
     const text = container.textContent;
-    expect(text).toMatch(/Booted from\W*Bank [ABR]/);
-    expect(text).not.toMatch(/Booted from\W*slot /i);
+    expect(text).toMatch(/Booted from\W*(?:Slot [AB]|Recovery R)/);
+    expect(text).not.toMatch(/Booted from\W*slot /);
     const booted = report.slots.find((candidate) => candidate.active);
     if (booted !== undefined) {
       expect(text).toContain(booted.entry.name);
