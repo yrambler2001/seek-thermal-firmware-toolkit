@@ -350,7 +350,7 @@ describe('SlotsView', () => {
 
     const row = bankRows(container)[2] as HTMLElement;
     expect(row.textContent).toContain(
-      "recovery only — R runs when A and B hold nothing the bootloader takes (measured for the plain form, 42.10); the FF form's boot is untested (42.12)",
+      'recovery only — R runs when A and B hold nothing the bootloader takes (measured on a camera for an earlier form of this image); whether this form starts is untested',
     );
     expect(row.textContent).not.toContain('skipped at boot');
     expect(row.textContent).not.toContain('not bootable');
@@ -601,9 +601,13 @@ describe('SlotsView', () => {
     const { container, unmount } = view(panel({ plan: realPlan, report }));
 
     const rows = bankRows(container);
-    expect(rows[0]?.textContent).toContain('goes here in its vendor form, stored under Key B');
-    expect(rows[1]?.textContent).toContain('goes here in its vendor form, stored under Key B');
-    expect(rows[2]?.textContent).toContain('goes here in its vendor form, stored under Key B');
+    /* In words: the key it is stored under, not its name (TESTING.md 42.110). */
+    for (const row of rows) {
+      expect(row.textContent).toContain(
+        'goes here in the form the vendor app sends it, and the camera stores it under its own key',
+      );
+      expect(row.textContent).not.toMatch(/TESTING|\(42\.\d+\)|token form/);
+    }
     /* The plan's own note states the rule, and the page explains it once more in words. */
     expect(container.textContent).toContain('UNTESTED');
     expect(container.textContent).toContain('The camera tells them apart itself');
@@ -1290,7 +1294,7 @@ describe('SlotsView: the frame-rate row action', () => {
     expect(rows[1]?.textContent).not.toMatch(/extra confirmation|acknowledge/);
     expect(rows[2]?.textContent.match(/extra confirmation|acknowledge/g)).toHaveLength(1);
     expect(rows[2]?.textContent).toContain(
-      'Recovery bank, mode 9, token form. Measured on a Compact PRO 1.0.3.0',
+      'Measured on a Compact PRO 1.0.3.0: recovery R took its own image',
     );
     expect(text).toContain('The booted bank named on this line is the bank the camera entered');
     expect(text).not.toContain('Where the page names');
@@ -1356,7 +1360,7 @@ describe('SlotsView: the frame-rate row action', () => {
       }),
     );
     const rNote = plan.slots.find((entry) => entry.key === 'r')?.notes[0] ?? '';
-    expect(rNote).toContain('Recovery bank, mode 9, token form.');
+    expect(rNote).toContain('Measured on a Compact PRO 1.0.3.0: recovery R took its own image');
     expect(recovery.container.textContent.split(rNote)).toHaveLength(2);
     recovery.unmount();
 
