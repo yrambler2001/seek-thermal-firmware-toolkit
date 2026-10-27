@@ -194,7 +194,8 @@ preserve_bank_<a|b|r>_capture.bin (its two agreeing reads),
 preserve_bank_<a|b|r>_plain.bin (its firmware, as plain bytes) and
 preserve_bank_<a|b|r>_patched.bin; preserve_dump_postwrite.bin (the whole flash
 as read, with the patch in it), preserve_dump_original.bin (the complete image,
-with the original firmware put back in),
+with the original firmware put back in), preserve_verify_windows.bin (the
+verify step's second read of the 31 blocks),
 manifest.json and README.md (the backup's dump archive) plus the decrypted
 slots under decrypted/.
 

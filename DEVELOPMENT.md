@@ -190,7 +190,7 @@ through the write gate below (`SEEK_E2E_WRITE=i-understand`).
 ```sh
 npm run e2e                # every unattended test (emulator + camera read-only); skips camera cleanly if none
 npm run e2e:gate           # the camera write gate and the write guard's budgets (no browser, no device)
-npm run e2e:dump           # sweep mode and an offline decrypt (SEEK_E2E_DUMP_FILE)
+npm run e2e:dump           # Dump all selectors and an offline decrypt (SEEK_E2E_DUMP_FILE)
 npm run e2e:cancel         # cancel Dump & decrypt (and step 02) mid-read, then read again
 npm run e2e:soak           # N Dump & decrypt runs (SEEK_E2E_SOAK_N, default 10) — identical sha, with timings
 npm run e2e:offline        # the hosted docs/ bundle, run with the network cut after it loads

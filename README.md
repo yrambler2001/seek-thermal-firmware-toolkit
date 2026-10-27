@@ -20,18 +20,19 @@ runs on your own machine, and the CLI talks to the camera directly. No SDK, no J
 
 The **Info** tab tells you which firmware a camera runs and which tab reads it.
 
-| Camera and firmware                                   | Read and back up the flash                                           | Decrypt | Write a bank        | Frame rate          |
-| ----------------------------------------------------- | -------------------------------------------------------------------- | ------- | ------------------- | ------------------- |
-| Compact 0.3.0.1 to 0.6.0.4 (2014)                     | no: the firmware has no read command (a J-Link or SPI dump decrypts) | yes     | no                  | no                  |
-| Compact 0.7.0.7, 0.7.0.8                              | yes, Dump & decrypt 0.x/1.x (tested on the emulator only)            | yes     | no                  | no                  |
-| Compact 0.8.0.0 to 0.10.0.0                           | yes, Dump & decrypt 0.x/1.x (tested on the emulator only)            | yes     | yes                 | 32 fps              |
-| Compact 1.0.0.0, 1.2.0.0, 1.3.0.0, 1.3.0.8            | yes, Dump & decrypt 0.x/1.x                                          | yes     | yes                 | 32 fps              |
-| Compact 1.3.0.8 FF (16 Hz)                            | yes, but the run leaves its patch in recovery R                      | yes     | yes (boot untested) | no                  |
-| Compact PRO 1.0.3.0 (2016)                            | yes, Dump & decrypt 0.x/1.x                                          | yes     | yes                 | 18 fps              |
-| Compact PRO 1.0.3.2                                   | the 31 readable blocks only: no whole-flash read on this build       | yes     | yes                 | 18 fps (9 Hz build) |
-| Compact 4.8.1.7, 4.8.1.9, 4.8.2.1; Compact XR 4.8.2.1 | yes, Dump & decrypt 4.x/Nano                                         | yes     | yes                 | 32 fps              |
-| Compact PRO 4.9.1.15, 4.9.2.0                         | yes, Dump & decrypt 4.x/Nano                                         | yes     | yes                 | 18 fps              |
-| Compact 4.16, Compact PRO 4.18, Mosaic, Nano 200/300  | yes, Dump & decrypt 4.x/Nano                                         | yes     | yes                 | no                  |
+| Camera and firmware                                   | Read and back up the flash                                                    | Decrypt | Write a bank        | Frame rate          |
+| ----------------------------------------------------- | ----------------------------------------------------------------------------- | ------- | ------------------- | ------------------- |
+| Compact 0.3.0.1 to 0.6.0.4 (2014)                     | no: the firmware has no read command (a J-Link or SPI dump decrypts)          | yes     | no                  | no                  |
+| Compact 0.7.0.7, 0.7.0.8                              | yes, Dump & decrypt 0.x/1.x (tested on the emulator only)                     | yes     | no                  | no                  |
+| Compact 0.8.0.0 to 0.10.0.0                           | yes, Dump & decrypt 0.x/1.x (tested on the emulator only)                     | yes     | yes                 | 32 fps              |
+| Compact 1.0.0.0, 1.2.0.0, 1.3.0.8                     | yes, Dump & decrypt 0.x/1.x (tested on the emulator only)                     | yes     | yes                 | 32 fps              |
+| Compact 1.3.0.0                                       | yes, Dump & decrypt 0.x/1.x                                                   | yes     | yes                 | 32 fps              |
+| Compact 1.3.0.8 FF (16 Hz)                            | yes, but the run leaves its patch in recovery R (tested on the emulator only) | yes     | yes (boot untested) | no                  |
+| Compact PRO 1.0.3.0 (2016)                            | yes, Dump & decrypt 0.x/1.x                                                   | yes     | yes                 | 18 fps              |
+| Compact PRO 1.0.3.2                                   | the 31 readable blocks only: no whole-flash read on this build                | yes     | yes                 | 18 fps (9 Hz build) |
+| Compact 4.8.1.7, 4.8.1.9, 4.8.2.1; Compact XR 4.8.2.1 | yes, Dump & decrypt 4.x/Nano                                                  | yes     | yes                 | 32 fps              |
+| Compact PRO 4.9.1.15, 4.9.2.0                         | yes, Dump & decrypt 4.x/Nano                                                  | yes     | yes                 | 18 fps              |
+| Compact 4.16, Compact PRO 4.18, Mosaic, Nano 200/300  | yes, Dump & decrypt 4.x/Nano                                                  | yes     | yes                 | no                  |
 
 "Write a bank" is the Work with firmware slots tab, on every build from 0.8.0.0. The details per build are in
 [HOW_IT_WORKS.md](HOW_IT_WORKS.md#which-cameras) and [PRESERVATION.md](PRESERVATION.md#the-supported-builds).
@@ -60,7 +61,8 @@ checks it byte for byte. The two steps that write ask first. CLI: `seek-fw prese
 
 ![The Dump & decrypt 4.x/Nano tab](.github/readme/dump-4x.avif)
 
-For the 2018-and-later cameras. **Start dump** reads the whole flash, decrypts the firmware and downloads
+For the 2018-and-later cameras. **Start dump** reads the whole flash but one block (`0x14060000`, which no
+request reaches and which holds no firmware bank on these cameras), decrypts the firmware and downloads
 it as one zip; it only reads. CLI: `seek-fw dump`.
 
 ### Decrypt File/Slot (`#/decrypt`)
