@@ -449,9 +449,8 @@ export function SlotsView({ slots, connected, busy }: SlotsViewProps): ReactElem
             slotName={pendingView.entry.name}
             slotAddress={hexUp(pendingView.entry.address)}
             risk={writeRisk(pending.report, pending.key)}
-            ffImage={pending.plan.staging === 'key-a-keystream'}
             targetEmpty={pending.plan.targetEmpty === true}
-            imageBuild={pending.plan.imageBuild?.text ?? null}
+            warnings={pending.plan.warnings}
             keyLine={
               pending.plan.derivedFrom
                 ? `The image is written under ${derivedKeyLine(pending.plan.derivedFrom, `bank ${pending.plan.derivedFrom.bank.toUpperCase()}`)}. Every other bank is written the same way.`
@@ -540,15 +539,15 @@ export function SlotsView({ slots, connected, busy }: SlotsViewProps): ReactElem
             same version. The camera tells them apart itself: its own answer for each bank says
             whether the application that answers takes it, and each build predicts its answers. The
             8 Hz image goes to any bank. The FF image is staged the way the vendor app stages it
-            (the image XOR Key A), and the camera stores it under Key B, to any bank. The page
-            refuses it while the camera runs the 8 Hz build, and when the camera&apos;s answers
-            cannot say which build runs, it refuses unless you tick the 16 Hz box above. Whether the
-            FF image boots is UNTESTED: no genuine bootloader for this build is in the corpus.
-            Writing R asks for the extra confirmation like any recovery write. An{' '}
-            <strong>empty</strong> bank (its header window reads as all 0xFF, as on many 2014
-            cameras&apos; bank B) is a state, not a fault. It dumps as the raw 64 KiB of 0xFF with
-            nothing to decrypt, and it is written exactly like any other bank; the plan and the
-            confirmation say that no firmware is overwritten.
+            (the image XOR Key A), and the 16 Hz build stores it under Key B, to any bank. The page
+            does not refuse it: the plan says, before you confirm, what the camera is expected to do
+            with it (the 8 Hz build refuses it at commit, and a camera on another version programs
+            it as it is sent, which it cannot start). Whether the FF image boots is UNTESTED: no
+            genuine bootloader for this build is in the corpus. Writing R asks for the extra
+            confirmation like any recovery write. An <strong>empty</strong> bank (its header window
+            reads as all 0xFF, as on many 2014 cameras&apos; bank B) is a state, not a fault. It
+            dumps as the raw 64 KiB of 0xFF with nothing to decrypt, and it is written exactly like
+            any other bank; the plan and the confirmation say that no firmware is overwritten.
           </p>
           <p>
             <strong>Copy to slot A</strong>, <strong>Copy to slot B</strong> and{' '}

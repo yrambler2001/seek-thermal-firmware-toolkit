@@ -14,7 +14,9 @@ import { buttonByText, render } from '../test-helpers';
 const BACKUP = 'seek_backup_<time>_SN_v1.3.0.0_bank-B_before-flash.zip';
 
 function setup(
-  overrides: Partial<Pick<SlotWriteConfirmProps, 'risk' | 'open' | 'ffImage' | 'targetEmpty'>> = {},
+  overrides: Partial<
+    Pick<SlotWriteConfirmProps, 'risk' | 'open' | 'warnings' | 'targetEmpty'>
+  > = {},
 ): ReturnType<typeof render> & {
   onConfirm: ReturnType<typeof vi.fn>;
   onCancel: ReturnType<typeof vi.fn>;
@@ -29,7 +31,7 @@ function setup(
       slotName="slot B"
       slotAddress="0x14060000"
       risk={overrides.risk ?? { booted: false, recovery: false, bootUnnamed: false }}
-      {...(overrides.ffImage === undefined ? {} : { ffImage: overrides.ffImage })}
+      {...(overrides.warnings === undefined ? {} : { warnings: overrides.warnings })}
       targetEmpty={overrides.targetEmpty ?? false}
       onConfirm={onConfirm}
       onCancel={onCancel}
@@ -203,16 +205,20 @@ describe('SlotWriteConfirm', () => {
     unmount();
   });
 
-  it('says the 1.3.0.8 FF image is stored under Key B and that its boot is untested, and still asks for the tick', () => {
+  it('says every warning of the plan, in its order, above the confirm, and still asks for the tick', () => {
+    /* The 1.3.0.8 FF image on a 1.3.0.0 camera (TESTING.md 42.109): the dialog had said the first alone. */
+    const warnings = [
+      'This image is firmware 1.3.0.8; the camera runs 1.3.0.0.',
+      'The 16 Hz FF image is staged in the form only the 16 Hz 1.3.0.8 build takes. This camera writes a bank without checking the image.',
+    ];
     const { onConfirm, unmount } = setup({
       risk: { booted: false, recovery: true, bootUnnamed: false },
-      ffImage: true,
+      warnings,
     });
-    const text = dialog().textContent;
-    expect(text).toContain('This is the 1.3.0.8 FF (16 Hz) image,');
-    expect(text).toContain('the camera stores it under Key B');
-    expect(text).toContain('UNTESTED');
-    expect(text).toContain('XOR Key A');
+    const box = dialog().querySelector('#slot-write-confirm-warnings');
+    expect([...(box?.querySelectorAll('p') ?? [])].map((p) => p.textContent)).toEqual(warnings);
+    /* No words of the page's own about the FF image: the plan's are the only ones. */
+    expect(dialog().textContent).not.toContain('UNTESTED');
     expect(checkbox()).not.toBeNull();
     expect(buttonByText(document.body, 'Yes — write to slot B').disabled).toBe(true);
     act(() => {

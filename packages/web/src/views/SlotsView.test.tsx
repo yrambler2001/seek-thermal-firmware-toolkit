@@ -452,7 +452,7 @@ describe('SlotsView', () => {
       buttonByText(container, 'Write to slot B…').click();
     });
     const node = dialog();
-    expect(node?.querySelector('#slot-write-confirm-build')?.textContent).toBe(text);
+    expect(node?.querySelector('#slot-write-confirm-warnings')?.textContent).toBe(text);
     /* People's words only: the code name is for JSON. */
     expect(node?.textContent).not.toContain('other-version');
     /* Warned, never gated: bank B needs no tick, and the confirm writes. */
@@ -485,7 +485,7 @@ describe('SlotsView', () => {
     act(() => {
       buttonByText(container, 'Write to slot B…').click();
     });
-    expect(dialog()?.querySelector('#slot-write-confirm-build')).toBeNull();
+    expect(dialog()?.querySelector('#slot-write-confirm-warnings')).toBeNull();
     unmount();
   });
 
@@ -529,7 +529,7 @@ describe('SlotsView', () => {
     /* "Read as" says what the file is, and "Staging" how it is sent, so the vendor form is said once. */
     expect(container.textContent).toContain('Read asa decrypted 1.3.0.8 FF imageStaging');
     expect(container.textContent).toContain(
-      'the 1.3.0.8 FF image as the vendor app stages it (XOR Key A) — the camera stores it under Key B, not these bytes',
+      'the 1.3.0.8 FF image as the vendor app stages it (XOR Key A) — the 16 Hz build stores it under Key B, not these bytes',
     );
     expect(container.textContent).toContain(
       '65,536 B predicted — the image XOR Key B, not the payload itself',
@@ -551,9 +551,10 @@ describe('SlotsView', () => {
     });
     const node = dialog();
     expect(node).not.toBeNull();
-    expect(node?.textContent).toContain('This is the 1.3.0.8 FF (16 Hz) image,');
-    expect(node?.textContent).toContain('the camera stores it under Key B');
-    expect(node?.textContent).toContain('UNTESTED');
+    /* The dialog says the plan's warnings, as "Read before writing" does (TESTING.md 42.109). */
+    expect(node?.querySelector('#slot-write-confirm-warnings')?.textContent).toBe(
+      'UNTESTED: no genuine bootloader for this build is in the corpus, so the boot is not measured.',
+    );
     /* Recovery's own tick still stands in the way of the write. */
     expect(buttonByText(document.body, 'Yes — write to recovery R').disabled).toBe(true);
     act(() => {

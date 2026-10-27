@@ -30,18 +30,15 @@ export interface SlotWriteConfirmProps {
   readonly slotName: string;
   readonly slotAddress: string;
   readonly risk: WriteRisk;
-  /**
-   * The write is the 1.3.0.8 FF (16 Hz) image, staged as the vendor app stages it and stored under
-   * Key B. Whether the written bank boots is untested, so the dialog says so, above the tick.
-   */
-  readonly ffImage?: boolean;
   /** The bank holds no image: the write overwrites no firmware. */
   readonly targetEmpty?: boolean;
   /**
-   * The image may not be the build the camera runs (core's `SlotFlashPlan.imageBuild`, its text). Said here
-   * again, above the confirm, because it is about what is written; the write stays allowed.
+   * The plan's warnings, as "Read before writing" lists them and the CLI prints them (core's words: the
+   * image's build, what the camera is expected to do with a 1.3.0.8 FF image, ...). Said again here, above
+   * the confirm, because they are about what is written; the write stays allowed. TESTING.md 42.109: the
+   * dialog had said the image's build alone, and a fixed FF paragraph instead of the plan's FF warning.
    */
-  readonly imageBuild?: string | null;
+  readonly warnings?: readonly string[];
   /** The key the image is written under and the bank it was derived from, when there is one. */
   readonly keyLine?: string | null;
   /** The backup zip's name as the plan shows it (the time still to come): the bank is saved there first. */
@@ -56,9 +53,8 @@ export function SlotWriteConfirm({
   slotName,
   slotAddress,
   risk,
-  ffImage = false,
   targetEmpty = false,
-  imageBuild = null,
+  warnings = [],
   keyLine,
   backupName,
   onConfirm,
@@ -114,13 +110,15 @@ export function SlotWriteConfirm({
           </p>
         )}
 
-        {imageBuild !== null && (
-          <p
-            id="slot-write-confirm-build"
-            className="rounded-md border border-warn/40 bg-warn/8 px-3 py-2 text-[0.85rem] font-medium text-foreground"
+        {warnings.length > 0 && (
+          <div
+            id="slot-write-confirm-warnings"
+            className="space-y-1.5 rounded-md border border-warn/40 bg-warn/8 px-3 py-2 text-[0.85rem] font-medium text-foreground"
           >
-            {imageBuild}
-          </p>
+            {warnings.map((line) => (
+              <p key={line}>{line}</p>
+            ))}
+          </div>
         )}
 
         <AlertDialogDescription id="slot-write-confirm-what" className="space-y-2">
@@ -134,14 +132,6 @@ export function SlotWriteConfirm({
               ? `The write still erases the 64 KiB block of the camera's flash at ${slotName} (already blank) and programs it.`
               : `This erases a 64 KiB block of the camera's flash and programs it at ${slotName}.`}
           </span>
-          {ffImage && (
-            <span className="block" id="slot-write-confirm-ff">
-              This is the 1.3.0.8 FF (16 Hz) image, staged the way the vendor app stages it: the
-              image XOR Key A, and the camera stores it under Key B. Whether the written bank boots
-              is UNTESTED: no genuine bootloader for this build is in the corpus, and on the earlier
-              0.9.0.0 bootloader the plain form booted from recovery R while this form will not.
-            </span>
-          )}
           {keyLine && <span className="block">{keyLine}</span>}
           <span className="block">
             {`Before anything is sent, ${slotName} is read again and saved as one zip download: ${backupName}. Check your downloads folder for it.`}
