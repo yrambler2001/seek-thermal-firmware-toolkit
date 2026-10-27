@@ -67,6 +67,10 @@ export interface PageWrite {
   readonly ackShown: boolean;
   /** The confirmation dialog's text as it asked (its warnings: the image's build, TESTING.md 42.104, 42.103). */
   readonly dialog: string;
+  /** The plan's "Read before writing" list as the page showed it before the dialog opened, or '' when it showed none (TESTING.md 42.106). */
+  readonly readFirst: string;
+  /** Whether the dialog's "Yes — write to <bank>" was pressable when it opened, before any tick. */
+  readonly confirmOn: boolean;
   /** The page's verdict panel ("Slot B — ...: the bank reads back as written."), or null. */
   readonly outcome: string | null;
 }

@@ -177,11 +177,21 @@ function windowOf(target: TargetHandle, scratchDir: string): BenchPage {
   /* The prepared plan is confirmed: the extra tick only where the page asks for it, and the page's
    * own verdict back. Shared by the picker's write and the bank's own fill. */
   async function confirmPrepared(name: string, acknowledge: boolean): Promise<PageWrite> {
+    /* The plan's "Read before writing" list, as the page shows it before the dialog (TESTING.md 42.106). */
+    const readFirst = await target.page
+      .$$eval('[data-slot="alert"]', (els) =>
+        els
+          .map((el) => (el as HTMLElement).innerText)
+          .filter((text) => text.trim().startsWith('Read before writing:'))
+          .join('\n'),
+      )
+      .catch(() => '');
     await openWriteConfirm(target.wizard, target.page, name);
     const dialog = await target.page
       .$eval(CONFIRM_DIALOG, (el) => (el as HTMLElement).innerText)
       .catch(() => '');
     const ackShown = (await target.page.$(ACK_BOX)) !== null;
+    const confirmOn = await confirmEnabled(target.wizard, name);
     if (ackShown !== acknowledge) {
       await target.wizard.click(CONFIRM_DIALOG, 'Cancel');
       throw new Error(
@@ -189,7 +199,7 @@ function windowOf(target: TargetHandle, scratchDir: string): BenchPage {
           `the plan expected it ${acknowledge ? 'to' : 'not to'}`,
       );
     }
-    if (ackShown && (await confirmEnabled(target.wizard, name))) {
+    if (ackShown && confirmOn) {
       throw new Error(`${name}: Yes is on before the acknowledgement is ticked`);
     }
     const status = await confirmWrite(target.wizard, target.page, name, ackShown);
@@ -198,7 +208,14 @@ function windowOf(target: TargetHandle, scratchDir: string): BenchPage {
         `the write ended "${status}"\n${await target.wizard.logTail('slotsrun', 25)}`,
       );
     }
-    return { status, ackShown, dialog, outcome: (await outcomeAlert(target.page)) ?? null };
+    return {
+      status,
+      ackShown,
+      dialog,
+      readFirst,
+      confirmOn,
+      outcome: (await outcomeAlert(target.page)) ?? null,
+    };
   }
 
   /* Every budget back to zero: nothing is staged or committed outside a write. */

@@ -18,8 +18,10 @@
  *
  * WHAT FOLLOWS is said only where the source says it: on the 2014 plaintext chain the camera's
  * checks are the image's header and word sum (the application's commit gate and the bootloader's
- * image_sum_ok, running.ts), so a different version is taken and runs. On the other lines nothing
- * here has checked it, and the warning says so.
+ * image_sum_ok, running.ts), so a different version is taken and runs. Seen on a camera (TESTING.md
+ * 42.106): the stock 1.2.0.0 written to bank B of a 1.3.0.0 Compact (bootloader 0.9.0.0) with this
+ * warning, the boot-config word set to B and a cold start: the camera reports 1.2.0.0, entered from
+ * B, and streams pictures. On the other lines nothing here has checked it, and the warning says so.
  * ==================================================================== */
 
 import { IMAGE_MAGIC, parseImageHeader } from '../image/header.js';
