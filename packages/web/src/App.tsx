@@ -9,6 +9,7 @@
  */
 
 import { useCallback, useMemo, useState, type ReactElement } from 'react';
+import { V4_TAB_FAMILY } from '@seek-fw/core';
 import { AppHeader } from './components/AppHeader';
 import { ConnectSection } from './components/ConnectSection';
 import { Prose } from './components/Prose';
@@ -59,7 +60,7 @@ export function App({ support }: AppProps = {}): ReactElement {
     runner,
     device,
     form: options,
-    profileId: 'modern-4x',
+    profileId: V4_TAB_FAMILY,
     dirPrefix: 'seek_flash4m_',
     sweepPrefix: 'seek_selectors_',
     onOptionsFailure,

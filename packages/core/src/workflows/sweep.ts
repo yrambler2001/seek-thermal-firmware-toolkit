@@ -80,7 +80,7 @@ export async function runSweep(
   ctx: WorkflowContext,
   options: Partial<DumpOptions> = {},
 ): Promise<SweepResult> {
-  requireCapability(ctx.profile, 'sweep');
+  requireCapability(ctx.profile, 'allSelectors');
   const args = resolveDumpOptions(options);
   const { device, profile, reporter } = ctx;
   const { flashBase, flashSize, windowSize } = profile.memory;
@@ -92,7 +92,7 @@ export async function runSweep(
    * 2014 Compact's subcommand 0x0E — which serves 0x140B0000 — was placed at
    * 0x140C0000. The same version gate as the dump runs first: on 0.3.0.1 every
    * arm of a sweep would be `EnterBootloaderMode`. */
-  const { plan } = await planForDevice(ctx, 'sweep');
+  const { plan } = await planForDevice(ctx, 'dump all selectors');
   const entries = plan.windows;
   /* Recorded while the transport is open: the sweep closes it before the
    * manifest is built (see `runDump`). */
@@ -117,7 +117,7 @@ export async function runSweep(
   let placed = 0;
 
   reporter.log(
-    `selector sweep: subcommands ${hex(first)}..${hex(last)}` +
+    `dump all selectors: subcommands ${hex(first)}..${hex(last)}` +
       (legacy ? ' with the authenticated channel-0x12 unlock token' : ' on the plain channel'),
     'detail',
   );
@@ -250,7 +250,10 @@ export async function runSweep(
       decryption = result.summary;
     } catch (error) {
       const message = errorMessage(error);
-      reporter.log(`decrypt: failed (${message}) — the sweep itself is unaffected`, 'error');
+      reporter.log(
+        `decrypt: failed (${message}) — the dump of all selectors is unaffected`,
+        'error',
+      );
       decryption = buildDecryptionFailed(message);
     }
   } else {
@@ -272,7 +275,7 @@ export async function runSweep(
     chunk: args.chunk,
     gapFill: args.gapFill,
     unlockToken,
-    producer: `seek-thermal-firmware-dump (${device.transport.info.api}, selector sweep)`,
+    producer: `seek-thermal-firmware-dump (${device.transport.info.api}, all selectors)`,
     transport,
     safety: SAFETY,
     selectors,

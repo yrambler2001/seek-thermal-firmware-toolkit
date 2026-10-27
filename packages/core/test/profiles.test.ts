@@ -901,33 +901,48 @@ describe('detection: compact-2016 against legacy-auth', () => {
 });
 
 describe('capabilities', () => {
-  /* legacy-auth no longer refuses at the capability level: its write path is
-   * the preservation campaign's, measured on the real 1.3.0.0 dump's chain,
-   * and the device-info gate keeps it off every build of the line but the
-   * 2014 plaintext chain (see plain-chain-flash.test.ts). */
-  const REFUSING: readonly FirmwareProfile[] = [compact2016, generic];
+  /* A bank write (`flash`) is declared by the three families the Work with firmware slots tab
+   * writes, each in its own staging form, and refused by the two whose banks it cannot place:
+   * the pre-0.8 Compact and a camera no family matched. compact-2016 used to refuse here while
+   * the slot writer wrote its banks anyway (TESTING.md 42.85: R then A written on a real 1.0.3.0
+   * camera); it declares the write it has. */
+  const REFUSING: readonly FirmwareProfile[] = [compact2014, generic];
 
-  it('lets modern-4x flash', () => {
-    expect(() => {
-      requireCapability(modern4x, 'flash');
-    }).not.toThrow();
-    expect(modern4x.capabilities.flash.supported).toBe(true);
+  for (const profile of [modern4x, legacyAuth, compact2016]) {
+    it(`lets ${profile.id} write a bank`, () => {
+      expect(() => {
+        requireCapability(profile, 'flash');
+      }).not.toThrow();
+      expect(profile.capabilities.flash.supported).toBe(true);
+    });
+  }
+
+  it('says what no family can claim any more: that only one family writes', () => {
+    for (const profile of listProfiles()) {
+      expect(profile.summary, profile.id).not.toMatch(/only family whose write path/);
+    }
   });
 
-  it('lets legacy-auth declare flash — the gate, not the capability, scopes it to the chain', () => {
-    expect(() => {
-      requireCapability(legacyAuth, 'flash');
-    }).not.toThrow();
+  it('keeps code names out of the summaries a person reads', () => {
+    for (const profile of listProfiles()) {
+      for (const name of [
+        'BeginFirmwareUpgrade',
+        'GetFeaturedFirmwareData',
+        'selector map',
+        'windows',
+        'plain 2-byte',
+        'wire id',
+        'flash capability',
+      ]) {
+        expect(profile.summary, `${profile.id}: ${name}`).not.toContain(name);
+      }
+    }
   });
 
-  it("gives compact-2016's real reason: the write path, not a selector map it does not have", () => {
-    /* It used to say this generation "uses a different BeginFirmwareUpgrade
-     * selector map", against its own summary: it uses legacy-auth's. */
-    const support = compact2016.capabilities.flash;
-    if (support.supported) throw new Error('compact-2016 must refuse to flash');
-    expect(support.reason).not.toMatch(/different BeginFirmwareUpgrade selector map/);
-    expect(support.reason).toMatch(/shares legacy-auth's locked BeginFirmwareUpgrade handler/);
-    expect(compact2016.summary).toMatch(/uses that selector map/);
+  it('says when a Compact PRO 1.0.3.x camera stays on legacy-auth', () => {
+    expect(legacyAuth.summary).toMatch(/1\.0\.3\.x camera is read as compact-2016/);
+    expect(legacyAuth.summary).toMatch(/stored plain or decrypts to 0x0000FFFF/);
+    expect(compact2016.summary).toMatch(/read under this family from the start/);
   });
 
   for (const profile of REFUSING) {
@@ -978,7 +993,7 @@ describe('capabilities', () => {
   });
 
   it('opens the camera read paths on every profile but early-compact', () => {
-    const reads: readonly CapabilityName[] = ['dump', 'sweep'];
+    const reads: readonly CapabilityName[] = ['dump', 'allSelectors'];
     for (const profile of listProfiles()) {
       const expected = profile.id !== 'early-compact';
       for (const op of reads) {
@@ -989,7 +1004,7 @@ describe('capabilities', () => {
 
   it('gives early-compact a refusal that names the command it would have sent', () => {
     const profile = getProfile('early-compact');
-    for (const op of ['dump', 'sweep'] as const) {
+    for (const op of ['dump', 'allSelectors'] as const) {
       const support = profile.capabilities[op];
       expect(support.supported).toBe(false);
       if (support.supported) return;
@@ -1008,7 +1023,13 @@ describe('capabilities', () => {
     /* The non-throwing gate a UI can ask before offering a button. If the two
      * ever disagreed, a page could offer a run the workflow then refuses — or
      * hide one it would have allowed. */
-    const ops: readonly CapabilityName[] = ['dump', 'sweep', 'decrypt', 'deviceInfo', 'flash'];
+    const ops: readonly CapabilityName[] = [
+      'dump',
+      'allSelectors',
+      'decrypt',
+      'deviceInfo',
+      'flash',
+    ];
     const seen = new Set<boolean>();
     for (const profile of listProfiles()) {
       for (const op of ops) {

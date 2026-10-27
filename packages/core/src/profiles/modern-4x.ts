@@ -274,12 +274,11 @@ export const MODERN_BOOT: BootPolicy = {
 
 const CAPABILITIES: ProfileCapabilities = {
   dump: SUPPORTED,
-  sweep: SUPPORTED,
+  allSelectors: SUPPORTED,
   decrypt: SUPPORTED,
   deviceInfo: SUPPORTED,
-  /* The only profile that may write. Everything in the write path — the selector
-   * map, the bank payload shape, the boot replay, the key table — was decoded
-   * against and exercised on this family. */
+  /* A bank write on the slots tab, staged under Key A (slots/capability-family.ts). The
+   * locked line's two families write too, each in its own staging form. */
   flash: SUPPORTED,
 };
 
@@ -419,12 +418,14 @@ export const modern4x: FirmwareProfile = {
    * the family does not have. */
   name: 'Modern (2018+ selector map)',
   summary:
-    'Every camera whose BeginFirmwareUpgrade exposes the whole 4 MiB part on the plain 2-byte ' +
-    'channel: Compact 4.8/4.16, Compact Pro 4.9/4.18, Compact Pro FF, Compact XR, Mosaic ' +
-    '2.27/10.9, Nano 200 42.x, Nano 300 44.x. Measured confirming all 63 windows at the ' +
-    'addresses this map claims. xorshift128 images under whitening K=0x13579BDF with a ' +
-    '0x0000FFFF acceptance sum. The only family whose write path has been exercised against ' +
-    'hardware.',
+    "Seek's 2018 and later builds (2.x, 4.x, 10.x, 42.x, 44.x): Compact 4.8/4.16, Compact Pro " +
+    '4.9/4.18, Compact Pro FF, Compact XR, Mosaic 2.27/10.9, Nano 200 and Nano 300. A dump reads ' +
+    '63 of the 64 blocks of flash without unlocking anything; no read reaches the block at ' +
+    '0x14060000 on these builds. The firmware is stored encrypted. Banks are written one at a ' +
+    'time on the Work with firmware slots tab.',
+  stored:
+    `encrypted: xorshift128, K=${hexUp(MODERN_CIPHER.whiteningK)}, the decrypted words sum to ` +
+    hexUp(MODERN_CIPHER.acceptanceSum),
   cipher: MODERN_CIPHER,
   memory: MODERN_MEMORY,
   capabilities: CAPABILITIES,

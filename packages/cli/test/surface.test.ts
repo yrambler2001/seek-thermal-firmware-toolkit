@@ -128,18 +128,54 @@ describe('the listings in info need no camera', () => {
     for (const id of ['modern-4x', 'legacy-auth', 'early-compact', 'compact-2016', 'generic']) {
       expect(stdout.text).toContain(`${id}: `);
     }
+    /* The page's words, not the capability keys; "sweep" is a removed name. */
+    expect(stdout.text).toMatch(/^id +name on the page +bank writes$/m);
+    expect(stdout.text).not.toMatch(/sweep|deviceInfo/);
+    expect(stdout.text).toContain('read by: the Dump & decrypt 4.x/Nano tab and `seek-fw dump`');
+    expect(stdout.text).toContain(
+      'read by: the preservation run on the Dump & decrypt 0.x/1.x 2014/2016 tab (`seek-fw preserve`)',
+    );
+    expect(stdout.text).toContain('refuses dump and Dump all selectors: ');
+    /* compact-2016's banks are written on the slots tab (TESTING.md 42.85), and the listing says so. */
+    expect(stdout.text).toMatch(/^compact-2016 +2016 Compact Pro +yes$/m);
+    expect(stdout.text).toMatch(/^early-compact +Early Compact \(pre-0\.8\) +no$/m);
   });
 
-  it('--families --json returns the families with their capabilities', async () => {
+  it('--families --json says the same as the table, under the same names', async () => {
     const { io, stdout } = noCameraIo();
     expect(await run(['info', '--families', '--json'], io, signal())).toBe(EXIT_OK);
     const document = JSON.parse(stdout.text) as {
       command: string;
-      families: { id: string; capabilities: Record<string, { supported: boolean }> }[];
+      families: {
+        id: string;
+        readBy: string;
+        bankWrites: { allowed: boolean; reason: string | null };
+        stored: string;
+        refuses: { operation: string; reason: string }[];
+        allSelectorsRange: number[];
+      }[];
     };
     expect(document.command).toBe('info');
-    expect(document.families.map((family) => family.id)).toContain('modern-4x');
-    expect(document.families[0]?.capabilities).toHaveProperty('dump');
+    const byId = new Map(document.families.map((family) => [family.id, family]));
+    expect([...byId.keys()]).toContain('modern-4x');
+    expect(
+      Object.fromEntries([...byId].map(([id, family]) => [id, family.bankWrites.allowed])),
+    ).toEqual({
+      'modern-4x': true,
+      'legacy-auth': true,
+      'compact-2016': true,
+      'early-compact': false,
+      generic: false,
+    });
+    expect(byId.get('modern-4x')?.readBy).toBe(
+      'the Dump & decrypt 4.x/Nano tab and `seek-fw dump`',
+    );
+    expect(byId.get('legacy-auth')?.stored).toMatch(/^plain: no key/);
+    expect(byId.get('early-compact')?.refuses.map((refusal) => refusal.operation)).toEqual([
+      'dump',
+      'allSelectors',
+    ]);
+    expect(stdout.text).not.toMatch(/sweep|"capabilities"|deviceInfo/);
   });
 
   it('--devices says so and exits 0 when no camera is attached', async () => {

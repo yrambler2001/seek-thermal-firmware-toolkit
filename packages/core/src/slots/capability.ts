@@ -59,13 +59,7 @@ import {
   stagingFor,
   type SlotFamily,
 } from './capability-family.js';
-import {
-  bankNotes,
-  emptyBankWhy,
-  planNotes,
-  profileFlashNote,
-  stagingNote,
-} from './capability-notes.js';
+import { bankNotes, emptyBankWhy, planNotes, stagingNote } from './capability-notes.js';
 import {
   SLOT_BYTES,
   type CommitEffect,
@@ -190,11 +184,8 @@ function dumpSupport(
 }
 
 /**
- * Flash support for one bank, in the family's staging form. The modern and
- * 2014-plain families take the profile's own flash capability. The 2016 family
- * does not: compact-2016 declares no flash capability, but the keystream-staged
- * write is the path the preservation pipeline ran on 1.0.3.0, and the plan
- * records that refusal as a note rather than hiding it.
+ * Flash support for one bank, in the family's staging form: the build must have a measured staging
+ * form and a write arm, and the profile must allow bank writes at all (`capabilities.flash`).
  */
 function flashSupport(
   profile: FirmwareProfile,
@@ -206,7 +197,6 @@ function flashSupport(
   if (write === null) {
     return unsupported(writeReason ?? 'this build has no write arm for the bank');
   }
-  if (family === 'locked-2016') return SUPPORTED;
   const gate = profile.capabilities.flash;
   return gate.supported ? SUPPORTED : gate;
 }
@@ -274,9 +264,6 @@ export function buildSlotPlan(profile: FirmwareProfile, firmwareVersion: string 
   const family = verdict.family;
   const plan = profile.windowPlan(firmwareVersion);
   const notes = planNotes(family, verdict.version);
-  if (family === 'locked-2016' && !profile.capabilities.flash.supported) {
-    notes.push(profileFlashNote(profile.id));
-  }
   /* How a bank write is staged is the same for every bank, so it is said once, with the build's notes,
    * not on each bank (TESTING.md 42.87). `slots list --json` follows the same split: the camera's notes
    * in `notes`, a bank's own in `slots[].notes`. */

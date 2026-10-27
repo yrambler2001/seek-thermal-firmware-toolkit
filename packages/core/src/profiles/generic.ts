@@ -39,16 +39,15 @@ import {
 export const GENERIC_BASELINE = 0.1;
 
 const FLASH_REFUSAL =
-  'the firmware family could not be identified, so Key A cannot be trusted. Writing an image ' +
-  'keyed for the wrong family leaves a camera that accepts the flash and then refuses to boot ' +
-  'it. Dump and decrypt this camera, identify it from the dump, then pick the family ' +
-  'explicitly.';
+  "the camera's family is not known, so neither is the key its banks are written under, and a " +
+  'camera takes a bank written under the wrong key and then will not start from it. Dump and ' +
+  'decrypt this camera, identify it from the dump, then name its family with --family.';
 
 const CAPABILITIES: ProfileCapabilities = {
   dump: SUPPORTED,
-  /* A sweep is precisely the tool for an unknown map: it probes every selector
-   * and reports which ones answered. */
-  sweep: SUPPORTED,
+  /* Dump all selectors is precisely the tool for an unknown map: it probes every
+   * selector and reports which ones answered. */
+  allSelectors: SUPPORTED,
   decrypt: SUPPORTED,
   deviceInfo: SUPPORTED,
   flash: unsupported(FLASH_REFUSAL),
@@ -67,9 +66,12 @@ export const generic: FirmwareProfile = {
   id: 'generic',
   name: 'Unidentified camera',
   summary:
-    'Fallback for a camera no family matched. Uses the 4.x selector map and cipher defaults ' +
-    'so a dump and a decrypt attempt still work, and refuses to flash because the family — ' +
-    'and therefore Key A — is unknown.',
+    'A camera no other family matches. `seek-fw dump` reads it with the 4.x block list (the ' +
+    '4.x/Nano tab refuses it), and a decrypt solves the key from the image itself, so neither ' +
+    'depends on the guess. No bank is written: the Work with firmware slots tab refuses it ' +
+    'until the camera is identified.',
+  stored:
+    'not known: a decrypt tries the 4.x cipher, and the key is solved from the image either way',
   /* Defaults, not findings. Decryption does not actually depend on these: the
    * cryptanalytic recovery derives the xorshift state from the image itself, and
    * the acceptance sum is only used to *name* the result. */

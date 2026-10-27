@@ -468,7 +468,7 @@ describe('useDumpPanel detects the camera instead of asking', () => {
   it('refuses the sweep the same way', async () => {
     const { camera, calls } = scriptedCamera({ version: null });
     const { result, unmount } = await run(camera, 'modern-4x', 'sweep');
-    expect(result.current.panel.refusal?.message).toContain('refusing to sweep');
+    expect(result.current.panel.refusal?.message).toContain('refusing to dump all selectors');
     expectOnlySafeReads(calls, 'sweep of a versionless camera');
     unmount();
   });

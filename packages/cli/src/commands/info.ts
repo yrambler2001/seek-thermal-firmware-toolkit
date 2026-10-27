@@ -16,7 +16,9 @@ import {
   bootedReportOf,
   bootRuleKnown,
   bytesToHex,
+  CAPABILITY_WORDS,
   detectedReportOf,
+  familyReadBy,
   hex,
   hexUp,
   keyReportRows,
@@ -478,94 +480,119 @@ async function devicesListing(ctx: CommandContext): Promise<CommandResult> {
 
 /* ---- `info --families`: the families this build knows, from the registry ---- */
 
-interface CapabilityInfo {
-  readonly supported: boolean;
-  readonly reason: string | null;
+/** An operation the family refuses, as `--json` names it, and why. */
+interface Refusal {
+  readonly operation: string;
+  readonly reason: string;
 }
 
-interface ProfileInfo {
+/** One family as `info --families` shows it: the columns of HOW_IT_WORKS.md's family table. */
+interface FamilyInfo {
   readonly id: string;
   readonly name: string;
   readonly summary: string;
+  /** Which tab or command reads a camera of this family. */
+  readonly readBy: string;
+  /** Whether a bank can be written on the Work with firmware slots tab, and if not, why. */
+  readonly bankWrites: { readonly allowed: boolean; readonly reason: string | null };
+  /** How the firmware is stored in a bank. */
+  readonly stored: string;
   readonly cipher: {
     readonly whiteningK: string;
     readonly acceptanceSum: string;
     readonly clearWords: readonly number[];
   };
-  readonly capabilities: Readonly<Record<string, CapabilityInfo>>;
-  readonly sweepRange: readonly number[];
-  readonly windows: number;
+  /** The operations other than a bank write that the family refuses. */
+  readonly refuses: readonly Refusal[];
+  /** The subcommands Dump all selectors (`--all-selectors`) probes. */
+  readonly allSelectorsRange: readonly number[];
+  /** The blocks a dump reads when the build is not known. */
+  readonly blocks: number;
 }
 
-const FAMILY_CAPABILITIES: readonly CapabilityName[] = [
-  'dump',
-  'sweep',
-  'decrypt',
-  'deviceInfo',
-  'flash',
+/** The operations a family may refuse besides a bank write: their `--json` name and capability. */
+const FAMILY_OPERATIONS: readonly (readonly [string, CapabilityName])[] = [
+  ['dump', 'dump'],
+  ['allSelectors', 'allSelectors'],
+  ['decrypt', 'decrypt'],
+  ['info', 'deviceInfo'],
 ];
 
-function describeProfile(profile: FirmwareProfile): ProfileInfo {
-  const capabilities: Record<string, CapabilityInfo> = {};
-  for (const name of FAMILY_CAPABILITIES) {
-    const support = profile.capabilities[name];
-    capabilities[name] = support.supported
-      ? { supported: true, reason: null }
-      : { supported: false, reason: support.reason };
+const BANK_WRITES_ALLOWED = 'yes, one bank at a time on the Work with firmware slots tab';
+
+function describeFamily(profile: FirmwareProfile): FamilyInfo {
+  const flash = profile.capabilities.flash;
+  const refuses: Refusal[] = [];
+  for (const [operation, capability] of FAMILY_OPERATIONS) {
+    const support = profile.capabilities[capability];
+    if (!support.supported) refuses.push({ operation, reason: support.reason });
   }
   return {
     id: profile.id,
     name: profile.name,
     summary: profile.summary,
+    readBy: familyReadBy(profile),
+    bankWrites: flash.supported
+      ? { allowed: true, reason: null }
+      : { allowed: false, reason: flash.reason },
+    stored: profile.stored,
     cipher: {
       whiteningK: hexUp(profile.cipher.whiteningK),
       acceptanceSum: hexUp(profile.cipher.acceptanceSum),
       clearWords: [...profile.cipher.clearWords],
     },
-    capabilities,
-    sweepRange: [...profile.sweepRange],
-    windows: profile.windowMap().length,
+    refuses,
+    allSelectorsRange: [...profile.sweepRange],
+    blocks: profile.windowMap().length,
   };
 }
 
 /** `info --families`: the registry, read rather than hard-coded, so a family added to core shows here. */
-function profilesListing(ctx: CommandContext): CommandResult {
-  const profiles = listProfiles().map(describeProfile);
+function familiesListing(ctx: CommandContext): CommandResult {
+  const families = listProfiles().map(describeFamily);
 
   if (ctx.human) {
     ctx.out(
       table(
-        profiles.map((profile) => [
-          profile.id,
-          profile.name,
-          ...FAMILY_CAPABILITIES.map((name) =>
-            profile.capabilities[name]?.supported === true ? 'yes' : 'no',
-          ),
-          profile.cipher.whiteningK,
-          profile.cipher.acceptanceSum,
+        families.map((family) => [
+          family.id,
+          family.name,
+          family.bankWrites.allowed ? 'yes' : 'no',
         ]),
-        ['id', 'name', ...FAMILY_CAPABILITIES, 'K', 'sum'],
+        ['id', 'name on the page', 'bank writes'],
       ),
     );
     ctx.out('');
-    for (const profile of profiles) {
-      ctx.out(`${profile.id}: ${profile.summary}`);
-      for (const name of FAMILY_CAPABILITIES) {
-        const capability = profile.capabilities[name];
-        if (capability !== undefined && !capability.supported && capability.reason !== null) {
-          ctx.out(`  ${name} refused: ${capability.reason}`);
-        }
+    for (const family of families) {
+      ctx.out(`${family.id}: ${family.summary}`);
+      ctx.out(`  read by: ${family.readBy}`);
+      ctx.out(
+        `  bank writes: ${family.bankWrites.allowed ? BANK_WRITES_ALLOWED : `no: ${family.bankWrites.reason ?? ''}`}`,
+      );
+      ctx.out(`  firmware stored: ${family.stored}`);
+      /* One line per reason: operations refused for the same reason are named together. */
+      const reasons = new Map<string, string[]>();
+      for (const [operation, capability] of FAMILY_OPERATIONS) {
+        const refusal = family.refuses.find((entry) => entry.operation === operation);
+        if (refusal === undefined) continue;
+        reasons.set(refusal.reason, [
+          ...(reasons.get(refusal.reason) ?? []),
+          CAPABILITY_WORDS[capability],
+        ]);
+      }
+      for (const [reason, words] of reasons) {
+        ctx.out(`  refuses ${words.join(' and ')}: ${reason}`);
       }
       ctx.out('');
     }
   }
 
-  return { families: profiles };
+  return { families };
 }
 
 export async function infoCommand(ctx: CommandContext): Promise<CommandResult> {
   if (ctx.options.devices) return devicesListing(ctx);
-  if (ctx.options.families) return profilesListing(ctx);
+  if (ctx.options.families) return familiesListing(ctx);
 
   const session = await openSession(ctx);
   try {

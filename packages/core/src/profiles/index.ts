@@ -7,6 +7,7 @@
 export * from './types.js';
 export {
   AMBIGUITY_MARGIN,
+  CAPABILITY_WORDS,
   CONFIDENT_SCORE,
   TIE_MARGIN,
   detectProfile,
@@ -18,6 +19,7 @@ export {
   unregisterProfile,
 } from './registry.js';
 export type { CapabilityName } from './registry.js';
+export { DUMP_COMMAND_FAMILIES, V4_TAB_FAMILY, familyReadBy } from './routes.js';
 
 export {
   ACCEPT_SUM,

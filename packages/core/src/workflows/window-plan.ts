@@ -26,7 +26,7 @@ export interface DevicePlan {
 }
 
 /** The operations that plan from the camera's own table, as a refusal names them. */
-export type PlannedOperation = 'dump' | 'sweep' | 'read the device info';
+export type PlannedOperation = 'dump' | 'dump all selectors' | 'read the device info';
 
 /**
  * The error a closed identity gate turns into, worded once.

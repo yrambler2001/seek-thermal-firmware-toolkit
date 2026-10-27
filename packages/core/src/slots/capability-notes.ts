@@ -97,21 +97,6 @@ const LOCKED_2016_STAGING_NOTE =
   'under (key block 1), so the stored bytes are not the staged ones. Nothing is read from the ' +
   'target bank to stage it: the bank’s keystream is used only to read the bank back.';
 
-/**
- * This profile declares no write capability of its own (its capabilities.flash says why). The slot write is
- * the keystream-staged path the preservation pipeline ran on 1.0.3.0, so the slot writer does not gate it on
- * that refusal, and the note says so instead of hiding the refusal. It is a slot view's note (the Slots
- * tab, `seek-fw slots list`), so it names neither front end (TESTING.md 42.87). No line has a whole-image
- * write since 42.80, so the note no longer speaks of one (TESTING.md 42.89).
- */
-export function profileFlashNote(profileId: string): string {
-  return (
-    `Family ${profileId} declares no write of its own. The banks are written one at a time, each ` +
-    'staged under its own image’s key, the path the backup already ran on 1.0.3.0 cameras, so a ' +
-    'bank write is not refused for that reason.'
-  );
-}
-
 /* The firmware's own names stay in the code (cmd_CompleteMemoryUpgrade's data types 7 to 9 call
  * fw_validate_decrypt_program); the note says what they do (TESTING.md 42.89). */
 const MODERN_STAGING_NOTE =

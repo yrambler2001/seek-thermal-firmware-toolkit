@@ -843,10 +843,17 @@ function runResult(
       createdAt: state.createdAt,
     },
     version: state.expectedVersion ?? null,
+    /* `storage` is how the build stores its firmware in a bank (`v1-2014` plain, `v1-2014-ff` the
+     * 1.3.0.8 FF build's two keystreams, `compact-2016` the 2016 keystream), which picks the solver
+     * and the patch table. It is not the firmware family `seek-fw info` names. */
     build:
       state.buildId === undefined
         ? null
-        : { id: state.buildId, family: state.buildFamily ?? null, label: state.buildLabel ?? null },
+        : {
+            id: state.buildId,
+            storage: state.buildFamily ?? null,
+            label: state.buildLabel ?? null,
+          },
     boot: state.boot ?? null,
     choice: state.choice,
     targets: state.targets ?? null,

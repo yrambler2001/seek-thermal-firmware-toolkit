@@ -236,7 +236,7 @@ describe('preserve — a fresh run, checkpointed after every step', () => {
       const coded = lines.filter((line) => PRESERVE_CODE_NAMES.some((name) => name.test(line)));
       expect(coded).toEqual([]);
       /* the run file keeps every detail */
-      expect((await loadState()).steps.backup?.notes).toMatch(/the sweep’s row, mode \d/);
+      expect((await loadState()).steps.backup?.notes).toMatch(/the backup’s first read, mode \d/);
     },
   );
 
@@ -250,6 +250,11 @@ describe('preserve — a fresh run, checkpointed after every step', () => {
       const test = testIo({ backend: backendOf(camera) });
       const code = await run(['preserve', '--out', runDir(), '--yes', '--json'], test.io, signal());
       expect(code).toBe(EXIT_OK);
+      /* How the build stores its firmware, under a name of its own: "family" is the firmware
+       * family `seek-fw info` names, a different thing. */
+      const result = JSON.parse(test.stdout.text) as { build: Record<string, unknown> | null };
+      expect(result.build).toMatchObject({ storage: 'v1-2014' });
+      expect(result.build).not.toHaveProperty('family');
 
       const state = await loadState();
       expect(state.version).toBe(3);

@@ -574,7 +574,7 @@ describe('runSweep', () => {
     const camera = fakeCamera({ fwInfo: new Map([[0, buildBlock('0.3.0.1')]]) });
     const ctx = await contextFor(modern4x, camera);
     await expect(runSweep(ctx, { chunk: 4096, decrypt: false })).rejects.toThrow(
-      /refusing to sweep: firmware 0\.3\.0\.1 predates the dump protocol/,
+      /refusing to dump all selectors: firmware 0\.3\.0\.1 predates the dump protocol/,
     );
     expect(camera.calls.some((c) => c.op === OP.BEGIN_FIRMWARE_UPGRADE)).toBe(false);
   }, 60_000);

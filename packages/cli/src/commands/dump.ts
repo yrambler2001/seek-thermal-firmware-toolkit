@@ -6,7 +6,7 @@
  * uses. A locked 2014–2017 camera is refused before anything is read, and its
  * flow is `seek-fw preserve`.
  *
- * `--all-selectors` is the old `sweep`: it probes every BeginFirmwareUpgrade
+ * `--all-selectors` (Dump all selectors) probes every BeginFirmwareUpgrade
  * selector instead of reading the map, and writes what each one exposes.
  *
  * The interesting behaviour is the cancel path. Core does NOT throw when the
@@ -18,7 +18,7 @@
  * a successful one, and it is not a reason to throw the bytes away either.
  */
 
-import { readRunningFirmware, runDump, runSweep } from '@seek-fw/core';
+import { DUMP_COMMAND_FAMILIES, readRunningFirmware, runDump, runSweep } from '@seek-fw/core';
 import type { CommandContext, CommandResult } from '../cli.js';
 import { CliError } from '../errors.js';
 import {
@@ -30,12 +30,10 @@ import {
   workflowContext,
 } from './shared.js';
 
-/**
- * The families the 4.x and Nano flow reads: the post-2018 selector map, and the map a camera
- * whose answers name no family is read with. The locked 2014–2017 line (legacy-auth, compact-2016)
- * and the pre-0.8 Compact (early-compact) are read by `seek-fw preserve`.
- */
-const V4_FAMILIES: ReadonlySet<string> = new Set(['modern-4x', 'generic']);
+/* The families this command reads are core's `DUMP_COMMAND_FAMILIES` (the 4.x map, and the map a
+ * camera whose answers name no family is read with); `info --families` lists the same set. The
+ * locked 2014–2017 line (legacy-auth, compact-2016) and the pre-0.8 Compact (early-compact) are read
+ * by `seek-fw preserve`. */
 
 export async function dumpCommand(ctx: CommandContext): Promise<CommandResult> {
   const session = await openSession(ctx);
@@ -55,7 +53,7 @@ export async function dumpCommand(ctx: CommandContext): Promise<CommandResult> {
       );
     }
     const choice = await chooseProfileByProbe(ctx, session);
-    if (!V4_FAMILIES.has(choice.profile.id)) {
+    if (!DUMP_COMMAND_FAMILIES.has(choice.profile.id)) {
       throw new CliError(
         `this camera answers as ${choice.profile.name} (${choice.profile.id}), a camera of the ` +
           '0.x/1.x 2014–2017 line, which `seek-fw dump` does not read; nothing was dumped',
@@ -75,7 +73,7 @@ export async function dumpCommand(ctx: CommandContext): Promise<CommandResult> {
     if (ctx.options.allSelectors) {
       const [first, last] = choice.profile.sweepRange;
       ctx.reporter.log(
-        `sweeping selectors ${String(first)}..${String(last)} under family ${choice.profile.id}`,
+        `dumping all selectors ${String(first)}..${String(last)} under family ${choice.profile.id}`,
         'detail',
       );
       const result = await runSweep(workflow, options);
@@ -87,7 +85,8 @@ export async function dumpCommand(ctx: CommandContext): Promise<CommandResult> {
             `${String(result.selectorsWithData)} returned data, ` +
             `${String(result.placedInImage)} placed in the assembled image`,
         );
-        if (result.cancelled) ctx.out('cancelled: this sweep is PARTIAL — see manifest.json');
+        if (result.cancelled)
+          ctx.out('cancelled: this dump of all selectors is PARTIAL — see manifest.json');
       }
 
       return {

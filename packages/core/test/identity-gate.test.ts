@@ -298,7 +298,7 @@ describe('a camera whose firmware version cannot be read', { timeout: 20_000 }, 
       const error = await refusal(async () =>
         runSweep(await contextFor(profile, camera), { chunk: 4096, decrypt: false }),
       );
-      expectVersionRefusal(error, 'sweep');
+      expectVersionRefusal(error, 'dump all selectors');
       expectOnlyAgreedReads(camera, `sweep under ${profile.id}`);
     }
   });
@@ -724,7 +724,7 @@ describe('a camera still starting up, which refuses every request for a while', 
     const entryPoints: readonly (readonly [string, (ctx: WorkflowContext) => Promise<unknown>])[] =
       [
         ['dump', (ctx) => runDump(ctx, { chunk: 4096, decrypt: false })],
-        ['sweep', (ctx) => runSweep(ctx, { chunk: 4096, decrypt: false })],
+        ['dump all selectors', (ctx) => runSweep(ctx, { chunk: 4096, decrypt: false })],
         ['read the device info', (ctx) => readDeviceInfo(ctx, { chunk: 4096 })],
       ];
     for (const [what, run] of entryPoints) {

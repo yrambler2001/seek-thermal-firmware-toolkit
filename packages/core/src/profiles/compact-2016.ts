@@ -14,8 +14,10 @@
  *    expects — it is probably the 2016 generation. Flashing is disabled."
  *
  * That negative test is encoded here as a real profile: the cipher it actually
- * uses is declared, the read paths stay open, and `capabilities.flash` refuses
- * with the reason the original only logged.
+ * uses is declared and the read paths stay open. The original's refusal to
+ * write is gone (2026-10-27): the slot writer stages a 2016 bank in its own
+ * keystream form, the path the preservation run took on 1.0.3.0 and the Work
+ * with firmware slots tab took on a real 1.0.3.0 camera (TESTING.md 42.85).
  *
  * ---- WHAT CHANGED, 2026-09-22, AND WHY IT MATTERS -------------------
  *
@@ -76,7 +78,7 @@ import type {
   CipherProfile,
   ProfileCapabilities,
 } from './types.js';
-import { SUPPORTED, unsupported } from './types.js';
+import { SUPPORTED } from './types.js';
 import { HDR_HI, HDR_LO } from './modern-4x.js';
 import {
   buildLegacyWindowMap,
@@ -96,28 +98,16 @@ const COMPACT_2016_CIPHER: CipherProfile = {
   clearWords: [HDR_LO, HDR_HI],
 };
 
-/* The selector map is NOT the reason: this generation shares legacy-auth's
- * handler and tables (see the header). The write is. Corrected 2026-10-06; it
- * used to say the map differed, which this file's own summary contradicts. */
-const FLASH_REFUSAL =
-  "the 2016 generation shares legacy-auth's locked BeginFirmwareUpgrade handler and selector " +
-  "map, so the read is the same, but the classic write path (this family's own flash capability) " +
-  'has nothing for its banks. It stages either a 4.x bank encrypted under a confirmed Key A or a ' +
-  '2014 plaintext-chain bank verbatim, and a 2016 bank is neither: it is xorshift128 under K=0 ' +
-  'with a decrypted word sum of 0, the Key A such a write needs sits in the bootloader block that ' +
-  '1.0.3.x refuses on every channel, and the form the running application takes (the image XORed ' +
-  'with its block-0 keystream) is staged by the slot writer, which does not gate on this refusal. ' +
-  'The original disabled flashing on this generation and this ' +
-  'family keeps that refusal.';
-
 const CAPABILITIES: ProfileCapabilities = {
   /* Reads stay open, and now on the right map: the six protected banks are
    * reachable with the token rather than gap-filled. */
   dump: SUPPORTED,
-  sweep: SUPPORTED,
+  allSelectors: SUPPORTED,
   decrypt: SUPPORTED,
   deviceInfo: SUPPORTED,
-  flash: unsupported(FLASH_REFUSAL),
+  /* A bank write on the slots tab, which stages the bank in this generation's keystream form
+   * (slots/capability-family.ts `stagingFor`). */
+  flash: SUPPORTED,
 };
 
 /* ---- detection ---------------------------------------------------------- */
@@ -288,12 +278,14 @@ export const compact2016: FirmwareProfile = {
   id: 'compact-2016',
   name: '2016 Compact Pro',
   summary:
-    'The 2016 Compact Pro generation: xorshift128 images with no whitening (K=0) and a ' +
-    '0x00000000 acceptance sum. Its BeginFirmwareUpgrade is the locked one — the same handler ' +
-    'legacy-auth describes, decoded byte-exactly from a 1.0.3.0 build — so it uses that ' +
-    'selector map and the 18-byte token on the six protected banks. The classic flash is refused, ' +
-    'because that write path has no staged form for this cipher chain; the slot writer stages its ' +
-    'banks under the keystream form.',
+    'The Compact PRO 1.0.3.x builds (1.0.3.0 and 1.0.3.2). They answer reads exactly as the 2014 ' +
+    'Compacts do, unlock token included, so they are told apart by their version and by how ' +
+    'their banks are stored: encrypted, where the 2014 banks are plain. A 1.0.3.x camera is ' +
+    'read under this family from the start. The preservation run reads the whole flash, and ' +
+    'banks are written one at a time on the Work with firmware slots tab.',
+  stored:
+    `encrypted: xorshift128, K=${hexUp(COMPACT_2016_CIPHER.whiteningK)}, the decrypted words sum ` +
+    `to ${String(COMPACT_2016_CIPHER.acceptanceSum)}`,
   cipher: COMPACT_2016_CIPHER,
   /* The legacy geometry, not the modern one: 0x14000000 is blocked on every
    * channel and there is no selector above 0x141FFFFF, so the dump's gap list

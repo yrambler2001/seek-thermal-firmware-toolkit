@@ -9,16 +9,16 @@ the v1 "locked line" cameras. A stock camera of this line lets out 31 of the 64 
 whole-flash image cannot be taken read-only. The pipeline is a separate, explicit route that runs only
 when you start it: it writes a small temporary patch, reads the whole flash, and puts the original back.
 It started with Compact 1.0.0.0 / 1.2.0.0 / 1.3.0.0 (FW-V1 docs 33 sec. 11.7 and 34) and now covers
-sixteen builds across three cipher/acceptance families; the eight 2014 Compact 0.x builds (0.7.0.7 ..
+sixteen builds stored three ways (the Storage column below); the eight 2014 Compact 0.x builds (0.7.0.7 ..
 0.10.0.0) joined in the doc-36 campaign. The command takes NO image argument: the backup step reads every
 bank TWICE (two independent captures that must agree byte for byte; a disagreement on the bank the camera
-runs refuses the run), derives each bank's factory plaintext (identity on the 2014 plain chain, the build
-family's keystream solver on a cipher family), gates the derived images, says which bank the next start
+runs refuses the run), derives each bank's factory plaintext (identity on the 2014 plain chain, the keystream
+solver of the build's storage on a ciphered one), gates the derived images, says which bank the next start
 enters and why, and prints what it will do before anything write-shaped runs.
 
 ## The supported builds
 
-| Build                                                    | Family       | Patch                                                                | Staged form                        | Restore                 | Drain (whole part)                                                                                                                                                                                                              |
+| Build                                                    | Storage      | Patch                                                                | Staged form                        | Restore                 | Drain (whole part)                                                                                                                                                                                                              |
 | -------------------------------------------------------- | ------------ | -------------------------------------------------------------------- | ---------------------------------- | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Compact 1.0.0.0 / 1.2.0.0 / 1.3.0.0                      | v1-2014      | widen + reader trio + arm cursor reset, word 142 rebalanced          | plain (the capture, conjugated)    | capture verbatim        | yes — one widened-window arm; byte-exact at the 64-byte ask                                                                                                                                                                     |
 | Compact 0.9.0.2 / 0.9.0.6 / 0.9.0.7 / 0.9.1.0 / 0.10.0.0 | v1-2014      | widen + trio (per-layout offsets) + arm cursor reset, word 142       | plain                              | capture verbatim        | yes — 13 bytes move; full in-place proven on the emulator (doc 36.4); stock cap 65,536 B/arm                                                                                                                                    |
@@ -28,6 +28,11 @@ enters and why, and prints what it will do before anything write-shaped runs.
 | Compact 1.3.0.8 FF (16 Hz)                               | v1-2014-ff   | guard + widen, word 142 := `0x485523E8` (the accept solve)           | plain ⊕ ks0 ⊕ ksD (two keystreams) | **refused** (see below) | commit + drain proven **through the recovery slot only**; the in-place variant is derived, not run                                                                                                                              |
 | Compact Pro 1.0.3.0 (9 Hz)                               | compact-2016 | guard + widen (by shape), `0xF1003000`                               | plain ⊕ ks(block 0)                | factory image, staged   | yes — the doc-33 chain                                                                                                                                                                                                          |
 | Compact Pro 1.0.3.2 (9 Hz and 18 Hz FF)                  | compact-2016 | guard + widen + the arm-tail hook nop, `0x29FD6B0F`                  | plain ⊕ ks(block 0)                | factory image, staged   | **refused** — 128 B is the lossless read unit and the EP0 sessions die at ~64–81 KB; backup → patch → commit → restore → verify only                                                                                            |
+
+**Storage** is how the build stores its firmware in a bank, and it picks the keystream solver and the
+patch table: `v1-2014` plain, `v1-2014-ff` the 1.3.0.8 FF build's two keystreams, `compact-2016` the 2016
+keystream. It is not the firmware family `seek-fw info` names: a 1.3.0.8 FF camera's family is
+`legacy-auth`. `seek-fw preserve --json` has it as `build.storage`.
 
 **Compact Pro 1.0.3.0 on a Compact board.** The 1.0.3.0 app reboots on any board but the PRO's, so a
 Compact (PN297) running it carries a board patch in its banks (`scripts/patch-dump.mjs`: eight bytes of
@@ -78,9 +83,9 @@ Two build-specific facts the plan print states and the gates enforce:
   dump workflow: no widening patch is needed, the modern stock plan already reads 63 of the 64 flash
   windows.
 
-A ciphered slot (the 2016 Compact PRO, the 1.3.0.8 FF build) is solved from its capture by the family's
+A ciphered slot (the 2016 Compact PRO, the 1.3.0.8 FF build) is solved from its capture by its storage's
 keystream solver (`solvePlainFromCapture` in `packages/core/src/preservation/solve.ts`). A capture that no
-family solves, or whose solved image fails the gates, is refused, and nothing is written.
+storage solves, or whose solved image fails the gates, is refused, and nothing is written.
 
 ## What it does — the four phases
 
@@ -133,13 +138,13 @@ On 1.3.0.0 they move exactly **thirteen bytes** on the part: 0x238..0x23B, 0x3C1
 0x3C69, 0x3C70, 0x3C71, 0x3DB7, 0x3DC6, 0x3DC7 (bank-relative). The 0.x line carries the same arm-tail edit
 at its own offsets (see the table above).
 
-A slot of a cipher family (the 2016 Compact PRO, the 1.3.0.8 FF build) does not hold the firmware image;
+A ciphered slot (the 2016 Compact PRO, the 1.3.0.8 FF build) does not hold the firmware image;
 it holds the image XOR a keystream, and the wire-79 reader serves those SLOT BYTES. Pasting the new
 plaintext bytes into such a capture corrupts the slot — the first FW-V1 wire run did exactly that. The
 rule is to conjugate: `wire[off] := wire[off] XOR old_plain[off] XOR new_plain[off]` per patched byte; the
 keystream cancels, the decrypted image changes by exactly the diff (`conjugateCapture` in
 `packages/core/src/preservation/patch.ts`). On the 2014 plain chain the keystream is zero, and the
-conjugated capture is what the commit stages. On a cipher family the commit's own transform makes the slot
+conjugated capture is what the commit stages. On a ciphered slot the commit's own transform makes the slot
 bytes, so the run stages the patched image in the build's staged form (the table above), and the
 conjugated capture is what the bank holds once the write has landed: a resumed commit compares against it
 to tell a bank it already wrote.

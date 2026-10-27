@@ -229,7 +229,7 @@ describe('the opcodes this toolkit sends are the commands the firmware has', () 
      * the version is all a camera gives you before you send it anything. */
     const compact2014 = getProfile('early-compact');
     expect(compact2014.capabilities.dump.supported).toBe(false);
-    expect(compact2014.capabilities.sweep.supported).toBe(false);
+    expect(compact2014.capabilities.allSelectors.supported).toBe(false);
     for (const [id, f] of IMAGES) {
       const read = f.opcodes[wire(OP.GET_FEATURED_FIRMWARE_DATA)];
       const noGetter = read?.firmwareCalls !== 'GetFeaturedFirmwareData' || read.getter === null;

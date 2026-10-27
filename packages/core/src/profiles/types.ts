@@ -169,9 +169,14 @@ export interface BootPolicy {
   selectBootSlot(cfg0: number, isBootable: (key: SlotKey) => boolean): BootPrediction;
 }
 
+/**
+ * What a family allows. `dump` is the read of the selector map (Dump); `allSelectors` is Dump all
+ * selectors (`--all-selectors`); `deviceInfo` is the Info tab's full read; `flash` is a bank write on the
+ * Work with firmware slots tab, which then asks the build's own staging form (slots/capability.ts).
+ */
 export interface ProfileCapabilities {
   readonly dump: Support;
-  readonly sweep: Support;
+  readonly allSelectors: Support;
   readonly decrypt: Support;
   readonly deviceInfo: Support;
   readonly flash: Support;
@@ -275,7 +280,10 @@ export interface DetectionVerdict {
 export interface FirmwareProfile {
   readonly id: ProfileId;
   readonly name: string;
+  /** What the family is, for a person: the page's Detected firmware family panel and `info --families`. */
   readonly summary: string;
+  /** How its firmware is stored in a bank, in a line (HOW_IT_WORKS.md, Firmware families). */
+  readonly stored: string;
   readonly cipher: CipherProfile;
   readonly memory: MemoryLayout;
   readonly capabilities: ProfileCapabilities;
@@ -297,7 +305,7 @@ export interface FirmwareProfile {
    * the rows every build it knows agrees on, and declares the rest unreachable.
    */
   windowPlan(firmwareVersion: string | null): WindowPlan;
-  /** Inclusive subcommand range a selector sweep should probe. */
+  /** Inclusive subcommand range Dump all selectors probes. */
   readonly sweepRange: readonly [number, number];
   detect(evidence: DeviceEvidence): DetectionVerdict;
 }

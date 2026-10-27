@@ -72,7 +72,9 @@ decryptable or actually bootable. Read-only: nothing is written to the camera.
 
   --devices              list the connected Seek cameras and open none. Says so, and
                          exits 0, when there is none
-  --families             list the firmware families this build knows and open no camera
+  --families             list the firmware families this build knows and open no camera:
+                         what reads each, whether a bank can be written, how the
+                         firmware is stored
   --family <id>          act under this family instead of the one the camera answers for
   --serial <id>          pick one camera when several are attached
   --recipient <r>        interface | device | auto (default auto)

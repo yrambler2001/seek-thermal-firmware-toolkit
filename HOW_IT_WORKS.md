@@ -41,7 +41,9 @@ store their firmware the same way. Seek cameras do not all speak one protocol, a
 cosmetic — they change which selector exposes which block, how a stored key maps to the cipher state, and
 what the bootloader will accept. The Info tab names the family in its Firmware family panel, `seek-fw info`
 prints the same name with its id, `seek-fw info --families` lists the five, and `--family <id>` names one
-by hand.
+by hand. The listing says what this table says, from the code: each family's summary, which tab or command
+reads it, whether a bank can be written on the Work with firmware slots tab, how its firmware is stored,
+and what it refuses (`--json`: `readBy`, `bankWrites`, `stored`, `refuses`).
 
 | `--family` id   | Name on the page            | Builds                                                                                                                                                | Read by                                                                               | Firmware stored                                                                                                   |
 | --------------- | --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
@@ -86,8 +88,9 @@ whose stored words sum to 0) rules `compact-2016` out; a bank that decrypts to 0
 cipher) keeps a 1.0.3.x camera on `legacy-auth`. The bootloader's version (1.2.0.0 on the 2016 part,
 0.9.0.0 on the 2014 Compact) corroborates. When the slots name the other family, the Info tab,
 `seek-fw info` and "Read slots" (`seek-fw slots list`) redo the analysis under it, and a dump decrypts its
-slots under it, saying in the report which family the read acted under. `compact-2016` declares no write
-of its own: its banks are written one at a time on the Work with firmware slots tab, as on every line.
+slots under it, saying in the report which family the read acted under. `compact-2016` declares the bank
+write, as `modern-4x` and `legacy-auth` do: its banks are written one at a time on the Work with firmware
+slots tab, each staged in the 2016 keystream form (written on a real 1.0.3.0 camera, TESTING.md 42.85).
 
 **`early-compact` refuses to dump, and that refusal is the point.** Every decrypted image carries its own
 RPC method table — wire id = index + 53 — and recovering it from all 36 images in the reference corpus

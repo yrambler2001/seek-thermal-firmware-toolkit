@@ -614,7 +614,7 @@ export async function backupWindows(
         throw new SeekError(
           'pipeline/refused',
           spentReaderRefusal(
-            `the sweep's boot-config block (${hexUp(0x14010000, 8)}) and slot A ` +
+            `the backup's boot-config block (${hexUp(0x14010000, 8)}) and slot A ` +
               `(${hexUp(bankAAddress, 8)}) both served entirely unprogrammed 0xFF fill, and ` +
               'slot A’s re-armed read agreed — a running camera cannot hold both (a blank ' +
               'record is what makes the bootloader boot slot A, so slot A must then hold the ' +

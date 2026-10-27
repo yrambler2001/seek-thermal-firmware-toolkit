@@ -33,6 +33,15 @@ import { modern4x } from './modern-4x.js';
 /** The operations a profile can support or refuse. */
 export type CapabilityName = keyof ProfileCapabilities;
 
+/** Each capability as a refusal names it to a person: the page's words, not the key. */
+export const CAPABILITY_WORDS: Readonly<Record<CapabilityName, string>> = {
+  dump: 'dump',
+  allSelectors: 'Dump all selectors',
+  decrypt: 'decrypt',
+  deviceInfo: "the Info tab's full read",
+  flash: 'bank writes',
+};
+
 /**
  * How far a winner must clear the fallback's baseline before the match counts as
  * confident. Derived from `GENERIC_BASELINE` rather than written as a literal so
@@ -128,7 +137,7 @@ export function requireCapability(profile: FirmwareProfile, op: CapabilityName):
   if (support.supported) return;
   throw new SeekError(
     'family/unsupported',
-    `${profile.name} does not support ${op}: ${support.reason}`,
+    `${profile.name} does not support ${CAPABILITY_WORDS[op]}: ${support.reason}`,
     { detail: { family: profile.id, capability: op, reason: support.reason } },
   );
 }

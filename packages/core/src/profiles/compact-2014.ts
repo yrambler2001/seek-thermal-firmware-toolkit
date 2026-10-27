@@ -117,10 +117,12 @@ const NO_READ_COMMAND =
   "Recovered from the images' own method tables, both handler columns; see " +
   'test/firmware/facts.json.';
 
+/* The firmware's own names for that sequence: UploadFirmware, VerifyFirmwareSendCRC16,
+ * EnterBootloaderMode. None is implemented here, and the selector map, key table and bank
+ * layout were all decoded against later builds. */
 const NO_WRITE_PATH =
-  'the upgrade protocol on this generation is UploadFirmware / VerifyFirmwareSendCRC16 / ' +
-  'EnterBootloaderMode, none of which this toolkit implements, and its selector map, key ' +
-  'table and bank layout were all decoded against later builds.';
+  'these builds take new firmware through an older upgrade sequence that this toolkit does ' +
+  'not send, and their banks were never mapped, so nothing is written.';
 
 /**
  * No selector map. An EMPTY map, not the modern one borrowed.
@@ -162,11 +164,8 @@ const MEMORY: MemoryLayout = {
 
 const CAPABILITIES: ProfileCapabilities = {
   dump: unsupported(NO_READ_COMMAND),
-  sweep: unsupported(
-    'a sweep probes 66 BeginFirmwareUpgrade selectors, and on 0.3.0.1 that wire id is ' +
-      'EnterBootloaderMode. ' +
-      NO_READ_COMMAND,
-  ),
+  /* The same reason: it arms the same command, 66 times, and on 0.3.0.1 that is EnterBootloaderMode. */
+  allSelectors: unsupported(NO_READ_COMMAND),
   /* Both of these read nothing off the camera's flash. A dump obtained another
    * way decrypts normally, and the info commands are at their usual wire ids. */
   decrypt: SUPPORTED,
@@ -224,14 +223,13 @@ export const compact2014: FirmwareProfile = {
   id: 'early-compact',
   name: 'Early Compact (pre-0.8)',
   summary:
-    'The 2014 Compact builds older than 0.8.0.0 (0.3.0.1, 0.5.0.2, 0.5.1.0, 0.5.1.3, 0.6.0.4, ' +
-    '0.7.0.7, 0.7.0.8). None has a read handler for GetFeaturedFirmwareData: before 0.7.0.7 ' +
-    'wire id 0x4F is UploadFirmwareRowSize, and on 0.7.0.7 and 0.7.0.8 it is registered as a ' +
-    'setter only, so the read a dump sends cannot be dispatched. On 0.3.0.1 wire id 0x52 is ' +
-    'EnterBootloaderMode rather than BeginFirmwareUpgrade. Dumping, and dumping every ' +
-    'selector, are refused rather than attempted; decrypting a dump taken by other means still ' +
-    'works. The preservation run reads 0.7.0.7 and 0.7.0.8 through wire id 0x58 ' +
-    '(GetFeaturedData), where those two builds register the read handler.',
+    'The 2014 Compacts older than 0.8.0.0: 0.3.0.1, 0.5.0.2, 0.5.1.0, 0.5.1.3, 0.6.0.4, 0.7.0.7 ' +
+    'and 0.7.0.8. Their firmware cannot answer the read a dump sends, so Dump, Dump all ' +
+    "selectors, the Info tab's full read and the Work with firmware slots tab refuse them after " +
+    'reading the version; on 0.3.0.1 the command a dump starts with would set up a firmware ' +
+    'upgrade instead. The preservation run reads 0.7.0.7 and 0.7.0.8 through another command ' +
+    'those two builds answer. A dump taken another way decrypts as usual.',
+  stored: 'plain on 0.7.0.7 and 0.7.0.8; the older builds are never read',
   cipher: CIPHER,
   memory: MEMORY,
   capabilities: CAPABILITIES,

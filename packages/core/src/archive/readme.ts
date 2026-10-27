@@ -180,7 +180,7 @@ export function makeLegacyReadme(manifest: LegacyDumpManifest): string {
 export function makeSweepReadme(manifest: SweepManifest): string {
   const legacy = manifest.mode === 'selector-sweep-legacy';
   return [
-    '# Seek Thermal — full selector sweep' + (legacy ? ' (legacy / unlock token)' : ''),
+    '# Seek Thermal — dump of all selectors' + (legacy ? ' (legacy / unlock token)' : ''),
     '',
     'Captured: ' + manifest.startedAt + ' .. ' + manifest.finishedAt,
     'Device:   ' +

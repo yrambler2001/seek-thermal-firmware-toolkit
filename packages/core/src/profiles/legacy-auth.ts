@@ -616,7 +616,7 @@ export const LEGACY_BOOT: BootPolicy = {
 
 const CAPABILITIES: ProfileCapabilities = {
   dump: SUPPORTED,
-  sweep: SUPPORTED,
+  allSelectors: SUPPORTED,
   decrypt: SUPPORTED,
   deviceInfo: SUPPORTED,
   /* The write path is the preservation campaign's, measured against the real
@@ -829,15 +829,16 @@ export const legacyAuth: FirmwareProfile = {
   id: 'legacy-auth',
   name: 'Legacy locked firmware',
   summary:
-    'The 2014-2017 locked line: Compact 0.8.0.0-1.3.0.8 and Compact PRO 1.0.3.x. Its ' +
-    'BeginFirmwareUpgrade refuses subcommands 2..9 on the plain channel and opens them to an ' +
-    '18-byte payload carrying a 16-byte token (the same token in all 22 corpus images that ' +
-    'have one), and there is no selector above 0x141fffff. Each build is dumped with its own ' +
-    'selector table: 31 blocks on the 2016-2017 builds (25 of the modern map answer plain), ' +
-    'and on the 2014 builds 0x140C0000 is out of reach because their table gives subcommand ' +
-    '0x0E the address of 0x0D. Flashing works on the 2014 plaintext chain — banks stored ' +
-    'plain, word sum 0, no keys, the staged bytes verbatim — and the device-info gate ' +
-    'refuses every other build of the line with that reason.',
+    'The 2014 Compacts 0.8.0.0 to 1.3.0.8, the 16 Hz 1.3.0.8 FF build among them. A stock camera ' +
+    'lets out under half of its flash, some of it only to an unlock token the toolkit sends; the ' +
+    'preservation run reads the rest through a temporary patch. Banks are stored plain, except ' +
+    'on the FF build. A Compact PRO 1.0.3.x camera is read as compact-2016, and moves here only ' +
+    "when a bank is stored plain or decrypts to 0x0000FFFF, as the FF build's do. Banks are " +
+    'written on the Work with firmware slots tab on the builds the preservation run was ' +
+    'measured on; any other 0.x or 1.x build is read only.',
+  stored:
+    'plain: no key, the stored words sum to 0; the 1.3.0.8 FF build is encrypted (two ' +
+    `keystreams, K=${hexUp(LEGACY_CIPHER.whiteningK)}, sum ${hexUp(LEGACY_CIPHER.acceptanceSum)})`,
   cipher: LEGACY_CIPHER,
   memory: LEGACY_MEMORY,
   capabilities: CAPABILITIES,

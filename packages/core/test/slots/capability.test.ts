@@ -449,10 +449,11 @@ describe('the facts a person is shown with the plan', () => {
     );
   });
 
-  it('says the 2016 keystream write is the preservation path, and carries the profile refusal', () => {
+  it('writes the 2016 banks, and says no refusal it does not have', () => {
     const plan = buildSlotPlan(compact2016, '1.0.3.0');
     expect(plan.slots.every((slot) => slot.flashPlain.supported)).toBe(true);
-    expect(plan.notes.join('\n')).toMatch(/Family compact-2016 declares no write of its own\./);
+    /* compact-2016 declares the bank write it has, so no note explains a refusal away. */
+    expect(plan.notes.join('\n')).not.toMatch(/declares no write/);
     /* no line has a whole-image write since 42.80, so no note speaks of one (TESTING.md 42.89) */
     expect(plan.notes.join('\n')).not.toMatch(/whole-image/);
     /* Shared by the page and the CLI, so it names neither as "this page" (TESTING.md 42.86). */

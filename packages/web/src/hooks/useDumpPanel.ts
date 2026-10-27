@@ -168,7 +168,8 @@ export function useDumpPanel(params: DumpPanelParams): DumpPanelApi {
         ) {
           throw lineRefusal(running.version);
         }
-        const chosen = await chooseActingProfile(client, mode, (text, level) => {
+        const operation = mode === 'sweep' ? 'dump all selectors' : 'dump';
+        const chosen = await chooseActingProfile(client, operation, (text, level) => {
           reporter.reporter.log(text, level);
         });
         setActing(chosen);

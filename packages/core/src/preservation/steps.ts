@@ -1449,7 +1449,7 @@ async function captureAnchor(
       capture = rescued;
       verifiedSecond = rescued;
       serveNote =
-        'the sweep’s row and the fresh-boot read both served garbage — a third boot’s read ' +
+        'the backup’s first read and the fresh-boot read both served garbage — a third boot’s read ' +
         'is the capture, and the archive’s row is repaired to it';
     } else {
       /* The flip: the sweep's boot was swallowed and the fresh boot reads a
@@ -1457,7 +1457,7 @@ async function captureAnchor(
        * repaired to it so the run directory stays self-consistent. */
       capture = fresh;
       serveNote =
-        'the sweep’s row served garbage and was re-verified — the fresh boot’s read is the ' +
+        'the backup’s first read served garbage and was re-verified — the fresh boot’s read is the ' +
         'capture';
     }
   } else if (!equalBytes(sweepRow, fresh)) {
@@ -1477,7 +1477,7 @@ async function captureAnchor(
         verifiedSecond = again;
         serveNote =
           'the fresh boot served garbage and was re-read on another boot — the re-read ' +
-          'agrees with the sweep’s row';
+          'agrees with the backup’s first read';
       } else if (!slotReadIsPlausible(again)) {
         fail(
           spentReaderRefusal(
@@ -1968,7 +1968,7 @@ async function runBackupStep(
             : `the camera reports it entered ${bankWordsOf(boot.entered)}`) +
           `; next start: ${boot.nextStart === null ? 'not known' : bankWordsOf(boot.nextStart)} ` +
           `(${boot.why}); ${bankWordsOf(anchor)}, the bank the camera runs, served twice ` +
-          `(the sweep’s row, mode ${String(anchorRead.readModes[0])}, + one fresh arm of the ` +
+          `(the backup’s first read, mode ${String(anchorRead.readModes[0])}, + one fresh arm of the ` +
           `bank window, mode ${String(anchorRead.readModes[1])}), ${anchorRead.serveNote} ` +
           `(sha256 ${anchorRead.slotReadShas[1]}); the factory plaintext derived from the ` +
           `capture (${anchorRead.derived.method}, ${String(anchorRead.derived.plain.length)} B) ` +

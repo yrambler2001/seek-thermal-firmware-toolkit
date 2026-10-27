@@ -604,7 +604,7 @@ describe('runPreserveStep(backup) — the double read and the derived-image gate
       expect([...derived!]).toEqual([...plain]);
       expect(state.steps.backup?.notes).toMatch(/both reads agree/);
       expect(state.steps.backup?.notes).toMatch(
-        /slot A, the bank the camera runs, served twice \(the sweep’s row, mode 7, \+ one fresh arm of the bank window, mode 7\)/,
+        /slot A, the bank the camera runs, served twice \(the backup’s first read, mode 7, \+ one fresh arm of the bank window, mode 7\)/,
       );
       expect(state.steps.backup?.notes).toMatch(/identity/);
       /* THE BOOT FACTS: the blank word tries A first, A passes the 2014 check
@@ -734,7 +734,7 @@ describe('runPreserveStep(backup) — the double read and the derived-image gate
       expect(state.boot?.nextStart).toBe('a');
       /* The note names the verification. */
       expect(state.steps.backup?.notes).toMatch(
-        /the sweep’s row served garbage and was re-verified — the fresh boot’s read is the capture/,
+        /the backup’s first read served garbage and was re-verified — the fresh boot’s read is the capture/,
       );
       /* The assembled backup's bank row is the verified capture, not the
        * garbage the sweep served. */
