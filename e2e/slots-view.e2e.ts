@@ -142,6 +142,8 @@ const SUPPORTED: readonly SupportedCase[] = [
     version: '4.8.2.1',
     layout: MODERN_LAYOUT,
     comparesReadBack: false,
+    /* compact_32k-4.8.2.1-to32 (TESTING.md 42.24, 2af8bb8). */
+    makeFps: 32,
   },
   {
     camera: entryFor(
@@ -152,7 +154,8 @@ const SUPPORTED: readonly SupportedCase[] = [
     version: '1.3.0.0',
     layout: LEGACY_LAYOUT,
     comparesReadBack: true,
-    makeFps: 16,
+    /* compact_32k-1.3.0.0-to32 (TESTING.md 42.25); the 16 Hz patches were removed in 42.26 (db45c5b). */
+    makeFps: 32,
   },
 ];
 
@@ -409,11 +412,14 @@ for (const subject of SUPPORTED) {
               if (dumped.decrypted !== null) {
                 bootedPlain = dumped.decrypted.bytes;
                 bootedPlainName = dumped.decrypted.name;
-                expect(sha256(dumped.decrypted.bytes).slice(0, 8)).toBe(
-                  /-decrypted-([0-9a-f]{8})(-KeyA-[0-9a-f]{32}-KeyB-[0-9a-f]{32})?\.bin$/.exec(
+                /* One stem for both files of a read since 42.71 (1d13e9d, `slotDumpNames`): the eight digits
+                 * are the stored bank's, then `-decrypted` and the key pair the image holds, if any. */
+                expect(
+                  /^seek-slot-[abr]-[^-]+-([0-9a-f]{8})-decrypted(-KeyA-[0-9a-f]{32}-KeyB-[0-9a-f]{32})?\.bin$/.exec(
                     dumped.decrypted.name,
                   )?.[1],
-                );
+                  `${name} decrypted file name carries the stored bank's first 8 of its sha`,
+                ).toBe(sha256(dumped.raw.bytes).slice(0, 8));
               }
             }
           }
@@ -485,8 +491,21 @@ for (const subject of SUPPORTED) {
           expect(outcome ?? '').toContain('NOW UNPLUG AND REPLUG THE CAMERA');
           await snap(t.page, SHOT_DIR, `${subject.version}-outcome-desktop`);
 
-          /* The page forgets its read once a write starts: the table is gone until a re-read. */
-          expect(await t.page.$(SLOTS_TABLE_ROWS), 'the table waits for a re-read').toBeNull();
+          /* The page drops its read at the commit point and reads the banks again after the read-back, so
+           * the table is back, from that new read (TESTING.md 42.44): the target now holds the image. */
+          const again = await rowsOf(t.page);
+          expect(
+            again.map((row) => row.name),
+            'the table is back after the write',
+          ).toEqual(['Slot A', 'Slot B', 'Recovery R']);
+          const written = again.find((row) => row.letter === target.letter);
+          say(
+            `after the write: ${written?.name ?? '?'} ${written?.firmware ?? '?'} ${written?.sha256 ?? '?'}`,
+          );
+          expect(
+            written === undefined ? '' : versionCell(written),
+            `${name} holds the image written`,
+          ).toBe(subject.version);
           /* Whatever the page says, the bank itself: read it back and compare its image. */
           await expectWrittenImage(t, target.letter, plain);
           expect(await refusalsOf(t)).toEqual([]);

@@ -302,6 +302,8 @@ export class UsbBridge implements DevicePrompter {
   readonly refusals: string[] = [];
   /** `in 0x4f` -> how many went out, for the report. */
   readonly counts = new Map<string, number>();
+  /** Every OUT transfer that went to the device, in order, with its payload: for a check by shape. */
+  readonly outs: { readonly request: number; readonly bytes: Uint8Array }[] = [];
   /** The bus and chooser events, timestamped, for the report. */
   readonly timeline: string[] = [];
   /** Shared with every other tab of the same browser profile. */
@@ -643,6 +645,7 @@ export class UsbBridge implements DevicePrompter {
         const bytes = new Uint8Array(Buffer.from(request.data, 'base64'));
         this.count('out', setup.request);
         this.enforce(this.bus.check(entry, 'out', request.setup, bytes), 'out', setup.request);
+        this.outs.push({ request: setup.request, bytes });
         const result = await device.controlTransferOut(setup, bytes, this.bus.hostTimeoutMs);
         const transfer: TransferValue = {
           status: result.status,

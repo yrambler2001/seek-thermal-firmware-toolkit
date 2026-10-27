@@ -344,7 +344,11 @@ describe.skipIf(!available)(
               expect(run.ffPrepare?.ffCommit).toBe('refuses');
               const text = run.ffPrepare?.warnings.join('\n') ?? '';
               expect(text).toContain('The camera runs the 8 Hz 1.3.0.8 build: the camera answers');
-              expect(text).toContain('expected to refuse this write at commit with 0x00070100');
+              /* In people's words since 42.110 (e28651e): no status code; the JSON's `ffCommit` says 'refuses'. */
+              expect(text).toContain(
+                'this payload fails that check, so it is expected to refuse this write before it writes anything',
+              );
+              expect(text).not.toMatch(/0x00070100/);
               expect(run.ffPrepare?.sent, 'requests sent while preparing').toBe(0);
             });
           }

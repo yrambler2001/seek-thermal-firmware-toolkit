@@ -188,8 +188,11 @@ for (const boot of BOOTED) {
         say(`${boot.name}: no empty bank on this dump`);
         return;
       }
-      expect(empty.actionsText).toContain('Frame-rate patch not offered: bank');
-      expect(empty.actionsText).toContain('it is empty');
+      /* The bank in its sentence words since 42.108 (a558f99): "slot B", "recovery R". */
+      const words = empty.letter === 'r' ? 'recovery R' : `slot ${empty.letter.toUpperCase()}`;
+      expect(empty.actionsText).toContain(
+        `Frame-rate patch not offered: ${words} has no decrypted image to patch (it is empty)`,
+      );
     });
   });
 }
