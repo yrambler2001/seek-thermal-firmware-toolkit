@@ -206,11 +206,11 @@ export function canRunPhase(input: PreserveGateInput): PreserveGate {
         break;
       }
       case 'drain': {
-        want('commit', 'the commit (run or resume at it first)');
+        want('commit', 'the Write step (run or resume at it first)');
         missing.push(...targetGaps(state));
         if (state.capability !== undefined && !state.capability.wholePart) {
           missing.push(
-            `the drain refuses on ${buildName(state)} — ${drainCapabilityWords(state.capability)}`,
+            `the whole-flash read refuses on ${buildName(state)} — ${drainCapabilityWords(state.capability)}`,
           );
         }
         for (const key of targetsOf(state)) {
@@ -219,7 +219,7 @@ export function canRunPhase(input: PreserveGateInput): PreserveGate {
         break;
       }
       case 'restore': {
-        want('commit', 'the commit (run or resume at it first)');
+        want('commit', 'the Write step (run or resume at it first)');
         missing.push(...targetGaps(state));
         for (const key of targetsOf(state)) {
           if (state.banks?.[key].patch === undefined) {

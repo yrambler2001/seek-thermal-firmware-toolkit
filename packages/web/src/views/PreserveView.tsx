@@ -207,14 +207,15 @@ export function PreserveView({
           <Alert tone="err">
             <p>
               <strong>
-                The commit is not on record for this run, so the phases past it are shut.
+                The write is not on record for this run, so the steps after it are shut.
               </strong>{' '}
-              The camera may already be running the patched image (an interrupted commit) or may not
-              (the commit never started) — the run file cannot prove which. Do not run the dump or
-              restore against a patched camera without the commit on record; the way forward is step
-              03, whose commit pre-check reads the bank and refuses a blind replay. Only if that
-              pre-check has already refused with <em>already holds the patched bytes</em> does the
-              jump apply — and it goes through its own dialog.
+              The camera may already be running the patched image (an interrupted write) or may not
+              (the write never started) — the run file cannot prove which. Do not run the
+              whole-flash read or the restore against a patched camera without the write on record;
+              the way forward is step 03, whose check before the write reads the bank and refuses to
+              write it blindly again. Only if that check has already refused with{' '}
+              <em>already holds the patched bytes</em> does the jump apply — and it goes through its
+              own dialog.
             </p>
           </Alert>
         )}
@@ -433,7 +434,7 @@ function PhaseSection({
   const startLabel = plannedStop
     ? 'Go on to step 04: restore the banks'
     : jumpOnly
-      ? 'Run past the unrecorded commit'
+      ? 'Run past the unrecorded write'
       : phaseFailed
         ? `Try ${meta.label.toLowerCase()} again`
         : `Start ${meta.label.toLowerCase()}`;
@@ -501,7 +502,7 @@ function PhaseSection({
               onArm(true);
             }}
           >
-            Skip the commit — start at the drain
+            Skip the write — start at the whole-flash read
           </Button>
         )}
         <Button variant="ghost" disabled={!active} onClick={preserve.cancel}>
@@ -535,7 +536,7 @@ function PhaseSection({
       )}
       {gate.pastCommit && (
         <p className="text-[0.8rem] font-medium text-warn">
-          Concerns the patched part while the commit is not on record — the camera may already be
+          Concerns the patched camera while the write is not on record — the camera may already be
           patched. See the note under &ldquo;What to expect&rdquo;.
         </p>
       )}
@@ -546,8 +547,8 @@ function PhaseSection({
         state.steps.commit?.status === 'done' &&
         state.steps.drain?.status !== 'done' && (
           <p className="text-[0.8rem] text-warn">
-            The whole-part dump has not run — this step puts the camera back without it. Run step 03
-            first unless the dump does not matter to you.
+            The whole-flash read has not run — this step puts the camera back without it. Run step
+            03 first unless the whole-flash read does not matter to you.
           </p>
         )}
       {active && writes && ask === null && (
@@ -847,7 +848,7 @@ function BankChoice({ state, busy, chooseBanks }: BankChoiceProps): ReactElement
       </p>
       {fixed && (
         <p className="text-[0.8rem] text-muted-foreground">
-          The commit has run, so the choice is fixed: step 04 puts back exactly these banks.
+          The write has run, so the choice is fixed: step 04 puts back exactly these banks.
         </p>
       )}
       {verdicts.some((verdict) => verdict.banks === null) && (
@@ -1072,17 +1073,17 @@ function PhaseConfirm({ request, state, onConfirm, onCancel }: PhaseConfirmProps
       <AlertDialogContent aria-describedby="preserve-confirm-what">
         <AlertDialogTitle>
           {request?.jump === true
-            ? `${label} — jump past the unrecorded commit?`
+            ? `${label} — jump past the unrecorded write?`
             : `${label} — write to ${banks}?`}
         </AlertDialogTitle>
         <AlertDialogDescription id="preserve-confirm-what" className="space-y-2">
           {request?.jump === true ? (
             <>
               <span className="block">
-                THE COMMIT IS NOT ON RECORD for this run, and you are asserting that the writes
-                landed without their checkpoints: the step starts past the commit instead of
-                replaying it. The steps&apos; own checks still run — the version read, the bank
-                pre-checks — and a wrong guess costs a wasted dump, not a bricked camera.
+                THE WRITE IS NOT ON RECORD for this run, and you are asserting that the writes
+                landed without their checkpoints: the step starts past the write instead of writing
+                again. The steps&apos; own checks still run — the version read, the bank checks —
+                and a wrong guess costs a wasted whole-flash read, not a bricked camera.
               </span>
               <span className="block">
                 Keep the camera plugged in and the computer awake until the step finishes.
@@ -1094,7 +1095,7 @@ function PhaseConfirm({ request, state, onConfirm, onCancel }: PhaseConfirmProps
                 {writing
                   ? `This writes a small patch into ${banks}${inOrder}` +
                     (order.length > 1 ? ' — the bank the camera tries first goes last' : '') +
-                    '. Step 04 puts the originals back. The dump that follows only reads.'
+                    '. Step 04 puts the originals back. The whole-flash read that follows only reads.'
                   : `This writes your original firmware back into ${banks}${inOrder}` +
                     (order.length > 1 ? ' — the bank the camera tries first goes first' : '') +
                     '.'}
@@ -1120,7 +1121,7 @@ function PhaseConfirm({ request, state, onConfirm, onCancel }: PhaseConfirmProps
               if (request !== null) onConfirm(request);
             }}
           >
-            {request?.jump === true ? 'Yes — jump past the commit' : 'Yes — write to the camera'}
+            {request?.jump === true ? 'Yes — jump past the write' : 'Yes — write to the camera'}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
@@ -1184,13 +1185,13 @@ function VerifySummary({ state, check, busy, onSave }: VerifySummaryProps): Reac
               ? []
               : ([
                   [
-                    'Only in the full dump',
+                    'Only in the whole-flash read',
                     `${String(check.onlyInFullDump.length)} block(s) a stock read cannot reach: ` +
                       blockList(check.onlyInFullDump),
                   ],
                 ] as const)),
             [
-              'Raw post-commit part',
+              'Whole-flash read, as read',
               <>
                 {state.rawDumpSha256 ?? 'not produced'}{' '}
                 {state.rawDumpSha256 !== undefined && (

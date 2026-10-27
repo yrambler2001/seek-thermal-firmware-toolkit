@@ -19,7 +19,7 @@ export type PhaseId = 'read-build' | 'patch-dump' | 'restore-verify';
 
 export const PHASE_LABEL: Readonly<Record<PhaseId, string>> = {
   'read-build': 'Read & build',
-  'patch-dump': 'Patch & dump',
+  'patch-dump': 'Write & whole-flash read',
   'restore-verify': 'Restore & verify',
 };
 
@@ -65,7 +65,7 @@ export const EVERYTHING: UiGuard = {
 export const READ_ONLY_CAMERA: UiGuard = {
   name: 'read-only (real camera)',
   allowClick: (label) =>
-    !/patch & dump|restore & verify|write to the camera|jump past|skip the commit|flash|i replugged it/i.test(
+    !/write & whole-flash read|restore & verify|write to the camera|jump past|skip the write|flash|i replugged it/i.test(
       label,
     ),
   allowRoute: (hash) => !/flash/i.test(hash),
@@ -82,7 +82,7 @@ export const READ_ONLY_CAMERA: UiGuard = {
 export const PRESERVE_WRITE: UiGuard = {
   name: 'Preserve steps 03 and 04 (the write run)',
   allowClick: (label) =>
-    !/flash|^write to camera$|— write to camera$|choose plaintext image|jump past|skip the commit|i replugged it|read & build/i.test(
+    !/flash|^write to camera$|— write to camera$|choose plaintext image|jump past|skip the write|i replugged it|read & build/i.test(
       label,
     ),
   allowRoute: (hash) => !/flash/i.test(hash),

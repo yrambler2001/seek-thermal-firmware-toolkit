@@ -28,6 +28,7 @@ import {
   PRESERVE_RUN_STATE_FILE,
   PRESERVE_VERIFY_FILE,
   preserveCaptureFile,
+  preserveStepLabel,
   preservePatchedFile,
   preservePlainFile,
 } from '@seek-fw/core';
@@ -124,54 +125,54 @@ export interface PreserveStepMeta {
 export const PRESERVE_STEPS: readonly PreserveStepMeta[] = [
   {
     id: 'backup',
-    label: 'Back up the reachable flash',
+    label: preserveStepLabel('backup'),
     description:
-      'Reads all 31 windows a stock camera serves, 64 KiB each, then reads every bank a ' +
-      'SECOND time, requires the two reads of each to agree byte for byte, derives each ' +
-      'bank’s factory plaintext and gates it, and works out which bank the next start ' +
-      'enters — the dump of the available regions, taken BEFORE anything is written. This is ' +
-      "the run's only copy of this camera.",
+      'Reads the 31 blocks of 64 KiB a stock camera can read, then reads every bank a second ' +
+      'time (the two reads must agree byte for byte), gets each bank’s firmware out of what the ' +
+      'camera stores (decrypted where it is stored encrypted) and checks it, and works out which ' +
+      'bank the camera starts next. This is the run’s only copy of this camera, taken before ' +
+      'anything is written.',
   },
   {
     id: 'patch',
-    label: 'Build the patched image',
+    label: preserveStepLabel('patch'),
     description:
-      'Offline. Applies the instruction edits and the checksum rebalance to each writable ' +
-      'bank’s derived factory plaintext and files the results as checkpoints. No camera traffic.',
+      'Offline, no camera. Builds the patch for each bank the run can write: it lets the ' +
+      'camera’s read reach the whole 4 MiB flash, and it is written in the form the camera ' +
+      'stores it, so only the patch’s own bytes change.',
   },
   {
     id: 'commit',
-    label: 'Commit the patch into the chosen banks',
+    label: preserveStepLabel('commit'),
     description:
-      'THE WRITE. Reads every chosen bank back, refuses unless each still holds exactly what ' +
-      'the backup recorded, stages the conjugated patch (image length only) and commits each ' +
-      '— the bank the camera tries first last. No reset in this session — the reset belongs ' +
-      'to the drain step.',
+      'The write. Reads every chosen bank back first and writes nothing unless each still holds ' +
+      'what the backup recorded (a write that already landed is never repeated), then writes ' +
+      'each one, the bank the camera tries first last. The camera is not restarted here: the ' +
+      'next step restarts it.',
   },
   {
     id: 'drain',
-    label: 'Dump the whole part',
+    label: preserveStepLabel('drain'),
     description:
-      'Resets the camera so it boots the patched image (it stays silent for roughly ten ' +
-      'seconds while it boots — the wizard waits and re-adopts it when it re-enumerates), ' +
-      'checks which bank it started from — a bank without the patch stops the step before ' +
-      'anything is read — then drains the whole 4 MiB part through the widened window and ' +
-      'swaps every written bank back from the backup to build the delivered, ' +
-      'original-content image. Nothing is written.',
+      'Restarts the camera so it starts the patched firmware (it is silent for about ten ' +
+      'seconds; the page waits and finds it again), checks which bank it started from (a bank ' +
+      'without the patch stops the step before anything is read), then reads the whole 4 MiB ' +
+      'flash in one read and puts each written bank’s original firmware, from the backup, into ' +
+      'the saved image. Nothing is written.',
   },
   {
     id: 'restore',
-    label: 'Restore the original banks',
+    label: preserveStepLabel('restore'),
     description:
-      'THE OTHER WRITE. Stages each written bank’s original content back while the patched ' +
-      'image still runs from SRAM, then resets.',
+      'The other write. Writes each written bank’s original firmware back while the patched ' +
+      'firmware still runs, then restarts the camera.',
   },
   {
     id: 'verify',
-    label: 'Verify against the backup',
+    label: preserveStepLabel('verify'),
     description:
-      'Re-reads the 31 windows on a fresh boot and requires zero differing bytes against the ' +
-      'backup taken before the first write. Read-only.',
+      'After a fresh start, reads the 31 blocks again, every bank among them: 0 differing bytes ' +
+      'proves the camera’s flash is byte-identical to the backup. Read-only.',
   },
 ];
 
@@ -210,7 +211,7 @@ export const PRESERVE_PHASES: readonly PreservePhaseMeta[] = [
     id: 'read-build',
     label: 'Read & build',
     description:
-      'Reads everything a normal dump can reach — 31 blocks of 64 KiB — and keeps it as your ' +
+      'Reads everything a stock camera lets out — 31 blocks of 64 KiB — and keeps it as your ' +
       'backup, reads each firmware bank a second time, works out which bank the camera ' +
       'starts from next time, and prepares the small patch the next step writes. Nothing is ' +
       'written to the camera. Usually under a minute. If the camera needs a restart along the ' +
@@ -221,12 +222,12 @@ export const PRESERVE_PHASES: readonly PreservePhaseMeta[] = [
   },
   {
     id: 'patch-dump',
-    label: 'Patch & dump',
+    label: 'Write & whole-flash read',
     description:
       'Writes a small, temporary patch into the firmware banks chosen in step 02 (by ' +
       'default the bank the camera starts from next), so it can read out all of its flash. ' +
       'Then the camera restarts — press "Connect device" and pick it again when the page asks ' +
-      '— and the whole 4 MiB is dumped. Step 04 puts the original firmware back.',
+      '— and the whole 4 MiB flash is read. Step 04 puts the original firmware back.',
     steps: ['commit', 'drain'],
     resetsCamera: true,
     replugAfter: true,

@@ -695,7 +695,7 @@ export function usePreservePanel(params: PreservePanelParams): PreservePanelApi 
         }
         if (allowJump && gate.jumpable) {
           rep.reporter.log(
-            'JUMP past the unrecorded commit, on your assertion that the writes landed ' +
+            'Jumping past the unrecorded write, on your word that the writes landed ' +
               'without their checkpoints — the steps’ own version and bank checks still run',
             'warn',
           );
@@ -717,8 +717,8 @@ export function usePreservePanel(params: PreservePanelParams): PreservePanelApi 
             }
             if (allowJump && step === 'commit' && current.steps.commit?.status === 'failed') {
               rep.reporter.log(
-                'JUMP: the commit is not replayed — an attempt is on record and the bank ' +
-                  'was read as already patched; continuing at the drain',
+                'Jumping past the write: it is not written again — an attempt is on record and ' +
+                  'the bank was read as already patched; going on with the whole-flash read',
                 'warn',
               );
               continue;
