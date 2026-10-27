@@ -110,7 +110,7 @@ const NO_READ_COMMAND_VERSIONS: readonly string[] = [
  *
  * The names-only facts could not see these two, and the toolkit called them
  * readable until 2026-09-23. With the five above they are the seven builds the
- * `compact-2014` profile refuses.
+ * `early-compact` profile refuses.
  */
 const SETTER_ONLY_READ_VERSIONS: readonly string[] = ['0.7.0.7', '0.7.0.8'];
 
@@ -222,12 +222,12 @@ describe('the opcodes this toolkit sends are the commands the firmware has', () 
   });
 
   it('refuses to dump every build whose read has no getter', () => {
-    /* The point of `compact-2014`, stated as a property rather than a list:
+    /* The point of `early-compact`, stated as a property rather than a list:
      * whichever builds cannot dispatch the read — no such command, or the
      * command in the setter column only — the profile that claims them must
      * refuse to dump, and it must be reachable from the version alone, because
      * the version is all a camera gives you before you send it anything. */
-    const compact2014 = getProfile('compact-2014');
+    const compact2014 = getProfile('early-compact');
     expect(compact2014.capabilities.dump.supported).toBe(false);
     expect(compact2014.capabilities.sweep.supported).toBe(false);
     for (const [id, f] of IMAGES) {
@@ -235,7 +235,7 @@ describe('the opcodes this toolkit sends are the commands the firmware has', () 
       const noGetter = read?.firmwareCalls !== 'GetFeaturedFirmwareData' || read.getter === null;
       expect(predatesDumpProtocol(f.version), `${id} (${f.version})`).toBe(noGetter);
       const verdict = compact2014.detect({ firmwareVersion: f.version });
-      expect(verdict.score > 0, `${id}: compact-2014 claims it`).toBe(noGetter);
+      expect(verdict.score > 0, `${id}: early-compact claims it`).toBe(noGetter);
       for (const legacy of ['legacy-auth', 'compact-2016'] as const) {
         if (!noGetter) continue;
         const score = getProfile(legacy).detect({ firmwareVersion: f.version }).score;

@@ -433,7 +433,7 @@ export function profileInfoOf(
     id: profile.id,
     name: profile.name,
     detectionScore: match?.score ?? 0,
-    reasons: match?.reasons ?? ['profile selected by the caller; no detection was run'],
+    reasons: match?.reasons ?? ['family named by the caller; no detection was run'],
   };
 }
 

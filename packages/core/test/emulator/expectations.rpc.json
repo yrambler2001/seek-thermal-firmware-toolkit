@@ -53,7 +53,7 @@
       },
       "plan": {
         "firmwareVersion": "0.3.0.1",
-        "profile": "compact-2014",
+        "profile": "early-compact",
         "dumps": false,
         "table": "none: no read handler on this generation",
         "windows": 0,
@@ -66,8 +66,8 @@
       "gate": {
         "firmwareVersion": "0.3.0.1",
         "identified": true,
-        "profile": "compact-2014",
-        "refusal": "profile/unsupported: Early Compact (pre-0.8) does not support dump: firmware older than 0.8.0.0 has no read handler for GetFeaturedFirmwareData, the command a dump reads flash with. On 0.7.0.7 and 0.7.0.8 it is in the RPC method table at 0x4F but registered as a setter (write handler) only, so the control-IN read a dump sends cannot be dispatched (the preservation run reads those two builds through wire id 0x58, GetFeaturedData, instead); before 0.7.0.7 wire id 0x4F is UploadFirmwareRowSize, and on 0.3.0.1 wire id 0x52 — the one a dump arms with — is EnterBootloaderMode rather than BeginFirmwareUpgrade: the camera stays in its application, but every arm sets a flash target and arms that build's firmware-upgrade stage (GetErrorCode then reads 0x00400000), which is not a read window. Recovered from the images' own method tables, both handler columns; see test/firmware/facts.json.",
+        "profile": "early-compact",
+        "refusal": "family/unsupported: Early Compact (pre-0.8) does not support dump: firmware older than 0.8.0.0 has no read handler for GetFeaturedFirmwareData, the command a dump reads flash with. On 0.7.0.7 and 0.7.0.8 it is in the RPC method table at 0x4F but registered as a setter (write handler) only, so the control-IN read a dump sends cannot be dispatched (the preservation run reads those two builds through wire id 0x58, GetFeaturedData, instead); before 0.7.0.7 wire id 0x4F is UploadFirmwareRowSize, and on 0.3.0.1 wire id 0x52 — the one a dump arms with — is EnterBootloaderMode rather than BeginFirmwareUpgrade: the camera stays in its application, but every arm sets a flash target and arms that build's firmware-upgrade stage (GetErrorCode then reads 0x00400000), which is not a read window. Recovered from the images' own method tables, both handler columns; see test/firmware/facts.json.",
         "sentBeforeIdentity": ["IN 0x4E"]
       },
       "staleSelector": {
@@ -124,7 +124,7 @@
       },
       "plan": {
         "firmwareVersion": "0.5.0.2",
-        "profile": "compact-2014",
+        "profile": "early-compact",
         "dumps": false,
         "table": "none: no read handler on this generation",
         "windows": 0,
@@ -137,8 +137,8 @@
       "gate": {
         "firmwareVersion": "0.5.0.2",
         "identified": true,
-        "profile": "compact-2014",
-        "refusal": "profile/unsupported: Early Compact (pre-0.8) does not support dump: firmware older than 0.8.0.0 has no read handler for GetFeaturedFirmwareData, the command a dump reads flash with. On 0.7.0.7 and 0.7.0.8 it is in the RPC method table at 0x4F but registered as a setter (write handler) only, so the control-IN read a dump sends cannot be dispatched (the preservation run reads those two builds through wire id 0x58, GetFeaturedData, instead); before 0.7.0.7 wire id 0x4F is UploadFirmwareRowSize, and on 0.3.0.1 wire id 0x52 — the one a dump arms with — is EnterBootloaderMode rather than BeginFirmwareUpgrade: the camera stays in its application, but every arm sets a flash target and arms that build's firmware-upgrade stage (GetErrorCode then reads 0x00400000), which is not a read window. Recovered from the images' own method tables, both handler columns; see test/firmware/facts.json.",
+        "profile": "early-compact",
+        "refusal": "family/unsupported: Early Compact (pre-0.8) does not support dump: firmware older than 0.8.0.0 has no read handler for GetFeaturedFirmwareData, the command a dump reads flash with. On 0.7.0.7 and 0.7.0.8 it is in the RPC method table at 0x4F but registered as a setter (write handler) only, so the control-IN read a dump sends cannot be dispatched (the preservation run reads those two builds through wire id 0x58, GetFeaturedData, instead); before 0.7.0.7 wire id 0x4F is UploadFirmwareRowSize, and on 0.3.0.1 wire id 0x52 — the one a dump arms with — is EnterBootloaderMode rather than BeginFirmwareUpgrade: the camera stays in its application, but every arm sets a flash target and arms that build's firmware-upgrade stage (GetErrorCode then reads 0x00400000), which is not a read window. Recovered from the images' own method tables, both handler columns; see test/firmware/facts.json.",
         "sentBeforeIdentity": ["IN 0x4E"]
       },
       "staleSelector": {
@@ -391,7 +391,7 @@
       },
       "plan": {
         "firmwareVersion": "0.6.0.4",
-        "profile": "compact-2014",
+        "profile": "early-compact",
         "dumps": false,
         "table": "none: no read handler on this generation",
         "windows": 0,
@@ -404,8 +404,8 @@
       "gate": {
         "firmwareVersion": "0.6.0.4",
         "identified": true,
-        "profile": "compact-2014",
-        "refusal": "profile/unsupported: Early Compact (pre-0.8) does not support dump: firmware older than 0.8.0.0 has no read handler for GetFeaturedFirmwareData, the command a dump reads flash with. On 0.7.0.7 and 0.7.0.8 it is in the RPC method table at 0x4F but registered as a setter (write handler) only, so the control-IN read a dump sends cannot be dispatched (the preservation run reads those two builds through wire id 0x58, GetFeaturedData, instead); before 0.7.0.7 wire id 0x4F is UploadFirmwareRowSize, and on 0.3.0.1 wire id 0x52 — the one a dump arms with — is EnterBootloaderMode rather than BeginFirmwareUpgrade: the camera stays in its application, but every arm sets a flash target and arms that build's firmware-upgrade stage (GetErrorCode then reads 0x00400000), which is not a read window. Recovered from the images' own method tables, both handler columns; see test/firmware/facts.json.",
+        "profile": "early-compact",
+        "refusal": "family/unsupported: Early Compact (pre-0.8) does not support dump: firmware older than 0.8.0.0 has no read handler for GetFeaturedFirmwareData, the command a dump reads flash with. On 0.7.0.7 and 0.7.0.8 it is in the RPC method table at 0x4F but registered as a setter (write handler) only, so the control-IN read a dump sends cannot be dispatched (the preservation run reads those two builds through wire id 0x58, GetFeaturedData, instead); before 0.7.0.7 wire id 0x4F is UploadFirmwareRowSize, and on 0.3.0.1 wire id 0x52 — the one a dump arms with — is EnterBootloaderMode rather than BeginFirmwareUpgrade: the camera stays in its application, but every arm sets a flash target and arms that build's firmware-upgrade stage (GetErrorCode then reads 0x00400000), which is not a read window. Recovered from the images' own method tables, both handler columns; see test/firmware/facts.json.",
         "sentBeforeIdentity": ["IN 0x4E"]
       },
       "staleSelector": {
@@ -462,7 +462,7 @@
       },
       "plan": {
         "firmwareVersion": "0.7.0.7",
-        "profile": "compact-2014",
+        "profile": "early-compact",
         "dumps": false,
         "table": "none: no read handler on this generation",
         "windows": 0,
@@ -475,8 +475,8 @@
       "gate": {
         "firmwareVersion": "0.7.0.7",
         "identified": true,
-        "profile": "compact-2014",
-        "refusal": "profile/unsupported: Early Compact (pre-0.8) does not support dump: firmware older than 0.8.0.0 has no read handler for GetFeaturedFirmwareData, the command a dump reads flash with. On 0.7.0.7 and 0.7.0.8 it is in the RPC method table at 0x4F but registered as a setter (write handler) only, so the control-IN read a dump sends cannot be dispatched (the preservation run reads those two builds through wire id 0x58, GetFeaturedData, instead); before 0.7.0.7 wire id 0x4F is UploadFirmwareRowSize, and on 0.3.0.1 wire id 0x52 — the one a dump arms with — is EnterBootloaderMode rather than BeginFirmwareUpgrade: the camera stays in its application, but every arm sets a flash target and arms that build's firmware-upgrade stage (GetErrorCode then reads 0x00400000), which is not a read window. Recovered from the images' own method tables, both handler columns; see test/firmware/facts.json.",
+        "profile": "early-compact",
+        "refusal": "family/unsupported: Early Compact (pre-0.8) does not support dump: firmware older than 0.8.0.0 has no read handler for GetFeaturedFirmwareData, the command a dump reads flash with. On 0.7.0.7 and 0.7.0.8 it is in the RPC method table at 0x4F but registered as a setter (write handler) only, so the control-IN read a dump sends cannot be dispatched (the preservation run reads those two builds through wire id 0x58, GetFeaturedData, instead); before 0.7.0.7 wire id 0x4F is UploadFirmwareRowSize, and on 0.3.0.1 wire id 0x52 — the one a dump arms with — is EnterBootloaderMode rather than BeginFirmwareUpgrade: the camera stays in its application, but every arm sets a flash target and arms that build's firmware-upgrade stage (GetErrorCode then reads 0x00400000), which is not a read window. Recovered from the images' own method tables, both handler columns; see test/firmware/facts.json.",
         "sentBeforeIdentity": ["IN 0x4E"]
       },
       "staleSelector": {
@@ -533,7 +533,7 @@
       },
       "plan": {
         "firmwareVersion": "0.7.0.8",
-        "profile": "compact-2014",
+        "profile": "early-compact",
         "dumps": false,
         "table": "none: no read handler on this generation",
         "windows": 0,
@@ -546,8 +546,8 @@
       "gate": {
         "firmwareVersion": "0.7.0.8",
         "identified": true,
-        "profile": "compact-2014",
-        "refusal": "profile/unsupported: Early Compact (pre-0.8) does not support dump: firmware older than 0.8.0.0 has no read handler for GetFeaturedFirmwareData, the command a dump reads flash with. On 0.7.0.7 and 0.7.0.8 it is in the RPC method table at 0x4F but registered as a setter (write handler) only, so the control-IN read a dump sends cannot be dispatched (the preservation run reads those two builds through wire id 0x58, GetFeaturedData, instead); before 0.7.0.7 wire id 0x4F is UploadFirmwareRowSize, and on 0.3.0.1 wire id 0x52 — the one a dump arms with — is EnterBootloaderMode rather than BeginFirmwareUpgrade: the camera stays in its application, but every arm sets a flash target and arms that build's firmware-upgrade stage (GetErrorCode then reads 0x00400000), which is not a read window. Recovered from the images' own method tables, both handler columns; see test/firmware/facts.json.",
+        "profile": "early-compact",
+        "refusal": "family/unsupported: Early Compact (pre-0.8) does not support dump: firmware older than 0.8.0.0 has no read handler for GetFeaturedFirmwareData, the command a dump reads flash with. On 0.7.0.7 and 0.7.0.8 it is in the RPC method table at 0x4F but registered as a setter (write handler) only, so the control-IN read a dump sends cannot be dispatched (the preservation run reads those two builds through wire id 0x58, GetFeaturedData, instead); before 0.7.0.7 wire id 0x4F is UploadFirmwareRowSize, and on 0.3.0.1 wire id 0x52 — the one a dump arms with — is EnterBootloaderMode rather than BeginFirmwareUpgrade: the camera stays in its application, but every arm sets a flash target and arms that build's firmware-upgrade stage (GetErrorCode then reads 0x00400000), which is not a read window. Recovered from the images' own method tables, both handler columns; see test/firmware/facts.json.",
         "sentBeforeIdentity": ["IN 0x4E"]
       },
       "staleSelector": {

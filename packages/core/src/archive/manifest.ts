@@ -285,7 +285,7 @@ export interface ImageSummary {
   readonly key: string | null;
   readonly state: string;
   readonly derivedTarget: string;
-  readonly profile: string;
+  readonly family: string;
   readonly sp: string;
   readonly entry: string;
   readonly duplicateOf: string | null;
@@ -305,7 +305,7 @@ export interface ImageSummaryInput {
   /** The recovered xorshift128 state, x/y/z/w — the actual decryption secret. */
   readonly state: readonly number[];
   readonly derivedTarget: number;
-  readonly profile: string;
+  readonly family: string;
   readonly sp: number;
   readonly entry: number;
   readonly duplicateOf: number | null;
@@ -326,7 +326,7 @@ export function buildImageSummary(input: ImageSummaryInput): ImageSummary {
     key: input.key ? bytesToHex(input.key) : null,
     state: input.state.map((word) => hexUp(word)).join(' '),
     derivedTarget: hexUp(input.derivedTarget),
-    profile: input.profile,
+    family: input.family,
     sp: hexUp(input.sp),
     entry: hexUp(input.entry),
     duplicateOf: input.duplicateOf != null ? hexUp(input.duplicateOf) : null,
@@ -346,14 +346,14 @@ export function buildImageSummary(input: ImageSummaryInput): ImageSummary {
 /** Original: `{ key: bytesToHex(key), profile: profName, recovery: "cryptanalytic", confidence }`. */
 export interface KeySummary {
   readonly key: string;
-  readonly profile: string;
+  readonly family: string;
   readonly recovery: string;
   readonly confidence: string;
 }
 
 export interface KeySummaryInput {
   readonly key: Uint8Array;
-  readonly profile: string;
+  readonly family: string;
   readonly recovery: string;
   readonly confidence: string;
 }
@@ -361,7 +361,7 @@ export interface KeySummaryInput {
 export function buildKeySummary(input: KeySummaryInput): KeySummary {
   return {
     key: bytesToHex(input.key),
-    profile: input.profile,
+    family: input.family,
     recovery: input.recovery,
     confidence: input.confidence,
   };
@@ -457,7 +457,7 @@ export interface DumpManifest {
   readonly expectedReadableWindows: number;
   readonly cancelled: boolean;
   /** NEW: which firmware profile this run detected/acted under. */
-  readonly profile: ManifestProfileInfo;
+  readonly family: ManifestProfileInfo;
   /**
    * NEW, 2026-09-23: which selector table the windows were armed from, and the
    * version it was resolved for. Absent on manifests written before per-build
@@ -493,7 +493,7 @@ export interface BuildDumpManifestInput {
   readonly usbReadableWindows: number;
   readonly expectedReadableWindows: number;
   readonly cancelled: boolean;
-  readonly profile: ManifestProfileInfo;
+  readonly family: ManifestProfileInfo;
   readonly selectorTable?: SelectorTableInfo;
   /** Always `false` in the original; kept overridable rather than hard-coded dead weight. */
   readonly usbComplete?: boolean;
@@ -526,7 +526,7 @@ export function buildDumpManifest(input: BuildDumpManifestInput): DumpManifest {
     usbReadableWindows: input.usbReadableWindows,
     expectedReadableWindows: input.expectedReadableWindows,
     cancelled: input.cancelled,
-    profile: input.profile,
+    family: input.family,
     ...(input.selectorTable === undefined ? {} : { selectorTable: input.selectorTable }),
   };
 }
@@ -590,7 +590,7 @@ export interface SweepManifest {
   readonly placedInImage: number;
   readonly cancelled: boolean;
   /** NEW: which firmware profile this run detected/acted under. */
-  readonly profile: ManifestProfileInfo;
+  readonly family: ManifestProfileInfo;
 }
 
 export interface BuildSweepManifestInput {
@@ -616,7 +616,7 @@ export interface BuildSweepManifestInput {
   readonly selectorsWithData: number;
   readonly placedInImage: number;
   readonly cancelled: boolean;
-  readonly profile: ManifestProfileInfo;
+  readonly family: ManifestProfileInfo;
 }
 
 /** Original: the `manifest` object literal built at the top of `runSweep`, plus its late fields. */
@@ -645,7 +645,7 @@ export function buildSweepManifest(input: BuildSweepManifestInput): SweepManifes
     selectorsWithData: input.selectorsWithData,
     placedInImage: input.placedInImage,
     cancelled: input.cancelled,
-    profile: input.profile,
+    family: input.family,
   };
 }
 
@@ -668,7 +668,7 @@ export interface OfflineDecryptManifest {
   readonly flashBase: string;
   readonly decryption: DecryptionSummary;
   /** NEW: which firmware profile this run detected/acted under. */
-  readonly profile: ManifestProfileInfo;
+  readonly family: ManifestProfileInfo;
 }
 
 export interface BuildOfflineDecryptManifestInput {
@@ -678,7 +678,7 @@ export interface BuildOfflineDecryptManifestInput {
   readonly source: OfflineDecryptSource;
   readonly flashBase: number;
   readonly decryption: DecryptionSummary;
-  readonly profile: ManifestProfileInfo;
+  readonly family: ManifestProfileInfo;
 }
 
 /** Original: the small `manifest` object literal built in `decryptPickedFile`. */
@@ -692,7 +692,7 @@ export function buildOfflineDecryptManifest(
     source: input.source,
     flashBase: hex(input.flashBase, 8),
     decryption: input.decryption,
-    profile: input.profile,
+    family: input.family,
   };
 }
 

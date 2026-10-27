@@ -318,7 +318,7 @@ function legacyHoles(traits: LegacyTraits): readonly UnreachableRange[] {
  * image's own switch.
  *
  * Builds older than 0.8.0.0 are not here: their tables decode too, but they have
- * no read command a dump can use (see `compact-2014`).
+ * no read command a dump can use (see `early-compact`).
  */
 const LEGACY_BUILDS: ReadonlyMap<string, LegacyTraits> = new Map<string, LegacyTraits>([
   ['0.8.0.0', { modeOne: 'boot-config', modeTwo: 'indirect', modeFourteen: 0x140b0000 }],
@@ -390,7 +390,7 @@ export function legacyUpgradeTargetBuild(version: string | null): string | null 
   return traits !== undefined && traits.modeOne !== 'boot-config' ? v : null;
 }
 
-/** The first build with a read handler for GetFeaturedFirmwareData (see `compact-2014`). */
+/** The first build with a read handler for GetFeaturedFirmwareData (see `early-compact`). */
 function predatesReadHandler(version: string): boolean {
   const [major, minor] = version.split('.').map((n) => Number.parseInt(n, 10));
   return major === 0 && (minor ?? 0) < 8;
@@ -434,7 +434,7 @@ export function legacyWindowPlan(firmwareVersion: string | null): WindowPlan {
   if (version !== null && predatesReadHandler(version)) {
     return {
       firmwareVersion,
-      table: `none: ${version} predates the read handler (see compact-2014)`,
+      table: `none: ${version} predates the read handler (see early-compact)`,
       selectors: [],
       windows: [],
       unreachable: [
@@ -468,7 +468,7 @@ export function legacyWindowPlan(firmwareVersion: string | null): WindowPlan {
   const agreed = agreedRows(
     known,
     (subcmd) =>
-      `the builds this profile knows disagree about subcommand ${hexUp(subcmd, 2)}, and the ` +
+      `the builds this family knows disagree about subcommand ${hexUp(subcmd, 2)}, and the ` +
       'version did not say which one this is',
   );
   const unknown =
@@ -601,11 +601,11 @@ export const LEGACY_BOOT: BootPolicy = {
     return lockedBootRule(cfg0);
   },
 
-  /* Shared by legacy-auth, compact-2016 and compact-2014, so the refusal names
+  /* Shared by legacy-auth, compact-2016 and early-compact, so the refusal names
    * the line rather than one of the three. */
   selectBootSlot(): BootPrediction {
     throw new SeekError(
-      'profile/unsupported',
+      'family/unsupported',
       "the locked line's boot rule is decoded, but the bank its bootloader entered is the " +
         "camera's own active-slot word, not a replay of cfg[0]: the device-info read names both " +
         'starts from that word on the 2014 plaintext chain and the 2016 Compact PRO (measured on a camera)',
@@ -666,7 +666,7 @@ const SCORE_WEAK = 0.3;
  * here until 2026-09-22 purely because the test was `major === 1`.
  *
  * The builds OLDER than 0.8 are a different matter and have their own profile;
- * see `compact-2014`. Five have no GetFeaturedFirmwareData at all, and 0.7.0.7
+ * see `early-compact`. Five have no GetFeaturedFirmwareData at all, and 0.7.0.7
  * and 0.7.0.8 have it at 0x4F with the right name and the handler in the SETTER
  * column, so a read cannot be dispatched (corrected 2026-09-23: this said 0.7).
  */
@@ -699,7 +699,7 @@ function detectLegacy(evidence: DeviceEvidence): DetectionVerdict {
     reasons: [
       ...verdict.reasons,
       `but firmware ${version.text} is the 2016 Compact PRO's 1.0.3.x line, whose banks are ` +
-        "compact-2016's cipher: this profile's acceptance check would fail every one of them",
+        "compact-2016's cipher: this family's acceptance check would fail every one of them",
     ],
   };
 }
@@ -717,7 +717,7 @@ function scoreLegacy(evidence: DeviceEvidence): DetectionVerdict {
     reasons.push(
       `firmware ${early.text} is older than 0.8.0.0: its RPC table has no read handler for ` +
         'GetFeaturedFirmwareData (none at all before 0.7.0.7, and a setter only on 0.7.0.7 and ' +
-        '0.7.0.8) — that is compact-2014, not this profile',
+        '0.7.0.8) — that is early-compact, not this family',
     );
     return { score: 0, reasons };
   }
@@ -766,7 +766,7 @@ function scoreLegacy(evidence: DeviceEvidence): DetectionVerdict {
     );
     if (evidence.authSelectorWorks === true) {
       reasons.push(
-        'and it opened the same bank when asked with the unlock, so the unlock this profile ' +
+        'and it opened the same bank when asked with the unlock, so the unlock this family ' +
           'sends is the one this camera checks',
       );
       return { score: SCORE_PROVEN, reasons: [...reasons, ...chainReasons] };

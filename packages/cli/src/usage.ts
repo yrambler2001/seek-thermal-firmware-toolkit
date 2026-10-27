@@ -26,7 +26,7 @@ Usage
 
 Commands: one for each tab of the web app
   info                   Info: the firmware version and identity of the camera, and the
-                         lists of connected cameras and firmware families (--devices, --profiles)
+                         lists of connected cameras and firmware families (--devices, --families)
   preserve               Dump & decrypt 0.x/1.x 2014/2016: the six-step preservation run.
                          --backup-only is its read-only first step, which saves the zip
   dump                   Dump & decrypt 4.x/Nano: read the whole 4 MiB flash and decrypt it
@@ -61,9 +61,9 @@ const COMMAND_USAGE: Record<CommandName, string> = {
   info: `seek-fw info — the Info tab: what is this camera running?
 
 Usage
-  seek-fw info [--profile <id>] [--serial <id>] [--recipient <r>] [--no-probe] [options]
+  seek-fw info [--family <id>] [--serial <id>] [--recipient <r>] [--no-probe] [options]
   seek-fw info --devices [--json]
-  seek-fw info --profiles [--json]
+  seek-fw info --families [--json]
 
 Reads the firmware info selectors, the boot config and all three firmware slots,
 decrypts them locally and reports the running version, the key table, which slot
@@ -72,8 +72,8 @@ decryptable or actually bootable. Read-only: nothing is written to the camera.
 
   --devices              list the connected Seek cameras and open none. Says so, and
                          exits 0, when there is none
-  --profiles             list the firmware families this build knows and open no camera
-  --profile <id>         act under this family instead of the one the camera answers for
+  --families             list the firmware families this build knows and open no camera
+  --family <id>          act under this family instead of the one the camera answers for
   --serial <id>          pick one camera when several are attached
   --recipient <r>        interface | device | auto (default auto)
   --no-probe             do not ask the camera which protocol it speaks first
@@ -235,8 +235,8 @@ ${EVERY_COMMAND}
   decrypt: `seek-fw decrypt — the Decrypt File/Slot tab
 
 Usage
-  seek-fw decrypt file <dump> [--out <dir> | --zip <file>] [--profile <id>]
-  seek-fw decrypt slot <file> [--out <dir> | --zip <file>] [--profile <id>]
+  seek-fw decrypt file <dump> [--out <dir> | --zip <file>] [--family <id>]
+  seek-fw decrypt slot <file> [--out <dir> | --zip <file>] [--family <id>]
 
 Needs no camera, no USB permission and no driver. Both forms recover each
 image's key by cryptanalysis (not by searching for a stored key) and write the
@@ -252,7 +252,7 @@ plaintext with a report.
          64 KiB is refused. A bank that holds no image, or whose key does not recover,
          writes the report and exits 1.
 
-  --profile <id>         decrypt under this family instead of the one the file's own
+  --family <id>          decrypt under this family instead of the one the file's own
                          images point to
   --out <dir> | --zip <file>  where the output goes (default: a timestamped directory)
 
@@ -324,7 +324,7 @@ a note of what each file is. The write waits for the zip to be on disk.
   --dry-run              flash, copy, restore: print the plan and send nothing to the bank
   --yes                  flash, copy, restore, patch-fps --write: skip the confirmation
                          (required when stdin is not a tty)
-  --profile <id>         act under this family instead of the one the camera answers for
+  --family <id>          act under this family instead of the one the camera answers for
   --out <dir> | --zip <file>  dump: where the bank goes
 
 An EMPTY bank (its header window reads as all 0xFF, as on many 2014 cameras'

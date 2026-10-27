@@ -16,7 +16,7 @@ export interface DetectionBoxProps {
   readonly detection: DetectionResult;
   /**
    * What the score was taken from, after "of 1.00": the camera's first answers before any bank is read
-   * (the probe, as the run's log line says), or the images in a file. The Info tab's Profile panel labels
+   * (the probe, as the run's log line says), or the images in a file. The Info tab's Firmware family panel labels
    * its own score the same way (TESTING.md 42.86, 42.87).
    */
   readonly scoreBasis: string;
@@ -68,7 +68,7 @@ export function DetectionBox({
             <strong>The evidence did not settle which family this is.</strong> Either the winner
             scored no better than the generic fallback, or a runner-up came too close to call. The
             decryption is unaffected — the key is solved out of the ciphertext either way — but the
-            profile named in the report, and anything gated on it, is a guess.
+            family named in the report, and anything gated on it, is a guess.
           </p>
         </Alert>
       )}

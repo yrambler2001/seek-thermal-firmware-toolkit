@@ -282,7 +282,7 @@ export async function runSweep(
     selectorsWithData: withData,
     placedInImage: placed,
     cancelled,
-    profile: profileInfoOf(profile, ctx.detection),
+    family: profileInfoOf(profile, ctx.detection),
   });
 
   for (const artifact of [

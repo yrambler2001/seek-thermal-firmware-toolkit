@@ -349,7 +349,7 @@ describe('a camera whose version says the ids mean something else', () => {
     block.set([0, 3, 0, 1], 0);
     const camera = fakeCamera({ initialMode: 0, fwInfo: new Map([[0, block]]) });
     const error = await refusal(async () => readDeviceInfo(await contextFor(modern4x, camera)));
-    expect(error.code).toBe('profile/unsupported');
+    expect(error.code).toBe('family/unsupported');
     expect(error.message).toContain('refusing to read the device info: firmware 0.3.0.1 predates');
     expect(camera.calls.map((c) => c.op)).toEqual([OP.GET_FIRMWARE_INFO, OP.GET_FIRMWARE_INFO]);
   });
@@ -487,7 +487,7 @@ describe('a camera an earlier command left with the firmware-info selector set',
     const error = await refusal(async () =>
       runDump(await contextFor(modern4x, camera), { chunk: 4096, decrypt: false }),
     );
-    expect(error.code).toBe('profile/unsupported');
+    expect(error.code).toBe('family/unsupported');
     expect(error.message).toContain('firmware 0.3.0.1 predates');
     expectOnlyAgreedReads(camera, 'dump of 0.3.0.1 with a stale selector');
   });

@@ -90,7 +90,7 @@ export function looksLikeAccessError(error: unknown): boolean {
 
 /**
  * Per-code advice, the CLI's table translated into what this page can offer:
- * there is no `--chunk` or `seek-fw profiles` here, there are form controls,
+ * there is no `--chunk` or `seek-fw info --families` here, there are form controls,
  * a dump that asks the camera which family it is, and a hand-picked family
  * for the camera that detection gets wrong.
  */
@@ -111,7 +111,7 @@ const SEEK_HINTS: Partial<Record<SeekErrorCode, string>> = {
     'The camera would not leave imaging mode. Unplug it, wait for it to power down fully, and ' +
     'plug it back in.',
   'device/window':
-    'The selector map this profile uses did not match the camera. On the 4.x/Nano tab, open ' +
+    'The selector map this family uses did not match the camera. On the 4.x/Nano tab, open ' +
     'Options and run "Dump all selectors" to see what the camera actually exposes.',
   'device/version-unknown':
     'Nothing that could change the camera was sent. Unplug it, let it finish starting up, plug ' +
@@ -125,10 +125,10 @@ const SEEK_HINTS: Partial<Record<SeekErrorCode, string>> = {
   /* 'flash/commit' has no hint: its message says what the commit did to the bank (a refusal before anything
    * was written, an erase that may have started, or a bank that may be partly written) and that the backup
    * saved before the write is kept. The old hint said every rejected commit left the flash untouched. */
-  'profile/unsupported':
-    'Nothing was read or written. Each tab covers one firmware line: 0.x and 1.x cameras go to ' +
+  'family/unsupported':
+    'Nothing was read or written. Each tab covers a range of firmware versions: 0.x and 1.x cameras go to ' +
     '"Dump & decrypt 0.x/1.x 2014/2016", 4.x and Nano cameras to "Dump & decrypt 4.x/Nano". The ' +
-    'Info tab says which line the camera is on.',
+    'Info tab says which tab the camera goes to.',
 };
 
 /**
@@ -146,7 +146,7 @@ export const FIRMWARE_TOO_OLD_HINT =
   '"Decrypt File/Slot".';
 
 function isFirmwareTooOld(error: SeekError): boolean {
-  return error.code === 'profile/unsupported' && typeof error.detail?.firmwareVersion === 'string';
+  return error.code === 'family/unsupported' && typeof error.detail?.firmwareVersion === 'string';
 }
 
 /**

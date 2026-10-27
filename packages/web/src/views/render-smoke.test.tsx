@@ -154,7 +154,7 @@ describe('V4View', () => {
       dumpStub(a!, {
         acting: null,
         refusal: {
-          code: 'profile/unsupported',
+          code: 'family/unsupported',
           message:
             'The camera looks like Legacy locked firmware (legacy-auth), not a 4.x/Nano camera, ' +
             'and this tab reads only 4.x/Nano. Nothing was read.',
@@ -249,7 +249,9 @@ describe('InfoView', () => {
     const panel = container.textContent;
     expect(panel).toContain('What the camera reports');
     expect(panel).toContain('4.18.2.0');
-    expect(panel).toContain('4.x / Nano');
+    expect(panel).toContain('Version range');
+    expect(panel).toContain('2.x and newer: the 4.x, Nano and Mosaic cameras');
+    expect(panel).not.toContain('Line');
     expect(panel).toContain('Dump & decrypt 4.x/Nano');
     expect(container.querySelector('a[href="#/v4"]')).toBeTruthy();
     unmount();
@@ -313,7 +315,15 @@ describe('InfoView', () => {
     /* The sections of `seek-fw info`, in its order. */
     const titles = Array.from(container.querySelectorAll('h3')).map((title) => title.textContent);
     expect(titles).toEqual(
-      expect.arrayContaining(['Camera', 'Firmware', 'Profile', 'Boot', 'Keys', 'Slots', 'Writing']),
+      expect.arrayContaining([
+        'Camera',
+        'Firmware',
+        'Firmware family',
+        'Boot',
+        'Keys',
+        'Slots',
+        'Writing',
+      ]),
     );
     expect(text).toContain('Product');
     expect(text).toContain('Store key');
@@ -422,7 +432,7 @@ describe('DecryptView', () => {
         whiteningK: 0x13579bdf,
         whiteningEvidence: 'plaintext',
         acceptanceSum: 0xffff,
-        matchesProfile: true,
+        matchesFamily: true,
         named: null,
       },
       notes: ['decrypted 32768 B under the key solved from this bank'],

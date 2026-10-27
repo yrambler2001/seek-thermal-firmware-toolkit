@@ -29,39 +29,47 @@ Firefox and iOS.
 | `flash_4m_usb_partial_gap_ff.bin` | the assembled 4 MiB flash image                                                                                             |
 | `windows/*.bin`                   | each 64 KiB block exactly as it came off the wire                                                                           |
 | `decrypted/*.bin`                 | each firmware image slot, decrypted — named `…-KeyA-<32 hex>-KeyB-<32 hex>` when the image embeds that key pair (see below) |
-| `decrypted/*.txt`                 | per-slot report: key, key location, cipher profile, SP, entry, SHA-256                                                      |
+| `decrypted/*.txt`                 | per-slot report: key, key location, family and cipher, SP, entry, SHA-256                                                   |
 | `decrypted/decryption_report.txt` | summary across all slots                                                                                                    |
-| `manifest.json`                   | exact read, gap and decryption metadata, including the firmware profile used                                                |
+| `manifest.json`                   | exact read, gap and decryption metadata, including the firmware family used                                                 |
 | `README.md`                       | what the capture is and what its limits are                                                                                 |
 
-## Firmware version profiles
+## Firmware families
 
-Seek cameras do not all speak the same protocol, and the differences are not cosmetic — they change which
-selector exposes which block, how a stored key maps to the cipher state, and what the bootloader will
-accept. A **profile** captures one firmware family:
+The code sorts every camera into a **firmware family**: a group of builds that speak the same protocol and
+store their firmware the same way. Seek cameras do not all speak one protocol, and the differences are not
+cosmetic — they change which selector exposes which block, how a stored key maps to the cipher state, and
+what the bootloader will accept. The Info tab names the family in its Firmware family panel, `seek-fw info`
+prints the same name with its id, `seek-fw info --families` lists the five, and `--family <id>` names one
+by hand.
 
-| Profile        | Family                                                                                                             | Read over USB  | Decrypt |
-| -------------- | ------------------------------------------------------------------------------------------------------------------ | -------------- | ------- |
-| `modern-4x`    | 2018 and later: Compact 4.8/4.16, Compact Pro 4.9/4.18, Compact XR, Mosaic 2.27/10.9, Nano 200 42.x, Nano 300 44.x | yes            | yes     |
-| `legacy-auth`  | 2014-2017 locked line: Compact 0.8.0.0-1.3.0.8, Compact PRO 1.0.3.x                                                | yes            | yes     |
-| `compact-2016` | the same locked protocol with the 2016 cipher (K=0, acceptance sum 0)                                              | yes            | yes     |
-| `compact-2014` | Compact builds older than 0.8.0.0 — no read handler for `GetFeaturedFirmwareData` in their RPC table               | **0.7.x only** | yes     |
-| `generic`      | fallback when the family cannot be identified                                                                      | yes            | yes     |
+| `--family` id   | Name on the page            | Builds                                                                                                                                                | Read by                                                                               | Firmware stored                                                                                                   |
+| --------------- | --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `modern-4x`     | Modern (2018+ selector map) | 2018 and later (2.x, 4.x, 10.x, 42.x, 44.x): Compact 4.8/4.16, Compact Pro 4.9/4.18, Compact Pro FF, Compact XR, Mosaic 2.27/10.9, Nano 200, Nano 300 | the Dump & decrypt 4.x/Nano tab and `seek-fw dump`                                    | encrypted: xorshift128, K=0x13579BDF, sum 0x0000FFFF                                                              |
+| `legacy-auth`   | Legacy locked firmware      | the 2014 Compacts 0.8.0.0 to 1.3.0.8, the 1.3.0.8 FF (16 Hz) among them                                                                               | the preservation run on the Dump & decrypt 0.x/1.x 2014/2016 tab (`seek-fw preserve`) | plain: no key, the stored words sum to 0; the 1.3.0.8 FF build is encrypted (two keystreams, K=0, sum 0x0000FFFF) |
+| `compact-2016`  | 2016 Compact Pro            | the Compact PRO 1.0.3.x (1.0.3.0, 1.0.3.2)                                                                                                            | the preservation run (`seek-fw preserve`)                                             | encrypted: xorshift128, K=0, the decrypted words sum to 0                                                         |
+| `early-compact` | Early Compact (pre-0.8)     | the Compacts before 0.8.0.0: 0.3.0.1, 0.5.0.2, 0.5.1.0, 0.5.1.3, 0.6.0.4, 0.7.0.7, 0.7.0.8                                                            | none for 0.3.0.1 to 0.6.0.4; the preservation run for 0.7.0.7 and 0.7.0.8             | plain on 0.7.0.7 and 0.7.0.8; the older builds are never read                                                     |
+| `generic`       | Unidentified camera         | a camera no other family matches                                                                                                                      | `seek-fw dump`, with the 4.x selector map; the 4.x/Nano tab refuses it                | not known: a decrypt tries the 4.x cipher, and the key is solved from the image either way                        |
 
-The 4.x/Nano tab reads only `modern-4x`, and `seek-fw dump` reads `modern-4x` and `generic`; the locked
-line, and the Compact 0.7.0.7 and 0.7.0.8, are read on the Dump & decrypt 0.x/1.x 2014/2016 tab
-([PRESERVATION.md](PRESERVATION.md)). No profile has a whole-image write: banks are written one at a
-time on the Work with firmware slots tab, and what each build allows is in
+Every family decrypts offline on the Decrypt File/Slot tab (`seek-fw decrypt`), whatever took the dump.
+The Info tab (`seek-fw info`) reads every family from 0.8.0.0, `generic` included; the Work with firmware
+slots tab (`seek-fw slots`) reads `modern-4x`, `legacy-auth` and `compact-2016` and refuses `generic`. An
+`early-compact` camera is read by neither past its version. No family has a whole-image write: banks are
+written one at a time on the Work with firmware slots tab, and what each build allows is in
 [Which cameras](#which-cameras).
 
-The profile is detected from evidence — and, on an attached camera, from **asking it**. Before a dump, a
+The Info tab's first read, "Read firmware version", shows only the version range: 0.x / 1.x goes to the
+Dump & decrypt 0.x/1.x 2014/2016 tab, 2.x and newer to the Dump & decrypt 4.x/Nano tab. That is the tab,
+not the family; the family comes with the full read.
+
+The family is detected from evidence — and, on an attached camera, from **asking it**. Before a dump, a
 dump of every selector or a device-info read, both the CLI and the web app send up to four read-only
 transfers (`--no-probe` turns this off on the CLI): the running firmware's version, then — only if that
 build can be read at all — a plain 2-byte arm of a bank the locked line protects, the 18-byte
 authenticated arm of the same bank, and a read of a bank that is open on every line. Those answers
 separate the families directly, where a USB product string or an acceptance sum only correlates with
 them. The web app asks, and says why when it will not read a camera. On `info`, `decrypt` and `slots`,
-`--profile <id>` overrides detection; on `info` and `slots` it also skips the probe — but not the version
+`--family <id>` overrides detection; on `info` and `slots` it also skips the probe — but not the version
 check: the run still reads the version first and refuses a camera that does not report it, or runs a
 build older than 0.8.0.0, whatever family was named. The web app names no family by hand: its 4.x/Nano
 tab reads only the modern family and refuses any other.
@@ -78,10 +86,10 @@ whose stored words sum to 0) rules `compact-2016` out; a bank that decrypts to 0
 cipher) keeps a 1.0.3.x camera on `legacy-auth`. The bootloader's version (1.2.0.0 on the 2016 part,
 0.9.0.0 on the 2014 Compact) corroborates. When the slots name the other family, the Info tab,
 `seek-fw info` and "Read slots" (`seek-fw slots list`) redo the analysis under it, and a dump decrypts its
-slots under it, saying in the report which profile the read acted under. `compact-2016` declares no write
+slots under it, saying in the report which family the read acted under. `compact-2016` declares no write
 of its own: its banks are written one at a time on the Work with firmware slots tab, as on every line.
 
-**`compact-2014` refuses to dump, and that refusal is the point.** Every decrypted image carries its own
+**`early-compact` refuses to dump, and that refusal is the point.** Every decrypted image carries its own
 RPC method table — wire id = index + 53 — and recovering it from all 36 images in the reference corpus
 shows five builds (0.3.0.1, 0.5.0.2, 0.5.1.0, 0.5.1.3, 0.6.0.4) with no `GetFeaturedFirmwareData` at all:
 wire id `0x4F` is `UploadFirmwareRowSize` there, and nothing in this toolkit reads a window on them. On
@@ -193,7 +201,7 @@ filled and why.
 On the modern line the USB command set exposes a read-window selector for every 64 KiB block of the 4 MiB
 flash **except** `0x14060000..0x1406ffff`. That one block is filled with `0xff` in the combined image and
 recorded in `manifest.json`. (The locked 0.x/1.x line reaches that block; see
-[Firmware version profiles](#firmware-version-profiles).)
+[Firmware families](#firmware-families).)
 
 **In practice this costs you nothing.** On most cameras that block is just erased flash, which reads as
 `0xff` anyway — so the filler matches the real contents and the dump is complete.
@@ -437,7 +445,7 @@ reported as unsupported, with the reason, and nothing but the version read is se
 do this:
 
 - **Read and write:** the modern line, 2.x, 4.x, 10.x, 42.x and 44.x (Compact, Compact PRO, Compact XR,
-  Mosaic and Nano), with the `modern-4x` profile.
+  Mosaic and Nano), with the `modern-4x` family.
 - **Read and write:** the 2014 plaintext-chain builds from 0.8.0.0 to 1.3.0.8, the builds listed in
   `PLAIN_CHAIN_VERSIONS` (`packages/core/src/slots/capability-family.ts`). That includes the 1.3.0.8 8 Hz
   and 16 Hz FF builds.
@@ -476,7 +484,7 @@ under **What has been run** in the Firmware slots section.
 - **Key retargeting.** The image's keys are retargeted, and checked, before any payload is built
   (`accept.emulator.test.ts`, `write-keys.test.ts`).
 - **Read-only.** The 4.x/Nano dump sends only the commands in `READ_ONLY_OPS`
-  (`packages/core/src/protocol/ops.ts`). The workflow tests check this for every profile
+  (`packages/core/src/protocol/ops.ts`). The workflow tests check this for every family
   (`packages/core/test/workflows.test.ts`), and so does the slot read
   (`packages/core/test/slots/inspect.test.ts`).
 
@@ -545,7 +553,7 @@ seek-fw slots patch-fps all --write --acknowledge-risk        # every bank that 
   A/B/R at `0x14050000` / `0x14060000` / `0x14070000`. The modern line (2.x, 4.x, XR, Mosaic, Nano) has
   them at `0x14030000` / `0x14050000` / `0x14070000`; no selector reaches `0x14060000` there.
 - **What each build can do is a table, not a guess.** `buildSlotPlan` (`packages/core/src/slots/`)
-  derives it from the profile and the build's own selector table, with the reason for every "no", and a
+  derives it from the family and the build's own selector table, with the reason for every "no", and a
   test checks every corpus build against it.
 - **Read-back.** After a commit the bank is read again and its decrypted image compared with the image
   that was meant to be written.
@@ -576,7 +584,7 @@ The identify probe that runs before a read sends the camera's unlock token, an 1
 `BeginFirmwareUpgrade`. The preservation backup sends it too. Once the camera accepts the token, it keeps
 its vendor window unlocked until its next power cycle. So the Info, both Dump & decrypt and the Work with
 firmware slots tabs do this, and so do the CLI's `info`, `dump`, `slots` and `preserve` commands. A CLI run
-given `--no-probe` or `--profile` skips the probe.
+given `--no-probe` or `--family` skips the probe.
 
 The page keeps one flag for the camera, so once one tab has sent the token, every tab shows the note, and
 so does the Connect section. The CLI prints the note when the run closes its session, and `--quiet` hides
@@ -645,15 +653,15 @@ Each recovered key is then checked, and the reports say how in words:
 
 | Verdict                           | When                                                                                                                                                |
 | --------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| verified by the acceptance sum    | the decrypted word sum equals the profile's target, the check the bootloader itself makes                                                           |
+| verified by the acceptance sum    | the decrypted word sum equals the family's target, the check the bootloader itself makes                                                            |
 | verified by the vector table only | no target matched, but reserved word 13, which the solve did not use, decrypts to 0 and the reset vector is an SRAM stack pointer and a Thumb entry |
 | not verified                      | neither; the slot is still decrypted                                                                                                                |
 
-`manifest.json` and `seek-fw decrypt --json` keep the code names (`VERIFIED(profile)`,
+`manifest.json` and `seek-fw decrypt --json` keep the code names (`VERIFIED(family)`,
 `VERIFIED(structural)`, `UNVERIFIED`).
 
 The cipher and acceptance forms known so far (K is resolved per image, as
-[Firmware version profiles](#firmware-version-profiles) says):
+[Firmware families](#firmware-families) says):
 
 | Builds                                                 | `K`                          | checksum target              |
 | ------------------------------------------------------ | ---------------------------- | ---------------------------- |
@@ -667,7 +675,7 @@ verified. Slots are found by the image header at each 64 KiB boundary; a dump wi
 and says so, and the flash image itself is unaffected.
 
 The implementation is a direct port of `decrypt_firmware.js` and produces byte-identical output —
-verified against it on real dumps covering both cipher profiles of the 1.0.0 page, multi-key devices,
+verified against it on real dumps covering both ciphers the 1.0.0 page knew, multi-key devices,
 duplicate slots, and the no-key-found path.
 
 ## Command-line reference
@@ -677,7 +685,7 @@ the CLI):
 
 | Command                       | Tab                              | What it does                                                                                                                                                                                            |
 | ----------------------------- | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `seek-fw info`                | Info                             | firmware version, identity, slots, key table, boot config, upgrade target; `--devices` lists the cameras, `--profiles` the families                                                                     |
+| `seek-fw info`                | Info                             | firmware version, identity, slots, key table, boot config, upgrade target; `--devices` lists the cameras, `--families` the families                                                                     |
 | `seek-fw preserve`            | Dump & decrypt 0.x/1.x 2014/2016 | the six-step preservation run; `--bank` chooses the banks it patches (default: the one the next start enters), `--backup-only` is its read-only first step, `--zip <file>` saves the run as one archive |
 | `seek-fw dump`                | Dump & decrypt 4.x/Nano          | read the whole 4 MiB flash and decrypt it; `--all-selectors` probes every selector instead                                                                                                              |
 | `seek-fw decrypt file <dump>` | Decrypt File/Slot                | decrypt a dump you already have — no camera needed                                                                                                                                                      |
@@ -691,13 +699,13 @@ seek-fw decrypt file flash_4m.bin           # works with no camera attached
 ```
 
 `seek-fw <command> --help` lists each command's options. A flag a command does not take is a usage error
-(`seek-fw dump --profile …` is refused, because the 4.x dump chooses its family from the camera). Common
+(`seek-fw dump --family …` is refused, because the 4.x dump chooses its family from the camera). Common
 options:
 
 ```
 --out <dir>          write files to a directory (default)
 --zip <file>         write a single archive instead
---profile <id>       info, decrypt and slots: act under a family named by hand
+--family <id>        info, decrypt and slots: act under a family named by hand
 --chunk <n>          control-IN request size, at most 64 (default 64)
 --gap-fill <byte>    fill byte for unreachable blocks (default 0xff)
 --retries <n>        per-window retry count (default 2)

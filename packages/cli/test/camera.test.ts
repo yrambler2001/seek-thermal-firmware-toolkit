@@ -109,7 +109,7 @@ describe('seek-fw info', () => {
   it('serialises the whole analysis under --json', async () => {
     const camera = cameraWithFlash(synthetic.flash);
     const { io, stdout } = testIo({ backend: fixedBackend([camera]) });
-    const code = await run(['info', '--json', '--profile', 'modern-4x'], io, signal());
+    const code = await run(['info', '--json', '--family', 'modern-4x'], io, signal());
     expect(code).toBe(EXIT_OK);
     const parsed = JSON.parse(stdout.text) as {
       ok: boolean;
@@ -140,13 +140,13 @@ describe('seek-fw info', () => {
   it('writes no bank under the generic fallback, and says why', async () => {
     const camera = cameraWithFlash(synthetic.flash);
     const { io, stdout } = testIo({ backend: fixedBackend([camera]) });
-    await run(['info', '--json', '--profile', 'generic'], io, signal());
+    await run(['info', '--json', '--family', 'generic'], io, signal());
     const parsed = JSON.parse(stdout.text) as {
       bankWrites: { staged: string | null; refusedBy: string[] };
     };
     expect(parsed.bankWrites.staged).toBeNull();
     expect(parsed.bankWrites.refusedBy[0]).toContain(
-      'the camera family is not identified (profile generic)',
+      'the camera family is not identified (family generic)',
     );
   });
 });
@@ -326,7 +326,7 @@ describe('seek-fw info on a 2016 Compact PRO (1.0.3.0)', () => {
     expect(stderr.text).not.toContain('acceptance FAILS');
     expect(stderr.text).not.toContain('flashing disabled');
     const parsed = JSON.parse(stdout.text) as {
-      profile: { actedUnder: { id: string }; detected: { id: string; ambiguous: boolean } };
+      family: { actedUnder: { id: string }; detected: { id: string; ambiguous: boolean } };
       firmware: { bootloaderVersion: string | null };
       slots: {
         accepts: boolean;
@@ -336,8 +336,8 @@ describe('seek-fw info on a 2016 Compact PRO (1.0.3.0)', () => {
       }[];
       bankWrites: { staged: string | null; refusedBy: string[] };
     };
-    expect(parsed.profile.actedUnder.id).toBe('compact-2016');
-    expect(parsed.profile.detected).toMatchObject({ id: 'compact-2016', ambiguous: false });
+    expect(parsed.family.actedUnder.id).toBe('compact-2016');
+    expect(parsed.family.detected).toMatchObject({ id: 'compact-2016', ambiguous: false });
     expect(parsed.firmware.bootloaderVersion).toBe('1.2.0.0');
     for (const slot of parsed.slots) {
       /* compact-2016's bootloader reads no footer, so footerOk is not applicable (null), not false */
@@ -493,7 +493,7 @@ describe('seek-fw dump on a 2016 Compact PRO (1.0.3.0)', () => {
     const { io, stdout } = testIo({ backend: fixedBackend([compactPro1030Camera()]) });
     expect(await run(['info', '--json'], io, signal())).toBe(EXIT_OK);
     expect(JSON.parse(stdout.text)).toMatchObject({
-      profile: { detected: { id: 'compact-2016' } },
+      family: { detected: { id: 'compact-2016' } },
     });
   });
 });
@@ -503,7 +503,7 @@ describe('seek-fw dump on a camera whose version the 0.x/1.x refusal lets throug
    * dump.ts:47). The profile check after the probe (dump.ts:58) is the other guard: a camera the
    * probe names as the 2014–2017 line is refused before anything is dumped. No 2014–2017 build
    * reports 2.x. The 2.0.0.0 below is this fake's version, chosen only to pass dump.ts:47, so the
-   * probe's answers are what name the line. `--profile` is not accepted by `dump`. */
+   * probe's answers are what name the line. `--family` is not accepted by `dump`. */
   it('refuses the line the probe names, and writes nothing', async () => {
     const version = new Uint8Array(36);
     version.set([2, 0, 0, 0], 0);
@@ -649,7 +649,7 @@ describe('a camera that does not report its firmware version', () => {
     ['dump', '--no-probe'],
     ['dump', '--all-selectors'],
     ['info'],
-    ['info', '--profile', 'modern-4x'],
+    ['info', '--family', 'modern-4x'],
   ]) {
     it(`refuses \`seek-fw ${argv.join(' ')}\` and arms nothing`, async () => {
       const camera = cameraWithFlash(synthetic.flash, { fwInfo: new Map() });

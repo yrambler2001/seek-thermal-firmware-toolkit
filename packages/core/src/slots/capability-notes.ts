@@ -106,7 +106,7 @@ const LOCKED_2016_STAGING_NOTE =
  */
 export function profileFlashNote(profileId: string): string {
   return (
-    `Profile ${profileId} declares no write of its own. The banks are written one at a time, each ` +
+    `Family ${profileId} declares no write of its own. The banks are written one at a time, each ` +
     'staged under its own image’s key, the path the backup already ran on 1.0.3.0 cameras, so a ' +
     'bank write is not refused for that reason.'
   );

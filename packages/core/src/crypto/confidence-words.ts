@@ -1,6 +1,6 @@
 /* ==================================================================== *
  * The words for a key recovery's verdict. `KeyConfidence` is a code name
- * ('VERIFIED(profile)', ...): the JSON outputs (the archive manifest, the CLI's
+ * ('VERIFIED(family)', ...): the JSON outputs (the archive manifest, the CLI's
  * decrypt JSON, the slot-file decryption's `key.confidence`) keep it for scripts,
  * and everything a person reads says the verdict in words, from this one map: the
  * read-back and dump notes, the slot-file decryptor and its report, the offline
@@ -12,7 +12,7 @@ import type { KeyConfidence } from './recover.js';
 
 const CONFIDENCE_PHRASE: Readonly<Record<KeyConfidence, string>> = {
   /* The decrypted image sums to the line's acceptance target: the check the bootloader itself makes. */
-  'VERIFIED(profile)': 'verified by the acceptance sum',
+  'VERIFIED(family)': 'verified by the acceptance sum',
   /* No known target matched, but the reserved vector decrypts to 0 and the reset vector is a Cortex-M entry. */
   'VERIFIED(structural)': 'verified by the vector table only',
   /* Neither: the bytes are decrypted all the same, and nothing confirms the key. */
@@ -30,7 +30,7 @@ export function keyConfidencePhrase(confidence: KeyConfidence): string {
  */
 export function keyCheckText(confidence: KeyConfidence, acceptanceSum: number): string {
   const phrase = keyConfidencePhrase(confidence);
-  return confidence === 'VERIFIED(profile)'
+  return confidence === 'VERIFIED(family)'
     ? `key ${phrase} ${hexUp(acceptanceSum)}`
     : `key ${phrase}; acceptance sum ${hexUp(acceptanceSum)}`;
 }

@@ -86,18 +86,18 @@ describe('hintFor', () => {
     /* planForDevice's refusal of a build that predates the dump protocol
      * carries the version it read; no family changes that answer. */
     const tooOld = new SeekError(
-      'profile/unsupported',
+      'family/unsupported',
       'refusing to dump: firmware 0.3.0.1 predates the dump protocol',
-      { detail: { firmwareVersion: '0.3.0.1', capability: 'dump', profile: 'modern-4x' } },
+      { detail: { firmwareVersion: '0.3.0.1', capability: 'dump', family: 'modern-4x' } },
     );
     expect(hintFor(tooOld, MAC)).toBe(FIRMWARE_TOO_OLD_HINT);
     expect(hintFor(tooOld, MAC)).toContain('Decrypt File/Slot');
 
     /* A family that cannot do the job is a different refusal, with a remedy. */
     const capability = new SeekError(
-      'profile/unsupported',
+      'family/unsupported',
       'Early Compact (pre-0.8) does not support dump: …',
-      { detail: { profile: 'compact-2014', capability: 'dump', reason: '…' } },
+      { detail: { family: 'early-compact', capability: 'dump', reason: '…' } },
     );
     expect(hintFor(capability, MAC)).toContain('Dump & decrypt 0.x/1.x 2014/2016');
   });

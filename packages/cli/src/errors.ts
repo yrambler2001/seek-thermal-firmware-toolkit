@@ -110,7 +110,7 @@ const SEEK_HINTS: Partial<Record<SeekErrorCode, string>> = {
     'smaller --chunk (64 is the value that works everywhere).',
   'usb/stalled':
     'The camera rejected the request. This usually means the firmware does not implement it — ' +
-    'check `seek-fw info --profiles` and try --profile with the family your camera belongs to.',
+    'check `seek-fw info --families` and try --family with the family your camera belongs to.',
   'usb/not-open':
     'Another program or a system driver is holding the camera. Close it, or try ' +
     '--recipient device, which does not need the interface claimed.',
@@ -119,7 +119,7 @@ const SEEK_HINTS: Partial<Record<SeekErrorCode, string>> = {
     'The camera would not leave imaging mode. Unplug it, wait for it to power down fully, ' +
     'and plug it back in.',
   'device/window':
-    'The selector map this profile uses did not match the camera. Try `seek-fw dump --all-selectors` ' +
+    'The selector map this family uses did not match the camera. Try `seek-fw dump --all-selectors` ' +
     'to see what the camera actually exposes.',
   'device/version-unknown':
     'Nothing that could change the camera was sent. Unplug it, let it finish starting up, plug ' +
@@ -134,9 +134,9 @@ const SEEK_HINTS: Partial<Record<SeekErrorCode, string>> = {
   /* 'flash/commit' has no hint: its message says what the commit did to the bank (a refusal before anything
    * was written, an erase that may have started, or a bank that may be partly written) and that the backup
    * saved before the write is kept. The old hint said every rejected commit left the flash untouched. */
-  'profile/unsupported':
-    'Override detection with --profile <id> only if you know which family the camera is; ' +
-    '`seek-fw info --profiles` lists them.',
+  'family/unsupported':
+    'Override detection with --family <id> only if you know which family the camera is; ' +
+    '`seek-fw info --families` lists them.',
 };
 
 /** `retryDelayMs` -> `retry-delay`: core's field names as this CLI spells them. */

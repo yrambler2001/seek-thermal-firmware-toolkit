@@ -108,7 +108,7 @@ function lockedFamily(text: string): SlotFamily {
 
 /**
  * The family of one build, for one profile. A profile that cannot own the build
- * (modern-4x on a 1.x build, compact-2014 on a 4.x build) is a refusal, not a
+ * (modern-4x on a 1.x build, early-compact on a 4.x build) is a refusal, not a
  * guess at which profile should have been used.
  */
 export function classifyBuild(
@@ -140,7 +140,7 @@ export function classifyBuild(
       version,
       `firmware ${text} is older than ${FIRST_SUPPORTED_VERSION}: its RPC table has no read ` +
         'handler for GetFeaturedFirmwareData, the command a slot read sends, so neither ' +
-        'a read nor a write is sent to it (compact-2014 has the evidence)',
+        'a read nor a write is sent to it (early-compact has the evidence)',
     );
   }
 
@@ -150,7 +150,7 @@ export function classifyBuild(
         return refused(
           'unidentified',
           version,
-          `profile modern-4x covers 2.x, 4.x, 10.x, 42.x and 44.x; ${text} is on the 0.x / 1.x ` +
+          `family modern-4x covers 2.x, 4.x, 10.x, 42.x and 44.x; ${text} is on the 0.x / 1.x ` +
             'locked line, which needs legacy-auth or compact-2016',
         );
       }
@@ -161,7 +161,7 @@ export function classifyBuild(
         return refused(
           'unidentified',
           version,
-          `profile legacy-auth covers the 0.x / 1.x locked line; ${text} is on the modern line, ` +
+          `family legacy-auth covers the 0.x / 1.x locked line; ${text} is on the modern line, ` +
             'which needs modern-4x',
         );
       }
@@ -172,16 +172,16 @@ export function classifyBuild(
         return refused(
           'unidentified',
           version,
-          `profile compact-2016 covers the Compact PRO 1.0.3.x line; ${text} is not on it`,
+          `family compact-2016 covers the Compact PRO 1.0.3.x line; ${text} is not on it`,
         );
       }
       return { family: lockedFamily(text), version, refusal: null };
 
-    case 'compact-2014':
+    case 'early-compact':
       return refused(
         'unidentified',
         version,
-        `profile compact-2014 covers the builds older than ${FIRST_SUPPORTED_VERSION} only, and ` +
+        `family early-compact covers the builds older than ${FIRST_SUPPORTED_VERSION} only, and ` +
           `${text} is read through legacy-auth`,
       );
 
@@ -189,7 +189,7 @@ export function classifyBuild(
       return refused(
         'unidentified',
         version,
-        'the camera family is not identified (profile generic), so the bank layout and the ' +
+        'the camera family is not identified (family generic), so the bank layout and the ' +
           'staging form are unknown; identify the camera before a slot is read or written',
       );
 
@@ -197,7 +197,7 @@ export function classifyBuild(
       return refused(
         'unidentified',
         version,
-        `no slot plan exists for profile ${profile.id}: its bank layout and staging form are not known`,
+        `no slot plan exists for family ${profile.id}: its bank layout and staging form are not known`,
       );
   }
 }

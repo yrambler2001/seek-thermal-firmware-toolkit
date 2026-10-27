@@ -555,7 +555,7 @@ async function probeGate(device: UsbIpWebUsbDevice, entryId: string): Promise<Ga
     } catch (error) {
       if (
         !(error instanceof SeekError) ||
-        (error.code !== 'device/version-unknown' && error.code !== 'profile/unsupported')
+        (error.code !== 'device/version-unknown' && error.code !== 'family/unsupported')
       ) {
         throw error;
       }

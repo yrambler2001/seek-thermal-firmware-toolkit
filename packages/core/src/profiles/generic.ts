@@ -41,7 +41,7 @@ export const GENERIC_BASELINE = 0.1;
 const FLASH_REFUSAL =
   'the firmware family could not be identified, so Key A cannot be trusted. Writing an image ' +
   'keyed for the wrong family leaves a camera that accepts the flash and then refuses to boot ' +
-  'it. Dump and decrypt this camera, identify it from the dump, then pick the profile ' +
+  'it. Dump and decrypt this camera, identify it from the dump, then pick the family ' +
   'explicitly.';
 
 const CAPABILITIES: ProfileCapabilities = {
@@ -67,7 +67,7 @@ export const generic: FirmwareProfile = {
   id: 'generic',
   name: 'Unidentified camera',
   summary:
-    'Fallback for a camera no profile matched. Uses the 4.x selector map and cipher defaults ' +
+    'Fallback for a camera no family matched. Uses the 4.x selector map and cipher defaults ' +
     'so a dump and a decrypt attempt still work, and refuses to flash because the family — ' +
     'and therefore Key A — is unknown.',
   /* Defaults, not findings. Decryption does not actually depend on these: the

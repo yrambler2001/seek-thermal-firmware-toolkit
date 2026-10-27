@@ -9,7 +9,7 @@ against the original page. [README.md](README.md) is for camera owners;
 ```
 packages/
   core/    @seek-fw/core   isomorphic, zero-dependency: cipher, key recovery,
-                           image packaging, USB protocol, firmware profiles
+                           image packaging, USB protocol, firmware families
   cli/     @seek-fw/cli    Node CLI, talks to the camera through `usb` v3
   web/     @seek-fw/web    React app, talks to the camera through WebUSB
 docs/                      the built web app — GitHub Pages serves this folder

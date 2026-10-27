@@ -77,7 +77,7 @@ describe('seek-fw decrypt file', () => {
       producer: 'seek-thermal-firmware-dump (seek-fw CLI, modern-4x)',
       flashBase: '0x14000000',
       source: { fileName: 'flash_4m_usb_partial_gap_ff.bin' },
-      profile: { id: 'modern-4x' },
+      family: { id: 'modern-4x' },
     });
 
     expect(stdout.text).toContain('wrote');
@@ -100,13 +100,13 @@ describe('seek-fw decrypt file', () => {
     expect(parsed).toMatchObject({
       command: 'decrypt',
       ok: true,
-      profile: 'modern-4x',
+      family: 'modern-4x',
       source: { file: 'flash_4m_usb_partial_gap_ff.bin' },
     });
     const document = parsed as { slots: { key: string; confidence: string; flash: string }[] };
     expect(document.slots).toHaveLength(1);
     expect(document.slots[0]?.flash).toBe('0x14030000');
-    expect(document.slots[0]?.confidence).toBe('VERIFIED(profile)');
+    expect(document.slots[0]?.confidence).toBe('VERIFIED(family)');
     expect(document.slots[0]?.key).toBe(bytesToHex(KEY_A));
     /* --verbose put plenty of human text somewhere; it must not be stdout. */
     expect(stderr.text.length).toBeGreaterThan(0);
@@ -124,11 +124,11 @@ describe('seek-fw decrypt file', () => {
     expect(stderr.text).toBe('');
   });
 
-  it('honours --profile and --zip', async () => {
+  it('honours --family and --zip', async () => {
     const zip = join(dir, 'archive.zip');
     const { io } = testIo();
     const code = await run(
-      ['decrypt', 'file', dumpPath, '--zip', zip, '--profile', 'compact-2016'],
+      ['decrypt', 'file', dumpPath, '--zip', zip, '--family', 'compact-2016'],
       io,
       signal(),
     );
@@ -213,7 +213,7 @@ describe('seek-fw decrypt slot', () => {
       status: 'decrypted',
       decrypted: true,
       source: { file: 'slot-a.bin', size: SLOT_LENGTH, sha256: sha256(bank) },
-      profile: { id: 'modern-4x', detected: true },
+      family: { id: 'modern-4x', detected: true },
       key: { method: 'cryptanalytic', key: bytesToHex(KEY_A), named: null },
       header: { version: '4.9.5.0' },
     });
@@ -223,13 +223,13 @@ describe('seek-fw decrypt slot', () => {
   it('names the family the caller gave, and says it was not detected', async () => {
     const { io, stdout } = testIo();
     const code = await run(
-      ['decrypt', 'slot', bankPath, '--profile', 'modern-4x', '--json', '--out', join(dir, 'p')],
+      ['decrypt', 'slot', bankPath, '--family', 'modern-4x', '--json', '--out', join(dir, 'p')],
       io,
       signal(),
     );
     expect(code).toBe(EXIT_OK);
     expect(JSON.parse(stdout.text)).toMatchObject({
-      profile: { id: 'modern-4x', detected: false },
+      family: { id: 'modern-4x', detected: false },
     });
   });
 

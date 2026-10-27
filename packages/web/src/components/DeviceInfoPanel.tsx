@@ -82,7 +82,7 @@ export function DeviceInfoPanel({ state }: DeviceInfoPanelProps): ReactElement {
 
   const running: readonly KeyValueRow[] = [
     ['Version', state.version],
-    ['Profile', state.profile.name],
+    ['Firmware family', state.profile.name],
     ['Build', state.buildString],
     ['Bootloader', bootloader],
     ['Platform', state.platform],

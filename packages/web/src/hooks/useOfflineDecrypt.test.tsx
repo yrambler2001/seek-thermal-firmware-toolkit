@@ -156,7 +156,7 @@ describe('useOfflineDecrypt', () => {
     expect(result.current.detection).not.toBeNull();
     expect(result.current.detection?.best.profile.id).toBe('modern-4x');
     expect(result.current.detection?.best.reasons.length).toBeGreaterThan(0);
-    expect(parsed).toMatchObject({ profile: { id: 'modern-4x' } });
+    expect(parsed).toMatchObject({ family: { id: 'modern-4x' } });
     unmount();
   }, 20_000);
 

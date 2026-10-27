@@ -138,7 +138,7 @@ export function CameraReport({ state }: CameraReportProps): ReactElement {
       </Panel>
 
       <Panel>
-        <PanelTitle>Profile</PanelTitle>
+        <PanelTitle>Firmware family</PanelTitle>
         <KeyValue
           rows={[
             ['Read under', state.profile.name],

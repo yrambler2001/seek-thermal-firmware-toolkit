@@ -69,7 +69,7 @@ export interface SlotFileKey {
   /** The whitening constant the key is written under (cryptanalytic only). */
   readonly whiteningK: number | null;
   /** What decided `whiteningK`: a key form that occurs once in the plaintext, or the profile's default. */
-  readonly whiteningEvidence: 'plaintext' | 'profile-default' | null;
+  readonly whiteningEvidence: 'plaintext' | 'family-default' | null;
   /** The 16-byte key in the form the image holds, in hex (cryptanalytic only). */
   readonly key: string | null;
   /** The key recovery's verdict, as a code for scripts (cryptanalytic only); people read `keyConfidencePhrase`. */
@@ -77,7 +77,7 @@ export interface SlotFileKey {
   /** The acceptance sum of the decrypted image (cryptanalytic only). */
   readonly acceptanceSum: number | null;
   /** Whether that sum is the profile's acceptance target (cryptanalytic only). */
-  readonly matchesProfile: boolean | null;
+  readonly matchesFamily: boolean | null;
   /**
    * The application key this is, as "Key A of <builds>" or "Key B of <builds>", when it matches
    * a pair this build knows. Null otherwise: the key is real, it just has no name here.
@@ -228,7 +228,7 @@ export async function decryptSlotFile(
         key: null,
         confidence: null,
         acceptanceSum: null,
-        matchesProfile: null,
+        matchesFamily: null,
         named: 'FF 1.3.0.8 Key B',
       },
       keyBPlain,
@@ -266,7 +266,7 @@ export async function decryptSlotFile(
         key: null,
         confidence: null,
         acceptanceSum: null,
-        matchesProfile: null,
+        matchesFamily: null,
         named: null,
       },
       plain,
@@ -274,7 +274,7 @@ export async function decryptSlotFile(
   }
 
   const whitening = resolveWhitening(plain, recovered.state, candidateKs);
-  const named = applicationKeyName(recovered.state, recovered.matchesProfile, whitening.whiteningK);
+  const named = applicationKeyName(recovered.state, recovered.matchesFamily, whitening.whiteningK);
   notes.push(
     `decrypted ${String(plain.length)} B under the key recovered from this bank ` +
       `(${keyCheckText(recovered.confidence, recovered.checksum)}` +
@@ -292,7 +292,7 @@ export async function decryptSlotFile(
       key: whitening.keyHex,
       confidence: recovered.confidence,
       acceptanceSum: recovered.checksum >>> 0,
-      matchesProfile: recovered.matchesProfile,
+      matchesFamily: recovered.matchesFamily,
       named,
     },
     plain,
@@ -310,7 +310,7 @@ export function slotFileReport(result: SlotFileDecryption, fileName: string): st
     '===============================',
     `Source      : ${fileName} (${String(result.size)} bytes)`,
     `sha256      : ${result.sha256}`,
-    `Profile     : ${result.profile.name} [${result.profile.id}] (${
+    `Family      : ${result.profile.name} [${result.profile.id}] (${
       result.profile.detected ? 'detected from the bank' : 'given by the caller'
     })`,
     `Status      : ${statusText(result.status)}`,
@@ -335,11 +335,11 @@ export function slotFileReport(result: SlotFileDecryption, fileName: string): st
       lines.push(`  state       : ${(key.state ?? []).join(' ')}`);
       lines.push(
         `  key         : ${key.key ?? '(none)'}  (K=${hexUp(key.whiteningK ?? 0)}, ` +
-          `${key.whiteningEvidence === 'plaintext' ? 'the key occurs once in the plaintext' : "the profile's default K"})`,
+          `${key.whiteningEvidence === 'plaintext' ? 'the key occurs once in the plaintext' : "the family's default K"})`,
       );
       lines.push(
         `  acceptance  : ${hexUp(key.acceptanceSum ?? 0)} (${
-          key.matchesProfile === true ? 'the profile target' : 'not the profile target'
+          key.matchesFamily === true ? 'the family target' : 'not the family target'
         })`,
       );
       /* The verdict in words; the JSON's `key.confidence` keeps the code (TESTING.md 42.88). */

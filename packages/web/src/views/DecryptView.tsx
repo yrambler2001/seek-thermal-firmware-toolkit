@@ -140,7 +140,7 @@ function SlotResult({ slotFile }: { readonly slotFile: SlotFileApi }): ReactElem
     [
       'Family',
       `${result.profile.name}${result.profile.detected ? ' (detected from the image)' : ''}${
-        result.key?.matchesProfile === false
+        result.key?.matchesFamily === false
           ? " — the sum is not this family's acceptance target, so the bootloader would not take the image as it stands"
           : ''
       }`,
@@ -223,12 +223,12 @@ export function DecryptView({ offline, slotFile, busy }: DecryptViewProps): Reac
 
         {offline.detection !== null && (
           <Panel>
-            <PanelTitle icon={<FileSearch />}>Detected firmware profile</PanelTitle>
+            <PanelTitle icon={<FileSearch />}>Detected firmware family</PanelTitle>
             <Prose className="mb-3">
               <p>
                 No camera is attached, so the family is scored from the images in the file itself.
                 The key is solved out of each slot&apos;s ciphertext either way; this is what names
-                the cipher profile in the report.
+                the firmware family in the report.
               </p>
             </Prose>
             <DetectionBox detection={offline.detection} scoreBasis="from the images in the file" />

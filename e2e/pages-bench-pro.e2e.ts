@@ -60,7 +60,7 @@
  * acknowledgement once.
  * And 42.88's: a write plan's "Read before writing" lists its warnings and only this write's own notes, not
  * the camera's notes shown above it (no "Note: Staged: …" there); the key recovery's verdict in words in the
- * read-back and dump lines ("key verified by the acceptance sum 0x00000000", never "VERIFIED(profile)"); the
+ * read-back and dump lines ("key verified by the acceptance sum 0x00000000", never "VERIFIED(family)"); the
  * frame-rate dialog naming no row by its record or link code names.
  * And 42.91's: every write saves its bank first as one zip download (no save dialog), named with the time,
  * the serial, the firmware, the bank and the write; each row's "Copy to …" and "Restore from full flash
@@ -436,7 +436,7 @@ describe.skipIf(!RUNNABLE)(
       expect(log, 'one read, under compact-2016: no legacy-auth read first').not.toContain(
         'legacy-auth',
       );
-      /* Two scores, each saying what it is: the probe's in the log, the read's in the Profile panel
+      /* Two scores, each saying what it is: the probe's in the log, the read's in the Firmware family panel
        * (TESTING.md 42.85 O5, 42.86). */
       expect(log, 'the probe line').toMatch(
         /probe: 2016 Compact Pro \(compact-2016\), score \d\.\d\d from the answers above, before any bank is read/,

@@ -38,7 +38,7 @@ const ARCHIVE: readonly (readonly [string, string])[] = [
   ['flash_4m_usb_partial_gap_ff.bin', 'the assembled 4 MiB flash image'],
   ['windows/*.bin', 'each 64 KiB block exactly as it came off the wire'],
   ['decrypted/*.bin', 'every firmware image slot, decrypted (if a key was found)'],
-  ['decrypted/*.txt', 'per-slot report: key, key location, cipher profile, SP, entry, SHA-256'],
+  ['decrypted/*.txt', 'per-slot report: key, key location, family and cipher, SP, entry, SHA-256'],
   ['manifest.json', 'exact read/gap/decryption metadata'],
   ['README.md', 'what the capture is and what its limits are'],
 ];

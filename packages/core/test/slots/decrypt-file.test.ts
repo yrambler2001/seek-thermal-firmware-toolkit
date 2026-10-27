@@ -94,7 +94,7 @@ describe('decryptSlotFile: a bank under a key', () => {
     expect(result.key?.method).toBe('cryptanalytic');
     expect(result.key?.key).toBe(bytesToHex(keyA));
     expect(result.key?.named).toBe(`Key A of ${pair.builds}`);
-    expect(result.key?.matchesProfile).toBe(true);
+    expect(result.key?.matchesFamily).toBe(true);
     expect(result.key?.state).toHaveLength(4);
   });
 
@@ -162,7 +162,7 @@ describe('decryptSlotFile: the 2014 plaintext chain', () => {
     const plain = plainImage();
     const bank = new Uint8Array(SLOT_BYTES).fill(0xff);
     bank.set(plain, 0);
-    const result = await decryptSlotFile(bank, { profile: getProfile('compact-2014') });
+    const result = await decryptSlotFile(bank, { profile: getProfile('early-compact') });
     expect(result.status).toBe('decrypted');
     expect(result.key?.method).toBe('stored-plain');
     expect(result.key?.key).toBeNull();
@@ -186,7 +186,7 @@ describe('slotFileReport', () => {
     expect(text).toContain('check       : key verified by the acceptance sum');
     expect(text).not.toContain('VERIFIED');
     expect(text).not.toMatch(/confidence/i);
-    expect(result.key?.confidence).toBe('VERIFIED(profile)');
+    expect(result.key?.confidence).toBe('VERIFIED(family)');
     expect(result.notes.join('\n')).toContain(
       'under the key recovered from this bank (key verified by the acceptance sum 0x0000FFFF; it is Key A of',
     );

@@ -698,7 +698,7 @@ export function listLines(
       ['  product', report.state.description.productName ?? '(no product string)'],
       ['  serial', report.state.serial ?? '(unreadable)'],
       ['  firmware', report.plan.firmwareVersion ?? '(unreadable)'],
-      ['  profile', report.plan.profileId],
+      ['  family', report.plan.profileId],
       ['  build', build.supported ? 'supported' : `not supported: ${build.reason}`],
     ]),
   );
@@ -802,7 +802,7 @@ export function listResult(report: SlotsReport): CommandResult {
     product: report.state.description.productName,
     serial: report.state.serial,
     firmware: report.plan.firmwareVersion,
-    profile: report.plan.profileId,
+    family: report.plan.profileId,
     build: report.plan.supportedBuild,
     notes: [...report.plan.notes],
     slots: report.slots.map((view) => ({

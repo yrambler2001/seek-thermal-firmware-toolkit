@@ -426,7 +426,7 @@ export async function runDump(
     usbReadableWindows: okCount,
     expectedReadableWindows: entries.length,
     cancelled,
-    profile: profileInfoOf(profile, ctx.detection),
+    family: profileInfoOf(profile, ctx.detection),
     selectorTable: { firmwareVersion: plan.firmwareVersion, table: plan.table },
   };
 

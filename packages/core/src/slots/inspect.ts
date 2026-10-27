@@ -59,7 +59,7 @@ export async function inspectSlots(
       'slots/refused',
       `refusing to read the firmware slots: ${plan.supportedBuild.reason}. Nothing beyond the ` +
         'version read was sent, so no bank was touched.',
-      { detail: { firmwareVersion: firmware.version, profile: plan.profileId } },
+      { detail: { firmwareVersion: firmware.version, family: plan.profileId } },
     );
   }
   /* A plan is for ONE build of ONE profile. Joining a plan made for another
@@ -70,7 +70,7 @@ export async function inspectSlots(
       `the slot plan is for firmware ${plan.firmwareVersion ?? 'unknown'} under ` +
         `${plan.profileId}, but the camera reports ${firmware.version ?? 'no version'} under ` +
         ctx.profile.id,
-      { detail: { firmwareVersion: firmware.version, profile: ctx.profile.id } },
+      { detail: { firmwareVersion: firmware.version, family: ctx.profile.id } },
     );
   }
 

@@ -729,7 +729,7 @@ describe('SlotsView', () => {
     const { container, unmount } = view(
       panel({
         refusal: {
-          code: 'profile/unsupported',
+          code: 'family/unsupported',
           message: 'firmware 0.3.0.1 predates the dump protocol',
           hint: null,
         },
@@ -1583,7 +1583,8 @@ describe('SlotsView: the device info on this page', () => {
     expect(runningHeading, 'Running firmware heading').toBeTruthy();
     const text = container.textContent;
     expect(text).toContain(base.version);
-    expect(text).toContain('Profile');
+    expect(text).toContain('Firmware family');
+    expect(text).not.toContain('Profile');
     expect(text).toContain('Booted from');
     expect(text).toContain('Upgrade target (its own upgrade)');
 

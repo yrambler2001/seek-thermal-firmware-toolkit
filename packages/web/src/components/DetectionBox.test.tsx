@@ -1,7 +1,7 @@
 /**
  * The detection panel the Dump tab (`CameraIdentity`) and the offline decryptor show. Its score says what
  * it was taken from, as the Info tab's log ("probe: …, score 0.85 from the answers above, before any bank is
- * read") and Profile panel ("score 0.98 after the read, from the evidence below") do; it was labelled
+ * read") and Firmware family panel ("score 0.98 after the read, from the evidence below") do; it was labelled
  * "Confidence 0.85 of 1.00" (TESTING.md 42.86 §7, 42.87).
  */
 

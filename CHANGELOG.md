@@ -30,6 +30,11 @@ the same things. It now covers the 2014 to 2017 cameras as well as the 2018-and-
 - **The 2014 to 2017 cameras.** Firmware families for the Compact 0.8.0.0 to 1.3.0.8 and the Compact
   PRO 1.0.3.x, including the 2016 cipher and the 2014 plain chain. The 2016 Compact PRO, which 1.0.0
   refused, is now read, decrypted and written.
+- **Firmware families.** Every camera is sorted into one of five families, from its own answers
+  and what its banks hold: `modern-4x`, `legacy-auth`, `compact-2016`, `early-compact` (the
+  Compacts before 0.8.0.0) and `generic`. The Info tab and `seek-fw info` name the family;
+  `seek-fw info --families` lists them, and `--family <id>` on `info`, `decrypt` and `slots`
+  names one by hand. The `--json` output and `manifest.json` record it under `family`.
 - **Dump & decrypt 0.x/1.x 2014/2016** (`seek-fw preserve`): a guided full-flash preservation run for
   sixteen builds of the 2014 to 2017 line, in six steps: backup, patch, write, drain, restore and
   verify. The page groups them into three: read and build, write and whole-flash read, restore and
@@ -59,7 +64,7 @@ the same things. It now covers the 2014 to 2017 cameras as well as the 2018-and-
   older than 0.8.0.0 have no read command, so the dump refuses them.
 - On the 2014 to 2017 line the dump reads `0x14060000`, the block 1.0.0 could not reach, and lists the
   blocks no request can reach as gaps.
-- The archive's `manifest.json` also records the firmware family used.
+- The archive's `manifest.json` also records the firmware family used, under `family`.
 
 ### Development
 

@@ -1918,7 +1918,7 @@ async function runBackupStep(
     },
     flashBase: profile.memory.flashBase,
     decryption: archive.summary,
-    profile: profileInfoOf(profile, archive.detection),
+    family: profileInfoOf(profile, archive.detection),
   });
 
   const allArtifacts: Artifact[] = [

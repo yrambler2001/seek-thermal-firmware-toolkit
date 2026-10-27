@@ -172,7 +172,7 @@ const KEY_B_AT = 0x1010;
 function versionWordFor(profile: FirmwareProfile): number {
   if (profile.id === 'compact-2016' || profile.id === 'legacy-auth')
     return 0x00030001; /* 1.0.3.0 */
-  if (profile.id === 'compact-2014') return 0x00000500; /* 0.5.0.0 */
+  if (profile.id === 'early-compact') return 0x00000500; /* 0.5.0.0 */
   return 0x00021204; /* 4.18.2.0 */
 }
 
@@ -463,7 +463,7 @@ describe('runDump', () => {
         (e: unknown) => e,
       );
       expect(error, version).toBeInstanceOf(SeekError);
-      expect((error as SeekError).code).toBe('profile/unsupported');
+      expect((error as SeekError).code).toBe('family/unsupported');
       expect((error as SeekError).message).toContain(`firmware ${version} predates the dump`);
       expect((error as SeekError).message).toContain('setter only');
       /* The version read (two unarmed reads), and nothing after it. */
@@ -603,8 +603,8 @@ describe('decryptDump', () => {
     expect(recovered.flash).toBe(FLASH_BASE + slotOffset);
     expect(recovered.length).toBe(IMAGE_SIZE);
     expect(equalBytes(recovered.plain, plain)).toBe(true);
-    expect(recovered.recovered.confidence).toBe('VERIFIED(profile)');
-    expect(recovered.recovered.matchesProfile).toBe(true);
+    expect(recovered.recovered.confidence).toBe('VERIFIED(family)');
+    expect(recovered.recovered.matchesFamily).toBe(true);
 
     /* the key is named from the image's OWN plaintext, not from the TARGET */
     expect(recovered.whitening.evidence).toBe('plaintext');
@@ -657,8 +657,8 @@ describe('decryptDump', () => {
       expect(result.summary.keys).toHaveLength(1);
       expect(result.summary.images[0]?.key).toBe(bytesToHex(keyA));
       /* The manifest is for scripts: it keeps the code. */
-      expect(result.summary.images[0]?.confidence).toBe('VERIFIED(profile)');
-      expect(result.summary.keys[0]?.confidence).toBe('VERIFIED(profile)');
+      expect(result.summary.images[0]?.confidence).toBe('VERIFIED(family)');
+      expect(result.summary.keys[0]?.confidence).toBe('VERIFIED(family)');
     } else {
       throw new Error('expected an attempted decryption summary');
     }
@@ -776,9 +776,9 @@ describe('readDeviceInfo', () => {
     expect(legacyMatch?.score).toBe(0);
   }, 60_000);
 
-  it('arms no slot the plan leaves out: compact-2014 picked by hand, past the gate', async () => {
-    /* compact-2014 plans nothing for any version, and a family picked by hand
-     * (`--profile compact-2014`, the web app's override) on a camera that
+  it('arms no slot the plan leaves out: early-compact picked by hand, past the gate', async () => {
+    /* early-compact plans nothing for any version, and a family picked by hand
+     * (`--family early-compact`, the web app's override) on a camera that
      * reports 0.8.0.0 or later gets past the identity gate. The slot loop used
      * to fall back to each slot descriptor's own subcommand when the plan had
      * no entry, so this read sent BeginFirmwareUpgrade 7, 8 and 9 under a
@@ -1061,8 +1061,8 @@ describe('detectProfileForDump', () => {
     const recovered = result.slots[0];
     if (recovered === undefined) throw new Error('no slot decrypted');
     expect(equalBytes(recovered.plain, plain)).toBe(true);
-    expect(recovered.recovered.matchesProfile).toBe(true);
-    expect(recovered.recovered.confidence).toBe('VERIFIED(profile)');
+    expect(recovered.recovered.matchesFamily).toBe(true);
+    expect(recovered.recovered.confidence).toBe('VERIFIED(family)');
     expect(recovered.whitening.whiteningK).toBe(0);
 
     const tag = addrTag(FLASH_BASE + slotOffset);
@@ -1091,7 +1091,7 @@ describe('detectProfileForDump', () => {
 
     const recovered = result.slots[0];
     if (recovered === undefined) throw new Error('no slot decrypted');
-    expect(recovered.recovered.matchesProfile).toBe(false);
+    expect(recovered.recovered.matchesFamily).toBe(false);
     expect(recovered.recovered.confidence).toBe('VERIFIED(structural)');
     expect(recovered.whitening.evidence).toBe('plaintext');
     expect(recovered.whitening.whiteningK).toBe(0);
@@ -1373,14 +1373,14 @@ describe('a 2016 Compact PRO (1.0.3.0), read and judged', () => {
       result.artifacts.find((a) => a.name === 'decrypted/decryption_report.txt')?.data,
     );
     expect(report).toContain(
-      'Profile   : 2016 Compact Pro [compact-2016] (detected from this dump and the camera; ' +
+      'Family    : 2016 Compact Pro [compact-2016] (detected from this dump and the camera; ' +
         'the read acted under legacy-auth)',
     );
     expect(report).toContain('[key verified by the acceptance sum]');
-    expect(report).not.toContain('VERIFIED(profile)');
-    expect(report).not.toContain('unknown profile');
+    expect(report).not.toContain('VERIFIED(family)');
+    expect(report).not.toContain('unknown family');
     /* the read itself is still legacy-auth's: the manifest says what it acted under */
-    expect(result.manifest.profile.id).toBe('legacy-auth');
+    expect(result.manifest.family.id).toBe('legacy-auth');
   }, 60_000);
 
   it('a family named by hand is decrypted under as named', async () => {
@@ -1393,7 +1393,7 @@ describe('a 2016 Compact PRO (1.0.3.0), read and judged', () => {
       result.artifacts.find((a) => a.name === 'decrypted/decryption_report.txt')?.data,
     );
     expect(report).toContain(
-      'Profile   : Legacy locked firmware [legacy-auth] (given by the caller)',
+      'Family    : Legacy locked firmware [legacy-auth] (given by the caller)',
     );
   }, 60_000);
 });
@@ -1432,8 +1432,8 @@ describe('decryptDump with the camera beside the dump', () => {
       result.artifacts.find((a) => a.name === 'decrypted/decryption_report.txt')?.data,
     );
     expect(report).toContain(
-      'Profile   : 2016 Compact Pro [compact-2016] (the profile the read acted under; ' +
-        'detection did not settle the family)',
+      'Family    : 2016 Compact Pro [compact-2016] (the family the read acted under; ' +
+        'detection did not settle it)',
     );
   });
 
@@ -1451,7 +1451,7 @@ describe('decryptDump with the camera beside the dump', () => {
       result.artifacts.find((a) => a.name === 'decrypted/decryption_report.txt')?.data,
     );
     expect(report).toContain('stored plain — the 2014 chain');
-    expect(report).not.toContain('unknown profile');
+    expect(report).not.toContain('unknown family');
   });
 });
 

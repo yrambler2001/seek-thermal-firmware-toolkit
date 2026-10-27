@@ -14,7 +14,7 @@
           "whiteningK": "0x13579BDF",
           "sp": "0x1001F800",
           "entry": "0x10000409",
-          "confidence": "VERIFIED(profile)",
+          "confidence": "VERIFIED(family)",
           "whiteningEvidence": "plaintext",
           "duplicateOf": null,
           "plainSha256": "48f0ebfd3f55d1dc4aee16f693eedd11c2d5cbbe88f4ca200a90c8ea1b19e735"
@@ -26,7 +26,7 @@
           "whiteningK": "0x13579BDF",
           "sp": "0x1001F800",
           "entry": "0x10000409",
-          "confidence": "VERIFIED(profile)",
+          "confidence": "VERIFIED(family)",
           "whiteningEvidence": "plaintext",
           "duplicateOf": null,
           "plainSha256": "d157c0fff86c0241017905fe183e930e2d34ffcbd25a3315426108968a579d03"
@@ -38,7 +38,7 @@
           "whiteningK": "0x13579BDF",
           "sp": "0x1001F800",
           "entry": "0x10000409",
-          "confidence": "VERIFIED(profile)",
+          "confidence": "VERIFIED(family)",
           "whiteningEvidence": "plaintext",
           "duplicateOf": "0x14030000",
           "plainSha256": "48f0ebfd3f55d1dc4aee16f693eedd11c2d5cbbe88f4ca200a90c8ea1b19e735"
@@ -57,7 +57,7 @@
           "whiteningK": "0x00000000",
           "sp": "0x1000A000",
           "entry": "0x100806A5",
-          "confidence": "VERIFIED(profile)",
+          "confidence": "VERIFIED(family)",
           "whiteningEvidence": "plaintext",
           "duplicateOf": null,
           "plainSha256": "5e1f3f24c8bc1e85bcb67e73e0ee23f301864ee7839a48135598fca961373e26"
@@ -69,7 +69,7 @@
           "whiteningK": "0x00000000",
           "sp": "0x1000A000",
           "entry": "0x100806A5",
-          "confidence": "VERIFIED(profile)",
+          "confidence": "VERIFIED(family)",
           "whiteningEvidence": "plaintext",
           "duplicateOf": "0x14050000",
           "plainSha256": "5e1f3f24c8bc1e85bcb67e73e0ee23f301864ee7839a48135598fca961373e26"
@@ -81,7 +81,7 @@
           "whiteningK": "0x00000000",
           "sp": "0x1000A000",
           "entry": "0x100806A5",
-          "confidence": "VERIFIED(profile)",
+          "confidence": "VERIFIED(family)",
           "whiteningEvidence": "plaintext",
           "duplicateOf": "0x14050000",
           "plainSha256": "5e1f3f24c8bc1e85bcb67e73e0ee23f301864ee7839a48135598fca961373e26"
@@ -100,7 +100,7 @@
           "whiteningK": "0x13579BDF",
           "sp": "0x1001F800",
           "entry": "0x10000409",
-          "confidence": "VERIFIED(profile)",
+          "confidence": "VERIFIED(family)",
           "whiteningEvidence": "plaintext",
           "duplicateOf": null,
           "plainSha256": "48f0ebfd3f55d1dc4aee16f693eedd11c2d5cbbe88f4ca200a90c8ea1b19e735"
@@ -112,7 +112,7 @@
           "whiteningK": "0x13579BDF",
           "sp": "0x1001F800",
           "entry": "0x10000409",
-          "confidence": "VERIFIED(profile)",
+          "confidence": "VERIFIED(family)",
           "whiteningEvidence": "plaintext",
           "duplicateOf": "0x14030000",
           "plainSha256": "48f0ebfd3f55d1dc4aee16f693eedd11c2d5cbbe88f4ca200a90c8ea1b19e735"
@@ -124,7 +124,7 @@
           "whiteningK": "0x13579BDF",
           "sp": "0x1001F800",
           "entry": "0x10000409",
-          "confidence": "VERIFIED(profile)",
+          "confidence": "VERIFIED(family)",
           "whiteningEvidence": "plaintext",
           "duplicateOf": "0x14030000",
           "plainSha256": "48f0ebfd3f55d1dc4aee16f693eedd11c2d5cbbe88f4ca200a90c8ea1b19e735"
@@ -143,7 +143,7 @@
           "whiteningK": "0x13579BDF",
           "sp": "0x1001F800",
           "entry": "0x10000409",
-          "confidence": "VERIFIED(profile)",
+          "confidence": "VERIFIED(family)",
           "whiteningEvidence": "plaintext",
           "duplicateOf": null,
           "plainSha256": "48f0ebfd3f55d1dc4aee16f693eedd11c2d5cbbe88f4ca200a90c8ea1b19e735"
@@ -155,7 +155,7 @@
           "whiteningK": "0x13579BDF",
           "sp": "0x1001F800",
           "entry": "0x10000409",
-          "confidence": "VERIFIED(profile)",
+          "confidence": "VERIFIED(family)",
           "whiteningEvidence": "plaintext",
           "duplicateOf": "0x14030000",
           "plainSha256": "48f0ebfd3f55d1dc4aee16f693eedd11c2d5cbbe88f4ca200a90c8ea1b19e735"
@@ -167,7 +167,7 @@
           "whiteningK": "0x13579BDF",
           "sp": "0x1001F800",
           "entry": "0x10000409",
-          "confidence": "VERIFIED(profile)",
+          "confidence": "VERIFIED(family)",
           "whiteningEvidence": "plaintext",
           "duplicateOf": "0x14030000",
           "plainSha256": "48f0ebfd3f55d1dc4aee16f693eedd11c2d5cbbe88f4ca200a90c8ea1b19e735"
@@ -186,7 +186,7 @@
           "whiteningK": "0x13579BDF",
           "sp": "0x1001F800",
           "entry": "0x10000409",
-          "confidence": "VERIFIED(profile)",
+          "confidence": "VERIFIED(family)",
           "whiteningEvidence": "plaintext",
           "duplicateOf": null,
           "plainSha256": "48f0ebfd3f55d1dc4aee16f693eedd11c2d5cbbe88f4ca200a90c8ea1b19e735"
@@ -198,7 +198,7 @@
           "whiteningK": "0x13579BDF",
           "sp": "0x1001F800",
           "entry": "0x10000409",
-          "confidence": "VERIFIED(profile)",
+          "confidence": "VERIFIED(family)",
           "whiteningEvidence": "plaintext",
           "duplicateOf": "0x14030000",
           "plainSha256": "48f0ebfd3f55d1dc4aee16f693eedd11c2d5cbbe88f4ca200a90c8ea1b19e735"
@@ -210,7 +210,7 @@
           "whiteningK": "0x13579BDF",
           "sp": "0x1001F800",
           "entry": "0x10000409",
-          "confidence": "VERIFIED(profile)",
+          "confidence": "VERIFIED(family)",
           "whiteningEvidence": "plaintext",
           "duplicateOf": "0x14030000",
           "plainSha256": "48f0ebfd3f55d1dc4aee16f693eedd11c2d5cbbe88f4ca200a90c8ea1b19e735"
@@ -229,7 +229,7 @@
           "whiteningK": "0x00000000",
           "sp": "0x1000A000",
           "entry": "0x100806A5",
-          "confidence": "VERIFIED(profile)",
+          "confidence": "VERIFIED(family)",
           "whiteningEvidence": "plaintext",
           "duplicateOf": null,
           "plainSha256": "6f06b3334c0c7243ca09753fda471f660d766db183963cb0ce8d5516bfe89682"
@@ -248,7 +248,7 @@
           "whiteningK": "0x00000000",
           "sp": "0x1000A000",
           "entry": "0x100806A5",
-          "confidence": "VERIFIED(profile)",
+          "confidence": "VERIFIED(family)",
           "whiteningEvidence": "plaintext",
           "duplicateOf": null,
           "plainSha256": "6f06b3334c0c7243ca09753fda471f660d766db183963cb0ce8d5516bfe89682"
@@ -260,7 +260,7 @@
           "whiteningK": "0x00000000",
           "sp": "0x1000A000",
           "entry": "0x100806A5",
-          "confidence": "VERIFIED(profile)",
+          "confidence": "VERIFIED(family)",
           "whiteningEvidence": "plaintext",
           "duplicateOf": "0x14050000",
           "plainSha256": "6f06b3334c0c7243ca09753fda471f660d766db183963cb0ce8d5516bfe89682"
@@ -272,7 +272,7 @@
           "whiteningK": "0x00000000",
           "sp": "0x1000A000",
           "entry": "0x100806A5",
-          "confidence": "VERIFIED(profile)",
+          "confidence": "VERIFIED(family)",
           "whiteningEvidence": "plaintext",
           "duplicateOf": "0x14050000",
           "plainSha256": "6f06b3334c0c7243ca09753fda471f660d766db183963cb0ce8d5516bfe89682"
@@ -291,7 +291,7 @@
           "whiteningK": "0x13579BDF",
           "sp": "0x10020000",
           "entry": "0x10000409",
-          "confidence": "VERIFIED(profile)",
+          "confidence": "VERIFIED(family)",
           "whiteningEvidence": "plaintext",
           "duplicateOf": null,
           "plainSha256": "13db63815bce911fb9388277cc6a177498df1023e9713994dd116e6eef6f84bb"
@@ -303,8 +303,8 @@
           "whiteningK": "0x13579BDF",
           "sp": "0x10020000",
           "entry": "0x10000409",
-          "confidence": "VERIFIED(profile)",
-          "whiteningEvidence": "profile-default",
+          "confidence": "VERIFIED(family)",
+          "whiteningEvidence": "family-default",
           "duplicateOf": null,
           "plainSha256": "229c87342628011e251440abb1de01bf0327e3b23946f876822fd4da215cb1ea"
         },
@@ -316,7 +316,7 @@
           "sp": "0x1000A000",
           "entry": "0x100806A5",
           "confidence": "VERIFIED(structural)",
-          "whiteningEvidence": "profile-default",
+          "whiteningEvidence": "family-default",
           "duplicateOf": null,
           "plainSha256": "196560c05096369165c8858f6a3f66239b6651ad73ff84f26a3fccdcf8c193d3"
         },
@@ -327,7 +327,7 @@
           "whiteningK": "0x13579BDF",
           "sp": "0x10020000",
           "entry": "0x10000409",
-          "confidence": "VERIFIED(profile)",
+          "confidence": "VERIFIED(family)",
           "whiteningEvidence": "plaintext",
           "duplicateOf": "0x14030000",
           "plainSha256": "13db63815bce911fb9388277cc6a177498df1023e9713994dd116e6eef6f84bb"
@@ -346,7 +346,7 @@
           "whiteningK": "0x13579BDF",
           "sp": "0x10020000",
           "entry": "0x100002E1",
-          "confidence": "VERIFIED(profile)",
+          "confidence": "VERIFIED(family)",
           "whiteningEvidence": "plaintext",
           "duplicateOf": null,
           "plainSha256": "f96ac57eda75bca22791acc3ed21c80bde96c1f538f0ddd2aea6ffe447752882"
@@ -358,7 +358,7 @@
           "whiteningK": "0x13579BDF",
           "sp": "0x10020000",
           "entry": "0x100002E1",
-          "confidence": "VERIFIED(profile)",
+          "confidence": "VERIFIED(family)",
           "whiteningEvidence": "plaintext",
           "duplicateOf": "0x14030000",
           "plainSha256": "f96ac57eda75bca22791acc3ed21c80bde96c1f538f0ddd2aea6ffe447752882"
@@ -370,7 +370,7 @@
           "whiteningK": "0x13579BDF",
           "sp": "0x10020000",
           "entry": "0x100002E1",
-          "confidence": "VERIFIED(profile)",
+          "confidence": "VERIFIED(family)",
           "whiteningEvidence": "plaintext",
           "duplicateOf": "0x14030000",
           "plainSha256": "f96ac57eda75bca22791acc3ed21c80bde96c1f538f0ddd2aea6ffe447752882"
@@ -389,7 +389,7 @@
           "whiteningK": "0x13579BDF",
           "sp": "0x10020000",
           "entry": "0x100002E1",
-          "confidence": "VERIFIED(profile)",
+          "confidence": "VERIFIED(family)",
           "whiteningEvidence": "plaintext",
           "duplicateOf": null,
           "plainSha256": "f96ac57eda75bca22791acc3ed21c80bde96c1f538f0ddd2aea6ffe447752882"
@@ -401,7 +401,7 @@
           "whiteningK": "0x13579BDF",
           "sp": "0x10020000",
           "entry": "0x100002E1",
-          "confidence": "VERIFIED(profile)",
+          "confidence": "VERIFIED(family)",
           "whiteningEvidence": "plaintext",
           "duplicateOf": "0x14030000",
           "plainSha256": "f96ac57eda75bca22791acc3ed21c80bde96c1f538f0ddd2aea6ffe447752882"
@@ -413,7 +413,7 @@
           "whiteningK": "0x13579BDF",
           "sp": "0x10020000",
           "entry": "0x100002E1",
-          "confidence": "VERIFIED(profile)",
+          "confidence": "VERIFIED(family)",
           "whiteningEvidence": "plaintext",
           "duplicateOf": "0x14030000",
           "plainSha256": "f96ac57eda75bca22791acc3ed21c80bde96c1f538f0ddd2aea6ffe447752882"
@@ -438,7 +438,7 @@
           "whiteningK": "0x13579BDF",
           "sp": "0x10017800",
           "entry": "0x10000409",
-          "confidence": "VERIFIED(profile)",
+          "confidence": "VERIFIED(family)",
           "whiteningEvidence": "plaintext",
           "duplicateOf": null,
           "plainSha256": "31f1ed53342e575edc88aada1b201a77ee82dcba6691cb58f7dee8d5ac951da9"
@@ -450,7 +450,7 @@
           "whiteningK": "0x13579BDF",
           "sp": "0x10017800",
           "entry": "0x10000409",
-          "confidence": "VERIFIED(profile)",
+          "confidence": "VERIFIED(family)",
           "whiteningEvidence": "plaintext",
           "duplicateOf": "0x14030000",
           "plainSha256": "31f1ed53342e575edc88aada1b201a77ee82dcba6691cb58f7dee8d5ac951da9"
@@ -462,7 +462,7 @@
           "whiteningK": "0x13579BDF",
           "sp": "0x10017800",
           "entry": "0x10000409",
-          "confidence": "VERIFIED(profile)",
+          "confidence": "VERIFIED(family)",
           "whiteningEvidence": "plaintext",
           "duplicateOf": "0x14030000",
           "plainSha256": "31f1ed53342e575edc88aada1b201a77ee82dcba6691cb58f7dee8d5ac951da9"
@@ -474,7 +474,7 @@
           "whiteningK": "0x13579BDF",
           "sp": "0x10017800",
           "entry": "0x10000409",
-          "confidence": "VERIFIED(profile)",
+          "confidence": "VERIFIED(family)",
           "whiteningEvidence": "plaintext",
           "duplicateOf": "0x14030000",
           "plainSha256": "31f1ed53342e575edc88aada1b201a77ee82dcba6691cb58f7dee8d5ac951da9"
@@ -493,7 +493,7 @@
           "whiteningK": "0x13579BDF",
           "sp": "0x1001F800",
           "entry": "0x10000409",
-          "confidence": "VERIFIED(profile)",
+          "confidence": "VERIFIED(family)",
           "whiteningEvidence": "plaintext",
           "duplicateOf": null,
           "plainSha256": "48f0ebfd3f55d1dc4aee16f693eedd11c2d5cbbe88f4ca200a90c8ea1b19e735"
@@ -505,7 +505,7 @@
           "whiteningK": "0x13579BDF",
           "sp": "0x1001F800",
           "entry": "0x10000409",
-          "confidence": "VERIFIED(profile)",
+          "confidence": "VERIFIED(family)",
           "whiteningEvidence": "plaintext",
           "duplicateOf": "0x14030000",
           "plainSha256": "48f0ebfd3f55d1dc4aee16f693eedd11c2d5cbbe88f4ca200a90c8ea1b19e735"
@@ -517,7 +517,7 @@
           "whiteningK": "0x13579BDF",
           "sp": "0x1001F800",
           "entry": "0x10000409",
-          "confidence": "VERIFIED(profile)",
+          "confidence": "VERIFIED(family)",
           "whiteningEvidence": "plaintext",
           "duplicateOf": "0x14030000",
           "plainSha256": "48f0ebfd3f55d1dc4aee16f693eedd11c2d5cbbe88f4ca200a90c8ea1b19e735"

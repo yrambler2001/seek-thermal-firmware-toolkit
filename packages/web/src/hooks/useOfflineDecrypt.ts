@@ -119,7 +119,7 @@ export function useOfflineDecrypt(params: OfflineDecryptParams): OfflineDecryptA
         source: { fileName: file.name, size: file.size, sha256: inputSha },
         flashBase: profile.memory.flashBase,
         decryption: result.summary,
-        profile: profileInfoOf(profile, result.detection),
+        family: profileInfoOf(profile, result.detection),
       });
 
       const outFiles: Artifact[] = [

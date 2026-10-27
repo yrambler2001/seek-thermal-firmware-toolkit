@@ -414,7 +414,7 @@ function detectModern(evidence: DeviceEvidence): DetectionVerdict {
 
 export const modern4x: FirmwareProfile = {
   id: 'modern-4x',
-  /* The id stays `modern-4x` — it is in scripts, in `--profile` invocations and
+  /* The id stays `modern-4x` — it is in scripts, in `--family` invocations and
    * in every pinned expectation — but the NAME no longer claims a version line
    * the family does not have. */
   name: 'Modern (2018+ selector map)',
@@ -423,7 +423,7 @@ export const modern4x: FirmwareProfile = {
     'channel: Compact 4.8/4.16, Compact Pro 4.9/4.18, Compact Pro FF, Compact XR, Mosaic ' +
     '2.27/10.9, Nano 200 42.x, Nano 300 44.x. Measured confirming all 63 windows at the ' +
     'addresses this map claims. xorshift128 images under whitening K=0x13579BDF with a ' +
-    '0x0000FFFF acceptance sum. The only profile whose write path has been exercised against ' +
+    '0x0000FFFF acceptance sum. The only family whose write path has been exercised against ' +
     'hardware.',
   cipher: MODERN_CIPHER,
   memory: MODERN_MEMORY,

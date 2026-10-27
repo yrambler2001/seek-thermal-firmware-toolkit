@@ -356,7 +356,7 @@ describe.skipIf(!available)('seek-fw slots, through the CLI, on the emulated cam
           ok: true,
           action: 'list',
           firmware: firmware.version,
-          profile: 'modern-4x',
+          family: 'modern-4x',
           build: { supported: true },
         });
         const slots = json.slots as Json[];
@@ -682,7 +682,7 @@ describe.skipIf(!available)(
           ok: true,
           action: 'list',
           firmware: '1.3.0.8',
-          profile: 'legacy-auth',
+          family: 'legacy-auth',
           build: { supported: true },
         });
         const notes = (list?.json?.notes as string[] | undefined) ?? [];

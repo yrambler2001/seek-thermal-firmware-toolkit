@@ -33,7 +33,7 @@ import {
 /**
  * The families the 4.x and Nano flow reads: the post-2018 selector map, and the map a camera
  * whose answers name no family is read with. The locked 2014–2017 line (legacy-auth, compact-2016)
- * and the pre-0.8 Compact (compact-2014) are read by `seek-fw preserve`.
+ * and the pre-0.8 Compact (early-compact) are read by `seek-fw preserve`.
  */
 const V4_FAMILIES: ReadonlySet<string> = new Set(['modern-4x', 'generic']);
 
@@ -66,7 +66,7 @@ export async function dumpCommand(ctx: CommandContext): Promise<CommandResult> {
       );
     }
     ctx.reporter.log(
-      `acting under profile ${choice.profile.id}${choice.forced ? ' (--profile)' : ''}`,
+      `acting under family ${choice.profile.id}${choice.forced ? ' (--family)' : ''}`,
       'detail',
     );
     const workflow = workflowContext(session, choice.profile, choice.detection, ctx);
@@ -75,7 +75,7 @@ export async function dumpCommand(ctx: CommandContext): Promise<CommandResult> {
     if (ctx.options.allSelectors) {
       const [first, last] = choice.profile.sweepRange;
       ctx.reporter.log(
-        `sweeping selectors ${String(first)}..${String(last)} under profile ${choice.profile.id}`,
+        `sweeping selectors ${String(first)}..${String(last)} under family ${choice.profile.id}`,
         'detail',
       );
       const result = await runSweep(workflow, options);
@@ -92,7 +92,7 @@ export async function dumpCommand(ctx: CommandContext): Promise<CommandResult> {
 
       return {
         mode: 'all-selectors',
-        profile: choice.profile.id,
+        family: choice.profile.id,
         selectorsArmed: result.selectorsArmed,
         selectorsWithData: result.selectorsWithData,
         placedInImage: result.placedInImage,
@@ -108,7 +108,7 @@ export async function dumpCommand(ctx: CommandContext): Promise<CommandResult> {
     if (ctx.human) {
       ctx.out(
         `read ${String(result.windowsRead)}/${String(result.windowsExpected)} windows` +
-          ` under profile ${choice.profile.id}`,
+          ` under family ${choice.profile.id}`,
       );
       if (result.cancelled) {
         ctx.out(
@@ -120,7 +120,7 @@ export async function dumpCommand(ctx: CommandContext): Promise<CommandResult> {
 
     return {
       mode: 'map',
-      profile: choice.profile.id,
+      family: choice.profile.id,
       windowsRead: result.windowsRead,
       windowsExpected: result.windowsExpected,
       bytes: result.combined.length,

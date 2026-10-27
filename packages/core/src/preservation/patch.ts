@@ -1433,7 +1433,7 @@ export function buildV1Patch(plain: Uint8Array): V1Patch {
   if (matches.length > 1) {
     throw new SeekError(
       'pipeline/refused',
-      `this image matches ${String(matches.length)} build profiles ` +
+      `this image matches ${String(matches.length)} known builds ` +
         `(${matches.map((p) => p.buildId).join(', ')}) — refusing to guess`,
     );
   }

@@ -163,7 +163,7 @@ describe('useInfoPanel: the camera read', () => {
     expect(panel.reporter.lines.some((line) => line.text.startsWith('firmware 4.18.2.0'))).toBe(
       true,
     );
-    /* The probe's score is labelled as the probe's, before any bank is read; the Profile panel's is the
+    /* The probe's score is labelled as the probe's, before any bank is read; the Firmware family panel's is the
      * one taken after the read (TESTING.md 42.85 O5, 42.86). No bare "confidence". */
     const probe = panel.reporter.lines.filter((line) =>
       line.text.startsWith("the camera's first answers point to "),

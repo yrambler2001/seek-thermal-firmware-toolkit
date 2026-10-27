@@ -21,7 +21,7 @@
 
 /** The families that ship with this package. */
 export type BuiltInProfileId =
-  'modern-4x' | 'legacy-auth' | 'compact-2016' | 'compact-2014' | 'generic';
+  'modern-4x' | 'legacy-auth' | 'compact-2016' | 'early-compact' | 'generic';
 
 /**
  * A profile identifier. Open on purpose: the built-in ids autocomplete, but any
@@ -246,7 +246,7 @@ export interface DeviceEvidence {
    * A window the selector map says is open on the plain channel actually served
    * bytes. False means `GetFeaturedFirmwareData` did not answer — which on the
    * earliest Compacts is not a wedge but the truth: that opcode is not in their
-   * RPC table at all (see `compact-2014`).
+   * RPC table at all (see `early-compact`).
    */
   readonly windowReadable?: boolean;
   /** Byte offsets at which image-header magic was found in a dump. */

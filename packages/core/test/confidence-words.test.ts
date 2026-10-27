@@ -8,7 +8,7 @@ import { describe, expect, it } from 'vitest';
 import { keyCheckText, keyConfidencePhrase } from '../src/crypto/confidence-words.js';
 import type { KeyConfidence } from '../src/crypto/recover.js';
 
-const ALL: readonly KeyConfidence[] = ['VERIFIED(profile)', 'VERIFIED(structural)', 'UNVERIFIED'];
+const ALL: readonly KeyConfidence[] = ['VERIFIED(family)', 'VERIFIED(structural)', 'UNVERIFIED'];
 
 describe('keyConfidencePhrase', () => {
   it('gives each verdict a short phrase, none of them the code name', () => {
@@ -27,7 +27,7 @@ describe('keyConfidencePhrase', () => {
 
 describe('keyCheckText', () => {
   it('reads the sum after "acceptance sum" when the sum is what verified the key', () => {
-    expect(keyCheckText('VERIFIED(profile)', 0)).toBe(
+    expect(keyCheckText('VERIFIED(family)', 0)).toBe(
       'key verified by the acceptance sum 0x00000000',
     );
   });

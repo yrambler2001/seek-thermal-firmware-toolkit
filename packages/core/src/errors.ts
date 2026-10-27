@@ -22,7 +22,7 @@ export type SeekErrorCode =
   | 'image/key-table'
   | 'flash/refused'
   | 'flash/commit'
-  | 'profile/unsupported'
+  | 'family/unsupported'
   /**
    * The v1 full-flash preservation pipeline refused to proceed — a gate that
    * exists to keep a write from landing somewhere other than the slot the

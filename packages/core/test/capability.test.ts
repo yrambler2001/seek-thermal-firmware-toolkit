@@ -138,7 +138,7 @@ describe('probeSelectorChannel', () => {
     expect(camera.calls.map((c) => c.op)).toEqual([OP.GET_FIRMWARE_INFO, OP.GET_FIRMWARE_INFO]);
     expect(probe.notes.join(' ')).toContain('setter only');
     const detection = detectProfile(evidenceFromChannelProbe(probe));
-    expect(detection.best.profile.id).toBe('compact-2014');
+    expect(detection.best.profile.id).toBe('early-compact');
     expect(detection.best.profile.capabilities.dump.supported).toBe(false);
   });
 
@@ -274,7 +274,7 @@ describe('evidenceFromChannelProbe', () => {
      * a camera nothing was asked. */
     expect(evidence.plainSelectorRefused).toBeUndefined();
     expect(evidence.plainSelectorWorks).toBeUndefined();
-    expect(detectProfile(evidence).best.profile.id).toBe('compact-2014');
+    expect(detectProfile(evidence).best.profile.id).toBe('early-compact');
   });
 });
 
@@ -315,15 +315,15 @@ describe('identifyCamera: detection on an attached camera, for any front end', (
     expect(camera.calls.every((call) => call.op === OP.GET_FIRMWARE_INFO)).toBe(true);
   });
 
-  it('says profile/unsupported for a build that predates the dump protocol', async () => {
+  it('says family/unsupported for a build that predates the dump protocol', async () => {
     const camera = cameraFor([0, 7, 0, 7]);
     await camera.open();
     const identification = await identifyCamera(new SeekDevice(camera));
 
     expect(identification.gate.permitsArming).toBe(false);
     if (identification.gate.permitsArming) return;
-    expect(identification.gate.code).toBe('profile/unsupported');
-    expect(identification.detection.best.profile.id).toBe('compact-2014');
+    expect(identification.gate.code).toBe('family/unsupported');
+    expect(identification.detection.best.profile.id).toBe('early-compact');
     expect(camera.calls.every((call) => call.op === OP.GET_FIRMWARE_INFO)).toBe(true);
   });
 });

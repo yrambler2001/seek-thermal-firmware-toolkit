@@ -126,7 +126,7 @@ export function recoverState(view: DataView, base: number): Xorshift128State {
   return Uint32Array.of(st[0] ?? 0, st[1] ?? 0, st[2] ?? 0, st[3] ?? 0);
 }
 
-export type KeyConfidence = 'VERIFIED(profile)' | 'VERIFIED(structural)' | 'UNVERIFIED';
+export type KeyConfidence = 'VERIFIED(family)' | 'VERIFIED(structural)' | 'UNVERIFIED';
 
 export interface KeyUnderK {
   readonly K: number;
@@ -139,7 +139,7 @@ export interface RecoveredKey {
   /** Acceptance sum the decrypted image produces. */
   readonly checksum: number;
   /** `checksum` equals the profile's acceptance target. */
-  readonly matchesProfile: boolean;
+  readonly matchesFamily: boolean;
   /** The decrypted reset vector looks like an LPC43xx Cortex-M entry. */
   readonly sane: boolean;
   /** Decrypted word 13, or null when the image is too short to hold one. */
@@ -166,7 +166,7 @@ export function recoverKeyInfo(
 ): RecoveredKey {
   const state = recoverState(view, base);
   const checksum = checksum32(view, base, byteLen, state, profile);
-  const matchesProfile = checksum === profile.acceptanceSum;
+  const matchesFamily = checksum === profile.acceptanceSum;
 
   /* structural confidence (independent of K / TARGET) */
   const probe = cloneState(state);
@@ -186,20 +186,20 @@ export function recoverKeyInfo(
     selfConsistent = word13 === 0;
   }
 
-  const confidence: KeyConfidence = matchesProfile
-    ? 'VERIFIED(profile)'
+  const confidence: KeyConfidence = matchesFamily
+    ? 'VERIFIED(family)'
     : selfConsistent && sane
       ? 'VERIFIED(structural)'
       : 'UNVERIFIED';
   /* No profile match means K is unknown; K=0 makes the reported key the raw
    * state, which is the one form that is always true of the image. */
-  const K = matchesProfile ? profile.whiteningK : 0x00000000;
+  const K = matchesFamily ? profile.whiteningK : 0x00000000;
   const key = keyFromState(state, K);
   const candidates = candidateKs.map((k) => ({ K: k, keyHex: bytesToHex(keyFromState(state, k)) }));
   return {
     state,
     checksum,
-    matchesProfile,
+    matchesFamily,
     sane,
     word13,
     selfConsistent,

@@ -333,9 +333,9 @@ describe('legacy-auth per-build tables (each build dumped with its own)', () => 
     }
   });
 
-  it('gives compact-2014 an empty plan whatever version it is handed, the whole part a gap', () => {
-    /* Reached when compact-2014 is the acting profile and the version passes
-     * the identity gate — a family picked by hand (`--profile compact-2014`,
+  it('gives early-compact an empty plan whatever version it is handed, the whole part a gap', () => {
+    /* Reached when early-compact is the acting profile and the version passes
+     * the identity gate — a family picked by hand (`--family early-compact`,
      * or the web app's override) on a camera that reports 0.8.0.0 or later.
      * `planForDevice` then asks this for a plan, and it must still plan
      * nothing: the profile's refusal is about the PROTOCOL it knows, and its
@@ -592,7 +592,7 @@ describe('legacy-auth boot policy', () => {
   });
 
   it('names the line, not one profile, when it refuses — compact-2016 shares the policy', () => {
-    /* `--profile compact-2016` printed "Legacy locked firmware: ..." here. */
+    /* `--family compact-2016` printed "Legacy locked firmware: ..." here. */
     expect(compact2016.boot).toBe(legacyAuth.boot);
     expect(() => compact2016.boot.selectBootSlot(0, () => true)).toThrow(/the locked line's/);
     expect(() => compact2016.boot.selectBootSlot(0, () => true)).not.toThrow(
@@ -944,17 +944,17 @@ describe('capabilities', () => {
       }
       expect(thrown).toBeInstanceOf(SeekError);
       const error = thrown as SeekError;
-      expect(error.code).toBe('profile/unsupported');
+      expect(error.code).toBe('family/unsupported');
       expect(error.message).toContain(support.reason);
       expect(error.detail?.reason).toBe(support.reason);
-      expect(error.detail?.profile).toBe(profile.id);
+      expect(error.detail?.family).toBe(profile.id);
     });
   }
 
   /**
    * WEAKENED ON PURPOSE, AND ONLY THIS FAR. This used to say "every read path is
    * open on every profile", which was a good rule while every profile could
-   * read. `compact-2014` cannot: the five builds it covers have no
+   * read. `early-compact` cannot: the five builds it covers have no
    * `GetFeaturedFirmwareData` in their RPC method table at all, and on 0.3.0.1
    * the wire id a dump ARMS with is `EnterBootloaderMode`. A profile that
    * dumped those would be arming that build's firmware upgrade 63 times.
@@ -977,18 +977,18 @@ describe('capabilities', () => {
     }
   });
 
-  it('opens the camera read paths on every profile but compact-2014', () => {
+  it('opens the camera read paths on every profile but early-compact', () => {
     const reads: readonly CapabilityName[] = ['dump', 'sweep'];
     for (const profile of listProfiles()) {
-      const expected = profile.id !== 'compact-2014';
+      const expected = profile.id !== 'early-compact';
       for (const op of reads) {
         expect(profile.capabilities[op].supported, `${profile.id}.${op}`).toBe(expected);
       }
     }
   });
 
-  it('gives compact-2014 a refusal that names the command it would have sent', () => {
-    const profile = getProfile('compact-2014');
+  it('gives early-compact a refusal that names the command it would have sent', () => {
+    const profile = getProfile('early-compact');
     for (const op of ['dump', 'sweep'] as const) {
       const support = profile.capabilities[op];
       expect(support.supported).toBe(false);
@@ -1032,8 +1032,8 @@ describe('capabilities', () => {
     expect(hasCapability(compact2014, 'decrypt')).toBe(true);
   });
 
-  it('gives compact-2014 no selector map at all, so a bypass still sends nothing', () => {
-    const profile = getProfile('compact-2014');
+  it('gives early-compact no selector map at all, so a bypass still sends nothing', () => {
+    const profile = getProfile('early-compact');
     expect(profile.windowMap()).toEqual([]);
     const [lo, hi] = profile.sweepRange;
     expect(lo).toBeGreaterThan(hi);
@@ -1046,7 +1046,7 @@ describe('registry', () => {
       'modern-4x',
       'legacy-auth',
       'compact-2016',
-      'compact-2014',
+      'early-compact',
       'generic',
     ];
     expect(listProfiles().map((p) => p.id)).toEqual(ids);

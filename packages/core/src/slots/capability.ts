@@ -87,7 +87,7 @@ const COMMIT_EFFECT: CommitEffect = 'bank-only';
 function bankAddress(profile: FirmwareProfile, key: SlotKey): number {
   const slot = profile.slots.find((s) => s.key === key);
   if (slot === undefined) {
-    throw new SeekError('slots/refused', `profile ${profile.id} declares no bank ${key}`);
+    throw new SeekError('slots/refused', `family ${profile.id} declares no bank ${key}`);
   }
   return slot.address;
 }

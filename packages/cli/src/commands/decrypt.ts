@@ -12,7 +12,7 @@
  *          report of the key's identity, size and sha256.
  *
  * Profile detection is core's, reached by simply not naming a profile: offline
- * there is no device evidence, so the file's own images decide. `--profile`
+ * there is no device evidence, so the file's own images decide. `--family`
  * overrides it, and either way the choice is printed and written into the report.
  */
 
@@ -84,12 +84,12 @@ async function decryptFileCommand(ctx: CommandContext, path: string): Promise<Co
   const fileName = basename(path);
   const startedAt = new Date().toISOString();
 
-  /* With no --profile, core detects the family from the dump itself: offline
+  /* With no --family, core detects the family from the dump itself: offline
    * there is no device evidence, and the file's own slots are the only thing
    * that can speak for it. The choice comes back on the result so it can be
    * shown and recorded rather than silently applied. */
-  const forced = ctx.options.profile === null ? null : getProfile(ctx.options.profile);
-  if (forced !== null) ctx.reporter.log(`profile ${forced.id} (--profile)`, 'detail');
+  const forced = ctx.options.family === null ? null : getProfile(ctx.options.family);
+  if (forced !== null) ctx.reporter.log(`family ${forced.id} (--family)`, 'detail');
   ctx.reporter.log(`${fileName}: ${String(bytes.length)} B`, 'detail');
 
   const options: DecryptOptions = {
@@ -112,7 +112,7 @@ async function decryptFileCommand(ctx: CommandContext, path: string): Promise<Co
     source: { fileName, size: bytes.length, sha256: await sha256hex(bytes) },
     flashBase: profile.memory.flashBase,
     decryption: result.summary,
-    profile: profileInfoOf(profile, detection),
+    family: profileInfoOf(profile, detection),
   });
 
   const extra: Artifact[] = [
@@ -126,10 +126,10 @@ async function decryptFileCommand(ctx: CommandContext, path: string): Promise<Co
   if (ctx.human) {
     ctx.out('');
     if (detection === null) {
-      ctx.out(`profile: ${profile.id} — ${profile.name} (forced with --profile)`);
+      ctx.out(`family: ${profile.id} — ${profile.name} (named with --family)`);
     } else {
       ctx.out(
-        `profile: ${profile.id} — ${profile.name} (detected, score ` +
+        `family: ${profile.id} — ${profile.name} (detected, score ` +
           `${detection.best.score.toFixed(2)}${detection.ambiguous ? ', AMBIGUOUS' : ''})`,
       );
       for (const reason of detection.best.reasons) ctx.out(`  · ${reason}`);
@@ -159,7 +159,7 @@ async function decryptFileCommand(ctx: CommandContext, path: string): Promise<Co
 
   return {
     source: { file: fileName, size: bytes.length, sha256: manifest.source.sha256 },
-    profile: profile.id,
+    family: profile.id,
     detection:
       detection === null
         ? null
@@ -169,7 +169,7 @@ async function decryptFileCommand(ctx: CommandContext, path: string): Promise<Co
             ambiguous: detection.ambiguous,
             reasons: [...detection.best.reasons],
           },
-    profileForced: forced !== null,
+    familyForced: forced !== null,
     slots: result.slots.map((slot) => ({
       flash: hexUp(slot.flash),
       fileOffset: hexUp(slot.fileOffset),
@@ -226,8 +226,8 @@ async function decryptSlotCommand(ctx: CommandContext, path: string): Promise<Co
   const fileName = basename(path);
   const stem = stemOf(fileName);
 
-  const forced = ctx.options.profile === null ? null : getProfile(ctx.options.profile);
-  if (forced !== null) ctx.reporter.log(`profile ${forced.id} (--profile)`, 'detail');
+  const forced = ctx.options.family === null ? null : getProfile(ctx.options.family);
+  if (forced !== null) ctx.reporter.log(`family ${forced.id} (--family)`, 'detail');
   const result = await decryptSlotFile(bytes, forced === null ? {} : { profile: forced });
 
   /* The report is written whatever the outcome: for a bank that holds no image it is the
@@ -247,9 +247,9 @@ async function decryptSlotCommand(ctx: CommandContext, path: string): Promise<Co
       table([
         ['  bank', statusLine(result)],
         [
-          '  profile',
+          '  family',
           `${result.profile.id} — ${result.profile.name} (${
-            result.profile.detected ? 'detected from the bank' : 'given by --profile'
+            result.profile.detected ? 'detected from the bank' : 'given by --family'
           })`,
         ],
         ['  key', keyLine(result)],
@@ -268,7 +268,7 @@ async function decryptSlotCommand(ctx: CommandContext, path: string): Promise<Co
   const summary = {
     source: { file: fileName, size: result.size, sha256: result.sha256 },
     status: result.status,
-    profile: result.profile,
+    family: result.profile,
     header: result.header,
     key: result.key,
     decrypted: result.plain !== null,

@@ -157,8 +157,8 @@ export type IdentityGate =
   | { readonly permitsArming: true; readonly version: string }
   | {
       readonly permitsArming: false;
-      /** `device/version-unknown` when there was no version; `profile/unsupported` when it predates. */
-      readonly code: Extract<SeekErrorCode, 'device/version-unknown' | 'profile/unsupported'>;
+      /** `device/version-unknown` when there was no version; `family/unsupported` when it predates. */
+      readonly code: Extract<SeekErrorCode, 'device/version-unknown' | 'family/unsupported'>;
       readonly reason: string;
     };
 
@@ -188,7 +188,7 @@ export function identityGate(firmware: RunningFirmware): IdentityGate {
   if (predatesDumpProtocol(firmware.version)) {
     return {
       permitsArming: false,
-      code: 'profile/unsupported',
+      code: 'family/unsupported',
       reason: predatesDumpProtocolReason(firmware.version),
     };
   }

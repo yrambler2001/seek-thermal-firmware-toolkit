@@ -105,8 +105,8 @@ describe('removed names are unknown commands', () => {
 
 describe('a flag a command does not take is refused, before anything runs', () => {
   it.each([
-    [['dump', '--profile', 'modern-4x'], "--profile does not apply to 'dump'"],
-    [['dump', '--all-selectors', '--profile', 'generic'], "--profile does not apply to 'dump'"],
+    [['dump', '--family', 'modern-4x'], "--family does not apply to 'dump'"],
+    [['dump', '--all-selectors', '--family', 'generic'], "--family does not apply to 'dump'"],
     [['info', '--out', 'x'], "--out does not apply to 'info'"],
     [['preserve', '--all-selectors'], "--all-selectors does not apply to 'preserve'"],
     [['dump', '--backup-only'], "--backup-only does not apply to 'dump'"],
@@ -122,24 +122,24 @@ describe('a flag a command does not take is refused, before anything runs', () =
 });
 
 describe('the listings in info need no camera', () => {
-  it('--profiles lists every family this build knows, and exits 0', async () => {
+  it('--families lists every family this build knows, and exits 0', async () => {
     const { io, stdout } = noCameraIo();
-    expect(await run(['info', '--profiles'], io, signal())).toBe(EXIT_OK);
-    for (const id of ['modern-4x', 'legacy-auth', 'compact-2014', 'compact-2016', 'generic']) {
+    expect(await run(['info', '--families'], io, signal())).toBe(EXIT_OK);
+    for (const id of ['modern-4x', 'legacy-auth', 'early-compact', 'compact-2016', 'generic']) {
       expect(stdout.text).toContain(`${id}: `);
     }
   });
 
-  it('--profiles --json returns the families with their capabilities', async () => {
+  it('--families --json returns the families with their capabilities', async () => {
     const { io, stdout } = noCameraIo();
-    expect(await run(['info', '--profiles', '--json'], io, signal())).toBe(EXIT_OK);
+    expect(await run(['info', '--families', '--json'], io, signal())).toBe(EXIT_OK);
     const document = JSON.parse(stdout.text) as {
       command: string;
-      profiles: { id: string; capabilities: Record<string, { supported: boolean }> }[];
+      families: { id: string; capabilities: Record<string, { supported: boolean }> }[];
     };
     expect(document.command).toBe('info');
-    expect(document.profiles.map((profile) => profile.id)).toContain('modern-4x');
-    expect(document.profiles[0]?.capabilities).toHaveProperty('dump');
+    expect(document.families.map((family) => family.id)).toContain('modern-4x');
+    expect(document.families[0]?.capabilities).toHaveProperty('dump');
   });
 
   it('--devices says so and exits 0 when no camera is attached', async () => {
@@ -148,9 +148,9 @@ describe('the listings in info need no camera', () => {
     expect(stdout.text).toContain('no Seek camera found');
   });
 
-  it('--devices and --profiles together are a usage error', async () => {
+  it('--devices and --families together are a usage error', async () => {
     const { io, stderr } = noCameraIo();
-    expect(await run(['info', '--devices', '--profiles'], io, signal())).toBe(EXIT_USAGE);
+    expect(await run(['info', '--devices', '--families'], io, signal())).toBe(EXIT_USAGE);
     expect(stderr.text).toContain('each list something');
   });
 });

@@ -480,7 +480,7 @@ describe('image / key / decryption summary builders', () => {
       key,
       state: [0x11111111, 0x22222222, 0x33333333, 0x44444444],
       derivedTarget: 0x0000ffff,
-      profile: 'xs128/K=0x00000000',
+      family: 'xs128/K=0x00000000',
       sp: 0x20001000,
       entry: 0x08001235,
       duplicateOf: null,
@@ -513,7 +513,7 @@ describe('image / key / decryption summary builders', () => {
       key: null,
       state: [1, 2, 3, 4],
       derivedTarget: 0,
-      profile: 'xs128/K=? (unknown profile)',
+      family: 'xs128/K=? (unknown family)',
       sp: 0x20000000,
       entry: 0x08000001,
       duplicateOf: 0x14030000,
@@ -535,12 +535,12 @@ describe('image / key / decryption summary builders', () => {
   it('buildKeySummary formats the key as plain (no "0x") lower-case hex', () => {
     const key = buildKeySummary({
       key: Uint8Array.from([0xab, 0xcd, 0xef]),
-      profile: 'xs128/K=0x00000000',
+      family: 'xs128/K=0x00000000',
       recovery: 'cryptanalytic',
       confidence: 'HIGH',
     });
     expect(key.key).toBe('abcdef');
-    expect(key.profile).toBe('xs128/K=0x00000000');
+    expect(key.family).toBe('xs128/K=0x00000000');
   });
 
   it('buildBootloaderKeysSummary formats offset with hexUp width 6', () => {
@@ -638,7 +638,7 @@ function sampleDumpInput(): BuildDumpManifestInput {
     usbReadableWindows: 63,
     expectedReadableWindows: 63,
     cancelled: false,
-    profile: sampleProfile(),
+    family: sampleProfile(),
   };
 }
 
@@ -651,7 +651,7 @@ describe('buildDumpManifest', () => {
     expect(manifest.gapFill).toBe('0xff');
     expect(manifest.usbComplete).toBe(false);
     expect(manifest.gapFilled).toBe(true);
-    expect(manifest.profile.id).toBe('modern-4x');
+    expect(manifest.family.id).toBe('modern-4x');
 
     const json = manifestToJson(manifest);
     expect(json.endsWith('\n')).toBe(true);
@@ -681,7 +681,7 @@ describe('buildLegacyDumpManifest', () => {
     expect(manifest.authChannelBanks).toEqual(['0x14010000', '0x14020000']);
     // still has the base dump manifest fields, correctly formatted
     expect(manifest.flashBase).toBe('0x14000000');
-    expect(manifest.profile.name).toBe('Modern 4.x');
+    expect(manifest.family.name).toBe('Modern 4.x');
   });
 });
 
@@ -710,7 +710,7 @@ describe('buildSweepManifest', () => {
       selectorsWithData: 8,
       placedInImage: 6,
       cancelled: false,
-      profile: sampleProfile(),
+      family: sampleProfile(),
     });
     expect(manifest.mode).toBe('selector-sweep');
     expect(manifest.channel).toBe('0x02');
@@ -741,7 +741,7 @@ describe('buildSweepManifest', () => {
       selectorsWithData: 8,
       placedInImage: 6,
       cancelled: false,
-      profile: sampleProfile(),
+      family: sampleProfile(),
     });
     expect(manifest.mode).toBe('selector-sweep-legacy');
     expect(manifest.channel).toBe('0x12 (unlock token)');
@@ -758,7 +758,7 @@ describe('buildOfflineDecryptManifest', () => {
       source: { fileName: 'dump.bin', size: 0x400000, sha256: 's'.repeat(64) },
       flashBase: 0x14000000,
       decryption: buildDecryptionNotAttempted('no images found'),
-      profile: sampleProfile(),
+      family: sampleProfile(),
     });
     expect(manifest.flashBase).toBe('0x14000000');
     expect(manifest.source.fileName).toBe('dump.bin');
@@ -838,7 +838,7 @@ describe('README generation', () => {
       selectorsWithData: 8,
       placedInImage: 6,
       cancelled: false,
-      profile: sampleProfile(),
+      family: sampleProfile(),
     });
     const readme = makeSweepReadme(normal);
     expect(readme).toContain('10 of 256 selectors armed; 8 returned data.');
@@ -854,7 +854,7 @@ describe('README generation', () => {
       source: { fileName: 'my_dump.bin', size: 4194304, sha256: 'deadbeef'.repeat(8) },
       flashBase: 0x14000000,
       decryption: buildDecryptionNotAttempted('no images found'),
-      profile: sampleProfile(),
+      family: sampleProfile(),
     });
     const readme = makeOfflineDecryptReadme(manifest);
     expect(readme).toContain('my_dump.bin');
@@ -872,7 +872,7 @@ describe('README generation', () => {
       finishedAt: '2024-03-05T10:25:00.000Z',
       source: { fileName: 'empty.bin', size: 1024, sha256: 'ab'.repeat(32) },
       flashBase: 0x14000000,
-      profile: sampleProfile(),
+      family: sampleProfile(),
     };
 
     const nothing = makeOfflineDecryptReadme(
@@ -896,11 +896,11 @@ describe('README generation', () => {
               length: 0xaf08,
               cipherSha256: 'c'.repeat(64),
               plainSha256: 'p'.repeat(64),
-              confidence: 'VERIFIED(profile)',
+              confidence: 'VERIFIED(family)',
               key: new Uint8Array(16),
               state: [1, 2, 3, 4],
               derivedTarget: 0x0000ffff,
-              profile: 'modern',
+              family: 'modern',
               sp: 0x1001f800,
               entry: 0x10000409,
               duplicateOf: null,

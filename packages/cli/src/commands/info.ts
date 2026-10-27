@@ -114,7 +114,7 @@ export function stateJson(state: DeviceState): Record<string, unknown> {
       vendorId: hex(state.description.vendorId, 4),
       productId: hex(state.description.productId, 4),
     },
-    profile: {
+    family: {
       actedUnder: { id: state.profile.id, name: state.profile.name },
       detected: {
         id: state.detection.best.profile.id,
@@ -228,7 +228,7 @@ export function renderState(ctx: CommandContext, state: DeviceState): void {
   ]);
 
   ctx.out('');
-  ctx.out(heading('Profile', ctx.color));
+  ctx.out(heading('Firmware family', ctx.color));
   pairs(ctx, [
     ['read under', state.profile.name],
     ['detected', detectedReportOf(state.detection)],
@@ -370,7 +370,7 @@ export async function analyseCamera(
    * reporting "no boot config" for a camera that would have answered. */
   const choice = await chooseProfileByProbe(ctx, session);
   ctx.reporter.log(
-    `acting under profile ${choice.profile.id}${choice.forced ? ' (--profile)' : ''}`,
+    `acting under family ${choice.profile.id}${choice.forced ? ' (--family)' : ''}`,
     'detail',
   );
 
@@ -394,7 +394,7 @@ export async function analyseCamera(
   } else if (better !== null) {
     ctx.reporter.log(
       `detection says ${better.id}; the analysis is unchanged because it shares this ` +
-        `profile's cipher. Pass --profile ${better.id} to act under it.`,
+        `family's cipher. Pass --family ${better.id} to act under it.`,
       'detail',
     );
   }
@@ -414,7 +414,7 @@ export const TABS: readonly {
   {
     tab: 'Info',
     command: 'seek-fw info',
-    does: "the camera's firmware version, identity, boot state and slots (--devices, --profiles)",
+    does: "the camera's firmware version, identity, boot state and slots (--devices, --families)",
   },
   {
     tab: 'Dump & decrypt 0.x/1.x 2014/2016',
@@ -476,7 +476,7 @@ async function devicesListing(ctx: CommandContext): Promise<CommandResult> {
   return { count: devices.length, devices };
 }
 
-/* ---- `info --profiles`: the families this build knows, from the registry ---- */
+/* ---- `info --families`: the families this build knows, from the registry ---- */
 
 interface CapabilityInfo {
   readonly supported: boolean;
@@ -528,7 +528,7 @@ function describeProfile(profile: FirmwareProfile): ProfileInfo {
   };
 }
 
-/** `info --profiles`: the registry, read rather than hard-coded, so a family added to core shows here. */
+/** `info --families`: the registry, read rather than hard-coded, so a family added to core shows here. */
 function profilesListing(ctx: CommandContext): CommandResult {
   const profiles = listProfiles().map(describeProfile);
 
@@ -560,12 +560,12 @@ function profilesListing(ctx: CommandContext): CommandResult {
     }
   }
 
-  return { profiles };
+  return { families: profiles };
 }
 
 export async function infoCommand(ctx: CommandContext): Promise<CommandResult> {
   if (ctx.options.devices) return devicesListing(ctx);
-  if (ctx.options.profiles) return profilesListing(ctx);
+  if (ctx.options.families) return profilesListing(ctx);
 
   const session = await openSession(ctx);
   try {

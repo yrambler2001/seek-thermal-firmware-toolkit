@@ -44,7 +44,7 @@ type Log = (text: string, level: LogLevel) => void;
 /**
  * The probe's line in a run's log: the profile the camera's first answers (its version, the channel questions,
  * the notes logged just above) point to, and the probe's score. It is taken before any bank is read, so it is
- * not the score the Info tab's Profile panel shows, which is taken again once the banks are read (core's
+ * not the score the Info tab's Firmware family panel shows, which is taken again once the banks are read (core's
  * `detectedReportOf`). On a Compact PRO 1.0.3.0 the two were 0.85 and 0.98, shown unlabelled as "confidence"
  * and "score" (TESTING.md 42.85 O5, 42.86).
  */
@@ -83,7 +83,7 @@ export async function chooseActingProfile(
 
 /** A run the toolkit refused before it read anything, and why, for the page to show. */
 export interface Refusal {
-  readonly code: Extract<SeekErrorCode, 'device/version-unknown' | 'profile/unsupported'>;
+  readonly code: Extract<SeekErrorCode, 'device/version-unknown' | 'family/unsupported'>;
   readonly message: string;
   /** What to do about it, or null when there is nothing honest to suggest. */
   readonly hint: string | null;
@@ -97,7 +97,7 @@ export interface Refusal {
  */
 export function refusalOf(error: unknown, userAgent?: string): Refusal | null {
   if (!isSeekError(error)) return null;
-  if (error.code !== 'device/version-unknown' && error.code !== 'profile/unsupported') {
+  if (error.code !== 'device/version-unknown' && error.code !== 'family/unsupported') {
     return null;
   }
   return { code: error.code, message: error.message, hint: hintFor(error, userAgent) };

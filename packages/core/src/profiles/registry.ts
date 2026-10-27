@@ -76,7 +76,7 @@ export function unregisterProfile(id: ProfileId): boolean {
 export function getProfile(id: ProfileId): FirmwareProfile {
   const profile = profiles.get(id);
   if (profile === undefined) {
-    throw new SeekError('profile/unsupported', `no firmware profile is registered as '${id}'`, {
+    throw new SeekError('family/unsupported', `no firmware family is registered as '${id}'`, {
       detail: { requested: id, registered: [...profiles.keys()] },
     });
   }
@@ -107,7 +107,7 @@ export function detectProfile(evidence: DeviceEvidence): DetectionResult {
 
   const best = ranked[0];
   if (best === undefined) {
-    throw new SeekError('profile/unsupported', 'no firmware profiles are registered');
+    throw new SeekError('family/unsupported', 'no firmware families are registered');
   }
 
   const runnerUp = ranked[1];
@@ -120,16 +120,16 @@ export function detectProfile(evidence: DeviceEvidence): DetectionResult {
 
 /**
  * The gate every destructive operation goes through. Throws
- * `SeekError('profile/unsupported')` carrying the capability's own reason, so the
+ * `SeekError('family/unsupported')` carrying the capability's own reason, so the
  * refusal a profile author wrote is the refusal the user reads.
  */
 export function requireCapability(profile: FirmwareProfile, op: CapabilityName): void {
   const support = profile.capabilities[op];
   if (support.supported) return;
   throw new SeekError(
-    'profile/unsupported',
+    'family/unsupported',
     `${profile.name} does not support ${op}: ${support.reason}`,
-    { detail: { profile: profile.id, capability: op, reason: support.reason } },
+    { detail: { family: profile.id, capability: op, reason: support.reason } },
   );
 }
 

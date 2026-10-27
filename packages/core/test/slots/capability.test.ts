@@ -452,7 +452,7 @@ describe('the facts a person is shown with the plan', () => {
   it('says the 2016 keystream write is the preservation path, and carries the profile refusal', () => {
     const plan = buildSlotPlan(compact2016, '1.0.3.0');
     expect(plan.slots.every((slot) => slot.flashPlain.supported)).toBe(true);
-    expect(plan.notes.join('\n')).toMatch(/Profile compact-2016 declares no write of its own\./);
+    expect(plan.notes.join('\n')).toMatch(/Family compact-2016 declares no write of its own\./);
     /* no line has a whole-image write since 42.80, so no note speaks of one (TESTING.md 42.89) */
     expect(plan.notes.join('\n')).not.toMatch(/whole-image/);
     /* Shared by the page and the CLI, so it names neither as "this page" (TESTING.md 42.86). */
@@ -562,7 +562,7 @@ describe('refusals name their reason and touch nothing', () => {
     ['an undotted version', legacyAuth, 'banana', /not a dotted version/],
     ['an empty version', modern4x, '', /not a dotted version/],
     ['0.7.0.8 under the legacy profile', legacyAuth, '0.7.0.8', /older than 0\.8\.0\.0/],
-    ['0.7.0.7 under the compact-2014 profile', compact2014, '0.7.0.7', /older than 0\.8\.0\.0/],
+    ['0.7.0.7 under the early-compact profile', compact2014, '0.7.0.7', /older than 0\.8\.0\.0/],
     ['a 1.3.0.0 build under modern-4x', modern4x, '1.3.0.0', /modern-4x covers 2\.x/],
     ['a 4.8.1.7 build under legacy-auth', legacyAuth, '4.8.1.7', /legacy-auth covers the 0\.x/],
     [
@@ -572,10 +572,10 @@ describe('refusals name their reason and touch nothing', () => {
       /compact-2016 covers the Compact PRO/,
     ],
     [
-      'a 4.8.1.7 build under compact-2014',
+      'a 4.8.1.7 build under early-compact',
       compact2014,
       '4.8.1.7',
-      /compact-2014 covers the builds older/,
+      /early-compact covers the builds older/,
     ],
     ['an unidentified camera under generic', generic, '4.8.1.7', /camera family is not identified/],
   ];

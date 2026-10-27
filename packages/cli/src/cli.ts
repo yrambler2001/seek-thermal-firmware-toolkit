@@ -16,7 +16,7 @@
  *   slots       Work with firmware slots
  *
  * A flag that a command does not use is refused for that command, not ignored:
- * `seek-fw dump --profile x` is a usage error, because a flag that silently does
+ * `seek-fw dump --family x` is a usage error, because a flag that silently does
  * nothing is how a person ends up believing they chose a family they did not.
  */
 
@@ -58,8 +58,8 @@ import { slotsCommand } from './commands/slots.js';
 export interface GlobalOptions {
   readonly out: string | null;
   readonly zip: string | null;
-  /** `--profile <id>`: a family named by hand. Read by `info`, `decrypt` and `slots`. */
-  readonly profile: ProfileId | null;
+  /** `--family <id>`: a family named by hand. Read by `info`, `decrypt` and `slots`. */
+  readonly family: ProfileId | null;
   /**
    * Ask the camera which protocol it speaks before choosing a profile.
    *
@@ -88,8 +88,8 @@ export interface GlobalOptions {
   /* ---- info only -------------------------------------------------------- */
   /** `--devices`: list the connected cameras and open none. */
   readonly devices: boolean;
-  /** `--profiles`: list the firmware families this build knows and open no camera. */
-  readonly profiles: boolean;
+  /** `--families`: list the firmware families this build knows and open no camera. */
+  readonly families: boolean;
   /* ---- dump only -------------------------------------------------------- */
   /** `--all-selectors`: probe every BeginFirmwareUpgrade selector instead of reading the map. */
   readonly allSelectors: boolean;
@@ -152,7 +152,7 @@ const RECIPIENTS: readonly RecipientPreference[] = ['interface', 'device', 'auto
 const FLAG_COMMANDS: Readonly<Record<string, readonly CommandName[]>> = {
   out: ['preserve', 'dump', 'decrypt', 'slots'],
   zip: ['preserve', 'dump', 'decrypt', 'slots'],
-  profile: ['info', 'decrypt', 'slots'],
+  family: ['info', 'decrypt', 'slots'],
   probe: ['info', 'dump', 'slots'],
   chunk: ['info', 'preserve', 'dump'],
   'gap-fill': ['info', 'dump'],
@@ -163,7 +163,7 @@ const FLAG_COMMANDS: Readonly<Record<string, readonly CommandName[]>> = {
   decrypt: ['dump'],
   yes: ['preserve', 'slots'],
   devices: ['info'],
-  profiles: ['info'],
+  families: ['info'],
   'all-selectors': ['dump'],
   resume: ['preserve'],
   'from-step': ['preserve'],
@@ -215,7 +215,7 @@ function validProfileId(id: string): ProfileId {
   try {
     return getProfile(id).id;
   } catch {
-    throw new UsageError(`unknown profile '${id}'`, 'Run `seek-fw info --profiles` for the list.');
+    throw new UsageError(`unknown family '${id}'`, 'Run `seek-fw info --families` for the list.');
   }
 }
 
@@ -256,7 +256,7 @@ export function parseCli(argv: readonly string[]): ParsedCli {
       options: {
         out: { type: 'string' },
         zip: { type: 'string' },
-        profile: { type: 'string' },
+        family: { type: 'string' },
         chunk: { type: 'string' },
         'gap-fill': { type: 'string' },
         retries: { type: 'string' },
@@ -271,7 +271,7 @@ export function parseCli(argv: readonly string[]): ParsedCli {
         yes: { type: 'boolean', default: false },
         probe: { type: 'boolean', default: true },
         devices: { type: 'boolean', default: false },
-        profiles: { type: 'boolean', default: false },
+        families: { type: 'boolean', default: false },
         'all-selectors': { type: 'boolean', default: false },
         resume: { type: 'string' },
         'from-step': { type: 'string' },
@@ -331,8 +331,8 @@ export function parseCli(argv: readonly string[]): ParsedCli {
       throw new UsageError(`unexpected argument '${extra[0] ?? ''}' after 'decrypt ${form}'`);
     }
   }
-  if (commandWord === 'info' && values.devices && values.profiles) {
-    throw new UsageError('--devices and --profiles each list something; pass one of them');
+  if (commandWord === 'info' && values.devices && values.families) {
+    throw new UsageError('--devices and --families each list something; pass one of them');
   }
 
   const recipient = values.recipient ?? 'auto';
@@ -343,7 +343,7 @@ export function parseCli(argv: readonly string[]): ParsedCli {
   const options: GlobalOptions = {
     out: values.out ?? null,
     zip: values.zip ?? null,
-    profile: values.profile === undefined ? null : validProfileId(values.profile),
+    family: values.family === undefined ? null : validProfileId(values.family),
     chunk:
       values.chunk === undefined
         ? null
@@ -372,7 +372,7 @@ export function parseCli(argv: readonly string[]): ParsedCli {
     colorFlag: values.color,
     yes: values.yes,
     devices: values.devices,
-    profiles: values.profiles,
+    families: values.families,
     allSelectors: values['all-selectors'],
     resume: values.resume ?? null,
     fromStep: values['from-step'] ?? null,

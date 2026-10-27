@@ -48,7 +48,7 @@ export function identityRefusal(
         ? '. Nothing was armed. Unplug the camera, let it finish starting up, plug it back ' +
           'in and try again.'
         : ''),
-    { detail: { firmwareVersion, capability: operation, profile } },
+    { detail: { firmwareVersion, capability: operation, family: profile } },
   );
 }
 
@@ -57,7 +57,7 @@ export function identityRefusal(
  *
  * REFUSES A BUILD THAT CANNOT BE READ, WHATEVER THE PROFILE. The capability
  * gate is the profile's; this one is the firmware's. A caller who forces
- * `--profile legacy-auth` onto a 0.7.0.7 camera gets the same refusal detection
+ * `--family legacy-auth` onto a 0.7.0.7 camera gets the same refusal detection
  * would have given it, before a single window is armed: that build has no read
  * handler, and on 0.3.0.1 the arm itself is `EnterBootloaderMode`.
  *

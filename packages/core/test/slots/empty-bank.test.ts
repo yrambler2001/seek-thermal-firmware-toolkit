@@ -522,7 +522,7 @@ describe('dumpSlot on an empty bank', () => {
     expect(notes).toContain(
       `decrypted ${String(plain.length)} B under the key recovered from this bank (key verified by the acceptance sum 0x0000FFFF)`,
     );
-    expect(notes).not.toMatch(/VERIFIED|confidence|the profile/);
+    expect(notes).not.toMatch(/VERIFIED|confidence|the profile|the family/);
   });
 });
 

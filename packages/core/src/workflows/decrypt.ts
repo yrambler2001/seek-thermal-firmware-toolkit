@@ -231,9 +231,9 @@ export async function decryptDump(
     const fallback = options.fallbackProfile;
     if (detection.ambiguous && fallback !== undefined) {
       profile = fallback;
-      profileSource = 'the profile the read acted under; detection did not settle the family';
+      profileSource = 'the family the read acted under; detection did not settle it';
       detectionNote =
-        `profile: ${fallback.name} [${fallback.id}], the one the read acted under — ` +
+        `family: ${fallback.name} [${fallback.id}], the one the read acted under — ` +
         `detection from ${from} did not settle the family (best ${scored})`;
     } else {
       profile = best.profile;
@@ -242,7 +242,7 @@ export async function decryptDump(
         (fallback !== undefined && fallback.id !== profile.id
           ? `; the read acted under ${fallback.id}`
           : '');
-      detectionNote = `profile detected from ${from}: ${scored}`;
+      detectionNote = `family detected from ${from}: ${scored}`;
     }
     reporter.log(`decrypt: ${detectionNote}`, detection.ambiguous ? 'warn' : 'detail');
   }
@@ -325,7 +325,7 @@ export async function decryptDump(
     );
     if (found && found.whiteningK !== profile.cipher.whiteningK) {
       reporter.log(
-        `         (they match a slot under K=${hexUp(found.whiteningK)}, not this profile's ` +
+        `         (they match a slot under K=${hexUp(found.whiteningK)}, not this family's ` +
           `K=${hexUp(profile.cipher.whiteningK)} — K and the acceptance TARGET are independent)`,
         'detail',
       );
@@ -341,7 +341,7 @@ export async function decryptDump(
     `Generated : ${clock().toISOString()}`,
     `Dump      : ${dumpPath} (${String(len)} bytes)`,
     'Method    : cryptanalytic (xorshift128 linear GF(2) solve); no key search',
-    `Profile   : ${profile.name} [${profile.id}] (${profileSource})`,
+    `Family    : ${profile.name} [${profile.id}] (${profileSource})`,
     `Slots     : ${images.map((image) => hexUp(flashBase + image.base)).join(', ')}`,
     '',
   ];
@@ -374,16 +374,8 @@ export async function decryptDump(
       infoByCipher.set(cipherHash, recovered);
     }
 
-    const {
-      state,
-      checksum,
-      matchesProfile,
-      confidence,
-      candidates,
-      word13,
-      selfConsistent,
-      sane,
-    } = recovered;
+    const { state, checksum, matchesFamily, confidence, candidates, word13, selfConsistent, sane } =
+      recovered;
     const stateHex = Array.from(state, (word) => hexUp(word)).join(' ');
 
     const plain = decryptImage(view, image.base, image.len, state, profile.cipher);
@@ -399,16 +391,16 @@ export async function decryptDump(
     const whitening = resolveWhitening(plain, state, candidateKs);
     const keyHex = whitening.keyHex;
     const keyBytes = keyFromState(state, whitening.whiteningK);
-    const named = matchesProfile || whitening.evidence === 'plaintext';
+    const named = matchesFamily || whitening.evidence === 'plaintext';
     /* A bank stored plain is no cipher's, and calling it an unknown one hid
      * what it is: the 2014 chain, whose bootloader takes the stored words. */
     const storedPlain = slotChainOf(state) === 'plain' && checksum === 0;
-    const profileName = matchesProfile
+    const profileName = matchesFamily
       ? `${profile.name} (K=${hexUp(whitening.whiteningK)}, ` +
         `TARGET=${hexUp(profile.cipher.acceptanceSum)})`
       : storedPlain
         ? `stored plain — the 2014 chain (identity keystream, stored word sum ${hexUp(0)})`
-        : `xs128/K=? (checksum=${hexUp(checksum)}, unknown profile)`;
+        : `xs128/K=? (checksum=${hexUp(checksum)}, unknown family)`;
 
     /* Only stamp the filename when the keys are genuinely inside this image.
      * A build that derives its key at runtime has no table to find, and saying
@@ -434,11 +426,11 @@ export async function decryptDump(
       `key check      : ${checkWords}\n` +
       `recovered state: ${stateHex}   (x y z w; the actual decryption secret)\n` +
       `derived TARGET : ${hexUp(checksum)}` +
-      `${matchesProfile ? '  (matches known profile)' : '  (no known TARGET matched)'}\n` +
+      `${matchesFamily ? '  (matches a known family)' : '  (no known TARGET matched)'}\n` +
       `self-check     : word13 decrypts to ${word13 === null ? 'n/a' : hexUp(word13)}` +
       (selfConsistent ? '  == 0 OK' : word13 === null ? '' : '  != 0 (assumption may not hold)') +
       `; reset-vector sane=${String(sane)}\n` +
-      `cipher profile : ${profileName}\n` +
+      `family         : ${profileName}\n` +
       `key (K=${hexUp(whitening.whiteningK)}) : ${keyHex}\n` +
       `key evidence   : ${keyEvidence}\n` +
       (named
@@ -538,7 +530,7 @@ export async function decryptDump(
         key: named ? keyBytes : null,
         state: Array.from(state),
         derivedTarget: checksum,
-        profile: profileName,
+        family: profileName,
         sp,
         entry,
         duplicateOf,
@@ -556,11 +548,11 @@ export async function decryptDump(
       }),
     );
 
-    if (named && !keySummaries.some((k) => k.key === keyHex && k.profile === profileName)) {
+    if (named && !keySummaries.some((k) => k.key === keyHex && k.family === profileName)) {
       keySummaries.push(
         buildKeySummary({
           key: keyBytes,
-          profile: profileName,
+          family: profileName,
           recovery: 'cryptanalytic',
           confidence,
         }),

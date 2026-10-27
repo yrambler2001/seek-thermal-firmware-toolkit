@@ -103,7 +103,7 @@ function tabFor(version: string | null): Route | null {
 function lineLabel(version: string | null): string {
   const line = firmwareLineOf(version);
   if (line === 'legacy') return '0.x / 1.x: the 2014 and 2016 cameras';
-  if (line === 'modern') return '4.x / Nano';
+  if (line === 'modern') return '2.x and newer: the 4.x, Nano and Mosaic cameras';
   return 'unknown';
 }
 
@@ -119,7 +119,7 @@ export function InfoView({ info, connected, busy }: InfoViewProps): ReactElement
       : [
           ['Firmware version', version],
           ['Build', result.buildString],
-          ['Line', version === null ? null : lineLabel(version)],
+          ['Version range', version === null ? null : lineLabel(version)],
           ['Tab for this camera', target === null ? null : ROUTE_LABEL[target]],
         ];
 

@@ -28,7 +28,7 @@ describe('parseCli', () => {
     expect(parsed.options).toEqual({
       out: null,
       zip: null,
-      profile: null,
+      family: null,
       chunk: null,
       gapFill: null,
       retries: null,
@@ -43,7 +43,7 @@ describe('parseCli', () => {
       yes: false,
       probe: true,
       devices: false,
-      profiles: false,
+      families: false,
       allSelectors: false,
       resume: null,
       fromStep: null,
@@ -100,14 +100,12 @@ describe('parseCli', () => {
     });
   });
 
-  it('takes --profile on the commands that still name a family, and nowhere else', () => {
-    expect(runOptions(['info', '--profile', 'modern-4x']).options.profile).toBe('modern-4x');
+  it('takes --family on the commands that still name a family, and nowhere else', () => {
+    expect(runOptions(['info', '--family', 'modern-4x']).options.family).toBe('modern-4x');
     expect(
-      runOptions(['decrypt', 'file', 'a.bin', '--profile', 'compact-2016']).options.profile,
+      runOptions(['decrypt', 'file', 'a.bin', '--family', 'compact-2016']).options.family,
     ).toBe('compact-2016');
-    expect(runOptions(['slots', 'list', '--profile', 'modern-4x']).options.profile).toBe(
-      'modern-4x',
-    );
+    expect(runOptions(['slots', 'list', '--family', 'modern-4x']).options.family).toBe('modern-4x');
   });
 
   it('takes the preserve options, the backup-only step and the zip', () => {
@@ -128,7 +126,7 @@ describe('parseCli', () => {
 
   it('reads the info listings', () => {
     expect(runOptions(['info', '--devices']).options.devices).toBe(true);
-    expect(runOptions(['info', '--profiles']).options.profiles).toBe(true);
+    expect(runOptions(['info', '--families']).options.families).toBe(true);
   });
 
   it('reads the decrypt form and its file, and no others', () => {
@@ -151,7 +149,7 @@ describe('parseCli', () => {
   });
 
   it('answers --help even when the command line names a flag the command does not take', () => {
-    expect(parseCli(['dump', '--profile', 'modern-4x', '--help'])).toEqual({
+    expect(parseCli(['dump', '--family', 'modern-4x', '--help'])).toEqual({
       kind: 'help',
       command: 'dump',
       json: false,
@@ -183,22 +181,36 @@ describe('parseCli', () => {
     [['dump', '--retries=-1'], /--retries expects a number/],
     [['dump', '--retry-delay', '1.5'], /--retry-delay expects a number/],
     [['dump', '--quiet', '--verbose'], /contradict/],
-    [['info', '--profile', 'nope'], /unknown profile 'nope'/],
-    [['info', '--devices', '--profiles'], /--devices and --profiles each list something/],
+    [['info', '--family', 'nope'], /unknown family 'nope'/],
+    [['info', '--devices', '--families'], /--devices and --families each list something/],
   ])('rejects %j', (argv, message) => {
     expect(() => parseCli(argv)).toThrow(UsageError);
     expect(() => parseCli(argv)).toThrow(message);
   });
 
-  it('names the known profiles when --profile is wrong', () => {
+  it('names the known families when --family is wrong', () => {
     try {
-      parseCli(['info', '--profile', 'nope']);
+      parseCli(['info', '--family', 'nope']);
       expect.unreachable('should have thrown');
     } catch (error) {
       expect(error).toBeInstanceOf(UsageError);
-      expect((error as UsageError).hint).toContain('info --profiles');
+      expect((error as UsageError).hint).toContain('info --families');
       expect((error as UsageError).exitCode).toBe(EXIT_USAGE);
     }
+  });
+
+  /* The flags were --profile and --profiles before the 2.0.0 names. No alias is kept: the old
+   * spellings are unknown options on every command, so a script still using them fails loudly. */
+  it.each([
+    [['info', '--profile', 'modern-4x']],
+    [['info', '--profiles']],
+    [['decrypt', 'file', 'a.bin', '--profile', 'modern-4x']],
+    [['decrypt', 'slot', 'a.bin', '--profile', 'modern-4x']],
+    [['slots', 'list', '--profile', 'modern-4x']],
+    [['dump', '--profile', 'modern-4x']],
+  ])('refuses the old flag in %j as an unknown option', (argv) => {
+    expect(() => parseCli(argv)).toThrow(UsageError);
+    expect(() => parseCli(argv)).toThrow(/Unknown option '--profiles?'/);
   });
 });
 
@@ -237,8 +249,8 @@ describe('removed command names and old forms', () => {
   });
 
   it('rejects a flag on a command that does not take it, and says which command does', () => {
-    expect(() => parseCli(['dump', '--profile', 'modern-4x'])).toThrow(
-      "--profile does not apply to 'dump'",
+    expect(() => parseCli(['dump', '--family', 'modern-4x'])).toThrow(
+      "--family does not apply to 'dump'",
     );
     expect(() => parseCli(['dump', '--devices'])).toThrow("--devices does not apply to 'dump'");
     expect(() => parseCli(['dump', '--backup-only'])).toThrow(
@@ -262,7 +274,7 @@ describe('removed command names and old forms', () => {
 
   it('refuses a refused flag with exit 2 and the help hint', () => {
     try {
-      parseCli(['dump', '--profile', 'modern-4x']);
+      parseCli(['dump', '--family', 'modern-4x']);
       expect.unreachable('should have thrown');
     } catch (error) {
       expect(error).toBeInstanceOf(UsageError);

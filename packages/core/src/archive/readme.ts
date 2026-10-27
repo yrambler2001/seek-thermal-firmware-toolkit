@@ -45,7 +45,7 @@ function producedByLines(): readonly string[] {
  */
 function profileLines(profile: ManifestProfileInfo): readonly string[] {
   const lines = [
-    'Profile:  ' +
+    'Family:   ' +
       profile.name +
       ' [' +
       profile.id +
@@ -68,7 +68,7 @@ export function makeReadme(manifest: DumpManifest): string {
     '',
     'Captured: ' + manifest.startedAt + ' .. ' + manifest.finishedAt,
     `Device:   ${String(manifest.device.product)} (VID ${manifest.vid} PID ${manifest.pid})`,
-    ...profileLines(manifest.profile),
+    ...profileLines(manifest.family),
     '',
     ...producedByLines(),
     '',
@@ -118,7 +118,7 @@ export function makeLegacyReadme(manifest: LegacyDumpManifest): string {
       ' PID ' +
       manifest.pid +
       ')',
-    ...profileLines(manifest.profile),
+    ...profileLines(manifest.family),
     '',
     ...producedByLines(),
     '',
@@ -190,7 +190,7 @@ export function makeSweepReadme(manifest: SweepManifest): string {
       ' PID ' +
       manifest.pid +
       ')',
-    ...profileLines(manifest.profile),
+    ...profileLines(manifest.family),
     '',
     ...producedByLines(),
     '',
@@ -229,7 +229,7 @@ export function makeOfflineDecryptReadme(manifest: OfflineDecryptManifest): stri
     'Size        : ' + String(manifest.source.size) + ' bytes',
     'SHA-256     : ' + manifest.source.sha256,
     'Decrypted   : ' + manifest.finishedAt,
-    ...profileLines(manifest.profile),
+    ...profileLines(manifest.family),
     '',
     ...producedByLines(),
     '',
@@ -239,12 +239,12 @@ export function makeOfflineDecryptReadme(manifest: OfflineDecryptManifest): stri
     ...(manifest.decryption.attempted && manifest.decryption.images.length > 0
       ? [
           'See `decrypted/decryption_report.txt` for the key, its location in the dump,',
-          'the cipher profile, and per-slot SP/entry/SHA-256 details.',
+          'the firmware family, and per-slot SP/entry/SHA-256 details.',
         ]
       : [
           'No firmware image slot was decrypted from this file, so there is no',
           '`decrypted/` directory. `manifest.json` records the file it was given, its',
-          'SHA-256 and the firmware profile that was tried.',
+          'SHA-256 and the firmware family that was tried.',
         ]),
     '',
   ].join('\n');

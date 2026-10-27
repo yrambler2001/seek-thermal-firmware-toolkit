@@ -237,7 +237,7 @@ async function measureRow(
        * generation refuses 38 of that map's 63 selectors and needs the
        * authenticated channel for six banks. `probeSelectorChannel` asks the
        * camera — read-only, four transfers — and the answer picks the profile,
-       * exactly as a caller with no `--profile` now does. */
+       * exactly as a caller with no `--family` now does. */
       const channel = await probeSelectorChannel(seek);
       profile = detectProfile(evidenceFromChannelProbe(channel)).best.profile;
 

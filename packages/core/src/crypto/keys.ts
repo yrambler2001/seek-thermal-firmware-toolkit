@@ -269,7 +269,7 @@ export function parseKeyFilenameSuffix(fileName: string): KeyPair | null {
 export interface WhiteningResolution {
   readonly whiteningK: number;
   /** `plaintext` when the key in that form is physically in the image. */
-  readonly evidence: 'plaintext' | 'profile-default';
+  readonly evidence: 'plaintext' | 'family-default';
   readonly keyHex: string;
 }
 
@@ -310,7 +310,7 @@ export function resolveWhitening(
   const fallbackK = candidateKs[0] ?? 0;
   return {
     whiteningK: fallbackK,
-    evidence: 'profile-default',
+    evidence: 'family-default',
     keyHex: bytesToHex(keyFromState(state, fallbackK)),
   };
 }

@@ -101,14 +101,14 @@ const COMPACT_2016_CIPHER: CipherProfile = {
  * used to say the map differed, which this file's own summary contradicts. */
 const FLASH_REFUSAL =
   "the 2016 generation shares legacy-auth's locked BeginFirmwareUpgrade handler and selector " +
-  "map, so the read is the same, but the classic write path (this profile's own flash capability) " +
+  "map, so the read is the same, but the classic write path (this family's own flash capability) " +
   'has nothing for its banks. It stages either a 4.x bank encrypted under a confirmed Key A or a ' +
   '2014 plaintext-chain bank verbatim, and a 2016 bank is neither: it is xorshift128 under K=0 ' +
   'with a decrypted word sum of 0, the Key A such a write needs sits in the bootloader block that ' +
   '1.0.3.x refuses on every channel, and the form the running application takes (the image XORed ' +
   'with its block-0 keystream) is staged by the slot writer, which does not gate on this refusal. ' +
   'The original disabled flashing on this generation and this ' +
-  'profile keeps that refusal.';
+  'family keeps that refusal.';
 
 const CAPABILITIES: ProfileCapabilities = {
   /* Reads stay open, and now on the right map: the six protected banks are
@@ -167,13 +167,13 @@ function detectCompact2016(evidence: DeviceEvidence): DetectionVerdict {
   const reasons: string[] = [];
   const sums = evidence.observedAcceptanceSums ?? [];
 
-  /* A build with no read handler is compact-2014's, whatever it sums to: the
+  /* A build with no read handler is early-compact's, whatever it sums to: the
    * 2014 images sum to zero as well, and this profile dumps. */
   const early = primaryVersion(evidence);
   if (early !== null && early.major === 0 && early.minor < 8) {
     reasons.push(
       `firmware ${early.text} is older than 0.8.0.0 and has no read handler for ` +
-        'GetFeaturedFirmwareData — that is compact-2014, not this profile',
+        'GetFeaturedFirmwareData — that is early-compact, not this family',
     );
     return { score: 0, reasons };
   }
@@ -191,7 +191,7 @@ function detectCompact2016(evidence: DeviceEvidence): DetectionVerdict {
   if (evidence.plainSelectorRefused === false) {
     reasons.push(
       'a plain 2-byte BeginFirmwareUpgrade armed a protected bank, so this camera is not on ' +
-        'the locked line this profile shares with legacy-auth',
+        'the locked line this family shares with legacy-auth',
     );
     return { score: 0, reasons };
   }

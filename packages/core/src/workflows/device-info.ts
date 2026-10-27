@@ -434,9 +434,9 @@ async function readBankVerdicts(
  * NO SUBCOMMAND IS GUESSED IN ITS PLACE. The slot descriptor carries one, but
  * that number is the profile's label for the slot on the builds it was decoded
  * from. On the camera in front of us only the plan says what arms what, and a
- * plan with no window at this address (`compact-2014` plans none at all, for
+ * plan with no window at this address (`early-compact` plans none at all, for
  * any version) is that firmware's answer. This read used to fall back to the
- * descriptor's subcommand, so a `compact-2014` read of a camera past the
+ * descriptor's subcommand, so an `early-compact` read of a camera past the
  * identity gate armed 7, 8 and 9 under a profile whose plan reads nothing.
  */
 function notInPlan(plan: WindowPlan, version: string | null, address: number): string {

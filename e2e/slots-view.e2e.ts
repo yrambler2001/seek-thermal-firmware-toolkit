@@ -355,7 +355,7 @@ for (const subject of SUPPORTED) {
           const booted = bootedOf(rows);
           const summary = await summaryRows(t.page);
           expect(summary.version).toBe(subject.version);
-          expect(summary.profile, 'the profile the build reads under').not.toBe('');
+          expect(summary['firmware family'], 'the family the build reads under').not.toBe('');
           /* "Booted from", on every line. */
           expect(summary['booted from']).toBe(booted.name);
           say(

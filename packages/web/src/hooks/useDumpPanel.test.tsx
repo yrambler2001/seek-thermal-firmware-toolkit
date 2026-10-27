@@ -454,7 +454,7 @@ describe('useDumpPanel detects the camera instead of asking', () => {
     const { result, unmount } = await run(camera);
 
     const refusal = result.current.panel.refusal;
-    expect(refusal?.code).toBe('profile/unsupported');
+    expect(refusal?.code).toBe('family/unsupported');
     expect(refusal?.message).toContain('firmware 0.3.0.1 predates the dump protocol');
     expect(refusal?.hint).toBe(FIRMWARE_TOO_OLD_HINT);
     expect(downloads).toHaveLength(0);
@@ -480,7 +480,7 @@ describe('the 4.x/Nano tab reads only its own family', () => {
     const { result, unmount } = await run(camera);
 
     const refusal = result.current.panel.refusal;
-    expect(refusal?.code).toBe('profile/unsupported');
+    expect(refusal?.code).toBe('family/unsupported');
     expect(refusal?.message).toContain('The camera runs 1.0.3.0, a 0.x or 1.x build');
     expect(refusal?.message).toContain('Dump & decrypt 0.x/1.x 2014/2016');
     expect(refusal?.message).toContain('Nothing was read but the version');
@@ -495,7 +495,7 @@ describe('the 4.x/Nano tab reads only its own family', () => {
   it('refuses the sweep the same way', async () => {
     const { camera, calls } = scriptedCamera({ version: [1, 0, 3, 0], legacy: true });
     const { result, unmount } = await run(camera, 'modern-4x', 'sweep');
-    expect(result.current.panel.refusal?.code).toBe('profile/unsupported');
+    expect(result.current.panel.refusal?.code).toBe('family/unsupported');
     expect(result.current.panel.refusal?.message).toContain('The camera runs 1.0.3.0');
     expect(downloads).toHaveLength(0);
     /* Only version reads (the tab's own, then the identity's): nothing armed, no window read. */
@@ -516,7 +516,7 @@ describe('the 4.x/Nano tab reads only its own family', () => {
   it('cannot send an arm to 0.3.0.1', async () => {
     const { camera, calls } = scriptedCamera({ version: [0, 3, 0, 1], legacy: true });
     const { result, unmount } = await run(camera);
-    expect(result.current.panel.refusal?.code).toBe('profile/unsupported');
+    expect(result.current.panel.refusal?.code).toBe('family/unsupported');
     expect(result.current.panel.refusal?.message).toContain('predates');
     /* Only version reads (the tab's own, then the identity's): nothing armed, no window read. */
     expect(calls.length).toBeGreaterThan(0);
@@ -546,7 +546,7 @@ describe('useDumpPanel: the unlock note (information only)', () => {
     const { camera, calls } = scriptedCamera({ version: [0, 3, 0, 1], legacy: true });
     const { result, unmount } = await run(camera);
 
-    expect(result.current.panel.refusal?.code).toBe('profile/unsupported');
+    expect(result.current.panel.refusal?.code).toBe('family/unsupported');
     expect(calls.some((call) => call.request === OP.BEGIN_FIRMWARE_UPGRADE)).toBe(false);
     expect(result.current.panel.unlockNote).toBe(false);
     unmount();

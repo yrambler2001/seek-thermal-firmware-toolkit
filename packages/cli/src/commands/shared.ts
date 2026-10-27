@@ -44,21 +44,21 @@ export function dumpOptionsFrom(options: GlobalOptions): Partial<DumpOptions> {
 export interface ProfileChoice {
   readonly profile: FirmwareProfile;
   readonly detection: DetectionResult | null;
-  /** True when `--profile` decided it rather than the evidence. */
+  /** True when `--family` decided it rather than the evidence. */
   readonly forced: boolean;
 }
 
 /**
  * The profile a run acts under, before anything has been read.
  *
- * With no `--profile` this is detection on USB descriptors alone, which is
+ * With no `--family` this is detection on USB descriptors alone, which is
  * thin evidence and therefore usually lands on `generic` — a profile that
  * dumps and decrypts with the 4.x map and refuses to write. That is the
  * intended outcome: reads stay available, the destructive operation does not.
  */
 export function chooseProfile(options: GlobalOptions, evidence: DeviceEvidence): ProfileChoice {
-  if (options.profile !== null) {
-    return { profile: getProfile(options.profile), detection: null, forced: true };
+  if (options.family !== null) {
+    return { profile: getProfile(options.family), detection: null, forced: true };
   }
   const detection = detectProfile(evidence);
   return { profile: detection.best.profile, detection, forced: false };
@@ -80,7 +80,7 @@ export function chooseProfile(options: GlobalOptions, evidence: DeviceEvidence):
  * `probeSelectorChannel` for why each one is safe and what it settles; the
  * composition itself is core's `identifyCamera`, which the browser uses too.
  *
- * `--profile` still wins outright and skips the probe: a caller who has named
+ * `--family` still wins outright and skips the probe: a caller who has named
  * a family is not asking to be second-guessed, and on a camera the fewest
  * transfers is the safest run.
  */
@@ -89,7 +89,7 @@ export async function chooseProfileByProbe(
   session: Session,
 ): Promise<ProfileChoice> {
   const descriptors = evidenceFromDevice(session.transport);
-  if (ctx.options.profile !== null) return chooseProfile(ctx.options, descriptors);
+  if (ctx.options.family !== null) return chooseProfile(ctx.options, descriptors);
   if (!ctx.options.probe) {
     ctx.reporter.log('capability probe skipped (--no-probe)', 'detail');
     return chooseProfile(ctx.options, descriptors);
@@ -171,7 +171,7 @@ export function workflowContext(
 
 /**
  * A confident detection that disagrees with the profile the run is acting
- * under, or null. `--profile` always wins: a user who named a family is not
+ * under, or null. `--family` always wins: a user who named a family is not
  * second-guessed.
  */
 export function betterProfile(

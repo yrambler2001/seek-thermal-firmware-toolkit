@@ -20,7 +20,7 @@
  *                             the corpus plaintext; an erased bank exits 0 and
  *                             reports empty; a wrong size, a random bank and a
  *                             bank whose key does not recover exit 1
- *   usage                     `decrypt` without a form, and `dump --profile`, exit 2
+ *   usage                     `decrypt` without a form, and `dump --family`, exit 2
  *
  * Every command runs under `--json` (one document on stdout). The exit codes are
  * the CLI's (0, 1, 2). What a camera command SENT is the emulator's own ledger, by
@@ -280,7 +280,7 @@ describe.skipIf(!available)('the Info command through the CLI, on the emulated c
         const wanted = subject.version.startsWith('4.')
           ? 'Dump & decrypt 4.x/Nano'
           : 'Dump & decrypt 0.x/1.x 2014/2016';
-        const profile = r.json?.profile as { actedUnder?: { id?: string } } | undefined;
+        const profile = r.json?.family as { actedUnder?: { id?: string } } | undefined;
         expect(profile?.actedUnder?.id, 'the family info acted under').toBeTruthy();
         say(
           `info ${subject.version}: tab for this camera ${wanted}, sent ${JSON.stringify([...r.sent])}`,
@@ -608,12 +608,12 @@ describe.skipIf(!available)('decrypt through the CLI, with no camera', () => {
   );
 
   it(
-    'refuses a missing form and a --profile on dump with exit 2',
+    'refuses a missing form and a --family on dump with exit 2',
     { timeout: TIMEOUT_MS },
     async () => {
       const noForm = await cli(['decrypt'], null);
       expect(noForm.code).toBe(EXIT_USAGE);
-      const profileOnDump = await cli(['dump', '--profile', 'modern-4x'], null);
+      const profileOnDump = await cli(['dump', '--family', 'modern-4x'], null);
       expect(profileOnDump.code).toBe(EXIT_USAGE);
     },
   );

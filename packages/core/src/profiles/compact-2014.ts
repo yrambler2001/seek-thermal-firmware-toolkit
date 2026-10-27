@@ -1,5 +1,5 @@
 /**
- * `compact-2014` — the seven earliest Compact builds, which have no read path
+ * `early-compact` — the seven earliest Compact builds, which have no read path
  * a dump can use and must not be sent one.
  *
  * WHY A PROFILE FOR A CAMERA THIS CANNOT READ. Because the alternative is
@@ -221,7 +221,7 @@ function detectCompact2014(evidence: DeviceEvidence): DetectionVerdict {
 /* ---- the profile -------------------------------------------------------- */
 
 export const compact2014: FirmwareProfile = {
-  id: 'compact-2014',
+  id: 'early-compact',
   name: 'Early Compact (pre-0.8)',
   summary:
     'The 2014 Compact builds older than 0.8.0.0 (0.3.0.1, 0.5.0.2, 0.5.1.0, 0.5.1.3, 0.6.0.4, ' +

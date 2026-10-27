@@ -106,7 +106,7 @@ describe('CameraReport on the 2016 Compact PRO (TESTING.md 42.84)', () => {
       'Slot A — the boot-config word is 0xFFFFFFFF, so the bootloader tries slot A first, and it holds an image the bootloader accepts',
     );
     expect(text).not.toContain('not a boot record');
-    /* The Profile panel's score is the one taken after the read, and says so (TESTING.md 42.86). */
+    /* The Firmware family panel's score is the one taken after the read, and says so (TESTING.md 42.86). */
     expect(text).toContain(detectedReportOf(state.detection));
     expect(detectedReportOf(state.detection)).toMatch(
       /^.+ \(score \d\.\d\d after the read, from the evidence below(; ambiguous)?\)$/,

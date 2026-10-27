@@ -98,10 +98,10 @@ function notThisFamily(id: string, name: string): SeekError {
       ? 'The camera did not match the 4.x/Nano family, and this tab reads only that family.'
       : `The camera looks like ${name} (${id}), not a 4.x/Nano camera, and this tab reads only 4.x/Nano.`;
   return new SeekError(
-    'profile/unsupported',
+    'family/unsupported',
     `${what} Nothing was read. For a 0.x or 1.x camera (2014 or 2016 builds), use ` +
       '"Dump & decrypt 0.x/1.x 2014/2016".',
-    { detail: { profile: id } },
+    { detail: { family: id } },
   );
 }
 
@@ -112,7 +112,7 @@ function notThisFamily(id: string, name: string): SeekError {
  */
 function lineRefusal(version: string): SeekError {
   return new SeekError(
-    'profile/unsupported',
+    'family/unsupported',
     `The camera runs ${version}, a 0.x or 1.x build (2014 or 2016), and this tab reads only ` +
       '4.x/Nano. Nothing was read but the version. For a 0.x or 1.x camera, use ' +
       '"Dump & decrypt 0.x/1.x 2014/2016".',

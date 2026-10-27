@@ -226,15 +226,15 @@ describe('GF(2) key recovery', () => {
     );
   });
 
-  it('reports VERIFIED(profile) with word 13 checking out', () => {
+  it('reports VERIFIED(family) with word 13 checking out', () => {
     const info = recoverKeyInfo(viewOf(enc), 0, enc.length, MODERN);
     expect(sameState(info.state, state)).toBe(true);
     expect(info.checksum).toBe(MODERN.acceptanceSum);
-    expect(info.matchesProfile).toBe(true);
+    expect(info.matchesFamily).toBe(true);
     expect(info.word13).toBe(0);
     expect(info.selfConsistent).toBe(true);
     expect(info.sane).toBe(true);
-    expect(info.confidence).toBe('VERIFIED(profile)');
+    expect(info.confidence).toBe('VERIFIED(family)');
     expect(bytesToHex(info.key)).toBe(bytesToHex(KEY_A));
     expect(info.candidates.map((c) => c.K)).toEqual([...CANDIDATE_K]);
   });
@@ -260,7 +260,7 @@ describe('GF(2) key recovery', () => {
       offSum.length,
       MODERN,
     );
-    expect(info.matchesProfile).toBe(false);
+    expect(info.matchesFamily).toBe(false);
     expect(info.confidence).toBe('VERIFIED(structural)');
     /* No profile => K unknown => the key is reported as the raw state (K=0). */
     expect(bytesToHex(info.key)).toBe(bytesToHex(keyFromState(state, 0)));
@@ -523,7 +523,7 @@ describe('resolveWhitening', () => {
   it('falls back to the profile K when no form occurs', () => {
     const r = resolveWhitening(plaintextWith(), state, CANDIDATES);
     expect(r.whiteningK).toBe(MODERN.whiteningK);
-    expect(r.evidence).toBe('profile-default');
+    expect(r.evidence).toBe('family-default');
     expect(r.keyHex).toBe(bytesToHex(profileForm));
   });
 
@@ -532,7 +532,7 @@ describe('resolveWhitening', () => {
     twice.set(rawForm, 0x40);
     twice.set(rawForm, 0x200);
     const r = resolveWhitening(twice, state, CANDIDATES);
-    expect(r.evidence).toBe('profile-default');
+    expect(r.evidence).toBe('family-default');
     expect(r.whiteningK).toBe(MODERN.whiteningK);
   });
 
@@ -546,7 +546,7 @@ describe('resolveWhitening', () => {
     const r = resolveWhitening(plaintextWith(rawForm), state, []);
     expect(r).toEqual({
       whiteningK: 0,
-      evidence: 'profile-default',
+      evidence: 'family-default',
       keyHex: bytesToHex(rawForm),
     });
   });
