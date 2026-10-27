@@ -15107,3 +15107,54 @@ New or changed tests: `plain-chain-flash.test.ts` (item 3); `capability.test.ts`
 - L4. `SlotsView.verdicts.test.tsx` feeds a reason with the old words "bank B has …" into the view. It is a fake input and still passes, but it no longer reads like core's words.
 
 **9. Commits** (branch `worktree-agent-aec7549e64c6d82b8`, on `refactor/all-firmware-profiles` `2e04a64`; not merged, not pushed): `10437d8` (empty-bank), `07a7f8d` (corpus-locked), `2b05562` (pages-emu and the bridge's `outs`), `7d737b7` (slots-view), `6d841ba` (slots-quality), and this section.
+
+### 42.112 The FW-V1 runner's bank-map read and flash-bank guards on a real 4.x board: the Compact PRO 4.9.2.0 on the bench reads as the 4.x bootloader's map, and every empty or off-map write is refused before the J-Link writes; read-only, the flash unchanged (2026-10-27)
+
+**Summary.** The orchestrator ran the read-only check planned after 42.99 and 42.100. The owner said the Compact PRO was on the bench. The board on the J-Link turned out to be the owner's Compact PRO 4.9.2.0 (serial `1215A0YZ9AA8`, bootloader 201.9.3.0, Jan 7 2019), not the Compact PRO FF board (`090BB12PR939`, 1.0.3.0, bootloader 1.2.0.0) that the plan expected. So the check shows the runner on a 4.x bootloader instead of the 2016 one.
+- `read-bank-map` named the Compact PRO 4.x bootloader with `"status":"known"` and used that map, which is the target's own.
+- `flash-bank` refused all three probes with exit 2 before any write session:
+  - an empty payload at bank A (0x14030000) as too short;
+  - 0x14060000 as not a bank base of the 4x map;
+  - 0x14040000 as not a bank base on any map.
+- Two halted whole-flash reads are byte-identical.
+- The camera was power-cycled and reads as before.
+
+Nothing was written, FW-V1 was not edited, and nothing was pushed.
+
+**Tags.** [measured]: run here. [source]: read from the file named.
+
+**1. Setup** [measured].
+- FW-V1 main `8946833ee`, target `targets/compact_pro_ff_18hz_4_18_2_0`, `JLINK_SERIAL=69656086 node tools/jlink/jlink-runner.js <cmd>`.
+- Switch `1=off 2=on` at the start, with no J-Link process running. On USB: `CompactPRO`, 289d:0011.
+- Channel 1 on: the J-Link enumerated after 2 s.
+- Files are in `SEEK_DUMPS/firmwares/Compact Pro/2020.02.13-15.26.01-4.9.2.0/1215A0YZ9AA8/bench-42.112/`.
+- The target's `jlink_dumps` held four empty `flash_factory_4m_2_2026-10-27T02-2x…02-43Z.log` files from overnight (03:25 to 03:43 CET), when no agent of this session ran on this target. Their runs logged nothing.
+
+**2. `read-bank-map`** [measured], exit 0:
+- "Bootloader: the flash holds the Compact PRO 4.x bootloader (Jan 7 2019 15:56:14): bank map 4x (A 0x14030000, B 0x14050000, R 0x14070000), this target's own."
+- `BANK_MAP_JSON {"map":"4x",…,"status":"known",…}`.
+
+**3. `read-boot-slots`** [measured], exit 0: `14010000 = 00000000 14050000 14060000 14070000`.
+
+**4. Halted reads** [measured]. `dump-spifi-4m-halted`, exit 0, read twice: `start.bin` before the guard probes and `end.bin` after.
+- Both are 4,194,304 B, sha256 `c0414047b33274527c88f70b9763921c7ea02926b25a4268f0e5185dea780941`, and `cmp` shows them identical.
+- Compared with the owner's earlier dump of this camera (`Compact Pro Feb 13 2020 15-26-01 4.9.2.0.84.00 Dump.bin`, sha256 `5738bc27…`), only the 64 KiB block at 0x14030000 (bank A) differs, in 44,521 bytes. `seek-fw info` reads bank A as 4.9.2.0 under Key B, and B and R under Key A. Bank A was rewritten by an earlier write; it is the same build, stored under the other key.
+
+**5. `flash-bank` guards** [measured; the order is from `jlink-runner.js` `flashBankPayload` [source]]. The map is read first, then the address and the payload are checked, and the J-Link write session is built only after both pass.
+- `BANK_PAYLOAD=/dev/null BANK_ADDR=0x14030000`: the bootloader line, then "Refusing to flash /dev/null: too short to contain a firmware header.", exit 2.
+- `BANK_ADDR=0x14060000`: the bootloader line, then "Refusing to flash at BANK_ADDR=0x14060000: not a bank base of bank map 4x (0x14030000, 0x14050000, 0x14070000).", exit 2.
+- `BANK_ADDR=0x14040000`: "Refusing to flash at BANK_ADDR=0x14040000: not a bank base on any bank map (0x14050000, 0x14060000, 0x14070000, 0x14030000).", exit 2. This one was refused before the map read.
+
+**6. End** [measured].
+- Channel 1 off, channel 2 cycled; the camera was back on USB after 1 s.
+- `seek-fw info` (`info.txt`):
+  - serial `1215A0YZ9AA8`, running 4.9.2.0 (Feb 13 2020), bootloader 201.9.3.0 (Jan 7 2019);
+  - profile "Modern (2018+ selector map)", cfg[0] `0x00000000`, booted Slot A, last start slot A (active-slot word 0), upgrade target Slot B;
+  - Slot A, Slot B and Recovery R: 4.9.2.0, 44,760 B, bootable.
+- Switch `1=off 2=on`.
+
+**7. Not covered, leftovers.**
+- 42.99's 2016-map probes need the Compact PRO FF board (1.0.3.0, bootloader 1.2.0.0) on the J-Link:
+  - `read-bank-map` names the 2016 line;
+  - `flash-bank` refuses 0x14030000 on the 2016 map.
+- The Info read's modern-profile reasons still use request names ("a plain 2-byte BeginFirmwareUpgrade armed a protected bank, so the authenticated read channel is not in force"). 42.103 put the 2014 line's reasons in words; the modern profile's are left.
