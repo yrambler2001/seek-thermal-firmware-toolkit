@@ -26,7 +26,7 @@ The **Info** tab tells you which firmware a camera runs and which tab reads it.
   </thead>
   <tbody>
     <tr><th colspan="5" align="left">Compact</th></tr>
-    <tr><td>Compact 0.3.0.1 to 0.6.0.4 (2014)</td><td>no: the firmware has no read command (a J-Link or SPI dump decrypts)</td><td>yes</td><td>no</td><td>no 8 → 32 fps patch yet</td></tr>
+    <tr><td>Compact 0.3.0.1 to 0.6.0.4</td><td>no: the firmware has no read command (a J-Link or SPI dump decrypts)</td><td>yes</td><td>no</td><td>no 8 → 32 fps patch yet</td></tr>
     <tr><td>Compact 0.7.0.7, 0.7.0.8</td><td>yes, Dump &amp; decrypt 0.x/1.x (tested on the emulator only)</td><td>yes</td><td>no</td><td>no 8 → 32 fps patch yet</td></tr>
     <tr><td>Compact 0.8.0.0 to 0.10.0.0</td><td>yes, Dump &amp; decrypt 0.x/1.x (tested on the emulator only)</td><td>yes</td><td>yes</td><td>8 fps → 32 fps</td></tr>
     <tr><td>Compact 1.0.0.0, 1.2.0.0, 1.3.0.8</td><td>yes, Dump &amp; decrypt 0.x/1.x (tested on the emulator only)</td><td>yes</td><td>yes</td><td>8 fps → 32 fps</td></tr>
