@@ -44,6 +44,7 @@ import {
 } from '@seek-fw/core';
 import { EMU_DIR } from '../packages/core/test/emulator/suite.js';
 import { say } from './lib/browser.js';
+import { INFO_FIRMWARE_INFO_OP, INFO_RAM_DATA_OP } from './lib/info-read.js';
 import { CAMERA_NAME } from './lib/camera-flow.js';
 import { entry, names, runState, sha256 } from './lib/checks.js';
 import {
@@ -85,6 +86,25 @@ const INFO_READ_KEYS = [
 function changesIn(wire: ReadonlyMap<string, number>): string[] {
   return [...wire.keys()].filter((key) => CHANGES_THE_CAMERA.includes(key));
 }
+
+/**
+ * The info selectors that reached the camera, each as `0x55 [10,0]` (request, payload bytes): the shape
+ * a check names. SetFirmwareInfoFeatures (0x55) takes a u16 record selector; SetRamDataFeatures (0x5A)
+ * the device-id block.
+ */
+function infoSettersSent(s: PagesSession): string[] {
+  return s.bridge.outs
+    .filter((o) => o.request === INFO_FIRMWARE_INFO_OP || o.request === INFO_RAM_DATA_OP)
+    .map((o) => `0x${o.request.toString(16)} [${[...o.bytes].join(',')}]`);
+}
+
+/**
+ * Preserve's read-only first step reads the started bank for its bank choice: GetFirmwareInfo
+ * selector 10, the roots record that holds the active-slot word (TESTING.md 42.98 to 42.103). That
+ * is ONE SetFirmwareInfoFeatures whose payload is the u16 10, the Info read's own shape; the
+ * pages-bench rig lets exactly that request out by its shape (42.103), and so does this check.
+ */
+const ACTIVE_SLOT_READ = `0x${INFO_FIRMWARE_INFO_OP.toString(16)} [10,0]`;
 
 function entryFor(prefix: string, kind: 'full-dump' | 'image-only', label: string): PagesCamera {
   const entryId = UNAVAILABLE === null ? corpusEntryId(prefix, kind) : null;
@@ -177,9 +197,10 @@ const INFO_CAMERAS: readonly {
     ),
     version: '1.0.3.0',
     tab: 'Dump & decrypt 0.x/1.x 2014/2016',
-    /* The 2016 PRO's read runs twice: the second read is under the profile the evidence names
-     * (`profileToRereadUnder`, useInfoPanel.ts). Measured on the emulator: 8 selector writes, 2 blocks. */
-    reads: 2,
+    /* One read since 42.84 (294712f): the probe picks compact-2016 on 1.0.3.x, so the evidence names the
+     * profile the read ran under and nothing is re-read (`profileToRereadUnder`). Before, the first read ran
+     * under legacy-auth and a second under compact-2016: 8 selector writes, 2 blocks (42.68). */
+    reads: 1,
   },
 ];
 
@@ -376,9 +397,16 @@ for (const subject of LEGACY_CAMERAS) {
         expect(text).not.toContain('The write is not on record');
       });
 
-      it('sends nothing that changes the camera during the read-only step', async () => {
+      it('sends nothing that changes the camera during the read-only step: the active-slot read alone, by its shape', async () => {
         const wire = await s.wire();
-        expect(changesIn(wire), 'no write, commit, reset or setter on the wire').toEqual([]);
+        expect(
+          changesIn(wire).filter((key) => key !== 'out 0x55'),
+          'no write, commit, reset or other setter on the wire',
+        ).toEqual([]);
+        expect(
+          infoSettersSent(s),
+          'one SetFirmwareInfoFeatures(10), the active-slot read, and no other setter',
+        ).toEqual([ACTIVE_SLOT_READ]);
         expect(await s.refusals()).toEqual([]);
       });
     },
@@ -429,7 +457,8 @@ describe.skipIf(UNAVAILABLE !== null)(
       expect(log, 'the log says the build is not a 0.x or 1.x build').toContain(
         'is not a 0.x or 1.x build',
       );
-      expect(log, 'the log names the 4.x/Nano tab').toContain('Dump & decrypt 4.x/Nano');
+      /* Core's words since 42.105 (871da8c): the tab in words, neither front end named. */
+      expect(log, 'the log names the 4.x/Nano tab').toContain('Dump & decrypt for 4.x and Nano');
       const wire = await s.wire();
       expect(changesIn(wire), 'nothing that changes the camera').toEqual([]);
       expect(
