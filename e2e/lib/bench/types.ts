@@ -101,7 +101,7 @@ export interface JlinkBench {
   setBootSlot(slot: BootSlot, template: string): Promise<void>;
 }
 
-/** The boot preference cfg[0]: 0 slot A, 1 slot B, 2 recovery bank R. */
+/** The boot preference cfg[0]: 0 slot A, 1 slot B, 2 recovery R. */
 export type BootSlot = 0 | 1 | 2;
 
 /** The camera side: USB presence, power, and the running firmware. */
@@ -126,7 +126,7 @@ export interface BenchCamera {
    */
   infoJson(): Promise<Record<string, unknown> | null>;
   /**
-   * `seek-fw slots flash <bank> <file> --yes [--acknowledge-risk] --json`: the CLI's
+   * `seek-fw slots flash <bank> <file> --yes [--acknowledge-risk] --dump-dir <dir> --json`: the CLI's
    * own write, through the core path the page uses. Nothing is written in a dry run.
    */
   slotFlash(bank: 'a' | 'b' | 'r', file: string, options: SlotFlashOptions): Promise<SlotFlashRun>;
@@ -135,6 +135,11 @@ export interface BenchCamera {
 /** The flags a bench slot write passes to the CLI. */
 export interface SlotFlashOptions {
   readonly acknowledgeRisk: boolean;
+  /**
+   * The folder the CLI saves its backup zip in before it writes (`--dump-dir`): the run's scratch folder, so
+   * the backups stay with the run and not in the folder the CLI runs in (TESTING.md 42.109 L3).
+   */
+  readonly backupDir: string;
 }
 
 /** One CLI slot write: its exit code, its one JSON document (null when none), and its streams. */

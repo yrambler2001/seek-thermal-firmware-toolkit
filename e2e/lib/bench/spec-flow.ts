@@ -32,7 +32,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
-import { APPLICATION_KEY_PAIRS, buildSlotPlan, listProfiles } from '@seek-fw/core';
+import { APPLICATION_KEY_PAIRS, bankWordsOf, buildSlotPlan, listProfiles } from '@seek-fw/core';
 
 import { sha256 } from '../checks.js';
 import type { SlotsSubject } from '../slots-expectations.js';
@@ -64,10 +64,11 @@ export const BOOT_CONFIG_ADDRESS = 0x14010000;
 export const BOOTLOADER_ADDRESS = 0x14000000;
 /** cfg[0], the boot preference: which bank the bootloader runs (FW-V1 set-boot: 0 A, 1 B, 2 recovery). */
 export const RECOVERY_SLOT: BootSlot = 2;
+/* In a sentence, as the page and the CLI say them: "slot A", "slot B", "recovery R" (core `bankWordsOf`). */
 const SLOT_NAME: Readonly<Record<BootSlot, string>> = {
-  0: 'slot A',
-  1: 'slot B',
-  2: 'recovery bank R',
+  0: bankWordsOf('a'),
+  1: bankWordsOf('b'),
+  2: bankWordsOf('r'),
 };
 
 /** cfg[0] as the bootloader reads it, or null when it names none of A, B and R. */
@@ -1352,10 +1353,10 @@ async function runEmptyBankFlow(
 
 /**
  * The derived upload, proven on the camera (TESTING 42.7; the subject is one the page refused
- * before the derivation). Bank B takes a build-string-marked image through the page; cfg[0] is set
- * to B and the camera must run the marked B. Then bank R takes its own marked image, cfg[0] is set
+ * before the derivation). Slot B takes a build-string-marked image through the page; cfg[0] is set
+ * to B and the camera must run the marked B. Then recovery R takes its own marked image, cfg[0] is set
  * to recovery and the camera must run the marked R. cfg[0] is put back after each boot, and the
- * boot-config block must equal what was saved before the probe. Bank A is never written.
+ * boot-config block must equal what was saved before the probe. Slot A is never written.
  */
 async function runDerivedProbe(
   rig: BenchRig,

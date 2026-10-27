@@ -52,6 +52,8 @@ export interface FfVendorFiles {
   readonly plainFfBankFile: string;
   /** The vendor app's own staged file for the image, when it is available (checked byte for byte). */
   readonly vendorFile: string | null;
+  /** The run's scratch folder; the CLI's backups of each write go to its `backups` folder. */
+  readonly scratchDir: string;
 }
 
 export interface FfVendorBench {
@@ -295,7 +297,10 @@ export async function runFfVendor(
 
     /* Step (b): A, then B, then R, through the CLI (the core write path), each read back halted. */
     for (const letter of ['a', 'b', 'r'] as const) {
-      const run = await camera.slotFlash(letter, files.plainFfFile, { acknowledgeRisk: true });
+      const run = await camera.slotFlash(letter, files.plainFfFile, {
+        acknowledgeRisk: true,
+        backupDir: path.join(files.scratchDir, 'backups'),
+      });
       const predicted = predictedFFStored(plain);
       const readBack = await haltedRead(jlink, camera, FF_BANK_ADDRESS[letter], FF_BANK_BYTES);
       const predictedSha256 = sha256(predicted);
@@ -592,5 +597,6 @@ export function ffVendorFilesFromEnv(
     plainFfSha256: chosen.plain.sha256,
     plainFfBankFile: bank,
     vendorFile: env.SEEK_BENCH_FF_VENDOR ?? null,
+    scratchDir,
   };
 }
