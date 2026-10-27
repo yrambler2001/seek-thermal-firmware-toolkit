@@ -15108,18 +15108,13 @@ New or changed tests: `plain-chain-flash.test.ts` (item 3); `capability.test.ts`
 
 **9. Commits** (branch `worktree-agent-aec7549e64c6d82b8`, on `refactor/all-firmware-profiles` `2e04a64`; not merged, not pushed): `10437d8` (empty-bank), `07a7f8d` (corpus-locked), `2b05562` (pages-emu and the bridge's `outs`), `7d737b7` (slots-view), `6d841ba` (slots-quality), and this section.
 
-### 42.112 The FW-V1 runner's bank-map read and flash-bank guards on a real 4.x board: the Compact PRO 4.9.2.0 on the bench reads as the 4.x bootloader's map, and every empty or off-map write is refused before the J-Link writes; read-only, the flash unchanged (2026-10-27)
+### 42.112 The FW-V1 runner's bank-map read and flash-bank guards on the bench Compact PRO board, under the 4.x and the 2016 bootloader: three whole images force-flashed and read back, each map named and every empty or off-map write refused; the board ends byte-identical (2026-10-27)
 
-**Summary.** The orchestrator ran the read-only check planned after 42.99 and 42.100. The owner said the Compact PRO was on the bench. The board on the J-Link turned out to be the owner's Compact PRO 4.9.2.0 (serial `1215A0YZ9AA8`, bootloader 201.9.3.0, Jan 7 2019), not the Compact PRO FF board (`090BB12PR939`, 1.0.3.0, bootloader 1.2.0.0) that the plan expected. So the check shows the runner on a 4.x bootloader instead of the 2016 one.
-- `read-bank-map` named the Compact PRO 4.x bootloader with `"status":"known"` and used that map, which is the target's own.
-- `flash-bank` refused all three probes with exit 2 before any write session:
-  - an empty payload at bank A (0x14030000) as too short;
-  - 0x14060000 as not a bank base of the 4x map;
-  - 0x14040000 as not a bank base on any map.
-- Two halted whole-flash reads are byte-identical.
-- The camera was power-cycled and reads as before.
-
-Nothing was written, FW-V1 was not edited, and nothing was pushed.
+**Summary.** The orchestrator ran the check planned after 42.99 and 42.100.
+- **The first, read-only pass (§1–§6).** The board on the J-Link held the owner's Compact PRO 4.9.2.0 image, read as serial `1215A0YZ9AA8` with bootloader 201.9.3.0 (Jan 7 2019). The serial Info reports comes from the flash image, so it does not name the board. `read-bank-map` named the 4.x bootloader as known and used that map. `flash-bank` refused every empty or off-map write before any write session.
+- **The force-flash pass (§8),** on the owner's word ("test that by force flashing any of those firmwares … they are adapted for testing on this hardware"). `flash-factory-4m-2` wrote three whole 4 MiB images in turn: 1.0.3.0 on 4.18.2.0 (the 2016 bootloader 1.2.0.0), 4.9.1.15 on 4.18.2.0, and the owner's 4.9.2.0 dump. Each was read back halted, byte-identical to its image. Each time, `read-bank-map` named the bootloader on the part and its map, all known: the 2016 map for 1.2.0.0, "not this target's own 4x"; the 4x map otherwise. On the 2016 map `flash-bank` refused 0x14030000 as "not a bank base of bank map 2016". On the 4x map it refused 0x14060000. The empty payload was refused as too short at every real bank base. Every image booted on a cold start, and `seek-fw info` read it.
+- **End.** The start image was written back. Only bank A's block differed from it. The final halted read is `c0414047…`, identical to the start, and the switch is `1=off 2=on`.
+- Nothing else was written, FW-V1 was not edited, and nothing was pushed.
 
 **Tags.** [measured]: run here. [source]: read from the file named.
 
@@ -15154,7 +15149,23 @@ Nothing was written, FW-V1 was not edited, and nothing was pushed.
 - Switch `1=off 2=on`.
 
 **7. Not covered, leftovers.**
-- 42.99's 2016-map probes need the Compact PRO FF board (1.0.3.0, bootloader 1.2.0.0) on the J-Link:
-  - `read-bank-map` names the 2016 line;
-  - `flash-bank` refuses 0x14030000 on the 2016 map.
 - The Info read's modern-profile reasons still use request names ("a plain 2-byte BeginFirmwareUpgrade armed a protected bank, so the authenticated read channel is not in force"). 42.103 put the 2014 line's reasons in words; the modern profile's are left.
+
+**8. Force-flash pass** [measured]. `scratchpad/pro-cycle.sh <image> <tag>`, one cycle per image:
+- check that no J-Link process is running, then channel 1 on;
+- `flash-factory-4m-2 FACTORY_IMAGE=<image>`; it writes only the 64 KiB blocks that differ, with the boot-config block second to last and the bootloader block last;
+- a halted read, then `cmp` with the image;
+- `read-bank-map`, `read-boot-slots`, and `flash-bank` with `BANK_PAYLOAD=/dev/null` at 0x14030000, 0x14050000 and 0x14060000;
+- channel 1 off, a channel-2 cold boot, then `seek-fw info`.
+
+Files are `<tag>-*.log`, `<tag>.bin` and `<tag>-info.txt` in `bench-42.112/`.
+
+| Image (sha256) | Blocks written | Halted read | Bootloader on the part (`read-bank-map`, all "known") | `14010000` | flash-bank /dev/null: 0x14030000 / 0x14050000 / 0x14060000 | Cold boot, `seek-fw info` |
+|---|---|---|---|---|---|---|
+| `1.0.3.0 on 4.18.2.0.bin` (`d2ee76b4…`) | 27 of 64 | `d2ee76b4…` = image | 2016 Compact PRO bootloader 1.2.0.0 (Jun 26 2016): bank map 2016 (A 0x14050000, B 0x14060000, R 0x14070000), "not this target's own 4x" | `FFFFFFFF ×4` | not a bank base of map 2016 / too short / too short | PIR324; 1.0.3.0, bootloader 1.2.0.0, "2016 Compact Pro", serial `090BB12PR939`, cfg[0] 0xFFFFFFFF, booted Slot A; A, B, R 1.0.3.0 key block 1, bootable |
+| `4.9.1.15 on 4.18.2.0.bin` (`9c4df4cf…`) | 22 of 64 | `9c4df4cf…` = image | Compact PRO 4.x bootloader (Jan 7 2019): bank map 4x, the target's own | `00000001 14030000 14050000 14070000` | too short / too short / not a bank base of map 4x | 4.9.1.15, bootloader 201.9.3.0, serial `090BB12PR939`, cfg[0] 1 (B first), booted Slot A: B holds 1.0.3.2 18 Hz, "NOT bootable", so the bootloader fell back to A; A and R 4.9.1.15 Key A, bootable |
+| owner's `…4.9.2.0.84.00 Dump.bin` (`5738bc27…`) | 26 of 64 | `5738bc27…` = image | 4.x bootloader (Jan 7 2019): map 4x | `00000000 14050000 14060000 14070000` | too short / too short / not a bank base of map 4x | CompactPRO; 4.9.2.0, serial `1215A0YZ9AA8`, cfg[0] 0, booted Slot A; A, B, R 4.9.2.0 Key A, bootable |
+| `bench-42.112/start.bin` (`c0414047…`) | 1 of 64 (0x14030000) | `c0414047…` = image = start | 4.x bootloader: map 4x | `00000000 14050000 14060000 14070000` | too short / too short / not a bank base of map 4x | CompactPRO; 4.9.2.0, serial `1215A0YZ9AA8`, booted Slot A; A Key B, B and R Key A, all bootable |
+
+Every `flash-factory-4m-2` run ended "DONE: the part reads back byte-identical to the image", and every write and verify passed on its first attempt. One rig miss: the first cycle checked for the camera while the switch was still cycling, so its `seek-fw info` found no camera. The script then waited for channel 2 to come back on, and a second `info` read the camera (the row above).
+
