@@ -1081,8 +1081,13 @@ export async function readDeviceInfo(
      * bootloader takes it neither at A nor at B, whatever a keystream solve says of it: with boot word 1
      * and the FF payload as sent in B, the 1.3.0.0 Compact started slot A (TESTING.md 42.109). Its
      * acceptance is the chain's, not the cipher's, so "accepts" is no and it is not bootable. Recovery R
-     * keeps its own rule (`ffFormInRecovery`). */
-    const chainPassesOver = plainChain && slot.present && !storedPlain(slot);
+     * keeps its own rule (`ffFormInRecovery`). Measured on the 0.9.0.0 bootloader only: a 1.3.0.8 FF
+     * camera's own bootloader is not in the corpus, so elsewhere the verdict stays the cipher's. */
+    const chainPassesOver =
+      plainChain &&
+      bootloaderVersion === LEGACY_2014_BOOTLOADER &&
+      slot.present &&
+      !storedPlain(slot);
     const accepts = chainPassesOver ? false : slot.accepts;
     const bootability: SlotState['bootability'] = storedPlain(slot)
       ? /* the chain's own model: see the verdict below */ 'bootable'

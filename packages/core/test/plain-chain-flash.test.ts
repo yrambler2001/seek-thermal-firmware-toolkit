@@ -162,7 +162,14 @@ export function plainImage2014(): Uint8Array {
  * the same image sits under a real keystream instead — the 1.0.3.x form.
  */
 function camera2014(
-  options: { plain?: boolean; cfg0?: number; activeSlot?: number; slotB?: Uint8Array } = {},
+  options: {
+    plain?: boolean;
+    cfg0?: number;
+    activeSlot?: number;
+    slotB?: Uint8Array;
+    /** The bootloader version the camera reports (fw-info selector 1), or none. */
+    bootloader?: readonly [number, number, number, number];
+  } = {},
 ): FakeCamera {
   const flash = new Uint8Array(4 * 1024 * 1024).fill(0xff);
   const image = plainImage2014();
@@ -183,8 +190,19 @@ function camera2014(
     fwInfo: new Map([
       [0, buildBlock()],
       [10, rootsBlock(options.activeSlot ?? 0)],
+      ...(options.bootloader === undefined
+        ? []
+        : [[1, bootloaderBlock(options.bootloader)] as [number, Uint8Array]]),
     ]),
   });
+}
+
+/** The bootloader info block (fw-info selector 1): its version bytes, then its name. */
+function bootloaderBlock(version: readonly [number, number, number, number]): Uint8Array {
+  const block = new Uint8Array(36);
+  block.set(version, 0);
+  block.set(new TextEncoder().encode('bootloader'), 4);
+  return block;
 }
 
 async function contextFor(camera: FakeCamera, reporter: Reporter): Promise<WorkflowContext> {
@@ -224,7 +242,7 @@ describe('a bank on the 2014 chain whose bytes are not a plain image (TESTING.md
     const underKey = cryptBytes(image, key, legacyAuth.cipher);
     const reporter = collectingReporter();
     const state = await readDeviceInfo(
-      await contextFor(camera2014({ slotB: underKey }), reporter),
+      await contextFor(camera2014({ slotB: underKey, bootloader: [0, 9, 0, 0] }), reporter),
       { chunk: 4096 },
     );
     expect(state.plainChain).toBe(true);
@@ -246,6 +264,27 @@ describe('a bank on the 2014 chain whose bytes are not a plain image (TESTING.md
     /* The banks stored plain keep their verdict. */
     expect(state.byKey.get('a')?.bootability).toBe('bootable');
     expect(state.byKey.get('r')?.bootability).toBe('bootable');
+  });
+
+  it("keeps the cipher's verdict when the bootloader is not the measured 0.9.0.0 (its own may decode the bank)", async () => {
+    const image = plainImage2014();
+    const dv = viewOf(image);
+    dv.setUint32(ADJUST_OFFSET, (dv.getUint32(ADJUST_OFFSET, true) + 0xffff) >>> 0, true);
+    const key = stateFromKey(new Uint8Array(16).fill(0x5a), 0);
+    const underKey = cryptBytes(image, key, legacyAuth.cipher);
+    const reporter = collectingReporter();
+    const state = await readDeviceInfo(
+      await contextFor(camera2014({ slotB: underKey }), reporter),
+      {
+        chunk: 4096,
+      },
+    );
+    expect(state.plainChain).toBe(true);
+    const b = state.byKey.get('b');
+    if (b === undefined) throw new Error('no slot B');
+    expect(b.accepts).toBe(true);
+    expect(b.bootability).not.toBe('not-bootable');
+    expect(logsOf(reporter)).not.toContain(PLAIN_CHAIN_PASSES_OVER);
   });
 });
 
