@@ -863,8 +863,10 @@ seek-fw slots patch-fps all --write --acknowledge-risk        # every bank that 
   image carrying the FF key pair is the FF build), and the **camera** says which build runs: GetFirmwareInfo
   selectors 6, 7 and 8 answer, bank by bank, whether the running application takes the bank. The FF image
   is staged the way the vendor app stages it, the image XOR Key A with the header verbatim, and the camera
-  stores it under Key B. It goes to A, B or R. A camera whose answers cannot tell the two builds apart is
-  refused unless you say it runs the 16 Hz build (`--running-16hz` on the CLI). The stored form is not
+  stores it under Key B. It goes to A, B or R. Nothing refuses it: the plan says before you confirm what the
+  camera is expected to do with it. The 8 Hz build, and a camera on another version, check the plain word
+  sum and are expected to refuse it at commit (0x00070100) before anything is written; when the camera's
+  answers cannot tell the two builds apart, the plan says what each build does. The stored form is not
   known to boot: no genuine bootloader for this build is in the corpus, so the boot is untested
   (`TESTING.md` §42.11 and §42.12).
 - **Flash raw bytes.** The bytes you give go through the staging stream as they are. Whether they
