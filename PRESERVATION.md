@@ -66,8 +66,8 @@ Two build-specific facts the plan print states and the gates enforce:
 
 - **The 1.3.0.8-FF build boots its patch from the RECOVERY slot only.** Its raw word sum is the 0xFFFF
   sentinel, which the 2014 bootloader rejects at slots A/B — it boots the recovery bank unchecked. The run
-  refuses a commit into A/B, and a run whose detection names A/B (the factory chimera's blank cfg) refuses
-  before any write. The restore is refused too, for a measured reason: no staged form of the factory image
+  refuses a commit into A/B; when the backup first finds the build in slot A or B (the factory chimera's
+  blank cfg), it takes recovery R as the bank the camera runs and reads and derives R in full. The restore is refused too, for a measured reason: no staged form of the factory image
   passes the running app's own acceptance while transforming back to the original slot bytes (accept1
   reads sum(P ⊕ ksD); the factory carries `0xB7AB9D17` there, not `0xFFFF`). The FF run ends with the
   delivered dump in hand and the patch in place; the original content can only go back with a full-flash
@@ -99,7 +99,7 @@ the first two are checked (the 2014 chain: the stored word sum; the 2016 line: t
 key its bootloader holds) and the last is entered unchecked. A watchdog reset early in a start makes both
 bootloaders write a mark over the bank they entered and set the word to 2, so recovery R runs from then on
 (FW-V1 `image.c` `boot_select_image`; the owner's 1.3.0.0 dump `4.bin` carries exactly that state,
-TESTING.md 42.92). The backup reads all three banks, and the plan says which bank the next start enters
+TESTING.md sec. 23 and 42.92). The backup reads all three banks, and the plan says which bank the next start enters
 and why before the first write. The choice (`--bank` in the CLI, the "Banks to patch" list on the page):
 
 - **the bank the next start enters** (the default; when that cannot be known, every bank that holds an
@@ -111,14 +111,17 @@ and why before the first write. The choice (`--bank` in the CLI, the "Banks to p
 A choice that leaves out the bank the next start enters is warned about and still runs: the drain then
 sees the start enter an unpatched bank and stops before it reads anything, and the restore puts the
 written banks back. A bank the run cannot write (erased, another build, its two reads disagree, stored
-under another key than the camera's bootloader checks, or the 1.3.0.8 FF build outside recovery R) is not
-offered, with the reason. The commit writes the bank the bootloader tries first last, and the restore puts
-it back first.
+under another key than the camera's bootloader checks, the 1.3.0.8 FF build outside recovery R, or an
+image that is not the stock firmware: a frame-rate build, named as such, or any change Preserve does not
+know) is not offered, with the reason. When the bank the camera runs holds such an image, the run stops
+before anything is written: write the stock image back first, then start a new run. The commit writes the
+bank the bootloader tries first last, and the restore puts it back first.
 
 ## The patch, and the ciphertext rule
 
-The patch is five instruction edits in the build's own update machinery, plus one free header word
-rebalanced so the bootloader's plaintext word-sum check still passes:
+On Compact 1.0.0.0 / 1.2.0.0 / 1.3.0.0 the patch is five instruction edits in the build's own update
+machinery, plus one free header word rebalanced so the bootloader's plaintext word-sum check still passes
+(the other builds' patches are in the table above):
 
 - the reader-window widening, `mov.w r3,#0x10000 → #0x400000`;
 - the three halfword loads/stores of the wire-79 reader's cursor, which wrapped every 64 KiB;
@@ -126,15 +129,20 @@ rebalanced so the bootloader's plaintext word-sum check still passes:
   low half of the now 32-bit cursor. After a read that crosses 64 KiB, every later window is served pages
   too far up, and after the drain every read stalls until a power cycle (TESTING.md §35.4, §36).
 
-Together they move exactly **thirteen bytes** on the part: 0x238..0x23B, 0x3C1C, 0x3C1D, 0x3C68, 0x3C69,
-0x3C70, 0x3C71, 0x3DB7, 0x3DC6, 0x3DC7 (bank-relative). The 0.x line carries the same arm-tail edit at its
-own offsets (see the table above).
+On 1.3.0.0 they move exactly **thirteen bytes** on the part: 0x238..0x23B, 0x3C1C, 0x3C1D, 0x3C68,
+0x3C69, 0x3C70, 0x3C71, 0x3DB7, 0x3DC6, 0x3DC7 (bank-relative). The 0.x line carries the same arm-tail edit
+at its own offsets (see the table above).
 
-A flash slot does not hold the firmware image; it holds the image XOR a keystream. The wire-79 reader
-serves those SLOT BYTES. Pasting the new plaintext bytes into a ciphertext capture corrupts the slot — the
-first FW-V1 wire run did exactly that. The pipeline conjugates instead:
-`wire[off] := wire[off] XOR old_plain[off] XOR new_plain[off]` per patched byte; the keystream cancels, the
-decrypted image changes by exactly the diff. (`conjugateCapture` in `src/preservation/patch.ts`.)
+A slot of a cipher family (the 2016 Compact PRO, the 1.3.0.8 FF build) does not hold the firmware image;
+it holds the image XOR a keystream, and the wire-79 reader serves those SLOT BYTES. Pasting the new
+plaintext bytes into such a capture corrupts the slot — the first FW-V1 wire run did exactly that. The
+rule is to conjugate: `wire[off] := wire[off] XOR old_plain[off] XOR new_plain[off]` per patched byte; the
+keystream cancels, the decrypted image changes by exactly the diff (`conjugateCapture` in
+`packages/core/src/preservation/patch.ts`). On the 2014 plain chain the keystream is zero, and the
+conjugated capture is what the commit stages. On a cipher family the commit's own transform makes the slot
+bytes, so the run stages the patched image in the build's staged form (the table above), and the
+conjugated capture is what the bank holds once the write has landed: a resumed commit compares against it
+to tell a bank it already wrote.
 
 ## The honest risk
 
@@ -158,10 +166,11 @@ SEEK_EMU_DIR=/path/to/FW-V1/emu npx vitest run packages/core/test/preservation/
 
 On hardware (Chrome/WebUSB or the node-usb backend). There is no image to pass: the run derives
 everything from the camera, and the detailed plan prints after the backup step — before anything
-write-shaped runs, with a second confirmation at that point on an interactive terminal:
+write-shaped runs, with a second confirmation at that point on an interactive terminal (`--yes` skips both
+confirmations, and is required when stdin is not a terminal):
 
 ```sh
-seek-fw preserve --out ./preserve-run --yes
+seek-fw preserve --out ./preserve-run
 ```
 
 ## Stepwise runs, and resuming one
@@ -182,8 +191,8 @@ properties fall out of that, and they are the reason the stepwise shape exists:
 - **A crash is a pause, not a loss.** Re-run with `--resume <dir>` and the run continues at
   `state.nextStep`; the interrupted step starts over, and a completed step is never repeated. The commit
   step is not replayable, so it reads every chosen bank back before it writes any: a bank that already
-  holds the patch is not written again (when every chosen bank does, the step refuses with "resume at the
-  drain"), and a bank that changed any other way is refused outright. `--resume <dir> --bank <choice>`
+  holds the patch is not written again (when every chosen bank does, the step refuses with "Resume at the
+  drain step"), and a bank that changed any other way is refused outright. `--resume <dir> --bank <choice>`
   chooses the banks again until the commit has run.
 
 ```sh
@@ -214,8 +223,9 @@ Artifacts in the run directory: `preserve_run.json` (the state, rewritten after 
 can write `preserve_bank_<a|b|r>_capture.bin` (its two agreeing reads), `preserve_bank_<a|b|r>_plain.bin`
 (the factory plaintext the backup step derived from it) and `preserve_bank_<a|b|r>_patched.bin` (the
 patched plaintext); `preserve_dump_postwrite.bin` (the part as patched), `preserve_dump_original.bin` (the
-delivered image — the camera's original content), plus `manifest.json`, `README.md` and the decrypted
-slots under `decrypted/` (the backup's dump archive).
+delivered image — the camera's original content), `preserve_verify_windows.bin` (the verify step's re-read
+of the 31 windows), plus `manifest.json`, `README.md` and the decrypted slots under `decrypted/` (the
+backup's dump archive).
 
 ## In the browser
 
@@ -241,10 +251,10 @@ The commit session never resets; the drain step owns the wire-89 and waits out t
 restarting…"). This camera has no USB serial number, so Chrome forgets it on every reboot: the running
 step then shows a blue "Your turn" box with its own Connect device button — pick the camera again and the
 step continues by itself. These hand-offs are the expected flow, so the page asks for them calmly; red is
-kept for real failures. A run whose committed patch predates the arm-tail cursor reset (the fifth site)
-ends Write & whole-flash read by asking you, the same way, to unplug the camera and plug it back in:
-without that site the drain leaves the reader dead until it is powered off. With it, the restore reads on
-the same boot and no replug is asked for. Compact Pro 1.0.3.0 needs no site for it: its own arm tail
+kept for real failures. A run whose patch carries no arm-tail cursor reset (the fifth site; the 1.3.0.8
+and 1.3.0.8 FF patches have none) ends Write & whole-flash read by asking you, the same way, to unplug the
+camera and plug it back in: without that site the drain can leave the reader dead until it is powered off.
+With it, the restore reads on the same boot and no replug is asked for. Compact Pro 1.0.3.0 needs no site for it: its own arm tail
 already zeroes the whole cursor (`str r5,[r4,#12]`), so its runs read on the same boot too. A camera whose
 boot-config block is erased (every 2016 Compact PRO in the record) reads its record as blank on every
 boot; step 02 admits such a boot when the same boot serves the device-identity block at `0x14020000`, so

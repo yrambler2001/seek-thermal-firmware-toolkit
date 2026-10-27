@@ -13,8 +13,10 @@ packages/
   cli/     @seek-fw/cli    Node CLI, talks to the camera through `usb` v3
   web/     @seek-fw/web    React app, talks to the camera through WebUSB
 docs/                      the built web app — GitHub Pages serves this folder
-scripts/                   the differential test against the original page (tag v1.0.0)
-e2e/                       opt-in browser runs of the web app (emulator, real camera)
+scripts/                   the phone dev server, the table generators, and the differential
+                           test against the original page (tag v1.0.0)
+e2e/                       opt-in browser runs of the web app (emulator, real camera), and the
+                           README screenshots
 ```
 
 `core` knows nothing about React, Node or the DOM: it takes a `UsbTransport` and a `Reporter` and does the
@@ -227,6 +229,19 @@ refused fails the test. The camera's guard used to refuse those resets unsent wh
 as if the camera had rebooted, and nothing failed. The image a dump must come back as is the emulator's
 known part, or on the camera the one `SEEK_E2E_CAMERA_SHA` names, or else the first whole image the test
 read.
+
+Seven more scripts drive the other tabs. `npm run e2e` loads them too, and each skips, saying why, when
+its target or its write gate is not there:
+
+```sh
+npm run e2e:pages:emu        # Info, both Dump & decrypt tabs and Decrypt File/Slot, on emulated cameras
+npm run e2e:slots:quality    # Work with firmware slots on three emulated cameras, against the verdict table; never writes
+npm run e2e:pages:bench      # every tab on the bench Compact 1.3.0.0 (the write gate, the J-Link and the switch)
+npm run e2e:pages:bench:pro  # Info and Work with firmware slots on the bench Compact PRO 1.0.3.0 (the write gate)
+npm run e2e:slots:bench      # Work with firmware slots on the bench camera, one build at a time, checked with the J-Link
+npm run e2e:fps:bench        # one bank's Make N FPS on the bench camera (SEEK_E2E_WRITE)
+npm run e2e:ff:vendor        # the 1.3.0.8 FF bank write on the bench camera (SEEK_E2E_WRITE)
+```
 
 ### Writing the real camera
 

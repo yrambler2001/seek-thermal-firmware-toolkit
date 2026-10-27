@@ -207,7 +207,7 @@ Then unplug and replug the camera.
 | ---------------------------------------------------------------------- | ------ | ------------------------------------------------ |
 | Compact 0.8.0.0, 0.9.0.2, 0.9.0.6, 0.9.0.7, 0.9.1.0, 0.10.0.0, 1.0.0.0 | 32 fps | yes (TESTING.md 42.27)                           |
 | Compact 1.2.0.0                                                        | 32 fps | yes, 32.2 fps (42.27)                            |
-| Compact 1.3.0.0                                                        | 32 fps | yes, 32.17 to 32.22 fps (42.25)                  |
+| Compact 1.3.0.0                                                        | 32 fps | yes, 32.17 to 32.22 fps (42.27)                  |
 | Compact 1.3.0.8                                                        | 32 fps | yes, 32.16 to 32.20 fps (FPS_32HZ.md, section 5) |
 | Compact 4.8.1.7, 4.8.1.9                                               | 32 fps | no, the emulator only (32.258 Hz)                |
 | Compact XR 4.8.2.1                                                     | 32 fps | yes, 32.0 to 32.2 fps (42.24)                    |
@@ -225,12 +225,14 @@ Compact 1.3.0.0 on the bench runs the current image. Any other build is refused,
 - **A backup before every write.** Every write on the Work with firmware slots tab saves the bank first, as one zip download
   holding the bank as stored, its decrypted image and a note of what each file is; the CLI saves the same
   zip into `--dump-dir`. Nothing is sent until the download has started. The preservation run keeps its
-  backup in the run file before its first write, and its last step puts the original back and checks it.
+  backup in the run file before its first write, and its last step puts the original back and checks it
+  (on every build but the 1.3.0.8 FF, whose run leaves its patch in recovery R).
 - **How to restore.** Write the zip's decrypted file back with **Flash decrypted image…**, or use
   **Restore from full flash backup…** ([undo](#what-make-n-fps-in-every-bank-does), above).
-- **What is never written.** The bootloader and the boot-config block. No reset is sent, and the camera
-  uses a written bank only after you unplug it and plug it back in. Writing the bank the camera boots now,
-  or recovery R, asks for a tick (`--acknowledge-risk` on the CLI).
+- **What is never written.** The bootloader and the boot-config block. A bank write sends no reset, and the
+  camera uses a written bank only after you unplug it and plug it back in (the preservation run restarts
+  the camera itself). Writing the bank the camera boots now, or
+  recovery R, asks for a tick (`--acknowledge-risk` on the CLI).
 - **The camera stays unlocked until it is power-cycled.** To read a camera, the page and the CLI send its
   unlock token, and the camera stays unlocked until its next power cycle. Other tools, such as the vendor
   app, may misread it until then, so unplug and replug it before you use them.
