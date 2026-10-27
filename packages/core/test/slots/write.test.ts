@@ -849,7 +849,7 @@ describe('prepareSlotFlash warnings', () => {
     const image = imageOf(0x2000, 11);
     const bootedA = reportFor(stateFor(modern, { slots, booted: 'a' }), withNotes);
     const outA = prepareSlotFlash(bootedA, 'a', { kind: 'raw', bytes: image, fileName: 'x' });
-    expect(outA.warnings.some((w) => w.includes('bank A is the bank the camera boots now'))).toBe(
+    expect(outA.warnings.some((w) => w.includes('Slot A is the bank the camera boots now'))).toBe(
       true,
     );
     /* The camera's notes and the bank's own are notes, not warnings, each with where it comes from
@@ -859,7 +859,7 @@ describe('prepareSlotFlash warnings', () => {
 
     const recovery = reportFor(stateFor(modern, { slots, booted: 'a' }), withNotes);
     const outR = prepareSlotFlash(recovery, 'r', { kind: 'raw', bytes: image, fileName: 'x' });
-    expect(outR.warnings.some((w) => w.includes('Recovery bank R'))).toBe(true); // write.ts's words (42.108: left for the merge)
+    expect(outR.warnings.some((w) => w.includes('Recovery R:'))).toBe(true);
     expect(outR.notes).toContainEqual({ source: 'bank', text: 'recovery-only note' });
     expect(outR.notes).toContainEqual({ source: 'camera', text: 'build note one' });
     expect(outA.notes.some((note) => note.text === 'recovery-only note')).toBe(false);
@@ -874,12 +874,11 @@ describe('prepareSlotFlash warnings', () => {
       expect(out.warnings.join('\n')).not.toContain('acknowledgeRisk');
     }
     expect(outA.warnings).toContain(
-      'bank A is the bank the camera boots now: writing it asks you to acknowledge the risk, and the ' +
+      'Slot A is the bank the camera boots now: writing it asks you to acknowledge the risk, and the ' +
         'camera runs whatever it holds after the next power cycle.',
     );
-    // write.ts's words, "bank A" and "Recovery bank R" (42.108: left for the merge).
     expect(outR.warnings).toContain(
-      'Recovery bank R: writing it asks you to acknowledge the risk. Nothing here checks that the ' +
+      'Recovery R: writing it asks you to acknowledge the risk. Nothing here checks that the ' +
         'camera boots afterwards.',
     );
   });
@@ -895,11 +894,11 @@ describe('prepareSlotFlash warnings', () => {
     );
     const out = prepareSlotFlash(plain, 'a', { kind: 'raw', bytes: image, fileName: 'x' });
     expect(out.warnings).toContain(
-      `${bootsNowOf('bank A')}: writing it asks you to acknowledge the risk, and the camera runs whatever ` +
+      `${bootsNowOf('Slot A')}: writing it asks you to acknowledge the risk, and the camera runs whatever ` +
         'it holds after the next power cycle.',
     );
     expect(out.warnings.join('\n')).not.toContain('active-slot word');
-    expect(bootsNowOf('bank A')).toBe('bank A is the bank the camera boots now');
+    expect(bootsNowOf('Slot A')).toBe('Slot A is the bank the camera boots now');
   });
 
   /* The rekey warning (write.ts, key-a branch; TESTING.md 42.50): the target accepts, has its footer, and

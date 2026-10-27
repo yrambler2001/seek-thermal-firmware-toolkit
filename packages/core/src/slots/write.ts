@@ -77,6 +77,7 @@ import {
   slotRefused,
   type StagedBytes,
 } from './write-image.js';
+import { bankNameOf } from '../profiles/locked-boot.js';
 import { bootsNowOf } from './booted-words.js';
 import { imageBuildWarningOf } from './image-build.js';
 import { FF_1308_VERSION } from './capability-family.js';
@@ -162,9 +163,8 @@ function ackNeeded(report: SlotsReport, key: SlotKey): string | null {
   const boot = report.state.boot;
   if (boot === null)
     return 'the booted bank could not be named, so this one is treated as the booted one';
-  if (boot.booted === key)
-    return bootsNowOf(key === 'r' ? 'recovery bank R' : `bank ${key.toUpperCase()}`);
-  if (key === 'r') return 'recovery bank R is the last-resort copy the bootloader falls back to';
+  if (boot.booted === key) return bootsNowOf(bankNameOf(key));
+  if (key === 'r') return 'Recovery R is the last-resort copy the bootloader falls back to';
   return null;
 }
 
@@ -317,7 +317,7 @@ export function prepareSlotFlash(
   const slot = slotByKey(state, key);
   if (slot === null || slot.unread) {
     throw slotRefused(
-      `slot ${entry.name} was not read (${unreadWhy(report, key)}), so nothing can be written ` +
+      `${entry.name} was not read (${unreadWhy(report, key)}), so nothing can be written ` +
         'on the strength of it',
     );
   }
@@ -485,7 +485,7 @@ export function prepareSlotFlash(
 
   if (key === 'r') {
     warnings.push(
-      'Recovery bank R: writing it asks you to acknowledge the risk. Nothing here checks that the camera boots afterwards.',
+      'Recovery R: writing it asks you to acknowledge the risk. Nothing here checks that the camera boots afterwards.',
     );
   }
   const risk = ackNeeded(report, key);

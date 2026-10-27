@@ -2874,7 +2874,7 @@ describe('slots patch-fps all', () => {
           results: [writtenResult(backup, 'b')],
           stopped: {
             key: 'r',
-            reason: 'Recovery bank R: CompleteMemoryUpgrade returned 0x00040005',
+            reason: 'Recovery R: CompleteMemoryUpgrade returned 0x00040005',
           },
           unwritten: ['a'],
         };
@@ -2900,7 +2900,7 @@ describe('slots patch-fps all', () => {
     ).catch((caught: unknown) => caught);
     expect((error as CliError).code).toBe('slots/verify-failed');
     expect((error as CliError).message).toBe(
-      'stopped at recovery R: Recovery bank R: CompleteMemoryUpgrade returned 0x00040005',
+      'stopped at recovery R: Recovery R: CompleteMemoryUpgrade returned 0x00040005',
     );
     expect(await readdir(dir)).toEqual([backup.fileName]);
     const text = test.stdout.text + test.stderr.text;

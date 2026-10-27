@@ -1332,7 +1332,7 @@ describe('SlotsView: the frame-rate row action', () => {
       },
     });
     const warning =
-      'bank A is the bank the camera boots now: writing it asks you to acknowledge the risk, and the camera runs whatever it holds after the next power cycle.';
+      'Slot A is the bank the camera boots now: writing it asks you to acknowledge the risk, and the camera runs whatever it holds after the next power cycle.';
     const booted = view(panel({ plan, report, pending: pendingFor('a', [warning]) }));
     const text = booted.container.textContent;
     expect(plan.notes.length).toBeGreaterThan(0);
@@ -1351,7 +1351,7 @@ describe('SlotsView: the frame-rate row action', () => {
       panel({
         plan,
         report,
-        pending: pendingFor('r', ['Recovery bank R: writing it asks you to acknowledge the risk.']),
+        pending: pendingFor('r', ['Recovery R: writing it asks you to acknowledge the risk.']),
       }),
     );
     const rNote = plan.slots.find((entry) => entry.key === 'r')?.notes[0] ?? '';

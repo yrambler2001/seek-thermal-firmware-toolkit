@@ -524,7 +524,7 @@ describe('planSlotCopy', () => {
 
   it('keeps the target’s own warnings: recovery R asks the acknowledgement', () => {
     const copy = planSlotCopy(report(), 'a', 'r');
-    expect(copy.plan.warnings.join('\n')).toMatch(/Recovery bank R/); // write.ts's words (42.108: left for the merge)
+    expect(copy.plan.warnings.join('\n')).toMatch(/Recovery R:/);
   });
 
   it('refuses a copy onto itself, and a source with no image to copy', () => {
