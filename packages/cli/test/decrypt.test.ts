@@ -25,7 +25,7 @@ beforeEach(async () => {
   cleanup = temp.cleanup;
   const synthetic = buildSyntheticFlash();
   plain = synthetic.plain;
-  dumpPath = join(dir, 'flash_4m_usb_partial_gap_ff.bin');
+  dumpPath = join(dir, 'flash_dump_original.bin');
   await writeFile(dumpPath, synthetic.flash);
 });
 afterEach(async () => {
@@ -76,7 +76,7 @@ describe('seek-fw decrypt file', () => {
        * the two front ends write the same document. */
       producer: 'seek-thermal-firmware-dump (seek-fw CLI, modern-4x)',
       flashBase: '0x14000000',
-      source: { fileName: 'flash_4m_usb_partial_gap_ff.bin' },
+      source: { fileName: 'flash_dump_original.bin' },
       family: { id: 'modern-4x' },
     });
 
@@ -101,7 +101,7 @@ describe('seek-fw decrypt file', () => {
       command: 'decrypt',
       ok: true,
       family: 'modern-4x',
-      source: { file: 'flash_4m_usb_partial_gap_ff.bin' },
+      source: { file: 'flash_dump_original.bin' },
     });
     const document = parsed as { slots: { key: string; confidence: string; flash: string }[] };
     expect(document.slots).toHaveLength(1);

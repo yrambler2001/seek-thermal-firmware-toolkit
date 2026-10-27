@@ -468,7 +468,7 @@ describe('PreserveView', () => {
         { backup: 'done', patch: 'done' },
         {
           nextStep: 'commit',
-          buildFamily: 'compact-2016',
+          buildStorage: 'compact-2016',
           buildId: 'compact-pro-1.0.3.0',
           buildLabel: 'Compact Pro 1.0.3.0 (9 Hz)',
           expectedVersion: '1.0.3.0',

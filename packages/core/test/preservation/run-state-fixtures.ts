@@ -95,7 +95,7 @@ export function handRunState(fields: Partial<PreserveRunState> = {}): PreserveRu
     boot: bootFactsOf(),
     banks: { a: bankRecordOf('a'), b: erasedBankOf('b'), r: erasedBankOf('r') },
     expectedVersion: '1.3.0.0',
-    buildFamily: 'v1-2014',
+    buildStorage: 'v1-2014',
     buildId: 'v1-2014',
     buildLabel: 'Compact 1.x firmware (2014)',
     stagedForm: 'plain',

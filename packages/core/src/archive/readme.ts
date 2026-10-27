@@ -178,7 +178,7 @@ export function makeLegacyReadme(manifest: LegacyDumpManifest): string {
 
 /** Original `makeSweepReadme(manifest, legacy)`. `legacy` is now read off `manifest.mode`. */
 export function makeSweepReadme(manifest: SweepManifest): string {
-  const legacy = manifest.mode === 'selector-sweep-legacy';
+  const legacy = manifest.mode === 'all-selectors-legacy';
   return [
     '# Seek Thermal — dump of all selectors' + (legacy ? ' (legacy / unlock token)' : ''),
     '',

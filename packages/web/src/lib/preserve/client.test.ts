@@ -79,7 +79,7 @@ describe('createPreserveRun — the empty, self-sourcing shell', () => {
     expect(created.state.nextStep).toBe('backup');
     expect(created.state.steps).toEqual({});
     /* The build fields fill in when the backup step derives the image. */
-    expect(created.state.buildFamily).toBeUndefined();
+    expect(created.state.buildStorage).toBeUndefined();
     expect(created.state.expectedVersion).toBeUndefined();
     /* No bank, no boot facts and no patch on a fresh run — nothing is read
      * or built before the camera speaks, and the choice resolves after the
@@ -110,7 +110,7 @@ async function stateAfterBackup(plain: Uint8Array): Promise<PreserveRunState> {
   return {
     ...created.state,
     nextStep: 'patch',
-    buildFamily: 'v1-2014',
+    buildStorage: 'v1-2014',
     expectedVersion: '1.3.0.0',
     anchor: 'a',
     boot: preserveBootOf(),

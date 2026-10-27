@@ -24,7 +24,7 @@ import {
   BANK_KEYS,
   PRESERVE_BACKUP_FILE,
   PRESERVE_DUMP_ORIGINAL_FILE,
-  PRESERVE_DUMP_POSTWRITE_FILE,
+  PRESERVE_DUMP_PATCHED_FILE,
   PRESERVE_RUN_STATE_FILE,
   PRESERVE_VERIFY_FILE,
   preserveCaptureFile,
@@ -54,7 +54,7 @@ export type { PreserveStepId } from '@seek-fw/core';
 export {
   PRESERVE_BACKUP_FILE,
   PRESERVE_DUMP_ORIGINAL_FILE,
-  PRESERVE_DUMP_POSTWRITE_FILE,
+  PRESERVE_DUMP_PATCHED_FILE,
   PRESERVE_RUN_STATE_FILE,
   PRESERVE_VERIFY_FILE,
   preserveCaptureFile,
@@ -76,7 +76,7 @@ export const CHECKPOINT_FILES: readonly CheckpointName[] = [
   PRESERVE_BACKUP_FILE,
   ...BANK_KEYS.flatMap((bank: BankKey) => [preserveCaptureFile(bank), preservePlainFile(bank)]),
   ...BANK_KEYS.map(preservePatchedFile),
-  PRESERVE_DUMP_POSTWRITE_FILE,
+  PRESERVE_DUMP_PATCHED_FILE,
   PRESERVE_DUMP_ORIGINAL_FILE,
   PRESERVE_VERIFY_FILE,
 ];
@@ -92,7 +92,7 @@ export const CHECKPOINT_STEP: Readonly<Record<CheckpointName, PreserveStepId>> =
       [preservePatchedFile(bank), 'patch'],
     ]),
   ),
-  [PRESERVE_DUMP_POSTWRITE_FILE]: 'drain',
+  [PRESERVE_DUMP_PATCHED_FILE]: 'drain',
   [PRESERVE_DUMP_ORIGINAL_FILE]: 'drain',
   [PRESERVE_VERIFY_FILE]: 'verify',
 };

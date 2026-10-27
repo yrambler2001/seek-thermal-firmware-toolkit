@@ -10,6 +10,7 @@
 
 import type { ReactElement } from 'react';
 import { CircleStop, FolderArchive, ListFilter, Play, Radar, ShieldCheck } from 'lucide-react';
+import { FLASH_DUMP_ORIGINAL_FILE } from '@seek-fw/core';
 import { CameraIdentity } from '@/components/CameraIdentity';
 import { OpcodeTable, READ_ONLY_OPCODES } from '@/components/OpcodeTable';
 import { OptionsDetails } from '@/components/OptionsDetails';
@@ -35,7 +36,10 @@ import type { DumpPanelApi } from '@/hooks/useDumpPanel';
 import type { OptionField, OptionsForm } from '@/lib/options';
 
 const ARCHIVE: readonly (readonly [string, string])[] = [
-  ['flash_4m_usb_partial_gap_ff.bin', 'the assembled 4 MiB flash image'],
+  [
+    FLASH_DUMP_ORIGINAL_FILE,
+    'the assembled 4 MiB flash image (the gap fill and the unlock token, if used, are in manifest.json)',
+  ],
   ['windows/*.bin', 'each 64 KiB block exactly as it came off the wire'],
   ['decrypted/*.bin', 'every firmware image slot, decrypted (if a key was found)'],
   ['decrypted/*.txt', 'per-slot report: key, key location, family and cipher, SP, entry, SHA-256'],

@@ -103,7 +103,7 @@ function fakeOutcome(step: PreserveStepId, state: PreserveRunState): PreserveSte
       return {
         state: {
           ...base,
-          buildFamily: 'v1-2014',
+          buildStorage: 'v1-2014',
           buildId: 'compact-1.3.0.8-8hz',
           buildLabel: 'Compact 1.3.0.8 (8 Hz)',
           expectedVersion: '1.3.0.8',
@@ -145,7 +145,7 @@ function fakeOutcome(step: PreserveStepId, state: PreserveRunState): PreserveSte
       };
     case 'drain':
       artifacts.push(
-        { name: 'preserve_dump_postwrite.bin', data: utf8('raw') },
+        { name: 'preserve_dump_patched.bin', data: utf8('raw') },
         { name: 'preserve_dump_original.bin', data: utf8('delivered') },
       );
       return {

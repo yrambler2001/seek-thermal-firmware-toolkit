@@ -2628,6 +2628,8 @@ function restorePlanOf(key: SlotKey, stored: Uint8Array, name: string): SlotRest
       from: 'flash-file',
       entry: null,
       identity: { serial: 'SN-1', chipId: '090BE9B6D4E4' },
+      gapFill: null,
+      gaps: [],
     },
     stored,
     storedSha256: 'cd'.repeat(32),

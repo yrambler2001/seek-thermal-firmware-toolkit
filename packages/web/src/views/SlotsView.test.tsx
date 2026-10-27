@@ -924,16 +924,20 @@ describe('SlotsView: an empty bank', () => {
     unmount();
   });
 
-  it('offers "Restore from full flash backup…" on each row, with what it takes', () => {
+  it('offers "Restore from full flash backup (.bin or .zip)…" on each row, with what it takes', () => {
     const { container, unmount } = view(panel({ plan: slotPlan(true), report: slotReport(base) }));
     for (const row of bankRows(container)) {
-      expect(buttonByText(row, 'Restore from full flash backup…').disabled).toBe(false);
+      expect(buttonByText(row, 'Restore from full flash backup (.bin or .zip)…').disabled).toBe(
+        false,
+      );
       expect(row.textContent).toContain(
-        'Pick a full flash backup: the 4 MiB image a J-Link reads, or a Preserve run file that holds the whole flash.',
+        'Pick a full flash backup: a .bin (a whole 4 MiB flash image, such as a J-Link read) or a .zip that ' +
+          'holds one (a Preserve run file, or the zip a Dump & decrypt 4.x/Nano or a Dump all selectors saves).',
       );
     }
     const input = container.querySelector<HTMLInputElement>('#slot-b-restore-file');
     expect(input?.accept).toContain('.zip');
+    expect(input?.accept).toContain('.bin');
     unmount();
   });
 
@@ -944,7 +948,7 @@ describe('SlotsView: an empty bank', () => {
     );
     const row = bankRows(container)[0] as HTMLElement;
     expect(buttonByText(row, 'Copy to slot B').disabled).toBe(true);
-    expect(buttonByText(row, 'Restore from full flash backup…').disabled).toBe(true);
+    expect(buttonByText(row, 'Restore from full flash backup (.bin or .zip)…').disabled).toBe(true);
     expect(row.textContent).toContain('Connect the camera first.');
     unmount();
   });

@@ -554,11 +554,12 @@ export function SlotsView({ slots, connected, busy }: SlotsViewProps): ReactElem
             <strong>Copy to recovery slot R</strong> on a bank row write the firmware that bank
             holds, as this read decrypted it, into the other bank, whatever it holds now. The image
             is staged as any decrypted image is, so the plan and the confirmation are the same as
-            for a file. <strong>Restore from full flash backup</strong> takes a 4 MiB flash image (a
-            J-Link read, or a Preserve run file that holds the whole flash), cuts this bank out of
-            it, decrypts it, and shows the plan; a backup that looks like another camera&apos;s, or
-            another firmware, is said in the plan. A bank that is empty in the backup cannot be
-            restored by a write, and the page says so.
+            for a file. <strong>Restore from full flash backup</strong> takes a .bin (a whole 4 MiB
+            flash image, such as a J-Link read) or a .zip that holds one (a Preserve run file, or
+            the zip a Dump &amp; decrypt 4.x/Nano or a Dump all selectors saves), cuts this bank out
+            of it, decrypts it, and shows the plan; a backup that looks like another camera&apos;s,
+            or another firmware, is said in the plan. A bank that is empty in the backup, or that
+            the dump did not read, cannot be restored by a write, and the page says so.
           </p>
           <p>
             <strong>Make N FPS</strong> on a bank row edits that bank&apos;s image to a higher frame

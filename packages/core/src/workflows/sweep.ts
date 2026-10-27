@@ -23,6 +23,7 @@ import {
   type DecryptionSummary,
   type SelectorRecord,
 } from '../archive/manifest.js';
+import { FLASH_DUMP_ALL_SELECTORS_FILE } from '../archive/flash-files.js';
 import { makeSweepReadme } from '../archive/readme.js';
 import { u16Payload } from '../protocol/client.js';
 import { OP, WINDOW_SIZE } from '../protocol/ops.js';
@@ -108,9 +109,8 @@ export async function runSweep(
   const combined = new Uint8Array(flashSize).fill(args.gapFill);
   const artifacts: Artifact[] = [];
   const selectors: SelectorRecord[] = [];
-  const combinedFile = `flash_4m_selectorsweep_gap_${args.gapFill
-    .toString(16)
-    .padStart(2, '0')}.bin`;
+  /* The gap fill and the channel are in manifest.json. */
+  const combinedFile = FLASH_DUMP_ALL_SELECTORS_FILE;
 
   let armedCount = 0;
   let withData = 0;

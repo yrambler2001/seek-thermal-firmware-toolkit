@@ -34,6 +34,7 @@ import {
   flashSlotWithBackup,
   fpsEveryBankPlan,
   fpsPlanOfBank,
+  fullFlashBackupText,
   fullFlashOf,
   hexUp,
   inspectSlots,
@@ -482,8 +483,9 @@ export interface SlotsPanelApi {
    */
   copyBank: (from: SlotKey, to: SlotKey) => Promise<void>;
   /**
-   * Prepares the restore of bank `key` from a full flash backup file (a 4 MiB flash image, or a Preserve run
-   * file holding one): the bank cut at its address, decrypted, and staged (core `planSlotRestore`). Sends nothing.
+   * Prepares the restore of bank `key` from a full flash backup file (a 4 MiB flash image, or a ZIP holding
+   * one: a Preserve run file, a Dump & decrypt 4.x/Nano zip or a Dump all selectors zip): the bank cut at its
+   * address, decrypted, and staged (core `planSlotRestore`). Sends nothing.
    */
   pickRestore: (key: SlotKey, file: File) => Promise<void>;
   write: (acknowledged: boolean) => Promise<void>;
@@ -911,11 +913,7 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
             (async (report, bank, picked) =>
               planSlotRestore(report, bank, await fullFlashOf(picked.bytes, picked.name)))
           )(current, key, { bytes, name: file.name });
-          log(
-            `${file.name}: a full flash backup (${restore.backup.from === 'preserve-run' ? `the whole flash in a Preserve run file, ${restore.backup.entry ?? ''}` : '4 MiB'}), sha256 ${restore.backup.sha256}; ` +
-              `its identity block names ${restore.backup.identity.serial ?? 'no serial'}`,
-            'detail',
-          );
+          log(fullFlashBackupText(restore.backup), 'detail');
           return {
             plan: restore.plan,
             what: `${pageBankName(current, key)} of ${file.name}`,

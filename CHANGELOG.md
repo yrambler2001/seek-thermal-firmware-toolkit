@@ -19,6 +19,11 @@ the same things. It now covers the 2014 to 2017 cameras as well as the 2018-and-
 - The whole-image write of the old "Firmware and flashing" view is gone. Images are written one bank
   at a time on the Work with firmware slots tab (`seek-fw slots flash`).
 - The original single-file page is no longer in the tree. It is kept at tag `v1.0.0`.
+- The dump's flash image is `flash_dump_original.bin` (1.0.0: `flash_4m_usb_partial_gap_ff.bin`), and
+  the decrypted files are named after it. **Dump all selectors** saves `flash_dump_all_selectors.bin`
+  (1.0.0: `flash_4m_selectorsweep_gap_ff.bin`), and its `manifest.json` mode is `all-selectors` or
+  `all-selectors-legacy` (1.0.0: `selector-sweep`). The gap fill and whether the unlock token was used
+  are no longer in the names; `manifest.json` records both.
 
 ### Added
 
@@ -43,7 +48,9 @@ the same things. It now covers the 2014 to 2017 cameras as well as the 2018-and-
 - **Work with firmware slots** (`seek-fw slots`): list, dump, write, copy and restore one bank (Slot
   A, Slot B or Recovery R) on every build from 0.8.0.0 up. The bank is saved before every write and
   read back after it. Empty banks are listed and can be written. A bank can be restored from a
-  whole-flash backup, with a warning when the backup looks like another camera's or another firmware.
+  whole-flash backup, a .bin or a .zip: a 4 MiB flash image, a Preserve run file, or the zip of
+  **Dump & decrypt 4.x/Nano** or **Dump all selectors**. The plan names the kind of file, and warns
+  when the backup looks like another camera's or another firmware.
 - **Make N FPS** (`seek-fw slots patch-fps`): raises the frame rate of a bank whose image is known —
   32 fps for the Compact 0.8.0.0 to 1.3.0.8 builds on the 2014 chain and for the Compact 4.8.1.7,
   4.8.1.9 and 4.8.2.1 (Compact XR 4.8.2.1 too), 18 fps for the Compact PRO 4.9.1.15, 4.9.2.0, 1.0.3.0

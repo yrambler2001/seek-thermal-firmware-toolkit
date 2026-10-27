@@ -33,7 +33,7 @@ import {
   PHASE_FOLDER,
   PRESERVE_BACKUP_FILE,
   PRESERVE_DUMP_ORIGINAL_FILE,
-  PRESERVE_DUMP_POSTWRITE_FILE,
+  PRESERVE_DUMP_PATCHED_FILE,
   PRESERVE_VERIFY_FILE,
   RUN_STATE_FILE,
   isCheckpointName,
@@ -81,7 +81,7 @@ const CHECKPOINT_WHAT: Readonly<Record<CheckpointName, string>> = {
       ],
     ]),
   ),
-  [PRESERVE_DUMP_POSTWRITE_FILE]:
+  [PRESERVE_DUMP_PATCHED_FILE]:
     'the whole 4 MiB as read, with the patch still in the written firmware banks',
   [PRESERVE_DUMP_ORIGINAL_FILE]:
     "THE COMPLETE IMAGE: the whole 4 MiB with the original firmware banks put back — the camera's original flash",

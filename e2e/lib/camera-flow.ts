@@ -254,7 +254,7 @@ export function checkDumpArchive(dump: DumpRun, want: string = CAMERA_IMAGE_SHA)
   expect(dir).toMatch(/^seek_flash4m_/);
   expect(all).toContain(`${dir}/manifest.json`);
   expect(all).toContain(`${dir}/README.md`);
-  const image = dump.entries.find((e) => /^[^/]+\/flash_4m_usb[^/]*\.bin$/.test(e.name));
+  const image = dump.entries.find((e) => /^[^/]+\/flash_dump_original\.bin$/.test(e.name));
   expect(image?.data.length).toBe(4 * 1024 * 1024);
   checkImageSha(sha256(image?.data ?? new Uint8Array(0)), "the dump's image", want);
 }

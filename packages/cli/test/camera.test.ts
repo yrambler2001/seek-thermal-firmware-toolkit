@@ -543,11 +543,11 @@ describe('seek-fw dump', () => {
     expect(files).toContain('README.md');
     expect(files).toContain('windows');
     expect(files).toContain('decrypted');
-    expect(files).toContain('flash_4m_usb_partial_gap_ff.bin');
+    expect(files).toContain('flash_dump_original.bin');
 
     /* The assembled image is the camera's flash, byte for byte, everywhere a
      * selector reaches. 0x14060000 has none and stays gap-filled. */
-    const combined = await readFile(join(out, 'flash_4m_usb_partial_gap_ff.bin'));
+    const combined = await readFile(join(out, 'flash_dump_original.bin'));
     expect(combined.length).toBe(synthetic.flash.length);
     expect(new Uint8Array(combined.subarray(0, 0x60000))).toEqual(
       synthetic.flash.subarray(0, 0x60000),
@@ -606,7 +606,7 @@ describe('seek-fw dump', () => {
     const files = (await readdir(out)).sort();
     expect(files).toContain('manifest.json');
     expect(files).toContain('README.md');
-    expect(files).toContain('flash_4m_usb_partial_gap_ff.bin');
+    expect(files).toContain('flash_dump_original.bin');
 
     const manifest = JSON.parse(await readFile(join(out, 'manifest.json'), 'utf8')) as {
       cancelled: boolean;

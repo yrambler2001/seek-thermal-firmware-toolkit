@@ -5,7 +5,7 @@
  *   slots dump <a|b|r>             read one bank as stored, and its decrypted image when a key recovers
  *   slots flash <a|b|r> <file>     write one bank: a decrypted image (the default), or --raw bytes
  *   slots copy <from> <to>         write one bank with another bank's image, as the slots read decrypted it
- *   slots restore <bank> <file>    write one bank as a full flash backup (4 MiB, or a Preserve run file) holds it
+ *   slots restore <bank> <file>    write one bank as a full flash backup (a .bin or a .zip) holds it
  *   slots patch-fps <a|b|r|all>    the frame-rate patch of one bank, or of every bank that offers it
  *
  * Core decides everything that makes a write correct: the build's capability matrix, the staging
@@ -61,6 +61,7 @@ import {
   everyBankBootedLast,
   fpsEveryBankPlan,
   fpsPlanOfBank,
+  fullFlashBackupText,
   fullFlashOf,
   hexUp,
   inspectSlots,
@@ -1364,11 +1365,7 @@ async function restoreAction(
         planSlotRestore(r, k, await fullFlashOf(f.bytes, f.name)))
     )(report, key, { bytes, name });
     const backup = restore.backup;
-    ctx.reporter.log(
-      `${name}: ${backup.from === 'preserve-run' ? `the whole flash in a Preserve run file (${backup.entry ?? ''})` : 'a 4 MiB flash image'}, ` +
-        `sha256 ${backup.sha256}; its identity block names ${backup.identity.serial ?? 'no serial'}`,
-      'info',
-    );
+    ctx.reporter.log(fullFlashBackupText(backup), 'info');
     return runPlannedWrite(ctx, ops, report, workflow, {
       command: 'restore',
       plan: restore.plan,

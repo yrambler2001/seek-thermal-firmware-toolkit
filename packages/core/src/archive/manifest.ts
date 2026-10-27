@@ -568,7 +568,7 @@ export function buildLegacyDumpManifest(input: BuildLegacyDumpManifestInput): Le
 export interface SweepManifest {
   readonly startedAt: string;
   readonly finishedAt: string;
-  readonly mode: 'selector-sweep' | 'selector-sweep-legacy';
+  readonly mode: 'all-selectors' | 'all-selectors-legacy';
   readonly vid: string;
   readonly pid: string;
   readonly device: DeviceInfo;
@@ -624,7 +624,7 @@ export function buildSweepManifest(input: BuildSweepManifestInput): SweepManifes
   return {
     startedAt: input.startedAt,
     finishedAt: input.finishedAt,
-    mode: input.legacy ? 'selector-sweep-legacy' : 'selector-sweep',
+    mode: input.legacy ? 'all-selectors-legacy' : 'all-selectors',
     vid: hex(input.vendorId, 4),
     pid: hex(input.productId, 4),
     device: input.device,

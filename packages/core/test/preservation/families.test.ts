@@ -487,7 +487,7 @@ function bytesEqual(a: Uint8Array, b: Uint8Array): boolean {
 /** A hand-built state past the commit, writing `targets`, with the build facts `fields` names. */
 function handState(
   fields: {
-    buildFamily: PreserveFamilyId;
+    buildStorage: PreserveFamilyId;
     buildId?: string;
     stagedForm?: StagedFormId;
     restoreForm?: RestoreFormId;
@@ -523,7 +523,7 @@ describe('the capability table and the commit route, in the gates', () => {
       'byte-exact only to 0x13c00. This run supports backup, patch, commit, restore ' +
       'and verify — the whole-part dump is not one of them (doc 1032 sec. 5).';
     const state = handState({
-      buildFamily: 'compact-2016',
+      buildStorage: 'compact-2016',
       buildId: 'compact-pro-1.0.3.2-9hz',
       capability: { wholePart: false, losslessReadUnit: 128, maxPerArmReach: 0x13c00, note },
     });
@@ -540,7 +540,7 @@ describe('the capability table and the commit route, in the gates', () => {
 
   it('a recovery-only route refuses writing A or B, and stays silent when the run writes R', async () => {
     const ff = {
-      buildFamily: 'v1-2014-ff' as const,
+      buildStorage: 'v1-2014-ff' as const,
       buildId: 'compact-1.3.0.8-ff',
       route: 'recovery-only' as const,
       routeNote: 'the 2014 bootloader rejects the 0xFFFF sum at slots A/B',
@@ -590,7 +590,7 @@ describe('the capability table and the commit route, in the gates', () => {
     }
     const state = handState(
       {
-        buildFamily: 'v1-2014-ff',
+        buildStorage: 'v1-2014-ff',
         buildId: 'compact-1.3.0.8-ff',
         restoreForm: 'none',
       },
@@ -603,7 +603,7 @@ describe('the capability table and the commit route, in the gates', () => {
 
   it('a cipher-family restore needs the factory plaintext; a plain-family restore does not', async () => {
     const cipher = handState({
-      buildFamily: 'compact-2016',
+      buildStorage: 'compact-2016',
       buildId: 'compact-pro-1.0.3.0',
       stagedForm: 'xor-ks0',
     });
@@ -611,7 +611,7 @@ describe('the capability table and the commit route, in the gates', () => {
     expect(refusal).toMatch(/preserve_bank_a_plain\.bin/);
 
     const plainOnly = handState({
-      buildFamily: 'v1-2014',
+      buildStorage: 'v1-2014',
       stagedForm: 'plain',
     });
     const plainRefusal = await describeStepGate('restore', plainOnly, neverLoader);

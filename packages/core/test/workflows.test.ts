@@ -369,7 +369,9 @@ describe('runDump', () => {
     expect(manifest.authChannelBanks).toEqual(
       entries.filter((e) => e.auth === true).map((e) => hex(e.address, 8)),
     );
-    expect(manifest.combinedFile).toContain('legacy');
+    /* One name for every dump: the unlock token and the gap fill are in the manifest, not the name. */
+    expect(manifest.combinedFile).toBe('flash_dump_original.bin');
+    expect(manifest.gapFill).toBe('0xff');
     expect(manifest.safety.join(' ')).toContain('channel-0x12 unlock token');
 
     /* the blocks THIS plan does not reach — for an undecoded build, the ones
@@ -540,7 +542,7 @@ describe('runSweep', () => {
     expect(result.selectorsArmed).toBe(3);
     expect(result.selectorsWithData).toBe(3);
     expect(result.placedInImage).toBe(3);
-    expect(result.manifest.mode).toBe('selector-sweep');
+    expect(result.manifest.mode).toBe('all-selectors');
     expect(namesOf(result.artifacts)).toContain('blocks/subcmd_03_14010000.bin');
 
     const base = 0x14010000 - FLASH_BASE;

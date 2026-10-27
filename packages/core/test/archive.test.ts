@@ -633,7 +633,7 @@ function sampleDumpInput(): BuildDumpManifestInput {
         reason: 'No BeginFirmwareUpgrade selector is exposed for this 64 KiB block.',
       }),
     ],
-    combinedFile: 'flash_4m_usb_partial_gap_ff.bin',
+    combinedFile: 'flash_dump_original.bin',
     decryption: buildDecryptionNotAttempted('disabled in options'),
     usbReadableWindows: 63,
     expectedReadableWindows: 63,
@@ -704,7 +704,7 @@ describe('buildSweepManifest', () => {
       transport: sampleTransport(),
       safety: [],
       selectors: [],
-      combinedFile: 'flash_4m_selectorsweep_gap_ff.bin',
+      combinedFile: 'flash_dump_all_selectors.bin',
       decryption: buildDecryptionNotAttempted('disabled in options'),
       selectorsArmed: 10,
       selectorsWithData: 8,
@@ -712,7 +712,7 @@ describe('buildSweepManifest', () => {
       cancelled: false,
       family: sampleProfile(),
     });
-    expect(manifest.mode).toBe('selector-sweep');
+    expect(manifest.mode).toBe('all-selectors');
     expect(manifest.channel).toBe('0x02');
     expect(manifest.unlockToken).toBeNull();
   });
@@ -735,7 +735,7 @@ describe('buildSweepManifest', () => {
       transport: sampleTransport(),
       safety: [],
       selectors: [],
-      combinedFile: 'flash_4m_selectorsweep_gap_ff.bin',
+      combinedFile: 'flash_dump_all_selectors.bin',
       decryption: buildDecryptionNotAttempted('disabled in options'),
       selectorsArmed: 10,
       selectorsWithData: 8,
@@ -743,7 +743,7 @@ describe('buildSweepManifest', () => {
       cancelled: false,
       family: sampleProfile(),
     });
-    expect(manifest.mode).toBe('selector-sweep-legacy');
+    expect(manifest.mode).toBe('all-selectors-legacy');
     expect(manifest.channel).toBe('0x12 (unlock token)');
     expect(manifest.unlockToken).toBe('01020304');
   });

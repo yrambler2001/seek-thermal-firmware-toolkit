@@ -851,7 +851,7 @@ function runResult(
         ? null
         : {
             id: state.buildId,
-            storage: state.buildFamily ?? null,
+            storage: state.buildStorage ?? null,
             label: state.buildLabel ?? null,
           },
     boot: state.boot ?? null,

@@ -37,7 +37,9 @@ import { copySourceRefusal, planSlotCopy } from '../../src/slots/copy.js';
 import { everyBankBootedLast, everyBankWriteOrder } from '../../src/slots/fps-patch.js';
 import {
   flashIdentityOf,
+  fullFlashBackupText,
   fullFlashOf,
+  fullFlashSourceWords,
   planSlotRestore,
   restoreReadBack,
   restoreReadBackText,
@@ -570,10 +572,130 @@ describe('restore from a full flash backup', () => {
     expect(flashIdentityOf(flashWith(null, {}))).toEqual({ serial: null, chipId: null });
   });
 
-  it('refuses a file that is not a whole flash, and a ZIP that holds none', async () => {
+  it('refuses a file that is not a whole flash, and a ZIP that holds none, naming the three it takes', async () => {
     await expect(fullFlashOf(new Uint8Array(1000), 'x.bin')).rejects.toThrow(/is 1000 B/);
     const other = buildZip([{ name: 'run/README.md', data: utf8('hi') }]);
-    await expect(fullFlashOf(other, 'run.zip')).rejects.toThrow(/holds no whole flash/);
+    await expect(fullFlashOf(other, 'run.zip')).rejects.toThrow(
+      'run.zip holds no whole flash. A ZIP is taken when it is a Preserve run file that holds ' +
+        'preserve_dump_original.bin (once its full-dump step has run), a Dump & decrypt 4.x/Nano zip ' +
+        '(flash_dump_original.bin) or a Dump all selectors zip (flash_dump_all_selectors.bin); this ZIP ' +
+        'holds README.md. Nothing was written.',
+    );
+  });
+
+  it('never takes a run file’s preserve_dump_patched.bin: the flash with the temporary patch in it', async () => {
+    const flash = flashWith(SERIAL, { a: IMAGE_A });
+    const patchedOnly = buildZip([
+      { name: 'preserve_run.json', data: utf8('{}') },
+      { name: '03-patch-dump/preserve_dump_patched.bin', data: flash },
+    ]);
+    await expect(fullFlashOf(patchedOnly, 'run.zip')).rejects.toThrow(
+      'this ZIP holds preserve_run.json, preserve_dump_patched.bin. Its preserve_dump_patched.bin is the ' +
+        "flash with the run's temporary patch in it, so it is not taken. Nothing was written.",
+    );
+    const both = buildZip([
+      { name: '03-patch-dump/preserve_dump_patched.bin', data: new Uint8Array(0x400000) },
+      { name: '03-patch-dump/preserve_dump_original.bin', data: flash },
+    ]);
+    const backup = await fullFlashOf(both, 'run.zip');
+    expect(backup.entry).toBe('03-patch-dump/preserve_dump_original.bin');
+    expect(equalBytes(backup.flash, flash)).toBe(true);
+  });
+
+  it('takes the flash out of a Dump & decrypt 4.x/Nano zip, with its gap fill and gaps; a bank in a gap is refused', async () => {
+    const flash = flashWith(SERIAL, { a: IMAGE_A, r: IMAGE_R });
+    const manifest = {
+      gapFill: '0xff',
+      gaps: [
+        {
+          address: '0x14060000',
+          offset: '0x060000',
+          length: 0x10000,
+          fill: '0xff',
+          reason: 'not reached',
+        },
+      ],
+      windows: [
+        { address: '0x14050000', requested: 0x10000, ok: true },
+        { address: '0x14070000', requested: 0x10000, ok: false, error: 'stall' },
+      ],
+    };
+    const zip = buildZip([
+      { name: 'seek_dump/decrypted/flash_dump_original_decrypted_14050000.bin', data: IMAGE_A },
+      { name: 'seek_dump/flash_dump_original.bin', data: flash },
+      { name: 'seek_dump/manifest.json', data: utf8(JSON.stringify(manifest)) },
+    ]);
+    const backup = await fullFlashOf(zip, 'dump.zip');
+    expect(backup.from).toBe('dump');
+    expect(backup.entry).toBe('seek_dump/flash_dump_original.bin');
+    expect(backup.gapFill).toBe(0xff);
+    expect(backup.gaps).toEqual([
+      { address: 0x14060000, length: 0x10000, reason: 'not reached' },
+      { address: 0x14070000, length: 0x10000, reason: 'its read failed: stall' },
+    ]);
+    expect(fullFlashBackupText(backup)).toBe(
+      `dump.zip: a Dump & decrypt 4.x/Nano zip (the whole flash is its seek_dump/flash_dump_original.bin), ` +
+        `sha256 ${backup.sha256}; its identity block names ${SERIAL}`,
+    );
+    const rep = report();
+    const a = await planSlotRestore(rep, 'a', backup);
+    expect(equalBytes(a.stored, bankOf(IMAGE_A))).toBe(true);
+    expect(a.plan.notes.map((note) => note.text).join('\n')).toContain(
+      'in dump.zip, a Dump & decrypt 4.x/Nano zip (its seek_dump/flash_dump_original.bin): stored sha256',
+    );
+    await expect(planSlotRestore(rep, 'b', backup)).rejects.toThrow(
+      "the backup's Slot B (at 0x14060000) was not read by the dump dump.zip comes from: by its " +
+        'manifest.json, 0x14060000 is a gap (not reached), filled with 0xFF. There is no image to restore. ' +
+        'Nothing was written.',
+    );
+    await expect(planSlotRestore(rep, 'r', backup)).rejects.toThrow(
+      /Recovery R \(at 0x14070000\) was not read by the dump .*0x14070000 is a gap \(its read failed: stall\)/,
+    );
+  });
+
+  it('takes the flash out of a Dump all selectors zip; a bank no selector returned is refused', async () => {
+    const flash = flashWith(SERIAL, { a: IMAGE_A });
+    flash.fill(0x00, 0x60000, 0x70000);
+    const selectors = [
+      { subcmd: '0x07', mappedAddress: '0x14050000', file: 'blocks/subcmd_07_14050000.bin' },
+      { subcmd: '0x08', mappedAddress: '0x14060000', file: null },
+    ];
+    const zip = buildZip([
+      { name: 'sweep/flash_dump_all_selectors.bin', data: flash },
+      {
+        name: 'sweep/manifest.json',
+        data: utf8(JSON.stringify({ mode: 'all-selectors', gapFill: '0x00', selectors })),
+      },
+    ]);
+    const backup = await fullFlashOf(zip, 'all.zip');
+    expect(backup.from).toBe('all-selectors');
+    expect(backup.gapFill).toBe(0);
+    expect(backup.gaps.map((gap) => gap.address)).not.toContain(0x14050000);
+    expect(backup.gaps.map((gap) => gap.address)).toContain(0x14060000);
+    expect(fullFlashSourceWords(backup.from)).toBe('a Dump all selectors zip');
+    const rep = report();
+    expect(equalBytes((await planSlotRestore(rep, 'a', backup)).stored, bankOf(IMAGE_A))).toBe(
+      true,
+    );
+    await expect(planSlotRestore(rep, 'b', backup)).rejects.toThrow(
+      "the backup's Slot B (at 0x14060000) was not read by the dump all.zip comes from: by its " +
+        'manifest.json, 0x14060000 is a gap (no selector with this address returned data), filled with ' +
+        '0x00. There is no image to restore. Nothing was written.',
+    );
+  });
+
+  it('refuses a bank whose every byte is the gap fill when the manifest lists no gap for it', async () => {
+    const flash = flashWith(SERIAL, { a: IMAGE_A });
+    flash.fill(0x00, 0x60000, 0x70000);
+    const zip = buildZip([
+      { name: 'flash_dump_original.bin', data: flash },
+      { name: 'manifest.json', data: utf8(JSON.stringify({ gapFill: '0x00', gaps: [] })) },
+    ]);
+    const backup = await fullFlashOf(zip, 'dump.zip');
+    await expect(planSlotRestore(report(), 'b', backup)).rejects.toThrow(
+      "the backup's Slot B (at 0x14060000) is 0x00 in every byte, the fill the dump writes where it read " +
+        'nothing: the dump did not read this bank. There is no image to restore. Nothing was written.',
+    );
   });
 
   it('takes the whole flash out of a Preserve run file', async () => {
@@ -585,6 +707,7 @@ describe('restore from a full flash backup', () => {
     const backup = await fullFlashOf(zip, 'preserve-run.zip');
     expect(backup.from).toBe('preserve-run');
     expect(backup.entry).toBe('03-patch-dump/preserve_dump_original.bin');
+    expect(backup.gapFill).toBeNull();
     expect(equalBytes(backup.flash, flash)).toBe(true);
     expect(backup.identity.serial).toBe(SERIAL);
   });

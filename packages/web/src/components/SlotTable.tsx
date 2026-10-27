@@ -49,7 +49,7 @@ import {
 /** The same image types the flash view takes. */
 const IMAGE_ACCEPT = '.bin,.img,.rom,application/octet-stream';
 /** A full flash backup: the 4 MiB image, or a Preserve run file (a zip) that holds one. */
-const FULL_FLASH_ACCEPT = '.bin,.img,.rom,.zip,application/octet-stream,application/zip';
+const FULL_FLASH_ACCEPT = '.bin,.zip,application/octet-stream,application/zip';
 
 export interface SlotTableProps {
   readonly report: SlotsReport;
@@ -82,8 +82,9 @@ const COPY_NOTE =
 
 /** What the restore button does, in words. */
 const RESTORE_NOTE =
-  'Pick a full flash backup: the 4 MiB image a J-Link reads, or a Preserve run file that holds the whole ' +
-  'flash. This bank is cut out of it, decrypted, and shown as a plan before anything is sent.';
+  'Pick a full flash backup: a .bin (a whole 4 MiB flash image, such as a J-Link read) or a .zip that ' +
+  'holds one (a Preserve run file, or the zip a Dump & decrypt 4.x/Nano or a Dump all selectors saves). ' +
+  'This bank is cut out of it, decrypted, and shown as a plan before anything is sent.';
 
 /**
  * Why a bank offers no frame-rate patch, in the page's words, or null when there is nothing to say (a
@@ -402,7 +403,7 @@ export function SlotTable({
                       id={`slot-${key}-restore-file`}
                       variant="outline"
                       icon={<ArchiveRestore />}
-                      label="Restore from full flash backup…"
+                      label="Restore from full flash backup (.bin or .zip)…"
                       accept={FULL_FLASH_ACCEPT}
                       disabled={!plainGate.enabled}
                       onPick={(file) => {

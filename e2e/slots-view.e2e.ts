@@ -340,7 +340,7 @@ for (const subject of SUPPORTED) {
               'Flash decrypted image…',
               'Flash raw bytes…',
               ...copies,
-              'Restore from full flash backup…',
+              'Restore from full flash backup (.bin or .zip)…',
               ...(holdsImage && subject.makeFps !== undefined
                 ? [`Make ${String(subject.makeFps)} FPS`]
                 : []),

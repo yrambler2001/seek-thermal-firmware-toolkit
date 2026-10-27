@@ -117,7 +117,7 @@ if (reason !== null) process.stderr.write(`\n[skip] ${title}: ${reason}\n`);
 /** The flash image inside a Dump & decrypt archive. */
 function dumpImageOf(dump: DumpRun): Uint8Array {
   return (
-    dump.entries.find((e) => /^[^/]+\/flash_4m_usb[^/]*\.bin$/.test(e.name))?.data ??
+    dump.entries.find((e) => /^[^/]+\/flash_dump_original\.bin$/.test(e.name))?.data ??
     new Uint8Array(0)
   );
 }
@@ -387,7 +387,7 @@ describe.skipIf(reason !== null)(title, () => {
     expect(state.expectedVersion).toBe(row.version);
     expect(state.buildId).toBe(row.buildId);
     expect(state.buildLabel).toBe(row.buildLabel);
-    expect(state.buildFamily).toBe(row.buildFamily);
+    expect(state.buildStorage).toBe(row.buildStorage);
     /* The default choice writes one bank: the one the next start enters. */
     const key = need(
       state.targets?.length === 1 ? (state.targets[0] ?? null) : null,
@@ -615,7 +615,7 @@ describe.skipIf(reason !== null)(title, () => {
     );
 
     const folder = PHASE_FOLDER['patch-dump'];
-    const raw = entry(run.entries, `${folder}/preserve_dump_postwrite.bin`);
+    const raw = entry(run.entries, `${folder}/preserve_dump_patched.bin`);
     const delivered = entry(run.entries, `${folder}/preserve_dump_original.bin`);
     const rawSha = sha256(raw);
     const deliveredSha = sha256(delivered);

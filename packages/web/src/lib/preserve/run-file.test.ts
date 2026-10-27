@@ -139,7 +139,7 @@ describe('the run-file round trip', () => {
     const all = new Map<CheckpointName, Uint8Array>([
       ...CHECKPOINTS,
       ['preserve_bank_a_patched.bin', utf8('patched')],
-      ['preserve_dump_postwrite.bin', utf8('raw')],
+      ['preserve_dump_patched.bin', utf8('raw')],
       ['preserve_dump_original.bin', utf8('delivered')],
       ['preserve_verify_windows.bin', utf8('re-read')],
     ]);
@@ -153,7 +153,7 @@ describe('the run-file round trip', () => {
       '02-read-build/preserve_bank_a_capture.bin',
       '02-read-build/preserve_bank_a_plain.bin',
       '02-read-build/preserve_bank_a_patched.bin',
-      '03-patch-dump/preserve_dump_postwrite.bin',
+      '03-patch-dump/preserve_dump_patched.bin',
       '03-patch-dump/preserve_dump_original.bin',
       '04-restore-verify/preserve_verify_windows.bin',
       '02-read-build/decrypted/slot.bin',

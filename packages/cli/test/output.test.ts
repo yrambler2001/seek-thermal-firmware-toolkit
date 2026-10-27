@@ -25,7 +25,7 @@ afterEach(async () => {
 });
 
 const ARTIFACTS = [
-  { name: 'flash_4m_usb_partial_gap_ff.bin', data: Uint8Array.from([1, 2, 3, 4]) },
+  { name: 'flash_dump_original.bin', data: Uint8Array.from([1, 2, 3, 4]) },
   { name: 'windows/addr_14030000_subcmd_05.bin', data: Uint8Array.from([5, 6]) },
   { name: 'decrypted/image_decrypted_14030000.bin', data: Uint8Array.from([7]) },
   { name: 'decrypted/decryption_report.txt', data: Uint8Array.from([8, 9]) },

@@ -26,7 +26,7 @@ Firefox and iOS.
 
 | Path                              | What it is                                                                                                                  |
 | --------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| `flash_4m_usb_partial_gap_ff.bin` | the assembled 4 MiB flash image                                                                                             |
+| `flash_dump_original.bin`         | the assembled 4 MiB flash image; the gap fill and whether the unlock token was used are in `manifest.json`                  |
 | `windows/*.bin`                   | each 64 KiB block exactly as it came off the wire                                                                           |
 | `decrypted/*.bin`                 | each firmware image slot, decrypted — named `…-KeyA-<32 hex>-KeyB-<32 hex>` when the image embeds that key pair (see below) |
 | `decrypted/*.txt`                 | per-slot report: key, key location, family and cipher, SP, entry, SHA-256                                                   |
@@ -366,7 +366,7 @@ lands under a key the bootloader cannot try, and the camera stops taking updates
 So a decrypted image is named after the key pair it contains:
 
 ```
-flash_4m_usb_partial_gap_ff_decrypted_14030000-KeyA-f32ad771…-KeyB-997ed6e5….bin
+flash_dump_original_decrypted_14030000-KeyA-f32ad771…-KeyB-997ed6e5….bin
 ```
 
 The suffix is added **only when the keys are genuinely in that image** — checked, not assumed. A decrypted
@@ -507,6 +507,7 @@ seek-fw slots flash b my-image.bin                  # decrypted image, encrypted
 seek-fw slots flash r prepared.bin --raw --acknowledge-risk   # raw staged bytes, verbatim
 seek-fw slots copy a b --dump-dir ./backups                   # bank A's image into bank B
 seek-fw slots restore b whole-flash.bin --dry-run             # bank B as a 4 MiB flash backup holds it
+seek-fw slots restore b camera-flash.zip --dry-run            # the same from a dump zip or a Preserve run file
 seek-fw slots patch-fps a                                     # frame-rate patch: prints the plan, sends nothing
 seek-fw slots patch-fps all --write --acknowledge-risk        # every bank that offers it, booted bank last
 ```
@@ -566,12 +567,19 @@ seek-fw slots patch-fps all --write --acknowledge-risk        # every bank that 
   risk acknowledgement rules do not change (`TESTING.md` §42.8).
 - **Copy and restore.** **Copy to slot A / B / recovery slot R** (`seek-fw slots copy <from> <to>`) writes
   one bank's image, as the read decrypted it, into another bank, filled or empty, staged as any decrypted
-  image is. **Restore from full flash backup…** (`seek-fw slots restore <bank> <file>`) takes a 4 MiB
-  flash image (a J-Link read, for one), or a Preserve run file that holds the whole flash, cuts the bank
-  out at its address, decrypts it, plans it, and after the write says whether the bank reads back as the
-  backup stores it. A backup that looks like another camera's (the serial in its identity block at
-  `0x14020000`), or of another firmware, is a warning; a bank that is empty in the backup cannot be
-  restored by a write (`TESTING.md` §42.91).
+  image is. **Restore from full flash backup (.bin or .zip)…** (`seek-fw slots restore <bank> <file>`)
+  takes a .bin, a whole 4 MiB flash image (a J-Link read, for one), or a .zip that holds one: a Preserve
+  run file (its `preserve_dump_original.bin`; the run's `preserve_dump_patched.bin` holds the temporary
+  patch and is never taken), a Dump & decrypt 4.x/Nano zip (`flash_dump_original.bin`) or a Dump all
+  selectors zip (`flash_dump_all_selectors.bin`). It cuts the bank out at its address, decrypts it, plans
+  it, and after the write says whether the bank reads back as the backup stores it. The plan names the kind
+  of file the flash came from. A backup that looks like another camera's (the serial in its identity block
+  at `0x14020000`), or of another firmware, is a warning; a bank that is empty in the backup cannot be
+  restored by a write (`TESTING.md` §42.91). Neither can a bank the dump did not read: a gap by its
+  `manifest.json` (a block no request reaches, a window whose read failed, or for Dump all selectors a
+  block no selector returned), or a bank whose every byte is a gap fill other than 0xFF. On 4.x the one
+  gap, `0x14060000`, holds no bank, so A, B and R of a 4.x dump zip plan as they do from the flash itself
+  (checked on the emulated Compact PRO 4.9.2.0).
 
 What has been run: the whole path on the emulator for every build from 0.8.0.0 in the corpus
 (`TESTING.md` §41). On **real** hardware: a Compact PRO 1.0.3.0 on a Compact board, a dump of all three

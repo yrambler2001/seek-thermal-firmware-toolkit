@@ -78,7 +78,7 @@ import type { PreserveBankChoice, PreserveBootFacts } from './banks.js';
 import {
   PRESERVE_BACKUP_FILE,
   PRESERVE_DUMP_ORIGINAL_FILE,
-  PRESERVE_DUMP_POSTWRITE_FILE,
+  PRESERVE_DUMP_PATCHED_FILE,
   backupResultFromImage,
   createPreserveRun,
   preserveCaptureFile,
@@ -1276,7 +1276,7 @@ export async function runPreservationPipeline(
    * consumed in asks — TESTING.md sec. 23.3), the patch-live probe afterwards
    * as an advisory on what budget remains. */
   const afterDrain = await runStep('drain');
-  const rawDump = store.get(PRESERVE_DUMP_POSTWRITE_FILE);
+  const rawDump = store.get(PRESERVE_DUMP_PATCHED_FILE);
   const processedDump = store.get(PRESERVE_DUMP_ORIGINAL_FILE);
   if (rawDump === undefined || processedDump === undefined) {
     throw new Error('the drain step produced no dumps');

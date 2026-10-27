@@ -45,7 +45,7 @@ import {
 } from './lib/target-tools.js';
 
 const image = (entries: readonly { name: string; data: Uint8Array }[]): Uint8Array =>
-  entries.find((e) => /^[^/]+\/flash_4m_usb[^/]*\.bin$/.test(e.name))?.data ?? new Uint8Array(0);
+  entries.find((e) => /^[^/]+\/flash_dump_original\.bin$/.test(e.name))?.data ?? new Uint8Array(0);
 
 /** Taking the camera's power away and giving it back, on this target. */
 interface Power {

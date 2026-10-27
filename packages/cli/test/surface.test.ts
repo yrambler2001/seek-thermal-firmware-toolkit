@@ -103,6 +103,21 @@ describe('removed names are unknown commands', () => {
   });
 });
 
+describe('slots restore says what it takes, as the page does', () => {
+  it('a .bin or a .zip: the three ZIPs that hold the whole flash, by their file names', () => {
+    const text = usageFor('slots').replace(/\s+/g, ' ');
+    expect(text).toContain('write one bank as a full flash backup holds it, a .bin or a .zip');
+    for (const name of [
+      'preserve_dump_original.bin',
+      'flash_dump_original.bin',
+      'flash_dump_all_selectors.bin',
+    ]) {
+      expect(text).toContain(name);
+    }
+    expect(text).not.toContain('preserve_dump_patched.bin');
+  });
+});
+
 describe('a flag a command does not take is refused, before anything runs', () => {
   it.each([
     [['dump', '--family', 'modern-4x'], "--family does not apply to 'dump'"],

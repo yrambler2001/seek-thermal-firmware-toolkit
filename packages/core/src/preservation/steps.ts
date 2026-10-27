@@ -283,8 +283,9 @@ export interface PreserveRunState {
   boot?: PreserveBootFacts;
   /** Every bank as the backup read it, and its patch after the patch step. */
   banks?: Readonly<Record<BankKey, PreserveBankRecord>>;
-  /** The cipher/acceptance family of the run's build. */
-  buildFamily?: PreserveFamilyId;
+  /** How the run's build stores its banks (its cipher and acceptance family), shown as
+   *  `build.storage`; it is only displayed, never used to decide anything. */
+  buildStorage?: PreserveFamilyId;
   /** The version the camera reported at the backup, which the anchor's
    *  derived image agreed with. Every later step requires the camera to
    *  still report it. */
@@ -329,7 +330,7 @@ export interface PreserveRunState {
  * ==================================================================== */
 
 export const PRESERVE_BACKUP_FILE = 'preserve_backup_windows.bin';
-export const PRESERVE_DUMP_POSTWRITE_FILE = 'preserve_dump_postwrite.bin';
+export const PRESERVE_DUMP_PATCHED_FILE = 'preserve_dump_patched.bin';
 export const PRESERVE_DUMP_ORIGINAL_FILE = 'preserve_dump_original.bin';
 /** The verify step's re-read of the 31 windows after the restore, assembled
  *  at its flash addresses like the backup (erased 0xFF between) — the second
@@ -1946,7 +1947,7 @@ async function runBackupStep(
     boot,
     banks: records,
     ...(resolved.banks === null ? {} : { targets: resolved.banks }),
-    buildFamily: anchorPatch.family,
+    buildStorage: anchorPatch.family,
     expectedVersion: version,
     buildId: anchorPatch.buildId,
     buildLabel: anchorPatch.label,
@@ -2478,11 +2479,11 @@ async function runDrainStep(
     })),
   );
   const artifacts: Artifact[] = [
-    named(PRESERVE_DUMP_POSTWRITE_FILE, layout),
+    named(PRESERVE_DUMP_PATCHED_FILE, layout),
     named(PRESERVE_DUMP_ORIGINAL_FILE, delivered),
   ];
   const shas = await shasOf(artifacts);
-  const rawSha = shas.get(PRESERVE_DUMP_POSTWRITE_FILE) ?? '';
+  const rawSha = shas.get(PRESERVE_DUMP_PATCHED_FILE) ?? '';
   const deliveredSha = shas.get(PRESERVE_DUMP_ORIGINAL_FILE) ?? '';
   const servedNote =
     rotationBase === null

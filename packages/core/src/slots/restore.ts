@@ -1,12 +1,19 @@
 /* ==================================================================== *
- * Restoring one bank from a full flash backup: the 4 MiB image a J-Link reads (or the whole flash a
- * Preserve run file holds), the bank cut out at its address for this camera's line, decrypted with the
- * slot-file decryption (`decryptSlotFile`, the keystream recovered from the bank's own bytes), and staged
- * as a decrypted image, so every rule of a decrypted-image write applies.
+ * Restoring one bank from a full flash backup: the 4 MiB image a J-Link reads, or the whole flash inside a
+ * ZIP (a Preserve run file's `preserve_dump_original.bin`, a Dump & decrypt 4.x/Nano zip's
+ * `flash_dump_original.bin`, a Dump all selectors zip's `flash_dump_all_selectors.bin`), the bank cut out
+ * at its address for this camera's line, decrypted with the slot-file decryption (`decryptSlotFile`, the
+ * keystream recovered from the bank's own bytes), and staged as a decrypted image, so every rule of a
+ * decrypted-image write applies. A run file's `preserve_dump_patched.bin` is never taken: it holds the
+ * run's temporary patch.
  *
  * WHAT IS CHECKED, AND WHAT ONLY WARNS (the page and the CLI warn, never gate):
- *   - a file that is not a whole flash (4 MiB, or a Preserve run file holding one) is refused: there is no
+ *   - a file that is not a whole flash (4 MiB, or a ZIP holding one of the three) is refused: there is no
  *     bank to cut;
+ *   - a bank the dump did not read (a gap by its manifest.json: a block no request reaches, a window whose
+ *     read failed, a block no selector returned; or a bank whose every byte is a gap fill other than 0xFF)
+ *     is refused: the bytes are the fill, not the bank. On 4.x the one unreachable block, 0x14060000,
+ *     holds no bank, so A, B and R of a 4.x dump are all read;
  *   - a bank that is EMPTY in the backup (all 0xFF) cannot be restored by a write, because a write programs
  *     an image and cannot leave a bank erased: refused, and said so;
  *   - a bank that holds no image, or that no key recovered from it opens, is refused: there is nothing to
@@ -21,8 +28,9 @@
 
 import { sha256hex } from '../bytes.js';
 import { bankWordsOf } from '../profiles/locked-boot.js';
-import { looksLikeZip, readZipEntries } from '../archive/zip-read.js';
-import { PRESERVE_DUMP_ORIGINAL_FILE } from '../preservation/steps.js';
+import { FLASH_DUMP_ALL_SELECTORS_FILE, FLASH_DUMP_ORIGINAL_FILE } from '../archive/flash-files.js';
+import { looksLikeZip, readZipEntries, type ZipEntry } from '../archive/zip-read.js';
+import { PRESERVE_DUMP_ORIGINAL_FILE, PRESERVE_DUMP_PATCHED_FILE } from '../preservation/steps.js';
 import { isDeviceBlockHead, DEVICE_BLOCK_ADDRESS } from '../preservation/windows.js';
 import { decryptSlotFile, type SlotFileDecryption } from './decrypt-file.js';
 import { slotDumpNames } from './dump.js';
@@ -66,6 +74,19 @@ export function flashIdentityOf(flash: Uint8Array): FlashIdentity {
   };
 }
 
+/**
+ * Where a full flash backup's 4 MiB came from: a flash file as it is, or the whole flash inside a Preserve
+ * run file, a Dump & decrypt 4.x/Nano zip, or a Dump all selectors zip.
+ */
+export type FullFlashSource = 'flash-file' | 'preserve-run' | 'dump' | 'all-selectors';
+
+/** A block of the flash the dump did not read, as its manifest.json lists it. */
+export interface FullFlashGap {
+  readonly address: number;
+  readonly length: number;
+  readonly reason: string;
+}
+
 /** A full flash backup, read from a file. */
 export interface FullFlashBackup {
   /** The file the person picked. */
@@ -73,26 +94,152 @@ export interface FullFlashBackup {
   /** The 4 MiB part. */
   readonly flash: Uint8Array;
   readonly sha256: string;
-  /** A flash file as it is, or the whole flash inside a Preserve run file. */
-  readonly from: 'flash-file' | 'preserve-run';
-  /** The entry the flash was taken from, for a Preserve run file. */
+  /** What kind of file the flash came from. */
+  readonly from: FullFlashSource;
+  /** The entry the flash was taken from, for a ZIP. */
   readonly entry: string | null;
   readonly identity: FlashIdentity;
+  /** The byte a dump writes where it read nothing (manifest.json's `gapFill`), or null when not known. */
+  readonly gapFill: number | null;
+  /** The blocks a dump's manifest.json lists as not read (its `gaps`); empty when it lists none. */
+  readonly gaps: readonly FullFlashGap[];
+}
+
+/** The ZIP entries a whole flash is taken from, in the order they are looked for. */
+const FULL_FLASH_ENTRIES: readonly { readonly file: string; readonly from: FullFlashSource }[] = [
+  { file: PRESERVE_DUMP_ORIGINAL_FILE, from: 'preserve-run' },
+  { file: FLASH_DUMP_ORIGINAL_FILE, from: 'dump' },
+  { file: FLASH_DUMP_ALL_SELECTORS_FILE, from: 'all-selectors' },
+];
+
+/** What kind of file a full flash backup is, in words, the same on the page and in the CLI. */
+export function fullFlashSourceWords(from: FullFlashSource): string {
+  switch (from) {
+    case 'flash-file':
+      return 'a 4 MiB flash image';
+    case 'preserve-run':
+      return 'a Preserve run file';
+    case 'dump':
+      return 'a Dump & decrypt 4.x/Nano zip';
+    case 'all-selectors':
+      return 'a Dump all selectors zip';
+  }
+}
+
+/** The line the page logs and the CLI prints when a full flash backup is read: the file, its kind, its identity. */
+export function fullFlashBackupText(backup: FullFlashBackup): string {
+  return (
+    `${backup.fileName}: ${fullFlashSourceWords(backup.from)}` +
+    (backup.entry === null ? '' : ` (the whole flash is its ${backup.entry})`) +
+    `, sha256 ${backup.sha256}; its identity block names ${backup.identity.serial ?? 'no serial'}`
+  );
 }
 
 function baseName(name: string): string {
   return name.slice(name.lastIndexOf('/') + 1);
 }
 
+function numberOf(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isInteger(value)) return value;
+  if (typeof value !== 'string' || !/^(0x)?[0-9a-f]+$/i.test(value)) return null;
+  return Number.parseInt(value.replace(/^0x/i, ''), 16);
+}
+
 /**
- * Reads a full flash backup from a file: a 4 MiB flash image as it is, or a Preserve run file (a ZIP) that
- * holds the whole flash (`preserve_dump_original.bin`, written once the run's full-dump step has run). Throws a
- * refusal for anything else, saying what the file is.
+ * The gap fill and the blocks a dump did not read, from its manifest.json (beside the flash entry, in the
+ * same folder): for Dump & decrypt 4.x/Nano the gaps it lists and every window whose read failed; for Dump
+ * all selectors every 64 KiB block no selector with that address returned data for. A manifest that is not
+ * there or cannot be read gives no gap fill and no gaps.
+ */
+function dumpGapsOf(
+  entries: readonly ZipEntry[],
+  flashEntry: string,
+  from: FullFlashSource,
+): { gapFill: number | null; gaps: FullFlashGap[] } {
+  const folder = flashEntry.slice(0, flashEntry.lastIndexOf('/') + 1);
+  const manifest = entries.find((candidate) => candidate.name === `${folder}manifest.json`);
+  if (manifest === undefined) return { gapFill: null, gaps: [] };
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(new TextDecoder().decode(manifest.data));
+  } catch {
+    return { gapFill: null, gaps: [] };
+  }
+  if (typeof parsed !== 'object' || parsed === null) return { gapFill: null, gaps: [] };
+  const record = parsed as {
+    gapFill?: unknown;
+    gaps?: unknown;
+    windows?: unknown;
+    selectors?: unknown;
+  };
+  const gaps: FullFlashGap[] = [];
+  if (Array.isArray(record.gaps)) {
+    for (const gap of record.gaps as unknown[]) {
+      if (typeof gap !== 'object' || gap === null) continue;
+      const { address, length, reason } = gap as {
+        address?: unknown;
+        length?: unknown;
+        reason?: unknown;
+      };
+      const at = numberOf(address);
+      const size = typeof length === 'number' ? length : null;
+      if (at === null || size === null) continue;
+      gaps.push({ address: at, length: size, reason: typeof reason === 'string' ? reason : '' });
+    }
+  }
+  if (Array.isArray(record.windows)) {
+    for (const window of record.windows as unknown[]) {
+      if (typeof window !== 'object' || window === null) continue;
+      const { address, requested, ok, error } = window as {
+        address?: unknown;
+        requested?: unknown;
+        ok?: unknown;
+        error?: unknown;
+      };
+      const at = numberOf(address);
+      if (ok !== false || at === null) continue;
+      gaps.push({
+        address: at,
+        length: typeof requested === 'number' ? requested : SLOT_BYTES,
+        reason:
+          typeof error === 'string' ? `its read failed: ${error}` : 'its read came back short',
+      });
+    }
+  }
+  if (from === 'all-selectors' && Array.isArray(record.selectors)) {
+    const placed = new Set<number>();
+    for (const selector of record.selectors as unknown[]) {
+      if (typeof selector !== 'object' || selector === null) continue;
+      const { mappedAddress, file } = selector as { mappedAddress?: unknown; file?: unknown };
+      const at = numberOf(mappedAddress);
+      if (at !== null && typeof file === 'string') placed.add(at);
+    }
+    for (let at = FLASH_BASE; at < FLASH_BASE + FULL_FLASH_BYTES; at += SLOT_BYTES) {
+      if (!placed.has(at)) {
+        gaps.push({
+          address: at,
+          length: SLOT_BYTES,
+          reason: 'no selector with this address returned data',
+        });
+      }
+    }
+  }
+  return { gapFill: numberOf(record.gapFill), gaps };
+}
+
+/**
+ * Reads a full flash backup from a file: a 4 MiB flash image as it is, or a ZIP that holds the whole flash:
+ * a Preserve run file (`preserve_dump_original.bin`, written once the run's full-dump step has run), a
+ * Dump & decrypt 4.x/Nano zip (`flash_dump_original.bin`) or a Dump all selectors zip
+ * (`flash_dump_all_selectors.bin`). A run file's `preserve_dump_patched.bin` is never taken. Throws a refusal
+ * for anything else, saying what the file is.
  */
 export async function fullFlashOf(bytes: Uint8Array, fileName: string): Promise<FullFlashBackup> {
   let flash = bytes;
-  let from: FullFlashBackup['from'] = 'flash-file';
+  let from: FullFlashSource = 'flash-file';
   let entry: string | null = null;
+  let gapFill: number | null = null;
+  let gaps: FullFlashGap[] = [];
   if (looksLikeZip(bytes)) {
     let entries;
     try {
@@ -102,26 +249,33 @@ export async function fullFlashOf(bytes: Uint8Array, fileName: string): Promise<
         `${fileName} is a ZIP that cannot be read here (${error instanceof Error ? error.message : String(error)}). Nothing was written.`,
       );
     }
-    const found = entries.find(
-      (candidate) => baseName(candidate.name) === PRESERVE_DUMP_ORIGINAL_FILE,
-    );
+    let found: { entry: ZipEntry; from: FullFlashSource } | undefined;
+    for (const kind of FULL_FLASH_ENTRIES) {
+      const match = entries.find((candidate) => baseName(candidate.name) === kind.file);
+      if (match !== undefined) {
+        found = { entry: match, from: kind.from };
+        break;
+      }
+    }
     if (found === undefined) {
+      const names = entries.map((candidate) => baseName(candidate.name));
       throw slotRefused(
-        `${fileName} holds no whole flash. A Preserve run file holds one (${PRESERVE_DUMP_ORIGINAL_FILE}) ` +
-          'once its full-dump step has run; this ZIP holds ' +
-          `${
-            entries.length === 0
-              ? 'nothing'
-              : entries
-                  .map((candidate) => baseName(candidate.name))
-                  .slice(0, 8)
-                  .join(', ')
-          }. Nothing was written.`,
+        `${fileName} holds no whole flash. A ZIP is taken when it is a Preserve run file that holds ` +
+          `${PRESERVE_DUMP_ORIGINAL_FILE} (once its full-dump step has run), a Dump & decrypt 4.x/Nano zip ` +
+          `(${FLASH_DUMP_ORIGINAL_FILE}) or a Dump all selectors zip (${FLASH_DUMP_ALL_SELECTORS_FILE}); ` +
+          `this ZIP holds ${names.length === 0 ? 'nothing' : names.slice(0, 8).join(', ')}.` +
+          (names.includes(PRESERVE_DUMP_PATCHED_FILE)
+            ? ` Its ${PRESERVE_DUMP_PATCHED_FILE} is the flash with the run's temporary patch in it, so it is not taken.`
+            : '') +
+          ' Nothing was written.',
       );
     }
-    flash = found.data;
-    from = 'preserve-run';
-    entry = found.name;
+    flash = found.entry.data;
+    from = found.from;
+    entry = found.entry.name;
+    if (from === 'dump' || from === 'all-selectors') {
+      ({ gapFill, gaps } = dumpGapsOf(entries, entry, from));
+    }
   }
   if (flash.length !== FULL_FLASH_BYTES) {
     throw slotRefused(
@@ -137,7 +291,13 @@ export async function fullFlashOf(bytes: Uint8Array, fileName: string): Promise<
     from,
     entry,
     identity: flashIdentityOf(flash),
+    gapFill,
+    gaps,
   };
+}
+
+function byteWords(value: number): string {
+  return `0x${value.toString(16).toUpperCase().padStart(2, '0')}`;
 }
 
 /** A restore, planned. */
@@ -181,10 +341,30 @@ export async function planSlotRestore(
   const stored = backup.flash.slice(offset, offset + SLOT_BYTES);
   const storedSha256 = await sha256hex(stored);
   const where = `the backup's ${entry.name} (at 0x${entry.address.toString(16).toUpperCase()})`;
+  const gap = backup.gaps.find(
+    (candidate) =>
+      candidate.address < entry.address + SLOT_BYTES &&
+      entry.address < candidate.address + candidate.length,
+  );
+  if (gap !== undefined) {
+    throw slotRefused(
+      `${where} was not read by the dump ${backup.fileName} comes from: by its manifest.json, ` +
+        `0x${gap.address.toString(16).toUpperCase()} is a gap${gap.reason === '' ? '' : ` (${gap.reason})`}` +
+        `${backup.gapFill === null ? '' : `, filled with ${byteWords(backup.gapFill)}`}. There is no image ` +
+        'to restore. Nothing was written.',
+    );
+  }
   if (stored.every((byte) => byte === 0xff)) {
     throw slotRefused(
       `${where} is empty: every byte is 0xFF. A write programs an image and cannot leave a bank ` +
         'erased, so an empty bank cannot be restored by a write. Nothing was written.',
+    );
+  }
+  const gapFill = backup.gapFill;
+  if (gapFill !== null && stored.every((byte) => byte === gapFill)) {
+    throw slotRefused(
+      `${where} is ${byteWords(gapFill)} in every byte, the fill the dump writes where it read nothing: ` +
+        'the dump did not read this bank. There is no image to restore. Nothing was written.',
     );
   }
   const decryption = await decryptSlotFile(stored, { profile: report.state.profile });
@@ -213,7 +393,8 @@ export async function planSlotRestore(
 
   const warnings: string[] = [];
   const notes: string[] = [
-    `The image is ${where} in ${backup.fileName}${backup.entry === null ? '' : ` (${backup.entry})`}: ` +
+    `The image is ${where} in ${backup.fileName}, ${fullFlashSourceWords(backup.from)}` +
+      `${backup.entry === null ? '' : ` (its ${backup.entry})`}: ` +
       `stored sha256 ${storedSha256}, decrypted to ${version === null ? 'an image' : `firmware ${version}`} of ` +
       `${String(plain.length)} B (sha256 ${decryption.plainSha256 ?? sha256Sync(plain)}).`,
     'After the write, the bank read back is compared with the backup’s stored bank bytes.',

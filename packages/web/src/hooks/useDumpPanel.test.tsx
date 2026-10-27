@@ -173,7 +173,7 @@ describe('useDumpPanel', () => {
     const names = archive.artifacts.map((file) => file.name);
     expect(names).toContain('manifest.json');
     expect(names).toContain('README.md');
-    expect(names).toContain('flash_4m_usb_partial_gap_ff.bin');
+    expect(names).toContain('flash_dump_original.bin');
     expect(names.filter((name) => name.startsWith('windows/')).length).toBeGreaterThan(50);
 
     const status = result.current.panel.reporter.progress.text;
@@ -203,7 +203,7 @@ describe('useDumpPanel', () => {
     if (archive === undefined) throw new Error('no archive');
     const names = archive.artifacts.map((file) => file.name);
     expect(names).toContain('manifest.json');
-    expect(names).toContain('flash_4m_usb_partial_gap_ff.bin');
+    expect(names).toContain('flash_dump_original.bin');
 
     const manifest = archive.artifacts.find((file) => file.name === 'manifest.json');
     if (manifest === undefined) throw new Error('no manifest');

@@ -251,11 +251,11 @@ describe.skipIf(UNAVAILABLE !== null)('the web app on the emulated camera (bridg
 
     const all = names(run.entries);
     const folder = PHASE_FOLDER['patch-dump'];
-    expect(all).toContain(`${folder}/preserve_dump_postwrite.bin`);
+    expect(all).toContain(`${folder}/preserve_dump_patched.bin`);
     expect(all).toContain(`${folder}/preserve_dump_original.bin`);
     expect(all).toContain(`${PHASE_FOLDER['read-build']}/preserve_backup_windows.bin`);
     expect(all.filter((n) => n.startsWith('04-'))).toEqual([]);
-    const raw = entry(run.entries, `${folder}/preserve_dump_postwrite.bin`);
+    const raw = entry(run.entries, `${folder}/preserve_dump_patched.bin`);
     const delivered = entry(run.entries, `${folder}/preserve_dump_original.bin`);
     expect(raw.length).toBe(FLASH_BYTES);
     say(`raw dump sha256 ${sha256(raw)}`);

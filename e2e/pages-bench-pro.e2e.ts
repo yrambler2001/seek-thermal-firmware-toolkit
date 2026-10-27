@@ -288,7 +288,7 @@ const STAGE_BUDGET = Math.ceil(BANK_BYTES / 64) + 64;
 /** The every-bank action's label (TESTING.md 42.91). */
 const EVERY_LABEL = `Make ${String(TO_HZ)} FPS in every bank`;
 /** The restore button's label. */
-const RESTORE_LABEL = 'Restore from full flash backup…';
+const RESTORE_LABEL = 'Restore from full flash backup (.bin or .zip)…';
 
 /* ---------------------------------------------------------------------------------- */
 

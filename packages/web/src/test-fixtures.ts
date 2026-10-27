@@ -316,7 +316,7 @@ export function preserveRunStateOf(overrides: Partial<PreserveRunState> = {}): P
     anchor: 'a',
     boot: preserveBootOf(),
     banks: { a: preserveBankOf('a'), b: preserveErasedBankOf('b'), r: preserveErasedBankOf('r') },
-    buildFamily: 'v1-2014',
+    buildStorage: 'v1-2014',
     expectedVersion: '1.3.0.8',
     buildId: 'compact-1.3.0.8-8hz',
     buildLabel: 'Compact 1.3.0.8 (8 Hz)',

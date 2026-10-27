@@ -34,6 +34,7 @@ import {
   type LegacyDumpManifest,
   type WindowRecord,
 } from '../archive/manifest.js';
+import { FLASH_DUMP_ORIGINAL_FILE } from '../archive/flash-files.js';
 import { makeLegacyReadme, makeReadme } from '../archive/readme.js';
 import { MAX_CONTROL_IN, WINDOW_SIZE } from '../protocol/ops.js';
 import { requireCapability } from '../profiles/registry.js';
@@ -289,9 +290,8 @@ export async function runDump(
   const combined = new Uint8Array(flashSize).fill(args.gapFill);
   const artifacts: Artifact[] = [];
 
-  const combinedFile =
-    `flash_4m_usb${legacy ? '_legacy' : ''}_partial_gap_` +
-    `${args.gapFill.toString(16).padStart(2, '0')}.bin`;
+  /* One name for every dump: the gap fill and the unlock token are in manifest.json. */
+  const combinedFile = FLASH_DUMP_ORIGINAL_FILE;
 
   /* Every block this firmware's table does not reach becomes a gap, with the
    * table's own reason. This is the one list: the modern table contributes

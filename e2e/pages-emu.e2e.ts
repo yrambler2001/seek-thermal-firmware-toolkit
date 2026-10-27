@@ -566,7 +566,7 @@ for (const subject of V4_CAMERAS) {
         const entries = readZip(archive.bytes);
         const dir = names(entries)[0]?.split('/')[0] ?? '';
         expect(dir).toMatch(/^seek_flash4m_/);
-        const image = entries.find((e) => /^[^/]+\/flash_4m_usb[^/]*\.bin$/.test(e.name));
+        const image = entries.find((e) => /^[^/]+\/flash_dump_original\.bin$/.test(e.name));
         expect(image?.data.length).toBe(4 * 1024 * 1024);
         const flash = s.asBootedFlash();
         expect(flash).not.toBeNull();

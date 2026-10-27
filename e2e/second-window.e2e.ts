@@ -48,7 +48,7 @@ import { Wizard, phaseSection, type DumpRun } from './lib/wizard.js';
 
 const imageSha = (dump: DumpRun): string =>
   sha256(
-    dump.entries.find((e) => /^[^/]+\/flash_4m_usb[^/]*\.bin$/.test(e.name))?.data ??
+    dump.entries.find((e) => /^[^/]+\/flash_dump_original\.bin$/.test(e.name))?.data ??
       new Uint8Array(0),
   );
 

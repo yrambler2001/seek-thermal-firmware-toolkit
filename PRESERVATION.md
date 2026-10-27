@@ -227,7 +227,7 @@ Artifacts in the run directory: `preserve_run.json` (the state, rewritten after 
 `preserve_backup_windows.bin` (the backup, assembled at its flash addresses), and for each bank the run
 can write `preserve_bank_<a|b|r>_capture.bin` (its two agreeing reads), `preserve_bank_<a|b|r>_plain.bin`
 (the factory plaintext the backup step derived from it) and `preserve_bank_<a|b|r>_patched.bin` (the
-patched plaintext); `preserve_dump_postwrite.bin` (the part as patched), `preserve_dump_original.bin` (the
+patched plaintext); `preserve_dump_patched.bin` (the part as patched), `preserve_dump_original.bin` (the
 delivered image — the camera's original content), `preserve_verify_windows.bin` (the verify step's re-read
 of the 31 windows), plus `manifest.json`, `README.md` and the decrypted slots under `decrypted/` (the
 backup's dump archive).

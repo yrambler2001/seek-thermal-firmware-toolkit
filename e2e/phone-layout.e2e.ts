@@ -93,7 +93,7 @@ function verifiedRun(): Uint8Array {
       b: erased('b', 0x14060000, 8),
       r: erased('r', 0x14070000, 9),
     },
-    buildFamily: 'v1-2014',
+    buildStorage: 'v1-2014',
     buildId: 'compact-1.3.0.0',
     buildLabel: 'Compact 1.3.0.0',
     expectedVersion: '1.3.0.0',

@@ -20,7 +20,7 @@ import { targetSpec } from './lib/spec.js';
 import { allowStep02Reset, checkImage, refusalsOf, waitForProgress } from './lib/target-tools.js';
 
 const image = (entries: readonly { name: string; data: Uint8Array }[]): Uint8Array =>
-  entries.find((e) => /^[^/]+\/flash_4m_usb[^/]*\.bin$/.test(e.name))?.data ?? new Uint8Array(0);
+  entries.find((e) => /^[^/]+\/flash_dump_original\.bin$/.test(e.name))?.data ?? new Uint8Array(0);
 
 targetSpec({ title: 'cancel mid-read', slug: 'cancel' }, (ctx) => {
   it('connects', async () => {

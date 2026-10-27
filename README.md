@@ -125,7 +125,8 @@ seek-fw slots list                         # 5: after the unplug and replug
 
 1. **Back up the whole flash** on **Dump & decrypt 4.x/Nano**: press **Connect device**, pick the camera
    and press **Start dump**. It only reads. Keep the zip it downloads: it holds the 4 MiB flash image
-   (`flash_4m_usb_partial_gap_ff.bin`) and the decrypted firmware. The one block no request reaches,
+   (`flash_dump_original.bin`) and the decrypted firmware, and to undo you can pick the zip itself in
+   **Restore from full flash backup (.bin or .zip)…**. The one block no request reaches,
    `0x14060000`, holds no bank on this camera
    ([why it costs nothing](HOW_IT_WORKS.md#known-limitation-the-0x14060000-gap-on-4x-and-nano)).
 2. On **Info**, press **Read firmware version**: the firmware is 4.9.2.0.
@@ -199,8 +200,9 @@ CLI: `seek-fw preserve --out ./preserve-run` runs the same steps and asks before
   32 Hz." Then open the camera in the Seek app.
 
 **To undo**, unzip the backup and write each bank's decrypted file back with **Flash decrypted image…** on
-that bank (`seek-fw slots flash a <file> --acknowledge-risk`), or use **Restore from full flash backup…**
-with your preservation run file or 4 MiB flash image (`seek-fw slots restore a <file> --acknowledge-risk`).
+that bank (`seek-fw slots flash a <file> --acknowledge-risk`), or use **Restore from full flash backup
+(.bin or .zip)…** with a 4 MiB flash image, your preservation run file, or the zip of **Dump & decrypt
+4.x/Nano** or **Dump all selectors**, picked as it is (`seek-fw slots restore a <file> --acknowledge-risk`).
 Then unplug and replug the camera.
 
 ### Every build the patch supports
@@ -230,7 +232,7 @@ Compact 1.3.0.0 on the bench runs the current image. Any other build is refused,
   backup in the run file before its first write, and its last step puts the original back and checks it
   (on every build but the 1.3.0.8 FF, whose run leaves its patch in recovery R).
 - **How to restore.** Write the zip's decrypted file back with **Flash decrypted image…**, or use
-  **Restore from full flash backup…** ([undo](#what-make-n-fps-in-every-bank-does), above).
+  **Restore from full flash backup (.bin or .zip)…** ([undo](#what-make-n-fps-in-every-bank-does), above).
 - **What is never written.** The bootloader and the boot-config block. A bank write sends no reset, and the
   camera uses a written bank only after you unplug it and plug it back in (the preservation run restarts
   the camera itself). Writing the bank the camera boots now, or

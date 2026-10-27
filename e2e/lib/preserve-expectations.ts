@@ -58,7 +58,7 @@ export interface PreserveRow {
   } | null;
   /* ---- the plan step 02 builds ------------------------------------------- */
   readonly buildLabel: string;
-  readonly buildFamily: string;
+  readonly buildStorage: string;
   /** The decrypted image the slot holds (the run state's `imageSha256`). */
   readonly imageSha256: string;
   readonly stagedForm: string;
@@ -111,7 +111,7 @@ const COMPACT_1300: PreserveRow = {
   buildId: 'v1-2014',
   derivation: null,
   buildLabel: 'Compact 1.x firmware (2014)',
-  buildFamily: 'v1-2014',
+  buildStorage: 'v1-2014',
   imageSha256: '862717a8a605021def7858ac0c04ad4aa1abe23d357d6c2417699939137f481c',
   stagedForm: 'plain',
   restoreForm: 'capture-verbatim',
@@ -148,7 +148,7 @@ const COMPACT_PRO_1030_PN297: PreserveRow = {
     balanceWord: 0x6322e32a,
   },
   buildLabel: 'Compact Pro 1.0.3.0 (9 Hz)',
-  buildFamily: 'compact-2016',
+  buildStorage: 'compact-2016',
   imageSha256: '68c6333409177ad4c28c758eba4325607c2795986dd08f69297fb6b252dc480b',
   stagedForm: 'xor-ks0',
   restoreForm: 'factory-staged',

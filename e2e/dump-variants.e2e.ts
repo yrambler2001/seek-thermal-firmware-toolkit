@@ -65,7 +65,7 @@ targetSpec({ title: 'Dump & decrypt — variants', slug: 'dump-variants' }, (ctx
      * out. The input is this camera's flash, so a live dump decrypts to the
      * same per-slot plaintext. */
     const live = await w.dumpAndDecrypt(20 * 60_000);
-    const liveImage = live.entries.find((e) => /^[^/]+\/flash_4m_usb[^/]*\.bin$/.test(e.name));
+    const liveImage = live.entries.find((e) => /^[^/]+\/flash_dump_original\.bin$/.test(e.name));
     checkImage(ctx.target(), sha256(liveImage?.data ?? new Uint8Array(0)), 'the live dump');
     const liveSlots = decryptedSlots(live.entries);
     for (const [address, hash] of slots) {

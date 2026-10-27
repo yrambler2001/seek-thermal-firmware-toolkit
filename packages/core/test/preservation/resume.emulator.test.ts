@@ -65,7 +65,7 @@ import { WebUsbTransport } from '../../src/protocol/webusb.js';
 import { FLASH_SIZE } from '../../src/profiles/modern-4x.js';
 import {
   PRESERVE_DUMP_ORIGINAL_FILE,
-  PRESERVE_DUMP_POSTWRITE_FILE,
+  PRESERVE_DUMP_PATCHED_FILE,
   createPreserveRun,
   readVersion,
   runPreserveStep,
@@ -381,7 +381,7 @@ describe.skipIf(UNSUPPORTED !== null)('v1 preservation run — resumed (emulator
       const asbooted = new Uint8Array(readFileSync(asbootedPath));
       expect(sha256(asbooted)).toBe(CORPUS_FLASH_SHA);
       const raw = new Uint8Array(
-        drained.artifacts.find((a) => a.name === PRESERVE_DUMP_POSTWRITE_FILE)!.data,
+        drained.artifacts.find((a) => a.name === PRESERVE_DUMP_PATCHED_FILE)!.data,
       );
       expect(diffOffsets(raw, truth), 'raw dump vs the post-commit state').toEqual([]);
       expect(

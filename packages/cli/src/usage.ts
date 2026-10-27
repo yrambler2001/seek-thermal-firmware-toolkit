@@ -194,7 +194,7 @@ Artifacts in the run directory: preserve_run.json (the state, rewritten after
 every step), preserve_backup_windows.bin, and per bank the run can write
 preserve_bank_<a|b|r>_capture.bin (its two agreeing reads),
 preserve_bank_<a|b|r>_plain.bin (its firmware, as plain bytes) and
-preserve_bank_<a|b|r>_patched.bin; preserve_dump_postwrite.bin (the whole flash
+preserve_bank_<a|b|r>_patched.bin; preserve_dump_patched.bin (the whole flash
 as read, with the patch in it), preserve_dump_original.bin (the complete image,
 with the original firmware put back in), preserve_verify_windows.bin (the
 verify step's second read of the 31 blocks),
@@ -291,12 +291,15 @@ tried. The bootloader and the boot-config block are not banks and are never writ
            you name and does not repoint the camera's boot choice
   copy     write bank <to> with the firmware bank <from> holds, as the slots read
            decrypted it, staged as any decrypted image is; whatever <to> holds now
-  restore  write one bank as a full flash backup holds it: the 4 MiB image a
-           J-Link reads, or a Preserve run file that holds the whole flash. The
-           bank is cut out at its address, decrypted, planned and written, and the
-           read-back is compared with the backup's stored bytes. A backup from
-           another camera, or of another firmware, is a warning; a bank that is
-           empty in the backup cannot be restored by a write
+  restore  write one bank as a full flash backup holds it, a .bin or a .zip: a
+           whole 4 MiB flash image (such as a J-Link read), or a .zip that holds
+           one: a Preserve run file (preserve_dump_original.bin), or the zip a
+           Dump & decrypt 4.x/Nano (flash_dump_original.bin) or a Dump all
+           selectors (flash_dump_all_selectors.bin) saves. The bank is cut out at
+           its address, decrypted, planned and written, and the read-back is
+           compared with the backup's stored bytes. A backup from another camera,
+           or of another firmware, is a warning; a bank that is empty in the
+           backup, or that the dump did not read, cannot be restored by a write
   patch-fps  raise the bank's frame rate by editing its bytes. To 32 fps: the Compact 0.8.0.0,
            0.9.0.2, 0.9.0.6, 0.9.0.7, 0.9.1.0, 0.10.0.0, 1.0.0.0, 1.2.0.0, 1.3.0.0 and 1.3.0.8
            builds on the plain 2014 chain, and the Compact 4.8.1.7, 4.8.1.9 and 4.8.2.1 (the

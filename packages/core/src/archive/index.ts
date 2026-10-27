@@ -3,6 +3,7 @@
 export { crc32 } from './crc32.js';
 export { buildZip, zipEntryCount, zipTotalDataSize } from './zip.js';
 export { looksLikeZip, readZipEntries, type ZipEntry } from './zip-read.js';
+export { FLASH_DUMP_ALL_SELECTORS_FILE, FLASH_DUMP_ORIGINAL_FILE } from './flash-files.js';
 
 export type {
   DeviceInfo,

@@ -48,7 +48,7 @@ import {
   BOOT_CONFIG_BYTES,
   PRESERVE_BACKUP_FILE,
   PRESERVE_DUMP_ORIGINAL_FILE,
-  PRESERVE_DUMP_POSTWRITE_FILE,
+  PRESERVE_DUMP_PATCHED_FILE,
   PRESERVE_STEP_IDS,
   PRESERVE_VERIFY_FILE,
   backupResultFromImage,
@@ -416,7 +416,7 @@ describe('createPreserveRun — the checkpoint document', () => {
       expect(state.choice).toBe('next-start');
       /* The build facts and the banks do not exist yet: the backup step reads
        * them from the camera. */
-      expect(state.buildFamily).toBeUndefined();
+      expect(state.buildStorage).toBeUndefined();
       expect(state.expectedVersion).toBeUndefined();
       expect(state.boot).toBeUndefined();
       expect(state.banks).toBeUndefined();
@@ -585,7 +585,7 @@ describe('runPreserveStep(backup) — the double read and the derived-image gate
       const state = await step('backup', camera, created.state, store);
 
       expect(state.version).toBe(3);
-      expect(state.buildFamily).toBe('v1-2014');
+      expect(state.buildStorage).toBe('v1-2014');
       expect(state.buildId).toBe('v1-2014');
       expect(state.expectedVersion).toBe(EXPECTED_VERSION);
       /* The camera does not answer selector 10, so the bank it runs is the
@@ -792,7 +792,7 @@ describe('runPreserveStep(backup) — the double read and the derived-image gate
       const state = await step('backup', camera, created.state, store);
 
       expect(state.buildId).toBe('compact-0.7.0.7');
-      expect(state.buildFamily).toBe('v1-2014');
+      expect(state.buildStorage).toBe('v1-2014');
       expect(state.expectedVersion).toBe('0.7.0.7');
       const ins = camera.calls.filter((c) => c.direction === 'in');
       expect(ins.some((c) => c.op === OP.GET_FEATURED_DATA)).toBe(true);
@@ -1412,7 +1412,7 @@ describe('describeStepGate — every prerequisite refusal', () => {
       const cipher: PreserveRunState = {
         ...throughCommit,
         stagedForm: 'xor-ks0',
-        buildFamily: 'compact-2016',
+        buildStorage: 'compact-2016',
       };
       const withoutPlain: PreserveRunState = { ...cipher };
       expect(await describeStepGate('restore', cipher, store.load)).toBeNull();
@@ -1858,7 +1858,7 @@ describe('runPreserveStep — the recovery behaviours', () => {
       const delivered = await store.load(PRESERVE_DUMP_ORIGINAL_FILE);
       expect(await sha256hex(delivered!)).toBe(await sha256hex(asBooted));
       /* The raw post-write dump differs exactly at the bank's patch bytes. */
-      const raw = await store.load(PRESERVE_DUMP_POSTWRITE_FILE);
+      const raw = await store.load(PRESERVE_DUMP_PATCHED_FILE);
       let rawDiffs = 0;
       for (let i = 0; i < FLASH_SIZE; i++) {
         if (raw![i] !== asBooted[i]) {
@@ -2184,7 +2184,7 @@ describe('Compact PRO 1.0.3.0 with the board patch — the fake bench camera', (
       expect(state.boot?.entered).toBe('a');
       expect(state.anchor).toBe('a');
       expect(state.expectedVersion).toBe(CP1030_VERSION);
-      expect(state.buildFamily).toBe('compact-2016');
+      expect(state.buildStorage).toBe('compact-2016');
       expect(state.buildId).toBe('compact-pro-1.0.3.0');
       /* The 2016 check: the key is named from A (entered first in the blank
        * word's order, so checked), and every bank is under it. */
@@ -2238,7 +2238,7 @@ describe('Compact PRO 1.0.3.0 with the board patch — the fake bench camera', (
       const afterCommit = new Uint8Array(camera.flash);
 
       state = await step('drain', camera, state, store);
-      expect(await store.load(PRESERVE_DUMP_POSTWRITE_FILE)).toEqual(afterCommit);
+      expect(await store.load(PRESERVE_DUMP_PATCHED_FILE)).toEqual(afterCommit);
       expect(await store.load(PRESERVE_DUMP_ORIGINAL_FILE)).toEqual(asBooted);
 
       state = await step('restore', camera, state, store);
@@ -2490,7 +2490,7 @@ describe('the banks a run writes — the next start, one bank, every bank', () =
       expect(changedBanks(asBooted, camera.flash)).toEqual(['a', 'r']);
 
       state = await step('drain', camera, state, store);
-      const raw = (await store.load(PRESERVE_DUMP_POSTWRITE_FILE))!;
+      const raw = (await store.load(PRESERVE_DUMP_PATCHED_FILE))!;
       expect(changedBanks(asBooted, raw)).toEqual(['a', 'r']);
       expect(await sha256hex((await store.load(PRESERVE_DUMP_ORIGINAL_FILE))!)).toBe(
         await sha256hex(asBooted),

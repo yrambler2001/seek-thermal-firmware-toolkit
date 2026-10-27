@@ -35,7 +35,7 @@ import { WebUsbTransport } from '../../src/protocol/webusb.js';
 import { FLASH_SIZE } from '../../src/profiles/modern-4x.js';
 import {
   PRESERVE_DUMP_ORIGINAL_FILE,
-  PRESERVE_DUMP_POSTWRITE_FILE,
+  PRESERVE_DUMP_PATCHED_FILE,
   buildV1Patch,
   createPreserveRun,
   preservePlainFile,
@@ -372,7 +372,7 @@ async function runOnEmulator(spec: RunSpec): Promise<PreserveRunState> {
     store.keep(drained.outcome);
     state = drained.outcome.state;
     expect(state.drainEntered).toBe(spec.drain);
-    const raw = (await store.load(PRESERVE_DUMP_POSTWRITE_FILE))!;
+    const raw = (await store.load(PRESERVE_DUMP_PATCHED_FILE))!;
     const delivered = (await store.load(PRESERVE_DUMP_ORIGINAL_FILE))!;
     expect(diffOffsets(raw, truth), 'raw dump vs the post-commit part').toEqual([]);
     expect(diffOffsets(delivered, asbooted), 'delivered dump vs the as-booted part').toEqual([]);

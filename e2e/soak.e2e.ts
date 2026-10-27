@@ -15,7 +15,7 @@ import { targetSpec } from './lib/spec.js';
 const N = Math.max(1, Number(process.env.SEEK_E2E_SOAK_N ?? '10'));
 
 const image = (entries: readonly { name: string; data: Uint8Array }[]): Uint8Array =>
-  entries.find((e) => /^[^/]+\/flash_4m_usb[^/]*\.bin$/.test(e.name))?.data ?? new Uint8Array(0);
+  entries.find((e) => /^[^/]+\/flash_dump_original\.bin$/.test(e.name))?.data ?? new Uint8Array(0);
 
 targetSpec({ title: `soak: ${String(N)} dumps`, slug: 'soak' }, (ctx) => {
   it('connects', async () => {

@@ -12,7 +12,10 @@
  *      afterwards shows the target holding the source's image;
  *   3. RESTORE that bank from the full flash backup (bank B; or recovery R when the backup's B is empty,
  *      which the restore refuses as it must): the write commits and reads back as written, and the
- *      read-back is compared with the backup's stored bank bytes (recorded: equal or not, per line);
+ *      read-back is compared with the backup's stored bank bytes (recorded: equal or not, per line).
+ *      The same flash as a Dump & decrypt 4.x/Nano zip (every block the dump cannot reach gap-filled and
+ *      listed in its manifest.json) plans every bank as the flash file does, and refuses a bank in a gap;
+ *      on 4.x the one gap, 0x14060000, holds no bank, so A, B and R all plan as from the flash file;
  *   4. EVERY BANK: the frame-rate patch of every bank that offers it, one zip saved first holding every one
  *      of them, each written in turn (booted bank last) and read back as planned;
  *   5. ResetDevice is never sent, and each commit was announced once (`onCommit`) before it went out.
@@ -24,7 +27,9 @@ import { readFileSync } from 'node:fs';
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { sha256hex } from '../../src/bytes.js';
+import { buildGapRecord } from '../../src/archive/manifest.js';
+import { buildZip } from '../../src/archive/zip.js';
+import { sha256hex, utf8 } from '../../src/bytes.js';
 import { silentReporter } from '../../src/events.js';
 import { errorMessage } from '../../src/errors.js';
 import { getProfile } from '../../src/profiles/registry.js';
@@ -122,6 +127,12 @@ interface Run {
     imageBack: boolean | null;
     notes: string[];
   };
+  /** Each bank's restore plan from the flash file and from the same flash as a dump zip: planned or refused. */
+  dumpZip: {
+    from: string | null;
+    gapBanks: SlotKey[];
+    outcomes: Partial<Record<SlotKey, { file: string; zip: string }>>;
+  };
   every: {
     offered: SlotKey[];
     error: string | null;
@@ -166,6 +177,7 @@ function blankRun(): Run {
       imageBack: null,
       notes: [],
     },
+    dumpZip: { from: null, gapBanks: [], outcomes: {} },
     every: {
       offered: [],
       error: null,
@@ -279,6 +291,48 @@ async function runFirmware(subject: Subject, row: RowEmulators, run: Run): Promi
 
       /* ---- 3. restore ---- */
       const backupFile = await fullFlashOf(flash, 'emulator-flash-out.bin');
+      /* The same flash as a dump zip: what the dump cannot reach is gap fill, listed in manifest.json. */
+      const dumped = flash.slice();
+      const gaps = subject.profile.memory.unreachable.map((range) => {
+        dumped.fill(0xff, range.address - FLASH_BASE, range.address - FLASH_BASE + range.length);
+        return buildGapRecord({
+          address: range.address,
+          flashBase: FLASH_BASE,
+          length: range.length,
+          fill: 0xff,
+          reason: range.reason,
+        });
+      });
+      const fromZip = await fullFlashOf(
+        buildZip([
+          { name: 'dump/flash_dump_original.bin', data: dumped },
+          { name: 'dump/manifest.json', data: utf8(JSON.stringify({ gapFill: '0xff', gaps })) },
+        ]),
+        'dump.zip',
+      );
+      run.dumpZip.from = fromZip.from;
+      const outcome = async (backup: typeof backupFile, bank: SlotKey): Promise<string> => {
+        try {
+          return `planned ${(await planSlotRestore(report, bank, backup)).storedSha256}`;
+        } catch (error) {
+          return `refused: ${errorMessage(error)}`;
+        }
+      };
+      for (const bank of ['a', 'b', 'r'] as const) {
+        const address = report.plan.slots.find((slot) => slot.key === bank)?.address ?? 0;
+        if (
+          subject.profile.memory.unreachable.some(
+            (range) =>
+              range.address < address + BANK_BYTES && address < range.address + range.length,
+          )
+        ) {
+          run.dumpZip.gapBanks.push(bank);
+        }
+        run.dumpZip.outcomes[bank] = {
+          file: await outcome(backupFile, bank),
+          zip: await outcome(fromZip, bank),
+        };
+      }
       let key: SlotKey = to;
       let restore = null;
       try {
@@ -407,6 +461,24 @@ describe.skipIf(!available)(
               `empty-bank refusal: ${String(run.restore.emptyRefusal)}; same camera: ${String(run.restore.sameCamera)}; ` +
               `warnings: ${JSON.stringify(run.restore.warnings)}\n`,
           );
+        });
+
+        it('a dump zip of the same flash: a bank in a gap is refused, every other bank plans as from the flash file', () => {
+          const detail = JSON.stringify(run.dumpZip, null, 1);
+          expect(run.dumpZip.from, detail).toBe('dump');
+          if (subject.version.startsWith('4.')) {
+            expect(run.dumpZip.gapBanks, '4.x: the gap 0x14060000 holds no bank').toEqual([]);
+          }
+          for (const bank of ['a', 'b', 'r'] as const) {
+            const seen = run.dumpZip.outcomes[bank];
+            expect(seen, detail).toBeDefined();
+            if (run.dumpZip.gapBanks.includes(bank)) {
+              expect(seen?.zip, detail).toMatch(/^refused: .*was not read by the dump/);
+            } else {
+              expect(seen?.zip, detail).toBe(seen?.file);
+            }
+          }
+          process.stderr.write(`[copy-restore] ${subject.label}: dump zip: ${detail}\n`);
         });
 
         it('every bank: one zip of every offered bank, each written in turn and read back as planned', () => {
