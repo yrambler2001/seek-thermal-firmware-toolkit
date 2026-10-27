@@ -41,8 +41,8 @@ The **Info** tab tells you which firmware a camera runs and which tab reads it.
 If your camera runs firmware that is not in this table, or runs 1.3.0.8, 4.16, 1.0.3.2 or Mosaic,
 please [open an issue on GitHub](https://github.com/yrambler2001/seek-thermal-firmware-dump/issues/new).
 
-There will be no frame-rate patch for firmware encrypted with AES, on cameras with the LPC43S30FET100
-processor (a CPU with AES built in).
+There will be no frame-rate patch for cameras with the LPC43S30FET100 processor, a CPU with AES built in
+whose firmware is AES-encrypted: there is currently no known way to decrypt that firmware.
 
 "Write a bank" is the Work with firmware slots tab, on every build from 0.8.0.0. The details per build are in
 [HOW_IT_WORKS.md](HOW_IT_WORKS.md#which-cameras) and [PRESERVATION.md](PRESERVATION.md#the-supported-builds).
