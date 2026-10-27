@@ -324,7 +324,9 @@ describe.skipIf(!available)(
             it('prepares the FF image for R on the FF build, unrefused, and sends nothing', () => {
               expect(run.ffPrepare, 'the FF image was prepared').not.toBeNull();
               expect(run.ffPrepare?.refused, run.ffPrepare?.message ?? '').toBe(false);
-              expect(run.ffPrepare?.ffCommit).toBe('takes');
+              /* On this emulator donor the camera's answers do not decide the build (the old flow needed the
+               * person's word here), so the plan says each build's outcome. */
+              expect(run.ffPrepare?.ffCommit).toBe('build-unknown');
               expect(run.ffPrepare?.sent, 'requests sent while preparing').toBe(0);
             });
             it('labels the FF image in R recovery only, and does not call the FF image in A bootable', () => {
