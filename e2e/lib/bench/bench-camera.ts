@@ -235,7 +235,9 @@ export function createBenchCamera(options: BenchCameraOptions): BenchCamera {
       const args = [cliPath, 'slots', 'flash', bank, file, '--yes', '--json'];
       if (options.acknowledgeRisk) args.push('--acknowledge-risk');
       if (dry) {
-        log(`[dry-run] would run: seek-fw slots flash ${bank} ${path.basename(file)} ${args.slice(5).join(' ')}`);
+        log(
+          `[dry-run] would run: seek-fw slots flash ${bank} ${path.basename(file)} ${args.slice(5).join(' ')}`,
+        );
         return { code: 0, result: null, stdout: '', stderr: '' };
       }
       const result = await runCli(process.execPath, args, {
