@@ -728,7 +728,7 @@ describe.skipIf(!available)(
           error: { code: 'slots/refused' },
         });
         expect(String((refusal?.json?.error as Json | undefined)?.message)).toMatch(
-          /bank R is the recovery bank/,
+          /recovery R is the bank the bootloader falls back to/,
         );
         expect(sentOf(refusal?.sent ?? new Map(), STAGE_OP)).toBe(0);
         expect(sentOf(refusal?.sent ?? new Map(), COMMIT_OP)).toBe(0);

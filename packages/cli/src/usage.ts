@@ -272,9 +272,9 @@ Usage
                                       [--no-verify] [--dump-dir <dir>] [options]
 
 Banks: the locked 0.x/1.x line (the 2014 chain, and the 2016 keystream line of
-1.0.3.0 and 1.0.3.2) has A 0x14050000, B 0x14060000 and R 0x14070000. The 4.x line
-(Compact 4.8.x, Compact PRO 4.9.x) has A 0x14030000, B 0x14050000 and R 0x14070000,
-where R is the recovery bank (the locked line's roles are not decoded). Builds
+1.0.3.0 and 1.0.3.2) has slot A at 0x14050000, slot B at 0x14060000 and recovery R
+at 0x14070000. The 4.x line (Compact 4.8.x, Compact PRO 4.9.x) has slot A at
+0x14030000, slot B at 0x14050000 and recovery R at 0x14070000. Builds
 0.8.0.0 and newer only; an older build is reported as unsupported and is never
 tried. The bootloader and the boot-config block are not banks and are never written.
 
@@ -317,7 +317,7 @@ a note of what each file is. The write waits for the zip to be on disk.
   --write                patch-fps: send the patch. Without it the command is a dry run
   --raw                  flash: the file is prepared bytes, staged verbatim
   --acknowledge-risk     flash, copy, restore, patch-fps: needed to write the bank the camera
-                         boots now, or bank R. Without it the write is refused, and nothing
+                         boots now, or recovery R. Without it the write is refused, and nothing
                          is sent
   --no-verify            flash, copy, restore, patch-fps: skip the read-back after the commit
   --dry-run              flash, copy, restore: print the plan and send nothing to the bank
@@ -330,7 +330,7 @@ a note of what each file is. The write waits for the zip to be on disk.
   --out <dir> | --zip <file>  dump: where the bank goes
 
 An EMPTY bank (its header window reads as all 0xFF, as on many 2014 cameras'
-bank B) is a state, not an error. list shows it as 'empty'; dump returns the raw
+slot B) is a state, not an error. list shows it as 'empty'; dump returns the raw
 64 KiB of 0xFF (seek-slot-<bank>-empty-<sha8>.bin) and says there is nothing to
 decrypt; flash writes it like any other bank, and the plan says nothing is
 overwritten. To give it the firmware another bank holds, copy that bank into it
