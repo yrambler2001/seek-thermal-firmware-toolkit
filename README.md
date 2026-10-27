@@ -35,12 +35,12 @@ The **Info** tab tells you which firmware a camera runs and which tab reads it.
 
 ### Compact PRO
 
-| Camera and firmware           | Read and back up the flash                                     | Decrypt | Write a bank | Frame rate     |
-| ----------------------------- | -------------------------------------------------------------- | ------- | ------------ | -------------- |
-| Compact PRO 1.0.3.0           | yes, Dump & decrypt 0.x/1.x                                    | yes     | yes          | 9 fps → 18 fps |
-| Compact PRO 1.0.3.2           | the 31 readable blocks only: no whole-flash read on this build | yes     | yes          | 9 fps → 18 fps |
-| Compact PRO 4.9.1.15, 4.9.2.0 | yes, Dump & decrypt 4.x/Nano                                   | yes     | yes          | 9 fps → 18 fps |
-| Compact PRO 4.18              | yes, Dump & decrypt 4.x/Nano                                   | yes     | yes          | already 18 fps |
+| Camera and firmware           | Read and back up the flash                                                                       | Decrypt | Write a bank | Frame rate     |
+| ----------------------------- | ------------------------------------------------------------------------------------------------ | ------- | ------------ | -------------- |
+| Compact PRO 1.0.3.0           | yes, Dump & decrypt 0.x/1.x                                                                      | yes     | yes          | 9 fps → 18 fps |
+| Compact PRO 1.0.3.2           | the 31 readable blocks only: no whole-flash read on this build (TODO implement whole flash read) | yes     | yes          | 9 fps → 18 fps |
+| Compact PRO 4.9.1.15, 4.9.2.0 | yes, Dump & decrypt 4.x/Nano                                                                     | yes     | yes          | 9 fps → 18 fps |
+| Compact PRO 4.18              | yes, Dump & decrypt 4.x/Nano                                                                     | yes     | yes          | already 18 fps |
 
 ### Nano
 
@@ -55,7 +55,7 @@ The **Info** tab tells you which firmware a camera runs and which tab reads it.
 | ------------------- | ---------------------------- | ------- | ------------ | ---------- |
 | Mosaic              | yes, Dump & decrypt 4.x/Nano | yes     | yes          | no         |
 
-If your camera runs firmware that is not in these tables, or runs 1.3.0.8, 4.16, 1.0.3.2 or Mosaic,
+If your camera runs firmware that is not in these tables, or runs 1.3.0.8, 4.16 or Mosaic,
 please [open an issue on GitHub](https://github.com/yrambler2001/seek-thermal-firmware-dump/issues/new).
 
 There will be no frame-rate patch for cameras with the LPC43S30FET100 processor, a CPU with AES built in
