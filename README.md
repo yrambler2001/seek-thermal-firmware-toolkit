@@ -22,8 +22,8 @@ The **Info** tab tells you which firmware a camera runs and which tab reads it.
 
 | Camera and firmware               | Read and back up the flash                                                    | Decrypt | Write a bank        | Frame rate               |
 | --------------------------------- | ----------------------------------------------------------------------------- | ------- | ------------------- | ------------------------ |
-| Compact 0.3.0.1 to 0.6.0.4 (2014) | no: the firmware has no read command (a J-Link or SPI dump decrypts)          | yes     | no                  | no                       |
-| Compact 0.7.0.7, 0.7.0.8          | yes, Dump & decrypt 0.x/1.x (tested on the emulator only)                     | yes     | no                  | no                       |
+| Compact 0.3.0.1 to 0.6.0.4 (2014) | no: the firmware has no read command (a J-Link or SPI dump decrypts)          | yes     | no                  | no 8 → 32 fps patch yet  |
+| Compact 0.7.0.7, 0.7.0.8          | yes, Dump & decrypt 0.x/1.x (tested on the emulator only)                     | yes     | no                  | no 8 → 32 fps patch yet  |
 | Compact 0.8.0.0 to 0.10.0.0       | yes, Dump & decrypt 0.x/1.x (tested on the emulator only)                     | yes     | yes                 | 8 fps → 32 fps           |
 | Compact 1.0.0.0, 1.2.0.0, 1.3.0.8 | yes, Dump & decrypt 0.x/1.x (tested on the emulator only)                     | yes     | yes                 | 8 fps → 32 fps           |
 | Compact 1.3.0.0                   | yes, Dump & decrypt 0.x/1.x                                                   | yes     | yes                 | 8 fps → 32 fps           |
@@ -38,8 +38,11 @@ The **Info** tab tells you which firmware a camera runs and which tab reads it.
 | Nano 200                          | yes, Dump & decrypt 4.x/Nano                                                  | yes     | yes                 | already 32 fps           |
 | Nano 300                          | yes, Dump & decrypt 4.x/Nano                                                  | yes     | yes                 | already 27 fps           |
 
-If your camera runs firmware that is not in this table, or runs 1.3.0.8 or 4.16, please
-[open an issue on GitHub](https://github.com/yrambler2001/seek-thermal-firmware-dump/issues/new).
+If your camera runs firmware that is not in this table, or runs 1.3.0.8, 4.16, 1.0.3.2 or Mosaic,
+please [open an issue on GitHub](https://github.com/yrambler2001/seek-thermal-firmware-dump/issues/new).
+
+There will be no frame-rate patch for firmware encrypted with AES, on cameras with the LPC43S30FET100
+processor (a CPU with AES built in).
 
 "Write a bank" is the Work with firmware slots tab, on every build from 0.8.0.0. The details per build are in
 [HOW_IT_WORKS.md](HOW_IT_WORKS.md#which-cameras) and [PRESERVATION.md](PRESERVATION.md#the-supported-builds).
