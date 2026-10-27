@@ -16,8 +16,9 @@ export const FF_1308_NOTE =
   'takes it, and each build predicts its own answers from the banks. The FF ' +
   'image is staged as the vendor app stages it, the image XOR the Key A keystream with the header ' +
   'verbatim, and the camera stores it under Key B (the image XOR the Key B keystream). It goes to ' +
-  "A, B or R. A write of it is refused while the camera runs the 8 Hz build, and while the camera's " +
-  'answers cannot tell the builds apart it is refused unless you say the camera runs the 16 Hz build. ' +
+  'A, B or R. The 8 Hz build is expected to refuse it at commit (0x00070100) before it writes ' +
+  "anything; while the camera's answers cannot tell the builds apart, the plan says what each build " +
+  'does with it. ' +
   'UNTESTED: no genuine bootloader for this build is in the corpus, so whether the written bank boots ' +
   'is not measured. On the 0.9.0.0 bootloader the earlier plain form booted from recovery R; this ' +
   'form will not, because recovery runs its bank unchecked and does not decrypt it (TESTING.md 42.12).';

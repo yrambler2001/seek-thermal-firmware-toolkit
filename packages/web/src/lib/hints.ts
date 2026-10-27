@@ -121,9 +121,9 @@ const SEEK_HINTS: Partial<Record<SeekErrorCode, string>> = {
     'The image does not carry the key pair its filename claims. Use the decrypted file exactly ' +
     'as the dump wrote it, name and all.',
   'flash/refused': 'Nothing was written to the camera.',
-  'flash/commit':
-    'The commit was rejected. The camera checks the transfer checksum before it erases ' +
-    'anything, so a rejected commit leaves the flash untouched.',
+  /* 'flash/commit' has no hint: its message says what the commit did to the bank (a refusal before anything
+   * was written, an erase that may have started, or a bank that may be partly written) and that the backup
+   * saved before the write is kept. The old hint said every rejected commit left the flash untouched. */
   'profile/unsupported':
     'Nothing was read or written. Each tab covers one firmware line: 0.x and 1.x cameras go to ' +
     '"Dump & decrypt 0.x/1.x 2014/2016", 4.x and Nano cameras to "Dump & decrypt 4.x/Nano". The ' +

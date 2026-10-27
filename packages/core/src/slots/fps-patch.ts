@@ -63,7 +63,7 @@ import {
 } from './backup.js';
 import { dumpSlot } from './dump.js';
 import { stagingPhrase } from './staging-words.js';
-import { checkSlotFlash, flashSlot, prepareSlotFlash } from './write.js';
+import { checkSlotFlash, flashSlot, prepareSlotFlash, withBackupKept } from './write.js';
 import type {
   DumpedSlot,
   FlashSlotResult,
@@ -182,16 +182,11 @@ function preparePatchedWrite(
   patched: Uint8Array,
   patch: FpsPatch,
 ): SlotFlashPlan {
-  const prepared = prepareSlotFlash(
-    report,
-    key,
-    {
-      kind: 'plain',
-      bytes: patched,
-      fileName: patchedFileName(key, report.state.version, patch.targetHz),
-    },
-    {},
-  );
+  const prepared = prepareSlotFlash(report, key, {
+    kind: 'plain',
+    bytes: patched,
+    fileName: patchedFileName(key, report.state.version, patch.targetHz),
+  });
   if (prepared.storedForm !== undefined) {
     throw refuse(`${name}: the plan stores the image in a form this patch is not written on.`);
   }
@@ -387,10 +382,13 @@ async function sendPatch(
   options: FpsPatchOptions,
 ): Promise<FpsPatchResult> {
   const { key, dumped, patch, patched, changed, plan } = prepared;
+  /* The bank was saved first, so a commit error says the backup is kept (`withBackupKept`). */
   const written = await flashSlot(ctx, report, plan, {
     verify: options.verify !== false,
     acknowledgeRisk: options.acknowledgeRisk,
     ...(options.onCommit === undefined ? {} : { onCommit: options.onCommit }),
+  }).catch((error: unknown) => {
+    throw withBackupKept(error);
   });
   /* (7) the read-back against the bank before the patch. */
   const readBack =

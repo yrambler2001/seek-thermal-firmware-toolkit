@@ -11,7 +11,7 @@
 
 import { hexUp } from '../bytes.js';
 import { slotDumpNames } from './dump.js';
-import { prepareSlotFlash, type PrepareSlotFlashOptions } from './write.js';
+import { prepareSlotFlash } from './write.js';
 import { slotRefused } from './write-image.js';
 import { sha256Sync } from './write-sha.js';
 import type { SlotFlashPlan, SlotKey, SlotsReport } from './types.js';
@@ -61,12 +61,7 @@ export function copySourceRefusal(report: SlotsReport, from: SlotKey): string | 
  * Plans the copy of `from`'s image into `to`. Throws a refusal (nothing sent) for a copy onto itself, for a
  * source with no image to copy, and for everything `prepareSlotFlash` refuses for a decrypted image in `to`.
  */
-export function planSlotCopy(
-  report: SlotsReport,
-  from: SlotKey,
-  to: SlotKey,
-  options: PrepareSlotFlashOptions = {},
-): SlotCopyPlan {
+export function planSlotCopy(report: SlotsReport, from: SlotKey, to: SlotKey): SlotCopyPlan {
   const fromName = nameOf(report, from);
   if (from === to) throw slotRefused(`${fromName} is not copied onto itself. Nothing was written.`);
   const why = copySourceRefusal(report, from);
@@ -85,7 +80,7 @@ export function planSlotCopy(
     report.state.keyTable,
   );
   const fileName = decrypted ?? `seek-slot-${from}-decrypted.bin`;
-  const prepared = prepareSlotFlash(report, to, { kind: 'plain', bytes: plain, fileName }, options);
+  const prepared = prepareSlotFlash(report, to, { kind: 'plain', bytes: plain, fileName });
   const source =
     `${fromName} at ${hexUp(view?.entry.address ?? 0)}` +
     `${version === null ? '' : `, firmware ${version}`}, as the slots read decrypted it`;

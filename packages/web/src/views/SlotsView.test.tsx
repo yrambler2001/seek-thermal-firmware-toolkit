@@ -130,8 +130,6 @@ function panel(over: Partial<SlotsPanelApi> = {}): SlotsPanelApi {
     write: vi.fn((_acknowledged: boolean) => Promise.resolve()),
     discardPending: vi.fn(),
     cancel: vi.fn(),
-    running16Hz: false,
-    setRunning16Hz: vi.fn(),
     unlockNote: false,
     fpsOutcome: null,
     fpsEveryOutcome: null,

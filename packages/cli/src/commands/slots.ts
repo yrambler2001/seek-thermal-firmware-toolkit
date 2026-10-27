@@ -99,7 +99,6 @@ import {
   type WriteAction,
   type WriteBackup,
   type SlotFlashInput,
-  type PrepareSlotFlashOptions,
   type SlotFlashPlan,
   type SlotInputKind,
   type SlotKey,
@@ -132,12 +131,7 @@ import {
 export interface SlotOps {
   inspect(ctx: WorkflowContext): Promise<SlotsReport>;
   dump(ctx: WorkflowContext, report: SlotsReport, key: SlotKey): Promise<DumpedSlot>;
-  prepare(
-    report: SlotsReport,
-    key: SlotKey,
-    input: SlotFlashInput,
-    options?: PrepareSlotFlashOptions,
-  ): SlotFlashPlan;
+  prepare(report: SlotsReport, key: SlotKey, input: SlotFlashInput): SlotFlashPlan;
   /** Saves the target bank first (the backup zip), then writes and reads it back: core `flashSlotWithBackup`. */
   write(
     ctx: WorkflowContext,
@@ -157,17 +151,11 @@ export interface SlotOps {
     report: SlotsReport,
     options: FpsPatchOptions,
   ): Promise<FpsEveryBankResult>;
-  copy?(
-    report: SlotsReport,
-    from: SlotKey,
-    to: SlotKey,
-    options?: PrepareSlotFlashOptions,
-  ): SlotCopyPlan;
+  copy?(report: SlotsReport, from: SlotKey, to: SlotKey): SlotCopyPlan;
   restore?(
     report: SlotsReport,
     key: SlotKey,
     file: { readonly bytes: Uint8Array; readonly name: string },
-    options?: PrepareSlotFlashOptions,
   ): Promise<SlotRestorePlan>;
 }
 
@@ -180,8 +168,8 @@ export const CORE_SLOT_OPS: SlotOps = {
   patchFps: patchBankFps,
   patchEveryFps: patchEveryBankFps,
   copy: planSlotCopy,
-  restore: async (report, key, file, options) =>
-    planSlotRestore(report, key, await fullFlashOf(file.bytes, file.name), options),
+  restore: async (report, key, file) =>
+    planSlotRestore(report, key, await fullFlashOf(file.bytes, file.name)),
 };
 
 /* ==================================================================== *
@@ -210,7 +198,6 @@ const NO_SLOT_FLAGS: SlotFlags = {
   acknowledgeRisk: false,
   verify: true,
   dryRun: false,
-  running16Hz: false,
   write: false,
   dumpDir: null,
 };
@@ -240,7 +227,6 @@ function refuseUnusedFlags(flags: SlotFlags, subcommand: Subcommand): void {
     { on: flags.acknowledgeRisk, name: '--acknowledge-risk' },
     { on: !flags.verify, name: '--no-verify' },
     { on: flags.dryRun, name: '--dry-run' },
-    { on: flags.running16Hz, name: '--running-16hz' },
     { on: flags.write === true, name: '--write' },
     { on: (flags.dumpDir ?? null) !== null, name: '--dump-dir' },
   ];
@@ -248,9 +234,9 @@ function refuseUnusedFlags(flags: SlotFlags, subcommand: Subcommand): void {
   const usedBy: Readonly<Record<Subcommand, readonly string[]>> = {
     list: [],
     dump: [],
-    flash: ['--raw', ...writes, '--dry-run', '--running-16hz'],
-    copy: [...writes, '--dry-run', '--running-16hz'],
-    restore: [...writes, '--dry-run', '--running-16hz'],
+    flash: ['--raw', ...writes, '--dry-run'],
+    copy: [...writes, '--dry-run'],
+    restore: [...writes, '--dry-run'],
     'patch-fps': [...writes, '--write'],
   };
   const unused = flagged.filter((flag) => flag.on && !usedBy[subcommand].includes(flag.name));
@@ -497,17 +483,12 @@ function versionOf(view: SlotView): string | null {
 }
 
 /**
- * What the camera's own per-bank answers say about the build it runs, on 1.3.0.8 (running.ts).
- * Unknown says so, and says what an FF write then needs.
+ * What the camera's own per-bank answers say about the build it runs, on 1.3.0.8 (running.ts). Unknown says
+ * so; a write's plan says what each build does with an FF image (core `ffCommitOf`).
  */
 function runningNote(report: SlotsReport): string {
   const run = runningApplicationOf(report.state);
-  if (run.build === null) {
-    return (
-      `the running build is not known: ${run.why}. A 1.3.0.8 FF (16 Hz) image is refused unless ` +
-      'you pass --running-16hz to say the camera runs the 16 Hz build'
-    );
-  }
+  if (run.build === null) return `the running build is not known: ${run.why}`;
   const build = run.build === 'ff-1308' ? 'the 16 Hz FF 1.3.0.8 build' : 'the 8 Hz 1.3.0.8 build';
   return `the camera runs ${build}: ${run.why}`;
 }
@@ -848,12 +829,6 @@ export function flashPlanLines(
   const ff = plan.staging === 'key-a-keystream' || plan.storedForm === 'key-b-ciphertext';
   const kind =
     plan.kind === 'plain' ? (ff ? 'decrypted 1.3.0.8 FF image' : 'decrypted image') : 'raw bytes';
-  const runningBasis =
-    plan.ffRunning === 'camera'
-      ? "the camera's own answers say it runs the 16 Hz FF build"
-      : plan.ffRunning === 'user'
-        ? "your word (--running-16hz): the camera's answers did not decide the build"
-        : null;
   const chunks = Math.ceil(plan.payload.length / 64);
 
   lines.push(heading('Slot flash plan', color));
@@ -866,7 +841,6 @@ export function flashPlanLines(
       ['  image', `${fileName} — ${kind}`],
       ...(extra.source == null ? [] : [['  image taken from', extra.source]]),
       ['  staging', stagingDetail(plan.staging)],
-      ...(runningBasis === null ? [] : [['  running build', runningBasis]]),
       ...(plan.derivedFrom
         ? [['  key', derivedKeyLine(plan.derivedFrom, `bank ${bankName(plan.derivedFrom.bank)}`)]]
         : []),
@@ -1215,6 +1189,9 @@ async function runPlannedWrite(
     warnings: [...plan.warnings],
     /* The image may not be the build the camera runs: its code is for JSON only; the text is also in warnings. */
     imageBuild: plan.imageBuild,
+    /* What the camera is expected to do at commit with a 1.3.0.8 FF image (core `FFCommitExpectation`), else
+     * null: the code for JSON only; the warnings say it in words. */
+    ffCommit: plan.ffCommit ?? null,
     planNotes: planNotesJson(plan),
   };
 
@@ -1316,12 +1293,7 @@ async function flashAction(
     /* Refused before anything is prepared or sent: the build, the bank, the read, and the booted or
      * recovery bank without the acknowledgement. */
     refuse(flashRefusal(report, key, kind, flags.acknowledgeRisk));
-    const plan = ops.prepare(
-      report,
-      key,
-      { kind, bytes, fileName },
-      { running16Hz: flags.running16Hz },
-    );
+    const plan = ops.prepare(report, key, { kind, bytes, fileName });
     return runPlannedWrite(ctx, ops, report, workflow, {
       command: 'flash',
       plan,
@@ -1347,7 +1319,7 @@ async function copyAction(
     refuse(flashRefusal(report, to, 'plain', flags.acknowledgeRisk));
     const why = copySourceRefusal(report, from);
     if (why !== null) refuse({ message: why, hint: NOTHING_SENT });
-    const copy = (ops.copy ?? planSlotCopy)(report, from, to, { running16Hz: flags.running16Hz });
+    const copy = (ops.copy ?? planSlotCopy)(report, from, to);
     return runPlannedWrite(ctx, ops, report, workflow, {
       command: 'copy',
       plan: copy.plan,
@@ -1376,7 +1348,7 @@ async function restoreAction(
       ops.restore ??
       (async (r: SlotsReport, k: SlotKey, f: { bytes: Uint8Array; name: string }) =>
         planSlotRestore(r, k, await fullFlashOf(f.bytes, f.name)))
-    )(report, key, { bytes, name }, { running16Hz: flags.running16Hz });
+    )(report, key, { bytes, name });
     const backup = restore.backup;
     ctx.reporter.log(
       `${name}: ${backup.from === 'preserve-run' ? `the whole flash in a Preserve run file (${backup.entry ?? ''})` : 'a 4 MiB flash image'}, ` +

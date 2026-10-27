@@ -367,24 +367,6 @@ export function SlotsView({ slots, connected, busy }: SlotsViewProps): ReactElem
           <>
             <DeviceInfoPanel state={report.state} />
             <SlotWriteKeys verdict={writeKeysVerdictOf(report)} />
-            {report.state.version === '1.3.0.8' && (
-              <label className="flex items-start gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  className="mt-1"
-                  checked={slots.running16Hz}
-                  onChange={(event) => {
-                    slots.setRunning16Hz(event.target.checked);
-                  }}
-                />
-                <span>
-                  This camera runs the 16 Hz build. It is used only for the 1.3.0.8 FF image, and
-                  only when the camera&apos;s own answers cannot say which build it runs. If the
-                  choice is wrong, the camera refuses the image with 0x00070100 before it programs
-                  anything.
-                </span>
-              </label>
-            )}
             {bootWarning !== null && (
               <Alert tone="warn">
                 {bootWarning.paragraphs.map((paragraph) => (

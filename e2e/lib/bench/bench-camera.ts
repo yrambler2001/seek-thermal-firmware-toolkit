@@ -234,7 +234,6 @@ export function createBenchCamera(options: BenchCameraOptions): BenchCamera {
     async slotFlash(bank, file, options): Promise<SlotFlashRun> {
       const args = [cliPath, 'slots', 'flash', bank, file, '--yes', '--json'];
       if (options.acknowledgeRisk) args.push('--acknowledge-risk');
-      if (options.running16Hz) args.push('--running-16hz');
       if (dry) {
         log(`[dry-run] would run: seek-fw slots flash ${bank} ${path.basename(file)} ${args.slice(5).join(' ')}`);
         return { code: 0, result: null, stdout: '', stderr: '' };

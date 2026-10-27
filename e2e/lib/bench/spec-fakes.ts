@@ -395,7 +395,7 @@ export function createFakeRig(options: {
       };
     },
 
-    async slotFlash(bank, file, options): Promise<SlotFlashRun> {
+    async slotFlash(bank, file, _options): Promise<SlotFlashRun> {
       /* The fake's write is the CLI's: the FF image lands as the predicted stored form, anything else
        * is refused before a byte is sent. The bank is named by the page's own letter. */
       const image = new Uint8Array(readFileSync(file));
@@ -403,7 +403,7 @@ export function createFakeRig(options: {
         ffImageLength(image) !== null &&
         image.length <= BANK_BYTES &&
         predictedFFStored(image).length === BANK_BYTES;
-      if (!isFf || !options.running16Hz) {
+      if (!isFf) {
         return { code: 1, result: { written: false }, stdout: '', stderr: 'refused (fake)' };
       }
       const offset = LAYOUT[bank] - BENCH_FLASH_BASE;

@@ -598,22 +598,18 @@ async function ffSequence(entry: ManifestEntry): Promise<FFSequence> {
 
       seq.list = await cli(['slots', 'list'], device, emu);
       seq.writtenB = await cli(
-        ['slots', 'flash', 'b', ffFile, '--acknowledge-risk', '--yes', '--running-16hz'],
+        ['slots', 'flash', 'b', ffFile, '--acknowledge-risk', '--yes'],
         device,
         emu,
       );
-      seq.refusedNoAck = await cli(
-        ['slots', 'flash', 'r', ffFile, '--yes', '--running-16hz'],
-        device,
-        emu,
-      );
+      seq.refusedNoAck = await cli(['slots', 'flash', 'r', ffFile, '--yes'], device, emu);
       seq.dryRun = await cli(
-        ['slots', 'flash', 'r', ffFile, '--acknowledge-risk', '--dry-run', '--running-16hz'],
+        ['slots', 'flash', 'r', ffFile, '--acknowledge-risk', '--dry-run'],
         device,
         emu,
       );
       seq.flash = await cli(
-        ['slots', 'flash', 'r', ffFile, '--acknowledge-risk', '--yes', '--running-16hz'],
+        ['slots', 'flash', 'r', ffFile, '--acknowledge-risk', '--yes'],
         device,
         emu,
       );
@@ -703,7 +699,7 @@ describe.skipIf(!available)(
         for (const slot of slots) expect(slot.staging, String(slot.bank)).toBe('plain');
       });
 
-      it('slots flash b <ff> --acknowledge-risk --yes --running-16hz: written in the vendor form, committed, read back', () => {
+      it('slots flash b <ff> --acknowledge-risk --yes: written in the vendor form, committed, read back', () => {
         const written = seq.current.writtenB;
         expect(written?.code, written?.stderr).toBe(EXIT_OK);
         expect(written?.json).toMatchObject({
@@ -748,6 +744,8 @@ describe.skipIf(!available)(
           written: false,
           dryRun: true,
         });
+        /* The FF build may take it: the camera's answers name it, or cannot say (42.107: never refused). */
+        expect(['takes', 'build-unknown']).toContain(dry?.json?.ffCommit);
         /* The payload is the staged image: the file's length, and not the bank's. */
         expect(dry?.json?.payloadBytes).toBe(seq.current.image?.length);
         /* The plan says the bank will hold the solved image, then erased, by its digest. */

@@ -11,21 +11,20 @@
  *   - send ResetDevice (0x59): nothing in this directory calls it;
  *   - write the booted bank, or recovery R, without `acknowledgeRisk` (`flashSlot`
  *     checks it before the first byte is sent);
- *   - write the 1.3.0.8 FF (16 Hz) image while the camera runs the 8 Hz build, which refuses
- *     its payload at commit (`stageImage`, from `runningApplicationOf`), or while the camera's
- *     own answers leave the build unknown and the person has not said it runs the 16 Hz build;
  *   - write a plan whose camera, firmware or address no longer match the
  *     analysis it is checked against (`flashSlot`).
  *
  * WHAT IT WARNS OF AND STILL WRITES: an image that is not the build the camera runs, or whose build
- * cannot be told (`imageBuildWarningOf`, image-build.ts; owner's rule: warn, never gate).
+ * cannot be told (`imageBuildWarningOf`, image-build.ts; owner's rule: warn, never gate); and the
+ * 1.3.0.8 FF (16 Hz) image on a camera that may refuse it at commit or not start it (`ffCommitOf`:
+ * the 8 Hz build, a build its answers cannot name, another version; owner, 2026-10-27).
  *
  * Every window the page arms comes from the report's plan (SlotEntry.write), and
  * every read from SlotEntry.read; no subcommand or address is written here.
  * ==================================================================== */
 
 import { hexUp, sha256hex, hex } from '../bytes.js';
-import type { SeekError } from '../errors.js';
+import { SeekError } from '../errors.js';
 import { transferSum16 } from '../image/bank.js';
 import { FOOTER_TAG } from '../image/header.js';
 import type { CipherProfile, WindowEntry } from '../profiles/types.js';
@@ -40,7 +39,7 @@ import {
 import {
   SLOT_BYTES,
   type FlashSlotOptions,
-  type FFRunningBasis,
+  type FFCommitExpectation,
   type FlashSlotResult,
   type ImageBuildWarning,
   type PlanNote,
@@ -82,7 +81,7 @@ import { bootsNowOf } from './booted-words.js';
 import { imageBuildWarningOf } from './image-build.js';
 import { FF_1308_VERSION } from './capability-family.js';
 import { slotContentOf } from './inspect.js';
-import { runningApplicationOf, type RunningApplication } from './running.js';
+import { plainBankVerdict, runningApplicationOf } from './running.js';
 import { stagingPhrase } from './staging-words.js';
 import { readBackBank, stageAndCommit } from './write-commit.js';
 import { compareReadBack } from './write-verify.js';
@@ -196,39 +195,13 @@ interface Body {
   readonly expectedStored: Uint8Array | null;
   /** How `expectedStored` relates to the payload; absent means 'as-sent'. */
   readonly storedForm?: StoredForm;
-  /** For an FF image (decrypted or raw): how the running build was decided. Null otherwise. */
-  readonly ffRunning?: FFRunningBasis;
-}
-
-/** What the person has said about the camera, beside the input. */
-export interface PrepareSlotFlashOptions {
-  /**
-   * The person says the camera runs the 16 Hz FF build. It is read only when the camera's own
-   * per-bank answers cannot say which build it runs (running.ts); a wrong choice is refused by the
-   * camera with 0x00070100 before it programs anything.
-   */
-  readonly running16Hz?: boolean;
+  /** For an FF image (decrypted or raw): what the camera is expected to do with it at commit. Absent otherwise. */
+  readonly ffCommit?: FFCommitExpectation;
 }
 
 /** The stored-form name the plan gives the Key B bank: the image XOR key block 1, header window verbatim. */
 const KEY_B_STORED_NAME =
   'Key B (the camera re-keys the payload with key block 1 and stores the image under it)';
-
-/**
- * The running build for an FF image, or a refusal. The camera's own answers name the 16 Hz build
- * (use it), name the 8 Hz build (refuse: its gate refuses the payload), or decide nothing (refuse
- * unless the person has said the camera runs the 16 Hz build).
- */
-function ffRunningGate(
-  report: SlotsReport,
-  options: PrepareSlotFlashOptions,
-): { readonly basis: FFRunningBasis; readonly running: RunningApplication } {
-  const running = runningApplicationOf(report.state);
-  if (running.build === 'plain') throw ffRunningRefusal(running);
-  if (running.build === 'ff-1308') return { basis: 'camera', running };
-  if (options.running16Hz === true) return { basis: 'user', running };
-  throw ffRunningUnknownRefusal(running);
-}
 
 /** What is said beside a plan: its warnings (a risk, or a check not made) and this write's own notes. */
 interface PlanWords {
@@ -237,63 +210,88 @@ interface PlanWords {
 }
 
 /**
- * What is said beside an FF image's plan: how the running build was decided, as a note; the untested boot,
- * and a running build the person chose, as warnings. How the image is staged and stored is the plan's own
- * rows' (its staging, `stagingDetail('key-a-keystream')`, and what the bank holds afterwards), so no note
- * says it again (TESTING.md 42.89); a raw payload in the FF form says it in its own note. The payload is not
- * the stored bytes, and no genuine bootloader for this build is in the corpus, so nothing here claims the
- * written bank boots.
+ * What a 2014-chain application does with an FF payload, said after "it": its commit check is the payload's
+ * plain word sum (`image_sum_ok` on the staged bytes). `measured`: the 8 Hz 1.3.0.8 build's refusal was
+ * measured on the earlier staged form; on the other versions it is from the source.
  */
-function ffStagingWords(args: {
-  readonly running: RunningApplication;
-  readonly basis: FFRunningBasis;
-}): PlanWords {
-  const { running, basis } = args;
-  const warnings = [
-    'UNTESTED: no genuine bootloader for the 1.3.0.8 FF build is in the corpus, so whether the ' +
-      'written bank boots is not measured. On the 0.9.0.0 bootloader the old plain form booted from ' +
-      'recovery R; this form will not, because recovery runs the bank unchecked and does not decrypt it ' +
-      '(TESTING.md 42.12). Nothing here claims the camera boots it.',
-  ];
-  const notes: string[] = [];
-  if (basis === 'camera') {
-    notes.push(`The camera's own answers say it runs the 16 Hz FF build: ${running.why}.`);
-  } else {
-    warnings.push(
-      `The camera's own answers did not say which build it runs (${running.why}). You said it runs ` +
-        'the 16 Hz build. If it runs the 8 Hz build, it refuses this payload at commit with ' +
-        '0x00070100 and leaves the bank unchanged, which is what happens when the choice is wrong.',
+function plainChainOutcome(plainTakes: boolean, measured: boolean): string {
+  if (plainTakes) {
+    return (
+      'checks only the plain word sum of a payload before it erases a bank, and this payload passes it, so ' +
+      'it may program these bytes as they are, which its bootloader does not decrypt: the bank may not ' +
+      'start (not tried; the backup saved before the write puts it back)'
     );
   }
-  return { warnings, notes };
-}
-
-/**
- * The refusal for the FF image while the camera runs the 8 Hz application. That application
- * refuses an FF payload at commit with 0x00070100, before it programs anything (its plain word-sum
- * gate, cmd_CompleteMemoryUpgrade case 9, TESTING.md 42.10), so nothing is sent.
- */
-function ffRunningRefusal(running: RunningApplication): SeekError {
-  return slotRefused(
-    'this is the 1.3.0.8 FF (16 Hz) image, but the camera runs the 8 Hz 1.3.0.8 application: ' +
-      `${running.why}. The 8 Hz application refuses an FF payload at commit with 0x00070100, before ` +
-      'it programs anything (its plain word-sum gate, measured for the earlier staged form, ' +
-      'TESTING.md 42.10). Nothing was sent.',
-    { running: running.build },
+  return (
+    'checks the plain word sum of a payload before it erases a bank, and this payload fails it, so it is ' +
+    'expected to refuse this write at commit with 0x00070100 before it writes anything' +
+    (measured ? ' (measured on the earlier staged form, TESTING.md 42.10)' : '')
   );
 }
 
 /**
- * The refusal for the FF image while the camera's answers cannot say which build it runs, unless
- * the person says it runs the 16 Hz build. Nothing is sent.
+ * What the camera is expected to do at commit with a 1.3.0.8 FF image's payload, and the words the plan says
+ * it in. Pure. NEVER A REFUSAL (owner, 2026-10-27: "turn into warnings"): every case is written, and the plan
+ * says what is expected before the confirm. `plainTakes` is whether the payload passes the 2014 chain's commit
+ * check (`plainBankVerdict`, the application's `image_sum_ok` on the staged bytes).
+ *   (a) The camera reports another version: every 2014-chain application this page writes commits a bank
+ *       only past that check (FW-V1 cmd_CompleteMemoryUpgrade, 0.8.0.0 to 1.3.0.0). Not tried on a camera.
+ *       The version fact is the image's build warning (image-build.ts, form 'ff-vendor'); this says what follows.
+ *   (b) Its answers name the 8 Hz build: the same check, measured on the earlier staged form.
+ *   (c) Its answers cannot say: which outcome follows from which build.
+ *   Its answers name the 16 Hz build: it takes the payload, and a note says how that was decided.
+ * The boot of a written FF bank is not measured (no genuine bootloader for the build is in the corpus), so
+ * where the camera may take the payload a warning says nothing here claims it boots.
  */
-function ffRunningUnknownRefusal(running: RunningApplication): SeekError {
-  return slotRefused(
-    `the camera's running build could not be told: ${running.why}. The 1.3.0.8 FF image is refused ` +
-      'by default, because if the camera runs the 8 Hz build it refuses this payload with 0x00070100. ' +
-      'To write it, confirm that this camera runs the 16 Hz build. Nothing was sent.',
-    { running: running.build },
-  );
+export function ffCommitOf(
+  state: DeviceState,
+  plainTakes: boolean,
+): { readonly expect: FFCommitExpectation } & PlanWords {
+  const untested =
+    'UNTESTED: no genuine bootloader for the 1.3.0.8 FF build is in the corpus, so whether the ' +
+    'written bank boots is not measured. On the 0.9.0.0 bootloader the old plain form booted from ' +
+    'recovery R; this form will not, because recovery runs the bank unchecked and does not decrypt it ' +
+    '(TESTING.md 42.12). Nothing here claims the camera boots it.';
+  const plainChain: FFCommitExpectation = plainTakes ? 'programs-as-sent' : 'refuses';
+  if (state.version !== FF_1308_VERSION) {
+    return {
+      expect: plainChain,
+      warnings: [
+        `The 16 Hz FF image is staged in the form only the 16 Hz ${FF_1308_VERSION} build takes, and ` +
+          'writing it to a camera on another version has not been tried. From its source, this camera ' +
+          `${plainChainOutcome(plainTakes, false)}.`,
+      ],
+      notes: [],
+    };
+  }
+  const running = runningApplicationOf(state);
+  if (running.build === 'ff-1308') {
+    return {
+      expect: 'takes',
+      warnings: [untested],
+      notes: [`The camera's own answers say it runs the 16 Hz FF build: ${running.why}.`],
+    };
+  }
+  if (running.build === 'plain') {
+    return {
+      expect: plainChain,
+      warnings: [
+        `The camera runs the 8 Hz ${FF_1308_VERSION} build: ${running.why}. That build ` +
+          `${plainChainOutcome(plainTakes, true)}.`,
+      ],
+      notes: [],
+    };
+  }
+  return {
+    expect: 'build-unknown',
+    warnings: [
+      `The camera's own answers do not say which ${FF_1308_VERSION} build it runs: ${running.why}. If it ` +
+        'runs the 16 Hz FF build, it takes this payload. If it runs the 8 Hz build, that build ' +
+        `${plainChainOutcome(plainTakes, true)}.`,
+      untested,
+    ],
+    notes: [],
+  };
 }
 
 /**
@@ -305,7 +303,6 @@ export function prepareSlotFlash(
   report: SlotsReport,
   key: SlotKey,
   input: SlotFlashInput,
-  options: PrepareSlotFlashOptions = {},
 ): SlotFlashPlan {
   const { state, plan } = report;
   const entry = entryFor(report, key);
@@ -364,7 +361,7 @@ export function prepareSlotFlash(
      * it and it folds to an image carrying the FF key pair. Sent as given all the same; this
      * only decides what the bank is said to hold, and which bank may take it. */
     const folded = entry.staging === 'plain' ? foldedFFPayload(payload) : null;
-    const ffRaw = folded === null ? null : ffRunningGate(report, options);
+    const ff = folded === null ? null : ffCommitOf(state, plainBankVerdict(payload) === 1);
     /* What the bank will hold depends on the form the device decodes the bytes
      * with. The 2014 plain chain programs them as sent (the FF build, the image they
      * fold to), so there the stored bytes are predicted; the encrypting forms
@@ -391,17 +388,17 @@ export function prepareSlotFlash(
             ? bankImageOf(payload, bankBytes)
             : null,
       ...(folded === null ? {} : { storedForm: 'key-b-ciphertext' as const }),
-      ffRunning: ffRaw === null ? null : ffRaw.basis,
+      ...(ff === null ? {} : { ffCommit: ff.expect }),
     };
     imageBuild = imageBuildWarningOf(
       payload,
       state,
-      folded === null && entry.staging === 'plain' ? 'plain-chain' : 'other',
+      ff !== null ? 'ff-vendor' : entry.staging === 'plain' ? 'plain-chain' : 'other',
     );
+    /* What the camera is expected to do with the FF form follows the image's build (put first, below). */
+    if (ff !== null) warnings.push(...ff.warnings);
     warnings.push('Raw payload: sent exactly as given. Nothing here checks that it is bootable.');
-    if (folded !== null && ffRaw !== null) {
-      const ff = ffStagingWords(ffRaw);
-      warnings.push(...ff.warnings);
+    if (ff !== null) {
       writeNotes.push(...ff.notes);
       writeNotes.push(
         'This payload is the 1.3.0.8 FF staged form (the image XOR key block 0, word sum 0xFFFF). ' +
@@ -448,7 +445,7 @@ export function prepareSlotFlash(
       );
     }
     refuseOnCameraWide(state, input.kind);
-    const staged = stageImage(report, slot, entry.staging, input, cipher, options);
+    const staged = stageImage(report, slot, entry.staging, input, cipher);
     body = {
       payload: staged.staged.payload,
       /* The stamped image is what the builder made the bank hold, after the length
@@ -459,13 +456,17 @@ export function prepareSlotFlash(
       derivedFrom: staged.derivedFrom,
       expectedStored: staged.expectedStored(bankBytes),
       ...(staged.storedForm === undefined ? {} : { storedForm: staged.storedForm }),
-      ...(staged.ffRunning === undefined ? {} : { ffRunning: staged.ffRunning }),
+      ...(staged.ffCommit === undefined ? {} : { ffCommit: staged.ffCommit }),
     };
     /* The FF image reports its own staging ('key-a-keystream'); only a plain-staged image is the chain's. */
     imageBuild = imageBuildWarningOf(
       input.bytes,
       state,
-      staged.staging === undefined && entry.staging === 'plain' ? 'plain-chain' : 'other',
+      staged.ffCommit !== undefined
+        ? 'ff-vendor'
+        : staged.staging === undefined && entry.staging === 'plain'
+          ? 'plain-chain'
+          : 'other',
     );
     if (staged.rekeyRisk) {
       warnings.push(
@@ -520,7 +521,7 @@ export function prepareSlotFlash(
     sum16: transferSum16(body.payload),
     expectedStored: body.expectedStored,
     ...(body.storedForm === undefined ? {} : { storedForm: body.storedForm }),
-    ...(body.ffRunning === undefined ? {} : { ffRunning: body.ffRunning }),
+    ...(body.ffCommit === undefined ? {} : { ffCommit: body.ffCommit }),
     expectedPlain: body.expectedPlain,
     derivedFrom: body.derivedFrom,
     compare,
@@ -547,8 +548,8 @@ interface StagedImage {
   readonly storedForm?: StoredForm;
   /** Extra words beside the plan: its warnings and this write's notes. */
   readonly words?: PlanWords;
-  /** For an FF image: how the running build was decided. */
-  readonly ffRunning?: FFRunningBasis;
+  /** For an FF image: what the camera is expected to do with it at commit. */
+  readonly ffCommit?: FFCommitExpectation;
 }
 
 /**
@@ -587,7 +588,6 @@ function stageImage(
   staging: StagingForm,
   input: SlotFlashInput,
   cipher: CipherProfile,
-  options: PrepareSlotFlashOptions,
 ): StagedImage {
   if (staging === 'key-a-ciphertext') {
     const { state } = report;
@@ -653,19 +653,10 @@ function stageImage(
   }
   /* The 2014 chain holds two builds under one version string; the image says which. */
   if (plainChainBuildOf(input.bytes) === 'ff-1308') {
-    const version = report.state.version;
-    if (version !== FF_1308_VERSION) {
-      throw slotRefused(
-        `this is the ${FF_1308_VERSION} FF (16 Hz) image, staged for a camera running ` +
-          `${FF_1308_VERSION}; this camera reports ${version ?? 'no version'}. Nothing was written.`,
-        { version },
-      );
-    }
-    /* The application that runs decides whether the camera takes this payload at all: the 8 Hz
-     * build refuses it at commit, so a camera running it is refused here, before anything is sent,
-     * and a camera whose answers cannot say is refused unless the person says it runs the 16 Hz build. */
-    const gate = ffRunningGate(report, options);
+    /* The camera's version and the application it runs decide whether it takes this payload at all.
+     * Each outcome is warned of, never refused (`ffCommitOf`). */
     const ff = buildFFPayload(input.bytes);
+    const outcome = ffCommitOf(report.state, plainBankVerdict(ff.payload) === 1);
     return {
       staged: ff,
       keyAfter: KEY_B_STORED_NAME,
@@ -675,8 +666,8 @@ function stageImage(
       rekeyRisk: false,
       staging: 'key-a-keystream',
       storedForm: 'key-b-ciphertext',
-      ffRunning: gate.basis,
-      words: ffStagingWords(gate),
+      ffCommit: outcome.expect,
+      words: { warnings: outcome.warnings, notes: outcome.notes },
     };
   }
   refusePlainStaging(report.state);
@@ -905,6 +896,29 @@ export async function flashSlotWithBackup(
     save: options.saveBackup,
     ...(options.now === undefined ? {} : { now: options.now }),
   });
-  const written = await flashSlot(ctx, report, plan, options);
-  return { written, backup };
+  try {
+    const written = await flashSlot(ctx, report, plan, options);
+    return { written, backup };
+  } catch (error) {
+    throw withBackupKept(error);
+  }
+}
+
+/**
+ * A commit error raised after the bank was saved, with the backup said beside it: whether the camera refused
+ * the payload (nothing written) or stopped part-way, the saved zip holds the bank as it was, and the person is
+ * told it is kept. Any other error comes back as it was. The frame-rate patch, which saves the bank the same
+ * way, says it too (fps-patch.ts).
+ */
+export function withBackupKept(error: unknown): unknown {
+  if (!(error instanceof SeekError) || error.code !== 'flash/commit') return error;
+  return new SeekError(
+    error.code,
+    `${error.message} The backup saved before the write is kept: it holds the bank as it was.`,
+    {
+      cause: error,
+      ...(error.deviceCode === undefined ? {} : { deviceCode: error.deviceCode }),
+      detail: { ...error.detail, backupKept: true },
+    },
+  );
 }

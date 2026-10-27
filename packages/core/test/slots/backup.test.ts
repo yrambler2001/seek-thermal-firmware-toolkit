@@ -397,6 +397,47 @@ describe('flashSlotWithBackup', () => {
     expect(done.written.verified).toBe(true);
   });
 
+  /* TESTING.md 42.107: a commit the camera refuses (the 1.3.0.8 FF image on the 8 Hz build is planned to expect
+   * it) says plainly that it refused, that nothing was written, and that the backup is kept. */
+  it('a commit the camera refuses says so plainly, that nothing was written, and that the backup is kept', async () => {
+    const camera = recordingCamera({});
+    const device = camera.device as unknown as {
+      completeMemoryUpgrade: () => Promise<void>;
+      getErrorCode: () => Promise<number>;
+    };
+    const commit = device.completeMemoryUpgrade;
+    let committed = false;
+    device.completeMemoryUpgrade = () => {
+      committed = true;
+      return commit();
+    };
+    device.getErrorCode = () => Promise.resolve(committed ? 0x70100 : 0);
+    const saved: WriteBackup[] = [];
+    const error = await flashSlotWithBackup(ctxOf(camera.device), rep, plan, {
+      acknowledgeRisk: false,
+      action,
+      now: () => AT,
+      saveBackup: (backup) => {
+        saved.push(backup);
+        return Promise.resolve(true);
+      },
+    }).catch((caught: unknown) => caught);
+    expect(saved).toHaveLength(1);
+    expect(error).toBeInstanceOf(SeekError);
+    const refusal = error as SeekError;
+    expect(refusal.code).toBe('flash/commit');
+    expect(refusal.deviceCode).toBe(0x70100);
+    expect(refusal.message).toMatch(
+      /^the camera refused the write to .*B at commit with 0x00070100: the image was refused by its acceptance check/,
+    );
+    expect(refusal.message).toContain(
+      'Nothing was written; the bank is unchanged. Read the banks again before doing anything else. ' +
+        'The backup saved before the write is kept: it holds the bank as it was.',
+    );
+    expect(refusal.message).not.toContain('CompleteMemoryUpgrade');
+    expect(refusal.detail).toMatchObject({ dropAnalysis: true, backupKept: true });
+  });
+
   it('a write that would be refused reads and saves nothing, and sends nothing', async () => {
     const camera = recordingCamera({});
     const booted = report({ a: IMAGE_A, b: null, r: IMAGE_R }, { booted: 'b' });

@@ -40,7 +40,6 @@ export {
   flashSlot,
   flashSlotWithBackup,
   prepareSlotFlash,
-  type PrepareSlotFlashOptions,
   type SlotWriteOptions,
   type SlotWriteResult,
 } from './write.js';

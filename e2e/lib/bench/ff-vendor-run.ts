@@ -272,10 +272,7 @@ export async function runFfVendor(
 
     /* Step (b): A, then B, then R, through the CLI (the core write path), each read back halted. */
     for (const letter of ['a', 'b', 'r'] as const) {
-      const run = await camera.slotFlash(letter, files.plainFfFile, {
-        acknowledgeRisk: true,
-        running16Hz: true,
-      });
+      const run = await camera.slotFlash(letter, files.plainFfFile, { acknowledgeRisk: true });
       const predicted = predictedFFStored(plain);
       const readBack = await haltedRead(jlink, camera, FF_BANK_ADDRESS[letter], FF_BANK_BYTES);
       const predictedSha256 = sha256(predicted);

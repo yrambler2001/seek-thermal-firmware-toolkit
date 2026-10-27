@@ -47,15 +47,9 @@ import { classifyBuild } from '../../src/slots/capability-family.js';
 import { dumpSlot } from '../../src/slots/dump.js';
 import { inspectSlots } from '../../src/slots/inspect.js';
 import { ffKeyBPlainOf } from '../../src/slots/ff-form.js';
-import {
-  flashSlot,
-  prepareSlotFlash,
-  type PrepareSlotFlashOptions,
-} from '../../src/slots/write.js';
+import { flashSlot, prepareSlotFlash } from '../../src/slots/write.js';
 import { slotWriteRefusal, writeBannerOf } from '../../src/slots/write-keys.js';
 
-/** The FF image is prepared on the person's word that the camera runs the 16 Hz build (TESTING.md 42.12). */
-const FF_PREPARE_OPTIONS: PrepareSlotFlashOptions = { running16Hz: true };
 import type {
   DumpedSlot,
   FlashSlotResult,
@@ -216,7 +210,14 @@ export interface LockedRun {
    * The 1.3.0.8 FF image, prepared for R on this camera and never sent: whether the page refused
    * it, why, and how many requests the preparation sent (none). Null where it was not prepared.
    */
-  ffPrepare: { refused: boolean; message: string | null; sent: number } | null;
+  ffPrepare: {
+    refused: boolean;
+    message: string | null;
+    sent: number;
+    /** What the plan expects the camera to do at commit (write.ts ffCommitOf), and its warnings. */
+    ffCommit: string | null;
+    warnings: readonly string[];
+  } | null;
   writes: WriteRow[];
   blocks: BlockRow[];
   cfgReadable: boolean;
@@ -356,7 +357,6 @@ async function writeStep(
   staging: PlanStaging,
   before: Uint8Array | null,
   sent: Sent[],
-  options: PrepareSlotFlashOptions = {},
 ): Promise<WriteRow> {
   const row: WriteRow = {
     step,
@@ -378,7 +378,7 @@ async function writeStep(
   };
   const mark = sent.length;
   try {
-    const plan: SlotFlashPlan = prepareSlotFlash(report, key, input, options);
+    const plan: SlotFlashPlan = prepareSlotFlash(report, key, input);
     row.notes.push(...plan.warnings);
     const result: FlashSlotResult = await flashSlot(ctx, report, plan, { acknowledgeRisk });
     row.commitStatus = result.commitStatus;
@@ -615,18 +615,25 @@ export async function runLockedFirmware(
       if (ffFile !== null) {
         const before = sent.length;
         try {
-          prepareSlotFlash(
-            report,
-            'r',
-            { kind: 'plain', bytes: ffFile, fileName: 'ff.bin' },
-            FF_PREPARE_OPTIONS,
-          );
-          run.ffPrepare = { refused: false, message: null, sent: sent.length - before };
+          const planned = prepareSlotFlash(report, 'r', {
+            kind: 'plain',
+            bytes: ffFile,
+            fileName: 'ff.bin',
+          });
+          run.ffPrepare = {
+            refused: false,
+            message: null,
+            sent: sent.length - before,
+            ffCommit: planned.ffCommit ?? null,
+            warnings: planned.warnings,
+          };
         } catch (error) {
           run.ffPrepare = {
             refused: true,
             message: reasonOf(error),
             sent: sent.length - before,
+            ffCommit: null,
+            warnings: [],
           };
         }
       }
@@ -671,9 +678,6 @@ export async function runLockedFirmware(
       const storedFF: Uint8Array | null = ffImage ? expectedFFStored(image) : null;
       const expectedImage: Uint8Array = image;
       const writeStaging: PlanStaging = ffImage ? 'key-a-keystream' : subject.staging;
-      /* The 1.3.0.8 FF image is staged on the person's word about the build when the camera's own answers
-       * cannot say (TESTING.md 42.12); every other image takes no such choice. */
-      const ffOptions: PrepareSlotFlashOptions = ffImage ? FF_PREPARE_OPTIONS : {};
 
       /* ---- 3. the booted bank, without acknowledgeRisk ----
        * On the FF build the refusal is asked of R, the bank the 2014 bootloader runs that image from
@@ -685,12 +689,11 @@ export async function runLockedFirmware(
         const mark = sent.length;
         const refusal: RefusalRow = { key: refusalKey, code: null, message: null, requests: 0 };
         try {
-          const planBooted = prepareSlotFlash(
-            report,
-            refusalKey,
-            { kind: 'plain', bytes: image, fileName: 'image.bin' },
-            ffOptions,
-          );
+          const planBooted = prepareSlotFlash(report, refusalKey, {
+            kind: 'plain',
+            bytes: image,
+            fileName: 'image.bin',
+          });
           await flashSlot(ctx, report, planBooted, { acknowledgeRisk: false });
           run.refusal = {
             ...refusal,
@@ -726,7 +729,6 @@ export async function runLockedFirmware(
         writeStaging,
         state.byKey.get(nonBooted)?.raw ?? null,
         sent,
-        ffOptions,
       );
       run.writes.push(plainNB);
       await blockStep(`after plain -> ${nonBooted.toUpperCase()}`);
@@ -743,7 +745,6 @@ export async function runLockedFirmware(
         writeStaging,
         state.byKey.get('r')?.raw ?? null,
         sent,
-        ffOptions,
       );
       run.writes.push(plainR);
       await blockStep('after plain -> R');
@@ -753,12 +754,11 @@ export async function runLockedFirmware(
        * or the FF build's two-stream form (what the camera folds back to the plain image). */
       let staged: Uint8Array | null = null;
       try {
-        staged = prepareSlotFlash(
-          report,
-          'r',
-          { kind: 'plain', bytes: image, fileName: 'image.bin' },
-          ffOptions,
-        ).payload;
+        staged = prepareSlotFlash(report, 'r', {
+          kind: 'plain',
+          bytes: image,
+          fileName: 'image.bin',
+        }).payload;
       } catch (error) {
         run.setup = run.setup ?? `no staged payload for the raw step: ${reasonOf(error)}`;
       }
@@ -774,7 +774,6 @@ export async function runLockedFirmware(
           writeStaging,
           null,
           sent,
-          ffOptions,
         );
         run.writes.push(rawR);
         await blockStep('after raw -> R');
@@ -800,7 +799,6 @@ export async function runLockedFirmware(
             writeStaging,
             storedFF,
             sent,
-            ffOptions,
           );
           run.writes.push(rawR);
           await blockStep('after raw -> R');

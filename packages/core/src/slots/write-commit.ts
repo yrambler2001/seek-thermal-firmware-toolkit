@@ -37,13 +37,13 @@ const PROGRESS_MASK = 0x7ff;
  * The error for a commit whose status is not 0. Every one carries
  * `dropAnalysis`, whatever its class: the commit transfer is where the camera
  * could have touched the bank, so the caller re-reads before it does anything
- * else. Only the words differ. `refused before programming; the bank is
- * unchanged` is said for the first class and for nothing else, and `may be
- * partially written` for the classes that cannot say so.
+ * else. Only the words differ. `Nothing was written; the bank is unchanged`
+ * is said for the first class and for nothing else, and `may be partially
+ * written` for the classes that cannot say so.
  */
 export function commitRefusal(name: string, status: number | null): SeekError {
   const outcome = classifyCommitStatus(status);
-  const reread = 'Re-read the device info before doing anything else';
+  const reread = 'Read the banks again before doing anything else';
   if (status === null) {
     return new SeekError(
       'flash/commit',
@@ -54,10 +54,12 @@ export function commitRefusal(name: string, status: number | null): SeekError {
   }
   const shown = hexUp(status);
   if (outcome === 'refused-before-programming') {
+    /* Said plainly, because it is an outcome a plan can expect (the 1.3.0.8 FF image on the 8 Hz build,
+     * write.ts `ffCommitOf`): the camera refused, nothing was written. */
     return new SeekError(
       'flash/commit',
-      `CompleteMemoryUpgrade returned ${shown} (${commitStatusCause(status)}) for ${name}: refused before ` +
-        `programming; the bank is unchanged. ${reread}.`,
+      `the camera refused the write to ${name} at commit with ${shown}: ` +
+        `${commitStatusCause(status)}. Nothing was written; the bank is unchanged. ${reread}.`,
       {
         deviceCode: status,
         detail: { dropAnalysis: true, safeToRetry: true, commitOutcome: outcome },
