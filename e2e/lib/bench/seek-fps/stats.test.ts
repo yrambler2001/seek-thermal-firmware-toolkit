@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 
 import { compactFrame } from './fake-camera.js';
 import { SeekFrame } from './frame.js';
-import { FrameStats, fpsWindows, median } from './stats.js';
+import { FrameStats, fpsWindows, median, notPicturesLine, statusCountsSince } from './stats.js';
 
 describe('FPSWindow (FrameTests.swift)', () => {
   it('reports mean and median per second', () => {
@@ -81,5 +81,73 @@ describe('FrameStats (the stream and --fps counters)', () => {
     s.clearStamps();
     expect(s.stamps).toEqual([]);
     expect(s.latest).toBe(f);
+  });
+});
+
+describe('the 8 Hz count: the camera’s shutter calibration between pictures (TESTING.md 42.103)', () => {
+  /* The stock 1.3.0.0 Compact in Normal, as traced on the camera: pictures 125 ms apart (4 fields at 32.2 Hz),
+   * and four calibrations in the first 5 s of a stream, each a reference frame (status 6) and a shutter frame
+   * (status 1) that take 17 fields, a 525 ms gap with no picture. */
+  const intervals = [
+    ...Array<number>(6).fill(0.125),
+    0.525,
+    ...Array<number>(5).fill(0.125),
+    0.525,
+    ...Array<number>(5).fill(0.125),
+    0.525,
+    ...Array<number>(5).fill(0.125),
+    0.525,
+    0.125,
+  ];
+  const stamps = intervals.reduce<number[]>((acc, dt) => [...acc, (acc.at(-1) ?? 0) + dt], [0]);
+
+  it('gives the per-second median of 8 fps and 27 pictures in the 5 s: both true, of different things', () => {
+    const windows = fpsWindows(stamps, 5);
+    expect(windows.reduce((sum, w) => sum + w.frames, 0)).toBe(27);
+    for (const w of windows) expect(w.median).toBeCloseTo(8, 5);
+  });
+
+  it('names the frames that are not pictures, and all frames read, after the overall line', () => {
+    const counts = new Map([
+      [3, 27],
+      [6, 4],
+      [1, 4],
+    ]);
+    expect(notPicturesLine(counts, 5)).toBe(
+      'not pictures, in the measurement: 4 shutter (status 1), 4 reference (status 6); all frames 35 ' +
+        '(7.00 fps). The median is the picture rate between them; the count is lower by the time they take.',
+    );
+  });
+
+  it('says nothing when every frame was a picture (status 0 has its own line)', () => {
+    expect(notPicturesLine(new Map([[3, 160]]), 5)).toBeNull();
+    expect(
+      notPicturesLine(
+        new Map([
+          [0, 12],
+          [3, 40],
+        ]),
+        5,
+      ),
+    ).toBeNull();
+  });
+
+  it('counts the frames read between two snapshots of the camera, by status', () => {
+    const before = new Map([
+      [1, 1],
+      [3, 2],
+      [4, 1],
+    ]);
+    const after = new Map([
+      [1, 5],
+      [3, 29],
+      [4, 1],
+      [6, 4],
+    ]);
+    expect([...statusCountsSince(before, after)]).toEqual([
+      [1, 4],
+      [3, 27],
+      [6, 4],
+    ]);
   });
 });

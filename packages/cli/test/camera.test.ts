@@ -88,7 +88,9 @@ describe('seek-fw info', () => {
     expect(stdout.text).toContain('0x14030000');
     expect(stdout.text).toContain('Key A');
     /* Detection, from evidence the read itself produced. */
-    expect(stdout.text).toContain('modern-4x');
+    expect(stdout.text).toContain('Modern (2018+ selector map) (score');
+    /* the profile in words; its code name is in --json only (TESTING.md 42.103) */
+    expect(stdout.text).not.toMatch(/(read under|detected)\s+modern-4x/);
     /* The tab map, so the Info command says what each tab does. */
     expect(stdout.text).toContain('Tabs');
     expect(stdout.text).toContain('Dump & decrypt 4.x/Nano');
@@ -373,7 +375,7 @@ describe('seek-fw info on a 2016 Compact PRO (1.0.3.0)', () => {
     );
     expect(text).not.toContain('no per-device key programmed');
     /* the footer column says it does not apply; bootability says unknown */
-    const row = text.split('\n').find((line) => line.startsWith('App image bank 0x14050000 '));
+    const row = text.split('\n').find((line) => line.startsWith('Slot A '));
     expect(row).toMatch(/\byes\s+n\/a\s+unknown\b/);
   });
 });
@@ -392,16 +394,16 @@ describe('seek-fw info on a 2016 Compact PRO that names the bank it entered (TES
     /* The score is the one taken after the read, and says so: the page's log also prints the probe's
      * (TESTING.md 42.85 O5, 42.86). */
     expect(text).toMatch(
-      /detected\s+compact-2016 \(score \d\.\d\d after the read, from the evidence below\)/,
+      /detected\s+2016 Compact Pro \(score \d\.\d\d after the read, from the evidence below\)/,
     );
     expect(text).toMatch(
-      /booted\s+App image bank 0x14050000 — the bank the bootloader entered at this start, as it records it\n/,
+      /booted\s+Slot A — the bank the bootloader entered at this start, as it records it\n/,
     );
     expect(text).toMatch(
       /last start\s+the camera reports it entered slot A \(active-slot word 0\)/,
     );
     expect(text).toMatch(
-      /next start\s+App image bank 0x14050000 — the boot-config word is 0xFFFFFFFF, so the bootloader tries slot A first, and it holds an image the bootloader accepts/,
+      /next start\s+Slot A — the boot-config word is 0xFFFFFFFF, so the bootloader tries slot A first, and it holds an image the bootloader accepts/,
     );
     expect(text).toMatch(/check key\s+key block 1 [0-9a-f]{32}, named from slot A/);
     expect(text).toMatch(
@@ -423,7 +425,7 @@ describe('seek-fw info on a 2016 Compact PRO that names the bank it entered (TES
     expect(text).not.toContain('\n\n\n');
     expect(text).not.toContain('flashing disabled');
     expect(text).not.toContain('not a boot record');
-    const row = text.split('\n').find((line) => line.startsWith('App image bank 0x14050000 '));
+    const row = text.split('\n').find((line) => line.startsWith('Slot A '));
     expect(row).toMatch(/key block 1\s+yes\s+n\/a\s+yes\b/);
   });
 

@@ -89,7 +89,7 @@ const APPROVED: WriteApproval = { approved: true, dry: false, reason: 'test' };
 const DRY: WriteApproval = { approved: false, dry: true, reason: 'dry run' };
 const SN = 'TEST-JLINK-SN';
 const CAMERA_SERIAL = 'TEST-CAMERA-SERIAL';
-const TARGET = 'compact_8hz_1_3_0_8';
+const TARGET = 'compact_8hz_1_3_0_0';
 const NO_HASH = 'b'.repeat(64);
 const BOARD = 'Compact on board 297 (PN297 32K Compact; its own flash is the 1.3.0.0 original)';
 
@@ -567,12 +567,12 @@ describe('createJlinkBench: the gate and the required settings', () => {
   });
 
   it("names FW-V1's current target only: a checkout with just the old name compact_32k_1_3_0_8 is refused", () => {
-    expect(DEFAULT_TARGET).toBe('compact_8hz_1_3_0_8');
+    expect(DEFAULT_TARGET).toBe('compact_8hz_1_3_0_0');
     const old = path.join(scratch, 'fw-v1-old-names');
     mkdirSync(path.join(old, 'targets', 'compact_32k_1_3_0_8'), { recursive: true });
     expect(() =>
       createJlinkBench({ gate: APPROVED, env: {}, fwv1Dir: old, serial: SN, exec }),
-    ).toThrow(/no FW-V1 target directory .*compact_8hz_1_3_0_8/);
+    ).toThrow(/no FW-V1 target directory .*compact_8hz_1_3_0_0/);
   });
 });
 
@@ -681,11 +681,14 @@ describe('flashFull: the runner, exact command lines', () => {
 });
 
 /* The block-diff write (TESTING.md 42.81): the runner's flash-factory-4m-2, and no erase. The target
- * that carries it is a stub runner file that names the command; the default target has none. */
+ * that carries it (the bench default, the 1.3.0.0 Compact's) is a stub runner file that names the
+ * command; the 1.3.0.8 Compact's target has none (TESTING.md 42.103). */
 const TARGET_4M2 = 'compact_8hz_1_3_0_0';
+const TARGET_NO_4M2 = 'compact_8hz_1_3_0_8';
 
 describe('flashBlocks: the runner’s flash-factory-4m-2, no erase', () => {
   beforeAll(() => {
+    mkdirSync(path.join(FW_V1, 'targets', TARGET_NO_4M2), { recursive: true });
     const runner = path.join(FW_V1, 'targets', TARGET_4M2, 'tools', 'jlink', 'jlink-runner.js');
     mkdirSync(path.dirname(runner), { recursive: true });
     writeFileSync(
@@ -741,7 +744,9 @@ describe('flashBlocks: the runner’s flash-factory-4m-2, no erase', () => {
 
   it('refuses a target whose runner has no flash-factory-4m-2, before anything runs', async () => {
     const { exec, calls } = fakeExec(() => OK);
-    await expect(bench(exec).flashBlocks(IMAGE)).rejects.toThrow(/has none/);
+    await expect(bench(exec, { target: TARGET_NO_4M2 }).flashBlocks(IMAGE)).rejects.toThrow(
+      /has none/,
+    );
     expect(calls).toHaveLength(0);
   });
 

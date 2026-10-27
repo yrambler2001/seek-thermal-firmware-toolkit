@@ -10,6 +10,7 @@
  */
 
 import {
+  acceptsDescription,
   bankWritingOf,
   bootChoiceOf,
   bootedReportOf,
@@ -229,7 +230,7 @@ export function renderState(ctx: CommandContext, state: DeviceState): void {
   ctx.out('');
   ctx.out(heading('Profile', ctx.color));
   pairs(ctx, [
-    ['read under', `${state.profile.id} — ${state.profile.name}`],
+    ['read under', state.profile.name],
     ['detected', detectedReportOf(state.detection)],
   ]);
   for (const reason of state.detection.best.reasons) ctx.out(`    · ${reason}`);
@@ -273,7 +274,7 @@ export function renderState(ctx: CommandContext, state: DeviceState): void {
         slot.present ? (slot.plainHeader?.versionStr ?? slot.header?.versionStr ?? '?') : '—',
         slot.header === null ? '—' : `${String(slot.header.length)} B`,
         slot.keyName ?? (slot.plain === null ? '—' : 'none (plaintext)'),
-        slot.present ? yesNo(slot.accepts) : '—',
+        acceptsDescription(slot),
         /* "n/a" where the bootloader reads no footer: a missing one is not a fault there */
         slot.present ? (state.profile.boot.checksFooter ? yesNo(slot.footerOk) : 'n/a') : '—',
         slot.present ? bootableDescription(slot) : '—',
@@ -320,7 +321,7 @@ function slotName(state: DeviceState, key: string): string {
   return state.slots.find((slot) => slot.key === key)?.name ?? key;
 }
 
-/** A bank by the name the profile gives it ("App image bank 0x14050000"), as the slot table names it. */
+/** A bank by the name the profile gives it ("Slot A"), as the slot table names it. */
 function nameOf(state: DeviceState): (key: SlotKey) => string {
   return (key) => slotName(state, key);
 }

@@ -178,6 +178,9 @@ function windowOf(target: TargetHandle, scratchDir: string): BenchPage {
    * own verdict back. Shared by the picker's write and the bank's own fill. */
   async function confirmPrepared(name: string, acknowledge: boolean): Promise<PageWrite> {
     await openWriteConfirm(target.wizard, target.page, name);
+    const dialog = await target.page
+      .$eval(CONFIRM_DIALOG, (el) => (el as HTMLElement).innerText)
+      .catch(() => '');
     const ackShown = (await target.page.$(ACK_BOX)) !== null;
     if (ackShown !== acknowledge) {
       await target.wizard.click(CONFIRM_DIALOG, 'Cancel');
@@ -195,7 +198,7 @@ function windowOf(target: TargetHandle, scratchDir: string): BenchPage {
         `the write ended "${status}"\n${await target.wizard.logTail('slotsrun', 25)}`,
       );
     }
-    return { status, ackShown, outcome: (await outcomeAlert(target.page)) ?? null };
+    return { status, ackShown, dialog, outcome: (await outcomeAlert(target.page)) ?? null };
   }
 
   /* Every budget back to zero: nothing is staged or committed outside a write. */

@@ -24,7 +24,7 @@ import {
 import type { StagingForm } from '../slots/types.js';
 import { deriveWriteKeys, slotWriteRefusals } from '../slots/write-keys.js';
 import { storeKeyDescription } from './device-info.js';
-import type { CheckKey, DeviceState } from './types.js';
+import type { CheckKey, DeviceState, SlotState } from './types.js';
 
 /** One row of the report: the label (lower case, as the CLI prints it) and its value. */
 export type ReportRow = readonly [label: string, value: string];
@@ -38,7 +38,7 @@ export type ReportRow = readonly [label: string, value: string];
 export function detectedReportOf(detection: DetectionResult): string {
   const best = detection.best;
   return (
-    `${best.profile.id} (score ${best.score.toFixed(2)} after the read, from the evidence below` +
+    `${best.profile.name} (score ${best.score.toFixed(2)} after the read, from the evidence below` +
     `${detection.ambiguous ? '; ambiguous' : ''})`
   );
 }
@@ -113,6 +113,21 @@ export function checkKeyReportOf(checkKey: CheckKey): string {
   return `${checkKey.name} ${bytesToHex(checkKey.key)}${pair}${from}`;
 }
 
+/**
+ * The accepts cell for one bank, the same in `seek-fw info` and the Info tab: whether the decrypted image hits
+ * the keyed acceptance sum. A bank stored plain is not checked that way (its words sum to 0, which the bootable
+ * cell says), so its cell is "n/a" rather than a "no" next to "bootable yes" (TESTING.md 42.103).
+ */
+export function acceptsDescription(slot: SlotState): string {
+  if (!slot.present) return '—';
+  if (slot.keyName === null && slot.plain !== null) return 'n/a';
+  return slot.accepts ? 'yes' : 'no';
+}
+
+/** The one key row on the 2014 plaintext chain, where the banks are stored plain and no key is used. */
+export const PLAIN_CHAIN_KEYS =
+  'none needed: the banks are stored as plain firmware, so a bank is read and written as it is';
+
 /** What the key-table row says on the 2016 line, where no selector reaches the bootloader block. */
 export const KEY_TABLE_REFUSED_2016 =
   'not read — the bootloader block (0x14000000) is refused on every channel on this line';
@@ -134,6 +149,10 @@ export function keyReportRows(state: DeviceState): ReportRow[] {
       store,
     ];
   }
+  /* The 2014 plaintext chain: a bank is read and written as it is, so no key is needed and none is shown
+   * (the key-table fields stay in --json). Rows for keys the camera does not use would contradict that
+   * (TESTING.md 42.102 O4, 42.103). */
+  if (state.plainChain && state.keyTable === null) return [['keys', PLAIN_CHAIN_KEYS]];
   const table = state.keyTable;
   return [
     ['key A', table === null ? '(not identified)' : bytesToHex(table.keyA)],

@@ -220,14 +220,13 @@ const TO_HZ = 18;
 const OFFER_LABEL = `Make ${String(TO_HZ)} FPS`;
 /** The check key the read names: the 1.0.3.x 9 Hz pair's key block 1 (the bootloader block holds it at 0x2ACC). */
 const CHECK_KEY = 'faacb3c6f1412469bd122fb82d78160d';
-const BOOTED_A =
-  'App image bank 0x14050000 — the bank the bootloader entered at this start, as it records it';
+const BOOTED_A = 'Slot A — the bank the bootloader entered at this start, as it records it';
 /** The active-slot word, the Last start row's, in the CLI's words (TESTING.md 42.89). */
 const LAST_START_A = 'the camera reports it entered slot A (active-slot word 0)';
 const NEXT_START_WHY =
   'the boot-config word is 0xFFFFFFFF, so the bootloader tries slot A first, and it holds an image the bootloader accepts';
 /** The Info tab names a bank by its read name, the slots page by its row name. */
-const NEXT_START_A = `App image bank 0x14050000 — ${NEXT_START_WHY}`;
+const NEXT_START_A = `Slot A — ${NEXT_START_WHY}`;
 const NEXT_START_A_SLOTS = `Bank A — ${NEXT_START_WHY}`;
 /** The lines the 2016 read printed before 42.84, which must not come back (TESTING.md 42.84 summary). */
 const STALE = [
@@ -337,9 +336,12 @@ function valueUnder(text: string, label: string): string | null {
   return at < 0 ? null : (lines[at + 1] ?? null);
 }
 
-/** The analysis line of one bank ("App image bank 0x14050000: firmware ..."), or null. */
+/** The analysis line of one bank ("Slot A: firmware ..."; the 2014 and 2016 lines name banks as the boot rows do, TESTING.md 42.103), or null. */
+/** The bank names the Info read gives (core's legacy slot names). */
+const BANK_NAME = { a: 'Slot A', b: 'Slot B', r: 'Recovery R' } as const;
+
 function bankLine(text: string, letter: BankLetter): string | null {
-  const head = `App image bank 0x${BANK_ADDRESS[letter].toString(16)}: firmware`;
+  const head = `${BANK_NAME[letter]}: firmware`;
   return linesOf(text).find((line) => line.startsWith(head)) ?? null;
 }
 

@@ -70,11 +70,6 @@ const SCRATCH =
   path.join(tmpdir(), `seek-e2e-pages-bench-${String(process.pid)}`);
 const KEEP = process.env.SEEK_E2E_KEEP === '1';
 
-/**
- * The bench's 1.3.0.0 target. Its runner carries `flash-factory-4m-2`, the block-diff write the
- * end restore uses; the default target (compact_8hz_1_3_0_8) has no such command (TESTING.md 42.81).
- */
-const PAGES_TARGET = 'compact_8hz_1_3_0_0';
 const FLASH_BASE = 0x14000000;
 const FLASH_BYTES = 0x400000;
 /** One 64 KiB block of the flash, and the two the end check names on their own. */
@@ -133,8 +128,15 @@ let startFile = '';
 let restored = false;
 /** A window's wire as the page-side guard counts it (ops sent by the page to the camera). */
 let identityWire: ReadonlySet<string> = new Set();
-/** The two info selectors' counts in the Info read (the only read that sends them in part A). */
+/** The two info selectors' counts in part A: the Info read's, plus Preserve step 02's selector 10. */
 let infoSelectorCounts: ReadonlyMap<string, number> = new Map();
+
+/** Adds one read's info-selector counts to the part's totals. */
+function addSelectorCounts(wire: ReadonlyMap<string, number>): void {
+  const sum = new Map(infoSelectorCounts);
+  for (const key of INFO_SELECTOR_KEYS) sum.set(key, (sum.get(key) ?? 0) + (wire.get(key) ?? 0));
+  infoSelectorCounts = sum;
+}
 
 /** The halted flash read of one range, through the J-Link (not the page). */
 async function haltedRead(address: number, length: number): Promise<Uint8Array> {
@@ -276,7 +278,9 @@ describe.skipIf(!RUNNABLE)('the web app pages on the bench camera (1.3.0.0, real
   beforeAll(async () => {
     mkdirSync(SCRATCH, { recursive: true });
     say(`scratch: ${SCRATCH}`);
-    jlink = createJlinkBench({ gate, target: PAGES_TARGET });
+    /* The default target is the bench camera's, compact_8hz_1_3_0_0: its runner carries
+     * `flash-factory-4m-2`, the block-diff write the end restore uses (TESTING.md 42.81, 42.103). */
+    jlink = createJlinkBench({ gate });
     camera = createBenchCamera({ gate });
     /* Part 0: the whole flash, halted, is the run's start image. It is written to the scratch folder
      * before anything else is sent to the camera: that file is the restore image (TESTING.md 42.81). */
@@ -360,7 +364,7 @@ describe.skipIf(!RUNNABLE)('the web app pages on the bench camera (1.3.0.0, real
       expect(wire.get('out 0x55'), 'SetFirmwareInfoFeatures: selectors 1, 20, 17, 10').toBe(4);
       expect(wire.get('out 0x5a'), 'SetRamDataFeatures: the device-id block, once').toBe(1);
       expect((await guardOf(app.page)).refusals).toEqual([]);
-      infoSelectorCounts = new Map([...wire].filter(([key]) => INFO_SELECTOR_KEYS.includes(key)));
+      addSelectorCounts(wire);
       identityWire = new Set([...wire.keys()].filter((key) => !INFO_SELECTOR_KEYS.includes(key)));
       expect(identityWire.size, 'Info sent something to read the version').toBeGreaterThan(0);
 
@@ -386,21 +390,21 @@ describe.skipIf(!RUNNABLE)('the web app pages on the bench camera (1.3.0.0, real
       /* The roots word is the bootloader's own record of the bank it entered (TESTING.md 42.56), and the
        * row says so; the next start follows from cfg[0] 0 and slot A's stored word sum (TESTING.md 42.84). */
       expect(valueUnder(text, 'Booted'), 'the booted bank (CLI: a, named by the roots word)').toBe(
-        'App image bank 0x14050000 — the bank the bootloader entered at this start, as it records it',
+        'Slot A — the bank the bootloader entered at this start, as it records it',
       );
       /* The word itself is the Last start row's, in the CLI's words (TESTING.md 42.89). */
       expect(valueUnder(text, 'Last start'), 'the last start (CLI: boot.reportedBooted a)').toBe(
         'the camera reports it entered slot A (active-slot word 0)',
       );
       expect(valueUnder(text, 'Next start'), 'the next start (CLI: boot.nextStart.runs a)').toBe(
-        'App image bank 0x14050000 — the boot-config word is 0, so the bootloader tries slot A first, and it holds an image the bootloader accepts',
+        'Slot A — the boot-config word is 0, so the bootloader tries slot A first, and it holds an image the bootloader accepts',
       );
       /* The bank is pinned. "confirmed on the wire" is the page reading back the window the upgrade
        * selector arms (`confirmUpgradeTarget`), and whether the camera confirms depends on its flash
        * (the baseline did not, the start image does): either suffix is allowed and logged (TESTING.md 42.81). */
       const upgrade = valueUnder(text, 'Upgrade target');
-      expect(upgrade, 'the upgrade target (CLI: b, bank 0x14060000)').toMatch(
-        /^App image bank 0x14060000( \(confirmed on the wire\))?$/,
+      expect(upgrade, 'the upgrade target (CLI: b, slot B at 0x14060000)').toMatch(
+        /^Slot B( \(confirmed on the wire\))?$/,
       );
       say(`info upgrade target: ${String(upgrade)}`);
       expect(text, 'the read reached the roots word').not.toContain('could not be read');
@@ -415,20 +419,31 @@ describe.skipIf(!RUNNABLE)('the web app pages on the bench camera (1.3.0.0, real
         const { app, wizard } = need();
         await wizard.openPreserve();
         const before = countsOf(await guardOf(app.page));
-        await setGuard(app.page, { allowReset: true });
+        /* Step 02 reads the active-slot word for the bank choice (GetFirmwareInfo selector 10, the roots record,
+         * TESTING.md 42.98 to 42.102): one SetFirmwareInfoFeatures in the Info read's shape, so the info
+         * selectors are let out for this step too, by shape, and counted (TESTING.md 42.103). */
+        await setGuard(app.page, { allowReset: true, infoOpen: true });
         let run;
         try {
           run = await step02(() =>
             wizard.runPhase('read-build', { confirm: false, timeoutMs: RUN_TIMEOUT_MS }),
           );
         } finally {
-          await setGuard(app.page, { allowReset: false });
+          await setGuard(app.page, { allowReset: false, infoOpen: false });
         }
         const wire = wireSince(before, countsOf(await guardOf(app.page)));
         say(
           `0.x/1.x step 02 wire: ${describeWire(wire)}; ${String(run.asks)} restart ask(s) answered`,
         );
-        for (const op of NEVER_ON_THE_WIRE) expect(wire.has(op), op).toBe(false);
+        for (const op of NEVER_ON_THE_WIRE.filter((key) => !INFO_SELECTOR_KEYS.includes(key))) {
+          expect(wire.has(op), op).toBe(false);
+        }
+        expect(
+          wire.get('out 0x55'),
+          'SetFirmwareInfoFeatures: selector 10, the active-slot word',
+        ).toBe(1);
+        expect(wire.has('out 0x5a'), 'no device-id block in step 02').toBe(false);
+        addSelectorCounts(wire);
 
         const flash = await haltedRead(FLASH_BASE, FLASH_BYTES);
         expect(
@@ -576,7 +591,7 @@ describe.skipIf(!RUNNABLE)('the web app pages on the bench camera (1.3.0.0, real
       const guard = await guardOf(app.page);
       expect(guard.refusals, 'page-side refusals').toEqual([]);
       for (const op of ['out 0x50', 'out 0x51']) expect(guard.counts[op], op).toBeUndefined();
-      /* The two info selectors went out in the Info read alone: the whole session's totals are its counts. */
+      /* The two info selectors went out in the Info read and step 02's selector 10 alone: the session's totals are theirs. */
       for (const op of INFO_SELECTOR_KEYS) {
         expect(guard.counts[op] ?? 0, `${op} over the whole session`).toBe(
           infoSelectorCounts.get(op) ?? 0,
@@ -659,6 +674,13 @@ describe.skipIf(!RUNNABLE)('the web app pages on the bench camera (1.3.0.0, real
           true,
         );
         expect(written.ackShown, 'bank B is not booted: no extra tick').toBe(false);
+        /* The image is the build the camera runs (1.3.0.0), so the plan's image-build warning (TESTING.md
+         * 42.104) is not in the dialog; another build would be its first warning. */
+        say(`write dialog: ${JSON.stringify(written.dialog)}`);
+        expect(written.dialog, 'the dialog was read').not.toBe('');
+        expect(written.dialog, 'no image-build warning for the build the camera runs').not.toMatch(
+          /This image is firmware|names no firmware version|the camera runs/,
+        );
         expect(await need().banner(), 'no write banner after an allowed write').toBeNull();
         /* A write clears the page's bank table until the banks are read again. */
         await need().readSlots();

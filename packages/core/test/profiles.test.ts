@@ -861,7 +861,7 @@ describe('detection: compact-2016 against legacy-auth', () => {
     const result = detectProfile(evidence);
     expect(result.best.profile.id).toBe('legacy-auth');
     expect(result.ambiguous).toBe(false);
-    expect(result.best.reasons.join(' ')).toMatch(/stored plain with a word sum of 0/);
+    expect(result.best.reasons.join(' ')).toMatch(/stored as plain firmware whose words sum to 0/);
     expect(score(evidence, 'compact-2016')).toBe(0);
   });
 

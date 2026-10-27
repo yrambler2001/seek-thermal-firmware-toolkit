@@ -65,6 +65,8 @@ export interface PageWrite {
   readonly status: string;
   /** Whether the confirmation asked for the extra tick (the booted bank, or R). */
   readonly ackShown: boolean;
+  /** The confirmation dialog's text as it asked (its warnings: the image's build, TESTING.md 42.104, 42.103). */
+  readonly dialog: string;
   /** The page's verdict panel ("Slot B — ...: the bank reads back as written."), or null. */
   readonly outcome: string | null;
 }

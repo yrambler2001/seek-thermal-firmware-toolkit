@@ -1254,7 +1254,7 @@ describe('a 2016 Compact PRO (1.0.3.0), read and judged', () => {
         'and it holds an image the bootloader accepts',
     );
     expect(log).toContain(
-      "the camera's own upgrade (mode 0) writes App image bank 0x14060000, the bank its active-slot " +
+      "the camera's own upgrade (mode 0) writes Slot B, the bank its active-slot " +
         "word does not name; a slot write goes to the bank it names, through that bank's own window",
     );
     /* the stale lines this line used to print are gone */

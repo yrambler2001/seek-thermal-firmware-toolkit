@@ -377,6 +377,8 @@ export class SeekCamera {
    * the other modes they are dropped. Counted in both, so a run says how many there were (TESTING.md 42.55).
    */
   untypedFrames = 0;
+  /** Every frame read, by its header status (pictures and calibration frames alike; TESTING.md 42.103). */
+  readonly statusCounts = new Map<number, number>();
   /**
    * The camera refused `Startup with Operation=0` (0x37) at connect, and the connect went on without it. Such a
    * build leaves the camera in operation 1 after an init, so a later init stops it first (see `sendInit`).
@@ -731,6 +733,7 @@ export class SeekCamera {
       this.options.rawMax,
     );
     if (frame.status === 0) this.untypedFrames += 1;
+    this.statusCounts.set(frame.status, (this.statusCounts.get(frame.status) ?? 0) + 1);
     return frame;
   }
 
