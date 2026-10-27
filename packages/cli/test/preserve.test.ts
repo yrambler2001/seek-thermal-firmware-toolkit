@@ -551,8 +551,11 @@ describe('preserve — the power-cycle retry gate on a failed backup', () => {
       expect(first.stdout.text).toMatch(
         /window reader is spent for this boot — power-cycle the camera .* before any retry/,
       );
-      expect(first.stderr.text).toMatch(/error: backup block 0x14020000 .* did not answer/);
-      expect(first.stdout.text).toMatch(/Backup failed: .*0x14020000/);
+      /* A failed step is said once, in its own line; no `error:` line repeats it, and the run still exits 1
+       * (TESTING.md 42.108 O2, 42.110). */
+      expect(first.stdout.text).toMatch(/Backup failed: backup block 0x14020000 .* did not answer/);
+      expect(first.stdout.text.match(/backup block 0x14020000 .* did not answer/g)).toHaveLength(1);
+      expect(first.stderr.text).not.toMatch(/error: /);
       const torn = await loadState();
       expect(torn.nextStep).toBe('backup');
       expect(torn.steps.backup?.status).toBe('failed');
@@ -705,7 +708,10 @@ describe('preserve — resume from a run the drain killed', () => {
       const probe = testIo({ backend: backendOf(camera) });
       const code = await run(['preserve', '--resume', runDir(), '--yes'], probe.io, signal());
       expect(code).toBe(EXIT_FAILED);
-      expect(probe.stderr.text).toMatch(/preserve_bank_a_plain\.bin/);
+      /* Said once, in the step's own "failed" line, not again as `error:` (TESTING.md 42.110). */
+      expect(probe.stdout.text).toMatch(/ failed: .*preserve_bank_a_plain\.bin/);
+      expect(probe.stdout.text.match(/preserve_bank_a_plain\.bin/g)?.length).toBe(1);
+      expect(probe.stderr.text).not.toMatch(/error: /);
 
       /* The file goes back under its artifact name (from the run zip) and the
        * same resume just works. */

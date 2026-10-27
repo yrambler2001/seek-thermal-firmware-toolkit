@@ -91,7 +91,7 @@ import {
   unpatchedStartOf,
 } from '@seek-fw/core';
 import type { CommandContext, CommandResult } from '../cli.js';
-import { CliError, markSaid } from '../errors.js';
+import { CliError, describeError, markSaid } from '../errors.js';
 import {
   artifactInventory,
   loadRunState,
@@ -722,13 +722,15 @@ async function runSteps(
         refused
           ? `${label} refused: ${error.message} — recorded in ${runDir}/` +
               `${PRESERVE_RUN_STATE_FILE}; nothing was written to the camera.`
-          : `${label} failed: ${error instanceof Error ? error.message : String(error)} — ` +
+          : `${label} failed: ${describeError(error, ctx.io.platform).message} — ` +
               `recorded in ${runDir}/${PRESERVE_RUN_STATE_FILE}; ` +
               'the previous checkpoint stands. Fix the cause and resume.',
         'error',
       );
-      /* A refusal is said once, in the line above; the run still fails (exit 1, the JSON's error). */
-      throw refused ? markSaid(error) : error;
+      /* A refusal or a failure is said once, in the line above, in the words the CLI's own `error:` line
+       * would print (describeError); the run still fails with its exit status (1) and the JSON's error. The
+       * hint, if any, is still printed after it (TESTING.md 42.108 O2, 42.110). */
+      throw typeof error === 'object' && error !== null ? markSaid(error) : error;
     }
     /* Artifacts first, state second: a crash in between leaves the state
      * behind the files, which a resume catches up from. */

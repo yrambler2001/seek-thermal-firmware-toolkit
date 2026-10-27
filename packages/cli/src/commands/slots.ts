@@ -70,6 +70,7 @@ import {
   planSlotCopy,
   planSlotRestore,
   prepareSlotFlash,
+  readBackReferenceOf,
   restoreReadBack,
   restoreReadBackText,
   runningApplicationOf,
@@ -919,18 +920,25 @@ export const REPLUG_LINE_PATCH =
   'Unplug the camera and plug it back in. The patched image runs after the next start. Then run ' +
   '`seek-fw slots list` to read the banks again.';
 
+/**
+ * `reference` is what the read-back was compared with, in words (core's `readBackReferenceOf` of the plan):
+ * the bytes the plan predicted the bank would hold, and which prediction, never "the staged image", which a
+ * bank that re-keys the payload does not keep (TESTING.md 42.109 L4).
+ */
 export function readBackLines(
   result: FlashSlotResult,
   afterSha256: string | null,
   color: boolean,
+  reference: string | null,
 ): string[] {
   const bank = bankName(result.key);
   const sha = afterSha256 === null ? '' : ` (sha256 ${afterSha256})`;
+  const against = reference ?? 'what the plan predicted';
   const lines: string[] = [`commit status: ${hexUp(result.commitStatus, 4)}`];
   if (result.verified === true) {
-    lines.push(paint(`read-back: ${bank} matches the staged image${sha}`, 'green', color));
+    lines.push(paint(`read-back: ${bank} matches ${against}${sha}`, 'green', color));
   } else if (result.verified === false) {
-    lines.push(paint(`read-back: ${bank} does NOT match the staged image${sha}`, 'red', color));
+    lines.push(paint(`read-back: ${bank} does NOT match ${against}${sha}`, 'red', color));
   } else if (afterSha256 !== null) {
     /* Read back, but nothing could be compared with it (raw bytes whose plain image cannot be
      * named). Said as what happened, not "skipped". */
@@ -1236,19 +1244,23 @@ async function runPlannedWrite(
   const storedSha256 = result.after === null ? null : await sha256hex(result.after);
   const check =
     planned.restore === null ? null : restoreReadBack(planned.restore.stored, result.after);
-  const lines = readBackLines(result, storedSha256, ctx.color);
+  const reference = readBackReferenceOf(plan);
+  const lines = readBackLines(result, storedSha256, ctx.color, reference);
   if (check !== null) {
     lines.splice(-1, 0, `restore: ${restoreReadBackText(check, bankName(plan.key))}`);
   }
   ctx.reporter.write(lines.join('\n'));
 
   if (result.verified === false) {
-    throw new CliError(`the read-back of ${bankName(plan.key)} does not match the staged image`, {
-      code: 'slots/verify-failed',
-      hint:
-        `The backup is ${saved.path ?? done.backup.fileName}. Run \`seek-fw slots list\` once the ` +
-        `camera is back. Do not rely on ${bankName(plan.key)} until a read matches.`,
-    });
+    throw new CliError(
+      `the read-back of ${bankName(plan.key)} does not match ${reference ?? 'what the plan predicted'}`,
+      {
+        code: 'slots/verify-failed',
+        hint:
+          `The backup is ${saved.path ?? done.backup.fileName}. Run \`seek-fw slots list\` once the ` +
+          `camera is back. Do not rely on ${bankName(plan.key)} until a read matches.`,
+      },
+    );
   }
 
   return {
