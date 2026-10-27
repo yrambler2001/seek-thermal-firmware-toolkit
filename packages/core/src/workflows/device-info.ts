@@ -368,6 +368,14 @@ export const PLAIN_CHAIN_ONLY_REASON =
   'stored plain, word sum 0, no key material — and no bank this read opened is stored ' +
   'that way';
 
+/**
+ * Why the 2014 bootloader does not start a bank whose bytes are not a plain image, in the words the read's
+ * line says it (TESTING.md 42.109: the 1.3.0.0 Compact passed over slot B holding the FF payload as sent).
+ */
+export const PLAIN_CHAIN_PASSES_OVER =
+  'the bootloader starts a bank only when its words sum to 0, and this bank holds no image in that ' +
+  'form, so the camera will not start it';
+
 /** The 2014 bootloader (the original Compact and the 8 Hz 1.3.0.8 build run on it; TESTING.md 42.10). */
 const LEGACY_2014_BOOTLOADER = '0.9.0.0';
 
@@ -1068,16 +1076,26 @@ export async function readDeviceInfo(
      * running bank "NOT bootable": that bootloader checks none, and the bank
      * has none (see `BootPolicy.checksFooter`). */
     const footerPasses = !profile.boot.checksFooter || slot.footerOk;
+    /* ON THE 2014 PLAINTEXT CHAIN THE BOOTLOADER'S CHECK IS THE STORED WORD SUM. A bank there whose bytes
+     * are not a plain image (the FF payload as sent, an image under a key) does not sum to 0, so the
+     * bootloader takes it neither at A nor at B, whatever a keystream solve says of it: with boot word 1
+     * and the FF payload as sent in B, the 1.3.0.0 Compact started slot A (TESTING.md 42.109). Its
+     * acceptance is the chain's, not the cipher's, so "accepts" is no and it is not bootable. Recovery R
+     * keeps its own rule (`ffFormInRecovery`). */
+    const chainPassesOver = plainChain && slot.present && !storedPlain(slot);
+    const accepts = chainPassesOver ? false : slot.accepts;
     const bootability: SlotState['bootability'] = storedPlain(slot)
       ? /* the chain's own model: see the verdict below */ 'bootable'
-      : identity.bootable && footerPasses
-        ? 'bootable'
-        : ffFormInRecovery(descriptor.key, slot, bootloaderVersion)
-          ? /* recovery runs it when A and B hold nothing the bootloader takes: not a skipped slot */
-            'recovery-only'
-          : slot.present && slot.accepts && footerPasses && !keyKnown
-            ? /* everything but the key checks out, and the key cannot be named */ 'unknown'
-            : 'not-bootable';
+      : ffFormInRecovery(descriptor.key, slot, bootloaderVersion)
+        ? /* recovery runs it when A and B hold nothing the bootloader takes: not a skipped slot */
+          'recovery-only'
+        : chainPassesOver
+          ? 'not-bootable'
+          : identity.bootable && footerPasses
+            ? 'bootable'
+            : slot.present && accepts && footerPasses && !keyKnown
+              ? /* everything but the key checks out, and the key cannot be named */ 'unknown'
+              : 'not-bootable';
     const bootable = bootability === 'bootable';
 
     const state: SlotState = {
@@ -1095,7 +1113,7 @@ export async function readDeviceInfo(
       recovered: slot.recovered,
       plain: slot.plain,
       plainHeader: slot.plainHeader,
-      accepts: slot.accepts,
+      accepts,
       footerOk: slot.footerOk,
       sha256: slot.sha256,
       /* A bank stored plain has no key, so it is not named: identifyKey would call its identity
@@ -1134,19 +1152,21 @@ export async function readDeviceInfo(
             ? `bootable unknown: ${unknownBootabilityWhy({ checkKey })}`
             : bootability === 'recovery-only'
               ? 'recovery only: R runs when A and B hold nothing the bootloader takes'
-              : 'NOT bootable';
+              : chainPassesOver
+                ? `NOT bootable: ${PLAIN_CHAIN_PASSES_OVER}`
+                : 'NOT bootable';
       reporter.log(
         `${descriptor.name}: firmware ${slot.plainHeader?.versionStr ?? '?'}, ` +
           `${String(slot.header?.length ?? 0)} B${frameRateNote(slot.plain)}, ` +
           `${identity.name ?? UNNAMED_KEY}, ` +
-          `acceptance ${slot.accepts ? 'ok' : 'FAILS'}, ${footer} -> ${verdict}`,
+          `acceptance ${accepts ? 'ok' : 'FAILS'}, ${footer} -> ${verdict}`,
         bootable
           ? 'ok'
           : bootability === 'unknown' || bootability === 'recovery-only'
             ? 'detail'
             : 'warn',
       );
-      if (bootability === 'not-bootable' && slot.accepts && footerPasses) {
+      if (bootability === 'not-bootable' && accepts && footerPasses) {
         reporter.log(
           checkKey?.name != null
             ? '    it decrypts and checksums under its own key, but the 2016 bootloader checks a ' +
