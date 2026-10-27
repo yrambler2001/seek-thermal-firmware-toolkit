@@ -875,7 +875,7 @@ describe('the flash plan and read-back', () => {
     const text = flashPlanLines(plan, 'ff.bin', 'feedface', false).join('\n');
     expect(text).toContain('ff.bin — decrypted 1.3.0.8 FF image');
     expect(text).toMatch(
-      /staging\s+the 1\.3\.0\.8 FF image as the vendor app stages it \(XOR Key A\) — the camera stores it under Key B/,
+      /staging\s+the 1\.3\.0\.8 FF image as the vendor app stages it \(XOR Key A\) — the 16 Hz build stores it under Key B/,
     );
     /* Said once: the image row says what the file is, the staging row how it is sent. */
     expect(text.match(/vendor app/g)).toHaveLength(1);
