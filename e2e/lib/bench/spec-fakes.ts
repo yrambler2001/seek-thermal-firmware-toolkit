@@ -563,6 +563,8 @@ export function createFakeRig(options: {
           status: `Written. Slot ${upper} is written.`,
           ackShown,
           dialog: '',
+          readFirst: '',
+          confirmOn: !ackShown,
           outcome: `Slot ${upper} — ${image.name}: ${verdict}\nNOW UNPLUG AND REPLUG THE CAMERA.`,
         };
       },
@@ -583,6 +585,8 @@ export function createFakeRig(options: {
           status: `Written. Slot ${upper} is written.`,
           ackShown,
           dialog: '',
+          readFirst: '',
+          confirmOn: !ackShown,
           outcome: `Slot ${upper} — the image of bank ${source.toUpperCase()}: the bank reads back as written.\nNOW UNPLUG AND REPLUG THE CAMERA.`,
         };
       },

@@ -33,7 +33,7 @@
  * ==================================================================== */
 
 import { createHash } from 'node:crypto';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
@@ -69,6 +69,12 @@ const SCRATCH =
   process.env.SEEK_E2E_SCRATCH ??
   path.join(tmpdir(), `seek-e2e-pages-bench-${String(process.pid)}`);
 const KEEP = process.env.SEEK_E2E_KEEP === '1';
+/**
+ * Opt-in (off by default; TESTING.md 42.106): the path of an image of ANOTHER build than the camera
+ * runs (e.g. the stock Compact 1.2.0.0, 47,768 B). When set, part B writes it into bank B as well and
+ * reads the plan's image-build warning (TESTING.md 42.104) on the page before Yes.
+ */
+const OTHER_BUILD = process.env.SEEK_E2E_OTHER_BUILD ?? '';
 
 const FLASH_BASE = 0x14000000;
 const FLASH_BYTES = 0x400000;
@@ -692,6 +698,49 @@ describe.skipIf(!RUNNABLE)('the web app pages on the bench camera (1.3.0.0, real
         ).toBe(true);
         const stagedAt = Buffer.from(flash).indexOf(Buffer.from(image.subarray(0, 4096)));
         expect(stagedAt, 'the image is in bank B at the start').toBe(0);
+      },
+      RUN_TIMEOUT_MS,
+    );
+
+    it.skipIf(OTHER_BUILD === '')(
+      'opt-in: an image of another build into bank B: the plan warns first, in "Read before writing" and in the dialog, Yes is not held back, and the J-Link reads the image back',
+      async () => {
+        const image = new Uint8Array(readFileSync(OTHER_BUILD));
+        /* The header's version word (0x20C), byte by byte: the build the warning names. */
+        const version = Array.from(image.subarray(0x20c, 0x210)).join('.');
+        expect(version, 'the opt-in image is another build').not.toBe('1.3.0.0');
+        const first = `This image is firmware ${version}; the camera runs 1.3.0.0.`;
+        const written = await need().write(
+          'b',
+          { name: path.basename(OTHER_BUILD), bytes: image },
+          false,
+        );
+        say(`other build ${version}: read before writing: ${JSON.stringify(written.readFirst)}`);
+        say(`other build ${version}: write dialog: ${JSON.stringify(written.dialog)}`);
+        const listed = written.readFirst
+          .split('\n')
+          .map((line) => line.trim())
+          .filter((line) => line !== '');
+        expect(listed[0], 'the page shows "Read before writing"').toBe('Read before writing:');
+        expect(
+          listed[1]?.startsWith(first),
+          `the image-build warning is the first warning ("${first}")`,
+        ).toBe(true);
+        expect(written.dialog, 'the dialog says it again').toContain(listed[1]);
+        expect(written.confirmOn, 'Yes is not held back by the warning').toBe(true);
+        expect(written.status.startsWith('Written. '), `the write ended "${written.status}"`).toBe(
+          true,
+        );
+        const flash = await haltedRead(BANK_ADDRESS.b, BANK_BYTES);
+        expect(
+          sameBytes(flash.subarray(0, image.length), image),
+          'the J-Link reads the image at the start of bank B',
+        ).toBe(true);
+        expect(
+          flash.subarray(image.length).every((byte) => byte === 0xff),
+          'the rest of bank B is erased',
+        ).toBe(true);
+        say(`other build ${version}: bank B sha256 ${sha256(flash)} (image ${sha256(image)})`);
       },
       RUN_TIMEOUT_MS,
     );
