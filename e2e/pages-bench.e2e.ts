@@ -61,6 +61,7 @@ import {
   type BenchCamera,
   type JlinkBench,
 } from './lib/bench/index.js';
+import { predictedFFVendorPayload } from './lib/bench/ff-form.js';
 import { createRealRig } from './lib/bench/spec-page.js';
 import type { BankLetter, BenchPage, BenchRig } from './lib/bench/spec-rig.js';
 import { readZip } from './lib/zip.js';
@@ -78,8 +79,8 @@ const OTHER_BUILD = process.env.SEEK_E2E_OTHER_BUILD ?? '';
 /**
  * Opt-in (off by default; TESTING.md 42.109): the path of the 1.3.0.8 FF (16 Hz) image (the plain corpus image,
  * 49,308 B). When set, part B writes it into bank B of the 1.3.0.0 camera (TESTING.md 42.107 case (a)): the plan
- * warns of the version and that the camera is expected to refuse the write at commit; the step records what the
- * camera answered and checks, with the J-Link, that bank B is what it was before.
+ * warns of the version and that the camera is expected to program the payload as it is sent (measured in 42.109:
+ * commit status 0); the step records the page's words and checks, with the J-Link, that bank B holds the payload.
  */
 const FF_IMAGE = process.env.SEEK_E2E_FF_IMAGE ?? '';
 
@@ -753,7 +754,7 @@ describe.skipIf(!RUNNABLE)('the web app pages on the bench camera (1.3.0.0, real
     );
 
     it.skipIf(FF_IMAGE === '')(
-      'opt-in: the 1.3.0.8 FF image into bank B of the 1.3.0.0 camera: the version and the commit warnings before Yes, then the camera answers, and the J-Link reads bank B unchanged',
+      'opt-in: the 1.3.0.8 FF image into bank B of the 1.3.0.0 camera: the version and the commit warnings before Yes, and the J-Link reads the payload in bank B, as sent',
       async () => {
         const image = new Uint8Array(readFileSync(FF_IMAGE));
         const version = Array.from(image.subarray(0x20c, 0x210)).join('.');
@@ -787,26 +788,22 @@ describe.skipIf(!RUNNABLE)('the web app pages on the bench camera (1.3.0.0, real
           'the version warning is the first warning',
         ).toBe(true);
         const commitWarning = listed.find((line) =>
-          line.includes(
-            'expected to refuse this write at commit with 0x00070100 before it writes anything',
-          ),
+          line.includes('expected to program this payload as it is sent'),
         );
         expect(
           commitWarning,
-          'the page says the camera is expected to refuse the write at commit',
+          'the page says the camera is expected to program the payload as it is sent',
         ).toBeDefined();
         expect(written.dialog, 'the dialog says the version warning').toContain(listed[1]);
         expect(written.dialog, 'the dialog says the commit warning').toContain(commitWarning);
         expect(written.confirmOn, 'Yes is not held back by the warnings').toBe(true);
-        expect(written.status, 'the page reports the refused commit').toMatch(/^Failed/);
-        expect(written.log, 'the log names the status').toContain('0x00070100');
-        expect(written.log, 'the log says nothing was written').toContain(
-          'Nothing was written; the bank is unchanged.',
-        );
-        expect(written.log, 'the log says the backup is kept').toContain(
-          'The backup saved before the write is kept',
-        );
-        expect(sameBytes(before, after), 'the J-Link reads bank B as it was before').toBe(true);
+        /* TESTING.md 42.109: the 1.3.0.0 application arms a bank with no image check, so it programs the
+         * payload as it is sent (commit status 0), and the plan predicts those bytes. */
+        expect(written.status, 'the page reports the write').toMatch(/^Written\. /);
+        expect(
+          sameBytes(after, predictedFFVendorPayload(image, BANK_BYTES)),
+          'the J-Link reads the payload in bank B, as sent (the image XOR Key A, the rest 0xFF)',
+        ).toBe(true);
       },
       RUN_TIMEOUT_MS,
     );
