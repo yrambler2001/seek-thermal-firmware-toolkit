@@ -43,8 +43,9 @@ The web app is built into `docs/`, which GitHub Pages serves, so **a change to t
 until `npm run build` is run and `docs/` is committed**. CI fails if the two are out of sync. Keep anything
 else out of `docs/`: the build empties it every time.
 
-The README's screenshots are generated: `npm run screenshots` regenerates `.github/readme/*.png` on the
-FW-V1 emulator (it needs `SEEK_EMU_DIR`, as for the emulator suites).
+The README's screenshots are generated: `npm run screenshots` regenerates `.github/readme/*.avif` on the
+FW-V1 emulator (it needs `SEEK_EMU_DIR`, as for the emulator suites). Each shot is captured as a PNG and
+compressed to AVIF with ImageMagick, so `magick` must be on the `PATH`.
 
 ## Running the web app locally
 

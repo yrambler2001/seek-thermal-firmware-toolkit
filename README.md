@@ -12,9 +12,9 @@ runs on your own machine, and the CLI talks to the camera directly. No SDK, no J
 
 **→ [Open the web tool](https://yrambler2001.github.io/seek-thermal-firmware-dump/)**
 
-![The Work with firmware slots tab on a Compact 1.3.0.0, with a Make 32 FPS button on each bank](.github/readme/slots.png)
+![The Work with firmware slots tab on a Compact 1.3.0.0, with a Make 32 FPS button on each bank](.github/readme/slots.avif)
 
-<!-- ![The page on an Android phone](.github/readme/phone.png) -->
+<!-- ![The page on an Android phone](.github/readme/phone.avif) -->
 
 ## Which cameras
 
@@ -43,14 +43,14 @@ in Chrome's list.
 
 ### Info (`#/`)
 
-![The Info tab after Read firmware version](.github/readme/info.png)
+![The Info tab after Read firmware version](.github/readme/info.avif)
 
 **Read firmware version** asks the camera what it runs, how it boots, which keys it holds and what each bank
 holds, and names the tab for that camera. It writes nothing to the flash. CLI: `seek-fw info`.
 
 ### Dump & decrypt 0.x/1.x 2014/2016 (`#/preserve`)
 
-![The Dump & decrypt 0.x/1.x 2014/2016 tab](.github/readme/preserve.png)
+![The Dump & decrypt 0.x/1.x 2014/2016 tab](.github/readme/preserve.avif)
 
 For the 2014 to 2017 cameras. They only let 31 of their 64 flash blocks be read, so this tab backs up what
 it can, writes a small temporary patch, reads the whole flash, then puts the original firmware back and
@@ -58,14 +58,14 @@ checks it byte for byte. The two steps that write ask first. CLI: `seek-fw prese
 
 ### Dump & decrypt 4.x/Nano (`#/v4`)
 
-![The Dump & decrypt 4.x/Nano tab](.github/readme/dump-4x.png)
+![The Dump & decrypt 4.x/Nano tab](.github/readme/dump-4x.avif)
 
 For the 2018-and-later cameras. **Start dump** reads the whole flash, decrypts the firmware and downloads
 it as one zip; it only reads. CLI: `seek-fw dump`.
 
 ### Decrypt File/Slot (`#/decrypt`)
 
-![The Decrypt File/Slot tab](.github/readme/decrypt.png)
+![The Decrypt File/Slot tab](.github/readme/decrypt.avif)
 
 No camera needed. **Choose dump file…** decrypts a whole flash dump (from this tool, J-Link or an SPI
 programmer), and **Choose slot file…** one 64 KiB firmware bank. This works in every browser, Safari and
@@ -73,7 +73,7 @@ iOS included. CLI: `seek-fw decrypt file`, `seek-fw decrypt slot`.
 
 ### Work with firmware slots (`#/slots`)
 
-![The Work with firmware slots tab on a Compact PRO, with Make 18 FPS](.github/readme/slots-pro.png)
+![The Work with firmware slots tab on a Compact PRO, with Make 18 FPS](.github/readme/slots-pro.avif)
 
 **Read slots** shows the three firmware banks (slot A, slot B and recovery R) and what each holds. A bank
 can be dumped, written from a decrypted image, copied into another bank, restored from a whole-flash
@@ -113,9 +113,9 @@ seek-fw slots patch-fps all --write --acknowledge-risk --dump-dir ./before-fps
 seek-fw slots list                         # 5: after the unplug and replug
 ```
 
-![The confirmation of Make 32 FPS in every bank](.github/readme/fps-plan.png)
+![The confirmation of Make 32 FPS in every bank](.github/readme/fps-plan.avif)
 
-![The result after the writes](.github/readme/fps-done.png)
+![The result after the writes](.github/readme/fps-done.avif)
 
 ### Compact PRO 4.9.2.0 → 18 fps
 

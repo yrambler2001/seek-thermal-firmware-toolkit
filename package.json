@@ -55,6 +55,7 @@
     "e2e:pages:bench:pro": "vitest run --config e2e/vitest.config.ts pages-bench-pro.e2e",
     "e2e:ff:vendor": "vitest run --config e2e/vitest.config.ts ff-vendor.e2e",
     "e2e:pages:emu": "vitest run --config e2e/vitest.config.ts pages-emu.e2e",
+    "screenshots": "vitest run --config e2e/screenshots.config.ts",
     "clean": "rm -rf packages/*/dist packages/*/tsconfig.tsbuildinfo coverage"
   },
   "devDependencies": {
