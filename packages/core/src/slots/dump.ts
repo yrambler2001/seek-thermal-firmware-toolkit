@@ -199,7 +199,7 @@ export async function dumpSlot(
         plain = keyB;
         notes.push(
           `decrypted ${String(keyB.length)} B under Key B: the 1.3.0.8 FF image, stored as the image ` +
-            'XOR its key block 1 keystream with the header window verbatim (TESTING.md 42.12)',
+            'XOR its key block 1 keystream with the header window verbatim',
         );
       } else if (!recovered.sane) {
         notes.push(

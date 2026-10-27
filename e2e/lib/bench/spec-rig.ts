@@ -18,13 +18,13 @@ import type {
   PatchedBuildString,
 } from './types.js';
 
-/** One of the three banks: A, B, or the recovery bank R. */
+/** One of the three banks: slot A, slot B or recovery R. */
 export type BankLetter = 'a' | 'b' | 'r';
 
 /** A bank row as the page shows it. */
 export interface BankView {
   readonly letter: BankLetter;
-  /** "Bank A", "Bank B", "Recovery bank R". */
+  /** "Slot A", "Slot B", "Recovery R": the page's names (core `bankNameOf`). */
   readonly name: string;
   readonly address: number;
   /** The version the row reports, or null when the bank holds no readable image. */

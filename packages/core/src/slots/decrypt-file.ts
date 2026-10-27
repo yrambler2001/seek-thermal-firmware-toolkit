@@ -215,7 +215,7 @@ export async function decryptSlotFile(
   if (keyBPlain !== null) {
     notes.push(
       `decrypted ${String(keyBPlain.length)} B under FF 1.3.0.8 Key B: the image is stored as the ` +
-        'image XOR its key block 1 keystream, header window verbatim (TESTING.md 42.12)',
+        'image XOR its key block 1 keystream, header window verbatim',
     );
     return finish(
       'decrypted',

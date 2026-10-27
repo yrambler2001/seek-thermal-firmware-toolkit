@@ -282,7 +282,7 @@ function ffVendorKeys(state: DeviceState): WriteKeys {
         'to be on the 2014 plaintext chain; the FF image is written in its vendor form, raw bytes are sent ' +
         'as given, and a plain 8 Hz image is not written',
       'a write of the FF image is offered with its UNTESTED warning: no genuine bootloader for this build ' +
-        'is in the corpus, so whether the written bank boots is not measured (TESTING.md 42.12)',
+        'is in the corpus, so whether the written bank boots is not measured',
     ],
   };
 }

@@ -32,6 +32,7 @@ import { viewOf } from '../../../packages/core/src/bytes.js';
 import { KEY_PAIRS } from '../../../packages/core/src/preservation/patch.js';
 import { ffImageLength, isFF1308Subject, predictedFFStored, FF_VERSION } from './ff-form.js';
 import { ffBankVerdict, plainBankVerdict } from '../../../packages/core/src/slots/running.js';
+import { bankNameOf } from '../../../packages/core/src/profiles/locked-boot.js';
 import type {
   BankLetter,
   BankView,
@@ -452,10 +453,11 @@ export function createFakeRig(options: {
     return flash.slice(offset, offset + BANK_BYTES);
   };
 
+  /* The page's names since 42.108: "Slot A", "Slot B", "Recovery R" (core `bankNameOf`). */
   const bankName: Readonly<Record<BankLetter, string>> = {
-    a: 'Bank A',
-    b: 'Bank B',
-    r: 'Recovery bank R',
+    a: bankNameOf('a'),
+    b: bankNameOf('b'),
+    r: bankNameOf('r'),
   };
 
   /** The reason the row refuses this image at this bank's picker, or null when it takes it. */

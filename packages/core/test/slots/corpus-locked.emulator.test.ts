@@ -331,8 +331,10 @@ describe.skipIf(!available)(
             });
             it('labels the FF image in R recovery only, and does not call the FF image in A bootable', () => {
               expect(run.bootability?.r).toBe('recovery-only');
-              /* A reads 'unknown' on this emulator donor: the plain chain has no key table, and the
-               * image's checksum passes acceptance. The label is not changed here (see the report). */
+              /* A read 'unknown' on this emulator donor before 42.110: no key table, and the image's
+               * checksum passes acceptance. Since 42.110 a read with a bank stored plain (the 2014 chain)
+               * calls a bank that is not a plain image not bootable (TESTING.md 42.109 L1); either way it
+               * is not bootable. */
               expect(run.bootability?.a).not.toBe('bootable');
             });
           } else {

@@ -121,8 +121,8 @@ export interface FpsPatch {
 export const FPS_OFFER_WITHHELD = false as boolean;
 
 const WITHHELD_REASON =
-  'withheld after the bench run (TESTING.md 42.14): on the physical camera the patch did not raise ' +
-  'the publish rate, and the shutter fired on every frame after the write';
+  'withheld after a run on a camera: there the patch did not raise the publish rate, and the ' +
+  'shutter fired on every frame after the write';
 
 /**
  * The stage-one entries: the plain 2014 chain, the builds slots/capability-family.ts stages plain (PLAIN_CHAIN_VERSIONS,
@@ -555,7 +555,7 @@ export const FPS_NO_PATCH_4821_VERSION = '4.8.2.1';
 export const FPS_NO_PATCH_4821_REASON =
   'this image reports the Compact 4.8.2.1 build (or the Compact XR 4.8.2.1, the same build) but is not the stock ' +
   'image the frame-rate patch was written for (f96ac57eda75: its 68-byte command pages, steady page 13), so no ' +
-  'frame-rate patch is made for it (TESTING.md 42.24)';
+  'frame-rate patch is made for it';
 
 /**
  * Why an image an earlier patch wrote gets no frame-rate patch (TESTING.md 42.97): it runs at `hz` but has no USB

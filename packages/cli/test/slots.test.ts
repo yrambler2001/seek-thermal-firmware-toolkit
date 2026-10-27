@@ -25,6 +25,7 @@ import {
   keyFilenameSuffix,
   LENGTH_OFFSET,
   prepareSlotFlash,
+  readBackReferenceOf,
   safeVersion,
   SeekError,
   writeBannerOf,
@@ -900,13 +901,35 @@ describe('the flash plan and read-back', () => {
 
   it('reports a read-back that matches, one that does not, and one that was skipped', () => {
     const base = { key: 'b' as const, commitStatus: 0, after: null, notes: [] };
-    expect(readBackLines({ ...base, verified: true }, 'abc123', false).join('\n')).toContain(
-      'matches the staged image (sha256 abc123)',
+    /* The reference is the plan's prediction, named (core's readBackReferenceOf), never "the staged image"
+     * (TESTING.md 42.110). */
+    const sent = readBackReferenceOf({ expectedStored: new Uint8Array(4), storedForm: 'as-sent' });
+    const keyB = readBackReferenceOf({
+      expectedStored: new Uint8Array(4),
+      storedForm: 'key-b-ciphertext',
+    });
+    expect(sent).toBe(
+      'the bytes the plan predicted the bank would hold (the bytes as they were sent)',
     );
-    expect(readBackLines({ ...base, verified: false }, 'abc123', false).join('\n')).toContain(
-      'does NOT match the staged image',
+    expect(keyB).toBe(
+      'the bytes the plan predicted the bank would hold (the image as the 16 Hz build stores it, ' +
+        'not the bytes sent)',
     );
-    expect(readBackLines({ ...base, verified: null }, null, false).join('\n')).toContain(
+    expect(readBackReferenceOf({ expectedStored: null, expectedPlain: new Uint8Array(4) })).toBe(
+      'the image the plan predicted the bank would decode to',
+    );
+    expect(readBackReferenceOf({ expectedStored: null, expectedPlain: null })).toBeNull();
+    expect(readBackLines({ ...base, verified: true }, 'abc123', false, sent).join('\n')).toContain(
+      'read-back: slot B matches the bytes the plan predicted the bank would hold (the bytes as they ' +
+        'were sent) (sha256 abc123)',
+    );
+    const mismatch = readBackLines({ ...base, verified: false }, 'abc123', false, keyB).join('\n');
+    expect(mismatch).toContain(
+      'read-back: slot B does NOT match the bytes the plan predicted the bank would hold (the image ' +
+        'as the 16 Hz build stores it, not the bytes sent)',
+    );
+    expect(mismatch).not.toContain('staged image');
+    expect(readBackLines({ ...base, verified: null }, null, false, null).join('\n')).toContain(
       'skipped (--no-verify)',
     );
     /* Read back, with nothing predicted to compare it with (a Key A bank): not "skipped". */
@@ -914,13 +937,14 @@ describe('the flash plan and read-back', () => {
       { ...base, after: new Uint8Array(4), verified: null },
       'abc123',
       false,
+      null,
     ).join('\n');
     expect(readBack).toContain('read back (sha256 abc123)');
     expect(readBack).not.toContain('skipped');
     /* The one replug instruction, with the CLI's own re-read command: core's end-of-write progress gives
      * neither (TESTING.md 42.87). */
     for (const verified of [true, false, null]) {
-      const text = readBackLines({ ...base, verified }, null, false).join('\n');
+      const text = readBackLines({ ...base, verified }, null, false, sent).join('\n');
       expect(text.match(/plug it back in/g)).toHaveLength(1);
       expect(text).toContain(
         'Unplug the camera and plug it back in. A bank is only used when the camera boots, so the new ' +
@@ -1332,7 +1356,7 @@ describe('slots command', () => {
     expect(test.stdout.text).toContain('skipped (--no-verify)');
   });
 
-  it('fails the run, with exit 1, when the read-back does not match what was staged', async () => {
+  it('fails the run, with exit 1, when the read-back does not match what the plan predicted', async () => {
     const { ops } = fakeOps(reportOf({ booted: 'a' }), { verified: false });
     await writeFile(join(temp.path, 'image.bin'), new Uint8Array(64).fill(1));
     const test = cameraIo();
@@ -1345,7 +1369,15 @@ describe('slots command', () => {
     expect(error).toBeInstanceOf(CliError);
     expect((error as CliError).code).toBe('slots/verify-failed');
     expect((error as CliError).exitCode).toBe(EXIT_FAILED);
-    expect(test.stdout.text).toContain('does NOT match the staged image');
+    /* The reference is the plan's prediction, and which one (TESTING.md 42.109 L4, 42.110). */
+    expect((error as CliError).message).toBe(
+      'the read-back of slot B does not match the bytes the plan predicted the bank would hold ' +
+        '(the bytes as they were sent)',
+    );
+    expect(test.stdout.text).toContain(
+      'read-back: slot B does NOT match the bytes the plan predicted the bank would hold',
+    );
+    expect(test.stdout.text).not.toContain('staged image');
   });
 
   it('reports an image file it cannot read, before the camera is touched', async () => {
@@ -1662,7 +1694,9 @@ describe('empty banks', () => {
       expect(test.stdout.text).toContain(
         'empty — the bank holds no image, so nothing is overwritten',
       );
-      expect(test.stdout.text).toContain('matches the staged image');
+      expect(test.stdout.text).toContain(
+        'matches the bytes the plan predicted the bank would hold',
+      );
       expect(result).toMatchObject({
         action: 'flash',
         bank: 'b',
@@ -3321,7 +3355,7 @@ describe('slots list on the 2016 Compact PRO', () => {
     expect(notes).not.toContain('B: a write needs');
     expect(notes.match(/acknowledge/g)).toHaveLength(2);
     expect(notes).toContain(
-      '  · Recovery R: Recovery bank, mode 9, token form. Measured on a Compact PRO 1.0.3.0: R took its own image',
+      '  · Recovery R: Measured on a Compact PRO 1.0.3.0: recovery R took its own image',
     );
     /* A note both front ends print names neither (TESTING.md 42.87). */
     expect(notes).toContain(

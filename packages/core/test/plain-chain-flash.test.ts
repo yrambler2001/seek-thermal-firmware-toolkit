@@ -60,7 +60,11 @@ import { inspectSlots, joinSlotViews } from '../src/slots/inspect.js';
 import type { SlotsReport } from '../src/slots/types.js';
 import { deriveWriteKeys, slotWriteRefusal } from '../src/slots/write-keys.js';
 import { flashSlot, prepareSlotFlash } from '../src/slots/write.js';
-import { readDeviceInfo } from '../src/workflows/device-info.js';
+import {
+  bootableDescription,
+  PLAIN_CHAIN_PASSES_OVER,
+  readDeviceInfo,
+} from '../src/workflows/device-info.js';
 import type { DeviceState, WorkflowContext } from '../src/workflows/types.js';
 import { fakeCamera, type FakeCamera, type FakeWindowSpec } from './fake-transport.js';
 
@@ -158,7 +162,7 @@ export function plainImage2014(): Uint8Array {
  * the same image sits under a real keystream instead — the 1.0.3.x form.
  */
 function camera2014(
-  options: { plain?: boolean; cfg0?: number; activeSlot?: number } = {},
+  options: { plain?: boolean; cfg0?: number; activeSlot?: number; slotB?: Uint8Array } = {},
 ): FakeCamera {
   const flash = new Uint8Array(4 * 1024 * 1024).fill(0xff);
   const image = plainImage2014();
@@ -169,6 +173,7 @@ function camera2014(
     const key = stateFromKey(new Uint8Array(16).fill(0x5a), 0);
     flash.set(cryptBytes(image, key, legacyAuth.cipher), SLOT_A_OFFSET);
   }
+  if (options.slotB !== undefined) flash.set(options.slotB, 0x60000);
   flash.set(bootConfigBlock(options.cfg0 ?? 0), 0x10000);
   return fakeCamera({
     flash,
@@ -203,6 +208,46 @@ function logsOf(reporter: { readonly events: { readonly type: string }[] }): str
     .map((e) => e.message)
     .join('\n');
 }
+
+describe('a bank on the 2014 chain whose bytes are not a plain image (TESTING.md 42.109, 42.110)', () => {
+  /* The FF payload as sent is the image under a keystream: the bootloader checks the stored word sum, which
+   * is not 0, so it passes the bank over. A keystream solve still decodes it to an image whose sum is 0;
+   * before 42.110 the read called it "accepts yes, bootable unknown". */
+  it('says the camera will not start it: accepts no, bootable no, and why, on the page and in the CLI alike', async () => {
+    /* An image whose decoded words sum to the keystream banks' acceptance (0xFFFF), as the FF image's do,
+     * under a keystream: the solve says "accepts", the 2014 bootloader does not. */
+    const image = plainImage2014();
+    const dv = viewOf(image);
+    dv.setUint32(ADJUST_OFFSET, (dv.getUint32(ADJUST_OFFSET, true) + 0xffff) >>> 0, true);
+    expect(wordSum32(image, image.length)).toBe(legacyAuth.cipher.acceptanceSum);
+    const key = stateFromKey(new Uint8Array(16).fill(0x5a), 0);
+    const underKey = cryptBytes(image, key, legacyAuth.cipher);
+    const reporter = collectingReporter();
+    const state = await readDeviceInfo(
+      await contextFor(camera2014({ slotB: underKey }), reporter),
+      { chunk: 4096 },
+    );
+    expect(state.plainChain).toBe(true);
+    const b = state.byKey.get('b');
+    if (b === undefined) throw new Error('no slot B');
+    expect(b.present).toBe(true);
+    expect(b.accepts).toBe(false);
+    expect(b.bootable).toBe(false);
+    expect(b.bootability).toBe('not-bootable');
+    /* The Info tab and `seek-fw info` print these two cells from core. */
+    expect(acceptsDescription(b)).toBe('no');
+    expect(bootableDescription(b)).toBe('no');
+    expect(logsOf(reporter)).toContain(`acceptance FAILS, no footer check`);
+    expect(logsOf(reporter)).toContain(`-> NOT bootable: ${PLAIN_CHAIN_PASSES_OVER}`);
+    expect(PLAIN_CHAIN_PASSES_OVER).toBe(
+      'the bootloader starts a bank only when its words sum to 0, and this bank holds no image in ' +
+        'that form, so the camera will not start it',
+    );
+    /* The banks stored plain keep their verdict. */
+    expect(state.byKey.get('a')?.bootability).toBe('bootable');
+    expect(state.byKey.get('r')?.bootability).toBe('bootable');
+  });
+});
 
 describe('the 2014 plaintext chain on the normal flash path', () => {
   it('refuses no bank write, and says it is the plaintext chain', async () => {

@@ -81,6 +81,7 @@ import { bankNameOf } from '../profiles/locked-boot.js';
 import { bootsNowOf } from './booted-words.js';
 import { imageBuildWarningOf } from './image-build.js';
 import { FF_1308_VERSION } from './capability-family.js';
+import { FF_BOOT_UNTESTED } from './capability-notes.js';
 import { slotContentOf } from './inspect.js';
 import { plainBankVerdict, runningApplicationOf } from './running.js';
 import { stagingPhrase } from './staging-words.js';
@@ -199,12 +200,17 @@ interface Body {
   readonly ffCommit?: FFCommitExpectation;
 }
 
-/** The stored-form name the plan gives the Key B bank: the image XOR key block 1, header window verbatim. */
-const KEY_B_STORED_NAME =
-  'Key B (the camera re-keys the payload with key block 1 and stores the image under it)';
-/** The stored-form name for an FF payload a camera programs as it is sent (TESTING.md 42.109). */
+/**
+ * The key row the plan gives the Key B bank: the camera re-keys the payload with key block 1 and stores the
+ * image XOR that keystream, header window verbatim (ff-form.ts). In words; the JSON's `storedForm` is the code.
+ */
+const KEY_B_STORED_NAME = 'Key B (the 16 Hz build stores the image under its own key)';
+/**
+ * The key row for an FF payload a camera programs as it is sent: the bank keeps the image XOR Key A
+ * (TESTING.md 42.109). In words.
+ */
 const FF_AS_SENT_NAME =
-  'Key A, as sent (the camera programs the payload as it is sent and does not re-key it)';
+  'as sent (the camera writes the bytes as they arrive, in a form it cannot start)';
 
 /** What is said beside a plan: its warnings (a risk, or a check not made) and this write's own notes. */
 interface PlanWords {
@@ -220,15 +226,16 @@ interface PlanWords {
 function plainChainOutcome(plainTakes: boolean): string {
   if (plainTakes) {
     return (
-      'checks only the plain word sum of a payload before it erases a bank, and this payload passes it, so ' +
-      'it may program these bytes as they are, which its bootloader does not decrypt: the bank may not ' +
-      'start (not tried; the backup saved before the write puts it back)'
+      'checks a payload before it erases a bank, and this payload passes that check, so it may write ' +
+      'these bytes as they are, in a form its bootloader cannot start: the bank may not start (not ' +
+      'tried; the backup saved before the write puts it back)'
     );
   }
+  /* The refusal is commit status 0x00070100; the JSON's `ffCommit` is 'refuses'. */
   return (
-    'checks the plain word sum of a payload before it erases a bank, and this payload fails it, so it is ' +
-    'expected to refuse this write at commit with 0x00070100 before it writes anything (measured on the ' +
-    'earlier staged form, TESTING.md 42.10)'
+    'checks a payload before it erases a bank, and this payload fails that check, so it is expected to ' +
+    'refuse this write before it writes anything (a camera running that build refused an earlier form ' +
+    'of this image the same way)'
   );
 }
 
@@ -252,20 +259,17 @@ export function ffCommitOf(
   state: DeviceState,
   plainTakes: boolean,
 ): { readonly expect: FFCommitExpectation } & PlanWords {
-  const untested =
-    'UNTESTED: no genuine bootloader for the 1.3.0.8 FF build is in the corpus, so whether the ' +
-    'written bank boots is not measured. On the 0.9.0.0 bootloader the old plain form booted from ' +
-    'recovery R; this form will not, because recovery runs the bank unchecked and does not decrypt it ' +
-    '(TESTING.md 42.12). Nothing here claims the camera boots it.';
+  const untested = `${FF_BOOT_UNTESTED} Nothing here claims the camera starts it.`;
   const plainChain: FFCommitExpectation = plainTakes ? 'programs-as-sent' : 'refuses';
   if (state.version !== FF_1308_VERSION) {
     return {
       expect: 'programs-as-sent',
+      /* The bank then holds the image XOR Key A, whose plain word sum is not 0 (TESTING.md 42.109). */
       warnings: [
-        `The 16 Hz FF image is staged in the form only the 16 Hz ${FF_1308_VERSION} build takes. This camera ` +
-          'writes a bank without checking the image (its source says so, and a 1.3.0.0 Compact did so, ' +
-          'TESTING.md 42.109), so it is expected to program this payload as it is sent: the bank then holds ' +
-          'the image XOR Key A, which is not an image this camera can start (its plain word sum is not 0).',
+        `The 16 Hz FF image is sent in the form only the 16 Hz ${FF_1308_VERSION} build reads. This camera ` +
+          'writes a bank without checking the image (its firmware source says so, and a 1.3.0.0 Compact ' +
+          'did so when tried), so it is expected to write the bytes as they are sent: the bank then holds ' +
+          'the image in a form this camera cannot start.',
       ],
       notes: [],
     };

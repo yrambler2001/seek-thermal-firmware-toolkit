@@ -70,7 +70,7 @@ import {
   type FfVendorFiles,
 } from './lib/bench/ff-vendor-run.js';
 import { predictedFFVendorPayload, vendorGateSum } from './lib/bench/ff-form.js';
-import type { BenchCamera, SlotFlashRun } from './lib/bench/types.js';
+import type { BenchCamera, SlotFlashOptions, SlotFlashRun } from './lib/bench/types.js';
 import {
   ADJUST_OFFSET,
   ERASED_FOR_BOOT,
@@ -1368,6 +1368,41 @@ describe('the camera on the bus and in the CLI', () => {
     expect(await camera(() => Promise.reject(new Error('spawn failed'))).runningInfo()).toBeNull();
   });
 
+  it('slotFlash passes the backup folder it is given to the CLI as --dump-dir (42.109 L3)', async () => {
+    const commands: { command: string; args: readonly string[] }[] = [];
+    const camera = createBenchCamera({
+      gate: APPROVED,
+      env: {},
+      cliPath: '/cli/bin.js',
+      runCli: (command, args) => {
+        commands.push({ command, args });
+        return Promise.resolve({ code: 0, stdout: '{"written":true}', stderr: '' });
+      },
+    });
+    const run = await camera.slotFlash('b', '/img/ff.bin', {
+      acknowledgeRisk: true,
+      backupDir: '/run/backups',
+    });
+    expect(run.result).toEqual({ written: true });
+    expect(commands).toEqual([
+      {
+        command: process.execPath,
+        args: [
+          '/cli/bin.js',
+          'slots',
+          'flash',
+          'b',
+          '/img/ff.bin',
+          '--yes',
+          '--json',
+          '--acknowledge-risk',
+          '--dump-dir',
+          '/run/backups',
+        ],
+      },
+    ]);
+  });
+
   it('parseRunningInfo is null for a document without firmware', () => {
     expect(parseRunningInfo('{"device":{}}')).toBeNull();
     expect(parseRunningInfo('[]')).toBeNull();
@@ -1656,6 +1691,13 @@ describe('the FF vendor-form run, on a fake J-Link and camera', () => {
     expect(report.answersAfterWrites?.build).toBe('ff-1308');
     expect(report.restored).toBe(true);
     expect(fake.flash).toEqual(fake.original);
+    /* Each CLI write saves its backup in the run's scratch folder, never where the CLI runs (42.109 L3). */
+    const backups = path.join(fake.files.scratchDir, 'backups');
+    expect(fake.calls.filter((call) => call.startsWith('slotFlash'))).toEqual([
+      `slotFlash a backups in ${backups}`,
+      `slotFlash b backups in ${backups}`,
+      `slotFlash r backups in ${backups}`,
+    ]);
   });
 
   it('reads the 8 Hz platform as A 1, B 0, R 1 (the 8 Hz build), and the FF-in-R platform as all 0 and not decided', async () => {
@@ -2096,8 +2138,12 @@ function fakeVendorBench(options: { storeAsSentAt?: 'a' | 'b' | 'r'; throwAt?: '
         },
       });
     },
-    slotFlash(bank: 'a' | 'b' | 'r', file: string): Promise<SlotFlashRun> {
-      calls.push(`slotFlash ${bank}`);
+    slotFlash(
+      bank: 'a' | 'b' | 'r',
+      file: string,
+      flashOptions: SlotFlashOptions,
+    ): Promise<SlotFlashRun> {
+      calls.push(`slotFlash ${bank} backups in ${flashOptions.backupDir}`);
       if (options.throwAt === bank)
         return Promise.reject(new Error(`CLI fault at ${bank.toUpperCase()}`));
       if (build !== 'ff')
@@ -2132,6 +2178,7 @@ function fakeVendorBench(options: { storeAsSentAt?: 'a' | 'b' | 'r'; throwAt?: '
     plainFfSha256: sha256(plainFf),
     plainFfBankFile,
     vendorFile: null,
+    scratchDir: dir,
   };
   return {
     bench: { jlink, camera, log: () => undefined },
@@ -2262,9 +2309,7 @@ describe('the derived probe, on the fake rig (TESTING 42.7)', () => {
     ]);
     const notes = result.notes.join('\n');
     expect(notes).toMatch(/derived B: cfg\[0\]=1 \(slot B\), the camera runs "BUILD:ZBZZZZ"/);
-    expect(notes).toMatch(
-      /derived R: cfg\[0\]=2 \(recovery bank R\), the camera runs "BUILD:ZRZZZZ"/,
-    );
+    expect(notes).toMatch(/derived R: cfg\[0\]=2 \(recovery R\), the camera runs "BUILD:ZRZZZZ"/);
     expect(notes.match(/cfg\[0\] restored to 0, block as saved/g)).toHaveLength(2);
     expect(result.bootProof).toBe('passed');
     expect(await rig.jlink.readFlash(0x14010000, 4)).toEqual(new Uint8Array([0, 0, 0, 0]));

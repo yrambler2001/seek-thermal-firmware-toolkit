@@ -788,7 +788,7 @@ describe.skipIf(!RUNNABLE)('the web app pages on the bench camera (1.3.0.0, real
           'the version warning is the first warning',
         ).toBe(true);
         const commitWarning = listed.find((line) =>
-          line.includes('expected to program this payload as it is sent'),
+          line.includes('expected to write the bytes as they are sent'),
         );
         expect(
           commitWarning,
