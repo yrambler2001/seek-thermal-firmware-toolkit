@@ -15050,3 +15050,60 @@ New or changed tests: `plain-chain-flash.test.ts` (item 3); `capability.test.ts`
 - L5. Nothing here is seen on a camera; `docs/` keeps the old page until the bundle is rebuilt.
 
 **11. Commits** (branch `worktree-agent-a99b72d66ebd35679`, on `refactor/all-firmware-profiles` `5516a9b`; not merged, not pushed): `e28651e` (core words, items 1, 2, 4), `88933c7` (core: item 3), `296ac18` (page), `63b8a48` (CLI: items 4, 5), `4ce574b` (e2e rig: items 6, 7), `d5ebf9e` (pages-bench pin, corpus comment), and this section.
+
+### 42.111 The integration pass's failures after 42.102 to 42.110: every one is a stale pin, none a product fault; the acknowledgement rule is unchanged, and the empty-bank suite now holds it on the booted bank (no hardware, 2026-10-27)
+
+**Summary.** Agent 42.111 (Opus 5.5), on `worktree-agent-aec7549e64c6d82b8`, reset to `refactor/all-firmware-profiles` (`2e04a64`; its code is `0191c8c`'s, the check's commit, plus a `plan.md` line). No camera, J-Link or switch; no bench, camera, soak or ff-vendor spec; no whole vitest. The emulator suites and the Electron-on-emulator specs ran. The check's fourteen failing tests, in five suites, are all tests that pinned words or behaviour a section changed on purpose. Four of the five suites had not run in an integration check before this one: the check script's e2e `pages-emu` log overwrote the CLI `pages-emulator` log of the same name, and `empty-bank.emulator`, `slots-view` and `slots-quality` were new to the check. So several pins date from long before 42.102 [measured: the earlier `logs42*m/pages-emu.log` are the CLI suite's 17 tests]. **No product code changed.** The risk acknowledgement in `write.ts` (`ackNeeded`, `checkSlotFlash`) is as it was: writing the booted bank or R needs it, and so does every bank when the camera names no booted bank. What changed is that, since 42.84, the 2016 Compact PRO names its booted bank (§2). Gate G7 stays for the owner to decide.
+
+**1. Setup** [measured]. `git reset --hard refactor/all-firmware-profiles`; `node_modules` cloned with `cp -cR` from the main checkout (its `@seek-fw` links are relative, so they resolve to this worktree; Electron's `dist` came with it); `npm run typecheck` (exit 0) built core's `dist`. Emulator runs used `SEEK_EMU_DIR=/Users/yrambler2001/things/a.noindex/seek/FW-V1/emu`, as the check did. Logs: this session's scratchpad, `a42111-*.log`.
+
+**2. `empty-bank.emulator` > Compact PRO 1.0.3.0 and PRO FF 1.0.3.0: "with no booted bank named, an empty bank still needs the tick"** — a pin, stale since **42.84** (`294712f`).
+
+- Cause [measured; source]. Reproduced here: 2 failed, 38 passed. A bisect on this test, run only on the PRO scenario: `2342754` (the parent) passes, 8 of 8; `294712f` fails the tick test. That commit made the 2016 line name its booted bank from the camera's active-slot word, the bootloader's record (`device-info.ts`, the `line2016 && prediction === null` block). So `state.boot` is no longer null on these two dumps, and the scenarios' `bootedNamed: false` is wrong. None of 42.102 to 42.110 is involved: not 42.107's `write.ts`, not 42.108's or 42.110's bank names, not 42.110's not-bootable rule. The orchestrator's `3322f2b` changed only `ackNeeded`'s words.
+- Is the new behaviour right? [measured; source]. Yes, under the rule as it stands. The camera names A as booted on the B-erased PRO dump, and R on the `1C1AB1CBC8A3` dump (A erased, B with no magic). The empty target (B, or A) is neither the booted bank nor R, so it needs no tick, as on the 1.3.0.0 and 4.8.2.1 scenarios. The gate was not dropped, by accident or on purpose. It now applies to the bank the camera names.
+- Fix (test only). `bootedNamed: boolean` becomes `booted: SlotKey | null`: A for 1.3.0.0, 4.8.2.1 and PRO 1.0.3.0, R for PRO FF, none for 0.8.0.0. Each scenario now checks that the read names that bank. Each one also sends an unticked write, to the booted bank, or to the empty bank where none is named, and expects `slots/refused`, the `acknowledgeRisk` words and 0 requests. The guard is therefore checked on all five scenarios, where before it was checked on three (`10437d8`).
+- After [measured]: 47 passed (40 before, plus 5 "names the booted bank" tests and 2 more guard tests).
+
+**3. `corpus-locked.emulator` > Compact 1.3.0.8 (8 Hz) > "plans the FF image for R on the 8 Hz build …"** — a pin, changed by **42.110** (`e28651e`: no status code in people's words). The pin now checks for "this payload fails that check, so it is expected to refuse this write before it writes anything" and checks that `0x00070100` is not in the warning. The `ffCommit` `'refuses'` and 0-requests checks stay (`07a7f8d`). The failure was taken from the check's log; the code is the same, and the old words are no longer in `write.ts` [source]. After [measured]: 299 passed.
+
+**4. `pages-emu.e2e`** (`2b05562`). Before: 4 failed, 38 passed (the check's log, same code).
+
+- (a) Info on Compact PRO 2016 1.0.3.0: 4 SetFirmwareInfoFeatures, not 8. A pin, stale since **42.84** (`294712f`). The probe picks `compact-2016` on 1.0.3.x, so the evidence names the profile the read ran under and nothing is read a second time. The `reads: 2` count was set in 42.68 (`c0d6937`), when the first read ran under `legacy-auth`. The fix is `reads: 1`. [measured] The wire is 0x55 ×4 and 0x5A ×1 on all three cameras, the same counts the CLI's `pages-emulator` test logs.
+- (b) Dump & decrypt 0.x/1.x, read-only step, on 1.3.0.0 and PRO 1.0.3.0: `out 0x55` on the wire. A pin. Since 42.98 to 42.102, Read & build reads the active-slot word (selector 10) for Preserve's bank choice, and 42.103 let that request out on pages-bench. The bridge (`e2e/lib/bridge.ts`) now keeps each OUT's payload (`outs`). The check lets exactly one request out, `0x55 [10,0]` (SetFirmwareInfoFeatures with the u16 10). Any other 0x55 or 0x5A payload, a second selector-10 read, or any write, commit or reset (0x50, 0x51, 0x59) still fails the check.
+- (c) The 4.8.2.1 refusal names "Dump & decrypt for 4.x and Nano": a pin, changed by **42.105** (`871da8c`: core's words, no front end named). The fix takes those words.
+- After [measured]: 42 passed.
+
+**5. `slots-view.e2e`**, on Compact 4.8.2.1 and 1.3.0.0 (`7d737b7`). Before: 6 failed, 6 passed (the check's log).
+
+- "reads the three banks": the extra action is **Make 32 FPS**. A pin, stale since **42.24 to 42.26**. `compact_32k-4.8.2.1-to32` (42.24, `2af8bb8`) and `compact_32k-1.3.0.0-to32` (42.25) are in the table, and 42.26 (`db45c5b`) removed the 16 Hz patches. The spec had no offer for 4.8.2.1 and "Make 16 FPS" for 1.3.0.0 (`91581c5`, 2026-10-18). Both are now 32. "Make N FPS" stays enabled on every bank that holds an image.
+- "dumps every bank": a pin, stale since **42.71** (`1d13e9d`, `slotDumpNames`). Both files of a dump share one stem, made from the stored bank's sha8, and the decrypted file adds `-decrypted` and the key pair. The check now compares the decrypted name's eight digits with the raw dump's sha. [measured] For example, `seek-slot-a-4.8.2.1-0476541b-decrypted-KeyA-…-KeyB-….bin`.
+- "flashes … the bank the camera does not boot": "the table waits for a re-read". A pin, stale since **42.44** (`c33040d`/`ffaa310`). The page drops its read at the commit point and reads the banks again after the read-back. The check is now that the table is back with Slot A, Slot B and Recovery R, and that the target row holds the version written [measured: "Slot B 4.8.2.1 … f96ac57e…", "Slot B 1.3.0.0 … 862717a8…"]. The bank read-back comparison after it is unchanged.
+- Slot B on 4.x [measured; source]. The rows read Slot A 0x14030000, Slot B 0x14050000 and Recovery R 0x14070000. These match `modern-4x.ts` (`SLOT_B_BASE = 0x14050000`, subcommand 8 "slot B") and the spec's `MODERN_LAYOUT`. "Prepared for Slot B at 0x14050000" is right. On 1.3.0.0, B is 0x14060000.
+- After [measured]: 12 passed.
+
+**6. `slots-quality.e2e` > Compact 1.3.0.0 > "says why an empty bank has no frame-rate patch"** — a pin, changed by **42.108** (`a558f99`: the reason names the bank with `bankWordsOf`). The reason is still in the row, in the new words: "Frame-rate patch not offered: slot B has no decrypted image to patch (it is empty)". The pin now checks that whole sentence, with the bank in its sentence words (`6d841ba`). After [measured]: 12 passed.
+
+**7. Runs after the fixes** [measured]:
+
+| Suite                                                                         | Result                |
+| ----------------------------------------------------------------------------- | --------------------- |
+| `core` `slots/empty-bank.emulator.test.ts`                                    | 47 passed             |
+| `core` `slots/corpus-locked.emulator.test.ts`                                 | 299 passed            |
+| e2e `pages-emu.e2e`                                                           | 42 passed             |
+| e2e `slots-view.e2e`                                                          | 12 passed             |
+| e2e `slots-quality.e2e`                                                       | 12 passed             |
+| `core`, the 16 non-emulator files in `packages/core/test/slots/`              | 711 passed, 6 skipped |
+| `cli` `slots.test.ts`                                                         | 148 passed            |
+| `web` (whole project)                                                         | 437 passed (35 files) |
+| `npm run typecheck`; `tsc -p e2e`; eslint and prettier on the 6 changed files | clean                 |
+
+`write.emulator` and the CLI's `slots.emulator` were not run, because no product code changed.
+
+**8. Leftovers.**
+
+- L1. Gate G7 (the booted bank or R needs the acknowledgement) is still for the owner to decide. It is unchanged and is now held on every empty-bank scenario.
+- L2. In `verify-42110.sh`, the CLI `pages-emulator` run and the e2e `pages-emu` run both write `$L/pages-emu.log`, so the second overwrites the first. One of them needs a new name.
+- L3. Several e2e page specs had not run in an integration check, and their pins had drifted since 2026-10-18 (42.24 to 42.26, 42.44, 42.71, 42.84). They are now in the check script; keep them there.
+- L4. `SlotsView.verdicts.test.tsx` feeds a reason with the old words "bank B has …" into the view. It is a fake input and still passes, but it no longer reads like core's words.
+
+**9. Commits** (branch `worktree-agent-aec7549e64c6d82b8`, on `refactor/all-firmware-profiles` `2e04a64`; not merged, not pushed): `10437d8` (empty-bank), `07a7f8d` (corpus-locked), `2b05562` (pages-emu and the bridge's `outs`), `7d737b7` (slots-view), `6d841ba` (slots-quality), and this section.
