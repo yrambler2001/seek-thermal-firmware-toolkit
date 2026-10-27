@@ -126,8 +126,9 @@ export function predatesDumpProtocolReason(version: string): string {
   return (
     `firmware ${version} predates the dump protocol: its RPC method table has no read handler ` +
     'for GetFeaturedFirmwareData (on 0.7.0.7 and 0.7.0.8 it is registered as a setter only, ' +
-    'and before that wire id 0x4F is UploadFirmwareRowSize), so no window can be read; on ' +
-    '0.3.0.1 wire id 0x52 is EnterBootloaderMode rather than BeginFirmwareUpgrade'
+    'and before that wire id 0x4F is UploadFirmwareRowSize), so no window can be read with it; ' +
+    'on 0.3.0.1 wire id 0x52 is EnterBootloaderMode rather than BeginFirmwareUpgrade. The ' +
+    'preservation run reads 0.7.0.7 and 0.7.0.8 through wire id 0x58 (GetFeaturedData) instead'
   );
 }
 

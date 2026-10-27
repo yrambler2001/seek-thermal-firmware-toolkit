@@ -442,8 +442,8 @@ export function legacyWindowPlan(firmwareVersion: string | null): WindowPlan {
           address: FLASH_BASE,
           length: FLASH_SIZE,
           reason:
-            `Firmware ${version} has no read handler for GetFeaturedFirmwareData, so no window ` +
-            'can be read on it whatever the selector map says.',
+            `Firmware ${version} has no read handler for GetFeaturedFirmwareData, so a dump ` +
+            'can read no window on it whatever the selector map says.',
         },
       ],
     };

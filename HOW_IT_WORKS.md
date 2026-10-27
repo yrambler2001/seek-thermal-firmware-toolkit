@@ -40,29 +40,31 @@ Seek cameras do not all speak the same protocol, and the differences are not cos
 selector exposes which block, how a stored key maps to the cipher state, and what the bootloader will
 accept. A **profile** captures one firmware family:
 
-| Profile        | Family                                                                                                             | Read over USB | Decrypt |
-| -------------- | ------------------------------------------------------------------------------------------------------------------ | ------------- | ------- |
-| `modern-4x`    | 2018 and later: Compact 4.8/4.16, Compact Pro 4.9/4.18, Compact XR, Mosaic 2.27/10.9, Nano 200 42.x, Nano 300 44.x | yes           | yes     |
-| `legacy-auth`  | 2014-2017 locked line: Compact 0.8.0.0-1.3.0.8, Compact PRO 1.0.3.x                                                | yes           | yes     |
-| `compact-2016` | the same locked protocol with the 2016 cipher (K=0, acceptance sum 0)                                              | yes           | yes     |
-| `compact-2014` | Compact builds older than 0.8.0.0 — no read handler exists in their RPC table                                      | **no**        | yes     |
-| `generic`      | fallback when the family cannot be identified                                                                      | yes           | yes     |
+| Profile        | Family                                                                                                             | Read over USB  | Decrypt |
+| -------------- | ------------------------------------------------------------------------------------------------------------------ | -------------- | ------- |
+| `modern-4x`    | 2018 and later: Compact 4.8/4.16, Compact Pro 4.9/4.18, Compact XR, Mosaic 2.27/10.9, Nano 200 42.x, Nano 300 44.x | yes            | yes     |
+| `legacy-auth`  | 2014-2017 locked line: Compact 0.8.0.0-1.3.0.8, Compact PRO 1.0.3.x                                                | yes            | yes     |
+| `compact-2016` | the same locked protocol with the 2016 cipher (K=0, acceptance sum 0)                                              | yes            | yes     |
+| `compact-2014` | Compact builds older than 0.8.0.0 — no read handler for `GetFeaturedFirmwareData` in their RPC table               | **0.7.x only** | yes     |
+| `generic`      | fallback when the family cannot be identified                                                                      | yes            | yes     |
 
-The 4.x/Nano dump reads only `modern-4x`; the locked line is read on the Dump & decrypt 0.x/1.x 2014/2016
-tab ([PRESERVATION.md](PRESERVATION.md)). No profile has a whole-image write: banks are written one at a
+The 4.x/Nano tab reads only `modern-4x`, and `seek-fw dump` reads `modern-4x` and `generic`; the locked
+line, and the Compact 0.7.0.7 and 0.7.0.8, are read on the Dump & decrypt 0.x/1.x 2014/2016 tab
+([PRESERVATION.md](PRESERVATION.md)). No profile has a whole-image write: banks are written one at a
 time on the Work with firmware slots tab, and what each build allows is in
 [Which cameras](#which-cameras).
 
 The profile is detected from evidence — and, on an attached camera, from **asking it**. Before a dump, a
-sweep or a device-info read, both the CLI and the web app send up to four read-only transfers
-(`--no-probe` turns this off on the CLI): the running firmware's version, then — only if that build can be
-read at all — a plain 2-byte arm of a bank the locked line protects, the 18-byte authenticated arm of the
-same bank, and a read of a bank that is open on every line. Those answers separate the families directly,
-where a USB product string or an acceptance sum only correlates with them. The web app asks, and says why
-when it will not read a camera. On `info`, `decrypt` and `slots`, `--profile <id>` overrides detection and
-skips the probe — but not the version check: the run still reads the version first and refuses a camera
-that does not report it, or runs a build older than 0.8.0.0, whatever family was named. The web app names
-no family by hand: its 4.x/Nano tab reads only the modern family and refuses any other.
+dump of every selector or a device-info read, both the CLI and the web app send up to four read-only
+transfers (`--no-probe` turns this off on the CLI): the running firmware's version, then — only if that
+build can be read at all — a plain 2-byte arm of a bank the locked line protects, the 18-byte
+authenticated arm of the same bank, and a read of a bank that is open on every line. Those answers
+separate the families directly, where a USB product string or an acceptance sum only correlates with
+them. The web app asks, and says why when it will not read a camera. On `info`, `decrypt` and `slots`,
+`--profile <id>` overrides detection; on `info` and `slots` it also skips the probe — but not the version
+check: the run still reads the version first and refuses a camera that does not report it, or runs a
+build older than 0.8.0.0, whatever family was named. The web app names no family by hand: its 4.x/Nano
+tab reads only the modern family and refuses any other.
 
 **`legacy-auth` and `compact-2016` share every selector, so the channel answers cannot tell them apart;
 the version and the slots can.** The read is the same 31 windows either way, but each family checks the
@@ -74,20 +76,25 @@ probe's answers and adds what only the slots say: a bank under a real xorshift12
 to a word sum of 0 is the 2016 cipher, and rules `legacy-auth` out; a bank stored plain (the 2014 chain,
 whose stored words sum to 0) rules `compact-2016` out; a bank that decrypts to 0xFFFF (the Compact 1.3.0.8
 cipher) keeps a 1.0.3.x camera on `legacy-auth`. The bootloader's version (1.2.0.0 on the 2016 part,
-0.9.0.0 on the 2014 Compact) corroborates. When the slots name the other family, `seek-fw info` and the
-Work with firmware slots tab's "Read slots" redo the analysis under it, and a dump decrypts its slots under it, saying in the
-report which profile the read acted under. `compact-2016` declares no write of its own: its banks are
-written one at a time on the Work with firmware slots tab, as on every line.
+0.9.0.0 on the 2014 Compact) corroborates. When the slots name the other family, the Info tab,
+`seek-fw info` and "Read slots" (`seek-fw slots list`) redo the analysis under it, and a dump decrypts its
+slots under it, saying in the report which profile the read acted under. `compact-2016` declares no write
+of its own: its banks are written one at a time on the Work with firmware slots tab, as on every line.
 
 **`compact-2014` refuses to dump, and that refusal is the point.** Every decrypted image carries its own
 RPC method table — wire id = index + 53 — and recovering it from all 36 images in the reference corpus
 shows five builds (0.3.0.1, 0.5.0.2, 0.5.1.0, 0.5.1.3, 0.6.0.4) with no `GetFeaturedFirmwareData` at all:
-wire id `0x4F` is `UploadFirmwareRowSize` there, so nothing can read a window however it is armed. On
+wire id `0x4F` is `UploadFirmwareRowSize` there, and nothing in this toolkit reads a window on them. On
 0.7.0.7 and 0.7.0.8 it is in the table with its handler in the write (setter) column only, so the
-control-IN read a dump sends cannot be dispatched either; 0.8.0.0 is the first build with a read handler.
-On 0.3.0.1, `0x52` — the id a dump arms 63 windows with — is `EnterBootloaderMode`. Dumping such a camera
-would not fail; it would send it 63 requests to leave the application. The facts are committed in
-`packages/core/test/firmware/facts.json` and asserted by `packages/core/test/firmware-facts.test.ts`.
+control-IN read a dump sends cannot be dispatched either; 0.8.0.0 is the first build with a read handler
+there. The same handler is the read side of `0x58` (`GetFeaturedData`) on those two builds, and the
+preservation run reads them through it (`legacyReaderOp` in `packages/core/src/profiles/legacy-auth.ts`);
+the Info tab, the dumps and the Work with firmware slots tab do not, and refuse every build older than
+0.8.0.0 after reading its version. On 0.3.0.1, `0x52` — the id a dump arms 63 windows with — is
+`EnterBootloaderMode`. Dumping such a camera would not read anything: each arm sets a flash target and
+arms that build's firmware-upgrade stage instead (the camera stays in its application; TESTING.md 21.5).
+The facts are committed in `packages/core/test/firmware/facts.json` and asserted by
+`packages/core/test/firmware-facts.test.ts`.
 
 **The locked line reaches `0x14060000` and the modern line does not**, which is the reverse of what
 [the 0x14060000 gap](#known-limitation-the-0x14060000-gap-on-4x-and-nano) says about 4.x cameras: on a
@@ -104,9 +111,9 @@ showed they are:
 - the **whitening constant K** (how a stored key maps to the keystream state),
 - the **acceptance sum TARGET** (what the decrypted word sum must equal).
 
-A real 1.3.0.8 Compact build has `TARGET = 0x0000FFFF` and yet **no whitening at all**. Pairing the two,
-as the original single-file page did, reports that build's key wrongly — and a wrong Key A poisons the
-upgrade path on a real camera. The tool now resolves K by looking for each candidate key form in the
+A real 1.3.0.8 Compact build (the 16 Hz FF one) has `TARGET = 0x0000FFFF` and yet **no whitening at
+all**. Pairing the two, as the original single-file page did, reports that build's key wrongly — and a
+wrong Key A poisons the upgrade path on a real camera. The tool now resolves K by looking for each candidate key form in the
 image's own plaintext and keeping the one that actually occurs.
 
 Adding a family is one file in `packages/core/src/profiles/` plus one `registerProfile()` call.
@@ -143,13 +150,15 @@ dump view reaches either.
 Each RPC carries two permission bits in the firmware's dispatch table: bit 0 "allowed in operation mode
 0", bit 1 "allowed in mode 1". They are not the same across builds:
 
-| Command                                                            | 4.18.x            | 4.9.x                 |
+| Command                                                            | 4.9.2.0, 4.18.2.0 | 4.9.1.15              |
 | ------------------------------------------------------------------ | ----------------- | --------------------- |
 | `BeginFirmwareUpgrade`                                             | `3` — either mode | `1` — **mode 0 only** |
 | `GetFeaturedFirmwareData`                                          | `3` — either mode | `1` — **mode 0 only** |
 | `GetFirmwareInfo`, `SetFirmwareInfoFeatures`, `SetRamDataFeatures` | `3`               | `3`                   |
 
-So on a 4.9.x camera the two commands the dump is built from are refused while the camera is still
+Mode 0 only is the common case: of the 36 corpus images, only 4.9.2.0, 4.18.2.0, 2.27.1.33, 10.9.1.31
+and 44.27.3.10 allow those two commands in either mode (`packages/core/test/firmware/facts.json`). So on
+most cameras the two commands the dump is built from are refused while the camera is still
 imaging, and the page has to get it into mode 0 first. Leaving imaging is not instant — there is a sensor
 and a shutter to park — so the page waits for mode 0 to actually read back rather than assuming a fixed
 delay covers it, and says so plainly if the camera never gets there.
@@ -171,9 +180,9 @@ on an idle-clocked camera.
 
 Some firmware does not tolerate a size everywhere. On a 4.9.x PIR324, 256-byte requests served 65280 bytes
 of a window and then the request that would empty it was never answered — the same bytes came back fine
-in 64-byte requests. So the read adapts: a failed request is retried once at the same size, then at
-progressively smaller ones, and **whatever size works is kept for the rest of the window**. Shrinking only
-for the stuck request and then going back up just stalls again on the next.
+in 64-byte requests. So the read adapts: a failed request is retried once at the same size, then at half
+that size, down to 32 bytes, and **whatever size works is kept for the rest of the window**. Shrinking
+only for the stuck request and then going back up just stalls again on the next.
 
 If a chunk will not come at any size, the read stops and keeps what it has. The good bytes are kept, the
 missing tail is gap-filled, and both the log and `manifest.json` record exactly which addresses were
@@ -253,7 +262,7 @@ The Writing section says how the camera can be written. On every line the banks 
 on the Work with firmware slots tab (`seek-fw slots flash` or `patch-fps`), each staged in its line's form
 (plain on the 2014 chain, under the image's own key block 0 on the 2016 Compact PRO, under keys derived
 from the booted bank and the running application on 4.x), and the section lists what refuses every bank
-of the camera, the reasons behind the Work with firmware Work with firmware slots tab's banner. No line has a whole-image write, and the read no
+of the camera, the reasons behind the Work with firmware slots tab's banner. No line has a whole-image write, and the read no
 longer reports one (`--json` has `bankWrites: {staged, refusedBy}` on every line and no `canFlash` or
 `flashBlockedBy`; TESTING.md 42.89).
 
@@ -424,7 +433,8 @@ sent.
 ### Which cameras
 
 The Work with firmware slots tab and `seek-fw slots` cover builds **0.8.0.0** and newer. An older build is
-reported as unsupported, with the reason, and nothing is sent to it. Each line can do this:
+reported as unsupported, with the reason, and nothing but the version read is sent to it. Each line can
+do this:
 
 - **Read and write:** the modern line, 2.x, 4.x, 10.x, 42.x and 44.x (Compact, Compact PRO, Compact XR,
   Mosaic and Nano), with the `modern-4x` profile.
@@ -475,8 +485,8 @@ under **What has been run** in the Firmware slots section.
 The **Work with firmware slots** tab
 ([`#/slots`](https://yrambler2001.github.io/seek-thermal-firmware-dump/#/slots)) and `seek-fw slots` work
 on one 64 KiB firmware bank at a time — A, B or the recovery bank R — on every build from **0.8.0.0** up.
-Older builds (0.3.0.1 .. 0.7.0.8) are reported as unsupported, with the reason, and nothing is sent to
-them: they have no usable read handler.
+Older builds (0.3.0.1 .. 0.7.0.8) are reported as unsupported, with the reason, and nothing but the
+version read is sent to them: they have no read handler for the command a slot read sends.
 
 ```sh
 seek-fw slots list                                  # banks, versions, keys, what each can do
@@ -525,7 +535,8 @@ seek-fw slots patch-fps all --write --acknowledge-risk        # every bank that 
   afterwards. The page and `seek-fw slots list` also warn when a patched bank is one the camera will not
   run. [README.md](README.md#raise-the-frame-rate-32--18-fps) has the steps, and
   [FPS_32HZ.md](FPS_32HZ.md) how each build is patched and what was measured.
-- **Writes arm bank 7/8/9 and nothing else.** They program that bank and leave the boot config alone, so
+- **Writes arm the bank's own window and nothing else** (subcommand 5, 8 or 9 on the modern line, 7, 8 or 9
+  on the locked line). They program that bank and leave the boot config alone, so
   there is no "select the active slot": the protocol has no such command. Writing the bank the camera
   boots now, or the recovery bank, needs an explicit acknowledgement (a checkbox on the page,
   `--acknowledge-risk` on the CLI). The bootloader (`0x14000000`) and the boot-config block are never
@@ -615,38 +626,31 @@ Offline decryption does work on iOS, since it only reads a file you pick.
 
 ## How the decryption works
 
-The firmware images are encrypted with a Marsaglia xorshift128 keystream (shifts 11/8/19). The 16-byte key
-maps to the generator state as `x = k1^K`, `y = k2^K`, `z = k3^K`, `w = k0^K`, for a per-build whitening
-constant `K`. One keystream word is consumed per image word and the generator always advances, but words
-128..143 (`0x200..0x23F`, the cleartext header) are left un-XORed. A key is accepted when the 32-bit sum
-of the decrypted words equals the profile's target.
+The firmware images of the modern line, the 2016 Compact PRO and the Compact 1.3.0.8 16 Hz FF build are
+encrypted with a Marsaglia xorshift128 keystream (shifts 11/8/19); the 2014 chain (Compact 0.8.0.0 to
+1.3.0.8 at 8 Hz) stores its images plain, and the solve below finds the all-zero state for them. The
+16-byte key maps to the generator state as `x = k1^K`, `y = k2^K`, `z = k3^K`, `w = k0^K`, for a
+per-build whitening constant `K`. One keystream word is consumed per image word and the generator always
+advances, but words 128..143 (`0x200..0x23F`, the cleartext header) are left un-XORed. The bootloader
+accepts an image when the 32-bit sum of its decrypted words equals its line's target.
 
-That acceptance test makes the cipher self-validating, which is what lets the key be found without knowing
-where it is stored: every 16-byte window in the dump is a candidate. A pre-filter on the decrypted reset
-vector — stack pointer must be SRAM-resident and word-aligned, entry must be a Thumb code address —
-discards almost every window before the full checksum runs, so a pass over the whole 4 MiB takes a
-fraction of a second.
+The key is not searched for. xorshift128 is linear over GF(2), so every keystream word is a linear function
+of the 128-bit state. A Cortex-M image's vector table has reserved words (7 to 10) that are 0 in the
+plaintext, so the ciphertext there is the keystream itself, and those 128 bits solve for the state
+directly (`recoverState` in `packages/core/src/crypto/recover.ts`). The stored key is never needed, so a
+slot decrypts even when the dump's key region is missing or could not be read, and the solve does not
+read the reset vector, so a damaged reset vector does not stop it.
 
-### The key search widens if the first pass fails
+Each recovered key is then checked, and the reports say how in words:
 
-The obvious way to decide "SRAM-resident" is to read the dump's own word 0 and take its top byte. That
-breaks on units that ship with a **poisoned reset vector**: word 0 reads `0xBEBEBE00` while the rest of the
-vector table is intact, so the derived prefix is `0xbe` and every genuine candidate is thrown away before
-the checksum ever runs. The key is sitting right there in the dump, and a naive scan reports "no key
-found".
+| Verdict                           | When                                                                                                                                                |
+| --------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| verified by the acceptance sum    | the decrypted word sum equals the profile's target, the check the bootloader itself makes                                                           |
+| verified by the vector table only | no target matched, but reserved word 13, which the solve did not use, decrypts to 0 and the reset vector is an SRAM stack pointer and a Thumb entry |
+| not verified                      | neither; the slot is still decrypted                                                                                                                |
 
-Because the pre-filter is only an optimisation — the checksum is the real acceptance test — relaxing it
-can never yield a wrong key, only a slower scan. So the search runs in stages and stops at the first one
-that finds a key:
-
-| Stage            | SP constraint                                                               |
-| ---------------- | --------------------------------------------------------------------------- |
-| `reset-vector`   | top byte equals the dump's own word 0 — fastest, and what a naive scan does |
-| `sram-region`    | any LPC43xx SRAM region (`0x10` or `0x20`)                                  |
-| `alignment-only` | none; alignment and the entry vector alone                                  |
-
-Dumps that the first stage already handles resolve identically and at identical speed. The stage that
-succeeded is recorded per key as `keySearch` in `manifest.json` and in the per-slot report.
+`manifest.json` and `seek-fw decrypt --json` keep the code names (`VERIFIED(profile)`,
+`VERIFIED(structural)`, `UNVERIFIED`).
 
 The cipher and acceptance forms known so far (K is resolved per image, as
 [Firmware version profiles](#firmware-version-profiles) says):
@@ -655,12 +659,12 @@ The cipher and acceptance forms known so far (K is resolved per image, as
 | ------------------------------------------------------ | ---------------------------- | ---------------------------- |
 | 2018.07.05 / 2019.01.07 / 2021.08.12 (the modern line) | `0x13579BDF`                 | `0x0000FFFF`                 |
 | 2016.06.26 (Compact PRO 1.0.3.x)                       | `0x00000000`                 | `0x00000000`                 |
-| Compact 1.3.0.8                                        | none (no whitening)          | `0x0000FFFF`                 |
+| Compact 1.3.0.8 16 Hz FF                               | none (no whitening)          | `0x0000FFFF`                 |
 | the 2014 plain chain                                   | not encrypted (stored as is) | stored word sum `0x00000000` |
 
-Decryption is best-effort. A unit whose bootloader derives its key from chip OTP cannot be decrypted from
-a flash dump alone, because the OTP is not in the dump. Those slots are skipped and listed in
-`manifest.json`; the flash image itself is unaffected.
+Decryption never drops a slot: one that fails every check is still decrypted and reported as not
+verified. Slots are found by the image header at each 64 KiB boundary; a dump with none decrypts nothing
+and says so, and the flash image itself is unaffected.
 
 The implementation is a direct port of `decrypt_firmware.js` and produces byte-identical output —
 verified against it on real dumps covering both cipher profiles of the 1.0.0 page, multi-key devices,

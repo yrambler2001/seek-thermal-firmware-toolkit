@@ -139,9 +139,11 @@ const SEEK_HINTS: Partial<Record<SeekErrorCode, string>> = {
  * the version it read — which `requireCapability` never does.
  */
 export const FIRMWARE_TOO_OLD_HINT =
-  'No firmware family can read this build over USB: its firmware has no command that serves ' +
-  'flash, so nothing that could be misread was sent to it. A dump taken with an SPI programmer ' +
-  'or over SWD/J-Link can still be decrypted on this page, under "Decrypt File/Slot".';
+  'No firmware family can read this build here: its firmware has no read handler for the ' +
+  'command this tab reads flash with, so nothing that could be misread was sent to it. A ' +
+  'Compact on 0.7.0.7 or 0.7.0.8 can be read on "Dump & decrypt 0.x/1.x 2014/2016". A dump ' +
+  'taken with an SPI programmer or over SWD/J-Link can still be decrypted on this page, under ' +
+  '"Decrypt File/Slot".';
 
 function isFirmwareTooOld(error: SeekError): boolean {
   return error.code === 'profile/unsupported' && typeof error.detail?.firmwareVersion === 'string';

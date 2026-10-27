@@ -196,8 +196,8 @@ function gateOf(source: FpsPatchSource): FpsGate {
       enabled: false,
       reason:
         `firmware ${source.version} is older than 0.8.0.0: its RPC table has no read handler for ` +
-        'GetFeaturedFirmwareData, the only command a bank is read with, so no bank of the build is ' +
-        'read or written, and the patch is not offered',
+        'GetFeaturedFirmwareData, the command a slot read sends, so the slots read and write no ' +
+        'bank of the build, and the patch is not offered',
     };
   }
   let why: string;

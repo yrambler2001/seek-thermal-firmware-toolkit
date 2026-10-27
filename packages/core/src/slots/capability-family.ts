@@ -139,7 +139,7 @@ export function classifyBuild(
       'pre-0.8',
       version,
       `firmware ${text} is older than ${FIRST_SUPPORTED_VERSION}: its RPC table has no read ` +
-        'handler for GetFeaturedFirmwareData, the only command a bank is read with, so neither ' +
+        'handler for GetFeaturedFirmwareData, the command a slot read sends, so neither ' +
         'a read nor a write is sent to it (compact-2014 has the evidence)',
     );
   }

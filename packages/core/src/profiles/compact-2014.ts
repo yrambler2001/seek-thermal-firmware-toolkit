@@ -29,10 +29,13 @@
  *   0.7.0.7   GetFeaturedFirmwareData, SETTER ONLY  BeginFirmwareUpgrade
  *   0.7.0.8   GetFeaturedFirmwareData, SETTER ONLY  BeginFirmwareUpgrade
  *
- * `GetFeaturedFirmwareData` is the ONLY command this toolkit reads flash with.
- * On the first five it is not in the table at all. On 0.7.0.7 and 0.7.0.8 it is,
- * with the right name, and its handler sits in the setter column with no getter
- * — so the control-IN read cannot be dispatched, however the window is armed.
+ * `GetFeaturedFirmwareData` is the command a dump, the device-info read and the
+ * slots read flash with. On the first five it is not in the table at all. On
+ * 0.7.0.7 and 0.7.0.8 it is, with the right name, and its handler sits in the
+ * setter column with no getter — so the control-IN read cannot be dispatched,
+ * however the window is armed. The same handler is the getter of 0x58
+ * (`GetFeaturedData`), which the preservation run reads those two builds with
+ * (`legacyReaderOp` in `legacy-auth.ts`).
  * Measured on the emulator (TESTING.md sec.9.10): the arms of 1 and 0x0A..0x21
  * come back with error code 0, and every read stalls at 64, 32, 16 and 8 bytes.
  * The first build with a getter there is 0.8.0.0.
@@ -101,10 +104,12 @@ import type { CipherProfile, WindowEntry } from './types.js';
 export const FIRST_READABLE_VERSION = '0.8.0.0';
 
 const NO_READ_COMMAND =
-  'firmware older than 0.8.0.0 has no read handler for GetFeaturedFirmwareData, the only ' +
-  'command this toolkit reads flash with. On 0.7.0.7 and 0.7.0.8 it is in the RPC method ' +
+  'firmware older than 0.8.0.0 has no read handler for GetFeaturedFirmwareData, the ' +
+  'command a dump reads flash with. On 0.7.0.7 and 0.7.0.8 it is in the RPC method ' +
   'table at 0x4F but registered as a setter (write handler) only, so the control-IN read a ' +
-  'dump sends cannot be dispatched; before 0.7.0.7 wire id 0x4F is UploadFirmwareRowSize, and ' +
+  'dump sends cannot be dispatched (the preservation run reads those two builds through ' +
+  'wire id 0x58, GetFeaturedData, instead); before 0.7.0.7 wire id 0x4F is ' +
+  'UploadFirmwareRowSize, and ' +
   'on 0.3.0.1 wire id 0x52 — the one a dump arms with — is EnterBootloaderMode rather than ' +
   'BeginFirmwareUpgrade: the camera stays in its application, but every arm sets a flash ' +
   "target and arms that build's firmware-upgrade stage (GetErrorCode then reads 0x00400000), " +
@@ -150,7 +155,7 @@ const MEMORY: MemoryLayout = {
     {
       address: FLASH_BASE,
       length: FLASH_SIZE,
-      reason: 'The whole part is out of reach over USB on this generation: ' + NO_READ_COMMAND,
+      reason: 'The whole part is out of reach of a dump on this generation: ' + NO_READ_COMMAND,
     },
   ],
 };
@@ -223,8 +228,10 @@ export const compact2014: FirmwareProfile = {
     '0.7.0.7, 0.7.0.8). None has a read handler for GetFeaturedFirmwareData: before 0.7.0.7 ' +
     'wire id 0x4F is UploadFirmwareRowSize, and on 0.7.0.7 and 0.7.0.8 it is registered as a ' +
     'setter only, so the read a dump sends cannot be dispatched. On 0.3.0.1 wire id 0x52 is ' +
-    'EnterBootloaderMode rather than BeginFirmwareUpgrade. Dumping and sweeping are refused ' +
-    'rather than attempted; decrypting a dump taken by other means still works.',
+    'EnterBootloaderMode rather than BeginFirmwareUpgrade. Dumping, and dumping every ' +
+    'selector, are refused rather than attempted; decrypting a dump taken by other means still ' +
+    'works. The preservation run reads 0.7.0.7 and 0.7.0.8 through wire id 0x58 ' +
+    '(GetFeaturedData), where those two builds register the read handler.',
   cipher: CIPHER,
   memory: MEMORY,
   capabilities: CAPABILITIES,

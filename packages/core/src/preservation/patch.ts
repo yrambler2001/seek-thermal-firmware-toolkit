@@ -1375,7 +1375,8 @@ export function outsideLineRefusal(version: string | null): string | null {
   return (
     `firmware ${version ?? ''} is not a 0.x or 1.x build, and this run covers only the 2014 and ` +
     '2016 builds. Nothing was read beyond the version. Read this camera with Dump & decrypt for ' +
-    '4.x and Nano instead: it reads the whole flash without a patch.'
+    '4.x and Nano instead: it reads the flash without a patch, every block but the one at ' +
+    '0x14060000, which no read window reaches on those builds.'
   );
 }
 
