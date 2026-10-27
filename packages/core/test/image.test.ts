@@ -9,7 +9,9 @@ import {
   FOOTER_TAG,
   HEADER_OFFSET,
   LENGTH_OFFSET,
+  PLAIN_CHAIN_STAGE_MAX,
   assertBankPayload,
+  assertPlainChainPayload,
   bankPayloadSize,
   buildBankPayload,
   findImages,
@@ -324,6 +326,58 @@ describe('assertBankPayload', () => {
         assertBankPayload(bad);
       }),
     ).toBe('flash/refused');
+  });
+});
+
+describe('assertPlainChainPayload', () => {
+  /** An image as the 2014 plain chain stores it: no cipher, stored words summing to 0. */
+  const plain = setAcceptSum(synthImage(), { ...MODERN, whiteningK: 0, acceptanceSum: 0 }).image;
+
+  it('passes an image whose stored words sum to 0', () => {
+    expect(wordSum32(plain, plain.length)).toBe(0);
+    expect(() => {
+      assertPlainChainPayload(plain);
+    }).not.toThrow();
+  });
+
+  it('rejects anything too short to hold an image header', () => {
+    expect(
+      codeOf(() => {
+        assertPlainChainPayload(new Uint8Array(HEADER_OFFSET));
+      }),
+    ).toBe('flash/refused');
+  });
+
+  it('rejects an image larger than the staging buffer holds', () => {
+    expect(
+      codeOf(() => {
+        assertPlainChainPayload(synthImage(PLAIN_CHAIN_STAGE_MAX + 4));
+      }),
+    ).toBe('image/unsupported');
+  });
+
+  it('rejects bytes with no image magic at +0x200, such as a flash dump', () => {
+    const bad = plain.slice();
+    viewOf(bad).setUint32(HEADER_OFFSET, 0, true);
+    expect(() => {
+      assertPlainChainPayload(bad);
+    }).toThrow(/no image header/);
+  });
+
+  it('rejects a header.length that disagrees with the payload', () => {
+    expect(
+      codeOf(() => {
+        assertPlainChainPayload(plain.slice(0, plain.length - 4));
+      }),
+    ).toBe('image/malformed');
+  });
+
+  it('rejects stored words that do not sum to 0', () => {
+    const bad = plain.slice();
+    bad[bad.length - 1] = (bad[bad.length - 1] ?? 0) ^ 0x01;
+    expect(() => {
+      assertPlainChainPayload(bad);
+    }).toThrow(/stored word sum is/);
   });
 });
 

@@ -4,6 +4,7 @@ import type { Artifact } from '../src/events.js';
 import { bytesToHex, utf8 } from '../src/bytes.js';
 import { crc32 } from '../src/archive/crc32.js';
 import { buildZip, zipEntryCount, zipTotalDataSize } from '../src/archive/zip.js';
+import { looksLikeZip, readZipEntries } from '../src/archive/zip-read.js';
 import {
   buildBootloaderKeysSummary,
   buildDecryptionFailed,
@@ -195,6 +196,75 @@ describe('buildZip', () => {
     const zip = buildZip(sampleFiles());
     const { entryCount } = readEocd(zip);
     expect(entryCount).toBe(4);
+  });
+});
+
+/* ==================================================================== *
+ * readZipEntries — the reader for the archives buildZip writes
+ * ==================================================================== */
+
+describe('readZipEntries', () => {
+  /** buildZip's output and where its central directory and first central header are. */
+  function sample(): { zip: Uint8Array; view: DataView; central: number } {
+    const zip = buildZip(sampleFiles(), FIXED_DATE);
+    const view = new DataView(zip.buffer, zip.byteOffset, zip.byteLength);
+    return { zip, view, central: readEocd(zip).cdOffset };
+  }
+
+  it("round-trips buildZip's entries, names and bytes exactly", () => {
+    const files = sampleFiles();
+    const entries = readZipEntries(buildZip(files, FIXED_DATE));
+    expect(entries.map((e) => e.name)).toEqual(files.map((f) => f.name));
+    entries.forEach((e, i) => {
+      expect(bytesToHex(e.data)).toBe(bytesToHex(files[i]?.data ?? new Uint8Array(0)));
+    });
+  });
+
+  it('looksLikeZip knows a local header from anything else', () => {
+    expect(looksLikeZip(sample().zip)).toBe(true);
+    expect(looksLikeZip(new Uint8Array([0x50, 0x4b, 0x03]))).toBe(false);
+    expect(looksLikeZip(new Uint8Array(0x10000).fill(0xff))).toBe(false);
+  });
+
+  it('refuses bytes with no end-of-central-directory', () => {
+    expect(() => readZipEntries(new Uint8Array(0x100))).toThrow(/not a ZIP archive/);
+  });
+
+  it('refuses a central directory that runs past the end of the file', () => {
+    const { zip, view } = sample();
+    view.setUint32(zip.length - 22 + 16, zip.length, true);
+    expect(() => readZipEntries(zip)).toThrow(/truncated \(its central directory/);
+  });
+
+  it('refuses a directory entry with no central header', () => {
+    const { zip, view } = sample();
+    view.setUint32(zip.length - 22 + 16, 0, true); /* point the directory at a local header */
+    expect(() => readZipEntries(zip)).toThrow(/entry 0 has no central header/);
+  });
+
+  it('refuses a compressed entry by its name', () => {
+    const { zip, view, central } = sample();
+    view.setUint16(central + 10, 8, true); /* deflate */
+    expect(() => readZipEntries(zip)).toThrow(/manifest\.json is compressed \(method 8\)/);
+  });
+
+  it('refuses an entry whose local header is missing', () => {
+    const { zip, view, central } = sample();
+    view.setUint32(central + 42, 1, true);
+    expect(() => readZipEntries(zip)).toThrow(/has no local header/);
+  });
+
+  it('refuses an entry whose data runs past the end of the file', () => {
+    const { zip, view, central } = sample();
+    view.setUint32(central + 24, zip.length, true);
+    expect(() => readZipEntries(zip)).toThrow(/manifest\.json is truncated/);
+  });
+
+  it('refuses an entry that fails its CRC-32', () => {
+    const { zip, view } = sample();
+    const dataAt = 30 + view.getUint16(26, true) + view.getUint16(28, true);
+    zip[dataAt] = (zip[dataAt] ?? 0) ^ 0xff;
+    expect(() => readZipEntries(zip)).toThrow(/failed its CRC-32/);
   });
 });
 
