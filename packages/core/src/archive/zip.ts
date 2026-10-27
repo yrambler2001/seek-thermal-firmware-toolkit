@@ -1,6 +1,6 @@
 /**
- * Dependency-free, store-only (method 0) ZIP writer, ported from
- * `legacy/index.html`'s `buildZip`. No compression is attempted: dumps are
+ * Dependency-free, store-only (method 0) ZIP writer, ported from the original
+ * page's (`index.html` at tag `v1.0.0`) `buildZip`. No compression is attempted: dumps are
  * already mostly-incompressible flash/firmware bytes, and storing lets the
  * writer stay a couple hundred lines of buffer arithmetic instead of an
  * Inflate/Deflate implementation.

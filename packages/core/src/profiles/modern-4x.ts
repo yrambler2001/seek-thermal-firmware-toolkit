@@ -125,7 +125,8 @@ export const MODERN_SWEEP_RANGE: readonly [number, number] = [0, 0x41];
  * The two generated runs are arithmetically one linear sequence —
  * `0x14080000 + (subcmd - 0x0a) * 0x10000` is `(subcmd + 5118) << 16` — but they
  * are kept as two loops with distinct notes, exactly as the original decoded
- * them, so a diff against `legacy/index.html` stays trivial.
+ * them, so a diff against the original page (`index.html` at tag `v1.0.0`)
+ * stays trivial.
  *
  * TWO ALIASES ARE DELIBERATELY ABSENT. The firmware's own switch also accepts
  * subcommand 4 (`case 1: case 4: fw_op_dest = 0x14020000`) and subcommand 7

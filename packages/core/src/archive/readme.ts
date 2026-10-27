@@ -1,6 +1,7 @@
 /**
  * Human-readable `README.md` shipped inside every archive, ported from
- * `legacy/index.html`'s `makeReadme` / `makeLegacyReadme` / `makeSweepReadme`
+ * the original page's (`index.html` at tag `v1.0.0`) `makeReadme` /
+ * `makeLegacyReadme` / `makeSweepReadme`
  * (plus the inline text `decryptPickedFile` built for an offline decrypt).
  *
  * These documents are carefully worded: they state exactly what was and was

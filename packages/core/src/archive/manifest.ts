@@ -1,6 +1,7 @@
 /**
- * Manifest JSON shapes, ported field-for-field from `legacy/index.html`'s
- * `runDump` / `runOldDump` / `runSweep` / `decryptPickedFile`.
+ * Manifest JSON shapes, ported field-for-field from the original page's
+ * (`index.html` at tag `v1.0.0`) `runDump` / `runOldDump` / `runSweep` /
+ * `decryptPickedFile`.
  *
  * These are PRESERVED OUTPUT FORMATS: downstream scripts and this project's
  * own history read `manifest.json` files produced by the old page, so every

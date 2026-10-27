@@ -139,7 +139,7 @@ describe('legacy-auth selector map, version unknown', () => {
     0x14010000, 0x14020000, 0x14030000, 0x14040000, 0x14050000, 0x14060000, 0x14070000,
   ];
 
-  /** Ground truth from legacy/index.html — recovered from one Compact PRO unit. */
+  /** Ground truth from the original page (index.html at tag v1.0.0) — recovered from one Compact PRO unit. */
   const EXPECTED_TOKEN = [
     0x53, 0x16, 0x10, 0x31, 0x80, 0xdd, 0x00, 0xb7, 0x4a, 0xf9, 0xe4, 0x17, 0xc5, 0x94, 0xbe, 0xd4,
   ];

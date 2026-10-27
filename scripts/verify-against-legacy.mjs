@@ -1,6 +1,7 @@
 /**
- * Differential test: decrypt real flash dumps with BOTH the original
- * `legacy/index.html` and the TypeScript core, and require identical results.
+ * Differential test: decrypt real flash dumps with BOTH the original page
+ * (`index.html` at tag `v1.0.0`) and the TypeScript core, and require identical
+ * results.
  *
  * The legacy page is the only version of this code that has ever driven real
  * hardware, so it — not the port — is the reference. Any divergence here is a
@@ -15,6 +16,7 @@
  * mismatch.
  */
 import { readFileSync, readdirSync, statSync, existsSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { loadLegacy } from './legacy-oracle.mjs';
@@ -43,7 +45,19 @@ function findDumps(root, out = [], depth = 0) {
   return out;
 }
 
-const legacy = loadLegacy(path.join(repoRoot, 'legacy', 'index.html'));
+/* The original page is no longer in the tree; git keeps it at the v1.0.0 tag. */
+let legacyHtml;
+try {
+  legacyHtml = execFileSync('git', ['show', 'v1.0.0:index.html'], {
+    cwd: repoRoot,
+    encoding: 'utf8',
+    maxBuffer: 16 * 1024 * 1024,
+  });
+} catch {
+  console.error('could not read index.html at tag v1.0.0; run `git fetch --tags` first');
+  process.exit(2);
+}
+const legacy = loadLegacy(legacyHtml);
 
 const D = path.join(repoRoot, 'packages', 'core', 'dist');
 const { recoverKeyInfo } = await import(`${D}/crypto/recover.js`);

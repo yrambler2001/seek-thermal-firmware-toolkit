@@ -208,9 +208,8 @@ packages/
                            image packaging, USB protocol, firmware profiles
   cli/     @seek-fw/cli    Node CLI, talks to the camera through `usb` v3
   web/     @seek-fw/web    React app, talks to the camera through WebUSB
-legacy/index.html          the original single-file page, kept for reference
 docs/                      the built web app — GitHub Pages serves this folder
-scripts/                   the differential test against the legacy page
+scripts/                   the differential test against the original page (tag v1.0.0)
 e2e/                       opt-in browser runs of the web app (emulator, real camera)
 ```
 
@@ -864,9 +863,11 @@ seek-fw slots patch-fps all --write --acknowledge-risk        # every bank that 
   selectors 6, 7 and 8 answer, bank by bank, whether the running application takes the bank. The FF image
   is staged the way the vendor app stages it, the image XOR Key A with the header verbatim, and the camera
   stores it under Key B. It goes to A, B or R. Nothing refuses it: the plan says before you confirm what the
-  camera is expected to do with it. The 8 Hz build, and a camera on another version, check the plain word
-  sum and are expected to refuse it at commit (0x00070100) before anything is written; when the camera's
-  answers cannot tell the two builds apart, the plan says what each build does. The stored form is not
+  camera is expected to do with it. The 8 Hz build checks the plain word sum and is expected to refuse it
+  at commit (0x00070100) before anything is written. A camera on another version writes a bank without
+  checking the image, so it is expected to write the payload as sent, in a form it cannot start (a 1.3.0.0
+  Compact did so, `TESTING.md` §42.109). When the camera's answers cannot tell the two builds apart, the
+  plan says what each build does. The stored form is not
   known to boot: no genuine bootloader for this build is in the corpus, so the boot is untested
   (`TESTING.md` §42.11 and §42.12).
 - **Flash raw bytes.** The bytes you give go through the staging stream as they are. Whether they
@@ -1309,9 +1310,9 @@ version and dump image (each is otherwise taken from the camera).
 
 ### Verifying a change against the original
 
-`legacy/index.html` is the only version of this code that has ever driven real hardware, so it is the
-reference. `scripts/verify-against-legacy.mjs` loads that page's own `<script>` into a stub-DOM `vm`
-context, runs both implementations over real flash dumps, and requires identical results — recovered
+The original single-file page (`index.html` at tag `v1.0.0`) is the reference the core was ported
+from. `scripts/verify-against-legacy.mjs` reads it from that tag with `git show`, loads its own
+`<script>` into a stub-DOM `vm` context, runs both implementations over real flash dumps, and requires identical results — recovered
 keystream state, acceptance checksum, decrypted plaintext, and the rebuilt bank payload byte for
 byte.
 

@@ -1,6 +1,6 @@
 /**
- * Loads the ORIGINAL <script> out of `legacy/index.html` into a stub-DOM `vm`
- * context and hands back its internals.
+ * Loads the ORIGINAL <script> out of the v1.0.0 page (`index.html` at tag
+ * `v1.0.0`) into a stub-DOM `vm` context and hands back its internals.
  *
  * Why this exists: the TypeScript core in `packages/core` is a port of that
  * page, and the page is the only version that has ever driven real hardware.
@@ -12,11 +12,9 @@
  * scratchpad and lost it. Keeping it in the repo means the next person changing
  * the cipher or the flash packaging can re-run the comparison in one command.
  */
-import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 
-export function loadLegacy(htmlPath) {
-  const html = readFileSync(htmlPath, 'utf8');
+export function loadLegacy(html) {
   const m = html.match(/<script>([\s\S]*)<\/script>\s*<\/body>/);
   if (!m) throw new Error('could not find the page script');
   const src = m[1];

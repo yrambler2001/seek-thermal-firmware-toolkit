@@ -11,7 +11,6 @@ export default defineConfig([
     ignores: [
       '**/dist/**',
       'docs/**',
-      'legacy/**',
       'coverage/**',
       '**/*.tsbuildinfo',
       /* Measurement instruments run with `npx jiti`, kept as they were run: they reach
