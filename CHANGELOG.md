@@ -62,9 +62,14 @@ the same things. It now covers the 2014 to 2017 cameras as well as the 2018-and-
 - A note that the camera stays unlocked until it is power-cycled, on both the page and the CLI.
 - The page runs one camera operation at a time across all its tabs and windows.
 - An Android phone layout, and `npm run dev:phone` to serve the app to a phone over Wi-Fi.
+- **Light and dark themes.** The page follows the system's setting. A switch beside the camera status
+  picks the other theme, and the browser remembers it; picking the system's own theme goes back to
+  following the system.
 
 ### Changed
 
+- The page's header says "Seek Thermal Firmware Toolkit", and the browser tab shows the header's
+  thermometer as its icon.
 - How a stored key maps to the cipher is worked out from each image, instead of one fixed constant
   for every image. This fixes the Key A that 1.0.0 reported for the Compact 1.3.0.8 build.
 - A dump reads the firmware version first and uses that build's own map of readable blocks. Builds

@@ -42,6 +42,9 @@ The **Info** tab tells you which firmware a camera runs and which tab reads it.
 Each tab has its own address. Connect the camera with **Connect device** at the top of a tab and pick it
 in Chrome's list.
 
+The page follows your system's light or dark setting. The switch in the top right corner picks the other
+theme, and this browser remembers it. Pick your system's theme again to go back to following the system.
+
 ### Info (`#/`)
 
 ![The Info tab after Read firmware version](.github/readme/info.avif)
