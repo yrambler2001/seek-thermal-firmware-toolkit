@@ -1908,7 +1908,7 @@ async function runBackupStep(
   const profile = archive.detection?.best.profile ?? getProfile('generic');
   const manifest = buildOfflineDecryptManifest({
     producer:
-      'seek-thermal-firmware-dump (preserve backup step: the offline decrypt of the assembled ' +
+      'seek-thermal-firmware-toolkit (preserve backup step: the offline decrypt of the assembled ' +
       'stock windows — the pre-flash dump of every region the stock plan can read)',
     startedAt,
     finishedAt: new Date().toISOString(),

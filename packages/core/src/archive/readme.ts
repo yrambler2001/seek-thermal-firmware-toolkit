@@ -28,12 +28,13 @@ import type {
   SweepManifest,
 } from './manifest.js';
 
-const REPO_URL = 'https://github.com/yrambler2001/seek-thermal-firmware-dump';
+/** The toolkit's repository: the archive READMEs name it, and the page links to it. */
+export const REPO_URL = 'https://github.com/yrambler2001/seek-thermal-firmware-toolkit';
 
 /** The "Produced by ..." byline, shared by every README. Notes the CLI is new. */
 function producedByLines(): readonly string[] {
   return [
-    'Produced by seek-thermal-firmware-dump, which now runs both as a browser app',
+    'Produced by seek-thermal-firmware-toolkit, which now runs both as a browser app',
     '(over WebUSB) and as a command-line tool, from',
     REPO_URL,
   ];

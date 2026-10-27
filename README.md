@@ -10,7 +10,7 @@ A tool for Seek Thermal cameras. It can:
 It runs in your browser over WebUSB, or from the command line. Nothing is uploaded anywhere: the page
 runs on your own machine, and the CLI talks to the camera directly. No SDK, no J-Link.
 
-**→ [Open the web tool](https://yrambler2001.github.io/seek-thermal-firmware-dump/)**
+**→ [Open the web tool](https://yrambler2001.github.io/seek-thermal-firmware-toolkit/)**
 
 ![The Work with firmware slots tab on a Compact 1.3.0.0, with a Make 32 FPS button on each bank](.github/readme/slots.avif)
 
@@ -26,29 +26,29 @@ The **Info** tab tells you which firmware a camera runs and which tab reads it.
   </thead>
   <tbody>
     <tr><th colspan="5" align="left">Compact</th></tr>
-    <tr><td>Compact 0.3.0.1 to 0.6.0.4</td><td>no: the firmware has no read command (a J-Link or SPI dump decrypts)</td><td>yes</td><td>no</td><td>no 8 → 32 fps patch yet</td></tr>
-    <tr><td>Compact 0.7.0.7, 0.7.0.8</td><td>yes, Dump &amp; decrypt 0.x/1.x (tested on the emulator only)</td><td>yes</td><td>no</td><td>no 8 → 32 fps patch yet</td></tr>
-    <tr><td>Compact 0.8.0.0 to 0.10.0.0</td><td>yes, Dump &amp; decrypt 0.x/1.x (tested on the emulator only)</td><td>yes</td><td>yes</td><td>8 fps → 32 fps</td></tr>
-    <tr><td>Compact 1.0.0.0, 1.2.0.0, 1.3.0.8</td><td>yes, Dump &amp; decrypt 0.x/1.x (tested on the emulator only)</td><td>yes</td><td>yes</td><td>8 fps → 32 fps</td></tr>
-    <tr><td>Compact 1.3.0.0</td><td>yes, Dump &amp; decrypt 0.x/1.x</td><td>yes</td><td>yes</td><td>8 fps → 32 fps</td></tr>
-    <tr><td>Compact 1.3.0.8 FF</td><td>yes, but the run leaves its patch in recovery R (tested on the emulator only)</td><td>yes</td><td>yes (boot untested)</td><td>no 16 → 32 fps patch yet</td></tr>
-    <tr><td>Compact 4.8.1.7, 4.8.1.9, 4.8.2.1</td><td>yes, Dump &amp; decrypt 4.x/Nano</td><td>yes</td><td>yes</td><td>8 fps → 32 fps</td></tr>
-    <tr><td>Compact 4.16</td><td>yes, Dump &amp; decrypt 4.x/Nano</td><td>yes</td><td>yes</td><td>no 16 → 32 fps patch yet</td></tr>
+    <tr><td>Compact 0.3.0.1 to 0.6.0.4</td><td>no: the firmware has no read command (a J-Link or SPI dump decrypts)</td><td>yes</td><td>no</td><td>❌ no 8 → 32 fps patch yet</td></tr>
+    <tr><td>Compact 0.7.0.7, 0.7.0.8</td><td>yes, Dump &amp; decrypt 0.x/1.x (tested on the emulator only)</td><td>yes</td><td>no</td><td>❌ no 8 → 32 fps patch yet</td></tr>
+    <tr><td>Compact 0.8.0.0 to 0.10.0.0</td><td>yes, Dump &amp; decrypt 0.x/1.x (tested on the emulator only)</td><td>yes</td><td>yes</td><td>✅ 8 fps → 32 fps</td></tr>
+    <tr><td>Compact 1.0.0.0, 1.2.0.0, 1.3.0.8</td><td>yes, Dump &amp; decrypt 0.x/1.x (tested on the emulator only)</td><td>yes</td><td>yes</td><td>✅ 8 fps → 32 fps</td></tr>
+    <tr><td>Compact 1.3.0.0</td><td>yes, Dump &amp; decrypt 0.x/1.x</td><td>yes</td><td>yes</td><td>✅ 8 fps → 32 fps</td></tr>
+    <tr><td>Compact 1.3.0.8 FF</td><td>yes, but the run leaves its patch in recovery R (tested on the emulator only)</td><td>yes</td><td>yes (boot untested)</td><td>❌ no 16 → 32 fps patch yet</td></tr>
+    <tr><td>Compact 4.8.1.7, 4.8.1.9, 4.8.2.1</td><td>yes, Dump &amp; decrypt 4.x/Nano</td><td>yes</td><td>yes</td><td>✅ 8 fps → 32 fps</td></tr>
+    <tr><td>Compact 4.16</td><td>yes, Dump &amp; decrypt 4.x/Nano</td><td>yes</td><td>yes</td><td>❌ no 16 → 32 fps patch yet</td></tr>
     <tr><th colspan="5" align="left">Compact PRO</th></tr>
-    <tr><td>Compact PRO 1.0.3.0</td><td>yes, Dump &amp; decrypt 0.x/1.x</td><td>yes</td><td>yes</td><td>9 fps → 18 fps</td></tr>
-    <tr><td>Compact PRO 1.0.3.2</td><td>the 31 readable blocks only: no whole-flash read on this build (TODO implement whole flash read)</td><td>yes</td><td>yes</td><td>9 fps → 18 fps</td></tr>
-    <tr><td>Compact PRO 4.9.1.15, 4.9.2.0</td><td>yes, Dump &amp; decrypt 4.x/Nano</td><td>yes</td><td>yes</td><td>9 fps → 18 fps</td></tr>
-    <tr><td>Compact PRO 4.18</td><td>yes, Dump &amp; decrypt 4.x/Nano</td><td>yes</td><td>yes</td><td>already 18 fps</td></tr>
+    <tr><td>Compact PRO 1.0.3.0</td><td>yes, Dump &amp; decrypt 0.x/1.x</td><td>yes</td><td>yes</td><td>✅ 9 fps → 18 fps</td></tr>
+    <tr><td>Compact PRO 1.0.3.2</td><td>the 31 readable blocks only: no whole-flash read on this build (TODO implement whole flash read)</td><td>yes</td><td>yes</td><td>✅ 9 fps → 18 fps</td></tr>
+    <tr><td>Compact PRO 4.9.1.15, 4.9.2.0</td><td>yes, Dump &amp; decrypt 4.x/Nano</td><td>yes</td><td>yes</td><td>✅ 9 fps → 18 fps</td></tr>
+    <tr><td>Compact PRO 4.18</td><td>yes, Dump &amp; decrypt 4.x/Nano</td><td>yes</td><td>yes</td><td>✅ already 18 fps</td></tr>
     <tr><th colspan="5" align="left">Nano</th></tr>
-    <tr><td>Nano 200</td><td>yes, Dump &amp; decrypt 4.x/Nano</td><td>yes</td><td>yes</td><td>already 32 fps</td></tr>
-    <tr><td>Nano 300</td><td>yes, Dump &amp; decrypt 4.x/Nano</td><td>yes</td><td>yes</td><td>already 27 fps</td></tr>
+    <tr><td>Nano 200</td><td>yes, Dump &amp; decrypt 4.x/Nano</td><td>yes</td><td>yes</td><td>✅ already 32 fps</td></tr>
+    <tr><td>Nano 300</td><td>yes, Dump &amp; decrypt 4.x/Nano</td><td>yes</td><td>yes</td><td>✅ already 27 fps</td></tr>
     <tr><th colspan="5" align="left">Mosaic</th></tr>
-    <tr><td>Mosaic</td><td>yes, Dump &amp; decrypt 4.x/Nano</td><td>yes</td><td>yes</td><td>no patch yet</td></tr>
+    <tr><td>Mosaic</td><td>yes, Dump &amp; decrypt 4.x/Nano</td><td>yes</td><td>yes</td><td>❌ no patch yet</td></tr>
   </tbody>
 </table>
 
 If your camera runs firmware that is not in this table, or runs 1.3.0.8, 4.16 or Mosaic,
-please [open an issue on GitHub](https://github.com/yrambler2001/seek-thermal-firmware-dump/issues/new).
+please [open an issue on GitHub](https://github.com/yrambler2001/seek-thermal-firmware-toolkit/issues/new).
 
 There will be no frame-rate patch for cameras with the LPC43S30FET100 processor, a CPU with AES built in
 whose firmware is AES-encrypted: there is currently no known way to decrypt that firmware.
@@ -274,8 +274,8 @@ Compact 1.3.0.0 on the bench runs the current image. Any other build is refused,
 The CLI runs from a clone (the packages are not on npm):
 
 ```sh
-git clone https://github.com/yrambler2001/seek-thermal-firmware-dump
-cd seek-thermal-firmware-dump
+git clone https://github.com/yrambler2001/seek-thermal-firmware-toolkit
+cd seek-thermal-firmware-toolkit
 npm ci && npm run build
 node packages/cli/dist/bin.js --help
 ```
@@ -327,4 +327,4 @@ have no WebUSB; they can still decrypt a file on the Decrypt File/Slot tab.
 - [DEVELOPMENT.md](DEVELOPMENT.md): the code layout, tests and end-to-end runs.
 - [FPS_32HZ.md](FPS_32HZ.md): how the frame-rate patch is made for each build.
 - The original single-file page (1.0.0) is kept at tag
-  [`v1.0.0`](https://github.com/yrambler2001/seek-thermal-firmware-dump/tree/v1.0.0).
+  [`v1.0.0`](https://github.com/yrambler2001/seek-thermal-firmware-toolkit/tree/v1.0.0).

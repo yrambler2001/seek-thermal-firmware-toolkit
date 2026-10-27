@@ -620,7 +620,7 @@ function sampleDumpInput(): BuildDumpManifestInput {
     windowSize: 0x10000,
     chunk: 64,
     gapFill: 0xff,
-    producer: 'seek-thermal-firmware-dump (WebUSB)',
+    producer: 'seek-thermal-firmware-toolkit (WebUSB)',
     transport: sampleTransport(),
     safety: ['No flash-write/flash-modify RPCs were called.'],
     windows: [],
@@ -700,7 +700,7 @@ describe('buildSweepManifest', () => {
       chunk: 64,
       gapFill: 0xff,
       unlockToken: null,
-      producer: 'seek-thermal-firmware-dump (WebUSB, all selectors)',
+      producer: 'seek-thermal-firmware-toolkit (WebUSB, all selectors)',
       transport: sampleTransport(),
       safety: [],
       selectors: [],
@@ -731,7 +731,7 @@ describe('buildSweepManifest', () => {
       chunk: 64,
       gapFill: 0xff,
       unlockToken: Uint8Array.from([1, 2, 3, 4]),
-      producer: 'seek-thermal-firmware-dump (WebUSB, all selectors)',
+      producer: 'seek-thermal-firmware-toolkit (WebUSB, all selectors)',
       transport: sampleTransport(),
       safety: [],
       selectors: [],
@@ -752,7 +752,7 @@ describe('buildSweepManifest', () => {
 describe('buildOfflineDecryptManifest', () => {
   it('formats flashBase and carries the source block through untouched', () => {
     const manifest = buildOfflineDecryptManifest({
-      producer: 'seek-thermal-firmware-dump (offline decrypt)',
+      producer: 'seek-thermal-firmware-toolkit (offline decrypt)',
       startedAt: 't0',
       finishedAt: 't1',
       source: { fileName: 'dump.bin', size: 0x400000, sha256: 's'.repeat(64) },

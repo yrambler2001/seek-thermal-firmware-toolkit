@@ -1,6 +1,6 @@
 # BRANCH_NOTES — `preservation/full-flash-pipeline`
 
-Branch of the dump-tooling monorepo (`seek-thermal-firmware-dump`) implementing the
+Branch of the dump-tooling monorepo (`seek-thermal-firmware-toolkit`) implementing the
 automated **v1 full-flash preservation pipeline**: back up what the wire can read,
 patch the ACTIVE boot slot in place, dump the whole 4 MiB through the widened
 window, deliver a byte-clean image of the camera's ORIGINAL flash content, and put

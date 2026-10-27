@@ -416,7 +416,7 @@ export async function runDump(
     windowSize,
     chunk: Math.min(args.chunk, MAX_CONTROL_IN),
     gapFill: args.gapFill,
-    producer: `seek-thermal-firmware-dump (${device.transport.info.api}, ${profile.id})`,
+    producer: `seek-thermal-firmware-toolkit (${device.transport.info.api}, ${profile.id})`,
     transport,
     safety: legacy ? SAFETY_AUTH : SAFETY_STANDARD,
     windows: records,

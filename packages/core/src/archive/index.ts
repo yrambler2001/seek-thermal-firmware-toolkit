@@ -61,6 +61,7 @@ export {
 } from './manifest.js';
 
 export {
+  REPO_URL,
   makeReadme,
   makeLegacyReadme,
   makeSweepReadme,

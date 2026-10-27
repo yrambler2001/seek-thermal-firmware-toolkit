@@ -494,7 +494,7 @@ under **What has been run** in the Firmware slots section.
 ## Firmware slots: list, dump and flash one bank
 
 The **Work with firmware slots** tab
-([`#/slots`](https://yrambler2001.github.io/seek-thermal-firmware-dump/#/slots)) and `seek-fw slots` work
+([`#/slots`](https://yrambler2001.github.io/seek-thermal-firmware-toolkit/#/slots)) and `seek-fw slots` work
 on one 64 KiB firmware bank at a time — A, B or the recovery bank R — on every build from **0.8.0.0** up.
 Older builds (0.3.0.1 .. 0.7.0.8) are reported as unsupported, with the reason, and nothing but the
 version read is sent to them: they have no read handler for the command a slot read sends.

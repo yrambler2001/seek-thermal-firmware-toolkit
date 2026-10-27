@@ -113,7 +113,7 @@ export function useOfflineDecrypt(params: OfflineDecryptParams): OfflineDecryptA
       const manifest = buildOfflineDecryptManifest({
         /* Same shape as the CLI's, differing only in the host, so two archives
          * of the same dump can be told apart and neither drifts. */
-        producer: `seek-thermal-firmware-dump (web, ${profile.id})`,
+        producer: `seek-thermal-firmware-toolkit (web, ${profile.id})`,
         startedAt,
         finishedAt: new Date().toISOString(),
         source: { fileName: file.name, size: file.size, sha256: inputSha },

@@ -4,6 +4,19 @@ All notable changes to this project are listed here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+
+- The repository is now `yrambler2001/seek-thermal-firmware-toolkit`, and the page is at
+  https://yrambler2001.github.io/seek-thermal-firmware-toolkit/. The old page address no longer works;
+  links to the old repository address are redirected by GitHub.
+- The archives name the toolkit by its new name.
+
+### Added
+
+- A link to the repository in the page's top right corner.
+
 ## [2.0.0] - 2026-10-27
 
 The single-file page became a toolkit: one shared core, a web app and a command-line tool that do
@@ -109,5 +122,6 @@ The original single-file page: `index.html`, run in the browser over WebUSB.
   firmware image to it through the camera's own upgrade path. This works on the 2018-and-later
   cameras (Compact, Compact PRO, Compact PRO FF, Compact XR, Nano 300).
 
-[2.0.0]: https://github.com/yrambler2001/seek-thermal-firmware-dump/compare/v1.0.0...v2.0.0
-[1.0.0]: https://github.com/yrambler2001/seek-thermal-firmware-dump/releases/tag/v1.0.0
+[Unreleased]: https://github.com/yrambler2001/seek-thermal-firmware-toolkit/compare/v2.0.0...HEAD
+[2.0.0]: https://github.com/yrambler2001/seek-thermal-firmware-toolkit/compare/v1.0.0...v2.0.0
+[1.0.0]: https://github.com/yrambler2001/seek-thermal-firmware-toolkit/releases/tag/v1.0.0

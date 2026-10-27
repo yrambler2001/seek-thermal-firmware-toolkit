@@ -26,8 +26,8 @@ than two implementations that drift.
 ## Getting started
 
 ```sh
-git clone https://github.com/yrambler2001/seek-thermal-firmware-dump
-cd seek-thermal-firmware-dump
+git clone https://github.com/yrambler2001/seek-thermal-firmware-toolkit
+cd seek-thermal-firmware-toolkit
 npm ci
 
 npm run dev        # web app on http://localhost:5173

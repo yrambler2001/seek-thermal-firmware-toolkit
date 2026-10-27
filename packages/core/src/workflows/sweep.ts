@@ -275,7 +275,7 @@ export async function runSweep(
     chunk: args.chunk,
     gapFill: args.gapFill,
     unlockToken,
-    producer: `seek-thermal-firmware-dump (${device.transport.info.api}, all selectors)`,
+    producer: `seek-thermal-firmware-toolkit (${device.transport.info.api}, all selectors)`,
     transport,
     safety: SAFETY,
     selectors,

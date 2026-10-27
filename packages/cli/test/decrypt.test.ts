@@ -74,7 +74,7 @@ describe('seek-fw decrypt file', () => {
     expect(manifest).toMatchObject({
       /* Core's builder, with the host and the profile the web app also names —
        * the two front ends write the same document. */
-      producer: 'seek-thermal-firmware-dump (seek-fw CLI, modern-4x)',
+      producer: 'seek-thermal-firmware-toolkit (seek-fw CLI, modern-4x)',
       flashBase: '0x14000000',
       source: { fileName: 'flash_dump_original.bin' },
       family: { id: 'modern-4x' },

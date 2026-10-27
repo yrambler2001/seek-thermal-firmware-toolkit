@@ -106,7 +106,7 @@ async function decryptFileCommand(ctx: CommandContext, path: string): Promise<Co
    * two manifests have to be the same document whichever front end wrote it.
    * Only the host inside `producer` differs. */
   const manifest = buildOfflineDecryptManifest({
-    producer: `seek-thermal-firmware-dump (seek-fw CLI, ${profile.id})`,
+    producer: `seek-thermal-firmware-toolkit (seek-fw CLI, ${profile.id})`,
     startedAt,
     finishedAt: new Date().toISOString(),
     source: { fileName, size: bytes.length, sha256: await sha256hex(bytes) },

@@ -143,7 +143,7 @@ describe('useOfflineDecrypt', () => {
     if (manifest === undefined) throw new Error('no manifest');
     const parsed: unknown = JSON.parse(new TextDecoder().decode(manifest.data));
     expect(parsed).toMatchObject({
-      producer: 'seek-thermal-firmware-dump (web, modern-4x)',
+      producer: 'seek-thermal-firmware-toolkit (web, modern-4x)',
       source: { fileName: 'dump.bin', size: bytes.length },
       flashBase: '0x14000000',
       decryption: { attempted: true },
@@ -195,7 +195,7 @@ describe('useOfflineDecrypt', () => {
     if (manifest === undefined) throw new Error('no manifest');
     const parsed: unknown = JSON.parse(new TextDecoder().decode(manifest.data));
     expect(parsed).toMatchObject({
-      producer: 'seek-thermal-firmware-dump (web, generic)',
+      producer: 'seek-thermal-firmware-toolkit (web, generic)',
       source: { fileName: 'blank.bin', size: bytes.length },
       /* The search ran and came up empty — which is the finding, and the
        * manifest says so rather than the archive simply not existing. */

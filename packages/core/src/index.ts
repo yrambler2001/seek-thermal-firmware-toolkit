@@ -292,6 +292,7 @@ export {
   makeReadme,
   makeSweepReadme,
   manifestToJson,
+  REPO_URL,
   zipEntryCount,
   zipTotalDataSize,
 } from './archive/index.js';
