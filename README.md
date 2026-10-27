@@ -20,19 +20,26 @@ runs on your own machine, and the CLI talks to the camera directly. No SDK, no J
 
 The **Info** tab tells you which firmware a camera runs and which tab reads it.
 
-| Camera and firmware                                   | Read and back up the flash                                                    | Decrypt | Write a bank        | Frame rate          |
-| ----------------------------------------------------- | ----------------------------------------------------------------------------- | ------- | ------------------- | ------------------- |
-| Compact 0.3.0.1 to 0.6.0.4 (2014)                     | no: the firmware has no read command (a J-Link or SPI dump decrypts)          | yes     | no                  | no                  |
-| Compact 0.7.0.7, 0.7.0.8                              | yes, Dump & decrypt 0.x/1.x (tested on the emulator only)                     | yes     | no                  | no                  |
-| Compact 0.8.0.0 to 0.10.0.0                           | yes, Dump & decrypt 0.x/1.x (tested on the emulator only)                     | yes     | yes                 | 32 fps              |
-| Compact 1.0.0.0, 1.2.0.0, 1.3.0.8                     | yes, Dump & decrypt 0.x/1.x (tested on the emulator only)                     | yes     | yes                 | 32 fps              |
-| Compact 1.3.0.0                                       | yes, Dump & decrypt 0.x/1.x                                                   | yes     | yes                 | 32 fps              |
-| Compact 1.3.0.8 FF (16 Hz)                            | yes, but the run leaves its patch in recovery R (tested on the emulator only) | yes     | yes (boot untested) | no                  |
-| Compact PRO 1.0.3.0 (2016)                            | yes, Dump & decrypt 0.x/1.x                                                   | yes     | yes                 | 18 fps              |
-| Compact PRO 1.0.3.2                                   | the 31 readable blocks only: no whole-flash read on this build                | yes     | yes                 | 18 fps (9 Hz build) |
-| Compact 4.8.1.7, 4.8.1.9, 4.8.2.1; Compact XR 4.8.2.1 | yes, Dump & decrypt 4.x/Nano                                                  | yes     | yes                 | 32 fps              |
-| Compact PRO 4.9.1.15, 4.9.2.0                         | yes, Dump & decrypt 4.x/Nano                                                  | yes     | yes                 | 18 fps              |
-| Compact 4.16, Compact PRO 4.18, Mosaic, Nano 200/300  | yes, Dump & decrypt 4.x/Nano                                                  | yes     | yes                 | no                  |
+| Camera and firmware               | Read and back up the flash                                                    | Decrypt | Write a bank        | Frame rate               |
+| --------------------------------- | ----------------------------------------------------------------------------- | ------- | ------------------- | ------------------------ |
+| Compact 0.3.0.1 to 0.6.0.4 (2014) | no: the firmware has no read command (a J-Link or SPI dump decrypts)          | yes     | no                  | no                       |
+| Compact 0.7.0.7, 0.7.0.8          | yes, Dump & decrypt 0.x/1.x (tested on the emulator only)                     | yes     | no                  | no                       |
+| Compact 0.8.0.0 to 0.10.0.0       | yes, Dump & decrypt 0.x/1.x (tested on the emulator only)                     | yes     | yes                 | 8 fps → 32 fps           |
+| Compact 1.0.0.0, 1.2.0.0, 1.3.0.8 | yes, Dump & decrypt 0.x/1.x (tested on the emulator only)                     | yes     | yes                 | 8 fps → 32 fps           |
+| Compact 1.3.0.0                   | yes, Dump & decrypt 0.x/1.x                                                   | yes     | yes                 | 8 fps → 32 fps           |
+| Compact 1.3.0.8 FF (16 Hz)        | yes, but the run leaves its patch in recovery R (tested on the emulator only) | yes     | yes (boot untested) | no 16 → 32 fps patch yet |
+| Compact PRO 1.0.3.0 (2016)        | yes, Dump & decrypt 0.x/1.x                                                   | yes     | yes                 | 9 fps → 18 fps           |
+| Compact PRO 1.0.3.2               | the 31 readable blocks only: no whole-flash read on this build                | yes     | yes                 | 9 fps → 18 fps           |
+| Compact 4.8.1.7, 4.8.1.9, 4.8.2.1 | yes, Dump & decrypt 4.x/Nano                                                  | yes     | yes                 | 8 fps → 32 fps           |
+| Compact PRO 4.9.1.15, 4.9.2.0     | yes, Dump & decrypt 4.x/Nano                                                  | yes     | yes                 | 9 fps → 18 fps           |
+| Compact 4.16                      | yes, Dump & decrypt 4.x/Nano                                                  | yes     | yes                 | no 16 → 32 fps patch yet |
+| Compact PRO 4.18                  | yes, Dump & decrypt 4.x/Nano                                                  | yes     | yes                 | already 18 fps           |
+| Mosaic                            | yes, Dump & decrypt 4.x/Nano                                                  | yes     | yes                 | no                       |
+| Nano 200                          | yes, Dump & decrypt 4.x/Nano                                                  | yes     | yes                 | already 32 fps           |
+| Nano 300                          | yes, Dump & decrypt 4.x/Nano                                                  | yes     | yes                 | already 27 fps           |
+
+If your camera runs firmware that is not in this table, or runs 1.3.0.8 or 4.16, please
+[open an issue on GitHub](https://github.com/yrambler2001/seek-thermal-firmware-dump/issues/new).
 
 "Write a bank" is the Work with firmware slots tab, on every build from 0.8.0.0. The details per build are in
 [HOW_IT_WORKS.md](HOW_IT_WORKS.md#which-cameras) and [PRESERVATION.md](PRESERVATION.md#the-supported-builds).
@@ -217,8 +224,7 @@ Then unplug and replug the camera.
 | Compact 1.3.0.0                                                        | 32 fps | yes, 32.17 to 32.22 fps (42.27)                  |
 | Compact 1.3.0.8                                                        | 32 fps | yes, 32.16 to 32.20 fps (FPS_32HZ.md, section 5) |
 | Compact 4.8.1.7, 4.8.1.9                                               | 32 fps | no, the emulator only (32.258 Hz)                |
-| Compact XR 4.8.2.1                                                     | 32 fps | yes, 32.0 to 32.2 fps (42.24)                    |
-| Compact 4.8.2.1                                                        | 32 fps | no: the XR's entry, measured on the XR only      |
+| Compact 4.8.2.1                                                        | 32 fps | yes, 32.0 to 32.2 fps (42.24)                    |
 | Compact PRO 1.0.3.0                                                    | 18 fps | yes, 17.68 fps (42.85)                           |
 | Compact PRO 1.0.3.2                                                    | 18 fps | not yet (the emulator: 17.68 Hz)                 |
 | Compact PRO 4.9.1.15                                                   | 18 fps | yes, 17.70 fps (42.32)                           |
