@@ -70,7 +70,7 @@ export interface GlobalOptions {
    * but the dump itself.
    */
   readonly probe: boolean;
-  /** null means "core's default", which is the value the README documents. */
+  /** null means "core's default", the value HOW_IT_WORKS.md's CLI reference documents. */
   readonly chunk: number | null;
   readonly gapFill: number | null;
   readonly retries: number | null;

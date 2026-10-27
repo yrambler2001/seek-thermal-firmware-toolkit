@@ -7,7 +7,8 @@
  * camera, and on Linux and Windows that is the ordinary first-run state — a
  * bare "could not claim USB interface 0: Access denied." leaves the user with
  * nowhere to go. The platform prose is the page's own platform-notes section
- * and the README's, so there is exactly one wording to keep true.
+ * and the README's "Browser and platform support" section, so there is
+ * exactly one wording to keep true.
  *
  * Deliberately NOT imported from `@seek-fw/cli`: the web bundle must not pull
  * in a package that reaches for `process` and `node:fs`.

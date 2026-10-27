@@ -300,14 +300,15 @@ describe('documented defaults', () => {
     expect(documentedDefault('retry-delay', text)).toBe(DEFAULT_DUMP_OPTIONS.retryDelayMs);
   });
 
-  it('the README is not a third copy that can drift', () => {
-    /* The same four numbers are written out a third time, for people who never run --help. An
-     * audit found the README had already drifted on other points; this is the cheap way to stop it
+  it('HOW_IT_WORKS.md, which holds the CLI reference the README used to, is not a third copy that can drift', () => {
+    /* The same four numbers are written out a third time, for people who never run --help, in
+     * HOW_IT_WORKS.md's command-line reference (they moved there from the README in 2.0.0). An audit
+     * found the README had already drifted on other points; this is the cheap way to stop it
      * drifting on these. */
-    const readme = readFileSync(new URL('../../../README.md', import.meta.url), 'utf8');
-    expect(documentedDefault('chunk', readme)).toBe(DEFAULT_DUMP_OPTIONS.chunk);
-    expect(documentedDefault('gap-fill', readme)).toBe(DEFAULT_DUMP_OPTIONS.gapFill);
-    expect(documentedDefault('retries', readme)).toBe(DEFAULT_DUMP_OPTIONS.retries);
-    expect(documentedDefault('retry-delay', readme)).toBe(DEFAULT_DUMP_OPTIONS.retryDelayMs);
+    const reference = readFileSync(new URL('../../../HOW_IT_WORKS.md', import.meta.url), 'utf8');
+    expect(documentedDefault('chunk', reference)).toBe(DEFAULT_DUMP_OPTIONS.chunk);
+    expect(documentedDefault('gap-fill', reference)).toBe(DEFAULT_DUMP_OPTIONS.gapFill);
+    expect(documentedDefault('retries', reference)).toBe(DEFAULT_DUMP_OPTIONS.retries);
+    expect(documentedDefault('retry-delay', reference)).toBe(DEFAULT_DUMP_OPTIONS.retryDelayMs);
   });
 });

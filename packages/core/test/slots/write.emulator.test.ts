@@ -704,8 +704,8 @@ describe.skipIf(!available)('the slot writer on the emulated cameras', () => {
         expect(run.blocks.afterR.cfg).toBe(true);
         expect(run.blocks.afterBooted.cfg).toBe(true);
         /* KNOWN GAP, NOT A PASS: several locked-line builds (Compact 1.3.0.8, the 2016 Compact
-         * PRO) have no selector that reaches 0x14000000 (README, "no selector reaches the
-         * bootloader block"), so the bootloader's bytes cannot be read back there and only the
+         * PRO) have no selector that reaches 0x14000000 (HOW_IT_WORKS.md, "Firmware version
+         * profiles": blocked on every channel), so the bootloader's bytes cannot be read back there and only the
          * boot-config half of this check is made. Where the window exists, it is all checked. */
         if (!run.blocks.bootloaderReadable) {
           process.stderr.write(

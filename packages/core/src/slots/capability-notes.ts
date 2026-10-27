@@ -1,7 +1,7 @@
 /* ==================================================================== *
  * The facts a person is shown next to a slot, per family and per build. Each
  * sentence states something the repo measured or decoded, and cites where: the
- * README build table, preservation/patch.ts, or the decoded firmware switch in
+ * PRESERVATION.md build table, preservation/patch.ts, or the decoded firmware switch in
  * test/firmware/facts.json. Nothing here is a claim the code cannot back.
  * ==================================================================== */
 
@@ -71,7 +71,7 @@ const LOCKED_2016_BOOT_WORD_NOTE =
 export const EP0_1032_NOTE =
   '1.0.3.2: EP0 sessions die at about 64 to 81 KB and 128 B is the lossless read unit, so one ' +
   '64 KiB bank per session is the measured limit. A whole-part drain is refused on this build ' +
-  '(README: no single-arm drain exists). The slot dump reads one ' +
+  '(PRESERVATION.md: no single-arm drain exists). The slot dump reads one ' +
   'bank at a time, in 64-byte asks.';
 
 /* The token is legacy-auth.ts OLD_FW_UNLOCK_TOKEN: a plain 2-byte arm of mode 7, 8 or 9 is refused, so a slot
@@ -217,7 +217,7 @@ export function planNotes(family: SlotFamily, version: FirmwareVersion): string[
       if (text === '0.8.0.0') {
         notes.push(
           '0.8.0.0: mode 2 (0x14000000) is a crash hazard on this build, an armed read walks off ' +
-            'SRAM (README). A slot read or write arms modes 7 to 9 only and never mode 2.',
+            'SRAM (PRESERVATION.md). A slot read or write arms modes 7 to 9 only and never mode 2.',
         );
       }
       if (text === FF_1308_VERSION) notes.push(FF_1308_NOTE);

@@ -68,6 +68,10 @@ the same things. It now covers the 2014 to 2017 cameras as well as the 2018-and-
   emulator or a real camera.
 - CI checks formatting, lint, types, tests with coverage, the build, and that `docs/` is up to date.
 - `scripts/verify-against-legacy.mjs` compares the core with the 1.0.0 page, read from tag `v1.0.0`.
+- The README is rewritten for camera owners: which cameras work, the five tabs with screenshots
+  (`.github/readme/`, made by `npm run screenshots`), and step-by-step frame-rate guides that start with a
+  whole-flash backup. The reference material moved to `HOW_IT_WORKS.md`, `PRESERVATION.md` and
+  `DEVELOPMENT.md`.
 
 ### Removed
 

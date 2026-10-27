@@ -564,7 +564,7 @@ describe('prepareSlotFlash: the file, the key pair and the analysis', () => {
     expect(equalBytes(kept, own)).toBe(true);
   });
 
-  it('an unnamed image that holds this camera’s own pair, each half once, is staged under that pair as it is; the same pair twice is refused (README "The name has no pair", TESTING.md 42.82 F2)', () => {
+  it('an unnamed image that holds this camera’s own pair, each half once, is staged under that pair as it is; the same pair twice is refused (HOW_IT_WORKS.md "The name has no pair", TESTING.md 42.82 F2)', () => {
     const image = imageOf(0x5000, 7);
     image.set(KEY_A, 0x4000);
     image.set(KEY_B, 0x4020);
