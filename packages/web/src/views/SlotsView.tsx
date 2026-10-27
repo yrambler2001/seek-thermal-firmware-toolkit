@@ -10,6 +10,8 @@
 import { useMemo, useState, type ReactElement } from 'react';
 import { CircleStop, Gauge, Layers, ScanSearch, Send, ShieldAlert } from 'lucide-react';
 import {
+  bankNameOf,
+  bankWordsOf,
   everyBankBootedLast,
   backupFileNameShown,
   backupPlanText,
@@ -89,7 +91,7 @@ function FpsOutcomePanel({ result }: { readonly result: FpsPatchResult }): React
     <Alert tone={tone} className="mt-3">
       <p>
         <strong>
-          {`Slot ${key.toUpperCase()} — patched from ${String(fromHz)} Hz to ${String(toHz)} Hz (firmware ${result.patch.version}).`}
+          {`${bankNameOf(key)} — patched from ${String(fromHz)} Hz to ${String(toHz)} Hz (firmware ${result.patch.version}).`}
         </strong>
       </p>
       <p>
@@ -114,15 +116,13 @@ function OutcomePanel({ outcome }: { readonly outcome: SlotFlashOutcome }): Reac
   return (
     <Alert tone={tone} className="mt-3">
       <p>
-        <strong>{`Slot ${key.toUpperCase()} — ${what}: ${verdict(result.verified)}`}</strong>
+        <strong>{`${bankNameOf(key)} — ${what}: ${verdict(result.verified)}`}</strong>
       </p>
       <p>{`The camera's commit returned status ${hexUp(result.commitStatus, 4)}.`}</p>
       {outcome.targetEmpty === true && (
-        <p>{`Slot ${key.toUpperCase()} was empty before this write, so no firmware was overwritten.`}</p>
+        <p>{`${bankNameOf(key)} was empty before this write, so no firmware was overwritten.`}</p>
       )}
-      {outcome.restore !== null && (
-        <p>{restoreReadBackText(outcome.restore, `Slot ${key.toUpperCase()}`)}</p>
-      )}
+      {outcome.restore !== null && <p>{restoreReadBackText(outcome.restore, bankNameOf(key))}</p>}
       <p>{backupLine(outcome.backup)}</p>
       <p>
         Proven so far: the payload was streamed and committed
@@ -154,13 +154,13 @@ function FpsEveryOutcomePanel({ result }: { readonly result: FpsEveryBankResult 
     <Alert tone={ok ? 'ok' : 'err'} className="mt-3">
       <p>
         <strong>
-          {`Every bank: ${String(result.results.length)} of ${String(result.order.length)} patched, in this order: ${result.order.map((key) => key.toUpperCase()).join(', ')}.`}
+          {`Every bank: ${String(result.results.length)} of ${String(result.order.length)} patched, in this order: ${result.order.map(bankWordsOf).join(', ')}.`}
         </strong>
       </p>
       <ul>
         {result.results.map((one) => (
           <li key={one.key}>
-            {`Slot ${one.key.toUpperCase()} — patched from ${String(one.fromHz)} Hz to ${String(one.toHz)} Hz (firmware ${one.patch.version}). ` +
+            {`${bankNameOf(one.key)} — patched from ${String(one.fromHz)} Hz to ${String(one.toHz)} Hz (firmware ${one.patch.version}). ` +
               (one.readBack.checked
                 ? one.readBack.ok === true
                   ? `The read-back differs from the saved bank only at the ${String(one.changed.length)} planned byte(s).`
@@ -171,7 +171,7 @@ function FpsEveryOutcomePanel({ result }: { readonly result: FpsEveryBankResult 
       </ul>
       {result.stopped !== null && <p>{`Stopped: ${result.stopped.reason}.`}</p>}
       {result.unwritten.length > 0 && (
-        <p>{`Not written: ${result.unwritten.map((key) => `slot ${key.toUpperCase()}`).join(', ')}.`}</p>
+        <p>{`Not written: ${result.unwritten.map(bankWordsOf).join(', ')}.`}</p>
       )}
       <p>{backupLine(result.backup)}</p>
       <p>
@@ -303,7 +303,7 @@ export function SlotsView({ slots, connected, busy }: SlotsViewProps): ReactElem
             Writes to flash
           </Badge>
         }
-        description="Read slots asks the camera what it runs and reads its three firmware banks — A, B and the recovery bank R — and shows what each holds. Reading and dumping change nothing. A flash button asks before any byte is sent."
+        description="Read slots asks the camera what it runs and reads its three firmware banks — slot A, slot B and recovery R — and shows what each holds. Reading and dumping change nothing. A flash button asks before any byte is sent."
       >
         <Alert tone="err">
           <p>
@@ -454,7 +454,7 @@ export function SlotsView({ slots, connected, busy }: SlotsViewProps): ReactElem
             imageBuild={pending.plan.imageBuild?.text ?? null}
             keyLine={
               pending.plan.derivedFrom
-                ? `The image is written under ${derivedKeyLine(pending.plan.derivedFrom, `bank ${pending.plan.derivedFrom.bank.toUpperCase()}`)}. Every other bank is written the same way.`
+                ? `The image is written under ${derivedKeyLine(pending.plan.derivedFrom, bankWordsOf(pending.plan.derivedFrom.bank))}. Every other bank is written the same way.`
                 : null
             }
             backupName={backupFileNameShown(pending.report, [pending.key], pending.action)}
@@ -546,7 +546,7 @@ export function SlotsView({ slots, connected, busy }: SlotsViewProps): ReactElem
             FF image boots is UNTESTED: no genuine bootloader for this build is in the corpus.
             Writing R asks for the extra confirmation like any recovery write. An{' '}
             <strong>empty</strong> bank (its header window reads as all 0xFF, as on many 2014
-            cameras&apos; bank B) is a state, not a fault. It dumps as the raw 64 KiB of 0xFF with
+            cameras&apos; slot B) is a state, not a fault. It dumps as the raw 64 KiB of 0xFF with
             nothing to decrypt, and it is written exactly like any other bank; the plan and the
             confirmation say that no firmware is overwritten.
           </p>

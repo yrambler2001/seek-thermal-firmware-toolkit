@@ -250,11 +250,11 @@ describe('SlotsView', () => {
 
     const rows = bankRows(container);
     expect(rows).toHaveLength(3);
-    expect(rows[0]?.textContent).toContain('slot A');
+    expect(rows[0]?.textContent).toContain('Slot A');
     expect(rows[0]?.textContent).toContain('0x14050000');
     expect(rows[0]?.textContent).toContain('booted now');
     expect(rows[1]?.textContent).toContain('not booted');
-    expect(rows[2]?.textContent).toContain('recovery R');
+    expect(rows[2]?.textContent).toContain('Recovery R');
     expect(rows[2]?.textContent).toContain('0x14070000');
     expect(rows[0]?.textContent).toContain('4.9.1.5');
     expect(rows[0]?.textContent).toContain('Key A');
@@ -322,7 +322,7 @@ describe('SlotsView', () => {
     );
     expect(rows[1]?.textContent).not.toContain('extra confirmation');
     expect(rows[2]?.textContent).toContain(
-      'Recovery bank: writing it asks for an extra confirmation.',
+      'Recovery R: writing it asks for an extra confirmation.',
     );
     /* Once in the row, not under each flash button (TESTING.md 42.87). */
     for (const row of [rows[0], rows[2]]) {
@@ -398,24 +398,24 @@ describe('SlotsView', () => {
     });
     const { container, unmount } = view(api);
 
-    expect(container.textContent).toContain('Prepared for slot A at 0x14050000');
+    expect(container.textContent).toContain('Prepared for Slot A at 0x14050000');
     expect(container.textContent).toContain('Nothing has been sent to the camera yet.');
     expect(container.textContent).toContain('Read before writing:');
-    expect(container.textContent).toContain('What changes in slot A');
+    expect(container.textContent).toContain('What changes in Slot A');
     expect(container.textContent).toContain('4.9.1.6');
 
     act(() => {
-      buttonByText(container, 'Write to slot A…').click();
+      buttonByText(container, 'Write to Slot A…').click();
     });
     expect(dialog()).not.toBeNull();
-    const confirm = buttonByText(document.body, 'Yes — write to slot A');
+    const confirm = buttonByText(document.body, 'Yes — write to Slot A');
     expect(confirm.disabled).toBe(true);
 
     act(() => {
       document.body.querySelector<HTMLInputElement>('#slot-write-ack')?.click();
     });
     act(() => {
-      buttonByText(document.body, 'Yes — write to slot A').click();
+      buttonByText(document.body, 'Yes — write to Slot A').click();
     });
     expect(api.write).toHaveBeenCalledWith(true);
     unmount();
@@ -449,14 +449,14 @@ describe('SlotsView', () => {
     const readFirst = [...container.querySelectorAll('li')].map((li) => li.textContent);
     expect(readFirst).toContain(text);
     act(() => {
-      buttonByText(container, 'Write to slot B…').click();
+      buttonByText(container, 'Write to Slot B…').click();
     });
     const node = dialog();
     expect(node?.querySelector('#slot-write-confirm-build')?.textContent).toBe(text);
     /* People's words only: the code name is for JSON. */
     expect(node?.textContent).not.toContain('other-version');
     /* Warned, never gated: bank B needs no tick, and the confirm writes. */
-    const confirm = buttonByText(document.body, 'Yes — write to slot B');
+    const confirm = buttonByText(document.body, 'Yes — write to Slot B');
     expect(confirm.disabled).toBe(false);
     act(() => {
       confirm.click();
@@ -483,7 +483,7 @@ describe('SlotsView', () => {
     });
     const { container, unmount } = view(api);
     act(() => {
-      buttonByText(container, 'Write to slot B…').click();
+      buttonByText(container, 'Write to Slot B…').click();
     });
     expect(dialog()?.querySelector('#slot-write-confirm-build')).toBeNull();
     unmount();
@@ -525,7 +525,7 @@ describe('SlotsView', () => {
     });
     const { container, unmount } = view(api);
 
-    expect(container.textContent).toContain('Prepared for recovery R at 0x14070000');
+    expect(container.textContent).toContain('Prepared for Recovery R at 0x14070000');
     /* "Read as" says what the file is, and "Staging" how it is sent, so the vendor form is said once. */
     expect(container.textContent).toContain('Read asa decrypted 1.3.0.8 FF imageStaging');
     expect(container.textContent).toContain(
@@ -547,7 +547,7 @@ describe('SlotsView', () => {
     expect(readFirst.filter((text) => text.includes('Camera-wide note.'))).toEqual([]);
 
     act(() => {
-      buttonByText(container, 'Write to recovery R…').click();
+      buttonByText(container, 'Write to Recovery R…').click();
     });
     const node = dialog();
     expect(node).not.toBeNull();
@@ -555,12 +555,12 @@ describe('SlotsView', () => {
     expect(node?.textContent).toContain('the camera stores it under Key B');
     expect(node?.textContent).toContain('UNTESTED');
     /* Recovery's own tick still stands in the way of the write. */
-    expect(buttonByText(document.body, 'Yes — write to recovery R').disabled).toBe(true);
+    expect(buttonByText(document.body, 'Yes — write to Recovery R').disabled).toBe(true);
     act(() => {
       document.body.querySelector<HTMLInputElement>('#slot-write-ack')?.click();
     });
     act(() => {
-      buttonByText(document.body, 'Yes — write to recovery R').click();
+      buttonByText(document.body, 'Yes — write to Recovery R').click();
     });
     expect(api.write).toHaveBeenCalledWith(true);
     unmount();
@@ -584,7 +584,7 @@ describe('SlotsView', () => {
     });
     const { container, unmount } = view(api);
     act(() => {
-      buttonByText(container, 'Write to recovery R…').click();
+      buttonByText(container, 'Write to Recovery R…').click();
     });
     expect(dialog()?.textContent).not.toContain('1.3.0.8 FF');
     unmount();
@@ -897,12 +897,12 @@ describe('SlotsView: an empty bank', () => {
     const rowB = rows[1] as HTMLElement;
     const rowR = rows[2] as HTMLElement;
     expect(buttonsIn(rowA)).toEqual(
-      expect.arrayContaining(['Copy to slot B', 'Copy to recovery slot R']),
+      expect.arrayContaining(['Copy to slot B', 'Copy to recovery R']),
     );
     expect(buttonsIn(rowA)).not.toContain('Copy to slot A');
     expect(buttonsIn(rowR)).toEqual(expect.arrayContaining(['Copy to slot A', 'Copy to slot B']));
     expect(buttonByText(rowA, 'Copy to slot B').disabled).toBe(false);
-    expect(buttonByText(rowA, 'Copy to recovery slot R').disabled).toBe(false);
+    expect(buttonByText(rowA, 'Copy to recovery R').disabled).toBe(false);
     expect(rowA.textContent).toContain(
       'Copies the firmware this bank holds, as this read decrypted it, into the bank you pick',
     );
@@ -964,16 +964,16 @@ describe('SlotsView: an empty bank', () => {
     const text = container.textContent;
     expect(text).toContain('Saved first');
     expect(text).toContain(
-      'Before anything is written, slot B (as stored, and decrypted) is read again and saved in one zip',
+      'Before anything is written, Slot B (as stored, and decrypted) is read again and saved in one zip',
     );
     expect(text).toContain('_bank-B_before-copy-from-A.zip');
     expect(text).toContain('The zip is downloaded automatically, before anything is sent.');
     expect(text).toContain('Image taken from');
     act(() => {
-      buttonByText(container, 'Write to slot B…').click();
+      buttonByText(container, 'Write to Slot B…').click();
     });
     expect(dialog()?.textContent).toContain(
-      'Before anything is sent, slot B is read again and saved as one zip download: seek_backup_<time>_',
+      'Before anything is sent, Slot B is read again and saved as one zip download: seek_backup_<time>_',
     );
     unmount();
   });
@@ -1067,23 +1067,23 @@ describe('SlotsView: an empty bank', () => {
     });
     const { container, unmount } = view(api);
 
-    expect(container.textContent).toContain('Prepared for slot B at 0x14060000');
+    expect(container.textContent).toContain('Prepared for Slot B at 0x14060000');
     expect(container.textContent).toContain('Image taken from');
     expect(container.textContent).toContain('slot A, the bank the camera boots now (4.9.1.5)');
     expect(container.textContent).toContain(
-      'slot B is empty: it holds no image, so this write overwrites no firmware',
+      'Slot B is empty: it holds no image, so this write overwrites no firmware',
     );
 
     act(() => {
-      buttonByText(container, 'Write to slot B…').click();
+      buttonByText(container, 'Write to Slot B…').click();
     });
     expect(dialog()?.textContent).toContain(
-      'slot B is empty: it holds no image, so no firmware is overwritten.',
+      'Slot B is empty: it holds no image, so no firmware is overwritten.',
     );
     /* Slot A is booted and B is not, so no tick is asked for: the rule is the one for a used bank. */
     expect(document.body.querySelector('#slot-write-ack')).toBeNull();
     act(() => {
-      buttonByText(document.body, 'Yes — write to slot B').click();
+      buttonByText(document.body, 'Yes — write to Slot B').click();
     });
     expect(api.write).toHaveBeenCalledWith(false);
     unmount();
@@ -1108,15 +1108,15 @@ describe('SlotsView: an empty bank', () => {
     const { container, unmount } = view(api);
 
     act(() => {
-      buttonByText(container, 'Write to slot B…').click();
+      buttonByText(container, 'Write to Slot B…').click();
     });
-    expect(dialog()?.textContent).toContain('slot B is empty');
-    expect(buttonByText(document.body, 'Yes — write to slot B').disabled).toBe(true);
+    expect(dialog()?.textContent).toContain('Slot B is empty');
+    expect(buttonByText(document.body, 'Yes — write to Slot B').disabled).toBe(true);
     act(() => {
       document.body.querySelector<HTMLInputElement>('#slot-write-ack')?.click();
     });
     act(() => {
-      buttonByText(document.body, 'Yes — write to slot B').click();
+      buttonByText(document.body, 'Yes — write to Slot B').click();
     });
     expect(api.write).toHaveBeenCalledWith(true);
     unmount();
@@ -1147,7 +1147,7 @@ describe('SlotsView: an empty bank', () => {
     const { container, unmount } = view(panel({ plan: slotPlan(true), report: slotReport(base) }));
     const text = container.textContent;
     expect(text).toContain('An empty bank');
-    expect(text).toContain('Copy to recovery slot R');
+    expect(text).toContain('Copy to recovery R');
     expect(text).toContain('Restore from full flash backup');
     expect(text).toContain('Every write saves its bank first');
     expect(text).toContain('one zip download');
@@ -1178,7 +1178,7 @@ describe('SlotsView: the frame-rate row action', () => {
     act(() => {
       buttonByText(rows[1] as HTMLElement, 'Make 32 FPS').click();
     });
-    expect(dialog()?.textContent).toContain('Make slot B run at 32 FPS?');
+    expect(dialog()?.textContent).toContain('Make Slot B run at 32 FPS?');
     unmount();
   });
 
@@ -1201,7 +1201,7 @@ describe('SlotsView: the frame-rate row action', () => {
     act(() => {
       buttonByText(rows[1] as HTMLElement, 'Make 18 FPS').click();
     });
-    expect(dialog()?.textContent).toContain('Make slot B run at 18 FPS?');
+    expect(dialog()?.textContent).toContain('Make Slot B run at 18 FPS?');
     unmount();
   });
 
@@ -1213,7 +1213,7 @@ describe('SlotsView: the frame-rate row action', () => {
       paragraphs: [
         'The camera boots recovery R. The boot-config word is 2, so the bootloader tries recovery R first.',
         'Slot A holds a frame-rate patch, but it does not run, so the patch does not take effect.',
-        'Patch recovery R too (the bank that runs): that is what makes the frame-rate patch take effect.',
+        'Patch Recovery R too (the bank that runs): that is what makes the frame-rate patch take effect.',
       ],
     };
     const planFps = vi.fn((): FpsPlan => offer(32));
@@ -1221,15 +1221,15 @@ describe('SlotsView: the frame-rate row action', () => {
       panel({ plan: slotPlan(true), report: slotReport(base), planFps }),
     );
     expect(container.textContent).toContain('The camera boots recovery R.');
-    expect(container.textContent).toContain('Patch recovery R too (the bank that runs)');
+    expect(container.textContent).toContain('Patch Recovery R too (the bank that runs)');
     act(() => {
       buttonByText(bankRows(container)[1] as HTMLElement, 'Make 32 FPS').click();
     });
     const open = dialog();
     if (open === null) throw new Error('the confirmation is not open');
-    expect(open.textContent).toContain('Patch recovery R too (the bank that runs)');
+    expect(open.textContent).toContain('Patch Recovery R too (the bank that runs)');
     /* The warning states; the confirmation is not gated by it. */
-    expect(buttonByText(open, 'Yes — patch slot B').disabled).toBe(false);
+    expect(buttonByText(open, 'Yes — patch Slot B').disabled).toBe(false);
     unmount();
   });
 
@@ -1258,7 +1258,7 @@ describe('SlotsView: the frame-rate row action', () => {
     );
     /* The device panel names the next start; the write keys are the 2016 form, never the banner. */
     expect(text).toContain(
-      'Bank A — the boot-config word is 0xFFFFFFFF, so the bootloader tries slot A first, and it holds an image the bootloader accepts',
+      'Slot A — the boot-config word is 0xFFFFFFFF, so the bootloader tries slot A first, and it holds an image the bootloader accepts',
     );
     expect(text).toContain('Staged as');
     expect(text).not.toContain('No bank of this camera can be written');
@@ -1407,7 +1407,7 @@ describe('SlotsView: the frame-rate row action', () => {
       buttonByText(bankRows(container)[1] as HTMLElement, 'Make 32 FPS').click();
     });
     act(() => {
-      buttonByText(document.body, 'Yes — patch slot B').click();
+      buttonByText(document.body, 'Yes — patch Slot B').click();
     });
     expect(patchFps).toHaveBeenCalledWith('b', false);
     unmount();

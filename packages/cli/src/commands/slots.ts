@@ -16,7 +16,7 @@
  *   - a camera the Slots page's banner refuses (core's `writeBannerOf`) is refused for every bank, raw
  *     bytes included, with the banner's words;
  *   - a bank whose read failed is refused, because nothing may be written on the strength of it;
- *   - the bank the camera boots now, and the recovery bank R, are refused unless the person says
+ *   - the bank the camera boots now, and recovery R, are refused unless the person says
  *     --acknowledge-risk. A camera that reports NO booted bank is treated the same way: the bank
  *     might be the one it boots, and the refusal says so. An EMPTY bank is not exempt from this
  *     (the rule is about which bank the camera boots, not about what the bank holds);
@@ -41,6 +41,7 @@
 import { mkdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { basename, join, resolve } from 'node:path';
 import {
+  bankNameOf,
   bankWordsOf,
   bootChoiceOf,
   bootRuleKnown,
@@ -207,7 +208,7 @@ export function parseBank(text: string): SlotKey {
   if (key === 'a' || key === 'b' || key === 'r') return key;
   throw new UsageError(
     `bank must be a, b or r, got '${text}'`,
-    'a and b are the two application banks; r is the recovery bank.',
+    'a is slot A, b is slot B and r is recovery R.',
   );
 }
 
@@ -300,7 +301,7 @@ export function parseSlotsArgs(args: readonly string[], flags: SlotFlags): Slots
     const source = parseBank(from);
     const target = parseBank(to);
     if (source === target)
-      throw new UsageError(`slots copy: bank ${from} is not copied onto itself`);
+      throw new UsageError(`slots copy: ${bankWordsOf(source)} is not copied onto itself`);
     refuseUnusedFlags(flags, 'copy');
     return { action: 'copy', from: source, to: target };
   }
@@ -339,8 +340,14 @@ export interface Refusal {
 
 const NOTHING_SENT = 'Nothing was sent to the camera.';
 
+/** A bank inside a sentence or as a row's label: "slot A", "slot B", "recovery R". */
 export function bankName(key: SlotKey): string {
-  return key.toUpperCase();
+  return bankWordsOf(key);
+}
+
+/** A bank's name as a value or at the start of a line: "Slot A", "Slot B", "Recovery R". */
+export function bankLabel(key: SlotKey): string {
+  return bankNameOf(key);
 }
 
 export function findView(report: SlotsReport, key: SlotKey): SlotView | null {
@@ -362,7 +369,7 @@ function buildRefusal(report: SlotsReport): Refusal | null {
 
 function bankMissing(key: SlotKey): Refusal {
   return {
-    message: `bank ${bankName(key)} is not in this build's slot plan`,
+    message: `${bankName(key)} is not in this build's slot plan`,
     hint: NOTHING_SENT,
   };
 }
@@ -376,7 +383,7 @@ export function dumpRefusal(report: SlotsReport, key: SlotKey): Refusal | null {
   const dump: Support = view.entry.dump;
   if (!dump.supported) {
     return {
-      message: `bank ${bankName(key)} cannot be dumped on this build: ${dump.reason}`,
+      message: `${bankName(key)} cannot be dumped on this build: ${dump.reason}`,
       hint: NOTHING_SENT,
     };
   }
@@ -393,15 +400,15 @@ export function dumpRefusal(report: SlotsReport, key: SlotKey): Refusal | null {
 export function bootRisk(report: SlotsReport, view: SlotView): string | null {
   const bank = bankName(view.entry.key);
   if (view.entry.key === 'r') {
-    return 'bank R is the recovery bank; a bad write there can leave the camera with no image it can boot';
+    return 'recovery R is the bank the bootloader falls back to; a bad write there can leave the camera with no image it can boot';
   }
   if (view.active) {
     /* The same words on every line, core's (`bootsNowOf`): on the locked lines the bank is the active-slot
      * word's, which TESTING.md 42.56 measured as the bank that ran (42.89). */
-    return `${bootsNowOf(`bank ${bank}`)}; a bad write there can stop the camera booting`;
+    return `${bootsNowOf(bank)}; a bad write there can stop the camera booting`;
   }
   if (!report.slots.some((other) => other.active)) {
-    return `the camera's booted bank could not be determined, so bank ${bank} may be the one it boots`;
+    return `the camera's booted bank could not be determined, so ${bank} may be the one it boots`;
   }
   return null;
 }
@@ -422,7 +429,7 @@ export function flashRefusal(
   const op: Support = kind === 'plain' ? view.entry.flashPlain : view.entry.flashRaw;
   if (!op.supported) {
     return {
-      message: `bank ${bank} does not take ${describeKind(kind)} on this build: ${op.reason}`,
+      message: `${bank} does not take ${describeKind(kind)} on this build: ${op.reason}`,
       hint: NOTHING_SENT,
     };
   }
@@ -438,20 +445,20 @@ export function flashRefusal(
   }
   if (view.unreadReason !== null) {
     return {
-      message: `bank ${bank} was not read (${view.unreadReason}); nothing is written on the strength of a read that failed`,
+      message: `${bank} was not read (${view.unreadReason}); nothing is written on the strength of a read that failed`,
       hint: NOTHING_SENT,
     };
   }
   if (view.content === 'empty' && !view.entry.emptyBank.writable.supported) {
     return {
-      message: `bank ${bank} is empty and cannot be written on this build: ${view.entry.emptyBank.writable.reason}`,
+      message: `${bank} is empty and cannot be written on this build: ${view.entry.emptyBank.writable.reason}`,
       hint: NOTHING_SENT,
     };
   }
   const risk = bootRisk(report, view);
   if (risk !== null && !acknowledgeRisk) {
     return {
-      message: `refusing to write bank ${bank}: ${risk}`,
+      message: `refusing to write ${bank}: ${risk}`,
       hint: `Pass --acknowledge-risk to write it anyway. ${NOTHING_SENT}`,
     };
   }
@@ -515,7 +522,7 @@ function slotRow(view: SlotView): string[] {
   const header = state?.header ?? null;
   const sha256 = state?.sha256 ?? null;
   return [
-    bankName(view.entry.key),
+    bankLabel(view.entry.key),
     hexUp(view.entry.address),
     view.active ? 'yes' : 'no',
     versionText(view),
@@ -543,7 +550,7 @@ export function imageSourceFor(report: SlotsReport, target: SlotKey): SlotView |
 
 /** The sentence `list` prints for an empty bank: what it is, that it can be written, and how to fill it. */
 export function emptyBankNote(report: SlotsReport, view: SlotView): string {
-  const bank = bankName(view.entry.key);
+  const bank = bankLabel(view.entry.key);
   const writable = view.entry.emptyBank.writable;
   const head =
     `${bank}: empty — its header window reads as all 0xFF, so it holds no image (nothing is ` +
@@ -553,7 +560,7 @@ export function emptyBankNote(report: SlotsReport, view: SlotView): string {
   const how =
     source === null
       ? ''
-      : ` To give it the firmware bank ${bankName(source.entry.key)} holds: ` +
+      : ` To give it the firmware ${bankName(source.entry.key)} holds: ` +
         `\`seek-fw slots copy ${source.entry.key} ${view.entry.key}\`.`;
   return `${head} It can be written. ${view.entry.emptyBank.why}${how}`;
 }
@@ -610,7 +617,7 @@ export function writeKeyLines(report: SlotsReport, color: boolean): string[] {
       ['  booted bank', `${booted} holds ${keys.bootedKeyName ?? 'a key this read cannot name'}`],
       [
         '  written as',
-        `${derivedKeyLine({ key: keys.atRest.name, holds: keys.bootedKeyName }, `bank ${booted}`)}; every bank is written the same way`,
+        `${derivedKeyLine({ key: keys.atRest.name, holds: keys.bootedKeyName }, booted)}; every bank is written the same way`,
       ],
     ]),
   );
@@ -727,7 +734,7 @@ export function listLines(
   const notes: string[] = [...report.plan.notes];
   if (report.state.version === '1.3.0.8') notes.push(runningNote(report));
   for (const view of report.slots) {
-    const bank = bankName(view.entry.key);
+    const bank = bankLabel(view.entry.key);
     for (const note of view.entry.notes) notes.push(`${bank}: ${note}`);
     const risk = bootRisk(report, view);
     if (risk !== null) notes.push(`${bank}: a write needs --acknowledge-risk: ${risk}.`);
@@ -834,7 +841,7 @@ export function flashPlanLines(
   lines.push(heading('Slot flash plan', color));
   lines.push(
     table([
-      ['  bank', `${bankName(plan.key)} (${hexUp(plan.address)})`],
+      ['  bank', `${bankLabel(plan.key)} (${hexUp(plan.address)})`],
       ...(plan.targetEmpty === true
         ? [['  target', 'empty — the bank holds no image, so nothing is overwritten']]
         : []),
@@ -842,7 +849,7 @@ export function flashPlanLines(
       ...(extra.source == null ? [] : [['  image taken from', extra.source]]),
       ['  staging', stagingDetail(plan.staging)],
       ...(plan.derivedFrom
-        ? [['  key', derivedKeyLine(plan.derivedFrom, `bank ${bankName(plan.derivedFrom.bank)}`)]]
+        ? [['  key', derivedKeyLine(plan.derivedFrom, bankName(plan.derivedFrom.bank))]]
         : []),
       ['  payload', `${String(plan.payload.length)} B in ${String(chunks)} chunk(s) of 64 B`],
       ['  transfer checksum', hexUp(plan.sum16, 4)],
@@ -896,7 +903,7 @@ export function flashQuestion(report: SlotsReport, plan: SlotFlashPlan, fileName
         : '';
   const product = report.state.description.productName ?? 'this camera';
   const serial = plan.serial === null ? '' : ` (${plan.serial})`;
-  return `Write ${fileName} to bank ${bankName(plan.key)}${booted} on ${product}${serial}? [y/N] `;
+  return `Write ${fileName} to ${bankName(plan.key)}${booted} on ${product}${serial}? [y/N] `;
 }
 
 /** What the read-back said, and what the person does next. */
@@ -921,16 +928,14 @@ export function readBackLines(
   const sha = afterSha256 === null ? '' : ` (sha256 ${afterSha256})`;
   const lines: string[] = [`commit status: ${hexUp(result.commitStatus, 4)}`];
   if (result.verified === true) {
-    lines.push(paint(`read-back: bank ${bank} matches the staged image${sha}`, 'green', color));
+    lines.push(paint(`read-back: ${bank} matches the staged image${sha}`, 'green', color));
   } else if (result.verified === false) {
-    lines.push(
-      paint(`read-back: bank ${bank} does NOT match the staged image${sha}`, 'red', color),
-    );
+    lines.push(paint(`read-back: ${bank} does NOT match the staged image${sha}`, 'red', color));
   } else if (afterSha256 !== null) {
     /* Read back, but nothing could be compared with it (raw bytes whose plain image cannot be
      * named). Said as what happened, not "skipped". */
     lines.push(
-      `read-back: bank ${bank} read back${sha}; no image could be predicted for it, so it is reported, not compared`,
+      `read-back: ${bank} read back${sha}; no image could be predicted for it, so it is reported, not compared`,
     );
   } else {
     lines.push('read-back: skipped (--no-verify)');
@@ -1095,9 +1100,9 @@ async function dumpAction(ctx: CommandContext, ops: SlotOps, key: SlotKey): Prom
     if (ctx.human) {
       ctx.out(
         dumped.empty
-          ? `bank ${bankName(key)}: empty, nothing to decrypt — the stored bank is the raw ` +
+          ? `${bankLabel(key)}: empty, nothing to decrypt — the stored bank is the raw ` +
               `${String(dumped.raw.length)} B of 0xFF, sha256 ${dumped.sha256}`
-          : `bank ${bankName(key)}: stored image sha256 ${dumped.sha256}` +
+          : `${bankLabel(key)}: stored image sha256 ${dumped.sha256}` +
               (dumped.plain === null
                 ? '; no decrypted image (no key recovered for it)'
                 : `; decrypted image sha256 ${dumped.plainSha256 ?? '(unknown)'}`),
@@ -1142,7 +1147,7 @@ interface PlannedWrite {
   readonly plan: SlotFlashPlan;
   /**
    * What is written, in the plan's image row and the question: the file's name, or for a copy and a restore
-   * the source in words ("bank A's image", "bank B of <file>"), never a made-up file name (TESTING.md 42.96).
+   * the source in words ("slot A's image", "slot B of <file>"), never a made-up file name (TESTING.md 42.96).
    */
   readonly what: string;
   readonly action: WriteAction;
@@ -1233,20 +1238,17 @@ async function runPlannedWrite(
     planned.restore === null ? null : restoreReadBack(planned.restore.stored, result.after);
   const lines = readBackLines(result, storedSha256, ctx.color);
   if (check !== null) {
-    lines.splice(-1, 0, `restore: ${restoreReadBackText(check, `bank ${bankName(plan.key)}`)}`);
+    lines.splice(-1, 0, `restore: ${restoreReadBackText(check, bankName(plan.key))}`);
   }
   ctx.reporter.write(lines.join('\n'));
 
   if (result.verified === false) {
-    throw new CliError(
-      `the read-back of bank ${bankName(plan.key)} does not match the staged image`,
-      {
-        code: 'slots/verify-failed',
-        hint:
-          `The backup is ${saved.path ?? done.backup.fileName}. Run \`seek-fw slots list\` once the ` +
-          `camera is back. Do not rely on bank ${bankName(plan.key)} until a read matches.`,
-      },
-    );
+    throw new CliError(`the read-back of ${bankName(plan.key)} does not match the staged image`, {
+      code: 'slots/verify-failed',
+      hint:
+        `The backup is ${saved.path ?? done.backup.fileName}. Run \`seek-fw slots list\` once the ` +
+        `camera is back. Do not rely on ${bankName(plan.key)} until a read matches.`,
+    });
   }
 
   return {
@@ -1323,7 +1325,7 @@ async function copyAction(
     return runPlannedWrite(ctx, ops, report, workflow, {
       command: 'copy',
       plan: copy.plan,
-      what: `bank ${bankName(from)}'s image`,
+      what: `${bankName(from)}'s image`,
       action: { kind: 'copy', from },
       source: copy.source,
       restore: null,
@@ -1358,7 +1360,7 @@ async function restoreAction(
     return runPlannedWrite(ctx, ops, report, workflow, {
       command: 'restore',
       plan: restore.plan,
-      what: `bank ${bankName(key)} of ${name}`,
+      what: `${bankName(key)} of ${name}`,
       action: { kind: 'restore', fileName: name },
       source: restore.source,
       restore,
@@ -1430,7 +1432,7 @@ export function fpsPlanLines(
   savedFirst: string,
   bootWarning: FpsBootWarning | null = null,
 ): string[] {
-  const bank = bankName(key);
+  const bank = bankLabel(key);
   const lines: string[] = [''];
   lines.push(heading('Frame-rate patch plan', color));
   lines.push(
@@ -1467,7 +1469,7 @@ function undoLine(key: SlotKey): string {
   return (
     `The decrypted file in the backup zip is the way back. To undo the patch, unzip it and write it: ` +
     `seek-fw slots flash ${key} <the -decrypted file> --yes (add --acknowledge-risk ` +
-    `${key === 'r' ? 'as for every write to recovery R' : `if the camera boots bank ${bankName(key)}`}).`
+    `${key === 'r' ? 'as for every write to recovery R' : `if the camera boots ${bankName(key)}`}).`
   );
 }
 
@@ -1482,7 +1484,7 @@ export function fpsQuestion(
   const product = report.state.description.productName ?? 'this camera';
   const serial = report.state.serial === null ? '' : ` (${report.state.serial})`;
   return (
-    `Patch bank ${bankName(key)}${booted} on ${product}${serial} from ${String(plan.fromHz)} Hz to ` +
+    `Patch ${bankName(key)}${booted} on ${product}${serial} from ${String(plan.fromHz)} Hz to ` +
     `${String(plan.toHz)} Hz? The bank is saved first. [y/N] `
   );
 }
@@ -1494,13 +1496,13 @@ function patchReadBackLine(result: FpsPatchResult, color: boolean): string {
   if (!readBack.checked) return 'read-back: skipped (--no-verify)';
   return readBack.ok === true
     ? paint(
-        `read-back: bank ${bank} differs from the saved bank only at the ` +
+        `read-back: ${bank} differs from the saved bank only at the ` +
           `${String(result.changed.length)} planned byte(s), the sites and the sum word`,
         'green',
         color,
       )
     : paint(
-        `read-back: bank ${bank} does NOT differ only as planned (unexpected ` +
+        `read-back: ${bank} does NOT differ only as planned (unexpected ` +
           `${String(readBack.unexpected.length)}, missing ${String(readBack.missing.length)})`,
         'red',
         color,
@@ -1541,7 +1543,7 @@ function refusePatchRisk(
   for (const key of keys) {
     const risk = bootRisk(report, requireView(report, key));
     if (risk !== null) {
-      throw new CliError(`refusing to patch bank ${bankName(key)}: ${risk}`, {
+      throw new CliError(`refusing to patch ${bankName(key)}: ${risk}`, {
         code: 'slots/refused',
         hint: `Pass --acknowledge-risk to patch it anyway. ${NOTHING_SENT}`,
       });
@@ -1562,7 +1564,7 @@ async function patchFpsAction(
     const plan = ops.fpsPlan === undefined ? fpsPlanOfBank(report, key) : ops.fpsPlan(report, key);
     const view = requireView(report, key);
     if (plan.status !== 'offer') {
-      throw new CliError(`bank ${bankName(key)}: ${plan.reason}`, {
+      throw new CliError(`${bankName(key)}: ${plan.reason}`, {
         code: 'slots/refused',
         hint: NOTHING_SENT,
       });
@@ -1597,7 +1599,7 @@ async function patchFpsAction(
       const needs =
         bootRisk(report, view) === null || flags.acknowledgeRisk ? '' : ' --acknowledge-risk';
       ctx.reporter.log(
-        `dry run: nothing was saved and nothing was written. Add --write${needs} to patch bank ${bankName(key)}.`,
+        `dry run: nothing was saved and nothing was written. Add --write${needs} to patch ${bankName(key)}.`,
         'info',
       );
       return {
@@ -1643,7 +1645,7 @@ async function patchFpsAction(
     );
     if (result.readBack.ok === false || result.written.verified === false) {
       throw new CliError(
-        `the read-back of bank ${bankName(key)} does not match the patched image as planned`,
+        `the read-back of ${bankName(key)} does not match the patched image as planned`,
         {
           code: 'slots/verify-failed',
           hint:
@@ -1787,7 +1789,7 @@ async function patchEveryAction(ctx: CommandContext, ops: SlotOps): Promise<Comm
       const product = report.state.description.productName ?? 'this camera';
       const serial = report.state.serial === null ? '' : ` (${report.state.serial})`;
       const confirmed = await ctx.io.confirm(
-        `Patch ${plan.order.map((key) => `bank ${bankName(key)}`).join(', then ')} on ${product}${serial}? ` +
+        `Patch ${plan.order.map(bankName).join(', then ')} on ${product}${serial}? ` +
           'The banks are saved first, in one zip. [y/N] ',
       );
       if (!confirmed) {
@@ -1816,14 +1818,14 @@ async function patchEveryAction(ctx: CommandContext, ops: SlotOps): Promise<Comm
     const lines: string[] = [];
     for (const one of done.results) {
       lines.push(
-        `bank ${bankName(one.key)}: commit status ${hexUp(one.written.commitStatus, 4)}`,
+        `${bankLabel(one.key)}: commit status ${hexUp(one.written.commitStatus, 4)}`,
         patchReadBackLine(one, ctx.color),
       );
     }
     if (done.stopped !== null)
       lines.push(paint(`stopped: ${done.stopped.reason}`, 'red', ctx.color));
     if (done.unwritten.length > 0) {
-      lines.push(`not written: ${done.unwritten.map((key) => `bank ${bankName(key)}`).join(', ')}`);
+      lines.push(`not written: ${done.unwritten.map(bankName).join(', ')}`);
     }
     lines.push(REPLUG_LINE_PATCH);
     ctx.reporter.write(lines.join('\n'));
@@ -1834,7 +1836,7 @@ async function patchEveryAction(ctx: CommandContext, ops: SlotOps): Promise<Comm
       throw new CliError(
         done.stopped === null
           ? 'a patched bank does not read back as planned'
-          : `stopped at bank ${bankName(done.stopped.key)}: ${done.stopped.reason}`,
+          : `stopped at ${bankName(done.stopped.key)}: ${done.stopped.reason}`,
         {
           code: 'slots/verify-failed',
           hint:

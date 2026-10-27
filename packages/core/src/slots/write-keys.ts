@@ -406,7 +406,7 @@ export function deriveWriteKeys(state: DeviceState): WriteKeys {
     );
   }
   const booted = state.byKey.get(boot.booted) ?? null;
-  const bootedName = `bank ${boot.booted.toUpperCase()}`;
+  const bootedName = bankWordsOf(boot.booted);
   if (booted === null || booted.unread || booted.plain === null) {
     return refused(
       `the booted ${bootedName} does not decrypt to an image, so the key it is stored under cannot be read`,
@@ -566,7 +566,7 @@ export function deriveWriteKeys(state: DeviceState): WriteKeys {
   for (const other of state.slots) {
     if (other.key === boot.booted || other.unread || other.plain === null) continue;
     evidence.push(
-      `bank ${other.key.toUpperCase()} decrypts under ` +
+      `${bankWordsOf(other.key)} decrypts under ` +
         `${other.keyName === null || other.keyName === UNNAMED_KEY ? 'no known key' : other.keyName}; ` +
         `it is written under ${atRest.name} by the same rule, and read back to check`,
     );

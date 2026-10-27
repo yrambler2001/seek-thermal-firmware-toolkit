@@ -859,7 +859,7 @@ describe('prepareSlotFlash warnings', () => {
 
     const recovery = reportFor(stateFor(modern, { slots, booted: 'a' }), withNotes);
     const outR = prepareSlotFlash(recovery, 'r', { kind: 'raw', bytes: image, fileName: 'x' });
-    expect(outR.warnings.some((w) => w.includes('Recovery bank R'))).toBe(true);
+    expect(outR.warnings.some((w) => w.includes('Recovery bank R'))).toBe(true); // write.ts's words (42.108: left for the merge)
     expect(outR.notes).toContainEqual({ source: 'bank', text: 'recovery-only note' });
     expect(outR.notes).toContainEqual({ source: 'camera', text: 'build note one' });
     expect(outA.notes.some((note) => note.text === 'recovery-only note')).toBe(false);
@@ -877,6 +877,7 @@ describe('prepareSlotFlash warnings', () => {
       'bank A is the bank the camera boots now: writing it asks you to acknowledge the risk, and the ' +
         'camera runs whatever it holds after the next power cycle.',
     );
+    // write.ts's words, "bank A" and "Recovery bank R" (42.108: left for the merge).
     expect(outR.warnings).toContain(
       'Recovery bank R: writing it asks you to acknowledge the risk. Nothing here checks that the ' +
         'camera boots afterwards.',
@@ -951,7 +952,7 @@ describe('prepareSlotFlash warnings', () => {
   });
 
   it('a 2016 write plan says the acknowledgement once as a warning, and the camera’s and bank’s notes as notes (TESTING.md 42.87, 42.88)', () => {
-    /* Before: R's plan said "Recovery bank R: writing it asks you to acknowledge the risk. …" and again
+    /* Before: R's plan said "Recovery R: writing it asks you to acknowledge the risk. …" and again
      * "Note: Recovery bank, mode 9, token form. A write asks you to acknowledge the risk. …". Then (42.87)
      * the warnings carried all six camera notes as "Note: …"; they are notes now, by source (42.88). */
     const plan = buildSlotPlan(compact2016, '1.0.3.0');
@@ -1267,11 +1268,11 @@ describe('flashSlot gates', () => {
       acknowledgeRisk: false,
     });
     expect(logs).toContain(
-      `Bank B: writing ${String(payload.payload.length)} B from the decrypted image, staged plain — ` +
+      `Slot B: writing ${String(payload.payload.length)} B from the decrypted image, staged plain — ` +
         `checksum 0x${payload.sum16.toString(16).toUpperCase().padStart(4, '0')}`,
     );
     expect(result.notes[0]).toBe(
-      `committed ${String(payload.payload.length)} B to Bank B at 0x14060000, staged plain; commit status 0x0`,
+      `committed ${String(payload.payload.length)} B to Slot B at 0x14060000, staged plain; commit status 0x0`,
     );
     expect(progress.at(-1)).toBe('Written.');
     const said = [...logs, ...progress, ...result.notes].join('\n');

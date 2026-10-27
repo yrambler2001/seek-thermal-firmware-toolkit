@@ -373,7 +373,7 @@ for (const subject of LEGACY_CAMERAS) {
           await s.wizard.isEnabled(phaseSection('patch-dump'), Wizard.startLabel('patch-dump')),
         ).toBe(true);
         const text = await s.page.evaluate(() => document.body.innerText);
-        expect(text).not.toContain('The commit is not on record');
+        expect(text).not.toContain('The write is not on record');
       });
 
       it('sends nothing that changes the camera during the read-only step', async () => {

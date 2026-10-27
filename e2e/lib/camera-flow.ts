@@ -331,6 +331,6 @@ export async function checkStep03Offered(wizard: Wizard, page: Page): Promise<vo
   );
   expect(await wizard.redAlerts()).toEqual([]);
   const text = await page.evaluate(() => document.body.innerText);
-  expect(text).not.toContain('The commit is not on record');
+  expect(text).not.toContain('The write is not on record');
   expect(text).not.toContain('Concerns the patched part');
 }

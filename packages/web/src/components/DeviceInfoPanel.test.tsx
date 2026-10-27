@@ -19,7 +19,7 @@ describe('DeviceInfoPanel: the upgrade target that is the booted bank', () => {
     const { container, unmount } = render(<DeviceInfoPanel state={sameBank} />);
     expect(container.textContent).toContain('Booted from');
     expect(container.textContent).toContain('Upgrade target (its own upgrade)');
-    expect(container.textContent).toContain('Bank B is both the bank the camera booted from');
+    expect(container.textContent).toContain('Slot B is both the bank the camera booted from');
     expect(container.textContent).toContain(WARNING);
     unmount();
   });
@@ -55,10 +55,10 @@ describe('DeviceInfoPanel: the upgrade target that is the booted bank', () => {
     const { container, unmount } = render(<DeviceInfoPanel state={recovery} />);
     expect(container.textContent).toContain('The camera is running its recovery bank');
     expect(container.textContent).toContain(
-      'its own upgrade writes Bank B, which it is not running',
+      'its own upgrade writes Slot B, which it is not running',
     );
     expect(container.textContent).toContain(
-      'Bank B holds the same bootable image as the bank it runs',
+      'Slot B holds the same bootable image as the bank it runs',
     );
     expect(container.textContent).toContain(WARNING);
     expect(container.textContent).not.toContain('is both the bank the camera booted from');
@@ -71,9 +71,9 @@ describe('DeviceInfoPanel on the locked line: the booted bank and the next start
     const state = deviceState2016(await fakeDeviceState());
     const { container, unmount } = render(<DeviceInfoPanel state={state} />);
     const text = container.textContent;
-    expect(text).toMatch(/Booted from\W*Bank A/);
+    expect(text).toMatch(/Booted from\W*Slot A/);
     expect(text).toContain(
-      'Bank A — the boot-config word is 0xFFFFFFFF, so the bootloader tries slot A first, and it holds an image the bootloader accepts',
+      'Slot A — the boot-config word is 0xFFFFFFFF, so the bootloader tries slot A first, and it holds an image the bootloader accepts',
     );
     expect(text).not.toContain('Named booted');
     unmount();

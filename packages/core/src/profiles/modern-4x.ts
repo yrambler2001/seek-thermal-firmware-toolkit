@@ -239,7 +239,7 @@ export function modernWindowPlan(
 export const MODERN_SLOTS: readonly SlotDescriptor[] = [
   { key: 'a', name: 'Slot A', subcmd: SUBCMD_SLOT_A, address: SLOT_A_BASE },
   { key: 'b', name: 'Slot B', subcmd: SUBCMD_SLOT_B, address: SLOT_B_BASE },
-  { key: 'r', name: 'Recovery', subcmd: SUBCMD_RECOVERY, address: SLOT_RECOVERY_BASE },
+  { key: 'r', name: 'Recovery R', subcmd: SUBCMD_RECOVERY, address: SLOT_RECOVERY_BASE },
 ];
 
 /**

@@ -330,6 +330,7 @@ export {
   describeDevice,
   detectProfileForDump,
   detectedReportOf,
+  probeLineOf,
   deviceInfoOf,
   entryForAddress,
   evidenceFromChannelProbe,

@@ -21,6 +21,7 @@
  * ==================================================================== */
 
 import { legacyVersionLine } from '../profiles/legacy-auth.js';
+import { bankNameOf } from '../profiles/locked-boot.js';
 import type { FirmwareProfile, SlotKey } from '../profiles/types.js';
 import { parseVersion, type FirmwareVersion } from '../profiles/version.js';
 import type { StagingForm } from './types.js';
@@ -223,10 +224,11 @@ export function stagingFor(family: SlotFamily): StagingForm | null {
 /** The three banks, in the bootloader's own order. */
 export const BANK_KEYS: readonly SlotKey[] = ['a', 'b', 'r'];
 
+/** The banks' names people read, the same on every family (`bankNameOf`). */
 export const BANK_NAME: Readonly<Record<SlotKey, string>> = {
-  a: 'Bank A',
-  b: 'Bank B',
-  r: 'Recovery bank R',
+  a: bankNameOf('a'),
+  b: bankNameOf('b'),
+  r: bankNameOf('r'),
 };
 
 /**

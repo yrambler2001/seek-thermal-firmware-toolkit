@@ -19,6 +19,7 @@ import { bytesToHex, hexToBytes } from '../src/bytes.js';
 import { stateFromKey } from '../src/crypto/keys.js';
 import { KEY_PAIRS } from '../src/preservation/patch.js';
 import { compact2016 } from '../src/profiles/compact-2016.js';
+import { bankNameOf } from '../src/profiles/locked-boot.js';
 import { legacyAuth } from '../src/profiles/legacy-auth.js';
 import { getProfile } from '../src/profiles/registry.js';
 import type { FirmwareProfile, SlotKey } from '../src/profiles/types.js';
@@ -215,11 +216,7 @@ function state2016(
     readonly profile?: FirmwareProfile;
   } = {},
 ): DeviceState {
-  const slots = [
-    slot('a', 'App image bank 0x14050000'),
-    slot('b', 'App image bank 0x14060000'),
-    slot('r', 'App image bank 0x14070000'),
-  ];
+  const slots = [slot('a', 'Slot A'), slot('b', 'Slot B'), slot('r', 'Recovery R')];
   const checkKey = options.checkKey === undefined ? NAMED : options.checkKey;
   return {
     profile: options.profile ?? compact2016,
@@ -244,19 +241,19 @@ function state2016(
   } as unknown as DeviceState;
 }
 
-const nameOf = (key: SlotKey): string => `App image bank ${key}`;
+const nameOf = (key: SlotKey): string => bankNameOf(key);
 
 describe('the report rows on the 2016 line (seek-fw info and the Info tab)', () => {
   it('says the booted bank is the bootloader’s record of this start, and names the next start', () => {
     const state = state2016();
     expect(bootedReportOf(state, nameOf)).toBe(
-      'App image bank a — the bank the bootloader entered at this start, as it records it',
+      'Slot A — the bank the bootloader entered at this start, as it records it',
     );
     expect(lastStartReportOf(state)).toBe(
       'the camera reports it entered slot A (active-slot word 0)',
     );
     expect(nextStartReportOf(state, nameOf)).toBe(
-      'App image bank a — the boot-config word is 0xFFFFFFFF, so the bootloader tries slot A first, ' +
+      'Slot A — the boot-config word is 0xFFFFFFFF, so the bootloader tries slot A first, ' +
         'and it holds an image the bootloader accepts',
     );
   });
@@ -359,7 +356,7 @@ describe('the report rows off the 2016 line', () => {
       'store key',
     ]);
     expect(nextStartReportOf(state, nameOf)).toBeNull();
-    expect(bootedReportOf(state, nameOf)).toBe('App image bank a');
+    expect(bootedReportOf(state, nameOf)).toBe('Slot A');
     /* the slot writer stages a 1.0.3.x image under its own key block 0 whichever profile read it */
     expect(bankWritingOf(state).staged).toBe("staged under its image's own key block 0");
     /* a 1.3.0.8 camera with no bank stored plain writes the FF image in the vendor's form */

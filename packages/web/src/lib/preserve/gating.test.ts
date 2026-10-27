@@ -134,7 +134,7 @@ describe('canRunPhase — the run’s gate, as the buttons show it', () => {
     const third = gate(state, 'restore-verify');
     expect(third.ok).toBe(false);
     expect(third.pastCommit).toBe(false);
-    expect(third.missing[0]).toContain('the commit');
+    expect(third.missing[0]).toContain('the Write step');
     expect(third.jumpable).toBe(false); /* the banks and their patches are missing too */
   });
 
@@ -150,7 +150,7 @@ describe('canRunPhase — the run’s gate, as the buttons show it', () => {
     expect(third.ok).toBe(false);
     expect(third.pastCommit).toBe(false);
     expect(third.jumpable).toBe(false);
-    expect(third.missing).toEqual(['the commit (run or resume at it first)']);
+    expect(third.missing).toEqual(['the Write step (run or resume at it first)']);
     expect(third.jumpStartStep).toBeNull();
   });
 

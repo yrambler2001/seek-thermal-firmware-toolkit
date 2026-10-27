@@ -40,6 +40,7 @@ import {
   EXIT_STOPPED,
   EXIT_USAGE,
   UsageError,
+  wasSaid,
 } from './errors.js';
 import { TerminalReporter } from './reporter.js';
 import type { Sink } from './sink.js';
@@ -589,7 +590,8 @@ export async function run(argv: readonly string[], io: Io, signal: AbortSignal):
       io.stderr.write('\ninterrupted\n');
       return described.exitCode;
     }
-    io.stderr.write(`error: ${described.message}\n`);
+    /* Said once: a command that printed the error's words in its own line is not repeated here. */
+    if (!wasSaid(error)) io.stderr.write(`error: ${described.message}\n`);
     if (described.hint !== undefined) io.stderr.write(`\n${described.hint}\n`);
     if (options.verbose && error instanceof Error && error.stack !== undefined) {
       io.stderr.write(`\n${error.stack}\n`);

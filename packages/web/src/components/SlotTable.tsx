@@ -148,7 +148,7 @@ function riskNote(risk: WriteRisk): string | null {
     return `${booted}, and recovery: writing it asks for an extra confirmation.`;
   }
   if (risk.booted) return `${booted}: writing it asks for an extra confirmation.`;
-  if (risk.recovery) return 'Recovery bank: writing it asks for an extra confirmation.';
+  if (risk.recovery) return 'Recovery R: writing it asks for an extra confirmation.';
   if (risk.bootUnnamed) {
     return 'The camera does not name its booted bank: writing it asks for an extra confirmation.';
   }
@@ -205,7 +205,7 @@ export function SlotTable({
   return (
     <Table>
       <TableCaption>
-        Each firmware bank on this camera — A, B and the recovery bank R — as read and checked in
+        Each firmware bank on this camera — slot A, slot B and recovery R — as read and checked in
         the browser
       </TableCaption>
       <TableHeader>

@@ -25,7 +25,7 @@ import { needsRiskAck, type WriteRisk } from '@/hooks/useSlotsPanel';
 
 export interface SlotWriteConfirmProps {
   readonly open: boolean;
-  /** What is written, in words: the file's name, or "Bank A's image" for a copy (`PendingSlotFlash.what`). */
+  /** What is written, in words: the file's name, or "Slot A's image" for a copy (`PendingSlotFlash.what`). */
   readonly what: string;
   readonly slotName: string;
   readonly slotAddress: string;

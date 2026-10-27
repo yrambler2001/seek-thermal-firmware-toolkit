@@ -37,7 +37,17 @@ export function bankOfActiveSlotWord(activeSlotWord: number | null): SlotKey | n
   return null;
 }
 
-/** A bank as the page and the CLI name it, lower case: "slot A", "slot B", "recovery R". */
+/**
+ * A bank's name as the page and the CLI show it on every camera family: "Slot A", "Slot B", "Recovery R"
+ * (a table cell, a row's label, the start of a line). Inside a sentence it is `bankWordsOf`.
+ */
+export function bankNameOf(key: SlotKey): string {
+  if (key === 'a') return 'Slot A';
+  if (key === 'b') return 'Slot B';
+  return 'Recovery R';
+}
+
+/** A bank as the page and the CLI name it inside a sentence, lower case: "slot A", "slot B", "recovery R". */
 export function bankWordsOf(key: SlotKey): string {
   if (key === 'a') return 'slot A';
   if (key === 'b') return 'slot B';

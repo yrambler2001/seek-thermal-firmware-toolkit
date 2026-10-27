@@ -15,6 +15,7 @@
  * ==================================================================== */
 
 import { buildZip } from '../archive/zip.js';
+import { bankNameOf } from '../profiles/locked-boot.js';
 import { hexUp, isoStamp, utf8 } from '../bytes.js';
 import { CancelledError, errorMessage, SeekError } from '../errors.js';
 import type { Artifact } from '../events.js';
@@ -53,7 +54,7 @@ export function writeActionLabel(action: WriteAction): string {
 
 /**
  * The write a backup is saved before, in words, for its text file: `"Flash decrypted image" of x.bin into
- * Bank B`, `a copy of Bank A's image into Bank B`, … The frame-rate patch adds its rates itself.
+ * Slot B`, `a copy of Slot A's image into Slot B`, … The frame-rate patch adds its rates itself.
  */
 export function writeActionWords(
   action: WriteAction,
@@ -61,7 +62,7 @@ export function writeActionWords(
   keys: readonly SlotKey[],
 ): string {
   const nameOf = (key: SlotKey): string =>
-    report.plan.slots.find((slot) => slot.key === key)?.name ?? `Bank ${key.toUpperCase()}`;
+    report.plan.slots.find((slot) => slot.key === key)?.name ?? bankNameOf(key);
   const targets = keys.map(nameOf).join(', then ');
   switch (action.kind) {
     case 'fps-patch':
@@ -98,7 +99,7 @@ export interface BackupFile {
 /** One bank as the backup saved it. */
 export interface BackupBank {
   readonly key: SlotKey;
-  /** The bank's name in the build's plan ("Bank A", "Recovery bank R"). */
+  /** The bank's name in the build's plan ("Slot A", "Recovery R"). */
   readonly name: string;
   readonly address: number;
   readonly content: BackupContent;
@@ -197,13 +198,13 @@ export function backupFileNameShown(
 }
 
 /**
- * What the plan says the backup will hold for one bank, from the slots read: "Bank B (as stored, and
+ * What the plan says the backup will hold for one bank, from the slots read: "Slot B (as stored, and
  * decrypted)", or why there is no decrypted file, or that the bank is empty or cannot be read. The read the
  * backup makes is a fresh one, just before the write; this is what that read is expected to find.
  */
 export function backupBankWords(report: SlotsReport, key: SlotKey): string {
   const view = report.slots.find((candidate) => candidate.entry.key === key);
-  const name = view?.entry.name ?? `Bank ${key.toUpperCase()}`;
+  const name = view?.entry.name ?? bankNameOf(key);
   if (view === undefined) return `${name} (not in this build's plan: the zip says so)`;
   if (!view.entry.dump.supported) {
     return `${name} (this build cannot read it, ${view.entry.dump.reason}: the zip says so)`;
@@ -365,7 +366,7 @@ export function buildWriteBackup(args: {
   const files: Artifact[] = [];
   const banks: BackupBank[] = reads.map((read) => {
     const entry = report.plan.slots.find((slot) => slot.key === read.key);
-    const name = entry?.name ?? `Bank ${read.key.toUpperCase()}`;
+    const name = entry?.name ?? bankNameOf(read.key);
     const address = entry?.address ?? 0;
     const keyName =
       report.slots.find((view) => view.entry.key === read.key)?.state?.keyName ?? null;

@@ -17,6 +17,22 @@ export const EXIT_USAGE = 2;
 export const EXIT_STOPPED = 3;
 export const EXIT_CANCELLED = 130;
 
+/* An error whose words the command has already printed in its own line (preserve's "Backup refused: …").
+ * The run still fails with its own status and its JSON error, but `error: <the same words>` is not printed
+ * a second time (TESTING.md 42.108). */
+const SAID = new WeakSet<object>();
+
+/** Marks an error as said by the command: the CLI prints no `error:` line for it. Returns it, to throw. */
+export function markSaid<T extends object>(error: T): T {
+  SAID.add(error);
+  return error;
+}
+
+/** True when the command has already printed this error's words. */
+export function wasSaid(error: unknown): boolean {
+  return typeof error === 'object' && error !== null && SAID.has(error);
+}
+
 /** A failure the CLI itself diagnosed. Carries the exit code it deserves. */
 export class CliError extends Error {
   readonly exitCode: number;

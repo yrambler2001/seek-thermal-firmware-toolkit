@@ -896,7 +896,7 @@ describe('useSlotsPanel: dumping an empty bank', () => {
     expect(name).toBe('seek-slot-b-empty-ffffffff.bin');
     expect(bytes).toHaveLength(0x10000);
     const lines = result.current.panel.reporter.lines;
-    expect(lineIncludes(lines, 'slot B is empty — nothing to decrypt')).toBe(true);
+    expect(lineIncludes(lines, 'Slot B is empty — nothing to decrypt')).toBe(true);
     expect(lineIncludes(lines, 'no decrypted image')).toBe(false);
     expect(lineIncludes(lines, 'no key this page recovered')).toBe(false);
     unmount();
@@ -1031,7 +1031,7 @@ describe('useSlotsPanel: a cancel says "partly written" only once a commit was s
       await result.current.panel.write(false);
     });
     expect(result.current.panel.reporter.progress.text).toBe(
-      'Cancelled after the commit to slot B was sent — the bank may be partly written. Read it before relying on it.',
+      'Cancelled after the commit to Slot B was sent — the bank may be partly written. Read it before relying on it.',
     );
     expect(result.current.panel.report).toBeNull();
     unmount();
@@ -1058,7 +1058,7 @@ describe('useSlotsPanel: a cancel says "partly written" only once a commit was s
     const report = slotReport(base);
     expect(cancelledStatus([], report)).toBe('Cancelled — nothing was written.');
     expect(cancelledStatus(['b', 'r'], report)).toBe(
-      'Cancelled after the commits to slot B and recovery R were sent — each may be partly written. Read them before relying on them.',
+      'Cancelled after the commits to Slot B and Recovery R were sent — each may be partly written. Read them before relying on them.',
     );
   });
 });
@@ -1154,7 +1154,7 @@ describe('useSlotsPanel: copying a bank into another', () => {
     expect(
       lineIncludes(
         result.current.panel.reporter.lines,
-        'slot B is empty: there is no image to copy',
+        'Slot B is empty: there is no image to copy',
       ),
     ).toBe(true);
     unmount();
@@ -1243,7 +1243,7 @@ describe('useSlotsPanel: restoring a bank from a full flash backup', () => {
     expect(
       lineIncludes(
         result.current.panel.reporter.lines,
-        'slot B reads back byte for byte as the backup stores it',
+        'Slot B reads back byte for byte as the backup stores it',
       ),
     ).toBe(true);
     unmount();
@@ -1285,7 +1285,7 @@ describe('slotCopyGate', () => {
     );
     expect(copyLabel('a')).toBe('Copy to slot A');
     expect(copyLabel('b')).toBe('Copy to slot B');
-    expect(copyLabel('r')).toBe('Copy to recovery slot R');
+    expect(copyLabel('r')).toBe('Copy to recovery R');
   });
 
   it('is off, with the reason, for a source with no image, and for a target the write rules turn off', () => {
@@ -1398,7 +1398,7 @@ describe('useSlotsPanel: Make N FPS in every bank', () => {
       await result.current.panel.patchEveryFps(true);
     });
     expect(result.current.panel.reporter.progress.text).toBe(
-      'Cancelled after the commit to slot B was sent — the bank may be partly written. Read it before relying on it.',
+      'Cancelled after the commit to Slot B was sent — the bank may be partly written. Read it before relying on it.',
     );
     unmount();
   });
@@ -1410,7 +1410,9 @@ describe('useSlotsPanel: Make N FPS in every bank', () => {
       stopped: { key: 'r', reason: 'slot R: CompleteMemoryUpgrade returned 0x00040005' },
       unwritten: ['a'],
     };
-    expect(everyPatchedStatus(stopped)).toBe('Stopped at slot R — 1 bank patched; see the result.');
+    expect(everyPatchedStatus(stopped)).toBe(
+      'Stopped at recovery R — 1 bank patched; see the result.',
+    );
   });
 });
 
@@ -1618,7 +1620,7 @@ describe('useSlotsPanel: the frame-rate patch', () => {
     expect(lineIncludes(result.current.panel.reporter.lines, 'NOW UNPLUG')).toBe(false);
     /* The patch is named by its firmware, not by the table's internal id. */
     expect(result.current.panel.reporter.lines.map((line) => line.text)).toContain(
-      'slot B: patched from 8 Hz to 32 Hz (firmware 1.3.0.0)',
+      'Slot B: patched from 8 Hz to 32 Hz (firmware 1.3.0.0)',
     );
     /* The patch line names the firmware, not the zip: the zip is named once, by the save's own line. */
     expect(lineIncludes(result.current.panel.reporter.lines, 'seek_backup_')).toBe(false);

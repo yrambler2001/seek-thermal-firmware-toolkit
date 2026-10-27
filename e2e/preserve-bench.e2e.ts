@@ -64,9 +64,7 @@ const RESETS_PER_PHASE = 40;
 const PRESERVE_BENCH_UI: UiGuard = {
   name: 'Preserve, bench (steps 02 to 04)',
   allowClick: (label) =>
-    !/flash|forget|raw|jump past|skip the commit|i replugged it|choose plaintext image/i.test(
-      label,
-    ),
+    !/flash|forget|raw|jump past|skip the write|i replugged it|choose plaintext image/i.test(label),
   allowRoute: (hash) => /^#\/(preserve)?$/.test(hash),
   allowPhase: () => true,
 };
@@ -249,9 +247,9 @@ describe.skipIf(!RUNNABLE)(
         expect(shown).toContain(
           'To preserve this camera, write the stock image back to slot A first',
         );
-        expect(await wizard.isEnabled(phaseSection('patch-dump'), 'Start patch & dump')).toBe(
-          false,
-        );
+        expect(
+          await wizard.isEnabled(phaseSection('patch-dump'), 'Start write & whole-flash read'),
+        ).toBe(false);
         expect(await refusalsOf(live()), 'nothing refused by the guards').toEqual([]);
         return;
       }
@@ -320,7 +318,7 @@ describe.skipIf(!RUNNABLE)(
         const stopped = await sectionText('patch-dump');
         expect(stopped).toContain('Go on to step 04: restore the banks');
         expect(stopped).toContain('Stopped as planned — the restore is next');
-        expect(stopped).not.toContain('Try patch & dump again');
+        expect(stopped).not.toContain('Try write & whole-flash read again');
       } else {
         expect(error, 'step 03 finishes').toBeNull();
       }

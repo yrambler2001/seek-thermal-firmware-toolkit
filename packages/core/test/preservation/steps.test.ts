@@ -4,8 +4,8 @@
  * resume depends on, all without a device or the emulator.
  *
  * THE FAKE V1 CAMERA. A 4 MiB flash carrying: a blank boot-config record at
- * 0x14010000 (cfg[0]=0 -> bank A, the bootloader's fixed validate order), the
- * factory plaintext AS STORED in bank A (the 2014 banks hold the image, no
+ * 0x14010000 (cfg[0]=0 -> slot A, the bootloader's fixed validate order), the
+ * factory plaintext AS STORED in slot A (the 2014 banks hold the image, no
  * cipher), and the selector map the pipeline arms — modes 3..9 on the token
  * form, 0x0A..0x21 plain, and mode 2 widened to the whole part (what the
  * PATCHED image serves; the fake serves it always, because the drain tests
@@ -212,7 +212,7 @@ interface V1CameraOptions {
   readonly fwInfo?: Map<number, Uint8Array>;
 }
 
-/** A stock-shaped v1 camera: blank cfg, factory plaintext in bank A. */
+/** A stock-shaped v1 camera: blank cfg, factory plaintext in slot A. */
 function v1Camera(plain: Uint8Array, options: V1CameraOptions = {}): FakeCamera {
   const flash =
     options.flash ??
@@ -450,7 +450,7 @@ describe('runPreserveStep(backup) — the double read and the derived-image gate
     const camera = v1Camera(plain);
     const store = memoryStore();
     const created = await createPreserveRun({ runId: 'double-read' });
-    /* Bank A's window is mode 7: the sweep's read is clean and every later
+    /* Slot A's window is mode 7: the sweep's read is clean and every later
      * mode-7 serve (the capture's fresh boot) carries one flipped byte per
      * packet at offset 4, so the read stays plausible (the magic survives)
      * and the two reads disagree while both parsing. The counter is shared
@@ -636,7 +636,7 @@ describe('runPreserveStep(backup) — the double read and the derived-image gate
     're-points the capture at recovery when the derived build commits only there',
     { timeout: 120_000 },
     async () => {
-      /* The FF chimera's shape (doc 35.3): a blank cfg names bank A, but the
+      /* The FF chimera's shape (doc 35.3): a blank cfg names slot A, but the
        * 0xFFFF-sum build in the slots can never BOOT from A — the bootloader
        * rejects it there and runs the recovery bank unchecked. The route is
        * only known once a capture has been derived, so the backup derives the
@@ -900,15 +900,15 @@ describe('the spent-reader refusals and the two-arm double read', () => {
   });
 
   it(
-    'an all-blank reader refuses in the sweep — the canary fires at bank A',
+    'an all-blank reader refuses in the sweep — the canary fires at slot A',
     { timeout: 120_000 },
     async () => {
       /* The whole flash is 0xFF: a spent reader serves blank at FULL length,
        * so the sweep's length check passes for every window and the step
        * would burn all 31 before the slot ladder refused. The canary refuses
-       * at the fifth window instead — the boot-config block and bank A cannot
+       * at the fifth window instead — the boot-config block and slot A cannot
        * both read unprogrammed on a camera that is running (a blank record is
-       * what makes the bootloader boot bank A, so bank A must hold the
+       * what makes the bootloader boot slot A, so slot A must hold the
        * running image) — with the power-cycle remedy, long before any cipher
        * talk. Measured live as run preserve-2026-10-02T22-39-43Z. */
       const flash = new Uint8Array(FLASH_SIZE).fill(0xff);
@@ -926,7 +926,7 @@ describe('the spent-reader refusals and the two-arm double read', () => {
         /power-cycle the camera \(unplug and replug it, or use its power switch\)/,
       );
       expect(message).toMatch(/preserve --resume/);
-      expect(message).toMatch(/boot-config block \(0x14010000\) and bank A \(0x14050000\)/);
+      expect(message).toMatch(/boot-config block \(0x14010000\) and slot A \(0x14050000\)/);
       expect(message).toMatch(/both served entirely unprogrammed 0xFF fill/);
       /* The generic puzzle text stays out of this shape. */
       expect(message).not.toMatch(/holds an unknown image/);
@@ -1065,7 +1065,7 @@ describe('the spent-reader refusals and the two-arm double read', () => {
      * with the app's own vector (SP 0x10008000, handlers in SRAM) — the
      * same SRAM-shaped neighbourhood as the bootloader's 0x10018000, and it
      * must NOT carry the spent-reader signature. The real words come off
-     * the donor J-Link dump (bank A at 0x14050000). */
+     * the donor J-Link dump (slot A at 0x14050000). */
     const capture = new Uint8Array(0x10000).fill(0xff);
     const dv = new DataView(capture.buffer);
     dv.setUint32(0, 0x10008000, true);
@@ -2222,17 +2222,17 @@ describe('Compact PRO 1.0.3.0 with the board patch — the fake bench camera', (
       expect(state.banks?.a.patch?.rebalanceWord).toBe(patch.rebalanceWord);
 
       state = await step('commit', camera, state, store);
-      /* Bank A now decrypts to the patched image: the guard, the widen and
+      /* Slot A now decrypts to the patched image: the guard, the widen and
        * the word moved, and the board patch is still in it. */
       const committed = decryptBank(camera.flash.subarray(0x50000), image.length);
       expect(committed).toEqual(patch.patched);
       expect([...committed.subarray(BOARD_PATCH.site.offset, BOARD_PATCH.site.offset + 8)]).toEqual(
         BOARD_PATCH.site.after,
       );
-      /* Only bank A changed, and only at the patch's bytes. */
+      /* Only slot A changed, and only at the patch's bytes. */
       for (let i = 0; i < asBooted.length; i++) {
         if (camera.flash[i] === asBooted[i]) continue;
-        expect(i >= 0x50000 && i < 0x60000, `byte ${i.toString(16)} outside bank A`).toBe(true);
+        expect(i >= 0x50000 && i < 0x60000, `byte ${i.toString(16)} outside slot A`).toBe(true);
         expect(patch.diffOffsets).toContain(i - 0x50000);
       }
       const afterCommit = new Uint8Array(camera.flash);

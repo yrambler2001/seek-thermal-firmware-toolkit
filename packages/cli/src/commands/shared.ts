@@ -5,6 +5,7 @@
  */
 
 import {
+  probeLineOf,
   SeekDevice,
   bytesToHex,
   detectProfile,
@@ -97,6 +98,8 @@ export async function chooseProfileByProbe(
   ctx.reporter.log('asking the camera which protocol it speaks ...', 'detail');
   const { probe, detection } = await identifyCamera(session.device);
   for (const note of probe.notes) ctx.reporter.log(`  ${note}`, 'detail');
+  /* The probe's line, as the page logs it: a detail unless the answers did not settle the family. */
+  ctx.reporter.log(probeLineOf(detection), detection.ambiguous ? 'warn' : 'detail');
   return { profile: detection.best.profile, detection, forced: false };
 }
 

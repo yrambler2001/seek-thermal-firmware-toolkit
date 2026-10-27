@@ -165,10 +165,14 @@ describe('useInfoPanel: the camera read', () => {
     );
     /* The probe's score is labelled as the probe's, before any bank is read; the Profile panel's is the
      * one taken after the read (TESTING.md 42.85 O5, 42.86). No bare "confidence". */
-    const probe = panel.reporter.lines.filter((line) => line.text.startsWith('probe: '));
+    const probe = panel.reporter.lines.filter((line) =>
+      line.text.startsWith("the camera's first answers point to "),
+    );
+    /* A detail line, in words, with no profile id (TESTING.md 42.108). */
+    expect(probe.map((line) => line.level)).toEqual(['detail']);
     expect(probe.map((line) => line.text)).toEqual([
       expect.stringMatching(
-        /^probe: .+ \(modern-4x\), score \d\.\d\d from the answers above, before any bank is read$/,
+        /^the camera's first answers point to .+ \(score \d\.\d\d\), before any bank is read$/,
       ),
     ]);
     expect(panel.reporter.lines.some((line) => line.text.includes('confidence'))).toBe(false);

@@ -1265,11 +1265,14 @@ describe('preserve — a bank that holds an unknown image is refused in plain wo
         signal(),
       );
       expect(code).toBe(EXIT_FAILED);
-      expect(test.stderr.text).toContain(unknownImageRefusal('a', EXPECTED_VERSION));
       /* A refusal, not a failure to fix and resume: the words say to start a new run (TESTING.md 42.98). */
       expect(test.stdout.text).toMatch(
         /Backup refused: Slot A holds an unknown image .* nothing was written to the camera\./,
       );
+      /* Said once (TESTING.md 42.108): no `error:` line repeats it, and the run still fails. */
+      const refusal = unknownImageRefusal('a', EXPECTED_VERSION);
+      expect((test.stdout.text + test.stderr.text).split(refusal)).toHaveLength(2);
+      expect(test.stderr.text).not.toMatch(/^error: /m);
       expect(test.stdout.text).not.toMatch(/Fix the cause and resume/);
       expect(await sha256hex(camera.flash)).toBe(await sha256hex(asBooted));
     },

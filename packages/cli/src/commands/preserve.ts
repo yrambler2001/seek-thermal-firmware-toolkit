@@ -91,7 +91,7 @@ import {
   unpatchedStartOf,
 } from '@seek-fw/core';
 import type { CommandContext, CommandResult } from '../cli.js';
-import { CliError } from '../errors.js';
+import { CliError, markSaid } from '../errors.js';
 import {
   artifactInventory,
   loadRunState,
@@ -727,7 +727,8 @@ async function runSteps(
               'the previous checkpoint stands. Fix the cause and resume.',
         'error',
       );
-      throw error;
+      /* A refusal is said once, in the line above; the run still fails (exit 1, the JSON's error). */
+      throw refused ? markSaid(error) : error;
     }
     /* Artifacts first, state second: a crash in between leaves the state
      * behind the files, which a resume catches up from. */

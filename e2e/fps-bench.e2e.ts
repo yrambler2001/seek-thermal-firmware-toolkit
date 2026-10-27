@@ -50,8 +50,8 @@ if (wantedTarget('camera') !== 'camera') {
 const MODE = process.env.SEEK_E2E_WRITE ?? '';
 const SHOT_DIR = process.env.SEEK_E2E_SLOTS_SHOTS ?? null;
 const FPS_ACK = '#slot-fps-ack';
-/** The dialog's own confirm, as the page names it ("Yes — patch Bank A"). */
-const CONFIRM_LABEL = 'Yes — patch Bank A';
+/** The dialog's own confirm, as the page names it ("Yes — patch Slot A"). */
+const CONFIRM_LABEL = 'Yes — patch Slot A';
 /** The patched image is written as one 64 KiB bank, staged in 64-byte chunks (as the page does). */
 const BANK_BYTES = 0x10000;
 const CHUNK_BYTES = 64;

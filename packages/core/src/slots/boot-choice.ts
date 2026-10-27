@@ -30,6 +30,7 @@
  * ==================================================================== */
 
 import {
+  bankNameOf,
   bankOfActiveSlotWord,
   bankWordsOf,
   lockedBootRule,
@@ -41,7 +42,7 @@ import type { DeviceState } from '../workflows/types.js';
 import { classifyBuild } from './capability-family.js';
 import { lockedBankVerdict, onCompactPro2016Line, onPlaintextChain } from './running.js';
 
-export { bankWordsOf };
+export { bankNameOf, bankWordsOf };
 
 /**
  * Why a 2016 bank has no boot verdict when the read could not name the key its bootloader checks a bank

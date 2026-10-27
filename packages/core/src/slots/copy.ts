@@ -10,6 +10,7 @@
  * ==================================================================== */
 
 import { hexUp } from '../bytes.js';
+import { bankNameOf } from '../profiles/locked-boot.js';
 import { slotDumpNames } from './dump.js';
 import { prepareSlotFlash } from './write.js';
 import { slotRefused } from './write-image.js';
@@ -25,14 +26,14 @@ export interface SlotCopyPlan {
    * carries the camera's key pair when the image holds it, as a dump's decrypted file does.
    */
   readonly fileName: string;
-  /** Where the image comes from, in words ("Bank A, firmware 1.0.3.0, as the slots read decrypted it"). */
+  /** Where the image comes from, in words ("Slot A, firmware 1.0.3.0, as the slots read decrypted it"). */
   readonly source: string;
   readonly plan: SlotFlashPlan;
 }
 
 /** The bank's name in the build's plan. */
 function nameOf(report: SlotsReport, key: SlotKey): string {
-  return report.plan.slots.find((slot) => slot.key === key)?.name ?? `Bank ${key.toUpperCase()}`;
+  return report.plan.slots.find((slot) => slot.key === key)?.name ?? bankNameOf(key);
 }
 
 /**

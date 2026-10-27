@@ -95,7 +95,7 @@ describe('CameraReport on the 2016 Compact PRO (TESTING.md 42.84)', () => {
     const { container, unmount } = render(<CameraReport state={state} />);
     const text = container.textContent;
     expect(text).toContain(
-      'App image bank 0x14050000 — the bank the bootloader entered at this start, as it records it',
+      'Slot A — the bank the bootloader entered at this start, as it records it',
     );
     /* The word is the Last start row's, in the CLI's words (TESTING.md 42.89). */
     expect(text).toContain('Last start');
@@ -103,7 +103,7 @@ describe('CameraReport on the 2016 Compact PRO (TESTING.md 42.84)', () => {
     expect(text).not.toContain('as it records it (active-slot word');
     expect(text).toContain('Next start');
     expect(text).toContain(
-      'App image bank 0x14050000 — the boot-config word is 0xFFFFFFFF, so the bootloader tries slot A first, and it holds an image the bootloader accepts',
+      'Slot A — the boot-config word is 0xFFFFFFFF, so the bootloader tries slot A first, and it holds an image the bootloader accepts',
     );
     expect(text).not.toContain('not a boot record');
     /* The Profile panel's score is the one taken after the read, and says so (TESTING.md 42.86). */

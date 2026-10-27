@@ -130,7 +130,7 @@ function phaseRow(container: HTMLElement, label: string): HTMLElement {
 
 function runButton(row: HTMLElement): HTMLButtonElement {
   const match = [...row.querySelectorAll('button')].find((button) =>
-    /^(Start |Try |Run past the unrecorded commit$)/.test(button.textContent.trim()),
+    /^(Start |Try |Run past the unrecorded write$)/.test(button.textContent.trim()),
   );
   if (match === undefined) throw new Error(`no run button on ${row.textContent.slice(0, 40)}`);
   return match;
@@ -213,7 +213,7 @@ describe('PreserveView', () => {
   it('before a run: phase ① creates it, the later phases are dark, the resume picker is there', () => {
     const { container, unmount } = renderPreserve({ state: null, connected: true });
     expect(runButton(phaseRow(container, 'Read & build')).disabled).toBe(false);
-    expect(runButton(phaseRow(container, 'Patch & dump')).disabled).toBe(true);
+    expect(runButton(phaseRow(container, 'Write & whole-flash read')).disabled).toBe(true);
     expect(runButton(phaseRow(container, 'Restore & verify')).disabled).toBe(true);
     expect(buttonByText(container, 'Load a run file…')).toBeTruthy();
     expect(buttonByText(container, 'Save the run file again').disabled).toBe(true);
@@ -222,7 +222,7 @@ describe('PreserveView', () => {
 
   it('a fresh run shows no past-commit alarm — the run is merely in its normal order', () => {
     const { container, unmount } = renderPreserve({ state: runState(), connected: true });
-    expect(container.textContent).not.toContain('The commit is not on record');
+    expect(container.textContent).not.toContain('The write is not on record');
     expect(phaseRow(container, 'Read & build').textContent).toContain('Up next');
     unmount();
   });
@@ -233,13 +233,13 @@ describe('PreserveView', () => {
     const view = renderPreserve({ state, connected: true }, ran);
 
     expect(document.body.querySelector('[role="alertdialog"]')).toBeNull();
-    const row = phaseRow(view.container, 'Patch & dump');
+    const row = phaseRow(view.container, 'Write & whole-flash read');
     expect(row.textContent).toContain('Up next');
     act(() => {
       runButton(row).click();
     });
     const dialog = document.body.querySelector('[role="alertdialog"]');
-    expect(dialog?.textContent).toContain('Patch & dump — write to slot A?');
+    expect(dialog?.textContent).toContain('Write & whole-flash read — write to slot A?');
     expect(dialog?.textContent).toContain('This writes a small patch into slot A');
     act(() => {
       dialogButton('Cancel')?.click();
@@ -258,9 +258,9 @@ describe('PreserveView', () => {
   it('right after step 02 nothing is alarming — step 04 just waits for step 03', () => {
     const state = runState({ backup: 'done', patch: 'done' }, { nextStep: 'commit' });
     const { container, unmount } = renderPreserve({ state, connected: true });
-    expect(container.textContent).not.toContain('The commit is not on record');
+    expect(container.textContent).not.toContain('The write is not on record');
     const row = phaseRow(container, 'Restore & verify');
-    expect(row.textContent).toContain('Available after step 03 (Patch & dump)');
+    expect(row.textContent).toContain('Available after step 03 (Write & whole-flash read)');
     expect(row.textContent).not.toContain('already be patched');
     expect(runButton(row).textContent.trim()).toBe('Start restore & verify');
     expect(runButton(row).disabled).toBe(true);
@@ -276,21 +276,21 @@ describe('PreserveView', () => {
     const view = renderPreserve({ state, connected: true }, ran);
 
     expect(view.container.textContent).toContain(
-      'The commit is not on record for this run, so the phases past it are shut',
+      'The write is not on record for this run, so the steps after it are shut',
     );
     const row = phaseRow(view.container, 'Restore & verify');
     expect(row.textContent).toContain('the camera may already be patched');
     const button = runButton(row);
-    expect(button.textContent.trim()).toBe('Run past the unrecorded commit');
+    expect(button.textContent.trim()).toBe('Run past the unrecorded write');
     expect(button.disabled).toBe(false);
     act(() => {
       button.click();
     });
     const dialog = document.body.querySelector('[role="alertdialog"]');
-    expect(dialog?.textContent).toContain('THE COMMIT IS NOT ON RECORD');
-    expect(dialog?.textContent).toContain('jump past the unrecorded commit');
+    expect(dialog?.textContent).toContain('THE WRITE IS NOT ON RECORD');
+    expect(dialog?.textContent).toContain('jump past the unrecorded write');
     act(() => {
-      dialogButton('Yes — jump past the commit')?.click();
+      dialogButton('Yes — jump past the write')?.click();
     });
     expect(ran).toEqual([['restore-verify', { allowJump: true }]]);
     view.unmount();
@@ -304,9 +304,9 @@ describe('PreserveView', () => {
     );
     const view = renderPreserve({ state, connected: true }, ran);
 
-    const row = phaseRow(view.container, 'Patch & dump');
+    const row = phaseRow(view.container, 'Write & whole-flash read');
     const skip = [...row.querySelectorAll('button')].find((button) =>
-      button.textContent.includes('Skip the commit'),
+      button.textContent.includes('Skip the write'),
     );
     expect(skip).toBeTruthy();
     expect(skip?.disabled).toBe(false);
@@ -314,10 +314,10 @@ describe('PreserveView', () => {
       skip?.click();
     });
     expect(document.body.querySelector('[role="alertdialog"]')?.textContent).toContain(
-      'THE COMMIT IS NOT ON RECORD',
+      'THE WRITE IS NOT ON RECORD',
     );
     act(() => {
-      dialogButton('Yes — jump past the commit')?.click();
+      dialogButton('Yes — jump past the write')?.click();
     });
     expect(ran).toEqual([['patch-dump', { allowJump: true }]]);
     view.unmount();
@@ -351,10 +351,10 @@ describe('PreserveView', () => {
       { nextStep: 'restore', drainEntered: 'a' },
     );
     const view = renderPreserve({ state, connected: true }, ran);
-    const row = phaseRow(view.container, 'Patch & dump');
+    const row = phaseRow(view.container, 'Write & whole-flash read');
     expect(row.textContent).toContain('Stopped as planned — the restore is next');
     expect(row.textContent).toContain('Next: the restore puts every written bank back.');
-    expect(row.textContent).not.toContain('Try patch & dump again');
+    expect(row.textContent).not.toContain('Try write & whole-flash read again');
     expect(row.textContent).not.toContain('Stopped — see the log');
     const go = [...row.querySelectorAll('button')].find(
       (button) => button.textContent.trim() === 'Go on to step 04: restore the banks',
@@ -421,10 +421,10 @@ describe('PreserveView', () => {
     expect(row.textContent).toContain('The next start enters slot A');
     expect(row.textContent).toContain('this choice does not patch it');
     act(() => {
-      runButton(phaseRow(container, 'Patch & dump')).click();
+      runButton(phaseRow(container, 'Write & whole-flash read')).click();
     });
     const dialog = document.body.querySelector('[role="alertdialog"]');
-    expect(dialog?.textContent).toContain('Patch & dump — write to recovery R?');
+    expect(dialog?.textContent).toContain('Write & whole-flash read — write to recovery R?');
     expect(dialog?.textContent).toContain('this choice does not patch it');
     unmount();
   });
@@ -442,7 +442,7 @@ describe('PreserveView', () => {
     );
     const { container, unmount } = renderPreserve({ state, connected: true });
     act(() => {
-      runButton(phaseRow(container, 'Patch & dump')).click();
+      runButton(phaseRow(container, 'Write & whole-flash read')).click();
     });
     const dialog = document.body.querySelector('[role="alertdialog"]');
     /* Word 2 tries R first, so R is written last. */
@@ -585,9 +585,9 @@ describe('PreserveView', () => {
      * actually match — never against the one-slot firmware image's sha. */
     expect(container.textContent).toContain('matches the backup on all 31 blocks');
     expect(container.textContent).not.toContain('DOES NOT match');
-    expect(container.textContent).toContain('Only in the full dump');
+    expect(container.textContent).toContain('Only in the whole-flash read');
     expect(container.textContent).toContain('0x14000000');
-    expect(container.textContent).toContain('Raw post-commit part');
+    expect(container.textContent).toContain('Whole-flash read, as read');
     expect(container.textContent).toContain('Firmware image (decrypted, slot A)');
     expect(buttonByText(container, 'Download the full archive (run file)')).toBeTruthy();
     unmount();
@@ -608,7 +608,7 @@ describe('PreserveView', () => {
         connects += 1;
       },
     });
-    const row = phaseRow(container, 'Patch & dump');
+    const row = phaseRow(container, 'Write & whole-flash read');
     expect(row.textContent).toContain('Your turn: press Connect device and pick the camera');
     expect(row.textContent).toContain('restarted, as planned');
     const ask = row.querySelector('[data-slot="alert"]');
@@ -637,7 +637,7 @@ describe('PreserveView', () => {
       prompt: { phase: 'patch-dump', kind: 'replug-before-restore' },
       onConnect: () => undefined,
     });
-    const row = phaseRow(container, 'Patch & dump');
+    const row = phaseRow(container, 'Write & whole-flash read');
     expect(row.textContent).toContain('Before step 04: unplug the camera, plug it back in');
     expect(row.querySelector('[data-slot="alert"]')?.className).toContain('border-l-primary');
     unmount();
@@ -664,7 +664,7 @@ describe('PreserveView', () => {
 
   it('no step reads as alarming before anything has gone wrong — no red buttons, borders or badges', () => {
     const { container, unmount } = renderPreserve({ state: runState(), connected: true });
-    for (const label of ['Read & build', 'Patch & dump', 'Restore & verify']) {
+    for (const label of ['Read & build', 'Write & whole-flash read', 'Restore & verify']) {
       const row = phaseRow(container, label);
       expect(row.innerHTML).not.toContain('destructive');
     }

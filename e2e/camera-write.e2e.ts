@@ -532,7 +532,7 @@ describe.skipIf(reason !== null)(title, () => {
     expect(await refusalsOf(t), 'nothing was refused (no write was even tried)').toEqual([]);
     await checkStep03Offered(t.wizard, t.page);
     const text = await t.page.evaluate(() => document.body.innerText);
-    expect(text).not.toContain('Patch & dump — done');
+    expect(text).not.toContain('Write & whole-flash read — done');
   });
 
   it('step 03 commits the patch and drains the whole part, exactly as the row says', async (test) => {

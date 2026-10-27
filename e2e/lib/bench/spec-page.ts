@@ -80,7 +80,7 @@ export function benchGuardScript(): string {
 export const SLOTS_BENCH_UI: UiGuard = {
   name: 'Firmware slots, bench (decrypted images only)',
   allowClick: (label) =>
-    !/raw|forget|preserve|patch & dump|restore & verify|read & build|jump past|skip the commit|replug/i.test(
+    !/raw|forget|preserve|write & whole-flash read|restore & verify|read & build|jump past|skip the write|replug/i.test(
       label,
     ),
   allowRoute: (hash) => /^#\/(slots)?$/.test(hash),

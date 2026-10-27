@@ -32,9 +32,9 @@ export const SLOT_ADDRESS: Readonly<Record<SlotKey, number>> = {
 };
 
 export const SLOT_NAME: Readonly<Record<SlotKey, string>> = {
-  a: 'slot A',
-  b: 'slot B',
-  r: 'recovery R',
+  a: 'Slot A',
+  b: 'Slot B',
+  r: 'Recovery R',
 };
 
 export const SLOT_HEADER: ImageHeader = {
@@ -296,7 +296,7 @@ export function deviceState2016(
   const header: ImageHeader = { ...SLOT_HEADER, length: 51848, versionStr: '1.0.3.0' };
   const slots = (['a', 'b', 'r'] as const).map((key) =>
     readSlotState(base, key, {
-      name: `App image bank 0x${SLOT_ADDRESS[key].toString(16).toUpperCase()}`,
+      name: SLOT_NAME[key],
       raw: new Uint8Array(0x10000),
       blank: false,
       plain: key === 'r' ? PLAIN_R_2016 : SLOT_PLAIN,

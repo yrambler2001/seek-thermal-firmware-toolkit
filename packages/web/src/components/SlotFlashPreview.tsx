@@ -9,6 +9,7 @@
 import type { ReactElement } from 'react';
 import { FileUp, Flame } from 'lucide-react';
 import {
+  bankWordsOf,
   derivedKeyLine,
   hexUp,
   stagingDetail,
@@ -104,7 +105,7 @@ export function SlotFlashPreview({
     ['Staging', stagingDetail(plan.staging)],
     ...(plan.derivedFrom
       ? ([
-          ['Key', derivedKeyLine(plan.derivedFrom, `bank ${plan.derivedFrom.bank.toUpperCase()}`)],
+          ['Key', derivedKeyLine(plan.derivedFrom, bankWordsOf(plan.derivedFrom.bank))],
         ] as const satisfies readonly KeyValueRow[])
       : []),
     [

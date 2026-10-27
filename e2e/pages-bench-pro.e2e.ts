@@ -207,9 +207,9 @@ const BANK_ADDRESS: Readonly<Record<BankLetter, number>> = {
 };
 /** The bank's name on the slots page (its rows, its dialogs). */
 const SLOT_NAME: Readonly<Record<BankLetter, string>> = {
-  a: 'Bank A',
-  b: 'Bank B',
-  r: 'Recovery bank R',
+  a: 'Slot A',
+  b: 'Slot B',
+  r: 'Recovery R',
 };
 const VERSION = '1.0.3.0';
 const SERIAL = process.env.SEEK_E2E_PRO_SERIAL ?? '090BB12PR939';
@@ -227,7 +227,7 @@ const NEXT_START_WHY =
   'the boot-config word is 0xFFFFFFFF, so the bootloader tries slot A first, and it holds an image the bootloader accepts';
 /** The Info tab names a bank by its read name, the slots page by its row name. */
 const NEXT_START_A = `Slot A — ${NEXT_START_WHY}`;
-const NEXT_START_A_SLOTS = `Bank A — ${NEXT_START_WHY}`;
+const NEXT_START_A_SLOTS = `Slot A — ${NEXT_START_WHY}`;
 /** The lines the 2016 read printed before 42.84, which must not come back (TESTING.md 42.84 summary). */
 const STALE = [
   'flashing disabled',
@@ -506,7 +506,7 @@ describe.skipIf(!RUNNABLE)(
       }
       const summary = await summaryRows(page);
       say(`slots summary: ${JSON.stringify(summary)}`);
-      expect(summary['booted from'], 'Booted from').toBe('Bank A');
+      expect(summary['booted from'], 'Booted from').toBe('Slot A');
       expect(summary['next start'], 'Next start').toBe(NEXT_START_A_SLOTS);
       const rows = await bankRows(page);
       for (const row of rows) {
@@ -573,7 +573,7 @@ describe.skipIf(!RUNNABLE)(
       const { wizard, page, downloads } = live();
       const saved = await dumpBank(wizard, page, downloads, letter);
       say(`dump ${letter.toUpperCase()} (${tag}): ${saved.status}`);
-      expect(saved.status, `Dump ${letter.toUpperCase()}`).toMatch(/^Dumped slot/);
+      expect(saved.status, `Dump ${letter.toUpperCase()}`).toMatch(/^Dumped (slot|recovery) /);
       keepBytes(`dump-${tag}-${letter}-raw.bin`, saved.raw.bytes);
       if (saved.decrypted !== null) {
         keepBytes(`dump-${tag}-${letter}-decrypted.bin`, saved.decrypted.bytes);
@@ -952,11 +952,11 @@ describe.skipIf(!RUNNABLE)(
           const warned = letter !== 'a' && !patched.has('a');
           if (letter === 'a') {
             expect(dialog, 'A is the bank the camera boots now').toContain(
-              'Bank A is the bank the camera boots now. The patched image replaces the firmware it runs now.',
+              'Slot A is the bank the camera boots now. The patched image replaces the firmware it runs now.',
             );
           }
           if (letter === 'r') {
-            expect(dialog).toContain('Recovery bank R is the recovery bank');
+            expect(dialog).toContain('Recovery R is the recovery bank');
           }
           if (warned) {
             expect(dialog, 'the warning names the bank that runs').toContain(WARNING_NAMES_A);
@@ -1060,7 +1060,7 @@ describe.skipIf(!RUNNABLE)(
           1,
         );
         expect(outcome ?? '', 'the result panel names the firmware, not the table id').toContain(
-          `Slot ${L} — patched from ${String(FROM_HZ)} Hz to ${String(TO_HZ)} Hz (firmware ${VERSION}).`,
+          `${SLOT_NAME[letter]} — patched from ${String(FROM_HZ)} Hz to ${String(TO_HZ)} Hz (firmware ${VERSION}).`,
         );
         const { zip } = await waitForBackupZip(downloads, [letter], 'before-fps-patch');
         checkBackupZip(zip, [letter], `fps-${letter}`);
@@ -1171,7 +1171,7 @@ describe.skipIf(!RUNNABLE)(
            * block 1 of the image's pair, so the bytes are expected to come back equal). */
           const verdict = (done.outcome ?? '')
             .split('\n')
-            .find((line) => line.startsWith(`Slot ${L} reads back`));
+            .find((line) => line.startsWith(`${SLOT_NAME[letter]} reads back`));
           say(`${tag}: restore verdict: ${verdict ?? '(none)'}`);
           expect(
             verdict,

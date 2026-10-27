@@ -11,6 +11,7 @@
 import type { ReactElement } from 'react';
 import { KeyRound, Microchip } from 'lucide-react';
 import {
+  bankNameOf,
   bootedSlot,
   bytesToHex,
   hexUp,
@@ -27,8 +28,8 @@ import { Prose } from './Prose';
 import { Alert } from './ui/alert';
 
 /**
- * A bank's name as the slot table says it ("Bank A", "Recovery bank R"). The device info names a bank
- * "slot A"; the same bank must carry the same name on the same page (TESTING.md 42.19).
+ * A bank's name as the slot table says it ("Slot A", "Recovery R"), core's `bankNameOf`, the same on every
+ * camera family; the same bank carries the same name on the same page (TESTING.md 42.19, 42.108).
  */
 function bankLabel(slot: SlotState): string {
   return bankLabelOf(slot.key);
@@ -36,7 +37,7 @@ function bankLabel(slot: SlotState): string {
 
 /** The same name, from the bank's key alone. */
 function bankLabelOf(key: SlotKey): string {
-  return key === 'r' ? 'Recovery bank R' : `Bank ${key.toUpperCase()}`;
+  return bankNameOf(key);
 }
 
 function perDeviceKey(state: DeviceState): string | null {
@@ -105,9 +106,7 @@ export function DeviceInfoPanel({ state }: DeviceInfoPanelProps): ReactElement {
   const orphans = orphanSlots(state);
   const targetIsOrphan = target !== null && orphans.includes(target);
   /* TESTING.md 42.50: the upgrade target is the bank the camera booted from. A warning, never a gate. */
-  const targetWarning = upgradeTargetWarning(state, (slot, key) =>
-    slot === undefined ? key.toUpperCase() : bankLabel(slot),
-  );
+  const targetWarning = upgradeTargetWarning(state, (_slot, key) => bankLabelOf(key));
 
   return (
     <>
