@@ -14721,3 +14721,66 @@ No patch is offered for either: the words say to write the stock image back firs
 - O5. `docs/` keeps the old page until the bundle is rebuilt.
 
 **10. Commits** (branch `worktree-agent-a1409f44b598356e8`, on `refactor/all-firmware-profiles` `f321245`; not merged, not pushed): `871da8c` (core words), `ca27c99` (core `preserveStepLabel`), `7446c58` (CLI stop, exit 3, help), `6ed99d7` (page details switch, bundle tag, rig), `a808be8` (the emulator pin), `a9b1c1f` (the route and changed-bytes words), and this section.
+
+### 42.108 The words left over from 42.103 and 42.105: one name per bank, the probe in words, a refusal said once, the Preserve page's step names (no hardware, 2026-10-27)
+
+**Summary.** Agent 42.108 (Opus 5.5), on `worktree-agent-abe4e39e6f6915d80`, reset to `refactor/all-firmware-profiles` (`05f9262`). No camera, J-Link or switch (42.106 had the bench); no emulator suite run. Nothing here is seen on a camera. Five items, each with tests: (1) a bank is named "Slot A", "Slot B", "Recovery R" on every family, on the page, in the CLI and in core, and "slot A" / "recovery R" inside a sentence where the code already wrote it lower case; (2) the read's probe lines are in words, and a detail line is the CLI's `--verbose` line on the Info tab too; (3) a refused Preserve backup is said once and still exits 1; (4) the Preserve page says "Write" and "Whole-flash read", not commit and dump; (5) the fixtures use the real names. `write.ts` and `image-build.ts` were not touched (42.106/42.107); their leftovers are in §6.
+
+**1. One name per bank** [source; test].
+- Core: `bankNameOf` (new, `profiles/locked-boot.ts`, beside `bankWordsOf`) gives "Slot A" / "Slot B" / "Recovery R". `BANK_NAME` (`slots/capability-family.ts`, every 2.x/4.x/10.x/42.x/44.x family) was "Bank A" / "Bank B" / "Recovery bank R", now `bankNameOf`; `modern-4x.ts` "Recovery" is now "Recovery R" (legacy-auth already said "Slot A", 42.103). The fallbacks (`copy.ts`, `backup.ts`) and the core sentences use the same words: "this build's plan has no bank B" → "… no slot B" (`fps-patch.ts`, `restore.ts`); "bank B cannot take a decrypted image" → "slot B cannot …"; "the booted bank A" → "the booted slot A" (`write-keys.ts`); "refusing to dump slot a" → "refusing to dump slot A"; the commit status "(… so bank A may be partly erased)" → "slot A" (`preservation/pipeline.ts`); the sweep refusal's "bank A" → "slot A"; the preserve window note "app image bank a (…)" → "slot A (…)"; the capability notes "Bank B is 0x14050000 on this line" → "Slot B …"; the read labels "bank A verdict" → "slot A verdict".
+- CLI (`commands/slots.ts`, `usage.ts`): `bankName` now gives the in-sentence words, `bankLabel` the name. "refusing to write bank A: bank A is the bank the camera boots now" → "refusing to write slot A: slot A is …"; "bank R is the recovery bank; …" → "recovery R is the bank the bootloader falls back to; …"; "Write image.bin to bank B …?" → "… to slot B …?"; the list table's first column "A" → "Slot A"; the notes "· A: …" → "· Slot A: …"; the plan row "B (0x14060000)" → "Slot B (0x14060000)"; "bank B: empty, nothing to decrypt" → "Slot B: empty, …"; "read-back: bank B matches …" → "read-back: slot B matches …"; "bank B: commit status …" → "Slot B: commit status …"; the patch-fps order "B, then R, then A" → "slot B, then recovery R, then slot A"; `--help` "has A 0x14050000, B 0x14060000 and R 0x14070000" → "has slot A at 0x14050000, slot B at 0x14060000 and recovery R at 0x14070000", "or bank R" → "or recovery R"; the bank argument's hint "a and b are the two application banks; r is the recovery bank." → "a is slot A, b is slot B and r is recovery R.".
+- Page: Info's bank label (`DeviceInfoPanel`) "Bank B" → core's "Slot B", the name the slots table and the 2014 boot rows show; the slots dialog "Write … to Bank B at 0x14060000?" → "… to Slot B …" (the plan's name); the dump status "Dumped slot B." stays, and R's "Dumped slot R." → "Dumped recovery R."; "Copy to recovery slot R" → "Copy to recovery R"; "Stopped at slot R —" → "Stopped at recovery R —"; the result "Slot R — …" → "Recovery R — …"; the table's "Recovery bank: writing it asks for an extra confirmation." → "Recovery R: …"; the descriptions "A, B and the recovery bank R" → "slot A, slot B and recovery R" (App, Info, Slots, the slot table). Where the code puts the plan's name inside a sentence ("Write to Slot B…", "Make Slot B run at 32 FPS?", "Before anything is written, Slot B (…") the name is capitalised, as it already was for the 2014 chain since 42.103 [source].
+- JSON keys and code names (`a`, `b`, `r`, `--bank`, the backup zip's `bank-B`) are unchanged.
+
+**2. Info's probe lines** [source; test]. All are `detail` lines: shown by the CLI with `--verbose`, and on the Info tab with its new "Show details in the log" switch (`#info-details`, off by default, as Preserve's step logs since 42.105 D3). Before, the Info tab showed every detail line the CLI hides.
+
+| Before | After |
+|---|---|
+| `a plain 2-byte BeginFirmwareUpgrade(0x5) was REFUSED` / `accepted` | `the camera refused to open a locked bank for an upgrade when asked without the unlock` / `the camera opened …` |
+| `the 18-byte authenticated BeginFirmwareUpgrade(0x5) was accepted` / `refused` | `it opened the same bank when asked with the unlock` / `it refused …` |
+| `a window open on every line served its first 64 bytes` | `a read of a bank every camera line lets out returned its first 64 bytes` |
+| `no window could be read (…)` | `no bank could be read (…)` |
+| `selector 0x0's window matches neither slot — the slots are identical, so the target cannot be read off the wire` | `the read of the camera's own upgrade bank matches neither slot — slot A and slot B hold the same bytes, so the read cannot tell which one its upgrade writes` |
+| page only, `ok`: `probe: Legacy locked firmware (legacy-auth), score 0.98 from the answers above, before any bank is read` | both front ends (core `probeLineOf`), `detail` (`warn` when the answers did not settle the family): `the camera's first answers point to Legacy locked firmware (score 0.98), before any bank is read` |
+
+`platform string: unavailable (control OUT 0x55 -> stall)` was already a `detail` line (`protocol/client.ts`) and keeps its raw reason, now hidden on both front ends by default.
+
+**3. A refused Preserve backup, said once** [test]. Before: `Backup refused: <words> — recorded in …; nothing was written to the camera.` then `error: <words>`, exit 1. After: the first line only; the command marks the error as said (`markSaid`/`wasSaid`, `errors.ts`) and `cli.ts` prints no `error:` line for it; exit 1 and the `--json` error are unchanged.
+
+**4. The Preserve page's own words** [source; test]. Step 03 "Patch & dump" → "Write & whole-flash read" (its buttons "Start write & whole-flash read", "Try write & whole-flash read again"). The steps' names are core's `preserveStepLabel` ("Backup", "Patch", "Write", "Whole-flash read", "Restore", "Check") and their descriptions `--help`'s, in words (before: "Commit the patch into the chosen banks", "Dump the whole part", "drains … through the widened window", "stages the conjugated patch … commits each"). "The commit is not on record for this run, so the phases past it are shut." → "The write is not on record for this run, so the steps after it are shut."; "Run past the unrecorded commit" → "… write"; "Skip the commit — start at the drain" → "Skip the write — start at the whole-flash read"; "Concerns the patched part while the commit is not on record" → "Concerns the patched camera while the write is not on record"; "The whole-part dump has not run …" → "The whole-flash read has not run …"; "The commit has run, so the choice is fixed" → "The write has run, …"; the jump dialog "THE COMMIT IS NOT ON RECORD … a wasted dump" → "THE WRITE IS NOT ON RECORD … a wasted whole-flash read", "Yes — jump past the commit" → "… the write"; "The dump that follows only reads." → "The whole-flash read that follows only reads."; "Only in the full dump" → "Only in the whole-flash read"; "Raw post-commit part" → "Whole-flash read, as read"; the log's "JUMP past the unrecorded commit …" / "JUMP: the commit is not replayed … continuing at the drain" → "Jumping past the unrecorded write …" / "Jumping past the write: it is not written again … going on with the whole-flash read"; the gate's "the commit (run or resume at it first)" → "the Write step (…)", "the drain refuses on …" → "the whole-flash read refuses on …". The step ids `--from-step` takes are unchanged; phases 02 "Read & build" and 04 "Restore & verify" keep their names (no commit or dump in them). The zip step is unchanged.
+
+**5. Fixtures** [test]. `core/test/check-key.test.ts` "App image bank 0x14050000" → "Slot A" (its `nameOf` is core's `bankNameOf`); `web/src/components/CameraReport.test.tsx` "App image bank 0x14050000 — …" → "Slot A — …"; `web/src/test-slots.ts` `SLOT_NAME` "slot A" / "recovery R" → "Slot A" / "Recovery R", and the 2016 fixture's "App image bank 0x…" → `SLOT_NAME`.
+
+**6. Left for the merge, in the files not touched here** [source].
+- `packages/core/src/slots/write.ts:167` `bootsNowOf(key === 'r' ? 'recovery bank R' : \`bank ${key.toUpperCase()}\`)` → `bootsNowOf(bankWordsOf(key))` ("slot A is the bank the camera boots now …").
+- `write.ts:168` `'recovery bank R is the last-resort copy the bootloader falls back to'` → "recovery R is …".
+- `write.ts:323` `` `slot ${entry.name} was not read (…` `` now reads "slot Slot B was not read" (it read "slot Bank B" before) → `` `${bankWordsOf(key)} was not read (…` ``.
+- `write.ts:487` `'Recovery bank R: writing it asks you to acknowledge the risk. …'` → "Recovery R: …".
+- `image-build.ts` and `ff-form.ts`: no bank name.
+- Their pins stay on the old words, marked "(42.108: left for the merge)": `core/test/slots/write.test.ts` (outA "bank A is the bank the camera boots now …", outR "Recovery bank R: writing it asks …" and `includes('Recovery bank R')`), `core/test/slots/backup.test.ts` (`/Recovery bank R/` in the copy-to-R test). `cli/test/slots.test.ts` "stopped at recovery R: Recovery bank R: CompleteMemoryUpgrade …" is a fake's own reason, not product text.
+
+**7. Tests** [measured here, by file; never a whole vitest].
+
+| Run | Result |
+|---|---|
+| core: 41 non-emulator files (`test/preservation/*.test.ts`, `test/slots/*.test.ts`, the top-level files that name banks or the probe), no corpus | 40 passed, 1 skipped; 1277 passed, 47 skipped |
+| CLI `--project cli`: `slots`, `surface`, `args`, `preserve`, `errors`, `output`, `decrypt`, `reporter` | 8 files, 288 passed, 1 skipped |
+| web `--project web` (new: the Info details switch, `render-smoke.test.tsx`) | 35 files, 437 passed |
+| e2e offline: `bench-lib`, `bench-verdict`, `supervised-gate`, `camera-bus`, `bench-paths` | 5 files, 173 passed, 6 skipped |
+| `npm run typecheck` (core built in this worktree; `node_modules/@seek-fw/{core,cli,web}` linked to this worktree's packages, untracked) | exit 0 |
+| eslint and prettier on every changed file | clean |
+
+**8. Emulator suites and rigs whose pins changed** (to run after the merge; none run here).
+- `packages/cli/test/slots.emulator.test.ts`: `/bank R is the recovery bank/` → `/recovery R is the bank the bootloader falls back to/`.
+- `e2e/pages-emu.e2e.ts`: "The commit is not on record" → "The write is not on record" (a `not.toContain`).
+- Rigs (typechecked, not run): `e2e/lib/slots-page.ts` (the row names, "Dumped (slot|recovery) ", "Copy to recovery R", the result's "Recovery R — "), `e2e/slots-view.e2e.ts`, `e2e/pages-bench-pro.e2e.ts`, `e2e/fps-bench.e2e.ts` ("Yes — patch Slot A"); for Preserve `e2e/lib/wizard.ts`, `e2e/lib/bench/spec-page.ts`, `e2e/lib/camera-flow.ts`, `e2e/preserve-bench.e2e.ts`, `e2e/camera-write.e2e.ts`. `e2e/pages-bench.e2e.ts` is not touched (no pin on a changed word).
+- Worth running because they print the changed core words, though no pin of theirs changed [inferred]: `packages/cli/test/slots-empty.emulator.test.ts`, `packages/core/test/slots/*.emulator.test.ts`, `packages/core/test/preservation/{pipeline,banks,resume}.emulator.test.ts`, `packages/cli/test/pages-emulator.test.ts`, `packages/cli/test/emulator-cli.test.ts`, `e2e/emulator.e2e.ts`. `e2e/lib/preserve-expectations.ts` holds none of these words.
+
+**9. Not done, and open.**
+- O1. Not seen on a camera; `docs/` keeps the old page until the bundle is rebuilt.
+- O2. A failed (not refused) Preserve step still says its message twice in the CLI ("Write failed: …" and `error: …`).
+- O3. Where the page puts the plan's name inside a sentence it is capitalised ("Make Slot B run at 32 FPS?", "Write to Slot B…"); lower-casing those changes the sentence code, not the name.
+- O4. The backup zip's file name keeps `bank-B` (a file name scripts read).
+- O5. Phases 02 and 04 keep "Read & build" and "Restore & verify"; the step inside 04 is "Check".
+
+**10. Commits** (branch `worktree-agent-abe4e39e6f6915d80`, on `refactor/all-firmware-profiles` `05f9262`; not merged, not pushed): `a558f99` (core names), `a53cbe2` (CLI names), `a9528a1` (page names, fixtures), `54b46b9` (rigs), `86d1bb5` (refusal said once), `6ef1e63` (Preserve page words), `7b350aa` (probe words, Info details switch), and this section.
