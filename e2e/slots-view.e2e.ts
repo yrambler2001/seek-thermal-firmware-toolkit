@@ -305,7 +305,7 @@ for (const subject of SUPPORTED) {
           expect(status, await w.logTail('slotsrun')).toMatch(/^Read\. 3\/3 banks read/);
 
           const rows = await rowsOf(t.page);
-          expect(rows.map((row) => row.name)).toEqual(['Bank A', 'Bank B', 'Recovery bank R']);
+          expect(rows.map((row) => row.name)).toEqual(['Slot A', 'Slot B', 'Recovery R']);
           for (const row of rows) {
             expect(row.address, `${row.name} address`).toBe(subject.layout[row.letter]);
             const holdsImage = row.firmware.startsWith(subject.version);
@@ -478,7 +478,9 @@ for (const subject of SUPPORTED) {
           expect(status2, await w.logTail('slotsrun')).toMatch(/^Written\. /);
           const outcome = await outcomeAlert(t.page);
           expect(outcome, 'the verification is shown').not.toBeNull();
-          expect(outcome ?? '').toContain(`Slot ${target.letter.toUpperCase()} — `);
+          expect(outcome ?? '').toContain(
+            `${target.letter === 'r' ? 'Recovery R' : `Slot ${target.letter.toUpperCase()}`} — `,
+          );
           expect(outcome ?? '').toContain(verdictFor(subject));
           expect(outcome ?? '').toContain('NOW UNPLUG AND REPLUG THE CAMERA');
           await snap(t.page, SHOT_DIR, `${subject.version}-outcome-desktop`);
@@ -511,7 +513,7 @@ for (const subject of SUPPORTED) {
             /Booted now: writing it asks for an extra confirmation\./,
           );
           expect(recovery.actionsText).toContain(
-            'Recovery bank: writing it asks for an extra confirmation.',
+            'Recovery R: writing it asks for an extra confirmation.',
           );
 
           const image = writeScratch(scratch, bootedNameOf(), plain);
@@ -582,15 +584,15 @@ for (const subject of SUPPORTED) {
           const status = await pickImage(w, t.page, 'r', 'plain', image);
           expect(status, await w.logTail('slotsrun')).toMatch(/^Ready — /);
           const view = await preparedView(t.page);
-          expect(view?.title).toBe(`Prepared for Recovery bank R at ${subject.layout.r}`);
+          expect(view?.title).toBe(`Prepared for Recovery R at ${subject.layout.r}`);
 
-          await openWriteConfirm(w, t.page, 'Recovery bank R');
-          expect(await confirmEnabled(w, 'Recovery bank R')).toBe(false);
-          const status2 = await confirmWrite(w, t.page, 'Recovery bank R', true);
+          await openWriteConfirm(w, t.page, 'Recovery R');
+          expect(await confirmEnabled(w, 'Recovery R')).toBe(false);
+          const status2 = await confirmWrite(w, t.page, 'Recovery R', true);
           say(`recovery write: ${status2}`);
           expect(status2, await w.logTail('slotsrun')).toMatch(/^Written\. /);
           const outcome = await outcomeAlert(t.page);
-          expect(outcome ?? '').toContain('Slot R — ');
+          expect(outcome ?? '').toContain('Recovery R — ');
           expect(outcome ?? '').toContain(verdictFor(subject));
           await snap(t.page, SHOT_DIR, `${subject.version}-recovery-outcome-desktop`);
 
@@ -599,7 +601,7 @@ for (const subject of SUPPORTED) {
           const status3 = await readSlots(w, t.page);
           expect(status3).toMatch(/^Read\. 3\/3/);
           const rows = await rowsOf(t.page);
-          expect(rows.map((row) => row.name)).toEqual(['Bank A', 'Bank B', 'Recovery bank R']);
+          expect(rows.map((row) => row.name)).toEqual(['Slot A', 'Slot B', 'Recovery R']);
           expect(await refusalsOf(t)).toEqual([]);
         },
         30 * 60_000,

@@ -25,7 +25,7 @@ export type BankLetter = 'a' | 'b' | 'r';
 /** One row of the bank table, as the page shows it. */
 export interface BankRowView {
   readonly letter: BankLetter;
-  /** The bank's name, as the plan gives it: "Bank A", "Recovery bank R". */
+  /** The bank's name, as the plan gives it: "Slot A", "Recovery R". */
   readonly name: string;
   /** The address the row header shows: "0x14030000". */
   readonly address: string;
@@ -42,9 +42,9 @@ export interface BankRowView {
 }
 
 const LETTER_OF: Readonly<Record<string, BankLetter>> = {
-  'Bank A': 'a',
-  'Bank B': 'b',
-  'Recovery bank R': 'r',
+  'Slot A': 'a',
+  'Slot B': 'b',
+  'Recovery R': 'r',
 };
 
 /** The bank table's rows, read from the DOM in the page. Row order is A, B, R. */
@@ -223,7 +223,7 @@ export async function dumpBank(
     w,
     page,
     () => w.click(row, 'Dump'),
-    /^(Dumped slot|Failed|Cancelled)/,
+    /^(Dumped (slot|recovery) |Failed|Cancelled)/,
     20 * 60_000,
   );
   const rawPattern = rawDumpNamePattern(letter);
@@ -241,7 +241,7 @@ export async function dumpBank(
 
 /** The page's label for a copy into `to` (web useSlotsPanel `copyLabel`). */
 export function copyLabel(to: BankLetter): string {
-  return to === 'r' ? 'Copy to recovery slot R' : `Copy to slot ${to.toUpperCase()}`;
+  return to === 'r' ? 'Copy to recovery R' : `Copy to slot ${to.toUpperCase()}`;
 }
 
 /**
@@ -391,7 +391,7 @@ export async function slotsAlerts(page: Page): Promise<string[]> {
 /** The write's verdict panel, when one is shown: the alert that starts "Slot A — ", "Slot B — " or "Slot R — ". */
 export async function outcomeAlert(page: Page): Promise<string | null> {
   const alerts = await slotsAlerts(page);
-  return alerts.find((text) => /^Slot [ABR] — /.test(text)) ?? null;
+  return alerts.find((text) => /^(Slot [AB]|Recovery R) — /.test(text)) ?? null;
 }
 
 /**
