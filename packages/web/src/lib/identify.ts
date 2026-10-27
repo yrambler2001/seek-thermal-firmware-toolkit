@@ -15,6 +15,7 @@
  */
 
 import {
+  probeLineOf,
   identifyCamera,
   identityRefusal,
   isSeekError,
@@ -48,12 +49,7 @@ type Log = (text: string, level: LogLevel) => void;
  * and "score" (TESTING.md 42.85 O5, 42.86).
  */
 export function probeLine(detection: DetectionResult): string {
-  const best = detection.best;
-  return (
-    `probe: ${best.profile.name} (${best.profile.id}), score ${best.score.toFixed(2)} from the answers ` +
-    `above, before any bank is read` +
-    (detection.ambiguous ? ' — the evidence did not settle it, so this is a guess' : '')
-  );
+  return probeLineOf(detection);
 }
 
 /**
@@ -76,7 +72,7 @@ export async function chooseActingProfile(
   if (!gate.permitsArming) {
     throw identityRefusal(gate, probe.firmwareVersion, operation, best.profile.id);
   }
-  log(probeLine(detection), detection.ambiguous ? 'warn' : 'ok');
+  log(probeLine(detection), detection.ambiguous ? 'warn' : 'detail');
   return {
     profile: best.profile,
     detection,

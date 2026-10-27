@@ -30,6 +30,20 @@ import type { CheckKey, DeviceState, SlotState } from './types.js';
 export type ReportRow = readonly [label: string, value: string];
 
 /**
+ * The probe's line in a read's log, on both front ends: the family the camera's first answers point to, and
+ * that answer's score, taken before any bank is read (so it is not the score of the detected row, which is
+ * taken again after the read). No profile id: that is in the JSON (TESTING.md 42.85 O5, 42.108).
+ */
+export function probeLineOf(detection: DetectionResult): string {
+  const best = detection.best;
+  return (
+    `the camera's first answers point to ${best.profile.name} (score ${best.score.toFixed(2)}), ` +
+    'before any bank is read' +
+    (detection.ambiguous ? ' — they did not settle it, so this is a guess' : '')
+  );
+}
+
+/**
  * The detected row's value: the profile the read's own evidence names, and its score. The page's Info log
  * also prints the probe's score, taken before any bank is read (1.0.3.x: 0.85 from the version line); this
  * one is scored again once the banks are read (0.98 with the bank evidence on the bench 1.0.3.0 camera), so

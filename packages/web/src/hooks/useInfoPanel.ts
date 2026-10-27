@@ -119,7 +119,7 @@ export function useInfoPanel(params: InfoPanelParams): InfoPanelApi {
         }
 
         const best = detection.best.profile;
-        reporter.log(probeLine(detection), detection.ambiguous ? 'warn' : 'ok');
+        reporter.log(probeLine(detection), detection.ambiguous ? 'warn' : 'detail');
         let state = await readDeviceInfo(
           { device: client, profile: best, detection, reporter: reporter.reporter, signal },
           {},

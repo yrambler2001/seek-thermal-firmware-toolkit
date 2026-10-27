@@ -491,8 +491,8 @@ async function confirmUpgradeTarget(
   });
   if (matches.length !== 1) {
     ctx.reporter.log(
-      `  selector ${hex(subcmd)}'s window matches ${matches.length ? 'both slots' : 'neither slot'}` +
-        ' — the slots are identical, so the target cannot be read off the wire',
+      `  the read of the camera's own upgrade bank matches ${matches.length ? 'both slots' : 'neither slot'}` +
+        ' — slot A and slot B hold the same bytes, so the read cannot tell which one its upgrade writes',
       'detail',
     );
     return null;

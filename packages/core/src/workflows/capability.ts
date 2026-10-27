@@ -33,7 +33,7 @@
  * build reads the same way are listed in `SAFE_BEFORE_IDENTITY`.
  * ==================================================================== */
 
-import { asciiz, hex } from '../bytes.js';
+import { asciiz } from '../bytes.js';
 import { CancelledError, errorMessage, SeekError, type SeekErrorCode } from '../errors.js';
 import type { SeekDevice } from '../protocol/client.js';
 import { DEFAULT_READ_CHUNK, OP } from '../protocol/ops.js';
@@ -529,9 +529,11 @@ export async function probeSelectorChannel(
       note: 'capability probe (plain)',
     }),
   );
+  /* In words: the request and its mode are in the JSON's probe answers (TESTING.md 42.108). */
   notes.push(
-    `a plain 2-byte BeginFirmwareUpgrade(${hex(PROBE_PROTECTED_SUBCMD)}) was ` +
-      (plainAccepted ? 'accepted' : 'REFUSED'),
+    plainAccepted
+      ? 'the camera opened a locked bank for an upgrade when asked without the unlock'
+      : 'the camera refused to open a locked bank for an upgrade when asked without the unlock',
   );
 
   /* ---- 3. the authenticated channel on the same bank ------------------
@@ -551,8 +553,9 @@ export async function probeSelectorChannel(
     }),
   );
   notes.push(
-    `the 18-byte authenticated BeginFirmwareUpgrade(${hex(PROBE_PROTECTED_SUBCMD)}) was ` +
-      (authAccepted ? 'accepted' : 'refused'),
+    authAccepted
+      ? 'it opened the same bank when asked with the unlock'
+      : 'it refused the same bank when asked with the unlock',
   );
 
   /* ---- 4. can it serve a window at all? -------------------------------- */
@@ -567,13 +570,13 @@ export async function probeSelectorChannel(
     openWindowReadable = read.data.length === PROBE_READ_BYTES;
     notes.push(
       openWindowReadable
-        ? `a window open on every line served its first ${String(PROBE_READ_BYTES)} bytes`
-        : `a window open on every line served only ${String(read.data.length)} byte(s)` +
+        ? `a read of a bank every camera line lets out returned its first ${String(PROBE_READ_BYTES)} bytes`
+        : `a read of a bank every camera line lets out returned only ${String(read.data.length)} byte(s)` +
             (read.stopReason === null ? '' : `: ${read.stopReason}`),
     );
   } catch (error) {
     if (error instanceof CancelledError) throw error;
-    notes.push(`no window could be read (${errorMessage(error)})`);
+    notes.push(`no bank could be read (${errorMessage(error)})`);
   }
 
   return {

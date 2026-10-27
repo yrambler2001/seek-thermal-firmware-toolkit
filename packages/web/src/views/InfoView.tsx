@@ -5,7 +5,7 @@
  * what each tab is for and which cameras it covers.
  */
 
-import type { ReactElement } from 'react';
+import { useState, type ReactElement } from 'react';
 import { CircleStop, Info as InfoIcon, ListChecks, ScanSearch } from 'lucide-react';
 import { KeyValue, type KeyValueRow } from '@/components/KeyValue';
 import { Panel, PanelTitle } from '@/components/Panel';
@@ -108,6 +108,8 @@ function lineLabel(version: string | null): string {
 }
 
 export function InfoView({ info, connected, busy }: InfoViewProps): ReactElement {
+  /* A detail line is the CLI's --verbose line: hidden until asked for, on both front ends (TESTING.md 42.108). */
+  const [showDetails, setShowDetails] = useState(false);
   const { result } = info;
   const version = result?.version ?? null;
   const target = tabFor(version);
@@ -153,11 +155,26 @@ export function InfoView({ info, connected, busy }: InfoViewProps): ReactElement
           </Prose>
         )}
 
+        <div className="flex items-center gap-2 text-[0.8rem] text-muted-foreground">
+          <input
+            type="checkbox"
+            id="info-details"
+            checked={showDetails}
+            onChange={(event) => {
+              setShowDetails(event.target.checked);
+            }}
+          />
+          <label htmlFor="info-details">Show details in the log</label>
+        </div>
         <RunPanel
           id="info"
           label="Firmware version"
           progress={info.reporter.progress}
-          lines={info.reporter.lines}
+          lines={
+            showDetails
+              ? info.reporter.lines
+              : info.reporter.lines.filter((line) => line.level !== 'detail')
+          }
           trimmed={info.reporter.trimmed}
         />
 

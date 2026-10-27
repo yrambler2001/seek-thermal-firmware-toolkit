@@ -88,6 +88,7 @@ export {
   bootedReportOf,
   checkKeyReportOf,
   detectedReportOf,
+  probeLineOf,
   acceptsDescription,
   keyReportRows,
   KEY_TABLE_REFUSED_2016,

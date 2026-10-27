@@ -6,6 +6,7 @@
  * state it wants and nothing else. The hooks themselves are tested in hooks/.
  */
 
+import { act } from 'react';
 import { describe, expect, it } from 'vitest';
 import { DecryptView } from './DecryptView';
 import { InfoView } from './InfoView';
@@ -194,6 +195,30 @@ describe('V4View', () => {
 });
 
 describe('InfoView', () => {
+  it('hides the read log’s detail lines until "Show details in the log" is ticked, as the CLI does without --verbose (TESTING.md 42.108)', () => {
+    const hook = renderHook(() => useReporter());
+    act(() => {
+      hook.result.current.log('firmware 1.3.0.0', 'ok');
+      hook.result.current.log(
+        '  the camera refused to open a locked bank for an upgrade when asked without the unlock',
+        'detail',
+      );
+    });
+    const { container, unmount } = render(
+      <InfoView info={infoStub(hook.result.current)} connected busy={false} />,
+    );
+    expect(container.querySelector('label[for="info-details"]')?.textContent).toBe(
+      'Show details in the log',
+    );
+    expect(container.textContent).toContain('firmware 1.3.0.0');
+    expect(container.textContent).not.toContain('refused to open a locked bank');
+    act(() => {
+      container.querySelector<HTMLInputElement>('#info-details')?.click();
+    });
+    expect(container.textContent).toContain('refused to open a locked bank');
+    unmount();
+  });
+
   it('reads the version only with a camera, and says so without one', () => {
     const [a] = reporters(1);
     const off = render(<InfoView info={infoStub(a!)} connected={false} busy={false} />);
