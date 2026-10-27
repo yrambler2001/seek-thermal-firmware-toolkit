@@ -43,14 +43,14 @@ is the endpoint-busy check at the field start (`app_init.c:952`, TESTING.md 42.7
 fixed time after the frame's last byte, in shuffled 20 s blocks on one boot:
 
 | credit held | published frames followed by a lost field |
-|---|---|
-| 0 ms | 1.8% |
-| 4 ms | 9.9% |
-| 6 ms | 17.1% |
-| 6.5 ms | 44.9% |
-| 7 ms | 78.0% |
-| 7.5 ms | 98.0% |
-| 8 to 12 ms | 100% (2,956 of 2,956) |
+| ----------- | ----------------------------------------- |
+| 0 ms        | 1.8%                                      |
+| 4 ms        | 9.9%                                      |
+| 6 ms        | 17.1%                                     |
+| 6.5 ms      | 44.9%                                     |
+| 7 ms        | 78.0%                                     |
+| 7.5 ms      | 98.0%                                     |
+| 8 to 12 ms  | 100% (2,956 of 2,956)                     |
 
 From 8 ms on, the camera publishes exactly every other field, the storm's signature, with nothing else changed.
 
@@ -61,27 +61,27 @@ for its bulk INs inside a frame stays at 0.02 to 0.04 ms in storms and outside t
 
 **The host thread's speed moves the storm.** Interleaved runs of the same checker:
 
-| condition | lost fields per minute (3 runs) | published frames followed by a loss |
-|---|---|---|
-| plain | 206, 349, 421 | 14 to 32% |
-| `taskpolicy -b` (background QoS) | 750, 735, 792 | 62 to 68% |
-| `taskpolicy -b`, no extra per-frame analysis | 691, 806, 765 | 59 to 72% |
+| condition                                    | lost fields per minute (3 runs) | published frames followed by a loss |
+| -------------------------------------------- | ------------------------------- | ----------------------------------- |
+| plain                                        | 206, 349, 421                   | 14 to 32%                           |
+| `taskpolicy -b` (background QoS)             | 750, 735, 792                   | 62 to 68%                           |
+| `taskpolicy -b`, no extra per-frame analysis | 691, 806, 765                   | 59 to 72%                           |
 
 In 42.78's 20 runs, the time a fixed piece of per-frame JavaScript took (its picture statistics) tracks the single-skip
 count with r = 0.97: 0.25 ms a frame in the clean run (11 skips a minute), 1.41 ms in the worst (790 a minute).
 
 **What it is not.**
 
-- *The microphone receiver* on the camera's hub (DJI Wireless Microphone RX, full speed, behind the same single-TT hub):
+- _The microphone receiver_ on the camera's hub (DJI Wireless Microphone RX, full speed, behind the same single-TT hub):
   CoreAudio and the coreaudiod log show its stream was never open during the logged storms. Holding it open (samples
   discarded) gave no storm in a 16-minute C-loop run (238 lost fields open against 172 closed over 16 ABBA pairs, p = 0.10);
   with the checker, 1,774 open against 2,153 closed over 16 pairs (p = 0.24), storming in both states.
-- *The switch board:* it cuts only VBUS; D+ and D- pass straight through.
-- *A beat between the camera's field clock and the USB 1 ms frame or 125 µs microframe:* the skip chance does not depend on
+- _The switch board:_ it cuts only VBUS; D+ and D- pass straight through.
+- _A beat between the camera's field clock and the USB 1 ms frame or 125 µs microframe:_ the skip chance does not depend on
   either phase, and the field period is steady at 31.0637 ms.
-- *The host load average* (r = -0.07 over 42.78's runs), *the image* (P and the copy-gate Pg alike), *the injected IN
-  delays and the number of pending INs* (they act on the bulk INs; the credit still waits for the processing).
-- *The camera's state:* the same camera streamed 16 minutes with no storm under the C loop, and stormed under the checker
+- _The host load average_ (r = -0.07 over 42.78's runs), _the image_ (P and the copy-gate Pg alike), _the injected IN
+  delays and the number of pending INs_ (they act on the bulk INs; the credit still waits for the processing).
+- _The camera's state:_ the same camera streamed 16 minutes with no storm under the C loop, and stormed under the checker
   minutes later.
 
 ## What remains when the credit is prompt

@@ -1,7 +1,11 @@
 dist/
 docs/
 coverage/
-legacy/
 package-lock.json
 # Kept as they were run (scripts/recipient-fidelity/README.md); the README itself is formatted.
 scripts/recipient-fidelity/*.ts
+# A measurement log: it quotes the cameras' own strings, spacing included ("Jan  6 2017").
+TESTING.md
+# Generated fixtures, kept byte for byte as their tools wrote them.
+packages/core/test/preservation/fps-patch-python.json
+e2e/lib/bench/compact-fps/fixtures/stock-raw-2s/frames.json

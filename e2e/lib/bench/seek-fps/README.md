@@ -90,6 +90,7 @@ same two fields in the same order.
 
 **When the connect fails.** The checker reads GetFirmwareInfo before it sends any init, and a failed connect says
 which of three things happened (TESTING.md 42.58):
+
 - **The camera did not answer.** No read got a reply: each one failed, stalled or timed out, or the camera is not on
   the bus at all. The message says so and says to wait for the camera to come back after a power cycle. Nothing
   is sent to it, and this includes a Pro.

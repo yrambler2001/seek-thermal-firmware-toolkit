@@ -25,7 +25,12 @@ import { equalBytes, hexToBytes } from '../../src/bytes.js';
 import { SeekError } from '../../src/errors.js';
 import { wordSum32 } from '../../src/image/bank.js';
 import { IMAGE_MAGIC, LENGTH_OFFSET } from '../../src/image/header.js';
-import { KEY_PAIRS, keyWordsOf, keystream, xorWindowVerbatim } from '../../src/preservation/patch.js';
+import {
+  KEY_PAIRS,
+  keyWordsOf,
+  keystream,
+  xorWindowVerbatim,
+} from '../../src/preservation/patch.js';
 import { ffKeyBPlainOf, ffPlainOfStaged, stageFFVendor } from '../../src/slots/ff-form.js';
 import { buildFFPayload, plainChainBuildOf } from '../../src/slots/write-image.js';
 import { emulatorDir } from '../emulator/harness.js';
@@ -116,7 +121,8 @@ describe('stageFFVendor: the vendor staged form (synthetic FF image)', () => {
     expect(equalBytes(staged, expected)).toBe(true);
     const dv = new DataView(staged.buffer, staged.byteOffset, staged.byteLength);
     const src = new DataView(image.buffer, image.byteOffset, image.byteLength);
-    for (let w = H_LO; w <= H_HI; w++) expect(dv.getUint32(w * 4, true)).toBe(src.getUint32(w * 4, true));
+    for (let w = H_LO; w <= H_HI; w++)
+      expect(dv.getUint32(w * 4, true)).toBe(src.getUint32(w * 4, true));
   });
 
   it('the stored bank is the image XOR key block 1 outside the header window, verbatim inside it', () => {
@@ -197,7 +203,11 @@ describe('plainChainBuildOf decides on the image itself', () => {
   it('a stored word sum of 0 is the plain chain, with or without the FF key pair', () => {
     const image = plainImageOf(0x4000, 21);
     new DataView(image.buffer).setUint32(ADJUST * 4, 0, true);
-    new DataView(image.buffer).setUint32(ADJUST * 4, (0 - wordSum32(image, image.length)) >>> 0, true);
+    new DataView(image.buffer).setUint32(
+      ADJUST * 4,
+      (0 - wordSum32(image, image.length)) >>> 0,
+      true,
+    );
     expect(wordSum32(image, image.length)).toBe(0);
     expect(plainChainBuildOf(image)).toBe('plain');
   });
@@ -230,36 +240,39 @@ const PLAIN_SHA256 = 'b97ced91fff9f0949a02f35fceab697634cc109a0fe2a2fbbfe6ccfadb
 /** The bank the camera keeps from it: the plain image XOR key block 1, header verbatim: sha256 fdc8be40... */
 const STORED_SHA256 = 'fdc8be406ea5387b65cf32b20463eb28a1168e7a54a2c47cbb575a9c4c5d318d';
 
-describe.skipIf(CORPUS_FF === null)('the corpus FF image, staged as the vendor app stages it', () => {
-  const plain = CORPUS_FF ?? new Uint8Array();
+describe.skipIf(CORPUS_FF === null)(
+  'the corpus FF image, staged as the vendor app stages it',
+  () => {
+    const plain = CORPUS_FF ?? new Uint8Array();
 
-  it('the corpus image is the plain image the page committed: sha256 b97ced91…', () => {
-    expect(sha256(plain)).toBe(PLAIN_SHA256);
-  });
+    it('the corpus image is the plain image the page committed: sha256 b97ced91…', () => {
+      expect(sha256(plain)).toBe(PLAIN_SHA256);
+    });
 
-  it('the staged payload is the vendor app’s file: sha256 fd9da63b…', () => {
-    const { staged } = stageFFVendor(plain);
-    expect(sha256(staged)).toBe(VENDOR_SHA256);
-    const file = vendorFile();
-    if (file !== null) expect(equalBytes(staged, file)).toBe(true);
-  });
+    it('the staged payload is the vendor app’s file: sha256 fd9da63b…', () => {
+      const { staged } = stageFFVendor(plain);
+      expect(sha256(staged)).toBe(VENDOR_SHA256);
+      const file = vendorFile();
+      if (file !== null) expect(equalBytes(staged, file)).toBe(true);
+    });
 
-  it('the stored bank the camera keeps is the plain image XOR Key B: sha256 fdc8be40…', () => {
-    const { stored } = stageFFVendor(plain);
-    expect(sha256(stored)).toBe(STORED_SHA256);
-    expect(equalBytes(ffKeyBPlainOf(stored) ?? new Uint8Array(), plain)).toBe(true);
-  });
+    it('the stored bank the camera keeps is the plain image XOR Key B: sha256 fdc8be40…', () => {
+      const { stored } = stageFFVendor(plain);
+      expect(sha256(stored)).toBe(STORED_SHA256);
+      expect(equalBytes(ffKeyBPlainOf(stored) ?? new Uint8Array(), plain)).toBe(true);
+    });
 
-  it('the payload the vendor file holds unstages to the plain image', () => {
-    const { staged } = stageFFVendor(plain);
-    expect(equalBytes(ffPlainOfStaged(staged) ?? new Uint8Array(), plain)).toBe(true);
-  });
+    it('the payload the vendor file holds unstages to the plain image', () => {
+      const { staged } = stageFFVendor(plain);
+      expect(equalBytes(ffPlainOfStaged(staged) ?? new Uint8Array(), plain)).toBe(true);
+    });
 
-  it('the page’s old two-stream payload is not the vendor form (it differs in every word outside the window)', () => {
-    const { staged } = stageFFVendor(plain);
-    const ks0 = ksOf(KEY_PAIRS.ff1308.block0, plain.length >> 2);
-    const ksD = ksOf(KEY_PAIRS.ff1308.block1, plain.length >> 2);
-    const twoStream = xorWindowVerbatim(xorWindowVerbatim(plain, ks0), ksD);
-    expect(equalBytes(staged, twoStream)).toBe(false);
-  });
-});
+    it('the page’s old two-stream payload is not the vendor form (it differs in every word outside the window)', () => {
+      const { staged } = stageFFVendor(plain);
+      const ks0 = ksOf(KEY_PAIRS.ff1308.block0, plain.length >> 2);
+      const ksD = ksOf(KEY_PAIRS.ff1308.block1, plain.length >> 2);
+      const twoStream = xorWindowVerbatim(xorWindowVerbatim(plain, ks0), ksD);
+      expect(equalBytes(staged, twoStream)).toBe(false);
+    });
+  },
+);

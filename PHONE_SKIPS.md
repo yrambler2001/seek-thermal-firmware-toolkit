@@ -32,32 +32,32 @@ counted in the USB interrupt before the status stage (`usb_ctrl_xfer_handler` ->
 
 **2. The request time does not matter** (Redmi, probe build, request held a random 0-8 ms, 120 s, `csweep.log`):
 
-| request after the frame's first chunk | on time | skipped |
-|---|---|---|
-| 23-24 ms | 38 | 144 (79 %) |
-| 24-28 ms (four 1 ms bins) | 41 each | 191-219 (82-84 %) |
-| 28-29 ms | 31 | 225 (88 %) |
-| 29-30 ms | 3 | 206 (98.6 %) |
-| 30 ms and later | 0 | all |
+| request after the frame's first chunk | on time | skipped           |
+| ------------------------------------- | ------- | ----------------- |
+| 23-24 ms                              | 38      | 144 (79 %)        |
+| 24-28 ms (four 1 ms bins)             | 41 each | 191-219 (82-84 %) |
+| 28-29 ms                              | 31      | 225 (88 %)        |
+| 29-30 ms                              | 3       | 206 (98.6 %)      |
+| 30 ms and later                       | 0       | all               |
 
 Flat until about 29 ms (the credit window: 22.6 ms + about 6.5 ms), so the skips are decided before the request matters.
 
 **3. The last chunk decides** (probe build, read of each frame's last chunk held a random 6-8.5 ms; holds under ~7 ms change nothing on the bus):
 
 | last chunk arrived after chunk 3 | Redmi skipped (`lsweep.log`) | Pixel skipped (`pix_lsweep.log`, 6-9.5 ms) |
-|---|---|---|
-| 6.5-7.0 ms (normal: 6.95-7.03) | 1 of 4 | 8 of 69 (11.6 %) |
-| 7.0-7.5 ms | 147 of 157 (93.6 %) | 177 of 302 (58.6 %) |
-| 7.5 ms and later | **1,681 of 1,681** | 1,568 of 1,570 |
+| -------------------------------- | ---------------------------- | ------------------------------------------ |
+| 6.5-7.0 ms (normal: 6.95-7.03)   | 1 of 4                       | 8 of 69 (11.6 %)                           |
+| 7.0-7.5 ms                       | 147 of 157 (93.6 %)          | 177 of 302 (58.6 %)                        |
+| 7.5 ms and later                 | **1,681 of 1,681**           | 1,568 of 1,570                             |
 
 In the Redmi run the requests went out 24-27 ms after the first chunk, where run 2 had 16 % on time; with the last chunk late, none were.
 
 **4. The drain** (queue -> the app sees the chunk, the chunk already waiting in the camera: hold of 8 ms or more):
 
-| | median | 10-90 % |
-|---|---|---|
+|             | median   | 10-90 %     |
+| ----------- | -------- | ----------- |
 | Pixel 8 Pro | 0.821 ms | 0.666-1.016 |
-| Redmi 4X | 1.378 ms | 1.124-1.666 |
+| Redmi 4X    | 1.378 ms | 1.124-1.666 |
 
 About 0.25 ms of each is software (the 4-byte control transfer's 0.29 ms on the Redmi includes it), so the Redmi needs roughly 1.1 ms on the bus
 for 16 KB (~15 MB/s) [inferred].

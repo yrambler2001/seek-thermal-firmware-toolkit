@@ -6,6 +6,7 @@ on purpose, to tell a late frame request from a late last chunk.
 ## The probe app (`apk-patches/`)
 
 An experiment patch for the owner's `apk-patches` repo (seek-patch), not a release patch:
+
 - `usb_probe.py`: adds four calls to the camera library's frame read (2.3.4: `com/tyriansystems/Seekware/a$a.smali` `run()` and
   `a.smali`): before and after the frame request (control transfer 0x41 / 0x53), before each chunk's `UsbRequest.queue()`, after each
   `requestWait()`. Nothing is changed.
@@ -17,6 +18,7 @@ An experiment patch for the owner's `apk-patches` repo (seek-patch), not a relea
   - `l=min-max`: wait a random time before queueing the read of each frame's last chunk.
 
 Build (a worktree of `apk-patches` main, 0.9.0):
+
 ```sh
 git -C apk-patches worktree add --detach /tmp/probe-wt main
 cp apk-patches/*.py /tmp/probe-wt/src/seekpatch/patches/ && cp apk-patches/UsbProbe.java /tmp/probe-wt/helpers/java/seekpatch/
@@ -24,6 +26,7 @@ cp apk-patches/*.py /tmp/probe-wt/src/seekpatch/patches/ && cp apk-patches/UsbPr
 ANDROID_HOME=... python helpers/build.py                       # compiles UsbProbe.java to smali
 PYTHONPATH=src python -m seekpatch patch Seek+Thermal_2.3.4.apk --side-by-side -o seek-2.3.4-probe.apk
 ```
+
 It installs over the side-by-side build (`com.tyriansystems.SeekThermal.patched`, same key) and keeps its data.
 
 ## Scripts
