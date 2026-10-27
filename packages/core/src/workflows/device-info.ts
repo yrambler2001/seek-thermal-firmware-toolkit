@@ -409,9 +409,9 @@ async function readBankVerdicts(
     return got !== null && got.length >= 1 ? (got[0] ?? null) : null;
   };
   const verdicts: BankVerdicts = {
-    a: await answerOf(6, 'bank A verdict'),
-    b: await answerOf(7, 'bank B verdict'),
-    r: await answerOf(8, 'bank R verdict'),
+    a: await answerOf(6, 'slot A verdict'),
+    b: await answerOf(7, 'slot B verdict'),
+    r: await answerOf(8, 'recovery R verdict'),
   };
   reporter.log(
     `  bank verdicts (selectors 6, 7, 8): A ${String(verdicts.a)}, B ${String(verdicts.b)}, R ${String(verdicts.r)}`,
@@ -1558,7 +1558,7 @@ export function upgradeTargetWhileRecovery(state: DeviceState): boolean {
 /**
  * The sentence the page and `seek-fw info` show under the upgrade target, or null. Two cases: the target is
  * the booted bank, so an upgrade overwrites the running image; or the camera runs its recovery bank and its
- * own upgrade writes B. `nameOf` names the bank; the page passes its own label ("Bank B") so the same bank
+ * own upgrade writes B. `nameOf` names the bank; the page passes its own label ("Slot B") so the same bank
  * carries the same name on the page, and the CLI keeps the profile's name.
  */
 export function upgradeTargetWarning(

@@ -21,6 +21,7 @@
  */
 
 import { hexUp } from '../bytes.js';
+import { bankWordsOf } from '../profiles/locked-boot.js';
 import { SeekError } from '../errors.js';
 import { authPayload, OLD_FW_UNLOCK_TOKEN } from '../profiles/legacy-auth.js';
 import { WINDOW_SIZE } from '../profiles/modern-4x.js';
@@ -140,7 +141,7 @@ export function bankWindow(key: BankKey): WindowEntry {
   return {
     subcmd: bank.mode,
     address: bank.address,
-    note: `app image bank ${key} (${hexUp(bank.address, 8)}), write-capable window`,
+    note: `${bankWordsOf(key)} (${hexUp(bank.address, 8)}), write-capable window`,
     payload: authPayload(bank.mode, OLD_FW_UNLOCK_TOKEN),
   };
 }

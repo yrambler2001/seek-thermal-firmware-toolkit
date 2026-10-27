@@ -1,6 +1,7 @@
 export * from './types.js';
 export { buildSlotPlan } from './capability.js';
 export {
+  bankNameOf,
   bankWordsOf,
   bootChoiceOf,
   bootRuleKnown,

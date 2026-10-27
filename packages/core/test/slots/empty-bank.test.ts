@@ -378,7 +378,7 @@ describe('an erased bank is named empty, distinct from every other thing it can 
     const lines = reporter.events.filter((e): e is LogEvent => e.type === 'log');
     const empties = lines.filter((l) => l.message.includes('is empty'));
     expect(empties).toHaveLength(1);
-    expect(empties[0]?.message).toMatch(/Bank B is empty: its header window reads as all 0xFF/);
+    expect(empties[0]?.message).toMatch(/Slot B is empty: its header window reads as all 0xFF/);
     expect(empties[0]?.message).toMatch(/nothing is decrypted/);
     expect(empties[0]?.message).toMatch(/It can be written/);
     /* Not a warning, and nothing in the log is an error. */
@@ -603,7 +603,7 @@ describe('prepareSlotFlash into an empty bank stages the same bytes as into a us
       bytes: image,
       fileName: `img${keyFilenameSuffix(SRC_A, SRC_B)}.bin`,
     };
-    /* Bank A carries a footer with recognisable bytes after the tag and length. */
+    /* Slot A carries a footer with recognisable bytes after the tag and length. */
     const footerRaw = new Uint8Array(FOOTER_SIZE).fill(0x5a);
     const view = new DataView(footerRaw.buffer);
     view.setUint32(0, FOOTER_TAG, true);

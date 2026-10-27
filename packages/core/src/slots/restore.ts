@@ -20,6 +20,7 @@
  * ==================================================================== */
 
 import { sha256hex } from '../bytes.js';
+import { bankWordsOf } from '../profiles/locked-boot.js';
 import { looksLikeZip, readZipEntries } from '../archive/zip-read.js';
 import { PRESERVE_DUMP_ORIGINAL_FILE } from '../preservation/steps.js';
 import { isDeviceBlockHead, DEVICE_BLOCK_ADDRESS } from '../preservation/windows.js';
@@ -172,7 +173,7 @@ export async function planSlotRestore(
 ): Promise<SlotRestorePlan> {
   const entry = report.plan.slots.find((slot) => slot.key === key);
   if (entry === undefined) {
-    throw slotRefused(`this build's plan has no bank ${key.toUpperCase()}. Nothing was written.`);
+    throw slotRefused(`this build's plan has no ${bankWordsOf(key)}. Nothing was written.`);
   }
   const offset = entry.address - FLASH_BASE;
   if (offset < 0 || offset + SLOT_BYTES > backup.flash.length) {

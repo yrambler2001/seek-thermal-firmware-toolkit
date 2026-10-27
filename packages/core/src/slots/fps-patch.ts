@@ -40,6 +40,7 @@
  * ==================================================================== */
 
 import { equalBytes, viewOf } from '../bytes.js';
+import { bankWordsOf } from '../profiles/locked-boot.js';
 import { CancelledError, errorMessage, SeekError } from '../errors.js';
 import { decryptImage } from '../crypto/cipher.js';
 import { recoverKeyInfo } from '../crypto/recover.js';
@@ -149,18 +150,18 @@ export function fpsPlanOfBank(report: SlotsReport, key: SlotKey): FpsPlan {
   }
   const view = report.slots.find((candidate) => candidate.entry.key === key);
   if (view === undefined)
-    return { status: 'refused', reason: `this build's plan has no bank ${key.toUpperCase()}` };
+    return { status: 'refused', reason: `this build's plan has no ${bankWordsOf(key)}` };
   if (!view.entry.flashPlain.supported) {
     return {
       status: 'refused',
-      reason: `bank ${key.toUpperCase()} cannot take a decrypted image on this build: ${view.entry.flashPlain.reason}`,
+      reason: `${bankWordsOf(key)} cannot take a decrypted image on this build: ${view.entry.flashPlain.reason}`,
     };
   }
   const plain = view.state?.plain ?? null;
   if (view.content === 'empty' || plain === null) {
     return {
       status: 'refused',
-      reason: `bank ${key.toUpperCase()} has no decrypted image to patch (${view.content === 'empty' ? 'it is empty' : 'it was not read or no key opens it'})`,
+      reason: `${bankWordsOf(key)} has no decrypted image to patch (${view.content === 'empty' ? 'it is empty' : 'it was not read or no key opens it'})`,
     };
   }
   return planFpsPatch(plain, report.state.version);
@@ -227,10 +228,10 @@ async function readAndPlan(
   report: SlotsReport,
   key: SlotKey,
 ): Promise<{ readonly dumped: DumpedSlot; readonly patch: FpsPatch }> {
-  const name = key.toUpperCase();
+  const name = bankWordsOf(key);
   if (!report.plan.supportedBuild.supported) throw refuse(report.plan.supportedBuild.reason);
   const entry = report.plan.slots.find((candidate) => candidate.key === key);
-  if (entry === undefined) throw refuse(`this build's plan has no bank ${name}.`);
+  if (entry === undefined) throw refuse(`this build's plan has no ${name}.`);
   if (!entry.flashPlain.supported) {
     throw refuse(
       `${entry.name} cannot take a decrypted image on this build: ${entry.flashPlain.reason}.`,
@@ -354,11 +355,10 @@ function preparePatch(
   patch: FpsPatch,
   options: Pick<FpsPatchOptions, 'acknowledgeRisk'>,
 ): PreparedPatch {
-  const name = key.toUpperCase();
+  const name = bankWordsOf(key);
   const entry = report.plan.slots.find((candidate) => candidate.key === key);
-  if (entry === undefined) throw refuse(`this build's plan has no bank ${name}.`);
-  if (dumped.key !== key)
-    throw refuse(`the bank read is bank ${dumped.key.toUpperCase()}, not ${name}.`);
+  if (entry === undefined) throw refuse(`this build's plan has no ${name}.`);
+  if (dumped.key !== key) throw refuse(`the bank read is ${bankWordsOf(dumped.key)}, not ${name}.`);
   const plain = dumped.plain;
   if (plain === null) throw refuse(`${entry.name} has no decrypted image to patch.`);
   if (report.state.version === null) {

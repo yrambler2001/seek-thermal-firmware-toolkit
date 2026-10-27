@@ -45,7 +45,7 @@ const REFUSED_BEFORE_PROGRAMMING = [
 ];
 const ERASE_STAGE = [0x00040005, 0x00040006, 0x00040007];
 const MAY_BE_PARTIAL = [
-  0x00040100 /* FLASH_PROGRAM_FAILED on bank A */, 0x00040105 /* FLASH_PROGRAM_FAILED on bank B */,
+  0x00040100 /* FLASH_PROGRAM_FAILED on slot A */, 0x00040105 /* FLASH_PROGRAM_FAILED on slot B */,
   0x00040200 /* FLASH_VERIFY_FAILED */, 0x00012345 /* a status this page does not recognise */,
 ];
 
@@ -95,7 +95,7 @@ function contextFor(device: SeekDevice): WorkflowContext {
 }
 
 const ENTRY = { key: 'b', name: 'slot B', address: BANK_B } as unknown as SlotEntry;
-const WRITE = { subcmd: 9, address: BANK_B, note: 'bank B' } as unknown as WindowEntry;
+const WRITE = { subcmd: 9, address: BANK_B, note: 'slot B' } as unknown as WindowEntry;
 const PAYLOAD = Uint8Array.from({ length: 128 }, (_, i) => i);
 
 /** Runs one commit that the camera answers with `status`; resolves to the error it throws, or null. */
@@ -242,7 +242,7 @@ describe('the preservation commit decodes a status as the slot writer does (prot
     for (const status of ERASE_STAGE) {
       const message = await preservationCommit(status);
       expect(message, `0x${status.toString(16)}`).toContain(
-        'the erase stage failed: nothing was programmed, but the erase may have started, so bank A ' +
+        'the erase stage failed: nothing was programmed, but the erase may have started, so slot A ' +
           'may be partly erased',
       );
       expect(message).not.toContain('partially written');
@@ -251,13 +251,13 @@ describe('the preservation commit decodes a status as the slot writer does (prot
 
   it('says the bank is unchanged for a status returned before programming, and may be partial otherwise', async () => {
     expect(await preservationCommit(0x00070000)).toContain(
-      'refused before programming; bank A is unchanged',
+      'refused before programming; slot A is unchanged',
     );
     expect(await preservationCommit(0x00040100)).toContain(
-      'the program stage failed — bank A may be partially written',
+      'the program stage failed — slot A may be partially written',
     );
     expect(await preservationCommit(null)).toContain(
-      'the status could not be read, so bank A may be partially written',
+      'the status could not be read, so slot A may be partially written',
     );
   });
 

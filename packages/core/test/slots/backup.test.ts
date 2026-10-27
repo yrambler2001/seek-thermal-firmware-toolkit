@@ -279,12 +279,12 @@ describe('the backup zip’s name', () => {
       `seek_backup_<time>_${SERIAL}_v${VERSION}_bank-B_before-copy-from-A.zip`,
     );
     expect(text).toBe(
-      'Before anything is written, Bank B (empty, every byte 0xFF: the zip says so, and the write ' +
+      'Before anything is written, Slot B (empty, every byte 0xFF: the zip says so, and the write ' +
         'overwrites no firmware) is read again and saved in one zip with a note of what each file is: ' +
         `seek_backup_<time>_${SERIAL}_v${VERSION}_bank-B_before-copy-from-A.zip.`,
     );
     expect(backupPlanText(report(), ['b', 'r', 'a'], { kind: 'fps-patch-every-bank' })).toContain(
-      'Recovery bank R (as stored, and decrypted) and Bank A (as stored, and decrypted) are read again',
+      'Recovery R (as stored, and decrypted) and Slot A (as stored, and decrypted) are read again',
     );
   });
 });
@@ -326,7 +326,7 @@ describe('the backup zip’s files', () => {
     expect(text).toContain(`saved at  : ${AT.toISOString()}`);
     expect(text).toContain(`sha256 ${sha256Sync(bankOf(IMAGE_A))}`);
     expect(text).toContain(`sha256 ${sha256Sync(IMAGE_A)}`);
-    expect(text).toContain('Bank B at 0x14060000');
+    expect(text).toContain('Slot B at 0x14060000');
     expect(text).toContain('the bank is empty (every byte read as 0xFF)');
     expect(text).toContain('could not be read');
     expect(text).toContain('the read failed: stall');
@@ -393,7 +393,7 @@ describe('flashSlotWithBackup', () => {
     expect(done.backup.fileName).toBe(
       `seek_backup_${STAMP}_${SERIAL}_v${VERSION}_bank-B_before-flash.zip`,
     );
-    expect(done.backup.text).toContain('"Flash decrypted image" of a.bin into Bank B');
+    expect(done.backup.text).toContain('"Flash decrypted image" of a.bin into Slot B');
     expect(done.written.verified).toBe(true);
   });
 
@@ -476,21 +476,21 @@ describe('planSlotCopy', () => {
     expect(equalBytes(copy.plan.expectedPlain ?? new Uint8Array(0), IMAGE_A)).toBe(true);
     expect(copy.fileName).toMatch(/^seek-slot-a-.+-decrypted\.bin$/);
     expect(copy.plan.notes[0]?.text).toContain(
-      "The image is Bank A's, as the slots read decrypted it",
+      "The image is Slot A's, as the slots read decrypted it",
     );
-    expect(copy.source).toContain('Bank A at 0x14050000');
+    expect(copy.source).toContain('Slot A at 0x14050000');
   });
 
   it('keeps the target’s own warnings: recovery R asks the acknowledgement', () => {
     const copy = planSlotCopy(report(), 'a', 'r');
-    expect(copy.plan.warnings.join('\n')).toMatch(/Recovery bank R/);
+    expect(copy.plan.warnings.join('\n')).toMatch(/Recovery bank R/); // write.ts's words (42.108: left for the merge)
   });
 
   it('refuses a copy onto itself, and a source with no image to copy', () => {
     const rep = report();
     expect(() => planSlotCopy(rep, 'a', 'a')).toThrow(/not copied onto itself/);
-    expect(copySourceRefusal(rep, 'b')).toBe('Bank B is empty: there is no image to copy');
-    expect(() => planSlotCopy(rep, 'b', 'a')).toThrow(/Bank B is empty/);
+    expect(copySourceRefusal(rep, 'b')).toBe('Slot B is empty: there is no image to copy');
+    expect(() => planSlotCopy(rep, 'b', 'a')).toThrow(/Slot B is empty/);
     expect(copySourceRefusal(rep, 'a')).toBeNull();
   });
 });
@@ -608,8 +608,8 @@ describe('restore from a full flash backup', () => {
     other[0x1234] = (other[0x1234] ?? 0) ^ 0xff;
     const check = restoreReadBack(stored, other);
     expect(check).toMatchObject({ equal: false, differing: 1, firstDiffering: 0x1234 });
-    expect(restoreReadBackText(check, 'Bank B')).toBe(
-      "Bank B reads back different from the backup's stored bytes in 1 B (first at +0x1234).",
+    expect(restoreReadBackText(check, 'Slot B')).toBe(
+      "Slot B reads back different from the backup's stored bytes in 1 B (first at +0x1234).",
     );
     expect(restoreReadBack(stored, null).compared).toBe(false);
   });

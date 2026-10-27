@@ -105,13 +105,13 @@ const MODERN_STAGING_NOTE =
   'the bank. The footer is what lets the bootloader take the bank, so a bank short of it is refused.';
 
 const MODERN_GAP_NOTE =
-  'Bank B is 0x14050000 on this line (mode 8). No selector reaches 0x14060000 on any 2.x, 4.x, ' +
+  'Slot B is 0x14050000 on this line (mode 8). No selector reaches 0x14060000 on any 2.x, 4.x, ' +
   '10.x, 42.x or 44.x build (decoded from the 14 post-2018 corpus images), so no ' +
   'bank sits there. The 0x14060000 layout belongs to the locked 0.x/1.x line.';
 
 const MODERN_NAMED_WRITE_NOTE =
   'Named writes (modes 7 to 9) are decoded from the firmware. The emulator suites write A, B ' +
-  'and R through them on the 4.x builds (TESTING.md 42.7, 42.36), and on a camera bank A of a ' +
+  'and R through them on the 4.x builds (TESTING.md 42.7, 42.36), and on a camera slot A of a ' +
   'Compact XR 4.8.2.1 was written through mode 7 by the frame-rate patch (42.24). A slot write ' +
   'never arms mode 0, the upgrade target.';
 
@@ -152,7 +152,7 @@ const EMPTY_PLAIN_WHY =
   'An empty bank takes an image exactly as a used one does. The plaintext chain stages the ' +
   'image bytes as they are, with no key, and the commit erases the block first, so nothing is ' +
   'read from the target bank. Measured on the bench Compact: an image written into an empty ' +
-  'bank B read back identical, and B booted alone (TESTING.md 42.8).';
+  'slot B read back identical, and B booted alone (TESTING.md 42.8).';
 
 const EMPTY_MODERN_WHY =
   'An empty bank takes an image exactly as a used one does. The payload is encrypted under keys ' +

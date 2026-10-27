@@ -65,6 +65,7 @@
  */
 
 import { hexUp, isoStamp, sha256hex } from '../bytes.js';
+import { bankWordsOf } from '../profiles/locked-boot.js';
 import { blockSweepWords } from './words.js';
 import { CancelledError, errorMessage, SeekError } from '../errors.js';
 import type { LogLevel, Reporter } from '../events.js';
@@ -613,10 +614,10 @@ export async function backupWindows(
         throw new SeekError(
           'pipeline/refused',
           spentReaderRefusal(
-            `the sweep's boot-config block (${hexUp(0x14010000, 8)}) and bank A ` +
+            `the sweep's boot-config block (${hexUp(0x14010000, 8)}) and slot A ` +
               `(${hexUp(bankAAddress, 8)}) both served entirely unprogrammed 0xFF fill, and ` +
-              'bank A’s re-armed read agreed — a running camera cannot hold both (a blank ' +
-              'record is what makes the bootloader boot bank A, so bank A must then hold the ' +
+              'slot A’s re-armed read agreed — a running camera cannot hold both (a blank ' +
+              'record is what makes the bootloader boot slot A, so slot A must then hold the ' +
               'running image), so the reader is serving blank and every window so far is ' +
               'fill, not flash content',
           ),
@@ -742,7 +743,7 @@ export async function commitToBank(
      * nothing programmed, and only the program and verify stages (or no status) may leave a partial image. */
     throw new Error(
       `${label}: CompleteMemoryUpgrade returned ` +
-        `${status === null ? 'no status' : hexUp(status)} (${commitStatusMeaning(status, `bank ${bank.toUpperCase()}`)})`,
+        `${status === null ? 'no status' : hexUp(status)} (${commitStatusMeaning(status, bankWordsOf(bank))})`,
     );
   }
   return { chunks, sum16: checksum, status, ms };
@@ -1248,7 +1249,7 @@ export async function runPreservationPipeline(
     const capture = store.get(preserveCaptureFile(key));
     const plain = store.get(preservePlainFile(key));
     if (capture === undefined || plain === undefined) {
-      throw new Error(`the backup step produced no capture or plaintext for bank ${key}`);
+      throw new Error(`the backup step produced no capture or plaintext for ${bankWordsOf(key)}`);
     }
     captures.set(key, capture);
     plains.set(key, plain);

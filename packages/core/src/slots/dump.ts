@@ -1,5 +1,6 @@
 /* OWNER: reader agent. See ./types.ts. */
 import { hex, hexUp, sha256hex, viewOf } from '../bytes.js';
+import { bankWordsOf } from '../profiles/locked-boot.js';
 import { decryptImage } from '../crypto/cipher.js';
 import { keyCheckText, keyConfidencePhrase } from '../crypto/confidence-words.js';
 import { findEmbeddedKeyTable, keyFilenameSuffix, type KeyPair } from '../crypto/keys.js';
@@ -101,7 +102,7 @@ export async function dumpSlot(
   }
   const entry = report.plan.slots.find((slot) => slot.key === key);
   if (entry === undefined) {
-    throw refuse(`refusing to dump slot ${key}: this build's plan has no such slot`);
+    throw refuse(`refusing to dump ${bankWordsOf(key)}: this build's plan has no such bank`);
   }
   /* Both refusals come BEFORE any transfer: an unsupported dump is a statement
    * about the build, and sending anything to find that out would be pointless. */
