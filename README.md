@@ -100,8 +100,8 @@ Read the steps once before you start, use a computer on mains power, and keep th
    [the preservation run](#back-up-a-0x1x-camera-the-preservation-run). Keep its last run file.
 2. On **Info**, press **Read firmware version**: the firmware is 1.3.0.0.
 3. On **Work with firmware slots**, press **Read slots**. Each bank that holds 1.3.0.0 has **Make 32 FPS**.
-4. Press **Make 32 FPS in every bank**, read the plan, tick the box and press **Yes — patch 3 banks** (the
-   number is how many banks offer it; [what happens](#what-make-n-fps-in-every-bank-does)).
+4. Press **Make 32 FPS in every bank**, read the plan, tick the box and press **Yes — patch … banks** (the
+   number is how many banks offer the patch: 2 in the picture below, where slot B is empty; [what happens](#what-make-n-fps-in-every-bank-does)).
 5. Unplug the camera and plug it back in. Press **Read slots** again, then watch it in the Seek app.
 
 ```sh

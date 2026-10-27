@@ -32,6 +32,7 @@ the same things. It now covers the 2014 to 2017 cameras as well as the 2018-and-
   refused, is now read, decrypted and written.
 - **Dump & decrypt 0.x/1.x 2014/2016** (`seek-fw preserve`): a guided full-flash preservation run for
   sixteen builds of the 2014 to 2017 line, in six steps: backup, patch, write, drain, restore and
+  verify. The page groups them into three: read and build, write and whole-flash read, restore and
   verify. The steps that write ask first. The backup reads every bank twice and compares the reads. A
   run file saved after every step lets a run resume.
 - **Work with firmware slots** (`seek-fw slots`): list, dump, write, copy and restore one bank (Slot
