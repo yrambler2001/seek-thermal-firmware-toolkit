@@ -10,5 +10,8 @@ export default defineConfig({
     environment: 'jsdom',
     include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
     setupFiles: ['./src/test-setup.ts'],
+    /* CSS imports are empty under test, except a `?raw` import: index-html.test.ts
+     * reads the dark tokens out of styles.css to check the favicon's colours. */
+    css: { include: [/\.css\?raw$/] },
   },
 });

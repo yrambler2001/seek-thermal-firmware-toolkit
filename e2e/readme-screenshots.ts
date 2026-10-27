@@ -21,8 +21,9 @@
  * `/Users/` path; it checks again after the capture. No serial is written in
  * this file: the cameras are named by family, date and build only.
  *
- * Light theme, a 1280 px wide viewport at 1x (the phone shot: 412 px), cropped to the
- * page's column or the dialog. A shot over 250 KB is captured again at a smaller scale
+ * Light theme (the emulated system is light, and a choice made with the header's light/dark
+ * switch is forgotten first), a 1280 px wide viewport at 1x (the phone shot: 412 px), cropped
+ * to the page's column or the dialog. A shot over 250 KB is captured again at a smaller scale
  * (0.9, 0.8, ...) of the same layout until it fits; the log says which scale each got. The
  * PNG is then compressed to AVIF with ImageMagick (`magick <png> -strip -quality 45 -define
  * heic:speed=2 <avif>`), so `magick` must be on the PATH.
@@ -56,6 +57,8 @@ try {
 }
 
 const OUT = path.join(REPO_ROOT, '.github', 'readme');
+/** Where the header's light/dark switch keeps a choice (packages/web/src/lib/theme.ts). */
+const THEME_KEY = 'seek-fw:theme';
 const WIDTH = 1280;
 const HEIGHT = 900;
 /** A phone's width (a common Android one); width only, so the page keeps its camera. */
@@ -239,6 +242,20 @@ const SCALES = [1, 0.9, 0.8, 0.75, 0.7];
 /** Light theme, the given width at 1x, no scrollbar, and a viewport tall enough to hold the whole document. */
 async function fitViewport(page: Page, width: number, minHeight: number): Promise<void> {
   await page.emulateMediaFeatures([{ name: 'prefers-color-scheme', value: 'light' }]);
+  /* The page follows the system unless its header switch chose a theme. Forget any choice and
+   * tell the page so (the storage event is how it hears of a choice made in another tab), so it
+   * follows the light system; then the capture waits for the light theme on <html>. */
+  await page.evaluate((key: string) => {
+    try {
+      localStorage.removeItem(key);
+    } catch {
+      /* No storage, so no choice is kept. */
+    }
+    window.dispatchEvent(new StorageEvent('storage', { key, newValue: null }));
+  }, THEME_KEY);
+  await page.waitForFunction(() => document.documentElement.dataset.theme === 'light', {
+    timeout: 5000,
+  });
   /* No scrollbar: the capture lays the page out without one, so the clip is measured that way too. */
   await page.evaluate(() => {
     if (document.getElementById('readme-shots-no-scrollbar') !== null) return;

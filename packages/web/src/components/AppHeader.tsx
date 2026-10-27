@@ -1,5 +1,5 @@
 /**
- * The masthead and the tab switch.
+ * The masthead (the name, the camera status, the light/dark switch) and the tab switch.
  *
  * The five tabs are real URLs (`#/`, `#/preserve`, `#/v4`, `#/decrypt`,
  * `#/slots`), so the switch is five real links carrying `aria-current="page"` —
@@ -10,6 +10,7 @@ import type { ReactElement } from 'react';
 import { Archive, FileKey2, Info, Layers, Radar, Thermometer } from 'lucide-react';
 import { ROUTE_HREF, ROUTE_LABEL, ROUTES, type Route } from '@/lib/routing';
 import { cn } from '@/lib/utils';
+import { ThemeSwitch } from './ThemeSwitch';
 
 export interface AppHeaderProps {
   readonly route: Route;
@@ -61,18 +62,21 @@ export function AppHeader({ route, connected, canUseUsb }: AppHeaderProps): Reac
             <Thermometer className="size-5" />
           </span>
           <h1 className="text-[1.15rem] leading-tight font-semibold tracking-tight">
-            Seek Thermal Firmware Dump
+            Seek Thermal Firmware Toolkit
           </h1>
-          <span className="ms-auto inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-2.5 py-1 text-[0.72rem] font-medium text-muted-foreground">
-            <span
-              aria-hidden="true"
-              className={cn(
-                'size-1.5 rounded-full',
-                connected ? 'bg-ok' : canUseUsb ? 'bg-muted-foreground/60' : 'bg-warn',
-              )}
-            />
-            {connected ? 'Camera selected' : canUseUsb ? 'No camera selected' : 'USB unavailable'}
-          </span>
+          <div className="ms-auto flex items-center gap-2">
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-2.5 py-1 text-[0.72rem] font-medium text-muted-foreground">
+              <span
+                aria-hidden="true"
+                className={cn(
+                  'size-1.5 rounded-full',
+                  connected ? 'bg-ok' : canUseUsb ? 'bg-muted-foreground/60' : 'bg-warn',
+                )}
+              />
+              {connected ? 'Camera selected' : canUseUsb ? 'No camera selected' : 'USB unavailable'}
+            </span>
+            <ThemeSwitch />
+          </div>
         </div>
 
         <nav aria-label="Tabs" className="-mb-px flex flex-wrap gap-1 pt-4">
