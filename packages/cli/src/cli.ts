@@ -118,11 +118,6 @@ export interface SlotFlags {
   readonly verify: boolean;
   /** `--dry-run`: build and print the flash plan, send nothing to the bank. */
   readonly dryRun: boolean;
-  /**
-   * `--running-16hz`: say the camera runs the 16 Hz FF 1.3.0.8 build. Read only when the camera's own
-   * answers cannot say which build it runs; a wrong choice is refused by the camera before programming.
-   */
-  readonly running16Hz: boolean;
   /** `--write` (`slots patch-fps` only): send the patch. Without it the command is a dry run. */
   readonly write?: boolean;
   /** `--dump-dir <dir>` (`slots patch-fps`): where the pre-patch dump is saved before a write. */
@@ -178,7 +173,6 @@ const FLAG_COMMANDS: Readonly<Record<string, readonly CommandName[]>> = {
   'acknowledge-risk': ['slots'],
   verify: ['slots'],
   'dry-run': ['slots'],
-  'running-16hz': ['slots'],
   write: ['slots'],
   'dump-dir': ['slots'],
 };
@@ -287,7 +281,6 @@ export function parseCli(argv: readonly string[]): ParsedCli {
         'acknowledge-risk': { type: 'boolean', default: false },
         verify: { type: 'boolean', default: true },
         'dry-run': { type: 'boolean', default: false },
-        'running-16hz': { type: 'boolean', default: false },
         write: { type: 'boolean', default: false },
         'dump-dir': { type: 'string' },
         help: { type: 'boolean', short: 'h', default: false },
@@ -400,7 +393,6 @@ export function parseCli(argv: readonly string[]): ParsedCli {
       acknowledgeRisk: values['acknowledge-risk'],
       verify: values.verify,
       dryRun: values['dry-run'],
-      running16Hz: values['running-16hz'],
       write: values.write,
       dumpDir: values['dump-dir'] ?? null,
     },

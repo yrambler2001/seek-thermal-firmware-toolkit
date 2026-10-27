@@ -115,9 +115,9 @@ const SEEK_HINTS: Partial<Record<SeekErrorCode, string>> = {
     'The image does not carry the key pair its filename claims. Use the decrypted file exactly ' +
     'as `seek-fw decrypt` or `seek-fw slots dump` wrote it, name and all.',
   'flash/refused': 'Nothing was written to the camera.',
-  'flash/commit':
-    'The commit was rejected. The camera checks the transfer checksum before it erases ' +
-    'anything, so a rejected commit leaves the flash untouched.',
+  /* 'flash/commit' has no hint: its message says what the commit did to the bank (a refusal before anything
+   * was written, an erase that may have started, or a bank that may be partly written) and that the backup
+   * saved before the write is kept. The old hint said every rejected commit left the flash untouched. */
   'profile/unsupported':
     'Override detection with --profile <id> only if you know which family the camera is; ' +
     '`seek-fw info --profiles` lists them.',

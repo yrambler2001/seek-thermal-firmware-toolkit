@@ -321,9 +321,6 @@ a note of what each file is. The write waits for the zip to be on disk.
                          is sent
   --no-verify            flash, copy, restore, patch-fps: skip the read-back after the commit
   --dry-run              flash, copy, restore: print the plan and send nothing to the bank
-  --running-16hz         flash, copy, restore: say the camera runs the 16 Hz FF 1.3.0.8 build;
-                         used only when its own answers cannot say which build runs. A wrong
-                         choice is refused by the camera (0x70100) before anything is programmed
   --yes                  flash, copy, restore, patch-fps --write: skip the confirmation
                          (required when stdin is not a tty)
   --profile <id>         act under this family instead of the one the camera answers for

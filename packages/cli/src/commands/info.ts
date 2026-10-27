@@ -349,12 +349,7 @@ function runningRows(state: DeviceState): [string, string][] {
   if (state.version !== '1.3.0.8') return [];
   const run = runningApplicationOf(state);
   if (run.build === null) {
-    return [
-      [
-        'running',
-        `not known: ${run.why}. A 16 Hz FF image needs --running-16hz to say the camera runs that build`,
-      ],
-    ];
+    return [['running', `not known: ${run.why}`]];
   }
   const build = run.build === 'ff-1308' ? 'the 16 Hz FF 1.3.0.8 build' : 'the 8 Hz 1.3.0.8 build';
   return [['running', `${build}: ${run.why}`]];

@@ -49,7 +49,14 @@ import {
   type UsbBackend,
 } from '@seek-fw/core';
 import { parseCli, run, type CommandContext } from '../src/cli.js';
-import { CliError, EXIT_FAILED, EXIT_OK, EXIT_USAGE, UsageError } from '../src/errors.js';
+import {
+  CliError,
+  describeError,
+  EXIT_FAILED,
+  EXIT_OK,
+  EXIT_USAGE,
+  UsageError,
+} from '../src/errors.js';
 import {
   bootLines,
   bootRisk,
@@ -105,7 +112,6 @@ const NO_FLAGS = {
   acknowledgeRisk: false,
   verify: true,
   dryRun: false,
-  running16Hz: false,
 } as const;
 
 function slotEntry(key: SlotKey, overrides: Partial<SlotEntry> = {}): SlotEntry {
@@ -520,7 +526,6 @@ describe('parseSlotsArgs', () => {
       acknowledgeRisk: false,
       verify: true,
       dryRun: false,
-      running16Hz: false,
     };
     expect(parseSlotsArgs(['flash', 'b', 'x.bin'], raw)).toMatchObject({ kind: 'raw' });
     expect(parseSlotsArgs(['flash', 'b', 'x.bin'], NO_FLAGS)).toMatchObject({ kind: 'plain' });
@@ -542,18 +547,9 @@ describe('parseSlotsArgs', () => {
   });
 
   it.each([
-    [
-      ['list'],
-      { raw: true, acknowledgeRisk: false, verify: true, dryRun: false, running16Hz: false },
-    ],
-    [
-      ['list'],
-      { raw: false, acknowledgeRisk: true, verify: true, dryRun: false, running16Hz: false },
-    ],
-    [
-      ['dump', 'a'],
-      { raw: false, acknowledgeRisk: false, verify: false, dryRun: false, running16Hz: false },
-    ],
+    [['list'], { raw: true, acknowledgeRisk: false, verify: true, dryRun: false }],
+    [['list'], { raw: false, acknowledgeRisk: true, verify: true, dryRun: false }],
+    [['dump', 'a'], { raw: false, acknowledgeRisk: false, verify: false, dryRun: false }],
   ])('refuses the flash-only flags on %j', (args, flags) => {
     expect(() => parseSlotsArgs(args, flags)).toThrow(/applies only to 'slots flash'/);
   });
@@ -585,7 +581,6 @@ describe('parseCli for slots', () => {
         acknowledgeRisk: true,
         verify: false,
         dryRun: false,
-        running16Hz: false,
       },
     });
     if (parsed.kind !== 'run') throw new Error('expected a run');
@@ -600,11 +595,16 @@ describe('parseCli for slots', () => {
       acknowledgeRisk: false,
       verify: true,
       dryRun: false,
-      running16Hz: false,
       write: false,
       dumpDir: null,
     });
     expect(parsed.args).toEqual(['list']);
+  });
+
+  it('has no --running-16hz: the FF image’s outcome on each build is a warning, not a statement asked for (42.107)', () => {
+    expect(() => parseCli(['slots', 'flash', 'b', 'ff.bin', '--running-16hz'])).toThrow(
+      /Unknown option/,
+    );
   });
 
   it('takes --out for a dump', () => {
@@ -863,13 +863,13 @@ describe('the flash plan and read-back', () => {
     expect(text).not.toContain('Notes');
   });
 
-  it('says the 1.3.0.8 FF image is staged as the vendor app stages it, stored under Key B, and who said the build', () => {
+  it('says the 1.3.0.8 FF image is staged as the vendor app stages it, stored under Key B, and the outcome in warnings', () => {
     const plan: SlotFlashPlan = {
       ...fakePlan('r', 'plain', new Uint8Array(0x6000)),
       staging: 'key-a-keystream',
       storedForm: 'key-b-ciphertext',
       expectedStored: new Uint8Array(0x10000),
-      ffRunning: 'user',
+      ffCommit: 'build-unknown',
       warnings: ['UNTESTED: the boot of the written bank is not measured'],
     };
     const text = flashPlanLines(plan, 'ff.bin', 'feedface', false).join('\n');
@@ -880,7 +880,8 @@ describe('the flash plan and read-back', () => {
     /* Said once: the image row says what the file is, the staging row how it is sent. */
     expect(text.match(/vendor app/g)).toHaveLength(1);
     expect(text).not.toContain('key-a-keystream');
-    expect(text).toMatch(/running build\s+your word \(--running-16hz\)/);
+    /* The outcome is in the warnings, as on the page: no row says how the running build was decided. */
+    expect(text).not.toMatch(/running build|--running-16hz/);
     expect(text).not.toContain('encrypted for this bank');
     expect(text).toContain('sha256 feedface');
     expect(text).toContain('! UNTESTED: the boot of the written bank is not measured');
@@ -1201,29 +1202,44 @@ describe('slots command', () => {
     expect(log.flashed).toEqual([]);
   });
 
-  /* The fake stands for a refusal core does make (write.ts ffRunningRefusal). Before 42.82 it said the FF
-   * image goes to R only, which core stopped saying in 42.12 (A, B and R take it). */
-  it('shows a core refusal of the FF image (the camera runs the 8 Hz build), and writes nothing', async () => {
-    const { ops, log } = fakeOps(reportOf({ booted: 'a' }));
+  /* TESTING.md 42.107: the camera refuses a write at commit (the 1.3.0.8 FF image on the 8 Hz build is planned
+   * to expect it). The fake throws core's words for it (write-commit.ts commitRefusal, write.ts withBackupKept)
+   * after the backup was saved: the CLI shows them, keeps the zip, and adds no hint that contradicts them. */
+  it('a commit the camera refuses: says it refused, nothing was written, the backup is kept, and no false hint', async () => {
+    const { ops, log } = fakeOps(reportOf({ booted: 'a' }), { save: true });
+    const refusedAtCommit =
+      'the camera refused the write to bank B at commit with 0x00070100: the image was refused by its ' +
+      'acceptance check before anything was erased (the check depends on the build). Nothing was written; ' +
+      'the bank is unchanged. Read the banks again before doing anything else. The backup saved before ' +
+      'the write is kept: it holds the bank as it was.';
     const refusing: SlotOps = {
       ...ops,
-      prepare: () => {
-        throw new SeekError(
-          'slots/refused',
-          'this is the 1.3.0.8 FF (16 Hz) image, but the camera runs the 8 Hz 1.3.0.8 application. Nothing was sent.',
-        );
+      write: async (ctx, report, plan, options) => {
+        await ops.write(ctx, report, plan, options);
+        throw new SeekError('flash/commit', refusedAtCommit, {
+          deviceCode: 0x70100,
+          detail: { dropAnalysis: true, backupKept: true },
+        });
       },
     };
-    await writeFile(join(temp.path, 'ff.bin'), new Uint8Array(0x100).fill(7));
+    const image = join(temp.path, 'ff.bin');
+    await writeFile(image, new Uint8Array(0x100).fill(7));
+    const dir = join(temp.path, 'kept');
     const test = cameraIo();
     const error = await slotsCommandWith(refusing)(
-      contextFor(['slots', 'flash', 'b', join(temp.path, 'ff.bin'), '--yes', '--no-probe'], test),
+      contextFor(['slots', 'flash', 'b', image, '--dump-dir', dir, '--yes', '--no-probe'], test),
     ).catch((caught: unknown) => caught);
     expect(error).toBeInstanceOf(SeekError);
-    expect((error as SeekError).code).toBe('slots/refused');
-    expect((error as SeekError).message).toContain('the camera runs the 8 Hz 1.3.0.8 application');
-    expect(log.flashed).toEqual([]);
-    expect(test.stdout.text).not.toContain('Slot flash plan');
+    const described = describeError(error);
+    expect(described.code).toBe('flash/commit');
+    expect(described.message).toBe(refusedAtCommit);
+    expect(described.hint).toBeUndefined();
+    expect(described.exitCode).not.toBe(EXIT_OK);
+    /* The zip is on disk, and the log said where before the write was sent. */
+    const name = backupOf(['b'], { kind: 'flash', input: 'plain', fileName: 'ff.bin' }).fileName;
+    expect(await readdir(dir)).toEqual([name]);
+    expect(test.stdout.text + test.stderr.text).toContain(`saved first: ${join(dir, name)}`);
+    expect(log.saved).toHaveLength(1);
   });
 
   it('asks before writing, and writes nothing when the answer is no', async () => {
@@ -1421,7 +1437,6 @@ describe('slots through run()', () => {
         acknowledgeRisk: false,
         verify: true,
         dryRun: true,
-        running16Hz: false,
       }),
     ).toThrow(/--dry-run/);
   });
