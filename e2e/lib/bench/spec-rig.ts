@@ -73,6 +73,8 @@ export interface PageWrite {
   readonly confirmOn: boolean;
   /** The page's verdict panel ("Slot B — ...: the bank reads back as written."), or null. */
   readonly outcome: string | null;
+  /** The slots run's log tail when the write did not reach "Written" (`write` with `expectWritten` false), else ''. */
+  readonly log: string;
 }
 
 /** What the page said when it refused an image at its picker (nothing was sent). */
@@ -101,9 +103,15 @@ export interface BenchPage {
   /**
    * Picks `image` for `letter`, confirms the write, and returns the page's
    * verdict. Throws when the page does not reach "Written", or when its
-   * acknowledgement prompt is not what `acknowledge` expects (nothing is sent).
+   * acknowledgement prompt is not what `acknowledge` expects (nothing is sent). With `expectWritten`
+   * false, a write that ends otherwise ("Failed — …") is returned with its log, not thrown (TESTING.md 42.109).
    */
-  write(letter: BankLetter, image: PageImage, acknowledge: boolean): Promise<PageWrite>;
+  write(
+    letter: BankLetter,
+    image: PageImage,
+    acknowledge: boolean,
+    expectWritten?: boolean,
+  ): Promise<PageWrite>;
   /**
    * Presses "Copy to <bank>" on the booted bank's row (or on the first other bank that offers it),
    * confirms the write, and returns the page's verdict, as `write` does. The image is the page's own:

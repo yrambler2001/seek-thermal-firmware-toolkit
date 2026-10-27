@@ -565,6 +565,7 @@ export function createFakeRig(options: {
           dialog: '',
           readFirst: '',
           confirmOn: !ackShown,
+          log: '',
           outcome: `Slot ${upper} — ${image.name}: ${verdict}\nNOW UNPLUG AND REPLUG THE CAMERA.`,
         };
       },
@@ -587,6 +588,7 @@ export function createFakeRig(options: {
           dialog: '',
           readFirst: '',
           confirmOn: !ackShown,
+          log: '',
           outcome: `Slot ${upper} — the image of bank ${source.toUpperCase()}: the bank reads back as written.\nNOW UNPLUG AND REPLUG THE CAMERA.`,
         };
       },

@@ -75,6 +75,13 @@ const KEEP = process.env.SEEK_E2E_KEEP === '1';
  * reads the plan's image-build warning (TESTING.md 42.104) on the page before Yes.
  */
 const OTHER_BUILD = process.env.SEEK_E2E_OTHER_BUILD ?? '';
+/**
+ * Opt-in (off by default; TESTING.md 42.109): the path of the 1.3.0.8 FF (16 Hz) image (the plain corpus image,
+ * 49,308 B). When set, part B writes it into bank B of the 1.3.0.0 camera (TESTING.md 42.107 case (a)): the plan
+ * warns of the version and that the camera is expected to refuse the write at commit; the step records what the
+ * camera answered and checks, with the J-Link, that bank B is what it was before.
+ */
+const FF_IMAGE = process.env.SEEK_E2E_FF_IMAGE ?? '';
 
 const FLASH_BASE = 0x14000000;
 const FLASH_BYTES = 0x400000;
@@ -741,6 +748,65 @@ describe.skipIf(!RUNNABLE)('the web app pages on the bench camera (1.3.0.0, real
           'the rest of bank B is erased',
         ).toBe(true);
         say(`other build ${version}: bank B sha256 ${sha256(flash)} (image ${sha256(image)})`);
+      },
+      RUN_TIMEOUT_MS,
+    );
+
+    it.skipIf(FF_IMAGE === '')(
+      'opt-in: the 1.3.0.8 FF image into bank B of the 1.3.0.0 camera: the version and the commit warnings before Yes, then the camera answers, and the J-Link reads bank B unchanged',
+      async () => {
+        const image = new Uint8Array(readFileSync(FF_IMAGE));
+        const version = Array.from(image.subarray(0x20c, 0x210)).join('.');
+        expect(version, 'the opt-in image is the 1.3.0.8 FF image').toBe('1.3.0.8');
+        const before = await haltedRead(BANK_ADDRESS.b, BANK_BYTES);
+        say(`FF image: bank B before, sha256 ${sha256(before)}`);
+        const written = await need().write(
+          'b',
+          { name: path.basename(FF_IMAGE), bytes: image },
+          false,
+          false,
+        );
+        say(`FF image: read before writing: ${JSON.stringify(written.readFirst)}`);
+        say(`FF image: write dialog: ${JSON.stringify(written.dialog)}`);
+        say(
+          `FF image: Yes pressable: ${String(written.confirmOn)}; ended: ${JSON.stringify(written.status)}`,
+        );
+        say(`FF image: outcome: ${JSON.stringify(written.outcome)}`);
+        say(`FF image: log: ${JSON.stringify(written.log)}`);
+        const after = await haltedRead(BANK_ADDRESS.b, BANK_BYTES);
+        say(
+          `FF image: bank B after, sha256 ${sha256(after)} (${sameBytes(before, after) ? 'unchanged' : 'CHANGED'})`,
+        );
+        const listed = written.readFirst
+          .split('\n')
+          .map((line) => line.trim())
+          .filter((line) => line !== '');
+        expect(listed[0], 'the page shows "Read before writing"').toBe('Read before writing:');
+        expect(
+          listed[1]?.startsWith('This image is firmware 1.3.0.8; the camera runs 1.3.0.0.'),
+          'the version warning is the first warning',
+        ).toBe(true);
+        const commitWarning = listed.find((line) =>
+          line.includes(
+            'expected to refuse this write at commit with 0x00070100 before it writes anything',
+          ),
+        );
+        expect(
+          commitWarning,
+          'the page says the camera is expected to refuse the write at commit',
+        ).toBeDefined();
+        expect(written.dialog, 'the dialog says the version warning').toContain(listed[1]);
+        expect(written.dialog, 'the dialog says the commit warning').toContain(commitWarning);
+        expect(written.confirmOn, 'Yes is not held back by the warnings').toBe(true);
+        expect(written.status, 'the page reports the refused commit').toMatch(/^Failed/);
+        expect(written.log, 'the log names the status').toContain('0x00070100');
+        expect(written.log, 'the log says nothing was written').toContain(
+          'Nothing was written; the bank is unchanged.',
+        );
+        expect(written.log, 'the log says the backup is kept').toContain(
+          'The backup saved before the write is kept',
+        );
+        expect(sameBytes(before, after), 'the J-Link reads bank B as it was before').toBe(true);
       },
       RUN_TIMEOUT_MS,
     );
