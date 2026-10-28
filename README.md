@@ -52,7 +52,7 @@ The Seek Thermal app for Android draws the picture at a constant 15 fps, whateve
 
 To patch a camera with a Lightning connector (the iPhone model), plug it into the computer or an Android phone through a Lightning to USB-C adapter: see [this post](https://4pda.to/forum/index.php?showtopic=851614&view=findpost&p=141878777) and [this one](https://4pda.to/forum/index.php?showtopic=851614&view=findpost&p=141892858).
 
-There will be no frame-rate patch for cameras with the LPC43S30FET100 processor, a CPU with AES built in whose firmware is AES-encrypted: there is currently no known way to decrypt that firmware.
+There will be no frame-rate patch for cameras with the LPC43S30FET100 processor, a CPU with AES built in whose firmware is AES-encrypted: there is currently no known way to decrypt that firmware. AES is mostly used on Mosaic and HTI cameras.
 
 "Write a bank" is the Work with firmware slots tab, on every build from 0.8.0.0. The details per build are in [HOW_IT_WORKS.md](HOW_IT_WORKS.md#which-cameras) and [PRESERVATION.md](PRESERVATION.md#the-supported-builds).
 
