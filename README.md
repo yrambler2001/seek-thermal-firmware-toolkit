@@ -43,6 +43,7 @@ The **Info** tab tells you which firmware a camera runs and which tab reads it.
     <tr><td>Nano 300</td><td>yes, Dump &amp; decrypt 4.x/Nano</td><td>yes</td><td>yes</td><td>✅ already 27 fps</td></tr>
     <tr><th colspan="5" align="left">Mosaic</th></tr>
     <tr><td>Mosaic</td><td>yes, Dump &amp; decrypt 4.x/Nano</td><td>yes</td><td>yes</td><td>❌ no patch yet</td></tr>
+    <tr><td>Seek Scan</td><td>yes, Dump &amp; decrypt 4.x/Nano</td><td>yes</td><td>not tested</td><td>❌ AES encrypted</td></tr>
   </tbody>
 </table>
 
