@@ -101,7 +101,50 @@ Read the steps once before you start, use a computer on mains power, and keep th
 
 ### Compact 1.3.0.0 → 32 fps
 
-<!-- VIDEO Compact 1.3.0.0: paste the GitHub upload link here, on its own line -->
+<details>
+<summary>Video: Compact 1.3.0.0, 8 → 32 → 8 fps</summary>
+
+The video: the whole-flash backup, **Make 32 FPS** on slot A, then recovery R copied back to slot A. The preview window's title shows the frame rate: 8, then 32, then 8 fps again.
+
+https://github.com/user-attachments/assets/008b7710-6bd9-4ebc-be95-d6ddce9901f4
+
+<details>
+<summary>Timeline</summary>
+
+- 00:00 8 fps: baseline
+- 00:18 Connect the camera to the page
+- 00:22 Read the firmware version
+
+**Dumping**
+
+- 00:27 Go to the **Dump & decrypt 0.x/1.x 2014/2016** tab
+- 00:29 Press **Start read & build**
+- 01:20 Press **Start write & whole-flash read**
+- 01:26 Press **Connect device**
+- 02:57 The dump is downloaded
+- 03:09 Press **Start restore & verify**
+- 03:15 Press **Connect device**
+
+**Patching**
+
+- 04:04 Go to the **Work with firmware slots** tab
+- 04:06 Press **Read slots**
+- 04:11 Find the booted slot and press its **Make 32 FPS**. On 1.x firmware the bootloader can switch the active slot to recovery R even on the original firmware, when the camera is reconnected to a phone's power several times while it boots, so recovery R can be the active slot on some 1.x cameras.
+- 04:26 Unplug the camera and plug it back in
+- 04:34 32 fps: patched
+
+**Restoring by flashing the image from another slot**
+
+- 04:45 Connect the camera to the page
+- 04:49 Press **Read slots**
+- 04:56 Find the slot you want to copy and press its **Copy to slot …** (recovery R to slot A in the video)
+- 04:59 Press **Write to Slot A…**
+- 05:10 Unplug the camera and plug it back in
+- 05:20 8 fps: restored
+
+</details>
+
+</details>
 
 1. **Back up the whole flash** on **Dump & decrypt 0.x/1.x 2014/2016**: [the preservation run](#back-up-a-0x1x-camera-the-preservation-run). Keep its last run file.
 2. On **Info**, press **Read firmware version**: the firmware is 1.3.0.0.
@@ -124,7 +167,87 @@ seek-fw slots list                         # 5: after the unplug and replug
 
 ### Compact PRO 4.9.2.0 → 18 fps
 
-<!-- VIDEO Compact PRO 4.9.2.0: paste the GitHub upload link here, on its own line -->
+<details>
+<summary>Video: Compact PRO 4.9.2.0, 9 → 18 → 9 fps</summary>
+
+The video: the whole-flash dump, **Make 18 FPS** on slot A, then recovery R copied back to slot A. The preview window's title shows the frame rate: 9, then 18, then 9 fps again. Two waits for the camera to restart are cut out.
+
+https://github.com/user-attachments/assets/1360c7c6-d4eb-440c-997b-91b50668b74a
+
+<details>
+<summary>Timeline</summary>
+
+- 00:00 9 fps: baseline
+- 00:11 Connect the camera to the page
+- 00:16 Read the firmware version
+
+**Dumping**
+
+- 00:20 Go to the **Dump & decrypt 4.x/Nano** tab
+- 00:23 Press **Start dump**
+- 01:07 The dump is downloaded
+
+**Patching**
+
+- 01:19 Go to the **Work with firmware slots** tab
+- 01:22 Press **Read slots**
+- 01:25 Find the booted slot and press its **Make 18 FPS**.
+- 01:42 Unplug the camera and plug it back in
+- 01:57 18 fps: patched
+
+**Restoring by flashing the image from another slot**
+
+- 02:09 Connect the camera to the page
+- 02:09 Press **Read slots**
+- 02:16 Find the slot you want to copy and press its **Copy to slot …** (recovery R to slot A in the video)
+- 02:19 Press **Write to Slot A…**
+- 02:30 Unplug the camera and plug it back in
+- 02:41 9 fps: restored
+
+</details>
+
+</details>
+
+<details>
+<summary>Video: Compact PRO 4.9.1.15, 9 → 18 → 9 fps</summary>
+
+The video: the whole-flash dump, **Make 18 FPS** on slot A, then recovery R copied back to slot A. The preview window's title shows the frame rate: 9, then 18, then 9 fps again.
+
+https://github.com/user-attachments/assets/96c10fa0-8efa-4740-90de-3be0fe72bd0e
+
+<details>
+<summary>Timeline</summary>
+
+- 00:00 9 fps: baseline
+- 00:11 Connect the camera to the page
+- 00:13 Read the firmware version
+
+**Dumping**
+
+- 00:20 Go to the **Dump & decrypt 4.x/Nano** tab
+- 00:23 Press **Start dump**
+- 01:07 The dump is downloaded
+
+**Patching**
+
+- 01:19 Go to the **Work with firmware slots** tab
+- 01:22 Press **Read slots**
+- 01:27 Find the booted slot and press its **Make 18 FPS**.
+- 01:42 Unplug the camera and plug it back in
+- 01:57 18 fps: patched
+
+**Restoring by flashing the image from another slot**
+
+- 02:07 Connect the camera to the page
+- 02:10 Press **Read slots**
+- 02:17 Find the slot you want to copy and press its **Copy to slot …** (recovery R to slot A in the video)
+- 02:19 Press **Write to Slot A…**
+- 02:34 Unplug the camera and plug it back in
+- 02:48 9 fps: restored
+
+</details>
+
+</details>
 
 1. **Back up the whole flash** on **Dump & decrypt 4.x/Nano**: press **Connect device**, pick the camera and press **Start dump**. It only reads. Keep the zip it downloads: it holds the 4 MiB flash image (`flash_dump_original.bin`) and the decrypted firmware, and to undo you can pick the zip itself in **Restore from full flash backup (.bin or .zip)…**. The one block no request reaches, `0x14060000`, holds no bank on this camera ([why it costs nothing](HOW_IT_WORKS.md#known-limitation-the-0x14060000-gap-on-4x-and-nano)).
 2. On **Info**, press **Read firmware version**: the firmware is 4.9.2.0.
@@ -132,11 +255,99 @@ seek-fw slots list                         # 5: after the unplug and replug
 4. Press **Make 18 FPS in every bank**, read the plan, tick the box and press **Yes — patch … banks**.
 5. Unplug the camera and plug it back in. Press **Read slots** again, then watch it in the Seek app.
 
-The commands are those of the Compact 1.3.0.0, with `seek-fw dump --zip ./camera-flash.zip` as step 1. The 18 fps patch of 4.9.2.0 has not been measured on a camera yet; 4.9.1.15 measured 17.70 fps.
+The commands are those of the Compact 1.3.0.0, with `seek-fw dump --zip ./camera-flash.zip` as step 1. On a camera, 4.9.2.0 shows about 17.3 fps in the video, and 4.9.1.15 measured 17.70 fps.
+
+### Compact 4.8.2.1 → 32 fps
+
+<details>
+<summary>Video: Compact 4.8.2.1, 8 → 32 → 8 fps</summary>
+
+The video: the whole-flash dump, **Make 32 FPS** on slot A, then recovery R copied back to slot A. The preview window's title shows the frame rate: 8, then 32, then 8 fps again.
+
+https://github.com/user-attachments/assets/1899b4b2-8aa7-4ae5-b756-0df225a5b52a
+
+<details>
+<summary>Timeline</summary>
+
+- 00:00 8 fps: baseline
+- 00:20 Connect the camera to the page
+- 00:22 Read the firmware version
+
+**Dumping**
+
+- 00:27 Go to the **Dump & decrypt 4.x/Nano** tab
+- 00:29 Press **Start dump**
+- 01:15 The dump is downloaded
+
+**Patching**
+
+- 01:29 Go to the **Work with firmware slots** tab
+- 01:31 Press **Read slots**
+- 01:37 Find the booted slot and press its **Make 32 FPS**.
+- 01:49 Unplug the camera and plug it back in
+- 02:01 32 fps: patched
+
+**Restoring by flashing the image from another slot**
+
+- 02:15 Connect the camera to the page
+- 02:18 Press **Read slots**
+- 02:25 Find the slot you want to copy and press its **Copy to slot …** (recovery R to slot A in the video)
+- 02:27 Press **Write to Slot A…**
+- 02:38 Unplug the camera and plug it back in
+- 02:48 8 fps: restored
+
+</details>
+
+</details>
+
+The steps and commands are those of the Compact PRO 4.9.2.0 above, with **Make 32 FPS**.
 
 ### Compact PRO 1.0.3.0 → 18 fps
 
-<!-- VIDEO Compact PRO 1.0.3.0: paste the GitHub upload link here, on its own line -->
+<details>
+<summary>Video: Compact PRO 1.0.3.0, 9 → 18 → 9 fps</summary>
+
+The video: the whole-flash backup, **Make 18 FPS** on slot A, then recovery R copied back to slot A. The preview window's title shows the frame rate: 9, then 18, then 9 fps again.
+
+https://github.com/user-attachments/assets/cb1c8de5-d379-4a1c-b958-438e3fefb245
+
+<details>
+<summary>Timeline</summary>
+
+- 00:00 9 fps: baseline
+- 00:12 Connect the camera to the page
+- 00:16 Read the firmware version
+
+**Dumping**
+
+- 00:24 Go to the **Dump & decrypt 0.x/1.x 2014/2016** tab
+- 00:28 Press **Start read & build**
+- 01:00 Press **Start write & whole-flash read**
+- 01:07 Press **Connect device**
+- 02:12 The dump is downloaded
+- 02:18 Press **Start restore & verify**
+- 02:19 Press **Connect device**
+
+**Patching**
+
+- 02:54 Go to the **Work with firmware slots** tab
+- 02:56 Press **Read slots**
+- 03:01 Find the booted slot and press its **Make 18 FPS**. On 1.x firmware the bootloader can switch the active slot to recovery R even on the original firmware, when the camera is reconnected to a phone's power several times while it boots, so recovery R can be the active slot on some 1.x cameras.
+- 03:17 Unplug the camera and plug it back in
+- 03:28 18 fps: patched
+
+**Restoring by flashing the image from another slot**
+
+- 03:43 Connect the camera to the page
+- 03:46 Press **Read slots**
+- 03:53 Find the slot you want to copy and press its **Copy to slot …** (recovery R to slot A in the video)
+- 03:55 Press **Write to Slot A…**
+- 04:07 Unplug the camera and plug it back in
+- 04:20 9 fps: restored
+
+</details>
+
+</details>
 
 1. **Back up the whole flash** on **Dump & decrypt 0.x/1.x 2014/2016**: [the preservation run](#back-up-a-0x1x-camera-the-preservation-run). Keep its last run file.
 2. On **Info**, press **Read firmware version**: the firmware is 1.0.3.0.
@@ -182,7 +393,7 @@ CLI: `seek-fw preserve --out ./preserve-run` runs the same steps and asks before
 | Compact PRO 1.0.3.0 | 18 fps | yes, 17.68 fps (42.85) |
 | Compact PRO 1.0.3.2 | 18 fps | not yet (the emulator: 17.68 Hz) |
 | Compact PRO 4.9.1.15 | 18 fps | yes, 17.70 fps (42.32) |
-| Compact PRO 4.9.2.0 | 18 fps | not yet (the emulator: 17.68 Hz) |
+| Compact PRO 4.9.2.0 | 18 fps | yes, about 17.3 fps in [the video](#compact-pro-4920--18-fps) (the emulator: 17.68 Hz) |
 
 The 32 fps rates were measured before the USB fix for phones joined the patch (FPS_32HZ.md); the Compact 1.3.0.0 on the bench runs the current image. Any other build is refused, with the reason.
 
