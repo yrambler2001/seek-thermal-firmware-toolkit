@@ -47,6 +47,11 @@ The **Info** tab tells you which firmware a camera runs and which tab reads it.
   </tbody>
 </table>
 
+The Seek Thermal app for Android draws the picture at a constant 15 fps, whatever the camera sends, so
+seeing a patched frame rate on an Android phone needs a patched app: register on [4pda.to](https://4pda.to/)
+and download the patched APK from
+[this post](https://4pda.to/forum/index.php?showtopic=851614&view=findpost&p=145700330).
+
 If your camera runs firmware that is not in this table, or runs 1.3.0.8 FF (16 FPS), 4.16 or Mosaic,
 please [open an issue on GitHub](https://github.com/yrambler2001/seek-thermal-firmware-toolkit/issues/new).
 
