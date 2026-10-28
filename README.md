@@ -47,7 +47,7 @@ The **Info** tab tells you which firmware a camera runs and which tab reads it.
   </tbody>
 </table>
 
-If your camera runs firmware that is not in this table, or runs 1.3.0.8, 4.16 or Mosaic,
+If your camera runs firmware that is not in this table, or runs 1.3.0.8 FF (16 FPS), 4.16 or Mosaic,
 please [open an issue on GitHub](https://github.com/yrambler2001/seek-thermal-firmware-toolkit/issues/new).
 
 There will be no frame-rate patch for cameras with the LPC43S30FET100 processor, a CPU with AES built in
