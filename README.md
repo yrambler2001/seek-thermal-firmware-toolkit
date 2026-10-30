@@ -63,6 +63,8 @@ Each tab has its own address. Connect the camera with **Connect device** at the 
 
 The page follows your system's light or dark setting. The switch in the top right corner picks the other theme, and this browser remembers it. Pick your system's theme again to go back to following the system.
 
+The page is in English, Deutsch, Español, Français, Italiano, Polski, Português (European), Română, Русский, Українська and 简体中文. It opens in your browser's language, or in English when the page does not have it. The language switch next to the theme switch picks another one, and this browser remembers it. To give someone a link in one language, put `?lang=` and the language's code (`en`, `de`, `es`, `fr`, `it`, `pl`, `pt`, `ro`, `ru`, `uk` or `zh-Hans`) before the `#`: `https://yrambler2001.github.io/seek-thermal-firmware-toolkit/?lang=de#/slots` opens the Work with firmware slots tab in German. The command-line tool, the run log and the copyable camera report stay in English.
+
 ### Info (`#/`)
 
 ![The Info tab after Read firmware version](.github/readme/info.avif)

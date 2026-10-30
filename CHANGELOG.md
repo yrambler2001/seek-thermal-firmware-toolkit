@@ -8,10 +8,31 @@ All notable changes to this project are listed here. The format follows [Keep a 
 
 - The repository is now `yrambler2001/seek-thermal-firmware-toolkit`, and the page is at https://yrambler2001.github.io/seek-thermal-firmware-toolkit/. The old page address no longer works; links to the old repository address are redirected by GitHub.
 - The archives name the toolkit by its new name.
+- The CLI prints proper plurals ("1 byte", "2 bytes") where it printed "byte(s)", "read(s)", "block(s)", "candidate(s)" and "time(s)".
+- A slot named inside a sentence is "slot A", not "Slot A": "its own upgrade writes slot B, which it is not running".
+- `seek-fw slots patch-fps all`, its help and its dry run say "every bank where the patch is available" instead of "every bank that offers it".
+- The hint for a camera whose version could not be read says "unplug it, plug it back in, let it finish starting up", in that order.
+- A Preserve run with no bank to patch says "Patch: no patch was built: no bank holds firmware the run can patch." instead of "Patch: built for ."
+- An image too long for a bank is "longer than slot A", not "longer than the Slot A bank".
+- The upgrade-target warning ends in two sentences: "…, which the upgrade replaces. Slot B is left unbootable if the upgrade stops partway."
+- Plainer words on the page: "Bytes changed on the flash chip" (was "Bytes that move on the part"), "(not asked)" for an upgrade target the camera was not asked for (was "(not replayed)"), "matches the backup (all 31 blocks)" (was "on all 31 blocks"), and "bootable — the bootloader accepts it" (was "can key it").
 
 ### Added
 
 - A link to the repository in the page's top right corner.
+- **The page in 11 languages:** English, Deutsch, Español, Français, Italiano, Polski, Português (European), Română, Русский, Українська and 简体中文. Each language other than English is downloaded only when it is used.
+- The page opens in the browser's language, or in English when it does not have it. The language switch next to the theme switch picks another one, and the browser remembers it. `?lang=xx` before the `#` picks one for that visit: `…/?lang=de#/slots`.
+- The command-line tool, the run log, the copyable camera report, hex values, firmware versions and file names stay in English.
+
+### Fixed
+
+- Buttons and badges with long labels wrap instead of running off a phone screen. "Dump all selectors (0x00–0xFF)" crossed the Options panel's border even in English.
+- When the booted bank has no name, the Work with firmware slots tab no longer says "the booted the booted bank".
+
+### Development
+
+- i18n tests: the page in a pseudo-locale with no English left, every key used, every locale with the same keys and params as English, the case forms of bank and key names, and no drift between core's English and its message templates.
+- `npm run e2e:phone:i18n` checks the phone-width layout in every language.
 
 ## [2.0.0] - 2026-10-27
 
