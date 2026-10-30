@@ -32,6 +32,7 @@ export function CameraIdentity({ acting, refusal }: CameraIdentityProps): ReactE
               : t('v4:identity.unsupported')}
           </strong>
         </p>
+        {/* i18n: core message (requireCapability's family/unsupported refusal has no code yet) */}
         <p>{refusal.message}</p>
         {refusal.hint !== null && <p>{refusal.hint}</p>}
       </Alert>
