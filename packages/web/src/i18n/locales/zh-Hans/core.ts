@@ -558,8 +558,10 @@ export default {
   /* ---- notes: what the read measured about a build, a bank or an empty bank (slots/capability-notes) ----
    * Mode numbers, addresses, version numbers and command names (CompleteMemoryUpgrade, BeginFirmwareUpgrade,
    * EP0, PRESERVATION.md) are names: keep them. `{untested}` is notes.ffBootUntested. */
+  /** "This line" is the firmware line (the 2014 0.x/1.x builds, as in notes.token), not a line of text: on these builds, the bank the page or the CLI calls booted is the one the camera entered at its last start. */
   'notes.lockedBootWord':
     '在这条固件线上，所说的当前启动槽位是相机上次启动时进入的槽位，按活动槽位字的记录（0 为槽位 A，1 为槽位 B，2 为恢复槽位 R）。下次启动由启动配置字决定：0 或 0xFFFFFFFF 先选 A，1 先选 B，其他任何值先选恢复槽位 R。只要 A 和 B 中都没有 2014 年引导程序接受的内容（字累加和为 0 的槽位），无论 R 中存放的是什么，都会运行恢复槽位 R（已在相机上测得）。',
+  /** "This line" is the firmware line (the 2016 Compact PRO 1.0.3.x builds), not a line of text: on these builds, the bank the page or the CLI calls booted is the one the camera entered at its last start. */
   'notes.locked2016BootWord':
     '在这条固件线上，所说的当前启动槽位是相机上次启动时进入的槽位，由引导程序记录在活动槽位字中（0 为槽位 A，1 为槽位 B，2 为恢复槽位 R）。下次启动由启动配置字决定：0 或 0xFFFFFFFF 先选 A，1 先选 B，其他任何值先选恢复槽位 R。2016 年的引导程序只有在槽位用它检查槽位的密钥（其 1.2.0.0 引导程序上为密钥块 1）解密后字累加和为 0 时才接受该槽位；当另外两个都不通过时，该顺序中的最后一个槽位会不经检查直接运行。由于存放该密钥的引导程序块在所有通道上都被拒绝读取，本次读取根据相机进入的槽位来指明该密钥（已在相机上测得）。',
   'notes.ep0of1032':
@@ -637,7 +639,7 @@ export default {
   /** `{operation}` is identity.operation.*, said after "refusing to"; `{reason}` is identity.versionUnknown or identity.predates. */
   'identity.refusing': '拒绝{operation}：{reason}',
   'identity.refusingNoVersion':
-    '拒绝{operation}：{reason}。没有打开任何读写窗口。请拔下相机，让它完成启动，再重新插上并重试。',
+    '拒绝{operation}：{reason}。没有打开任何读写窗口。请拔下相机，再重新插上，等它完成启动后重试。',
   'identity.operation.dump': '导出',
   'identity.operation.dumpAll': '导出全部选择器',
   'identity.operation.readInfo': '读取设备信息',
@@ -1115,7 +1117,7 @@ export default {
   'preserve.refused.recoveryOnly': '此版本只从恢复槽位 R 运行：{note}',
   /* ---- the Decrypt tab: one bank file (slots/decrypt-file) ---- */
   /** `{size}` and `{count}` are byte counts ("B" is bytes); `{kib}` is the bank's size as "64 KiB". */
-  'decryptFile.wrongSize': '固件槽位为 {size} B（{kib}）；这个文件为 {count} B',
+  'decryptFile.wrongSize': '固件槽位为 {size} B（{kib} KB）；这个文件为 {count} B',
   'decryptFile.erasedBank': '空，没有可解密的内容：全部 {size} B 读出都是 0xFF（已擦除的槽位）',
   'decryptFile.erasedHeader': '已擦除：头部窗口全是 0xFF，因此该槽位中没有镜像；不会解密任何内容',
   'decryptFile.noHeader': '没有镜像头部（魔数 {magic}），因此没有可解密的镜像',

@@ -18,7 +18,8 @@
  *   written back (step 04); the whole-flash read = reading the full 4 MiB flash once the patch runs.
  * - "Connect device" is the page's connect button (app:connect.connect): use the same words.
  * - The step names on the chips (Backup, Patch, Write, Whole-flash read, Restore, Check) are core's
- *   and stay English for now, as do the sentences core writes ({why}, {reason}, {what}, {build}…).
+ *   words, translated in core:preserve.step.*. The sentences core writes ({why}, {reason}, {what},
+ *   {build}…) arrive already translated, from the `core` namespace.
  * - SPI, SWD/J-Link, MiB/KiB, sha256, hex values and file names stay as they are.
  *
  * src/i18n/README.md has the conventions.
@@ -337,7 +338,7 @@ export default {
   /*
    * ---- why a step cannot start yet ----
    * gate.needs is shown after notReady.gate's dash; {missing} is one or more of the gate.* phrases
-   * below, joined by "; ". {build}, {why} and {reason} are core's.
+   * below, joined by common:list.semicolon. {build}, {why} and {reason} are core's.
    */
   'gate.needs': 'needs {missing}',
   'gate.noRun': 'no run is active — the first phase creates the run',
@@ -357,7 +358,7 @@ export default {
   /* What a step lacks from the run's files: a bank's two agreeing reads, its decrypted image. */
   'gate.capture': '{bank}’s capture',
   'gate.derived': '{bank}’s derived image',
-  /* "Write" is the step's name on its chip (core's, English for now). */
+  /* "Write" is the step's name on its chip (core:preserve.step.commit): use the same word as there. */
   'gate.writeStep': 'the Write step (run or resume at it first)',
   'gate.drainRefused': 'the whole-flash read refuses on {build} — {why}',
   'gate.patchSummary': 'the patch summary of {bank} (the staged length)',

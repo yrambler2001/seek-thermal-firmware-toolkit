@@ -28,8 +28,9 @@
  *     preserve.refused.recoveryOnly and identity.versionUnknown. Each is another key of
  *     this namespace (the comment above a key says which), already in your
  *     language. A `{why}` that starts a sentence arrives with a capital letter.
- *   - a list: `{banks}`, `{reasons}` (joined with your common:list.* words, or
- *     "; " where the English uses a semicolon; `{reasons}` in
+ *   - a list: `{banks}`, `{reasons}`, `{masks}`, `{files}`, `{sites}`, `{places}`,
+ *     `{context}`, `{notes}` (joined with your common:list.* words; where the
+ *     English uses a semicolon, common:list.semicolon; `{reasons}` in
  *     writeRefusal.otherFamily is detect.* sentences).
  * - Params that stay AS THEY ARE: hex values and offsets (`{word}`, `{offset}`,
  *   `{sum}`, `{hex}`, `{address}`, `{at}`, `{status}`, `{magic}`, `{length}`,
@@ -471,10 +472,10 @@ export default {
   'writeRefusal.keyTable': "this camera's key table could not be confirmed",
   'writeRefusal.whitening':
     "this camera's key table resolves under K={k} but {family} encrypts under K={expected}",
-  /** `{reasons}`: the detection's evidence (detect.*), joined with "; ". */
+  /** `{reasons}`: the detection's evidence (detect.*), joined with common:list.semicolon. */
   'writeRefusal.otherFamily':
     'the evidence says this camera is {detected}, not {family} ({reasons})',
-  /** `{reasons}`: writeRefusal.* joined with "; ". */
+  /** `{reasons}`: writeRefusal.* joined with common:list.semicolon. */
   'writeRefusal.camera': 'this camera cannot be written from here: {reasons}',
 
   /* ---- family: what each camera family is (profiles/*: `summary`), the decrypt tab's Summary row ---- */
@@ -492,7 +493,7 @@ export default {
     'A camera no other family matches. `seek-fw dump` reads it with the 4.x block list (the 4.x/Nano tab refuses it), and a decrypt solves the key from the image itself, so neither depends on the guess. No bank is written: the Work with firmware slots tab refuses it until the camera is identified.',
 
   /* ---- detect: why a family scored as it did, one item of the evidence list (profiles/*: `detect`) ---- */
-  /* Each starts lower case: it is a list item, and writeRefusal.otherFamily joins them with "; ".
+  /* Each starts lower case: it is a list item, and writeRefusal.otherFamily joins them with common:list.semicolon.
    * `{said}` is detect.source.*; `{version}` a firmware or bootloader version; `{sum}`, `{zero}` hex.
    * Family ids (early-compact, compact-2016, legacy-auth), command names (BeginFirmwareUpgrade,
    * GetFeaturedFirmwareData) and xorshift128 stay English. */
@@ -609,8 +610,10 @@ export default {
   /* ---- notes: what the read measured about a build, a bank or an empty bank (slots/capability-notes) ----
    * Mode numbers, addresses, version numbers and command names (CompleteMemoryUpgrade, BeginFirmwareUpgrade,
    * EP0, PRESERVATION.md) are names: keep them. `{untested}` is notes.ffBootUntested. */
+  /** "This line" is the firmware line (the 2014 0.x/1.x builds, as in notes.token), not a line of text: on these builds, the bank the page or the CLI calls booted is the one the camera entered at its last start. */
   'notes.lockedBootWord':
     'The booted bank named on this line is the bank the camera entered at its last start, as the active-slot word records it (0 slot A, 1 slot B, 2 recovery R). The next start is set by the boot-config word: 0 or 0xFFFFFFFF choose A first, 1 B first, any other value recovery R first. Recovery R runs whenever A and B hold nothing the 2014 bootloader takes (a bank whose words sum to 0), whatever R holds (measured on a camera).',
+  /** "This line" is the firmware line (the 2016 Compact PRO 1.0.3.x builds), not a line of text: on these builds, the bank the page or the CLI calls booted is the one the camera entered at its last start. */
   'notes.locked2016BootWord':
     'The booted bank named on this line is the bank the camera entered at its last start, as the bootloader records it in the active-slot word (0 slot A, 1 slot B, 2 recovery R). The next start is set by the boot-config word: 0 or 0xFFFFFFFF choose A first, 1 B first, any other value recovery R first. The 2016 bootloader takes a bank only when it decrypts to a word sum of 0 under the key it checks a bank under (key block 1 on its 1.2.0.0 bootloader), and the last bank of that order runs unchecked when the other two fail. The read names that key from the bank the camera entered, because the bootloader block that holds it is refused on every channel (measured on a camera).',
   'notes.ep0of1032':
@@ -670,7 +673,7 @@ export default {
     'the camera did not report its firmware version ({note}); a command number does not mean the same thing on every Seek firmware — on Compact 0.3.0.1 wire id 0x52, the id that arms a read window, is EnterBootloaderMode — so until the version is known nothing is sent but GetErrorCode, GetOperationMode and GetFirmwareInfo, the reads every build answers the same way',
   /* Why the version read gave no version (`{note}` above). `{error}`: the USB error (English unless it has
    * a code); `{reads}`, `{answered}`, `{refusals}`, `{count}`: numbers; `{spacing}`, `{window}`: milliseconds;
-   * `{context}`: identity.note.otherRecord / afterStartup, joined with "; ". */
+   * `{context}`: identity.note.otherRecord / afterStartup, joined with common:list.semicolon. */
   'identity.note.startup':
     'GetFirmwareInfo did not answer ({error}) on any of {reads} reads {spacing} ms apart, a start-up window of {window} ms; a camera still starting up answers within it',
   'identity.note.neverTwice': 'GetFirmwareInfo was never answered twice in a row in {reads} reads',
@@ -688,7 +691,7 @@ export default {
   /** `{operation}` is identity.operation.*, said after "refusing to"; `{reason}` is identity.versionUnknown or identity.predates. */
   'identity.refusing': 'refusing to {operation}: {reason}',
   'identity.refusingNoVersion':
-    'refusing to {operation}: {reason}. Nothing was armed. Unplug the camera, let it finish starting up, plug it back in and try again.',
+    'refusing to {operation}: {reason}. Nothing was armed. Unplug the camera, plug it back in, let it finish starting up and try again.',
   'identity.operation.dump': 'dump',
   'identity.operation.dumpAll': 'dump all selectors',
   'identity.operation.readInfo': 'read the device info',
@@ -785,7 +788,7 @@ export default {
     'each written bank gets back its original firmware, written in the form the camera stores it, so the bank ends byte for byte as the backup read it',
   'preserve.restoreForm.none':
     'not possible on this build: no form of the original firmware passes the camera’s own check and also stores back as the original bytes, so the run ends with the complete image and the patch still in place',
-  /** The plan's "Whole flash" row. `{notes}` is preserve.drain.rotated / .hazard, joined with "; ". */
+  /** The plan's "Whole flash" row. `{notes}` is preserve.drain.rotated / .hazard, joined with common:list.semicolon. */
   'preserve.drain.notPossible':
     'not possible on this build: the patched firmware cannot read the whole flash, so the run has no complete image to give',
   'preserve.drain.rotated': 'the camera serves it rotated, and the run puts it back in order',
@@ -969,7 +972,7 @@ export default {
     'commit runs after the patch step, which records what it stages',
   'preserve.gate.commitNeedsPatch':
     'commit needs the patch of {banks}, and the patch step recorded none — run the patch step again',
-  /** `{files}`: file names, joined with ", ". */
+  /** `{files}`: file names, joined with common:list.comma. */
   'preserve.gate.commitFiles':
     'commit requires the backup files in the run directory and they are missing: {files} — without them a commit has no restore source, so it refuses',
   'preserve.gate.drainNoCommit':
@@ -977,7 +980,7 @@ export default {
   /** `{build}`: a build's name, preserve.build.firmware or preserve.gate.detectedBuild. `{note}`: the capability table's note, in English. */
   'preserve.gate.drainRefused': 'the drain step refuses on {build}: {note}',
   'preserve.gate.detectedBuild': 'the detected build',
-  /** `{sites}`: hex offsets, joined with ", ". */
+  /** `{sites}`: hex offsets, joined with common:list.comma. */
   'preserve.gate.drainHazard':
     'the drain step refuses on {build}: starting the whole-flash read on this build’s unpatched firmware crashes the camera (it reads from a value that is not a flash address; measured on the emulator: 32 KiB served, then the camera faulted). The change that makes the read safe is at {sites}, and it is not among the changes this run recorded for {bank} — run the patch step (and land the write) before the whole-flash read.',
   'preserve.gate.drainFiles':
@@ -1116,7 +1119,7 @@ export default {
     '{where} is empty: every byte is 0xFF. A write programs an image and cannot leave a bank erased, so an empty bank cannot be restored by a write. Nothing was written.',
   'restore.refused.fill':
     '{where} is {fill} in every byte, the fill the dump writes where it read nothing: the dump did not read this bank. There is no image to restore. Nothing was written.',
-  /** `{why}`: the bank file's decryption notes (decrypt.*), joined with "; ", or its status word. */
+  /** `{why}`: the bank file's decryption notes (decrypt.*), joined with common:list.semicolon, or its status word. */
   'restore.refused.notDecrypted':
     '{where} cannot be restored from this file: {why}. Nothing was written.',
   /* ---- support: why a build cannot read or write a bank (slots/capability, profiles) ---- */
@@ -1198,8 +1201,8 @@ export default {
   /** `{note}` is preserve.routeNote.*. */
   'preserve.refused.recoveryOnly': 'this build runs only from recovery R: {note}',
   /* ---- the Decrypt tab: one bank file (slots/decrypt-file) ---- */
-  /** `{size}` and `{count}` are byte counts ("B" is bytes); `{kib}` is the bank's size as "64 KiB". */
-  'decryptFile.wrongSize': 'a firmware bank is {size} B ({kib}); this file is {count} B',
+  /** `{size}` and `{count}` are byte counts ("B" is bytes); `{kib}` is the bank's size in KiB, a number (64): write the unit your language's way (KB). */
+  'decryptFile.wrongSize': 'a firmware bank is {size} B ({kib} KiB); this file is {count} B',
   'decryptFile.erasedBank': 'empty, nothing to decrypt: all {size} B read as 0xFF (an erased bank)',
   'decryptFile.erasedHeader':
     'erased: the header window is all 0xFF, so the bank holds no image; nothing is decrypted',

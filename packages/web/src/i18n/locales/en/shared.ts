@@ -59,7 +59,8 @@ export default {
     'Another program or a system driver is holding the camera — only one process can hold the USB interface at a time. Quit anything else that talks to it, then unplug and replug the camera.',
   'hint.recipientFallback':
     'Or set recipient to "device" in the read options, which does not need the interface claimed.',
-  'hint.optionsInvalid': 'Open "Read options" and check the note under the fields for each range.',
+  /* "Options" is the 4.x/Nano tab's fold-out (v4:options.title): use the same word as there. */
+  'hint.optionsInvalid': 'Open "Options" and check the note under the fields for each range.',
   'hint.usbTimeout':
     'The camera accepted the request and never answered. Unplug and replug it, then try a smaller chunk (64 is the value that works everywhere).',
   'hint.usbStalled':
@@ -72,7 +73,7 @@ export default {
   'hint.deviceWindow':
     'The selector map this family uses did not match the camera. On the 4.x/Nano tab, open Options and run "Dump all selectors" to see what the camera actually exposes.',
   'hint.deviceVersionUnknown':
-    'Nothing that could change the camera was sent. Unplug it, let it finish starting up, plug it back in and try again; a camera that reports its firmware version is read normally.',
+    'Nothing that could change the camera was sent. Unplug it, plug it back in, let it finish starting up and try again; a camera that reports its firmware version is read normally.',
   'hint.imageMalformed': 'The file is not a decrypted Seek firmware image.',
   'hint.imageUnsupported': 'This image cannot be packaged for the camera as it is.',
   'hint.imageKeyTable':

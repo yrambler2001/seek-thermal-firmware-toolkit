@@ -230,3 +230,11 @@ export function listComma(items: readonly string[], translate: Translate = t): s
     translate('common:list.comma', { first: joined, second: item }),
   );
 }
+
+/** Joins clauses with `common:list.semicolon`, pairwise: "the flash backup; the patch step". */
+export function listSemicolon(items: readonly string[], translate: Translate = t): string {
+  if (items.length === 0) return '';
+  return items.reduce((joined, item) =>
+    translate('common:list.semicolon', { first: joined, second: item }),
+  );
+}

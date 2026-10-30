@@ -24,7 +24,7 @@ import {
   type FirmwareProfile,
   type ProfileMatch,
 } from '@seek-fw/core';
-import { listAnd, listComma, t, type Translate } from '@/i18n';
+import { listAnd, listComma, listSemicolon, t, type Translate } from '@/i18n';
 import { en } from '@/i18n/locales/en';
 import { bankName, bankWords } from '@/lib/bank-names';
 
@@ -44,7 +44,7 @@ function paramWords(param: CoreParam, translate: Translate): string | number {
   }
   if ('capital' in param) return capitalise(String(paramWords(param.capital, translate)));
   const words = param.list.map((item) => String(paramWords(item, translate)));
-  if (param.join === 'semicolon') return words.join('; ');
+  if (param.join === 'semicolon') return listSemicolon(words, translate);
   if (param.join === 'comma') return listComma(words, translate);
   if (param.join === 'and') return listAnd(words, translate);
   const last = words.at(-1);

@@ -51,8 +51,8 @@ export function identityRefusal(
   const message =
     `refusing to ${operation}: ${gate.reason}` +
     (firmwareVersion === null
-      ? '. Nothing was armed. Unplug the camera, let it finish starting up, plug it back ' +
-        'in and try again.'
+      ? '. Nothing was armed. Unplug the camera, plug it back in, let it finish starting ' +
+        'up and try again.'
       : '');
   const params = {
     operation: coreMessage(OPERATION_CODE[operation], {}, operation),

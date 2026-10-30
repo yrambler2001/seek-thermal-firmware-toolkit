@@ -754,10 +754,10 @@ describe('SlotsView', () => {
           message:
             'refusing to read the device info: the camera did not report its firmware version ' +
             '(GetFirmwareInfo did not answer on any of 26 reads). Nothing was armed. Unplug the camera, ' +
-            'let it finish starting up, plug it back in and try again.',
+            'plug it back in, let it finish starting up and try again.',
           hint:
-            'Nothing that could change the camera was sent. Unplug it, let it finish starting up, ' +
-            'plug it back in and try again; a camera that reports its firmware version is read normally.',
+            'Nothing that could change the camera was sent. Unplug it, plug it back in, ' +
+            'let it finish starting up and try again; a camera that reports its firmware version is read normally.',
         },
       }),
     );

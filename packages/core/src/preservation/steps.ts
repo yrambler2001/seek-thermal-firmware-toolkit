@@ -619,7 +619,7 @@ export const PRESERVE_GATE = {
   commitFiles: (missing: readonly string[]): CoreMessage =>
     coreMessage(
       'preserve.gate.commitFiles',
-      { files: missing.join(', ') },
+      { files: listParam(missing, 'comma') },
       'commit requires the backup files in the run directory and they are missing: ' +
         `${missing.join(', ')} — without them a commit has no restore source, so it refuses`,
     ),
@@ -642,7 +642,14 @@ export const PRESERVE_GATE = {
     const at = sites.map((offset) => hexUp(offset)).join(', ');
     return coreMessage(
       'preserve.gate.drainHazard',
-      { build, sites: at, bank: bankParam(key) },
+      {
+        build,
+        sites: listParam(
+          sites.map((offset) => hexUp(offset)),
+          'comma',
+        ),
+        bank: bankParam(key),
+      },
       `the drain step refuses on ${paramText(build)}: ` +
         'starting the whole-flash read on this build’s unpatched firmware crashes the ' +
         'camera (it reads from a value that is not a flash address; measured on the ' +
@@ -656,7 +663,7 @@ export const PRESERVE_GATE = {
   drainFiles: (missing: readonly string[]): CoreMessage =>
     coreMessage(
       'preserve.gate.drainFiles',
-      { files: missing.join(', ') },
+      { files: listParam(missing, 'comma') },
       `drain needs ${missing.join(', ')} (the delivered dump is post-processed with each ` +
         'written bank’s capture) and it is not in the run directory',
     ),
@@ -685,7 +692,7 @@ export const PRESERVE_GATE = {
   restoreFiles: (missing: readonly string[]): CoreMessage =>
     coreMessage(
       'preserve.gate.restoreFiles',
-      { files: missing.join(', ') },
+      { files: listParam(missing, 'comma') },
       `restore needs ${missing.join(', ')} (the original of each written bank, from the ` +
         'backup step) and it is not in the run directory',
     ),

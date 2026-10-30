@@ -21,6 +21,8 @@ export default {
   'list.then': '{first}，然后是{second}',
   /* Two names in a plain list ("slot A, slot B"). listComma() uses it. */
   'list.comma': '{first}、{second}',
+  /* Clauses in a list, where English uses a semicolon ("the flash backup; the patch step"). listSemicolon() uses it. */
+  'list.semicolon': '{first}；{second}',
 
   /*
    * Firmware banks. A bank is one of the camera's three firmware slots, A, B and R; R is the recovery

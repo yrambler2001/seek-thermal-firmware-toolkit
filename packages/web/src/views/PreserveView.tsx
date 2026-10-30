@@ -63,7 +63,7 @@ import {
   routeNoteMessage,
 } from '@seek-fw/core';
 import { coreText, recordedText } from '@/lib/core-text';
-import { rich, t } from '@/i18n';
+import { listComma, rich, t } from '@/i18n';
 import { bankList, bankName, bankWords } from '@/lib/bank-names';
 import { Panel, PanelTitle } from '@/components/Panel';
 import { Prose } from '@/components/Prose';
@@ -1171,7 +1171,7 @@ interface VerifySummaryProps {
 }
 
 function blockList(addresses: readonly number[]): string {
-  return addresses.map((address) => hexUp(address, 8)).join(', ');
+  return listComma(addresses.map((address) => hexUp(address, 8)));
 }
 
 /** The delivered image's own verdict: held against the backup taken before

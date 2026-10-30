@@ -124,7 +124,7 @@ export const SLOT_FILE_WORDS = {
   wrongSize: (size: number): CoreMessage =>
     coreMessage(
       'decryptFile.wrongSize',
-      { size: String(SLOT_BYTES), kib: '64 KiB', count: String(size) },
+      { size: String(SLOT_BYTES), kib: String(SLOT_BYTES / 1024), count: String(size) },
       `a firmware bank is ${String(SLOT_BYTES)} B (64 KiB); this file is ${String(size)} B`,
     ),
   erasedBank: (size: number): CoreMessage =>

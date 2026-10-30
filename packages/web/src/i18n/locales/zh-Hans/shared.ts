@@ -54,6 +54,7 @@ export default {
   'hint.holding':
     '另一个程序或系统驱动正在占用相机——同一时间只能有一个进程占用 USB 接口。请退出其他与它通信的程序，然后拔下相机再重新插上。',
   'hint.recipientFallback': '或者在读取选项中把 recipient 设为“device”，这样不需要占用接口。',
+  /* "Options" is the 4.x/Nano tab's fold-out (v4:options.title): use the same word as there. */
   'hint.optionsInvalid': '打开“选项”，查看各字段下方关于取值范围的说明。',
   'hint.usbTimeout':
     '相机接受了请求，但一直没有应答。请拔下相机再重新插上，然后改用更小的 chunk 再试（64 是在所有设备上都可用的值）。',
@@ -66,7 +67,7 @@ export default {
   'hint.deviceWindow':
     '该固件系列使用的选择器映射与相机不符。请在 4.x/Nano 标签页上打开“选项”，运行“导出全部选择器”，查看相机实际开放了哪些内容。',
   'hint.deviceVersionUnknown':
-    '没有发送任何可能改变相机的命令。请拔下相机，让它完成启动，再重新插上并重试；能报告固件版本的相机会被正常读取。',
+    '没有发送任何可能改变相机的命令。请拔下相机，再重新插上，等它完成启动后重试；能报告固件版本的相机会被正常读取。',
   'hint.imageMalformed': '该文件不是解密后的 Seek 固件镜像。',
   'hint.imageUnsupported': '这个镜像无法按原样打包给相机。',
   'hint.imageKeyTable':

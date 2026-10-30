@@ -25,7 +25,7 @@
 
 import { drainCapabilityMessage, preserveBuildParam, preserveChoiceOf } from '@seek-fw/core';
 import { coreText, recordedText } from '@/lib/core-text';
-import { t, type Translate } from '@/i18n';
+import { listSemicolon, t, type Translate } from '@/i18n';
 import { bankWords } from '@/lib/bank-names';
 import {
   NEEDS_CONFIRM,
@@ -358,5 +358,5 @@ export function canRunPhase(input: PreserveGateInput): PreserveGate {
  */
 export function gateReason(gate: PreserveGate, translate: Translate = t): string | null {
   if (gate.ok || gate.jumpable) return null;
-  return translate('preserve:gate.needs', { missing: gate.missing.join('; ') });
+  return translate('preserve:gate.needs', { missing: listSemicolon(gate.missing, translate) });
 }
