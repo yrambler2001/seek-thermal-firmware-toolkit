@@ -202,4 +202,108 @@ export default {
   'report.lastStart.notRead': 'not read',
   'report.lastStart.noBank': 'the camera reports {word}, which names no bank',
   'report.lastStart.entered': 'the camera reports it entered {bank} (active-slot word {word})',
+
+  /* ---- running: which 1.3.0.8 build the camera runs, from its own answers (slots/running) ---- */
+  /** Instead of a version in running.why.otherVersion. */
+  'running.noVersion': 'no version',
+  'running.why.otherVersion': 'the camera reports {version}, and only {only} has two builds',
+  /** "Bank verdicts": the camera's yes/no per bank; GetFirmwareInfo is a USB command name (keep it). */
+  'running.why.noVerdicts':
+    'the camera did not answer the bank verdicts (GetFirmwareInfo selectors 6, 7, 8)',
+  'running.why.notRead':
+    'a bank the verdicts depend on was not read, so the answers cannot be predicted',
+  /** `{answers}` is running.answers.each: the three answers, "A 1, B 0, R 1" (1 accepts, 0 refuses). */
+  'running.answers': 'the camera answers {answers}',
+  'running.answers.each': 'A {a}, B {b}, R {r}',
+  /** `{answers}` is running.answers; `{predicted}`, `{plain}`, `{ff}` are running.answers.each. */
+  'running.why.plain':
+    '{answers}, which is what the 8 Hz 1.3.0.8 build answers for these banks ({predicted})',
+  'running.why.ff':
+    '{answers}, which is what the 16 Hz FF 1.3.0.8 build answers for these banks ({predicted})',
+  'running.why.both':
+    '{answers}, and both builds answer exactly that for these banks, so the banks do not tell them apart',
+  'running.why.neither': '{answers}, which matches neither build (8 Hz: {plain}; 16 Hz FF: {ff})',
+
+  /* ---- imageBuild: an image that may not be the camera's build (slots/image-build) ---- */
+  /** `{image}`, `{camera}`, `{version}` are firmware versions. */
+  'imageBuild.noVersion':
+    "This image's header names no firmware version, so whether it is the build the camera runs ({camera}) cannot be told. Check that it is the image you mean to write.",
+  'imageBuild.otherVersion': 'This image is firmware {image}; the camera runs {camera}.',
+  'imageBuild.otherVersionTaken':
+    'This image is firmware {image}; the camera runs {camera}. On this line the camera checks only that an image is well formed (its header and word sum), not its version, so it takes this image, and when it starts from this bank it runs {image}.',
+  'imageBuild.otherVersionUnchecked':
+    'This image is firmware {image}; the camera runs {camera}. Whether this camera takes a different build, and runs it, has not been checked.',
+  'imageBuild.otherBuild':
+    'This image is the 8 Hz {version} build; the camera runs the 16 Hz {version} FF build. The 16 Hz build checks a payload against its own FF form when it is committed and refuses one that fails, before it erases the bank (from its source). Writing the 8 Hz build to it has not been tried on a camera.',
+  'imageBuild.runningUnknown':
+    'This image is the 8 Hz {version} build. The camera runs {version}, which comes as an 8 Hz and a 16 Hz FF build, and its own answers did not say which one it runs, so whether this is its build cannot be told.',
+
+  /* ---- bootFail: a bootloader check a raw payload fails (slots/write-image); write.raw.bootloaderRejects says it ---- */
+  /** Values are hex; `header.length`, "CODE" and 0x200 are names and stay as they are. */
+  'bootFail.tooShort': 'the payload is {size} B, too short to hold a header at 0x200',
+  'bootFail.noMagic': 'no image magic at 0x200 (found {found}, the bootloader needs {needs})',
+  'bootFail.lengthOutside': 'header.length {length} is outside the {size} B payload',
+  'bootFail.lengthNotPayload': 'header.length {length} is not the payload length {size}',
+  'bootFail.overStage': '{size} B is over the {max} B stage',
+  'bootFail.plainSum': 'stored word sum {sum}, the 2014 bootloader needs 0',
+  'bootFail.noFooter': 'no footer at {offset}: the payload ends at {end}',
+  'bootFail.footerNotCode':
+    'footer at {offset} is not "CODE" — the bootloader takes its segmented loader',
+  'bootFail.footerLength': 'footer length does not equal header.length {length}',
+  'bootFail.keyASum':
+    "decrypted under this camera's Key A the word sum is {sum}, the bootloader needs {needs}",
+
+  /* ---- keyCheck: how a recovered key was confirmed (crypto/confidence-words) ---- */
+  'keyConfidence.family': 'verified by the acceptance sum',
+  'keyConfidence.structural': 'verified by the vector table only',
+  'keyConfidence.unverified': 'not verified',
+  /** `{sum}` is hex. */
+  'keyCheck.family': 'key verified by the acceptance sum {sum}',
+  /** `{phrase}` is keyConfidence.structural or keyConfidence.unverified. */
+  'keyCheck.other': 'key {phrase}; acceptance sum {sum}',
+
+  /* ---- staging.phrase: how a write's bytes were sent, inside written.committed (slots/staging-words) ---- */
+  'staging.phrase.keyACiphertext': "staged under the camera's own keys",
+  'staging.phrase.slotKeystreamCiphertext': "staged under the image's own key",
+  'staging.phrase.plain': 'staged plain',
+  'staging.phrase.keyAKeystream': 'staged as the vendor app stages the FF image (XOR Key A)',
+  'staging.phrase.verbatim': 'sent as given',
+
+  /* ---- written: a finished bank write's notes (slots/write, slots/write-verify) ---- */
+  /** `{name}` is a bank (label form); `{staged}` is staging.phrase.*; `{size}` is a byte count; the rest hex. */
+  'written.committed':
+    'committed {size} B to {name} at {address}, {staged}; commit status {status}',
+  'written.noReadWindow': 'this build names no read window for the bank, so nothing was read back',
+  /** `{error}`: the error's own message (translated where core gives it a code). */
+  'written.readBackFailed': 'the read-back failed: {error}',
+  'written.readBack': 'read back {size} B, SHA-256 {sha256}',
+  'written.verifyOff': 'verify is off: the bank was not read back',
+  /** What the read-back was compared with, inside readBack.sizeDiffers and readBack.differs. */
+  'readBack.reference.folded':
+    'the bytes the plan predicted the bank would hold (the image as the 16 Hz build stores it, not the bytes sent)',
+  'readBack.reference.asSent':
+    'the bytes the plan predicted the bank would hold (the bytes as they were sent)',
+  'readBack.sizeDiffers':
+    'the read-back is {size} B, the plan predicted {predictedSize} B: the bank does NOT match {reference}',
+  'readBack.matchesFolded':
+    'the bank holds the image as the 16 Hz build stores it (not the bytes sent), and the rest of the bank is erased',
+  'readBack.matches':
+    'the bank matches the bytes the plan predicted (the 2014 plain chain programs exactly what it is sent)',
+  'readBack.differs': 'the bank does NOT match {reference} (first difference at {offset})',
+  'readBack.noHeader':
+    'the read-back holds no image header at {offset} (magic {magic}), so the bank does NOT decrypt to the expected image',
+  'readBack.lengthDiffers':
+    "the read-back's header says {length} B, the plan's image is {imageLength} B: the bank does NOT decrypt to the expected image",
+  'readBack.tooShort':
+    'the read-back is {size} B, too short for a {length} B image: the bank does NOT decrypt to the expected image',
+  /** `{check}` is keyCheck.*; said after "under the" in readBack.decrypts and readBack.decryptDiffers. */
+  'readBack.recovered': 'keystream recovered from the read-back ({check})',
+  /** `{recovered}` is readBack.recovered. */
+  'readBack.decrypts': 'the bank decrypts to the expected image ({length} B) under the {recovered}',
+  'readBack.decryptDiffers':
+    'the bank does NOT decrypt to the expected image: first difference at image offset {offset} under the {recovered}',
+  'readBack.rawNotCompared':
+    'raw bytes: read-back reported, not compared (the bytes do not decrypt to a plain image that can be predicted on this form, and the device re-encrypts what it keeps)',
+  'readBack.notCompared':
+    'no comparison was possible: the plan predicts neither the stored bytes nor the plain image',
 } as const satisfies NamespaceMessages;

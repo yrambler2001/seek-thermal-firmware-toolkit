@@ -66,6 +66,7 @@ import { ffPlainOfStaged, stageFFVendor } from './ff-form.js';
 import type { CipherProfile } from '../profiles/types.js';
 import type { StagingForm } from './types.js';
 import { sha256Sync } from './write-sha.js';
+import { coreMessage, type CoreMessage } from '../message.js';
 
 /** Every refusal of this page is one code, so a front end can tell "nothing was sent" apart. */
 export function slotRefused(
@@ -409,21 +410,46 @@ export function bootloaderFailures(
   cipher: CipherProfile,
   keys: { readonly keyA: Uint8Array | null },
 ): string[] {
+  return bootloaderFailureMessages(staging, payload, cipher, keys).map((failure) => failure.text);
+}
+
+/** `bootloaderFailures` as messages, for the page. */
+export function bootloaderFailureMessages(
+  staging: StagingForm | null,
+  payload: Uint8Array,
+  cipher: CipherProfile,
+  keys: { readonly keyA: Uint8Array | null },
+): CoreMessage[] {
   if (payload.length < HEADER_OFFSET + HEADER_SIZE) {
-    return [`the payload is ${String(payload.length)} B, too short to hold a header at 0x200`];
+    const size = String(payload.length);
+    return [
+      coreMessage(
+        'bootFail.tooShort',
+        { size },
+        `the payload is ${size} B, too short to hold a header at 0x200`,
+      ),
+    ];
   }
-  const failures: string[] = [];
+  const failures: CoreMessage[] = [];
   const dv = viewOf(payload);
   const magic = dv.getUint32(HEADER_OFFSET, true);
   if (magic !== IMAGE_MAGIC) {
     failures.push(
-      `no image magic at 0x200 (found ${hexUp(magic)}, the bootloader needs ${hexUp(IMAGE_MAGIC)})`,
+      coreMessage(
+        'bootFail.noMagic',
+        { found: hexUp(magic), needs: hexUp(IMAGE_MAGIC) },
+        `no image magic at 0x200 (found ${hexUp(magic)}, the bootloader needs ${hexUp(IMAGE_MAGIC)})`,
+      ),
     );
   }
   const length = dv.getUint32(LENGTH_OFFSET, true);
   if (length === 0 || length > payload.length) {
     failures.push(
-      `header.length ${hexUp(length)} is outside the ${hexUp(payload.length)} B payload`,
+      coreMessage(
+        'bootFail.lengthOutside',
+        { length: hexUp(length), size: hexUp(payload.length) },
+        `header.length ${hexUp(length)} is outside the ${hexUp(payload.length)} B payload`,
+      ),
     );
     return failures;
   }
@@ -431,28 +457,60 @@ export function bootloaderFailures(
   if (staging === 'plain') {
     if (length !== payload.length) {
       failures.push(
-        `header.length ${hexUp(length)} is not the payload length ${hexUp(payload.length)}`,
+        coreMessage(
+          'bootFail.lengthNotPayload',
+          { length: hexUp(length), size: hexUp(payload.length) },
+          `header.length ${hexUp(length)} is not the payload length ${hexUp(payload.length)}`,
+        ),
       );
     }
     if (payload.length > PLAIN_CHAIN_STAGE_MAX) {
       failures.push(
-        `${hexUp(payload.length)} B is over the ${hexUp(PLAIN_CHAIN_STAGE_MAX)} B stage`,
+        coreMessage(
+          'bootFail.overStage',
+          { size: hexUp(payload.length), max: hexUp(PLAIN_CHAIN_STAGE_MAX) },
+          `${hexUp(payload.length)} B is over the ${hexUp(PLAIN_CHAIN_STAGE_MAX)} B stage`,
+        ),
       );
     }
     const sum = wordSum32(payload, payload.length);
-    if (sum !== 0) failures.push(`stored word sum ${hexUp(sum)}, the 2014 bootloader needs 0`);
+    if (sum !== 0) {
+      failures.push(
+        coreMessage(
+          'bootFail.plainSum',
+          { sum: hexUp(sum) },
+          `stored word sum ${hexUp(sum)}, the 2014 bootloader needs 0`,
+        ),
+      );
+    }
   } else if (staging === 'key-a-ciphertext') {
     const foff = footerOffsetFor(length);
     if (foff + FOOTER_SIZE > payload.length) {
-      failures.push(`no footer at ${hexUp(foff)}: the payload ends at ${hexUp(payload.length)}`);
+      failures.push(
+        coreMessage(
+          'bootFail.noFooter',
+          { offset: hexUp(foff), end: hexUp(payload.length) },
+          `no footer at ${hexUp(foff)}: the payload ends at ${hexUp(payload.length)}`,
+        ),
+      );
     } else {
       if (dv.getUint32(foff, true) !== FOOTER_TAG) {
         failures.push(
-          `footer at ${hexUp(foff)} is not "CODE" — the bootloader takes its segmented loader`,
+          coreMessage(
+            'bootFail.footerNotCode',
+            { offset: hexUp(foff) },
+            `footer at ${hexUp(foff)} is not "CODE" — the bootloader takes its segmented loader`,
+          ),
         );
       }
       if (dv.getUint32(foff + 4, true) !== length) {
-        failures.push(`footer length does not equal header.length ${hexUp(length)}`);
+        failures.push(
+          coreMessage(
+            'bootFail.footerLength',
+            { length: hexUp(length) },
+            `footer length does not equal header.length ${hexUp(length)}`,
+          ),
+        );
       }
     }
     if (keys.keyA !== null) {
@@ -464,8 +522,12 @@ export function bootloaderFailures(
       const sum = wordSum32(plain, length);
       if (sum !== cipher.acceptanceSum) {
         failures.push(
-          `decrypted under this camera's Key A the word sum is ${hexUp(sum)}, the bootloader ` +
-            `needs ${hexUp(cipher.acceptanceSum)}`,
+          coreMessage(
+            'bootFail.keyASum',
+            { sum: hexUp(sum), needs: hexUp(cipher.acceptanceSum) },
+            `decrypted under this camera's Key A the word sum is ${hexUp(sum)}, the bootloader ` +
+              `needs ${hexUp(cipher.acceptanceSum)}`,
+          ),
         );
       }
     }

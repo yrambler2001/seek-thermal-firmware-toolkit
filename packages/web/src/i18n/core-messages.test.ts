@@ -56,6 +56,21 @@ import {
   stagingDetailMessage,
   storedUnderCheckKeyMessage,
   unknownBootabilityWhyMessage,
+  NO_READ_WINDOW_NOTE,
+  VERIFY_OFF_NOTE,
+  bootloaderFailureMessages,
+  compareReadBack,
+  decryptedNote,
+  imageBuildWarningMessage,
+  keyCheckMessage,
+  keyConfidenceMessage,
+  readBackFailedNote,
+  readBackNote,
+  runningApplicationOf,
+  runningVerdictOf,
+  stagingPhraseMessage,
+  writtenCommittedNote,
+  SeekError,
   type CoreMessage,
   type CoreParam,
   type DeviceState,
@@ -263,6 +278,149 @@ function samples(base: DeviceState): CoreMessage[] {
   add(lastStartReportMessage(state2016));
   add(lastStartReportMessage({ ...state2016, activeSlotWord: null }));
   add(lastStartReportMessage({ ...state2016, activeSlotWord: 7 }));
+
+  /* running: which 1.3.0.8 build runs */
+  add(runningApplicationOf({ ...state2016, version: null }).whyMessage);
+  add(runningApplicationOf({ ...state2016, version: '1.3.0.0' }).whyMessage);
+  add(runningApplicationOf({ ...state2016, version: '1.3.0.8', bankVerdicts: null }).whyMessage);
+  add(
+    runningApplicationOf({
+      ...state2016,
+      version: '1.3.0.8',
+      bankVerdicts: { a: 1, b: 0, r: 1 },
+      byKey: new Map(),
+    }).whyMessage,
+  );
+  const answers = (a: 0 | 1, b: 0 | 1, r: 0 | 1) => ({ a, b, r });
+  for (const [plain, ff] of [
+    [answers(1, 0, 1), answers(0, 0, 0)],
+    [answers(0, 0, 0), answers(1, 0, 1)],
+    [answers(1, 0, 1), answers(1, 0, 1)],
+    [answers(0, 0, 0), answers(1, 1, 1)],
+  ] as const) {
+    add(runningVerdictOf(answers(1, 0, 1), { plain, ff }).why);
+  }
+  add(
+    ffRunsFastNote(
+      runningVerdictOf(answers(1, 0, 1), { plain: answers(0, 0, 0), ff: answers(1, 0, 1) }).why,
+    ),
+  );
+
+  /* imageBuild */
+  for (const kind of [
+    'noVersion',
+    'otherVersion',
+    'otherVersionTaken',
+    'otherVersionUnchecked',
+    'otherBuild',
+    'runningUnknown',
+  ] as const) {
+    add(imageBuildWarningMessage(kind, '1.2.0.0', '1.3.0.0'));
+  }
+
+  /* bootFail: a raw payload's failed bootloader checks */
+  const cipher = base.profile.cipher;
+  add(
+    bootloaderRejectsWarning(
+      bootloaderFailureMessages('plain', new Uint8Array(16), cipher, { keyA: null })[0] ?? 'x',
+    ),
+  );
+  const payload = new Uint8Array(0x400);
+  new DataView(payload.buffer).setUint32(0x204, 0x300, true);
+  bootloaderFailureMessages('plain', payload, cipher, { keyA: null }).forEach(add);
+  const big = new Uint8Array(0x100000);
+  new DataView(big.buffer).setUint32(0x204, 0x100000, true);
+  bootloaderFailureMessages('plain', big, cipher, { keyA: null }).forEach(add);
+  new DataView(payload.buffer).setUint32(0x204, 0x800, true);
+  bootloaderFailureMessages('plain', payload, cipher, { keyA: null }).forEach(add);
+  new DataView(payload.buffer).setUint32(0x204, 0x300, true);
+  bootloaderFailureMessages('key-a-ciphertext', payload, cipher, {
+    keyA: new Uint8Array(16),
+  }).forEach(add);
+  new DataView(payload.buffer).setUint32(0x204, 0x200, true);
+  bootloaderFailureMessages('key-a-ciphertext', payload, cipher, { keyA: null }).forEach(add);
+
+  const footed = new Uint8Array(0x40000);
+  new DataView(footed.buffer).setUint32(0x204, 0x300, true);
+  bootloaderFailureMessages('key-a-ciphertext', footed, cipher, { keyA: null }).forEach(add);
+
+  /* keyCheck */
+  add(keyConfidenceMessage('VERIFIED(family)'));
+  add(keyCheckMessage('VERIFIED(family)', 0));
+  add(keyCheckMessage('VERIFIED(structural)', 0x1234abcd));
+  add(keyCheckMessage('UNVERIFIED', 1));
+
+  /* written: a finished write's notes */
+  STAGINGS.forEach((staging) => {
+    add(stagingPhraseMessage(staging));
+  });
+  add(
+    writtenCommittedNote({
+      size: '65536',
+      name: bankParam('b', 'name'),
+      address: '0x00020000',
+      staged: stagingPhraseMessage('plain'),
+      status: '0x0',
+    }),
+  );
+  add(NO_READ_WINDOW_NOTE);
+  add(VERIFY_OFF_NOTE);
+  add(readBackFailedNote(new Error('transfer failed')));
+  add(
+    readBackFailedNote(
+      new SeekError('slots/refused', bootsNowMessage(bankParam('a')).text, {
+        coreMessage: bootsNowMessage(bankParam('a')),
+      }),
+    ),
+  );
+  add(readBackNote('65536', 'ab'.repeat(32)));
+  const bytes = (length: number, fill = 0) => new Uint8Array(length).fill(fill);
+  const verdicts = [
+    compareReadBack(bytes(8), { stored: bytes(4), plain: null }, cipher, 'plain'),
+    compareReadBack(bytes(4), { stored: bytes(4), plain: null }, cipher, 'plain'),
+    compareReadBack(
+      bytes(4),
+      { stored: bytes(4), plain: null, storedAs: 'key-b-ciphertext' },
+      cipher,
+      'raw',
+    ),
+    compareReadBack(
+      bytes(4, 1),
+      { stored: bytes(4), plain: null, storedAs: 'key-b-ciphertext' },
+      cipher,
+      'raw',
+    ),
+    compareReadBack(bytes(0x400), { stored: null, plain: bytes(0x300) }, cipher, 'plain'),
+    compareReadBack(bytes(4), { stored: null, plain: null }, cipher, 'raw'),
+    compareReadBack(bytes(4), { stored: null, plain: null }, cipher, 'plain'),
+  ];
+  const withHeader = (length: number, size: number) => {
+    const image = bytes(size);
+    new DataView(image.buffer).setUint32(0x200, 0xa1b2c3d4, true);
+    new DataView(image.buffer).setUint32(0x204, length, true);
+    return image;
+  };
+  verdicts.push(
+    compareReadBack(
+      withHeader(0x300, 0x400),
+      { stored: null, plain: bytes(0x200) },
+      cipher,
+      'plain',
+    ),
+  );
+  verdicts.push(
+    compareReadBack(
+      withHeader(0x800, 0x400),
+      { stored: null, plain: bytes(0x800) },
+      cipher,
+      'plain',
+    ),
+  );
+  verdicts.forEach((verdict) => {
+    verdict.noteMessages.forEach(add);
+  });
+  add(decryptedNote(null, { length: '0x300', check: keyCheckMessage('VERIFIED(family)', 0) }));
+  add(decryptedNote('0x210', { length: '0x300', check: keyCheckMessage('UNVERIFIED', 5) }));
 
   const all: CoreMessage[] = [];
   out.forEach((message) => {

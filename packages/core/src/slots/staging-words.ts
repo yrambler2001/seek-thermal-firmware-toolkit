@@ -59,6 +59,19 @@ const STAGING_DETAIL_CODE: Readonly<Record<PlanStaging, string>> = {
   verbatim: 'staging.detail.verbatim',
 };
 
+const STAGING_PHRASE_CODE: Readonly<Record<PlanStaging, string>> = {
+  'key-a-ciphertext': 'staging.phrase.keyACiphertext',
+  'slot-keystream-ciphertext': 'staging.phrase.slotKeystreamCiphertext',
+  plain: 'staging.phrase.plain',
+  'key-a-keystream': 'staging.phrase.keyAKeystream',
+  verbatim: 'staging.phrase.verbatim',
+};
+
+/** `stagingPhrase` as a message, for the page. */
+export function stagingPhraseMessage(staging: PlanStaging): CoreMessage {
+  return coreMessage(STAGING_PHRASE_CODE[staging], {}, STAGING_WORDS[staging].phrase);
+}
+
 /** `stagingDetail` as a message, for the page. */
 export function stagingDetailMessage(staging: PlanStaging): CoreMessage {
   return coreMessage(STAGING_DETAIL_CODE[staging], {}, STAGING_WORDS[staging].detail);

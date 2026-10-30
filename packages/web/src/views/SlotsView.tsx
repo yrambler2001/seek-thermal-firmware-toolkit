@@ -155,10 +155,9 @@ function OutcomePanel({ outcome }: { readonly outcome: SlotFlashOutcome }): Reac
           : t('slots:outcome.provenCommitted')}
       </p>
       <p>{rich('slots:outcome.replug')}</p>
-      {/* i18n: core message (the write's notes) */}
       {result.notes.length > 0 && (
         <ul>
-          {result.notes.map((note) => (
+          {coreTexts(result.noteMessages, result.notes).map((note) => (
             <li key={note}>{note}</li>
           ))}
         </ul>
@@ -466,7 +465,6 @@ export function SlotsView({ slots, connected, busy }: SlotsViewProps): ReactElem
             slotAddress={hexUp(pendingView.entry.address)}
             risk={writeRisk(pending.report, pending.key)}
             targetEmpty={pending.plan.targetEmpty === true}
-            /* i18n: core message (the image-build warning, imageBuildWarningOf, has no code yet: English) */
             warnings={coreTexts(pending.plan.warningMessages, pending.plan.warnings)}
             keyLine={
               pending.plan.derivedFrom

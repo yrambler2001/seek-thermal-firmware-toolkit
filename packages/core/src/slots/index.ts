@@ -47,7 +47,18 @@ export {
   type SlotWriteOptions,
   type SlotWriteResult,
 } from './write.js';
-export { readBackReferenceOf } from './write-verify.js';
+export {
+  NO_READ_WINDOW_NOTE,
+  VERIFY_OFF_NOTE,
+  compareReadBack,
+  decryptedNote,
+  readBackFailedNote,
+  readBackNote,
+  readBackReferenceOf,
+  writtenCommittedNote,
+} from './write-verify.js';
+export { bootloaderFailureMessages } from './write-image.js';
+export { keyCheckMessage, keyConfidenceMessage } from '../crypto/confidence-words.js';
 export {
   BACKUP_TEXT_NAME,
   BACKUP_TIME_PLACEHOLDER,
@@ -79,7 +90,12 @@ export {
   planSlotCopy,
   type SlotCopyPlan,
 } from './copy.js';
-export { imageBuildWarningOf, type ImageBuildForm } from './image-build.js';
+export {
+  imageBuildWarningMessage,
+  imageBuildWarningOf,
+  type ImageBuildForm,
+  type ImageBuildWarningKind,
+} from './image-build.js';
 export {
   FLASH_BASE,
   FULL_FLASH_BYTES,
@@ -102,6 +118,7 @@ export {
   stagingDetail,
   stagingDetailMessage,
   stagingPhrase,
+  stagingPhraseMessage,
   type StagingWords,
 } from './staging-words.js';
 export { flashInvalidatesAnalysis } from './write-commit.js';
@@ -113,6 +130,7 @@ export {
   runningApplicationOf,
   type RunningApplication,
   type Verdict,
+  runningVerdictOf,
 } from './running.js';
 export { ffKeyBPlainOf, ffPlainOfStaged, stageFFVendor, FF_ACCEPT_SUM } from './ff-form.js';
 export {

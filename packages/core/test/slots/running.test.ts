@@ -468,7 +468,7 @@ describe('the 8 Hz 1.3.0.8 image against the build the camera runs: warned, neve
       fileName: '8hz.bin',
     });
     expect(plan.staging).toBe('plain');
-    expect(plan.imageBuild).toEqual({
+    expect(plan.imageBuild).toMatchObject({
       code: 'other-build',
       image: '1.3.0.8 8 Hz',
       camera: '1.3.0.8 16 Hz FF',
@@ -484,7 +484,7 @@ describe('the 8 Hz 1.3.0.8 image against the build the camera runs: warned, neve
   it('the camera’s answers do not say which build runs: the build cannot be told, so it warns (the choice: warn)', () => {
     const state = stateOf(EIGHT_HZ_BANKS, null);
     expect(runningApplicationOf(state).build).toBeNull();
-    expect(imageBuildWarningOf(image, state, 'plain-chain')).toEqual({
+    expect(imageBuildWarningOf(image, state, 'plain-chain')).toMatchObject({
       code: 'running-build-unknown',
       image: '1.3.0.8 8 Hz',
       camera: '1.3.0.8',

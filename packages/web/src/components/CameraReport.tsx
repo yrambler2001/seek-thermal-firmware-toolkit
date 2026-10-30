@@ -26,7 +26,7 @@ import {
   upgradeTargetWarningMessage,
   type CoreParam,
 } from '@seek-fw/core';
-import { cfg0Words, nullableCoreText } from '@/lib/core-text';
+import { cfg0Words, coreText, nullableCoreText } from '@/lib/core-text';
 import { KeyValue } from './KeyValue';
 import { Panel, PanelTitle } from './Panel';
 import { Prose } from './Prose';
@@ -66,10 +66,10 @@ function runningText(state: DeviceState): string | null {
   if (state.version !== '1.3.0.8') return null;
   const run = runningApplicationOf(state);
   if (run.build === null) {
-    return t('info:report.buildNotKnown', { why: run.why }); // i18n: core message (why)
+    return t('info:report.buildNotKnown', { why: coreText(run.whyMessage) });
   }
   const build = run.build === 'ff-1308' ? t('info:report.buildFf') : t('info:report.build8Hz');
-  return t('info:report.buildWhy', { build, why: run.why });
+  return t('info:report.buildWhy', { build, why: coreText(run.whyMessage) });
 }
 
 function bankPresence(
@@ -185,7 +185,6 @@ export function CameraReport({ state }: CameraReportProps): ReactElement {
                 ? t('info:report.unreadable')
                 : `${hexUp(state.cfg0)} — ${cfg0Words(state.profile.boot, state.cfg0)}`,
             ],
-            /* i18n: core message (the 1.3.0.8 row's value: running.ts words) */
             [t('info:report.booted'), nullableCoreText(bootedReportMessage(state, nameParam))],
             [t('info:report.lastStart'), nullableCoreText(lastStartReportMessage(state))],
             [t('info:report.running1308'), running],

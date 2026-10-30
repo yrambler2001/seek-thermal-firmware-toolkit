@@ -1060,7 +1060,7 @@ describe('prepareSlotFlash: an image that is not the build the camera runs is wa
       'This image is firmware 1.2.0.0; the camera runs 1.3.0.0. On this line the camera checks only ' +
       'that an image is well formed (its header and word sum), not its version, so it takes this ' +
       'image, and when it starts from this bank it runs 1.2.0.0.';
-    expect(out.imageBuild).toEqual({
+    expect(out.imageBuild).toMatchObject({
       code: 'other-version',
       image: '1.2.0.0',
       camera: '1.3.0.0',
@@ -1078,7 +1078,7 @@ describe('prepareSlotFlash: an image that is not the build the camera runs is wa
     const image = imageOf(0x6000, 63);
     new DataView(image.buffer).setUint32(0x20c, 0, true);
     const out = prepareSlotFlash(chainReport(), 'b', plain(image));
-    expect(out.imageBuild).toEqual({
+    expect(out.imageBuild).toMatchObject({
       code: 'no-version',
       image: null,
       camera: '1.3.0.0',
@@ -1121,7 +1121,7 @@ describe('prepareSlotFlash: an image that is not the build the camera runs is wa
     image2016.set(hexToBytes(KEY_PAIRS.cp103.block1), 0x3100);
     const out2016 = prepareSlotFlash(pro, 'b', plain(image2016));
     expect(out2016.staging).toBe('slot-keystream-ciphertext');
-    expect(out2016.imageBuild).toEqual({
+    expect(out2016.imageBuild).toMatchObject({
       code: 'other-version',
       image: '1.0.3.2',
       camera: '1.0.3.0',

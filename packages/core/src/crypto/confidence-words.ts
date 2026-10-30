@@ -9,6 +9,7 @@
 
 import { hexUp } from '../bytes.js';
 import type { KeyConfidence } from './recover.js';
+import { coreMessage, type CoreMessage } from '../message.js';
 
 const CONFIDENCE_PHRASE: Readonly<Record<KeyConfidence, string>> = {
   /* The decrypted image sums to the line's acceptance target: the check the bootloader itself makes. */
@@ -29,8 +30,30 @@ export function keyConfidencePhrase(confidence: KeyConfidence): string {
  * "key verified by the vector table only; acceptance sum 0x1234ABCD" when the sum is not what verified it.
  */
 export function keyCheckText(confidence: KeyConfidence, acceptanceSum: number): string {
-  const phrase = keyConfidencePhrase(confidence);
-  return confidence === 'VERIFIED(family)'
-    ? `key ${phrase} ${hexUp(acceptanceSum)}`
-    : `key ${phrase}; acceptance sum ${hexUp(acceptanceSum)}`;
+  return keyCheckMessage(confidence, acceptanceSum).text;
+}
+
+const CONFIDENCE_CODE: Readonly<Record<KeyConfidence, string>> = {
+  'VERIFIED(family)': 'keyConfidence.family',
+  'VERIFIED(structural)': 'keyConfidence.structural',
+  UNVERIFIED: 'keyConfidence.unverified',
+};
+
+/** `keyConfidencePhrase` as a message, for the page. */
+export function keyConfidenceMessage(confidence: KeyConfidence): CoreMessage {
+  return coreMessage(CONFIDENCE_CODE[confidence], {}, keyConfidencePhrase(confidence));
+}
+
+/** `keyCheckText` as a message, for the page. */
+export function keyCheckMessage(confidence: KeyConfidence, acceptanceSum: number): CoreMessage {
+  const sum = hexUp(acceptanceSum);
+  if (confidence === 'VERIFIED(family)') {
+    return coreMessage('keyCheck.family', { sum }, `key ${keyConfidencePhrase(confidence)} ${sum}`);
+  }
+  const phrase = keyConfidenceMessage(confidence);
+  return coreMessage(
+    'keyCheck.other',
+    { phrase, sum },
+    `key ${phrase.text}; acceptance sum ${sum}`,
+  );
 }

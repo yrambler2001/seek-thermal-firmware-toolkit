@@ -30,6 +30,7 @@ import type { DeviceState } from '../workflows/types.js';
 import { FF_1308_VERSION } from './capability-family.js';
 import { runningApplicationOf } from './running.js';
 import type { ImageBuildWarning } from './types.js';
+import { coreMessage, type CoreMessage } from '../message.js';
 
 /**
  * How the bank takes the bytes: 'plain-chain' when the 2014 chain programs them as they are (a
@@ -61,14 +62,8 @@ export function imageBuildWarningOf(
   if (camera === '') return null;
 
   if (blankVersion(header.version)) {
-    return {
-      code: 'no-version',
-      image: null,
-      camera,
-      text:
-        `This image's header names no firmware version, so whether it is the build the camera ` +
-        `runs (${camera}) cannot be told. Check that it is the image you mean to write.`,
-    };
+    const message = imageBuildWarningMessage('noVersion', '', camera);
+    return { code: 'no-version', image: null, camera, text: message.text, message };
   }
   const image = header.versionStr;
   if (image !== camera) {
@@ -76,45 +71,101 @@ export function imageBuildWarningOf(
     const chainTakesIt =
       form === 'plain-chain' &&
       (camera !== FF_1308_VERSION || runningApplicationOf(state).build === 'plain');
-    const follows = chainTakesIt
-      ? ' On this line the camera checks only that an image is well formed (its header and word ' +
-        'sum), not its version, so it takes this image, and when it starts from this bank it ' +
-        `runs ${image}.`
-      : form === 'ff-vendor'
-        ? ''
-        : ' Whether this camera takes a different build, and runs it, has not been checked.';
-    return {
-      code: 'other-version',
+    const message = imageBuildWarningMessage(
+      chainTakesIt
+        ? 'otherVersionTaken'
+        : form === 'ff-vendor'
+          ? 'otherVersion'
+          : 'otherVersionUnchecked',
       image,
       camera,
-      text: `This image is firmware ${image}; the camera runs ${camera}.${follows}`,
-    };
+    );
+    return { code: 'other-version', image, camera, text: message.text, message };
   }
   if (form !== 'plain-chain' || camera !== FF_1308_VERSION) return null;
 
   const running = runningApplicationOf(state);
   if (running.build === 'ff-1308') {
+    const message = imageBuildWarningMessage('otherBuild', '', FF_1308_VERSION);
     return {
       code: 'other-build',
       image: `${FF_1308_VERSION} 8 Hz`,
       camera: `${FF_1308_VERSION} 16 Hz FF`,
-      text:
-        `This image is the 8 Hz ${FF_1308_VERSION} build; the camera runs the 16 Hz ` +
-        `${FF_1308_VERSION} FF build. The 16 Hz build checks a payload against its own FF form when ` +
-        'it is committed and refuses one that fails, before it erases the bank (from its source). ' +
-        'Writing the 8 Hz build to it has not been tried on a camera.',
+      text: message.text,
+      message,
     };
   }
   if (running.build === null) {
+    const message = imageBuildWarningMessage('runningUnknown', '', FF_1308_VERSION);
     return {
       code: 'running-build-unknown',
       image: `${FF_1308_VERSION} 8 Hz`,
       camera: FF_1308_VERSION,
-      text:
-        `This image is the 8 Hz ${FF_1308_VERSION} build. The camera runs ${FF_1308_VERSION}, which ` +
-        'comes as an 8 Hz and a 16 Hz FF build, and its own answers did not say which one it runs, ' +
-        'so whether this is its build cannot be told.',
+      text: message.text,
+      message,
     };
   }
   return null;
+}
+
+export type ImageBuildWarningKind =
+  | 'noVersion'
+  | 'otherVersion'
+  | 'otherVersionTaken'
+  | 'otherVersionUnchecked'
+  | 'otherBuild'
+  | 'runningUnknown';
+
+/**
+ * The words of an image-build warning (`imageBuildWarningOf`): `image` and `camera` are the two versions
+ * ('' where the kind names none); the 1.3.0.8 kinds name that version themselves.
+ */
+export function imageBuildWarningMessage(
+  kind: ImageBuildWarningKind,
+  image: string,
+  camera: string,
+): CoreMessage {
+  const ff = FF_1308_VERSION;
+  const versions = `This image is firmware ${image}; the camera runs ${camera}.`;
+  switch (kind) {
+    case 'noVersion':
+      return coreMessage(
+        'imageBuild.noVersion',
+        { camera },
+        `This image's header names no firmware version, so whether it is the build the camera ` +
+          `runs (${camera}) cannot be told. Check that it is the image you mean to write.`,
+      );
+    case 'otherVersion':
+      return coreMessage('imageBuild.otherVersion', { image, camera }, versions);
+    case 'otherVersionTaken':
+      return coreMessage(
+        'imageBuild.otherVersionTaken',
+        { image, camera },
+        `${versions} On this line the camera checks only that an image is well formed (its header and word ` +
+          `sum), not its version, so it takes this image, and when it starts from this bank it runs ${image}.`,
+      );
+    case 'otherVersionUnchecked':
+      return coreMessage(
+        'imageBuild.otherVersionUnchecked',
+        { image, camera },
+        `${versions} Whether this camera takes a different build, and runs it, has not been checked.`,
+      );
+    case 'otherBuild':
+      return coreMessage(
+        'imageBuild.otherBuild',
+        { version: ff },
+        `This image is the 8 Hz ${ff} build; the camera runs the 16 Hz ` +
+          `${ff} FF build. The 16 Hz build checks a payload against its own FF form when ` +
+          'it is committed and refuses one that fails, before it erases the bank (from its source). ' +
+          'Writing the 8 Hz build to it has not been tried on a camera.',
+      );
+    case 'runningUnknown':
+      return coreMessage(
+        'imageBuild.runningUnknown',
+        { version: ff },
+        `This image is the 8 Hz ${ff} build. The camera runs ${ff}, which ` +
+          'comes as an 8 Hz and a 16 Hz FF build, and its own answers did not say which one it runs, ' +
+          'so whether this is its build cannot be told.',
+      );
+  }
 }

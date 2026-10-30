@@ -64,7 +64,7 @@ import {
 import {
   assertImageShape,
   bankImageOf,
-  bootloaderFailures,
+  bootloaderFailureMessages,
   buildFFPayload,
   buildKeyAPayload,
   buildPlainPayload,
@@ -102,9 +102,16 @@ import { imageBuildWarningOf } from './image-build.js';
 import { FF_1308_VERSION } from './capability-family.js';
 import { slotContentOf } from './inspect.js';
 import { plainBankVerdict, runningApplicationOf } from './running.js';
-import { stagingPhrase } from './staging-words.js';
+import { stagingPhrase, stagingPhraseMessage } from './staging-words.js';
 import { readBackBank, stageAndCommit } from './write-commit.js';
-import { compareReadBack } from './write-verify.js';
+import {
+  NO_READ_WINDOW_NOTE,
+  VERIFY_OFF_NOTE,
+  compareReadBack,
+  readBackFailedNote,
+  readBackNote,
+  writtenCommittedNote,
+} from './write-verify.js';
 import {
   backUpBanks,
   writeActionWords,
@@ -280,15 +287,18 @@ export function ffCommitOf(
   if (running.build === 'ff-1308') {
     return {
       expect: 'takes',
-      ...planWords([ffUntestedWarning()], [ffRunsFastNote(running.why)]),
+      ...planWords([ffUntestedWarning()], [ffRunsFastNote(running.whyMessage)]),
     };
   }
   if (running.build === 'plain') {
-    return { expect: plainChain, ...planWords([ffRunsSlowWarning(running.why, plainTakes)]) };
+    return {
+      expect: plainChain,
+      ...planWords([ffRunsSlowWarning(running.whyMessage, plainTakes)]),
+    };
   }
   return {
     expect: 'build-unknown',
-    ...planWords([ffBuildUnknownWarning(running.why, plainTakes), ffUntestedWarning()]),
+    ...planWords([ffBuildUnknownWarning(running.whyMessage, plainTakes), ffUntestedWarning()]),
   };
 }
 
@@ -408,7 +418,7 @@ export function prepareSlotFlash(
       if (entry.staging !== 'plain') {
         writeNotes.push(REENCRYPTS_NOTE);
       }
-      for (const failure of bootloaderFailures(entry.staging, payload, cipher, {
+      for (const failure of bootloaderFailureMessages(entry.staging, payload, cipher, {
         keyA: state.keyTable?.keyA ?? null,
       })) {
         warnings.push(bootloaderRejectsWarning(failure));
@@ -469,7 +479,7 @@ export function prepareSlotFlash(
     throw slotRefused(`the payload is ${hex(body.payload.length)} B, past the ${entry.name} bank`);
   }
   /* What the image is comes first: every other warning is about writing it. */
-  if (imageBuild !== null) warnings.unshift(imageBuild.text);
+  if (imageBuild !== null) warnings.unshift(imageBuild.message ?? imageBuild.text);
 
   if (key === 'r') warnings.push(RECOVERY_ACK_WARNING);
   const risk = ackNeeded(report, key);
@@ -801,29 +811,32 @@ export async function flashSlot(
     options.onCommit?.(plan.key);
   });
 
-  const notes: string[] = [
-    `committed ${String(plan.payload.length)} B to ${entry.name} at ${hexUp(entry.address)}, ` +
-      `${staged}; commit status ${hex(commitStatus)}`,
+  const notes: CoreMessage[] = [
+    writtenCommittedNote({
+      size: String(plan.payload.length),
+      name: bankNameParam(entry.name, plan.key),
+      address: hexUp(entry.address),
+      staged: stagingPhraseMessage(plan.staging),
+      status: hex(commitStatus),
+    }),
   ];
   let after: Uint8Array | null = null;
   let verified: boolean | null = null;
 
   if (options.verify !== false) {
     if (entry.read === null) {
-      notes.push('this build names no read window for the bank, so nothing was read back');
+      notes.push(NO_READ_WINDOW_NOTE);
     } else {
       try {
         after = await readBackBank(ctx, entry.read);
       } catch (error) {
         if (isCancelled(ctx)) throw error;
         verified = false;
-        notes.push(
-          `the read-back failed: ${error instanceof Error ? error.message : String(error)}`,
-        );
+        notes.push(readBackFailedNote(error));
       }
     }
     if (after !== null) {
-      notes.push(`read back ${String(after.length)} B, SHA-256 ${await sha256hex(after)}`);
+      notes.push(readBackNote(String(after.length), await sha256hex(after)));
       /* Byte comparison where the plan predicts the stored bytes; otherwise the bank
        * is decrypted under the keystream the read-back itself carries and compared
        * with the plain image. See write-verify.ts for why that is the check. */
@@ -838,10 +851,10 @@ export async function flashSlot(
         plan.kind,
       );
       verified = verdict.verified;
-      notes.push(...verdict.notes);
+      notes.push(...verdict.noteMessages);
     }
   } else {
-    notes.push('verify is off: the bank was not read back');
+    notes.push(VERIFY_OFF_NOTE);
   }
 
   /* The replug instruction, and what to read again after it, are the front end's to give, once, after its
@@ -851,7 +864,14 @@ export async function flashSlot(
    * (TESTING.md 42.87). */
   reporter.progress(1, 1, 'Written.');
 
-  return { key: plan.key, commitStatus, verified, after, notes };
+  return {
+    key: plan.key,
+    commitStatus,
+    verified,
+    after,
+    notes: notes.map((note) => note.text),
+    noteMessages: notes,
+  };
 }
 
 /* ==================================================================== *

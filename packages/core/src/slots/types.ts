@@ -244,6 +244,8 @@ export interface ImageBuildWarning {
   readonly camera: string | null;
   /** The warning in people's words; the plan's `warnings` carry the same text. */
   readonly text: string;
+  /** `text` as a message, for the page. */
+  readonly message?: CoreMessage;
 }
 
 /** Everything a person is shown, and a write is checked against, before a send. */
@@ -339,4 +341,6 @@ export interface FlashSlotResult {
   /** Read-back of the slot after the write, when it was taken. */
   readonly after: Uint8Array | null;
   readonly notes: readonly string[];
+  /** `notes` as messages, for the page. */
+  readonly noteMessages?: readonly CoreMessage[];
 }

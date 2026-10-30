@@ -24,6 +24,7 @@ import { keystream, keyWordsOf, KEY_PAIRS, xorWindowVerbatim } from '../preserva
 import type { BankVerdicts, DeviceState, SlotState } from '../workflows/types.js';
 import { classifyBuild, FF_1308_VERSION } from './capability-family.js';
 import { FF_ACCEPT_SUM } from './ff-form.js';
+import { coreMessage, paramText, type CoreMessage } from '../message.js';
 
 /** The camera's answer for one bank, from a page-side prediction: 1 accepts, 0 refuses. */
 export type Verdict = 0 | 1;
@@ -95,6 +96,8 @@ export interface RunningApplication {
   readonly build: 'plain' | 'ff-1308' | null;
   /** What decided it, as a sentence the page and the CLI can carry. */
   readonly why: string;
+  /** `why` as a message, for the page. */
+  readonly whyMessage: CoreMessage;
   /** The camera's own answers for A, B and R (selectors 6, 7, 8), or null when not read. */
   readonly camera: BankVerdicts | null;
   /** Each build's predicted answers from the bank bytes the page read, or null where a bank was not read. */
@@ -134,9 +137,9 @@ function sameAnswers(a: BankVerdicts, b: BankVerdicts): boolean {
   return a.a === b.a && a.b === b.b && a.r === b.r;
 }
 
-function triple(v: BankVerdicts | null): string {
-  if (v === null) return 'not known';
-  return `A ${String(v.a)}, B ${String(v.b)}, R ${String(v.r)}`;
+function triple(v: BankVerdicts): CoreMessage {
+  const [a, b, r] = [String(v.a), String(v.b), String(v.r)];
+  return coreMessage('running.answers.each', { a, b, r }, `A ${a}, B ${b}, R ${r}`);
 }
 
 /**
@@ -150,54 +153,49 @@ export function runningApplicationOf(state: DeviceState): RunningApplication {
     ff: predicted(state, ffBankVerdict),
   };
   const camera = state.bankVerdicts ?? null;
-  const unknown = (why: string): RunningApplication => ({
+  const unknown = (why: CoreMessage): RunningApplication => ({
     build: null,
-    why,
+    why: why.text,
+    whyMessage: why,
     camera,
     predicted: predictions,
   });
   if (state.version !== FF_1308_VERSION) {
+    const version = state.version ?? coreMessage('running.noVersion', {}, 'no version');
     return unknown(
-      `the camera reports ${state.version ?? 'no version'}, and only ${FF_1308_VERSION} has two builds`,
+      coreMessage(
+        'running.why.otherVersion',
+        { version, only: FF_1308_VERSION },
+        `the camera reports ${paramText(version)}, and only ${FF_1308_VERSION} has two builds`,
+      ),
     );
   }
   if (camera?.a == null || camera.b === null || camera.r === null) {
     return unknown(
-      'the camera did not answer the bank verdicts (GetFirmwareInfo selectors 6, 7, 8)',
+      coreMessage(
+        'running.why.noVerdicts',
+        {},
+        'the camera did not answer the bank verdicts (GetFirmwareInfo selectors 6, 7, 8)',
+      ),
     );
   }
   if (predictions.plain === null || predictions.ff === null) {
     return unknown(
-      'a bank the verdicts depend on was not read, so the answers cannot be predicted',
+      coreMessage(
+        'running.why.notRead',
+        {},
+        'a bank the verdicts depend on was not read, so the answers cannot be predicted',
+      ),
     );
   }
-  const plainMatch = sameAnswers(camera, predictions.plain);
-  const ffMatch = sameAnswers(camera, predictions.ff);
-  const answers = `the camera answers ${triple(camera)}`;
-  if (plainMatch && !ffMatch) {
-    return {
-      build: 'plain',
-      why: `${answers}, which is what the 8 Hz 1.3.0.8 build answers for these banks (${triple(predictions.plain)})`,
-      camera,
-      predicted: predictions,
-    };
-  }
-  if (ffMatch && !plainMatch) {
-    return {
-      build: 'ff-1308',
-      why: `${answers}, which is what the 16 Hz FF 1.3.0.8 build answers for these banks (${triple(predictions.ff)})`,
-      camera,
-      predicted: predictions,
-    };
-  }
-  if (plainMatch && ffMatch) {
-    return unknown(
-      `${answers}, and both builds answer exactly that for these banks, so the banks do not tell them apart`,
-    );
-  }
-  return unknown(
-    `${answers}, which matches neither build (8 Hz: ${triple(predictions.plain)}; 16 Hz FF: ${triple(predictions.ff)})`,
-  );
+  const verdict = runningVerdictOf(camera, { plain: predictions.plain, ff: predictions.ff });
+  return {
+    build: verdict.build,
+    why: verdict.why.text,
+    whyMessage: verdict.why,
+    camera,
+    predicted: predictions,
+  };
 }
 
 /**
@@ -218,4 +216,62 @@ export function onPlaintextChain(profile: FirmwareProfile, version: string | nul
  */
 export function onCompactPro2016Line(profile: FirmwareProfile, version: string | null): boolean {
   return profile.id === 'compact-2016' && classifyBuild(profile, version).family === 'locked-2016';
+}
+
+/**
+ * Which build the camera's own answers name, given each build's predicted answers for the banks read, and
+ * why (`RunningApplication.why`).
+ */
+export function runningVerdictOf(
+  camera: BankVerdicts,
+  predictions: { readonly plain: BankVerdicts; readonly ff: BankVerdicts },
+): { readonly build: 'plain' | 'ff-1308' | null; readonly why: CoreMessage } {
+  const plainMatch = sameAnswers(camera, predictions.plain);
+  const ffMatch = sameAnswers(camera, predictions.ff);
+  const said = triple(camera);
+  const answers = coreMessage(
+    'running.answers',
+    { answers: said },
+    `the camera answers ${said.text}`,
+  );
+  const plain = triple(predictions.plain);
+  const ff = triple(predictions.ff);
+  if (plainMatch && !ffMatch) {
+    return {
+      build: 'plain',
+      why: coreMessage(
+        'running.why.plain',
+        { answers, predicted: plain },
+        `${answers.text}, which is what the 8 Hz 1.3.0.8 build answers for these banks (${plain.text})`,
+      ),
+    };
+  }
+  if (ffMatch && !plainMatch) {
+    return {
+      build: 'ff-1308',
+      why: coreMessage(
+        'running.why.ff',
+        { answers, predicted: ff },
+        `${answers.text}, which is what the 16 Hz FF 1.3.0.8 build answers for these banks (${ff.text})`,
+      ),
+    };
+  }
+  if (plainMatch && ffMatch) {
+    return {
+      build: null,
+      why: coreMessage(
+        'running.why.both',
+        { answers },
+        `${answers.text}, and both builds answer exactly that for these banks, so the banks do not tell them apart`,
+      ),
+    };
+  }
+  return {
+    build: null,
+    why: coreMessage(
+      'running.why.neither',
+      { answers, plain, ff },
+      `${answers.text}, which matches neither build (8 Hz: ${plain.text}; 16 Hz FF: ${ff.text})`,
+    ),
+  };
 }
