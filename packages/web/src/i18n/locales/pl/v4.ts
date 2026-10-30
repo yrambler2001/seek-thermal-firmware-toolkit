@@ -90,7 +90,7 @@ export default {
   'gap.fine':
     'Ta nadmiarowość wyjaśnia też, dlaczego kamera, której `{address}` odczytuje się jako `{fill}`, jest w porządku: firmware zdolny do uruchomienia nadal istnieje w pozostałych slotach. Tak czy inaczej nic na tej karcie nie zapisuje do urządzenia — luka dotyczy tylko pobieranego pliku.',
   'gap.complete':
-    'Jeśli naprawdę potrzebny jest ściśle kompletny obraz bajt w bajt — na przykład do porównania pamięci flash z wzorcem — odczytaj ją przez SWD/J-Link lub programatorem SPI.',
+    'Jeśli naprawdę potrzebny jest ściśle kompletny obraz bajt w bajt — na przykład do porównania pamięci flash z wzorcem — odczytaj pamięć flash przez SWD/J-Link lub programatorem SPI.',
 
   /* components/OpcodeTable. Opcodes, names and IN/OUT stay as they are. */
   'opcodes.opcode': 'Kod',
@@ -98,7 +98,7 @@ export default {
   'opcodes.dir': 'Kier.',
   'opcodes.why': 'Do czego służy',
   'opcodes.getInfo':
-    'wersja działającego firmware, odczytywana jako pierwsza: decyduje, której kompilacji tabeli selektorów używa zrzut, a kamera, która jej nie podaje, nie jest odczytywana',
+    'wersja działającego firmware, odczytywana jako pierwsza: decyduje, z tabeli selektorów której kompilacji korzysta zrzut, a kamera, która jej nie podaje, nie jest odczytywana',
   'opcodes.getError': 'sprawdzenie stanu po każdym kroku',
   'opcodes.setMode': 'tylko do wybrania trybu 0 i tylko wtedy, gdy kamera jeszcze w nim nie jest',
   'opcodes.getMode': 'odczyt bieżącego trybu',
@@ -129,7 +129,7 @@ export default {
   'options.recipientAuto': 'automatycznie',
   'options.recipientInterface': 'interface ({requestTypes})',
   'options.recipientDevice': 'device ({requestTypes})',
-  'options.decrypt': 'odszyfruj firmware',
+  'options.decrypt': 'odszyfrowanie firmware',
   /** A choice of the "decrypt firmware" option: "yes". */
   'options.yes': 'tak',
   /** A choice of the "decrypt firmware" option: "no". */

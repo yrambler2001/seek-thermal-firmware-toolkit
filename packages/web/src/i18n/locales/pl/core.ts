@@ -706,9 +706,9 @@ export default {
   'identity.note.noAnswerSome':
     'GetFirmwareInfo nie odpowiedziało ({error}); odpowiedzi: {answered} z {reads} odczytów, nigdy dwie z rzędu, więc żadnej z nich nie da się odróżnić od rekordu pozostawionego przez wcześniejsze polecenie',
   'identity.note.tooShort':
-    'GetFirmwareInfo odpowiedziało tylko liczbą bajtów: {count}, za mało na wersję',
+    'GetFirmwareInfo zwróciło za mało bajtów na wersję (liczba bajtów: {count})',
   'identity.note.tooShortContext':
-    'GetFirmwareInfo odpowiedziało tylko liczbą bajtów: {count}, za mało na wersję; {context}',
+    'GetFirmwareInfo zwróciło za mało bajtów na wersję (liczba bajtów: {count}); {context}',
   'identity.note.otherRecord':
     'pierwszy odczyt zwrócił inny rekord ({version}), na którym wcześniejsze polecenie zostawiło selektor informacji o firmware — ten odczyt go wyczyścił',
   'identity.note.afterStartup':
@@ -995,9 +995,9 @@ export default {
     'ten przebieg jest zakończony — wszystkie kroki wykonano (przebieg {run})',
   /** `{finished}`: a date and time (ISO 8601). */
   'preserve.gate.stepDone':
-    '{step} jest już wykonany w tym przebiegu (zakończono {finished}) — wznowienie kontynuuje od {next}',
+    'krok {step} jest już wykonany w tym przebiegu (zakończono {finished}) — wznowienie kontynuuje od kroku {next}',
   'preserve.gate.stepDoneUnknownTime':
-    '{step} jest już wykonany w tym przebiegu (czas zakończenia nieznany) — wznowienie kontynuuje od {next}',
+    'krok {step} jest już wykonany w tym przebiegu (czas zakończenia nieznany) — wznowienie kontynuuje od kroku {next}',
   'preserve.gate.backupRerun':
     'kopii zapasowej nie można wykonać ponownie: ten przebieg ma już wykonane kroki {steps}, a jego następny krok to {next} — użyj --resume',
   /** `{error}`: the failed backup's recorded error, or preserve.gate.noErrorText. */
@@ -1038,7 +1038,7 @@ export default {
   'preserve.gate.verifyNeedsBackup':
     'sprawdzenie wymaga {file} (wzorca do porównania), a nie ma go w katalogu przebiegu',
   'preserve.gate.needsBanks':
-    '{step} wymaga slotów odczytanych w kroku kopii zapasowej, a stan ich nie zawiera',
+    'krok {step} wymaga slotów odczytanych w kroku kopii zapasowej, a stan ich nie zawiera',
   /** `{what}`: why the run's choice offers no bank (preserve.choice.*). */
   'preserve.gate.noBanks': 'dla tego przebiegu nie wybrano slotów: {what}',
   /** `{why}`: the bank's refusal (preserve.refused.*, preserve.image.*). */

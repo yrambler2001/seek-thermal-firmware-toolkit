@@ -195,7 +195,7 @@ export default {
    * ("Booted now", the badge's word with a capital), translated by core's messages.
    */
   'table.risk.bootedRecovery':
-    '{booted} i slot odzyskiwania: zapis wymaga dodatkowego potwierdzenia.',
+    '{booted}, a zarazem slot odzyskiwania: zapis wymaga dodatkowego potwierdzenia.',
   'table.risk.booted': '{booted}: zapis wymaga dodatkowego potwierdzenia.',
   'table.risk.recovery': '{bank}: zapis wymaga dodatkowego potwierdzenia.',
   'table.risk.bootUnnamed':

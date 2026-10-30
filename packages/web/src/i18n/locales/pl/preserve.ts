@@ -39,7 +39,7 @@ export default {
   'how.noFile': 'Nie trzeba wybierać pliku firmware: wszystko jest odczytywane z samej kamery.',
   /* {a}, {b}, {r}: the three banks inside a sentence ("slot A, slot B and recovery R"). */
   'how.banks':
-    'Kamera przechowuje firmware w trzech **slotach** ({a}, {b} i {r}). Krok 02 odczytuje wszystkie trzy i ustala, z którego kamera uruchomi się następnym razem; łatka działa tylko wtedy, gdy zawiera ją ten slot. Sloty, które łata krok 03, wybierasz sam — domyślnie ten, z którego nastąpi następne uruchomienie — a krok 04 przywraca każdy z nich.',
+    'Kamera przechowuje firmware w trzech **slotach** ({a}, {b} i {r}). Krok 02 odczytuje wszystkie trzy i ustala, z którego kamera uruchomi się następnym razem; łatka działa tylko wtedy, gdy zawiera ją ten slot. Sloty, które łata krok 03, wybierasz samodzielnie — domyślnie ten, z którego nastąpi następne uruchomienie — a krok 04 przywraca każdy z nich.',
   /* {example} is the run file's name pattern; keep it as it is. */
   'how.runFile':
     'Po każdym kroku przeglądarka pobiera **plik przebiegu** nazwany od początku przebiegu, czasu zapisu i osiągniętego kroku (`{example}`), z jednym folderem na każdy krok w środku. Zachowaj najnowszy — pozwala kontynuować później.',
@@ -309,7 +309,7 @@ export default {
   'runFile.file': 'Plik',
   'runFile.lastSaved': 'Ostatni zapis',
   /* {step} is the step's id in the run file (English), {at} a time stamp, {bytes} the size in bytes. */
-  'runFile.lastSavedValue': 'po {step} — {at} ({bytes} B)',
+  'runFile.lastSavedValue': 'po kroku {step} — {at} ({bytes} B)',
   'runFile.nextStep': 'Następny krok',
   'runFile.none':
     'Żaden przebieg nie jest aktywny. Rozpoczyna go krok 02; można też wczytać tu plik przebiegu.',
@@ -346,7 +346,7 @@ export default {
   /* {error} is core's message, or unknownReason. */
   'status.failedEarlier': 'Wcześniej nie powiodło się: {error}',
   /* {step} is the step's id in the run file (English). */
-  'status.resumed': 'Wznowiono od {step}. Lista etapów kontynuuje od tego miejsca.',
+  'status.resumed': 'Wznowiono od kroku {step}. Lista etapów kontynuuje od tego miejsca.',
   'status.notResumed': 'Nie wznowiono — zobacz dziennik powyżej.',
 
   /*
@@ -358,7 +358,7 @@ export default {
   'gate.noRun': 'żaden przebieg nie jest aktywny — tworzy go pierwszy etap',
   'gate.runDone': 'ten przebieg jest zakończony — wszystkie etapy wykonano',
   /* {step} is the step's id in the run file (English). */
-  'gate.alreadyDone': 'już wykonano — wznowienie kontynuuje od {step}',
+  'gate.alreadyDone': 'już wykonano — wznowienie kontynuuje od kroku {step}',
   'gate.banksRead': 'sloty odczytywane przez kopię zapasową',
   'gate.choice': 'wybór slotów — {why}',
   'gate.bankRefused': '{bank} nie może zostać zapisany: {reason}',
@@ -367,7 +367,7 @@ export default {
     'droga przez slot odzyskiwania (w tej kompilacji startuje tylko {r}, a nie {bank})',
   'gate.backupFirst': 'kopia zapasowa pamięci flash (wykonywana jako pierwsza w tym etapie)',
   'gate.backup': 'kopia zapasowa pamięci flash',
-  'gate.patchStep': 'krok łatki',
+  'gate.patchStep': 'krok „Łatka”',
   'gate.patchOf': 'łatka ({bank})',
   'gate.backupFile': 'plik okien kopii zapasowej',
   /* What a step lacks from the run's files: a bank's two agreeing reads, its decrypted image. */
