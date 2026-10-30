@@ -83,7 +83,7 @@ export default {
   'split.where':
     'As compilações Compact PRO de 2016 (1.0.3.0 e 1.0.3.2, incluindo as variantes FF) e a compilação Compact 1.3.0.8 FF (16 Hz) **não** são câmaras 4.x e não são lidas como tal. O protocolo delas é o protocolo bloqueado de 2014–2017, e o firmware guarda as ranhuras com uma cifra diferente (2016) ou como a cadeia sem encriptação de 2014, com uma via só de recuperação (FF). Por isso estão em **Dump e desencriptação 0.x/1.x 2014/2016**, e o separador 4.x/Nano recusa-as antes de ler o que quer que seja.',
   'split.evidence':
-    'Os indícios de que funcionam no separador 0.x/1.x: o processo Preserve tem um patch derivado para cada uma delas, e as execuções no emulador passam em ambas. A compilação 1.0.3.0, no seu dump nativo de 2016, passou pela cópia de segurança, patch, escrita, leitura completa, restauro e verificação; a 1.3.0.8 FF passou pela sua via de recuperação. Na câmara de bancada, uma Compact PRO 1.0.3.0, a leitura do passo 02 do Preserve terminou sem reinício e sem escrita, e a câmara foi identificada como sendo da cifra de 2016. Nestas compilações, o mapa de seletores 4.x é recusado em 38 dos seus 63 seletores, por isso o separador 4.x só conseguiria devolver lacunas para eles.',
+    'Os indícios de que funcionam no separador 0.x/1.x: o processo Preserve tem um patch derivado para cada uma delas, e as execuções no emulador passam em ambas. A compilação 1.0.3.0, no seu dump nativo de 2016, passou pela cópia de segurança, patch, escrita, leitura completa, restauro e verificação; a 1.3.0.8 FF passou pela sua via de recuperação. Na câmara de bancada, uma Compact PRO 1.0.3.0, a leitura do passo 02 do Preserve terminou sem reinício e sem escrita, e foi identificada na câmara a cifra de 2016. Nestas compilações, o mapa de seletores 4.x é recusado em 38 dos seus 63 seletores, por isso o separador 4.x só conseguiria devolver lacunas para eles.',
   /* "There" is the 4.x/Nano tab: the page once had a firmware-family selector there, and it is gone, so no setting routes these builds into the 4.x/Nano read. */
   'split.stay':
     'Por isso ficam no separador 0.x/1.x, e o separador 4.x/Nano não tem nenhum seletor de família que as envie para lá.',
@@ -117,7 +117,7 @@ export default {
   'report.upgradeTarget': 'Destino da atualização',
   /** Value: the camera was not asked for its upgrade target, so there is none to show. */
   'report.notReplayed': '(não perguntado)',
-  'report.targetConfirmed': '{slot} (confirmado no tráfego USB)',
+  'report.targetConfirmed': '{slot} (confirmada no tráfego USB)',
   /* {why} is core's reason. */
   'report.buildNotKnown':
     'desconhecida: {why}. Uma imagem FF de 16 Hz precisa que a câmara diga qual a compilação que executa (o separador de ranhuras pergunta)',

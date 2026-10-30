@@ -42,7 +42,7 @@ export default {
   'slot.title': 'Desencriptar uma ranhura de firmware',
   'slot.description': 'Uma ranhura, a partir de um ficheiro: 64 KB, tal como a câmara a guarda.',
   'slot.intro':
-    'Escolha um ficheiro com uma ranhura de firmware — 65 536 bytes, tal como o dump de uma ranhura no separador <link>{tab}</link> a guarda, ou os 64 KB no endereço de uma ranhura num dump completo da flash. A página encontra a chave a partir dos próprios bytes da ranhura, desencripta a imagem e disponibiliza-a para transferência, mostrando a chave, o tamanho e o SHA-256. Não usa câmara, por isso funciona sem nada conectado.',
+    'Escolha um ficheiro com uma ranhura de firmware — 65 536 bytes, tal como o dump de uma ranhura no separador <link>{tab}</link> a guarda, ou os 64 KB no endereço de uma ranhura num dump completo da flash. A página encontra a chave a partir dos próprios bytes da ranhura, desencripta a imagem e disponibiliza-a para transferência, com a chave, o tamanho e o SHA-256 indicados. Não usa câmara, por isso funciona sem nada conectado.',
   'slot.refusedIntro':
     'Um ficheiro que não seja uma ranhura, que não contenha nenhuma imagem de firmware ou que não se desencripte é recusado, com o motivo. Uma ranhura apagada é indicada como tal e não tem nada para desencriptar.',
   'slot.actions': 'Ações do ficheiro de ranhura',

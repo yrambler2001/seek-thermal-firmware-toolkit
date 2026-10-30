@@ -37,7 +37,7 @@ export default {
 
   /* lib/camera-lock: another tab holds the camera. */
   'cameraLock.inUseElsewhere':
-    'A câmara está a ser usada noutro separador ou noutra janela — termine ou feche lá primeiro.',
+    'A câmara está a ser usada noutro separador ou noutra janela — termine ou feche primeiro o que está aberto lá.',
 
   /* lib/backup-save: shown after core's plan sentence on a write's confirmation. */
   'backup.downloadNote':
@@ -118,7 +118,7 @@ export default {
   'deviceInfo.keysConfirmed':
     'Confirmadas pela correspondência com o estado do fluxo de chave de uma ranhura, recuperado do próprio texto cifrado. Um envio é preparado para que cada ranhura o guarde com a chave de armazenamento do bootloader ({storeKey}), ou com a chave própria da ranhura de arranque quando a chave de armazenamento da aplicação não é essa.',
   'deviceInfo.keysDecrypted':
-    'Cada ranhura foi desencriptada no browser, deduzindo o fluxo de chave a partir dos seus próprios vetores de reset, que se sabe serem zero. Desencriptar não é o mesmo que arrancar: o bootloader só experimenta {storeKey:acc} e a chave A, por isso uma ranhura escrita com qualquer outra chave tem a soma de verificação perfeita e mesmo assim é ignorada. Não foi escrito nada.',
+    'Cada ranhura foi desencriptada no browser: o seu fluxo de chave foi deduzido a partir dos seus próprios vetores de reset, que se sabe serem zero. Desencriptar não é o mesmo que arrancar: o bootloader só experimenta {storeKey:acc} e a chave A, por isso uma ranhura escrita com qualquer outra chave tem a soma de verificação perfeita e mesmo assim é ignorada. Não foi escrito nada.',
   /* {banks} is one bank name or several joined by common:list.and. */
   'deviceInfo.orphan': {
     one: '**{banks:ins} contém uma imagem de firmware válida, encriptada com uma chave que o bootloader desta câmara não conhece.** A imagem está intacta e a soma de verificação está correta, mas o bootloader só experimenta {storeKey:acc} e a chave A quando verifica uma ranhura, por isso ignora-a e arranca a partir de outra.',

@@ -39,7 +39,7 @@ export default {
   'how.noFile': 'Não há nenhum ficheiro de firmware para escolher: tudo é lido da própria câmara.',
   /* {a}, {b}, {r}: the three banks inside a sentence ("slot A, slot B and recovery R"). */
   'how.banks':
-    'A câmara guarda o firmware em três **ranhuras** ({a}, {b} e {r}). O passo 02 lê as três e determina a partir de qual a câmara vai arrancar a seguir; o patch só funciona se estiver nessa ranhura. É o utilizador que escolhe as ranhuras a que o passo 03 aplica o patch — por predefinição, a do próximo arranque — e o passo 04 repõe todas elas.',
+    'A câmara guarda o firmware em três **ranhuras** ({a}, {b} e {r}). O passo 02 lê as três e determina a partir de qual a câmara vai arrancar a seguir; o patch só funciona se estiver nessa ranhura. Pode escolher as ranhuras a que o passo 03 aplica o patch — por predefinição, a do próximo arranque —, e o passo 04 repõe todas elas.',
   /* {example} is the run file's name pattern; keep it as it is. */
   'how.runFile':
     'Depois de cada passo, o browser transfere um **ficheiro de execução** com o nome do início da execução, a hora a que foi guardado e o passo a que chegou (`{example}`), com uma pasta por passo lá dentro. Guarde o mais recente — permite-lhe continuar mais tarde.',
@@ -75,7 +75,7 @@ export default {
   'step.patch.description':
     'Offline, sem câmara. Prepara o patch para cada ranhura que a execução pode escrever: o patch permite que a leitura da câmara chegue a toda a flash de 4 MB, e é escrito na forma em que a câmara o guarda, para que só mudem os bytes do próprio patch.',
   'step.commit.description':
-    'A escrita. Primeiro relê cada ranhura escolhida e não escreve nada a menos que cada uma ainda contenha o que a cópia de segurança registou (uma escrita que já foi feita nunca é repetida); depois escreve cada uma, deixando para o fim a ranhura que a câmara experimenta primeiro. A câmara não é reiniciada aqui: é o passo seguinte que a reinicia.',
+    'A escrita. Primeiro relê cada ranhura escolhida e não escreve nada a menos que cada uma ainda contenha o que a cópia de segurança registou (uma escrita que já foi feita nunca é repetida); depois escreve cada uma, e a ranhura que a câmara experimenta primeiro fica para o fim. A câmara não é reiniciada aqui: é o passo seguinte que a reinicia.',
   'step.drain.description':
     'Reinicia a câmara para que arranque o firmware com o patch (fica em silêncio cerca de dez segundos; a página espera e volta a encontrá-la), verifica a partir de qual ranhura arrancou (uma ranhura sem o patch interrompe o passo antes de qualquer leitura), depois lê toda a flash de 4 MB numa só leitura e coloca na imagem guardada o firmware original de cada ranhura escrita, tirado da cópia de segurança. Não é escrito nada.',
   'step.restore.description':

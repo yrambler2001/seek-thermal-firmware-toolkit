@@ -186,7 +186,7 @@ export default {
   'table.restoreNote':
     'Escolha uma cópia de segurança completa da flash: um .bin (uma imagem completa da flash de 4 MB, como uma leitura por J-Link) ou um .zip que contenha uma (um ficheiro de execução do Preserve, ou o zip que «Dump e desencriptação 4.x/Nano» ou «Dump de todos os seletores» guarda). Esta ranhura é extraída dela, desencriptada e mostrada como plano antes de qualquer envio.',
   'table.fpsNote':
-    'Passa esta ranhura de {fromHz} Hz para {toHz} Hz, alterando os seus bytes. Primeiro, a ranhura é guardada num zip transferido, e o ficheiro desencriptado que ele contém é a forma de voltar atrás.',
+    'Passa esta ranhura de {fromHz} Hz para {toHz} Hz através de uma alteração dos seus bytes. Primeiro, a ranhura é guardada num zip transferido, e o ficheiro desencriptado que ele contém é a forma de voltar atrás.',
   /*
    * The extra confirmation a write to this bank asks for. {booted} is core's word for the booted bank
    * ("Booted now", the badge's word with a capital), translated by core's messages.

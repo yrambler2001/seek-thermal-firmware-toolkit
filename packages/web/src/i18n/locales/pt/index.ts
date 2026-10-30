@@ -52,7 +52,8 @@
  * - selector → seletor; read window → janela de leitura; arm (open a window) → abrir ("nothing was armed"
  *   → «não foi aberta nenhuma janela»); unlock token → token de desbloqueio; evidence → indícios
  * - tab → separador; download → transferir / transferência; downloads folder → pasta de transferências;
- *   browser → o browser; log → o registo
+ *   browser → o browser; log → o registo; archive (the zip a dump downloads) → o arquivo (pt-PT
+ *   says "arquivo" for an archive and "ficheiro" for a file)
  * Typography: quotation marks « » (no spaces inside); no space before ":", ";", "!", "?". Sizes KB/MB
  * and bytes B with a space before the unit (README, Units); Hz, FPS, ms, Mbit/s as they are; a
  * percentage "{value}%". Status lines keep the English dots ("A ler...", "A cancelar …"). Plurals: one,

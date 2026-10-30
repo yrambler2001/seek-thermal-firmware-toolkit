@@ -73,7 +73,7 @@ export default {
   'boot.verdict.checkKeyUnnamed':
     'não pôde ser verificada: a chave com que o bootloader verifica uma ranhura não foi identificada',
   'boot.cfg0NotRead':
-    'a palavra de configuração de arranque (cfg[0]) não foi lida, por isso não se sabe que ranhura arranca no próximo arranque',
+    'a palavra de configuração de arranque (cfg[0]) não foi lida, por isso não se sabe que ranhura vai arrancar da próxima vez',
   'boot.select.unknown':
     'a palavra de configuração de arranque é {word}, por isso o bootloader experimenta primeiro {first:acc}, mas {bank:acc} {verdict}, por isso não se sabe que ranhura arranca',
   'boot.select.first':
@@ -789,7 +789,7 @@ export default {
     'as ranhuras são escolhidas depois da cópia de segurança, que as lê — faça primeiro a cópia de segurança',
   /** `{banks}`: the banks the run writes, joined with commas, or preserve.banks.none. */
   'preserve.banks.afterCommit':
-    'as ranhuras não podem mudar depois de a escrita ter sido feita ou tentada: esta execução escreve: {banks}; e o restauro repõe exatamente essas',
+    'as ranhuras não podem mudar depois de a escrita ter sido feita ou tentada (esta execução escreve: {banks}), e o restauro repõe exatamente essas ranhuras',
   'preserve.banks.none': 'nenhuma ranhura',
 
   /* ---- status: a status line a run leaves under its progress bar ---- */
