@@ -2,9 +2,11 @@ import type { ComponentProps, ReactElement } from 'react';
 import { cva, type VariantProps } from 'class-variance-authority';
 import { cn } from '@/lib/utils';
 
+/* No `nowrap`: a badge longer than its row (a translation, on a phone) wraps
+ * inside its pill rather than running off the screen. */
 const badgeVariants = cva(
   'inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[0.7rem] ' +
-    'font-semibold whitespace-nowrap [&_svg]:size-3 [&_svg]:shrink-0',
+    'max-w-full font-semibold [&_svg]:size-3 [&_svg]:shrink-0',
   {
     variants: {
       tone: {

@@ -216,6 +216,16 @@
     display: none;
   }
 
+  /* At table widths a button or badge keeps its label on one line, as it always
+   * did, and the columns size around it. In the phone's cards it may wrap
+   * (ui/button.tsx, ui/badge.tsx). */
+  @media (min-width: 48rem) {
+    .table-cards [data-slot='button'],
+    .table-cards [data-slot='badge'] {
+      white-space: nowrap;
+    }
+  }
+
   @media (max-width: 48rem) {
     .table-cards,
     .table-cards tbody,

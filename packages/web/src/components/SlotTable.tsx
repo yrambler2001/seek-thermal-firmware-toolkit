@@ -252,7 +252,7 @@ export function SlotTable({
 
           return (
             <TableRow key={key}>
-              <TableRowHeader className="whitespace-nowrap">
+              <TableRowHeader className="md:whitespace-nowrap">
                 <span className="block">{bankName(key)}</span>
                 <span className="block font-mono text-[0.75rem] font-normal text-muted-foreground">
                   {hexUp(entry.address)}

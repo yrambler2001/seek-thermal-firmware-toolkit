@@ -69,15 +69,19 @@ export function AppHeader({ route, connected, canUseUsb }: AppHeaderProps): Reac
       />
       <div className="mx-auto w-full max-w-[64rem] px-4 pt-5 pb-0 sm:px-6">
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-          <span
-            aria-hidden="true"
-            className="flex size-9 items-center justify-center rounded-lg border border-primary/30 bg-primary/10 text-primary"
-          >
-            <Thermometer className="size-5" />
-          </span>
-          <h1 className="text-[1.15rem] leading-tight font-semibold tracking-tight">
-            {t('app:title')}
-          </h1>
+          {/* The mark and the name stay on one row: a name longer than the row
+           * (a translated one, on a phone) wraps beside the mark. */}
+          <div className="flex min-w-0 items-center gap-3">
+            <span
+              aria-hidden="true"
+              className="flex size-9 shrink-0 items-center justify-center rounded-lg border border-primary/30 bg-primary/10 text-primary"
+            >
+              <Thermometer className="size-5" />
+            </span>
+            <h1 className="min-w-0 text-[1.15rem] leading-tight font-semibold tracking-tight">
+              {t('app:title')}
+            </h1>
+          </div>
           <div className="ms-auto flex items-center gap-2">
             <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-2.5 py-1 text-[0.72rem] font-medium text-muted-foreground">
               <span

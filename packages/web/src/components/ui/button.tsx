@@ -7,10 +7,15 @@ import { cn } from '@/lib/utils';
  * vocabulary, not decoration: `default` is the one action a panel is for,
  * `outline` is everything else, and `destructive` is reserved for the single
  * control that erases a camera's flash.
+ *
+ * A label wider than the row it sits in (a long translation, on a phone) wraps
+ * inside the button, balanced and hyphenated in the page's language, instead of
+ * pushing the button past the screen's edge. A label that fits stays one line,
+ * at the height it always had.
  */
 export const buttonVariants = cva(
-  'inline-flex shrink-0 cursor-pointer items-center justify-center gap-2 rounded-md ' +
-    'text-sm leading-none font-semibold whitespace-nowrap transition-colors select-none ' +
+  'inline-flex max-w-full shrink-0 cursor-pointer items-center justify-center gap-2 rounded-md ' +
+    'text-center text-sm leading-tight font-semibold text-balance hyphens-auto transition-colors select-none ' +
     'disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-45 ' +
     '[&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0',
   {
@@ -24,9 +29,9 @@ export const buttonVariants = cva(
         danger: 'border border-destructive/55 bg-card text-destructive hover:bg-destructive/10',
       },
       size: {
-        sm: 'h-8 px-2.5 text-[0.8125rem]',
-        default: 'h-9 px-3.5',
-        lg: 'h-11 px-5 text-[0.95rem]',
+        sm: 'min-h-8 px-2.5 py-1.5 text-[0.8125rem]',
+        default: 'min-h-9 px-3.5 py-2',
+        lg: 'min-h-11 px-5 py-2.5 text-[0.95rem]',
       },
     },
     defaultVariants: { variant: 'outline', size: 'default' },
