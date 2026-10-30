@@ -55,11 +55,18 @@ export function interpolate(
 
 const rules = new Map<string, Intl.PluralRules>();
 
+/**
+ * The locale whose plural rules a language code uses, where the bare code means another variety:
+ * plain `pt` resolves to Brazilian Portuguese in CLDR (0 and 1.5 are `one`), and the page's Portuguese
+ * is European (`pt-PT`: only 1 is `one`).
+ */
+const PLURAL_LOCALE: Readonly<Record<string, string>> = { pt: 'pt-PT' };
+
 /** The CLDR plural category of `count` in `lang` (cached per language). */
 export function pluralCategory(lang: string, count: number): PluralCategory {
   let rule = rules.get(lang);
   if (rule === undefined) {
-    rule = new Intl.PluralRules(lang);
+    rule = new Intl.PluralRules(PLURAL_LOCALE[lang] ?? lang);
     rules.set(lang, rule);
   }
   return rule.select(count);

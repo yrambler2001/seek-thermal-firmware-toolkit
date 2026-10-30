@@ -265,6 +265,16 @@ describe('t()', () => {
     expect(pluralCategory('ru', 5)).toBe('many');
   });
 
+  it('chooses European Portuguese plural rules for pt, not the Brazilian ones plain pt resolves to', () => {
+    expect([0, 1, 2, 1.5, 1000000].map((n) => pluralCategory('pt', n))).toEqual([
+      'other',
+      'one',
+      'other',
+      'other',
+      'many',
+    ]);
+  });
+
   it('uses `other` alone where the language has one form', async () => {
     await setLanguage('zh-Hans');
     expect(t('common:count.files', { count: 1 })).toBe('1 个文件');
