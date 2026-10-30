@@ -133,8 +133,13 @@ export default {
   'deviceInfo.orphanIsTarget':
     'Саме в цей слот записує оновлення. Застосунок, що працює на цій камері, перешифровує образ цим невідомим ключем, тож **запис через цю сторінку дасть ще один слот, з якого завантажувач не зможе запустити камеру**, — камера й далі запускатиметься зі {bank:gen}. Обійти це можна, записавши слот напряму програматором SPI або через SWD/J-Link.',
   /*
-   * Only deviceInfo.orphanIsTarget uses this, as its {bank} when the booted bank has no name: a plain
-   * text, which takes no case, so it is written in the genitive that "зі {bank:gen}" needs there.
+   * Only deviceInfo.orphanIsTarget uses this, as its {bank} when the booted bank has no name. It is a name
+   * with case forms; the phrase starts with "слот" so that "зі {bank:gen}" there reads right.
    */
-  'deviceInfo.otherBank': 'слота, з якого вона запускається зараз',
+  'deviceInfo.otherBank': 'слот, з якого вона запускається зараз',
+  'deviceInfo.otherBank:gen': 'слота, з якого вона запускається зараз',
+  'deviceInfo.otherBank:dat': 'слоту, з якого вона запускається зараз',
+  'deviceInfo.otherBank:acc': 'слот, з якого вона запускається зараз',
+  'deviceInfo.otherBank:ins': 'слотом, з якого вона запускається зараз',
+  'deviceInfo.otherBank:loc': 'слоті, з якого вона запускається зараз',
 } satisfies Translation<'shared'>;

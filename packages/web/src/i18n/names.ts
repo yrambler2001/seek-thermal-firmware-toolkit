@@ -96,7 +96,7 @@ export const NAME_PARAMS = {
 
 /** Whether `key` (`namespace:key`) names a bank or a key, so a translation may give it case forms (`NameKey`). */
 export function isNameKey(key: string): boolean {
-  return /^(?:common:bank|core:keyName)\./.test(key);
+  return /^(?:common:bank\.|core:keyName\.|shared:deviceInfo\.otherBank$)/.test(key);
 }
 
 /** The name params of a page key, for the parity test: none for a key not listed. */

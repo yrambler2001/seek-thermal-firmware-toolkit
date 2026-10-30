@@ -447,7 +447,7 @@ export default {
   /** `{masks}`: key names joined with commas. */
   'keys.evidence.masks':
     'the upload is the image XOR the keystreams of {masks}; the device stores the image under {key}',
-  /** `{held}` is a key name or keys.noKnownKey. */
+  /** `{held}` is a key name or keys.noKnownKey (a sentence, not a name: it takes no case). */
   'keys.evidence.otherBank':
     '{bank} decrypts under {held}; it is written under {key} by the same rule, and read back to check',
 
@@ -1100,7 +1100,7 @@ export default {
   'slots.plan.noKeyTable':
     "the analysis does not name this camera's bootloader key table, so the image cannot be retargeted to it",
   /* ---- slots: the commit and the staging transfer (slots/write-commit, protocol/commit-status) ---- */
-  /** `{name}`: the bank, as a label. CompleteMemoryUpgrade is a command name: keep it. */
+  /** `{name}`: the bank, inside the sentence ("slot A"). CompleteMemoryUpgrade is a command name: keep it. */
   'slots.commit.unread':
     'the commit status could not be read after CompleteMemoryUpgrade, so {name} may be partially written. Read the banks again before doing anything else, and keep your dump.',
   /** `{status}`: hex; `{cause}`: commit.cause.*. */

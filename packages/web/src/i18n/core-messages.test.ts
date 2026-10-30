@@ -906,6 +906,17 @@ function samples(base: DeviceState): CoreMessage[] {
       }),
       'patch',
     ],
+    [
+      run({
+        steps: { patch: done },
+        banks: {
+          a: record('a', { patch: { diffCount: 9 } as never }),
+          b: record('b', { patch: { diffCount: 7 } as never }),
+          r: refusedRecord('r', erased),
+        },
+      }),
+      'patch',
+    ],
     [run({ steps: { patch: done }, banks: allRefused }), 'patch'],
     [run({ steps: { commit: done }, targets: ['a'] }), 'commit'],
     [run({ steps: { commit: done }, targets: ['a', 'b'] }), 'commit'],
@@ -1385,10 +1396,18 @@ describe('the core namespace', () => {
      * does not know in another sample (a family's own bank name, an unnamed key), which is then said as it
      * is; a param no sample passes as a name (a count, a hex value) takes no case. */
     const names = new Map<string, Set<string>>();
+    /* Per code, the params some sample passes as a sentence or a phrase, not a name (`{held}` is
+     * keys.noKnownKey when no key is known): a case there would be dropped, so it is a problem too. An
+     * empty list says nothing in any case, so it does not count. */
+    const notNames = new Map<string, Set<string>>();
     for (const message of all) {
       for (const [param, value] of Object.entries(message.params)) {
-        if (typeof value !== 'object' || coreNameOf(value) === null) continue;
-        names.set(message.code, (names.get(message.code) ?? new Set()).add(param));
+        if (typeof value !== 'object') continue;
+        if (coreNameOf(value) !== null) {
+          names.set(message.code, (names.get(message.code) ?? new Set()).add(param));
+        } else if (!('list' in value && value.list.length === 0)) {
+          notNames.set(message.code, (notNames.get(message.code) ?? new Set()).add(param));
+        }
       }
     }
     const problems: string[] = [];
@@ -1403,6 +1422,8 @@ describe('the core namespace', () => {
             if (!isGrammaticalCase(gramCase)) problems.push(`${id}: ${whole} is not a case`);
             else if (names.get(code)?.has(param) !== true)
               problems.push(`${id}: ${whole}, but {${param}} is not a name`);
+            else if (notNames.get(code)?.has(param) === true)
+              problems.push(`${id}: ${whole}, but {${param}} is not always a name`);
           }
         }
       }

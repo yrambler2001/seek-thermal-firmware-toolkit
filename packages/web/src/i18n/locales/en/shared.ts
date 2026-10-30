@@ -122,5 +122,7 @@ export default {
   },
   'deviceInfo.orphanIsTarget':
     'That is the slot an upgrade writes. The application running on this camera re-encrypts with that unknown key, so **flashing through this page will produce another slot the bootloader cannot boot** — the camera will carry on running {bank}. Writing the slot directly with an SPI programmer or over SWD/J-Link is the way round it.',
+  /** deviceInfo.orphanIsTarget's {bank} when the booted bank has no name. A name: a translation may give
+   * it case forms ('deviceInfo.otherBank:gen'), like common:bank.*. */
   'deviceInfo.otherBank': 'the other bank',
 } as const satisfies NamespaceMessages;

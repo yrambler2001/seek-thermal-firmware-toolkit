@@ -187,7 +187,7 @@ export function DeviceInfoPanel({ state }: DeviceInfoPanelProps): ReactElement {
                 params: {
                   bank:
                     booted === null
-                      ? { text: t('shared:deviceInfo.otherBank') }
+                      ? { name: 'shared:deviceInfo.otherBank' }
                       : bankLabelRef(booted),
                 },
               })}

@@ -510,7 +510,7 @@ export default {
     'przesyłane dane to obraz XOR strumienie {masks:gen}; urządzenie przechowuje obraz pod {key:ins}',
   /** `{held}` is a key name or keys.noKnownKey. */
   'keys.evidence.otherBank':
-    '{bank} odszyfrowuje się {held:ins}; według tej samej zasady jest zapisywany pod {key:ins} i odczytywany kontrolnie',
+    '{bank} — klucz do odszyfrowania: {held}; według tej samej zasady slot jest zapisywany pod {key:ins} i odczytywany kontrolnie',
   /* ---- keys.refused: why no upload key is derived (the "refused" row, or the banner) ---- */
   'keys.refused.bootUnnamed':
     'nie udało się ustalić uruchomionego slotu, więc nie da się z niego odczytać klucza, pod którym slot jest przechowywany',

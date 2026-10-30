@@ -927,7 +927,7 @@ export default {
   'preserve.result.nextUnknown': 'невідомий слот',
   'preserve.result.backupNext':
     '{label}: збережено кожен блок, доступний звичайному зчитуванню; {writable}; наступний запуск: {next}.',
-  'preserve.result.patch': '{label}: створено для слотів: {banks}.',
+  'preserve.result.patch': '{label}: створено для {banks:gen}.',
   'preserve.result.patchCount':
     '{label}: створено для {banks:gen}; у кожному змінюється байтів: {count}.',
   'preserve.result.commitOne': '{label}: {banks} записано з патчем, і камера його прийняла.',

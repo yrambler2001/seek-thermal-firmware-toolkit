@@ -65,8 +65,14 @@ export type ParamValue = string | number;
  */
 export type GrammaticalCase = 'gen' | 'dat' | 'acc' | 'ins' | 'loc';
 
-/** The entries that name something a sentence declines: the banks and the keys. */
-export type NameKey = Extract<MessageKey, `common:bank.${string}` | `core:keyName.${string}`>;
+/**
+ * The entries that name something a sentence declines: the banks and the keys, and the page's "the other
+ * bank" (said where the booted bank has no name).
+ */
+export type NameKey = Extract<
+  MessageKey,
+  `common:bank.${string}` | `core:keyName.${string}` | 'shared:deviceInfo.otherBank'
+>;
 
 /** One name: the entry that says it ("slot {letter}") and that entry's params. */
 export interface NameRef {
