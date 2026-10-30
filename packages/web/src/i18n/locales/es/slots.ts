@@ -193,7 +193,7 @@ export default {
    * ("Booted now", the badge's word with a capital), translated by core's messages.
    */
   'table.risk.bootedRecovery':
-    '{booted}, y de recuperación: escribir en ella pide una confirmación adicional.',
+    '{booted} y ranura de recuperación: escribir en ella pide una confirmación adicional.',
   'table.risk.booted': '{booted}: escribir en ella pide una confirmación adicional.',
   'table.risk.recovery': '{bank}: escribir en ella pide una confirmación adicional.',
   'table.risk.bootUnnamed':
