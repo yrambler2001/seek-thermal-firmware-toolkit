@@ -46,6 +46,7 @@
     "e2e:forget": "vitest run --config e2e/vitest.config.ts forget.e2e",
     "e2e:second": "vitest run --config e2e/vitest.config.ts second-window.e2e",
     "e2e:phone": "vitest run --config e2e/vitest.config.ts phone-layout.e2e",
+    "e2e:phone:i18n": "vitest run --config e2e/vitest.config.ts phone-layout-i18n.e2e",
     "e2e:unplug": "vitest run --config e2e/vitest.config.ts unplug.e2e",
     "e2e:write": "vitest run --config e2e/vitest.config.ts camera-write.e2e",
     "e2e:slots:bench": "vitest run --config e2e/vitest.config.ts slots-bench.e2e",
