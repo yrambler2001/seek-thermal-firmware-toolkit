@@ -239,6 +239,7 @@ export {
   PLAIN_CHAIN_EVIDENCE,
 } from './write-keys-words.js';
 export { fpsStoppedMessage } from './fps-patch.js';
+export { FPS_TABLE_REASON } from '../preservation/fps-patch.js';
 export { capabilityNoteMessage, capabilityNotes } from './capability-notes.js';
 export { SUPPORT_REASON, supportReasonMessage, supportReasons } from './capability.js';
 export { SLOT_WRITE_REFUSAL } from './write.js';

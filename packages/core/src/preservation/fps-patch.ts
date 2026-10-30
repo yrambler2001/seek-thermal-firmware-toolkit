@@ -51,7 +51,7 @@ import { wordSum32 } from '../image/bank.js';
 import { sha256Sync } from '../slots/write-sha.js';
 import { FPS_KNOWN_RATE, FPS_PATCH_TABLE, type FpsPatchSource } from './fps-patch-table.js';
 import { fpsRowName } from './fps-row-words.js';
-import type { CoreMessage } from '../message.js';
+import { coreMessage, type CoreMessage } from '../message.js';
 
 export { FPS_NOT_PATCHED_NOTES } from './fps-patch-table.js';
 
@@ -94,6 +94,8 @@ export interface FpsGate {
   readonly enabled: boolean;
   /** Null when enabled; otherwise the recorded reason, starting "stage two:". */
   readonly reason: string | null;
+  /** `reason` as a message, for the page. */
+  readonly reasonMessage?: CoreMessage;
 }
 
 export interface FpsPatch {
@@ -124,6 +126,81 @@ export const FPS_OFFER_WITHHELD = false as boolean;
 const WITHHELD_REASON =
   'withheld after a run on a camera: there the patch did not raise the publish rate, and the ' +
   'shutter fired on every frame after the write';
+
+/**
+ * Why the table makes no patch for an image, as messages for the page (`reason` is their English): the
+ * patch table's own reasons, said where a bank's frame-rate patch is not offered and in fpsBoot.cannotPatch.
+ */
+export const FPS_TABLE_REASON = {
+  withheld: coreMessage('fps.table.withheld', {}, WITHHELD_REASON),
+  predates: (version: string): CoreMessage =>
+    coreMessage(
+      'fps.table.predates',
+      { version },
+      `firmware ${version} is older than 0.8.0.0: its RPC table has no read handler for ` +
+        'GetFeaturedFirmwareData, the command a slot read sends, so the slots read and write no ' +
+        'bank of the build, and the patch is not offered',
+    ),
+  stageTwoFf: coreMessage(
+    'fps.table.stageTwoFf',
+    {},
+    'stage two: the 16 Hz FF build is staged as the vendor app stages it (the image XOR Key A, ' +
+      'stored under Key B), not as plain bytes, so its staging check is not done and the patch is not ' +
+      'offered yet',
+  ),
+  stageTwo: coreMessage(
+    'fps.table.stageTwo',
+    {},
+    'stage two: this entry is not in the stage-two set, so its staging check is not done and the ' +
+      'patch is not offered yet',
+  ),
+  notOffered: coreMessage('fps.table.notOffered', {}, 'not offered'),
+  notImage: coreMessage(
+    'fps.table.notImage',
+    {},
+    'this is not a firmware image, so no frame-rate patch applies to it',
+  ),
+  otherBuild: (image: string, id: string, camera: string | null): CoreMessage =>
+    camera === null
+      ? coreMessage(
+          'fps.table.otherBuildNoVersion',
+          { image, id },
+          `the image is the ${image} build ("${id}"), but the camera reports ` +
+            'no version; the patch is refused rather than applied to a build it does not match',
+        )
+      : coreMessage(
+          'fps.table.otherBuild',
+          { image, id, camera },
+          `the image is the ${image} build ("${id}"), but the camera reports ` +
+            `${camera}; the patch is refused rather than applied to a build it does not match`,
+        ),
+  patched: (hz: number): CoreMessage =>
+    coreMessage(
+      'fps.table.patched',
+      { hz },
+      `the frame-rate patch is already applied: this image runs at ${String(hz)} Hz`,
+    ),
+  earlierPatch: (hz: number): CoreMessage =>
+    coreMessage('fps.table.earlierPatch', { hz }, fpsEarlierPatchReason(hz)),
+  atRate: (hz: number): CoreMessage =>
+    coreMessage(
+      'fps.table.atRate',
+      { hz },
+      `this build already runs at ${String(hz)} Hz without a patch`,
+    ),
+  not4821: (): CoreMessage => coreMessage('fps.table.not4821', {}, FPS_NO_PATCH_4821_REASON),
+  notInTable: coreMessage(
+    'fps.table.notInTable',
+    {},
+    'this image is not in the frame-rate patch table, so no frame-rate patch is made for this build. ' +
+      'The table names the Compact 0.7.0.8 to 1.3.0.8 (8 Hz; 0.7.0.8 is refused by the slots code), 1.3.0.8 (16 Hz FF), ' +
+      '4.8.1.7, 4.8.1.9, 4.8.2.1 and 4.16.1.7 FF builds and the Compact PRO 1.0.3.x and 4.9.x builds; no other build has an entry',
+  ),
+} as const;
+
+function refusedGate(reason: CoreMessage): FpsGate {
+  return { enabled: false, reason: reason.text, reasonMessage: reason };
+}
 
 /**
  * The stage-one entries: the plain 2014 chain, the builds slots/capability-family.ts stages plain (PLAIN_CHAIN_VERSIONS,
@@ -189,30 +266,15 @@ function gateOf(source: FpsPatchSource): FpsGate {
     FPS_STAGE_THREE_IDS.has(source.id)
   ) {
     return FPS_OFFER_WITHHELD
-      ? { enabled: false, reason: WITHHELD_REASON }
+      ? refusedGate(FPS_TABLE_REASON.withheld)
       : { enabled: true, reason: null };
   }
   if (versionBefore(source.version, '0.8.0.0')) {
-    return {
-      enabled: false,
-      reason:
-        `firmware ${source.version} is older than 0.8.0.0: its RPC table has no read handler for ` +
-        'GetFeaturedFirmwareData, the command a slot read sends, so the slots read and write no ' +
-        'bank of the build, and the patch is not offered',
-    };
+    return refusedGate(FPS_TABLE_REASON.predates(source.version));
   }
-  let why: string;
-  if (source.version.endsWith('-FF')) {
-    why =
-      'stage two: the 16 Hz FF build is staged as the vendor app stages it (the image XOR Key A, ' +
-      'stored under Key B), not as plain bytes, so its staging check is not done and the patch is not ' +
-      'offered yet';
-  } else {
-    why =
-      'stage two: this entry is not in the stage-two set, so its staging check is not done and the ' +
-      'patch is not offered yet';
-  }
-  return { enabled: false, reason: why };
+  return refusedGate(
+    source.version.endsWith('-FF') ? FPS_TABLE_REASON.stageTwoFf : FPS_TABLE_REASON.stageTwo,
+  );
 }
 
 /** The table as bytes, with each entry's gate. Built once. */
@@ -443,10 +505,17 @@ export type FpsPlan =
       /** The adjust word, which moves to keep the acceptance sum. */
       readonly sumWord: { readonly offset: number; readonly before: number };
     }
-  | { readonly status: 'patched'; readonly reason: string; readonly hz: number }
+  | {
+      readonly status: 'patched';
+      readonly reason: string;
+      readonly reasonMessage?: CoreMessage;
+      readonly hz: number;
+    }
   | {
       readonly status: 'at-rate';
       readonly reason: string;
+      /** `reason` as a message, for the page. */
+      readonly reasonMessage?: CoreMessage;
       readonly hz: number;
       /** Set (true) only when the image is an earlier patch, not a build made at this rate; the reason says so. */
       readonly earlierPatch?: true;
@@ -467,24 +536,21 @@ export type FpsPlan =
 export function planFpsPatch(image: Uint8Array, cameraVersion: string | null): FpsPlan {
   const identity = identifyFpsImage(image);
   if (identity.length === null || identity.sha256 === null) {
-    return {
-      status: 'refused',
-      reason: 'this is not a firmware image, so no frame-rate patch applies to it',
-    };
+    return refusedPlan(FPS_TABLE_REASON.notImage);
   }
   if (identity.stockEntries.length > 0) {
     const entry = [...identity.stockEntries].sort((a, b) => b.targetHz - a.targetHz)[0];
     if (entry === undefined) throw new Error('unreachable: stock entries are not empty');
-    if (!entry.gate.enabled)
-      return { status: 'refused', reason: entry.gate.reason ?? 'not offered' };
+    if (!entry.gate.enabled) {
+      return refusedPlan(
+        entry.gate.reason === null
+          ? FPS_TABLE_REASON.notOffered
+          : (entry.gate.reasonMessage ?? entry.gate.reason),
+      );
+    }
     const build = entry.version.replace(/-FF$/, '');
     if (cameraVersion !== build) {
-      return {
-        status: 'refused',
-        reason:
-          `the image is the ${entry.version} build ("${entry.id}"), but the camera reports ` +
-          `${cameraVersion ?? 'no version'}; the patch is refused rather than applied to a build it does not match`,
-      };
+      return refusedPlan(FPS_TABLE_REASON.otherBuild(entry.version, entry.id, cameraVersion));
     }
     const sites: FpsSite[] = [];
     for (const edit of entry.edits) {
@@ -517,33 +583,33 @@ export function planFpsPatch(image: Uint8Array, cameraVersion: string | null): F
     const hz = FPS_MEASURED_HZ.get(entry.id) ?? entry.targetHz;
     /* Said as the state it is, with no table id: the page words its own row from `hz`, and the CLI
      * refuses a second patch with this reason (TESTING.md 42.86). */
-    return {
-      status: 'patched',
-      reason: `the frame-rate patch is already applied: this image runs at ${String(hz)} Hz`,
-      hz,
-    };
+    const reason = FPS_TABLE_REASON.patched(hz);
+    return { status: 'patched', reason: reason.text, reasonMessage: reason, hz };
   }
   if (identity.known !== null) {
+    const reason = identity.known.earlierPatch
+      ? FPS_TABLE_REASON.earlierPatch(identity.known.hz)
+      : FPS_TABLE_REASON.atRate(identity.known.hz);
     return {
       status: 'at-rate',
-      reason: identity.known.earlierPatch
-        ? fpsEarlierPatchReason(identity.known.hz)
-        : `this build already runs at ${String(identity.known.hz)} Hz without a patch`,
+      reason: reason.text,
+      reasonMessage: reason,
       // only on an earlier patch, so a build made at its rate plans exactly as before
       ...(identity.known.earlierPatch ? { earlierPatch: true } : {}),
       hz: identity.known.hz,
     };
   }
   if (cameraVersion === FPS_NO_PATCH_4821_VERSION) {
-    return { status: 'refused', reason: FPS_NO_PATCH_4821_REASON };
+    return refusedPlan(FPS_TABLE_REASON.not4821());
   }
-  return {
-    status: 'refused',
-    reason:
-      'this image is not in the frame-rate patch table, so no frame-rate patch is made for this build. ' +
-      'The table names the Compact 0.7.0.8 to 1.3.0.8 (8 Hz; 0.7.0.8 is refused by the slots code), 1.3.0.8 (16 Hz FF), ' +
-      '4.8.1.7, 4.8.1.9, 4.8.2.1 and 4.16.1.7 FF builds and the Compact PRO 1.0.3.x and 4.9.x builds; no other build has an entry',
-  };
+  return refusedPlan(FPS_TABLE_REASON.notInTable);
+}
+
+/** A refusal; a reason with no message (a gate a caller built) stays its English. */
+function refusedPlan(reason: CoreMessage | string): FpsPlan {
+  return typeof reason === 'string'
+    ? { status: 'refused', reason }
+    : { status: 'refused', reason: reason.text, reasonMessage: reason };
 }
 
 /**

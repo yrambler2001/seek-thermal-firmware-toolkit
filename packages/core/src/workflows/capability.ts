@@ -34,8 +34,21 @@
  * ==================================================================== */
 
 import { asciiz } from '../bytes.js';
-import { CancelledError, errorMessage, SeekError, type SeekErrorCode } from '../errors.js';
-import { coreMessage, type CoreMessage } from '../message.js';
+import {
+  CancelledError,
+  errorMessage,
+  errorParam,
+  SeekError,
+  type SeekErrorCode,
+} from '../errors.js';
+import {
+  coreMessage,
+  listParam,
+  paramText,
+  recordedParam,
+  type CoreMessage,
+  type CoreParam,
+} from '../message.js';
 import type { SeekDevice } from '../protocol/client.js';
 import { DEFAULT_READ_CHUNK, OP } from '../protocol/ops.js';
 import { OLD_FW_UNLOCK_TOKEN, authPayload } from '../profiles/legacy-auth.js';
@@ -147,6 +160,8 @@ export interface RunningFirmware {
   readonly buildString: string | null;
   /** One line saying what was read, or why nothing was. */
   readonly note: string;
+  /** `note` as a message, for the page, where no version was read (`versionUnknownReasonMessage`). */
+  readonly noteMessage?: CoreMessage;
 }
 
 /** Why nothing beyond `SAFE_BEFORE_IDENTITY` goes out to a camera that has not said what it runs. */
@@ -155,11 +170,11 @@ export function versionUnknownReason(note: string): string {
 }
 
 /** `versionUnknownReason` as a message, for the page; `note` is the version read's own account. */
-export function versionUnknownReasonMessage(note: string): CoreMessage {
+export function versionUnknownReasonMessage(note: CoreParam): CoreMessage {
   return coreMessage(
     'identity.versionUnknown',
     { note },
-    `the camera did not report its firmware version (${note}); a command number does not ` +
+    `the camera did not report its firmware version (${paramText(note)}); a command number does not ` +
       'mean the same thing on every Seek firmware — on Compact 0.3.0.1 wire id 0x52, the id ' +
       'that arms a read window, is EnterBootloaderMode — so until the version is known nothing ' +
       'is sent but GetErrorCode, GetOperationMode and GetFirmwareInfo, the reads every build ' +
@@ -196,7 +211,7 @@ export type IdentityGate =
  */
 export function identityGate(firmware: RunningFirmware): IdentityGate {
   if (firmware.version === null) {
-    const reason = versionUnknownReasonMessage(firmware.note);
+    const reason = versionUnknownReasonMessage(recordedParam(firmware.noteMessage, firmware.note));
     return {
       permitsArming: false,
       code: 'device/version-unknown',
@@ -374,15 +389,7 @@ export async function readRunningFirmware(device: SeekDevice): Promise<RunningFi
     if (!read.answered && isStall(read.error) && !reads.some((r) => r.answered)) {
       startupRefusals += 1;
       if (startupRefusals >= VERSION_READ_STARTUP_READS) {
-        return {
-          version: null,
-          buildString: null,
-          note:
-            `GetFirmwareInfo did not answer (${errorMessage(read.error)}) on any of ` +
-            `${String(startupRefusals)} reads ${String(VERSION_READ_STARTUP_SPACING_MS)} ms ` +
-            `apart, a start-up window of ${String(VERSION_READ_STARTUP_WINDOW_MS)} ms; a camera ` +
-            'still starting up answers within it',
-        };
+        return noVersion(VERSION_NOTE.startup(read.error, startupRefusals));
       }
       device.reporter.log(
         `GetFirmwareInfo was refused (${errorMessage(read.error)}), read ` +
@@ -405,19 +412,84 @@ export async function readRunningFirmware(device: SeekDevice): Promise<RunningFi
 
   const lastFailure = [...reads].reverse().find((read) => !read.answered);
   const answered = reads.filter((read) => read.answered).length;
-  return {
-    version: null,
-    buildString: null,
-    note:
-      lastFailure === undefined
-        ? `GetFirmwareInfo was never answered twice in a row in ${String(reads.length)} reads`
-        : `GetFirmwareInfo did not answer (${errorMessage(lastFailure.error)})` +
-          (answered > 0
-            ? `; ${String(answered)} of ${String(reads.length)} reads answered, never two in a ` +
-              'row, so none of them can be told from a record an earlier command left selected'
-            : ''),
-  };
+  return noVersion(
+    lastFailure === undefined
+      ? VERSION_NOTE.neverTwice(reads.length)
+      : answered > 0
+        ? VERSION_NOTE.noAnswerSome(lastFailure.error, answered, reads.length)
+        : VERSION_NOTE.noAnswer(lastFailure.error),
+  );
 }
+
+function noVersion(note: CoreMessage): RunningFirmware {
+  return { version: null, buildString: null, note: note.text, noteMessage: note };
+}
+
+/** Why the version read gave no version, as `note` says it; the page shows it in identity.versionUnknown. */
+export const VERSION_NOTE = {
+  startup: (error: unknown, reads: number): CoreMessage =>
+    coreMessage(
+      'identity.note.startup',
+      {
+        error: errorParam(error),
+        reads,
+        spacing: VERSION_READ_STARTUP_SPACING_MS,
+        window: VERSION_READ_STARTUP_WINDOW_MS,
+      },
+      `GetFirmwareInfo did not answer (${errorMessage(error)}) on any of ` +
+        `${String(reads)} reads ${String(VERSION_READ_STARTUP_SPACING_MS)} ms ` +
+        `apart, a start-up window of ${String(VERSION_READ_STARTUP_WINDOW_MS)} ms; a camera ` +
+        'still starting up answers within it',
+    ),
+  neverTwice: (reads: number): CoreMessage =>
+    coreMessage(
+      'identity.note.neverTwice',
+      { reads },
+      `GetFirmwareInfo was never answered twice in a row in ${String(reads)} reads`,
+    ),
+  noAnswer: (error: unknown): CoreMessage =>
+    coreMessage(
+      'identity.note.noAnswer',
+      { error: errorParam(error) },
+      `GetFirmwareInfo did not answer (${errorMessage(error)})`,
+    ),
+  noAnswerSome: (error: unknown, answered: number, reads: number): CoreMessage =>
+    coreMessage(
+      'identity.note.noAnswerSome',
+      { error: errorParam(error), answered, reads },
+      `GetFirmwareInfo did not answer (${errorMessage(error)})` +
+        `; ${String(answered)} of ${String(reads)} reads answered, never two in a ` +
+        'row, so none of them can be told from a record an earlier command left selected',
+    ),
+  /** `context`: VERSION_NOTE.otherRecord and .afterStartup, each said after "; ". */
+  tooShort: (count: number, context: readonly CoreMessage[]): CoreMessage => {
+    const said = context.map((clause) => `; ${clause.text}`).join('');
+    return context.length === 0
+      ? coreMessage(
+          'identity.note.tooShort',
+          { count },
+          `GetFirmwareInfo answered ${String(count)} byte(s), too few for a version`,
+        )
+      : coreMessage(
+          'identity.note.tooShortContext',
+          { count, context: listParam(context, 'semicolon') },
+          `GetFirmwareInfo answered ${String(count)} byte(s), too few for a version${said}`,
+        );
+  },
+  otherRecord: (version: string): CoreMessage =>
+    coreMessage(
+      'identity.note.otherRecord',
+      { version },
+      `the first read answered a different record (${version}), which an ` +
+        'earlier command had left the firmware-info selector on — that read cleared it',
+    ),
+  afterStartup: (refusals: number): CoreMessage =>
+    coreMessage(
+      'identity.note.afterStartup',
+      { refusals },
+      `it answered after refusing ${String(refusals)} read(s) while starting up`,
+    ),
+} as const;
 
 /** The version the second of two answered reads carries, and what the first one said. */
 function firmwareFrom(
@@ -434,11 +506,13 @@ function firmwareFrom(
       ? ''
       : `; it answered after refusing ${String(startupRefusals)} read(s) while starting up`);
   if (bytes.length < 4) {
-    return {
-      version: null,
-      buildString: null,
-      note: `GetFirmwareInfo answered ${String(bytes.length)} byte(s), too few for a version${context}`,
-    };
+    const clauses = [
+      ...(sameBytes(first, bytes) || first.length < 4
+        ? []
+        : [VERSION_NOTE.otherRecord(versionOf(first))]),
+      ...(startupRefusals === 0 ? [] : [VERSION_NOTE.afterStartup(startupRefusals)]),
+    ];
+    return noVersion(VERSION_NOTE.tooShort(bytes.length, clauses));
   }
   const version = versionOf(bytes);
   const buildString = bytes.length > 4 ? asciiz(bytes.subarray(4)) : null;

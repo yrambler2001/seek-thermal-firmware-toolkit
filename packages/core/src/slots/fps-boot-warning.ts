@@ -10,7 +10,15 @@
 
 import { identifyFpsImage, FPS_MEASURED_HZ } from '../preservation/fps-patch.js';
 import type { SlotKey } from '../profiles/types.js';
-import { bankParam, capitalParam, coreMessage, listParam, type CoreMessage } from '../message.js';
+import {
+  bankParam,
+  capitalParam,
+  coreMessage,
+  listParam,
+  paramText,
+  recordedParam,
+  type CoreMessage,
+} from '../message.js';
 import { bankWordsOf, bootChoiceOf, bootRuleKnown } from './boot-choice.js';
 import { fpsPlanOfBank } from './fps-patch.js';
 import type { SlotsReport } from './types.js';
@@ -68,16 +76,16 @@ export interface FpsBootOptions {
   /** What an image holds. Default: fpsPatchHeldBy. A seam for tests that hand-make images. */
   readonly heldBy?: (plain: Uint8Array | null) => PatchHeld | null;
   /** Why a bank cannot be patched here, or null. Default: that bank's own plan. A seam for tests. */
-  readonly patchBlock?: (key: SlotKey) => string | null;
+  readonly patchBlock?: (key: SlotKey) => CoreMessage | string | null;
 }
 
 function plainOf(report: SlotsReport, key: SlotKey): Uint8Array | null {
   return report.slots.find((view) => view.entry.key === key)?.state?.plain ?? null;
 }
 
-function patchBlockOf(report: SlotsReport, key: SlotKey): string | null {
+function patchBlockOf(report: SlotsReport, key: SlotKey): CoreMessage | string | null {
   const plan = fpsPlanOfBank(report, key);
-  return plan.status === 'offer' ? null : plan.reason;
+  return plan.status === 'offer' ? null : recordedParam(plan.reasonMessage, plan.reason);
 }
 
 function capitalise(text: string): string {
@@ -168,7 +176,7 @@ export function fpsBootWarningOf(
       : coreMessage(
           'fpsBoot.cannotPatch',
           { bank: capitalParam(bank), reason: block },
-          `${capitalise(runsName)} cannot be patched here (${block}), so a frame-rate patch in another bank does not take effect on this camera.`,
+          `${capitalise(runsName)} cannot be patched here (${paramText(block)}), so a frame-rate patch in another bank does not take effect on this camera.`,
         ),
   );
   return { runs, word: choice.word, idle, paragraphs: messages.map((m) => m.text), messages };

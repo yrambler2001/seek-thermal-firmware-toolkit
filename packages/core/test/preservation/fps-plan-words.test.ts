@@ -71,6 +71,7 @@ describe('the words for a bank that already runs the faster rate (TESTING.md 42.
     expect(plan).toEqual({
       status: 'patched',
       reason: 'the frame-rate patch is already applied: this image runs at 18 Hz',
+      reasonMessage: expect.objectContaining({ code: 'fps.table.patched', params: { hz: 18 } }),
       hz: 18,
     });
     if (plan.status === 'patched') {
@@ -84,6 +85,7 @@ describe('the words for a bank that already runs the faster rate (TESTING.md 42.
     expect(plan).toEqual({
       status: 'at-rate',
       reason: 'this build already runs at 18 Hz without a patch',
+      reasonMessage: expect.objectContaining({ code: 'fps.table.atRate', params: { hz: 18 } }),
       hz: 18,
     });
   });

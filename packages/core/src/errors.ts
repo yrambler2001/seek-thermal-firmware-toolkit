@@ -2,7 +2,7 @@
  * Error taxonomy. Callers branch on `code`, never on message text — messages are
  * for humans and are expected to change.
  */
-import type { CoreMessage } from './message.js';
+import { recordedParam, type CoreMessage } from './message.js';
 
 export type SeekErrorCode =
   /** A caller passed an option outside its accepted range. */
@@ -67,6 +67,14 @@ export class SeekError extends Error {
 /** An error's message as a code + params, when it is a SeekError that carries one. */
 export function errorCoreMessage(error: unknown): CoreMessage | undefined {
   return error instanceof SeekError ? error.coreMessage : undefined;
+}
+
+/**
+ * An error as a message param: its message while it still says the error's English, else the English.
+ * A plain Error (a USB failure, a bug) is its English.
+ */
+export function errorParam(error: unknown): CoreMessage | string {
+  return recordedParam(errorCoreMessage(error), errorMessage(error));
 }
 
 /** Raised when the caller's AbortSignal fires. Never indicates a device fault. */

@@ -38,6 +38,7 @@ export {
   CancelledError,
   SeekError,
   errorCoreMessage,
+  errorParam,
   errorMessage,
   isSeekError,
 } from './errors.js';
@@ -622,6 +623,7 @@ export {
 export {
   predatesDumpProtocolReasonMessage,
   versionUnknownReasonMessage,
+  VERSION_NOTE,
 } from './workflows/capability.js';
 export { readStatusMessage } from './workflows/device-info.js';
 export { WRITTEN_STATUS } from './slots/write.js';

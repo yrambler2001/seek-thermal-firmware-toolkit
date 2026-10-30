@@ -154,6 +154,8 @@ import {
   spentReaderDiagnosisMessage,
   staleDescriptorMessage,
   stagedClauseMessage,
+  FPS_TABLE_REASON,
+  VERSION_NOTE,
   COMPACT_2016_EVIDENCE,
   EARLY_COMPACT_EVIDENCE,
   GENERIC_EVIDENCE,
@@ -247,6 +249,7 @@ function samples(base: DeviceState): CoreMessage[] {
   for (const options of [
     { target: 'b' as const, heldBy: held([]), patchBlock: () => null },
     { heldBy: held([1]), patchBlock: () => 'the build has no patch site' },
+    { heldBy: held([1]), patchBlock: () => FPS_TABLE_REASON.notInTable },
     { heldBy: held([1, 2]), patchBlock: () => null },
     { target: 'r' as const, heldBy: held([1]), patchBlock: () => null },
   ]) {
@@ -579,7 +582,29 @@ function samples(base: DeviceState): CoreMessage[] {
     }),
   );
 
-  /* identity: the arming gate's refusals */
+  /* identity: the arming gate's refusals, and why the version read gave no version */
+  const usbError = new Error('LIBUSB_ERROR_PIPE');
+  for (const note of [
+    VERSION_NOTE.startup(usbError, 6),
+    VERSION_NOTE.neverTwice(3),
+    VERSION_NOTE.noAnswer(usbError),
+    VERSION_NOTE.noAnswer(
+      new SeekError('device/window', SLOT_FILE_WORDS.wrongSize(100).text, {
+        coreMessage: SLOT_FILE_WORDS.wrongSize(100),
+      }),
+    ),
+    VERSION_NOTE.noAnswerSome(usbError, 1, 3),
+    VERSION_NOTE.tooShort(2, []),
+    VERSION_NOTE.tooShort(2, [VERSION_NOTE.otherRecord('4.8.2.1'), VERSION_NOTE.afterStartup(2)]),
+  ]) {
+    const gate = identityGate({
+      version: null,
+      buildString: null,
+      note: note.text,
+      noteMessage: note,
+    });
+    if (!gate.permitsArming) add(gate.reasonMessage);
+  }
   for (const version of [null, '0.3.0.1']) {
     const gate = identityGate({ version, buildString: null, note: 'no answer' });
     if (!gate.permitsArming) {
@@ -1064,6 +1089,25 @@ function samples(base: DeviceState): CoreMessage[] {
     for (const sentence of Object.values(family)) {
       if (typeof sentence !== 'function') add(sentence);
     }
+  }
+
+  /* fps: the patch table's reasons */
+  for (const reason of [
+    FPS_TABLE_REASON.withheld,
+    FPS_TABLE_REASON.predates('0.7.0.8'),
+    FPS_TABLE_REASON.stageTwoFf,
+    FPS_TABLE_REASON.stageTwo,
+    FPS_TABLE_REASON.notOffered,
+    FPS_TABLE_REASON.notImage,
+    FPS_TABLE_REASON.otherBuild('1.3.0.8-FF', '1308ff-16hz', '1.3.0.0'),
+    FPS_TABLE_REASON.otherBuild('1.3.0.8', '1308-32hz', null),
+    FPS_TABLE_REASON.patched(32),
+    FPS_TABLE_REASON.earlierPatch(16),
+    FPS_TABLE_REASON.atRate(16),
+    FPS_TABLE_REASON.not4821(),
+    FPS_TABLE_REASON.notInTable,
+  ]) {
+    add(reason);
   }
 
   /* decrypt: a bank file's refusal and notes */

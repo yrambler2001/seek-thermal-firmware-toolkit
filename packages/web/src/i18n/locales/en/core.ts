@@ -24,8 +24,8 @@
  *     `{plain}`, `{ff}`, `{reference}`, `{recovered}`, `{check}`, `{phrase}`,
  *     `{staged}`, `{source}`, `{operation}`, `{error}`, `{label}`, `{writable}`,
  *     `{next}`, `{form}`, `{notes}`, `{remedy}`, `{capability}`, `{pair}`
- *     (report.checkKey.pair, or nothing), `{said}` (detect.source.*), and `{note}` in
- *     preserve.refused.recoveryOnly. Each is another key of
+ *     (report.checkKey.pair, or nothing), `{said}` (detect.source.*), `{context}`, and `{note}` in
+ *     preserve.refused.recoveryOnly and identity.versionUnknown. Each is another key of
  *     this namespace (the comment above a key says which), already in your
  *     language. A `{why}` that starts a sentence arrives with a capital letter.
  *   - a list: `{banks}`, `{reasons}` (joined with your common:list.* words, or
@@ -39,8 +39,7 @@
  *   names (`{file}`), a SHA-256 (`{sha256}`), a selector table's name
  *   (`{table}`) and family names (`{family}`, `{detected}`).
  * - Still English inside a translated sentence (core gives them no code yet):
- *   `{reason}` in fpsBoot.cannotPatch (the patch table's reason); `{note}` in
- *   identity.versionUnknown; `{error}` when the error has no code, and a read
+ *   `{error}` when the error has no code (a USB error, a bug), and a read
  *   reason (read.reason.*'s place) that came from such an error.
  * - Capitals: keep the English's. A template that starts lower case is said
  *   inside another sentence or after a label ("Note: …", a list item, "Not
@@ -98,6 +97,7 @@ export default {
     'Patching {target} would not make it run, because the camera boots {bank} instead.',
   'fpsBoot.patchRunning':
     'Patch {bank} too (the bank that runs): that is what makes the frame-rate patch take effect.',
+  /** `{reason}`: fps.table.*, or a fps.plan.* reason. */
   'fpsBoot.cannotPatch':
     '{bank} cannot be patched here ({reason}), so a frame-rate patch in another bank does not take effect on this camera.',
 
@@ -519,6 +519,32 @@ export default {
     'firmware {version} is on the 0.x / 1.x legacy line, which is a different numbering line from the post-2018 application versions, not an older 4.x',
   'detect.legacy.none': 'nothing observed points at the authenticated read channel',
 
+  /* ---- fps.table: why the frame-rate patch table makes no patch for an image (preservation/fps-patch) ---- */
+  /* `{version}`, `{image}`, `{camera}`: firmware versions; `{id}`: the table entry's name; `{hz}`: a rate.
+   * "stage two", Key A / Key B, f96ac57eda75 and the build names stay as they are. */
+  'fps.table.withheld':
+    'withheld after a run on a camera: there the patch did not raise the publish rate, and the shutter fired on every frame after the write',
+  'fps.table.predates':
+    'firmware {version} is older than 0.8.0.0: its RPC table has no read handler for GetFeaturedFirmwareData, the command a slot read sends, so the slots read and write no bank of the build, and the patch is not offered',
+  'fps.table.stageTwoFf':
+    'stage two: the 16 Hz FF build is staged as the vendor app stages it (the image XOR Key A, stored under Key B), not as plain bytes, so its staging check is not done and the patch is not offered yet',
+  'fps.table.stageTwo':
+    'stage two: this entry is not in the stage-two set, so its staging check is not done and the patch is not offered yet',
+  'fps.table.notOffered': 'not offered',
+  'fps.table.notImage': 'this is not a firmware image, so no frame-rate patch applies to it',
+  'fps.table.otherBuild':
+    'the image is the {image} build ("{id}"), but the camera reports {camera}; the patch is refused rather than applied to a build it does not match',
+  'fps.table.otherBuildNoVersion':
+    'the image is the {image} build ("{id}"), but the camera reports no version; the patch is refused rather than applied to a build it does not match',
+  'fps.table.patched': 'the frame-rate patch is already applied: this image runs at {hz} Hz',
+  'fps.table.earlierPatch':
+    'this image holds an earlier {hz} Hz frame-rate patch without the USB fix, and a patch is never applied to a patched image: restore the stock image, then patch it',
+  'fps.table.atRate': 'this build already runs at {hz} Hz without a patch',
+  'fps.table.not4821':
+    'this image reports the Compact 4.8.2.1 build (or the Compact XR 4.8.2.1, the same build) but is not the stock image the frame-rate patch was written for (f96ac57eda75: its 68-byte command pages, steady page 13), so no frame-rate patch is made for it',
+  'fps.table.notInTable':
+    'this image is not in the frame-rate patch table, so no frame-rate patch is made for this build. The table names the Compact 0.7.0.8 to 1.3.0.8 (8 Hz; 0.7.0.8 is refused by the slots code), 1.3.0.8 (16 Hz FF), 4.8.1.7, 4.8.1.9, 4.8.2.1 and 4.16.1.7 FF builds and the Compact PRO 1.0.3.x and 4.9.x builds; no other build has an entry',
+
   /* ---- fps: why a bank's frame-rate patch is not offered, or why a patch of every bank stopped (slots/fps-patch) ---- */
   'fps.plan.noBank': "this build's plan has no {bank}",
   /** `{reason}`: the build's own reason (English: the support table has no codes yet). */
@@ -590,9 +616,24 @@ export default {
     "1.3.0.8-FF (16 Hz) reports the same version as the 8 Hz build. The read tells them apart from the camera: the camera says, bank by bank, whether its application takes the bank, and each build predicts its own answers from the banks. The FF image is sent in the form the vendor app sends it, and the camera stores it under its own key. It goes to slot A, slot B or recovery R. The 8 Hz build is expected to refuse it before it writes anything; while the camera's answers cannot tell the builds apart, the plan says what each build does with it. {untested}",
 
   /* ---- identity: why nothing is armed before the camera names its build (workflows/capability, window-plan) ---- */
-  /** `{note}`: the version read's own account (English). Command names (GetErrorCode, …) and wire ids stay. */
+  /** `{note}`: identity.note.*, the version read's own account. Command names (GetErrorCode, …) and wire ids stay. */
   'identity.versionUnknown':
     'the camera did not report its firmware version ({note}); a command number does not mean the same thing on every Seek firmware — on Compact 0.3.0.1 wire id 0x52, the id that arms a read window, is EnterBootloaderMode — so until the version is known nothing is sent but GetErrorCode, GetOperationMode and GetFirmwareInfo, the reads every build answers the same way',
+  /* Why the version read gave no version (`{note}` above). `{error}`: the USB error (English unless it has
+   * a code); `{reads}`, `{answered}`, `{refusals}`, `{count}`: numbers; `{spacing}`, `{window}`: milliseconds;
+   * `{context}`: identity.note.otherRecord / afterStartup, joined with "; ". */
+  'identity.note.startup':
+    'GetFirmwareInfo did not answer ({error}) on any of {reads} reads {spacing} ms apart, a start-up window of {window} ms; a camera still starting up answers within it',
+  'identity.note.neverTwice': 'GetFirmwareInfo was never answered twice in a row in {reads} reads',
+  'identity.note.noAnswer': 'GetFirmwareInfo did not answer ({error})',
+  'identity.note.noAnswerSome':
+    'GetFirmwareInfo did not answer ({error}); {answered} of {reads} reads answered, never two in a row, so none of them can be told from a record an earlier command left selected',
+  'identity.note.tooShort': 'GetFirmwareInfo answered {count} byte(s), too few for a version',
+  'identity.note.tooShortContext':
+    'GetFirmwareInfo answered {count} byte(s), too few for a version; {context}',
+  'identity.note.otherRecord':
+    'the first read answered a different record ({version}), which an earlier command had left the firmware-info selector on — that read cleared it',
+  'identity.note.afterStartup': 'it answered after refusing {refusals} read(s) while starting up',
   'identity.predates':
     'firmware {version} predates the dump protocol: its RPC method table has no read handler for GetFeaturedFirmwareData (on 0.7.0.7 and 0.7.0.8 it is registered as a setter only, and before that wire id 0x4F is UploadFirmwareRowSize), so no window can be read with it; on 0.3.0.1 wire id 0x52 is EnterBootloaderMode rather than BeginFirmwareUpgrade. The preservation run reads 0.7.0.7 and 0.7.0.8 through wire id 0x58 (GetFeaturedData) instead',
   /** `{operation}` is identity.operation.*, said after "refusing to"; `{reason}` is identity.versionUnknown or identity.predates. */
