@@ -165,9 +165,9 @@ The language loads only when someone picks it (a dynamic `import()`, its own chu
 ### Conventions
 
 - **Plain words.** The page is for camera owners, not firmware engineers. Say it the way a careful manual in your language would. Keep sentences short, as the English does.
-- **Slot, not bank.** Where the English says "slot" (Slot A, recovery R), use your language's word for slot. Never write "bank" in user text where the English says slot. Some English sentences say "bank" (core's sentences, the 0.x/1.x tab's bank table): translate those as they are, and use one word for "bank" throughout.
+- **Slot, never bank.** In this code "bank" is only the internal word for the same firmware slot (`common:bank.*` builds "Slot A"). Use your language's word for slot everywhere, also where the English says "bank" (core's sentences, the Slots and 0.x/1.x tabs' tables). Russian and Ukrainian: always "слот", never "банк".
 - **Bank names:** `common:bank.*` builds them; keep the Latin letter (A, B, R). "Recovery R" is the last-resort slot the bootloader falls back to.
-- **Units:** B, KB, MB, KiB, MiB, Hz, FPS stay as written. A number is inserted as it is (no grouping): don't add separators around `{count}`.
+- **Units:** sizes are KB and MB, never the KiB/MiB style, even where the English writes "64 KiB" or "4 MiB" (a namespace comment that says KiB/MiB stay is overruled by this line). Write them in your language's usual form: Russian and Ukrainian **КБ/МБ** (never КиБ/МиБ), French **Ko/Mo**, every other language KB/MB. B (bytes), Hz and FPS stay. A number is inserted as it is (no grouping): don't add separators around `{count}`.
 - **Keep as they are:** hex values, versions, file names and paths, register and command names (`cfg[0]`, GetFirmwareInfo, CompleteMemoryUpgrade), opcode names, family and product names (Compact, Compact PRO, Mosaic, Nano, Seek Thermal), programs (Zadig, Chrome, J-Link), WebUSB, and anything in `` `code` ``.
 - **Buttons the text names.** When a sentence names a button ("press _Connect device_"), use the button's own translation from `app`/`shared`, word for word.
 - **Capitals:** keep the English's. A value that starts lower case is said inside another sentence or after a label; one that starts upper case stands alone.
