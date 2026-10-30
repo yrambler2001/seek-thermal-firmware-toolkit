@@ -34,7 +34,7 @@ export default {
     '“读取槽位”会询问相机运行的是什么固件，读取它的三个固件槽位——{a}、{b} 和{r}——并显示每个槽位存放的内容。读取和导出不会改变任何东西。写入按钮在发送任何字节之前都会先征求确认。',
   /* The red warning at the top of the tab. */
   'section.danger':
-    '**本页可以写入相机的闪存。**一次写入会擦除一个 64 KB 槽位，再写入新内容。结构上有效但无法运行的镜像会让相机无法启动，而引导程序不支持 USB——只有 SWD/J-Link 或 SPI 编程器才能救回。请先导出该槽位，并保存好文件。',
+    '**本页可以写入相机的闪存。**一次写入会擦除一个 64 KB 槽位，再写入新内容。结构上有效但无法运行的镜像会让相机无法启动，而引导程序不支持 USB——只有 SWD/J-Link 或 SPI 编程器才能恢复它。请先导出该槽位，并保存好文件。',
 
   /* The buttons under the warning; toolbar is the group's accessible name. */
   'actions.toolbar': '槽位操作',
@@ -62,7 +62,7 @@ export default {
   'status.reading': '正在读取…',
   'status.readingAgain': '正在重新读取槽位…',
   /* {count} banks in all, {read} of them read. */
-  'status.read': { other: '已读取。已读取 {read}/{count} 个槽位。' },
+  'status.read': { other: '已读取。共 {count} 个槽位，已读取 {read} 个。' },
   'status.unsupported': '此版本不受支持——没有读取任何槽位。',
   'status.refused': '已拒绝——没有打开任何读写窗口。请查看日志下方的消息。',
   'status.disconnected': '设备已断开——请重新读取槽位。',
@@ -315,16 +315,16 @@ export default {
 
   /* The result panel after a write. {what} as in writeConfirm.title. */
   'outcome.verified': '{bank}——{what}：该槽位的回读结果与写入内容一致。',
-  'outcome.mismatch': '{bank}——{what}：回读结果与写入的内容不一致。',
+  'outcome.mismatch': '{bank}——{what}：回读结果与写入的内容并不一致。',
   /* Null verdict: the read-back was taken, but core had no expected image to compare it with. */
   'outcome.notCompared': '{bank}——{what}：已回读，但没有比对，因此这次写入在这里未经验证。',
   /* {status} is a hex status code. */
   'outcome.commitStatus': '相机的提交返回状态 {status}。',
   'outcome.wasEmpty': '{bank} 在这次写入之前是空的，所以没有覆盖任何固件。',
   'outcome.provenVerified':
-    '目前已证实：载荷已传送并提交，该槽位的回读结果与写入内容一致。尚未证实：引导程序会选择这个槽位，以及镜像能够运行。',
+    '目前已证实：载荷已传送并提交，该槽位的回读结果与写入内容一致。尚未证实：引导程序是否会选择这个槽位，镜像是否能够运行。',
   'outcome.provenCommitted':
-    '目前已证实：载荷已传送并提交。尚未证实：引导程序会选择这个槽位，以及镜像能够运行。',
+    '目前已证实：载荷已传送并提交。尚未证实：引导程序是否会选择这个槽位，镜像是否能够运行。',
   'outcome.replug':
     '**现在请拔下相机，再重新插上。**没有发送重置命令，所以该槽位只有在真正断电重启之后才会生效。然后重新读取槽位：只有相机报告的版本和活动槽位才能最终说明结果。',
   /* After a frame-rate patch. */

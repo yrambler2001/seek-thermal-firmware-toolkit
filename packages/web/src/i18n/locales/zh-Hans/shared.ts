@@ -110,7 +110,7 @@ export default {
   /* {banks} is one bank name or several joined by common:list.and. */
   'deviceInfo.orphan': {
     other:
-      '**{banks} 中存有有效的固件镜像，但它是用这台相机的引导程序不认识的密钥加密的。**镜像完好，校验和也正确，但引导程序检查槽位时只尝试 {storeKey} 和密钥 A，所以会跳过它，转而启动其他内容。',
+      '**{banks} 中存有有效的固件镜像，但它是用这台相机的引导程序不认识的密钥加密的。**镜像完好，校验和也正确，但引导程序检查槽位时只尝试 {storeKey} 和密钥 A，所以会将其跳过，转而启动其他内容。',
   },
   'deviceInfo.orphanIsTarget':
     '这正是升级时写入的槽位。这台相机上运行的应用程序会用那个未知密钥重新加密，所以**通过本页写入只会再产生一个引导程序无法启动的槽位**——相机会继续运行{bank}。用 SPI 编程器或通过 SWD/J-Link 直接写入该槽位，可以绕过这个问题。',

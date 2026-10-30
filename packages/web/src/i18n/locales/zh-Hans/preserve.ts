@@ -108,8 +108,7 @@ export default {
   /* {reason} is gate.needs. */
   'notReady.gate': '尚未就绪——{reason}。',
   /* {section} is how.title. */
-  'phase.pastCommit':
-    '涉及写入没有记录时已打补丁的相机——相机可能已经打过补丁。请参阅“{section}”下的说明。',
+  'phase.pastCommit': '适用于写入没有记录的情况——相机可能已经打过补丁。请参阅“{section}”下的说明。',
   'phase.noDrain':
     '全闪存读取尚未运行——此步骤会在没有它的情况下让相机恢复原样。除非全闪存读取对你无关紧要，否则请先运行步骤 03。',
   'phase.keepPlugged': '在此步骤完成之前，请保持相机连接，并让电脑保持唤醒。',
@@ -326,7 +325,7 @@ export default {
   'gate.choice': '选择槽位——{why}',
   'gate.bankRefused': '{bank} 无法写入：{reason}',
   /* {r} is the recovery bank inside a sentence ("recovery R"), {bank} a chosen bank. */
-  'gate.recoveryRoute': '恢复槽位路径（此版本只从{r}运行，而不是{bank}）',
+  'gate.recoveryRoute': '恢复槽位路径（此版本只从{r} 运行，而不是{bank}）',
   'gate.backupFirst': '闪存备份（在此步骤中最先运行）',
   'gate.backup': '闪存备份',
   'gate.patchStep': '补丁步骤',
@@ -336,7 +335,7 @@ export default {
   'gate.capture': '{bank} 的采集数据',
   'gate.derived': '{bank} 的推导镜像',
   /* "Write" is the step's name on its chip (core's, English for now). */
-  'gate.writeStep': '“Write”步骤（请先运行它，或从它继续）',
+  'gate.writeStep': '“写入”步骤（请先运行它，或从它继续）',
   'gate.drainRefused': '全闪存读取在 {build} 上拒绝运行——{why}',
   'gate.patchSummary': '{bank} 的补丁摘要（暂存长度）',
   'gate.restoreRefused':
