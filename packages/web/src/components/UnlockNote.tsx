@@ -6,13 +6,14 @@
  */
 
 import type { ReactElement } from 'react';
-import { UNLOCK_POWER_CYCLE_NOTE } from '@seek-fw/core';
 import { Alert } from '@/components/ui/alert';
+import { useT } from '@/i18n';
 
 export function UnlockNote(): ReactElement {
+  const { t } = useT();
   return (
     <Alert tone="warn" className="mt-3">
-      <p>{`Note: ${UNLOCK_POWER_CYCLE_NOTE}.`}</p>
+      <p>{t('app:unlockNote', { note: t('core:unlock.powerCycleNote') })}</p>
     </Alert>
   );
 }

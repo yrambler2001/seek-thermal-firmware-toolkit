@@ -11,11 +11,12 @@
 
 import type { ReactElement, ReactNode } from 'react';
 
-const TOKEN = /(\*\*[^*]+\*\*|\*[^*]+\*|`[^`]+`)/g;
+/** The three tokens, captured so `split` keeps them. src/i18n/rich.tsx shares it. */
+export const MARKUP_TOKEN = /(\*\*[^*]+\*\*|\*[^*]+\*|`[^`]+`)/g;
 
 /** Splits one line of mini-markup into React nodes. */
 export function renderRich(text: string): ReactNode[] {
-  return text.split(TOKEN).map((part, index) => {
+  return text.split(MARKUP_TOKEN).map((part, index) => {
     const key = `${String(index)}:${part}`;
     if (part.startsWith('**') && part.endsWith('**') && part.length > 4) {
       return <strong key={key}>{part.slice(2, -2)}</strong>;

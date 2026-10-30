@@ -5,6 +5,7 @@
  */
 
 import { useEffect, useState } from 'react';
+import { t, useLanguage } from '@/i18n';
 
 export type Route = 'info' | 'preserve' | 'v4' | 'decrypt' | 'slots';
 
@@ -16,26 +17,30 @@ export const ROUTE_HREF: Readonly<Record<Route, string>> = {
   slots: '#/slots',
 };
 
-/** The tab labels, as the nav shows them. */
-export const ROUTE_LABEL: Readonly<Record<Route, string>> = {
-  info: 'Info',
-  preserve: 'Dump & decrypt 0.x/1.x 2014/2016',
-  v4: 'Dump & decrypt 4.x/Nano',
-  decrypt: 'Decrypt File/Slot',
-  slots: 'Work with firmware slots',
-};
-
 /** The tabs in nav order. */
 export const ROUTES: readonly Route[] = ['info', 'preserve', 'v4', 'decrypt', 'slots'];
 
-/** Page titles, one per tab. */
-export const ROUTE_TITLE: Readonly<Record<Route, string>> = {
-  info: 'Seek Thermal Firmware — Info (WebUSB)',
-  preserve: 'Seek Thermal Firmware — Dump & decrypt 0.x/1.x 2014/2016 (WebUSB)',
-  v4: 'Seek Thermal Firmware — Dump & decrypt 4.x/Nano (WebUSB)',
-  decrypt: 'Seek Thermal Firmware — Decrypt File/Slot (WebUSB)',
-  slots: 'Seek Thermal Firmware — Work with firmware slots (WebUSB)',
-};
+/**
+ * A record whose values are read through `t()` each time, so they follow the
+ * language in use while every caller keeps indexing it like a constant.
+ */
+function translated(read: (route: Route) => string): Readonly<Record<Route, string>> {
+  const record = {} as Record<Route, string>;
+  for (const route of ROUTES) {
+    Object.defineProperty(record, route, { enumerable: true, get: () => read(route) });
+  }
+  return Object.freeze(record);
+}
+
+/** The tab labels, as the nav shows them, in the language in use. */
+export const ROUTE_LABEL: Readonly<Record<Route, string>> = translated((route) =>
+  t(`app:tab.${route}`),
+);
+
+/** Page titles, one per tab, in the language in use. */
+export const ROUTE_TITLE: Readonly<Record<Route, string>> = translated((route) =>
+  t('app:documentTitle', { tab: ROUTE_LABEL[route] }),
+);
 
 export function parseRoute(hash: string): Route {
   const cleaned = hash.replace(/^#/, '').replace(/^\//, '').replace(/\/$/, '').toLowerCase();
@@ -53,6 +58,7 @@ export function currentRoute(): Route {
 /** Subscribes to `hashchange`. No router dependency, and none is needed. */
 export function useRoute(): Route {
   const [route, setRoute] = useState<Route>(currentRoute);
+  const lang = useLanguage();
 
   useEffect(() => {
     const onHashChange = (): void => {
@@ -68,7 +74,7 @@ export function useRoute(): Route {
 
   useEffect(() => {
     document.title = ROUTE_TITLE[route];
-  }, [route]);
+  }, [route, lang]);
 
   return route;
 }

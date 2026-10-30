@@ -2,12 +2,15 @@
  * Browser-support detection, ported from the original page's `checkSupport()`.
  *
  * The prose is the original's, word for word; only its HTML tags have become
- * the mini-markup of ./rich-text.tsx. The one rule that matters is at the top
+ * the mini-markup of ./rich-text.tsx. It lives in the `app` namespace
+ * (src/i18n/locales/en/app.ts) and is read in the language in use when
+ * `detectSupport` runs; App runs it again when the language changes. The one rule that matters is at the top
  * of the original function and is preserved exactly: **dumping needs WebUSB,
  * decrypting a file you already have does not**, so an unsupported browser
  * loses steps 1-2 and keeps the offline decryptor.
  */
 
+import { t } from '@/i18n';
 import { getWebUsb } from './webusb';
 
 export type SupportKind = 'ready' | 'ios' | 'no-webusb' | 'insecure';
@@ -35,10 +38,13 @@ export interface SupportStatus {
   readonly paragraphs: readonly string[];
 }
 
-/** The original's `offlineStillWorks`, appended to every failure banner. */
-export const OFFLINE_STILL_WORKS =
-  'You can still use the **Decrypt File/Slot** tab — that runs entirely on a file you pick and ' +
-  'needs no USB access.';
+/** The original's `offlineStillWorks`, appended to every failure banner, in the language in use. */
+export function offlineStillWorks(): string {
+  return t('app:support.offlineStillWorks', { tab: t('app:tab.decrypt') });
+}
+
+/** Its English wording, which the tests pin. */
+export const OFFLINE_STILL_WORKS = offlineStillWorks();
 
 /** The original's iOS/iPadOS sniff, including the iPadOS-13+ desktop-UA case. */
 export function isIosDevice(env: BrowserEnvironment): boolean {
@@ -55,15 +61,7 @@ export function detectSupport(env: BrowserEnvironment): SupportStatus {
       tone: 'warn',
       canUseUsb: false,
       offlineDecryptWorks: true,
-      paragraphs: [
-        '**WebUSB is not available on iOS or iPadOS,** so this device cannot read a ' +
-          "camera's flash.",
-        'Safari does not implement it, and every iOS browser is required to use WebKit, so ' +
-          'Chrome and Firefox here cannot expose it either. There is no flag or extension that ' +
-          'changes this. To dump a camera, use a desktop computer or an Android phone with a ' +
-          'USB-OTG cable.',
-        OFFLINE_STILL_WORKS,
-      ],
+      paragraphs: [t('app:support.ios.title'), t('app:support.ios.body'), offlineStillWorks()],
     };
   }
 
@@ -74,16 +72,10 @@ export function detectSupport(env: BrowserEnvironment): SupportStatus {
       canUseUsb: false,
       offlineDecryptWorks: true,
       paragraphs: [
-        '**This browser cannot access USB devices.**',
-        'WebUSB is available in Chrome, Edge, Opera and other Chromium browsers on Windows, ' +
-          'macOS, Linux and Android. Firefox and Safari have both declined to implement it.',
-        ...(env.isSecureContext
-          ? []
-          : [
-              'This page is also not being served over a secure connection, which blocks WebUSB ' +
-                'on its own.',
-            ]),
-        OFFLINE_STILL_WORKS,
+        t('app:support.noWebUsb.title'),
+        t('app:support.noWebUsb.body'),
+        ...(env.isSecureContext ? [] : [t('app:support.noWebUsb.insecure')]),
+        offlineStillWorks(),
       ],
     };
   }
@@ -95,10 +87,9 @@ export function detectSupport(env: BrowserEnvironment): SupportStatus {
       canUseUsb: false,
       offlineDecryptWorks: true,
       paragraphs: [
-        '**Insecure connection.** WebUSB is disabled here.',
-        'Open this page over HTTPS or from `http://localhost`. A plain LAN address such as ' +
-          '`http://192.168.1.10:8000` does not qualify.',
-        OFFLINE_STILL_WORKS,
+        t('app:support.insecure.title'),
+        t('app:support.insecure.body'),
+        offlineStillWorks(),
       ],
     };
   }
@@ -109,13 +100,8 @@ export function detectSupport(env: BrowserEnvironment): SupportStatus {
     canUseUsb: true,
     offlineDecryptWorks: true,
     paragraphs: [
-      '**Ready.** Plug in your Seek camera and press *Connect device*.',
-      ...(env.protocol === 'file:'
-        ? [
-            'Opened as a local file, so the browser will not remember the device between ' +
-              'reloads. That is harmless.',
-          ]
-        : []),
+      t('app:support.ready', { connect: t('app:connect.connect') }),
+      ...(env.protocol === 'file:' ? [t('app:support.fileProtocol')] : []),
     ],
   };
 }

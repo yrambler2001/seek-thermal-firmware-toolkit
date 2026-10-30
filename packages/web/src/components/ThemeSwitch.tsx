@@ -10,10 +10,12 @@
 
 import type { ReactElement } from 'react';
 import { Moon, Sun } from 'lucide-react';
+import { useT } from '@/i18n';
 import { themeHint, useTheme } from '@/lib/theme';
 import { cn } from '@/lib/utils';
 
 export function ThemeSwitch(): ReactElement {
+  const { t } = useT();
   const { theme, choice, system, toggle } = useTheme();
   const dark = theme === 'dark';
   return (
@@ -24,7 +26,7 @@ export function ThemeSwitch(): ReactElement {
       onClick={toggle}
       className="relative grid h-7 w-[3.125rem] shrink-0 cursor-pointer grid-cols-2 place-items-center rounded-full border border-input bg-card p-0.5 transition-colors hover:bg-accent"
     >
-      <span className="sr-only">Dark theme</span>
+      <span className="sr-only">{t('app:theme.label')}</span>
       <span
         aria-hidden="true"
         className={cn(

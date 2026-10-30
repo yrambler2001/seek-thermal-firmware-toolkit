@@ -1,6 +1,6 @@
 /**
- * The masthead (the name, the camera status, the light/dark switch, the link to the repository) and the
- * tab switch.
+ * The masthead (the name, the camera status, the light/dark and language
+ * switches, the link to the repository) and the tab switch.
  *
  * The five tabs are real URLs (`#/`, `#/preserve`, `#/v4`, `#/decrypt`,
  * `#/slots`), so the switch is five real links carrying `aria-current="page"` —
@@ -10,8 +10,10 @@
 import type { ReactElement } from 'react';
 import { Archive, FileKey2, Info, Layers, Radar, Thermometer } from 'lucide-react';
 import { REPO_URL } from '@seek-fw/core';
+import { useT } from '@/i18n';
 import { ROUTE_HREF, ROUTE_LABEL, ROUTES, type Route } from '@/lib/routing';
 import { cn } from '@/lib/utils';
+import { LanguageSwitch } from './LanguageSwitch';
 import { ThemeSwitch } from './ThemeSwitch';
 
 export interface AppHeaderProps {
@@ -54,6 +56,7 @@ const NAV: readonly NavItem[] = ROUTES.map((route) => ({
 }));
 
 export function AppHeader({ route, connected, canUseUsb }: AppHeaderProps): ReactElement {
+  const { t } = useT();
   return (
     <header className="relative isolate border-b border-border/70 bg-card/60">
       <div aria-hidden="true" className="bezel-grid pointer-events-none absolute inset-0 -z-10" />
@@ -73,7 +76,7 @@ export function AppHeader({ route, connected, canUseUsb }: AppHeaderProps): Reac
             <Thermometer className="size-5" />
           </span>
           <h1 className="text-[1.15rem] leading-tight font-semibold tracking-tight">
-            Seek Thermal Firmware Toolkit
+            {t('app:title')}
           </h1>
           <div className="ms-auto flex items-center gap-2">
             <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-2.5 py-1 text-[0.72rem] font-medium text-muted-foreground">
@@ -84,23 +87,28 @@ export function AppHeader({ route, connected, canUseUsb }: AppHeaderProps): Reac
                   connected ? 'bg-ok' : canUseUsb ? 'bg-muted-foreground/60' : 'bg-warn',
                 )}
               />
-              {connected ? 'Camera selected' : canUseUsb ? 'No camera selected' : 'USB unavailable'}
+              {connected
+                ? t('app:header.cameraSelected')
+                : canUseUsb
+                  ? t('app:header.noCamera')
+                  : t('app:header.usbUnavailable')}
             </span>
             <ThemeSwitch />
+            <LanguageSwitch />
             <a
               href={REPO_URL}
               target="_blank"
               rel="noopener noreferrer"
-              title="The toolkit on GitHub"
+              title={t('app:header.github')}
               className="flex size-7 shrink-0 items-center justify-center rounded-full border border-input bg-card text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
             >
               <GitHubMark className="size-4" />
-              <span className="sr-only">The toolkit on GitHub</span>
+              <span className="sr-only">{t('app:header.github')}</span>
             </a>
           </div>
         </div>
 
-        <nav aria-label="Tabs" className="-mb-px flex flex-wrap gap-1 pt-4">
+        <nav aria-label={t('app:header.tabs')} className="-mb-px flex flex-wrap gap-1 pt-4">
           {NAV.map((item) => {
             const current = route === item.route;
             return (

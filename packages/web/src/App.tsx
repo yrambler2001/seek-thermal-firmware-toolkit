@@ -23,6 +23,7 @@ import { usePreservePanel } from './hooks/usePreservePanel';
 import { useRunner } from './hooks/useRunner';
 import { useSlotFileDecrypt } from './hooks/useSlotFileDecrypt';
 import { useSlotsPanel } from './hooks/useSlotsPanel';
+import { useT } from './i18n';
 import { reportInUseElsewhere, withCameraLock } from './lib/camera-lock';
 import { DEFAULT_OPTIONS_FORM, type OptionsFailure, type OptionsForm } from './lib/options';
 import { useRoute } from './lib/routing';
@@ -40,7 +41,13 @@ export interface AppProps {
 
 export function App({ support }: AppProps = {}): ReactElement {
   const route = useRoute();
-  const status = useMemo(() => support ?? detectSupport(readBrowserEnvironment()), [support]);
+  /* App re-renders when the language changes, and with it the whole page:
+   * everything below reads its text in the language in use. */
+  const { rich, lang } = useT();
+  /* The environment is read once; the banner's paragraphs are read again in a
+   * new language (`lang` is in the deps for that). */
+  const environment = useMemo(() => readBrowserEnvironment(), []);
+  const status = useMemo(() => support ?? detectSupport(environment), [support, environment, lang]);
 
   const device = useDevice();
   const runner = useRunner();
@@ -130,46 +137,7 @@ export function App({ support }: AppProps = {}): ReactElement {
 
       <main className="mx-auto w-full max-w-[64rem] space-y-4 px-4 pt-5 pb-20 sm:px-6">
         <Prose className="max-w-[62ch]">
-          {route === 'v4' ? (
-            <p>
-              Makes a read-only copy of the 4&nbsp;MiB SPI flash of a <strong>4.x or Nano</strong>{' '}
-              camera over WebUSB and decrypts any firmware images it finds. Everything runs locally
-              in your browser — nothing is uploaded anywhere. <strong>Read-only:</strong> this tab
-              issues no flash write, erase, upload, commit, or reset command. A camera on another
-              firmware line is refused before anything is read.
-            </p>
-          ) : route === 'preserve' ? (
-            <p>
-              For <strong>0.x and 1.x</strong> cameras (the 2014 and 2016 builds). Makes a{' '}
-              <strong>complete</strong> copy of the camera&apos;s 4&nbsp;MiB flash — including the
-              parts a normal dump cannot reach — and then puts the camera back exactly as it was. It
-              backs up what it can read, briefly patches the firmware so the rest can be read, dumps
-              everything, restores the original and checks it. Everything runs locally in your
-              browser. <strong>Two of the steps write to flash</strong>, and each asks you first.
-            </p>
-          ) : route === 'decrypt' ? (
-            <p>
-              Decrypts firmware you already have, on this computer: a whole flash dump, or one
-              64&nbsp;KiB firmware slot. <strong>No camera is used</strong>, so this works with
-              nothing plugged in, and in browsers that have no USB access. The file is read here and
-              never uploaded.
-            </p>
-          ) : route === 'slots' ? (
-            <p>
-              Reads the camera&apos;s three firmware banks — slot A, slot B and recovery R — and
-              shows what each holds, which one the camera boots, and what this build can do with it,
-              with the device&apos;s running firmware and keys beside them. Everything runs locally
-              in your browser. <strong>This tab writes to flash:</strong> it can flash one bank from
-              a decrypted image or from raw bytes, and asks before every write.
-            </p>
-          ) : (
-            <p>
-              Reads the connected camera the way <code>seek-fw info</code> does: its firmware, the
-              family it answers as, how it boots, its keys and every bank. It tells you which of the
-              other tabs covers it, and says in plain words what each tab is for.{' '}
-              <strong>Nothing is written to flash on this tab.</strong>
-            </p>
-          )}
+          <p>{rich(`app:intro.${route}`)}</p>
         </Prose>
 
         {usesCamera && <SupportBanner status={status} />}

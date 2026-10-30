@@ -17,6 +17,7 @@
  */
 
 import { useCallback, useEffect, useLayoutEffect, useState } from 'react';
+import { t } from '@/i18n';
 
 export type Theme = 'light' | 'dark';
 
@@ -73,9 +74,9 @@ export function applyTheme(theme: Theme, doc: Document = document): void {
 
 /** The switch's tooltip: where the theme in use comes from. */
 export function themeHint(choice: Theme | null, system: Theme): string {
-  if (choice === null) return "Follows your system's light or dark setting";
-  if (choice !== system) return "Chosen here. Switch back to follow your system's setting.";
-  return "Chosen here, the same as your system's setting now";
+  if (choice === null) return t('app:theme.followsSystem');
+  if (choice !== system) return t('app:theme.chosenDiffers');
+  return t('app:theme.chosenSame');
 }
 
 export interface ThemeState {

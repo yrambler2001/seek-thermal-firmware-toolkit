@@ -7,6 +7,7 @@ import { Section } from './Section';
 import { UnlockNote } from './UnlockNote';
 import { Button } from './ui/button';
 import { Toolbar } from './ui/toolbar';
+import { useT } from '@/i18n';
 import { cn } from '@/lib/utils';
 
 export interface ConnectSectionProps {
@@ -35,24 +36,25 @@ export function ConnectSection({
   onTest,
   onForget,
 }: ConnectSectionProps): ReactElement {
+  const { t, rich } = useT();
   return (
-    <Section id="connect" step="1" title="Connect" icon={<PlugZap />}>
-      <Toolbar label="Device actions">
+    <Section id="connect" step="1" title={t('app:connect.title')} icon={<PlugZap />}>
+      <Toolbar label={t('app:connect.actions')}>
         {/* CONNECT STAYS LIVE DURING A RUN: the preserve pipeline reboots the
          * camera by command, and this camera has no USB serial number, so
          * Chrome cannot re-recognise it afterwards — the re-confirm gesture
          * IS the recovery. Everything else still locks while busy. */}
         <Button variant="default" onClick={onConnect} disabled={!canUseUsb}>
           <Plug />
-          {connected ? 'Change device' : 'Connect device'}
+          {connected ? t('app:connect.change') : t('app:connect.connect')}
         </Button>
         <Button onClick={onTest} disabled={!connected || busy || testing}>
           <Waypoints />
-          Test connection
+          {t('app:connect.test')}
         </Button>
         <Button onClick={onForget} disabled={!connected || !canForget || busy}>
           <Unplug />
-          Forget device
+          {t('app:connect.forget')}
         </Button>
       </Toolbar>
 
@@ -74,10 +76,7 @@ export function ConnectSection({
       {unlocked && <UnlockNote />}
 
       <Prose>
-        <p>
-          Any Seek Thermal device is offered (USB vendor <code>0x289d</code>) — Compact,
-          Compact&nbsp;PRO, Nano and so on. Pick yours in the browser&apos;s device chooser.
-        </p>
+        <p>{rich('app:connect.vendorNote', { params: { vendor: '0x289d' } })}</p>
       </Prose>
     </Section>
   );
