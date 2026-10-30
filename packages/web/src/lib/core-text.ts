@@ -15,11 +15,14 @@
  */
 
 import {
+  evidenceMessages,
   isCoreMessage,
   recordedParam,
   type BootPolicy,
   type CoreMessage,
   type CoreParam,
+  type FirmwareProfile,
+  type ProfileMatch,
 } from '@seek-fw/core';
 import { listAnd, listComma, t, type Translate } from '@/i18n';
 import { en } from '@/i18n/locales/en';
@@ -98,6 +101,25 @@ export function nullableCoreText(
   translate: Translate = t,
 ): string | null {
   return message === null || message === undefined ? null : coreText(message, translate);
+}
+
+/**
+ * Why detection scored a family as it did, one sentence per reason, in the language in use. A reason
+ * whose message no longer says its English (a match a caller built) shows the English.
+ */
+export function evidenceTexts(
+  match: Pick<ProfileMatch, 'reasons' | 'reasonMessages'>,
+  translate: Translate = t,
+): string[] {
+  return evidenceMessages(match).map((reason) => coreText(reason, translate));
+}
+
+/** What a family is (`summary`), in the language in use. */
+export function familySummaryText(
+  profile: Pick<FirmwareProfile, 'summary' | 'summaryMessage'>,
+  translate: Translate = t,
+): string {
+  return coreText(recordedParam(profile.summaryMessage, profile.summary), translate);
 }
 
 /** What a boot-config word means on this family, in the language in use (`describeCfg0`). */

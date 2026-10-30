@@ -110,7 +110,12 @@ export function detectProfile(evidence: DeviceEvidence): DetectionResult {
   const ranked: readonly ProfileMatch[] = listProfiles()
     .map((profile): ProfileMatch => {
       const verdict = profile.detect(evidence);
-      return { profile, score: verdict.score, reasons: verdict.reasons };
+      return {
+        profile,
+        score: verdict.score,
+        reasons: verdict.reasons,
+        ...(verdict.reasonMessages === undefined ? {} : { reasonMessages: verdict.reasonMessages }),
+      };
     })
     /* Stable, so equal scores keep registration order. */
     .sort((a, b) => b.score - a.score);

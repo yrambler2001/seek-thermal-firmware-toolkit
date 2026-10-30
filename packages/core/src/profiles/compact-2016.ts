@@ -89,7 +89,9 @@ import {
   legacyVersionLine,
   legacyWindowPlan,
 } from './legacy-auth.js';
-import { parseVersion, primaryVersion, versionSource } from './version.js';
+import { parseVersion, primaryVersion } from './version.js';
+import { verdictOf, versionSaid } from './evidence.js';
+import { coreMessage, type CoreMessage } from '../message.js';
 
 /** No whitening and a zero acceptance target — the original's second DEC_PROFILE. */
 const COMPACT_2016_CIPHER: CipherProfile = {
@@ -153,43 +155,124 @@ function chainEvidence(evidence: DeviceEvidence): {
   };
 }
 
+/** The detection's evidence, as the page shows it; `reasons` is the English (profiles/evidence.ts). */
+export const COMPACT_2016_EVIDENCE = {
+  early: (version: string): CoreMessage =>
+    coreMessage(
+      'detect.compact2016.early',
+      { version },
+      `firmware ${version} is older than 0.8.0.0 and has no read handler for ` +
+        'GetFeaturedFirmwareData — that is early-compact, not this family',
+    ),
+  modernSum: coreMessage(
+    'detect.compact2016.modernSum',
+    { sum: hexUp(MODERN_ACCEPT_SUM) },
+    `a slot decrypts to the ${hexUp(MODERN_ACCEPT_SUM)} acceptance sum, which is not ` +
+      "this generation's target",
+  ),
+  plainArmed: coreMessage(
+    'detect.compact2016.plainArmed',
+    {},
+    'a plain 2-byte BeginFirmwareUpgrade armed a protected bank, so this camera is not on ' +
+      'the locked line this family shares with legacy-auth',
+  ),
+  notLine: (version: string): CoreMessage =>
+    coreMessage(
+      'detect.compact2016.notLine',
+      { version },
+      `firmware ${version} is not on the 0.x / 1.x line`,
+    ),
+  storedPlain: coreMessage(
+    'detect.compact2016.storedPlain',
+    {},
+    'a slot is stored plain — the keystream solve returns the identity state, so its stored ' +
+      "words ARE the image — which is the 2014 plaintext chain; this generation's banks are " +
+      'xorshift128 under a real key',
+  ),
+  keyedZero: coreMessage(
+    'detect.compact2016.keyedZero',
+    { sum: hexUp(0) },
+    `a slot stored under a real xorshift128 keystream decrypts to the ${hexUp(0)} ` +
+      "acceptance sum, which is this generation's cipher",
+  ),
+  zeroSum: coreMessage(
+    'detect.compact2016.zeroSum',
+    { sum: hexUp(0) },
+    `a slot decrypts to the ${hexUp(0)} acceptance sum, which is this generation's target`,
+  ),
+  refused: coreMessage(
+    'detect.compact2016.refused',
+    {},
+    'and a protected bank refused the plain 2-byte arm, which is the locked handler',
+  ),
+  proLine: (said: CoreMessage, version: string): CoreMessage =>
+    coreMessage(
+      'detect.compact2016.proLine',
+      { said, version },
+      `${said.text} firmware ${version}, the 2016 Compact PRO's 1.0.3.x line`,
+    ),
+  compactLine: (said: CoreMessage, version: string): CoreMessage =>
+    coreMessage(
+      'detect.compact2016.compactLine',
+      { said, version },
+      `${said.text} firmware ${version}, a Compact build, not the Compact PRO's 1.0.3.x line`,
+    ),
+  lockedLine: (said: CoreMessage, version: string): CoreMessage =>
+    coreMessage(
+      'detect.compact2016.lockedLine',
+      { said, version },
+      `${said.text} firmware ${version}, on the 0.x / 1.x line this generation shares with ` +
+        'the locked legacy firmware',
+    ),
+  bootloader2016: (version: string): CoreMessage =>
+    coreMessage(
+      'detect.compact2016.bootloader2016',
+      { version },
+      `the bootloader reports ${version}, a 2016-generation bootloader (1.2.0.0 is ` +
+        "measured under Compact PRO 1.0.3.0; the 2014 Compact's is 0.9.0.0)",
+    ),
+  bootloader2014: (version: string): CoreMessage =>
+    coreMessage(
+      'detect.compact2016.bootloader2014',
+      { version },
+      `the bootloader reports ${version}, the 2014 generation's numbering, not this ` +
+        "generation's",
+    ),
+  none: coreMessage(
+    'detect.compact2016.none',
+    {},
+    'no slot was observed decrypting to a zero acceptance sum under a real key',
+  ),
+} as const;
+
 function detectCompact2016(evidence: DeviceEvidence): DetectionVerdict {
-  const reasons: string[] = [];
+  const reasons: CoreMessage[] = [];
   const sums = evidence.observedAcceptanceSums ?? [];
 
   /* A build with no read handler is early-compact's, whatever it sums to: the
    * 2014 images sum to zero as well, and this profile dumps. */
   const early = primaryVersion(evidence);
   if (early !== null && early.major === 0 && early.minor < 8) {
-    reasons.push(
-      `firmware ${early.text} is older than 0.8.0.0 and has no read handler for ` +
-        'GetFeaturedFirmwareData — that is early-compact, not this family',
-    );
-    return { score: 0, reasons };
+    reasons.push(COMPACT_2016_EVIDENCE.early(early.text));
+    return verdictOf(0, reasons);
   }
 
   if (sums.some((sum) => sum >>> 0 === MODERN_ACCEPT_SUM)) {
-    reasons.push(
-      `a slot decrypts to the ${hexUp(MODERN_ACCEPT_SUM)} acceptance sum, which is not ` +
-        "this generation's target",
-    );
-    return { score: 0, reasons };
+    reasons.push(COMPACT_2016_EVIDENCE.modernSum);
+    return verdictOf(0, reasons);
   }
 
   /* A camera that armed a protected bank on the plain channel is not on the
    * locked line at all, whatever its slots sum to. Measured, not inferred. */
   if (evidence.plainSelectorRefused === false) {
-    reasons.push(
-      'a plain 2-byte BeginFirmwareUpgrade armed a protected bank, so this camera is not on ' +
-        'the locked line this family shares with legacy-auth',
-    );
-    return { score: 0, reasons };
+    reasons.push(COMPACT_2016_EVIDENCE.plainArmed);
+    return verdictOf(0, reasons);
   }
 
   const version = primaryVersion(evidence);
   if (version !== null && !LEGACY_MAJORS.includes(version.major)) {
-    reasons.push(`firmware ${version.text} is not on the 0.x / 1.x line`);
-    return { score: 0, reasons };
+    reasons.push(COMPACT_2016_EVIDENCE.notLine(version.text));
+    return verdictOf(0, reasons);
   }
 
   /* THE CHAIN. Both chains sum to 0, so the sum alone cannot tell a 2014
@@ -197,27 +280,18 @@ function detectCompact2016(evidence: DeviceEvidence): DetectionVerdict {
    * plain, with nothing keyed beside it summing to 0, is the 2014 chain. */
   const chain = chainEvidence(evidence);
   if (chain.storedPlain && !chain.keyedZero) {
-    reasons.push(
-      'a slot is stored plain — the keystream solve returns the identity state, so its stored ' +
-        "words ARE the image — which is the 2014 plaintext chain; this generation's banks are " +
-        'xorshift128 under a real key',
-    );
-    return { score: 0, reasons };
+    reasons.push(COMPACT_2016_EVIDENCE.storedPlain);
+    return verdictOf(0, reasons);
   }
 
   let score = 0;
   if (chain.keyedZero) {
     score = SCORE_DECISIVE;
     reasons.push(
-      chain.chainKnown
-        ? `a slot stored under a real xorshift128 keystream decrypts to the ${hexUp(0)} ` +
-            "acceptance sum, which is this generation's cipher"
-        : `a slot decrypts to the ${hexUp(0)} acceptance sum, which is this generation's target`,
+      chain.chainKnown ? COMPACT_2016_EVIDENCE.keyedZero : COMPACT_2016_EVIDENCE.zeroSum,
     );
     if (evidence.plainSelectorRefused === true) {
-      reasons.push(
-        'and a protected bank refused the plain 2-byte arm, which is the locked handler',
-      );
+      reasons.push(COMPACT_2016_EVIDENCE.refused);
       score = SCORE_CORROBORATED;
     }
   }
@@ -227,21 +301,17 @@ function detectCompact2016(evidence: DeviceEvidence): DetectionVerdict {
    * no slot read it is the best evidence there is: it picks this profile for the
    * first read, so the banks are checked against this generation's target. */
   if (version !== null) {
-    const said =
-      `${versionSource(evidence) === 'dump' ? 'the image header says' : 'the camera reports'} ` +
-      `firmware ${version.text}`;
+    const said = versionSaid(evidence);
     const line = legacyVersionLine(version.text);
     if (line === 'compact-pro-2016') {
-      reasons.push(`${said}, the 2016 Compact PRO's 1.0.3.x line`);
+      reasons.push(COMPACT_2016_EVIDENCE.proLine(said, version.text));
       score = score > 0 ? score + SCORE_AGREES : SCORE_VERSION_LINE;
     } else if (line === 'compact') {
-      reasons.push(`${said}, a Compact build, not the Compact PRO's 1.0.3.x line`);
+      reasons.push(COMPACT_2016_EVIDENCE.compactLine(said, version.text));
     } else {
       /* Weak on purpose: the locked Compact firmware is numbered 0.x/1.x too,
        * and a measured 1.3.0.8 build hits 0xFFFF rather than 0. */
-      reasons.push(
-        `${said}, on the 0.x / 1.x line this generation shares with the locked legacy firmware`,
-      );
+      reasons.push(COMPACT_2016_EVIDENCE.lockedLine(said, version.text));
       score = Math.max(score, SCORE_WEAK);
     }
   }
@@ -253,36 +323,36 @@ function detectCompact2016(evidence: DeviceEvidence): DetectionVerdict {
   const bootloader = parseVersion(evidence.bootloaderVersion);
   if (bootloader !== null && score > 0) {
     if (bootloader.major >= 1) {
-      reasons.push(
-        `the bootloader reports ${bootloader.text}, a 2016-generation bootloader (1.2.0.0 is ` +
-          "measured under Compact PRO 1.0.3.0; the 2014 Compact's is 0.9.0.0)",
-      );
+      reasons.push(COMPACT_2016_EVIDENCE.bootloader2016(bootloader.text));
       score += SCORE_AGREES;
     } else {
-      reasons.push(
-        `the bootloader reports ${bootloader.text}, the 2014 generation's numbering, not this ` +
-          "generation's",
-      );
+      reasons.push(COMPACT_2016_EVIDENCE.bootloader2014(bootloader.text));
     }
   }
 
   if (score === 0) {
-    reasons.push('no slot was observed decrypting to a zero acceptance sum under a real key');
+    reasons.push(COMPACT_2016_EVIDENCE.none);
   }
-  return { score, reasons };
+  return verdictOf(score, reasons);
 }
 
 /* ---- the profile -------------------------------------------------------- */
 
-export const compact2016: FirmwareProfile = {
-  id: 'compact-2016',
-  name: '2016 Compact Pro',
-  summary:
-    'The Compact PRO 1.0.3.x builds (1.0.3.0 and 1.0.3.2). They answer reads exactly as the 2014 ' +
+const SUMMARY = coreMessage(
+  'family.summary.compact2016',
+  {},
+  'The Compact PRO 1.0.3.x builds (1.0.3.0 and 1.0.3.2). They answer reads exactly as the 2014 ' +
     'Compacts do, unlock token included, so they are told apart by their version and by how ' +
     'their banks are stored: encrypted, where the 2014 banks are plain. A 1.0.3.x camera is ' +
     'read under this family from the start. The preservation run reads the whole flash, and ' +
     'banks are written one at a time on the Work with firmware slots tab.',
+);
+
+export const compact2016: FirmwareProfile = {
+  id: 'compact-2016',
+  name: '2016 Compact Pro',
+  summary: SUMMARY.text,
+  summaryMessage: SUMMARY,
   stored:
     `encrypted: xorshift128, K=${hexUp(COMPACT_2016_CIPHER.whiteningK)}, the decrypted words sum ` +
     `to ${String(COMPACT_2016_CIPHER.acceptanceSum)}`,

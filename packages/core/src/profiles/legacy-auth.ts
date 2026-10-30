@@ -94,9 +94,10 @@ import type {
 } from './types.js';
 import { SUPPORTED } from './types.js';
 import { lockedBootRule, lockedBootRuleMessage } from './locked-boot.js';
-import type { CoreMessage } from '../message.js';
+import { coreMessage, type CoreMessage } from '../message.js';
+import { PLAIN_ARM_NOT_IN_FORCE, verdictOf, versionSaid, type MessageVerdict } from './evidence.js';
 import { agreedRows, buildWindowPlan } from './plan.js';
-import { primaryVersion, versionSource } from './version.js';
+import { primaryVersion } from './version.js';
 import { FLASH_BASE, FLASH_SIZE, HDR_HI, HDR_LO, WINDOW_SIZE } from './modern-4x.js';
 
 /**
@@ -688,6 +689,77 @@ const SCORE_PRO_LINE = 0.5;
  * line's own chains read, the version now decides the probe: this profile stays a candidate below
  * compact-2016, and the slots overrule both once they are read.
  */
+/** The detection's evidence, as the page shows it; `reasons` is the English (profiles/evidence.ts). */
+export const LEGACY_EVIDENCE = {
+  proLine: (version: string): CoreMessage =>
+    coreMessage(
+      'detect.legacy.proLine',
+      { version },
+      `but firmware ${version} is the 2016 Compact PRO's 1.0.3.x line, whose banks are ` +
+        "compact-2016's cipher: this family's acceptance check would fail every one of them",
+    ),
+  early: (version: string): CoreMessage =>
+    coreMessage(
+      'detect.legacy.early',
+      { version },
+      `firmware ${version} is older than 0.8.0.0: its RPC table has no read handler for ` +
+        'GetFeaturedFirmwareData (none at all before 0.7.0.7, and a setter only on 0.7.0.7 and ' +
+        '0.7.0.8) — that is early-compact, not this family',
+    ),
+  keyedZero: coreMessage(
+    'detect.legacy.keyedZero',
+    { zero: hexUp(0), sum: hexUp(LEGACY_CIPHER.acceptanceSum) },
+    `a slot stored under a real xorshift128 keystream decrypts to ${hexUp(0)} — the 2016 ` +
+      "Compact PRO's cipher (compact-2016). This line stores its banks plain with a word sum " +
+      `of 0 (the 2014 chain) or keyed to ${hexUp(LEGACY_CIPHER.acceptanceSum)} (Compact ` +
+      '1.3.0.8), and its acceptance check fails such a slot',
+  ),
+  plainChain: coreMessage(
+    'detect.legacy.plainChain',
+    {},
+    'a bank is stored as plain firmware whose words sum to 0, as the 2014 bootloader of this ' +
+      'line boots it',
+  ),
+  refused: coreMessage(
+    'detect.legacy.refused',
+    {},
+    'the camera refused to open a locked bank for an upgrade when asked without the unlock, as ' +
+      'only this generation of firmware does',
+  ),
+  unlocked: coreMessage(
+    'detect.legacy.unlocked',
+    {},
+    'and it opened the same bank when asked with the unlock, so the unlock this family ' +
+      'sends is the one this camera checks',
+  ),
+  plainArmed: PLAIN_ARM_NOT_IN_FORCE,
+  notLine: (said: CoreMessage, version: string): CoreMessage =>
+    coreMessage(
+      'detect.legacy.notLine',
+      { said, version },
+      `${said.text} firmware ${version}, which is not on the 0.x / 1.x legacy line`,
+    ),
+  authOnly: coreMessage(
+    'detect.legacy.authOnly',
+    {},
+    'it opened a locked bank for an upgrade when asked with the unlock, as this generation ' +
+      'of firmware does; asking without the unlock was not tried, so this alone does not ' +
+      'prove the generation',
+  ),
+  version: (version: string): CoreMessage =>
+    coreMessage(
+      'detect.legacy.version',
+      { version },
+      `firmware ${version} is on the 0.x / 1.x legacy line, which is a different ` +
+        'numbering line from the post-2018 application versions, not an older 4.x',
+    ),
+  none: coreMessage(
+    'detect.legacy.none',
+    {},
+    'nothing observed points at the authenticated read channel',
+  ),
+} as const;
+
 function detectLegacy(evidence: DeviceEvidence): DetectionVerdict {
   const verdict = scoreLegacy(evidence);
   if (verdict.score === 0) return verdict;
@@ -699,18 +771,14 @@ function detectLegacy(evidence: DeviceEvidence): DetectionVerdict {
       (s.chain === 'cipher' && s.acceptanceSum >>> 0 === LEGACY_CIPHER.acceptanceSum),
   );
   if (ownChain) return verdict;
-  return {
-    score: Math.min(verdict.score, SCORE_PRO_LINE),
-    reasons: [
-      ...verdict.reasons,
-      `but firmware ${version.text} is the 2016 Compact PRO's 1.0.3.x line, whose banks are ` +
-        "compact-2016's cipher: this family's acceptance check would fail every one of them",
-    ],
-  };
+  return verdictOf(Math.min(verdict.score, SCORE_PRO_LINE), [
+    ...verdict.reasonMessages,
+    LEGACY_EVIDENCE.proLine(version.text),
+  ]);
 }
 
-function scoreLegacy(evidence: DeviceEvidence): DetectionVerdict {
-  const reasons: string[] = [];
+function scoreLegacy(evidence: DeviceEvidence): MessageVerdict {
+  const reasons: CoreMessage[] = [];
 
   /* FIRST, BEFORE ANY CHANNEL EVIDENCE. A 0.7.0.x camera refuses the plain arm
    * of a protected bank exactly as this line does — its handler is this line's —
@@ -719,12 +787,8 @@ function scoreLegacy(evidence: DeviceEvidence): DetectionVerdict {
    * score. */
   const early = primaryVersion(evidence);
   if (early !== null && early.major === 0 && early.minor < 8) {
-    reasons.push(
-      `firmware ${early.text} is older than 0.8.0.0: its RPC table has no read handler for ` +
-        'GetFeaturedFirmwareData (none at all before 0.7.0.7, and a setter only on 0.7.0.7 and ' +
-        '0.7.0.8) — that is early-compact, not this family',
-    );
-    return { score: 0, reasons };
+    reasons.push(LEGACY_EVIDENCE.early(early.text));
+    return verdictOf(0, reasons);
   }
 
   /* THE CIPHER, BEFORE THE CHANNEL — added 2026-10-06. This line's banks are
@@ -741,20 +805,10 @@ function scoreLegacy(evidence: DeviceEvidence): DetectionVerdict {
   );
   const plainZero = slots.some((s) => s.chain === 'plain' && s.acceptanceSum >>> 0 === 0);
   if (keyedZero && !keyedOwn && !plainZero) {
-    reasons.push(
-      `a slot stored under a real xorshift128 keystream decrypts to ${hexUp(0)} — the 2016 ` +
-        "Compact PRO's cipher (compact-2016). This line stores its banks plain with a word sum " +
-        `of 0 (the 2014 chain) or keyed to ${hexUp(LEGACY_CIPHER.acceptanceSum)} (Compact ` +
-        '1.3.0.8), and its acceptance check fails such a slot',
-    );
-    return { score: 0, reasons };
+    reasons.push(LEGACY_EVIDENCE.keyedZero);
+    return verdictOf(0, reasons);
   }
-  const chainReasons: string[] = plainZero
-    ? [
-        'a bank is stored as plain firmware whose words sum to 0, as the 2014 bootloader of this ' +
-          'line boots it',
-      ]
-    : [];
+  const chainReasons: CoreMessage[] = plainZero ? [LEGACY_EVIDENCE.plainChain] : [];
 
   /* THE OBSERVATION THIS PROFILE'S OWN COMMENTS SAID NOBODY MADE.
    * `probeSelectorChannel` sends a plain 2-byte arm at a bank this firmware
@@ -765,37 +819,26 @@ function scoreLegacy(evidence: DeviceEvidence): DetectionVerdict {
    * and every 2014 image's own switch from 0.5.0.2 on (`plainChannelLockedModes`
    * in `test/firmware/facts.json`). */
   if (evidence.plainSelectorRefused === true) {
-    reasons.push(
-      'the camera refused to open a locked bank for an upgrade when asked without the unlock, as ' +
-        'only this generation of firmware does',
-    );
+    reasons.push(LEGACY_EVIDENCE.refused);
     if (evidence.authSelectorWorks === true) {
-      reasons.push(
-        'and it opened the same bank when asked with the unlock, so the unlock this family ' +
-          'sends is the one this camera checks',
-      );
-      return { score: SCORE_PROVEN, reasons: [...reasons, ...chainReasons] };
+      reasons.push(LEGACY_EVIDENCE.unlocked);
+      return verdictOf(SCORE_PROVEN, [...reasons, ...chainReasons]);
     }
-    return { score: SCORE_DECISIVE, reasons: [...reasons, ...chainReasons] };
+    return verdictOf(SCORE_DECISIVE, [...reasons, ...chainReasons]);
   }
 
   /* A protected bank that opened on the plain 2-byte channel proves the
    * authenticated handler is not in the way — whatever this camera is, it is
    * not the locked legacy firmware. */
   if (evidence.plainSelectorRefused === false || evidence.plainSelectorWorks === true) {
-    reasons.push(
-      'a plain 2-byte BeginFirmwareUpgrade armed a protected bank, so the authenticated read channel is not in force',
-    );
-    return { score: 0, reasons };
+    reasons.push(LEGACY_EVIDENCE.plainArmed);
+    return verdictOf(0, reasons);
   }
 
   const version = primaryVersion(evidence);
   if (version !== null && !LEGACY_MAJORS.includes(version.major)) {
-    reasons.push(
-      `${versionSource(evidence) === 'dump' ? 'the image header says' : 'the camera reports'} ` +
-        `firmware ${version.text}, which is not on the 0.x / 1.x legacy line`,
-    );
-    return { score: 0, reasons };
+    reasons.push(LEGACY_EVIDENCE.notLine(versionSaid(evidence), version.text));
+    return verdictOf(0, reasons);
   }
   let score = 0;
   /* "The authenticated channel worked" is not "the plain channel was refused".
@@ -805,17 +848,10 @@ function scoreLegacy(evidence: DeviceEvidence): DetectionVerdict {
   const authWorks = evidence.authSelectorWorks === true;
   if (authWorks) {
     score = SCORE_WEAK;
-    reasons.push(
-      'it opened a locked bank for an upgrade when asked with the unlock, as this generation ' +
-        'of firmware does; asking without the unlock was not tried, so this alone does not ' +
-        'prove the generation',
-    );
+    reasons.push(LEGACY_EVIDENCE.authOnly);
   }
   if (version !== null) {
-    reasons.push(
-      `firmware ${version.text} is on the 0.x / 1.x legacy line, which is a different ` +
-        'numbering line from the post-2018 application versions, not an older 4.x',
-    );
+    reasons.push(LEGACY_EVIDENCE.version(version.text));
     score = authWorks ? SCORE_CORROBORATED : Math.max(score, SCORE_STRONG);
   }
   /* The 2014 chain, measured on the slots: decisive offline too, where no
@@ -824,23 +860,29 @@ function scoreLegacy(evidence: DeviceEvidence): DetectionVerdict {
     reasons.push(...chainReasons);
     score = Math.max(score, version !== null ? SCORE_PLAIN_CHAIN_VERSION : SCORE_PLAIN_CHAIN);
   }
-  if (score === 0) reasons.push('nothing observed points at the authenticated read channel');
-  return { score, reasons };
+  if (score === 0) reasons.push(LEGACY_EVIDENCE.none);
+  return verdictOf(score, reasons);
 }
 
 /* ---- the profile -------------------------------------------------------- */
 
-export const legacyAuth: FirmwareProfile = {
-  id: 'legacy-auth',
-  name: 'Legacy locked firmware',
-  summary:
-    'The 2014 Compacts 0.8.0.0 to 1.3.0.8, the 16 Hz 1.3.0.8 FF build among them. A stock camera ' +
+const SUMMARY = coreMessage(
+  'family.summary.legacy',
+  { sum: '0x0000FFFF' },
+  'The 2014 Compacts 0.8.0.0 to 1.3.0.8, the 16 Hz 1.3.0.8 FF build among them. A stock camera ' +
     'lets out under half of its flash, some of it only to an unlock token the toolkit sends; the ' +
     'preservation run reads the rest through a temporary patch. Banks are stored plain, except ' +
     'on the FF build. A Compact PRO 1.0.3.x camera is read as compact-2016, and moves here only ' +
     "when a bank is stored plain or decrypts to 0x0000FFFF, as the FF build's do. Banks are " +
     'written on the Work with firmware slots tab on the builds the preservation run was ' +
     'measured on; any other 0.x or 1.x build is read only.',
+);
+
+export const legacyAuth: FirmwareProfile = {
+  id: 'legacy-auth',
+  name: 'Legacy locked firmware',
+  summary: SUMMARY.text,
+  summaryMessage: SUMMARY,
   stored:
     'plain: no key, the stored words sum to 0; the 1.3.0.8 FF build is encrypted (two ' +
     `keystreams, K=${hexUp(LEGACY_CIPHER.whiteningK)}, sum ${hexUp(LEGACY_CIPHER.acceptanceSum)})`,

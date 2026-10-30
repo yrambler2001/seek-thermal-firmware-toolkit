@@ -21,6 +21,12 @@ export {
 } from './registry.js';
 export type { CapabilityName } from './registry.js';
 export { DUMP_COMMAND_FAMILIES, V4_TAB_FAMILY, familyReadBy } from './routes.js';
+export { VERSION_SAID, evidenceMessages, versionSaid } from './evidence.js';
+export { MODERN_EVIDENCE } from './modern-4x.js';
+export { LEGACY_EVIDENCE } from './legacy-auth.js';
+export { COMPACT_2016_EVIDENCE } from './compact-2016.js';
+export { EARLY_COMPACT_EVIDENCE } from './compact-2014.js';
+export { GENERIC_EVIDENCE } from './generic.js';
 
 export {
   ACCEPT_SUM,

@@ -88,7 +88,8 @@ import type {
   ProfileCapabilities,
 } from './types.js';
 import { unsupported, SUPPORTED } from './types.js';
-import { coreMessage } from '../message.js';
+import { coreMessage, type CoreMessage } from '../message.js';
+import { verdictOf, versionSaid } from './evidence.js';
 import { FLASH_BASE, FLASH_SIZE, HDR_HI, HDR_LO, WINDOW_SIZE } from './modern-4x.js';
 import { LEGACY_BOOT, LEGACY_SLOTS } from './legacy-auth.js';
 import { primaryVersion, versionSource } from './version.js';
@@ -189,50 +190,78 @@ function predatesReadPath(major: number, minor: number): boolean {
   return major === 0 && minor < 8;
 }
 
+/** The detection's evidence, as the page shows it; `reasons` is the English (profiles/evidence.ts). */
+export const EARLY_COMPACT_EVIDENCE = {
+  noVersion: coreMessage(
+    'detect.early.noVersion',
+    {},
+    'no firmware version was reported or found in an image header',
+  ),
+  readable: (version: string): CoreMessage =>
+    coreMessage(
+      'detect.early.readable',
+      { version, first: FIRST_READABLE_VERSION },
+      `firmware ${version} is ${FIRST_READABLE_VERSION} or later, so its RPC table has ` +
+        'a getter for GetFeaturedFirmwareData and the ordinary read path applies',
+    ),
+  older: (said: CoreMessage, version: string): CoreMessage =>
+    coreMessage(
+      'detect.early.older',
+      { said, version, first: FIRST_READABLE_VERSION },
+      `${said.text} firmware ${version}, ` +
+        `which is older than ${FIRST_READABLE_VERSION} — the first build whose RPC method table ` +
+        'has a read handler (getter) for GetFeaturedFirmwareData',
+    ),
+  noWindow: coreMessage(
+    'detect.early.noWindow',
+    {},
+    'and no window could be read, which is what that predicts',
+  ),
+} as const;
+
 function detectCompact2014(evidence: DeviceEvidence): DetectionVerdict {
-  const reasons: string[] = [];
+  const reasons: CoreMessage[] = [];
   const version = primaryVersion(evidence);
 
   if (version === null) {
     /* NO GUESSING FROM A MISSING VERSION. This profile refuses to read, so a
      * false positive costs the user a dump they could have taken. It names
      * itself only when a version says so. */
-    reasons.push('no firmware version was reported or found in an image header');
-    return { score: 0, reasons };
+    reasons.push(EARLY_COMPACT_EVIDENCE.noVersion);
+    return verdictOf(0, reasons);
   }
 
   if (!predatesReadPath(version.major, version.minor)) {
-    reasons.push(
-      `firmware ${version.text} is ${FIRST_READABLE_VERSION} or later, so its RPC table has ` +
-        'a getter for GetFeaturedFirmwareData and the ordinary read path applies',
-    );
-    return { score: 0, reasons };
+    reasons.push(EARLY_COMPACT_EVIDENCE.readable(version.text));
+    return verdictOf(0, reasons);
   }
 
   const fromDump = versionSource(evidence) === 'dump';
-  reasons.push(
-    `${fromDump ? 'the image header says' : 'the camera reports'} firmware ${version.text}, ` +
-      `which is older than ${FIRST_READABLE_VERSION} — the first build whose RPC method table ` +
-      'has a read handler (getter) for GetFeaturedFirmwareData',
-  );
+  reasons.push(EARLY_COMPACT_EVIDENCE.older(versionSaid(evidence), version.text));
   if (evidence.windowReadable === false) {
-    reasons.push('and no window could be read, which is what that predicts');
+    reasons.push(EARLY_COMPACT_EVIDENCE.noWindow);
   }
-  return { score: fromDump ? SCORE_STRONG : SCORE_DECISIVE, reasons };
+  return verdictOf(fromDump ? SCORE_STRONG : SCORE_DECISIVE, reasons);
 }
 
 /* ---- the profile -------------------------------------------------------- */
 
-export const compact2014: FirmwareProfile = {
-  id: 'early-compact',
-  name: 'Early Compact (pre-0.8)',
-  summary:
-    'The 2014 Compacts older than 0.8.0.0: 0.3.0.1, 0.5.0.2, 0.5.1.0, 0.5.1.3, 0.6.0.4, 0.7.0.7 ' +
+const SUMMARY = coreMessage(
+  'family.summary.early',
+  {},
+  'The 2014 Compacts older than 0.8.0.0: 0.3.0.1, 0.5.0.2, 0.5.1.0, 0.5.1.3, 0.6.0.4, 0.7.0.7 ' +
     'and 0.7.0.8. Their firmware cannot answer the read a dump sends, so Dump, Dump all ' +
     "selectors, the Info tab's full read and the Work with firmware slots tab refuse them after " +
     'reading the version; on 0.3.0.1 the command a dump starts with would set up a firmware ' +
     'upgrade instead. The preservation run reads 0.7.0.7 and 0.7.0.8 through another command ' +
     'those two builds answer. A dump taken another way decrypts as usual.',
+);
+
+export const compact2014: FirmwareProfile = {
+  id: 'early-compact',
+  name: 'Early Compact (pre-0.8)',
+  summary: SUMMARY.text,
+  summaryMessage: SUMMARY,
   stored: 'plain on 0.7.0.7 and 0.7.0.8; the older builds are never read',
   cipher: CIPHER,
   memory: MEMORY,

@@ -154,6 +154,12 @@ import {
   spentReaderDiagnosisMessage,
   staleDescriptorMessage,
   stagedClauseMessage,
+  COMPACT_2016_EVIDENCE,
+  EARLY_COMPACT_EVIDENCE,
+  GENERIC_EVIDENCE,
+  LEGACY_EVIDENCE,
+  MODERN_EVIDENCE,
+  VERSION_SAID,
   type CoreMessage,
   type CoreParam,
   type DeviceState,
@@ -560,7 +566,7 @@ function samples(base: DeviceState): CoreMessage[] {
       acceptanceSumRefusal('Mosaic', '0x00000000'),
       KEY_TABLE_REFUSAL,
       whiteningRefusal('0x1', 'Mosaic', '0x2'),
-      otherFamilyRefusal('Compact', 'Mosaic', ['a reason', 'another']),
+      otherFamilyRefusal('Compact', 'Mosaic', ['a reason', MODERN_EVIDENCE.none]),
     ]),
   );
   add(cameraRefusalMessage(['an old reason']));
@@ -1025,6 +1031,40 @@ function samples(base: DeviceState): CoreMessage[] {
   /* preserve: a build that runs from recovery R only */
   add(PRESERVE_BANK_REFUSAL.recoveryOnly(RECOVERY_ONLY_ROUTE_NOTE));
   message(routeNoteMessage(RECOVERY_ONLY_ROUTE_NOTE));
+
+  /* detection: what each family is, and each family's evidence */
+  listProfiles().forEach((profile) => {
+    expect(profile.summaryMessage).toBeDefined();
+    add(profile.summaryMessage);
+  });
+  for (const said of Object.values(VERSION_SAID)) {
+    add(MODERN_EVIDENCE.legacyVersion(said, '1.3.0.8'));
+    add(EARLY_COMPACT_EVIDENCE.older(said, '0.7.0.7'));
+    add(COMPACT_2016_EVIDENCE.proLine(said, '1.0.3.0'));
+    add(COMPACT_2016_EVIDENCE.compactLine(said, '1.3.0.0'));
+    add(COMPACT_2016_EVIDENCE.lockedLine(said, '1.5.0.0'));
+    add(LEGACY_EVIDENCE.notLine(said, '4.8.2.1'));
+  }
+  add(MODERN_EVIDENCE.version('4.8.2.1'));
+  add(EARLY_COMPACT_EVIDENCE.readable('1.3.0.8'));
+  add(COMPACT_2016_EVIDENCE.early('0.7.0.7'));
+  add(COMPACT_2016_EVIDENCE.notLine('4.8.2.1'));
+  add(COMPACT_2016_EVIDENCE.bootloader2016('1.2.0.0'));
+  add(COMPACT_2016_EVIDENCE.bootloader2014('0.9.0.0'));
+  add(LEGACY_EVIDENCE.proLine('1.0.3.2'));
+  add(LEGACY_EVIDENCE.early('0.7.0.8'));
+  add(LEGACY_EVIDENCE.version('1.3.0.8'));
+  for (const family of [
+    MODERN_EVIDENCE,
+    EARLY_COMPACT_EVIDENCE,
+    GENERIC_EVIDENCE,
+    COMPACT_2016_EVIDENCE,
+    LEGACY_EVIDENCE,
+  ]) {
+    for (const sentence of Object.values(family)) {
+      if (typeof sentence !== 'function') add(sentence);
+    }
+  }
 
   /* decrypt: a bank file's refusal and notes */
   add(SLOT_FILE_WORDS.wrongSize(100));

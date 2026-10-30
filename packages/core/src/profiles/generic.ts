@@ -21,6 +21,7 @@ import type {
 } from './types.js';
 import { SUPPORTED, unsupported } from './types.js';
 import { coreMessage } from '../message.js';
+import { verdictOf } from './evidence.js';
 import {
   buildModernWindowMap,
   MODERN_BOOT,
@@ -56,23 +57,33 @@ const CAPABILITIES: ProfileCapabilities = {
   flash: unsupported(FLASH_REFUSAL_MESSAGE),
 };
 
+/** The detection's evidence, as the page shows it; `reasons` is the English (profiles/evidence.ts). */
+export const GENERIC_EVIDENCE = {
+  fallback: coreMessage(
+    'detect.generic.fallback',
+    {},
+    'fallback: no firmware family matched confidently, so reads stay available and writes do not',
+  ),
+} as const;
+
 function detectGeneric(_evidence: DeviceEvidence): DetectionVerdict {
-  return {
-    score: GENERIC_BASELINE,
-    reasons: [
-      'fallback: no firmware family matched confidently, so reads stay available and writes do not',
-    ],
-  };
+  return verdictOf(GENERIC_BASELINE, [GENERIC_EVIDENCE.fallback]);
 }
+
+const SUMMARY = coreMessage(
+  'family.summary.generic',
+  {},
+  'A camera no other family matches. `seek-fw dump` reads it with the 4.x block list (the ' +
+    '4.x/Nano tab refuses it), and a decrypt solves the key from the image itself, so neither ' +
+    'depends on the guess. No bank is written: the Work with firmware slots tab refuses it ' +
+    'until the camera is identified.',
+);
 
 export const generic: FirmwareProfile = {
   id: 'generic',
   name: 'Unidentified camera',
-  summary:
-    'A camera no other family matches. `seek-fw dump` reads it with the 4.x block list (the ' +
-    '4.x/Nano tab refuses it), and a decrypt solves the key from the image itself, so neither ' +
-    'depends on the guess. No bank is written: the Work with firmware slots tab refuses it ' +
-    'until the camera is identified.',
+  summary: SUMMARY.text,
+  summaryMessage: SUMMARY,
   stored:
     'not known: a decrypt tries the 4.x cipher, and the key is solved from the image either way',
   /* Defaults, not findings. Decryption does not actually depend on these: the

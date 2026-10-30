@@ -24,23 +24,23 @@
  *     `{plain}`, `{ff}`, `{reference}`, `{recovered}`, `{check}`, `{phrase}`,
  *     `{staged}`, `{source}`, `{operation}`, `{error}`, `{label}`, `{writable}`,
  *     `{next}`, `{form}`, `{notes}`, `{remedy}`, `{capability}`, `{pair}`
- *     (report.checkKey.pair, or nothing), and `{note}` in
+ *     (report.checkKey.pair, or nothing), `{said}` (detect.source.*), and `{note}` in
  *     preserve.refused.recoveryOnly. Each is another key of
  *     this namespace (the comment above a key says which), already in your
  *     language. A `{why}` that starts a sentence arrives with a capital letter.
  *   - a list: `{banks}`, `{reasons}` (joined with your common:list.* words, or
- *     "; " where the English uses a semicolon).
+ *     "; " where the English uses a semicolon; `{reasons}` in
+ *     writeRefusal.otherFamily is detect.* sentences).
  * - Params that stay AS THEY ARE: hex values and offsets (`{word}`, `{offset}`,
  *   `{sum}`, `{hex}`, `{address}`, `{at}`, `{status}`, `{magic}`, `{length}`,
- *   `{k}`), byte counts (`{size}`, `{count}`, `{kib}`), mode numbers (`{mode}`),
+ *   `{k}`, `{zero}`, `{block}`), byte counts (`{size}`, `{count}`, `{kib}`), mode numbers (`{mode}`),
  *   a score (`{score}`), firmware versions (`{version}`, `{image}`, `{camera}`,
- *   `{firmware}`, `{builds}`, `{only}`, and `{first}` in support.*), file
+ *   `{firmware}`, `{builds}`, `{only}`, and `{first}` in support.* and detect.*), file
  *   names (`{file}`), a SHA-256 (`{sha256}`), a selector table's name
  *   (`{table}`) and family names (`{family}`, `{detected}`).
  * - Still English inside a translated sentence (core gives them no code yet):
  *   `{reason}` in fpsBoot.cannotPatch (the patch table's reason); `{note}` in
- *   identity.versionUnknown; `{reasons}` in writeRefusal.otherFamily (the
- *   detection's evidence); `{error}` when the error has no code, and a read
+ *   identity.versionUnknown; `{error}` when the error has no code, and a read
  *   reason (read.reason.*'s place) that came from such an error.
  * - Capitals: keep the English's. A template that starts lower case is said
  *   inside another sentence or after a label ("Note: …", a list item, "Not
@@ -422,11 +422,102 @@ export default {
   'writeRefusal.keyTable': "this camera's key table could not be confirmed",
   'writeRefusal.whitening':
     "this camera's key table resolves under K={k} but {family} encrypts under K={expected}",
-  /** `{reasons}`: the detection's evidence, joined with "; " (English: detection has no codes yet). */
+  /** `{reasons}`: the detection's evidence (detect.*), joined with "; ". */
   'writeRefusal.otherFamily':
     'the evidence says this camera is {detected}, not {family} ({reasons})',
   /** `{reasons}`: writeRefusal.* joined with "; ". */
   'writeRefusal.camera': 'this camera cannot be written from here: {reasons}',
+
+  /* ---- family: what each camera family is (profiles/*: `summary`), the decrypt tab's Summary row ---- */
+  /** "Work with firmware slots", "Info", "4.x/Nano", "Dump", "Dump all selectors": the page's own tab and button names; `seek-fw dump` stays English. `{block}` is an address. */
+  'family.summary.modern':
+    "Seek's 2018 and later builds (2.x, 4.x, 10.x, 42.x, 44.x): Compact 4.8/4.16, Compact Pro 4.9/4.18, Compact Pro FF, Compact XR, Mosaic 2.27/10.9, Nano 200 and Nano 300. A dump reads 63 of the 64 blocks of flash without unlocking anything; no read reaches the block at {block} on these builds. The firmware is stored encrypted. Banks are written one at a time on the Work with firmware slots tab.",
+  'family.summary.early':
+    "The 2014 Compacts older than 0.8.0.0: 0.3.0.1, 0.5.0.2, 0.5.1.0, 0.5.1.3, 0.6.0.4, 0.7.0.7 and 0.7.0.8. Their firmware cannot answer the read a dump sends, so Dump, Dump all selectors, the Info tab's full read and the Work with firmware slots tab refuse them after reading the version; on 0.3.0.1 the command a dump starts with would set up a firmware upgrade instead. The preservation run reads 0.7.0.7 and 0.7.0.8 through another command those two builds answer. A dump taken another way decrypts as usual.",
+  'family.summary.compact2016':
+    'The Compact PRO 1.0.3.x builds (1.0.3.0 and 1.0.3.2). They answer reads exactly as the 2014 Compacts do, unlock token included, so they are told apart by their version and by how their banks are stored: encrypted, where the 2014 banks are plain. A 1.0.3.x camera is read under this family from the start. The preservation run reads the whole flash, and banks are written one at a time on the Work with firmware slots tab.',
+  /** `{sum}` is hex. */
+  'family.summary.legacy':
+    "The 2014 Compacts 0.8.0.0 to 1.3.0.8, the 16 Hz 1.3.0.8 FF build among them. A stock camera lets out under half of its flash, some of it only to an unlock token the toolkit sends; the preservation run reads the rest through a temporary patch. Banks are stored plain, except on the FF build. A Compact PRO 1.0.3.x camera is read as compact-2016, and moves here only when a bank is stored plain or decrypts to {sum}, as the FF build's do. Banks are written on the Work with firmware slots tab on the builds the preservation run was measured on; any other 0.x or 1.x build is read only.",
+  'family.summary.generic':
+    'A camera no other family matches. `seek-fw dump` reads it with the 4.x block list (the 4.x/Nano tab refuses it), and a decrypt solves the key from the image itself, so neither depends on the guess. No bank is written: the Work with firmware slots tab refuses it until the camera is identified.',
+
+  /* ---- detect: why a family scored as it did, one item of the evidence list (profiles/*: `detect`) ---- */
+  /* Each starts lower case: it is a list item, and writeRefusal.otherFamily joins them with "; ".
+   * `{said}` is detect.source.*; `{version}` a firmware or bootloader version; `{sum}`, `{zero}` hex.
+   * Family ids (early-compact, compact-2016, legacy-auth), command names (BeginFirmwareUpgrade,
+   * GetFeaturedFirmwareData) and xorshift128 stay English. */
+  'detect.source.header': 'the image header says',
+  'detect.source.camera': 'the camera reports',
+  'detect.plainArmedNotInForce':
+    'a plain 2-byte BeginFirmwareUpgrade armed a protected bank, so the authenticated read channel is not in force',
+  'detect.modern.plainRefused':
+    'a plain 2-byte BeginFirmwareUpgrade of a protected bank was REFUSED, which no build on this line does — its handler has no token check and accepts the plain channel on every bank',
+  'detect.modern.authArmed':
+    'a protected bank armed on the 18-byte authenticated selector; nothing tried the plain one there, so that does not place this camera off this line',
+  'detect.modern.legacyVersion':
+    '{said} firmware {version}, which is on the 0.x / 1.x legacy line (a different numbering line, not an older 4.x — and one of those builds hits the {sum} sum too)',
+  'detect.modern.noSum':
+    "no slot decrypts to the {sum} acceptance sum this family's bootloader demands",
+  'detect.modern.sum': 'a slot decrypts to the {sum} acceptance sum',
+  'detect.modern.version':
+    'firmware {version} is on the post-2018 line this selector map covers (2.x / 4.x / 10.x / 42.x / 44.x: Compact, Compact Pro, Compact XR, Mosaic, Nano)',
+  'detect.modern.plainWorks':
+    'a plain 2-byte BeginFirmwareUpgrade armed a protected bank, so this is not the locked legacy firmware',
+  'detect.modern.none': 'no evidence placing this camera on the post-2018 line',
+  'detect.early.noVersion': 'no firmware version was reported or found in an image header',
+  /** `{first}`: the first version with a read handler. */
+  'detect.early.readable':
+    'firmware {version} is {first} or later, so its RPC table has a getter for GetFeaturedFirmwareData and the ordinary read path applies',
+  'detect.early.older':
+    '{said} firmware {version}, which is older than {first} — the first build whose RPC method table has a read handler (getter) for GetFeaturedFirmwareData',
+  'detect.early.noWindow': 'and no window could be read, which is what that predicts',
+  'detect.generic.fallback':
+    'fallback: no firmware family matched confidently, so reads stay available and writes do not',
+  'detect.compact2016.early':
+    'firmware {version} is older than 0.8.0.0 and has no read handler for GetFeaturedFirmwareData — that is early-compact, not this family',
+  'detect.compact2016.modernSum':
+    "a slot decrypts to the {sum} acceptance sum, which is not this generation's target",
+  'detect.compact2016.plainArmed':
+    'a plain 2-byte BeginFirmwareUpgrade armed a protected bank, so this camera is not on the locked line this family shares with legacy-auth',
+  'detect.compact2016.notLine': 'firmware {version} is not on the 0.x / 1.x line',
+  'detect.compact2016.storedPlain':
+    "a slot is stored plain — the keystream solve returns the identity state, so its stored words ARE the image — which is the 2014 plaintext chain; this generation's banks are xorshift128 under a real key",
+  'detect.compact2016.keyedZero':
+    "a slot stored under a real xorshift128 keystream decrypts to the {sum} acceptance sum, which is this generation's cipher",
+  'detect.compact2016.zeroSum':
+    "a slot decrypts to the {sum} acceptance sum, which is this generation's target",
+  'detect.compact2016.refused':
+    'and a protected bank refused the plain 2-byte arm, which is the locked handler',
+  'detect.compact2016.proLine': "{said} firmware {version}, the 2016 Compact PRO's 1.0.3.x line",
+  'detect.compact2016.compactLine':
+    "{said} firmware {version}, a Compact build, not the Compact PRO's 1.0.3.x line",
+  'detect.compact2016.lockedLine':
+    '{said} firmware {version}, on the 0.x / 1.x line this generation shares with the locked legacy firmware',
+  'detect.compact2016.bootloader2016':
+    "the bootloader reports {version}, a 2016-generation bootloader (1.2.0.0 is measured under Compact PRO 1.0.3.0; the 2014 Compact's is 0.9.0.0)",
+  'detect.compact2016.bootloader2014':
+    "the bootloader reports {version}, the 2014 generation's numbering, not this generation's",
+  'detect.compact2016.none':
+    'no slot was observed decrypting to a zero acceptance sum under a real key',
+  'detect.legacy.proLine':
+    "but firmware {version} is the 2016 Compact PRO's 1.0.3.x line, whose banks are compact-2016's cipher: this family's acceptance check would fail every one of them",
+  'detect.legacy.early':
+    'firmware {version} is older than 0.8.0.0: its RPC table has no read handler for GetFeaturedFirmwareData (none at all before 0.7.0.7, and a setter only on 0.7.0.7 and 0.7.0.8) — that is early-compact, not this family',
+  'detect.legacy.keyedZero':
+    "a slot stored under a real xorshift128 keystream decrypts to {zero} — the 2016 Compact PRO's cipher (compact-2016). This line stores its banks plain with a word sum of 0 (the 2014 chain) or keyed to {sum} (Compact 1.3.0.8), and its acceptance check fails such a slot",
+  'detect.legacy.plainChain':
+    'a bank is stored as plain firmware whose words sum to 0, as the 2014 bootloader of this line boots it',
+  'detect.legacy.refused':
+    'the camera refused to open a locked bank for an upgrade when asked without the unlock, as only this generation of firmware does',
+  'detect.legacy.unlocked':
+    'and it opened the same bank when asked with the unlock, so the unlock this family sends is the one this camera checks',
+  'detect.legacy.notLine': '{said} firmware {version}, which is not on the 0.x / 1.x legacy line',
+  'detect.legacy.authOnly':
+    'it opened a locked bank for an upgrade when asked with the unlock, as this generation of firmware does; asking without the unlock was not tried, so this alone does not prove the generation',
+  'detect.legacy.version':
+    'firmware {version} is on the 0.x / 1.x legacy line, which is a different numbering line from the post-2018 application versions, not an older 4.x',
+  'detect.legacy.none': 'nothing observed points at the authenticated read channel',
 
   /* ---- fps: why a bank's frame-rate patch is not offered, or why a patch of every bank stopped (slots/fps-patch) ---- */
   'fps.plan.noBank': "this build's plan has no {bank}",

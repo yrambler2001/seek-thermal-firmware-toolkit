@@ -66,6 +66,7 @@ import { onCompactPro2016Line } from '../slots/running.js';
 import { isStaleDescriptorWord } from '../preservation/windows.js';
 import { LEGACY_BOOT, legacyUpgradeTargetBuild } from '../profiles/legacy-auth.js';
 import { bankOfActiveSlotWord, bankWordsOf, enteredChecked } from '../profiles/locked-boot.js';
+import { evidenceMessages } from '../profiles/evidence.js';
 import { detectProfile, requireCapability } from '../profiles/registry.js';
 import type {
   BootPrediction,
@@ -1587,7 +1588,11 @@ export async function readDeviceInfo(
      * one extra read is a cheap price for the adoption being a decision
      * somebody made rather than one the code made quietly. */
     bankWriteRefusalMessages.push(
-      otherFamilyRefusal(detection.best.profile.name, profile.name, detection.best.reasons),
+      otherFamilyRefusal(
+        detection.best.profile.name,
+        profile.name,
+        evidenceMessages(detection.best),
+      ),
     );
   }
   const bankWriteRefusals = bankWriteRefusalMessages.map((reason) => reason.text);

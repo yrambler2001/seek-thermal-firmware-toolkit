@@ -55,7 +55,8 @@ import type {
 } from './types.js';
 import { SUPPORTED } from './types.js';
 import { buildWindowPlan } from './plan.js';
-import { primaryVersion, versionSource } from './version.js';
+import { primaryVersion } from './version.js';
+import { PLAIN_ARM_NOT_IN_FORCE, verdictOf, versionSaid } from './evidence.js';
 
 /* ---- memory layout ------------------------------------------------------ */
 
@@ -337,8 +338,62 @@ const SCORE_MEASURED_PLAIN = 0.6;
  */
 const LEGACY_MAJORS: readonly number[] = [0, 1];
 
+/** The detection's evidence, as the page shows it; `reasons` is the English (profiles/evidence.ts). */
+export const MODERN_EVIDENCE = {
+  plainRefused: coreMessage(
+    'detect.modern.plainRefused',
+    {},
+    'a plain 2-byte BeginFirmwareUpgrade of a protected bank was REFUSED, which no build ' +
+      'on this line does — its handler has no token check and accepts the plain channel ' +
+      'on every bank',
+  ),
+  authArmed: coreMessage(
+    'detect.modern.authArmed',
+    {},
+    'a protected bank armed on the 18-byte authenticated selector; nothing tried the plain ' +
+      'one there, so that does not place this camera off this line',
+  ),
+  legacyVersion: (said: CoreMessage, version: string): CoreMessage =>
+    coreMessage(
+      'detect.modern.legacyVersion',
+      { said, version, sum: '0x0000FFFF' },
+      `${said.text} ` +
+        `firmware ${version}, which is on the 0.x / 1.x legacy line (a different ` +
+        'numbering line, not an older 4.x — and one of those builds hits the 0x0000FFFF ' +
+        'sum too)',
+    ),
+  noSum: coreMessage(
+    'detect.modern.noSum',
+    { sum: hexUp(ACCEPT_SUM) },
+    `no slot decrypts to the ${hexUp(ACCEPT_SUM)} acceptance sum this family's bootloader demands`,
+  ),
+  sum: coreMessage(
+    'detect.modern.sum',
+    { sum: hexUp(ACCEPT_SUM) },
+    `a slot decrypts to the ${hexUp(ACCEPT_SUM)} acceptance sum`,
+  ),
+  version: (version: string): CoreMessage =>
+    coreMessage(
+      'detect.modern.version',
+      { version },
+      `firmware ${version} is on the post-2018 line this selector map covers ` +
+        '(2.x / 4.x / 10.x / 42.x / 44.x: Compact, Compact Pro, Compact XR, Mosaic, Nano)',
+    ),
+  plainArmed: PLAIN_ARM_NOT_IN_FORCE,
+  plainWorks: coreMessage(
+    'detect.modern.plainWorks',
+    {},
+    'a plain 2-byte BeginFirmwareUpgrade armed a protected bank, so this is not the locked legacy firmware',
+  ),
+  none: coreMessage(
+    'detect.modern.none',
+    {},
+    'no evidence placing this camera on the post-2018 line',
+  ),
+} as const;
+
 function detectModern(evidence: DeviceEvidence): DetectionVerdict {
-  const reasons: string[] = [];
+  const reasons: CoreMessage[] = [];
 
   /* THE DECISIVE NEGATIVE, now that something actually makes the observation.
    * A protected bank that refused the plain 2-byte arm is the legacy locked
@@ -347,12 +402,8 @@ function detectModern(evidence: DeviceEvidence): DetectionVerdict {
    * modern handler's only length test is `(req_len & 0xFFFFFFEF) != 2`, which
    * accepts 2 and 18 alike and compares no token at all. */
   if (evidence.plainSelectorRefused === true) {
-    reasons.push(
-      'a plain 2-byte BeginFirmwareUpgrade of a protected bank was REFUSED, which no build ' +
-        'on this line does — its handler has no token check and accepts the plain channel ' +
-        'on every bank',
-    );
-    return { score: 0, reasons };
+    reasons.push(MODERN_EVIDENCE.plainRefused);
+    return verdictOf(0, reasons);
   }
 
   /* An authenticated arm that WORKED does not rule this family out: the flag
@@ -360,10 +411,7 @@ function detectModern(evidence: DeviceEvidence): DetectionVerdict {
    * line's handler ignores the extra 16 bytes. Kept as a caveat, out of the
    * score — `plainSelectorRefused` above is the one that decides. */
   if (evidence.authSelectorWorks === true && evidence.plainSelectorRefused === undefined) {
-    reasons.push(
-      'a protected bank armed on the 18-byte authenticated selector; nothing tried the plain ' +
-        'one there, so that does not place this camera off this line',
-    );
+    reasons.push(MODERN_EVIDENCE.authArmed);
   }
 
   const version = primaryVersion(evidence);
@@ -371,13 +419,8 @@ function detectModern(evidence: DeviceEvidence): DetectionVerdict {
     /* Deliberately outranks the acceptance sum below. 32K_43X0_1.3.0.8_COMPACT
      * is measured to hit the 0x0000FFFF sum with NO whitening, so the sum on its
      * own cannot place a build on this line — a version can. */
-    reasons.push(
-      `${versionSource(evidence) === 'dump' ? 'the image header says' : 'the camera reports'} ` +
-        `firmware ${version.text}, which is on the 0.x / 1.x legacy line (a different ` +
-        'numbering line, not an older 4.x — and one of those builds hits the 0x0000FFFF ' +
-        'sum too)',
-    );
-    return { score: 0, reasons };
+    reasons.push(MODERN_EVIDENCE.legacyVersion(versionSaid(evidence), version.text));
+    return verdictOf(0, reasons);
   }
 
   const sums = evidence.observedAcceptanceSums ?? [];
@@ -385,22 +428,17 @@ function detectModern(evidence: DeviceEvidence): DetectionVerdict {
   if (sums.length > 0 && !hitsTarget) {
     /* The original's own negative test: this is the exact evidence on which it
      * refused to flash and called the camera "probably the 2016 generation". */
-    reasons.push(
-      `no slot decrypts to the ${hexUp(ACCEPT_SUM)} acceptance sum this family's bootloader demands`,
-    );
-    return { score: 0, reasons };
+    reasons.push(MODERN_EVIDENCE.noSum);
+    return verdictOf(0, reasons);
   }
 
   let score = 0;
   if (hitsTarget) {
     score = SCORE_DECISIVE;
-    reasons.push(`a slot decrypts to the ${hexUp(ACCEPT_SUM)} acceptance sum`);
+    reasons.push(MODERN_EVIDENCE.sum);
   }
   if (version !== null) {
-    reasons.push(
-      `firmware ${version.text} is on the post-2018 line this selector map covers ` +
-        '(2.x / 4.x / 10.x / 42.x / 44.x: Compact, Compact Pro, Compact XR, Mosaic, Nano)',
-    );
+    reasons.push(MODERN_EVIDENCE.version(version.text));
     score = hitsTarget ? SCORE_CORROBORATED : Math.max(score, SCORE_STRONG);
   }
   if (evidence.plainSelectorRefused === false) {
@@ -410,22 +448,27 @@ function detectModern(evidence: DeviceEvidence): DetectionVerdict {
      * out — but the 2016 generation is ruled out by it too only because that
      * generation refuses; a camera answering plain could still be an early
      * Compact, which is why this corroborates rather than decides. */
-    reasons.push(
-      'a plain 2-byte BeginFirmwareUpgrade armed a protected bank, so the authenticated ' +
-        'read channel is not in force',
-    );
+    reasons.push(MODERN_EVIDENCE.plainArmed);
     score = Math.max(score, SCORE_MEASURED_PLAIN);
   } else if (score === 0 && evidence.plainSelectorWorks === true) {
-    reasons.push(
-      'a plain 2-byte BeginFirmwareUpgrade armed a protected bank, so this is not the locked legacy firmware',
-    );
+    reasons.push(MODERN_EVIDENCE.plainWorks);
     score = SCORE_WEAK;
   }
-  if (score === 0) reasons.push('no evidence placing this camera on the post-2018 line');
-  return { score, reasons };
+  if (score === 0) reasons.push(MODERN_EVIDENCE.none);
+  return verdictOf(score, reasons);
 }
 
 /* ---- the profile -------------------------------------------------------- */
+
+const SUMMARY = coreMessage(
+  'family.summary.modern',
+  { block: '0x14060000' },
+  "Seek's 2018 and later builds (2.x, 4.x, 10.x, 42.x, 44.x): Compact 4.8/4.16, Compact Pro " +
+    '4.9/4.18, Compact Pro FF, Compact XR, Mosaic 2.27/10.9, Nano 200 and Nano 300. A dump reads ' +
+    '63 of the 64 blocks of flash without unlocking anything; no read reaches the block at ' +
+    '0x14060000 on these builds. The firmware is stored encrypted. Banks are written one at a ' +
+    'time on the Work with firmware slots tab.',
+);
 
 export const modern4x: FirmwareProfile = {
   id: 'modern-4x',
@@ -433,12 +476,8 @@ export const modern4x: FirmwareProfile = {
    * in every pinned expectation — but the NAME no longer claims a version line
    * the family does not have. */
   name: 'Modern (2018+ selector map)',
-  summary:
-    "Seek's 2018 and later builds (2.x, 4.x, 10.x, 42.x, 44.x): Compact 4.8/4.16, Compact Pro " +
-    '4.9/4.18, Compact Pro FF, Compact XR, Mosaic 2.27/10.9, Nano 200 and Nano 300. A dump reads ' +
-    '63 of the 64 blocks of flash without unlocking anything; no read reaches the block at ' +
-    '0x14060000 on these builds. The firmware is stored encrypted. Banks are written one at a ' +
-    'time on the Work with firmware slots tab.',
+  summary: SUMMARY.text,
+  summaryMessage: SUMMARY,
   stored:
     `encrypted: xorshift128, K=${hexUp(MODERN_CIPHER.whiteningK)}, the decrypted words sum to ` +
     hexUp(MODERN_CIPHER.acceptanceSum),

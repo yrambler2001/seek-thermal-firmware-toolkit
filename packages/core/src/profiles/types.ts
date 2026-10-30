@@ -289,6 +289,8 @@ export interface DetectionVerdict {
   readonly score: number;
   /** Human-readable justification, shown in the UI and written into reports. */
   readonly reasons: readonly string[];
+  /** `reasons` as messages, in the same order, for the page (`evidenceMessages`). */
+  readonly reasonMessages?: readonly CoreMessage[];
 }
 
 export interface FirmwareProfile {
@@ -296,6 +298,8 @@ export interface FirmwareProfile {
   readonly name: string;
   /** What the family is, for a person: the page's Detected firmware family panel and `info --families`. */
   readonly summary: string;
+  /** `summary` as a message, for the page. */
+  readonly summaryMessage?: CoreMessage;
   /** How its firmware is stored in a bank, in a line (HOW_IT_WORKS.md, Firmware families). */
   readonly stored: string;
   readonly cipher: CipherProfile;
@@ -328,6 +332,7 @@ export interface ProfileMatch {
   readonly profile: FirmwareProfile;
   readonly score: number;
   readonly reasons: readonly string[];
+  readonly reasonMessages?: readonly CoreMessage[];
 }
 
 export interface DetectionResult {

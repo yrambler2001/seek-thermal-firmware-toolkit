@@ -9,6 +9,7 @@
 import { t, useT } from '@/i18n';
 import type { ReactElement } from 'react';
 import type { DetectionResult } from '@seek-fw/core';
+import { evidenceTexts, familySummaryText } from '@/lib/core-text';
 import { KeyValue, type KeyValueRow } from './KeyValue';
 import { Prose } from './Prose';
 import { Alert } from './ui/alert';
@@ -50,8 +51,9 @@ export function DetectionBox({
       </span>,
     ],
     [t('decrypt:detection.readAs'), actingName === best.profile.name ? null : (actingName ?? null)],
-    [t('decrypt:detection.summary'), best.profile.summary], // i18n: core message
+    [t('decrypt:detection.summary'), familySummaryText(best.profile)],
   ];
+  const evidence = evidenceTexts(best);
 
   return (
     <>
@@ -59,9 +61,8 @@ export function DetectionBox({
       <Prose className="mt-3">
         <p>{t('decrypt:detection.why')}</p>
         <ul>
-          {/* i18n: core message */}
-          {best.reasons.map((reason) => (
-            <li key={reason}>{reason}</li>
+          {best.reasons.map((reason, index) => (
+            <li key={reason}>{evidence[index] ?? reason}</li>
           ))}
         </ul>
       </Prose>

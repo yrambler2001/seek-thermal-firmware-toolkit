@@ -27,7 +27,14 @@ import {
   upgradeTargetWarningMessage,
   type CoreParam,
 } from '@seek-fw/core';
-import { cfg0Words, coreParamText, coreText, coreTexts, nullableCoreText } from '@/lib/core-text';
+import {
+  cfg0Words,
+  coreParamText,
+  coreText,
+  coreTexts,
+  evidenceTexts,
+  nullableCoreText,
+} from '@/lib/core-text';
 import { KeyValue } from './KeyValue';
 import { Panel, PanelTitle } from './Panel';
 import { Prose } from './Prose';
@@ -107,6 +114,7 @@ export function CameraReport({ state }: CameraReportProps): ReactElement {
   );
   const running = runningText(state);
   const best = state.detection.best;
+  const evidence = evidenceTexts(best);
   const nameOf = (key: SlotKey): string => slotName(state, key);
   const nameParam = (key: SlotKey): CoreParam => bankNameParam(nameOf(key), key);
   /* How the banks are written, on every line (core's `bankWritingOf`, the CLI's Writing section). */
@@ -167,9 +175,8 @@ export function CameraReport({ state }: CameraReportProps): ReactElement {
         {best.reasons.length > 0 && (
           <Prose className="mt-2">
             <ul>
-              {/* i18n: core message */}
-              {best.reasons.map((reason) => (
-                <li key={reason}>{reason}</li>
+              {best.reasons.map((reason, index) => (
+                <li key={reason}>{evidence[index] ?? reason}</li>
               ))}
             </ul>
           </Prose>

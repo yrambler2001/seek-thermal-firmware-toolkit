@@ -341,11 +341,11 @@ export function whiteningRefusal(k: string, family: string, expected: string): C
   );
 }
 
-/** The detection names another family; `reasons` are its evidence. */
+/** The detection names another family; `reasons` are its evidence (`evidenceMessages`, or its English). */
 export function otherFamilyRefusal(
   detected: string,
   family: string,
-  reasons: readonly string[],
+  reasons: readonly CoreParam[],
 ): CoreMessage {
   const why = listParam(reasons, 'semicolon');
   return coreMessage(
