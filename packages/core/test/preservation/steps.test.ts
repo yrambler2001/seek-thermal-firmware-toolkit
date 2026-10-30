@@ -1896,7 +1896,7 @@ describe('runPreserveStep — the recovery behaviours', () => {
         silentReporter,
       ).catch((e: unknown) => e);
       expect(error).toBeInstanceOf(Error);
-      expect((error as Error).message).toMatch(/differing byte\(s\)/);
+      expect((error as Error).message).toMatch(/1 differing byte over/);
       expect((error as Error).message).toMatch(/in slot A 0x14050000/);
       /* The caller checkpoints the failure; the state it keeps is unchanged. */
       const failed = recordStepFailure(state, 'verify', error);
