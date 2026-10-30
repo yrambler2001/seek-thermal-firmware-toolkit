@@ -202,9 +202,10 @@ export function SlotWriteKeys({ verdict }: SlotWriteKeysProps): ReactElement {
     verdict.bootedKey == null
       ? (verdict.bootedName ?? t('slots:keys.theBootedBank'))
       : bankName(verdict.bootedKey);
-  const booted: CoreParam =
+  /* No name at all: core's sentence says "the booted bank" itself (passing it as the name would double it). */
+  const booted: CoreParam | null =
     verdict.bootedKey == null
-      ? (verdict.bootedName ?? t('slots:keys.theBootedBank'))
+      ? (verdict.bootedName ?? null)
       : bankNameParam(verdict.bootedName ?? bankNameOf(verdict.bootedKey), verdict.bootedKey);
   const bootedKey =
     verdict.bootedKeyName === null

@@ -204,6 +204,10 @@ export default {
   'keys.derived.same': '{key}, abgeleitet vom gestarteten {bank}',
   'keys.derived.holds':
     '{key} (der Speicherschlüssel), abgeleitet vom gestarteten {bank}, der {holds} enthält',
+  /* The same two lines when the booted bank has no name. */
+  'keys.derived.sameUnnamed': '{key}, abgeleitet vom gestarteten Slot',
+  'keys.derived.holdsUnnamed':
+    '{key} (der Speicherschlüssel), abgeleitet vom gestarteten Slot, der {holds} enthält',
   'keys.ffVendor.staged':
     'das 1.3.0.8-FF-Image (16 Hz) so, wie die Hersteller-App es überträgt: das Image XOR seinen eigenen Schlüsselblock 0 (Schlüssel A), Header-Fenster unverändert, in jeden Slot; die Schlüssel dieser Kamera werden nicht verwendet',
   'keys.ffVendor.stored':

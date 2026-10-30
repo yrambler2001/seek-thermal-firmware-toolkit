@@ -149,6 +149,9 @@ describe('SlotWriteKeys', () => {
     );
     const text = container.textContent;
     expect(text).toContain('the booted bank holds a key the page cannot name');
+    /* The written-as line names no bank either, and says "the booted bank" once. */
+    expect(text).toContain('derived from the booted bank');
+    expect(text).not.toContain('the booted the booted');
     unmount();
   });
 });

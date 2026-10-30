@@ -275,13 +275,30 @@ export function derivedKeyLine(
   return derivedKeyLineMessage(derived, bankLabel).text;
 }
 
-/** `derivedKeyLine` as a message; `bank` is a bank param (`bankParam(key)`) or the caller's name for it. */
+/**
+ * `derivedKeyLine` as a message; `bank` is a bank param (`bankParam(key)`) or the caller's name for it,
+ * or null when the booted bank has no name (the sentence then says "the booted bank" itself).
+ */
 export function derivedKeyLineMessage(
   derived: Pick<DerivedKey, 'key' | 'holds'>,
-  bank: CoreParam,
+  bank: CoreParam | null,
 ): CoreMessage {
-  const bankLabel = paramText(bank);
   const key = keyNameParam(derived.key);
+  if (bank === null) {
+    if (!derived.holds || derived.holds === derived.key) {
+      return coreMessage(
+        'keys.derived.sameUnnamed',
+        { key },
+        `${derived.key}, derived from the booted bank`,
+      );
+    }
+    return coreMessage(
+      'keys.derived.holdsUnnamed',
+      { key, holds: keyNameParam(derived.holds) },
+      `${derived.key} (the store key), derived from the booted bank, which holds ${derived.holds}`,
+    );
+  }
+  const bankLabel = paramText(bank);
   if (!derived.holds || derived.holds === derived.key) {
     return coreMessage(
       'keys.derived.same',

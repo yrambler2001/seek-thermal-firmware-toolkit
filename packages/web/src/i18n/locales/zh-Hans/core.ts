@@ -178,6 +178,9 @@ export default {
   /* ---- keys: the keys of a bank write (slots/write-keys) ---- */
   'keys.derived.same': '{key}，由当前启动的{bank} 推导得出',
   'keys.derived.holds': '{key}（存储密钥），由当前启动的{bank} 推导得出，该槽位持有{holds}',
+  /* The same two lines when the booted bank has no name. */
+  'keys.derived.sameUnnamed': '{key}，由当前启动的槽位推导得出',
+  'keys.derived.holdsUnnamed': '{key}（存储密钥），由当前启动的槽位推导得出，该槽位持有{holds}',
   'keys.ffVendor.staged':
     '按厂商应用暂存的方式处理 1.3.0.8 FF（16 Hz）镜像：镜像 XOR 它自己的密钥块 0（密钥 A），头部窗口保持原样，可写入任何槽位；不使用这台相机的密钥',
   'keys.ffVendor.stored': '密钥 B：相机用密钥块 1 重新加密上传的数据，并以它存储镜像',

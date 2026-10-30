@@ -198,6 +198,10 @@ export default {
   'keys.derived.same': '{key}, derived from the booted {bank}',
   'keys.derived.holds':
     '{key} (the store key), derived from the booted {bank}, which holds {holds}',
+  /* The same two lines when the booted bank has no name. */
+  'keys.derived.sameUnnamed': '{key}, derived from the booted bank',
+  'keys.derived.holdsUnnamed':
+    '{key} (the store key), derived from the booted bank, which holds {holds}',
   'keys.ffVendor.staged':
     "the 1.3.0.8 FF (16 Hz) image as the vendor app stages it: the image XOR its own key block 0 (Key A), header window verbatim, to any bank; this camera's keys are not used",
   'keys.ffVendor.stored':

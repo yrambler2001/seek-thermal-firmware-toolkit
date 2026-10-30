@@ -312,6 +312,8 @@ function samples(base: DeviceState): CoreMessage[] {
   });
   add(derivedKeyLineMessage({ key: 'Key A', holds: 'Key A' }, bankParam('a')));
   add(derivedKeyLineMessage({ key: 'Key B', holds: 'per-device key' }, 'slot B'));
+  add(derivedKeyLineMessage({ key: 'Key A', holds: 'Key A' }, null));
+  add(derivedKeyLineMessage({ key: 'Key B', holds: 'per-device key' }, null));
   add(FF_VENDOR_STAGED_MESSAGE);
   add(FF_VENDOR_STORED_MESSAGE);
   add(STAGED_UNDER_IMAGE_BLOCK_0_MESSAGE);
