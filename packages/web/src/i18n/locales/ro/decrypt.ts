@@ -35,7 +35,7 @@ export default {
   'offline.panel': 'Decriptare offline',
   'offline.detectedTitle': 'Familia de firmware detectată',
   'offline.detectedIntro':
-    'Nu este conectată nicio cameră, așa că familia este evaluată din imaginile din fișier. Cheia se calculează oricum din textul criptat al fiecărui slot; de aici vine doar numele familiei de firmware din raport.',
+    'Nu este conectată nicio cameră, așa că familia este evaluată din imaginile din fișier. Cheia se calculează oricum din textul criptat al fiecărui slot; această evaluare dă doar numele familiei de firmware din raport.',
   'offline.scoreBasis': 'din imaginile din fișier',
 
   /* views/DecryptView: one firmware slot. <link> wraps the Slots tab's name. */

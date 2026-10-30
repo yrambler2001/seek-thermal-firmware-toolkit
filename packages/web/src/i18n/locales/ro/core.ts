@@ -1430,9 +1430,9 @@ export default {
   /** `{key}` is a key name; `{hex}` the key's bytes; `{pair}` is report.checkKey.pair or empty. */
   'report.checkKey.named': '{key} {hex}{pair}',
   'report.checkKey.namedFrom':
-    '{key} {hex}{pair}, numită pe baza {bank:gen}, slotul în care camera raportează că a intrat după verificarea bootloader-ului',
+    '{key} {hex}{pair}, pe baza {bank:gen}, slotul în care camera raportează că a intrat după verificarea bootloader-ului',
   'report.checkKey.inferredFrom':
-    '{key} {hex}{pair}, dedusă din {bank:acc}, slotul în care camera raportează că a intrat: bootloader-ul intră în acel slot fără verificare și îl rulează cu cheia cu care verifică celelalte sloturi',
+    '{key} {hex}{pair}, prin deducție din {bank:acc}, slotul în care camera raportează că a intrat: bootloader-ul intră în acel slot fără verificare și îl rulează cu cheia cu care verifică celelalte sloturi',
   /** Starts with a space; `{pair}` is keyPair.* (already translated): "the Compact PRO 1.0.3.x 9 Hz pair's block 1". */
   'report.checkKey.pair': ' (blocul 1 din {pair})',
   /** A 2016 image pair: the two key blocks one build's images carry. Keep the product name and version. */
