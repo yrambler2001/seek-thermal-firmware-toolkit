@@ -346,6 +346,8 @@ export default {
   /** The 2016 line's check key: the second block of the image's own key table. */
   'keyName.block1': 'key block 1',
   'keyName.theDeviceKey': 'the device key',
+  /** A slot's key when the read names none (a placeholder, not a key's name). */
+  'keyName.unknown': 'unknown key',
   'keys.noKnownKey': 'no known key',
 
   /* ---- keys.evidence: the facts a write's keys rest on, one list item each (slots/write-keys-words) ---- */

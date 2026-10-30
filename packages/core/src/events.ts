@@ -25,6 +25,8 @@ export interface ProgressEvent {
   /** Human-readable status line. Omitted to update the bar without retitling. */
   readonly text?: string;
   readonly unit?: ProgressUnit;
+  /** `text` as a code + params, when the workflow gave one. */
+  readonly message?: CoreMessage;
 }
 
 /** A file produced by a workflow, ready to be zipped, downloaded or written to disk. */
@@ -118,7 +120,7 @@ export function collectingReporter(): Reporter & { readonly events: RunEvent[] }
     log: (message, level = 'info') => {
       events.push({ type: 'log', level, message });
     },
-    progress: (done, total, text, unit) => {
+    progress: (done, total, text, unit, message) => {
       /* Optional fields are omitted rather than set to undefined, so a consumer
        * spreading the event cannot clobber a retained status line with a hole. */
       events.push({
@@ -127,6 +129,7 @@ export function collectingReporter(): Reporter & { readonly events: RunEvent[] }
         total,
         ...(text === undefined ? {} : { text }),
         ...(unit === undefined ? {} : { unit }),
+        ...(message === undefined ? {} : { message }),
       });
     },
     artifact: (artifact) => {

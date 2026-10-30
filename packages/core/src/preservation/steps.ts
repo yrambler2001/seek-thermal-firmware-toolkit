@@ -1922,8 +1922,8 @@ async function runBackupStep(
     {
       /* A front end's reporter may be a class: its methods are called, not spread. */
       log: () => undefined,
-      progress: (done, total, text, unit) => {
-        reporter.progress(done, total, text, unit);
+      progress: (done, total, text, unit, message) => {
+        reporter.progress(done, total, text, unit, message);
       },
       artifact: (artifact) => {
         reporter.artifact(artifact);

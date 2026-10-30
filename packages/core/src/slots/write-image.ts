@@ -540,6 +540,41 @@ export function bootloaderFailureMessages(
 
 /* ---- compare rows ------------------------------------------------------- */
 
+/* ---- the compare table's words, as messages for the page: each is a constant, so its English names it.
+ * `compareRows` writes these same constants, so a reworded word keeps its code (the page's drift test
+ * fails until the template follows). ---- */
+const COMPARE_TEXT = {
+  version: 'Firmware version',
+  imageId: 'Image id',
+  initialSp: 'Initial SP',
+  resetVector: 'Reset vector',
+  size: 'Size',
+  shaExpected: 'SHA-256 of the expected plain image',
+  sha: 'SHA-256 of the image',
+  shaNotStored: 'SHA-256 of the expected plain image (stored bytes not predicted)',
+  key: 'Key',
+  noImage: '(no image)',
+  notImage: '(not an image)',
+  notPredicted: '(not predicted: the device decides what it stores)',
+  plaintext: 'none (plaintext)',
+} as const;
+
+const COMPARE_WORDS: ReadonlyMap<string, string> = new Map([
+  [COMPARE_TEXT.version, 'compare.field.version'],
+  [COMPARE_TEXT.imageId, 'compare.field.imageId'],
+  [COMPARE_TEXT.initialSp, 'compare.field.initialSp'],
+  [COMPARE_TEXT.resetVector, 'compare.field.resetVector'],
+  [COMPARE_TEXT.size, 'compare.field.size'],
+  [COMPARE_TEXT.shaExpected, 'compare.field.shaExpected'],
+  [COMPARE_TEXT.sha, 'compare.field.sha'],
+  [COMPARE_TEXT.shaNotStored, 'compare.field.shaNotStored'],
+  [COMPARE_TEXT.key, 'compare.field.key'],
+  [COMPARE_TEXT.noImage, 'compare.noImage'],
+  [COMPARE_TEXT.notImage, 'compare.notImage'],
+  [COMPARE_TEXT.notPredicted, 'compare.notPredicted'],
+  [COMPARE_TEXT.plaintext, 'compare.plaintext'],
+]);
+
 /**
  * The rows a person reads before a write: what the bank holds now, and what it
  * will hold. Every row is shown, equal or not, so the plan is a complete
@@ -563,9 +598,9 @@ export function compareRows(
     readonly keyName: string;
   },
 ): { field: string; before: string; after: string }[] {
-  const none = '(no image)';
-  const notImage = '(not an image)';
-  const unknown = '(not predicted: the device decides what it stores)';
+  const none = COMPARE_TEXT.noImage;
+  const notImage = COMPARE_TEXT.notImage;
+  const unknown = COMPARE_TEXT.notPredicted;
   const b = before.header;
   const a = after.plain === null ? null : parseImageHeader(after.plain);
   /* A header row is claimed only from the predicted plain image, never from the
@@ -582,32 +617,32 @@ export function compareRows(
   const shaRow =
     after.plain === null
       ? {
-          field: 'SHA-256 of the expected plain image',
+          field: COMPARE_TEXT.shaExpected,
           before: before.sha256 ?? none,
           after: unknown,
         }
       : after.storedPredicted
         ? {
-            field: 'SHA-256 of the image',
+            field: COMPARE_TEXT.sha,
             before: before.sha256 ?? none,
             after: sha256Sync(after.plain),
           }
         : {
-            field: 'SHA-256 of the expected plain image (stored bytes not predicted)',
+            field: COMPARE_TEXT.shaNotStored,
             before: before.sha256 ?? none,
             after: sha256Sync(after.plain),
           };
   return [
-    row('Firmware version', b?.versionStr ?? none, (h) => h.versionStr),
-    row('Image id', b ? hexUp(b.imageId) : none, (h) => hexUp(h.imageId)),
-    row('Initial SP', b ? hexUp(b.sp) : none, (h) => hexUp(h.sp)),
-    row('Reset vector', b ? hexUp(b.entry) : none, (h) => hexUp(h.entry)),
-    row('Size', b ? `${hex(b.length)} B` : none, (h) => `${hex(h.length)} B`),
+    row(COMPARE_TEXT.version, b?.versionStr ?? none, (h) => h.versionStr),
+    row(COMPARE_TEXT.imageId, b ? hexUp(b.imageId) : none, (h) => hexUp(h.imageId)),
+    row(COMPARE_TEXT.initialSp, b ? hexUp(b.sp) : none, (h) => hexUp(h.sp)),
+    row(COMPARE_TEXT.resetVector, b ? hexUp(b.entry) : none, (h) => hexUp(h.entry)),
+    row(COMPARE_TEXT.size, b ? `${hex(b.length)} B` : none, (h) => `${hex(h.length)} B`),
     shaRow,
     /* A bank with an image and no key name is stored plain (the 2014 chain), not an empty bank. */
     {
-      field: 'Key',
-      before: before.keyName ?? (b === null ? none : 'none (plaintext)'),
+      field: COMPARE_TEXT.key,
+      before: before.keyName ?? (b === null ? none : COMPARE_TEXT.plaintext),
       after: after.keyName,
     },
   ];
@@ -661,26 +696,6 @@ export function bankImageOf(payload: Uint8Array, bankBytes: number): Uint8Array 
   out.set(payload.subarray(0, bankBytes), 0);
   return out;
 }
-
-/* ---- the compare table's words, as messages for the page: each is a constant, so its English names it ---- */
-const COMPARE_WORDS: ReadonlyMap<string, string> = new Map([
-  ['Firmware version', 'compare.field.version'],
-  ['Image id', 'compare.field.imageId'],
-  ['Initial SP', 'compare.field.initialSp'],
-  ['Reset vector', 'compare.field.resetVector'],
-  ['Size', 'compare.field.size'],
-  ['SHA-256 of the expected plain image', 'compare.field.shaExpected'],
-  ['SHA-256 of the image', 'compare.field.sha'],
-  [
-    'SHA-256 of the expected plain image (stored bytes not predicted)',
-    'compare.field.shaNotStored',
-  ],
-  ['Key', 'compare.field.key'],
-  ['(no image)', 'compare.noImage'],
-  ['(not an image)', 'compare.notImage'],
-  ['(not predicted: the device decides what it stores)', 'compare.notPredicted'],
-  ['none (plaintext)', 'compare.plaintext'],
-]);
 
 /**
  * A word of `compareRows` (a field name, or a value such as "(no image)") as a message; a key's name as

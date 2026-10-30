@@ -13,6 +13,7 @@ import {
   type CoreParam,
 } from '../message.js';
 import type { SlotKey } from '../profiles/types.js';
+import { UNNAMED_KEY } from '../crypto/keys.js';
 
 const KEY_NAME_CODE: ReadonlyMap<string, string> = new Map([
   ['Key A', 'keyName.keyA'],
@@ -23,6 +24,8 @@ const KEY_NAME_CODE: ReadonlyMap<string, string> = new Map([
   ["the application's Key B", 'keyName.applicationKeyB'],
   ['key block 1', 'keyName.block1'],
   ['the device key', 'keyName.theDeviceKey'],
+  /* A slot's key when this read names none (SlotState.keyName). */
+  [UNNAMED_KEY, 'keyName.unknown'],
 ]);
 
 /** A key's name as a param: the names core gives keys are messages (translated), any other stays as it is. */
