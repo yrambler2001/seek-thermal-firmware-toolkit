@@ -23,6 +23,7 @@ import {
   type DeviceState,
   type IdentityGate,
 } from '@seek-fw/core';
+import { t } from '@/i18n';
 import { reportInUseElsewhere } from '../lib/camera-lock';
 import { logHint } from '../lib/hints';
 import { probeLine } from '../lib/identify';
@@ -70,7 +71,7 @@ export interface InfoPanelApi {
 
 export function useInfoPanel(params: InfoPanelParams): InfoPanelApi {
   const { runner, device, form } = params;
-  const reporter = useReporter('Not read yet.');
+  const reporter = useReporter(t('info:status.notRead'));
   const [result, setResult] = useState<InfoReading | null>(null);
   const reading = runner.active === INFO_READ_PANEL_ID;
 
@@ -82,7 +83,7 @@ export function useInfoPanel(params: InfoPanelParams): InfoPanelApi {
 
   const read = useCallback(async (): Promise<void> => {
     const outcome = await runner.start(INFO_READ_PANEL_ID, async (signal) => {
-      reporter.reset('Reading ...');
+      reporter.reset(t('info:status.reading'));
       setResult(null);
       let transport: ReturnType<DeviceHandle['makeTransport']> | null = null;
       let client: SeekDevice | null = null;
@@ -105,15 +106,13 @@ export function useInfoPanel(params: InfoPanelParams): InfoPanelApi {
 
         if (version === null) {
           reporter.log(probe.notes[0] ?? 'the camera did not report its firmware version', 'warn');
-          reporter.setStatus('No version reported.');
+          reporter.setStatus(t('info:status.noVersion'));
           setResult({ version, buildString, gate, state: null });
           return;
         }
         reporter.log(`firmware ${version}${buildString ? `  ${buildString}` : ''}`, 'ok');
         if (!gate.permitsArming) {
-          reporter.setStatus(
-            `Read. Firmware ${version} is older than 0.8.0.0 — nothing else was read.`,
-          );
+          reporter.setStatus(t('info:status.tooOld', { version }));
           setResult({ version, buildString, gate, state: null });
           return;
         }
@@ -143,15 +142,15 @@ export function useInfoPanel(params: InfoPanelParams): InfoPanelApi {
           );
         }
         setResult({ version, buildString, gate, state });
-        reporter.setStatus(`Read. Firmware ${version}.`);
+        reporter.setStatus(t('info:status.read', { version }));
       } catch (error) {
         if (error instanceof CancelledError) {
           reporter.log('cancelled', 'warn');
-          reporter.setStatus('Cancelled.');
+          reporter.setStatus(t('shared:status.cancelled'));
         } else {
           reporter.log(`ERROR: ${errorMessage(error)}`, 'error');
           logHint(reporter.log, error);
-          reporter.setStatus('Failed — see the log above.');
+          reporter.setStatus(t('shared:status.failedSeeLog'));
         }
       } finally {
         if (transport !== null) await transport.close();
@@ -167,7 +166,7 @@ export function useInfoPanel(params: InfoPanelParams): InfoPanelApi {
 
   const cancel = useCallback((): void => {
     runner.cancel();
-    reporter.setStatus('Cancelling ...');
+    reporter.setStatus(t('shared:status.cancelling'));
     reporter.log('cancel requested', 'warn');
   }, [reporter, runner]);
 

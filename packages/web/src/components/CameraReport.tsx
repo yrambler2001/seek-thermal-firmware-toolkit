@@ -38,13 +38,14 @@ import {
   TableRow,
   TableRowHeader,
 } from './ui/table';
+import { t } from '@/i18n';
 
 export interface CameraReportProps {
   readonly state: DeviceState;
 }
 
 function yesNo(value: boolean): string {
-  return value ? 'yes' : 'no';
+  return value ? t('info:report.yes') : t('info:report.no');
 }
 
 function slotName(state: DeviceState, key: SlotKey): string {
@@ -52,6 +53,7 @@ function slotName(state: DeviceState, key: SlotKey): string {
 }
 
 /** A row of core's report (`keyReportRows`), labelled as the page labels it: the CLI's words, capitalised. */
+/* i18n: core message (the row's label and value are core's) */
 function pageRow([label, value]: ReportRow): [string, string] {
   return [label.charAt(0).toUpperCase() + label.slice(1), value];
 }
@@ -61,13 +63,10 @@ function runningText(state: DeviceState): string | null {
   if (state.version !== '1.3.0.8') return null;
   const run = runningApplicationOf(state);
   if (run.build === null) {
-    return (
-      `not known: ${run.why}. A 16 Hz FF image needs the camera to say which build it runs ` +
-      '(the slots tab asks)'
-    );
+    return t('info:report.buildNotKnown', { why: run.why }); // i18n: core message (why)
   }
-  const build = run.build === 'ff-1308' ? 'the 16 Hz FF 1.3.0.8 build' : 'the 8 Hz 1.3.0.8 build';
-  return `${build}: ${run.why}`;
+  const build = run.build === 'ff-1308' ? t('info:report.buildFf') : t('info:report.build8Hz');
+  return t('info:report.buildWhy', { build, why: run.why });
 }
 
 function bankPresence(
@@ -83,52 +82,62 @@ function bankPresence(
 } {
   return {
     version: slot.present ? (slot.plainHeader?.versionStr ?? slot.header?.versionStr ?? '?') : '—',
-    size: slot.header === null ? '—' : `${String(slot.header.length)} B`,
-    key: slot.keyName ?? (slot.plain === null ? '—' : 'none (plaintext)'),
-    accepts: acceptsDescription(slot),
+    size: slot.header === null ? '—' : t('info:report.bytes', { count: slot.header.length }),
+    key: slot.keyName ?? (slot.plain === null ? '—' : t('info:report.plaintext')),
+    accepts: acceptsDescription(slot), // i18n: core message
     /* "n/a" where the bootloader reads no footer: a missing one is not a fault there */
-    footer: slot.present ? (state.profile.boot.checksFooter ? yesNo(slot.footerOk) : 'n/a') : '—',
-    bootable: slot.present ? bootableDescription(slot) : '—',
+    footer: slot.present
+      ? state.profile.boot.checksFooter
+        ? yesNo(slot.footerOk)
+        : t('info:report.notApplicable')
+      : '—',
+    bootable: slot.present ? bootableDescription(slot) : '—', // i18n: core message
   };
 }
 
 export function CameraReport({ state }: CameraReportProps): ReactElement {
-  const warning = upgradeTargetWarning(state);
+  const warning = upgradeTargetWarning(state); // i18n: core message
   const running = runningText(state);
   const best = state.detection.best;
   const nameOf = (key: SlotKey): string => slotName(state, key);
   /* How the banks are written, on every line (core's `bankWritingOf`, the CLI's Writing section). */
-  const bankWriting = bankWritingOf(state);
+  const bankWriting = bankWritingOf(state); // i18n: core message (staged, refusals)
 
   return (
     <>
       <Panel>
-        <PanelTitle>Camera</PanelTitle>
+        <PanelTitle>{t('info:report.camera')}</PanelTitle>
         <KeyValue
           rows={[
-            ['Product', state.description.productName ?? '(no product string)'],
-            ['Manufacturer', state.description.manufacturerName ?? '(none)'],
-            ['Serial', state.serial ?? state.description.serialNumber ?? '(unreadable)'],
-            ['Platform', state.platform ?? '(unreadable)'],
-            ['USB link', state.usbSpeed ?? '(unreadable)'],
+            [t('info:report.product'), state.description.productName ?? t('info:report.noProduct')],
+            [
+              t('info:report.manufacturer'),
+              state.description.manufacturerName ?? t('info:report.none'),
+            ],
+            [
+              t('info:report.serial'),
+              state.serial ?? state.description.serialNumber ?? t('info:report.unreadable'),
+            ],
+            [t('info:report.platform'), state.platform ?? t('info:report.unreadable')],
+            [t('info:report.usbLink'), state.usbSpeed ?? t('info:report.unreadable')],
           ]}
         />
       </Panel>
 
       <Panel>
-        <PanelTitle>Firmware</PanelTitle>
+        <PanelTitle>{t('info:report.firmware')}</PanelTitle>
         <KeyValue
           rows={[
             [
-              'Running',
+              t('info:report.running'),
               state.version === null
-                ? '(unreadable)'
+                ? t('info:report.unreadable')
                 : `${state.version}${state.buildString === null ? '' : `  ${state.buildString}`}`,
             ],
             [
-              'Bootloader',
+              t('info:report.bootloader'),
               state.bootloaderVersion === null
-                ? '(unreadable)'
+                ? t('info:report.unreadable')
                 : `${state.bootloaderVersion}${
                     state.bootloaderString === null ? '' : `  ${state.bootloaderString}`
                   }`,
@@ -138,16 +147,18 @@ export function CameraReport({ state }: CameraReportProps): ReactElement {
       </Panel>
 
       <Panel>
-        <PanelTitle>Firmware family</PanelTitle>
+        <PanelTitle>{t('info:report.family')}</PanelTitle>
         <KeyValue
           rows={[
-            ['Read under', state.profile.name],
-            ['Detected', detectedReportOf(state.detection)],
+            [t('info:report.readUnder'), state.profile.name],
+            /* i18n: core message */
+            [t('info:report.detected'), detectedReportOf(state.detection)],
           ]}
         />
         {best.reasons.length > 0 && (
           <Prose className="mt-2">
             <ul>
+              {/* i18n: core message */}
               {best.reasons.map((reason) => (
                 <li key={reason}>{reason}</li>
               ))}
@@ -157,26 +168,27 @@ export function CameraReport({ state }: CameraReportProps): ReactElement {
       </Panel>
 
       <Panel>
-        <PanelTitle>Boot</PanelTitle>
+        <PanelTitle>{t('info:report.boot')}</PanelTitle>
         <KeyValue
           rows={[
             [
               'cfg[0]',
               state.cfg0 === null
-                ? '(unreadable)'
-                : `${hexUp(state.cfg0)} — ${state.profile.boot.describeCfg0(state.cfg0)}`,
+                ? t('info:report.unreadable')
+                : `${hexUp(state.cfg0)} — ${state.profile.boot.describeCfg0(state.cfg0)}`, // i18n: core message
             ],
-            ['Booted', bootedReportOf(state, nameOf)],
-            ['Last start', lastStartReportOf(state)],
-            ['Running (1.3.0.8)', running],
-            ['Next start', nextStartReportOf(state, nameOf)],
+            /* i18n: core message (these three rows' values) */
+            [t('info:report.booted'), bootedReportOf(state, nameOf)],
+            [t('info:report.lastStart'), lastStartReportOf(state)],
+            [t('info:report.running1308'), running],
+            [t('info:report.nextStart'), nextStartReportOf(state, nameOf)],
             [
-              'Upgrade target',
+              t('info:report.upgradeTarget'),
               state.boot === null
-                ? '(not replayed)'
-                : `${slotName(state, state.boot.target)}${
-                    state.targetConfirmed === null ? '' : ' (confirmed on the wire)'
-                  }`,
+                ? t('info:report.notReplayed')
+                : state.targetConfirmed === null
+                  ? slotName(state, state.boot.target)
+                  : t('info:report.targetConfirmed', { slot: slotName(state, state.boot.target) }),
             ],
           ]}
         />
@@ -188,26 +200,24 @@ export function CameraReport({ state }: CameraReportProps): ReactElement {
       </Panel>
 
       <Panel>
-        <PanelTitle>Keys</PanelTitle>
+        <PanelTitle>{t('info:report.keys')}</PanelTitle>
         <KeyValue rows={keyReportRows(state).map(pageRow)} />
       </Panel>
 
       <Panel>
-        <PanelTitle>Slots</PanelTitle>
+        <PanelTitle>{t('info:report.slots')}</PanelTitle>
         <Table>
-          <TableCaption>
-            Each bank as the read found it. Read-only: the Slots tab writes.
-          </TableCaption>
+          <TableCaption>{t('info:report.slotsCaption')}</TableCaption>
           <TableHeader>
             <TableRow>
-              <TableHead>Slot</TableHead>
-              <TableHead>Address</TableHead>
-              <TableHead>Version</TableHead>
-              <TableHead>Size</TableHead>
-              <TableHead>Key</TableHead>
-              <TableHead>Accepts</TableHead>
-              <TableHead>Footer</TableHead>
-              <TableHead>Bootable</TableHead>
+              <TableHead>{t('info:report.slot')}</TableHead>
+              <TableHead>{t('info:report.address')}</TableHead>
+              <TableHead>{t('info:report.version')}</TableHead>
+              <TableHead>{t('info:report.size')}</TableHead>
+              <TableHead>{t('info:report.key')}</TableHead>
+              <TableHead>{t('info:report.accepts')}</TableHead>
+              <TableHead>{t('info:report.footer')}</TableHead>
+              <TableHead>{t('info:report.bootable')}</TableHead>
               <TableHead>SHA-256</TableHead>
             </TableRow>
           </TableHeader>
@@ -217,15 +227,15 @@ export function CameraReport({ state }: CameraReportProps): ReactElement {
               return (
                 <TableRow key={slot.key}>
                   <TableRowHeader className="font-semibold">{slot.name}</TableRowHeader>
-                  <TableCell label="Address" className="font-mono">
+                  <TableCell label={t('info:report.address')} className="font-mono">
                     {hexUp(slot.address)}
                   </TableCell>
-                  <TableCell label="Version">{cells.version}</TableCell>
-                  <TableCell label="Size">{cells.size}</TableCell>
-                  <TableCell label="Key">{cells.key}</TableCell>
-                  <TableCell label="Accepts">{cells.accepts}</TableCell>
-                  <TableCell label="Footer">{cells.footer}</TableCell>
-                  <TableCell label="Bootable">{cells.bootable}</TableCell>
+                  <TableCell label={t('info:report.version')}>{cells.version}</TableCell>
+                  <TableCell label={t('info:report.size')}>{cells.size}</TableCell>
+                  <TableCell label={t('info:report.key')}>{cells.key}</TableCell>
+                  <TableCell label={t('info:report.accepts')}>{cells.accepts}</TableCell>
+                  <TableCell label={t('info:report.footer')}>{cells.footer}</TableCell>
+                  <TableCell label={t('info:report.bootable')}>{cells.bootable}</TableCell>
                   <TableCell label="SHA-256" className="font-mono">
                     {slot.sha256 === null ? '—' : slot.sha256.slice(0, 16)}
                   </TableCell>
@@ -241,7 +251,7 @@ export function CameraReport({ state }: CameraReportProps): ReactElement {
                 .filter((slot) => slot.reason !== null)
                 .map((slot) => (
                   <li key={slot.key}>
-                    {slot.name}: {slot.reason}
+                    {t('info:report.slotReason', { slot: slot.name, reason: slot.reason ?? '' })}
                   </li>
                 ))}
             </ul>
@@ -250,10 +260,10 @@ export function CameraReport({ state }: CameraReportProps): ReactElement {
       </Panel>
 
       <Panel>
-        <PanelTitle>Writing</PanelTitle>
+        <PanelTitle>{t('info:report.writing')}</PanelTitle>
         {bankWriting.staged === null ? (
           <Prose>
-            <p>No bank of this camera is written:</p>
+            <p>{t('info:report.noBankWritten')}</p>
             <ul>
               {bankWriting.refusals.map((reason) => (
                 <li key={reason}>{reason}</li>
@@ -262,12 +272,10 @@ export function CameraReport({ state }: CameraReportProps): ReactElement {
           </Prose>
         ) : (
           <Prose>
-            <p>
-              {`One bank at a time: the Slots tab writes or patches one bank of this camera, each bank ${bankWriting.staged}, and each write asks first.`}
-            </p>
+            <p>{t('info:report.oneBank', { staged: bankWriting.staged })}</p>
             {bankWriting.refusals.length > 0 && (
               <>
-                <p>The Slots tab refuses every bank of this camera:</p>
+                <p>{t('info:report.refusesEvery')}</p>
                 <ul>
                   {bankWriting.refusals.map((reason) => (
                     <li key={reason}>{reason}</li>

@@ -30,6 +30,7 @@ import { Toolbar } from '@/components/ui/toolbar';
 import type { InfoPanelApi } from '@/hooks/useInfoPanel';
 import { firmwareLineOf } from '@/lib/family-line';
 import { ROUTE_HREF, ROUTE_LABEL, type Route } from '@/lib/routing';
+import { t, useT } from '@/i18n';
 
 export interface InfoViewProps {
   readonly info: InfoPanelApi;
@@ -45,52 +46,40 @@ interface TabGuide {
 }
 
 /** What each tab does, which cameras it is for, and whether it writes. */
-const TABS: readonly TabGuide[] = [
-  {
-    route: 'info',
-    does:
-      'Reads what the camera reports: its firmware, the family it answers as, how it boots, its keys ' +
-      'and every bank. The same read as seek-fw info. It writes nothing.',
-    cameras: 'Any Seek camera that WebUSB can open.',
-    writes: 'No.',
-  },
-  {
-    route: 'preserve',
-    does:
-      'Makes a complete copy of the camera’s 4 MiB flash, with a run file saved after every step, ' +
-      'and can put a patched firmware back in place. It walks through the steps one at a time.',
-    cameras:
-      'Cameras on 0.x and 1.x firmware: the 2014 Compact builds, the 2016 Compact PRO builds (1.0.3.x), ' +
-      'and the 1.3.0.8 FF (16 Hz) Compact build.',
-    writes: 'Yes, in two steps, and each asks first. It puts the camera back as it was.',
-  },
-  {
-    route: 'v4',
-    does:
-      'Reads the whole flash of a 4.x or Nano camera and decrypts the firmware slots it finds. ' +
-      'Read-only: it sends six read commands and no write.',
-    cameras:
-      'Cameras on 4.x firmware (Compact, Compact PRO, Compact XR), Mosaic (10.x and 2.x) and Nano ' +
-      '(42.x and 44.x), from 2018 on.',
-    writes: 'No.',
-  },
-  {
-    route: 'decrypt',
-    does:
-      'Decrypts a file you already have: a whole dump, slot by slot, or one 64 KiB firmware slot ' +
-      'on its own. The result can be downloaded.',
-    cameras: 'None. It uses no camera, so it works with nothing plugged in and in any browser.',
-    writes: 'No. It only writes the download.',
-  },
-  {
-    route: 'slots',
-    does:
-      'Reads the three firmware banks (slot A, slot B and recovery R), shows what each holds and ' +
-      'which one the camera boots, and can dump or write one bank at a time.',
-    cameras: 'Cameras on 0.8.0.0 and newer firmware.',
-    writes: 'Yes, one bank at a time, and each write asks first.',
-  },
-];
+function tabGuides(): readonly TabGuide[] {
+  return [
+    {
+      route: 'info',
+      does: t('info:tabs.info.does'),
+      cameras: t('info:tabs.info.cameras'),
+      writes: t('info:tabs.info.writes'),
+    },
+    {
+      route: 'preserve',
+      does: t('info:tabs.preserve.does'),
+      cameras: t('info:tabs.preserve.cameras'),
+      writes: t('info:tabs.preserve.writes'),
+    },
+    {
+      route: 'v4',
+      does: t('info:tabs.v4.does'),
+      cameras: t('info:tabs.v4.cameras'),
+      writes: t('info:tabs.v4.writes'),
+    },
+    {
+      route: 'decrypt',
+      does: t('info:tabs.decrypt.does'),
+      cameras: t('info:tabs.decrypt.cameras'),
+      writes: t('info:tabs.decrypt.writes'),
+    },
+    {
+      route: 'slots',
+      does: t('info:tabs.slots.does'),
+      cameras: t('info:tabs.slots.cameras'),
+      writes: t('info:tabs.slots.writes'),
+    },
+  ];
+}
 
 /** The tab a version belongs to, or null when the version says nothing. */
 function tabFor(version: string | null): Route | null {
@@ -102,12 +91,13 @@ function tabFor(version: string | null): Route | null {
 
 function lineLabel(version: string | null): string {
   const line = firmwareLineOf(version);
-  if (line === 'legacy') return '0.x / 1.x: the 2014 and 2016 cameras';
-  if (line === 'modern') return '2.x and newer: the 4.x, Nano and Mosaic cameras';
-  return 'unknown';
+  if (line === 'legacy') return t('info:result.rangeLegacy');
+  if (line === 'modern') return t('info:result.rangeModern');
+  return t('info:result.rangeUnknown');
 }
 
 export function InfoView({ info, connected, busy }: InfoViewProps): ReactElement {
+  const { rich } = useT();
   /* A detail line is the CLI's --verbose line: hidden until asked for, on both front ends (TESTING.md 42.108). */
   const [showDetails, setShowDetails] = useState(false);
   const { result } = info;
@@ -117,10 +107,10 @@ export function InfoView({ info, connected, busy }: InfoViewProps): ReactElement
     result === null
       ? null
       : [
-          ['Firmware version', version],
-          ['Build', result.buildString],
-          ['Version range', version === null ? null : lineLabel(version)],
-          ['Tab for this camera', target === null ? null : ROUTE_LABEL[target]],
+          [t('info:result.version'), version],
+          [t('info:result.build'), result.buildString],
+          [t('info:result.range'), version === null ? null : lineLabel(version)],
+          [t('info:result.tab'), target === null ? null : ROUTE_LABEL[target]],
         ];
 
   return (
@@ -128,11 +118,11 @@ export function InfoView({ info, connected, busy }: InfoViewProps): ReactElement
       <Section
         id="info-read"
         step="2"
-        title="Read the camera"
+        title={t('info:read.title')}
         icon={<ScanSearch />}
-        description="Read-only. Asks the camera what it runs, how it boots, which keys it holds and what each bank holds: the same read as seek-fw info. Nothing is written."
+        description={t('info:read.description')}
       >
-        <Toolbar label="Info actions">
+        <Toolbar label={t('info:read.actions')}>
           <Button
             variant="default"
             disabled={!connected || busy}
@@ -141,17 +131,17 @@ export function InfoView({ info, connected, busy }: InfoViewProps): ReactElement
             }}
           >
             <ScanSearch />
-            Read firmware version
+            {t('info:read.button')}
           </Button>
           <Button variant="ghost" disabled={!info.reading} onClick={info.cancel}>
             <CircleStop />
-            Cancel
+            {t('common:cancel')}
           </Button>
         </Toolbar>
 
         {!connected && (
           <Prose>
-            <p>Connect the camera above first, then press Read firmware version.</p>
+            <p>{t('info:read.connectFirst')}</p>
           </Prose>
         )}
 
@@ -164,11 +154,11 @@ export function InfoView({ info, connected, busy }: InfoViewProps): ReactElement
               setShowDetails(event.target.checked);
             }}
           />
-          <label htmlFor="info-details">Show details in the log</label>
+          <label htmlFor="info-details">{t('info:read.showDetails')}</label>
         </div>
         <RunPanel
           id="info"
-          label="Firmware version"
+          label={t('info:read.panel')}
           progress={info.reporter.progress}
           lines={
             showDetails
@@ -183,30 +173,29 @@ export function InfoView({ info, connected, busy }: InfoViewProps): ReactElement
         {result !== null && rows !== null && (
           <>
             <Panel>
-              <PanelTitle icon={<InfoIcon />}>What the camera reports</PanelTitle>
+              <PanelTitle icon={<InfoIcon />}>{t('info:result.title')}</PanelTitle>
               <KeyValue rows={rows} />
               {version === null && (
                 <Alert tone="warn" className="mt-3">
-                  <p>
-                    <strong>The camera did not report its firmware version.</strong> Nothing else
-                    was sent. Unplug it, let it finish starting up, plug it back in and read again.
-                  </p>
+                  <p>{rich('info:result.noVersion')}</p>
                 </Alert>
               )}
               {!result.gate.permitsArming && version !== null && (
                 <Alert tone="err" className="mt-3">
                   <p>
-                    <strong>No tab reads this build.</strong>
+                    <strong>{t('info:result.noTab')}</strong>
                   </p>
+                  {/* i18n: core message */}
                   <p>{result.gate.reason}</p>
                 </Alert>
               )}
               {result.gate.permitsArming && target !== null && (
                 <Prose className="mt-3">
                   <p>
-                    Open <a href={ROUTE_HREF[target]}>{ROUTE_LABEL[target]}</a> for this camera.
-                    That tab asks the camera which family it is again before it reads anything, and
-                    refuses a camera that is not the family it covers.
+                    {rich('info:result.openTab', {
+                      params: { tab: ROUTE_LABEL[target] },
+                      slots: { tab: (text) => <a href={ROUTE_HREF[target]}>{text}</a> },
+                    })}
                   </p>
                 </Prose>
               )}
@@ -216,68 +205,44 @@ export function InfoView({ info, connected, busy }: InfoViewProps): ReactElement
         )}
       </Section>
 
-      <Section id="tabs" title="What each tab is for" icon={<ListChecks />}>
+      <Section id="tabs" title={t('info:tabs.title')} icon={<ListChecks />}>
         <Prose>
-          <p>
-            Five tabs, in this order. Each one is a page of its own, and the header shows which one
-            you are on.
-          </p>
+          <p>{t('info:tabs.intro')}</p>
         </Prose>
         <Table>
-          <TableCaption>
-            The tabs, what they do, the cameras they cover and whether they write
-          </TableCaption>
+          <TableCaption>{t('info:tabs.caption')}</TableCaption>
           <TableHeader>
             <TableRow>
-              <TableHead className="w-[12rem]">Tab</TableHead>
-              <TableHead>What it does</TableHead>
-              <TableHead>Cameras</TableHead>
-              <TableHead>Writes to the camera?</TableHead>
+              <TableHead className="w-[12rem]">{t('info:tabs.tab')}</TableHead>
+              <TableHead>{t('info:tabs.does')}</TableHead>
+              <TableHead>{t('info:tabs.cameras')}</TableHead>
+              <TableHead>{t('info:tabs.writes')}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {TABS.map((tab) => (
+            {tabGuides().map((tab) => (
               <TableRow key={tab.route}>
                 <TableRowHeader className="font-semibold">
                   <a href={ROUTE_HREF[tab.route]} className="underline underline-offset-2">
                     {ROUTE_LABEL[tab.route]}
                   </a>
                 </TableRowHeader>
-                <TableCell label="What it does">{tab.does}</TableCell>
-                <TableCell label="Cameras" className="text-muted-foreground">
+                <TableCell label={t('info:tabs.does')}>{tab.does}</TableCell>
+                <TableCell label={t('info:tabs.cameras')} className="text-muted-foreground">
                   {tab.cameras}
                 </TableCell>
-                <TableCell label="Writes to the camera?">{tab.writes}</TableCell>
+                <TableCell label={t('info:tabs.writes')}>{tab.writes}</TableCell>
               </TableRow>
             ))}
           </TableBody>
         </Table>
       </Section>
 
-      <Section id="split" title="Where the 2016 and 1.3.0.8 FF builds are" icon={<InfoIcon />}>
+      <Section id="split" title={t('info:split.title')} icon={<InfoIcon />}>
         <Prose>
-          <p>
-            The 2016 Compact PRO builds (1.0.3.0 and 1.0.3.2, including their FF variants) and the
-            1.3.0.8 FF (16 Hz) Compact build are <strong>not</strong> 4.x cameras, and they are not
-            read like one. Their protocol is the locked 2014–2017 one, and their firmware stores the
-            slots under a different cipher (2016) or as the 2014 plaintext chain with a
-            recovery-only route (FF). So they are on{' '}
-            <strong>Dump &amp; decrypt 0.x/1.x 2014/2016</strong>, and the 4.x/Nano tab refuses them
-            before it reads anything.
-          </p>
-          <p>
-            The evidence that they work on the 0.x/1.x tab: the Preserve pipeline has a derived
-            patch for each of them, and its emulator runs are green for both. The 1.0.3.0 build on
-            its native 2016 dump went through backup, patch, commit, drain, restore and verify; the
-            1.3.0.8 FF went through its recovery route. On the bench camera, a Compact PRO 1.0.3.0,
-            the Preserve step 02 read completed with no reset and no write, and the camera was
-            identified as the 2016 cipher. On these builds the 4.x selector map is refused for 38 of
-            its 63 selectors, so the 4.x tab could only return gaps for them.
-          </p>
-          <p>
-            So they stay on the 0.x/1.x tab, and the 4.x/Nano tab has no family selector that would
-            send them there.
-          </p>
+          <p>{rich('info:split.where')}</p>
+          <p>{t('info:split.evidence')}</p>
+          <p>{t('info:split.stay')}</p>
         </Prose>
       </Section>
     </>
