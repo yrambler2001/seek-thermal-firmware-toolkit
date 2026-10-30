@@ -81,7 +81,7 @@ const DUMP_COPY: readonly string[] = [
   'GetFeaturedFirmwareData',
   'the actual flash read',
   'BeginFirmwareUpgrade',
-  'volatile read-window selector only — it selects which 64 KiB block the next reads return, and writes nothing',
+  'only picks which 64 KiB block the next reads return — the choice is not kept, and nothing is written',
 ];
 
 /* ---- the firmware slots tab ------------------------------------------ */

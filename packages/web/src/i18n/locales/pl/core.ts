@@ -282,9 +282,9 @@ export default {
     '{name} nie dał się odczytać przy tym sprawdzeniu, więc nie wiadomo, co zawiera.',
   'upgrade.verdict.blank': '{name} jest pusty, więc aktualizacja zapisuje do pustego slotu.',
   'upgrade.verdict.bootableSame':
-    '{name} zawiera ten sam uruchamialny obraz co działający slot, a aktualizacja go zastępuje; jeśli aktualizacja zatrzyma się w połowie, {name} nie będzie się dało uruchomić.',
+    '{name} zawiera ten sam uruchamialny obraz co działający slot, a aktualizacja go zastępuje. {name} przestanie się uruchamiać, jeśli aktualizacja zatrzyma się w połowie.',
   'upgrade.verdict.bootable':
-    '{name} zawiera uruchamialny obraz, który aktualizacja zastępuje; jeśli aktualizacja zatrzyma się w połowie, {name} nie będzie się dało uruchomić.',
+    '{name} zawiera uruchamialny obraz, który aktualizacja zastępuje. {name} przestanie się uruchamiać, jeśli aktualizacja zatrzyma się w połowie.',
   'upgrade.verdict.unknown':
     '{name}: w tym odczycie nie wiadomo, czy da się go uruchomić, więc aktualizacja może zastąpić obraz, który kamera by uruchomiła.',
   'upgrade.verdict.notBootable':
@@ -936,6 +936,8 @@ export default {
   'preserve.result.backupNext':
     '{label}: zachowano każdy blok, do którego sięga zwykły odczyt; {writable}; slot następnego uruchomienia: {next}.',
   'preserve.result.patch': '{label}: łatka przygotowana — {banks}.',
+  'preserve.result.patchNone':
+    '{label}: nie przygotowano łatki: żaden slot nie zawiera firmware, który przebieg może załatać.',
   'preserve.result.patchCount':
     '{label}: łatka przygotowana — {banks}; w każdym zmienia się bajtów: {count}.',
   'preserve.result.commitOne': '{label}: {banks} — zapisano z łatką, a kamera ją przyjęła.',

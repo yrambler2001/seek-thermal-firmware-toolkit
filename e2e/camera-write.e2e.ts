@@ -465,7 +465,7 @@ describe.skipIf(reason !== null)(title, () => {
       phaseSection('read-build'),
     );
     expect(shown).toContain(`The plan — ${row.buildLabel}, patches ${bankWordsOf(key)}`);
-    expect(shown).toContain(`Bytes that move on the part${String(row.moved.length)}`);
+    expect(shown).toContain(`Bytes changed on the flash chip${String(row.moved.length)}`);
     expect(shown).toContain(`${String(row.stagedLength)} B in ${String(row.chunkCount)} chunks`);
     expect(shown).toContain(
       row.derivation === null

@@ -202,7 +202,8 @@ export default {
     '{label} ({id}) on the factory image. Its balance, {balance}, is in the adjust word; the patch balances on top of it, and step 04 puts the image back with the edit.',
   'bankPlan.factorySha': 'Factory plaintext sha256',
   'bankPlan.patchedSha': 'Patched sha256',
-  'bankPlan.diffCount': 'Bytes that move on the part',
+  /** Row label: how many bytes of the bank, as the flash chip stores it, the patch changes. */
+  'bankPlan.diffCount': 'Bytes changed on the flash chip',
   /** Row label: the length of the image as sent to the camera, in bytes. */
   'bankPlan.staged': 'Staged length',
   /* {size} bytes sent in {count} USB commands. */

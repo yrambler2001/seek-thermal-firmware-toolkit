@@ -617,13 +617,13 @@ export const SLOT_WRITE_REFUSAL = {
     coreMessage(
       'slots.refused.rawTooLong',
       { size: String(size), name: wordsOf(entry), bankSize: hex(bankBytes) },
-      `${String(size)} B is longer than the ${wordsText(entry)} bank (${hex(bankBytes)} B)`,
+      `${String(size)} B is longer than ${wordsText(entry)} (${hex(bankBytes)} B)`,
     ),
   imageTooLong: (entry: SlotEntry, size: number, bankBytes: number): CoreMessage =>
     coreMessage(
       'slots.refused.imageTooLong',
       { size: String(size), name: wordsOf(entry), bankSize: hex(bankBytes) },
-      `image is ${String(size)} B, longer than the ${wordsText(entry)} bank (${hex(bankBytes)} B)`,
+      `image is ${String(size)} B, longer than ${wordsText(entry)} (${hex(bankBytes)} B)`,
     ),
 } as const;
 
@@ -674,7 +674,7 @@ export const SLOT_PLAN_REFUSAL = {
     coreMessage(
       'slots.plan.outsideBank',
       { size: hex(size), name: wordsOf(entry) },
-      `the payload is ${hex(size)} B, outside the ${wordsText(entry)} bank`,
+      `the payload is ${hex(size)} B, larger than ${wordsText(entry)}`,
     ),
   /** A library caller's write without `acknowledgeRisk` (`risk`: why the bank matters). */
   riskAck: (risk: CoreMessage): CoreMessage =>

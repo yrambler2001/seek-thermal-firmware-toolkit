@@ -103,7 +103,7 @@ export default {
   'opcodes.getMode': 'read the current mode',
   'opcodes.getData': 'the actual flash read',
   'opcodes.begin':
-    'volatile read-window selector only — it selects which 64 KiB block the next reads return, and writes nothing',
+    'only picks which 64 KiB block the next reads return — the choice is not kept, and nothing is written',
 
   /* components/CameraIdentity: what the camera said before the dump. */
   'identity.versionUnknown': 'Not read: the camera did not say which firmware it runs.',

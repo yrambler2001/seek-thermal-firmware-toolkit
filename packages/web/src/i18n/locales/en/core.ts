@@ -108,7 +108,7 @@ export default {
   'fpsBoot.cannotPatch':
     '{bank} cannot be patched here ({reason}), so a frame-rate patch in another bank does not take effect on this camera.',
 
-  /* ---- backup: the zip saved before a bank write (slots/backup) ---- */
+  /* ---- backup: the zip saved before a bank write (slots/backup); `{name}` is the bank inside a sentence ("slot B"): each is an item of backup.plan.* ---- */
   'backup.bank.notInPlan': "{name} (not in this build's plan: the zip says so)",
   'backup.bank.unsupported': '{name} (this build cannot read it, {reason}: the zip says so)',
   'backup.bank.empty':
@@ -265,16 +265,16 @@ export default {
   'report.nextStart.runs': '{bank} — {why}',
   'upgrade.targetBooted':
     '{name} is both the bank the camera booted from and the bank its own upgrade writes. An upgrade run from this camera would overwrite the image it is running. This is a warning only: nothing here stops an upgrade.',
-  /** `{verdict}` is one of upgrade.verdict.*. */
+  /** `{verdict}` is one of upgrade.verdict.*. `{name}` here is the bank inside a sentence ("slot B"); in upgrade.targetBooted and upgrade.verdict.* it starts a sentence ("Slot B"). */
   'upgrade.whileRecovery':
     'The camera is running its recovery bank, and its own upgrade writes {name}, which it is not running. {verdict} This is a warning only: nothing here stops an upgrade.',
   'upgrade.verdict.notRead':
     '{name} could not be read on this check, so what it holds is not known.',
   'upgrade.verdict.blank': '{name} is blank, so the upgrade writes into an empty bank.',
   'upgrade.verdict.bootableSame':
-    '{name} holds the same bootable image as the bank it runs, which the upgrade replaces; if the upgrade stops partway, {name} is left unbootable.',
+    '{name} holds the same bootable image as the bank it runs, which the upgrade replaces. {name} is left unbootable if the upgrade stops partway.',
   'upgrade.verdict.bootable':
-    '{name} holds a bootable image, which the upgrade replaces; if the upgrade stops partway, {name} is left unbootable.',
+    '{name} holds a bootable image, which the upgrade replaces. {name} is left unbootable if the upgrade stops partway.',
   'upgrade.verdict.unknown':
     "{name}'s bootability is unknown on this read, so the upgrade may replace an image the camera would boot.",
   'upgrade.verdict.notBootable':
@@ -855,6 +855,9 @@ export default {
   'preserve.result.backupNext':
     '{label}: every block a normal read reaches was saved; {writable}; the next start enters {next}.',
   'preserve.result.patch': '{label}: built for {banks}.',
+  /** The patch step when every bank was refused: nothing to build for. */
+  'preserve.result.patchNone':
+    '{label}: no patch was built: no bank holds firmware the run can patch.',
   'preserve.result.patchCount': '{label}: built for {banks}; {count} bytes change in each.',
   'preserve.result.commitOne':
     '{label}: {banks} written with the patch, and the camera accepted it.',
@@ -1091,7 +1094,7 @@ export default {
   'slots.plan.edited':
     'the plan checksum does not match its payload, so the plan was edited. Nothing was written.',
   /** `{size}`: a hex byte count. */
-  'slots.plan.outsideBank': 'the payload is {size} B, outside the {name} bank',
+  'slots.plan.outsideBank': 'the payload is {size} B, larger than {name}',
   /** Only a program that uses core directly sees this: `acknowledgeRisk: true` is an option name, keep it. `{risk}`: why the bank matters. */
   'slots.plan.riskAck': '{risk}. Writing it needs acknowledgeRisk: true. Nothing was sent.',
   /** `{reason}`: the support table's reason (support.*). */
@@ -1230,8 +1233,8 @@ export default {
   'slots.refused.noStaging':
     '{name} has no staging form on this build, so an image cannot be encoded for it',
   /** `{size}` is a byte count, `{bankSize}` the bank's size in hex. */
-  'slots.refused.rawTooLong': '{size} B is longer than the {name} bank ({bankSize} B)',
-  'slots.refused.imageTooLong': 'image is {size} B, longer than the {name} bank ({bankSize} B)',
+  'slots.refused.rawTooLong': '{size} B is longer than {name} ({bankSize} B)',
+  'slots.refused.imageTooLong': 'image is {size} B, longer than {name} ({bankSize} B)',
   /* ---- the Preserve tab: a build that runs from recovery R only (preservation/patch, steps) ---- */
   'preserve.routeNote.recoveryOnly':
     'the 2014 bootloader does not take this build’s check sum in slot A or B, and starts recovery R (0x14070000) without checking it, so the patch is written into recovery R and nowhere else',

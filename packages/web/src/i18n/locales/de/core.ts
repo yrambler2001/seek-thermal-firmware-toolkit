@@ -281,9 +281,9 @@ export default {
     '{name} konnte bei dieser Prüfung nicht gelesen werden, daher ist nicht bekannt, was er enthält.',
   'upgrade.verdict.blank': '{name} ist leer, das Upgrade schreibt also in einen leeren Slot.',
   'upgrade.verdict.bootableSame':
-    '{name} enthält dasselbe startfähige Image wie der Slot, aus dem sie läuft, und das Upgrade ersetzt es; bricht das Upgrade mittendrin ab, bleibt {name} startunfähig zurück.',
+    '{name} enthält dasselbe startfähige Image wie der Slot, aus dem sie läuft, und das Upgrade ersetzt es. {name} bleibt startunfähig zurück, wenn das Upgrade mittendrin abbricht.',
   'upgrade.verdict.bootable':
-    '{name} enthält ein startfähiges Image, das das Upgrade ersetzt; bricht das Upgrade mittendrin ab, bleibt {name} startunfähig zurück.',
+    '{name} enthält ein startfähiges Image, das das Upgrade ersetzt. {name} bleibt startunfähig zurück, wenn das Upgrade mittendrin abbricht.',
   'upgrade.verdict.unknown':
     'Ob {name} startfähig ist, ist bei diesem Lesen unbekannt, das Upgrade ersetzt also womöglich ein Image, aus dem die Kamera starten würde.',
   'upgrade.verdict.notBootable':
@@ -887,6 +887,8 @@ export default {
   'preserve.result.backupNext':
     '{label}: Jeder Block, den ein normales Lesen erreicht, wurde gesichert; {writable}; Slot des nächsten Starts: {next}.',
   'preserve.result.patch': '{label}: gebaut für {banks}.',
+  'preserve.result.patchNone':
+    '{label}: Es wurde kein Patch gebaut: Kein Slot enthält Firmware, die der Durchlauf patchen kann.',
   'preserve.result.patchCount': '{label}: gebaut für {banks}; in jedem ändern sich {count} Bytes.',
   'preserve.result.commitOne':
     '{label}: {banks} mit dem Patch beschrieben, und die Kamera hat ihn angenommen.',

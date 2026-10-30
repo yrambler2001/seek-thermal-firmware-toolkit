@@ -282,12 +282,12 @@ describe('the backup zip’s name', () => {
       `seek_backup_<time>_${SERIAL}_v${VERSION}_bank-B_before-copy-from-A.zip`,
     );
     expect(text).toBe(
-      'Before anything is written, Slot B (empty, every byte 0xFF: the zip says so, and the write ' +
+      'Before anything is written, slot B (empty, every byte 0xFF: the zip says so, and the write ' +
         'overwrites no firmware) is read again and saved in one zip with a note of what each file is: ' +
         `seek_backup_<time>_${SERIAL}_v${VERSION}_bank-B_before-copy-from-A.zip.`,
     );
     expect(backupPlanText(report(), ['b', 'r', 'a'], { kind: 'fps-patch-every-bank' })).toContain(
-      'Recovery R (as stored, and decrypted) and Slot A (as stored, and decrypted) are read again',
+      'recovery R (as stored, and decrypted) and slot A (as stored, and decrypted) are read again',
     );
   });
 });

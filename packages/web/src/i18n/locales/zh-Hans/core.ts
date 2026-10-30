@@ -783,6 +783,7 @@ export default {
   'preserve.result.backupNext':
     '{label}：普通读取能访问的每个块都已保存；{writable}；下次启动会进入{next}。',
   'preserve.result.patch': '{label}：已为{banks} 生成。',
+  'preserve.result.patchNone': '{label}：未生成补丁：没有任何槽位存有本次运行可以修补的固件。',
   'preserve.result.patchCount': '{label}：已为{banks} 生成；每个槽位改变 {count} 个字节。',
   'preserve.result.commitOne': '{label}：已用补丁写入{banks}，相机已接受。',
   'preserve.result.commitMany': '{label}：已用补丁写入{banks}，相机已逐一接受。',

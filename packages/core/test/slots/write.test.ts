@@ -365,7 +365,7 @@ describe('prepareSlotFlash refuses before it builds anything', () => {
     const long = new Uint8Array(SLOT_BYTES + 4);
     expect(() =>
       prepareSlotFlash(report, 'b', { kind: 'raw', bytes: long, fileName: 'x' }),
-    ).toThrow(/longer than the/);
+    ).toThrow(/longer than slot B/);
   });
 
   it('a raw entry the build cannot take is refused', () => {

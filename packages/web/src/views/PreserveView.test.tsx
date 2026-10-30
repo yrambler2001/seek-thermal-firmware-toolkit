@@ -334,7 +334,7 @@ describe('PreserveView', () => {
     expect(row.textContent).not.toContain('Not ready');
     expect(row.textContent).toContain('Compact 1.3.0.8 (8 Hz)');
     expect(row.textContent).toContain('two agreeing reads');
-    expect(row.textContent).toContain('Bytes that move on the part');
+    expect(row.textContent).toContain('Bytes changed on the flash chip');
     /* Each change in plain words; the instruction text stays in the run file (42.101). */
     expect(row.textContent).toContain(
       "lets the camera's read command reach the whole 4 MiB flash, not just the first 64 KiB",

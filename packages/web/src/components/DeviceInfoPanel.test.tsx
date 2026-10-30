@@ -55,7 +55,7 @@ describe('DeviceInfoPanel: the upgrade target that is the booted bank', () => {
     const { container, unmount } = render(<DeviceInfoPanel state={recovery} />);
     expect(container.textContent).toContain('The camera is running its recovery bank');
     expect(container.textContent).toContain(
-      'its own upgrade writes Slot B, which it is not running',
+      'its own upgrade writes slot B, which it is not running',
     );
     expect(container.textContent).toContain(
       'Slot B holds the same bootable image as the bank it runs',

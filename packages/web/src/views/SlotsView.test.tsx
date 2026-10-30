@@ -977,7 +977,7 @@ describe('SlotsView: an empty bank', () => {
     const text = container.textContent;
     expect(text).toContain('Saved first');
     expect(text).toContain(
-      'Before anything is written, Slot B (as stored, and decrypted) is read again and saved in one zip',
+      'Before anything is written, slot B (as stored, and decrypted) is read again and saved in one zip',
     );
     expect(text).toContain('_bank-B_before-copy-from-A.zip');
     expect(text).toContain('The zip is downloaded automatically, before anything is sent.');

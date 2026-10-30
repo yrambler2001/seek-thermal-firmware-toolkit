@@ -102,7 +102,7 @@ describe('the upgrade target written while the camera runs recovery (TESTING.md 
     );
     const warning = upgradeTargetWarning(state);
     expect(warning).toContain('The camera is running its recovery bank');
-    expect(warning).toContain('its own upgrade writes Slot B, which it is not running');
+    expect(warning).toContain('its own upgrade writes slot B, which it is not running');
     expect(warning).toContain('nothing here stops an upgrade');
     /* The running image is not the one written, so the booted-bank sentence is not used. */
     expect(warning).not.toContain('overwrite the image it is running');
@@ -121,7 +121,7 @@ describe('the upgrade target written while the camera runs recovery (TESTING.md 
     expect(warning).toContain(
       'Slot B holds the same bootable image as the bank it runs, which the upgrade replaces',
     );
-    expect(warning).toContain('if the upgrade stops partway, Slot B is left unbootable');
+    expect(warning).toContain('Slot B is left unbootable if the upgrade stops partway');
   });
 
   it('says B holds a bootable image of its own when its sha256 differs from the running bank', () => {

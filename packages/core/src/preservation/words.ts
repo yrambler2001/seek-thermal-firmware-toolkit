@@ -446,6 +446,13 @@ export function preserveStepResultMessage(
       const writable = writableOf(state);
       const counts = writable.map((key) => records?.[key].patch?.diffCount ?? 0);
       const same = counts.every((count) => count === counts[0]);
+      if (writable.length === 0) {
+        return said(
+          'patchNone',
+          {},
+          'no patch was built: no bank holds firmware the run can patch.',
+        );
+      }
       return counts.length > 0 && same
         ? said(
             'patchCount',

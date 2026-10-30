@@ -17,7 +17,14 @@
 import { buildZip } from '../archive/zip.js';
 import { bankNameOf } from '../profiles/locked-boot.js';
 import { supportReasonMessage } from './capability.js';
-import { bankParam, coreMessage, listParam, type CoreMessage, type CoreParam } from '../message.js';
+import {
+  bankParam,
+  coreMessage,
+  listParam,
+  paramText,
+  type CoreMessage,
+  type CoreParam,
+} from '../message.js';
 import { hexUp, isoStamp, utf8 } from '../bytes.js';
 import { CancelledError, errorMessage, SeekError } from '../errors.js';
 import { SLOT_ERROR_WORDS } from './error-words.js';
@@ -225,8 +232,11 @@ export function bankWordsParam(name: string, key: SlotKey): CoreParam {
 /** `backupBankWords` as a message, for the page. */
 export function backupBankMessage(report: SlotsReport, key: SlotKey): CoreMessage {
   const view = report.slots.find((candidate) => candidate.entry.key === key);
-  const name = view?.entry.name ?? bankNameOf(key);
-  const bank = { name: bankNameParam(name, key) };
+  const label = view?.entry.name ?? bankNameOf(key);
+  /* Each item is said inside the plan's sentence: the bank in its sentence form ("slot B"). */
+  const words = bankWordsParam(label, key);
+  const name = paramText(words);
+  const bank = { name: words };
   if (view === undefined) {
     return coreMessage(
       'backup.bank.notInPlan',

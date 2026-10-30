@@ -66,7 +66,12 @@ import { onCompactPro2016Line } from '../slots/running.js';
  * reused — that remedy names `preserve --resume`, which is wrong advice here. */
 import { isStaleDescriptorWord } from '../preservation/windows.js';
 import { LEGACY_BOOT, legacyUpgradeTargetBuild } from '../profiles/legacy-auth.js';
-import { bankOfActiveSlotWord, bankWordsOf, enteredChecked } from '../profiles/locked-boot.js';
+import {
+  bankNameOf,
+  bankOfActiveSlotWord,
+  bankWordsOf,
+  enteredChecked,
+} from '../profiles/locked-boot.js';
 import { evidenceMessages } from '../profiles/evidence.js';
 import { detectProfile, requireCapability } from '../profiles/registry.js';
 import type {
@@ -1746,7 +1751,7 @@ export function upgradeTargetWarningMessage(
   if (upgradeTargetIsBooted(state)) return upgradeTargetBootedWarning(name);
   if (upgradeTargetWhileRecovery(state)) {
     return upgradeWhileRecoveryWarning(
-      name,
+      inSentence(name, target),
       recoveryTargetVerdictMessage(
         state.byKey.get(target),
         state.byKey.get(state.boot.booted),
@@ -1755,6 +1760,15 @@ export function upgradeTargetWarningMessage(
     );
   }
   return null;
+}
+
+/**
+ * A bank's name said inside a sentence: a bank's label ("Slot B", as a param or as the usual text) becomes
+ * its sentence form ("slot B"); a name of the caller's own stays as it is.
+ */
+function inSentence(name: CoreParam, key: SlotKey): CoreParam {
+  if (typeof name === 'object' && 'bank' in name) return bankParam(name.bank);
+  return name === bankNameOf(key) ? bankParam(key) : name;
 }
 
 /** The upgrade target is the bank the camera booted from. */
@@ -1813,8 +1827,8 @@ export function recoveryTargetVerdictMessage(
     return coreMessage(
       same ? 'upgrade.verdict.bootableSame' : 'upgrade.verdict.bootable',
       params,
-      `${name} holds ${holds}, which the upgrade replaces; ` +
-        `if the upgrade stops partway, ${name} is left unbootable.`,
+      `${name} holds ${holds}, which the upgrade replaces. ` +
+        `${name} is left unbootable if the upgrade stops partway.`,
     );
   }
   if (slot.bootability === 'unknown') {

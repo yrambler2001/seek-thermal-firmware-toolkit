@@ -42,7 +42,7 @@ describe('CameraReport: the upgrade target warning', () => {
     const { container, unmount } = render(<CameraReport state={recovery} />);
     expect(container.textContent).toContain('The camera is running its recovery bank');
     expect(container.textContent).toContain(
-      'its own upgrade writes Slot B, which it is not running',
+      'its own upgrade writes slot B, which it is not running',
     );
     expect(container.textContent).toContain(WARNING);
     unmount();

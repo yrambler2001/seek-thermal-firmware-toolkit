@@ -258,7 +258,7 @@ describe('seek-fw info: the upgrade target written while the camera runs recover
     expect(stdout.text).toMatch(/booted\s+Recovery/);
     expect(stdout.text).toMatch(/upgrade target\s+Slot B/);
     expect(stdout.text).toContain('warning: The camera is running its recovery bank');
-    expect(stdout.text).toContain('its own upgrade writes Slot B, which it is not running');
+    expect(stdout.text).toContain('its own upgrade writes slot B, which it is not running');
     expect(stdout.text).toContain('Slot B holds the same bootable image as the bank it runs');
     expect(stdout.text).toContain('nothing here stops an upgrade');
     /* The warning is a line of information: the rest of the report is still printed. */
