@@ -71,7 +71,7 @@ export default {
   /* views/V4View: the read-only guarantee. Command names are params, in `code`. <link> wraps the Slots tab's name. */
   'readonly.title': 'Read-only guarantee',
   'readonly.intro':
-    'This page can issue exactly six vendor commands. That is its entire vocabulary — there is no code path to anything else:',
+    'This tab can issue exactly six vendor commands. That is its entire vocabulary — there is no code path to anything else:',
   'readonly.caption': 'The six read-only vendor commands',
   'readonly.absent':
     '`{setData}`, `{complete}`, `{reset}` and every upload, commit and erase command are absent from this view. `{usbReset}` is never called either; the retry path just closes and reopens the handle. Decryption happens entirely in memory on the copy in your browser and never touches the device.',
@@ -87,7 +87,7 @@ export default {
   'gap.redundant':
     'And when the block *is* in use, what it holds is a redundant copy. These cameras keep the same firmware image in several 64 KiB slots: across every multi-slot dump checked while building this page, all slots decrypted to byte-identical firmware — in one case across four slots that had been written with two different keys. On the one unit seen with a real image at `{address}`, it was byte-for-byte the same as the copies at `{before}` and `{after}`, so the archive still contains that firmware, just read from a different address.',
   'gap.fine':
-    'That redundancy is also why a camera whose `{address}` reads back as `{fill}` is fine: the bootable firmware still exists in the other slots. Nothing on this page writes to the device in any case — the gap affects only the file you download.',
+    'That redundancy is also why a camera whose `{address}` reads back as `{fill}` is fine: the bootable firmware still exists in the other slots. Nothing on this tab writes to the device in any case — the gap affects only the file you download.',
   'gap.complete':
     'If you do want a strictly complete byte-for-byte image — to diff flash against a reference, say — read it over SWD/J-Link or with an SPI programmer.',
 

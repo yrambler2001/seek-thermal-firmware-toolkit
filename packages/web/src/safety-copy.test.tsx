@@ -52,7 +52,7 @@ const DUMP_COPY: readonly string[] = [
   /* the read-only promise */
   'Read-only: this tab issues no flash write, erase, upload, commit, or reset command.',
   'A camera on another firmware line is refused before anything is read.',
-  'This page can issue exactly six vendor commands. That is its entire vocabulary — there is no code path to anything else:',
+  'This tab can issue exactly six vendor commands. That is its entire vocabulary — there is no code path to anything else:',
   'Until the camera has reported its firmware version, only three of the six are sent, and only as reads: GetFirmwareInfo, GetOperationMode and GetErrorCode.',
   'USBDevice.reset() is never called either; the retry path just closes and reopens the handle.',
 
