@@ -76,7 +76,7 @@ export default {
   'step.patch.description':
     'Offline, senza termocamera. Prepara la patch per ogni slot che l’esecuzione può scrivere: permette alla lettura della termocamera di raggiungere l’intera flash da 4 MB, e viene scritta nella forma in cui la termocamera la conserva, così cambiano solo i byte della patch stessa.',
   'step.commit.description':
-    'La scrittura. Prima rilegge ogni slot scelto e non scrive nulla se ognuno non contiene ancora ciò che il backup ha registrato (una scrittura già andata a segno non viene mai ripetuta), poi scrive ciascuno, per ultimo lo slot che la termocamera prova per primo. Qui la termocamera non viene riavviata: la riavvia il passaggio successivo.',
+    'La scrittura. Prima rilegge ogni slot scelto e non scrive nulla a meno che ognuno contenga ancora ciò che il backup ha registrato (una scrittura già andata a segno non viene mai ripetuta), poi scrive ciascuno, per ultimo lo slot che la termocamera prova per primo. Qui la termocamera non viene riavviata: la riavvia il passaggio successivo.',
   'step.drain.description':
     'Riavvia la termocamera perché esegua il firmware con la patch (resta muta per una decina di secondi; la pagina aspetta e la ritrova), controlla da quale slot si è avviata (uno slot senza la patch ferma il passaggio prima di leggere qualsiasi cosa), poi legge l’intera flash da 4 MB in una sola lettura e inserisce nell’immagine salvata il firmware originale di ogni slot scritto, preso dal backup. Non viene scritto nulla.',
   'step.restore.description':
