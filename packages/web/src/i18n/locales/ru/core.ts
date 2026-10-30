@@ -544,7 +544,7 @@ export default {
   'writeRefusal.otherFamily':
     'по имеющимся данным эта камера — {detected}, а не {family} ({reasons})',
   /** `{reasons}`: writeRefusal.* joined with common:list.semicolon. */
-  'writeRefusal.camera': 'эту камеру нельзя записать отсюда: {reasons}',
+  'writeRefusal.camera': 'в эту камеру нельзя записывать отсюда: {reasons}',
 
   /* ---- family: what each camera family is (profiles/*: `summary`), the decrypt tab's Summary row ---- */
   /** "Work with firmware slots", "Info", "4.x/Nano", "Dump", "Dump all selectors": the page's own tab and button names; `seek-fw dump` stays English. `{block}` is an address. */

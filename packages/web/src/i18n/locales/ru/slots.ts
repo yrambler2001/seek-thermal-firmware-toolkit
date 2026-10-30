@@ -131,7 +131,7 @@ export default {
   'gate.busy': 'Выполняется другая операция — дождитесь её завершения.',
   'gate.readFirst': 'Сначала считайте слоты.',
   'gate.cameraRefused':
-    'Эту камеру нельзя записать отсюда, по причине, указанной в сообщении выше. Ничего не отправляется.',
+    'В эту камеру нельзя записывать отсюда по причине, указанной в сообщении выше. Ничего не отправляется.',
   /* {reason} is core's reason the bank was not read. */
   'gate.notRead': 'Не считан: {reason}. Перед записью считайте слоты заново.',
   'gate.notReadNoReason':
@@ -271,7 +271,7 @@ export default {
     'В камеру пока ничего не отправлено. Запись передаст эти данные в {bank:acc} и подтвердит запись.',
   'preview.toolbar': 'Действия записи для {bank:gen}',
   'preview.write': 'Записать в {bank:acc}…',
-  'preview.discard': 'Отменить',
+  'preview.discard': 'Отбросить',
 
   /* The write's confirmation dialog. {what} is a file name or what.copy / what.restore. */
   'writeConfirm.title': 'Записать {what} в {bank:acc} по адресу {address}?',

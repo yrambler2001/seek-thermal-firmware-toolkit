@@ -22,7 +22,7 @@ export default {
   'read.title': 'Считать камеру',
   'read.description':
     'Только чтение. Спрашивает камеру, что на ней работает, как она запускается, какие ключи в ней хранятся и что лежит в каждом слоте: то же считывание, что и seek-fw info. Ничего не записывается.',
-  'read.actions': 'Действия: сведения',
+  'read.actions': 'Действия вкладки «Сведения»',
   'read.button': 'Считать версию прошивки',
   'read.connectFirst': 'Сначала подключите камеру выше, затем нажмите «Считать версию прошивки».',
   'read.showDetails': 'Подробности в журнале',
@@ -57,7 +57,7 @@ export default {
   /** A table cell answering "Writes to the camera?" for this tab: the word "no", not "number". */
   'tabs.info.writes': 'Нет.',
   'tabs.preserve.does':
-    'Делает полную копию 4 МБ флеш-памяти камеры, сохраняя файл прогона после каждого шага, и может вернуть на место пропатченную прошивку. Проводит по шагам по одному.',
+    'Делает полную копию 4 МБ флеш-памяти камеры, сохраняя файл прогона после каждого шага, и может вернуть на место пропатченную прошивку. Шаги выполняются по одному.',
   'tabs.preserve.cameras':
     'Камеры с прошивкой 0.x и 1.x: сборки Compact 2014 года, сборки Compact PRO 2016 года (1.0.3.x) и сборка Compact 1.3.0.8 FF (16 Hz).',
   'tabs.preserve.writes':
@@ -117,7 +117,7 @@ export default {
   'report.upgradeTarget': 'Цель обновления',
   /** Value: the camera was not asked for its upgrade target, so there is none to show. */
   'report.notReplayed': '(не запрашивалось)',
-  'report.targetConfirmed': '{slot} (подтверждено камерой)',
+  'report.targetConfirmed': '{slot} (подтверждено по USB)',
   /* {why} is core's reason. */
   'report.buildNotKnown':
     'неизвестно: {why}. Для образа FF 16 Hz камера должна сообщить, какая сборка на ней работает (вкладка слотов это спрашивает)',
@@ -136,7 +136,7 @@ export default {
   /** Column of the bank table: which keys the bootloader accepts the bank under. */
   'report.accepts': 'Принимает',
   /** Column: whether the image's footer (the checksum block after the image) is right. */
-  'report.footer': 'Концевик',
+  'report.footer': 'Концевой блок',
   /** Column: whether the bootloader would start this bank. */
   'report.bootable': 'Запускается',
   'report.bytes': '{count} Б',

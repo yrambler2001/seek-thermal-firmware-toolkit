@@ -39,7 +39,7 @@ export default {
 
   /* views/V4View: step 2, the dump. */
   'dump.title': 'Дамп',
-  'dump.actions': 'Действия: дамп',
+  'dump.actions': 'Действия дампа',
   'dump.start': 'Начать дамп',
   'dump.panel': 'Дамп',
   'dump.how':
