@@ -14,6 +14,10 @@ import { parseVersion } from '../../src/profiles/version.js';
 import type { SlotKey, Support } from '../../src/profiles/types.js';
 import { buildSlotPlan, supportReasonMessage } from '../../src/slots/capability.js';
 import {
+  COMPACT_PRO_2016_VERSIONS,
+  PLAIN_CHAIN_VERSIONS,
+} from '../../src/slots/capability-family.js';
+import {
   bankNotes,
   capabilityNoteMessage,
   emptyBankWhy,
@@ -33,18 +37,23 @@ const FAMILIES: readonly Family[] = [
   'unidentified',
 ];
 const KEYS: readonly SlotKey[] = ['a', 'b', 'r'];
-/* Every version a note names, and one none names. */
+/* Every version a note names, every locked build the tables measured (each has its own selector table, so
+ * its own write arms), and one none names. */
 const VERSIONS = [
-  '0.8.0.0',
-  '1.0.3.0',
-  '1.0.3.2',
-  '1.3.0.8',
-  '4.8.2.1',
-  '10.9.1.31',
-  '2.27.1.33',
-  '42.32.3.10',
-  '44.27.3.10',
-  '9.9.9.9',
+  ...new Set([
+    ...PLAIN_CHAIN_VERSIONS,
+    ...COMPACT_PRO_2016_VERSIONS,
+    '0.8.0.0',
+    '1.0.3.0',
+    '1.0.3.2',
+    '1.3.0.8',
+    '4.8.2.1',
+    '10.9.1.31',
+    '2.27.1.33',
+    '42.32.3.10',
+    '44.27.3.10',
+    '9.9.9.9',
+  ]),
 ];
 
 describe('constant sentences found by their English', () => {

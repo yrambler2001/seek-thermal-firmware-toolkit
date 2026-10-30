@@ -275,7 +275,9 @@ export function SlotTable({
                     {view.unreadReason === null
                       ? t('slots:table.notReadNoReason')
                       : t('slots:table.notRead', {
-                          reason: coreText(view.unreadReasonMessage ?? view.unreadReason),
+                          reason: coreText(
+                            recordedParam(view.unreadReasonMessage, view.unreadReason),
+                          ),
                         })}
                   </span>
                 ) : empty ? (

@@ -77,7 +77,7 @@ import {
   copySourceRefusalMessage,
 } from '@seek-fw/core';
 import { coreText } from '@/lib/core-text';
-import { supportReasonMessage } from '@seek-fw/core';
+import { recordedParam, supportReasonMessage } from '@seek-fw/core';
 import { listAnd, t, tEnglish, type Translate } from '@/i18n';
 import { backupDownloadLines, saveBackupAsDownload } from '../lib/backup-save';
 import { bankName, bankWords } from '../lib/bank-names';
@@ -311,7 +311,9 @@ export function slotActionGate(args: {
         args.view.unreadReason === null
           ? t('slots:gate.notReadNoReason')
           : t('slots:gate.notRead', {
-              reason: coreText(args.view.unreadReasonMessage ?? args.view.unreadReason),
+              reason: coreText(
+                recordedParam(args.view.unreadReasonMessage, args.view.unreadReason),
+              ),
             }),
     };
   }
