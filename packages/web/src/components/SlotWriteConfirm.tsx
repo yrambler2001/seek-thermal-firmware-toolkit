@@ -11,6 +11,7 @@
 import { useRef, useState, type ReactElement } from 'react';
 import { Flame } from 'lucide-react';
 import { bootsNowOf } from '@seek-fw/core';
+import { useT } from '@/i18n';
 import { Checkbox } from './ui/field';
 import {
   AlertDialog,
@@ -60,6 +61,7 @@ export function SlotWriteConfirm({
   onConfirm,
   onCancel,
 }: SlotWriteConfirmProps): ReactElement {
+  const { t } = useT();
   const [acknowledged, setAcknowledged] = useState(false);
   /* Radix closes the dialog itself once the action fires. Without this the
    * close would report itself as a cancel too, and the caller would be told
@@ -91,22 +93,25 @@ export function SlotWriteConfirm({
           >
             <Flame className="size-4" />
           </span>
-          <AlertDialogTitle>{`Write ${what} to ${slotName} at ${slotAddress}?`}</AlertDialogTitle>
+          <AlertDialogTitle>
+            {t('slots:writeConfirm.title', { what, bank: slotName, address: slotAddress })}
+          </AlertDialogTitle>
         </div>
 
         {risk.booted && (
           <p className="rounded-md border border-destructive/40 bg-destructive/8 px-3 py-2 text-[0.85rem] font-medium text-destructive">
-            {`${bootsNowOf(slotName)}. Writing it replaces the firmware the camera is running now. If the new image does not run, the camera may not boot at all.`}
+            {/* i18n: core message (bootsNowOf) */}
+            {t('slots:writeConfirm.booted', { bootsNow: bootsNowOf(slotName) })}
           </p>
         )}
         {risk.recovery && (
           <p className="rounded-md border border-destructive/40 bg-destructive/8 px-3 py-2 text-[0.85rem] font-medium text-destructive">
-            {`${slotName} is the recovery bank, the last-resort copy the bootloader falls back to. Writing it leaves the camera without that copy until it is restored.`}
+            {t('slots:writeConfirm.recovery', { bank: slotName })}
           </p>
         )}
         {!risk.booted && !risk.recovery && risk.bootUnnamed && (
           <p className="rounded-md border border-destructive/40 bg-destructive/8 px-3 py-2 text-[0.85rem] font-medium text-destructive">
-            {`The camera does not say which bank it boots, so ${slotName} is treated as the bank it boots now. Writing it can replace the firmware the camera is running.`}
+            {t('slots:writeConfirm.bootUnnamed', { bank: slotName })}
           </p>
         )}
 
@@ -115,6 +120,7 @@ export function SlotWriteConfirm({
             id="slot-write-confirm-warnings"
             className="space-y-1.5 rounded-md border border-warn/40 bg-warn/8 px-3 py-2 text-[0.85rem] font-medium text-foreground"
           >
+            {/* i18n: core message (the plan's warnings) */}
             {warnings.map((line) => (
               <p key={line}>{line}</p>
             ))}
@@ -124,25 +130,20 @@ export function SlotWriteConfirm({
         <AlertDialogDescription id="slot-write-confirm-what" className="space-y-2">
           {targetEmpty && (
             <span className="block font-medium">
-              {`${slotName} is empty: it holds no image, so no firmware is overwritten.`}
+              {t('slots:writeConfirm.empty', { bank: slotName })}
             </span>
           )}
           <span className="block">
             {targetEmpty
-              ? `The write still erases the 64 KiB block of the camera's flash at ${slotName} (already blank) and programs it.`
-              : `This erases a 64 KiB block of the camera's flash and programs it at ${slotName}.`}
+              ? t('slots:writeConfirm.eraseEmpty', { bank: slotName })
+              : t('slots:writeConfirm.erase', { bank: slotName })}
           </span>
           {keyLine && <span className="block">{keyLine}</span>}
           <span className="block">
-            {`Before anything is sent, ${slotName} is read again and saved as one zip download: ${backupName}. Check your downloads folder for it.`}
+            {t('slots:writeConfirm.backup', { bank: slotName, file: backupName })}
           </span>
-          <span className="block">
-            No reset is sent. Unplug and replug the camera afterwards for the bank to take effect.
-          </span>
-          <span className="block">
-            If the image does not run, the camera cannot be recovered over USB — only with
-            SWD/J-Link or an SPI programmer.
-          </span>
+          <span className="block">{t('slots:writeConfirm.noReset')}</span>
+          <span className="block">{t('slots:writeConfirm.noUsbRecovery')}</span>
         </AlertDialogDescription>
 
         {needsAck && (
@@ -159,16 +160,16 @@ export function SlotWriteConfirm({
             />
             <span>
               {risk.booted
-                ? 'I understand this is the bank the camera boots now, and that a bad image can leave the camera unbootable.'
+                ? t('slots:ack.booted')
                 : risk.recovery
-                  ? 'I understand this is the recovery bank, and that a bad image leaves the camera without a last-resort copy.'
-                  : 'I understand the camera does not say which bank it boots, so this one is treated as the booted one, and that a bad image can leave the camera unbootable.'}
+                  ? t('slots:ack.recovery')
+                  : t('slots:writeConfirm.ackUnnamed')}
             </span>
           </label>
         )}
 
         <AlertDialogFooter>
-          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogCancel>{t('common:cancel')}</AlertDialogCancel>
           <AlertDialogAction
             disabled={!confirmable}
             onClick={() => {
@@ -178,7 +179,7 @@ export function SlotWriteConfirm({
               onConfirm(sent);
             }}
           >
-            {`Yes — write to ${slotName}`}
+            {t('slots:writeConfirm.confirm', { bank: slotName })}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

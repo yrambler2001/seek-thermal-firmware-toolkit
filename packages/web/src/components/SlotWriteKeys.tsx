@@ -21,9 +21,12 @@ import {
   STAGED_UNDER_IMAGE_BLOCK_0,
   storedUnderCheckKey,
   writeBannerOf,
+  type SlotKey,
   type SlotsReport,
   type WriteKeyForm,
 } from '@seek-fw/core';
+import { t, tEnglish } from '@/i18n';
+import { bankName } from '@/lib/bank-names';
 import { KeyValue } from './KeyValue';
 import { Panel, PanelTitle } from './Panel';
 import { Prose } from './Prose';
@@ -46,6 +49,8 @@ export interface WriteKeysVerdict {
   readonly keysRefusal: string | null;
   /** The booted bank's name, as the page shows it ("slot A"), or null when none is named. */
   readonly bootedName: string | null;
+  /** The booted bank, so the page can name it in the language in use; left out where only a name is known. */
+  readonly bootedKey?: SlotKey | null;
   /**
    * The key every bank is stored under (e.g. "Key B"); on the 2016 line the key its bootloader checks a bank
    * under ("key block 1"), or null when the read did not name it.
@@ -73,6 +78,7 @@ export function writeKeysVerdictOf(report: SlotsReport): WriteKeysVerdict {
     form: keys.form,
     keysRefusal: keys.refusal,
     bootedName: booted,
+    bootedKey: keys.booted,
     keyName: keys.atRest?.name ?? null,
     bootedKeyName: keys.bootedKeyName,
     storedAs: keys.form === 'image-block-0' ? storedUnderCheckKey(keys) : null,
@@ -89,8 +95,9 @@ export function SlotWriteKeys({ verdict }: SlotWriteKeysProps): ReactElement {
     return (
       <Alert tone="err" className="mt-3">
         <p>
-          <strong>No bank of this camera can be written from here.</strong>
+          <strong>{t('slots:keys.refusedTitle')}</strong>
         </p>
+        {/* i18n: core message (writeBannerOf) */}
         <p>{verdict.refusal}</p>
       </Alert>
     );
@@ -98,16 +105,17 @@ export function SlotWriteKeys({ verdict }: SlotWriteKeysProps): ReactElement {
   if (verdict.form === 'plain') {
     return (
       <Panel className="mt-3">
-        <PanelTitle icon={<KeyRound />}>Keys for the writes</PanelTitle>
+        <PanelTitle icon={<KeyRound />}>{t('slots:keys.title')}</PanelTitle>
         <KeyValue
           rows={[
-            ['Chain', 'the 2014 plaintext chain: every bank is stored plain, so none holds a key'],
-            ['Written as', 'the image as it is, with no key, to any bank'],
+            [t('slots:keys.chain'), t('slots:keys.chainPlain')],
+            [t('slots:keys.writtenAs'), t('slots:keys.writtenPlain')],
           ]}
         />
         {verdict.evidence.length > 0 && (
           <Prose>
             <ul>
+              {/* i18n: core message (the derivation's evidence) */}
               {verdict.evidence.map((line) => (
                 <li key={line}>{line}</li>
               ))}
@@ -122,16 +130,18 @@ export function SlotWriteKeys({ verdict }: SlotWriteKeysProps): ReactElement {
      * bootloader checks a bank under (core's evidence names it, and the bank it was named from). */
     return (
       <Panel className="mt-3">
-        <PanelTitle icon={<KeyRound />}>Keys for the writes</PanelTitle>
+        <PanelTitle icon={<KeyRound />}>{t('slots:keys.title')}</PanelTitle>
         <KeyValue
           rows={[
-            ['Staged as', STAGED_UNDER_IMAGE_BLOCK_0],
-            ['Stored as', verdict.storedAs ?? storedUnderCheckKey({ atRest: null })],
+            /* i18n: core message (STAGED_UNDER_IMAGE_BLOCK_0, storedUnderCheckKey) */
+            [t('slots:keys.stagedAs'), STAGED_UNDER_IMAGE_BLOCK_0],
+            [t('slots:keys.storedAs'), verdict.storedAs ?? storedUnderCheckKey({ atRest: null })],
           ]}
         />
         {verdict.evidence.length > 0 && (
           <Prose>
             <ul>
+              {/* i18n: core message (the derivation's evidence) */}
               {verdict.evidence.map((line) => (
                 <li key={line}>{line}</li>
               ))}
@@ -146,16 +156,18 @@ export function SlotWriteKeys({ verdict }: SlotWriteKeysProps): ReactElement {
      * under Key B (core's rows, the CLI's `staged as` and `stored as`; TESTING.md 42.89). */
     return (
       <Panel className="mt-3">
-        <PanelTitle icon={<KeyRound />}>Keys for the writes</PanelTitle>
+        <PanelTitle icon={<KeyRound />}>{t('slots:keys.title')}</PanelTitle>
         <KeyValue
           rows={[
-            ['Staged as', FF_VENDOR_STAGED],
-            ['Stored as', FF_VENDOR_STORED],
+            /* i18n: core message (FF_VENDOR_STAGED, FF_VENDOR_STORED) */
+            [t('slots:keys.stagedAs'), FF_VENDOR_STAGED],
+            [t('slots:keys.storedAs'), FF_VENDOR_STORED],
           ]}
         />
         {verdict.evidence.length > 0 && (
           <Prose>
             <ul>
+              {/* i18n: core message (the derivation's evidence) */}
               {verdict.evidence.map((line) => (
                 <li key={line}>{line}</li>
               ))}
@@ -170,23 +182,36 @@ export function SlotWriteKeys({ verdict }: SlotWriteKeysProps): ReactElement {
      * row says why, as the CLI's "refused" row does. */
     return (
       <Panel className="mt-3">
-        <PanelTitle icon={<KeyRound />}>Keys for the writes</PanelTitle>
-        <KeyValue rows={[['Refused', verdict.keysRefusal]]} />
+        <PanelTitle icon={<KeyRound />}>{t('slots:keys.title')}</PanelTitle>
+        {/* i18n: core message (the derivation's refusal) */}
+        <KeyValue rows={[[t('slots:keys.refused'), verdict.keysRefusal]]} />
       </Panel>
     );
   }
-  const booted = verdict.bootedName ?? 'the booted bank';
-  const bootedKey = verdict.bootedKeyName ?? 'a key the page cannot name';
-  const key = verdict.keyName ?? 'the booted bank’s key';
+  /* The page's row names the bank in the language in use; core's derivedKeyLine gets the English names
+   * (it is core's sentence, English until core's sentences are translated). */
+  const bootedShown =
+    verdict.bootedKey == null
+      ? (verdict.bootedName ?? t('slots:keys.theBootedBank'))
+      : bankName(verdict.bootedKey);
+  const booted = verdict.bootedName ?? tEnglish('slots:keys.theBootedBank');
+  const bootedKey = verdict.bootedKeyName ?? t('slots:keys.unnamedKey');
+  const key = verdict.keyName ?? tEnglish('slots:keys.bootedBanksKey');
   return (
     <Panel className="mt-3">
-      <PanelTitle icon={<KeyRound />}>Keys for the writes</PanelTitle>
+      <PanelTitle icon={<KeyRound />}>{t('slots:keys.title')}</PanelTitle>
       <KeyValue
         rows={[
-          ['Booted bank', `${booted} holds ${bootedKey}`],
           [
-            'Written as',
-            `${derivedKeyLine({ key, holds: verdict.bootedKeyName }, booted)}; every bank is written the same way`,
+            t('slots:keys.bootedBank'),
+            t('slots:keys.bootedHolds', { bank: bootedShown, key: bootedKey }),
+          ],
+          [
+            t('slots:keys.writtenAs'),
+            /* i18n: core message (derivedKeyLine) */
+            t('slots:keys.writtenDerived', {
+              line: derivedKeyLine({ key, holds: verdict.bootedKeyName }, booted),
+            }),
           ],
         ]}
       />

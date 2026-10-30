@@ -76,7 +76,9 @@ import {
   type WriteAction,
   type WriteBackup,
 } from '@seek-fw/core';
+import { listAnd, t, tEnglish, type Translate } from '@/i18n';
 import { backupDownloadLines, saveBackupAsDownload } from '../lib/backup-save';
+import { bankName, bankWords } from '../lib/bank-names';
 import { reportInUseElsewhere } from '../lib/camera-lock';
 import { downloadBytes } from '../lib/download';
 import { logHint } from '../lib/hints';
@@ -210,48 +212,49 @@ export function replugRecord(what: 'write' | 'patch'): string {
 
 /** The status line after a write: how it ended. The result panel says what to do next. */
 export function writtenStatus(verified: boolean | null): string {
-  if (verified === false) return 'Written, but the read-back does not match — see the result.';
-  if (verified === true) return 'Written. The bank reads back as written.';
-  return 'Written. The read-back was not compared — see the result.';
+  if (verified === false) return t('slots:status.written.mismatch');
+  if (verified === true) return t('slots:status.written.verified');
+  return t('slots:status.written.notCompared');
 }
 
 /** The status line after a frame-rate patch: how it ended. The result panel says what to do next. */
 export function patchedStatus(readBackOk: boolean | null): string {
-  if (readBackOk === false) {
-    return 'Patched, but the read-back does not differ only as planned — see the result.';
-  }
-  if (readBackOk === true) return 'Patched. The bank reads back as planned.';
-  return 'Patched. The read-back was not checked — see the result.';
+  if (readBackOk === false) return t('slots:status.patched.unexpected');
+  if (readBackOk === true) return t('slots:status.patched.ok');
+  return t('slots:status.patched.unchecked');
 }
 
 /** The status line after an every-bank patch: how it ended. The result panel says each bank's. */
 export function everyPatchedStatus(done: FpsEveryBankResult): string {
-  const n = done.results.length;
-  const banks = `${String(n)} bank${n === 1 ? '' : 's'}`;
+  const count = done.results.length;
   if (done.stopped !== null) {
-    return `Stopped at ${bankWordsOf(done.stopped.key)} — ${banks} patched; see the result.`;
+    return t('slots:status.every.stopped', { count, bank: bankWords(done.stopped.key) });
   }
   if (done.results.some((one) => one.readBack.ok !== true)) {
-    return `Patched ${banks}, but a read-back was not checked as planned — see the result.`;
+    return t('slots:status.every.unchecked', { count });
   }
-  return `Patched ${banks}. Each reads back as planned.`;
+  return t('slots:status.every.ok', { count });
 }
 
 /**
  * The status line after a cancel. It says a bank may be partly written only once that bank's commit was sent
  * (`committed`, from core's `onCommit`); a cancel before any commit wrote nothing (TESTING.md 42.82, 42.91 C).
+ * The same sentence goes to the status line (`t`, the default) and the run log (`tEnglish`). The banks are
+ * named as every build names them (common:bank.*), so `_report` is not read; it stays for the callers.
  */
-export function cancelledStatus(committed: readonly SlotKey[], report: SlotsReport | null): string {
-  if (committed.length === 0) return 'Cancelled — nothing was written.';
-  const name = (key: SlotKey): string =>
-    report?.slots.find((view) => view.entry.key === key)?.entry.name ?? bankNameOf(key);
+export function cancelledStatus(
+  committed: readonly SlotKey[],
+  _report: SlotsReport | null,
+  translate: Translate = t,
+): string {
+  if (committed.length === 0) return translate('slots:status.cancelled.nothing');
+  const name = (key: SlotKey): string => bankName(key, translate);
   if (committed.length === 1) {
-    return `Cancelled after the commit to ${name(committed[0] ?? 'a')} was sent — the bank may be partly written. Read it before relying on it.`;
+    return translate('slots:status.cancelled.one', { bank: name(committed[0] ?? 'a') });
   }
-  return (
-    `Cancelled after the commits to ${committed.map(name).join(' and ')} were sent — each may be partly ` +
-    'written. Read them before relying on them.'
-  );
+  return translate('slots:status.cancelled.many', {
+    banks: listAnd(committed.map(name), translate),
+  });
 }
 
 /** The three things a bank row can do. */
@@ -287,23 +290,25 @@ export function slotActionGate(args: {
   readonly cameraRefusal?: string | null;
 }): ActionGate {
   const support = slotActionSupport(args.entry, args.action);
+  /* i18n: core message */
   if (!support.supported) return { enabled: false, reason: support.reason };
-  if (!args.connected) return { enabled: false, reason: 'Connect the camera first.' };
-  if (args.busy) {
-    return { enabled: false, reason: 'Another operation is running — wait for it to finish.' };
-  }
-  if (args.view === null) return { enabled: false, reason: 'Read the slots first.' };
+  if (!args.connected) return { enabled: false, reason: t('slots:gate.connectFirst') };
+  if (args.busy) return { enabled: false, reason: t('slots:gate.busy') };
+  if (args.view === null) return { enabled: false, reason: t('slots:gate.readFirst') };
   if (args.action !== 'dump' && (args.cameraRefusal ?? null) !== null) {
     return {
       enabled: false,
-      reason:
-        'This camera cannot be written from here, for the reason in the banner above. Nothing is sent.',
+      reason: t('slots:gate.cameraRefused'),
     };
   }
   if (args.action !== 'dump' && args.view.state === null) {
     return {
       enabled: false,
-      reason: `Not read: ${args.view.unreadReason ?? 'this bank was not read'}. Read the slots again before writing it.`,
+      /* i18n: core message (the unread reason) */
+      reason:
+        args.view.unreadReason === null
+          ? t('slots:gate.notReadNoReason')
+          : t('slots:gate.notRead', { reason: args.view.unreadReason }),
     };
   }
   /* An empty bank is writable where the plan says so; where it does not, the write is off
@@ -315,7 +320,8 @@ export function slotActionGate(args: {
   ) {
     return {
       enabled: false,
-      reason: `This bank is empty and cannot be written on this build: ${args.entry.emptyBank.writable.reason}`,
+      /* i18n: core message (the plan's reason) */
+      reason: t('slots:gate.emptyNotWritable', { reason: args.entry.emptyBank.writable.reason }),
     };
   }
   return { enabled: true, reason: null };
@@ -342,7 +348,7 @@ export function slotCopyGate(args: {
   readonly cameraRefusal?: string | null;
 }): ActionGate {
   const target = args.report.slots.find((view) => view.entry.key === args.to) ?? null;
-  if (target === null) return { enabled: false, reason: 'This build has no such bank.' };
+  if (target === null) return { enabled: false, reason: t('slots:gate.noSuchBank') };
   const gate = slotActionGate({
     entry: target.entry,
     view: target,
@@ -353,6 +359,7 @@ export function slotCopyGate(args: {
   });
   if (!gate.enabled) return gate;
   const source = copySourceRefusal(args.report, args.from);
+  /* i18n: core message (copySourceRefusal) */
   if (source !== null) return { enabled: false, reason: `${capitalised(source)}.` };
   return { enabled: true, reason: null };
 }
@@ -361,9 +368,9 @@ function capitalised(text: string): string {
   return text.length === 0 ? text : `${(text[0] ?? '').toUpperCase()}${text.slice(1)}`;
 }
 
-/** The button's words for a copy target: "Copy to slot A", "Copy to slot B", "Copy to recovery slot R". */
-export function copyLabel(to: SlotKey): string {
-  return `Copy to ${bankWordsOf(to)}`;
+/** The button's words for a copy target: "Copy to slot A", "Copy to slot B", "Copy to recovery R". */
+export function copyLabel(to: SlotKey, translate: Translate = t): string {
+  return translate('slots:table.copyTo', { bank: bankWords(to, translate) });
 }
 
 function contextOf(
@@ -381,6 +388,7 @@ function contextOf(
   };
 }
 
+/** The run log's count of the banks read (English, like every log line). */
 function summarise(report: SlotsReport): string {
   const read = report.slots.filter((view) => view.state !== null).length;
   return `${String(read)}/${String(report.slots.length)} banks read.`;
@@ -388,9 +396,17 @@ function summarise(report: SlotsReport): string {
 
 /* ---- the hook ---------------------------------------------------------- */
 
-/** A bank's name as the page shows it ("Slot A"). */
+/** A bank's name as the run log writes it ("Slot A"). */
 function pageBankName(report: SlotsReport, key: SlotKey): string {
   return report.slots.find((view) => view.entry.key === key)?.entry.name ?? bankNameOf(key);
+}
+
+/** The status line once the banks are read: how many of them were. */
+function readStatus(report: SlotsReport): string {
+  return t('slots:status.read', {
+    read: report.slots.filter((view) => view.state !== null).length,
+    count: report.slots.length,
+  });
 }
 
 /** A prepared write, held until it is confirmed or discarded. */
@@ -402,6 +418,11 @@ export interface PendingSlotFlash {
    * ("Slot A's image", "Slot B of <backup file>"), never a file name the person does not have.
    */
   readonly what: string;
+  /**
+   * The same words for the page, translated when called (a copy or a restore names a bank). `what` is the
+   * English the run log keeps; a picked file has no other words than its name, so this is left out.
+   */
+  readonly whatOnPage?: (() => string) | undefined;
   readonly plan: SlotFlashPlan;
   /** The report the plan was checked against. Only that report may send it. */
   readonly report: SlotsReport;
@@ -422,6 +443,8 @@ export interface SlotFlashOutcome {
   readonly key: SlotKey;
   /** What was written, in words (`PendingSlotFlash.what`). */
   readonly what: string;
+  /** `PendingSlotFlash.whatOnPage`. */
+  readonly whatOnPage?: (() => string) | undefined;
   readonly result: SlotWriteResult['written'];
   /** The bank held no image before this write, so no firmware was overwritten. */
   readonly targetEmpty?: boolean;
@@ -498,7 +521,7 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
   /* The camera's unlock flag is the device's, shared with every panel (TESTING.md 42.59); a session that sent the token
    * marks it through `device.markUnlocked`. Information only. */
   const unlockNote = device.unlocked;
-  const handle = useReporter('Idle.');
+  const handle = useReporter(t('shared:status.idle'));
   /* Destructured because the handle is a new object on every log line, and
    * the callbacks below must keep their identity. The `Reporter` and these
    * functions are stable. */
@@ -551,9 +574,7 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
     setFpsOutcome(null);
     setFpsEveryOutcome(null);
     setStatus(
-      device.device === null
-        ? 'Device disconnected — read the slots again.'
-        : 'New device selected — read the slots again.',
+      device.device === null ? t('slots:status.disconnected') : t('slots:status.newDevice'),
     );
   }, [device.generation, device.device, forgetReport, setStatus]);
 
@@ -574,7 +595,7 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
       what: 'write' | 'patch',
     ): Promise<void> => {
       /* Over core's own end-of-write status, which names the Info tab's read, not this one. */
-      workflow.progress(1, 1, 'Reading the banks again ...');
+      workflow.progress(1, 1, t('slots:status.readingAgain'));
       try {
         const version = written.state.version;
         const again = await backend.inspect(
@@ -601,7 +622,7 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
 
   const readSlots = useCallback(async (): Promise<void> => {
     const result = await runner.start(SLOTS_READ_PANEL_ID, async (signal) => {
-      reset('Reading ...');
+      reset(t('slots:status.reading'));
       forgetReport();
       setPlan(null);
       setRefusal(null);
@@ -632,7 +653,7 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
         if (!built.supportedBuild.supported) {
           /* Reported, never read: an unsupported build's banks are not tried. */
           log(`not read: ${built.supportedBuild.reason}`, 'warn');
-          setStatus('Not supported on this build — no bank was read.');
+          setStatus(t('slots:status.unsupported'));
           return;
         }
         const ctx: WorkflowContext = {
@@ -649,23 +670,19 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
           acting.firmwareVersion === null ? undefined : { version: acting.firmwareVersion };
         const next = await backend.inspect(ctx, identified);
         setCurrentReport(next);
-        workflow.progress(1, 1, `Read. ${summarise(next)}`);
+        workflow.progress(1, 1, readStatus(next));
       } catch (error) {
         const failure = asOptionsFailure(error);
         if (failure !== null) onOptionsFailure(failure);
         if (error instanceof CancelledError) {
           log('cancelled', 'warn');
-          setStatus('Cancelled.');
+          setStatus(t('shared:status.cancelled'));
         } else {
           const refused = refusalOf(error);
           if (refused !== null) setRefusal(refused);
           log(`ERROR: ${errorMessage(error)}`, 'error');
           logHint(log, error);
-          setStatus(
-            refused === null
-              ? 'Failed — see the log above.'
-              : 'Refused — nothing was armed. See the message below the log.',
-          );
+          setStatus(refused === null ? t('shared:status.failedSeeLog') : t('slots:status.refused'));
         }
       } finally {
         if (transport !== null) await transport.close();
@@ -693,9 +710,8 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
 
   const dump = useCallback(
     async (key: SlotKey): Promise<void> => {
-      const name = bankWordsOf(key);
       const result = await runner.start(SLOTS_DUMP_PANEL_ID, async (signal) => {
-        reset(`Dumping ${name} ...`);
+        reset(t('slots:status.dumping', { bank: bankWords(key) }));
         const current = reportRef.current;
         let transport: ReturnType<DeviceHandle['makeTransport']> | null = null;
         let usedClient: SeekDevice | null = null;
@@ -751,15 +767,15 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
             );
           }
           for (const note of dumped.notes) log(note, 'detail');
-          workflow.progress(1, 1, `Dumped ${name}.`);
+          workflow.progress(1, 1, t('slots:status.dumped', { bank: bankWords(key) }));
         } catch (error) {
           if (error instanceof CancelledError) {
             log('cancelled', 'warn');
-            setStatus('Cancelled.');
+            setStatus(t('shared:status.cancelled'));
           } else {
             log(`ERROR: ${errorMessage(error)}`, 'error');
             logHint(log, error);
-            setStatus('Failed — see the log above.');
+            setStatus(t('shared:status.failedSeeLog'));
           }
         } finally {
           if (transport !== null) await transport.close();
@@ -786,6 +802,7 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
       load: (current: SlotsReport) => Promise<{
         readonly plan: SlotFlashPlan;
         readonly what: string;
+        readonly whatOnPage?: (() => string) | undefined;
         readonly bytes: number;
         readonly source: string | null;
         readonly action: WriteAction;
@@ -796,7 +813,7 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
       const result = await runner.start(
         SLOTS_PREPARE_PANEL_ID,
         async () => {
-          reset('Reading image ...');
+          reset(t('slots:status.readingImage'));
           setCurrentPending(null);
           const current = reportRef.current;
           try {
@@ -824,6 +841,7 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
               key,
               kind,
               what: input.what,
+              whatOnPage: input.whatOnPage,
               plan: prepared,
               report: current,
               source: input.source,
@@ -836,11 +854,11 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
               'ok',
             );
             log('nothing sent to the camera yet', 'detail');
-            setStatus('Ready — review the plan, then write it.');
+            setStatus(t('slots:status.ready'));
           } catch (error) {
             log(`cannot use this file: ${errorMessage(error)}`, 'error');
             logHint(log, error);
-            setStatus('Rejected — see the log above.');
+            setStatus(t('slots:status.rejected'));
           } finally {
             flush();
           }
@@ -887,7 +905,8 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
           const copy = (backend.copy ?? planSlotCopy)(current, from, to);
           return Promise.resolve({
             plan: copy.plan,
-            what: `${pageBankName(current, from)}'s image`,
+            what: tEnglish('slots:what.copy', { bank: pageBankName(current, from) }),
+            whatOnPage: () => t('slots:what.copy', { bank: bankName(from) }),
             bytes: copy.plan.expectedPlain?.length ?? copy.plan.payload.length,
             source: copy.source,
             action: { kind: 'copy', from } as const,
@@ -916,7 +935,11 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
           log(fullFlashBackupText(restore.backup), 'detail');
           return {
             plan: restore.plan,
-            what: `${pageBankName(current, key)} of ${file.name}`,
+            what: tEnglish('slots:what.restore', {
+              bank: pageBankName(current, key),
+              file: file.name,
+            }),
+            whatOnPage: () => t('slots:what.restore', { bank: bankName(key), file: file.name }),
             bytes: restore.decryption.plain?.length ?? 0,
             source: restore.source,
             action: { kind: 'restore', fileName: file.name } as const,
@@ -950,7 +973,7 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
   const write = useCallback(
     async (acknowledged: boolean): Promise<void> => {
       const result = await runner.start(SLOTS_FLASH_PANEL_ID, async (signal) => {
-        reset('Writing ...');
+        reset(t('slots:status.writing'));
         setOutcome(null);
         const ready = pendingRef.current;
         const current = reportRef.current;
@@ -1022,6 +1045,7 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
           setOutcome({
             key: ready.key,
             what: ready.what,
+            whatOnPage: ready.whatOnPage,
             result: written,
             targetEmpty: ready.plan.targetEmpty === true,
             backup: done.backup,
@@ -1045,13 +1069,13 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
           }
           if (error instanceof CancelledError) {
             /* The log says what the status says, not the error's own word ("cancelled: cancelled", TESTING.md 42.96). */
-            const said = cancelledStatus(commit.sent ? [ready?.key ?? 'a'] : [], current);
-            log(said, 'warn');
-            setStatus(said);
+            const committed = commit.sent ? [ready?.key ?? 'a'] : [];
+            log(cancelledStatus(committed, current, tEnglish), 'warn');
+            setStatus(cancelledStatus(committed, current));
           } else {
             log(`ERROR: ${errorMessage(error)}`, 'error');
             logHint(log, error);
-            setStatus('Failed — see the log above.');
+            setStatus(t('shared:status.failedSeeLog'));
           }
         } finally {
           if (transport !== null) await transport.close();
@@ -1085,7 +1109,7 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
       if (report === null) {
         return {
           status: 'refused',
-          reason: 'read the slots first — the patch is planned from the bank’s own image',
+          reason: t('slots:fps.readFirst'),
         };
       }
       return (backend.fpsPlan ?? fpsPlanOfBank)(report, key);
@@ -1107,9 +1131,8 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
    */
   const patchFps = useCallback(
     async (key: SlotKey, acknowledged: boolean): Promise<void> => {
-      const name = bankWordsOf(key);
       const result = await runner.start(SLOTS_FPS_PANEL_ID, async (signal) => {
-        reset(`Patching ${name} ...`);
+        reset(t('slots:status.patching', { bank: bankWords(key) }));
         setFpsOutcome(null);
         setFpsEveryOutcome(null);
         const current = reportRef.current;
@@ -1168,13 +1191,13 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
           }
           if (error instanceof CancelledError) {
             /* The log says what the status says, not the error's own word ("cancelled: cancelled", TESTING.md 42.96). */
-            const said = cancelledStatus(commit.sent ? [key] : [], current);
-            log(said, 'warn');
-            setStatus(said);
+            const committed = commit.sent ? [key] : [];
+            log(cancelledStatus(committed, current, tEnglish), 'warn');
+            setStatus(cancelledStatus(committed, current));
           } else {
             log(`ERROR: ${errorMessage(error)}`, 'error');
             logHint(log, error);
-            setStatus('Failed — see the log above.');
+            setStatus(t('shared:status.failedSeeLog'));
           }
         } finally {
           if (transport !== null) await transport.close();
@@ -1209,7 +1232,7 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
   const patchEveryFps = useCallback(
     async (acknowledged: boolean): Promise<void> => {
       const result = await runner.start(SLOTS_FPS_PANEL_ID, async (signal) => {
-        reset('Patching every bank ...');
+        reset(t('slots:status.patchingEvery'));
         setFpsOutcome(null);
         setFpsEveryOutcome(null);
         const current = reportRef.current;
@@ -1283,13 +1306,12 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
           }
           if (error instanceof CancelledError) {
             /* The log says what the status says, not the error's own word ("cancelled: cancelled", TESTING.md 42.96). */
-            const said = cancelledStatus(committed, current);
-            log(said, 'warn');
-            setStatus(said);
+            log(cancelledStatus(committed, current, tEnglish), 'warn');
+            setStatus(cancelledStatus(committed, current));
           } else {
             log(`ERROR: ${errorMessage(error)}`, 'error');
             logHint(log, error);
-            setStatus('Failed — see the log above.');
+            setStatus(t('shared:status.failedSeeLog'));
           }
         } finally {
           if (transport !== null) await transport.close();
@@ -1318,7 +1340,7 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
 
   const cancel = useCallback((): void => {
     runner.cancel();
-    setStatus('Cancelling ...');
+    setStatus(t('shared:status.cancelling'));
   }, [runner, setStatus]);
 
   const discardPending = useCallback((): void => {

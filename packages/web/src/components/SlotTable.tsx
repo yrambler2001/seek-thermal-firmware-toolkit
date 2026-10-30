@@ -23,6 +23,8 @@ import {
   type SlotView,
   type SlotsReport,
 } from '@seek-fw/core';
+import { t } from '@/i18n';
+import { bankName, bankWords } from '@/lib/bank-names';
 import { FilePickerButton } from './FilePickerButton';
 import { Badge } from './ui/badge';
 import { Button } from './ui/button';
@@ -69,22 +71,11 @@ export interface SlotTableProps {
 
 /** What the frame-rate row action says when it is on: the rate change, and that the saved file is the way back. */
 function fpsNote(plan: Extract<FpsPlan, { status: 'offer' }>): string {
-  return (
-    `Raises this bank from ${String(plan.fromHz)} Hz to ${String(plan.toHz)} Hz by editing its bytes. ` +
-    'The bank is saved first, in a zip download, and the decrypted file in it is the way back.'
-  );
+  return t('slots:table.fpsNote', { fromHz: plan.fromHz, toHz: plan.toHz });
 }
 
-/** What the copy buttons do, in words, once. */
-const COPY_NOTE =
-  'Copies the firmware this bank holds, as this read decrypted it, into the bank you pick, whatever that ' +
-  'bank holds now. You review the plan before anything is sent.';
-
-/** What the restore button does, in words. */
-const RESTORE_NOTE =
-  'Pick a full flash backup: a .bin (a whole 4 MiB flash image, such as a J-Link read) or a .zip that ' +
-  'holds one (a Preserve run file, or the zip a Dump & decrypt 4.x/Nano or a Dump all selectors saves). ' +
-  'This bank is cut out of it, decrypted, and shown as a plan before anything is sent.';
+/* What the copy buttons do (table.copyNote) and what the restore button does (table.restoreNote) are
+ * said under them, translated at render. */
 
 /**
  * Why a bank offers no frame-rate patch, in the page's words, or null when there is nothing to say (a
@@ -98,21 +89,15 @@ const RESTORE_NOTE =
  */
 export function fpsOffNote(plan: FpsPlan, supported: boolean): string | null {
   if (!supported || plan.status === 'offer') return null;
-  if (plan.status === 'patched') {
-    return `Frame-rate patch applied: this image runs at ${String(plan.hz)} Hz.`;
-  }
+  if (plan.status === 'patched') return t('slots:fps.applied', { hz: plan.hz });
   if (plan.status === 'at-rate') {
     /* An earlier patch (before the USB no-skip branch) is not patched again: the way on is the stock
      * image first (TESTING.md 42.97). */
-    if (plan.earlierPatch === true) {
-      return (
-        `Frame-rate patch not offered: this bank holds an earlier ${String(plan.hz)} Hz patch without the ` +
-        `USB fix. Restore the stock image, then Make ${String(plan.hz)} FPS.`
-      );
-    }
-    return `No frame-rate patch needed: this build already runs at ${String(plan.hz)} Hz.`;
+    if (plan.earlierPatch === true) return t('slots:fps.earlierPatch', { hz: plan.hz });
+    return t('slots:fps.atRate', { hz: plan.hz });
   }
-  return `Frame-rate patch not offered: ${plan.reason}`;
+  /* i18n: core message (the plan's reason) */
+  return t('slots:fps.notOffered', { reason: plan.reason });
 }
 
 /** A bank's bootability cell. `unknownWhy` is core's reason a verdict is unknown on this camera (`unknownBootabilityWhy`). */
@@ -121,22 +106,22 @@ function bootability(view: SlotView, unknownWhy: string): ReactNode {
   if (state === null) return '—';
   /* An empty bank holds nothing the bootloader could take: "not bootable" would read as a
    * verdict on an image that is not there. */
-  if (view.content === 'empty') return <span>— nothing to boot</span>;
+  if (view.content === 'empty') return <span>{t('slots:table.boot.empty')}</span>;
   if (state.bootability === 'bootable') {
-    return <span className="text-ok">bootable — the bootloader can key it</span>;
+    return <span className="text-ok">{t('slots:table.boot.bootable')}</span>;
   }
   if (state.bootability === 'not-bootable') {
-    return <span className="text-destructive">not bootable — skipped at boot</span>;
+    return <span className="text-destructive">{t('slots:table.boot.notBootable')}</span>;
   }
   if (state.bootability === 'recovery-only') {
     return (
       <span className="text-warn">
-        recovery only — R runs when A and B hold nothing the bootloader takes (measured on a camera
-        for an earlier form of this image); whether this form starts is untested
+        {t('slots:table.boot.recoveryOnly', { letterA: 'A', letterB: 'B', letterR: 'R' })}
       </span>
     );
   }
-  return <span>unknown — {unknownWhy}</span>;
+  /* i18n: core message (unknownBootabilityWhy) */
+  return <span>{t('slots:table.boot.unknown', { why: unknownWhy })}</span>;
 }
 
 /**
@@ -144,15 +129,12 @@ function bootability(view: SlotView, unknownWhy: string): ReactNode {
  * locked lines the bank is the active-slot word's, which 42.56 measured as the bank that ran.
  */
 function riskNote(risk: WriteRisk): string | null {
+  /* i18n: core message (BOOTED_NOW) */
   const booted = BOOTED_NOW.charAt(0).toUpperCase() + BOOTED_NOW.slice(1);
-  if (risk.booted && risk.recovery) {
-    return `${booted}, and recovery: writing it asks for an extra confirmation.`;
-  }
-  if (risk.booted) return `${booted}: writing it asks for an extra confirmation.`;
-  if (risk.recovery) return 'Recovery R: writing it asks for an extra confirmation.';
-  if (risk.bootUnnamed) {
-    return 'The camera does not name its booted bank: writing it asks for an extra confirmation.';
-  }
+  if (risk.booted && risk.recovery) return t('slots:table.risk.bootedRecovery', { booted });
+  if (risk.booted) return t('slots:table.risk.booted', { booted });
+  if (risk.recovery) return t('slots:table.risk.recovery', { bank: bankName('r') });
+  if (risk.bootUnnamed) return t('slots:table.risk.bootUnnamed');
   return null;
 }
 
@@ -164,7 +146,13 @@ function copyReasons(
   if (off.length === 0) return null;
   const reasons = [...new Set(off.map((copy) => copy.gate.reason ?? ''))].filter((r) => r !== '');
   if (off.length === copies.length && reasons.length === 1) return reasons[0] ?? null;
-  return off.map((copy) => `${copyLabel(copy.to)}: ${copy.gate.reason ?? 'off'}`).join(' ');
+  return off
+    .map((copy) =>
+      copy.gate.reason === null
+        ? t('slots:table.copyOffNoReason', { button: copyLabel(copy.to) })
+        : t('slots:table.copyOff', { button: copyLabel(copy.to), reason: copy.gate.reason }),
+    )
+    .join(' ');
 }
 
 /** A control and, under it, the words for why it is off (or what it will ask). */
@@ -206,18 +194,17 @@ export function SlotTable({
   return (
     <Table>
       <TableCaption>
-        Each firmware bank on this camera — slot A, slot B and recovery R — as read and checked in
-        the browser
+        {t('slots:table.caption', { a: bankWords('a'), b: bankWords('b'), r: bankWords('r') })}
       </TableCaption>
       <TableHeader>
         <TableRow>
-          <TableHead>Bank</TableHead>
-          <TableHead>Firmware</TableHead>
-          <TableHead>Size</TableHead>
-          <TableHead>Key</TableHead>
-          <TableHead>Bootable</TableHead>
-          <TableHead>SHA-256 of plaintext</TableHead>
-          <TableHead>Actions</TableHead>
+          <TableHead>{t('slots:table.col.bank')}</TableHead>
+          <TableHead>{t('slots:table.col.firmware')}</TableHead>
+          <TableHead>{t('slots:table.col.size')}</TableHead>
+          <TableHead>{t('slots:table.col.key')}</TableHead>
+          <TableHead>{t('slots:table.col.bootable')}</TableHead>
+          <TableHead>{t('slots:table.col.sha')}</TableHead>
+          <TableHead>{t('slots:table.col.actions')}</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -257,17 +244,19 @@ export function SlotTable({
           return (
             <TableRow key={key}>
               <TableRowHeader className="whitespace-nowrap">
-                <span className="block">{entry.name}</span>
+                <span className="block">{bankName(key)}</span>
                 <span className="block font-mono text-[0.75rem] font-normal text-muted-foreground">
                   {hexUp(entry.address)}
                 </span>
                 <span className="mt-1 block">
+                  {/* i18n: core message (BOOTED_NOW, NOT_BOOTED) */}
                   {view.active ? (
                     <Badge tone="ok">{BOOTED_NOW}</Badge>
                   ) : (
                     <Badge tone="neutral">{NOT_BOOTED}</Badge>
                   )}
                 </span>
+                {/* i18n: core message (the bank's notes) */}
                 {entry.notes.map((text) => (
                   <span
                     key={text}
@@ -278,60 +267,68 @@ export function SlotTable({
                 ))}
               </TableRowHeader>
 
-              <TableCell label="Firmware">
+              <TableCell label={t('slots:table.col.firmware')}>
+                {/* i18n: core message (the unread reason, the empty bank's why and reason, the image's reason) */}
                 {state === null ? (
-                  <span className="text-warn">{`not read — ${view.unreadReason ?? 'the bank was not read'}`}</span>
+                  <span className="text-warn">
+                    {view.unreadReason === null
+                      ? t('slots:table.notReadNoReason')
+                      : t('slots:table.notRead', { reason: view.unreadReason })}
+                  </span>
                 ) : empty ? (
                   <>
-                    <Badge tone="neutral">empty</Badge>
+                    <Badge tone="neutral">{t('slots:table.empty')}</Badge>
                     <span className="mt-1 block text-[0.75rem] text-muted-foreground">
-                      No image: this bank&apos;s header window reads as all 0xFF, so nothing is
-                      decrypted from it and writing it overwrites no firmware.
+                      {t('slots:table.emptyNote')}
                     </span>
                     <span className="mt-1 block text-[0.72rem] leading-snug text-muted-foreground">
                       {entry.emptyBank.writable.supported
-                        ? `Can be written. ${entry.emptyBank.why}`
-                        : `Cannot be written on this build: ${entry.emptyBank.writable.reason}`}
+                        ? t('slots:table.emptyWritable', { why: entry.emptyBank.why })
+                        : t('slots:table.emptyNotWritable', {
+                            reason: entry.emptyBank.writable.reason,
+                          })}
                     </span>
                   </>
                 ) : state.present ? (
                   <>
-                    {version ?? 'unknown version'}
+                    {version ?? t('slots:table.unknownVersion')}
                     {state.header !== null && (
                       <span className="block text-[0.75rem] text-muted-foreground">
-                        {`image ${hexUp(state.header.imageId)}`}
+                        {t('slots:table.imageId', { id: hexUp(state.header.imageId) })}
                       </span>
                     )}
                   </>
                 ) : (
-                  <span className="text-muted-foreground">{state.reason ?? 'no image'}</span>
-                )}
-              </TableCell>
-
-              <TableCell label="Size">
-                {`${SLOT_BYTES.toLocaleString()} B bank`}
-                {state?.header != null && (
-                  <span className="block text-[0.75rem] text-muted-foreground">
-                    {`image ${state.header.length.toLocaleString()} B`}
+                  <span className="text-muted-foreground">
+                    {state.reason ?? t('slots:table.noImage')}
                   </span>
                 )}
               </TableCell>
 
-              <TableCell label="Key">
-                {state?.keyName ?? (state?.plain == null ? '—' : 'none (plaintext)')}
+              <TableCell label={t('slots:table.col.size')}>
+                {t('slots:table.bankSize', { size: SLOT_BYTES.toLocaleString() })}
+                {state?.header != null && (
+                  <span className="block text-[0.75rem] text-muted-foreground">
+                    {t('slots:table.imageSize', { size: state.header.length.toLocaleString() })}
+                  </span>
+                )}
               </TableCell>
 
-              <TableCell label="Bootable">
+              <TableCell label={t('slots:table.col.key')}>
+                {state?.keyName ?? (state?.plain == null ? '—' : t('slots:table.keyNone'))}
+              </TableCell>
+
+              <TableCell label={t('slots:table.col.bootable')}>
                 {bootability(view, unknownBootabilityWhy(report.state))}
               </TableCell>
 
-              <TableCell label="SHA-256 of plaintext">
+              <TableCell label={t('slots:table.col.sha')}>
                 <span className="font-mono text-[0.72rem] [overflow-wrap:anywhere]">
                   {state?.sha256 ?? '—'}
                 </span>
               </TableCell>
 
-              <TableCell label="Actions">
+              <TableCell label={t('slots:table.col.actions')}>
                 <div className="space-y-3">
                   <Action reason={dumpGate.reason} note={null}>
                     <Button
@@ -342,7 +339,7 @@ export function SlotTable({
                       }}
                     >
                       <Download />
-                      Dump
+                      {t('slots:table.dump')}
                     </Button>
                   </Action>
 
@@ -351,7 +348,7 @@ export function SlotTable({
                       id={`slot-${key}-plain-file`}
                       variant="danger"
                       icon={<FileUp />}
-                      label="Flash decrypted image…"
+                      label={t('slots:table.flashPlain')}
                       accept={IMAGE_ACCEPT}
                       disabled={!plainGate.enabled}
                       onPick={(file) => {
@@ -365,7 +362,7 @@ export function SlotTable({
                       id={`slot-${key}-raw-file`}
                       variant="danger"
                       icon={<FileUp />}
-                      label="Flash raw bytes…"
+                      label={t('slots:table.flashRaw')}
                       accept={IMAGE_ACCEPT}
                       disabled={!rawGate.enabled}
                       onPick={(file) => {
@@ -380,7 +377,7 @@ export function SlotTable({
                     </span>
                   )}
 
-                  <Action reason={copyReasons(copies)} note={COPY_NOTE}>
+                  <Action reason={copyReasons(copies)} note={t('slots:table.copyNote')}>
                     <div className="flex flex-wrap gap-2">
                       {copies.map((copy) => (
                         <Button
@@ -398,12 +395,12 @@ export function SlotTable({
                     </div>
                   </Action>
 
-                  <Action reason={plainGate.reason} note={RESTORE_NOTE}>
+                  <Action reason={plainGate.reason} note={t('slots:table.restoreNote')}>
                     <FilePickerButton
                       id={`slot-${key}-restore-file`}
                       variant="outline"
                       icon={<ArchiveRestore />}
-                      label="Restore from full flash backup (.bin or .zip)…"
+                      label={t('slots:table.restore')}
                       accept={FULL_FLASH_ACCEPT}
                       disabled={!plainGate.enabled}
                       onPick={(file) => {
@@ -422,7 +419,7 @@ export function SlotTable({
                         }}
                       >
                         <Gauge />
-                        {`Make ${String(fps.toHz)} FPS`}
+                        {t('slots:table.makeFps', { hz: fps.toHz })}
                       </Button>
                     </Action>
                   ) : (

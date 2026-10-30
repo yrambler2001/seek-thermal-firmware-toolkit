@@ -16,6 +16,7 @@ import {
   type SlotFlashPlan,
   type SlotInputKind,
 } from '@seek-fw/core';
+import { t } from '@/i18n';
 import { KeyValue, type KeyValueRow } from './KeyValue';
 import { Panel, PanelTitle } from './Panel';
 import { Prose } from './Prose';
@@ -38,11 +39,11 @@ const CHUNK = 64;
 
 /** What the Stored afterwards row says, by what the plan predicts and how it relates to the payload. */
 function storedText(plan: SlotFlashPlan): string {
-  if (plan.expectedStored === null) return 'not predicted — the read-back is the check';
-  const size = `${plan.expectedStored.length.toLocaleString()} B predicted`;
+  if (plan.expectedStored === null) return t('slots:preview.storedNotPredicted');
+  const size = plan.expectedStored.length.toLocaleString();
   return plan.storedForm === 'key-b-ciphertext'
-    ? `${size} — the image XOR Key B, not the payload itself`
-    : size;
+    ? t('slots:preview.storedKeyB', { size })
+    : t('slots:preview.storedPredicted', { size });
 }
 
 export interface SlotFlashPreviewProps {
@@ -80,73 +81,89 @@ export function SlotFlashPreview({
   /* Only this write's own notes join the warnings: the camera's notes are above the device panel and the
    * bank's own are on its row, both in this section already (TESTING.md 42.88). */
   const writeNotes = plan.notes.filter((note) => note.source === 'write');
-  const readFirst = [...plan.warnings, ...writeNotes.map((note) => `Note: ${note.text}`)];
+  /* i18n: core message (the plan's warnings and notes) */
+  const readFirst = [
+    ...plan.warnings,
+    ...writeNotes.map((note) => t('slots:preview.note', { note: note.text })),
+  ];
   const rows: readonly KeyValueRow[] = [
     /* A copy or a restore names its source instead of a file the person does not have (TESTING.md 42.96). */
-    source === null ? ['File', what] : ['Image taken from', source],
+    /* i18n: core message (the source) */
+    source === null ? [t('slots:preview.file'), what] : [t('slots:preview.source'), source],
     ...(targetEmpty
       ? [
           [
-            'Target',
-            `${slotName} is empty: it holds no image, so this write overwrites no firmware`,
+            t('slots:preview.target'),
+            t('slots:preview.targetEmpty', { bank: slotName }),
           ] satisfies KeyValueRow,
         ]
       : []),
     [
       /* What the file is; the Staging row says how it is sent (core's `stagingDetail`), so the two rows do
        * not say it twice (TESTING.md 42.87). */
-      'Read as',
+      t('slots:preview.readAs'),
       kind === 'plain'
         ? plan.staging === 'key-a-keystream'
-          ? 'a decrypted 1.3.0.8 FF image'
-          : 'a decrypted image'
-        : 'raw bytes',
+          ? t('slots:preview.readAs.ff', { version: '1.3.0.8' })
+          : t('slots:preview.readAs.plain')
+        : t('slots:preview.readAs.raw'),
     ],
-    ['Staging', stagingDetail(plan.staging)],
+    /* i18n: core message (stagingDetail) */
+    [t('slots:preview.staging'), stagingDetail(plan.staging)],
     ...(plan.derivedFrom
       ? ([
-          ['Key', derivedKeyLine(plan.derivedFrom, bankWordsOf(plan.derivedFrom.bank))],
+          /* i18n: core message (derivedKeyLine) */
+          [
+            t('slots:preview.key'),
+            derivedKeyLine(plan.derivedFrom, bankWordsOf(plan.derivedFrom.bank)),
+          ],
         ] as const satisfies readonly KeyValueRow[])
       : []),
     [
-      'Payload',
-      `${plan.payload.length.toLocaleString()} B in ${String(chunks)} chunk${
-        chunks === 1 ? '' : 's'
-      } of up to ${String(CHUNK)} B`,
+      t('slots:preview.payload'),
+      t('slots:preview.payloadValue', {
+        size: plan.payload.length.toLocaleString(),
+        count: chunks,
+        chunk: CHUNK,
+      }),
     ],
-    ['Transfer checksum', hexUp(plan.sum16, 4)],
-    ['Stored afterwards', storedText(plan)],
-    ['Saved first', backupText],
+    [t('slots:preview.checksum'), hexUp(plan.sum16, 4)],
+    [t('slots:preview.stored'), storedText(plan)],
+    /* i18n: core message (backupPlanText), then the page's download note */
+    [t('slots:preview.savedFirst'), backupText],
   ];
 
   return (
     <Panel>
-      <PanelTitle icon={<FileUp />}>{`Prepared for ${slotName} at ${hexUp(address)}`}</PanelTitle>
+      <PanelTitle icon={<FileUp />}>
+        {t('slots:preview.title', { bank: slotName, address: hexUp(address) })}
+      </PanelTitle>
       <KeyValue rows={rows} />
 
       {plan.compare.length > 0 && (
         <div className="mt-3">
           <Table>
-            <TableCaption>What changes in {slotName}</TableCaption>
+            <TableCaption>{t('slots:preview.compareCaption', { bank: slotName })}</TableCaption>
             <TableHeader>
               <TableRow>
-                <TableHead>Field</TableHead>
-                <TableHead>Now</TableHead>
-                <TableHead>After the write</TableHead>
+                <TableHead>{t('slots:preview.col.field')}</TableHead>
+                <TableHead>{t('slots:preview.col.now')}</TableHead>
+                <TableHead>{t('slots:preview.col.after')}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
+              {/* i18n: core message (the compare rows' field names) */}
               {plan.compare.map((row) => (
                 <TableRow key={row.field}>
                   <TableRowHeader>{row.field}</TableRowHeader>
                   <TableCell
-                    label="Now"
+                    label={t('slots:preview.col.now')}
                     className="font-mono text-[0.8rem] [overflow-wrap:anywhere]"
                   >
                     {row.before}
                   </TableCell>
                   <TableCell
-                    label="After the write"
+                    label={t('slots:preview.col.after')}
                     className="font-mono text-[0.8rem] [overflow-wrap:anywhere]"
                   >
                     {row.after}
@@ -161,7 +178,7 @@ export function SlotFlashPreview({
       {readFirst.length > 0 && (
         <Alert tone="warn" className="mt-3">
           <p>
-            <strong>Read before writing:</strong>
+            <strong>{t('slots:preview.readFirst')}</strong>
           </p>
           <ul>
             {readFirst.map((line) => (
@@ -172,13 +189,10 @@ export function SlotFlashPreview({
       )}
 
       <Prose className="mt-3">
-        <p>
-          Nothing has been sent to the camera yet. Writing streams this payload to {slotName} and
-          commits it.
-        </p>
+        <p>{t('slots:preview.nothingSent', { bank: slotName })}</p>
       </Prose>
 
-      <Toolbar label={`Write actions for ${slotName}`} className="mt-3">
+      <Toolbar label={t('slots:preview.toolbar', { bank: slotName })} className="mt-3">
         <Button
           variant="destructive"
           disabled={busy}
@@ -188,10 +202,10 @@ export function SlotFlashPreview({
           }}
         >
           <Flame />
-          {`Write to ${slotName}…`}
+          {t('slots:preview.write', { bank: slotName })}
         </Button>
         <Button variant="ghost" onClick={onDiscard}>
-          Discard
+          {t('slots:preview.discard')}
         </Button>
       </Toolbar>
     </Panel>

@@ -10,6 +10,7 @@
 import { useRef, useState, type ReactElement } from 'react';
 import { Gauge } from 'lucide-react';
 import { bootsNowOf, type FpsBootWarning, type FpsPlan } from '@seek-fw/core';
+import { useT } from '@/i18n';
 import { Checkbox } from './ui/field';
 import {
   AlertDialog,
@@ -21,7 +22,7 @@ import {
   AlertDialogTitle,
 } from './ui/alert-dialog';
 import { needsRiskAck, type WriteRisk } from '@/hooks/useSlotsPanel';
-import { BACKUP_DOWNLOAD_NOTE } from '@/lib/backup-save';
+import { backupDownloadNote } from '@/lib/backup-save';
 
 export type FpsOffer = Extract<FpsPlan, { status: 'offer' }>;
 
@@ -55,6 +56,7 @@ export function SlotFpsConfirm({
   onConfirm,
   onCancel,
 }: SlotFpsConfirmProps): ReactElement {
+  const { t } = useT();
   const [acknowledged, setAcknowledged] = useState(false);
   /* Radix closes the dialog itself once the action fires; without this the close would also count as a cancel. */
   const confirmed = useRef(false);
@@ -85,22 +87,26 @@ export function SlotFpsConfirm({
           >
             <Gauge className="size-4" />
           </span>
-          <AlertDialogTitle>{`Make ${slotName} run at ${String(toHz)} FPS?`}</AlertDialogTitle>
+          <AlertDialogTitle>
+            {t('slots:fpsConfirm.title', { bank: slotName, hz: toHz })}
+          </AlertDialogTitle>
         </div>
 
         {risk.booted && (
           <p className="rounded-md border border-destructive/40 bg-destructive/8 px-3 py-2 text-[0.85rem] font-medium text-destructive">
-            {`${bootsNowOf(slotName)}. The patched image replaces the firmware it runs now.`}
+            {/* i18n: core message (bootsNowOf) */}
+            {t('slots:fpsConfirm.booted', { bootsNow: bootsNowOf(slotName) })}
           </p>
         )}
         {risk.recovery && (
           <p className="rounded-md border border-destructive/40 bg-destructive/8 px-3 py-2 text-[0.85rem] font-medium text-destructive">
-            {`${slotName} is the recovery bank, the last-resort copy the bootloader falls back to.`}
+            {t('slots:fpsConfirm.recovery', { bank: slotName })}
           </p>
         )}
 
         {bootWarning !== null && (
           <div className="space-y-1.5 rounded-md border border-warn/40 bg-warn/8 px-3 py-2 text-[0.85rem] text-foreground">
+            {/* i18n: core message (fpsBootWarningOf) */}
             {bootWarning.paragraphs.map((paragraph) => (
               <p key={paragraph} className="m-0">
                 {paragraph}
@@ -111,19 +117,20 @@ export function SlotFpsConfirm({
 
         <AlertDialogDescription id="slot-fps-confirm-what" className="space-y-2">
           <span className="block">
-            {`${slotName} holds firmware ${version ?? '(unknown)'}, and this makes its image run at ${String(toHz)} Hz instead of ${String(fromHz)} Hz.`}
+            {t('slots:fpsConfirm.what', {
+              bank: slotName,
+              version: version ?? t('slots:fpsConfirm.unknownVersion'),
+              toHz,
+              fromHz,
+            })}
           </span>
-          <span className="block">
-            {`The patch changes ${String(sites)} byte(s) of the image and the acceptance-sum word, so the sum the bootloader checks is kept. The key pair is not touched.`}
-          </span>
-          <span className="block">{`${backupText} ${BACKUP_DOWNLOAD_NOTE}`}</span>
+          <span className="block">{t('slots:fpsConfirm.bytes', { count: sites })}</span>
+          {/* i18n: core message (backupPlanText), then the page's download note */}
+          <span className="block">{`${backupText} ${backupDownloadNote()}`}</span>
           <span className="block font-medium">
-            {`The decrypted file in that zip is the way back: to undo the patch, write it with "Flash decrypted image" on ${slotName}.`}
+            {t('slots:fpsConfirm.wayBack', { bank: slotName })}
           </span>
-          <span className="block">
-            No reset is sent. Unplug and replug the camera afterwards for the patched bank to take
-            effect.
-          </span>
+          <span className="block">{t('slots:fpsConfirm.noReset')}</span>
         </AlertDialogDescription>
 
         {needsAck && (
@@ -140,16 +147,16 @@ export function SlotFpsConfirm({
             />
             <span>
               {risk.booted
-                ? 'I understand this is the bank the camera boots now, and that a bad image can leave the camera unbootable.'
+                ? t('slots:ack.booted')
                 : risk.recovery
-                  ? 'I understand this is the recovery bank, and that a bad image leaves the camera without a last-resort copy.'
-                  : 'I understand the camera does not say which bank it boots, so this one is treated as the booted one.'}
+                  ? t('slots:ack.recovery')
+                  : t('slots:fpsConfirm.ackUnnamed')}
             </span>
           </label>
         )}
 
         <AlertDialogFooter>
-          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogCancel>{t('common:cancel')}</AlertDialogCancel>
           <AlertDialogAction
             disabled={!confirmable}
             onClick={() => {
@@ -159,7 +166,7 @@ export function SlotFpsConfirm({
               onConfirm(sent);
             }}
           >
-            {`Yes — patch ${slotName}`}
+            {t('slots:fpsConfirm.confirm', { bank: slotName })}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

@@ -11,6 +11,8 @@
 import { useRef, useState, type ReactElement } from 'react';
 import { Gauge } from 'lucide-react';
 import type { FpsEveryBankPlan, SlotKey } from '@seek-fw/core';
+import { listAnd, listThen, t } from '@/i18n';
+import { bankName } from '@/lib/bank-names';
 import { Checkbox } from './ui/field';
 import {
   AlertDialog,
@@ -23,7 +25,7 @@ import {
 } from './ui/alert-dialog';
 import { fpsOffNote } from './SlotTable';
 import { needsRiskAck, type WriteRisk } from '@/hooks/useSlotsPanel';
-import { BACKUP_DOWNLOAD_NOTE } from '@/lib/backup-save';
+import { backupDownloadNote } from '@/lib/backup-save';
 
 export interface SlotFpsEveryConfirmProps {
   readonly open: boolean;
@@ -47,14 +49,14 @@ function commonRate(plan: FpsEveryBankPlan | null): number | null {
   return rates.size === 1 ? ([...rates][0] ?? null) : null;
 }
 
-/** What a bank is, beside its name, when writing it asks for the tick. */
-function roleOf(risk: WriteRisk): string {
-  if (risk.booted && risk.recovery)
-    return ' (the bank this camera boots now, and the recovery bank)';
-  if (risk.booted) return ' (the bank this camera boots now)';
-  if (risk.recovery) return ' (the recovery bank, the last-resort copy)';
-  if (risk.bootUnnamed) return ' (the camera does not say which bank it boots)';
-  return '';
+/** A bank's name and, when writing it asks for the tick, what it is. */
+function namedWithRole(key: SlotKey, risk: WriteRisk): string {
+  const bank = bankName(key);
+  if (risk.booted && risk.recovery) return t('slots:fpsEvery.role.bootedRecovery', { bank });
+  if (risk.booted) return t('slots:fpsEvery.role.booted', { bank });
+  if (risk.recovery) return t('slots:fpsEvery.role.recovery', { bank });
+  if (risk.bootUnnamed) return t('slots:fpsEvery.role.bootUnnamed', { bank });
+  return bank;
 }
 
 export function SlotFpsEveryConfirm({
@@ -75,11 +77,11 @@ export function SlotFpsEveryConfirm({
   const needsAck = asking.length > 0;
   const confirmable = offers.length > 0 && (!needsAck || acknowledged);
   const rate = commonRate(plan);
-  const count = `${String(offers.length)} bank${offers.length === 1 ? '' : 's'}`;
-  const order = offers.map((offer) => offer.name).join(', then ');
+  const count = offers.length;
+  const order = listThen(offers.map((offer) => bankName(offer.key)));
   const others = (plan?.others ?? []).flatMap((other) => {
     const note = fpsOffNote(other.plan, true);
-    return note === null ? [] : [`${other.name}: ${note}`];
+    return note === null ? [] : [t('slots:fpsEvery.other', { bank: bankName(other.key), note })];
   });
 
   return (
@@ -105,37 +107,44 @@ export function SlotFpsEveryConfirm({
           </span>
           <AlertDialogTitle>
             {rate === null
-              ? `Patch the frame rate of ${count}?`
-              : `Make every bank run at ${String(rate)} FPS?`}
+              ? t('slots:fpsEvery.titleMixed', { count })
+              : t('slots:fpsEvery.title', { hz: rate })}
           </AlertDialogTitle>
         </div>
 
         <AlertDialogDescription id="slot-fps-every-what" className="space-y-2">
           <span className="block">
-            {`This patches ${count} that offer it, of firmware ${version ?? '(unknown)'}:`}
+            {t('slots:fpsEvery.intro', {
+              count,
+              version: version ?? t('slots:fpsConfirm.unknownVersion'),
+            })}
           </span>
           {offers.map((offer) => (
             <span key={offer.key} className="block pl-3">
-              {`${offer.name}${roleOf(riskOf(offer.key))}: ${String(offer.plan.fromHz)} Hz to ${String(offer.plan.toHz)} Hz, ${String(offer.plan.sites.length)} byte(s) and the acceptance-sum word.`}
+              {t('slots:fpsEvery.offer', {
+                bank: namedWithRole(offer.key, riskOf(offer.key)),
+                fromHz: offer.plan.fromHz,
+                toHz: offer.plan.toHz,
+                count: offer.plan.sites.length,
+              })}
             </span>
           ))}
           {others.length > 0 && (
-            <span className="block">{`Left as they are: ${others.join(' ')}`}</span>
+            <span className="block">
+              {t('slots:fpsEvery.others', { others: others.join(' ') })}
+            </span>
           )}
           <span className="block">
             {offers.length === 1
-              ? `It writes ${order} alone, and reads it back.`
-              : `They are written in this order: ${order}.${bootedLast ? ' The bank the camera boots now goes last, so a failure stops before it.' : ''} Each is read back before the next, and the first failure stops the rest.`}
+              ? t('slots:fpsEvery.orderOne', { bank: order })
+              : bootedLast
+                ? t('slots:fpsEvery.orderBootedLast', { order })
+                : t('slots:fpsEvery.order', { order })}
           </span>
-          <span className="block">{`${backupText} ${BACKUP_DOWNLOAD_NOTE}`}</span>
-          <span className="block font-medium">
-            The decrypted files in that zip are the way back: to undo the patch of a bank, write its
-            file with &quot;Flash decrypted image&quot; on that bank.
-          </span>
-          <span className="block">
-            No reset is sent. Unplug and replug the camera afterwards for the patched banks to take
-            effect.
-          </span>
+          {/* i18n: core message (backupPlanText), then the page's download note */}
+          <span className="block">{`${backupText} ${backupDownloadNote()}`}</span>
+          <span className="block font-medium">{t('slots:fpsEvery.wayBack')}</span>
+          <span className="block">{t('slots:fpsEvery.noReset')}</span>
         </AlertDialogDescription>
 
         {needsAck && (
@@ -151,13 +160,15 @@ export function SlotFpsEveryConfirm({
               }}
             />
             <span>
-              {`I understand this writes ${asking.map((offer) => `${offer.name}${roleOf(riskOf(offer.key))}`).join(' and ')}, and that a bad image can leave the camera unbootable.`}
+              {t('slots:fpsEvery.ack', {
+                banks: listAnd(asking.map((offer) => namedWithRole(offer.key, riskOf(offer.key)))),
+              })}
             </span>
           </label>
         )}
 
         <AlertDialogFooter>
-          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogCancel>{t('common:cancel')}</AlertDialogCancel>
           <AlertDialogAction
             disabled={!confirmable}
             onClick={() => {
@@ -167,7 +178,7 @@ export function SlotFpsEveryConfirm({
               onConfirm(sent);
             }}
           >
-            {`Yes — patch ${count}`}
+            {t('slots:fpsEvery.confirm', { count })}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

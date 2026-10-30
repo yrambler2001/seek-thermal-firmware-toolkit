@@ -47,7 +47,9 @@ import {
   type SlotFlashOutcome,
   type SlotsPanelApi,
 } from '@/hooks/useSlotsPanel';
-import { BACKUP_DOWNLOAD_NOTE } from '@/lib/backup-save';
+import { listComma, listThen, t, useT, type Translate } from '@/i18n';
+import { backupDownloadNote } from '@/lib/backup-save';
+import { bankName, bankWords } from '@/lib/bank-names';
 import type { Refusal } from '@/lib/identify';
 
 export interface SlotsViewProps {
@@ -60,13 +62,14 @@ function viewOf(report: SlotsReport, key: SlotKey) {
   return report.slots.find((view) => view.entry.key === key) ?? null;
 }
 
-function verdict(verified: boolean | null): string {
-  if (verified === true) return 'the bank reads back as written.';
-  if (verified === false) return 'the read-back does NOT match what was written.';
+/** The result panel's first line: the bank, what was written, and the read-back's verdict. */
+function outcomeTitle(bank: string, what: string, verified: boolean | null): string {
+  if (verified === true) return t('slots:outcome.verified', { bank, what });
+  if (verified === false) return t('slots:outcome.mismatch', { bank, what });
   /* The page always asks for the read-back. Null means core took it but had no
    * expected image to compare it with (a bank the device re-encrypts), which is
    * not the same as verification being switched off. Its notes say why. */
-  return 'the read-back was taken but not compared, so this write is not verified here.';
+  return t('slots:outcome.notCompared', { bank, what });
 }
 
 /**
@@ -74,66 +77,83 @@ function verdict(verified: boolean | null): string {
  * read-back is the check that only the planned bytes changed. It says what was NOT proven: the rate.
  */
 /** The zip a write saved first, in the result panel: its name, and where to look for it. */
-export function backupLine(backup: WriteBackup): string {
-  return (
-    `Saved first, as a download: ${backup.fileName}. ` +
-    (backup.banks.length > 1
-      ? 'The decrypted files in it are the way back ("Flash decrypted image" on each bank). '
-      : 'The decrypted file in it is the way back ("Flash decrypted image" on the same bank). ') +
-    'Check your downloads folder for it.'
-  );
+export function backupLine(backup: WriteBackup, translate: Translate = t): string {
+  return [
+    translate('slots:outcome.savedFirst', { file: backup.fileName }),
+    backup.banks.length > 1
+      ? translate('slots:outcome.wayBackMany')
+      : translate('slots:outcome.wayBackOne'),
+    translate('slots:outcome.checkDownloads'),
+  ].join(' ');
+}
+
+/** "The read-back differs … only at the N planned byte(s) …", or why it does not, for one patched bank. */
+function readBackLine(result: FpsPatchResult, every: boolean): string {
+  const { readBack } = result;
+  if (!readBack.checked) {
+    return every ? t('slots:fpsEveryOutcome.notTaken') : t('slots:fpsOutcome.notTaken');
+  }
+  if (readBack.ok === true) {
+    return every
+      ? t('slots:fpsEveryOutcome.readBackOk', { count: result.changed.length })
+      : t('slots:fpsOutcome.readBackOk', { count: result.changed.length });
+  }
+  return t('slots:fpsOutcome.readBackBad', {
+    unexpected: readBack.unexpected.length,
+    count: readBack.missing.length,
+  });
+}
+
+/** "Slot A — patched from 9 Hz to 30 Hz (firmware 1.0.3.0)." */
+function patchedLine(result: FpsPatchResult): string {
+  return t('slots:fpsOutcome.title', {
+    bank: bankName(result.key),
+    fromHz: result.fromHz,
+    toHz: result.toHz,
+    version: result.patch.version,
+  });
 }
 
 function FpsOutcomePanel({ result }: { readonly result: FpsPatchResult }): ReactElement {
-  const { key, fromHz, toHz, backup, readBack } = result;
+  const { rich } = useT();
+  const { backup, readBack } = result;
   const tone = readBack.ok === true && result.written.verified !== false ? 'ok' : 'err';
   return (
     <Alert tone={tone} className="mt-3">
       <p>
-        <strong>
-          {`${bankNameOf(key)} — patched from ${String(fromHz)} Hz to ${String(toHz)} Hz (firmware ${result.patch.version}).`}
-        </strong>
+        <strong>{patchedLine(result)}</strong>
       </p>
-      <p>
-        {readBack.checked
-          ? readBack.ok === true
-            ? `The read-back differs from the saved dump only at the ${String(result.changed.length)} planned byte(s), the sites and the sum word.`
-            : `The read-back does NOT differ only as planned: ${String(readBack.unexpected.length)} unexpected and ${String(readBack.missing.length)} missing byte(s).`
-          : 'The read-back was not taken, so the patch is not checked here.'}
-      </p>
+      <p>{readBackLine(result, false)}</p>
       <p>{backupLine(backup)}</p>
-      <p>
-        <strong>NOW UNPLUG AND REPLUG THE CAMERA.</strong> No reset was sent. Then read the slots
-        again.
-      </p>
+      <p>{rich('slots:outcome.replugShort')}</p>
     </Alert>
   );
 }
 
 function OutcomePanel({ outcome }: { readonly outcome: SlotFlashOutcome }): ReactElement {
-  const { key, what, result } = outcome;
+  const { rich } = useT();
+  const { key, result } = outcome;
+  const what = outcome.whatOnPage?.() ?? outcome.what;
   const tone = result.verified === true ? 'ok' : result.verified === false ? 'err' : 'warn';
   return (
     <Alert tone={tone} className="mt-3">
       <p>
-        <strong>{`${bankNameOf(key)} — ${what}: ${verdict(result.verified)}`}</strong>
+        <strong>{outcomeTitle(bankName(key), what, result.verified)}</strong>
       </p>
-      <p>{`The camera's commit returned status ${hexUp(result.commitStatus, 4)}.`}</p>
+      <p>{t('slots:outcome.commitStatus', { status: hexUp(result.commitStatus, 4) })}</p>
       {outcome.targetEmpty === true && (
-        <p>{`${bankNameOf(key)} was empty before this write, so no firmware was overwritten.`}</p>
+        <p>{t('slots:outcome.wasEmpty', { bank: bankName(key) })}</p>
       )}
+      {/* i18n: core message (restoreReadBackText) */}
       {outcome.restore !== null && <p>{restoreReadBackText(outcome.restore, bankNameOf(key))}</p>}
       <p>{backupLine(outcome.backup)}</p>
       <p>
-        Proven so far: the payload was streamed and committed
-        {result.verified === true ? ', and the bank reads back as written' : ''}. NOT proven: that
-        the bootloader will select this bank, or that the image runs.
+        {result.verified === true
+          ? t('slots:outcome.provenVerified')
+          : t('slots:outcome.provenCommitted')}
       </p>
-      <p>
-        <strong>NOW UNPLUG AND REPLUG THE CAMERA.</strong> No reset was sent, so the bank only takes
-        effect after a real power cycle. Then read the slots again: the version and the active bank
-        the camera reports are the only thing that settles it.
-      </p>
+      <p>{rich('slots:outcome.replug')}</p>
+      {/* i18n: core message (the write's notes) */}
       {result.notes.length > 0 && (
         <ul>
           {result.notes.map((note) => (
@@ -147,6 +167,7 @@ function OutcomePanel({ outcome }: { readonly outcome: SlotFlashOutcome }): Reac
 
 /** What "Make N FPS in every bank" did: each bank's result in the order written, and where it stopped. */
 function FpsEveryOutcomePanel({ result }: { readonly result: FpsEveryBankResult }): ReactElement {
+  const { rich } = useT();
   const ok =
     result.stopped === null &&
     result.results.every((one) => one.readBack.ok === true && one.written.verified !== false);
@@ -154,30 +175,31 @@ function FpsEveryOutcomePanel({ result }: { readonly result: FpsEveryBankResult 
     <Alert tone={ok ? 'ok' : 'err'} className="mt-3">
       <p>
         <strong>
-          {`Every bank: ${String(result.results.length)} of ${String(result.order.length)} patched, in this order: ${result.order.map(bankWordsOf).join(', ')}.`}
+          {t('slots:fpsEveryOutcome.title', {
+            done: result.results.length,
+            count: result.order.length,
+            order: listComma(result.order.map((key) => bankWords(key))),
+          })}
         </strong>
       </p>
       <ul>
         {result.results.map((one) => (
-          <li key={one.key}>
-            {`${bankNameOf(one.key)} — patched from ${String(one.fromHz)} Hz to ${String(one.toHz)} Hz (firmware ${one.patch.version}). ` +
-              (one.readBack.checked
-                ? one.readBack.ok === true
-                  ? `The read-back differs from the saved bank only at the ${String(one.changed.length)} planned byte(s).`
-                  : `The read-back does NOT differ only as planned: ${String(one.readBack.unexpected.length)} unexpected and ${String(one.readBack.missing.length)} missing byte(s).`
-                : 'The read-back was not taken.')}
-          </li>
+          <li key={one.key}>{`${patchedLine(one)} ${readBackLine(one, true)}`}</li>
         ))}
       </ul>
-      {result.stopped !== null && <p>{`Stopped: ${result.stopped.reason}.`}</p>}
+      {/* i18n: core message (the reason it stopped) */}
+      {result.stopped !== null && (
+        <p>{t('slots:fpsEveryOutcome.stopped', { reason: result.stopped.reason })}</p>
+      )}
       {result.unwritten.length > 0 && (
-        <p>{`Not written: ${result.unwritten.map(bankWordsOf).join(', ')}.`}</p>
+        <p>
+          {t('slots:fpsEveryOutcome.notWritten', {
+            banks: listComma(result.unwritten.map((key) => bankWords(key))),
+          })}
+        </p>
       )}
       <p>{backupLine(result.backup)}</p>
-      <p>
-        <strong>NOW UNPLUG AND REPLUG THE CAMERA.</strong> No reset was sent. Then read the slots
-        again.
-      </p>
+      <p>{rich('slots:outcome.replugShort')}</p>
     </Alert>
   );
 }
@@ -195,15 +217,11 @@ function RefusalAlert({ refusal }: { readonly refusal: Refusal }): ReactElement 
     return (
       <Alert tone="err">
         <p>
-          <strong>Not identified: this page cannot tell which build the camera runs.</strong>
+          <strong>{t('slots:refusal.notIdentified.title')}</strong>
         </p>
-        <p>
-          The camera gave no usable firmware version, so no bank was read and nothing was armed.
-          This page covers builds 0.8.0.0 and newer. Builds before 0.8.0.0 are outside what the
-          slots page supports, so a camera on one of them is never read here.
-        </p>
+        <p>{t('slots:refusal.notIdentified.body', { minVersion: '0.8.0.0' })}</p>
         {refusal.hint !== null && (
-          <p>If the camera runs a supported build, it may only be starting up. {refusal.hint}</p>
+          <p>{t('slots:refusal.notIdentified.hint', { hint: refusal.hint })}</p>
         )}
       </Alert>
     );
@@ -211,8 +229,9 @@ function RefusalAlert({ refusal }: { readonly refusal: Refusal }): ReactElement 
   return (
     <Alert tone="err">
       <p>
-        <strong>Refused — nothing was armed.</strong>
+        <strong>{t('slots:refusal.title')}</strong>
       </p>
+      {/* i18n: core message (the refusal) */}
       <p>{refusal.message}</p>
       {refusal.hint !== null && <p>{refusal.hint}</p>}
     </Alert>
@@ -239,34 +258,34 @@ function EveryBankAction({
   const rates = new Set(plan.offers.map((offer) => offer.plan.toHz));
   const label =
     rates.size === 1
-      ? `Make ${String([...rates][0] ?? 0)} FPS in every bank`
-      : 'Make every bank faster';
+      ? t('slots:everyBank.make', { hz: [...rates][0] ?? 0 })
+      : t('slots:everyBank.faster');
   const gates = plan.offers.map((offer) => {
     const view = viewOf(report, offer.key);
     return view === null
-      ? { enabled: false, reason: 'This build has no such bank.' }
+      ? { enabled: false, reason: t('slots:gate.noSuchBank') }
       : slotActionGate({ entry: view.entry, view, action: 'flash-plain', connected, busy });
   });
   const off = gates.find((gate) => !gate.enabled) ?? null;
+  const order = listThen(plan.offers.map((offer) => bankName(offer.key)));
   return (
-    <Toolbar label="Every bank" className="mt-3">
+    <Toolbar label={t('slots:everyBank.toolbar')} className="mt-3">
       <Button variant="outline" disabled={off !== null} onClick={onOpen}>
         <Gauge />
         {label}
       </Button>
       <span className="text-[0.8rem] leading-snug text-muted-foreground">
         {off?.reason ??
-          `Patches ${plan.offers.map((offer) => offer.name).join(', then ')} in one confirmation` +
-            (everyBankBootedLast(report, plan.order)
-              ? ', the bank the camera boots now last'
-              : '') +
-            '; each is saved first, in one zip download, and read back.'}
+          (everyBankBootedLast(report, plan.order)
+            ? t('slots:everyBank.noteBootedLast', { order })
+            : t('slots:everyBank.note', { order }))}
       </span>
     </Toolbar>
   );
 }
 
 export function SlotsView({ slots, connected, busy }: SlotsViewProps): ReactElement {
+  const { rich } = useT();
   const [confirming, setConfirming] = useState(false);
   /* The bank whose frame-rate patch the person is confirming, or null when no dialog is open. */
   const [fpsKey, setFpsKey] = useState<SlotKey | null>(null);
@@ -295,26 +314,25 @@ export function SlotsView({ slots, connected, busy }: SlotsViewProps): ReactElem
       <Section
         id="slots"
         step="2"
-        title="Work with firmware slots"
+        title={t('slots:section.title')}
         icon={<Layers />}
         aside={
           <Badge tone="err">
             <ShieldAlert />
-            Writes to flash
+            {t('slots:section.badge')}
           </Badge>
         }
-        description="Read slots asks the camera what it runs and reads its three firmware banks — slot A, slot B and recovery R — and shows what each holds. Reading and dumping change nothing. A flash button asks before any byte is sent."
+        description={t('slots:section.description', {
+          a: bankWords('a'),
+          b: bankWords('b'),
+          r: bankWords('r'),
+        })}
       >
         <Alert tone="err">
-          <p>
-            <strong>This page can write to the camera&apos;s flash.</strong> A write erases one 64
-            KiB bank and programs it. An image that is structurally valid but does not run leaves
-            the camera unbootable, and the bootloader has no USB — only SWD/J-Link or an SPI
-            programmer can recover it. Dump the bank first and keep the file.
-          </p>
+          <p>{rich('slots:section.danger')}</p>
         </Alert>
 
-        <Toolbar label="Slot actions">
+        <Toolbar label={t('slots:actions.toolbar')}>
           <Button
             variant="default"
             disabled={!connected || busy}
@@ -323,17 +341,17 @@ export function SlotsView({ slots, connected, busy }: SlotsViewProps): ReactElem
             }}
           >
             <ScanSearch />
-            Read slots
+            {t('slots:actions.read')}
           </Button>
           <Button variant="ghost" disabled={!reading && !writing} onClick={slots.cancel}>
             <CircleStop />
-            Cancel
+            {t('common:cancel')}
           </Button>
         </Toolbar>
 
         <RunPanel
           id="slotsrun"
-          label="Slots"
+          label={t('slots:run.label')}
           tone={writing ? 'danger' : 'default'}
           progress={slots.reporter.progress}
           lines={slots.reporter.lines}
@@ -345,14 +363,14 @@ export function SlotsView({ slots, connected, busy }: SlotsViewProps): ReactElem
         {unsupported !== null && (
           <Alert tone="err">
             <p>
-              <strong>
-                This build is not supported here, so no bank was read and none can be written.
-              </strong>
+              <strong>{t('slots:unsupported.title')}</strong>
             </p>
+            {/* i18n: core message (the build's support reason) */}
             <p>{unsupported}</p>
           </Alert>
         )}
 
+        {/* i18n: core message (the plan's notes) */}
         {plan !== null && plan.notes.length > 0 && (
           <Prose>
             <ul>
@@ -367,6 +385,7 @@ export function SlotsView({ slots, connected, busy }: SlotsViewProps): ReactElem
           <>
             <DeviceInfoPanel state={report.state} />
             <SlotWriteKeys verdict={writeKeysVerdictOf(report)} />
+            {/* i18n: core message (fpsBootWarningOf) */}
             {bootWarning !== null && (
               <Alert tone="warn">
                 {bootWarning.paragraphs.map((paragraph) => (
@@ -416,25 +435,22 @@ export function SlotsView({ slots, connected, busy }: SlotsViewProps): ReactElem
 
         {report === null && unsupported === null && refusal === null && (
           <Prose>
-            <p>
-              {connected
-                ? 'Press Read slots. The camera is asked which build it runs first, and nothing is armed on a build this page does not support.'
-                : 'Connect the camera, then press Read slots.'}
-            </p>
+            <p>{connected ? t('slots:empty.connected') : t('slots:empty.disconnected')}</p>
           </Prose>
         )}
 
         {pending !== null && pendingView !== null && (
           <SlotFlashPreview
-            slotName={pendingView.entry.name}
+            slotName={bankName(pending.key)}
             address={pendingView.entry.address}
-            what={pending.what}
+            what={pending.whatOnPage?.() ?? pending.what}
             kind={pending.kind}
             plan={pending.plan}
             busy={busy}
             targetEmpty={pending.plan.targetEmpty === true}
             source={pending.source}
-            backupText={`${backupPlanText(pending.report, [pending.key], pending.action)} ${BACKUP_DOWNLOAD_NOTE}`}
+            /* i18n: core message (backupPlanText), then the page's download note */
+            backupText={`${backupPlanText(pending.report, [pending.key], pending.action)} ${backupDownloadNote()}`}
             onWrite={() => {
               setConfirming(true);
             }}
@@ -445,15 +461,21 @@ export function SlotsView({ slots, connected, busy }: SlotsViewProps): ReactElem
         {pending !== null && pendingView !== null && (
           <SlotWriteConfirm
             open={confirming}
-            what={pending.what}
-            slotName={pendingView.entry.name}
+            what={pending.whatOnPage?.() ?? pending.what}
+            slotName={bankName(pending.key)}
             slotAddress={hexUp(pendingView.entry.address)}
             risk={writeRisk(pending.report, pending.key)}
             targetEmpty={pending.plan.targetEmpty === true}
             warnings={pending.plan.warnings}
             keyLine={
               pending.plan.derivedFrom
-                ? `The image is written under ${derivedKeyLine(pending.plan.derivedFrom, bankWordsOf(pending.plan.derivedFrom.bank))}. Every other bank is written the same way.`
+                ? t('slots:writeConfirm.keyLine', {
+                    /* i18n: core message (derivedKeyLine) */
+                    key: derivedKeyLine(
+                      pending.plan.derivedFrom,
+                      bankWordsOf(pending.plan.derivedFrom.bank),
+                    ),
+                  })
                 : null
             }
             backupName={backupFileNameShown(pending.report, [pending.key], pending.action)}
@@ -470,7 +492,7 @@ export function SlotsView({ slots, connected, busy }: SlotsViewProps): ReactElem
         {fpsKey !== null && fpsView !== null && (
           <SlotFpsConfirm
             open={fpsOffer !== null}
-            slotName={fpsView.entry.name}
+            slotName={bankName(fpsKey)}
             offer={fpsOffer}
             version={report?.state.version ?? null}
             risk={
@@ -479,6 +501,7 @@ export function SlotsView({ slots, connected, busy }: SlotsViewProps): ReactElem
                 : writeRisk(report, fpsKey)
             }
             bootWarning={dialogBootWarning}
+            /* i18n: core message (backupPlanText) */
             backupText={
               report === null ? '' : backupPlanText(report, [fpsKey], { kind: 'fps-patch' })
             }
@@ -500,6 +523,7 @@ export function SlotsView({ slots, connected, busy }: SlotsViewProps): ReactElem
             version={report.state.version}
             riskOf={(key) => writeRisk(report, key)}
             bootedLast={everyPlan !== null && everyBankBootedLast(report, everyPlan.order)}
+            /* i18n: core message (backupPlanText) */
             backupText={
               everyPlan === null
                 ? ''
@@ -521,70 +545,21 @@ export function SlotsView({ slots, connected, busy }: SlotsViewProps): ReactElem
         {slots.unlockNote && <UnlockNote />}
       </Section>
 
-      <Section id="slots-how" title="What these buttons do" icon={<Send />}>
+      <Section id="slots-how" title={t('slots:how.title')} icon={<Send />}>
         <Prose>
+          <p>{rich('slots:how.read', { params: { minVersion: '0.8.0.0' } })}</p>
+          <p>{rich('slots:how.flash')}</p>
+          <p>{rich('slots:how.ff', { params: { letterR: 'R', b: bankWords('b') } })}</p>
+          <p>{rich('slots:how.copy', { params: { letterA: 'A', letterB: 'B', letterR: 'R' } })}</p>
+          <p>{rich('slots:how.fps')}</p>
           <p>
-            <strong>Read slots</strong> and <strong>Dump</strong> change nothing in the camera. The
-            camera is asked which build it runs before anything else; a build older than 0.8.0.0 is
-            reported, and its banks are not read.
+            {rich('slots:how.backup', {
+              params: {
+                example: 'seek_backup_<time>_<serial>_v1.0.3.0_bank-B_before-copy-from-A.zip',
+              },
+            })}
           </p>
-          <p>
-            <strong>Flash decrypted image</strong> takes a plaintext image, encrypts it the way that
-            bank&apos;s firmware needs before it is staged, and shows the plan.{' '}
-            <strong>Flash raw bytes</strong> stages the file exactly as given. Neither sends
-            anything until you confirm.
-          </p>
-          <p>
-            A Compact on 1.3.0.8 can be the 8 Hz build or the 16 Hz FF build, and both report the
-            same version. The camera tells them apart itself: its own answer for each bank says
-            whether the application that answers takes it, and each build predicts its answers. The
-            8 Hz image goes to any bank. The FF image is staged the way the vendor app stages it
-            (the image XOR Key A), and the 16 Hz build stores it under Key B, to any bank. The page
-            does not refuse it: the plan says, before you confirm, what the camera is expected to do
-            with it (the 8 Hz build refuses it at commit, and a camera on another version programs
-            it as it is sent, which it cannot start). Whether the FF image boots is UNTESTED: no
-            genuine bootloader for this build is in the corpus. Writing R asks for the extra
-            confirmation like any recovery write. An <strong>empty</strong> bank (its header window
-            reads as all 0xFF, as on many 2014 cameras&apos; slot B) is a state, not a fault. It
-            dumps as the raw 64 KiB of 0xFF with nothing to decrypt, and it is written exactly like
-            any other bank; the plan and the confirmation say that no firmware is overwritten.
-          </p>
-          <p>
-            <strong>Copy to slot A</strong>, <strong>Copy to slot B</strong> and{' '}
-            <strong>Copy to recovery slot R</strong> on a bank row write the firmware that bank
-            holds, as this read decrypted it, into the other bank, whatever it holds now. The image
-            is staged as any decrypted image is, so the plan and the confirmation are the same as
-            for a file. <strong>Restore from full flash backup</strong> takes a .bin (a whole 4 MiB
-            flash image, such as a J-Link read) or a .zip that holds one (a Preserve run file, or
-            the zip a Dump &amp; decrypt 4.x/Nano or a Dump all selectors saves), cuts this bank out
-            of it, decrypts it, and shows the plan; a backup that looks like another camera&apos;s,
-            or another firmware, is said in the plan. A bank that is empty in the backup, or that
-            the dump did not read, cannot be restored by a write, and the page says so.
-          </p>
-          <p>
-            <strong>Make N FPS</strong> on a bank row edits that bank&apos;s image to a higher frame
-            rate, and <strong>Make N FPS in every bank</strong> does it to every bank that offers
-            it, in one confirmation, the bank the camera boots now last. A bank that cannot be
-            offered it says why.
-          </p>
-          <p>
-            <strong>Every write saves its bank first</strong>: the bank is read again and saved as
-            one zip download, named with the time, the camera&apos;s serial, the firmware, the bank
-            and the write (for example{' '}
-            <code>
-              seek_backup_&lt;time&gt;_&lt;serial&gt;_v1.0.3.0_bank-B_before-copy-from-A.zip
-            </code>
-            ), holding the bank as stored, its decrypted image and a note of what each file is. The
-            write waits until the download has started. A browser gives no word when a download
-            reaches the disk, so check your downloads folder. To go back, write the zip&apos;s
-            decrypted file with <strong>Flash decrypted image</strong>.
-          </p>
-          <p>
-            A write erases one 64 KiB bank and programs it. The bootloader at{' '}
-            <code>0x14000000</code> and the boot config are never written here, and there is no
-            control for choosing the active bank. The bank takes effect only after the camera is
-            unplugged and replugged.
-          </p>
+          <p>{rich('slots:how.write', { params: { address: '0x14000000' } })}</p>
         </Prose>
       </Section>
     </>
