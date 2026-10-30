@@ -20,6 +20,7 @@ import {
   type ReportMessageRow,
   type SlotKey,
   type SlotState,
+  bankNameOf,
   bankNameParam,
   bootedReportMessage,
   lastStartReportMessage,
@@ -115,8 +116,9 @@ function bankPresence(
 
 export function CameraReport({ state }: CameraReportProps): ReactElement {
   const warning = nullableCoreText(
+    /* A bank the read did not list is still named as a bank ("Slot B"), never by its bare letter. */
     upgradeTargetWarningMessage(state, (slot, key) =>
-      slot === undefined ? key : bankNameParam(slot.name, key),
+      bankNameParam(slot?.name ?? bankNameOf(key), key),
     ),
   );
   const running = runningText(state);

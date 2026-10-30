@@ -5,10 +5,12 @@
  * verdict comes from core; these tests pin how the page shows it.
  */
 
+import { act } from 'react';
 import { describe, expect, it } from 'vitest';
 import { FF_VENDOR_STAGED, FF_VENDOR_STORED } from '@seek-fw/core';
 import { SlotWriteKeys, writeKeysVerdictOf, type WriteKeysVerdict } from './SlotWriteKeys';
 import { render } from '../test-helpers';
+import { setLanguage } from '@/i18n';
 import { fakeDeviceState } from '../test-fixtures';
 import { slotReport2016 } from '../test-slots';
 
@@ -152,6 +154,18 @@ describe('SlotWriteKeys', () => {
     /* The written-as line names no bank either, and says "the booted bank" once. */
     expect(text).toContain('derived from the booted bank');
     expect(text).not.toContain('the booted the booted');
+    unmount();
+  });
+  it('says the booted bank in the language in use, in both rows, when only core’s name is known', async () => {
+    await act(async () => {
+      await setLanguage('fr');
+    });
+    const { container, unmount } = render(
+      <SlotWriteKeys verdict={{ ...STORE, bootedName: 'Slot A' }} />,
+    );
+    /* Core's name is the bank itself: the French rows decline it, and no English name is left. */
+    expect(container.textContent).not.toMatch(/[Ss]lot A/);
+    expect(container.textContent).toContain('emplacement A');
     unmount();
   });
 });

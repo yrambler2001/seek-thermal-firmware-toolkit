@@ -28,7 +28,7 @@ import {
   type CoreMessage,
   type CoreParam,
 } from '@seek-fw/core';
-import { coreParamText, coreText, keyNameValue } from '@/lib/core-text';
+import { coreText, keyNameValue } from '@/lib/core-text';
 import { t, type NameValue } from '@/i18n';
 import { bankNameRef } from '@/lib/bank-names';
 import { KeyValue } from './KeyValue';
@@ -51,7 +51,7 @@ export interface WriteKeysVerdict {
    * Not the banner (`refusal`), which is camera-wide.
    */
   readonly keysRefusal: CoreMessage | string | null;
-  /** The booted bank's name, as the page shows it ("slot A"), or null when none is named. */
+  /** The booted bank's name in core's words ("Slot A"), or null when none is named; the page translates it. */
   readonly bootedName: string | null;
   /** The booted bank, so the page can name it in the language in use; left out where only a name is known. */
   readonly bootedKey?: SlotKey | null;
@@ -68,19 +68,19 @@ export interface WriteKeysVerdict {
   readonly evidence: readonly (CoreMessage | string)[];
 }
 
+/** The three banks, for finding one by core's name. */
+const SLOT_KEYS: readonly SlotKey[] = ['a', 'b', 'r'];
+
 /** The verdict for a report: core's answer, with the booted bank named as the page names it. */
 export function writeKeysVerdictOf(report: SlotsReport): WriteKeysVerdict {
   const keys = deriveWriteKeys(report.state);
+  /* Core's own name ("Slot A"), not the translated text: bankNameParam knows the usual name only in core's
+   * words, and then passes the bank itself, which the language in use says and declines. */
   const booted =
     keys.booted === null
       ? null
-      : coreParamText(
-          bankNameParam(
-            report.slots.find((view) => view.entry.key === keys.booted)?.entry.name ??
-              bankNameOf(keys.booted),
-            keys.booted,
-          ),
-        );
+      : (report.slots.find((view) => view.entry.key === keys.booted)?.entry.name ??
+        bankNameOf(keys.booted));
   return {
     /* The banner's text is core's (writeBannerOf): the same words the CLI's JSON carries. */
     refusal: writeBannerMessage(report.state),
@@ -197,15 +197,19 @@ export function SlotWriteKeys({ verdict }: SlotWriteKeysProps): ReactElement {
     );
   }
   /* The page's row and core's derivedKeyLine both name the bank in the language in use. */
-  const bootedShown =
-    verdict.bootedKey == null
+  /* The bank itself where it is known, or where the name is core's usual one ("Slot A"), so the language in
+   * use says and declines it; a name of another kind stays as it is. */
+  const bankKey =
+    verdict.bootedKey ?? SLOT_KEYS.find((key) => bankNameOf(key) === verdict.bootedName);
+  const bootedShown: NameValue =
+    bankKey == null
       ? { text: verdict.bootedName ?? t('slots:keys.theBootedBank') }
-      : bankNameRef(verdict.bootedKey);
+      : bankNameRef(bankKey);
   /* No name at all: core's sentence says "the booted bank" itself (passing it as the name would double it). */
   const booted: CoreParam | null =
-    verdict.bootedKey == null
-      ? (verdict.bootedName ?? null)
-      : bankNameParam(verdict.bootedName ?? bankNameOf(verdict.bootedKey), verdict.bootedKey);
+    bankKey == null
+      ? verdict.bootedName
+      : bankNameParam(verdict.bootedName ?? bankNameOf(bankKey), bankKey);
   const bootedKey: NameValue =
     verdict.bootedKeyName === null
       ? { text: t('slots:keys.unnamedKey') }

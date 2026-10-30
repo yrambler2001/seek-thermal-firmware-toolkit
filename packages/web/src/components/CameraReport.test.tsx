@@ -55,6 +55,16 @@ describe('CameraReport: the upgrade target warning', () => {
     expect(container.textContent).not.toContain(WARNING);
     unmount();
   });
+  it('names a bank the read did not list as a bank, never by its bare letter', async () => {
+    const state = await fakeDeviceState();
+    const byKey = new Map(state.byKey);
+    byKey.delete('b');
+    const sameBank = { ...state, byKey, boot: { booted: 'b', target: 'b' } } as DeviceState;
+    const { container, unmount } = render(<CameraReport state={sameBank} />);
+    expect(container.textContent).toContain('Slot B is both the bank the camera booted from');
+    expect(container.textContent).not.toContain('b is both the bank');
+    unmount();
+  });
 });
 
 describe('CameraReport: the active-slot word on 4.9.x (TESTING.md 42.89)', () => {
