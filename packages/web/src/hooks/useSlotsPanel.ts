@@ -115,7 +115,7 @@ export interface SlotsBackend {
     key: SlotKey,
     options: FpsPatchOptions,
   ) => Promise<FpsPatchResult>;
-  /** Patches every bank that offers it (core `patchEveryBankFps`). Core's by default. */
+  /** Patches every bank where the patch is available (core `patchEveryBankFps`). Core's by default. */
   readonly patchEveryFps?: (
     ctx: WorkflowContext,
     report: SlotsReport,
@@ -492,7 +492,7 @@ export interface SlotsPanelApi {
   readonly patchFps: (key: SlotKey, acknowledged: boolean) => Promise<void>;
   /** What "Make N FPS in every bank" would patch, from the last read. Pure. Null before a read. */
   readonly planEveryFps: () => FpsEveryBankPlan | null;
-  /** Patches every bank that offers it, in one confirmation: one zip of all of them first, then each in turn. */
+  /** Patches every bank where the patch is available, in one confirmation: one zip of all of them first, then each in turn. */
   readonly patchEveryFps: (acknowledged: boolean) => Promise<void>;
   /** The last every-bank patch, kept on screen until the next run starts. */
   readonly fpsEveryOutcome: FpsEveryBankResult | null;

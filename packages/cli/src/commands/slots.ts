@@ -6,7 +6,7 @@
  *   slots flash <a|b|r> <file>     write one bank: a decrypted image (the default), or --raw bytes
  *   slots copy <from> <to>         write one bank with another bank's image, as the slots read decrypted it
  *   slots restore <bank> <file>    write one bank as a full flash backup (a .bin or a .zip) holds it
- *   slots patch-fps <a|b|r|all>    the frame-rate patch of one bank, or of every bank that offers it
+ *   slots patch-fps <a|b|r|all>    the frame-rate patch of one bank, or of every bank where the patch is available
  *
  * Core decides everything that makes a write correct: the build's capability matrix, the staging
  * that encrypts a decrypted image for the bank, the commit and the read-back. This file adds what
@@ -1780,7 +1780,7 @@ async function patchEveryAction(ctx: CommandContext, ops: SlotOps): Promise<Comm
           ? ''
           : ' --acknowledge-risk';
       ctx.reporter.log(
-        `dry run: nothing was saved and nothing was written. Add --write${needs} to patch every bank that offers it.`,
+        `dry run: nothing was saved and nothing was written. Add --write${needs} to patch every bank where the patch is available.`,
         'info',
       );
       return {

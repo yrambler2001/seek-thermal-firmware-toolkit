@@ -1328,7 +1328,7 @@ describe('useSlotsPanel: Make N FPS in every bank', () => {
     };
   }
 
-  it('plans every bank that offers it, the booted bank last', async () => {
+  it('plans every bank where the patch is available, the booted bank last', async () => {
     const { backend } = makeBackend();
     const { result, unmount } = setup({ ...backend, fpsPlan: (_report, key) => offer(key) });
     expect(result.current.panel.planEveryFps()).toBeNull();

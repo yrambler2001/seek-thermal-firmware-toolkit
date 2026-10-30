@@ -37,7 +37,7 @@ import type { DumpedSlot, SlotInputKind, SlotKey, SlotsReport } from './types.js
 export type WriteAction =
   /** The frame-rate patch of one bank. */
   | { readonly kind: 'fps-patch' }
-  /** The frame-rate patch of every bank that offers it, in one confirmation. */
+  /** The frame-rate patch of every bank where the patch is available, in one confirmation. */
   | { readonly kind: 'fps-patch-every-bank' }
   /** "Flash decrypted image" (`input` 'plain') or "Flash raw bytes" ('raw') of a picked file. */
   | { readonly kind: 'flash'; readonly input: SlotInputKind; readonly fileName: string }
@@ -78,7 +78,7 @@ export function writeActionWords(
     case 'fps-patch':
       return `the frame-rate patch of ${targets}`;
     case 'fps-patch-every-bank':
-      return `the frame-rate patch of every bank that offers it: ${targets}`;
+      return `the frame-rate patch of every bank where the patch is available: ${targets}`;
     case 'flash':
       return `"${action.input === 'raw' ? 'Flash raw bytes' : 'Flash decrypted image'}" of ${action.fileName} into ${targets}`;
     case 'copy':

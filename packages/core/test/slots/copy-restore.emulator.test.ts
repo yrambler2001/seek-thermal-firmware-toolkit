@@ -16,7 +16,7 @@
  *      The same flash as a Dump & decrypt 4.x/Nano zip (every block the dump cannot reach gap-filled and
  *      listed in its manifest.json) plans every bank as the flash file does, and refuses a bank in a gap;
  *      on 4.x the one gap, 0x14060000, holds no bank, so A, B and R all plan as from the flash file;
- *   4. EVERY BANK: the frame-rate patch of every bank that offers it, one zip saved first holding every one
+ *   4. EVERY BANK: the frame-rate patch of every bank where the patch is available, one zip saved first holding every one
  *      of them, each written in turn (booted bank last) and read back as planned;
  *   5. ResetDevice is never sent, and each commit was announced once (`onCommit`) before it went out.
  *

@@ -350,7 +350,7 @@ function patchFollows(
   ].join(' or ');
   const firmware = report.state.version ?? '(unknown)';
   return every
-    ? `the frame-rate patch of every bank that offers it: ${banks} (${rates}, firmware ${firmware})`
+    ? `the frame-rate patch of every bank where the patch is available: ${banks} (${rates}, firmware ${firmware})`
     : `the frame-rate patch of ${banks}, ${rates} (firmware ${firmware})`;
 }
 
@@ -471,7 +471,7 @@ export interface FpsBankVerdict {
 export interface FpsEveryBankPlan {
   /** The banks that offer the patch, in the order they would be written. */
   readonly order: readonly SlotKey[];
-  /** Every bank that offers it, with its offer, in that order. */
+  /** Every bank where the patch is available, with its offer, in that order. */
   readonly offers: readonly (FpsBankVerdict & {
     readonly plan: Extract<FpsPlan, { status: 'offer' }>;
   })[];

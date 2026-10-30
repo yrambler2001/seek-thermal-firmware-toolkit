@@ -2879,7 +2879,9 @@ describe('slots patch-fps all', () => {
     expect(text).toMatch(
       /order\s+slot B, then recovery R, then slot A \(the bank the camera boots now last\)/,
     );
-    expect(text).toContain('Add --write --acknowledge-risk to patch every bank that offers it.');
+    expect(text).toContain(
+      'Add --write --acknowledge-risk to patch every bank where the patch is available.',
+    );
   });
 
   it('refuses without --acknowledge-risk when the booted bank or R is among them, before anything is saved', async () => {
