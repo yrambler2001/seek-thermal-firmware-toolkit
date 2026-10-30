@@ -107,6 +107,7 @@ import {
   type PreserveStepId,
 } from '@/lib/preserve/types';
 import type { DeliveredCheck, PreservePanelApi, PreservePrompt } from '@/hooks/usePreservePanel';
+import { stepErrorText } from '@/lib/preserve/step-error';
 
 const RUN_ACCEPT = '.zip,application/zip';
 
@@ -1066,7 +1067,7 @@ function VerifyVerdict({
               error:
                 failed.error === undefined
                   ? t('preserve:unknownReason')
-                  : recordedText(failed.errorCode, failed.error),
+                  : stepErrorText(failed.errorCode, failed.error),
             },
           })}
         </p>

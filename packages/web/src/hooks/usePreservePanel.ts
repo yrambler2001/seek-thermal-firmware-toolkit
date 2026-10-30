@@ -59,7 +59,7 @@ import {
   SeekError,
   unpatchedStartOf,
 } from '@seek-fw/core';
-import { coreText, recordedText } from '@/lib/core-text';
+import { coreText } from '@/lib/core-text';
 import { errorCoreMessage, errorMessage } from '@seek-fw/core';
 import { t, tEnglish } from '@/i18n';
 import { reportInUseElsewhere } from '../lib/camera-lock';
@@ -77,6 +77,7 @@ import {
 } from '../lib/preserve/client';
 import { canRunPhase, gateReason } from '../lib/preserve/gating';
 import { buildRunFile, parseRunFile } from '../lib/preserve/run-file';
+import { cameraNotBackEnglish, stepErrorText } from '../lib/preserve/step-error';
 import {
   isCheckpointName,
   PHASE_FOLDER,
@@ -470,13 +471,8 @@ export function usePreservePanel(params: PreservePanelParams): PreservePanelApi 
             }
             await waitMs(1000, signal);
           }
-          throw new Error(
-            `the camera did not come back after ${String(Math.round(attempts / 60))} min of ` +
-              'retrying: ' +
-              `${errorMessage(lastError)} — if Chrome asked nothing, replug the camera and ` +
-              'run the phase again; if the log said to re-connect it, the "Connect device" ' +
-              'click is what it was waiting for',
-          );
+          /* English: the run file records it as the step's error; stepErrorText shows it translated. */
+          throw new Error(cameraNotBackEnglish(Math.round(attempts / 60), errorMessage(lastError)));
         },
         close: closeAll,
       };
@@ -883,7 +879,7 @@ export function usePreservePanel(params: PreservePanelParams): PreservePanelApi 
                     error:
                       (failed?.error === undefined
                         ? undefined
-                        : recordedText(failed.errorCode, failed.error)) ??
+                        : stepErrorText(failed.errorCode, failed.error)) ??
                       t('preserve:unknownReason'),
                   }),
                 );

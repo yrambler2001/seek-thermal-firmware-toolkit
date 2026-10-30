@@ -25,6 +25,7 @@ import {
   lastStartReportMessage,
   nextStartReportMessage,
   upgradeTargetWarningMessage,
+  keyNameParam,
   type CoreParam,
 } from '@seek-fw/core';
 import {
@@ -34,6 +35,7 @@ import {
   coreTexts,
   evidenceTexts,
   nullableCoreText,
+  recordedText,
 } from '@/lib/core-text';
 import { KeyValue } from './KeyValue';
 import { Panel, PanelTitle } from './Panel';
@@ -94,7 +96,12 @@ function bankPresence(
   return {
     version: slot.present ? (slot.plainHeader?.versionStr ?? slot.header?.versionStr ?? '?') : '—',
     size: slot.header === null ? '—' : t('info:report.bytes', { count: slot.header.length }),
-    key: slot.keyName ?? (slot.plain === null ? '—' : t('info:report.plaintext')),
+    key:
+      slot.keyName == null
+        ? slot.plain === null
+          ? '—'
+          : t('info:report.plaintext')
+        : coreParamText(keyNameParam(slot.keyName)),
     accepts: coreText(acceptsDescriptionMessage(slot)),
     /* "n/a" where the bootloader reads no footer: a missing one is not a fault there */
     footer: slot.present
@@ -137,7 +144,12 @@ export function CameraReport({ state }: CameraReportProps): ReactElement {
               state.serial ?? state.description.serialNumber ?? t('info:report.unreadable'),
             ],
             [t('info:report.platform'), state.platform ?? t('info:report.unreadable')],
-            [t('info:report.usbLink'), state.usbSpeed ?? t('info:report.unreadable')],
+            [
+              t('info:report.usbLink'),
+              state.usbSpeed === null
+                ? t('info:report.unreadable')
+                : recordedText(state.usbSpeedMessage, state.usbSpeed),
+            ],
           ]}
         />
       </Panel>
@@ -205,8 +217,10 @@ export function CameraReport({ state }: CameraReportProps): ReactElement {
               state.boot === null
                 ? t('info:report.notReplayed')
                 : state.targetConfirmed === null
-                  ? slotName(state, state.boot.target)
-                  : t('info:report.targetConfirmed', { slot: slotName(state, state.boot.target) }),
+                  ? coreParamText(nameParam(state.boot.target))
+                  : t('info:report.targetConfirmed', {
+                      slot: coreParamText(nameParam(state.boot.target)),
+                    }),
             ],
           ]}
         />
@@ -244,7 +258,9 @@ export function CameraReport({ state }: CameraReportProps): ReactElement {
               const cells = bankPresence(state, slot);
               return (
                 <TableRow key={slot.key}>
-                  <TableRowHeader className="font-semibold">{slot.name}</TableRowHeader>
+                  <TableRowHeader className="font-semibold">
+                    {coreParamText(bankNameParam(slot.name, slot.key))}
+                  </TableRowHeader>
                   <TableCell label={t('info:report.address')} className="font-mono">
                     {hexUp(slot.address)}
                   </TableCell>

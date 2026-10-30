@@ -365,4 +365,13 @@ export default {
   'gate.restoreFirst': 'the restore (it runs first in this phase)',
   'gate.powerCycle':
     'the power-cycle assertion — power-cycle the camera (unplug and replug it, or use its power switch), then use the re-run control',
+
+  /**
+   * The Preserve wizard's reconnect wait gave up: shown as a failed step's
+   * reason (lib/preserve/step-error.ts). `{minutes}` is a number; `{error}` is
+   * the last USB or browser error, which stays English. "Connect device" is
+   * the button app:connect.connect: use the same words as there.
+   */
+  'error.cameraNotBack':
+    'the camera did not come back after {minutes} min of retrying: {error} — if Chrome asked nothing, replug the camera and run the phase again; if the log said to re-connect it, the "Connect device" click is what it was waiting for',
 } as const satisfies NamespaceMessages;

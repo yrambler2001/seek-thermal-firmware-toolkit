@@ -11,7 +11,6 @@
 import type { ReactElement } from 'react';
 import { KeyRound, Microchip } from 'lucide-react';
 import {
-  bankNameOf,
   bootedSlot,
   bytesToHex,
   hexUp,
@@ -22,8 +21,10 @@ import {
   bankParam,
   nextStartReportMessage,
   upgradeTargetWarningMessage,
+  keyNameParam,
 } from '@seek-fw/core';
-import { cfg0Words, nullableCoreText } from '@/lib/core-text';
+import { cfg0Words, coreParamText, nullableCoreText, recordedText } from '@/lib/core-text';
+import { bankName } from '@/lib/bank-names';
 import { KeyValue, type KeyValueRow } from './KeyValue';
 import { Panel, PanelTitle } from './Panel';
 import { Prose } from './Prose';
@@ -40,7 +41,7 @@ function bankLabel(slot: SlotState): string {
 
 /** The same name, from the bank's key alone. */
 function bankLabelOf(key: SlotKey): string {
-  return bankNameOf(key);
+  return bankName(key);
 }
 
 function perDeviceKey(state: DeviceState): string | null {
@@ -91,7 +92,10 @@ export function DeviceInfoPanel({ state }: DeviceInfoPanelProps): ReactElement {
     [t('shared:deviceInfo.bootloader'), bootloader],
     [t('shared:deviceInfo.platform'), state.platform],
     [t('shared:deviceInfo.serial'), state.serial],
-    [t('shared:deviceInfo.usbLink'), state.usbSpeed],
+    [
+      t('shared:deviceInfo.usbLink'),
+      state.usbSpeed === null ? null : recordedText(state.usbSpeedMessage, state.usbSpeed),
+    ],
     [t('shared:deviceInfo.bootConfig'), cfg0Text],
     /* On the locked line the bank is the active-slot word's, which is the bootloader's own record of the
      * bank it entered (TESTING.md 42.53, 42.56: measured on 1.3.0.0 and 1.0.3.0 for boot words 0, 1, 2). */
@@ -169,7 +173,7 @@ export function DeviceInfoPanel({ state }: DeviceInfoPanelProps): ReactElement {
               params: {
                 count: orphans.length,
                 banks: listAnd(orphans.map(bankLabel)),
-                storeKey: state.storeKey.name,
+                storeKey: coreParamText(keyNameParam(state.storeKey.name)),
               },
             })}
           </p>

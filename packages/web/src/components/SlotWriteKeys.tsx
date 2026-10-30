@@ -29,7 +29,7 @@ import {
   type CoreParam,
   keyNameParam,
 } from '@seek-fw/core';
-import { coreText } from '@/lib/core-text';
+import { coreParamText, coreText } from '@/lib/core-text';
 import { t } from '@/i18n';
 import { bankName } from '@/lib/bank-names';
 import { KeyValue } from './KeyValue';
@@ -75,8 +75,13 @@ export function writeKeysVerdictOf(report: SlotsReport): WriteKeysVerdict {
   const booted =
     keys.booted === null
       ? null
-      : (report.slots.find((view) => view.entry.key === keys.booted)?.entry.name ??
-        bankNameOf(keys.booted));
+      : coreParamText(
+          bankNameParam(
+            report.slots.find((view) => view.entry.key === keys.booted)?.entry.name ??
+              bankNameOf(keys.booted),
+            keys.booted,
+          ),
+        );
   return {
     /* The banner's text is core's (writeBannerOf): the same words the CLI's JSON carries. */
     refusal: writeBannerMessage(report.state),

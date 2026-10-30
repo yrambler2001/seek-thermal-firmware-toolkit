@@ -25,8 +25,9 @@ import {
   BOOTED_NOW_MESSAGE,
   NOT_BOOTED_MESSAGE,
   unknownBootabilityWhyMessage,
+  keyNameParam,
 } from '@seek-fw/core';
-import { coreText } from '@/lib/core-text';
+import { coreParamText, coreText } from '@/lib/core-text';
 import { t } from '@/i18n';
 import { bankName, bankWords } from '@/lib/bank-names';
 import { FilePickerButton } from './FilePickerButton';
@@ -324,7 +325,11 @@ export function SlotTable({
               </TableCell>
 
               <TableCell label={t('slots:table.col.key')}>
-                {state?.keyName ?? (state?.plain == null ? '—' : t('slots:table.keyNone'))}
+                {state?.keyName == null
+                  ? state?.plain == null
+                    ? '—'
+                    : t('slots:table.keyNone')
+                  : coreParamText(keyNameParam(state.keyName))}
               </TableCell>
 
               <TableCell label={t('slots:table.col.bootable')}>
