@@ -64,8 +64,30 @@
 import { bytesToHex, equalBytes, findAll, hexToBytes, hexUp } from '../bytes.js';
 import { cryptBytes } from '../crypto/cipher.js';
 import { findEmbeddedKeyTable, stateFromKey, UNNAMED_KEY } from '../crypto/keys.js';
-import { bankWordsOf } from '../profiles/locked-boot.js';
 import { coreMessage, paramText, type CoreMessage, type CoreParam } from '../message.js';
+import {
+  BOOT_UNNAMED_REFUSAL,
+  FF_VENDOR_EVIDENCE,
+  KEY_TABLE_SOURCE,
+  LINE_2016_EVIDENCE,
+  NOT_DERIVED_REFUSAL,
+  PLAIN_CHAIN_EVIDENCE,
+  applicationEvidence,
+  applicationPairSource,
+  bootedKeyEvidence,
+  cameraRefusalMessage,
+  checkKeyEvidence,
+  keyNameParam,
+  keyNotInTableRefusal,
+  masksEvidence,
+  noApplicationPairRefusal,
+  noBootKeyRefusal,
+  notDecryptedRefusal,
+  otherBankEvidence,
+  storeEvidence,
+  storeKeyEvidence,
+  uploadCheckedRefusal,
+} from './write-keys-words.js';
 import type { CipherProfile, SlotKey } from '../profiles/types.js';
 import type { DerivedKey } from './types.js';
 import type { DeviceState } from '../workflows/types.js';
@@ -123,6 +145,8 @@ export type WriteKeyForm =
 export interface WriteKeys {
   /** Why no bank can be written from this camera, stated with the measurement; null when derived. */
   readonly refusal: string | null;
+  /** `refusal` as a message, for the page. */
+  readonly refusalMessage?: CoreMessage | null;
   /** How the keys are chosen: see `WriteKeyForm`. */
   readonly form: WriteKeyForm;
   /** The booted bank the at-rest key was read from, or null. */
@@ -141,6 +165,15 @@ export interface WriteKeys {
   readonly masks: readonly KeyRef[];
   /** One line per fact the derivation relied on, for the page and the CLI. */
   readonly evidence: readonly string[];
+  /** `evidence` as messages, for the page. */
+  readonly evidenceMessages?: readonly CoreMessage[];
+}
+
+/** Evidence lines: the English the CLI prints, and the messages the page renders. */
+function linesOf(
+  messages: readonly CoreMessage[],
+): Pick<WriteKeys, 'evidence' | 'evidenceMessages'> {
+  return { evidence: messages.map((line) => line.text), evidenceMessages: [...messages] };
 }
 
 /**
@@ -180,9 +213,17 @@ export function stagesUnderCameraKey(state: DeviceState): boolean {
  * they cannot disagree about it.
  */
 export function slotWriteRefusal(state: DeviceState): string | null {
-  const camera = cameraWriteRefusal(state);
+  const said = slotWriteRefusalMessage(state);
+  return said === null ? null : paramText(said);
+}
+
+/** `slotWriteRefusal` as a message, for the page (a refusal built without a code is its English). */
+export function slotWriteRefusalMessage(state: DeviceState): CoreMessage | string | null {
+  const camera = cameraWriteRefusalMessage(state);
   if (camera !== null) return camera;
-  return stagesUnderCameraKey(state) && !state.plainChain ? deriveWriteKeys(state).refusal : null;
+  if (!stagesUnderCameraKey(state) || state.plainChain) return null;
+  const keys = deriveWriteKeys(state);
+  return keys.refusalMessage ?? keys.refusal;
 }
 
 /**
@@ -203,11 +244,18 @@ export function slotWriteRefusals(state: DeviceState): string[] {
  * `writeKeys.refused` against it, so the two cannot disagree.
  */
 export function writeBannerOf(state: DeviceState): string | null {
-  const refusal = slotWriteRefusal(state);
+  const said = writeBannerMessage(state);
+  return said === null ? null : paramText(said);
+}
+
+/** `writeBannerOf` as a message, for the page (a refusal built without a code is its English). */
+export function writeBannerMessage(state: DeviceState): CoreMessage | string | null {
+  const refusal = slotWriteRefusalMessage(state);
   if (refusal !== null) return refusal;
   if (!stagesUnderCameraKey(state) || state.plainChain) return null;
   const keys = deriveWriteKeys(state);
-  return keys.atRest === null ? (keys.refusal ?? 'the keys could not be derived') : null;
+  if (keys.atRest !== null) return null;
+  return keys.refusalMessage ?? keys.refusal ?? NOT_DERIVED_REFUSAL;
 }
 
 /**
@@ -227,16 +275,17 @@ export function derivedKeyLineMessage(
   bank: CoreParam,
 ): CoreMessage {
   const bankLabel = paramText(bank);
+  const key = keyNameParam(derived.key);
   if (!derived.holds || derived.holds === derived.key) {
     return coreMessage(
       'keys.derived.same',
-      { key: derived.key, bank },
+      { key, bank },
       `${derived.key}, derived from the booted ${bankLabel}`,
     );
   }
   return coreMessage(
     'keys.derived.holds',
-    { key: derived.key, bank, holds: derived.holds },
+    { key, bank, holds: keyNameParam(derived.holds) },
     `${derived.key} (the store key), derived from the booted ${bankLabel}, which holds ${derived.holds}`,
   );
 }
@@ -267,8 +316,19 @@ function keyBytesNamed(state: DeviceState, name: string): Uint8Array | null {
  * these and, on the Key A line, for the derivation too (`slotWriteRefusal`).
  */
 export function cameraWriteRefusal(state: DeviceState): string | null {
+  return cameraWriteRefusalMessage(state)?.text ?? null;
+}
+
+/** `cameraWriteRefusal` as a message, for the page. */
+export function cameraWriteRefusalMessage(state: DeviceState): CoreMessage | null {
   if (state.bankWriteRefusals.length === 0) return null;
-  return `this camera cannot be written from here: ${state.bankWriteRefusals.join('; ')}`;
+  /* The messages only while they still say the reasons: a caller that replaces the reasons (a test's state, a
+   * spread) keeps its own words. */
+  const messages = state.bankWriteRefusalMessages;
+  const current =
+    messages?.length === state.bankWriteRefusals.length &&
+    messages.every((message, at) => message.text === state.bankWriteRefusals[at]);
+  return cameraRefusalMessage(current ? messages : state.bankWriteRefusals);
 }
 
 /** How a 1.3.0.8 FF upload is staged, as the page's "Staged as" row and the CLI's `staged as` row say it. */
@@ -307,13 +367,7 @@ function ffVendorKeys(state: DeviceState): WriteKeys {
     application: null,
     store: null,
     masks: [],
-    evidence: [
-      'the 1.3.0.8 FF (16 Hz) build: no bank this read opened is stored plain, so the camera is not shown ' +
-        'to be on the 2014 plaintext chain; the FF image is written in its vendor form, raw bytes are sent ' +
-        'as given, and a plain 8 Hz image is not written',
-      'a write of the FF image is offered with its UNTESTED warning: no genuine bootloader for this build ' +
-        'is in the corpus, so whether the written bank boots is not measured',
-    ],
+    ...linesOf(FF_VENDOR_EVIDENCE),
   };
 }
 
@@ -346,7 +400,7 @@ export function storedUnderCheckKeyMessage(keys: Pick<WriteKeys, 'atRest'>): Cor
       )
     : coreMessage(
         'keys.imageBlock0.stored',
-        { key: keys.atRest.name },
+        { key: keyNameParam(keys.atRest.name) },
         `${keys.atRest.name}, the key its bootloader checks a bank under; the camera re-encrypts the upload under it`,
       );
 }
@@ -368,22 +422,18 @@ function imageBlockZeroKeys(state: DeviceState): WriteKeys {
       ? { name: checkKey.name, key: checkKey.key, from: checkKey.from, inferred: checkKey.inferred }
       : null;
   const evidence = [
-    'the 2016 Compact PRO line: an upload is the image XORed with the keystream of its own key ' +
-      'block 0, found in the image by value, so no key of this camera builds it',
-    named === null
-      ? 'the camera decrypts the upload with that key and re-encrypts it under the key its ' +
-        'bootloader checks a bank under; that key was not named on this read' +
-        (checkKey?.unnamedWhy == null ? '' : ` (${checkKey.unnamedWhy})`) +
-        ', and the write does not need it: the bank is read back as the image it decrypts to'
-      : `the camera decrypts the upload with that key and re-encrypts it under ${named.name} ` +
-        `${bytesToHex(named.key)}, the key its bootloader checks a bank under` +
-        (named.from === null
-          ? ''
-          : named.inferred
-            ? ` (inferred from ${bankWordsOf(named.from)}, the bank the camera reports it entered, which ` +
-              'the bootloader entered without its check)'
-            : ` (named from ${bankWordsOf(named.from)}, the bank the camera reports it entered)`) +
-        ', so every bank it writes is stored the way the bootloader takes it',
+    LINE_2016_EVIDENCE,
+    checkKeyEvidence(
+      named === null
+        ? null
+        : {
+            name: named.name,
+            hex: bytesToHex(named.key),
+            from: named.from,
+            inferred: named.inferred,
+          },
+      checkKey?.unnamedWhy ?? null,
+    ),
   ];
   return {
     refusal: null,
@@ -394,7 +444,7 @@ function imageBlockZeroKeys(state: DeviceState): WriteKeys {
     application: null,
     store: null,
     masks: [],
-    evidence,
+    ...linesOf(evidence),
   };
 }
 
@@ -403,9 +453,10 @@ function imageBlockZeroKeys(state: DeviceState): WriteKeys {
  * application (see the header). Every refusal names the measurement that failed.
  */
 export function deriveWriteKeys(state: DeviceState): WriteKeys {
-  const evidence: string[] = [];
-  const refused = (refusal: string): WriteKeys => ({
-    refusal,
+  const evidence: CoreMessage[] = [];
+  const refused = (refusal: CoreMessage): WriteKeys => ({
+    refusal: refusal.text,
+    refusalMessage: refusal,
     form: 'derived',
     booted: null,
     bootedKeyName: null,
@@ -413,7 +464,7 @@ export function deriveWriteKeys(state: DeviceState): WriteKeys {
     application: null,
     store: null,
     masks: [],
-    evidence,
+    ...linesOf(evidence),
   });
 
   /* The 2014 plaintext chain: no bank is keyed, so there is no key to read from the booted bank and no
@@ -428,10 +479,7 @@ export function deriveWriteKeys(state: DeviceState): WriteKeys {
       application: null,
       store: null,
       masks: [],
-      evidence: [
-        'the 2014 plaintext chain: every bank is stored plain, so no upload key is derived; ' +
-          'the upload is the image as it is',
-      ],
+      ...linesOf([PLAIN_CHAIN_EVIDENCE]),
     };
   }
 
@@ -451,116 +499,114 @@ export function deriveWriteKeys(state: DeviceState): WriteKeys {
 
   const boot = state.boot;
   if (boot === null) {
-    return refused(
-      'the booted bank could not be named, so the key the bank is stored under cannot be read from it',
-    );
+    return refused(BOOT_UNNAMED_REFUSAL);
   }
   const booted = state.byKey.get(boot.booted) ?? null;
-  const bootedName = bankWordsOf(boot.booted);
   if (booted === null || booted.unread || booted.plain === null) {
-    return refused(
-      `the booted ${bootedName} does not decrypt to an image, so the key it is stored under cannot be read`,
-    );
+    return refused(notDecryptedRefusal(boot.booted));
   }
 
   /* The booted bank: the bootloader accepts it under the key its identity names (identifyKey). The
    * placeholder UNNAMED_KEY is no key the bootloader tries, so it names none. */
   const bootedKeyName = booted.keyName === UNNAMED_KEY ? null : booted.keyName;
   if (!booted.bootable || bootedKeyName === null) {
-    return refused(
-      `the booted ${bootedName} decrypts under no key the bootloader tries (its Key A, or its store ` +
-        'key), so the key the bank is stored under cannot be read from it',
-    );
+    return refused(noBootKeyRefusal(boot.booted));
   }
   const bootedKey = keyBytesNamed(state, bootedKeyName);
   if (bootedKey === null) {
-    return refused(
-      `the booted ${bootedName} decrypts under ${bootedKeyName}, but this camera's key table does not carry ` +
-        'that key, so it cannot be written under it',
-    );
+    return refused(keyNotInTableRefusal(boot.booted, bootedKeyName));
   }
 
   /* The running application: its own pair, located by value in the booted bank's image. */
   const plain = booted.plain;
   const version = booted.plainHeader?.versionStr ?? state.version ?? null;
+  const firmware = version ?? '?';
   const programmed = state.storeKey.programmed;
-  const candidates: { source: string; keyA: Uint8Array; keyB: Uint8Array }[] = [];
+  const candidates: { source: CoreMessage; keyA: Uint8Array; keyB: Uint8Array }[] = [];
   if (state.keyTable !== null) {
     candidates.push({
-      source: "the bootloader's key table",
+      source: KEY_TABLE_SOURCE,
       keyA: state.keyTable.keyA,
       keyB: state.keyTable.keyB,
     });
   }
   for (const pair of APPLICATION_KEY_PAIRS) {
     candidates.push({
-      source: `the decoded application pair of ${pair.builds}`,
+      source: applicationPairSource(pair.builds),
       keyA: hexToBytes(pair.keyA),
       keyB: hexToBytes(pair.keyB),
     });
   }
-  let application: ApplicationKeys | null = null;
+  let found: { readonly keys: ApplicationKeys; readonly source: CoreMessage } | null = null;
   for (const cand of candidates) {
     if (programmed) {
       const at = findAll(plain, cand.keyA);
       if (at.length === 1) {
-        application = {
-          bank: boot.booted,
-          firmware: version,
-          keyA: cand.keyA,
-          keyB: null,
+        found = {
+          keys: {
+            bank: boot.booted,
+            firmware: version,
+            keyA: cand.keyA,
+            keyB: null,
+            source: cand.source.text,
+            keyAAt: at[0] ?? 0,
+            keyBAt: null,
+          },
           source: cand.source,
-          keyAAt: at[0] ?? 0,
-          keyBAt: null,
         };
         break;
       }
     } else {
       const at = findEmbeddedKeyTable(plain, cand.keyA, cand.keyB);
       if (at !== null) {
-        application = {
-          bank: boot.booted,
-          firmware: version,
-          keyA: cand.keyA,
-          keyB: cand.keyB,
+        found = {
+          keys: {
+            bank: boot.booted,
+            firmware: version,
+            keyA: cand.keyA,
+            keyB: cand.keyB,
+            source: cand.source.text,
+            keyAAt: at.offsetA,
+            keyBAt: at.offsetB,
+          },
           source: cand.source,
-          keyAAt: at.offsetA,
-          keyBAt: at.offsetB,
         };
         break;
       }
     }
   }
-  if (application === null) {
+  if (found === null) {
     const table = state.keyTable;
-    const counted =
-      table === null
-        ? ''
-        : ` (the bootloader's Key A occurs ${String(findAll(plain, table.keyA).length)} time(s), ` +
-          `its Key B ${String(findAll(plain, table.keyB).length)})`;
     return refused(
-      `the running application (${bootedName}, firmware ${version ?? '?'}) carries none of the known key ` +
-        "pairs (the bootloader's and the decoded application pairs), each half exactly once, so its Key A " +
-        `cannot be located in its image${counted}`,
+      noApplicationPairRefusal(
+        boot.booted,
+        firmware,
+        table === null
+          ? null
+          : { keyA: findAll(plain, table.keyA).length, keyB: findAll(plain, table.keyB).length },
+      ),
     );
   }
+  const application = found.keys;
   evidence.push(
-    `the running application (${bootedName}, firmware ${version ?? '?'}) carries its Key A ` +
-      `${bytesToHex(application.keyA)} at ${hexUp(application.keyAAt)}, from ${application.source}` +
-      (application.keyB !== null
-        ? `, and its Key B ${bytesToHex(application.keyB)} at ${hexUp(application.keyBAt ?? 0)}`
-        : ''),
+    applicationEvidence({
+      bank: boot.booted,
+      firmware,
+      keyA: bytesToHex(application.keyA),
+      keyAAt: hexUp(application.keyAAt),
+      source: found.source,
+      keyB:
+        application.keyB === null
+          ? null
+          : { hex: bytesToHex(application.keyB), at: hexUp(application.keyBAt ?? 0) },
+    }),
   );
 
   /* The store key the application re-encrypts under. */
   const store: KeyRef = programmed
     ? { name: 'the per-device key', key: state.storeKey.key ?? new Uint8Array(16) }
     : { name: "the application's Key B", key: application.keyB ?? new Uint8Array(16) };
-  evidence.push(
-    programmed
-      ? 'a per-device key is programmed, so the application re-encrypts under it'
-      : 'no per-device key is programmed, so the application re-encrypts under its own Key B',
-  );
+  evidence.push(storeEvidence(programmed));
 
   /*
    * The key the writes store every bank under. Two keys the bootloader accepts are candidates: its
@@ -576,16 +622,17 @@ export function deriveWriteKeys(state: DeviceState): WriteKeys {
     const storeName = bootStore.programmed ? 'per-device key' : 'Key B';
     atRest = { name: storeName, key: bootStore.key };
     evidence.push(
-      `the application's store key is the bootloader's ${storeName} (${bytesToHex(bootStore.key)}), ` +
-        `so the writes store every bank under it; the booted ${bootedName} holds ${bootedKeyName}, ` +
-        'which the bootloader accepts as well',
+      storeKeyEvidence({
+        key: storeName,
+        hex: bytesToHex(bootStore.key),
+        bank: boot.booted,
+        held: bootedKeyName,
+      }),
     );
   } else {
     atRest = { name: bootedKeyName, key: bootedKey };
     evidence.push(
-      `the booted ${bootedName} decrypts under ${bootedKeyName} (${bytesToHex(bootedKey)}), a key the ` +
-        "bootloader tries; the application's store key is not the bootloader's, so the writes store every " +
-        'bank under the booted bank’s key',
+      bootedKeyEvidence({ bank: boot.booted, key: bootedKeyName, hex: bytesToHex(bootedKey) }),
     );
   }
 
@@ -594,12 +641,12 @@ export function deriveWriteKeys(state: DeviceState): WriteKeys {
     const underKeyA = equalBytes(atRest.key, application.keyA);
     if (!underStore && !underKeyA) {
       return refused(
-        `the running application (${bootedName}, firmware ${version ?? '?'}) checks an upload under its ` +
-          'own keys before it programs it (the decoded source of this build tries the upload under its ' +
-          'Key A and its store key, as its bootloader tries a bank), and ' +
-          `the key the writes store under, ${atRest.name} (${bytesToHex(atRest.key)}), is neither its ` +
-          'Key A nor its store key, so the camera would refuse the upload with 0x50000 before erasing ' +
-          'anything',
+        uploadCheckedRefusal({
+          bank: boot.booted,
+          firmware,
+          key: atRest.name,
+          hex: bytesToHex(atRest.key),
+        }),
       );
     }
   }
@@ -610,15 +657,19 @@ export function deriveWriteKeys(state: DeviceState): WriteKeys {
     { name: "the application's Key A", key: application.keyA },
   ]);
   evidence.push(
-    `the upload is the image XOR the keystreams of ${masks.map((m) => m.name).join(', ')}; ` +
-      `the device stores the image under ${atRest.name}`,
+    masksEvidence(
+      masks.map((m) => m.name),
+      atRest.name,
+    ),
   );
   for (const other of state.slots) {
     if (other.key === boot.booted || other.unread || other.plain === null) continue;
     evidence.push(
-      `${bankWordsOf(other.key)} decrypts under ` +
-        `${other.keyName === null || other.keyName === UNNAMED_KEY ? 'no known key' : other.keyName}; ` +
-        `it is written under ${atRest.name} by the same rule, and read back to check`,
+      otherBankEvidence(
+        other.key,
+        other.keyName === null || other.keyName === UNNAMED_KEY ? null : other.keyName,
+        atRest.name,
+      ),
     );
   }
 
@@ -631,7 +682,7 @@ export function deriveWriteKeys(state: DeviceState): WriteKeys {
     application,
     store,
     masks,
-    evidence,
+    ...linesOf(evidence),
   };
 }
 

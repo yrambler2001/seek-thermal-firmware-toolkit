@@ -51,6 +51,7 @@ import { wordSum32 } from '../image/bank.js';
 import { sha256Sync } from '../slots/write-sha.js';
 import { FPS_KNOWN_RATE, FPS_PATCH_TABLE, type FpsPatchSource } from './fps-patch-table.js';
 import { fpsRowName } from './fps-row-words.js';
+import type { CoreMessage } from '../message.js';
 
 export { FPS_NOT_PATCHED_NOTES } from './fps-patch-table.js';
 
@@ -450,7 +451,12 @@ export type FpsPlan =
       /** Set (true) only when the image is an earlier patch, not a build made at this rate; the reason says so. */
       readonly earlierPatch?: true;
     }
-  | { readonly status: 'refused'; readonly reason: string };
+  | {
+      readonly status: 'refused';
+      readonly reason: string;
+      /** `reason` as a message, for the page, where core gives it a code. */
+      readonly reasonMessage?: CoreMessage;
+    };
 
 /**
  * What can be done to one decrypted image: the table entry for its rate, or why none. The

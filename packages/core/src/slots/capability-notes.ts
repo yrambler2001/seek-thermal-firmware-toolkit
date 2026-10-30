@@ -5,6 +5,7 @@
  * test/firmware/facts.json. Nothing here is a claim the code cannot back.
  * ==================================================================== */
 
+import { coreMessage, type CoreMessage } from '../message.js';
 import type { SlotKey } from '../profiles/types.js';
 import type { FirmwareVersion } from '../profiles/version.js';
 import { FF_1308_VERSION, type SlotFamily } from './capability-family.js';
@@ -200,26 +201,16 @@ export function planNotes(family: SlotFamily, version: FirmwareVersion): string[
       notes.push(TOKEN_NOTE);
       notes.push(LOCKED_BOOT_WORD_NOTE);
       if (text === '0.8.0.0') {
-        notes.push(
-          '0.8.0.0: mode 2 (0x14000000) is a crash hazard on this build, an armed read walks off ' +
-            'SRAM (PRESERVATION.md). A slot read or write arms modes 7 to 9 only and never mode 2.',
-        );
+        notes.push(MODE_2_080_NOTE);
       }
       if (text === FF_1308_VERSION) notes.push(FF_1308_NOTE);
       break;
     case 'locked-2016':
       notes.push(TOKEN_NOTE);
       notes.push(LOCKED_2016_BOOT_WORD_NOTE);
-      notes.push(
-        'The 9 Hz builds of 1.0.3.0 and 1.0.3.2 share one key pair, and the FF builds share ' +
-          'another. The version string does not tell them apart, so the keystream is recovered ' +
-          'from the bank itself and the bank’s own image decides.',
-      );
+      notes.push(KEY_PAIRS_2016_NOTE);
       if (text === '1.0.3.0') {
-        notes.push(
-          'The 1.0.3.0 app reboots on any board but the Compact Pro’s, so a Compact board ' +
-            'runs it only with the board patch in its banks.',
-        );
+        notes.push(BOARD_1030_NOTE);
       }
       if (text === '1.0.3.2') notes.push(EP0_1032_NOTE);
       break;
@@ -238,6 +229,27 @@ export function planNotes(family: SlotFamily, version: FirmwareVersion): string[
  * stored under Key B (ff-form.ts); the 2014 bootloader takes a bank only when its stored word sum is 0, and
  * runs recovery unchecked, without decrypting it (TESTING.md 42.10, 42.12).
  */
+const MODE_2_080_NOTE =
+  '0.8.0.0: mode 2 (0x14000000) is a crash hazard on this build, an armed read walks off ' +
+  'SRAM (PRESERVATION.md). A slot read or write arms modes 7 to 9 only and never mode 2.';
+
+const KEY_PAIRS_2016_NOTE =
+  'The 9 Hz builds of 1.0.3.0 and 1.0.3.2 share one key pair, and the FF builds share ' +
+  'another. The version string does not tell them apart, so the keystream is recovered ' +
+  'from the bank itself and the bank’s own image decides.';
+
+const BOARD_1030_NOTE =
+  'The 1.0.3.0 app reboots on any board but the Compact Pro’s, so a Compact board ' +
+  'runs it only with the board patch in its banks.';
+
+const MODERN_A_BANK_NOTE =
+  'Written through a bank arm the modern map leaves out; a Compact XR 4.8.2.1 took a write ' +
+  'through it on a camera.';
+
+const RECOVERY_2016_BANK_NOTE =
+  'Measured on a Compact PRO 1.0.3.0: recovery R took its own image, a one-byte change and the ' +
+  'raw bytes as they were sent, each written without an error.';
+
 const FF_1308_BANK_NOTES: Readonly<Record<SlotKey, string>> = {
   a: 'The 1.3.0.8 FF (16 Hz) image goes here in the form the vendor app sends it, and the camera stores it under its own key. The 2014 bootloader starts a bank only when its words sum to 0, so it passes this one over at boot; whether the 16 Hz build starts from slot A is UNTESTED. The 8 Hz image is written as it is.',
   b: 'The 1.3.0.8 FF (16 Hz) image goes here in the form the vendor app sends it, and the camera stores it under its own key. The 2014 bootloader starts a bank only when its words sum to 0, so it passes this one over at boot; whether the 16 Hz build starts from slot B is UNTESTED. The 8 Hz image is written as it is.',
@@ -284,10 +296,7 @@ export function bankNotes(
       if (key === 'a') {
         /* Read through mode 5 (0x14030000), written through mode 7, a decoded alias of mode 5 (TESTING.md
          * 42.24: a Compact XR 4.8.2.1 took a write through it). */
-        notes.push(
-          'Written through a bank arm the modern map leaves out; a Compact XR 4.8.2.1 took a write ' +
-            'through it on a camera.',
-        );
+        notes.push(MODERN_A_BANK_NOTE);
       }
       break;
     case 'locked-plain':
@@ -296,10 +305,7 @@ export function bankNotes(
     case 'locked-2016':
       if (key === 'r') {
         /* Mode 9, token form; each with commit status 0 (TESTING.md 41.3). */
-        notes.push(
-          'Measured on a Compact PRO 1.0.3.0: recovery R took its own image, a one-byte change and the ' +
-            'raw bytes as they were sent, each written without an error.',
-        );
+        notes.push(RECOVERY_2016_BANK_NOTE);
       }
       break;
     case 'unverified-locked':
@@ -308,4 +314,62 @@ export function bankNotes(
       break;
   }
   return notes;
+}
+
+/* ---- the notes as messages, for the page --------------------------------- *
+ * Every note above is a constant, so its English names it: `capabilityNoteMessage(note)` gives the message
+ * for a note a plan, a bank or an empty bank carries, and a note it does not know stays English. */
+
+function noteMessages(): ReadonlyMap<string, CoreMessage> {
+  const plain: readonly (readonly [string, string])[] = [
+    [LOCKED_BOOT_WORD_NOTE, 'notes.lockedBootWord'],
+    [LOCKED_2016_BOOT_WORD_NOTE, 'notes.locked2016BootWord'],
+    [EP0_1032_NOTE, 'notes.ep0of1032'],
+    [TOKEN_NOTE, 'notes.token'],
+    [LOCKED_PLAIN_STAGING_NOTE, 'notes.staging.lockedPlain'],
+    [LOCKED_2016_STAGING_NOTE, 'notes.staging.locked2016'],
+    [MODERN_STAGING_NOTE, 'notes.staging.modern'],
+    [MODERN_GAP_NOTE, 'notes.modernGap'],
+    [MODERN_NAMED_WRITE_NOTE, 'notes.modernNamedWrite'],
+    [UNVERIFIED_NOTE, 'notes.unverified'],
+    [EMPTY_PLAIN_WHY, 'notes.empty.plain'],
+    [EMPTY_MODERN_WHY, 'notes.empty.modern'],
+    [EMPTY_2016_WHY, 'notes.empty.locked2016'],
+    [MODE_2_080_NOTE, 'notes.mode2of080'],
+    [KEY_PAIRS_2016_NOTE, 'notes.keyPairs2016'],
+    [BOARD_1030_NOTE, 'notes.board1030'],
+    [MODERN_A_BANK_NOTE, 'notes.bank.modernA'],
+    [RECOVERY_2016_BANK_NOTE, 'notes.bank.recovery2016'],
+    [FF_1308_BANK_NOTES.a, 'notes.bank.ff1308A'],
+    [FF_1308_BANK_NOTES.b, 'notes.bank.ff1308B'],
+    [FF_1308_BANK_NOTES.r, 'notes.bank.ff1308R'],
+    ...Object.entries(PRODUCT_NOTES).map(
+      ([version, note]) => [note, `notes.product.${version.replaceAll('.', '_')}`] as const,
+    ),
+  ];
+  return new Map<string, CoreMessage>([
+    ...plain.map(([note, code]) => [note, coreMessage(code, {}, note)] as const),
+    [
+      FF_1308_NOTE,
+      coreMessage(
+        'notes.ff1308',
+        { untested: coreMessage('notes.ffBootUntested', {}, FF_BOOT_UNTESTED) },
+        FF_1308_NOTE,
+      ),
+    ],
+  ]);
+}
+
+let NOTE_MESSAGES: ReadonlyMap<string, CoreMessage> | null = null;
+
+/** A capability note (`planNotes`, `bankNotes`, `emptyBankWhy`, `stagingNote`) as a message; an unknown one as it is. */
+export function capabilityNoteMessage(note: string): CoreMessage | string {
+  NOTE_MESSAGES ??= noteMessages();
+  return NOTE_MESSAGES.get(note) ?? note;
+}
+
+/** Every note `capabilityNoteMessage` knows, for the page's tests. */
+export function capabilityNotes(): string[] {
+  NOTE_MESSAGES ??= noteMessages();
+  return [...NOTE_MESSAGES.keys()];
 }

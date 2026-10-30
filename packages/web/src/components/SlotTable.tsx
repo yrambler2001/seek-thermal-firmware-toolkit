@@ -13,7 +13,8 @@ import { ArchiveRestore, Copy, Download, FileUp, Gauge } from 'lucide-react';
 import {
   SLOT_BYTES,
   hexUp,
-  writeBannerOf,
+  writeBannerMessage,
+  capabilityNoteMessage,
   type FpsPlan,
   type SlotInputKind,
   type SlotKey,
@@ -97,8 +98,8 @@ export function fpsOffNote(plan: FpsPlan, supported: boolean): string | null {
     if (plan.earlierPatch === true) return t('slots:fps.earlierPatch', { hz: plan.hz });
     return t('slots:fps.atRate', { hz: plan.hz });
   }
-  /* i18n: core message (the plan's reason) */
-  return t('slots:fps.notOffered', { reason: plan.reason });
+  /* A reason core gives no code yet (the patch table's own, the build's support) stays English. */
+  return t('slots:fps.notOffered', { reason: coreText(plan.reasonMessage ?? plan.reason) });
 }
 
 /** A bank's bootability cell. `unknownWhy` is core's reason a verdict is unknown on this camera (`unknownBootabilityWhy`). */
@@ -190,7 +191,8 @@ export function SlotTable({
   onPatchFps,
 }: SlotTableProps): ReactElement {
   /* The camera-wide refusal the banner shows, if any: it turns every flash control off (see slotActionGate). */
-  const cameraRefusal = writeBannerOf(report.state);
+  const banner = writeBannerMessage(report.state);
+  const cameraRefusal = banner === null ? null : coreText(banner);
   return (
     <Table>
       <TableCaption>
@@ -255,19 +257,18 @@ export function SlotTable({
                     <Badge tone="neutral">{coreText(NOT_BOOTED_MESSAGE)}</Badge>
                   )}
                 </span>
-                {/* i18n: core message (the bank's notes) */}
                 {entry.notes.map((text) => (
                   <span
                     key={text}
                     className="block text-[0.72rem] leading-snug font-normal whitespace-normal text-muted-foreground"
                   >
-                    {text}
+                    {coreText(capabilityNoteMessage(text))}
                   </span>
                 ))}
               </TableRowHeader>
 
               <TableCell label={t('slots:table.col.firmware')}>
-                {/* i18n: core message (the unread reason, the empty bank's why and reason, the image's reason) */}
+                {/* i18n: core message (the unread reason, the empty bank's reason, the image's reason) */}
                 {state === null ? (
                   <span className="text-warn">
                     {view.unreadReason === null
@@ -282,7 +283,9 @@ export function SlotTable({
                     </span>
                     <span className="mt-1 block text-[0.72rem] leading-snug text-muted-foreground">
                       {entry.emptyBank.writable.supported
-                        ? t('slots:table.emptyWritable', { why: entry.emptyBank.why })
+                        ? t('slots:table.emptyWritable', {
+                            why: coreText(capabilityNoteMessage(entry.emptyBank.why)),
+                          })
                         : t('slots:table.emptyNotWritable', {
                             reason: entry.emptyBank.writable.reason,
                           })}

@@ -24,6 +24,7 @@ import {
   bankParam,
   derivedKeyLineMessage,
   restoreReadBackMessage,
+  capabilityNoteMessage,
 } from '@seek-fw/core';
 import { coreText, coreTexts } from '@/lib/core-text';
 import { DeviceInfoPanel } from '@/components/DeviceInfoPanel';
@@ -188,9 +189,12 @@ function FpsEveryOutcomePanel({ result }: { readonly result: FpsEveryBankResult 
           <li key={one.key}>{`${patchedLine(one)} ${readBackLine(one, true)}`}</li>
         ))}
       </ul>
-      {/* i18n: core message (the reason it stopped) */}
       {result.stopped !== null && (
-        <p>{t('slots:fpsEveryOutcome.stopped', { reason: result.stopped.reason })}</p>
+        <p>
+          {t('slots:fpsEveryOutcome.stopped', {
+            reason: coreText(result.stopped.reasonMessage ?? result.stopped.reason),
+          })}
+        </p>
       )}
       {result.unwritten.length > 0 && (
         <p>
@@ -371,12 +375,11 @@ export function SlotsView({ slots, connected, busy }: SlotsViewProps): ReactElem
           </Alert>
         )}
 
-        {/* i18n: core message (the plan's notes) */}
         {plan !== null && plan.notes.length > 0 && (
           <Prose>
             <ul>
               {plan.notes.map((note) => (
-                <li key={note}>{note}</li>
+                <li key={note}>{coreText(capabilityNoteMessage(note))}</li>
               ))}
             </ul>
           </Prose>

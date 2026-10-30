@@ -27,10 +27,14 @@ vi.mock('@seek-fw/core', async (importOriginal) => {
     ...actual,
     writeBannerOf: (state: Parameters<typeof actual.writeBannerOf>[0]) =>
       cameraVerdict.held === undefined ? actual.writeBannerOf(state) : cameraVerdict.held,
+    /* The page reads the banner as a message (writeBannerMessage); the held verdict stands for both. */
+    writeBannerMessage: (state: Parameters<typeof actual.writeBannerMessage>[0]) =>
+      cameraVerdict.held === undefined ? actual.writeBannerMessage(state) : cameraVerdict.held,
     fpsBootWarningOf: (...args: Parameters<typeof actual.fpsBootWarningOf>) =>
       bootWarning.value === undefined ? actual.fpsBootWarningOf(...args) : bootWarning.value,
   };
 });
+import { coreText } from '../lib/core-text';
 import { detectSupport, type BrowserEnvironment } from '../lib/support';
 import { useReporter, type ReporterHandle } from '../hooks/useReporter';
 import type { SlotsPanelApi } from '../hooks/useSlotsPanel';
@@ -199,7 +203,7 @@ describe('SlotsView', () => {
     const text = container.textContent;
     if (verdict.refusal !== null) {
       expect(text).toContain('No bank of this camera can be written from here.');
-      expect(text).toContain(verdict.refusal);
+      expect(text).toContain(coreText(verdict.refusal));
     } else {
       expect(text).toContain('Keys for the writes');
       expect(text).toContain(`derived from the booted bank ${verdict.bootedName ?? ''}`);

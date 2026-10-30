@@ -56,7 +56,39 @@ import {
   stagingDetailMessage,
   storedUnderCheckKeyMessage,
   unknownBootabilityWhyMessage,
+  BOOT_UNNAMED_REFUSAL,
+  FF_VENDOR_EVIDENCE,
+  KEY_NAMES,
+  KEY_TABLE_REFUSAL,
+  KEY_TABLE_SOURCE,
+  LINE_2016_EVIDENCE,
+  NOT_DERIVED_REFUSAL,
+  PLAIN_CHAIN_EVIDENCE,
+  acceptanceSumRefusal,
+  applicationEvidence,
+  applicationPairSource,
+  bootedKeyEvidence,
+  cameraRefusalMessage,
+  checkKeyEvidence,
+  deriveWriteKeys,
+  keyNameParam,
+  keyNotInTableRefusal,
+  masksEvidence,
+  noApplicationPairRefusal,
+  noBootKeyRefusal,
+  notDecryptedRefusal,
+  otherBankEvidence,
+  otherFamilyRefusal,
+  storeEvidence,
+  storeKeyEvidence,
+  uploadCheckedRefusal,
+  whiteningRefusal,
+  writeBannerMessage,
   NO_READ_WINDOW_NOTE,
+  capabilityNoteMessage,
+  capabilityNotes,
+  fpsPlanOfBank,
+  fpsStoppedMessage,
   VERIFY_OFF_NOTE,
   bootloaderFailureMessages,
   compareReadBack,
@@ -421,6 +453,104 @@ function samples(base: DeviceState): CoreMessage[] {
   });
   add(decryptedNote(null, { length: '0x300', check: keyCheckMessage('VERIFIED(family)', 0) }));
   add(decryptedNote('0x210', { length: '0x300', check: keyCheckMessage('UNVERIFIED', 5) }));
+
+  /* keys: a write's key derivation, its evidence and refusals */
+  const message = (said: CoreMessage | string | null): void => {
+    if (said !== null && typeof said !== 'string') add(said);
+  };
+  KEY_NAMES.forEach((name) => {
+    message(keyNameParam(name));
+  });
+  add(PLAIN_CHAIN_EVIDENCE);
+  FF_VENDOR_EVIDENCE.forEach(add);
+  add(LINE_2016_EVIDENCE);
+  add(checkKeyEvidence(null, null));
+  add(checkKeyEvidence(null, 'the active-slot word could not be read'));
+  add(checkKeyEvidence({ name: 'key block 1', hex: 'aa', from: null, inferred: false }, null));
+  add(checkKeyEvidence({ name: 'key block 1', hex: 'aa', from: 'b', inferred: true }, null));
+  add(checkKeyEvidence({ name: 'Key B', hex: 'aa', from: 'r', inferred: false }, null));
+  add(
+    applicationEvidence({
+      bank: 'a',
+      firmware: '4.9.1.15',
+      keyA: 'aa',
+      keyAAt: '0x100',
+      source: KEY_TABLE_SOURCE,
+      keyB: null,
+    }),
+  );
+  add(
+    applicationEvidence({
+      bank: 'b',
+      firmware: '?',
+      keyA: 'aa',
+      keyAAt: '0x100',
+      source: applicationPairSource('4.9.1.15'),
+      keyB: { hex: 'bb', at: '0x110' },
+    }),
+  );
+  add(storeEvidence(true));
+  add(storeEvidence(false));
+  add(storeKeyEvidence({ key: 'per-device key', hex: 'cc', bank: 'a', held: 'Key A' }));
+  add(bootedKeyEvidence({ bank: 'b', key: 'Key A', hex: 'dd' }));
+  add(masksEvidence(['Key B', 'the per-device key', "the application's Key A"], 'Key B'));
+  add(otherBankEvidence('r', null, 'Key B'));
+  add(otherBankEvidence('b', "the application's Key B", 'per-device key'));
+  add(BOOT_UNNAMED_REFUSAL);
+  add(NOT_DERIVED_REFUSAL);
+  add(notDecryptedRefusal('a'));
+  add(noBootKeyRefusal('b'));
+  add(keyNotInTableRefusal('a', 'Key B'));
+  add(noApplicationPairRefusal('a', '4.9.1.15', null));
+  add(noApplicationPairRefusal('a', '?', { keyA: 2, keyB: 0 }));
+  add(uploadCheckedRefusal({ bank: 'a', firmware: '4.18.2.0', key: 'Key B', hex: 'ee' }));
+  add(
+    cameraRefusalMessage([
+      acceptanceSumRefusal('Mosaic', '0x00000000'),
+      KEY_TABLE_REFUSAL,
+      whiteningRefusal('0x1', 'Mosaic', '0x2'),
+      otherFamilyRefusal('Compact', 'Mosaic', ['a reason', 'another']),
+    ]),
+  );
+  add(cameraRefusalMessage(['an old reason']));
+  (deriveWriteKeys(base).evidenceMessages ?? []).forEach(add);
+  message(
+    writeBannerMessage({
+      ...base,
+      bankWriteRefusals: [KEY_TABLE_REFUSAL.text],
+      bankWriteRefusalMessages: [KEY_TABLE_REFUSAL],
+    }),
+  );
+
+  /* notes: every capability note */
+  capabilityNotes().forEach((note) => {
+    message(capabilityNoteMessage(note));
+  });
+
+  /* fps: a bank's plan refused, a patch of every bank stopped */
+  for (const fpsReport of [
+    { ...report, slots: report.slots.slice(1) },
+    withView(report, 'a', {
+      entry: slotEntry('a', { flashPlain: { supported: false, reason: 'no window' } }),
+    }),
+    withView(report, 'a', { content: 'empty' }),
+    withView(report, 'a', {
+      state: report.slots[0]?.state ? { ...report.slots[0].state, plain: null } : null,
+    }),
+  ]) {
+    const plan = fpsPlanOfBank(fpsReport, 'a');
+    if (plan.status === 'refused' && plan.reasonMessage !== undefined) add(plan.reasonMessage);
+  }
+  add(fpsStoppedMessage(bankParam('b', 'name')));
+  add(fpsStoppedMessage('Main', new Error('transfer failed')));
+  add(
+    fpsStoppedMessage(
+      bankParam('r', 'name'),
+      new SeekError('slots/refused', NOT_DERIVED_REFUSAL.text, {
+        coreMessage: NOT_DERIVED_REFUSAL,
+      }),
+    ),
+  );
 
   const all: CoreMessage[] = [];
   out.forEach((message) => {

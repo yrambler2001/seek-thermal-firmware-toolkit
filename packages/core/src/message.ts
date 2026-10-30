@@ -31,11 +31,11 @@ export interface CoreCapitalParam {
 
 /**
  * Params joined into one: `and` pairwise ("A and B and C"), `commaAnd` as core's bank lists say it
- * ("A, B and C"), `semicolon` with "; ".
+ * ("A, B and C"), `comma` with ", " only, `semicolon` with "; ".
  */
 export interface CoreListParam {
   readonly list: readonly CoreParam[];
-  readonly join: 'and' | 'commaAnd' | 'semicolon';
+  readonly join: 'and' | 'comma' | 'commaAnd' | 'semicolon';
 }
 
 export type CoreParam =
@@ -104,6 +104,7 @@ export function paramText(param: CoreParam): string {
   if ('capital' in param) return capitalise(paramText(param.capital));
   const words = param.list.map(paramText);
   if (param.join === 'semicolon') return words.join('; ');
+  if (param.join === 'comma') return words.join(', ');
   if (param.join === 'and' || words.length < 2) return words.join(' and ');
   return `${words.slice(0, -1).join(', ')} and ${words.at(-1) ?? ''}`;
 }

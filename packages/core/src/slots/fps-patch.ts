@@ -41,7 +41,8 @@
 
 import { equalBytes, viewOf } from '../bytes.js';
 import { bankWordsOf } from '../profiles/locked-boot.js';
-import { CancelledError, errorMessage, SeekError } from '../errors.js';
+import { CancelledError, errorCoreMessage, errorMessage, SeekError } from '../errors.js';
+import { bankParam, coreMessage, paramText, type CoreMessage, type CoreParam } from '../message.js';
 import { decryptImage } from '../crypto/cipher.js';
 import { recoverKeyInfo } from '../crypto/recover.js';
 import type { CipherProfile } from '../profiles/types.js';
@@ -55,6 +56,7 @@ import {
 } from '../preservation/fps-patch.js';
 import type { WorkflowContext } from '../workflows/types.js';
 import {
+  bankNameParam,
   buildWriteBackup,
   saveBackupFirst,
   backupLogLines,
@@ -150,24 +152,64 @@ export function fpsPlanOfBank(report: SlotsReport, key: SlotKey): FpsPlan {
   }
   const view = report.slots.find((candidate) => candidate.entry.key === key);
   if (view === undefined)
-    return { status: 'refused', reason: `this build's plan has no ${bankWordsOf(key)}` };
+    return refusedPlan(
+      coreMessage(
+        'fps.plan.noBank',
+        { bank: bankParam(key) },
+        `this build's plan has no ${bankWordsOf(key)}`,
+      ),
+    );
   if (!view.entry.flashPlain.supported) {
-    return {
-      status: 'refused',
-      reason: `${bankWordsOf(key)} cannot take a decrypted image on this build: ${view.entry.flashPlain.reason}`,
-    };
+    return refusedPlan(
+      coreMessage(
+        'fps.plan.noPlain',
+        { bank: bankParam(key), reason: view.entry.flashPlain.reason },
+        `${bankWordsOf(key)} cannot take a decrypted image on this build: ${view.entry.flashPlain.reason}`,
+      ),
+    );
   }
   const plain = view.state?.plain ?? null;
   if (view.content === 'empty' || plain === null) {
-    return {
-      status: 'refused',
-      reason: `${bankWordsOf(key)} has no decrypted image to patch (${view.content === 'empty' ? 'it is empty' : 'it was not read or no key opens it'})`,
-    };
+    return refusedPlan(
+      view.content === 'empty'
+        ? coreMessage(
+            'fps.plan.empty',
+            { bank: bankParam(key) },
+            `${bankWordsOf(key)} has no decrypted image to patch (it is empty)`,
+          )
+        : coreMessage(
+            'fps.plan.noImage',
+            { bank: bankParam(key) },
+            `${bankWordsOf(key)} has no decrypted image to patch (it was not read or no key opens it)`,
+          ),
+    );
   }
   return planFpsPatch(plain, report.state.version);
 }
 
 export type { FpsPatch, FpsPlan };
+
+function refusedPlan(reason: CoreMessage): FpsPlan {
+  return { status: 'refused', reason: reason.text, reasonMessage: reason };
+}
+
+/** Why a patch of every bank stopped at a bank: its read-back, or the error it met (`error`). */
+export function fpsStoppedMessage(name: CoreParam, error?: unknown): CoreMessage {
+  if (error === undefined) {
+    return coreMessage(
+      'fpsEvery.stopped.readBack',
+      { name },
+      `${paramText(name)} was written, but its read-back does not differ from the saved bank only ` +
+        'as planned, so the banks after it were not written',
+    );
+  }
+  const said: CoreParam = errorCoreMessage(error) ?? errorMessage(error);
+  return coreMessage(
+    'fpsEvery.stopped.error',
+    { name, error: said },
+    `${paramText(name)}: ${paramText(said)}`,
+  );
+}
 
 /**
  * The writer's plan for the patched image, decided before anything is saved or sent. The image goes
@@ -501,7 +543,12 @@ export interface FpsEveryBankResult {
    * The bank where it stopped and why: a write that failed (that bank may be partly written), or a
    * read-back that does not differ only as planned (that bank was written). Null when every bank was written.
    */
-  readonly stopped: { readonly key: SlotKey; readonly reason: string } | null;
+  readonly stopped: {
+    readonly key: SlotKey;
+    readonly reason: string;
+    /** `reason` as a message, for the page. */
+    readonly reasonMessage?: CoreMessage;
+  } | null;
   /** The banks after the stop, not written. */
   readonly unwritten: readonly SlotKey[];
 }
@@ -551,17 +598,14 @@ export async function patchEveryBankFps(
       const done = await sendPatch(ctx, report, one, backup, options);
       results.push(done);
       if (done.readBack.ok === false || done.written.verified === false) {
-        stopped = {
-          key: one.key,
-          reason:
-            `${one.entry.name} was written, but its read-back does not differ from the saved bank only ` +
-            'as planned, so the banks after it were not written',
-        };
+        const reason = fpsStoppedMessage(bankNameParam(one.entry.name, one.key));
+        stopped = { key: one.key, reason: reason.text, reasonMessage: reason };
         break;
       }
     } catch (error) {
       if (error instanceof CancelledError) throw error;
-      stopped = { key: one.key, reason: `${one.entry.name}: ${errorMessage(error)}` };
+      const reason = fpsStoppedMessage(bankNameParam(one.entry.name, one.key), error);
+      stopped = { key: one.key, reason: reason.text, reasonMessage: reason };
       break;
     }
   }

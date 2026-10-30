@@ -36,6 +36,7 @@ function paramWords(param: CoreParam, translate: Translate): string | number {
   if ('capital' in param) return capitalise(String(paramWords(param.capital, translate)));
   const words = param.list.map((item) => String(paramWords(item, translate)));
   if (param.join === 'semicolon') return words.join('; ');
+  if (param.join === 'comma') return listComma(words, translate);
   if (param.join === 'and') return listAnd(words, translate);
   const last = words.at(-1);
   if (last === undefined) return '';

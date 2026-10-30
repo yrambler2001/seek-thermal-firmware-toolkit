@@ -45,6 +45,7 @@ import type {
   WhiteningResolution,
 } from '../crypto/keys.js';
 import type { ImageFooter, ImageHeader } from '../image/header.js';
+import type { CoreMessage } from '../message.js';
 
 /* ==================================================================== *
  * Options
@@ -373,6 +374,8 @@ export interface DeviceState {
    * their own image (the 2014 chain, the 2016 line, the 1.3.0.8 FF image) do not need the table.
    */
   readonly bankWriteRefusals: readonly string[];
+  /** `bankWriteRefusals` as messages, for the page. */
+  readonly bankWriteRefusalMessages?: readonly CoreMessage[];
   /**
    * The 2016 Compact PRO line only: the key its bootloader checks a bank under, named from the bank the
    * camera reports it entered (device-info.ts `checkKeyOf`), or the reason it could not be named. Null on

@@ -15,7 +15,7 @@ import { KeyRound } from 'lucide-react';
 import {
   bankNameOf,
   deriveWriteKeys,
-  writeBannerOf,
+  writeBannerMessage,
   type SlotKey,
   type SlotsReport,
   type WriteKeyForm,
@@ -27,6 +27,7 @@ import {
   storedUnderCheckKeyMessage,
   type CoreMessage,
   type CoreParam,
+  keyNameParam,
 } from '@seek-fw/core';
 import { coreText } from '@/lib/core-text';
 import { t } from '@/i18n';
@@ -38,7 +39,7 @@ import { Alert } from './ui/alert';
 
 export interface WriteKeysVerdict {
   /** The measured reason no bank can be written, or null. */
-  readonly refusal: string | null;
+  readonly refusal: CoreMessage | string | null;
   /**
    * How the keys are chosen: 'plain' on the 2014 plaintext chain (no key is derived; not a refusal),
    * 'image-block-0' on the 2016 Compact PRO (the image's own key block 0; the camera stores under the key its
@@ -50,7 +51,7 @@ export interface WriteKeysVerdict {
    * Why the derivation names no key, when it does not ('derived' only): the row the CLI prints as "refused".
    * Not the banner (`refusal`), which is camera-wide.
    */
-  readonly keysRefusal: string | null;
+  readonly keysRefusal: CoreMessage | string | null;
   /** The booted bank's name, as the page shows it ("slot A"), or null when none is named. */
   readonly bootedName: string | null;
   /** The booted bank, so the page can name it in the language in use; left out where only a name is known. */
@@ -65,7 +66,7 @@ export interface WriteKeysVerdict {
   /** The 2016 line: what a written bank is stored under, in core's words (`storedUnderCheckKey`); else null. */
   readonly storedAs: CoreMessage | null;
   /** One line per fact the derivation relied on. */
-  readonly evidence: readonly string[];
+  readonly evidence: readonly (CoreMessage | string)[];
 }
 
 /** The verdict for a report: core's answer, with the booted bank named as the page names it. */
@@ -78,15 +79,15 @@ export function writeKeysVerdictOf(report: SlotsReport): WriteKeysVerdict {
         bankNameOf(keys.booted));
   return {
     /* The banner's text is core's (writeBannerOf): the same words the CLI's JSON carries. */
-    refusal: writeBannerOf(report.state),
+    refusal: writeBannerMessage(report.state),
     form: keys.form,
-    keysRefusal: keys.refusal,
+    keysRefusal: keys.refusalMessage ?? keys.refusal,
     bootedName: booted,
     bootedKey: keys.booted,
     keyName: keys.atRest?.name ?? null,
     bootedKeyName: keys.bootedKeyName,
     storedAs: keys.form === 'image-block-0' ? storedUnderCheckKeyMessage(keys) : null,
-    evidence: keys.evidence,
+    evidence: keys.evidenceMessages ?? keys.evidence,
   };
 }
 
@@ -101,8 +102,7 @@ export function SlotWriteKeys({ verdict }: SlotWriteKeysProps): ReactElement {
         <p>
           <strong>{t('slots:keys.refusedTitle')}</strong>
         </p>
-        {/* i18n: core message (writeBannerOf) */}
-        <p>{verdict.refusal}</p>
+        <p>{coreText(verdict.refusal)}</p>
       </Alert>
     );
   }
@@ -119,10 +119,10 @@ export function SlotWriteKeys({ verdict }: SlotWriteKeysProps): ReactElement {
         {verdict.evidence.length > 0 && (
           <Prose>
             <ul>
-              {/* i18n: core message (the derivation's evidence) */}
-              {verdict.evidence.map((line) => (
-                <li key={line}>{line}</li>
-              ))}
+              {verdict.evidence.map((said) => {
+                const line = coreText(said);
+                return <li key={line}>{line}</li>;
+              })}
             </ul>
           </Prose>
         )}
@@ -147,10 +147,10 @@ export function SlotWriteKeys({ verdict }: SlotWriteKeysProps): ReactElement {
         {verdict.evidence.length > 0 && (
           <Prose>
             <ul>
-              {/* i18n: core message (the derivation's evidence) */}
-              {verdict.evidence.map((line) => (
-                <li key={line}>{line}</li>
-              ))}
+              {verdict.evidence.map((said) => {
+                const line = coreText(said);
+                return <li key={line}>{line}</li>;
+              })}
             </ul>
           </Prose>
         )}
@@ -172,10 +172,10 @@ export function SlotWriteKeys({ verdict }: SlotWriteKeysProps): ReactElement {
         {verdict.evidence.length > 0 && (
           <Prose>
             <ul>
-              {/* i18n: core message (the derivation's evidence) */}
-              {verdict.evidence.map((line) => (
-                <li key={line}>{line}</li>
-              ))}
+              {verdict.evidence.map((said) => {
+                const line = coreText(said);
+                return <li key={line}>{line}</li>;
+              })}
             </ul>
           </Prose>
         )}
@@ -188,8 +188,7 @@ export function SlotWriteKeys({ verdict }: SlotWriteKeysProps): ReactElement {
     return (
       <Panel className="mt-3">
         <PanelTitle icon={<KeyRound />}>{t('slots:keys.title')}</PanelTitle>
-        {/* i18n: core message (the derivation's refusal) */}
-        <KeyValue rows={[[t('slots:keys.refused'), verdict.keysRefusal]]} />
+        <KeyValue rows={[[t('slots:keys.refused'), coreText(verdict.keysRefusal)]]} />
       </Panel>
     );
   }
@@ -202,7 +201,10 @@ export function SlotWriteKeys({ verdict }: SlotWriteKeysProps): ReactElement {
     verdict.bootedKey == null
       ? (verdict.bootedName ?? t('slots:keys.theBootedBank'))
       : bankNameParam(verdict.bootedName ?? bankNameOf(verdict.bootedKey), verdict.bootedKey);
-  const bootedKey = verdict.bootedKeyName ?? t('slots:keys.unnamedKey');
+  const bootedKey =
+    verdict.bootedKeyName === null
+      ? t('slots:keys.unnamedKey')
+      : coreText(keyNameParam(verdict.bootedKeyName));
   const key = verdict.keyName ?? t('slots:keys.bootedBanksKey');
   return (
     <Panel className="mt-3">
@@ -224,9 +226,10 @@ export function SlotWriteKeys({ verdict }: SlotWriteKeysProps): ReactElement {
       {verdict.evidence.length > 0 && (
         <Prose>
           <ul>
-            {verdict.evidence.map((line) => (
-              <li key={line}>{line}</li>
-            ))}
+            {verdict.evidence.map((said) => {
+              const line = coreText(said);
+              return <li key={line}>{line}</li>;
+            })}
           </ul>
         </Prose>
       )}

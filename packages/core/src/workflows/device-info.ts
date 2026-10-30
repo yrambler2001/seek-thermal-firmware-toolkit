@@ -89,6 +89,12 @@ import {
 } from './types.js';
 import { channelEvidenceOf } from './capability.js';
 import { planForDevice } from './window-plan.js';
+import {
+  KEY_TABLE_REFUSAL,
+  acceptanceSumRefusal,
+  otherFamilyRefusal,
+  whiteningRefusal,
+} from '../slots/write-keys-words.js';
 
 /** Bytes of the bootloader block scanned for the key table. */
 const BOOT_BLOCK_BYTES = 0x8000;
@@ -1455,21 +1461,20 @@ export async function readDeviceInfo(
    * application, write-keys.ts). The key table and the acceptance sum are the cipher chains' questions: on
    * the 2014 plaintext chain nothing is encrypted, and its own measurements (identity keystream, stored
    * word sum 0) stand in for both. */
-  const bankWriteRefusals: string[] = [];
+  const bankWriteRefusalMessages: CoreMessage[] = [];
   if (!familyOk && !plainChain) {
-    bankWriteRefusals.push(
-      `no slot decrypts to ${profile.name}'s ${hexUp(profile.cipher.acceptanceSum)} acceptance sum`,
+    bankWriteRefusalMessages.push(
+      acceptanceSumRefusal(profile.name, hexUp(profile.cipher.acceptanceSum)),
     );
   }
   /* Only a write sent under the camera's keys reads the table; the 2016 line, the 2014 chain and the
    * 1.3.0.8 FF image stage from their own image. */
   if (underCameraKey && !keyTable && !plainChain) {
-    bankWriteRefusals.push("this camera's key table could not be confirmed");
+    bankWriteRefusalMessages.push(KEY_TABLE_REFUSAL);
   }
   if (keyWhiteningK !== profile.cipher.whiteningK) {
-    bankWriteRefusals.push(
-      `this camera's key table resolves under K=${hexUp(keyWhiteningK)} but ${profile.name} ` +
-        `encrypts under K=${hexUp(profile.cipher.whiteningK)}`,
+    bankWriteRefusalMessages.push(
+      whiteningRefusal(hexUp(keyWhiteningK), profile.name, hexUp(profile.cipher.whiteningK)),
     );
   }
   if (!detection.ambiguous && detection.best.profile.id !== profile.id) {
@@ -1485,11 +1490,11 @@ export async function readDeviceInfo(
      * caller that wants the detected family re-reads under it explicitly —
      * one extra read is a cheap price for the adoption being a decision
      * somebody made rather than one the code made quietly. */
-    bankWriteRefusals.push(
-      `the evidence says this camera is ${detection.best.profile.name}, not ${profile.name} ` +
-        `(${detection.best.reasons.join('; ')})`,
+    bankWriteRefusalMessages.push(
+      otherFamilyRefusal(detection.best.profile.name, profile.name, detection.best.reasons),
     );
   }
+  const bankWriteRefusals = bankWriteRefusalMessages.map((reason) => reason.text);
   if (bankWriteRefusals.length > 0) {
     reporter.log('');
     for (const reason of bankWriteRefusals) {
@@ -1527,6 +1532,7 @@ export async function readDeviceInfo(
     familyOk,
     plainChain,
     bankWriteRefusals,
+    bankWriteRefusalMessages,
     checkKey,
   };
 
