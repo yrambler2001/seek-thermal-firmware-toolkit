@@ -158,6 +158,8 @@ import {
   VERSION_NOTE,
   COPY_WORDS,
   RESTORE_WORDS,
+  PRESERVE_FAIL,
+  spentReaderRefusalMessage,
   COMPACT_2016_EVIDENCE,
   EARLY_COMPACT_EVIDENCE,
   GENERIC_EVIDENCE,
@@ -1090,6 +1092,26 @@ function samples(base: DeviceState): CoreMessage[] {
   ]) {
     for (const sentence of Object.values(family)) {
       if (typeof sentence !== 'function') add(sentence);
+    }
+  }
+
+  /* preserve: why a step stopped */
+  add(spentReaderRefusalMessage('every byte 0xFF'));
+  add(PRESERVE_FAIL.notInBackup('a', 0x14010000));
+  add(PRESERVE_FAIL.readsDisagree('b', 'ab', 'cd'));
+  add(PRESERVE_FAIL.notFactory('r'));
+  add(PRESERVE_FAIL.ffSum);
+  add(PRESERVE_FAIL.headChanged('a', '00', '11'));
+  add(PRESERVE_FAIL.landed(['a']));
+  add(PRESERVE_FAIL.landed(['a', 'b', 'r']));
+  add(PRESERVE_FAIL.drainRebootRefused);
+  add(PRESERVE_FAIL.shiftedRebootRefused);
+  const places = [0x14010000, 0x14000000, 0x14070000].map((address) =>
+    PRESERVE_FAIL.verifyPlace(address),
+  );
+  for (const where of [[], places]) {
+    for (const short of [[], [3, 7]]) {
+      add(PRESERVE_FAIL.verify({ count: 12, read: 63, total: 64, places: where, short }));
     }
   }
 

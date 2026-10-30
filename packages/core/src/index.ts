@@ -530,6 +530,8 @@ export {
   PRESERVE_UNPATCHED_START_NEXT,
   PRESERVE_UNPATCHED_START_NEXT_MESSAGE,
   PRESERVE_UNPATCHED_START_STOP_MESSAGE,
+  PRESERVE_FAIL,
+  spentReaderRefusalMessage,
   bankDerivedWords,
   blockSweepWords,
   derivationWords,

@@ -39,8 +39,11 @@
  *   names (`{file}`), a SHA-256 (`{sha256}`), a selector table's name
  *   (`{table}`) and family names (`{family}`, `{detected}`).
  * - Still English inside a translated sentence (core gives them no code yet):
- *   `{error}` when the error has no code (a USB error, a bug), and a read
- *   reason (read.reason.*'s place) that came from such an error.
+ *   `{error}` when the error has no code (a USB error, a bug, a refusal only a
+ *   broken run file reaches, or one not converted yet: a Preserve step's
+ *   precondition, the patch derivation, a slot plan file, write-image,
+ *   write-commit), a read reason (read.reason.*'s place) that came from such
+ *   an error, and `{signature}` in preserve.fail.spentReader.
  * - Capitals: keep the English's. A template that starts lower case is said
  *   inside another sentence or after a label ("Note: …", a list item, "Not
  *   read: …"); one that starts upper case stands alone.
@@ -858,6 +861,44 @@ export default {
   'preserve.done.detailNoImageCount':
     'The whole-flash read did not run, so this run has no complete image of the flash. Every written bank was put back, and a fresh read of the {blocks} blocks a normal dump reaches matches the backup. For the complete image, start a new run with a choice that includes the bank the next start enters.',
   /** Why the run cannot write a bank (`{reason}` in preserve.bank.notWritten and preserve.choice.*). `{error}` is the read's error; `{sha256}`/`{other}` are hashes. */
+  /* ---- preserve.fail: why a Preserve step stopped (preservation/steps), shown as "{error}" ---- */
+  /** `{signature}`: what the spent reader served, in English (a description of the bytes). `preserve --resume <run-directory>` stays as it is. */
+  'preserve.fail.spentReader':
+    'the camera’s window reader is budgeted per boot and these reads came back from a spent reader — power-cycle the camera (unplug and replug it, or use its power switch), then re-run `preserve --resume <run-directory>`. Signature: {signature}',
+  /** `{address}` hex; `{sha256}`, `{other}`: SHA-256 values; `{live}`, `{capture}`: hex bytes. */
+  'preserve.fail.notInBackup':
+    'the backup does not hold {bank} ({address}) — the stock windows cannot serve it',
+  'preserve.fail.readsDisagree':
+    'the two reads of {bank} disagree (sha256 {sha256} vs {other}) — a camera that cannot serve the bank it runs twice in a row is not a camera to write to; the capture is the restore source and the patch’s derivation input',
+  'preserve.fail.notFactory':
+    '{bank} does not hold the factory image as this build’s cipher stores it (the expected image prefix does not match the capture) — refusing before anything is recorded, let alone written',
+  'preserve.fail.ffSum':
+    'the patched firmware, in the form the camera stores it, does not pass this build’s own check (its sum must be {sum}) — refusing to send a bank the camera would reject after the erase',
+  'preserve.fail.headChanged':
+    "{bank}'s head changed since the backup (it holds neither the original capture nor the patched bytes) — refusing to write over an unknown bank state; nothing was written. Head hex: live {live} vs capture {capture}",
+  /** `--resume` stays as it is. */
+  'preserve.fail.landedOne':
+    '{banks} already holds the patched bytes — the commit landed in a previous attempt and must not be replayed. Resume at the drain step (--resume), which boots the patched image and continues from there.',
+  'preserve.fail.landed':
+    '{banks} already hold the patched bytes — the commit landed in a previous attempt and must not be replayed. Resume at the drain step (--resume), which boots the patched image and continues from there.',
+  'preserve.fail.drainRebootRefused':
+    'the drain’s reboot command was REFUSED by the host before it left (a SecurityError: a browser policy or a test guard), so the camera still runs the image it booted with, not the committed patch. The drain reads only through the patched image’s widened window, so it stops before arming anything; nothing was read. Run the drain again where the host lets the restart command through.',
+  'preserve.fail.shiftedRebootRefused':
+    'the drain came back one page high, and the reboot that takes another boot was REFUSED by the host before it left (a SecurityError: a browser policy or a test guard) — another attempt would drain the same shifted boot. Nothing was kept; run the drain again where the reset can go out.',
+  /** `{count}`: bytes; `{read}`/`{total}`: windows; `{places}`: preserve.fail.verifyPlace, joined with commas; `{short}`: window numbers. */
+  'preserve.fail.verify':
+    'the verify read {count} differing byte(s) over {read}/{total} windows — the part does not re-read byte-identical to the backup',
+  'preserve.fail.verifyIn':
+    'the verify read {count} differing byte(s) over {read}/{total} windows (in {places}) — the part does not re-read byte-identical to the backup',
+  'preserve.fail.verifyShort':
+    'the verify read {count} differing byte(s) over {read}/{total} windows (short windows: {short}) — the part does not re-read byte-identical to the backup',
+  'preserve.fail.verifyInShort':
+    'the verify read {count} differing byte(s) over {read}/{total} windows (in {places}) (short windows: {short}) — the part does not re-read byte-identical to the backup',
+  /** `{what}`: a bank, or one of the two below; `{address}` hex. */
+  'preserve.fail.verifyPlace': '{what} {address}',
+  'preserve.fail.bootConfigBlock': 'the boot-config block',
+  'preserve.fail.dataBlock': 'a data block',
+
   'preserve.refused.secondRead': 'its second read failed ({error})',
   'preserve.refused.readsDisagree': 'its two reads disagree (sha256 {sha256} vs {other})',
   'preserve.refused.erased': 'it is erased',

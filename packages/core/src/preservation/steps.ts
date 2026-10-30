@@ -170,6 +170,7 @@ import {
   isStaleDescriptorWord,
   preservationWindows,
   spentReaderRefusal,
+  spentReaderRefusalMessage,
   type BankKey,
 } from './windows.js';
 
@@ -179,7 +180,7 @@ import {
 
 /** The six steps, in run order. */
 import { errorCoreMessage } from '../errors.js';
-import type { CoreMessage } from '../message.js';
+import type { CoreMessage, CoreParam } from '../message.js';
 
 /** A failed record without its error code: a later failure records its own, or none. */
 function withoutErrorCode(record: PreserveStepRecord): PreserveStepRecord {
@@ -1035,9 +1036,126 @@ function expectedPrefixOf(state: PreserveRunState): Uint8Array | undefined {
   return state.expectedSlotPrefix === undefined ? undefined : hexToBytes(state.expectedSlotPrefix);
 }
 
-function fail(message: string): never {
-  throw new SeekError('pipeline/refused', message);
+function fail(message: string | CoreMessage): never {
+  if (typeof message === 'string') throw new SeekError('pipeline/refused', message);
+  throw new SeekError('pipeline/refused', message.text, { coreMessage: message });
 }
+
+/**
+ * Why a step stopped, as messages for the page (the run file keeps the English as `error` and the message
+ * as `errorCode`). The refusals that only a broken run file can reach stay English.
+ */
+export const PRESERVE_FAIL = {
+  notInBackup: (bank: BankKey, address: number): CoreMessage =>
+    coreMessage(
+      'preserve.fail.notInBackup',
+      { bank: bankParam(bank), address: hexUp(address, 8) },
+      `the backup does not hold ${bankWordsOf(bank)} (${hexUp(address, 8)}) — the stock windows cannot serve it`,
+    ),
+  readsDisagree: (bank: BankKey, sha256: string, other: string): CoreMessage =>
+    coreMessage(
+      'preserve.fail.readsDisagree',
+      { bank: bankParam(bank), sha256, other },
+      `the two reads of ${bankWordsOf(bank)} disagree (sha256 ${sha256} vs ${other}) — a camera that cannot ` +
+        'serve the bank it runs twice in a row is not a camera to write to; the capture is the ' +
+        'restore source and the patch’s derivation input',
+    ),
+  notFactory: (bank: BankKey): CoreMessage =>
+    coreMessage(
+      'preserve.fail.notFactory',
+      { bank: bankParam(bank) },
+      `${bankWordsOf(bank)} does not hold the factory image as this build’s cipher stores it ` +
+        '(the expected image prefix does not match the capture) — refusing before anything ' +
+        'is recorded, let alone written',
+    ),
+  ffSum: coreMessage(
+    'preserve.fail.ffSum',
+    { sum: '0xFFFF' },
+    'the patched firmware, in the form the camera stores it, does not pass this build’s own ' +
+      'check (its sum must be 0xFFFF) — refusing to send a bank the camera would reject ' +
+      'after the erase',
+  ),
+  headChanged: (bank: BankKey, live: string, capture: string): CoreMessage =>
+    coreMessage(
+      'preserve.fail.headChanged',
+      { bank: bankParam(bank), live, capture },
+      `${bankWordsOf(bank)}'s head changed since the backup (it holds neither the original capture ` +
+        'nor the patched bytes) — refusing to write over an unknown bank state; nothing ' +
+        `was written. Head hex: live ${live} vs capture ${capture}`,
+    ),
+  landed: (banks: readonly BankKey[]): CoreMessage =>
+    coreMessage(
+      banks.length === 1 ? 'preserve.fail.landedOne' : 'preserve.fail.landed',
+      {
+        banks: listParam(
+          banks.map((key) => bankParam(key)),
+          'commaAnd',
+        ),
+      },
+      `${bankList(banks)} already ${banks.length === 1 ? 'holds' : 'hold'} the patched ` +
+        'bytes — the commit landed in a previous attempt and must not be replayed. Resume ' +
+        'at the drain step (--resume), which boots the patched image and continues from ' +
+        'there.',
+    ),
+  drainRebootRefused: coreMessage(
+    'preserve.fail.drainRebootRefused',
+    {},
+    'the drain’s reboot command was REFUSED by the host before it left (a SecurityError: ' +
+      'a browser policy or a test guard), so the camera still runs the image it booted ' +
+      'with, not the committed patch. The drain reads only through the patched image’s ' +
+      'widened window, so it stops before arming anything; nothing was read. Run the drain ' +
+      'again where the host lets the restart command through.',
+  ),
+  shiftedRebootRefused: coreMessage(
+    'preserve.fail.shiftedRebootRefused',
+    {},
+    'the drain came back one page high, and the reboot that takes another boot was ' +
+      'REFUSED by the host before it left (a SecurityError: a browser policy or a test ' +
+      'guard) — another attempt would drain the same shifted boot. Nothing was kept; run ' +
+      'the drain again where the reset can go out.',
+  ),
+  /** `places`: the blocks that differ (`verifyPlace`); `short`: the short windows' numbers. */
+  verify: (facts: {
+    readonly count: number;
+    readonly read: number;
+    readonly total: number;
+    readonly places: readonly CoreMessage[];
+    readonly short: readonly number[];
+  }): CoreMessage => {
+    const where = facts.places.length > 0;
+    const short = facts.short.length > 0;
+    const code = `preserve.fail.verify${where ? 'In' : ''}${short ? 'Short' : ''}`;
+    return coreMessage(
+      code,
+      {
+        count: facts.count,
+        read: facts.read,
+        total: facts.total,
+        ...(where ? { places: listParam(facts.places, 'comma') } : {}),
+        ...(short ? { short: facts.short.join(',') } : {}),
+      },
+      `the verify read ${String(facts.count)} differing byte(s) over ` +
+        `${String(facts.read)}/${String(facts.total)} windows` +
+        (where ? ` (in ${facts.places.map((place) => place.text).join(', ')})` : '') +
+        (short ? ` (short windows: ${facts.short.join(',')})` : '') +
+        ' — the part does not re-read byte-identical to the backup',
+    );
+  },
+  verifyPlace: (address: number): CoreMessage => {
+    const bank = BANKS.find((entry) => entry.address === address);
+    const what: CoreParam =
+      bank !== undefined
+        ? bankParam(bank.key)
+        : address === BOOT_CONFIG_ADDRESS
+          ? coreMessage('preserve.fail.bootConfigBlock', {}, 'the boot-config block')
+          : coreMessage('preserve.fail.dataBlock', {}, 'a data block');
+    return coreMessage(
+      'preserve.fail.verifyPlace',
+      { what, address: hexUp(address, 8) },
+      `${paramText(what)} ${hexUp(address, 8)}`,
+    );
+  },
+} as const;
 
 function stepRecord(
   startedAt: string,
@@ -1463,9 +1581,7 @@ async function captureAnchor(
   const address = bankOf(bank).address;
   const sweepRow = byAddress.get(address);
   if (sweepRow === undefined) {
-    fail(
-      `the backup does not hold ${words} (${hexUp(address, 8)}) — the stock windows cannot serve it`,
-    );
+    fail(PRESERVE_FAIL.notInBackup(bank, address));
   }
   const [bankEntry, planEntry] = doubleReadWindows(bank);
   const fresh = await readBankOnFreshBoot(
@@ -1487,11 +1603,7 @@ async function captureAnchor(
   let verifiedSecond: Uint8Array = fresh;
   let serveNote = 'both reads agree';
   const disagree = (sha1: string, sha2: string): never =>
-    fail(
-      `the two reads of ${words} disagree (sha256 ${sha1} vs ${sha2}) — a camera that cannot ` +
-        'serve the bank it runs twice in a row is not a camera to write to; the capture is the ' +
-        'restore source and the patch’s derivation input',
-    );
+    fail(PRESERVE_FAIL.readsDisagree(bank, sha1, sha2));
   if (!slotReadIsPlausible(sweepRow)) {
     if (!slotReadIsPlausible(fresh)) {
       /* Both boots served garbage. One more admitted boot for the sweep row's
@@ -1506,7 +1618,7 @@ async function captureAnchor(
       );
       if (!slotReadIsPlausible(rescued)) {
         fail(
-          spentReaderRefusal(
+          spentReaderRefusalMessage(
             `the reads of ${words}, the bank the camera runs, served garbage on three boots ` +
               `(${slotGarbageNoun(sweepRow)}; ${slotGarbageNoun(fresh)}; then ` +
               `${slotGarbageNoun(rescued)})`,
@@ -1547,7 +1659,7 @@ async function captureAnchor(
           'agrees with the backup’s first read';
       } else if (!slotReadIsPlausible(again)) {
         fail(
-          spentReaderRefusal(
+          spentReaderRefusalMessage(
             `the fresh-boot reads of ${words} served garbage twice (${slotGarbageNoun(fresh)}; ` +
               `then ${slotGarbageNoun(again)})`,
           ),
@@ -1585,11 +1697,7 @@ async function captureAnchor(
     expectedPrefix !== undefined &&
     !equalBytes(capture.subarray(0, expectedPrefix.length), expectedPrefix)
   ) {
-    fail(
-      `${words} does not hold the factory image as this build’s cipher stores it ` +
-        '(the expected image prefix does not match the capture) — refusing before anything ' +
-        'is recorded, let alone written',
-    );
+    fail(PRESERVE_FAIL.notFactory(bank));
   }
 
   let derived: Derived;
@@ -1803,7 +1911,7 @@ function bootHeadOf(cfgRow: Uint8Array): Uint8Array {
   const word = viewOf(head).getUint32(0, true);
   if (isStaleDescriptorWord(word)) {
     fail(
-      spentReaderRefusal(
+      spentReaderRefusalMessage(
         `cfg[0]=${hexUp(word)} is an SRAM-shaped word — the bootloader vector’s initial SP ` +
           'served through a stale reader descriptor, not a record the bootloader wrote — and ' +
           'no bank can be named from it; nothing is written',
@@ -2253,11 +2361,7 @@ async function bankWriteOf(
       ? conjugateCapture(capture, patch)
       : stagedFormOf(patch, patch.patched);
   if (patch.family === 'v1-2014-ff' && stagedAcceptanceSum(patch, payload) !== 0xffff) {
-    fail(
-      'the patched firmware, in the form the camera stores it, does not pass this build’s own ' +
-        'check (its sum must be 0xFFFF) — refusing to send a bank the camera would reject ' +
-        'after the erase',
-    );
+    fail(PRESERVE_FAIL.ffSum);
   }
   return { key, capture, patch, payload, patchedSlot: conjugateCapture(capture, patch) };
 }
@@ -2318,20 +2422,16 @@ async function runCommitStep(
         }
         if (!equalBytes(live, write.capture.subarray(0, BANK_HEAD_BYTES))) {
           fail(
-            `${words}'s head changed since the backup (it holds neither the original capture ` +
-              'nor the patched bytes) — refusing to write over an unknown bank state; nothing ' +
-              `was written. Head hex: live ${bytesToHex(live, 24)} vs capture ` +
+            PRESERVE_FAIL.headChanged(
+              write.key,
+              bytesToHex(live, 24),
               bytesToHex(write.capture.subarray(0, 24)),
+            ),
           );
         }
       }
       if (landed.size === writes.length) {
-        fail(
-          `${bankList(order)} already ${writes.length === 1 ? 'holds' : 'hold'} the patched ` +
-            'bytes — the commit landed in a previous attempt and must not be replayed. Resume ' +
-            'at the drain step (--resume), which boots the patched image and continues from ' +
-            'there.',
-        );
+        fail(PRESERVE_FAIL.landed(order));
       }
 
       const done: string[] = [];
@@ -2467,13 +2567,7 @@ async function runDrainStep(
       'info',
     );
     if ((await resetDevice(device)) === 'refused') {
-      fail(
-        'the drain’s reboot command was REFUSED by the host before it left (a SecurityError: ' +
-          'a browser policy or a test guard), so the camera still runs the image it booted ' +
-          'with, not the committed patch. The drain reads only through the patched image’s ' +
-          'widened window, so it stops before arming anything; nothing was read. Run the drain ' +
-          'again where the host lets the restart command through.',
-      );
+      fail(PRESERVE_FAIL.drainRebootRefused);
     }
   });
 
@@ -2548,12 +2642,7 @@ async function runDrainStep(
           'warn',
         );
         if ((await resetDevice(device)) === 'refused') {
-          fail(
-            'the drain came back one page high, and the reboot that takes another boot was ' +
-              'REFUSED by the host before it left (a SecurityError: a browser policy or a test ' +
-              'guard) — another attempt would drain the same shifted boot. Nothing was kept; run ' +
-              'the drain again where the reset can go out.',
-          );
+          fail(PRESERVE_FAIL.shiftedRebootRefused);
         }
         rawDump = null;
         lastError = 'page-shifted boot (rebooting for another)';
@@ -2857,24 +2946,13 @@ async function runVerifyStep(
   }
   if (result.diffBytes !== 0 || result.badWindows.length > 0) {
     fail(
-      `the verify read ${String(result.diffBytes)} differing byte(s) over ` +
-        `${String(result.windowsRead)}/${String(BACKUP_WINDOW_COUNT)} windows` +
-        (differing.length > 0
-          ? ` (in ${differing
-              .map((address) => {
-                const bank = BANKS.find((entry) => entry.address === address);
-                const what =
-                  bank !== undefined
-                    ? bankWordsOf(bank.key)
-                    : address === BOOT_CONFIG_ADDRESS
-                      ? 'the boot-config block'
-                      : 'a data block';
-                return `${what} ${hexUp(address, 8)}`;
-              })
-              .join(', ')})`
-          : '') +
-        (result.badWindows.length > 0 ? ` (short windows: ${result.badWindows.join(',')})` : '') +
-        ' — the part does not re-read byte-identical to the backup',
+      PRESERVE_FAIL.verify({
+        count: result.diffBytes,
+        read: result.windowsRead,
+        total: BACKUP_WINDOW_COUNT,
+        places: differing.map((address) => PRESERVE_FAIL.verifyPlace(address)),
+        short: result.badWindows,
+      }),
     );
   }
 

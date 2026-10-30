@@ -20,6 +20,7 @@
  * the widened window is the dump's.
  */
 
+import { coreMessage, type CoreMessage } from '../message.js';
 import { hexUp } from '../bytes.js';
 import { bankWordsOf } from '../profiles/locked-boot.js';
 import { SeekError } from '../errors.js';
@@ -194,6 +195,11 @@ export function doubleReadWindows(bank: BankKey): readonly [WindowEntry, WindowE
  * it the same way: the diagnosis and the power-cycle remedy FIRST (the one
  * action that un-blocks a real camera), the technical detail after.
  */
+/** `spentReaderRefusal` as a message, for the page; the signature stays English (a description of the bytes). */
+export function spentReaderRefusalMessage(signature: string): CoreMessage {
+  return coreMessage('preserve.fail.spentReader', { signature }, spentReaderRefusal(signature));
+}
+
 export function spentReaderRefusal(signature: string): string {
   return (
     'the camera’s window reader is budgeted per boot and these reads came back from a spent ' +
