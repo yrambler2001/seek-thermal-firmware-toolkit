@@ -64,7 +64,7 @@ export default {
   'phase.patchDump.label': 'Schreiben & volles Auslesen',
   'phase.patchDump.inSentence': 'Schreiben & volles Auslesen',
   'phase.patchDump.description':
-    'Schreibt einen kleinen, vorübergehenden Patch in die in Schritt 02 gewählten Firmware-Slots (standardmäßig in den Slot, aus dem die Kamera beim nächsten Mal startet), damit sie ihren gesamten Flash-Speicher herausgibt. Dann startet die Kamera neu — klicken Sie auf „Gerät verbinden“ und wählen Sie sie erneut aus, wenn die Seite darum bittet —, und der gesamte 4-MB-Flash-Speicher wird gelesen. Schritt 04 bringt die Original-Firmware zurück.',
+    'Schreibt einen kleinen, vorübergehenden Patch in die in Schritt 02 gewählten Firmware-Slots (standardmäßig in den Slot, aus dem die Kamera beim nächsten Mal startet), damit die Kamera ihren gesamten Flash-Speicher herausgibt. Dann startet die Kamera neu — klicken Sie auf „Gerät verbinden“ und wählen Sie sie erneut aus, wenn die Seite darum bittet —, und der gesamte 4-MB-Flash-Speicher wird gelesen. Schritt 04 bringt die Original-Firmware zurück.',
   'phase.restoreVerify.label': 'Wiederherstellen & prüfen',
   'phase.restoreVerify.inSentence': 'Wiederherstellen & prüfen',
   'phase.restoreVerify.description':
