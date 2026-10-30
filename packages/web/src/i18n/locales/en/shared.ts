@@ -94,6 +94,7 @@ export default {
   'deviceInfo.platform': 'Platform',
   'deviceInfo.serial': 'Serial',
   'deviceInfo.usbLink': 'USB link',
+  /** Row label: the boot-config word (cfg[0]) and what it means. */
   'deviceInfo.bootConfig': 'Boot config',
   'deviceInfo.bootedFrom': 'Booted from',
   'deviceInfo.nextStart': 'Next start',
@@ -104,7 +105,9 @@ export default {
   'deviceInfo.keysTitle': 'Keys read from this camera',
   'deviceInfo.foundAt': 'Found at',
   'deviceInfo.flashOffset': 'flash offset {offset}',
+  /** Row label: the name of the camera's first AES key ("Key A"), as core names it (core:keyName.keyA). */
   'deviceInfo.keyA': 'Key A',
+  /** Row label: the second key ("Key B"), as core names it (core:keyName.keyB). */
   'deviceInfo.keyB': 'Key B',
   'deviceInfo.keysConfirmed':
     "Confirmed by matching a slot's keystream state, recovered from the ciphertext itself. An upload is built so each bank stores it under the bootloader's store key ({storeKey}), or under the booted bank's own key where the application's store key is not that one.",

@@ -59,6 +59,7 @@ export default {
   'slot.imageVersion': 'Image version',
   'slot.imageSize': 'Image size',
   'slot.imageSha': 'Image SHA-256',
+  /** Row label: the 32-bit word sum the bootloader checks on the decrypted image (a hex value follows). */
   'slot.acceptanceSum': 'Acceptance sum',
   'slot.notComputed': 'not computed for this form',
   'slot.family': 'Family',
@@ -72,10 +73,12 @@ export default {
   'slot.key': 'Key',
   'slot.keyPlain': 'none: the bank holds the image in the clear (the 2014 plaintext chain)',
   'slot.keyFfB': 'Key B of the 1.3.0.8 FF pair',
+  /** Row label: how the bank holds the image (under which key, or plain). */
   'slot.storedAs': 'Stored as',
   'slot.storedAsFfB': 'the image XOR the Key B keystream, header window verbatim',
   'slot.keyNone': 'none',
   'slot.keyNamed': '{key} — {name}',
+  /** Row label: what kind of key decrypted the bank (named, solved from the bytes, ...). */
   'slot.keyForm': 'Key form',
   /* {k} is "K=0x…" (or "K=" when unknown). */
   'slot.keyFormOnce': '{k} — the image itself holds this form once, which names it',

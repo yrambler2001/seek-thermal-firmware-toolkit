@@ -119,15 +119,19 @@ export default {
   'options.title': 'Options',
   'options.subtitle': '— the defaults are correct; you do not need to change anything here.',
   'options.chunk': 'chunk (control-IN bytes)',
+  /** Option label: the byte value written where a window could not be read (0xFF by default). */
   'options.gapFill': 'gap-fill byte',
   'options.retries': 'retries per window',
   'options.retryDelay': 'retry delay (ms)',
   'options.recipient': 'control transfer recipient',
+  /** A choice in the USB recipient option: chosen automatically. */
   'options.recipientAuto': 'auto',
   'options.recipientInterface': 'interface ({requestTypes})',
   'options.recipientDevice': 'device ({requestTypes})',
   'options.decrypt': 'decrypt firmware',
+  /** A choice of the "decrypt firmware" option: "yes". */
   'options.yes': 'yes',
+  /** A choice of the "decrypt firmware" option: "no". */
   'options.no': 'no',
   'options.help':
     "**chunk** is the size of each control-IN read, at most 64: one EP0 packet. A longer read can lose a packet to the camera's boot ROM when the camera idles at a low clock, so a larger value is read 64 bytes at a time; a smaller one is used as given, and if a camera stalls the page drops lower on its own and carries on. **gap-fill** is the byte written into the one 64 KiB block USB cannot reach. **recipient** defaults to interface and falls back to device if the browser cannot claim interface 0 — the firmware accepts both.",

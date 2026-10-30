@@ -99,6 +99,7 @@ export default {
   'badge.done': 'Done',
   'badge.plannedStop': 'Stopped as planned — the restore is next',
   'badge.failed': 'Stopped — see the log',
+  /** A badge on the step that runs next. */
   'badge.upNext': 'Up next',
   /* Why the start button is off. */
   'notReady.noRun': 'Available after step 02 — it starts the run.',
@@ -201,12 +202,14 @@ export default {
   'bankPlan.factorySha': 'Factory plaintext sha256',
   'bankPlan.patchedSha': 'Patched sha256',
   'bankPlan.diffCount': 'Bytes that move on the part',
+  /** Row label: the length of the image as sent to the camera, in bytes. */
   'bankPlan.staged': 'Staged length',
   /* {size} bytes sent in {count} USB commands. */
   'bankPlan.stagedValue': {
     one: '{size} B in {count} chunk',
     other: '{size} B in {count} chunks',
   },
+  /** Row label: the reserved word the patch changes so the image's checksum stays the same (hex follows). */
   'bankPlan.rebalance': 'Rebalance word',
   /* {word} and {balance} are hex words. */
   'bankPlan.rebalanceValue': '{word} (was {balance}, the edit’s balance)',

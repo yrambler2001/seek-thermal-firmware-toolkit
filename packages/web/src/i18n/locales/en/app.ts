@@ -16,6 +16,7 @@ export default {
   title: 'Seek Thermal Firmware Toolkit',
   'header.cameraSelected': 'Camera selected',
   'header.noCamera': 'No camera selected',
+  /** A badge in the header: this browser cannot use USB (no WebUSB). */
   'header.usbUnavailable': 'USB unavailable',
   'header.github': 'The toolkit on GitHub',
   'header.tabs': 'Tabs',
@@ -81,6 +82,7 @@ export default {
   'connect.connect': 'Connect device',
   'connect.change': 'Change device',
   'connect.test': 'Test connection',
+  /** Button: makes the browser forget its permission for the camera (USBDevice.forget()). */
   'connect.forget': 'Forget device',
   /** `{vendor}` is the USB vendor id, 0x289d. */
   'connect.vendorNote':

@@ -54,6 +54,7 @@ export default {
   'tabs.info.does':
     'Reads what the camera reports: its firmware, the family it answers as, how it boots, its keys and every bank. The same read as seek-fw info. It writes nothing.',
   'tabs.info.cameras': 'Any Seek camera that WebUSB can open.',
+  /** A table cell answering "Writes to the camera?" for this tab: the word "no", not "number". */
   'tabs.info.writes': 'No.',
   'tabs.preserve.does':
     'Makes a complete copy of the camera’s 4 MiB flash, with a run file saved after every step, and can put a patched firmware back in place. It walks through the steps one at a time.',
@@ -65,6 +66,7 @@ export default {
     'Reads the whole flash of a 4.x or Nano camera and decrypts the firmware slots it finds. Read-only: it sends six read commands and no write.',
   'tabs.v4.cameras':
     'Cameras on 4.x firmware (Compact, Compact PRO, Compact XR), Mosaic (10.x and 2.x) and Nano (42.x and 44.x), from 2018 on.',
+  /** The same answer, "no", for the 4.x tab. */
   'tabs.v4.writes': 'No.',
   'tabs.decrypt.does':
     'Decrypts a file you already have: a whole dump, slot by slot, or one 64 KiB firmware slot on its own. The result can be downloaded.',
@@ -102,14 +104,17 @@ export default {
   'report.running': 'Running',
   'report.bootloader': 'Bootloader',
   'report.family': 'Firmware family',
+  /** Row label: the firmware family the read used (its name follows, in English). */
   'report.readUnder': 'Read under',
   'report.detected': 'Detected',
   'report.boot': 'Boot',
   'report.booted': 'Booted',
   'report.lastStart': 'Last start',
+  /** Row label: which of the two 1.3.0.8 builds (8 Hz or FF 16 Hz) the camera runs. */
   'report.running1308': 'Running (1.3.0.8)',
   'report.nextStart': 'Next start',
   'report.upgradeTarget': 'Upgrade target',
+  /** Value: the camera was not asked for its upgrade target, so there is none to show. */
   'report.notReplayed': '(not replayed)',
   'report.targetConfirmed': '{slot} (confirmed on the wire)',
   /* {why} is core's reason. */
@@ -126,12 +131,17 @@ export default {
   'report.version': 'Version',
   'report.size': 'Size',
   'report.key': 'Key',
+  /** Column of the bank table: which keys the bootloader accepts the bank under. */
   'report.accepts': 'Accepts',
+  /** Column: whether the image's footer (the checksum block after the image) is right. */
   'report.footer': 'Footer',
+  /** Column: whether the bootloader would start this bank. */
   'report.bootable': 'Bootable',
   'report.bytes': '{count} B',
   'report.plaintext': 'none (plaintext)',
+  /** A table value, lower case: "yes". */
   'report.yes': 'yes',
+  /** A table value, lower case: "no". */
   'report.no': 'no',
   /* Where the bootloader reads no footer. */
   'report.notApplicable': 'n/a',

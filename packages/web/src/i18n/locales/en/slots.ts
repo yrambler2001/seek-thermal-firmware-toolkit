@@ -226,7 +226,9 @@ export default {
   'preview.readAs': 'Read as',
   'preview.readAs.ff': 'a decrypted {version} FF image',
   'preview.readAs.plain': 'a decrypted image',
+  /** Value of "Read as": the picked file is taken as the bank's raw bytes, not decrypted. */
   'preview.readAs.raw': 'raw bytes',
+  /** Row label: how the image is encrypted for the upload (core's words follow). */
   'preview.staging': 'Staging',
   'preview.key': 'Key',
   'preview.payload': 'Payload',
@@ -236,6 +238,7 @@ export default {
     other: '{size} B in {count} chunks of up to {chunk} B',
   },
   'preview.checksum': 'Transfer checksum',
+  /** Row label: what the bank should hold after the write. */
   'preview.stored': 'Stored afterwards',
   'preview.storedNotPredicted': 'not predicted — the read-back is the check',
   'preview.storedPredicted': '{size} B predicted',
@@ -414,9 +417,12 @@ export default {
   'keys.title': 'Keys for the writes',
   'keys.chain': 'Chain',
   'keys.chainPlain': 'the 2014 plaintext chain: every bank is stored plain, so none holds a key',
+  /** Row label in "the keys the writes use": the form a write sends. */
   'keys.writtenAs': 'Written as',
   'keys.writtenPlain': 'the image as it is, with no key, to any bank',
+  /** Row label: the key the upload is encrypted under. */
   'keys.stagedAs': 'Staged as',
+  /** Row label: the key the camera stores the image under. */
   'keys.storedAs': 'Stored as',
   'keys.refused': 'Refused',
   'keys.bootedBank': 'Booted bank',

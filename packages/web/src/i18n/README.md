@@ -137,10 +137,12 @@ Translate the UI labels around them. Don't put the values in the dictionary at a
 
 There is no "machine translation" label and no English shown under translated text: the owner declined both.
 
-## Adding a language
+## How to add a language
 
-1. `cp -R src/i18n/locales/en src/i18n/locales/<code>`.
-2. In each namespace file, change the type line and translate the values:
+Written for the agent that translates one language. You work from the English dictionaries alone; the code is there when a comment is not enough.
+
+1. **Copy English.** `cp -R src/i18n/locales/en src/i18n/locales/<code>` (`de`, `es`, `fr`, `it`, `pl`, `pt`, `ru`, `uk`, `zh-Hans`).
+2. **Translate each namespace file.** Change the type line and translate every value; keep every key and every comment's meaning (you may translate the comments or leave them):
    ```ts
    import type { Translation } from '../../types';
    export default {
@@ -148,17 +150,49 @@ There is no "machine translation" label and no English shown under translated te
    } satisfies Translation<'app'>;
    ```
    A missing key, an extra key, or a string where English has plural forms is a compile error.
-3. In `locales/<code>/index.ts`:
+3. **`locales/<code>/index.ts`:**
    ```ts
    import type { Dictionary } from '../../types';
    // the same imports as en/index.ts
    const de: Dictionary = { common, app, core, shared, info, decrypt, v4, slots, preserve };
    export default de;
    ```
-4. Uncomment the language's line in `languages.ts`. **The order is the rule:** English first, then by native name, Latin script, then Cyrillic, then Chinese: English, Deutsch, Español, Français, Italiano, Polski, Português, Русский, Українська, 简体中文. A language that is not planned goes in its place in that order, and its code goes into `LanguageCode`.
-5. Run `npx vitest run --project web src/i18n`. `locales.test.ts` checks every registered language against English: keys, plural forms, `{params}` and `<slots>`.
+4. **Register it.** Uncomment the language's line in `languages.ts`. The order is the rule: English first, then by native name, Latin script, then Cyrillic, then Chinese: English, Deutsch, Español, Français, Italiano, Polski, Português, Русский, Українська, 简体中文.
+5. **Check it:** `npx tsc --noEmit -p packages/web/tsconfig.app.json`, then `npx vitest run packages/web/src/i18n/locales.test.ts packages/web/src/i18n/pseudo-locale.test.tsx packages/web/src/i18n/key-usage.test.ts packages/web/src/i18n/core-messages.test.ts` and the whole web project (`npx vitest run --project web`). `locales.test.ts` checks every registered language against English: keys, plural forms, `{params}` and `<slots>`. Then `npx eslint packages/web` and `npx prettier --write` on your files.
 
 The language loads only when someone picks it (a dynamic `import()`, its own chunk), so a new language adds nothing to the English page.
+
+### Conventions
+
+- **Plain words.** The page is for camera owners, not firmware engineers. Say it the way a careful manual in your language would. Keep sentences short, as the English does.
+- **Slot, not bank.** Where the English says "slot" (Slot A, recovery R), use your language's word for slot. Never write "bank" in user text where the English says slot. Some English sentences say "bank" (core's sentences, the 0.x/1.x tab's bank table): translate those as they are, and use one word for "bank" throughout.
+- **Bank names:** `common:bank.*` builds them; keep the Latin letter (A, B, R). "Recovery R" is the last-resort slot the bootloader falls back to.
+- **Units:** B, KB, MB, KiB, MiB, Hz, FPS stay as written. A number is inserted as it is (no grouping): don't add separators around `{count}`.
+- **Keep as they are:** hex values, versions, file names and paths, register and command names (`cfg[0]`, GetFirmwareInfo, CompleteMemoryUpgrade), opcode names, family and product names (Compact, Compact PRO, Mosaic, Nano, Seek Thermal), programs (Zadig, Chrome, J-Link), WebUSB, and anything in `` `code` ``.
+- **Buttons the text names.** When a sentence names a button ("press _Connect device_"), use the button's own translation from `app`/`shared`, word for word.
+- **Capitals:** keep the English's. A value that starts lower case is said inside another sentence or after a label; one that starts upper case stands alone.
+- **Plurals:** give the forms your language uses (`Intl.PluralRules` categories): ru/uk/pl `one, few, many, other`; es/fr/it/pt `one, many, other`; de `one, other`; zh-Hans `other` only.
+- **Params** arrive either already translated (another key, a bank name, a list) or as data that stays as it is (hex, sizes, versions, file names). The comment above a key says which when it matters; the `core` namespace lists them all at its top.
+- **What stays English** whatever the language: the run log lines, the copyable camera report, the CLI, and a browser's or the USB stack's own error text inside a translated sentence. See "What stays English" above.
+
+### Glossary
+
+| English                      | Means                                                                  |
+| ---------------------------- | ---------------------------------------------------------------------- |
+| slot / firmware slot         | one of the camera's three firmware copies (A, B, recovery R)           |
+| dump                         | read the camera's flash to a file                                      |
+| write / flash                | write an image into a slot                                             |
+| boot / booted / next start   | which slot the camera starts from                                      |
+| frame-rate patch, `N FPS`    | the edit that makes the camera run faster; keep "FPS" and the number   |
+| run file                     | the Preserve wizard's saved zip, used to resume a run                  |
+| backup (zip saved first)     | the zip every write downloads before it sends anything                 |
+| key, Key A, Key B, key block | the camera's AES keys; "Key A"/"Key B" are names, translate "key" only |
+| acceptance sum               | the checksum the bootloader checks on a decrypted image                |
+| unlock token / power cycle   | the 0.x/1.x unlock; unplug and plug the camera back in                 |
+
+### Checking a language by hand
+
+`pseudo-locale.test.tsx` renders the page in a pseudo language and fails on any English left outside a short, commented allowlist. It renders the shell (header, switcher, connect section, footer, every support banner) and each tab in the states its stubs reach: no camera; a 4.x, a 2016 and a too-old build in Info; a full read; Decrypt File/Slot with a refused file, an erased bank and a read error; the 4.x tab idle, running and with a detected camera; Slots before a read, a 4.x and a 2016 read, empty and unread banks, a prepared write, its dialog and its outcome; Preserve before a run, after each phase, a failed commit, the reconnect and replug asks, the gave-up error, and the verdicts. It cannot reach, so check these by hand with `npm run dev` and `?lang=<code>`: the language menu opened; a live camera flow's own errors (USB failures, a refusal raised mid-run); the Slots tab's refusal and frame-rate outcomes; the 4.x tab's refusal; the offline dump decrypt's detection box; the Preserve run-file load. Where the page shows core text, the drift test (`core-messages.test.ts`) proves every core code has a template.
 
 ## How the language is chosen
 
