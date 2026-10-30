@@ -18,8 +18,8 @@
  * - read-back = the bank read again after a write, to compare with what was sent.
  * - "Flash decrypted image", "Read slots", "Dump"… in quotes or bold are this tab's own buttons
  *   (table.flashPlain, actions.read, table.dump): use the same words as those keys.
- * - Hz values, firmware versions (0.8.0.0, 1.3.0.8), Key A / Key B, 0xFF, KiB/MiB, .bin/.zip, SWD/J-Link
- *   and SPI stay as they are.
+ * - Hz values, firmware versions (0.8.0.0, 1.3.0.8), 0xFF, .bin/.zip, SWD/J-Link and SPI stay as they
+ *   are. Key A / Key B: translate "Key", keep the letter. KiB/MiB are written KB/MB (README, Units).
  *
  * src/i18n/README.md has the conventions.
  */
@@ -166,7 +166,7 @@ export default {
     '通过修改字节，把这个槽位从 {fromHz} Hz 提高到 {toHz} Hz。会先把该槽位保存为一个 zip 下载，其中的解密文件就是恢复原状的途径。',
   /*
    * The extra confirmation a write to this bank asks for. {booted} is core's word for the booted bank
-   * ("Booted now", the badge's word with a capital), English until core's words are translated.
+   * ("Booted now", the badge's word with a capital), translated by core's messages.
    */
   'table.risk.bootedRecovery': '{booted}，且是恢复槽位：写入它需要额外确认。',
   'table.risk.booted': '{booted}：写入它需要额外确认。',
@@ -237,7 +237,7 @@ export default {
 
   /* The write's confirmation dialog. {what} is a file name or what.copy / what.restore. */
   'writeConfirm.title': '将 {what} 写入{bank}（{address}）？',
-  /* {bootsNow} is core's sentence "Slot A is the bank the camera boots now", English until core's are translated. */
+  /* {bootsNow} is core's sentence "Slot A is the bank the camera boots now", translated by core's messages. */
   'writeConfirm.booted':
     '{bootsNow}。写入它会替换相机当前正在运行的固件。如果新镜像无法运行，相机可能完全无法启动。',
   'writeConfirm.recovery':

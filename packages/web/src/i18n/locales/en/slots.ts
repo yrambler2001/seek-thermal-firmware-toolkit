@@ -18,8 +18,8 @@
  * - read-back = the bank read again after a write, to compare with what was sent.
  * - "Flash decrypted image", "Read slots", "Dump"… in quotes or bold are this tab's own buttons
  *   (table.flashPlain, actions.read, table.dump): use the same words as those keys.
- * - Hz values, firmware versions (0.8.0.0, 1.3.0.8), Key A / Key B, 0xFF, KiB/MiB, .bin/.zip, SWD/J-Link
- *   and SPI stay as they are.
+ * - Hz values, firmware versions (0.8.0.0, 1.3.0.8), 0xFF, .bin/.zip, SWD/J-Link and SPI stay as they
+ *   are. Key A / Key B: translate "Key", keep the letter. KiB/MiB are written KB/MB (README, Units).
  *
  * src/i18n/README.md has the conventions.
  */
@@ -183,7 +183,7 @@ export default {
     'Raises this bank from {fromHz} Hz to {toHz} Hz by editing its bytes. The bank is saved first, in a zip download, and the decrypted file in it is the way back.',
   /*
    * The extra confirmation a write to this bank asks for. {booted} is core's word for the booted bank
-   * ("Booted now", the badge's word with a capital), English until core's words are translated.
+   * ("Booted now", the badge's word with a capital), translated by core's messages.
    */
   'table.risk.bootedRecovery': '{booted}, and recovery: writing it asks for an extra confirmation.',
   'table.risk.booted': '{booted}: writing it asks for an extra confirmation.',
@@ -259,7 +259,7 @@ export default {
 
   /* The write's confirmation dialog. {what} is a file name or what.copy / what.restore. */
   'writeConfirm.title': 'Write {what} to {bank} at {address}?',
-  /* {bootsNow} is core's sentence "Slot A is the bank the camera boots now", English until core's are translated. */
+  /* {bootsNow} is core's sentence "Slot A is the bank the camera boots now", translated by core's messages. */
   'writeConfirm.booted':
     '{bootsNow}. Writing it replaces the firmware the camera is running now. If the new image does not run, the camera may not boot at all.',
   'writeConfirm.recovery':

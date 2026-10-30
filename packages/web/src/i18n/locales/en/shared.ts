@@ -64,7 +64,7 @@ export default {
   'hint.usbTimeout':
     'The camera accepted the request and never answered. Unplug and replug it, then try a smaller chunk (64 is the value that works everywhere).',
   'hint.usbStalled':
-    'The camera rejected the request. This usually means the firmware does not implement it — the camera is asked which family it is before anything is read, so a family that keeps refusing is the one the camera answers with — check the firmware version on the Info tab.',
+    'The camera rejected the request. This usually means its firmware does not support it. The page asks the camera which family it is before it reads anything, so requests that keep being rejected were made for the family the camera itself reported. Check the firmware version on the Info tab.',
   'hint.usbNotOpen':
     'Another program or a system driver is holding the camera. Close it, or set recipient to "device" in the read options, which does not need the interface claimed.',
   'hint.usbTransferFailed': 'Unplug and replug the camera, then try again.',

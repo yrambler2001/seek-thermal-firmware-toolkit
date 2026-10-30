@@ -65,7 +65,7 @@ export default {
   'hint.usbTimeout':
     'Die Kamera hat die Anfrage angenommen und nie geantwortet. Ziehen Sie sie ab, stecken Sie sie wieder ein und versuchen Sie es dann mit einem kleineren chunk (64 ist der Wert, der überall funktioniert).',
   'hint.usbStalled':
-    'Die Kamera hat die Anfrage abgelehnt. Meist bedeutet das, dass die Firmware sie nicht unterstützt. Die Kamera wird vor jedem Lesen nach ihrer Familie gefragt; eine Familie, die weiter ablehnt, ist also die, als die sich die Kamera meldet. Prüfen Sie die Firmware-Version im Tab „Info“.',
+    'Die Kamera hat die Anfrage abgelehnt. Meist bedeutet das, dass ihre Firmware sie nicht unterstützt. Die Seite fragt die Kamera vor jedem Lesen nach ihrer Familie. Anfragen, die weiter abgelehnt werden, galten also der Familie, die die Kamera selbst gemeldet hat. Prüfen Sie die Firmware-Version im Tab „Info“.',
   'hint.usbNotOpen':
     'Ein anderes Programm oder ein Systemtreiber belegt die Kamera. Schließen Sie es, oder stellen Sie in den Optionen den Empfänger (recipient) auf „Gerät“; dafür muss die Schnittstelle nicht belegt werden.',
   'hint.usbTransferFailed':
