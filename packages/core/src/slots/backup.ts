@@ -228,7 +228,7 @@ export function backupBankMessage(report: SlotsReport, key: SlotKey): CoreMessag
   if (!view.entry.dump.supported) {
     return coreMessage(
       'backup.bank.unsupported',
-      { ...bank, reason: supportReasonMessage(view.entry.dump.reason) },
+      { ...bank, reason: supportReasonMessage(view.entry.dump) },
       `${name} (this build cannot read it, ${view.entry.dump.reason}: the zip says so)`,
     );
   }

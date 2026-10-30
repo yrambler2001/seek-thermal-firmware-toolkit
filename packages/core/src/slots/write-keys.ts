@@ -64,7 +64,13 @@
 import { bytesToHex, equalBytes, findAll, hexToBytes, hexUp } from '../bytes.js';
 import { cryptBytes } from '../crypto/cipher.js';
 import { findEmbeddedKeyTable, stateFromKey, UNNAMED_KEY } from '../crypto/keys.js';
-import { coreMessage, paramText, type CoreMessage, type CoreParam } from '../message.js';
+import {
+  coreMessage,
+  paramText,
+  recordedParam,
+  type CoreMessage,
+  type CoreParam,
+} from '../message.js';
 import {
   BOOT_UNNAMED_REFUSAL,
   FF_VENDOR_EVIDENCE,
@@ -310,7 +316,20 @@ function keyBytesNamed(state: DeviceState, name: string): Uint8Array | null {
 }
 
 /**
- * The camera-wide refusal, for every bank and every staging: the reasons the read found that refuse every
+ * `slotWriteRefusals` as messages, for the page: each reason's message while it still says the reason, else
+ * its English.
+ */
+export function slotWriteRefusalMessages(state: DeviceState): (CoreMessage | string)[] {
+  const texts = slotWriteRefusals(state);
+  if (state.bankWriteRefusals.length > 0) {
+    const messages = state.bankWriteRefusalMessages;
+    return texts.map((text, at) => recordedParam(messages?.[at], text));
+  }
+  return texts.map((text) => recordedParam(deriveWriteKeys(state).refusalMessage, text));
+}
+
+/**
+ * A raw payload is refused for these alone: the reasons the read found that refuse every
  * bank write on this camera (`DeviceState.bankWriteRefusals`), in one sentence, or null when there are none.
  * A raw payload is refused for these alone (no key of the write builds it); a decrypted image is refused for
  * these and, on the Key A line, for the derivation too (`slotWriteRefusal`).
@@ -432,7 +451,9 @@ function imageBlockZeroKeys(state: DeviceState): WriteKeys {
             from: named.from,
             inferred: named.inferred,
           },
-      checkKey?.unnamedWhy ?? null,
+      checkKey?.unnamedWhy == null
+        ? null
+        : recordedParam(checkKey.unnamedWhyMessage, checkKey.unnamedWhy),
     ),
   ];
   return {

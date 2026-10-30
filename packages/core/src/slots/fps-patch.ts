@@ -164,7 +164,7 @@ export function fpsPlanOfBank(report: SlotsReport, key: SlotKey): FpsPlan {
     return refusedPlan(
       coreMessage(
         'fps.plan.noPlain',
-        { bank: bankParam(key), reason: supportReasonMessage(view.entry.flashPlain.reason) },
+        { bank: bankParam(key), reason: supportReasonMessage(view.entry.flashPlain) },
         `${bankWordsOf(key)} cannot take a decrypted image on this build: ${view.entry.flashPlain.reason}`,
       ),
     );

@@ -2,14 +2,17 @@
  * The page finds a capability note's message by its English (`capabilityNoteMessage`), and a key's name
  * by its English (`keyNameParam`). A note or a name added without an entry there would show in English on
  * a translated page with no test failing, so every note the note functions give, and the placeholder key
- * name a slot can carry, must have one.
+ * name a slot can carry, must have one. The same for a refusal (`Support`): every one a slot plan or a
+ * family gives must carry its message, or be a constant `supportReasonMessage` finds by its English.
  * ==================================================================== */
 
 import { describe, expect, it } from 'vitest';
 
 import { UNNAMED_KEY } from '../../src/crypto/keys.js';
+import { listProfiles } from '../../src/profiles/registry.js';
 import { parseVersion } from '../../src/profiles/version.js';
-import type { SlotKey } from '../../src/profiles/types.js';
+import type { SlotKey, Support } from '../../src/profiles/types.js';
+import { buildSlotPlan, supportReasonMessage } from '../../src/slots/capability.js';
 import {
   bankNotes,
   capabilityNoteMessage,
@@ -65,6 +68,27 @@ describe('constant sentences found by their English', () => {
     expect([...notes].filter((note) => typeof capabilityNoteMessage(note) === 'string')).toEqual(
       [],
     );
+  });
+
+  it('gives every refusal of a slot plan and of a family a message', () => {
+    const supports: Support[] = [];
+    for (const profile of listProfiles()) {
+      supports.push(...(Object.values(profile.capabilities) as Support[]));
+      for (const version of [null, 'v4', '0.7.0.7', '1.5.0.0', ...VERSIONS]) {
+        const plan = buildSlotPlan(profile, version);
+        supports.push(plan.supportedBuild);
+        for (const slot of plan.slots) {
+          supports.push(slot.dump, slot.flashPlain, slot.flashRaw, slot.emptyBank.writable);
+        }
+      }
+    }
+    const reasons = supports.flatMap((support) => (support.supported ? [] : [support]));
+    expect(reasons.length).toBeGreaterThan(10);
+    expect(
+      reasons
+        .filter((support) => typeof supportReasonMessage(support) === 'string')
+        .map((support) => support.reason),
+    ).toEqual([]);
   });
 
   it('gives the placeholder key name a message', () => {

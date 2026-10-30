@@ -293,7 +293,7 @@ export function slotActionGate(args: {
 }): ActionGate {
   const support = slotActionSupport(args.entry, args.action);
   if (!support.supported) {
-    return { enabled: false, reason: coreText(supportReasonMessage(support.reason)) };
+    return { enabled: false, reason: coreText(supportReasonMessage(support)) };
   }
   if (!args.connected) return { enabled: false, reason: t('slots:gate.connectFirst') };
   if (args.busy) return { enabled: false, reason: t('slots:gate.busy') };
@@ -325,7 +325,7 @@ export function slotActionGate(args: {
     return {
       enabled: false,
       reason: t('slots:gate.emptyNotWritable', {
-        reason: coreText(supportReasonMessage(args.entry.emptyBank.writable.reason)),
+        reason: coreText(supportReasonMessage(args.entry.emptyBank.writable)),
       }),
     };
   }

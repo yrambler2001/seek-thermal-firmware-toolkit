@@ -16,6 +16,7 @@
  */
 
 import { SeekError } from '../errors.js';
+import { coreMessage, recordedParam, type CoreMessage } from '../message.js';
 import type {
   DetectionResult,
   DeviceEvidence,
@@ -135,10 +136,28 @@ export function detectProfile(evidence: DeviceEvidence): DetectionResult {
 export function requireCapability(profile: FirmwareProfile, op: CapabilityName): void {
   const support = profile.capabilities[op];
   if (support.supported) return;
-  throw new SeekError(
-    'family/unsupported',
+  const message = capabilityRefusalMessage(profile, op);
+  throw new SeekError('family/unsupported', message?.text ?? support.reason, {
+    detail: { family: profile.id, capability: op, reason: support.reason },
+    ...(message === null ? {} : { coreMessage: message }),
+  });
+}
+
+/** `requireCapability`'s refusal as a message, for the page; null when the profile allows `op`. */
+export function capabilityRefusalMessage(
+  profile: FirmwareProfile,
+  op: CapabilityName,
+): CoreMessage | null {
+  const support = profile.capabilities[op];
+  if (support.supported) return null;
+  return coreMessage(
+    'support.capabilityRefused',
+    {
+      family: profile.name,
+      capability: coreMessage(`support.capability.${op}`, {}, CAPABILITY_WORDS[op]),
+      reason: recordedParam(support.reasonMessage, support.reason),
+    },
     `${profile.name} does not support ${CAPABILITY_WORDS[op]}: ${support.reason}`,
-    { detail: { family: profile.id, capability: op, reason: support.reason } },
   );
 }
 

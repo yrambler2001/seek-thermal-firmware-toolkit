@@ -150,6 +150,7 @@ export {
   FF_VENDOR_STORED,
   slotWriteRefusal,
   slotWriteRefusals,
+  slotWriteRefusalMessages,
   STAGED_UNDER_IMAGE_BLOCK_0,
   stagesUnderCameraKey,
   storedUnderCheckKey,
@@ -238,5 +239,5 @@ export {
 } from './write-keys-words.js';
 export { fpsStoppedMessage } from './fps-patch.js';
 export { capabilityNoteMessage, capabilityNotes } from './capability-notes.js';
-export { supportReasonMessage, supportReasons } from './capability.js';
+export { SUPPORT_REASON, supportReasonMessage, supportReasons } from './capability.js';
 export { SLOT_WRITE_REFUSAL } from './write.js';

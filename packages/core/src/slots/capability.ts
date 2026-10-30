@@ -49,14 +49,14 @@ import type {
   WindowPlan,
 } from '../profiles/types.js';
 import { SUPPORTED, unsupported } from '../profiles/types.js';
-import { FLASH_REFUSAL } from '../profiles/generic.js';
-import { NO_READ_COMMAND, NO_WRITE_PATH } from '../profiles/compact-2014.js';
-import { coreMessage, type CoreMessage } from '../message.js';
+import { FLASH_REFUSAL_MESSAGE } from '../profiles/generic.js';
+import { NO_READ_COMMAND_MESSAGE, NO_WRITE_PATH_MESSAGE } from '../profiles/compact-2014.js';
+import { bankParam, coreMessage, recordedParam, type CoreMessage } from '../message.js';
 import {
   BANK_KEYS,
   BANK_NAME,
   MODERN_A_WRITE_SUBCMD,
-  UNVERIFIED_STAGING_REASON,
+  UNVERIFIED_STAGING_MESSAGE,
   WRITE_SUBCMD,
   classifyBuild,
   stagingFor,
@@ -93,7 +93,7 @@ function bankAddress(profile: FirmwareProfile, key: SlotKey): number {
 function refusedPlan(
   profile: FirmwareProfile,
   firmwareVersion: string | null,
-  refusal: string,
+  refusal: CoreMessage,
 ): SlotPlan {
   const slots: SlotEntry[] = BANK_KEYS.map((key) => ({
     key,
@@ -107,7 +107,7 @@ function refusedPlan(
     flashRaw: unsupported(refusal),
     staging: null,
     commitEffect: COMMIT_EFFECT,
-    emptyBank: { writable: unsupported(refusal), why: refusal },
+    emptyBank: { writable: unsupported(refusal), why: refusal.text },
     notes: [],
   }));
   return {
@@ -115,7 +115,7 @@ function refusedPlan(
     firmwareVersion,
     supportedBuild: unsupported(refusal),
     slots,
-    notes: [refusal],
+    notes: [refusal.text],
   };
 }
 
@@ -130,7 +130,7 @@ function writeWindow(
   plan: WindowPlan,
   key: SlotKey,
   address: number,
-): { readonly window: WindowEntry | null; readonly reason: string | null } {
+): { readonly window: WindowEntry | null; readonly reason: CoreMessage | null } {
   const subcmd = family === 'modern' && key === 'a' ? MODERN_A_WRITE_SUBCMD : WRITE_SUBCMD[key];
   const row = plan.selectors.find((r) => r.subcmd === subcmd);
 
@@ -141,7 +141,7 @@ function writeWindow(
     if (!alias && (row?.address !== address || row.channel !== 'plain')) {
       return {
         window: null,
-        reason: `this build's table does not arm mode ${String(subcmd)} at ${hexUp(address, 8)} on the plain channel`,
+        reason: SUPPORT_REASON.noArm('plain', subcmd, address),
       };
     }
     const note = alias
@@ -156,14 +156,14 @@ function writeWindow(
   if (row?.address !== address || row.channel !== 'auth') {
     return {
       window: null,
-      reason: `this build's table does not arm mode ${String(subcmd)} at ${hexUp(address, 8)} on the token channel`,
+      reason: SUPPORT_REASON.noArm('token', subcmd, address),
     };
   }
   const window = bankWindow(key);
   if (window.address !== address) {
     return {
       window: null,
-      reason: `the preservation bank window for ${BANK_NAME[key]} is at ${hexUp(window.address, 8)}, not ${hexUp(address, 8)}`,
+      reason: SUPPORT_REASON.windowElsewhere(key, window.address, address),
     };
   }
   return { window, reason: null };
@@ -179,9 +179,7 @@ function dumpSupport(
   const cap = profile.capabilities.dump;
   if (!cap.supported) return cap;
   if (read === null) {
-    return unsupported(
-      `this build's BeginFirmwareUpgrade table has no window at ${hexUp(address, 8)} for ${BANK_NAME[key]}`,
-    );
+    return unsupported(SUPPORT_REASON.noDumpWindow(key, address));
   }
   return SUPPORTED;
 }
@@ -194,9 +192,9 @@ function flashSupport(
   profile: FirmwareProfile,
   family: SlotFamily,
   write: WindowEntry | null,
-  writeReason: string | null,
+  writeReason: CoreMessage | null,
 ): Support {
-  if (family === 'unverified-locked') return unsupported(UNVERIFIED_STAGING_REASON);
+  if (family === 'unverified-locked') return unsupported(UNVERIFIED_STAGING);
   if (write === null) {
     return unsupported(writeReason ?? NO_WRITE_ARM);
   }
@@ -216,7 +214,7 @@ function emptyBankPolicy(family: SlotFamily, flash: Support): EmptyBankPolicy {
   if (why === null) {
     return {
       writable: unsupported(NO_STAGING_EMPTY),
-      why: NO_STAGING_EMPTY,
+      why: NO_STAGING_EMPTY.text,
     };
   }
   return { writable: SUPPORTED, why };
@@ -261,7 +259,7 @@ function supportedEntry(
 export function buildSlotPlan(profile: FirmwareProfile, firmwareVersion: string | null): SlotPlan {
   const verdict = classifyBuild(profile, firmwareVersion);
   if (verdict.refusal !== null || verdict.version === null) {
-    return refusedPlan(profile, firmwareVersion, verdict.refusal ?? BUILD_UNKNOWN);
+    return refusedPlan(profile, firmwareVersion, verdict.refusalMessage ?? BUILD_UNKNOWN);
   }
 
   const family = verdict.family;
@@ -286,29 +284,70 @@ export function buildSlotPlan(profile: FirmwareProfile, firmwareVersion: string 
 }
 
 /* ---- the support reasons, as messages for the page ------------------------------------------- *
- * A reason the support table gives as a constant is found by its English; a reason built from the build's
- * own facts (a version, an address) stays English. */
-const NO_WRITE_ARM = 'this build has no write arm for the bank';
-const NO_STAGING_EMPTY = 'this build has no staging form, so an empty bank is not written';
-const BUILD_UNKNOWN = 'the build is unknown';
+ * Every refusal in the plan carries its message (`Support.reasonMessage`); a reason that reaches the page as
+ * a string alone (an empty bank's `why`, a refusal a caller copied) is found by its English when it is one of
+ * the constants. packages/core/test/slots/note-messages.test.ts fails on a refusal with no message. */
+const NO_WRITE_ARM = coreMessage(
+  'support.noWriteArm',
+  {},
+  'this build has no write arm for the bank',
+);
+const NO_STAGING_EMPTY = coreMessage(
+  'support.noStagingEmpty',
+  {},
+  'this build has no staging form, so an empty bank is not written',
+);
+const BUILD_UNKNOWN = coreMessage('support.buildUnknown', {}, 'the build is unknown');
+const UNVERIFIED_STAGING = UNVERIFIED_STAGING_MESSAGE;
+
+/** A bank's refusals built from the build's table, as messages (the drift test reaches them here). */
+export const SUPPORT_REASON = {
+  noArm: (channel: 'plain' | 'token', mode: number, address: number): CoreMessage =>
+    coreMessage(
+      channel === 'plain' ? 'support.noArmPlain' : 'support.noArmToken',
+      { mode, address: hexUp(address, 8) },
+      `this build's table does not arm mode ${String(mode)} at ${hexUp(address, 8)} on the ${channel} channel`,
+    ),
+  windowElsewhere: (key: SlotKey, at: number, address: number): CoreMessage =>
+    coreMessage(
+      'support.windowElsewhere',
+      { bank: bankParam(key, 'name'), at: hexUp(at, 8), address: hexUp(address, 8) },
+      `the preservation bank window for ${BANK_NAME[key]} is at ${hexUp(at, 8)}, not ${hexUp(address, 8)}`,
+    ),
+  noDumpWindow: (key: SlotKey, address: number): CoreMessage =>
+    coreMessage(
+      'support.noDumpWindow',
+      { address: hexUp(address, 8), bank: bankParam(key, 'name') },
+      `this build's BeginFirmwareUpgrade table has no window at ${hexUp(address, 8)} for ${BANK_NAME[key]}`,
+    ),
+};
 
 let REASON_MESSAGES: ReadonlyMap<string, CoreMessage> | null = null;
 
 function reasonMessages(): ReadonlyMap<string, CoreMessage> {
-  const pairs: readonly (readonly [string, string])[] = [
-    [NO_WRITE_ARM, 'support.noWriteArm'],
-    [NO_STAGING_EMPTY, 'support.noStagingEmpty'],
-    [BUILD_UNKNOWN, 'support.buildUnknown'],
-    [UNVERIFIED_STAGING_REASON, 'support.unverifiedStaging'],
-    [FLASH_REFUSAL, 'support.unknownFamily'],
-    [NO_READ_COMMAND, 'support.noReadCommand'],
-    [NO_WRITE_PATH, 'support.noWritePath'],
+  const messages = [
+    NO_WRITE_ARM,
+    NO_STAGING_EMPTY,
+    BUILD_UNKNOWN,
+    UNVERIFIED_STAGING,
+    FLASH_REFUSAL_MESSAGE,
+    NO_READ_COMMAND_MESSAGE,
+    NO_WRITE_PATH_MESSAGE,
   ];
-  return new Map(pairs.map(([text, code]) => [text, coreMessage(code, {}, text)] as const));
+  return new Map(messages.map((message) => [message.text, message] as const));
 }
 
-/** A support reason (`Support.reason`, an empty bank's `why`) as a message; one it does not know as it is. */
-export function supportReasonMessage(reason: string): CoreMessage | string {
+/**
+ * A support reason as a message: a refusing `Support` gives its own `reasonMessage` while it still says its
+ * `reason`; a reason string (an empty bank's `why`) is found by its English. One it does not know stays as
+ * it is, and a `Support` that does not refuse gives ''.
+ */
+export function supportReasonMessage(reason: string | Support): CoreMessage | string {
+  if (typeof reason !== 'string') {
+    if (reason.supported) return '';
+    const own = recordedParam(reason.reasonMessage, reason.reason);
+    return typeof own === 'string' ? supportReasonMessage(own) : own;
+  }
   REASON_MESSAGES ??= reasonMessages();
   return REASON_MESSAGES.get(reason) ?? reason;
 }

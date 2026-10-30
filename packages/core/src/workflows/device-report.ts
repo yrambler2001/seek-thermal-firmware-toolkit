@@ -13,22 +13,38 @@
  * ==================================================================== */
 
 import { bytesToHex, hexUp } from '../bytes.js';
-import { bankParam, coreMessage, paramText, type CoreMessage, type CoreParam } from '../message.js';
+import {
+  bankParam,
+  coreMessage,
+  paramText,
+  recordedParam,
+  type CoreMessage,
+  type CoreParam,
+} from '../message.js';
 import { bankOfActiveSlotWord, bankWordsOf } from '../profiles/locked-boot.js';
 import type { DetectionResult, SlotKey } from '../profiles/types.js';
 import { bootChoiceOf, bootRuleKnown, reportsActiveSlotWord } from '../slots/boot-choice.js';
 import {
   classifyBuild,
   stagingFor,
+  UNVERIFIED_STAGING_MESSAGE,
   UNVERIFIED_STAGING_REASON,
 } from '../slots/capability-family.js';
 import type { StagingForm } from '../slots/types.js';
-import { deriveWriteKeys, slotWriteRefusals } from '../slots/write-keys.js';
-import { storeKeyDescription } from './device-info.js';
+import {
+  deriveWriteKeys,
+  slotWriteRefusalMessages,
+  slotWriteRefusals,
+} from '../slots/write-keys.js';
+import { bootableDescription, storeKeyDescriptionMessage } from './device-info.js';
+import { keyNameParam } from '../slots/write-keys-words.js';
 import type { CheckKey, DeviceState, SlotState } from './types.js';
 
 /** One row of the report: the label (lower case, as the CLI prints it) and its value. */
 export type ReportRow = readonly [label: string, value: string];
+
+/** A row as messages, for the page: `ReportRow` is their English. */
+export type ReportMessageRow = readonly [label: CoreMessage, value: CoreMessage | string];
 
 /**
  * The probe's line in a read's log, on both front ends: the family the camera's first answers point to, and
@@ -51,11 +67,19 @@ export function probeLineOf(detection: DetectionResult): string {
  * the row says which it is (TESTING.md 42.86).
  */
 export function detectedReportOf(detection: DetectionResult): string {
+  return detectedReportMessage(detection).text;
+}
+
+/** `detectedReportOf` as a message, for the page. */
+export function detectedReportMessage(detection: DetectionResult): CoreMessage {
   const best = detection.best;
-  return (
+  const text =
     `${best.profile.name} (score ${best.score.toFixed(2)} after the read, from the evidence below` +
-    `${detection.ambiguous ? '; ambiguous' : ''})`
-  );
+    `${detection.ambiguous ? '; ambiguous' : ''})`;
+  const params = { family: best.profile.name, score: best.score.toFixed(2) };
+  return detection.ambiguous
+    ? coreMessage('report.detectedAmbiguous', params, text)
+    : coreMessage('report.detected', params, text);
 }
 
 /**
@@ -154,10 +178,30 @@ export function nextStartReportMessage(
  * from a bank the bootloader entered without its check says it is inferred, and why (TESTING.md 42.89).
  */
 export function checkKeyReportOf(checkKey: CheckKey): string {
+  return checkKeyReportMessage(checkKey).text;
+}
+
+/**
+ * `checkKeyReportOf` as a message, for the page. The image pair is a clause of its own (`pair`, with its
+ * leading space, or ''), so each of the three wordings (no bank, named from a bank, inferred from one) is
+ * one template.
+ */
+export function checkKeyReportMessage(checkKey: CheckKey): CoreMessage {
   if (checkKey.name === null || checkKey.key === null) {
-    return `not named — ${checkKey.unnamedWhy ?? 'the read could not name it'}`;
+    const why: CoreParam =
+      checkKey.unnamedWhy === null
+        ? coreMessage('report.checkKey.couldNotName', {}, 'the read could not name it')
+        : recordedParam(checkKey.unnamedWhyMessage, checkKey.unnamedWhy);
+    return coreMessage('report.checkKey.notNamed', { why }, `not named — ${paramText(why)}`);
   }
-  const pair = checkKey.pair === null ? '' : ` (${checkKey.pair}'s block 1)`;
+  const pair: CoreParam =
+    checkKey.pair === null
+      ? ''
+      : coreMessage(
+          'report.checkKey.pair',
+          { pair: checkKey.pair },
+          ` (${checkKey.pair}'s block 1)`,
+        );
   const bank = checkKey.from === null ? null : bankWordsOf(checkKey.from);
   const from =
     bank === null
@@ -166,7 +210,13 @@ export function checkKeyReportOf(checkKey: CheckKey): string {
         ? `, inferred from ${bank}, the bank the camera reports it entered: the bootloader enters that ` +
           'bank without its check, and runs it under the key it checks the other banks under'
         : `, named from ${bank}, the bank the camera reports it entered after the bootloader's check`;
-  return `${checkKey.name} ${bytesToHex(checkKey.key)}${pair}${from}`;
+  const text = `${checkKey.name} ${bytesToHex(checkKey.key)}${paramText(pair)}${from}`;
+  const params = { key: keyNameParam(checkKey.name), hex: bytesToHex(checkKey.key), pair };
+  if (checkKey.from === null) return coreMessage('report.checkKey.named', params, text);
+  const fromBank = { ...params, bank: bankParam(checkKey.from) };
+  return checkKey.inferred
+    ? coreMessage('report.checkKey.inferredFrom', fromBank, text)
+    : coreMessage('report.checkKey.namedFrom', fromBank, text);
 }
 
 /**
@@ -180,6 +230,30 @@ export function acceptsDescription(slot: SlotState): string {
   return slot.accepts ? 'yes' : 'no';
 }
 
+/** The words of the accepts and bootable cells, as messages for the page. */
+const CELL_CODE: Readonly<Record<string, string>> = {
+  yes: 'report.cell.yes',
+  no: 'report.cell.no',
+  'n/a': 'report.cell.notApplicable',
+  unknown: 'report.cell.unknown',
+  'recovery only': 'report.cell.recoveryOnly',
+};
+
+function cellMessage(text: string): CoreMessage | string {
+  const code = CELL_CODE[text];
+  return code === undefined ? text : coreMessage(code, {}, text);
+}
+
+/** `acceptsDescription` as a message, for the page ('—' stays as it is). */
+export function acceptsDescriptionMessage(slot: SlotState): CoreMessage | string {
+  return cellMessage(acceptsDescription(slot));
+}
+
+/** `bootableDescription` (device-info.ts) as a message, for the page. */
+export function bootableDescriptionMessage(slot: SlotState): CoreMessage | string {
+  return cellMessage(bootableDescription(slot));
+}
+
 /** The one key row on the 2014 plaintext chain, where the banks are stored plain and no key is used. */
 export const PLAIN_CHAIN_KEYS =
   'none needed: the banks are stored as plain firmware, so a bank is read and written as it is';
@@ -188,19 +262,42 @@ export const PLAIN_CHAIN_KEYS =
 export const KEY_TABLE_REFUSED_2016 =
   'not read — the bootloader block (0x14000000) is refused on every channel on this line';
 
+const PLAIN_CHAIN_KEYS_MESSAGE = coreMessage('report.key.plainChain', {}, PLAIN_CHAIN_KEYS);
+const KEY_TABLE_REFUSED_2016_MESSAGE = coreMessage(
+  'report.key.tableRefused2016',
+  {},
+  KEY_TABLE_REFUSED_2016,
+);
+
+/** A key row's label (lower case, as the CLI prints it). */
+function rowLabel(code: string, text: string): CoreMessage {
+  return coreMessage(`report.keyRow.${code}`, {}, text);
+}
+
 /**
  * The key rows. On the 2016 line (`checkKey` set): the key its bootloader checks a bank under, that no key
  * table is read, the whitening constant and the key the application stores under. Elsewhere: the bootloader's
  * key table as the read confirmed it, or did not.
  */
 export function keyReportRows(state: DeviceState): ReportRow[] {
-  const whitening: ReportRow = ['whitening K', hexUp(state.keyWhiteningK)];
-  const store: ReportRow = ['store key', storeKeyDescription(state)];
+  return keyReportMessageRows(state).map(([label, value]) => [label.text, paramText(value)]);
+}
+
+/** `keyReportRows` as messages, for the page. */
+export function keyReportMessageRows(state: DeviceState): ReportMessageRow[] {
+  const whitening: ReportMessageRow = [
+    rowLabel('whitening', 'whitening K'),
+    hexUp(state.keyWhiteningK),
+  ];
+  const store: ReportMessageRow = [
+    rowLabel('store', 'store key'),
+    storeKeyDescriptionMessage(state),
+  ];
   const checkKey = state.checkKey ?? null;
   if (checkKey !== null) {
     return [
-      ['check key', checkKeyReportOf(checkKey)],
-      ['key table', KEY_TABLE_REFUSED_2016],
+      [rowLabel('check', 'check key'), checkKeyReportMessage(checkKey)],
+      [rowLabel('table', 'key table'), KEY_TABLE_REFUSED_2016_MESSAGE],
       whitening,
       store,
     ];
@@ -208,16 +305,27 @@ export function keyReportRows(state: DeviceState): ReportRow[] {
   /* The 2014 plaintext chain: a bank is read and written as it is, so no key is needed and none is shown
    * (the key-table fields stay in --json). Rows for keys the camera does not use would contradict that
    * (TESTING.md 42.102 O4, 42.103). */
-  if (state.plainChain && state.keyTable === null) return [['keys', PLAIN_CHAIN_KEYS]];
+  if (state.plainChain && state.keyTable === null) {
+    return [[rowLabel('keys', 'keys'), PLAIN_CHAIN_KEYS_MESSAGE]];
+  }
   const table = state.keyTable;
+  const notIdentified = coreMessage('report.key.notIdentified', {}, '(not identified)');
   return [
-    ['key A', table === null ? '(not identified)' : bytesToHex(table.keyA)],
-    ['key B', table === null ? '(not identified)' : bytesToHex(table.keyB)],
+    [rowLabel('a', 'key A'), table === null ? notIdentified : bytesToHex(table.keyA)],
+    [rowLabel('b', 'key B'), table === null ? notIdentified : bytesToHex(table.keyB)],
     [
-      'table at',
+      rowLabel('tableAt', 'table at'),
       table === null
-        ? `${String(state.keyTableCandidates)} candidate(s), none confirmed`
-        : `${hexUp(table.offset)} in the bootloader block, confirmed against a slot`,
+        ? coreMessage(
+            'report.key.candidates',
+            { count: String(state.keyTableCandidates) },
+            `${String(state.keyTableCandidates)} candidate(s), none confirmed`,
+          )
+        : coreMessage(
+            'report.key.tableAt',
+            { offset: hexUp(table.offset) },
+            `${hexUp(table.offset)} in the bootloader block, confirmed against a slot`,
+          ),
     ],
     whitening,
     store,
@@ -237,30 +345,57 @@ export interface BankWriting {
   readonly staged: string | null;
   /** What refuses every bank of this camera; empty when a bank can be written. */
   readonly refusals: readonly string[];
+  /** `staged` as a message, for the page. */
+  readonly stagedMessage: CoreMessage | null;
+  /** `refusals` as messages, for the page (a reason with no message is its English). */
+  readonly refusalMessages: readonly (CoreMessage | string)[];
 }
 
 /** The staging clause of each form the slot writer stages a bank in, in words (TESTING.md 42.89). */
-const STAGED_CLAUSE: Readonly<Record<StagingForm, string>> = {
-  plain: 'staged plain (the image as it is, with no key)',
-  'slot-keystream-ciphertext': "staged under its image's own key block 0",
-  'key-a-ciphertext': 'staged under keys derived from the booted bank and the running application',
+const STAGED_CLAUSE: Readonly<Record<StagingForm, CoreMessage>> = {
+  plain: coreMessage('report.staged.plain', {}, 'staged plain (the image as it is, with no key)'),
+  'slot-keystream-ciphertext': coreMessage(
+    'report.staged.slotKeystream',
+    {},
+    "staged under its image's own key block 0",
+  ),
+  'key-a-ciphertext': coreMessage(
+    'report.staged.keyA',
+    {},
+    'staged under keys derived from the booted bank and the running application',
+  ),
 };
 
 /** The staging clause on a 1.3.0.8 FF camera with no bank stored plain (write-keys.ts `FF_VENDOR_STAGED`). */
-const FF_VENDOR_CLAUSE =
+const FF_VENDOR_CLAUSE = coreMessage(
+  'report.staged.ffVendor',
+  {},
   'staged as the vendor app stages the 16 Hz FF image (the image XOR its own key block 0), stored by the ' +
-  'camera under Key B';
+    'camera under Key B',
+);
+
+/** The staging clause of a form (or the 1.3.0.8 FF vendor form), as a message. */
+export function stagedClauseMessage(form: StagingForm | 'ff-vendor'): CoreMessage {
+  return form === 'ff-vendor' ? FF_VENDOR_CLAUSE : STAGED_CLAUSE[form];
+}
 
 export function bankWritingOf(state: DeviceState): BankWriting {
   const verdict = classifyBuild(state.profile, state.version);
   const staging = stagingFor(verdict.family);
   const refusals = slotWriteRefusals(state);
+  const refusalMessages = slotWriteRefusalMessages(state);
   if (verdict.refusal !== null || staging === null) {
-    return { staged: null, refusals: [verdict.refusal ?? UNVERIFIED_STAGING_REASON, ...refusals] };
+    const why = verdict.refusalMessage ?? UNVERIFIED_STAGING_MESSAGE;
+    return {
+      staged: null,
+      refusals: [verdict.refusal ?? UNVERIFIED_STAGING_REASON, ...refusals],
+      stagedMessage: null,
+      refusalMessages: [why, ...refusalMessages],
+    };
   }
   /* The 1.3.0.8 FF build with no bank stored plain stages the FF image in the vendor's form. */
-  if (deriveWriteKeys(state).form === 'ff-vendor') {
-    return { staged: FF_VENDOR_CLAUSE, refusals };
-  }
-  return { staged: STAGED_CLAUSE[staging], refusals };
+  const clause = stagedClauseMessage(
+    deriveWriteKeys(state).form === 'ff-vendor' ? 'ff-vendor' : staging,
+  );
+  return { staged: clause.text, refusals, stagedMessage: clause, refusalMessages };
 }

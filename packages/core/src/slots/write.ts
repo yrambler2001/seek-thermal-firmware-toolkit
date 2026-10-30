@@ -27,7 +27,7 @@ import { hexUp, sha256hex, hex } from '../bytes.js';
 import { SeekError } from '../errors.js';
 import { transferSum16 } from '../image/bank.js';
 import { FOOTER_TAG } from '../image/header.js';
-import type { CipherProfile, WindowEntry } from '../profiles/types.js';
+import type { CipherProfile, Unsupported, WindowEntry } from '../profiles/types.js';
 import { PLAIN_CHAIN_ONLY_REASON } from '../workflows/device-info.js';
 import {
   isCancelled,
@@ -336,7 +336,7 @@ export function prepareSlotFlash(
    * otherwise is refused with its own reason, before anything is built. */
   const targetEmpty = slotContentOf(slot) === 'empty';
   if (targetEmpty && !entry.emptyBank.writable.supported) {
-    throw slotRefused(SLOT_WRITE_REFUSAL.emptyNotWritable(entry, entry.emptyBank.writable.reason));
+    throw slotRefused(SLOT_WRITE_REFUSAL.emptyNotWritable(entry, entry.emptyBank.writable));
   }
   if (input.bytes.length === 0) {
     throw slotRefused(SLOT_WRITE_REFUSAL.emptyInput());
@@ -354,7 +354,7 @@ export function prepareSlotFlash(
   let body: Body;
   if (input.kind === 'raw') {
     if (!entry.flashRaw.supported) {
-      throw slotRefused(SLOT_WRITE_REFUSAL.noRaw(entry, entry.flashRaw.reason));
+      throw slotRefused(SLOT_WRITE_REFUSAL.noRaw(entry, entry.flashRaw));
     }
     if (input.bytes.length > bankBytes) {
       throw slotRefused(SLOT_WRITE_REFUSAL.rawTooLong(entry, input.bytes.length, bankBytes), {
@@ -427,7 +427,7 @@ export function prepareSlotFlash(
     }
   } else {
     if (!entry.flashPlain.supported) {
-      throw slotRefused(SLOT_WRITE_REFUSAL.noPlain(entry, entry.flashPlain.reason));
+      throw slotRefused(SLOT_WRITE_REFUSAL.noPlain(entry, entry.flashPlain));
     }
     if (entry.staging === null) {
       throw slotRefused(SLOT_WRITE_REFUSAL.noStaging(entry));
@@ -559,6 +559,9 @@ function nothingWritten(state: DeviceState, refusal: string): CoreMessage {
 const nameOf = (entry: { readonly name: string; readonly key: SlotKey }): CoreParam =>
   bankNameParam(entry.name, entry.key);
 
+const reasonText = (reason: string | Unsupported): string =>
+  typeof reason === 'string' ? reason : reason.reason;
+
 /** The refusals a slot write raises before it sends anything, as messages (the SeekError's text is theirs). */
 export const SLOT_WRITE_REFUSAL = {
   nothingWritten: (said: CoreParam, refusal: string): CoreMessage =>
@@ -581,23 +584,23 @@ export const SLOT_WRITE_REFUSAL = {
       'the analysis does not say which firmware the camera runs. Nothing was written.',
     ),
   emptyInput: (): CoreMessage => coreMessage('slots.refused.emptyInput', {}, 'the input is empty'),
-  emptyNotWritable: (entry: SlotEntry, reason: string): CoreMessage =>
+  emptyNotWritable: (entry: SlotEntry, reason: string | Unsupported): CoreMessage =>
     coreMessage(
       'slots.refused.emptyNotWritable',
       { name: nameOf(entry), reason: supportReasonMessage(reason) },
-      `${entry.name} is empty and cannot be written on this build: ${reason}`,
+      `${entry.name} is empty and cannot be written on this build: ${reasonText(reason)}`,
     ),
-  noRaw: (entry: SlotEntry, reason: string): CoreMessage =>
+  noRaw: (entry: SlotEntry, reason: string | Unsupported): CoreMessage =>
     coreMessage(
       'slots.refused.noRaw',
       { name: nameOf(entry), reason: supportReasonMessage(reason) },
-      `${entry.name} cannot take raw bytes on this build: ${reason}`,
+      `${entry.name} cannot take raw bytes on this build: ${reasonText(reason)}`,
     ),
-  noPlain: (entry: SlotEntry, reason: string): CoreMessage =>
+  noPlain: (entry: SlotEntry, reason: string | Unsupported): CoreMessage =>
     coreMessage(
       'slots.refused.noPlain',
       { name: nameOf(entry), reason: supportReasonMessage(reason) },
-      `${entry.name} cannot take a decrypted image on this build: ${reason}`,
+      `${entry.name} cannot take a decrypted image on this build: ${reasonText(reason)}`,
     ),
   noStaging: (entry: SlotEntry): CoreMessage =>
     coreMessage(

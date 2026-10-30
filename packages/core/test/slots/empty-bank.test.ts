@@ -231,7 +231,7 @@ describe('the plan says an empty bank can be written, and why', () => {
   it('a locked build whose staging was never measured: read only, an empty bank is not written either', () => {
     const plan = buildSlotPlan(legacyAuth, '1.5.0.0');
     for (const slot of plan.slots) {
-      expect(slot.emptyBank.writable).toEqual({
+      expect(slot.emptyBank.writable).toMatchObject({
         supported: false,
         reason: UNVERIFIED_STAGING_REASON,
       });
@@ -248,7 +248,7 @@ describe('the plan says an empty bank can be written, and why', () => {
       expect(plan.supportedBuild.supported).toBe(false);
       const reason = plan.supportedBuild.supported ? '' : plan.supportedBuild.reason;
       for (const slot of plan.slots) {
-        expect(slot.emptyBank.writable).toEqual({ supported: false, reason });
+        expect(slot.emptyBank.writable).toMatchObject({ supported: false, reason });
         expect(slot.emptyBank.why).toBe(reason);
       }
     }

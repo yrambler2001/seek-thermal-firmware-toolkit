@@ -241,6 +241,8 @@ export interface SlotState {
   readonly present: boolean;
   /** Why the slot holds no usable image, when it does not. */
   readonly reason: string | null;
+  /** `reason` as a message, for the page; shown only while its text is `reason` (`recordedParam`). */
+  readonly reasonMessage?: CoreMessage;
   /**
    * The bank's image-header window read as all 0xFF: an erased bank, which holds
    * no image and is not an error (a stock camera carries one). Set only on a clean
@@ -411,6 +413,8 @@ export interface CheckKey {
   readonly pair: string | null;
   /** Why the key could not be named, as a clause ("the camera's active-slot word … could not be read"); null when named. */
   readonly unnamedWhy: string | null;
+  /** `unnamedWhy` as a message, for the page. */
+  readonly unnamedWhyMessage?: CoreMessage;
   /** One sentence for the read's log: the key and how it was named, or why it was not. */
   readonly why: string;
 }

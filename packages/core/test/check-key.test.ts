@@ -300,14 +300,14 @@ describe('the report rows on the 2016 line (seek-fw info and the Info tab)', () 
   });
 
   it('writes the banks one at a time, each under its image’s key block 0, and lists what refuses every bank', () => {
-    expect(bankWritingOf(state2016())).toEqual({
+    expect(bankWritingOf(state2016())).toMatchObject({
       staged: "staged under its image's own key block 0",
       refusals: [],
     });
     const refused = state2016({
       bankWriteRefusals: ['no slot decrypts to the 0x00000000 acceptance sum'],
     });
-    expect(bankWritingOf(refused)).toEqual({
+    expect(bankWritingOf(refused)).toMatchObject({
       staged: "staged under its image's own key block 0",
       refusals: ['no slot decrypts to the 0x00000000 acceptance sum'],
     });

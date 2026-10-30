@@ -709,6 +709,44 @@ export default {
     "firmware older than 0.8.0.0 has no read handler for GetFeaturedFirmwareData, the command a dump reads flash with. On 0.7.0.7 and 0.7.0.8 it is in the RPC method table at 0x4F but registered as a setter (write handler) only, so the control-IN read a dump sends cannot be dispatched (the preservation run reads those two builds through wire id 0x58, GetFeaturedData, instead); before 0.7.0.7 wire id 0x4F is UploadFirmwareRowSize, and on 0.3.0.1 wire id 0x52 — the one a dump arms with — is EnterBootloaderMode rather than BeginFirmwareUpgrade: the camera stays in its application, but every arm sets a flash target and arms that build's firmware-upgrade stage (GetErrorCode then reads 0x00400000), which is not a read window. Recovered from the images' own method tables, both handler columns; see test/firmware/facts.json.",
   'support.noWritePath':
     'these builds take new firmware through an older upgrade sequence that this toolkit does not send, and their banks were never mapped, so nothing is written.',
+  /* The build's own refusals (slots/capability-family `classifyBuild`): `{version}` is the firmware version,
+   * `{first}` the first version a slot is read on, `{family}` a family id (modern-4x, legacy-auth, …), which
+   * stays as it is like the other family ids in these sentences. */
+  'support.versionUnread':
+    'the firmware version could not be read, so the build, its banks and their staging form are unknown; nothing is read or written on it',
+  'support.versionNotDotted':
+    'firmware version "{version}" is not a dotted version, so the build, its banks and their staging form are unknown; nothing is read or written on it',
+  'support.olderThanFirst':
+    'firmware {version} is older than {first}: its RPC table has no read handler for GetFeaturedFirmwareData, the command a slot read sends, so neither a read nor a write is sent to it (early-compact has the evidence)',
+  'support.modernOnLocked':
+    'family modern-4x covers 2.x, 4.x, 10.x, 42.x and 44.x; {version} is on the 0.x / 1.x locked line, which needs legacy-auth or compact-2016',
+  'support.lockedOnModern':
+    'family legacy-auth covers the 0.x / 1.x locked line; {version} is on the modern line, which needs modern-4x',
+  'support.notCompactPro':
+    'family compact-2016 covers the Compact PRO 1.0.3.x line; {version} is not on it',
+  'support.earlyCompact':
+    'family early-compact covers the builds older than {first} only, and {version} is read through legacy-auth',
+  'support.generic':
+    'the camera family is not identified (family generic), so the bank layout and the staging form are unknown; identify the camera before a slot is read or written',
+  'support.noPlan':
+    'no slot plan exists for family {family}: its bank layout and staging form are not known',
+  /* A bank's own refusals (slots/capability): `{mode}` is a mode number, `{address}` and `{at}` hex addresses. */
+  'support.noArmPlain':
+    "this build's table does not arm mode {mode} at {address} on the plain channel",
+  'support.noArmToken':
+    "this build's table does not arm mode {mode} at {address} on the token channel",
+  'support.windowElsewhere': 'the preservation bank window for {bank} is at {at}, not {address}',
+  'support.noDumpWindow':
+    "this build's BeginFirmwareUpgrade table has no window at {address} for {bank}",
+  /* A family that refuses an operation (profiles/registry `requireCapability`): `{family}` is the family's
+   * name, `{capability}` one of support.capability.*, `{reason}` a support.* reason. */
+  'support.capabilityRefused': '{family} does not support {capability}: {reason}',
+  'support.capability.dump': 'dump',
+  /** The 4.x/Nano tab's button of that name. */
+  'support.capability.allSelectors': 'Dump all selectors',
+  'support.capability.decrypt': 'decrypt',
+  'support.capability.deviceInfo': "the Info tab's full read",
+  'support.capability.flash': 'bank writes',
   /* ---- slots: why a bank was not read, and a write's refusals (slots/inspect, slots/write) ---- */
   /** `{name}` is the bank's name ("Slot A", in your words) or the build's own name for it; `{address}` a hex address. */
   'slots.unread.noWindow':
@@ -731,4 +769,92 @@ export default {
   /** `{size}` is a byte count, `{bankSize}` the bank's size in hex. */
   'slots.refused.rawTooLong': '{size} B is longer than the {name} bank ({bankSize} B)',
   'slots.refused.imageTooLong': 'image is {size} B, longer than the {name} bank ({bankSize} B)',
+  /* ---- the read: why a bank holds no image or was not read (workflows/device-info) ---- */
+  /** `{size}` and `{count}` are byte counts ("B" is bytes). */
+  'read.reason.shortRead': 'short read ({size} B)',
+  'read.reason.noParse': 'could not parse an image header',
+  /** `{magic}` is the word the header has where an image's magic would be. */
+  'read.reason.noHeader': 'no image header (magic {magic})',
+  /** `header.length` is the header's field name. */
+  'read.reason.lengthOutOfRange': 'header.length {length} is out of range',
+  'read.reason.stopped': 'bank read stopped at {count}/{size} B',
+  /** `{table}` is the name of the build's selector table; `{address}` a hex address. */
+  'read.reason.notInPlan':
+    'not readable on firmware {version}: its plan ({table}) has no window at {address}, so nothing was armed for it',
+  'read.reason.notInPlanUnknown':
+    'not readable on firmware of unknown version: its plan ({table}) has no window at {address}, so nothing was armed for it',
+  /** `{remedy}` is read.spentRemedy. `{word}` and `{hex}` are hex words. */
+  'read.reason.staleDescriptor':
+    "the window served a stale reader descriptor's bytes — word 0 {word} with reset {hex} is 0x14000000's vector table, not this bank's content, so nothing was analysed from it: {remedy}",
+  'read.reason.spentReader': "the camera's slots could not be read — {remedy}",
+  'read.spentRemedy':
+    'the window reader may be spent for this boot; power-cycle the camera and retry',
+  /* ---- the read: why the check key was not named (workflows/device-info `checkKeyOf`) ---- */
+  'checkKey.unnamed.wordNotRead':
+    "the camera's active-slot word (fw info roots, selector 10) could not be read",
+  /** `{word}` is the active-slot word, a number. */
+  'checkKey.unnamed.wordNamesNoBank':
+    "the camera's active-slot word is {word}, which names no bank",
+  'checkKey.unnamed.cfg0NotRead':
+    'the boot-config word was not read, so whether the bootloader checked {bank} before it entered it is not known',
+  'checkKey.unnamed.noZeroSum':
+    'the camera reports it entered {bank}, but {bank} does not decrypt to a zero word sum on this read',
+  /** `{word}` is the boot-config word in hex. */
+  'checkKey.unnamed.noZeroSumUnchecked':
+    'the camera reports it entered {bank}, which the boot-config word {word} leaves to last, so the bootloader entered it without its check, but {bank} does not decrypt to a zero word sum on this read',
+  /* ---- the Info tab's camera report (workflows/device-report) ---- */
+  /** The detected row; `{score}` is a number like 0.98. */
+  'report.detected': '{family} (score {score} after the read, from the evidence below)',
+  'report.detectedAmbiguous':
+    '{family} (score {score} after the read, from the evidence below; ambiguous)',
+  /** The accepts and bootable cells of the banks table. */
+  'report.cell.yes': 'yes',
+  'report.cell.no': 'no',
+  'report.cell.notApplicable': 'n/a',
+  'report.cell.unknown': 'unknown',
+  'report.cell.recoveryOnly': 'recovery only',
+  /** The key rows' labels; the page capitalises the first letter. "K" is the whitening constant's name. */
+  'report.keyRow.whitening': 'whitening K',
+  'report.keyRow.store': 'store key',
+  'report.keyRow.check': 'check key',
+  'report.keyRow.table': 'key table',
+  'report.keyRow.keys': 'keys',
+  'report.keyRow.a': 'key A',
+  'report.keyRow.b': 'key B',
+  'report.keyRow.tableAt': 'table at',
+  'report.key.notIdentified': '(not identified)',
+  /** `{count}` is a number of candidate key tables. */
+  'report.key.candidates': '{count} candidate(s), none confirmed',
+  'report.key.tableAt': '{offset} in the bootloader block, confirmed against a slot',
+  'report.key.plainChain':
+    'none needed: the banks are stored as plain firmware, so a bank is read and written as it is',
+  'report.key.tableRefused2016':
+    'not read — the bootloader block (0x14000000) is refused on every channel on this line',
+  /** `{key}` is a key name; `{hex}` the key's bytes; `{pair}` is report.checkKey.pair or empty. */
+  'report.checkKey.named': '{key} {hex}{pair}',
+  'report.checkKey.namedFrom':
+    "{key} {hex}{pair}, named from {bank}, the bank the camera reports it entered after the bootloader's check",
+  'report.checkKey.inferredFrom':
+    '{key} {hex}{pair}, inferred from {bank}, the bank the camera reports it entered: the bootloader enters that bank without its check, and runs it under the key it checks the other banks under',
+  /** Starts with a space; `{pair}` is an image pair's name (stays as it is). */
+  'report.checkKey.pair': " ({pair}'s block 1)",
+  /** `{why}` is a checkKey.unnamed.* reason or report.checkKey.couldNotName. */
+  'report.checkKey.notNamed': 'not named — {why}',
+  'report.checkKey.couldNotName': 'the read could not name it',
+  'report.storeKey.checkKeyUnnamed':
+    'the key its bootloader checks a bank under (not named on this read): the application stores every bank it writes under that key',
+  'report.storeKey.checkKey':
+    '{key}: the application stores every bank it writes under the key its bootloader checks',
+  'report.storeKey.unknown':
+    'unknown — the bootloader block holding the per-device key slot was not read',
+  'report.storeKey.keyBUnidentified':
+    'Key B (no per-device key programmed; Key B itself not identified)',
+  'report.storeKey.keyB': 'Key B (no per-device key programmed)',
+  /** How each bank is staged: said after "each bank" (info:report.oneBank). */
+  'report.staged.plain': 'staged plain (the image as it is, with no key)',
+  'report.staged.slotKeystream': "staged under its image's own key block 0",
+  'report.staged.keyA':
+    'staged under keys derived from the booted bank and the running application',
+  'report.staged.ffVendor':
+    'staged as the vendor app stages the 16 Hz FF image (the image XOR its own key block 0), stored by the camera under Key B',
 } as const satisfies NamespaceMessages;

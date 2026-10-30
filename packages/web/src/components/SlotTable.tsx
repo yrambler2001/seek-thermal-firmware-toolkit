@@ -15,6 +15,8 @@ import {
   hexUp,
   writeBannerMessage,
   capabilityNoteMessage,
+  recordedParam,
+  supportReasonMessage,
   type FpsPlan,
   type SlotInputKind,
   type SlotKey,
@@ -268,7 +270,6 @@ export function SlotTable({
               </TableRowHeader>
 
               <TableCell label={t('slots:table.col.firmware')}>
-                {/* i18n: core message (the empty bank's and the image's reason below) */}
                 {state === null ? (
                   <span className="text-warn">
                     {view.unreadReason === null
@@ -289,7 +290,7 @@ export function SlotTable({
                             why: coreText(capabilityNoteMessage(entry.emptyBank.why)),
                           })
                         : t('slots:table.emptyNotWritable', {
-                            reason: entry.emptyBank.writable.reason,
+                            reason: coreText(supportReasonMessage(entry.emptyBank.writable)),
                           })}
                     </span>
                   </>
@@ -304,7 +305,9 @@ export function SlotTable({
                   </>
                 ) : (
                   <span className="text-muted-foreground">
-                    {state.reason ?? t('slots:table.noImage')}
+                    {state.reason === null
+                      ? t('slots:table.noImage')
+                      : coreText(recordedParam(state.reasonMessage, state.reason))}
                   </span>
                 )}
               </TableCell>

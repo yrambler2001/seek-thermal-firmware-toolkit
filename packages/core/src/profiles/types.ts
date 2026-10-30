@@ -34,14 +34,24 @@ export type ProfileId = BuiltInProfileId | (string & {});
 
 export type SlotKey = 'a' | 'b' | 'r';
 
-/** Whether a profile supports an operation, and if not, why not. */
+/**
+ * Whether a profile supports an operation, and if not, why not: `reason` in English, and `reasonMessage`
+ * the same sentence as a message for the page (message.ts), where the reason has one.
+ */
 export type Support =
-  { readonly supported: true } | { readonly supported: false; readonly reason: string };
+  | { readonly supported: true }
+  | { readonly supported: false; readonly reason: string; readonly reasonMessage?: CoreMessage };
+
+/** A `Support` that refuses. */
+export type Unsupported = Extract<Support, { readonly supported: false }>;
 
 export const SUPPORTED: Support = { supported: true };
 
-export function unsupported(reason: string): Support {
-  return { supported: false, reason };
+/** A refusal: its English, or a message (which carries its English). */
+export function unsupported(reason: string | CoreMessage): Support {
+  return typeof reason === 'string'
+    ? { supported: false, reason }
+    : { supported: false, reason: reason.text, reasonMessage: reason };
 }
 
 export interface CipherProfile {

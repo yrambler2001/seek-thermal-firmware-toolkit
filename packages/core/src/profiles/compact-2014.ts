@@ -88,6 +88,7 @@ import type {
   ProfileCapabilities,
 } from './types.js';
 import { unsupported, SUPPORTED } from './types.js';
+import { coreMessage } from '../message.js';
 import { FLASH_BASE, FLASH_SIZE, HDR_HI, HDR_LO, WINDOW_SIZE } from './modern-4x.js';
 import { LEGACY_BOOT, LEGACY_SLOTS } from './legacy-auth.js';
 import { primaryVersion, versionSource } from './version.js';
@@ -162,15 +163,18 @@ const MEMORY: MemoryLayout = {
   ],
 };
 
+export const NO_READ_COMMAND_MESSAGE = coreMessage('support.noReadCommand', {}, NO_READ_COMMAND);
+export const NO_WRITE_PATH_MESSAGE = coreMessage('support.noWritePath', {}, NO_WRITE_PATH);
+
 const CAPABILITIES: ProfileCapabilities = {
-  dump: unsupported(NO_READ_COMMAND),
+  dump: unsupported(NO_READ_COMMAND_MESSAGE),
   /* The same reason: it arms the same command, 66 times, and on 0.3.0.1 that is EnterBootloaderMode. */
-  allSelectors: unsupported(NO_READ_COMMAND),
+  allSelectors: unsupported(NO_READ_COMMAND_MESSAGE),
   /* Both of these read nothing off the camera's flash. A dump obtained another
    * way decrypts normally, and the info commands are at their usual wire ids. */
   decrypt: SUPPORTED,
   deviceInfo: SUPPORTED,
-  flash: unsupported(NO_WRITE_PATH),
+  flash: unsupported(NO_WRITE_PATH_MESSAGE),
 };
 
 /* ---- detection ---------------------------------------------------------- */

@@ -138,6 +138,19 @@ import {
   type PreserveBootFacts,
   type PreserveChoiceFacts,
   type PreserveRunState,
+  READ_REASON,
+  SUPPORT_REASON,
+  acceptsDescriptionMessage,
+  bootableDescriptionMessage,
+  buildSlotPlan,
+  capabilityRefusalMessage,
+  checkKeyOf,
+  detectedReportMessage,
+  keyReportMessageRows,
+  listProfiles,
+  spentReaderDiagnosisMessage,
+  staleDescriptorMessage,
+  stagedClauseMessage,
   type CoreMessage,
   type CoreParam,
   type DeviceState,
@@ -874,6 +887,137 @@ function samples(base: DeviceState): CoreMessage[] {
   add(SLOT_WRITE_REFUSAL.noStaging(entry));
   add(SLOT_WRITE_REFUSAL.rawTooLong(entry, 9, 0x40000));
   add(SLOT_WRITE_REFUSAL.imageTooLong(entry, 9, 0x40000));
+
+  /* support: the build's refusals and a bank's, on every family; every family's refused operation */
+  const refuses = { supported: false, reason: 'x' } as const;
+  const [first] = listProfiles();
+  if (first === undefined) throw new Error('no family is registered');
+  const families = [
+    ...listProfiles(),
+    { ...first, id: 'custom' },
+    {
+      ...first,
+      capabilities: {
+        dump: refuses,
+        allSelectors: refuses,
+        decrypt: refuses,
+        deviceInfo: refuses,
+        flash: refuses,
+      },
+    },
+  ];
+  for (const profile of families) {
+    for (const version of [null, 'v4', '0.7.0.7', '1.3.0.0', '1.5.0.0', '1.0.3.0', '4.8.2.1']) {
+      const plan = buildSlotPlan(profile, version);
+      for (const support of [
+        plan.supportedBuild,
+        ...plan.slots.flatMap((slot) => [slot.dump, slot.flashPlain, slot.emptyBank.writable]),
+      ]) {
+        if (!support.supported) message(supportReasonMessage(support));
+      }
+    }
+    for (const op of ['dump', 'allSelectors', 'decrypt', 'deviceInfo', 'flash'] as const) {
+      add(capabilityRefusalMessage(profile, op));
+    }
+  }
+  add(SUPPORT_REASON.noArm('plain', 7, 0x10000));
+  add(SUPPORT_REASON.noArm('token', 8, 0x10000));
+  add(SUPPORT_REASON.windowElsewhere('b', 0x20000, 0x30000));
+  add(SUPPORT_REASON.noDumpWindow('r', 0x40000));
+
+  /* the read: why a bank holds no image or was not read, and why the check key was not named */
+  add(READ_REASON.shortRead(12));
+  add(READ_REASON.noParse());
+  add(READ_REASON.noHeader(0xffffffff));
+  add(READ_REASON.lengthOutOfRange(0x1234567));
+  add(READ_REASON.stopped(4096, 65536));
+  add(READ_REASON.notInPlan('modern', '4.8.2.1', 0x10000));
+  add(READ_REASON.notInPlan('modern', null, 0x10000));
+  add(spentReaderDiagnosisMessage());
+  add(staleDescriptorMessage(new Uint8Array([0, 0, 0, 0x10, 0, 0, 0, 0x14])));
+  for (const [activeSlotWord, cfg0] of [
+    [null, 0],
+    [9, 0],
+    [0, null],
+    [0, 0],
+    [1, 0],
+    [2, 0],
+  ] as const) {
+    const checkKey = checkKeyOf({
+      cfg0,
+      activeSlotWord,
+      bootloaderVersion: '1.2.0.0',
+      whiteningK: 0,
+      slotOf: () => undefined,
+    });
+    add(checkKey.unnamedWhyMessage);
+  }
+
+  /* the Info tab's report: the key rows, the cells, the detected row, the staging clauses */
+  const named2016 = deviceState2016(base);
+  const unnamed2016 = deviceState2016(base, { checkKeyNamed: false });
+  const unprogrammed = { ...base.storeKey, programmed: false };
+  for (const state of [
+    base,
+    { ...base, keyTable: null },
+    { ...base, keyTable: null, plainChain: true },
+    { ...base, storeKey: unprogrammed, deviceKeySlot: null },
+    { ...base, storeKey: unprogrammed, deviceKeySlot: new Uint8Array(16) },
+    { ...base, storeKey: unprogrammed, deviceKeySlot: new Uint8Array(16), keyTable: null },
+    {
+      ...base,
+      storeKey: unprogrammed,
+      deviceKeySlot: new Uint8Array(16),
+      keyTable: { keyA: new Uint8Array(16), keyB: new Uint8Array(16), offset: 0x1234 },
+    },
+    named2016,
+    unnamed2016,
+    { ...named2016, checkKey: { ...named2016.checkKey, pair: 'x', from: 'r', inferred: true } },
+    { ...named2016, checkKey: { ...named2016.checkKey, from: 'a', inferred: false } },
+    { ...named2016, checkKey: { ...named2016.checkKey, from: null } },
+    { ...unnamed2016, checkKey: { ...unnamed2016.checkKey, unnamedWhy: null } },
+  ] as DeviceState[]) {
+    keyReportMessageRows(state).forEach(([label, value]) => {
+      add(label);
+      message(value);
+    });
+  }
+  const cell = (fields: object) =>
+    ({
+      present: true,
+      keyName: 'Key A',
+      plain: null,
+      accepts: true,
+      bootable: true,
+      bootability: 'bootable',
+      ...fields,
+    }) as never;
+  for (const slot of [
+    cell({}),
+    cell({ accepts: false, bootable: false, bootability: 'not-bootable' }),
+    cell({ keyName: null, plain: new Uint8Array(1) }),
+    cell({ bootability: 'unknown' }),
+    cell({ bootability: 'recovery-only' }),
+  ]) {
+    message(acceptsDescriptionMessage(slot));
+    message(bootableDescriptionMessage(slot));
+  }
+  for (const ambiguous of [false, true]) {
+    add(
+      detectedReportMessage({
+        best: { profile: { name: 'Compact PRO' }, score: 0.98 },
+        ambiguous,
+      } as never),
+    );
+  }
+  for (const form of [
+    'plain',
+    'slot-keystream-ciphertext',
+    'key-a-ciphertext',
+    'ff-vendor',
+  ] as const) {
+    add(stagedClauseMessage(form));
+  }
 
   const all: CoreMessage[] = [];
   out.forEach((message) => {

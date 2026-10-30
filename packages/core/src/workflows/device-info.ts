@@ -17,8 +17,8 @@
  * ==================================================================== */
 
 import { asciiz, bytesToHex, hex, hexToBytes, hexUp, sha256hex, viewOf } from '../bytes.js';
-import { CancelledError, errorMessage } from '../errors.js';
-import { coreMessage, paramText, type CoreMessage, type CoreParam } from '../message.js';
+import { CancelledError, errorCoreMessage, errorMessage } from '../errors.js';
+import { bankParam, coreMessage, paramText, type CoreMessage, type CoreParam } from '../message.js';
 import { decryptImage } from '../crypto/cipher.js';
 import {
   findKeyCandidates,
@@ -89,6 +89,7 @@ import {
 } from './types.js';
 import { channelEvidenceOf } from './capability.js';
 import { planForDevice } from './window-plan.js';
+import { keyNameParam } from '../slots/write-keys-words.js';
 import {
   KEY_TABLE_REFUSAL,
   acceptanceSumRefusal,
@@ -106,6 +107,8 @@ const BOOT_CONFIG_BYTES = 0x120;
 interface RawSlot {
   readonly present: boolean;
   readonly reason: string | null;
+  /** `reason` as a message, for the page. */
+  readonly reasonMessage?: CoreMessage;
   /**
    * True when the slot was not read: the read threw, or the plan has no window
    * for it and nothing was armed. A clean read of an empty slot is false.
@@ -137,6 +140,17 @@ interface RawSlot {
  */
 export const SPENT_READER_REMEDY =
   'the window reader may be spent for this boot; power-cycle the camera and retry';
+
+const SPENT_READER_REMEDY_MESSAGE = coreMessage('read.spentRemedy', {}, SPENT_READER_REMEDY);
+
+/** `spentReaderDiagnosis` as a message, for the page. */
+export function spentReaderDiagnosisMessage(): CoreMessage {
+  return coreMessage(
+    'read.reason.spentReader',
+    { remedy: SPENT_READER_REMEDY_MESSAGE },
+    spentReaderDiagnosis(),
+  );
+}
 
 /** The whole-read refusal, when no window served bank content. */
 export function spentReaderDiagnosis(): string {
@@ -175,16 +189,23 @@ export function blankSlotCapture(head: Uint8Array): boolean {
  * cipher analysis that feeds family scoring.
  */
 export function staleDescriptorCapture(head: Uint8Array): string | null {
+  return staleDescriptorMessage(head)?.text ?? null;
+}
+
+/** `staleDescriptorCapture` as a message, for the page. */
+export function staleDescriptorMessage(head: Uint8Array): CoreMessage | null {
   if (head.length < 8) return null;
   const dv = viewOf(head);
   const word0 = dv.getUint32(0, true);
   const reset = dv.getUint32(4, true);
   if (!isStaleDescriptorWord(word0)) return null;
   if (reset >>> 16 !== 0x1400) return null;
-  return (
+  return coreMessage(
+    'read.reason.staleDescriptor',
+    { word: hexUp(word0), hex: hexUp(reset), remedy: SPENT_READER_REMEDY_MESSAGE },
     `the window served a stale reader descriptor's bytes — word 0 ${hexUp(word0)} with reset ` +
-    `${hexUp(reset)} is 0x14000000's vector table, not this bank's content, so nothing was ` +
-    `analysed from it: ${SPENT_READER_REMEDY}`
+      `${hexUp(reset)} is 0x14000000's vector table, not this bank's content, so nothing was ` +
+      `analysed from it: ${SPENT_READER_REMEDY}`,
   );
 }
 
@@ -199,9 +220,10 @@ async function readSlot(
   chunk: number,
   onChunk: (n: number) => void,
 ): Promise<RawSlot> {
-  const none = (reason: string, header: ImageHeader | null): RawSlot => ({
+  const none = (reason: CoreMessage, header: ImageHeader | null): RawSlot => ({
     present: false,
-    reason,
+    reason: reason.text,
+    reasonMessage: reason,
     header,
     raw: null,
     footer: null,
@@ -211,7 +233,7 @@ async function readSlot(
   const probeLen = HEADER_OFFSET + HEADER_SIZE;
   const head = await device.readArmed(chunk, probeLen, onChunk);
   if (head.data.length < probeLen) {
-    return none(`short read (${String(head.data.length)} B)`, null);
+    return none(READ_REASON.shortRead(head.data.length), null);
   }
 
   /* A spent reader's bytes parse into no honest header, and they must never
@@ -219,11 +241,12 @@ async function readSlot(
    * are checked before `parseImageHeader`, which will happily build a header
    * out of 0xFFFFFFFF or out of a stale descriptor's tail. See the helpers
    * above for the measured signatures. */
-  const stale = staleDescriptorCapture(head.data);
+  const stale = staleDescriptorMessage(head.data);
   if (stale !== null) {
     return {
       present: false,
-      reason: stale,
+      reason: stale.text,
+      reasonMessage: stale,
       unread: true,
       spent: true,
       header: null,
@@ -239,7 +262,8 @@ async function readSlot(
      * reason is the same line a blank capture has always reported. */
     return {
       present: false,
-      reason: `no image header (magic ${hexUp(0xffffffff)})`,
+      reason: READ_REASON.noHeader(0xffffffff).text,
+      reasonMessage: READ_REASON.noHeader(0xffffffff),
       blank: true,
       header: null,
       raw: null,
@@ -248,12 +272,14 @@ async function readSlot(
   }
 
   const header = parseImageHeader(head.data);
-  if (header === null) return none('could not parse an image header', null);
+  if (header === null) {
+    return none(READ_REASON.noParse(), null);
+  }
   if (header.magic !== IMAGE_MAGIC) {
-    return none(`no image header (magic ${hexUp(header.magic)})`, header);
+    return none(READ_REASON.noHeader(header.magic), header);
   }
   if (header.length < HEADER_OFFSET || header.length >= TRY_KEYS_MAX_LEN || header.length & 3) {
-    return none(`header.length ${hexUp(header.length)} is out of range`, header);
+    return none(READ_REASON.lengthOutOfRange(header.length), header);
   }
 
   const total = bankPayloadSize(header.length);
@@ -262,7 +288,7 @@ async function readSlot(
   raw.set(head.data, 0);
   raw.set(rest.data, head.data.length);
   if (raw.length < total) {
-    return none(`bank read stopped at ${String(raw.length)}/${String(total)} B`, header);
+    return none(READ_REASON.stopped(raw.length, total), header);
   }
 
   return {
@@ -446,12 +472,49 @@ async function readBankVerdicts(
  * descriptor's subcommand, so an `early-compact` read of a camera past the
  * identity gate armed 7, 8 and 9 under a profile whose plan reads nothing.
  */
-function notInPlan(plan: WindowPlan, version: string | null, address: number): string {
-  return (
-    `not readable on firmware ${version ?? 'of unknown version'}: its plan (${plan.table}) has ` +
-    `no window at ${hex(address, 8)}, so nothing was armed for it`
-  );
+function notInPlan(plan: WindowPlan, version: string | null, address: number): CoreMessage {
+  return READ_REASON.notInPlan(plan.table, version, address);
 }
+
+/** Why a bank holds no image or was not read, as messages (a slot's `reason` is their text). */
+export const READ_REASON = {
+  shortRead: (length: number): CoreMessage =>
+    coreMessage(
+      'read.reason.shortRead',
+      { size: String(length) },
+      `short read (${String(length)} B)`,
+    ),
+  noParse: (): CoreMessage =>
+    coreMessage('read.reason.noParse', {}, 'could not parse an image header'),
+  /** The header window holds no image: its magic is not an image's. */
+  noHeader: (magic: number): CoreMessage =>
+    coreMessage(
+      'read.reason.noHeader',
+      { magic: hexUp(magic) },
+      `no image header (magic ${hexUp(magic)})`,
+    ),
+  lengthOutOfRange: (length: number): CoreMessage =>
+    coreMessage(
+      'read.reason.lengthOutOfRange',
+      { length: hexUp(length) },
+      `header.length ${hexUp(length)} is out of range`,
+    ),
+  stopped: (read: number, total: number): CoreMessage =>
+    coreMessage(
+      'read.reason.stopped',
+      { count: String(read), size: String(total) },
+      `bank read stopped at ${String(read)}/${String(total)} B`,
+    ),
+  notInPlan: (table: string, version: string | null, address: number): CoreMessage => {
+    const text =
+      `not readable on firmware ${version ?? 'of unknown version'}: its plan (${table}) has ` +
+      `no window at ${hex(address, 8)}, so nothing was armed for it`;
+    const params = { table, address: hex(address, 8) };
+    return version === null
+      ? coreMessage('read.reason.notInPlanUnknown', params, text)
+      : coreMessage('read.reason.notInPlan', { version, ...params }, text);
+  },
+};
 
 /**
  * The upgrade-target selector, if the running firmware's own table has it.
@@ -588,29 +651,44 @@ export function checkKeyOf(input: {
   readonly whiteningK: number;
   readonly slotOf: (key: SlotKey) => CheckKeyBank | undefined;
 }): CheckKey {
-  const unnamed = (reason: string): CheckKey => ({
+  const unnamed = (reason: CoreMessage): CheckKey => ({
     name: null,
     key: null,
     from: null,
     inferred: false,
     pair: null,
-    unnamedWhy: reason,
-    why: `check key not named: ${reason}, so whether the bootloader takes each bank is not known`,
+    unnamedWhy: reason.text,
+    unnamedWhyMessage: reason,
+    why: `check key not named: ${reason.text}, so whether the bootloader takes each bank is not known`,
   });
   if (input.activeSlotWord === null) {
-    return unnamed("the camera's active-slot word (fw info roots, selector 10) could not be read");
+    return unnamed(
+      coreMessage(
+        'checkKey.unnamed.wordNotRead',
+        {},
+        "the camera's active-slot word (fw info roots, selector 10) could not be read",
+      ),
+    );
   }
   const entered = bankOfActiveSlotWord(input.activeSlotWord);
   if (entered === null) {
     return unnamed(
-      `the camera's active-slot word is ${String(input.activeSlotWord)}, which names no bank`,
+      coreMessage(
+        'checkKey.unnamed.wordNamesNoBank',
+        { word: String(input.activeSlotWord) },
+        `the camera's active-slot word is ${String(input.activeSlotWord)}, which names no bank`,
+      ),
     );
   }
   const bank = bankWordsOf(entered);
   if (input.cfg0 === null) {
     return unnamed(
-      `the boot-config word was not read, so whether the bootloader checked ${bank} before it ` +
-        'entered it is not known',
+      coreMessage(
+        'checkKey.unnamed.cfg0NotRead',
+        { bank: bankParam(entered) },
+        `the boot-config word was not read, so whether the bootloader checked ${bank} before it ` +
+          'entered it is not known',
+      ),
     );
   }
   /* The last bank of the word's order is entered without its check: it still runs under the key the others
@@ -623,9 +701,17 @@ export function checkKeyOf(input: {
   const slot = input.slotOf(entered);
   const state = slot?.recovered?.state ?? null;
   if (slot === undefined || !slot.present || state === null || !slot.accepts) {
-    return unnamed(
+    const text =
       `the camera reports it entered ${bank}${unchecked}, but ${bank} does not decrypt to a zero ` +
-        'word sum on this read',
+      'word sum on this read';
+    return unnamed(
+      inferred
+        ? coreMessage(
+            'checkKey.unnamed.noZeroSumUnchecked',
+            { bank: bankParam(entered), word: hexUp(input.cfg0) },
+            text,
+          )
+        : coreMessage('checkKey.unnamed.noZeroSum', { bank: bankParam(entered) }, text),
     );
   }
   const key = keyFromState(state, input.whiteningK);
@@ -919,9 +1005,11 @@ export async function readDeviceInfo(
     armedWith.push(entry?.subcmd ?? null);
     let read: RawSlot;
     if (entry === null) {
+      const reason = notInPlan(plan, version, descriptor.address);
       read = {
         present: false,
-        reason: notInPlan(plan, version, descriptor.address),
+        reason: reason.text,
+        reasonMessage: reason,
         unread: true,
         header: null,
         raw: null,
@@ -937,9 +1025,11 @@ export async function readDeviceInfo(
         noteArmed(entry);
       } catch (error) {
         if (error instanceof CancelledError) throw error;
+        const message = errorCoreMessage(error);
         read = {
           present: false,
           reason: errorMessage(error),
+          ...(message === undefined ? {} : { reasonMessage: message }),
           unread: true,
           header: null,
           raw: null,
@@ -969,7 +1059,12 @@ export async function readDeviceInfo(
     for (let i = 0; i < analysed.length; i++) {
       const slot = analysed[i];
       if (slot?.blank === true) {
-        analysed[i] = { ...slot, unread: true, reason: spentReaderDiagnosis() };
+        analysed[i] = {
+          ...slot,
+          unread: true,
+          reason: spentReaderDiagnosis(),
+          reasonMessage: spentReaderDiagnosisMessage(),
+        };
       }
     }
     reporter.log('');
@@ -1130,6 +1225,7 @@ export async function readDeviceInfo(
       address: descriptor.address,
       present: slot.present,
       reason: slot.reason,
+      ...(slot.reasonMessage === undefined ? {} : { reasonMessage: slot.reasonMessage }),
       blank: slot.blank === true && slot.unread !== true,
       unread: slot.unread === true,
       header: slot.header,
@@ -1722,21 +1818,42 @@ export function recoveryTargetVerdictMessage(
  * targets/compact_pro_9hz_1_0_3_0/src/crypto.c:291-329, rpc_cmds.c:1786-1812; `checkKeyOf`).
  */
 export function storeKeyDescription(state: DeviceState): string {
+  return paramText(storeKeyDescriptionMessage(state));
+}
+
+/** `storeKeyDescription` as a message, for the page (a key the page has no name for is its English). */
+export function storeKeyDescriptionMessage(state: DeviceState): CoreMessage | string {
   const checkKey = state.checkKey ?? null;
   if (checkKey !== null) {
     return checkKey.name === null
-      ? 'the key its bootloader checks a bank under (not named on this read): the application ' +
-          'stores every bank it writes under that key'
-      : `${checkKey.name}: the application stores every bank it writes under the key its ` +
-          'bootloader checks';
+      ? coreMessage(
+          'report.storeKey.checkKeyUnnamed',
+          {},
+          'the key its bootloader checks a bank under (not named on this read): the application ' +
+            'stores every bank it writes under that key',
+        )
+      : coreMessage(
+          'report.storeKey.checkKey',
+          { key: keyNameParam(checkKey.name) },
+          `${checkKey.name}: the application stores every bank it writes under the key its ` +
+            'bootloader checks',
+        );
   }
-  if (state.storeKey.programmed) return state.storeKey.name;
+  if (state.storeKey.programmed) return keyNameParam(state.storeKey.name);
   if (state.deviceKeySlot === null) {
-    return 'unknown — the bootloader block holding the per-device key slot was not read';
+    return coreMessage(
+      'report.storeKey.unknown',
+      {},
+      'unknown — the bootloader block holding the per-device key slot was not read',
+    );
   }
   return state.keyTable === null
-    ? 'Key B (no per-device key programmed; Key B itself not identified)'
-    : 'Key B (no per-device key programmed)';
+    ? coreMessage(
+        'report.storeKey.keyBUnidentified',
+        {},
+        'Key B (no per-device key programmed; Key B itself not identified)',
+      )
+    : coreMessage('report.storeKey.keyB', {}, 'Key B (no per-device key programmed)');
 }
 
 /** The bootable cell for one bank: an FF image in recovery is a recovery-only image, not a verdict of 'no'. */

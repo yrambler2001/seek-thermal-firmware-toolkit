@@ -59,7 +59,7 @@ import {
   SeekError,
   unpatchedStartOf,
 } from '@seek-fw/core';
-import { coreText, recordedCoreText } from '@/lib/core-text';
+import { coreText, recordedText } from '@/lib/core-text';
 import { errorCoreMessage, errorMessage } from '@seek-fw/core';
 import { t, tEnglish } from '@/i18n';
 import { reportInUseElsewhere } from '../lib/camera-lock';
@@ -881,7 +881,9 @@ export function usePreservePanel(params: PreservePanelParams): PreservePanelApi 
                 phaseRep.reset(
                   t('preserve:status.failedEarlier', {
                     error:
-                      recordedCoreText(failed?.errorCode, failed?.error) ??
+                      (failed?.error === undefined
+                        ? undefined
+                        : recordedText(failed.errorCode, failed.error)) ??
                       t('preserve:unknownReason'),
                   }),
                 );

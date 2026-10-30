@@ -53,6 +53,11 @@ function paramWords(param: CoreParam, translate: Translate): string | number {
   });
 }
 
+/** One param of a core message in the language in use (a bank, a nested message, a list, plain text). */
+export function coreParamText(param: CoreParam, translate: Translate = t): string {
+  return String(paramWords(param, translate));
+}
+
 /** Whether the page's dictionary has a template for this code. */
 export function knowsCoreCode(code: string): boolean {
   return Object.hasOwn(en.core, code);

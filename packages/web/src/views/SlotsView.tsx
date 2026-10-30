@@ -312,7 +312,7 @@ export function SlotsView({ slots, connected, busy }: SlotsViewProps): ReactElem
   );
   const unsupported =
     plan !== null && !plan.supportedBuild.supported
-      ? coreText(supportReasonMessage(plan.supportedBuild.reason))
+      ? coreText(supportReasonMessage(plan.supportedBuild))
       : null;
   const pendingView = pending === null ? null : viewOf(pending.report, pending.key);
 
@@ -372,7 +372,6 @@ export function SlotsView({ slots, connected, busy }: SlotsViewProps): ReactElem
             <p>
               <strong>{t('slots:unsupported.title')}</strong>
             </p>
-            {/* i18n: core message (a family refusal that names the version) */}
             <p>{unsupported}</p>
           </Alert>
         )}

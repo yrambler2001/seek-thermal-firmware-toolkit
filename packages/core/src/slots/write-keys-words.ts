@@ -80,7 +80,7 @@ export function checkKeyEvidence(
     readonly from: SlotKey | null;
     readonly inferred: boolean;
   } | null,
-  unnamedWhy: string | null,
+  unnamedWhy: CoreParam | null,
 ): CoreMessage {
   if (named === null) {
     const head =
@@ -93,7 +93,7 @@ export function checkKeyEvidence(
       : coreMessage(
           'keys.evidence.checkKeyUnnamedWhy',
           { why: unnamedWhy },
-          `${head} (${unnamedWhy})${tail}`,
+          `${head} (${paramText(unnamedWhy)})${tail}`,
         );
   }
   const key = keyNameParam(named.name);

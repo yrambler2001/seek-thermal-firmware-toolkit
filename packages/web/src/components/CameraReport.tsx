@@ -9,14 +9,15 @@
 import type { ReactElement } from 'react';
 import {
   bankWritingOf,
-  bootableDescription,
-  acceptsDescription,
-  detectedReportOf,
+  bootableDescriptionMessage,
+  acceptsDescriptionMessage,
+  detectedReportMessage,
   hexUp,
-  keyReportRows,
+  keyReportMessageRows,
+  recordedParam,
   runningApplicationOf,
   type DeviceState,
-  type ReportRow,
+  type ReportMessageRow,
   type SlotKey,
   type SlotState,
   bankNameParam,
@@ -26,7 +27,7 @@ import {
   upgradeTargetWarningMessage,
   type CoreParam,
 } from '@seek-fw/core';
-import { cfg0Words, coreText, nullableCoreText } from '@/lib/core-text';
+import { cfg0Words, coreParamText, coreText, coreTexts, nullableCoreText } from '@/lib/core-text';
 import { KeyValue } from './KeyValue';
 import { Panel, PanelTitle } from './Panel';
 import { Prose } from './Prose';
@@ -55,10 +56,10 @@ function slotName(state: DeviceState, key: SlotKey): string {
   return state.byKey.get(key)?.name ?? key;
 }
 
-/** A row of core's report (`keyReportRows`), labelled as the page labels it: the CLI's words, capitalised. */
-/* i18n: core message (the row's label and value are core's) */
-function pageRow([label, value]: ReportRow): [string, string] {
-  return [label.charAt(0).toUpperCase() + label.slice(1), value];
+/** A row of core's report (`keyReportMessageRows`), labelled as the page labels it: core's words, capitalised. */
+function pageRow([label, value]: ReportMessageRow): [string, string] {
+  const words = coreText(label);
+  return [words.charAt(0).toUpperCase() + words.slice(1), coreText(value)];
 }
 
 /** The running row, on 1.3.0.8 only: the build the camera's own per-bank answers name, or why not. */
@@ -87,14 +88,14 @@ function bankPresence(
     version: slot.present ? (slot.plainHeader?.versionStr ?? slot.header?.versionStr ?? '?') : '—',
     size: slot.header === null ? '—' : t('info:report.bytes', { count: slot.header.length }),
     key: slot.keyName ?? (slot.plain === null ? '—' : t('info:report.plaintext')),
-    accepts: acceptsDescription(slot), // i18n: core message
+    accepts: coreText(acceptsDescriptionMessage(slot)),
     /* "n/a" where the bootloader reads no footer: a missing one is not a fault there */
     footer: slot.present
       ? state.profile.boot.checksFooter
         ? yesNo(slot.footerOk)
         : t('info:report.notApplicable')
       : '—',
-    bootable: slot.present ? bootableDescription(slot) : '—', // i18n: core message
+    bootable: slot.present ? coreText(bootableDescriptionMessage(slot)) : '—',
   };
 }
 
@@ -109,7 +110,8 @@ export function CameraReport({ state }: CameraReportProps): ReactElement {
   const nameOf = (key: SlotKey): string => slotName(state, key);
   const nameParam = (key: SlotKey): CoreParam => bankNameParam(nameOf(key), key);
   /* How the banks are written, on every line (core's `bankWritingOf`, the CLI's Writing section). */
-  const bankWriting = bankWritingOf(state); // i18n: core message (staged, refusals)
+  const bankWriting = bankWritingOf(state);
+  const refusals = coreTexts(bankWriting.refusalMessages, bankWriting.refusals);
 
   return (
     <>
@@ -159,8 +161,7 @@ export function CameraReport({ state }: CameraReportProps): ReactElement {
         <KeyValue
           rows={[
             [t('info:report.readUnder'), state.profile.name],
-            /* i18n: core message */
-            [t('info:report.detected'), detectedReportOf(state.detection)],
+            [t('info:report.detected'), coreText(detectedReportMessage(state.detection))],
           ]}
         />
         {best.reasons.length > 0 && (
@@ -211,7 +212,7 @@ export function CameraReport({ state }: CameraReportProps): ReactElement {
 
       <Panel>
         <PanelTitle>{t('info:report.keys')}</PanelTitle>
-        <KeyValue rows={keyReportRows(state).map(pageRow)} />
+        <KeyValue rows={keyReportMessageRows(state).map(pageRow)} />
       </Panel>
 
       <Panel>
@@ -261,8 +262,10 @@ export function CameraReport({ state }: CameraReportProps): ReactElement {
                 .filter((slot) => slot.reason !== null)
                 .map((slot) => (
                   <li key={slot.key}>
-                    {/* i18n: core message (the read's per-slot reason, and the slot's name as core names it) */}
-                    {t('info:report.slotReason', { slot: slot.name, reason: slot.reason ?? '' })}
+                    {t('info:report.slotReason', {
+                      slot: coreParamText(bankNameParam(slot.name, slot.key)),
+                      reason: coreText(recordedParam(slot.reasonMessage, slot.reason ?? '')),
+                    })}
                   </li>
                 ))}
             </ul>
@@ -276,19 +279,23 @@ export function CameraReport({ state }: CameraReportProps): ReactElement {
           <Prose>
             <p>{t('info:report.noBankWritten')}</p>
             <ul>
-              {bankWriting.refusals.map((reason) => (
+              {refusals.map((reason) => (
                 <li key={reason}>{reason}</li>
               ))}
             </ul>
           </Prose>
         ) : (
           <Prose>
-            <p>{t('info:report.oneBank', { staged: bankWriting.staged })}</p>
-            {bankWriting.refusals.length > 0 && (
+            <p>
+              {t('info:report.oneBank', {
+                staged: coreText(bankWriting.stagedMessage ?? bankWriting.staged),
+              })}
+            </p>
+            {refusals.length > 0 && (
               <>
                 <p>{t('info:report.refusesEvery')}</p>
                 <ul>
-                  {bankWriting.refusals.map((reason) => (
+                  {refusals.map((reason) => (
                     <li key={reason}>{reason}</li>
                   ))}
                 </ul>

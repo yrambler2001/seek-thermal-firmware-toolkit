@@ -20,6 +20,7 @@ import type {
   ProfileCapabilities,
 } from './types.js';
 import { SUPPORTED, unsupported } from './types.js';
+import { coreMessage } from '../message.js';
 import {
   buildModernWindowMap,
   MODERN_BOOT,
@@ -43,6 +44,8 @@ export const FLASH_REFUSAL =
   'camera takes a bank written under the wrong key and then will not start from it. Dump and ' +
   'decrypt this camera, identify it from the dump, then name its family with --family.';
 
+export const FLASH_REFUSAL_MESSAGE = coreMessage('support.unknownFamily', {}, FLASH_REFUSAL);
+
 const CAPABILITIES: ProfileCapabilities = {
   dump: SUPPORTED,
   /* Dump all selectors is precisely the tool for an unknown map: it probes every
@@ -50,7 +53,7 @@ const CAPABILITIES: ProfileCapabilities = {
   allSelectors: SUPPORTED,
   decrypt: SUPPORTED,
   deviceInfo: SUPPORTED,
-  flash: unsupported(FLASH_REFUSAL),
+  flash: unsupported(FLASH_REFUSAL_MESSAGE),
 };
 
 function detectGeneric(_evidence: DeviceEvidence): DetectionVerdict {

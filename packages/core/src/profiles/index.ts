@@ -16,6 +16,7 @@ export {
   listProfiles,
   registerProfile,
   requireCapability,
+  capabilityRefusalMessage,
   unregisterProfile,
 } from './registry.js';
 export type { CapabilityName } from './registry.js';

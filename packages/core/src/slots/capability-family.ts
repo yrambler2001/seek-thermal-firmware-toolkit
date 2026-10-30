@@ -25,6 +25,7 @@ import { bankNameOf } from '../profiles/locked-boot.js';
 import type { FirmwareProfile, SlotKey } from '../profiles/types.js';
 import { parseVersion, type FirmwareVersion } from '../profiles/version.js';
 import type { StagingForm } from './types.js';
+import { coreMessage, type CoreMessage } from '../message.js';
 
 /** The first build a slot can be planned for. 0.7.x and older have no read handler. */
 export const FIRST_SUPPORTED_VERSION = '0.8.0.0';
@@ -84,20 +85,28 @@ export const UNVERIFIED_STAGING_REASON =
   'patch tables were measured on (0.8.0.0 .. 1.3.0.8 and 1.0.3.0 / 1.0.3.2), so the staging ' +
   'form its bank takes is unknown and nothing is written';
 
+export const UNVERIFIED_STAGING_MESSAGE = coreMessage(
+  'support.unverifiedStaging',
+  {},
+  UNVERIFIED_STAGING_REASON,
+);
+
 export interface FamilyVerdict {
   readonly family: SlotFamily;
   /** The parsed version, or null when the version could not be read or parsed. */
   readonly version: FirmwareVersion | null;
   /** Why no slot can be read or written on this build; null when one can. */
   readonly refusal: string | null;
+  /** `refusal` as a message, for the page. */
+  readonly refusalMessage?: CoreMessage;
 }
 
 function refused(
   family: SlotFamily,
   version: FirmwareVersion | null,
-  refusal: string,
+  refusal: CoreMessage,
 ): FamilyVerdict {
-  return { family, version, refusal };
+  return { family, version, refusal: refusal.text, refusalMessage: refusal };
 }
 
 function lockedFamily(text: string): SlotFamily {
@@ -119,8 +128,12 @@ export function classifyBuild(
     return refused(
       'unidentified',
       null,
-      'the firmware version could not be read, so the build, its banks and their staging form ' +
-        'are unknown; nothing is read or written on it',
+      coreMessage(
+        'support.versionUnread',
+        {},
+        'the firmware version could not be read, so the build, its banks and their staging form ' +
+          'are unknown; nothing is read or written on it',
+      ),
     );
   }
   const version = parseVersion(firmwareVersion);
@@ -128,8 +141,12 @@ export function classifyBuild(
     return refused(
       'unidentified',
       null,
-      `firmware version "${firmwareVersion}" is not a dotted version, so the build, its banks ` +
-        'and their staging form are unknown; nothing is read or written on it',
+      coreMessage(
+        'support.versionNotDotted',
+        { version: firmwareVersion },
+        `firmware version "${firmwareVersion}" is not a dotted version, so the build, its banks ` +
+          'and their staging form are unknown; nothing is read or written on it',
+      ),
     );
   }
   const text = version.text;
@@ -138,9 +155,13 @@ export function classifyBuild(
     return refused(
       'pre-0.8',
       version,
-      `firmware ${text} is older than ${FIRST_SUPPORTED_VERSION}: its RPC table has no read ` +
-        'handler for GetFeaturedFirmwareData, the command a slot read sends, so neither ' +
-        'a read nor a write is sent to it (early-compact has the evidence)',
+      coreMessage(
+        'support.olderThanFirst',
+        { version: text, first: FIRST_SUPPORTED_VERSION },
+        `firmware ${text} is older than ${FIRST_SUPPORTED_VERSION}: its RPC table has no read ` +
+          'handler for GetFeaturedFirmwareData, the command a slot read sends, so neither ' +
+          'a read nor a write is sent to it (early-compact has the evidence)',
+      ),
     );
   }
 
@@ -150,8 +171,12 @@ export function classifyBuild(
         return refused(
           'unidentified',
           version,
-          `family modern-4x covers 2.x, 4.x, 10.x, 42.x and 44.x; ${text} is on the 0.x / 1.x ` +
-            'locked line, which needs legacy-auth or compact-2016',
+          coreMessage(
+            'support.modernOnLocked',
+            { version: text },
+            `family modern-4x covers 2.x, 4.x, 10.x, 42.x and 44.x; ${text} is on the 0.x / 1.x ` +
+              'locked line, which needs legacy-auth or compact-2016',
+          ),
         );
       }
       return { family: 'modern', version, refusal: null };
@@ -161,8 +186,12 @@ export function classifyBuild(
         return refused(
           'unidentified',
           version,
-          `family legacy-auth covers the 0.x / 1.x locked line; ${text} is on the modern line, ` +
-            'which needs modern-4x',
+          coreMessage(
+            'support.lockedOnModern',
+            { version: text },
+            `family legacy-auth covers the 0.x / 1.x locked line; ${text} is on the modern line, ` +
+              'which needs modern-4x',
+          ),
         );
       }
       return { family: lockedFamily(text), version, refusal: null };
@@ -172,7 +201,11 @@ export function classifyBuild(
         return refused(
           'unidentified',
           version,
-          `family compact-2016 covers the Compact PRO 1.0.3.x line; ${text} is not on it`,
+          coreMessage(
+            'support.notCompactPro',
+            { version: text },
+            `family compact-2016 covers the Compact PRO 1.0.3.x line; ${text} is not on it`,
+          ),
         );
       }
       return { family: lockedFamily(text), version, refusal: null };
@@ -181,23 +214,35 @@ export function classifyBuild(
       return refused(
         'unidentified',
         version,
-        `family early-compact covers the builds older than ${FIRST_SUPPORTED_VERSION} only, and ` +
-          `${text} is read through legacy-auth`,
+        coreMessage(
+          'support.earlyCompact',
+          { first: FIRST_SUPPORTED_VERSION, version: text },
+          `family early-compact covers the builds older than ${FIRST_SUPPORTED_VERSION} only, and ` +
+            `${text} is read through legacy-auth`,
+        ),
       );
 
     case 'generic':
       return refused(
         'unidentified',
         version,
-        'the camera family is not identified (family generic), so the bank layout and the ' +
-          'staging form are unknown; identify the camera before a slot is read or written',
+        coreMessage(
+          'support.generic',
+          {},
+          'the camera family is not identified (family generic), so the bank layout and the ' +
+            'staging form are unknown; identify the camera before a slot is read or written',
+        ),
       );
 
     default:
       return refused(
         'unidentified',
         version,
-        `no slot plan exists for family ${profile.id}: its bank layout and staging form are not known`,
+        coreMessage(
+          'support.noPlan',
+          { family: profile.id },
+          `no slot plan exists for family ${profile.id}: its bank layout and staging form are not known`,
+        ),
       );
   }
 }

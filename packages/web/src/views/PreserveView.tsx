@@ -61,7 +61,7 @@ import {
   restoreFormMessage,
   drainCapabilityMessage,
 } from '@seek-fw/core';
-import { coreText, recordedCoreText, recordedText } from '@/lib/core-text';
+import { coreText, recordedText } from '@/lib/core-text';
 import { rich, t } from '@/i18n';
 import { bankList, bankName, bankWords } from '@/lib/bank-names';
 import { Panel, PanelTitle } from '@/components/Panel';
@@ -1064,7 +1064,9 @@ function VerifyVerdict({
           {rich('preserve:verify.failed', {
             params: {
               error:
-                recordedCoreText(failed.errorCode, failed.error) ?? t('preserve:unknownReason'),
+                failed.error === undefined
+                  ? t('preserve:unknownReason')
+                  : recordedText(failed.errorCode, failed.error),
             },
           })}
         </p>

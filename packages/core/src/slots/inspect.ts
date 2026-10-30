@@ -6,7 +6,7 @@ import { profileToRereadUnder, readDeviceInfo } from '../workflows/device-info.j
 import type { DeviceState, SlotState, WorkflowContext } from '../workflows/types.js';
 import { buildSlotPlan } from './capability.js';
 import type { SlotContent, SlotEntry, SlotPlan, SlotsReport, SlotView } from './types.js';
-import { coreMessage } from '../message.js';
+import { coreMessage, recordedParam } from '../message.js';
 import { bankNameParam } from './backup.js';
 
 /** The build the caller already read: what `readRunningFirmware` or an identify probe returns. */
@@ -186,8 +186,9 @@ export function joinSlotViews(
         state: null,
         unreadReason: found.reason ?? `${entry.name} was not read`,
         unreadReasonMessage:
-          found.reason ??
-          coreMessage('slots.unread.notRead', { name }, `${entry.name} was not read`),
+          found.reason === null
+            ? coreMessage('slots.unread.notRead', { name }, `${entry.name} was not read`)
+            : recordedParam(found.reasonMessage, found.reason),
         content: 'unread',
         active,
       };
