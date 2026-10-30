@@ -13,6 +13,9 @@ export {
   subscribe,
   loadLanguage,
   followLanguageChoice,
+  tEnglish,
+  listAnd,
+  type Translate,
 } from './store';
 export { rich, renderMarkup, type Slot, type Slots } from './rich';
 export { useLanguage, useLanguageSwitch, useT, type UseT } from './react';

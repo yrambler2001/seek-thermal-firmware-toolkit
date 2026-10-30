@@ -38,4 +38,7 @@ export default {
   'count.files': { one: '{count} file', other: '{count} files' },
   'count.blocks': { one: '{count} block', other: '{count} blocks' },
   'count.seconds': { one: '{count} second', other: '{count} seconds' },
+
+  /* Lists: two names (or a list and one more name) joined by "and". listAnd() uses it. */
+  'list.and': '{first} and {second}',
 } as const satisfies NamespaceMessages;

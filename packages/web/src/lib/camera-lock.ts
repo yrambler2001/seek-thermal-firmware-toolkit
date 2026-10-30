@@ -48,12 +48,17 @@
  * are back to the old risk.
  */
 
+import { t, tEnglish } from '@/i18n';
+
 /** The lock's name. Locks are per origin, so this needs no origin of its own. */
 export const CAMERA_LOCK = 'seek-fw:camera';
 
-/** What a refused page's panel shows: its status line, then its log line. */
-export const IN_USE_ELSEWHERE_STATUS =
-  'The camera is in use in another tab or window — finish or close it there first.';
+/** What a refused page's panel shows: its status line (translated when shown), then its log line (English). */
+export function inUseElsewhereStatus(): string {
+  return t('shared:cameraLock.inUseElsewhere');
+}
+/** The status line in English, as tests assert it. */
+export const IN_USE_ELSEWHERE_STATUS = tEnglish('shared:cameraLock.inUseElsewhere');
 export const IN_USE_ELSEWHERE_LOG =
   'the camera is in use in another tab or window of this browser — finish the run there, or ' +
   'close that tab, then try again here; nothing was sent to the camera from this tab';
@@ -111,5 +116,5 @@ export function reportInUseElsewhere(rep: {
   setStatus: (text: string) => void;
 }): void {
   rep.log(IN_USE_ELSEWHERE_LOG, 'info');
-  rep.setStatus(IN_USE_ELSEWHERE_STATUS);
+  rep.setStatus(inUseElsewhereStatus());
 }

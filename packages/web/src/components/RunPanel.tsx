@@ -21,6 +21,7 @@ import type { LogLevel } from '@seek-fw/core';
 import { percent, type LogLine, type ProgressState } from '@/hooks/useReporter';
 import { Progress } from './ui/progress';
 import { cn } from '@/lib/utils';
+import { useT } from '@/i18n';
 
 /** The four log levels are the only four status colours in the tool. */
 const LEVEL_CLASS: Readonly<Record<LogLevel, string>> = {
@@ -50,6 +51,7 @@ export function RunPanel({
   trimmed,
   tone = 'default',
 }: RunPanelProps): ReactElement {
+  const { t } = useT();
   const logRef = useRef<HTMLDivElement | null>(null);
   const value = percent(progress);
 
@@ -70,12 +72,17 @@ export function RunPanel({
           {label}
         </span>
         <span className="ms-auto font-mono text-[0.72rem] text-muted-foreground tabular-nums">
-          {`${value.toFixed(0)}%`}
+          {t('shared:runPanel.percent', { value: value.toFixed(0) })}
         </span>
       </div>
 
       <div className="space-y-1.5 px-3 pt-2.5 pb-2">
-        <Progress value={value} label={`${label} progress`} valueText={progress.text} tone={tone} />
+        <Progress
+          value={value}
+          label={t('shared:runPanel.progressLabel', { label })}
+          valueText={progress.text}
+          tone={tone}
+        />
         <div
           className="text-[0.82rem] text-muted-foreground [overflow-wrap:anywhere]"
           id={`${id}-status`}
@@ -92,11 +99,13 @@ export function RunPanel({
           id={`${id}-log`}
           ref={logRef}
           role="log"
-          aria-label={`${label} log`}
+          aria-label={t('shared:runPanel.logLabel', { label })}
           tabIndex={0}
         >
           {trimmed > 0 && (
-            <div className="text-muted-foreground">{`… ${String(trimmed)} earlier line(s) trimmed`}</div>
+            <div className="text-muted-foreground">
+              {t('shared:runPanel.trimmed', { count: trimmed })}
+            </div>
           )}
           {lines.map((line) => (
             <div key={line.seq} className={LEVEL_CLASS[line.level]}>
@@ -109,7 +118,7 @@ export function RunPanel({
       {lines.length > 0 && (
         <div className="flex items-center gap-1.5 border-t border-border/70 px-3 py-1 text-[0.68rem] text-muted-foreground">
           <ScrollText aria-hidden="true" className="size-3" />
-          {`${String(lines.length)} line${lines.length === 1 ? '' : 's'}`}
+          {t('shared:runPanel.lineCount', { count: lines.length })}
         </div>
       )}
     </div>

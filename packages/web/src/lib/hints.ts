@@ -21,34 +21,35 @@ import {
   type SeekError,
   type SeekErrorCode,
 } from '@seek-fw/core';
+import { tEnglish, type Translate } from '@/i18n';
 
 /** Only the three the advice actually differs for. */
 export type HostPlatform = 'linux' | 'windows' | 'other';
 
-export const UDEV_HINT =
-  'On Linux the camera needs a udev rule before the browser can open it:\n' +
-  '\n' +
+/** The udev rule, as the hint quotes it: a file and two commands, the same in every language. */
+const UDEV_RULE =
   '  # /etc/udev/rules.d/70-seek-thermal.rules\n' +
   '  SUBSYSTEM=="usb", ATTR{idVendor}=="289d", MODE="0666", TAG+="uaccess"\n' +
   '\n' +
-  '  sudo udevadm control --reload-rules && sudo udevadm trigger\n' +
-  '\n' +
-  'Then unplug and replug the camera. Snap and Flatpak Chromium builds are often sandboxed ' +
-  'away from raw USB devices; the .deb or .rpm build is the reliable one.';
+  '  sudo udevadm control --reload-rules && sudo udevadm trigger';
 
-export const WINDOWS_HINT =
-  'Windows needs the WinUSB driver bound to the camera before any browser can reach it. Use ' +
-  'Zadig (https://zadig.akeo.ie/): Options → List All Devices, pick the entry named after your ' +
-  'camera — for example "CompactPRO FF" — choose WinUSB, and click Replace Driver.';
+/*
+ * Each hint is a dictionary entry (`shared:hint.*`). A function takes the
+ * translate function: `t` for the page, `tEnglish` (the default) for the run
+ * log, which stays English. The exported constants are the English text, for
+ * the tests and the log.
+ */
+function udevHint(translate: Translate): string {
+  return translate('shared:hint.udev', { rule: UDEV_RULE });
+}
+export const UDEV_HINT = udevHint(tEnglish);
+
+export const WINDOWS_HINT = tEnglish('shared:hint.windows');
 
 /** The macOS/Android case, and the fallback when the UA says nothing useful. */
-export const HOLDING_HINT =
-  'Another program or a system driver is holding the camera — only one process can hold the USB ' +
-  'interface at a time. Quit anything else that talks to it, then unplug and replug the camera.';
+export const HOLDING_HINT = tEnglish('shared:hint.holding');
 
 /** The way out that needs no driver work at all, appended to every platform's advice. */
-const RECIPIENT_FALLBACK =
-  'Or set recipient to "device" in the read options, which does not need the interface claimed.';
 
 /* Android and ChromeOS both advertise Linux, and neither can act on a udev
  * rule — a phone has no /etc to write to and ChromeOS hands USB devices out
@@ -61,11 +62,12 @@ export function hostPlatform(userAgent: string): HostPlatform {
 }
 
 /** The platform-specific "the browser cannot open this device" advice. */
-export function permissionHint(userAgent: string): string {
+export function permissionHint(userAgent: string, translate: Translate = tEnglish): string {
   const platform = hostPlatform(userAgent);
-  if (platform === 'linux') return `${UDEV_HINT}\n\n${RECIPIENT_FALLBACK}`;
-  if (platform === 'windows') return `${WINDOWS_HINT}\n\n${RECIPIENT_FALLBACK}`;
-  return `${HOLDING_HINT} ${RECIPIENT_FALLBACK}`;
+  const fallback = translate('shared:hint.recipientFallback');
+  if (platform === 'linux') return `${udevHint(translate)}\n\n${fallback}`;
+  if (platform === 'windows') return `${translate('shared:hint.windows')}\n\n${fallback}`;
+  return `${translate('shared:hint.holding')} ${fallback}`;
 }
 
 /**
@@ -94,41 +96,23 @@ export function looksLikeAccessError(error: unknown): boolean {
  * a dump that asks the camera which family it is, and a hand-picked family
  * for the camera that detection gets wrong.
  */
-const SEEK_HINTS: Partial<Record<SeekErrorCode, string>> = {
-  'options/invalid': 'Open "Read options" and check the note under the fields for each range.',
-  'usb/timeout':
-    'The camera accepted the request and never answered. Unplug and replug it, then try a ' +
-    'smaller chunk (64 is the value that works everywhere).',
-  'usb/stalled':
-    'The camera rejected the request. This usually means the firmware does not implement it — ' +
-    'the camera is asked which family it is before anything is read, so a family that keeps ' +
-    'refusing is the one the camera answers with — check the firmware version on the Info tab.',
-  'usb/not-open':
-    'Another program or a system driver is holding the camera. Close it, or set recipient to ' +
-    '"device" in the read options, which does not need the interface claimed.',
-  'usb/transfer-failed': 'Unplug and replug the camera, then try again.',
-  'device/mode':
-    'The camera would not leave imaging mode. Unplug it, wait for it to power down fully, and ' +
-    'plug it back in.',
-  'device/window':
-    'The selector map this family uses did not match the camera. On the 4.x/Nano tab, open ' +
-    'Options and run "Dump all selectors" to see what the camera actually exposes.',
-  'device/version-unknown':
-    'Nothing that could change the camera was sent. Unplug it, let it finish starting up, plug ' +
-    'it back in and try again; a camera that reports its firmware version is read normally.',
-  'image/malformed': 'The file is not a decrypted Seek firmware image.',
-  'image/unsupported': 'This image cannot be packaged for the camera as it is.',
-  'image/key-table':
-    'The image does not carry the key pair its filename claims. Use the decrypted file exactly ' +
-    'as the dump wrote it, name and all.',
-  'flash/refused': 'Nothing was written to the camera.',
+const SEEK_HINTS: Partial<Record<SeekErrorCode, (translate: Translate) => string>> = {
+  'options/invalid': (translate) => translate('shared:hint.optionsInvalid'),
+  'usb/timeout': (translate) => translate('shared:hint.usbTimeout'),
+  'usb/stalled': (translate) => translate('shared:hint.usbStalled'),
+  'usb/not-open': (translate) => translate('shared:hint.usbNotOpen'),
+  'usb/transfer-failed': (translate) => translate('shared:hint.usbTransferFailed'),
+  'device/mode': (translate) => translate('shared:hint.deviceMode'),
+  'device/window': (translate) => translate('shared:hint.deviceWindow'),
+  'device/version-unknown': (translate) => translate('shared:hint.deviceVersionUnknown'),
+  'image/malformed': (translate) => translate('shared:hint.imageMalformed'),
+  'image/unsupported': (translate) => translate('shared:hint.imageUnsupported'),
+  'image/key-table': (translate) => translate('shared:hint.imageKeyTable'),
+  'flash/refused': (translate) => translate('shared:hint.flashRefused'),
   /* 'flash/commit' has no hint: its message says what the commit did to the bank (a refusal before anything
    * was written, an erase that may have started, or a bank that may be partly written) and that the backup
    * saved before the write is kept. The old hint said every rejected commit left the flash untouched. */
-  'family/unsupported':
-    'Nothing was read or written. Each tab covers a range of firmware versions: 0.x and 1.x cameras go to ' +
-    '"Dump & decrypt 0.x/1.x 2014/2016", 4.x and Nano cameras to "Dump & decrypt 4.x/Nano". The ' +
-    'Info tab says which tab the camera goes to.',
+  'family/unsupported': (translate) => translate('shared:hint.familyUnsupported'),
 };
 
 /**
@@ -138,12 +122,7 @@ const SEEK_HINTS: Partial<Record<SeekErrorCode, string>> = {
  * round in a circle. Told apart by what `planForDevice` puts in the detail —
  * the version it read — which `requireCapability` never does.
  */
-export const FIRMWARE_TOO_OLD_HINT =
-  'No firmware family can read this build here: its firmware has no read handler for the ' +
-  'command this tab reads flash with, so nothing that could be misread was sent to it. A ' +
-  'Compact on 0.7.0.7 or 0.7.0.8 can be read on "Dump & decrypt 0.x/1.x 2014/2016". A dump ' +
-  'taken with an SPI programmer or over SWD/J-Link can still be decrypted on this page, under ' +
-  '"Decrypt File/Slot".';
+export const FIRMWARE_TOO_OLD_HINT = tEnglish('shared:hint.firmwareTooOld');
 
 function isFirmwareTooOld(error: SeekError): boolean {
   return error.code === 'family/unsupported' && typeof error.detail?.firmwareVersion === 'string';
@@ -155,9 +134,7 @@ function isFirmwareTooOld(error: SeekError): boolean {
  * still holds the run, so its remedy is the replug and the Connect click — a
  * replugged camera is a stranger to Chrome, like a rebooted one.
  */
-export const POWER_CYCLE_HINT =
-  'In this wizard: unplug the camera and plug it back in, press "Connect device" and pick it, ' +
-  'then start the same step again. The run is still loaded here — there is nothing to resume.';
+export const POWER_CYCLE_HINT = tEnglish('shared:hint.powerCycle');
 
 /** A step refused because the camera's reader is spent until a power cycle. */
 export function isPowerCycleRefusal(error: unknown): boolean {
@@ -170,14 +147,18 @@ function liveUserAgent(): string {
 }
 
 /** What to try next, or null when there is nothing honest to suggest. */
-export function hintFor(error: unknown, userAgent: string = liveUserAgent()): string | null {
+export function hintFor(
+  error: unknown,
+  userAgent: string = liveUserAgent(),
+  translate: Translate = tEnglish,
+): string | null {
   /* The permission case first: it is the one whose remedy depends on the
    * machine rather than on which opcode failed. */
-  if (looksLikeAccessError(error)) return permissionHint(userAgent);
+  if (looksLikeAccessError(error)) return permissionHint(userAgent, translate);
   if (isSeekError(error)) {
-    if (isFirmwareTooOld(error)) return FIRMWARE_TOO_OLD_HINT;
-    if (isPowerCycleRefusal(error)) return POWER_CYCLE_HINT;
-    return SEEK_HINTS[error.code] ?? null;
+    if (isFirmwareTooOld(error)) return translate('shared:hint.firmwareTooOld');
+    if (isPowerCycleRefusal(error)) return translate('shared:hint.powerCycle');
+    return SEEK_HINTS[error.code]?.(translate) ?? null;
   }
   return null;
 }

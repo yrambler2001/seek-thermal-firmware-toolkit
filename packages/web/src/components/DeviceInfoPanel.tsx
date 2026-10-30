@@ -26,6 +26,7 @@ import { KeyValue, type KeyValueRow } from './KeyValue';
 import { Panel, PanelTitle } from './Panel';
 import { Prose } from './Prose';
 import { Alert } from './ui/alert';
+import { listAnd, t, useT } from '@/i18n';
 
 /**
  * A bank's name as the slot table says it ("Slot A", "Recovery R"), core's `bankNameOf`, the same on every
@@ -44,7 +45,7 @@ function perDeviceKey(state: DeviceState): string | null {
   const slot = state.deviceKeySlot;
   if (slot === null) return null;
   const blank = slot.every((byte) => byte === 0xff) || slot.every((byte) => byte === 0);
-  return blank ? 'not programmed — the camera falls back to Key B' : bytesToHex(slot);
+  return blank ? t('shared:deviceInfo.notProgrammed') : bytesToHex(slot);
 }
 
 /** Slots the bootloader provably skips: everything checks out but the key it tries. */
@@ -64,12 +65,13 @@ export interface DeviceInfoPanelProps {
 }
 
 export function DeviceInfoPanel({ state }: DeviceInfoPanelProps): ReactElement {
+  const { rich } = useT();
   const booted = bootedSlot(state);
   const target = targetSlot(state);
   const cfg0Text =
     state.cfg0 === null
       ? null
-      : `${hexUp(state.cfg0)} — ${state.profile.boot.describeCfg0(state.cfg0)}`;
+      : `${hexUp(state.cfg0)} — ${state.profile.boot.describeCfg0(state.cfg0)}`; // i18n: core message
 
   const bootloader =
     state.bootloaderString != null && state.bootloaderString !== ''
@@ -81,37 +83,44 @@ export function DeviceInfoPanel({ state }: DeviceInfoPanelProps): ReactElement {
       : state.bootloaderVersion;
 
   const running: readonly KeyValueRow[] = [
-    ['Version', state.version],
-    ['Firmware family', state.profile.name],
-    ['Build', state.buildString],
-    ['Bootloader', bootloader],
-    ['Platform', state.platform],
-    ['Serial', state.serial],
-    ['USB link', state.usbSpeed],
-    ['Boot config', cfg0Text],
+    [t('shared:deviceInfo.version'), state.version],
+    [t('shared:deviceInfo.family'), state.profile.name],
+    [t('shared:deviceInfo.build'), state.buildString],
+    [t('shared:deviceInfo.bootloader'), bootloader],
+    [t('shared:deviceInfo.platform'), state.platform],
+    [t('shared:deviceInfo.serial'), state.serial],
+    [t('shared:deviceInfo.usbLink'), state.usbSpeed],
+    [t('shared:deviceInfo.bootConfig'), cfg0Text],
     /* On the locked line the bank is the active-slot word's, which is the bootloader's own record of the
      * bank it entered (TESTING.md 42.53, 42.56: measured on 1.3.0.0 and 1.0.3.0 for boot words 0, 1, 2). */
-    ['Booted from', booted === null ? null : bankLabel(booted)],
+    [t('shared:deviceInfo.bootedFrom'), booted === null ? null : bankLabel(booted)],
     /* The bank the next start runs, where the boot rule and each bank's check are decoded (core's
      * `nextStartReportOf`: the 2014 plaintext chain and the 2016 Compact PRO); hidden elsewhere. */
-    ['Next start', nextStartReportOf(state, bankLabelOf)],
+    /* i18n: core message */
+    [t('shared:deviceInfo.nextStart'), nextStartReportOf(state, bankLabelOf)],
     /* The camera's own upgrade choice. This page writes the bank it is given, not this one. */
     [
-      'Upgrade target (its own upgrade)',
-      target === null ? null : `${bankLabel(target)} at ${hexUp(target.address)}`,
+      t('shared:deviceInfo.upgradeTarget'),
+      target === null
+        ? null
+        : t('shared:deviceInfo.bankAt', {
+            bank: bankLabel(target),
+            address: hexUp(target.address),
+          }),
     ],
-    ['Per-device key', perDeviceKey(state)],
+    [t('shared:deviceInfo.perDeviceKey'), perDeviceKey(state)],
   ];
 
   const orphans = orphanSlots(state);
   const targetIsOrphan = target !== null && orphans.includes(target);
   /* TESTING.md 42.50: the upgrade target is the bank the camera booted from. A warning, never a gate. */
+  // i18n: core message
   const targetWarning = upgradeTargetWarning(state, (_slot, key) => bankLabelOf(key));
 
   return (
     <>
       <Panel>
-        <PanelTitle icon={<Microchip />}>Running firmware</PanelTitle>
+        <PanelTitle icon={<Microchip />}>{t('shared:deviceInfo.running')}</PanelTitle>
         <KeyValue rows={running} />
         {targetWarning !== null && (
           <Alert tone="warn" className="mt-3">
@@ -122,26 +131,27 @@ export function DeviceInfoPanel({ state }: DeviceInfoPanelProps): ReactElement {
 
       {state.keyTable !== null && (
         <Panel>
-          <PanelTitle icon={<KeyRound />}>Keys read from this camera</PanelTitle>
+          <PanelTitle icon={<KeyRound />}>{t('shared:deviceInfo.keysTitle')}</PanelTitle>
           <KeyValue
             rows={[
-              ['Found at', `flash offset ${hexUp(state.keyTable.offset, 6)}`],
-              ['Key A', bytesToHex(state.keyTable.keyA)],
-              ['Key B', bytesToHex(state.keyTable.keyB)],
+              [
+                t('shared:deviceInfo.foundAt'),
+                t('shared:deviceInfo.flashOffset', { offset: hexUp(state.keyTable.offset, 6) }),
+              ],
+              [t('shared:deviceInfo.keyA'), bytesToHex(state.keyTable.keyA)],
+              [t('shared:deviceInfo.keyB'), bytesToHex(state.keyTable.keyB)],
             ]}
           />
           <Prose className="mt-2.5">
             <p>
-              Confirmed by matching a slot&apos;s keystream state, recovered from the ciphertext
-              itself. An upload is built so each bank stores it under the bootloader&apos;s store
-              key ({state.storeKey.name}), or under the booted bank&apos;s own key where the
-              application&apos;s store key is not that one.
+              {rich('shared:deviceInfo.keysConfirmed', {
+                params: { storeKey: state.storeKey.name },
+              })}
             </p>
             <p>
-              Each slot was decrypted in the browser by solving for its keystream from its own
-              known-zero reset vectors. Decrypting is not the same as booting: the bootloader only
-              ever tries {state.storeKey.name} and Key A, so a slot written under any other key
-              checksums perfectly and is still skipped. Nothing was written.
+              {rich('shared:deviceInfo.keysDecrypted', {
+                params: { storeKey: state.storeKey.name },
+              })}
             </p>
           </Prose>
         </Panel>
@@ -150,25 +160,21 @@ export function DeviceInfoPanel({ state }: DeviceInfoPanelProps): ReactElement {
       {orphans.length > 0 && (
         <Alert tone="err">
           <p>
-            <strong>
-              {`${orphans.map(bankLabel).join(' and ')}${
-                orphans.length > 1 ? ' hold' : ' holds'
-              } a valid firmware image encrypted with a key this camera's bootloader does not know.`}
-            </strong>{' '}
-            The image is intact and its checksum is correct, but the bootloader only tries{' '}
-            {state.storeKey.name} and Key A when it checks a bank, so it skips{' '}
-            {orphans.length > 1 ? 'them' : 'it'} and boots something else.
+            {rich('shared:deviceInfo.orphan', {
+              params: {
+                count: orphans.length,
+                banks: listAnd(orphans.map(bankLabel)),
+                storeKey: state.storeKey.name,
+              },
+            })}
           </p>
           {targetIsOrphan && (
             <p>
-              That is the slot an upgrade writes. The application running on this camera re-encrypts
-              with that unknown key, so{' '}
-              <strong>
-                flashing through this page will produce another slot the bootloader cannot boot
-              </strong>{' '}
-              — the camera will carry on running{' '}
-              {booted === null ? 'the other bank' : bankLabel(booted)}. Writing the slot directly
-              with an SPI programmer or over SWD/J-Link is the way round it.
+              {rich('shared:deviceInfo.orphanIsTarget', {
+                params: {
+                  bank: booted === null ? t('shared:deviceInfo.otherBank') : bankLabel(booted),
+                },
+              })}
             </p>
           )}
         </Alert>

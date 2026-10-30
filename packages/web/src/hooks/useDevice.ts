@@ -9,6 +9,7 @@
  * it changes — so a payload built for one unit can never be sent to another.
  */
 
+import { t, tEnglish, type MessageKey, type Translate } from '@/i18n';
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { SEEK_VENDOR_ID, WebUsbTransport, hex, type RecipientPreference } from '@seek-fw/core';
 import { asWebUsbDevice } from '../lib/usb-adapter';
@@ -16,9 +17,11 @@ import { canForget, getWebUsb } from '../lib/webusb';
 import { UnlockSeat } from '../lib/unlock-seat';
 
 /** The original's `describeDevice`, on a raw `USBDevice`. */
-export function describeUsbDevice(device: USBDevice): string {
+export function describeUsbDevice(device: USBDevice, translate: Translate = tEnglish): string {
   const parts = [
-    `${device.productName ?? 'unknown product'} — ${device.manufacturerName ?? 'unknown vendor'}`,
+    `${device.productName ?? translate('shared:device.unknownProduct')} — ${
+      device.manufacturerName ?? translate('shared:device.unknownVendor')
+    }`,
     `VID ${hex(device.vendorId, 4)} PID ${hex(device.productId, 4)}`,
   ];
   if (device.serialNumber != null && device.serialNumber !== '') {
@@ -71,11 +74,17 @@ export interface DeviceHandle {
   setResetWindow: (open: boolean) => void;
 }
 
-const NO_DEVICE = 'No device selected.';
+/** Why no camera is held. The line itself is translated at render, so it follows a language switch. */
+type NoDeviceReason = 'none' | 'disconnected' | 'revoked';
+const NO_DEVICE_KEY = {
+  none: 'shared:device.none',
+  disconnected: 'shared:device.disconnected',
+  revoked: 'shared:device.revoked',
+} as const satisfies Record<NoDeviceReason, MessageKey>;
 
 export function useDevice(): DeviceHandle {
   const [device, setDevice] = useState<USBDevice | null>(null);
-  const [description, setDescription] = useState(NO_DEVICE);
+  const [reason, setReason] = useState<NoDeviceReason>('none');
   const [generation, setGeneration] = useState(0);
   const current = useRef<USBDevice | null>(null);
   /* The unlock flag for the connected camera (TESTING.md 42.59). The seat's rules are in lib/unlock-seat.ts; a change
@@ -100,7 +109,7 @@ export function useDevice(): DeviceHandle {
   const dropped = useRef<{ vid: number; pid: number } | null>(null);
 
   const adopt = useCallback(
-    (next: USBDevice | null, reason: string): void => {
+    (next: USBDevice | null, why: NoDeviceReason): void => {
       if (current.current === next) return;
       if (next !== null) {
         /* A camera other than the one held is a swap: a second camera while one is held, or another model. The
@@ -114,7 +123,7 @@ export function useDevice(): DeviceHandle {
       current.current = next;
       if (next !== null) dropped.current = null;
       setDevice(next);
-      setDescription(next === null ? reason : describeUsbDevice(next));
+      setReason(why);
       setGeneration((value) => value + 1);
     },
     [seat],
@@ -131,7 +140,7 @@ export function useDevice(): DeviceHandle {
       .then((known) => {
         if (cancelled) return;
         const match = known.find((candidate) => candidate.vendorId === SEEK_VENDOR_ID);
-        if (match !== undefined) adopt(match, NO_DEVICE);
+        if (match !== undefined) adopt(match, 'none');
       })
       .catch(() => undefined);
     return () => {
@@ -148,7 +157,7 @@ export function useDevice(): DeviceHandle {
         last === null ||
         (event.device.vendorId === last.vid && event.device.productId === last.pid);
       if (current.current === null && event.device.vendorId === SEEK_VENDOR_ID && sameShape) {
-        adopt(event.device, NO_DEVICE);
+        adopt(event.device, 'none');
       }
     };
     const onDisconnect = (event: USBConnectionEvent): void => {
@@ -156,7 +165,7 @@ export function useDevice(): DeviceHandle {
         dropped.current = { vid: event.device.vendorId, pid: event.device.productId };
         /* A power cycle or a replug clears the unlock flag, unless this is the wizard's own reset (TESTING.md 42.59). */
         seat.left();
-        adopt(null, 'Device disconnected.');
+        adopt(null, 'disconnected');
       }
     };
     usb.addEventListener('connect', onConnect);
@@ -172,7 +181,7 @@ export function useDevice(): DeviceHandle {
     if (usb === null) return { kind: 'failed', message: 'WebUSB is not available in this browser' };
     try {
       const chosen = await usb.requestDevice({ filters: [{ vendorId: SEEK_VENDOR_ID }] });
-      adopt(chosen, NO_DEVICE);
+      adopt(chosen, 'none');
       return { kind: 'connected', description: describeUsbDevice(chosen) };
     } catch (error) {
       if (error instanceof Error && error.name === 'NotFoundError') return { kind: 'cancelled' };
@@ -185,8 +194,8 @@ export function useDevice(): DeviceHandle {
     try {
       if (held !== null && canForget(held)) await held.forget();
       seat.changed();
-      adopt(null, 'Permission revoked.');
-      return { kind: 'connected', description: 'Permission revoked.' };
+      adopt(null, 'revoked');
+      return { kind: 'connected', description: t('shared:device.revoked') };
     } catch (error) {
       return { kind: 'failed', message: error instanceof Error ? error.message : String(error) };
     }
@@ -200,7 +209,7 @@ export function useDevice(): DeviceHandle {
       const known = await usb.getDevices();
       const match = known.find((candidate) => candidate.vendorId === SEEK_VENDOR_ID);
       if (match === undefined) return false;
-      adopt(match, NO_DEVICE);
+      adopt(match, 'none');
       return true;
     } catch {
       return false;
@@ -243,6 +252,7 @@ export function useDevice(): DeviceHandle {
   );
   /* Read at render: a change to the seat re-renders this hook (bumpSeat), and the memo below rebuilds the handle. */
   const unlocked = seat.unlocked;
+  const description = device === null ? t(NO_DEVICE_KEY[reason]) : describeUsbDevice(device, t);
 
   return useMemo(
     () => ({

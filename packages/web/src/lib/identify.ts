@@ -26,6 +26,7 @@ import {
   type SeekDevice,
   type SeekErrorCode,
 } from '@seek-fw/core';
+import { t } from '@/i18n';
 import { hintFor } from './hints';
 
 /** What a run acts under, and what the camera said to decide it. */
@@ -100,5 +101,6 @@ export function refusalOf(error: unknown, userAgent?: string): Refusal | null {
   if (error.code !== 'device/version-unknown' && error.code !== 'family/unsupported') {
     return null;
   }
-  return { code: error.code, message: error.message, hint: hintFor(error, userAgent) };
+  /* The hint is shown on the page, so it is translated; the message is core's. i18n: core message */
+  return { code: error.code, message: error.message, hint: hintFor(error, userAgent, t) };
 }

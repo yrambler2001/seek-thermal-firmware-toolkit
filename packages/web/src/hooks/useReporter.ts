@@ -14,6 +14,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Artifact, LogLevel, Reporter } from '@seek-fw/core';
+import { t } from '@/i18n';
 
 /** The original's repaint throttle, in milliseconds. */
 export const FLUSH_INTERVAL_MS = 60;
@@ -72,7 +73,7 @@ export function percent(progress: ProgressState): number {
   return Math.min(100, (progress.done / progress.total) * 100);
 }
 
-export function useReporter(initialStatus = 'Idle.'): ReporterHandle {
+export function useReporter(initialStatus: string = t('shared:status.idle')): ReporterHandle {
   const [lines, setLines] = useState<readonly LogLine[]>([]);
   const [artifacts, setArtifacts] = useState<readonly Artifact[]>([]);
   const [trimmed, setTrimmed] = useState(0);
@@ -95,6 +96,18 @@ export function useReporter(initialStatus = 'Idle.'): ReporterHandle {
    * retitling — so the title has to survive both the flush that empties the
    * buffer and the render that follows it. */
   const statusText = useRef(initialStatus);
+  /* Set by the first reset, status or progress. Until then the status line is
+   * `initialStatus`, which the caller translates on every render, so it
+   * follows a language switch (the effect below); after it, a status stays in
+   * the language it was set in until the next one. */
+  const touched = useRef(false);
+  useEffect(() => {
+    if (touched.current) return;
+    statusText.current = initialStatus;
+    setProgress((current) =>
+      current.text === initialStatus ? current : { ...current, text: initialStatus },
+    );
+  }, [initialStatus]);
 
   const flush = useCallback((): void => {
     if (timer.current !== null) {
@@ -146,6 +159,7 @@ export function useReporter(initialStatus = 'Idle.'): ReporterHandle {
         pushLine(message, level ?? 'info');
       },
       progress: (done, total, text) => {
+        touched.current = true;
         if (text !== undefined) statusText.current = text;
         buffer.current.progress = { done, total, text: statusText.current };
         /* The one event that must never be swallowed by the throttle. */
@@ -161,6 +175,7 @@ export function useReporter(initialStatus = 'Idle.'): ReporterHandle {
   );
 
   const setStatus = useCallback((text: string): void => {
+    touched.current = true;
     statusText.current = text;
     const previous = buffer.current.progress;
     if (previous !== null) buffer.current.progress = { ...previous, text };
@@ -176,6 +191,7 @@ export function useReporter(initialStatus = 'Idle.'): ReporterHandle {
     lineStore.current = [];
     artifactStore.current = [];
     seq.current = 0;
+    touched.current = true;
     statusText.current = text;
     setLines([]);
     setArtifacts([]);

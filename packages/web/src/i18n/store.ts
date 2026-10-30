@@ -150,17 +150,22 @@ export function resetI18n(): void {
  * came from.
  */
 export function template(key: string, params?: Readonly<Record<string, ParamValue>>): string {
+  return templateIn(state.dict, state.lang, key, params);
+}
+
+function templateIn(
+  dict: LooseDictionary,
+  dictLang: LanguageCode,
+  key: string,
+  params?: Readonly<Record<string, ParamValue>>,
+): string {
   const split = key.indexOf(':');
   const namespace = key.slice(0, split);
   const name = key.slice(split + 1);
-  const own = state.dict[namespace]?.[name];
+  const own = dict[namespace]?.[name];
   const english = ENGLISH[namespace]?.[name];
   const [message, lang] =
-    own !== undefined
-      ? [own, state.lang]
-      : english !== undefined
-        ? [english, DEFAULT_LANGUAGE]
-        : [];
+    own !== undefined ? [own, dictLang] : english !== undefined ? [english, DEFAULT_LANGUAGE] : [];
   if (message === undefined || lang === undefined) return key;
   if (!isPluralForms(message)) return message;
   /* A form the translation left out falls back to its own `other`, which
@@ -181,4 +186,31 @@ export function template(key: string, params?: Readonly<Record<string, ParamValu
 export function t<K extends MessageKey>(key: K, ...args: TArgs<K>): string;
 export function t(key: string, params?: Readonly<Record<string, ParamValue>>): string {
   return interpolate(template(key, params), params);
+}
+
+/**
+ * The English text for a key, whatever language is in use. For a sentence the
+ * page both shows and writes into the run log or a copyable report, which stay
+ * English (README.md, "What stays English"): one dictionary entry, two
+ * readers. `hintFor(error, ua, t)` shows a hint translated; `logHint` logs the
+ * same hint through `tEnglish`.
+ */
+export function tEnglish<K extends MessageKey>(key: K, ...args: TArgs<K>): string;
+export function tEnglish(key: string, params?: Readonly<Record<string, ParamValue>>): string {
+  return interpolate(templateIn(ENGLISH, DEFAULT_LANGUAGE, key, params), params);
+}
+
+/** `t` or `tEnglish`: for a function that builds text either for the page or for the log. */
+export type Translate = typeof t;
+
+/**
+ * Joins names into one phrase with `common:list.and`, pairwise from the left:
+ * "slot A", "slot A and slot B", "slot A and slot B and slot R". The names are
+ * params, so a translation only places them.
+ */
+export function listAnd(items: readonly string[], translate: Translate = t): string {
+  if (items.length === 0) return '';
+  return items.reduce((joined, item) =>
+    translate('common:list.and', { first: joined, second: item }),
+  );
 }
