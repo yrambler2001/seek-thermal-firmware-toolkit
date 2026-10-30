@@ -127,4 +127,46 @@ export default {
     'the key its bootloader checks a bank under (not named on this read); the camera re-encrypts the upload under it',
   'keys.imageBlock0.stored':
     '{key}, the key its bootloader checks a bank under; the camera re-encrypts the upload under it',
+
+  /* ---- notes: a bank's or the camera's notes (slots/capability-notes) ---- */
+  'notes.ffBootUntested':
+    'UNTESTED: no bootloader of the 16 Hz FF build has been read from a camera, so whether the written bank starts is not known. On the 0.9.0.0 bootloader an earlier form of this image started from recovery R; this form will not, because that bootloader starts recovery R as it is stored, without decoding it.',
+
+  /* ---- write: a bank write's warnings and notes before the confirm (slots/write-words) ---- */
+  'write.ff.otherVersion':
+    'The 16 Hz FF image is sent in the form only the 16 Hz {version} build reads. This camera writes a bank without checking the image (its firmware source says so, and a 1.3.0.0 Compact did so when tried), so it is expected to write the bytes as they are sent: the bank then holds the image in a form this camera cannot start.',
+  /** `{untested}` is notes.ffBootUntested. */
+  'write.ff.untested': '{untested} Nothing here claims the camera starts it.',
+  /** `{why}`: how the camera's answers name its build (English until running.ts has codes). */
+  'write.ff.runsFast': "The camera's own answers say it runs the 16 Hz FF build: {why}.",
+  /** What the 8 Hz build does, said after "That build" (write.ff.runsSlow, write.ff.buildUnknown). */
+  'write.ff.outcome.takes':
+    'checks a payload before it erases a bank, and this payload passes that check, so it may write these bytes as they are, in a form its bootloader cannot start: the bank may not start (not tried; the backup saved before the write puts it back)',
+  'write.ff.outcome.refuses':
+    'checks a payload before it erases a bank, and this payload fails that check, so it is expected to refuse this write before it writes anything (a camera running that build refused an earlier form of this image the same way)',
+  'write.ff.runsSlow': 'The camera runs the 8 Hz {version} build: {why}. That build {outcome}.',
+  'write.ff.buildUnknown':
+    "The camera's own answers do not say which {version} build it runs: {why}. If it runs the 16 Hz FF build, it takes this payload. If it runs the 8 Hz build, that build {outcome}.",
+  'write.raw.asGiven':
+    'Raw payload: sent exactly as given. Nothing here checks that it is bootable.',
+  'write.raw.ffStagedForm':
+    'This payload is the 1.3.0.8 FF staged form (the image XOR key block 0, word sum 0xFFFF). The camera stores the image under Key B, so the read-back is checked against those bytes.',
+  'write.raw.noStaging':
+    'This build names no staging form for the slot, so the bootloader checks cannot be stated.',
+  'write.raw.reencrypts':
+    'The device decodes this payload and re-encrypts what it keeps, so the stored bytes are not predicted. The read-back is checked as the image it decrypts to, where that can be said.',
+  /** `{failure}`: the bootloader check the payload fails (English until write-image.ts has codes). */
+  'write.raw.bootloaderRejects': 'The bootloader would reject this payload: {failure}.',
+  'write.raw.stageKeyUnchecked':
+    "The 2016 stage key (key block 0) is not in raw bytes, so this payload's decrypted word sum is not checked here.",
+  'write.image.rekeyRisk':
+    '{name} already holds an image the bootloader cannot take. This write lands in the same state.',
+  'write.ack.recovery':
+    'Recovery R: writing it asks you to acknowledge the risk. Nothing here checks that the camera boots afterwards.',
+  /** `{risk}` is boot.bootsNow (with the bank's label form) or write.ack.bootUnnamed. */
+  'write.ack.risk':
+    '{risk}: writing it asks you to acknowledge the risk, and the camera runs whatever it holds after the next power cycle.',
+  'write.ack.bootUnnamed':
+    'the booted bank could not be named, so this one is treated as the booted one',
+  'write.ack.recoveryFallback': 'Recovery R is the last-resort copy the bootloader falls back to',
 } as const satisfies NamespaceMessages;

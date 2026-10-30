@@ -12,6 +12,23 @@
  */
 
 import {
+  BOOT_UNNAMED_RISK,
+  FF_BOOT_UNTESTED_MESSAGE,
+  FF_STAGED_FORM_NOTE,
+  NO_STAGING_FORM_WARNING,
+  RAW_AS_GIVEN_WARNING,
+  RECOVERY_ACK_WARNING,
+  RECOVERY_FALLBACK_RISK,
+  REENCRYPTS_NOTE,
+  STAGE_KEY_UNCHECKED_WARNING,
+  bootloaderRejectsWarning,
+  ffBuildUnknownWarning,
+  ffOtherVersionWarning,
+  ffRunsFastNote,
+  ffRunsSlowWarning,
+  ffUntestedWarning,
+  rekeyRiskWarning,
+  riskAckWarning,
   BANK_NOT_READ_VERDICT,
   BOOTED_NOW_MESSAGE,
   CFG0_NOT_READ,
@@ -187,6 +204,30 @@ function samples(base: DeviceState): CoreMessage[] {
       'Slot B',
     ),
   );
+
+  /* write plan */
+  add(FF_BOOT_UNTESTED_MESSAGE);
+  add(ffOtherVersionWarning());
+  add(ffUntestedWarning());
+  add(ffRunsFastNote('its answers name the 16 Hz FF build'));
+  add(ffRunsSlowWarning('its answers name the 8 Hz build', true));
+  add(ffRunsSlowWarning('its answers name the 8 Hz build', false));
+  add(ffBuildUnknownWarning('its answers name no build', false));
+  for (const message of [
+    RAW_AS_GIVEN_WARNING,
+    FF_STAGED_FORM_NOTE,
+    NO_STAGING_FORM_WARNING,
+    REENCRYPTS_NOTE,
+    STAGE_KEY_UNCHECKED_WARNING,
+    RECOVERY_ACK_WARNING,
+    BOOT_UNNAMED_RISK,
+    RECOVERY_FALLBACK_RISK,
+  ]) {
+    add(message);
+  }
+  add(bootloaderRejectsWarning('its word sum is not 0'));
+  add(rekeyRiskWarning(bankParam('b', 'name')));
+  add(riskAckWarning(bootsNowMessage(bankParam('a', 'name'))));
 
   const all: CoreMessage[] = [];
   out.forEach((message) => {

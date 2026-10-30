@@ -466,7 +466,8 @@ export function SlotsView({ slots, connected, busy }: SlotsViewProps): ReactElem
             slotAddress={hexUp(pendingView.entry.address)}
             risk={writeRisk(pending.report, pending.key)}
             targetEmpty={pending.plan.targetEmpty === true}
-            warnings={pending.plan.warnings}
+            /* i18n: core message (the image-build warning, imageBuildWarningOf, has no code yet: English) */
+            warnings={coreTexts(pending.plan.warningMessages, pending.plan.warnings)}
             keyLine={
               pending.plan.derivedFrom
                 ? t('slots:writeConfirm.keyLine', {

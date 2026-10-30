@@ -71,7 +71,7 @@ export function coreText(
 
 /** Core's sentences in the language in use: `messages` where core gave them, else the English `texts`. */
 export function coreTexts(
-  messages: readonly CoreMessage[] | undefined,
+  messages: readonly (CoreMessage | string)[] | undefined,
   texts: readonly string[],
   translate: Translate = t,
 ): string[] {

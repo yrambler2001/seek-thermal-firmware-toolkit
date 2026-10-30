@@ -16,7 +16,7 @@ import {
   derivedKeyLineMessage,
   stagingDetailMessage,
 } from '@seek-fw/core';
-import { coreText } from '@/lib/core-text';
+import { coreText, coreTexts } from '@/lib/core-text';
 import { t } from '@/i18n';
 import { KeyValue, type KeyValueRow } from './KeyValue';
 import { Panel, PanelTitle } from './Panel';
@@ -82,10 +82,12 @@ export function SlotFlashPreview({
   /* Only this write's own notes join the warnings: the camera's notes are above the device panel and the
    * bank's own are on its row, both in this section already (TESTING.md 42.88). */
   const writeNotes = plan.notes.filter((note) => note.source === 'write');
-  /* i18n: core message (the plan's warnings and notes) */
+  /* i18n: core message (the image-build warning, imageBuildWarningOf, has no code yet: English) */
   const readFirst = [
-    ...plan.warnings,
-    ...writeNotes.map((note) => t('slots:preview.note', { note: note.text })),
+    ...coreTexts(plan.warningMessages, plan.warnings),
+    ...writeNotes.map((note) =>
+      t('slots:preview.note', { note: coreText(note.message ?? note.text) }),
+    ),
   ];
   const rows: readonly KeyValueRow[] = [
     /* A copy or a restore names its source instead of a file the person does not have (TESTING.md 42.96). */

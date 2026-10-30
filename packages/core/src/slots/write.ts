@@ -77,11 +77,29 @@ import {
   slotRefused,
   type StagedBytes,
 } from './write-image.js';
-import { bankNameOf } from '../profiles/locked-boot.js';
-import { bootsNowOf } from './booted-words.js';
+import { bankNameParam } from './backup.js';
+import { bootsNowMessage } from './booted-words.js';
+import { bankParam, paramText, type CoreMessage } from '../message.js';
+import {
+  BOOT_UNNAMED_RISK,
+  bootloaderRejectsWarning,
+  ffBuildUnknownWarning,
+  ffOtherVersionWarning,
+  ffRunsFastNote,
+  ffRunsSlowWarning,
+  ffUntestedWarning,
+  FF_STAGED_FORM_NOTE,
+  NO_STAGING_FORM_WARNING,
+  RAW_AS_GIVEN_WARNING,
+  RECOVERY_ACK_WARNING,
+  RECOVERY_FALLBACK_RISK,
+  REENCRYPTS_NOTE,
+  rekeyRiskWarning,
+  riskAckWarning,
+  STAGE_KEY_UNCHECKED_WARNING,
+} from './write-words.js';
 import { imageBuildWarningOf } from './image-build.js';
 import { FF_1308_VERSION } from './capability-family.js';
-import { FF_BOOT_UNTESTED } from './capability-notes.js';
 import { slotContentOf } from './inspect.js';
 import { plainBankVerdict, runningApplicationOf } from './running.js';
 import { stagingPhrase } from './staging-words.js';
@@ -160,12 +178,11 @@ function footerTemplateFor(report: SlotsReport, slot: SlotState): Uint8Array | n
 }
 
 /** Whether writing this bank needs the risk acknowledgement: the booted bank, recovery, or a boot that could not be named. */
-function ackNeeded(report: SlotsReport, key: SlotKey): string | null {
+function ackNeeded(report: SlotsReport, key: SlotKey): CoreMessage | null {
   const boot = report.state.boot;
-  if (boot === null)
-    return 'the booted bank could not be named, so this one is treated as the booted one';
-  if (boot.booted === key) return bootsNowOf(bankNameOf(key));
-  if (key === 'r') return 'Recovery R is the last-resort copy the bootloader falls back to';
+  if (boot === null) return BOOT_UNNAMED_RISK;
+  if (boot.booted === key) return bootsNowMessage(bankParam(key, 'name'));
+  if (key === 'r') return RECOVERY_FALLBACK_RISK;
   return null;
 }
 
@@ -216,27 +233,22 @@ const FF_AS_SENT_NAME =
 interface PlanWords {
   readonly warnings: readonly string[];
   readonly notes: readonly string[];
+  /** `warnings` and `notes` as messages (code + params), for the page. */
+  readonly warningMessages: readonly CoreMessage[];
+  readonly noteMessages: readonly CoreMessage[];
 }
 
-/**
- * What the 8 Hz 1.3.0.8 build does with an FF payload, said after "it": its commit of a bank arm checks the
- * payload's plain word sum (`image_sum_ok` on the staged bytes). Its refusal was measured on the earlier
- * staged form (TESTING.md 42.10).
- */
-function plainChainOutcome(plainTakes: boolean): string {
-  if (plainTakes) {
-    return (
-      'checks a payload before it erases a bank, and this payload passes that check, so it may write ' +
-      'these bytes as they are, in a form its bootloader cannot start: the bank may not start (not ' +
-      'tried; the backup saved before the write puts it back)'
-    );
-  }
-  /* The refusal is commit status 0x00070100; the JSON's `ffCommit` is 'refuses'. */
-  return (
-    'checks a payload before it erases a bank, and this payload fails that check, so it is expected to ' +
-    'refuse this write before it writes anything (a camera running that build refused an earlier form ' +
-    'of this image the same way)'
-  );
+/** Plan words from messages: the English text of each, and the messages. */
+function planWords(
+  warningMessages: readonly CoreMessage[],
+  noteMessages: readonly CoreMessage[] = [],
+): PlanWords {
+  return {
+    warnings: warningMessages.map((message) => message.text),
+    notes: noteMessages.map((message) => message.text),
+    warningMessages,
+    noteMessages,
+  };
 }
 
 /**
@@ -259,48 +271,24 @@ export function ffCommitOf(
   state: DeviceState,
   plainTakes: boolean,
 ): { readonly expect: FFCommitExpectation } & PlanWords {
-  const untested = `${FF_BOOT_UNTESTED} Nothing here claims the camera starts it.`;
   const plainChain: FFCommitExpectation = plainTakes ? 'programs-as-sent' : 'refuses';
   if (state.version !== FF_1308_VERSION) {
-    return {
-      expect: 'programs-as-sent',
-      /* The bank then holds the image XOR Key A, whose plain word sum is not 0 (TESTING.md 42.109). */
-      warnings: [
-        `The 16 Hz FF image is sent in the form only the 16 Hz ${FF_1308_VERSION} build reads. This camera ` +
-          'writes a bank without checking the image (its firmware source says so, and a 1.3.0.0 Compact ' +
-          'did so when tried), so it is expected to write the bytes as they are sent: the bank then holds ' +
-          'the image in a form this camera cannot start.',
-      ],
-      notes: [],
-    };
+    /* The bank then holds the image XOR Key A, whose plain word sum is not 0 (TESTING.md 42.109). */
+    return { expect: 'programs-as-sent', ...planWords([ffOtherVersionWarning()]) };
   }
   const running = runningApplicationOf(state);
   if (running.build === 'ff-1308') {
     return {
       expect: 'takes',
-      warnings: [untested],
-      notes: [`The camera's own answers say it runs the 16 Hz FF build: ${running.why}.`],
+      ...planWords([ffUntestedWarning()], [ffRunsFastNote(running.why)]),
     };
   }
   if (running.build === 'plain') {
-    return {
-      expect: plainChain,
-      warnings: [
-        `The camera runs the 8 Hz ${FF_1308_VERSION} build: ${running.why}. That build ` +
-          `${plainChainOutcome(plainTakes)}.`,
-      ],
-      notes: [],
-    };
+    return { expect: plainChain, ...planWords([ffRunsSlowWarning(running.why, plainTakes)]) };
   }
   return {
     expect: 'build-unknown',
-    warnings: [
-      `The camera's own answers do not say which ${FF_1308_VERSION} build it runs: ${running.why}. If it ` +
-        'runs the 16 Hz FF build, it takes this payload. If it runs the 8 Hz build, that build ' +
-        `${plainChainOutcome(plainTakes)}.`,
-      untested,
-    ],
-    notes: [],
+    ...planWords([ffBuildUnknownWarning(running.why, plainTakes), ffUntestedWarning()]),
   };
 }
 
@@ -345,10 +333,11 @@ export function prepareSlotFlash(
   if (input.bytes.length === 0) throw slotRefused('the input is empty');
   const bankBytes = Math.min(entry.length, SLOT_BYTES);
   const cipher = state.profile.cipher;
-  const warnings: string[] = [];
+  /* The warnings, as messages where core has a code for them, else as English text. */
+  const warnings: (CoreMessage | string)[] = [];
   /* This write's own notes: how it is staged or checked, or what the bank will hold. Not a risk, so not a
    * warning (TESTING.md 42.88). */
-  const writeNotes: string[] = [];
+  const writeNotes: (CoreMessage | string)[] = [];
   /* Whether the image is the build the camera runs: warned, never refused (image-build.ts). */
   let imageBuild: ImageBuildWarning | null;
 
@@ -408,35 +397,24 @@ export function prepareSlotFlash(
       ff !== null ? 'ff-vendor' : entry.staging === 'plain' ? 'plain-chain' : 'other',
     );
     /* What the camera is expected to do with the FF form follows the image's build (put first, below). */
-    if (ff !== null) warnings.push(...ff.warnings);
-    warnings.push('Raw payload: sent exactly as given. Nothing here checks that it is bootable.');
+    if (ff !== null) warnings.push(...ff.warningMessages);
+    warnings.push(RAW_AS_GIVEN_WARNING);
     if (ff !== null) {
-      writeNotes.push(...ff.notes);
-      writeNotes.push(
-        'This payload is the 1.3.0.8 FF staged form (the image XOR key block 0, word sum 0xFFFF). ' +
-          'The camera stores the image under Key B, so the read-back is checked against those bytes.',
-      );
+      writeNotes.push(...ff.noteMessages);
+      writeNotes.push(FF_STAGED_FORM_NOTE);
     } else if (entry.staging === null) {
-      warnings.push(
-        'This build names no staging form for the slot, so the bootloader checks cannot be stated.',
-      );
+      warnings.push(NO_STAGING_FORM_WARNING);
     } else {
       if (entry.staging !== 'plain') {
-        writeNotes.push(
-          'The device decodes this payload and re-encrypts what it keeps, so the stored bytes are ' +
-            'not predicted. The read-back is checked as the image it decrypts to, where that can be said.',
-        );
+        writeNotes.push(REENCRYPTS_NOTE);
       }
       for (const failure of bootloaderFailures(entry.staging, payload, cipher, {
         keyA: state.keyTable?.keyA ?? null,
       })) {
-        warnings.push(`The bootloader would reject this payload: ${failure}.`);
+        warnings.push(bootloaderRejectsWarning(failure));
       }
       if (entry.staging === 'slot-keystream-ciphertext') {
-        warnings.push(
-          "The 2016 stage key (key block 0) is not in raw bytes, so this payload's decrypted " +
-            'word sum is not checked here.',
-        );
+        warnings.push(STAGE_KEY_UNCHECKED_WARNING);
       }
     }
   } else {
@@ -481,12 +459,10 @@ export function prepareSlotFlash(
           : 'other',
     );
     if (staged.rekeyRisk) {
-      warnings.push(
-        `${entry.name} already holds an image the bootloader cannot take. This write lands in the same state.`,
-      );
+      warnings.push(rekeyRiskWarning(bankNameParam(entry.name, key)));
     }
-    warnings.push(...(staged.words?.warnings ?? []));
-    writeNotes.push(...(staged.words?.notes ?? []));
+    warnings.push(...(staged.words?.warningMessages ?? []));
+    writeNotes.push(...(staged.words?.noteMessages ?? []));
   }
 
   if (body.payload.length > bankBytes) {
@@ -495,22 +471,18 @@ export function prepareSlotFlash(
   /* What the image is comes first: every other warning is about writing it. */
   if (imageBuild !== null) warnings.unshift(imageBuild.text);
 
-  if (key === 'r') {
-    warnings.push(
-      'Recovery R: writing it asks you to acknowledge the risk. Nothing here checks that the camera boots afterwards.',
-    );
-  }
+  if (key === 'r') warnings.push(RECOVERY_ACK_WARNING);
   const risk = ackNeeded(report, key);
-  if (risk !== null && key !== 'r') {
-    warnings.push(
-      `${risk}: writing it asks you to acknowledge the risk, and the camera runs whatever it holds after the next power cycle.`,
-    );
-  }
+  if (risk !== null && key !== 'r') warnings.push(riskAckWarning(risk));
   /* This write's notes, then the bank's own, then the camera's. None is a risk, so none is a warning. A front
    * end that already shows the camera's notes and the bank's row need not say those two again (TESTING.md
    * 42.88). */
   const notes: PlanNote[] = [
-    ...writeNotes.map((text) => ({ source: 'write' as const, text })),
+    ...writeNotes.map((said) =>
+      typeof said === 'string'
+        ? { source: 'write' as const, text: said }
+        : { source: 'write' as const, text: said.text, message: said },
+    ),
     ...entry.notes.map((text) => ({ source: 'bank' as const, text })),
     ...plan.notes.map((text) => ({ source: 'camera' as const, text })),
   ];
@@ -538,7 +510,8 @@ export function prepareSlotFlash(
     derivedFrom: body.derivedFrom,
     compare,
     targetEmpty,
-    warnings,
+    warnings: warnings.map(paramText),
+    warningMessages: warnings,
     imageBuild,
     notes,
     serial: state.serial,
@@ -679,7 +652,7 @@ function stageImage(
         rekeyRisk: false,
         staging: 'key-a-keystream',
         ffCommit: outcome.expect,
-        words: { warnings: outcome.warnings, notes: outcome.notes },
+        words: outcome,
       };
     }
     return {
@@ -692,7 +665,7 @@ function stageImage(
       staging: 'key-a-keystream',
       storedForm: 'key-b-ciphertext',
       ffCommit: outcome.expect,
-      words: { warnings: outcome.warnings, notes: outcome.notes },
+      words: outcome,
     };
   }
   refusePlainStaging(report.state);
@@ -778,7 +751,7 @@ export function checkSlotFlash(
    * first (`useSlotsPanel` `needsRiskAck`, the same rule), and the CLI refuses `slots flash` and
    * `slots patch-fps` without --acknowledge-risk before the plan (`bootRisk`, a superset of this rule). */
   if (risk !== null && !options.acknowledgeRisk) {
-    throw slotRefused(`${risk}. Writing it needs acknowledgeRisk: true. Nothing was sent.`, {
+    throw slotRefused(`${risk.text}. Writing it needs acknowledgeRisk: true. Nothing was sent.`, {
       key: plan.key,
     });
   }

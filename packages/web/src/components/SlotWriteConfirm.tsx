@@ -120,7 +120,6 @@ export function SlotWriteConfirm({
             id="slot-write-confirm-warnings"
             className="space-y-1.5 rounded-md border border-warn/40 bg-warn/8 px-3 py-2 text-[0.85rem] font-medium text-foreground"
           >
-            {/* i18n: core message (the plan's warnings) */}
             {warnings.map((line) => (
               <p key={line}>{line}</p>
             ))}

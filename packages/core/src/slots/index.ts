@@ -166,3 +166,23 @@ export {
   type FpsPlan,
   type FpsReadBackCheck,
 } from './fps-patch.js';
+export {
+  BOOT_UNNAMED_RISK,
+  bootloaderRejectsWarning,
+  ffBuildUnknownWarning,
+  ffOtherVersionWarning,
+  ffRunsFastNote,
+  ffRunsSlowWarning,
+  ffUntestedWarning,
+  FF_BOOT_UNTESTED_MESSAGE,
+  FF_STAGED_FORM_NOTE,
+  NO_STAGING_FORM_WARNING,
+  plainChainOutcomeMessage,
+  RAW_AS_GIVEN_WARNING,
+  RECOVERY_ACK_WARNING,
+  RECOVERY_FALLBACK_RISK,
+  REENCRYPTS_NOTE,
+  rekeyRiskWarning,
+  riskAckWarning,
+  STAGE_KEY_UNCHECKED_WARNING,
+} from './write-words.js';

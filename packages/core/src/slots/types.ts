@@ -19,6 +19,7 @@
  *     and are never written here.
  * ==================================================================== */
 
+import type { CoreMessage } from '../message.js';
 import type { Support } from '../profiles/types.js';
 import type { SlotKey, WindowEntry } from '../profiles/types.js';
 import type { DeviceState, SlotState } from '../workflows/types.js';
@@ -219,6 +220,8 @@ export type PlanNoteSource = 'write' | 'bank' | 'camera';
 export interface PlanNote {
   readonly source: PlanNoteSource;
   readonly text: string;
+  /** `text` as a message (code + params), for the page, where core has a code for it. */
+  readonly message?: CoreMessage;
 }
 
 /**
@@ -292,6 +295,11 @@ export interface SlotFlashPlan {
    * writing recovery, a raw payload, a payload the bootloader would reject). Notes are not here: see `notes`.
    */
   readonly warnings: readonly string[];
+  /**
+   * `warnings` for the page: a message (code + params) where core has a code for the warning, else its
+   * English text. Hand-made plans in tests may leave it out.
+   */
+  readonly warningMessages?: readonly (CoreMessage | string)[];
   /**
    * The image may not be the build the camera runs: its header names another version (or none), or, on
    * 1.3.0.8, it is the 8 Hz build and the camera runs the 16 Hz one or does not say. Null when the image is
