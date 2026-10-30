@@ -14,7 +14,7 @@
  * shows core's English.
  */
 
-import type { CoreMessage, CoreParam } from '@seek-fw/core';
+import type { BootPolicy, CoreMessage, CoreParam } from '@seek-fw/core';
 import { listAnd, listComma, t, type Translate } from '@/i18n';
 import { en } from '@/i18n/locales/en';
 import { bankName, bankWords } from '@/lib/bank-names';
@@ -78,4 +78,17 @@ export function coreTexts(
   return messages === undefined
     ? [...texts]
     : messages.map((message) => coreText(message, translate));
+}
+
+/** `coreText`, keeping a missing message missing (a row the page leaves out). */
+export function nullableCoreText(
+  message: CoreMessage | null | undefined,
+  translate: Translate = t,
+): string | null {
+  return message === null || message === undefined ? null : coreText(message, translate);
+}
+
+/** What a boot-config word means on this family, in the language in use (`describeCfg0`). */
+export function cfg0Words(boot: BootPolicy, cfg0: number, translate: Translate = t): string {
+  return coreText(boot.describeCfg0Message?.(cfg0) ?? boot.describeCfg0(cfg0), translate);
 }

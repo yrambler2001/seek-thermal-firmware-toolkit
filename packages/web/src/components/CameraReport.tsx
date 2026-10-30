@@ -24,6 +24,7 @@ import {
   type SlotKey,
   type SlotState,
 } from '@seek-fw/core';
+import { cfg0Words } from '@/lib/core-text';
 import { KeyValue } from './KeyValue';
 import { Panel, PanelTitle } from './Panel';
 import { Prose } from './Prose';
@@ -175,7 +176,7 @@ export function CameraReport({ state }: CameraReportProps): ReactElement {
               'cfg[0]',
               state.cfg0 === null
                 ? t('info:report.unreadable')
-                : `${hexUp(state.cfg0)} — ${state.profile.boot.describeCfg0(state.cfg0)}`, // i18n: core message
+                : `${hexUp(state.cfg0)} — ${cfg0Words(state.profile.boot, state.cfg0)}`,
             ],
             /* i18n: core message (these three rows' values) */
             [t('info:report.booted'), bootedReportOf(state, nameOf)],

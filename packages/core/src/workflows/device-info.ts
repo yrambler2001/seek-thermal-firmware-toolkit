@@ -18,7 +18,7 @@
 
 import { asciiz, bytesToHex, hex, hexToBytes, hexUp, sha256hex, viewOf } from '../bytes.js';
 import { CancelledError, errorMessage } from '../errors.js';
-import { coreMessage, type CoreMessage } from '../message.js';
+import { coreMessage, paramText, type CoreMessage, type CoreParam } from '../message.js';
 import { decryptImage } from '../crypto/cipher.js';
 import {
   findKeyCandidates,
@@ -1604,25 +1604,53 @@ export function upgradeTargetWarning(
   state: DeviceState,
   nameOf: (slot: SlotState | undefined, key: SlotKey) => string = (slot, key) => slot?.name ?? key,
 ): string | null {
+  return upgradeTargetWarningMessage(state, nameOf)?.text ?? null;
+}
+
+/** `upgradeTargetWarning` as a message; `nameOf` names the bank (a bank param, or the caller's text). */
+export function upgradeTargetWarningMessage(
+  state: DeviceState,
+  nameOf: (slot: SlotState | undefined, key: SlotKey) => CoreParam = (slot, key) =>
+    slot?.name ?? key,
+): CoreMessage | null {
   if (state.boot === null) return null;
   const target = state.boot.target;
   const name = nameOf(state.byKey.get(target), target);
-  if (upgradeTargetIsBooted(state)) {
-    return (
-      `${name} is both the bank the camera booted from and the bank its own upgrade writes. ` +
-      'An upgrade run from this camera would overwrite the image it is running. ' +
-      'This is a warning only: nothing here stops an upgrade.'
-    );
-  }
+  if (upgradeTargetIsBooted(state)) return upgradeTargetBootedWarning(name);
   if (upgradeTargetWhileRecovery(state)) {
-    return (
-      'The camera is running its recovery bank, and its own upgrade writes ' +
-      `${name}, which it is not running. ` +
-      `${recoveryTargetVerdict(state.byKey.get(target), state.byKey.get(state.boot.booted), name)} ` +
-      'This is a warning only: nothing here stops an upgrade.'
+    return upgradeWhileRecoveryWarning(
+      name,
+      recoveryTargetVerdictMessage(
+        state.byKey.get(target),
+        state.byKey.get(state.boot.booted),
+        name,
+      ),
     );
   }
   return null;
+}
+
+/** The upgrade target is the bank the camera booted from. */
+export function upgradeTargetBootedWarning(name: CoreParam): CoreMessage {
+  return coreMessage(
+    'upgrade.targetBooted',
+    { name },
+    `${paramText(name)} is both the bank the camera booted from and the bank its own upgrade writes. ` +
+      'An upgrade run from this camera would overwrite the image it is running. ' +
+      'This is a warning only: nothing here stops an upgrade.',
+  );
+}
+
+/** The camera runs recovery R and its upgrade writes `name`; `verdict` is `recoveryTargetVerdictMessage`. */
+export function upgradeWhileRecoveryWarning(name: CoreParam, verdict: CoreMessage): CoreMessage {
+  return coreMessage(
+    'upgrade.whileRecovery',
+    { name, verdict },
+    'The camera is running its recovery bank, and its own upgrade writes ' +
+      `${paramText(name)}, which it is not running. ` +
+      `${verdict.text} ` +
+      'This is a warning only: nothing here stops an upgrade.',
+  );
 }
 
 /**
@@ -1631,30 +1659,50 @@ export function upgradeTargetWarning(
  * recovery bank's (TESTING.md 42.50, measured on the emulator: A, B and R identical and bootable), so the
  * text says so. An interrupted write leaves the bank unbootable, which is the one risk named.
  */
-function recoveryTargetVerdict(
+export function recoveryTargetVerdictMessage(
   slot: SlotState | undefined,
   running: SlotState | undefined,
-  name: string,
-): string {
+  nameParam: CoreParam,
+): CoreMessage {
+  const name = paramText(nameParam);
+  const params = { name: nameParam };
   if (!slot?.present) {
-    return `${name} could not be read on this check, so what it holds is not known.`;
+    return coreMessage(
+      'upgrade.verdict.notRead',
+      params,
+      `${name} could not be read on this check, so what it holds is not known.`,
+    );
   }
-  if (slot.blank) return `${name} is blank, so the upgrade writes into an empty bank.`;
+  if (slot.blank) {
+    return coreMessage(
+      'upgrade.verdict.blank',
+      params,
+      `${name} is blank, so the upgrade writes into an empty bank.`,
+    );
+  }
   if (slot.bootability === 'bootable') {
     const same = slot.sha256 !== null && slot.sha256 === (running?.sha256 ?? null);
     const holds = same ? 'the same bootable image as the bank it runs' : 'a bootable image';
-    return (
+    return coreMessage(
+      same ? 'upgrade.verdict.bootableSame' : 'upgrade.verdict.bootable',
+      params,
       `${name} holds ${holds}, which the upgrade replaces; ` +
-      `if the upgrade stops partway, ${name} is left unbootable.`
+        `if the upgrade stops partway, ${name} is left unbootable.`,
     );
   }
   if (slot.bootability === 'unknown') {
-    return (
+    return coreMessage(
+      'upgrade.verdict.unknown',
+      params,
       `${name}'s bootability is unknown on this read, so the upgrade may replace an image ` +
-      'the camera would boot.'
+        'the camera would boot.',
     );
   }
-  return `${name} is not shown as bootable on this read, so the upgrade replaces no image the camera would boot.`;
+  return coreMessage(
+    'upgrade.verdict.notBootable',
+    params,
+    `${name} is not shown as bootable on this read, so the upgrade replaces no image the camera would boot.`,
+  );
 }
 
 /**

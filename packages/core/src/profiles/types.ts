@@ -19,6 +19,8 @@
  * pairing holds.
  */
 
+import type { CoreMessage } from '../message.js';
+
 /** The families that ship with this package. */
 export type BuiltInProfileId =
   'modern-4x' | 'legacy-auth' | 'compact-2016' | 'early-compact' | 'generic';
@@ -165,6 +167,8 @@ export interface BootPolicy {
    */
   readonly checksFooter: boolean;
   describeCfg0(cfg0: number): string;
+  /** `describeCfg0` as a message (code + params), for the page. */
+  describeCfg0Message?(cfg0: number): CoreMessage;
   /** Replays the bootloader's select_boot_slot() over observed slot state. */
   selectBootSlot(cfg0: number, isBootable: (key: SlotKey) => boolean): BootPrediction;
 }

@@ -82,6 +82,10 @@ export {
   unknownBootabilityWhyMessage,
   upgradeTargetIsBooted,
   upgradeTargetWarning,
+  upgradeTargetWarningMessage,
+  upgradeTargetBootedWarning,
+  upgradeWhileRecoveryWarning,
+  recoveryTargetVerdictMessage,
   upgradeTargetWhileRecovery,
 } from './device-info.js';
 export {
@@ -95,6 +99,7 @@ export {
   KEY_TABLE_REFUSED_2016,
   lastStartReportOf,
   nextStartReportOf,
+  nextStartReportMessage,
   type BankWriting,
   type ReportRow,
 } from './device-report.js';

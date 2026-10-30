@@ -15,13 +15,15 @@ import {
   bootedSlot,
   bytesToHex,
   hexUp,
-  nextStartReportOf,
   targetSlot,
-  upgradeTargetWarning,
   type DeviceState,
   type SlotKey,
   type SlotState,
+  bankParam,
+  nextStartReportMessage,
+  upgradeTargetWarningMessage,
 } from '@seek-fw/core';
+import { cfg0Words, nullableCoreText } from '@/lib/core-text';
 import { KeyValue, type KeyValueRow } from './KeyValue';
 import { Panel, PanelTitle } from './Panel';
 import { Prose } from './Prose';
@@ -71,7 +73,7 @@ export function DeviceInfoPanel({ state }: DeviceInfoPanelProps): ReactElement {
   const cfg0Text =
     state.cfg0 === null
       ? null
-      : `${hexUp(state.cfg0)} — ${state.profile.boot.describeCfg0(state.cfg0)}`; // i18n: core message
+      : `${hexUp(state.cfg0)} — ${cfg0Words(state.profile.boot, state.cfg0)}`;
 
   const bootloader =
     state.bootloaderString != null && state.bootloaderString !== ''
@@ -96,8 +98,10 @@ export function DeviceInfoPanel({ state }: DeviceInfoPanelProps): ReactElement {
     [t('shared:deviceInfo.bootedFrom'), booted === null ? null : bankLabel(booted)],
     /* The bank the next start runs, where the boot rule and each bank's check are decoded (core's
      * `nextStartReportOf`: the 2014 plaintext chain and the 2016 Compact PRO); hidden elsewhere. */
-    /* i18n: core message */
-    [t('shared:deviceInfo.nextStart'), nextStartReportOf(state, bankLabelOf)],
+    [
+      t('shared:deviceInfo.nextStart'),
+      nullableCoreText(nextStartReportMessage(state, (key) => bankParam(key, 'name'))),
+    ],
     /* The camera's own upgrade choice. This page writes the bank it is given, not this one. */
     [
       t('shared:deviceInfo.upgradeTarget'),
@@ -114,8 +118,9 @@ export function DeviceInfoPanel({ state }: DeviceInfoPanelProps): ReactElement {
   const orphans = orphanSlots(state);
   const targetIsOrphan = target !== null && orphans.includes(target);
   /* TESTING.md 42.50: the upgrade target is the bank the camera booted from. A warning, never a gate. */
-  // i18n: core message
-  const targetWarning = upgradeTargetWarning(state, (_slot, key) => bankLabelOf(key));
+  const targetWarning = nullableCoreText(
+    upgradeTargetWarningMessage(state, (_slot, key) => bankParam(key, 'name')),
+  );
 
   return (
     <>

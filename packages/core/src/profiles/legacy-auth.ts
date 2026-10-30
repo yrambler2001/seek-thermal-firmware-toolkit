@@ -93,7 +93,8 @@ import type {
   WindowPlan,
 } from './types.js';
 import { SUPPORTED } from './types.js';
-import { lockedBootRule } from './locked-boot.js';
+import { lockedBootRule, lockedBootRuleMessage } from './locked-boot.js';
+import type { CoreMessage } from '../message.js';
 import { agreedRows, buildWindowPlan } from './plan.js';
 import { primaryVersion, versionSource } from './version.js';
 import { FLASH_BASE, FLASH_SIZE, HDR_HI, HDR_LO, WINDOW_SIZE } from './modern-4x.js';
@@ -599,6 +600,10 @@ export const LEGACY_BOOT: BootPolicy = {
 
   describeCfg0(cfg0: number): string {
     return lockedBootRule(cfg0);
+  },
+
+  describeCfg0Message(cfg0: number): CoreMessage {
+    return lockedBootRuleMessage(cfg0);
   },
 
   /* Shared by legacy-auth, compact-2016 and early-compact, so the refusal names

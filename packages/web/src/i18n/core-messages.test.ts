@@ -12,6 +12,11 @@
  */
 
 import {
+  MODERN_BOOT,
+  nextStartReportMessage,
+  recoveryTargetVerdictMessage,
+  upgradeTargetBootedWarning,
+  upgradeWhileRecoveryWarning,
   BOOT_UNNAMED_RISK,
   FF_BOOT_UNTESTED_MESSAGE,
   FF_STAGED_FORM_NOTE,
@@ -62,7 +67,7 @@ import { tEnglish, type Translate } from '@/i18n';
 import { en } from '@/i18n/locales/en';
 import { coreText, coreTexts } from '@/lib/core-text';
 import { fakeDeviceState } from '@/test-fixtures';
-import { slotEntry, slotReport, slotReport2016 } from '@/test-slots';
+import { deviceState2016, slotEntry, slotReport, slotReport2016 } from '@/test-slots';
 
 /** Every message in `message`, nested ones included. */
 function walk(message: CoreMessage, into: CoreMessage[]): void {
@@ -228,6 +233,26 @@ function samples(base: DeviceState): CoreMessage[] {
   add(bootloaderRejectsWarning('its word sum is not 0'));
   add(rekeyRiskWarning(bankParam('b', 'name')));
   add(riskAckWarning(bootsNowMessage(bankParam('a', 'name'))));
+
+  /* the device panel */
+  for (const word of [0, 1, 2]) add(MODERN_BOOT.describeCfg0Message?.(word));
+  add(nextStartReportMessage(deviceState2016(base), (key) => bankParam(key, 'name')));
+  add(nextStartReportMessage(deviceState2016(base, { checkKeyNamed: false }), () => 'x'));
+  const name = bankParam('a', 'name');
+  add(upgradeTargetBootedWarning(name));
+  const slot = (fields: object) =>
+    ({ present: true, blank: false, sha256: 'aa', ...fields }) as never;
+  for (const target of [
+    undefined,
+    slot({ present: false }),
+    slot({ blank: true }),
+    slot({ bootability: 'bootable' }),
+    slot({ bootability: 'unknown' }),
+    slot({ bootability: 'not-bootable' }),
+  ]) {
+    add(upgradeWhileRecoveryWarning(name, recoveryTargetVerdictMessage(target, slot({}), name)));
+  }
+  add(recoveryTargetVerdictMessage(slot({ bootability: 'bootable' }), slot({ sha256: 'bb' }), 'B'));
 
   const all: CoreMessage[] = [];
   out.forEach((message) => {

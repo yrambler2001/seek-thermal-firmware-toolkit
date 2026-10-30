@@ -38,6 +38,7 @@
  */
 
 import { hexUp } from '../bytes.js';
+import { coreMessage, type CoreMessage } from '../message.js';
 import type {
   BootPolicy,
   BootPrediction,
@@ -248,14 +249,29 @@ export const MODERN_SLOTS: readonly SlotDescriptor[] = [
  * port of `select_boot_slot()`, so the page can name the slot the camera booted
  * from and the one an upgrade would therefore overwrite.
  */
+function modernCfg0Message(cfg0: number): CoreMessage {
+  if (cfg0 === 0 || cfg0 === 0xffffffff) {
+    return coreMessage(
+      'boot.cfg0.modernBlank',
+      {},
+      'blank/0: prefer slot A, then B, then recovery',
+    );
+  }
+  if (cfg0 === 1)
+    return coreMessage('boot.cfg0.modernB', {}, 'prefer slot B, then A, then recovery');
+  return coreMessage('boot.cfg0.modernRecovery', {}, 'prefer recovery, then A, then B');
+}
+
 export const MODERN_BOOT: BootPolicy = {
   updateTargetSubcmd: SUBCMD_UPDATE_TARGET,
   checksFooter: true,
 
   describeCfg0(cfg0: number): string {
-    if (cfg0 === 0 || cfg0 === 0xffffffff) return 'blank/0: prefer slot A, then B, then recovery';
-    if (cfg0 === 1) return 'prefer slot B, then A, then recovery';
-    return 'prefer recovery, then A, then B';
+    return modernCfg0Message(cfg0).text;
+  },
+
+  describeCfg0Message(cfg0: number): CoreMessage {
+    return modernCfg0Message(cfg0);
   },
 
   selectBootSlot(cfg0: number, isBootable: (key: SlotKey) => boolean): BootPrediction {

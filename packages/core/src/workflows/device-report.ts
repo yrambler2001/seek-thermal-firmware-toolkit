@@ -13,6 +13,7 @@
  * ==================================================================== */
 
 import { bytesToHex, hexUp } from '../bytes.js';
+import { coreMessage, paramText, type CoreMessage, type CoreParam } from '../message.js';
 import { bankOfActiveSlotWord, bankWordsOf } from '../profiles/locked-boot.js';
 import type { DetectionResult, SlotKey } from '../profiles/types.js';
 import { bootChoiceOf, bootRuleKnown, reportsActiveSlotWord } from '../slots/boot-choice.js';
@@ -100,11 +101,22 @@ export function nextStartReportOf(
   state: DeviceState,
   nameOf: (key: SlotKey) => string,
 ): string | null {
+  return nextStartReportMessage(state, nameOf)?.text ?? null;
+}
+
+/** `nextStartReportOf` as a message; `nameOf` names the bank (a bank param, or the caller's text). */
+export function nextStartReportMessage(
+  state: DeviceState,
+  nameOf: (key: SlotKey) => CoreParam,
+): CoreMessage | null {
   if (!bootRuleKnown(state)) return null;
   const choice = bootChoiceOf(state);
-  return choice.runs === null
-    ? `not known — ${choice.why}`
-    : `${nameOf(choice.runs)} — ${choice.why}`;
+  const why: CoreParam = choice.whyMessage ?? choice.why;
+  if (choice.runs === null) {
+    return coreMessage('report.nextStart.unknown', { why }, `not known — ${choice.why}`);
+  }
+  const bank = nameOf(choice.runs);
+  return coreMessage('report.nextStart.runs', { bank, why }, `${paramText(bank)} — ${choice.why}`);
 }
 
 /**

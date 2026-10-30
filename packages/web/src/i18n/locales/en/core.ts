@@ -169,4 +169,29 @@ export default {
   'write.ack.bootUnnamed':
     'the booted bank could not be named, so this one is treated as the booted one',
   'write.ack.recoveryFallback': 'Recovery R is the last-resort copy the bootloader falls back to',
+
+  /* ---- the device panel and the Info tab (profiles/*, workflows/device-report, device-info) ---- */
+  /** What a 4.x boot-config word means (the legacy families say boot.rule). */
+  'boot.cfg0.modernBlank': 'blank/0: prefer slot A, then B, then recovery',
+  'boot.cfg0.modernB': 'prefer slot B, then A, then recovery',
+  'boot.cfg0.modernRecovery': 'prefer recovery, then A, then B',
+  /** The "Next start" row: `{why}` is boot.select.* or boot.cfg0NotRead. */
+  'report.nextStart.unknown': 'not known — {why}',
+  'report.nextStart.runs': '{bank} — {why}',
+  'upgrade.targetBooted':
+    '{name} is both the bank the camera booted from and the bank its own upgrade writes. An upgrade run from this camera would overwrite the image it is running. This is a warning only: nothing here stops an upgrade.',
+  /** `{verdict}` is one of upgrade.verdict.*. */
+  'upgrade.whileRecovery':
+    'The camera is running its recovery bank, and its own upgrade writes {name}, which it is not running. {verdict} This is a warning only: nothing here stops an upgrade.',
+  'upgrade.verdict.notRead':
+    '{name} could not be read on this check, so what it holds is not known.',
+  'upgrade.verdict.blank': '{name} is blank, so the upgrade writes into an empty bank.',
+  'upgrade.verdict.bootableSame':
+    '{name} holds the same bootable image as the bank it runs, which the upgrade replaces; if the upgrade stops partway, {name} is left unbootable.',
+  'upgrade.verdict.bootable':
+    '{name} holds a bootable image, which the upgrade replaces; if the upgrade stops partway, {name} is left unbootable.',
+  'upgrade.verdict.unknown':
+    "{name}'s bootability is unknown on this read, so the upgrade may replace an image the camera would boot.",
+  'upgrade.verdict.notBootable':
+    '{name} is not shown as bootable on this read, so the upgrade replaces no image the camera would boot.',
 } as const satisfies NamespaceMessages;
