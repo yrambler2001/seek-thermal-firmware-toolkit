@@ -8,7 +8,8 @@
 import { act, type ReactElement } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { LanguageSwitch } from '@/components/LanguageSwitch';
-import { render } from '@/test-helpers';
+import { useReporter } from '@/hooks/useReporter';
+import { render, renderHook } from '@/test-helpers';
 import {
   LANG_KEY,
   detectLanguage,
@@ -22,7 +23,16 @@ import type * as LanguagesModule from './languages';
 import type { LanguageEntry } from './languages';
 import { useT } from './react';
 import { renderMarkup } from './rich';
-import { followLanguageChoice, getLanguage, initI18n, resetI18n, setLanguage, t } from './store';
+import {
+  followLanguageChoice,
+  getLanguage,
+  initI18n,
+  listAnd,
+  resetI18n,
+  setLanguage,
+  t,
+  tEnglish,
+} from './store';
 import type { Dictionary } from './types';
 
 const [gate, ukGate] = vi.hoisted(() => {
@@ -51,8 +61,10 @@ vi.mock('./languages', async (importOriginal) => {
         many: '{count} файлов',
         other: '{count} файла',
       },
+      'list.and': '{first} и {second}',
     },
     app: { 'connect.test': 'Проверить соединение', 'language.label': 'Язык' },
+    shared: { 'status.idle': 'Ожидание.' },
   };
   const zh = { common: { 'count.files': { other: '{count} 个文件' } } };
   const pl = { app: { 'connect.test': 'Testuj połączenie' } };
@@ -251,6 +263,43 @@ describe('t()', () => {
     await setLanguage('zh-Hans');
     expect(t('common:count.files', { count: 1 })).toBe('1 个文件');
     expect(t('common:count.files', { count: 7 })).toBe('7 个文件');
+  });
+});
+
+describe('English for the log, lists', () => {
+  it('tEnglish() gives English whatever the language in use', async () => {
+    await setLanguage('ru');
+    expect(t('app:connect.test')).toBe('Проверить соединение');
+    expect(tEnglish('app:connect.test')).toBe('Test connection');
+    expect(tEnglish('common:count.files', { count: 2 })).toBe('2 files');
+  });
+
+  it('listAnd() joins pairwise with common:list.and, in the language in use', async () => {
+    expect(listAnd([])).toBe('');
+    expect(listAnd(['slot A'])).toBe('slot A');
+    expect(listAnd(['slot A', 'slot B', 'slot R'])).toBe('slot A and slot B and slot R');
+    await setLanguage('ru');
+    expect(listAnd(['A', 'B'])).toBe('A и B');
+    expect(listAnd(['A', 'B'], tEnglish)).toBe('A and B');
+  });
+
+  it('keeps an untouched status line in step with the language, and a set one as set', async () => {
+    const hook = renderHook(() => useReporter());
+    expect(hook.result.current.progress.text).toBe('Idle.');
+    await act(async () => {
+      await setLanguage('ru');
+    });
+    hook.rerender();
+    expect(hook.result.current.progress.text).toBe('Ожидание.');
+    act(() => {
+      hook.result.current.setStatus('Read.');
+    });
+    await act(async () => {
+      await setLanguage('en');
+    });
+    hook.rerender();
+    expect(hook.result.current.progress.text).toBe('Read.');
+    hook.unmount();
   });
 });
 

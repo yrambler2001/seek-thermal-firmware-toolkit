@@ -113,6 +113,17 @@ Hooks and libs import the plain function: `import { t } from '@/i18n'`. It reads
 - App re-renders the whole page on a switch, so `t()` called during render is always current. A string stored in React state stays in the language it was made in. Store the key and params (or the data) and translate at render time when that matters, or accept it for short-lived messages.
 - Memoised text needs the language in its deps: `const lang = useLanguage(); useMemo(() => build(), [data, lang])`.
 
+### Patterns that work
+
+- **Status lines.** `shared:status.*` has the ones several panels set (`idle`, `cancelled`, `cancelling`, `failedSeeLog`). `useReporter(t('…'))` takes the idle line; until the first `reset`/`setStatus`/progress it follows a language switch, after that a status stays in the language it was set in until the next one.
+- **Module-level tables.** Make them a function called at render (`tabGuides()` in InfoView, `archiveRows()` in V4View), or give the record getters (`get why(): string { return t('…'); }` in `READ_ONLY_OPCODES`), so the export keeps its shape.
+- **Shown and logged.** When the same sentence goes on the page and into the run log, keep one entry and pass the translate function: `hintFor(error, ua, t)` for the page, the default `tEnglish` for `logHint`. `tEnglish(key, params)` is `t` in English whatever the language; `Translate` is its type. Old English constants (`UDEV_HINT`, `IN_USE_ELSEWHERE_STATUS`, `BACKUP_DOWNLOAD_NOTE`) are now `tEnglish(...)`, for the tests and the log.
+- **A SeekError made by the page.** Its message is English (it is logged). `withPageMessage(error, () => t('…'))` from `lib/identify` attaches the translated wording, and `refusalOf()` shows that one.
+- **Lists of names.** `listAnd(names)` joins with `common:list.and` (`{first} and {second}`, pairwise), so English stays "A and B and C".
+- **Code, hex, file names inside a sentence.** Pass them as params inside `code` markup: ``'… every `{begin}` selector `{first}`–`{last}` …'``.
+- **Variants, not suffixes.** "Done — 5/5 windows read (cancelled). Check your downloads." is its own key next to the plain one; never append `' (cancelled)'`.
+- **Core's sentences** (reasons, notes, boot reports, refusal messages) are shown as they come, with a `// i18n: core message` comment (or `{/* i18n: core message */}` in JSX) where the page shows them.
+
 ## What stays English
 
 Keep these in English, in every language:
