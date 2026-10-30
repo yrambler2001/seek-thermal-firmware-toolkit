@@ -19,6 +19,7 @@ import {
 } from '@seek-fw/core';
 import { renderHook } from '../test-helpers';
 import { decryptedNameOf, useSlotFileDecrypt } from './useSlotFileDecrypt';
+import { coreText } from '@/lib/core-text';
 
 const IMAGE_LEN = 0x8000;
 const BANK = 0x10000;
@@ -103,7 +104,7 @@ describe('useSlotFileDecrypt', () => {
     });
 
     expect(result.current.result).toBeNull();
-    expect(result.current.refusal).toContain('64 KiB');
+    expect(coreText(result.current.refusal)).toContain('64 KiB');
     expect(result.current.downloadName).toBeNull();
     expect(result.current.readError).toBeNull();
     unmount();
