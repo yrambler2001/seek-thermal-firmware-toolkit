@@ -42,6 +42,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Toolbar } from '@/components/ui/toolbar';
 import {
+  copyLabel,
   slotActionGate,
   writeRisk,
   type SlotFlashOutcome,
@@ -550,7 +551,11 @@ export function SlotsView({ slots, connected, busy }: SlotsViewProps): ReactElem
           <p>{rich('slots:how.read', { params: { minVersion: '0.8.0.0' } })}</p>
           <p>{rich('slots:how.flash')}</p>
           <p>{rich('slots:how.ff', { params: { letterR: 'R', b: bankWords('b') } })}</p>
-          <p>{rich('slots:how.copy', { params: { letterA: 'A', letterB: 'B', letterR: 'R' } })}</p>
+          <p>
+            {rich('slots:how.copy', {
+              params: { copyA: copyLabel('a'), copyB: copyLabel('b'), copyR: copyLabel('r') },
+            })}
+          </p>
           <p>{rich('slots:how.fps')}</p>
           <p>
             {rich('slots:how.backup', {

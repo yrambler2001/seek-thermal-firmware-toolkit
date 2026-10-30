@@ -960,7 +960,7 @@ export function usePreservePanel(params: PreservePanelParams): PreservePanelApi 
   const cancel = useCallback((): void => {
     runner.cancel();
     const phase = phaseOfPanelId(runner.active);
-    if (phase !== null) phaseReporters[phase].setStatus('Cancelling …');
+    if (phase !== null) phaseReporters[phase].setStatus(t('shared:status.cancelling'));
   }, [phaseReporters, runner]);
 
   const saveAgain = useCallback((): void => {

@@ -149,7 +149,7 @@ describe('useOfflineDecrypt', () => {
       decryption: { attempted: true },
     });
 
-    expect(result.current.reporter.progress.text).toContain('1/1 slot(s) decrypted');
+    expect(result.current.reporter.progress.text).toContain('1/1 slot decrypted');
 
     /* With no camera attached the family is scored from the file itself, and
      * the verdict is surfaced rather than assumed. */

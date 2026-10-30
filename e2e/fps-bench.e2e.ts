@@ -186,7 +186,7 @@ describe.skipIf(MODE !== 'i-understand' && MODE !== 'dry-run')(
       expect(dialog, 'the dialog names the rate change').toContain('32 Hz instead of 8 Hz');
       expect(dialog, 'the dialog names the build').toContain(`holds firmware ${BUILD}`);
       expect(dialog, 'the dialog names the bytes').toContain(
-        `changes ${String(PATCH_BYTES)} byte(s)`,
+        `changes ${String(PATCH_BYTES)} ${PATCH_BYTES === 1 ? 'byte' : 'bytes'} of the image`,
       );
       await snap(handle.page, SHOT_DIR, 'fps-bench-dialog');
       if (MODE === 'dry-run') {

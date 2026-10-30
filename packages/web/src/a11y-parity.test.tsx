@@ -181,7 +181,7 @@ describe('accessibility parity', () => {
     const log = container.querySelector('[role="log"]');
     expect(log?.getAttribute('aria-label')).toBe('Dump log');
     expect(log?.getAttribute('tabindex')).toBe('0');
-    expect(log?.textContent).toContain('3 earlier line(s) trimmed');
+    expect(log?.textContent).toContain('3 earlier lines trimmed');
     unmount();
   });
 

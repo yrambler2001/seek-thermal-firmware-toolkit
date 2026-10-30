@@ -86,7 +86,7 @@ describe('the frame-rate patch confirmation', () => {
     expect(text).toContain('Make slot B run at 32 FPS?');
     expect(text).toContain('holds firmware 1.3.0.0');
     expect(text).toContain('makes its image run at 32 Hz instead of 8 Hz');
-    expect(text).toContain('1 byte(s) of the image');
+    expect(text).toContain('1 byte of the image');
     expect(text).not.toContain('UNTESTED on hardware');
     unmount();
   });

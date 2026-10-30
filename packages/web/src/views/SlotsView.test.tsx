@@ -1506,7 +1506,7 @@ describe('SlotsView: the frame-rate row action', () => {
     expect(text).not.toContain('compact_32k-');
     /* The capitalised replug prompt is the panel's, once (TESTING.md 42.86). */
     expect(text.split('NOW UNPLUG AND REPLUG THE CAMERA.')).toHaveLength(2);
-    expect(text).toContain('differs from the saved dump only at the 2 planned byte(s)');
+    expect(text).toContain('differs from the saved dump only at the 2 planned bytes');
     expect(text).toContain(`Saved first, as a download: ${BACKUP.fileName}.`);
     expect(text).not.toContain('UNTESTED on hardware');
     expect(text).toContain('The decrypted file in it is the way back');

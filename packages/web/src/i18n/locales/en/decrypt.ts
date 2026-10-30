@@ -18,10 +18,10 @@ export default {
   'status.building': 'Building archive ...',
   'status.nothingDecrypted':
     'No images decrypted — see the log for why. The manifest is in your downloads.',
-  /* {count} is the number of slots found; English says "slot(s)" in both forms. */
+  /* {count} is the number of slots found. */
   'status.done': {
-    one: 'Done — {done}/{count} slot(s) decrypted. Check your downloads.',
-    other: 'Done — {done}/{count} slot(s) decrypted. Check your downloads.',
+    one: 'Done — {done}/{count} slot decrypted. Check your downloads.',
+    other: 'Done — {done}/{count} slots decrypted. Check your downloads.',
   },
 
   /* views/DecryptView: a whole dump. */

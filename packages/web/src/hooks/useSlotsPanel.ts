@@ -391,7 +391,8 @@ function contextOf(
 /** The run log's count of the banks read (English, like every log line). */
 function summarise(report: SlotsReport): string {
   const read = report.slots.filter((view) => view.state !== null).length;
-  return `${String(read)}/${String(report.slots.length)} banks read.`;
+  const total = report.slots.length;
+  return `${String(read)}/${String(total)} ${total === 1 ? 'bank' : 'banks'} read.`;
 }
 
 /* ---- the hook ---------------------------------------------------------- */

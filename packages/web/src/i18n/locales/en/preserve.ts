@@ -204,7 +204,7 @@ export default {
   'bankPlan.staged': 'Staged length',
   /* {size} bytes sent in {count} USB commands. */
   'bankPlan.stagedValue': {
-    one: '{size} B in {count} chunks',
+    one: '{size} B in {count} chunk',
     other: '{size} B in {count} chunks',
   },
   'bankPlan.rebalance': 'Rebalance word',
@@ -219,15 +219,15 @@ export default {
   /* ---- step 04's verdict ---- */
   /* {read} of 31 blocks read, {count} bytes differ (0 when it matches). */
   'verify.ok': {
-    one: '**Verified — a perfect match.** After a fresh start the camera was read again: {read}/31 blocks, {count} differing byte(s). Its flash is exactly what it was before the first write.',
+    one: '**Verified — a perfect match.** After a fresh start the camera was read again: {read}/31 blocks, {count} differing byte. Its flash is exactly what it was before the first write.',
     other:
-      '**Verified — a perfect match.** After a fresh start the camera was read again: {read}/31 blocks, {count} differing byte(s). Its flash is exactly what it was before the first write.',
+      '**Verified — a perfect match.** After a fresh start the camera was read again: {read}/31 blocks, {count} differing bytes. Its flash is exactly what it was before the first write.',
   },
   /* The same, with the blocks that came back short ({blocks}: their numbers, comma-separated). */
   'verify.okShort': {
-    one: '**Verified — a perfect match.** After a fresh start the camera was read again: {read}/31 blocks, {count} differing byte(s) (short blocks: {blocks}). Its flash is exactly what it was before the first write.',
+    one: '**Verified — a perfect match.** After a fresh start the camera was read again: {read}/31 blocks, {count} differing byte (short blocks: {blocks}). Its flash is exactly what it was before the first write.',
     other:
-      '**Verified — a perfect match.** After a fresh start the camera was read again: {read}/31 blocks, {count} differing byte(s) (short blocks: {blocks}). Its flash is exactly what it was before the first write.',
+      '**Verified — a perfect match.** After a fresh start the camera was read again: {read}/31 blocks, {count} differing bytes (short blocks: {blocks}). Its flash is exactly what it was before the first write.',
   },
   /* {error} is core's message, or unknownReason. */
   'verify.failed': '**The check found differences against the backup.** {error}',
@@ -263,18 +263,18 @@ export default {
   'summary.notProduced': 'not produced',
   /* The complete image against the backup, block by block. {differing} of {count} blocks; {blocks} are hex addresses. */
   'summary.differs': {
-    one: 'differs from the backup in {differing} of {count} blocks: {blocks}',
+    one: 'differs from the backup in {differing} of {count} block: {blocks}',
     other: 'differs from the backup in {differing} of {count} blocks: {blocks}',
   },
   'summary.matches': {
-    one: 'matches the backup on all {count} blocks',
+    one: 'matches the backup on its {count} block',
     other: 'matches the backup on all {count} blocks',
   },
   'summary.onlyInFull': 'Only in the whole-flash read',
   /* {count} blocks hold data a normal read cannot reach; {blocks} are their hex addresses. */
   'summary.onlyInFullValue': {
-    one: '{count} block(s) a stock read cannot reach: {blocks}',
-    other: '{count} block(s) a stock read cannot reach: {blocks}',
+    one: '{count} block a stock read cannot reach: {blocks}',
+    other: '{count} blocks a stock read cannot reach: {blocks}',
   },
   'summary.rawDump': 'Whole-flash read, as read',
   'summary.rawDumpBadge': 'the same, with the patch still in',

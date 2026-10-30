@@ -64,9 +64,9 @@ export default {
   /* The status line of the run panel. "..." stays three dots, as English has it. */
   'status.reading': 'Reading ...',
   'status.readingAgain': 'Reading the banks again ...',
-  /* {count} banks in all, {read} of them read. English says "banks" in both forms. */
+  /* {count} banks in all, {read} of them read. */
   'status.read': {
-    one: 'Read. {read}/{count} banks read.',
+    one: 'Read. {read}/{count} bank read.',
     other: 'Read. {read}/{count} banks read.',
   },
   'status.unsupported': 'Not supported on this build — no bank was read.',
@@ -297,11 +297,11 @@ export default {
     '{bank} holds firmware {version}, and this makes its image run at {toHz} Hz instead of {fromHz} Hz.',
   /* In place of a firmware version the camera did not give. */
   'fpsConfirm.unknownVersion': '(unknown)',
-  /* {count} bytes of the image change. English says "byte(s)" in both forms. */
+  /* {count} bytes of the image change. */
   'fpsConfirm.bytes': {
-    one: 'The patch changes {count} byte(s) of the image and the acceptance-sum word, so the sum the bootloader checks is kept. The key pair is not touched.',
+    one: 'The patch changes {count} byte of the image and the acceptance-sum word, so the sum the bootloader checks is kept. The key pair is not touched.',
     other:
-      'The patch changes {count} byte(s) of the image and the acceptance-sum word, so the sum the bootloader checks is kept. The key pair is not touched.',
+      'The patch changes {count} bytes of the image and the acceptance-sum word, so the sum the bootloader checks is kept. The key pair is not touched.',
   },
   'fpsConfirm.wayBack':
     'The decrypted file in that zip is the way back: to undo the patch, write it with "Flash decrypted image" on {bank}.',
@@ -318,7 +318,7 @@ export default {
     other: 'Patch the frame rate of {count} banks?',
   },
   'fpsEvery.intro': {
-    one: 'This patches {count} bank that offer it, of firmware {version}:',
+    one: 'This patches {count} bank that offers it, of firmware {version}:',
     other: 'This patches {count} banks that offer it, of firmware {version}:',
   },
   /* A bank's name and, when writing it asks for the tick, what it is. */
@@ -326,10 +326,10 @@ export default {
   'fpsEvery.role.booted': '{bank} (the bank this camera boots now)',
   'fpsEvery.role.recovery': '{bank} (the recovery bank, the last-resort copy)',
   'fpsEvery.role.bootUnnamed': '{bank} (the camera does not say which bank it boots)',
-  /* One bank's line. {count} bytes change. English says "byte(s)" in both forms. */
+  /* One bank's line. {count} bytes change. */
   'fpsEvery.offer': {
-    one: '{bank}: {fromHz} Hz to {toHz} Hz, {count} byte(s) and the acceptance-sum word.',
-    other: '{bank}: {fromHz} Hz to {toHz} Hz, {count} byte(s) and the acceptance-sum word.',
+    one: '{bank}: {fromHz} Hz to {toHz} Hz, {count} byte and the acceptance-sum word.',
+    other: '{bank}: {fromHz} Hz to {toHz} Hz, {count} bytes and the acceptance-sum word.',
   },
   /* A bank that is not patched, and why ({note} is fps.*). */
   'fpsEvery.other': '{bank}: {note}',
@@ -378,17 +378,17 @@ export default {
 
   /* The result panel after a frame-rate patch. */
   'fpsOutcome.title': '{bank} — patched from {fromHz} Hz to {toHz} Hz (firmware {version}).',
-  /* {count} bytes were planned to change. English says "byte(s)" in both forms. */
+  /* {count} bytes were planned to change. */
   'fpsOutcome.readBackOk': {
-    one: 'The read-back differs from the saved dump only at the {count} planned byte(s), the sites and the sum word.',
+    one: 'The read-back differs from the saved dump only at the {count} planned byte, the sites and the sum word.',
     other:
-      'The read-back differs from the saved dump only at the {count} planned byte(s), the sites and the sum word.',
+      'The read-back differs from the saved dump only at the {count} planned bytes, the sites and the sum word.',
   },
   /* {unexpected} bytes changed that should not have, {count} that should have did not. */
   'fpsOutcome.readBackBad': {
-    one: 'The read-back does NOT differ only as planned: {unexpected} unexpected and {count} missing byte(s).',
+    one: 'The read-back does NOT differ only as planned: {unexpected} unexpected and {count} missing byte.',
     other:
-      'The read-back does NOT differ only as planned: {unexpected} unexpected and {count} missing byte(s).',
+      'The read-back does NOT differ only as planned: {unexpected} unexpected and {count} missing bytes.',
   },
   'fpsOutcome.notTaken': 'The read-back was not taken, so the patch is not checked here.',
   /*
@@ -400,8 +400,8 @@ export default {
     other: 'Every bank: {done} of {count} patched, in this order: {order}.',
   },
   'fpsEveryOutcome.readBackOk': {
-    one: 'The read-back differs from the saved bank only at the {count} planned byte(s).',
-    other: 'The read-back differs from the saved bank only at the {count} planned byte(s).',
+    one: 'The read-back differs from the saved bank only at the {count} planned byte.',
+    other: 'The read-back differs from the saved bank only at the {count} planned bytes.',
   },
   'fpsEveryOutcome.notTaken': 'The read-back was not taken.',
   /* {reason} is core's. */
@@ -437,9 +437,9 @@ export default {
   /* FF = the 16 Hz "FF" build of the Compact; the vendor app = Seek's own phone app. */
   'how.ff':
     "A Compact on 1.3.0.8 can be the 8 Hz build or the 16 Hz FF build, and both report the same version. The camera tells them apart itself: its own answer for each bank says whether the application that answers takes it, and each build predicts its answers. The 8 Hz image goes to any bank. The FF image is staged the way the vendor app stages it (the image XOR Key A), and the 16 Hz build stores it under Key B, to any bank. The page does not refuse it: the plan says, before you confirm, what the camera is expected to do with it (the 8 Hz build refuses it at commit, and a camera on another version programs it as it is sent, which it cannot start). Whether the FF image boots is UNTESTED: no genuine bootloader for this build is in the corpus. Writing {letterR} asks for the extra confirmation like any recovery write. An **empty** bank (its header window reads as all 0xFF, as on many 2014 cameras' {b}) is a state, not a fault. It dumps as the raw 64 KiB of 0xFF with nothing to decrypt, and it is written exactly like any other bank; the plan and the confirmation say that no firmware is overwritten.",
-  /* The three copy buttons are named as English wrote them here ("recovery slot R"); {letter*} are A, B, R. */
+  /* {copyA}, {copyB}, {copyR} are the three copy buttons' own labels (table.copyTo: "Copy to slot A"…). */
   'how.copy':
-    "**Copy to slot {letterA}**, **Copy to slot {letterB}** and **Copy to recovery slot {letterR}** on a bank row write the firmware that bank holds, as this read decrypted it, into the other bank, whatever it holds now. The image is staged as any decrypted image is, so the plan and the confirmation are the same as for a file. **Restore from full flash backup** takes a .bin (a whole 4 MiB flash image, such as a J-Link read) or a .zip that holds one (a Preserve run file, or the zip a Dump & decrypt 4.x/Nano or a Dump all selectors saves), cuts this bank out of it, decrypts it, and shows the plan; a backup that looks like another camera's, or another firmware, is said in the plan. A bank that is empty in the backup, or that the dump did not read, cannot be restored by a write, and the page says so.",
+    "**{copyA}**, **{copyB}** and **{copyR}** on a bank row write the firmware that bank holds, as this read decrypted it, into the other bank, whatever it holds now. The image is staged as any decrypted image is, so the plan and the confirmation are the same as for a file. **Restore from full flash backup** takes a .bin (a whole 4 MiB flash image, such as a J-Link read) or a .zip that holds one (a Preserve run file, or the zip a Dump & decrypt 4.x/Nano or a Dump all selectors saves), cuts this bank out of it, decrypts it, and shows the plan; a backup that looks like another camera's, or another firmware, is said in the plan. A bank that is empty in the backup, or that the dump did not read, cannot be restored by a write, and the page says so.",
   'how.fps':
     "**Make N FPS** on a bank row edits that bank's image to a higher frame rate, and **Make N FPS in every bank** does it to every bank that offers it, in one confirmation, the bank the camera boots now last. A bank that cannot be offered it says why.",
   /* {example} is a file name; keep it as it is. */

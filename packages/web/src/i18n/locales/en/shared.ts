@@ -17,17 +17,17 @@ export default {
   'runPanel.percent': '{value}%',
   'runPanel.progressLabel': '{label} progress',
   'runPanel.logLabel': '{label} log',
-  /* English says "line(s)" in both forms; a translation uses its own plural forms. */
+  /* {count} older lines dropped from the top of a long log. */
   'runPanel.trimmed': {
-    one: '… {count} earlier line(s) trimmed',
-    other: '… {count} earlier line(s) trimmed',
+    one: '… {count} earlier line trimmed',
+    other: '… {count} earlier lines trimmed',
   },
   'runPanel.lineCount': { one: '{count} line', other: '{count} lines' },
 
   /* Status lines several panels set. */
   'status.idle': 'Idle.',
   'status.cancelled': 'Cancelled.',
-  'status.cancelling': 'Cancelling ...',
+  'status.cancelling': 'Cancelling …',
   'status.failedSeeLog': 'Failed — see the log above.',
 
   /* lib/camera-lock: another tab holds the camera. */
