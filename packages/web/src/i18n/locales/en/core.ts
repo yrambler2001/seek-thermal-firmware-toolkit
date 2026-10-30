@@ -194,4 +194,12 @@ export default {
     "{name}'s bootability is unknown on this read, so the upgrade may replace an image the camera would boot.",
   'upgrade.verdict.notBootable':
     '{name} is not shown as bootable on this read, so the upgrade replaces no image the camera would boot.',
+  /** The Info tab's "Booted" row: the bank's name alone, or with how the camera records it. */
+  'report.booted.name': '{bank}',
+  'report.booted.entered':
+    '{bank} — the bank the bootloader entered at this start, as it records it',
+  /** The Info tab's "Last start" row; `{word}` is the active-slot word. */
+  'report.lastStart.notRead': 'not read',
+  'report.lastStart.noBank': 'the camera reports {word}, which names no bank',
+  'report.lastStart.entered': 'the camera reports it entered {bank} (active-slot word {word})',
 } as const satisfies NamespaceMessages;

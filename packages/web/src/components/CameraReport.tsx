@@ -11,20 +11,22 @@ import {
   bankWritingOf,
   bootableDescription,
   acceptsDescription,
-  bootedReportOf,
   detectedReportOf,
   hexUp,
   keyReportRows,
-  lastStartReportOf,
-  nextStartReportOf,
   runningApplicationOf,
-  upgradeTargetWarning,
   type DeviceState,
   type ReportRow,
   type SlotKey,
   type SlotState,
+  bankNameParam,
+  bootedReportMessage,
+  lastStartReportMessage,
+  nextStartReportMessage,
+  upgradeTargetWarningMessage,
+  type CoreParam,
 } from '@seek-fw/core';
-import { cfg0Words } from '@/lib/core-text';
+import { cfg0Words, nullableCoreText } from '@/lib/core-text';
 import { KeyValue } from './KeyValue';
 import { Panel, PanelTitle } from './Panel';
 import { Prose } from './Prose';
@@ -97,10 +99,15 @@ function bankPresence(
 }
 
 export function CameraReport({ state }: CameraReportProps): ReactElement {
-  const warning = upgradeTargetWarning(state); // i18n: core message
+  const warning = nullableCoreText(
+    upgradeTargetWarningMessage(state, (slot, key) =>
+      slot === undefined ? key : bankNameParam(slot.name, key),
+    ),
+  );
   const running = runningText(state);
   const best = state.detection.best;
   const nameOf = (key: SlotKey): string => slotName(state, key);
+  const nameParam = (key: SlotKey): CoreParam => bankNameParam(nameOf(key), key);
   /* How the banks are written, on every line (core's `bankWritingOf`, the CLI's Writing section). */
   const bankWriting = bankWritingOf(state); // i18n: core message (staged, refusals)
 
@@ -178,11 +185,14 @@ export function CameraReport({ state }: CameraReportProps): ReactElement {
                 ? t('info:report.unreadable')
                 : `${hexUp(state.cfg0)} — ${cfg0Words(state.profile.boot, state.cfg0)}`,
             ],
-            /* i18n: core message (these three rows' values) */
-            [t('info:report.booted'), bootedReportOf(state, nameOf)],
-            [t('info:report.lastStart'), lastStartReportOf(state)],
+            /* i18n: core message (the 1.3.0.8 row's value: running.ts words) */
+            [t('info:report.booted'), nullableCoreText(bootedReportMessage(state, nameParam))],
+            [t('info:report.lastStart'), nullableCoreText(lastStartReportMessage(state))],
             [t('info:report.running1308'), running],
-            [t('info:report.nextStart'), nextStartReportOf(state, nameOf)],
+            [
+              t('info:report.nextStart'),
+              nullableCoreText(nextStartReportMessage(state, nameParam)),
+            ],
             [
               t('info:report.upgradeTarget'),
               state.boot === null

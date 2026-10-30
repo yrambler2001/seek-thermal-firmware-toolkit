@@ -13,7 +13,7 @@
  * ==================================================================== */
 
 import { bytesToHex, hexUp } from '../bytes.js';
-import { coreMessage, paramText, type CoreMessage, type CoreParam } from '../message.js';
+import { bankParam, coreMessage, paramText, type CoreMessage, type CoreParam } from '../message.js';
 import { bankOfActiveSlotWord, bankWordsOf } from '../profiles/locked-boot.js';
 import type { DetectionResult, SlotKey } from '../profiles/types.js';
 import { bootChoiceOf, bootRuleKnown, reportsActiveSlotWord } from '../slots/boot-choice.js';
@@ -68,10 +68,25 @@ export function bootedReportOf(
   state: DeviceState,
   nameOf: (key: SlotKey) => string,
 ): string | null {
+  return bootedReportMessage(state, nameOf)?.text ?? null;
+}
+
+/** `bootedReportOf` as a message; `nameOf` names the bank (a bank param, or the caller's text). */
+export function bootedReportMessage(
+  state: DeviceState,
+  nameOf: (key: SlotKey) => CoreParam,
+): CoreMessage | null {
   if (state.boot === null) return null;
-  const name = nameOf(state.boot.booted);
-  if (!bootRuleKnown(state) || state.activeSlotWord === null) return name;
-  return `${name} — the bank the bootloader entered at this start, as it records it`;
+  const bank = nameOf(state.boot.booted);
+  const name = paramText(bank);
+  if (!bootRuleKnown(state) || state.activeSlotWord === null) {
+    return coreMessage('report.booted.name', { bank }, name);
+  }
+  return coreMessage(
+    'report.booted.entered',
+    { bank },
+    `${name} — the bank the bootloader entered at this start, as it records it`,
+  );
 }
 
 /**
@@ -84,13 +99,28 @@ export function bootedReportOf(
 export function lastStartReportOf(
   state: Pick<DeviceState, 'activeSlotWord' | 'profile' | 'version'>,
 ): string | null {
+  return lastStartReportMessage(state)?.text ?? null;
+}
+
+/** `lastStartReportOf` as a message, for the page. */
+export function lastStartReportMessage(
+  state: Pick<DeviceState, 'activeSlotWord' | 'profile' | 'version'>,
+): CoreMessage | null {
   if (!reportsActiveSlotWord(state.profile, state.version)) return null;
   const word = state.activeSlotWord;
-  if (word === null) return 'not read';
+  if (word === null) return coreMessage('report.lastStart.notRead', {}, 'not read');
   const bank = bankOfActiveSlotWord(word);
   return bank === null
-    ? `the camera reports ${String(word)}, which names no bank`
-    : `the camera reports it entered ${bankWordsOf(bank)} (active-slot word ${String(word)})`;
+    ? coreMessage(
+        'report.lastStart.noBank',
+        { word: String(word) },
+        `the camera reports ${String(word)}, which names no bank`,
+      )
+    : coreMessage(
+        'report.lastStart.entered',
+        { bank: bankParam(bank), word: String(word) },
+        `the camera reports it entered ${bankWordsOf(bank)} (active-slot word ${String(word)})`,
+      );
 }
 
 /**

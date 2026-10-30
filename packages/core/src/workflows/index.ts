@@ -91,6 +91,8 @@ export {
 export {
   bankWritingOf,
   bootedReportOf,
+  bootedReportMessage,
+  lastStartReportMessage,
   checkKeyReportOf,
   detectedReportOf,
   probeLineOf,

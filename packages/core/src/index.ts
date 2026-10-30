@@ -342,6 +342,8 @@ export {
   bankWritingOf,
   bootableDescription,
   bootedReportOf,
+  bootedReportMessage,
+  lastStartReportMessage,
   bootedSlot,
   channelEvidenceOf,
   checkKeyNameOf,

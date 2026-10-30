@@ -13,6 +13,8 @@
 
 import {
   MODERN_BOOT,
+  bootedReportMessage,
+  lastStartReportMessage,
   nextStartReportMessage,
   recoveryTargetVerdictMessage,
   upgradeTargetBootedWarning,
@@ -253,6 +255,14 @@ function samples(base: DeviceState): CoreMessage[] {
     add(upgradeWhileRecoveryWarning(name, recoveryTargetVerdictMessage(target, slot({}), name)));
   }
   add(recoveryTargetVerdictMessage(slot({ bootability: 'bootable' }), slot({ sha256: 'bb' }), 'B'));
+
+  /* the Info tab's report rows */
+  const state2016 = deviceState2016(base);
+  add(bootedReportMessage(state2016, (key) => bankParam(key, 'name')));
+  add(bootedReportMessage({ ...state2016, activeSlotWord: null }, () => 'Main'));
+  add(lastStartReportMessage(state2016));
+  add(lastStartReportMessage({ ...state2016, activeSlotWord: null }));
+  add(lastStartReportMessage({ ...state2016, activeSlotWord: 7 }));
 
   const all: CoreMessage[] = [];
   out.forEach((message) => {
