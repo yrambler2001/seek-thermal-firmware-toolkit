@@ -214,6 +214,14 @@ export function bankNameParam(name: string, key: SlotKey): CoreParam {
   return name === bankNameOf(key) ? bankParam(key, 'name') : name;
 }
 
+/**
+ * The same name said inside a sentence: the bank in its sentence form ("slot A") when the plan's name is the
+ * usual one ("Slot A"), else the plan's own text. Use it where the name is not at the start of a sentence.
+ */
+export function bankWordsParam(name: string, key: SlotKey): CoreParam {
+  return name === bankNameOf(key) ? bankParam(key) : name;
+}
+
 /** `backupBankWords` as a message, for the page. */
 export function backupBankMessage(report: SlotsReport, key: SlotKey): CoreMessage {
   const view = report.slots.find((candidate) => candidate.entry.key === key);

@@ -79,7 +79,7 @@ import {
   slotRefused,
   type StagedBytes,
 } from './write-image.js';
-import { bankNameParam } from './backup.js';
+import { bankNameParam, bankWordsParam } from './backup.js';
 import { bootsNowMessage } from './booted-words.js';
 import { bankParam, coreMessage, paramText, type CoreMessage, type CoreParam } from '../message.js';
 import { supportReasonMessage } from './capability.js';
@@ -558,6 +558,11 @@ function nothingWritten(state: DeviceState, refusal: string): CoreMessage {
 /** A slot's name as a param ("Slot A" in the reader's words, a named bank as it is). */
 const nameOf = (entry: { readonly name: string; readonly key: SlotKey }): CoreParam =>
   bankNameParam(entry.name, entry.key);
+/** The bank inside a sentence ("slot A"), and its English. */
+const wordsOf = (entry: { readonly name: string; readonly key: SlotKey }): CoreParam =>
+  bankWordsParam(entry.name, entry.key);
+const wordsText = (entry: { readonly name: string; readonly key: SlotKey }): string =>
+  paramText(wordsOf(entry));
 
 const reasonText = (reason: string | Unsupported): string =>
   typeof reason === 'string' ? reason : reason.reason;
@@ -611,14 +616,14 @@ export const SLOT_WRITE_REFUSAL = {
   rawTooLong: (entry: SlotEntry, size: number, bankBytes: number): CoreMessage =>
     coreMessage(
       'slots.refused.rawTooLong',
-      { size: String(size), name: nameOf(entry), bankSize: hex(bankBytes) },
-      `${String(size)} B is longer than the ${entry.name} bank (${hex(bankBytes)} B)`,
+      { size: String(size), name: wordsOf(entry), bankSize: hex(bankBytes) },
+      `${String(size)} B is longer than the ${wordsText(entry)} bank (${hex(bankBytes)} B)`,
     ),
   imageTooLong: (entry: SlotEntry, size: number, bankBytes: number): CoreMessage =>
     coreMessage(
       'slots.refused.imageTooLong',
-      { size: String(size), name: nameOf(entry), bankSize: hex(bankBytes) },
-      `image is ${String(size)} B, longer than the ${entry.name} bank (${hex(bankBytes)} B)`,
+      { size: String(size), name: wordsOf(entry), bankSize: hex(bankBytes) },
+      `image is ${String(size)} B, longer than the ${wordsText(entry)} bank (${hex(bankBytes)} B)`,
     ),
 } as const;
 
@@ -651,14 +656,14 @@ export const SLOT_PLAN_REFUSAL = {
   otherAddress: (address: number, entry: SlotEntry): CoreMessage =>
     coreMessage(
       'slots.plan.otherAddress',
-      { address: hexUp(address), name: nameOf(entry), at: hexUp(entry.address) },
-      `the plan targets ${hexUp(address)}, but the build's ${entry.name} is at ${hexUp(entry.address)}`,
+      { address: hexUp(address), name: wordsOf(entry), at: hexUp(entry.address) },
+      `the plan targets ${hexUp(address)}, but the build's ${wordsText(entry)} is at ${hexUp(entry.address)}`,
     ),
   notRead: (entry: SlotEntry): CoreMessage =>
     coreMessage(
       'slots.plan.notRead',
-      { name: nameOf(entry) },
-      `the analysis no longer reads ${entry.name}. Nothing was written.`,
+      { name: wordsOf(entry) },
+      `the analysis no longer reads ${wordsText(entry)}. Nothing was written.`,
     ),
   edited: coreMessage(
     'slots.plan.edited',
@@ -668,8 +673,8 @@ export const SLOT_PLAN_REFUSAL = {
   outsideBank: (size: number, entry: SlotEntry): CoreMessage =>
     coreMessage(
       'slots.plan.outsideBank',
-      { size: hex(size), name: nameOf(entry) },
-      `the payload is ${hex(size)} B, outside the ${entry.name} bank`,
+      { size: hex(size), name: wordsOf(entry) },
+      `the payload is ${hex(size)} B, outside the ${wordsText(entry)} bank`,
     ),
   /** A library caller's write without `acknowledgeRisk` (`risk`: why the bank matters). */
   riskAck: (risk: CoreMessage): CoreMessage =>
@@ -934,7 +939,7 @@ export async function flashSlot(
   const notes: CoreMessage[] = [
     writtenCommittedNote({
       size: String(plan.payload.length),
-      name: bankNameParam(entry.name, plan.key),
+      name: bankWordsParam(entry.name, plan.key),
       address: hexUp(entry.address),
       staged: stagingPhraseMessage(plan.staging),
       status: hex(commitStatus),

@@ -1271,7 +1271,7 @@ describe('flashSlot gates', () => {
         `checksum 0x${payload.sum16.toString(16).toUpperCase().padStart(4, '0')}`,
     );
     expect(result.notes[0]).toBe(
-      `committed ${String(payload.payload.length)} B to Slot B at 0x14060000, staged plain; commit status 0x0`,
+      `committed ${String(payload.payload.length)} B to slot B at 0x14060000, staged plain; commit status 0x0`,
     );
     expect(progress.at(-1)).toBe('Written.');
     const said = [...logs, ...progress, ...result.notes].join('\n');

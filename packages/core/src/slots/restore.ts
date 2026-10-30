@@ -42,7 +42,7 @@ import { looksLikeZip, readZipEntries, type ZipEntry } from '../archive/zip-read
 import { PRESERVE_DUMP_ORIGINAL_FILE, PRESERVE_DUMP_PATCHED_FILE } from '../preservation/steps.js';
 import { isDeviceBlockHead, DEVICE_BLOCK_ADDRESS } from '../preservation/windows.js';
 import { decryptSlotFile, type SlotFileDecryption } from './decrypt-file.js';
-import { bankNameParam } from './backup.js';
+import { bankNameParam, bankWordsParam } from './backup.js';
 import { slotDumpNames } from './dump.js';
 import { prepareSlotFlash } from './write.js';
 import { slotRefused } from './write-image.js';
@@ -442,8 +442,8 @@ export const RESTORE_WORDS = {
   where: (name: string, key: SlotKey, address: number): CoreMessage =>
     coreMessage(
       'restore.where',
-      { name: bankNameParam(name, key), address: `0x${address.toString(16).toUpperCase()}` },
-      `the backup's ${name} (at 0x${address.toString(16).toUpperCase()})`,
+      { name: bankWordsParam(name, key), address: `0x${address.toString(16).toUpperCase()}` },
+      `the backup's ${paramText(bankWordsParam(name, key))} (at 0x${address.toString(16).toUpperCase()})`,
     ),
   image: (facts: {
     readonly where: CoreMessage;
@@ -497,10 +497,10 @@ export const RESTORE_WORDS = {
       {
         theirs: theirs ?? '(none)',
         camera: camera ?? '(serial not read)',
-        name: bankNameParam(name, key),
+        name: bankWordsParam(name, key),
       },
       `This backup looks like another camera's: its identity block names serial ${theirs ?? '(none)'}, and this ` +
-        `camera is ${camera ?? '(serial not read)'}. Only ${name}'s image is written; nothing of that ` +
+        `camera is ${camera ?? '(serial not read)'}. Only ${paramText(bankWordsParam(name, key))}'s image is written; nothing of that ` +
         "camera's identity or calibration is.",
     ),
   noIdentity: coreMessage(

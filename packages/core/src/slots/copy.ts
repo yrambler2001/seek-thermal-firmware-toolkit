@@ -18,7 +18,7 @@ import {
   type CoreMessage,
   type CoreParam,
 } from '../message.js';
-import { bankNameParam } from './backup.js';
+import { bankNameParam, bankWordsParam } from './backup.js';
 import { slotDumpNames } from './dump.js';
 import { prepareSlotFlash } from './write.js';
 import { slotRefused } from './write-image.js';
@@ -89,8 +89,8 @@ export function copySourceRefusalMessage(report: SlotsReport, from: SlotKey): Co
   if (view.state.plain === null) {
     return coreMessage(
       'copy.source.noKey',
-      bank,
-      `no key this read recovered opens ${name}, so there is no decrypted image to copy`,
+      { name: bankWordsParam(name, from) },
+      `no key this read recovered opens ${paramText(bankWordsParam(name, from))}, so there is no decrypted image to copy`,
     );
   }
   return null;
@@ -120,11 +120,11 @@ export const COPY_WORDS = {
     size: number,
     sha256: string,
   ): CoreMessage => {
-    const name = bankNameParam(fromName, from);
+    const name = bankWordsParam(fromName, from);
     return coreMessage(
       version === null ? 'copy.note' : 'copy.noteVersion',
       version === null ? { name, size, sha256 } : { name, version, size, sha256 },
-      `The image is ${fromName}'s, as the slots read decrypted it: ` +
+      `The image is ${paramText(name)}'s, as the slots read decrypted it: ` +
         `${version === null ? '' : `firmware ${version}, `}${String(size)} B, sha256 ${sha256}.`,
     );
   },

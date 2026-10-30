@@ -520,7 +520,7 @@ describe('planSlotCopy', () => {
     expect(equalBytes(copy.plan.expectedPlain ?? new Uint8Array(0), IMAGE_A)).toBe(true);
     expect(copy.fileName).toMatch(/^seek-slot-a-.+-decrypted\.bin$/);
     expect(copy.plan.notes[0]?.text).toContain(
-      "The image is Slot A's, as the slots read decrypted it",
+      "The image is slot A's, as the slots read decrypted it",
     );
     expect(copy.source).toContain('Slot A at 0x14050000');
   });
@@ -645,12 +645,12 @@ describe('restore from a full flash backup', () => {
       'in dump.zip, a Dump & decrypt 4.x/Nano zip (its seek_dump/flash_dump_original.bin): stored sha256',
     );
     await expect(planSlotRestore(rep, 'b', backup)).rejects.toThrow(
-      "the backup's Slot B (at 0x14060000) was not read by the dump dump.zip comes from: by its " +
+      "the backup's slot B (at 0x14060000) was not read by the dump dump.zip comes from: by its " +
         'manifest.json, 0x14060000 is a gap (not reached), filled with 0xFF. There is no image to restore. ' +
         'Nothing was written.',
     );
     await expect(planSlotRestore(rep, 'r', backup)).rejects.toThrow(
-      /Recovery R \(at 0x14070000\) was not read by the dump .*0x14070000 is a gap \(its read failed: stall\)/,
+      /recovery R \(at 0x14070000\) was not read by the dump .*0x14070000 is a gap \(its read failed: stall\)/,
     );
   });
 
@@ -679,7 +679,7 @@ describe('restore from a full flash backup', () => {
       true,
     );
     await expect(planSlotRestore(rep, 'b', backup)).rejects.toThrow(
-      "the backup's Slot B (at 0x14060000) was not read by the dump all.zip comes from: by its " +
+      "the backup's slot B (at 0x14060000) was not read by the dump all.zip comes from: by its " +
         'manifest.json, 0x14060000 is a gap (no selector with this address returned data), filled with ' +
         '0x00. There is no image to restore. Nothing was written.',
     );
@@ -694,7 +694,7 @@ describe('restore from a full flash backup', () => {
     ]);
     const backup = await fullFlashOf(zip, 'dump.zip');
     await expect(planSlotRestore(report(), 'b', backup)).rejects.toThrow(
-      "the backup's Slot B (at 0x14060000) is 0x00 in every byte, the fill the dump writes where it read " +
+      "the backup's slot B (at 0x14060000) is 0x00 in every byte, the fill the dump writes where it read " +
         'nothing: the dump did not read this bank. There is no image to restore. Nothing was written.',
     );
   });

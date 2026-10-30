@@ -50,7 +50,8 @@ export function commitRefusal(name: string, status: number | null, key?: SlotKey
   const outcome = classifyCommitStatus(status);
   const reread = 'Read the banks again before doing anything else';
   const bank: CoreParam =
-    key !== undefined && name === paramText(bankParam(key, 'name')) ? bankParam(key, 'name') : name;
+    key !== undefined && name === paramText(bankParam(key, 'name')) ? bankParam(key) : name;
+  const said = paramText(bank);
   const refusal = (message: CoreMessage, safeToRetry: boolean): SeekError =>
     new SeekError('flash/commit', message.text, {
       ...(status === null ? {} : { deviceCode: status }),
@@ -62,7 +63,7 @@ export function commitRefusal(name: string, status: number | null, key?: SlotKey
       coreMessage(
         'slots.commit.unread',
         { name: bank },
-        `the commit status could not be read after CompleteMemoryUpgrade, so ${name} may be ` +
+        `the commit status could not be read after CompleteMemoryUpgrade, so ${said} may be ` +
           `partially written. ${reread}, and keep your dump.`,
       ),
       false,
@@ -77,7 +78,7 @@ export function commitRefusal(name: string, status: number | null, key?: SlotKey
       coreMessage(
         'slots.commit.refused',
         { name: bank, status: shown, cause },
-        `the camera refused the write to ${name} at commit with ${shown}: ` +
+        `the camera refused the write to ${said} at commit with ${shown}: ` +
           `${commitStatusCause(status)}. Nothing was written; the bank is unchanged. ${reread}.`,
       ),
       true,
@@ -88,7 +89,7 @@ export function commitRefusal(name: string, status: number | null, key?: SlotKey
       coreMessage(
         'slots.commit.eraseStage',
         { name: bank, status: shown, cause },
-        `CompleteMemoryUpgrade returned ${shown} (${commitStatusCause(status)}) for ${name}: nothing was ` +
+        `CompleteMemoryUpgrade returned ${shown} (${commitStatusCause(status)}) for ${said}: nothing was ` +
           'programmed, but the erase may have started, so the bank may be partly erased. ' +
           `${reread}, and keep your dump.`,
       ),
@@ -99,7 +100,7 @@ export function commitRefusal(name: string, status: number | null, key?: SlotKey
     coreMessage(
       'slots.commit.partial',
       { name: bank, status: shown, cause },
-      `CompleteMemoryUpgrade returned ${shown} (${commitStatusCause(status)}) — ${name} may be partially ` +
+      `CompleteMemoryUpgrade returned ${shown} (${commitStatusCause(status)}) — ${said} may be partially ` +
         `written. ${reread}, and keep your dump.`,
     ),
     false,
@@ -114,11 +115,11 @@ export function stagingStatusMessage(
   offset: number,
 ): CoreMessage {
   const bank: CoreParam =
-    key !== undefined && name === paramText(bankParam(key, 'name')) ? bankParam(key, 'name') : name;
+    key !== undefined && name === paramText(bankParam(key, 'name')) ? bankParam(key) : name;
   return coreMessage(
     'slots.commit.stagingStatus',
     { status: hex(status), name: bank, offset: hex(offset) },
-    `the camera reported ${hex(status)} while staging ${name} at offset ` +
+    `the camera reported ${hex(status)} while staging ${paramText(bank)} at offset ` +
       `${hex(offset)} — aborted before CompleteMemoryUpgrade, so nothing was written to flash`,
   );
 }
