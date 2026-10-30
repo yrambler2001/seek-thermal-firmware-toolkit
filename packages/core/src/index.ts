@@ -564,6 +564,8 @@ export {
   frameRateImageWords,
   type FrameRateBuild,
   unknownImageWords,
+  RECOVERY_ONLY_ROUTE_NOTE,
+  routeNoteMessage,
 } from './preservation/index.js';
 export type {
   BackupResult,

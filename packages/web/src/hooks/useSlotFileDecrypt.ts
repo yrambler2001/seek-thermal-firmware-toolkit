@@ -12,9 +12,11 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
 import {
   decryptSlotFile,
+  errorCoreMessage,
   errorMessage,
   SeekError,
   sha256hex,
+  type CoreMessage,
   type SlotFileDecryption,
 } from '@seek-fw/core';
 import { downloadBytes } from '../lib/download';
@@ -32,7 +34,7 @@ export interface SlotFileApi {
   /** What core made of the file, or null before a pick has finished. */
   readonly result: SlotFileDecryption | null;
   /** Why the file was refused before any decryption (not a bank-sized file), or null. */
-  readonly refusal: string | null;
+  readonly refusal: CoreMessage | string | null;
   /** SHA-256 of the file as picked, once it has been read. */
   readonly inputSha256: string | null;
   /** A failure to read the file itself, which is not a refusal. */
@@ -53,7 +55,7 @@ export function useSlotFileDecrypt(): SlotFileApi {
   const [busy, setBusy] = useState(false);
   const [file, setFile] = useState<SlotFileInput | null>(null);
   const [result, setResult] = useState<SlotFileDecryption | null>(null);
-  const [refusal, setRefusal] = useState<string | null>(null);
+  const [refusal, setRefusal] = useState<CoreMessage | string | null>(null);
   const [inputSha256, setInputSha256] = useState<string | null>(null);
   const [readError, setReadError] = useState<string | null>(null);
   /* The pick whose result may still land: a later pick makes an earlier one stale. */
@@ -77,9 +79,9 @@ export function useSlotFileDecrypt(): SlotFileApi {
     } catch (error) {
       if (current !== pick.current) return;
       /* A file that is not exactly one bank is a refusal of core's, not a failed read. */
-      // i18n: core message (the refusal; a read error is the browser's)
-      if (error instanceof SeekError && error.code === 'slots/refused') setRefusal(error.message);
-      else setReadError(errorMessage(error));
+      if (error instanceof SeekError && error.code === 'slots/refused') {
+        setRefusal(errorCoreMessage(error) ?? error.message);
+      } else setReadError(errorMessage(error));
     } finally {
       if (current === pick.current) setBusy(false);
     }

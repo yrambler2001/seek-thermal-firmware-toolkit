@@ -139,6 +139,9 @@ import {
   type PreserveChoiceFacts,
   type PreserveRunState,
   READ_REASON,
+  RECOVERY_ONLY_ROUTE_NOTE,
+  routeNoteMessage,
+  SLOT_FILE_WORDS,
   SUPPORT_REASON,
   acceptsDescriptionMessage,
   bootableDescriptionMessage,
@@ -1018,6 +1021,22 @@ function samples(base: DeviceState): CoreMessage[] {
   ] as const) {
     add(stagedClauseMessage(form));
   }
+
+  /* preserve: a build that runs from recovery R only */
+  add(PRESERVE_BANK_REFUSAL.recoveryOnly(RECOVERY_ONLY_ROUTE_NOTE));
+  message(routeNoteMessage(RECOVERY_ONLY_ROUTE_NOTE));
+
+  /* decrypt: a bank file's refusal and notes */
+  add(SLOT_FILE_WORDS.wrongSize(100));
+  add(SLOT_FILE_WORDS.erasedBank(65536));
+  add(SLOT_FILE_WORDS.erasedHeader());
+  add(SLOT_FILE_WORDS.noHeader(0x12345678));
+  add(SLOT_FILE_WORDS.lengthOutOfRange(0x123));
+  add(SLOT_FILE_WORDS.ffKeyB(51848));
+  add(SLOT_FILE_WORDS.notRecovered('UNVERIFIED'));
+  add(SLOT_FILE_WORDS.storedPlain());
+  add(SLOT_FILE_WORDS.decrypted(51848, 'VERIFIED(family)', 0, null));
+  add(SLOT_FILE_WORDS.decrypted(51848, 'VERIFIED(structural)', 0x1234abcd, 'Key A'));
 
   const all: CoreMessage[] = [];
   out.forEach((message) => {

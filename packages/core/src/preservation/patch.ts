@@ -56,8 +56,24 @@
  */
 
 import { bytesToHex, findAll, hexToBytes, hexUp, viewOf } from '../bytes.js';
+import { coreMessage, type CoreMessage } from '../message.js';
 import { SeekError } from '../errors.js';
 import { parseImageHeader } from '../image/header.js';
+
+/* ---- the route note, as a message for the page ------------------------------------------------ */
+
+/** Why a build's patch is written into recovery R only (its `routeNote`). */
+export const RECOVERY_ONLY_ROUTE_NOTE =
+  'the 2014 bootloader does not take this build’s check sum in slot A or B, and starts ' +
+  'recovery R (0x14070000) without checking it, so the patch is written into recovery R and ' +
+  'nowhere else';
+
+/** A build's route note as a message (the one note the build table carries); another note as it is. */
+export function routeNoteMessage(note: string): CoreMessage | string {
+  return note === RECOVERY_ONLY_ROUTE_NOTE
+    ? coreMessage('preserve.routeNote.recoveryOnly', {}, RECOVERY_ONLY_ROUTE_NOTE)
+    : note;
+}
 
 /** The R16 xorshift128 generator, seeded [k1,k2,k3,k0], no whitening — the
  *  2016-donor at-rest form (`build_v1_patch.py keystream`). Only needed where
@@ -1052,10 +1068,7 @@ const COMPACT_1308_FF_PROFILE: BuildPatchProfile = {
   restoreForm: 'none',
   acceptanceSum: 0xffff,
   route: 'recovery-only',
-  routeNote:
-    'the 2014 bootloader does not take this build’s check sum in slot A or B, and starts ' +
-    'recovery R (0x14070000) without checking it, so the patch is written into recovery R and ' +
-    'nowhere else',
+  routeNote: RECOVERY_ONLY_ROUTE_NOTE,
   capability: {
     wholePart: true,
     losslessReadUnit: 64,

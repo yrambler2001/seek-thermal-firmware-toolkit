@@ -26,7 +26,14 @@
 import { hexToBytes, hexUp, sha256hex, viewOf } from '../bytes.js';
 import { SeekError } from '../errors.js';
 import { decryptImage } from '../crypto/cipher.js';
-import { keyCheckText, keyConfidencePhrase } from '../crypto/confidence-words.js';
+import {
+  keyCheckMessage,
+  keyCheckText,
+  keyConfidenceMessage,
+  keyConfidencePhrase,
+} from '../crypto/confidence-words.js';
+import { coreMessage, type CoreMessage } from '../message.js';
+import { keyNameParam } from './write-keys-words.js';
 import { identifyKey, resolveWhitening, type KeyPair } from '../crypto/keys.js';
 import { CANDIDATE_K, recoverKeyInfo, slotChainOf, type KeyConfidence } from '../crypto/recover.js';
 import type { Xorshift128State } from '../crypto/xorshift128.js';
@@ -108,7 +115,80 @@ export interface SlotFileDecryption {
   readonly plainSha256: string | null;
   /** What happened, in the order it happened, in plain words. */
   readonly notes: readonly string[];
+  /** `notes` as messages, for the page. */
+  readonly noteMessages?: readonly CoreMessage[];
 }
+
+/** What `decryptSlotFile` says, as messages: its refusal and its notes (`notes` are their text). */
+export const SLOT_FILE_WORDS = {
+  wrongSize: (size: number): CoreMessage =>
+    coreMessage(
+      'decryptFile.wrongSize',
+      { size: String(SLOT_BYTES), kib: '64 KiB', count: String(size) },
+      `a firmware bank is ${String(SLOT_BYTES)} B (64 KiB); this file is ${String(size)} B`,
+    ),
+  erasedBank: (size: number): CoreMessage =>
+    coreMessage(
+      'decryptFile.erasedBank',
+      { size: String(size) },
+      `empty, nothing to decrypt: all ${String(size)} B read as 0xFF (an erased bank)`,
+    ),
+  erasedHeader: (): CoreMessage =>
+    coreMessage(
+      'decryptFile.erasedHeader',
+      {},
+      'erased: the header window is all 0xFF, so the bank holds no image; nothing is decrypted',
+    ),
+  noHeader: (magic: number): CoreMessage =>
+    coreMessage(
+      'decryptFile.noHeader',
+      { magic: hexUp(magic) },
+      `no image header (magic ${hexUp(magic)}), so there is no image to decrypt`,
+    ),
+  lengthOutOfRange: (length: number): CoreMessage =>
+    coreMessage(
+      'decryptFile.lengthOutOfRange',
+      { length: hexUp(length) },
+      `header.length ${hexUp(length)} is out of range; no image to decrypt`,
+    ),
+  ffKeyB: (size: number): CoreMessage =>
+    coreMessage(
+      'decryptFile.ffKeyB',
+      { size: String(size) },
+      `decrypted ${String(size)} B under FF 1.3.0.8 Key B: the image is stored as the ` +
+        'image XOR its key block 1 keystream, header window verbatim',
+    ),
+  notRecovered: (confidence: KeyConfidence): CoreMessage =>
+    coreMessage(
+      'decryptFile.notRecovered',
+      { check: keyConfidenceMessage(confidence) },
+      'key not recovered: the image decrypts to a reset vector that is not a Cortex-M entry ' +
+        `(key ${keyConfidencePhrase(confidence)}); nothing is decrypted`,
+    ),
+  storedPlain: (): CoreMessage =>
+    coreMessage(
+      'decryptFile.storedPlain',
+      {},
+      'stored plain: the bank holds the image as it runs (the 2014 plaintext chain, an identity ' +
+        'keystream), so there is no key and the decrypted image is the image itself',
+    ),
+  decrypted: (
+    size: number,
+    confidence: KeyConfidence,
+    checksum: number,
+    named: string | null,
+  ): CoreMessage => {
+    const text =
+      `decrypted ${String(size)} B under the key recovered from this bank ` +
+      `(${keyCheckText(confidence, checksum)}` +
+      (named === null ? '' : `; it is ${named}`) +
+      ')';
+    const params = { size: String(size), check: keyCheckMessage(confidence, checksum) };
+    return named === null
+      ? coreMessage('decryptFile.decrypted', params, text)
+      : coreMessage('decryptFile.decryptedNamed', { ...params, key: keyNameParam(named) }, text);
+  },
+};
 
 export interface DecryptSlotFileOptions {
   /**
@@ -153,16 +233,21 @@ export async function decryptSlotFile(
   options: DecryptSlotFileOptions = {},
 ): Promise<SlotFileDecryption> {
   if (bytes.length !== SLOT_BYTES) {
-    throw new SeekError(
-      'slots/refused',
-      `a firmware bank is ${String(SLOT_BYTES)} B (64 KiB); this file is ${String(bytes.length)} B`,
-      { detail: { size: bytes.length } },
-    );
+    const refusal = SLOT_FILE_WORDS.wrongSize(bytes.length);
+    throw new SeekError('slots/refused', refusal.text, {
+      detail: { size: bytes.length },
+      coreMessage: refusal,
+    });
   }
   const sha256 = await sha256hex(bytes);
   const detected = options.profile === undefined;
   const profile = options.profile ?? detectProfile(evidenceFromDump(bytes)).best.profile;
   const notes: string[] = [];
+  const noteMessages: CoreMessage[] = [];
+  const note = (message: CoreMessage): void => {
+    notes.push(message.text);
+    noteMessages.push(message);
+  };
 
   const finish = async (
     status: SlotFileStatus,
@@ -179,12 +264,11 @@ export async function decryptSlotFile(
     plain,
     plainSha256: plain === null ? null : await sha256hex(plain),
     notes,
+    noteMessages,
   });
 
   if (bytes.every((byte) => byte === 0xff)) {
-    notes.push(
-      `empty, nothing to decrypt: all ${String(bytes.length)} B read as 0xFF (an erased bank)`,
-    );
+    note(SLOT_FILE_WORDS.erasedBank(bytes.length));
     return finish('empty', null, null, null);
   }
 
@@ -192,20 +276,16 @@ export async function decryptSlotFile(
   const header = parseImageHeader(bytes);
   if (header?.magic !== IMAGE_MAGIC) {
     if (headWindow.every((byte) => byte === 0xff)) {
-      notes.push(
-        'erased: the header window is all 0xFF, so the bank holds no image; nothing is decrypted',
-      );
+      note(SLOT_FILE_WORDS.erasedHeader());
     } else {
-      notes.push(
-        `no image header (magic ${hexUp(header?.magic ?? 0)}), so there is no image to decrypt`,
-      );
+      note(SLOT_FILE_WORDS.noHeader(header?.magic ?? 0));
     }
     return finish('no-image', null, null, null);
   }
 
   const length = header.length;
   if (length < HEADER_OFFSET || length >= TRY_KEYS_MAX_LEN || (length & 3) !== 0) {
-    notes.push(`header.length ${hexUp(length)} is out of range; no image to decrypt`);
+    note(SLOT_FILE_WORDS.lengthOutOfRange(length));
     return finish('bad-header', headerOf(header), null, null);
   }
 
@@ -213,10 +293,7 @@ export async function decryptSlotFile(
    * decoded, not solved. */
   const keyBPlain = ffKeyBPlainOf(bytes);
   if (keyBPlain !== null) {
-    notes.push(
-      `decrypted ${String(keyBPlain.length)} B under FF 1.3.0.8 Key B: the image is stored as the ` +
-        'image XOR its key block 1 keystream, header window verbatim',
-    );
+    note(SLOT_FILE_WORDS.ffKeyB(keyBPlain.length));
     return finish(
       'decrypted',
       headerOf(header),
@@ -241,20 +318,14 @@ export async function decryptSlotFile(
   const candidateKs = [own, ...CANDIDATE_K.filter((k) => k >>> 0 !== own)];
   const recovered = recoverKeyInfo(view, 0, length, cipher, candidateKs);
   if (!recovered.sane) {
-    notes.push(
-      'key not recovered: the image decrypts to a reset vector that is not a Cortex-M entry ' +
-        `(key ${keyConfidencePhrase(recovered.confidence)}); nothing is decrypted`,
-    );
+    note(SLOT_FILE_WORDS.notRecovered(recovered.confidence));
     return finish('not-decrypted', headerOf(header), null, null);
   }
 
   const plain = decryptImage(view, 0, length, recovered.state, cipher);
 
   if (slotChainOf(recovered.state) === 'plain') {
-    notes.push(
-      'stored plain: the bank holds the image as it runs (the 2014 plaintext chain, an identity ' +
-        'keystream), so there is no key and the decrypted image is the image itself',
-    );
+    note(SLOT_FILE_WORDS.storedPlain());
     return finish(
       'decrypted',
       headerOf(header),
@@ -275,12 +346,7 @@ export async function decryptSlotFile(
 
   const whitening = resolveWhitening(plain, recovered.state, candidateKs);
   const named = applicationKeyName(recovered.state, recovered.matchesFamily, whitening.whiteningK);
-  notes.push(
-    `decrypted ${String(plain.length)} B under the key recovered from this bank ` +
-      `(${keyCheckText(recovered.confidence, recovered.checksum)}` +
-      (named === null ? '' : `; it is ${named}`) +
-      ')',
-  );
+  note(SLOT_FILE_WORDS.decrypted(plain.length, recovered.confidence, recovered.checksum, named));
   return finish(
     'decrypted',
     headerOf(header),

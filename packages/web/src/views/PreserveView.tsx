@@ -60,6 +60,7 @@ import {
   stagedFormMessage,
   restoreFormMessage,
   drainCapabilityMessage,
+  routeNoteMessage,
 } from '@seek-fw/core';
 import { coreText, recordedText } from '@/lib/core-text';
 import { rich, t } from '@/i18n';
@@ -898,9 +899,8 @@ function PlanFromState({ state }: { readonly state: PreserveRunState }): ReactEl
                   coreText(stagedFormMessage(state.stagedForm)),
                 ] as const,
               ]),
-          /* i18n: core message (the build's route note, from core's build table) */
           ...(state.route === 'recovery-only' && state.routeNote != null
-            ? ([[t('preserve:plan.route'), state.routeNote]] as const)
+            ? ([[t('preserve:plan.route'), coreText(routeNoteMessage(state.routeNote))]] as const)
             : []),
           ...(state.restoreForm === undefined
             ? []

@@ -154,6 +154,7 @@ import {
   type RestoreFormId,
   type StagedFormId,
   type V1Patch,
+  routeNoteMessage,
 } from './patch.js';
 import { FPS_MEASURED_HZ, identifyFpsImage } from './fps-patch.js';
 import { solvePlainFromCapture } from './solve.js';
@@ -1634,6 +1635,13 @@ function logDerived(reporter: Reporter, bank: BankKey, derived: Derived): void {
 /** Another bank's two reads and derivation: never refuses the backup. */
 /** The reasons the backup records for a bank the run cannot write, as messages (`refused` is the text). */
 export const PRESERVE_BANK_REFUSAL = {
+  /** The build's patch boots from recovery R only (`note` is its route note). */
+  recoveryOnly: (note: string): CoreMessage =>
+    coreMessage(
+      'preserve.refused.recoveryOnly',
+      { note: routeNoteMessage(note) },
+      `this build runs only from recovery R: ${note}`,
+    ),
   secondRead: (error: unknown): CoreMessage => {
     const why = error instanceof Error ? error.message : String(error);
     return coreMessage(
@@ -1955,7 +1963,8 @@ async function runBackupStep(
       refused = refusedMessage.text;
     }
     if (refused === null && anchorPatch.route === 'recovery-only' && key !== 'r') {
-      refused = `this build runs only from recovery R: ${anchorPatch.routeNote ?? ''}`;
+      refusedMessage = PRESERVE_BANK_REFUSAL.recoveryOnly(anchorPatch.routeNote ?? '');
+      refused = refusedMessage.text;
     }
     if (
       refused === null &&

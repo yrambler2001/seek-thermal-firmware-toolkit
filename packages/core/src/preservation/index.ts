@@ -37,6 +37,8 @@ export {
   KNOWN_DERIVATIONS,
   V1_2014_PATCH_SITES,
   V1_PAYLOAD_VMA_BASE,
+  RECOVERY_ONLY_ROUTE_NOTE,
+  routeNoteMessage,
 } from './patch.js';
 export type {
   BuildPatchProfile,

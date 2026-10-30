@@ -32,6 +32,7 @@ export {
 export { dumpSlot, safeVersion, slotDumpNames, type SlotDumpNames } from './dump.js';
 export {
   decryptSlotFile,
+  SLOT_FILE_WORDS,
   slotFileReport,
   type DecryptSlotFileOptions,
   type SlotFileDecryption,

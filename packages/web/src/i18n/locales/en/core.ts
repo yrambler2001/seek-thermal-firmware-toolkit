@@ -23,24 +23,25 @@
  *     `{untested}`, `{outcome}`, `{failure}`, `{answers}`, `{predicted}`,
  *     `{plain}`, `{ff}`, `{reference}`, `{recovered}`, `{check}`, `{phrase}`,
  *     `{staged}`, `{source}`, `{operation}`, `{error}`, `{label}`, `{writable}`,
- *     `{next}`, `{form}`, `{notes}`. Each is another key of
+ *     `{next}`, `{form}`, `{notes}`, `{remedy}`, `{capability}`, `{pair}`
+ *     (report.checkKey.pair, or nothing), and `{note}` in
+ *     preserve.refused.recoveryOnly. Each is another key of
  *     this namespace (the comment above a key says which), already in your
  *     language. A `{why}` that starts a sentence arrives with a capital letter.
  *   - a list: `{banks}`, `{reasons}` (joined with your common:list.* words, or
  *     "; " where the English uses a semicolon).
  * - Params that stay AS THEY ARE: hex values and offsets (`{word}`, `{offset}`,
- *   `{sum}`, `{hex}`, `{address}`, `{status}`, `{magic}`, `{length}`, `{k}`),
- *   byte counts (`{size}`, `{count}`), firmware versions (`{version}`,
- *   `{image}`, `{camera}`, `{firmware}`, `{builds}`, `{only}`), file names
- *   (`{file}`), a SHA-256 (`{sha256}`) and family names (`{family}`,
- *   `{detected}`).
+ *   `{sum}`, `{hex}`, `{address}`, `{at}`, `{status}`, `{magic}`, `{length}`,
+ *   `{k}`), byte counts (`{size}`, `{count}`, `{kib}`), mode numbers (`{mode}`),
+ *   a score (`{score}`), firmware versions (`{version}`, `{image}`, `{camera}`,
+ *   `{firmware}`, `{builds}`, `{only}`, and `{first}` in support.*), file
+ *   names (`{file}`), a SHA-256 (`{sha256}`), a selector table's name
+ *   (`{table}`) and family names (`{family}`, `{detected}`).
  * - Still English inside a translated sentence (core gives them no code yet):
- *   `{reason}` in fpsBoot.cannotPatch (the patch table's reason); a `{reason}`
- *   from the build's support table or the read that names a version or an
- *   address (the constant ones are support.*); `{why}` in
- *   keys.evidence.checkKeyUnnamedWhy; `{note}` in identity.versionUnknown;
- *   `{reasons}` in writeRefusal.otherFamily (the detection's evidence); `{error}`
- *   when the error has no code.
+ *   `{reason}` in fpsBoot.cannotPatch (the patch table's reason); `{note}` in
+ *   identity.versionUnknown; `{reasons}` in writeRefusal.otherFamily (the
+ *   detection's evidence); `{error}` when the error has no code, and a read
+ *   reason (read.reason.*'s place) that came from such an error.
  * - Capitals: keep the English's. A template that starts lower case is said
  *   inside another sentence or after a label ("Note: …", a list item, "Not
  *   read: …"); one that starts upper case stands alone.
@@ -769,6 +770,30 @@ export default {
   /** `{size}` is a byte count, `{bankSize}` the bank's size in hex. */
   'slots.refused.rawTooLong': '{size} B is longer than the {name} bank ({bankSize} B)',
   'slots.refused.imageTooLong': 'image is {size} B, longer than the {name} bank ({bankSize} B)',
+  /* ---- the Preserve tab: a build that runs from recovery R only (preservation/patch, steps) ---- */
+  'preserve.routeNote.recoveryOnly':
+    'the 2014 bootloader does not take this build’s check sum in slot A or B, and starts recovery R (0x14070000) without checking it, so the patch is written into recovery R and nowhere else',
+  /** `{note}` is preserve.routeNote.*. */
+  'preserve.refused.recoveryOnly': 'this build runs only from recovery R: {note}',
+  /* ---- the Decrypt tab: one bank file (slots/decrypt-file) ---- */
+  /** `{size}` and `{count}` are byte counts ("B" is bytes); `{kib}` is the bank's size as "64 KiB". */
+  'decryptFile.wrongSize': 'a firmware bank is {size} B ({kib}); this file is {count} B',
+  'decryptFile.erasedBank': 'empty, nothing to decrypt: all {size} B read as 0xFF (an erased bank)',
+  'decryptFile.erasedHeader':
+    'erased: the header window is all 0xFF, so the bank holds no image; nothing is decrypted',
+  'decryptFile.noHeader': 'no image header (magic {magic}), so there is no image to decrypt',
+  'decryptFile.lengthOutOfRange': 'header.length {length} is out of range; no image to decrypt',
+  'decryptFile.ffKeyB':
+    'decrypted {size} B under FF 1.3.0.8 Key B: the image is stored as the image XOR its key block 1 keystream, header window verbatim',
+  /** `{check}` is how sure the key is (keys.confidence.*). */
+  'decryptFile.notRecovered':
+    'key not recovered: the image decrypts to a reset vector that is not a Cortex-M entry (key {check}); nothing is decrypted',
+  'decryptFile.storedPlain':
+    'stored plain: the bank holds the image as it runs (the 2014 plaintext chain, an identity keystream), so there is no key and the decrypted image is the image itself',
+  /** `{check}` is the key's check (keys.check.*); `{key}` a key name. */
+  'decryptFile.decrypted': 'decrypted {size} B under the key recovered from this bank ({check})',
+  'decryptFile.decryptedNamed':
+    'decrypted {size} B under the key recovered from this bank ({check}; it is {key})',
   /* ---- the read: why a bank holds no image or was not read (workflows/device-info) ---- */
   /** `{size}` and `{count}` are byte counts ("B" is bytes). */
   'read.reason.shortRead': 'short read ({size} B)',

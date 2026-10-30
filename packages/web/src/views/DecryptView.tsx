@@ -14,6 +14,7 @@
 import type { ReactElement } from 'react';
 import { CircleStop, FileKey2, FileSearch, Download } from 'lucide-react';
 import type { SlotFileDecryption } from '@seek-fw/core';
+import { coreText, coreTexts } from '@/lib/core-text';
 import { DetectionBox } from '@/components/DetectionBox';
 import { FilePickerButton } from '@/components/FilePickerButton';
 import { KeyValue, type KeyValueRow } from '@/components/KeyValue';
@@ -111,8 +112,7 @@ function SlotResult({ slotFile }: { readonly slotFile: SlotFileApi }): ReactElem
         <p>
           <strong>{t('decrypt:slot.notDecrypted', { file: file.name })}</strong>
         </p>
-        {/* i18n: core message */}
-        <p>{refusal}</p>
+        <p>{coreText(refusal)}</p>
         <p>{t('decrypt:slot.nothingWritten')}</p>
       </Alert>
     );
@@ -125,8 +125,7 @@ function SlotResult({ slotFile }: { readonly slotFile: SlotFileApi }): ReactElem
         <p>
           <strong>{t('decrypt:slot.notDecrypted', { file: file.name })}</strong>
         </p>
-        {/* i18n: core message */}
-        <p>{result.notes.join(' ')}</p>
+        <p>{coreTexts(result.noteMessages, result.notes).join(' ')}</p>
         <p>{t('decrypt:slot.nothingWritten')}</p>
       </Alert>
     );
@@ -137,8 +136,7 @@ function SlotResult({ slotFile }: { readonly slotFile: SlotFileApi }): ReactElem
         <p>
           <strong>{t('decrypt:slot.erased', { file: file.name })}</strong>
         </p>
-        {/* i18n: core message */}
-        <p>{result.notes.join(' ')}</p>
+        <p>{coreTexts(result.noteMessages, result.notes).join(' ')}</p>
       </Alert>
     );
   }
@@ -168,8 +166,7 @@ function SlotResult({ slotFile }: { readonly slotFile: SlotFileApi }): ReactElem
       {result.notes.length > 0 && (
         <Prose className="mt-3">
           <ul>
-            {/* i18n: core message */}
-            {result.notes.map((note) => (
+            {coreTexts(result.noteMessages, result.notes).map((note) => (
               <li key={note}>{note}</li>
             ))}
           </ul>
