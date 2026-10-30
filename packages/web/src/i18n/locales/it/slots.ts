@@ -125,7 +125,7 @@ export default {
   'gate.busy': 'È in corso un’altra operazione: aspetta che finisca.',
   'gate.readFirst': 'Prima leggi gli slot.',
   'gate.cameraRefused':
-    'Questa termocamera non può essere scritta da qui, per il motivo indicato nel riquadro qui sopra. Non viene inviato nulla.',
+    'Su questa termocamera non si può scrivere da qui, per il motivo indicato nel riquadro qui sopra. Non viene inviato nulla.',
   /* {reason} is core's reason the bank was not read. */
   'gate.notRead': 'Non letto: {reason}. Leggi di nuovo gli slot prima di scriverlo.',
   'gate.notReadNoReason':
@@ -336,10 +336,10 @@ export default {
     other: 'Applicare la patch della frequenza dei fotogrammi a {count} slot?',
   },
   'fpsEvery.intro': {
-    one: 'Questa operazione applica la patch a {count} slot che la offre, con il firmware {version}:',
-    many: 'Questa operazione applica la patch a {count} di slot che la offrono, con il firmware {version}:',
+    one: 'Questa operazione applica la patch a {count} slot per cui è disponibile, con il firmware {version}:',
+    many: 'Questa operazione applica la patch a {count} di slot per cui è disponibile, con il firmware {version}:',
     other:
-      'Questa operazione applica la patch a {count} slot che la offrono, con il firmware {version}:',
+      'Questa operazione applica la patch a {count} slot per cui è disponibile, con il firmware {version}:',
   },
   /* A bank's name and, when writing it asks for the tick, what it is. */
   'fpsEvery.role.bootedRecovery':
@@ -477,7 +477,7 @@ export default {
   'how.copy':
     '**{copyA}**, **{copyB}** e **{copyR}** sulla riga di uno slot scrivono il firmware contenuto in quello slot, come l’ha decifrato questa lettura, nell’altro slot, qualunque cosa contenga ora. L’immagine viene trasferita come qualsiasi immagine decifrata, quindi il piano e la conferma sono gli stessi di un file. **Ripristina da backup completo della flash** prende un .bin (un’intera immagine della flash da 4 MB, come una lettura J-Link) o un .zip che ne contenga uno (un file di esecuzione di Preserve, oppure lo zip salvato da Estrai e decifra 4.x/Nano o da Estrai tutti i selettori), ne ritaglia questo slot, lo decifra e mostra il piano; se il backup sembra di un’altra termocamera o di un altro firmware, il piano lo dice. Uno slot vuoto nel backup, o che il dump non ha letto, non può essere ripristinato con una scrittura, e la pagina lo dice.',
   'how.fps':
-    '**Passa a N FPS** sulla riga di uno slot modifica l’immagine di quello slot portandola a una frequenza dei fotogrammi più alta, e **Passa a N FPS in ogni slot** fa lo stesso su ogni slot che lo offre, con una sola conferma, per ultimo lo slot da cui la termocamera si avvia ora. Uno slot a cui non si può offrire dice perché.',
+    '**Passa a N FPS** sulla riga di uno slot modifica l’immagine di quello slot portandola a una frequenza dei fotogrammi più alta, e **Passa a N FPS in ogni slot** fa lo stesso su ogni slot per cui è disponibile, con una sola conferma, per ultimo lo slot da cui la termocamera si avvia ora. Se per uno slot la patch non si può proporre, la pagina dice perché.',
   /* {example} is a file name; keep it as it is. */
   'how.backup':
     '**Ogni scrittura salva prima il suo slot**: lo slot viene letto di nuovo e salvato in un unico zip scaricato, con un nome che contiene l’ora, il numero di serie della termocamera, il firmware, lo slot e la scrittura (per esempio `{example}`), e che contiene lo slot così come è conservato, la sua immagine decifrata e una nota su cosa sia ciascun file. La scrittura attende che il download sia iniziato. Il browser non avvisa quando un download arriva sul disco, quindi controlla la cartella dei download. Per tornare indietro, scrivi il file decifrato dello zip con **Scrivi immagine decifrata**.',

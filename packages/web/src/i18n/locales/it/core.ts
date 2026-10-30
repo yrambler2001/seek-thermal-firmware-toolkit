@@ -158,7 +158,7 @@ export default {
 
   /* ---- restore: a bank restored from a full flash backup (slots/restore) ---- */
   /** "the backup's slot A (at 0x14010000)", said inside restore.* sentences as `{where}`. */
-  'restore.where': '{name:acc} del backup (all’indirizzo {address})',
+  'restore.where': '{name:acc} (all’indirizzo {address})',
   /** The preview's Source row. `{file}`: the backup's file name. */
   'restore.from': '{where} nel backup completo della flash {file}',
   'restore.fromVersion': '{where} nel backup completo della flash {file}, firmware {version}',
@@ -189,7 +189,7 @@ export default {
   'restore.warn.serialNotRead':
     'Il numero di serie della termocamera non è stato letto, quindi il backup (numero di serie {serial}) non può essere confrontato con essa.',
   'restore.warn.otherFirmware':
-    '{where}: contiene il firmware {version}, e la termocamera esegue {camera}; il ripristino mette un altro firmware nello slot.',
+    'Nel backup, {where} contiene il firmware {version}, e la termocamera esegue {camera}: il ripristino mette un altro firmware nello slot.',
 
   /* ---- restore: a restored bank read back (slots/restore) ---- */
   'restore.readBack.notCompared':
@@ -271,7 +271,7 @@ export default {
   'report.nextStart.unknown': 'non noto — {why}',
   'report.nextStart.runs': '{bank} — {why}',
   'upgrade.targetBooted':
-    '{name:ins} è sia lo slot da cui la termocamera si è avviata sia lo slot che scrive il suo stesso aggiornamento. Un aggiornamento eseguito da questa termocamera sovrascriverebbe l’immagine che sta eseguendo. È solo un avviso: niente qui impedisce un aggiornamento.',
+    '{name:ins} è sia lo slot da cui la termocamera si è avviata sia lo slot in cui scrive il suo stesso aggiornamento. Un aggiornamento eseguito da questa termocamera sovrascriverebbe l’immagine che sta eseguendo. È solo un avviso: niente qui impedisce un aggiornamento.',
   /** `{verdict}` is one of upgrade.verdict.*. `{name}` here is the bank inside a sentence ("slot B"); in upgrade.targetBooted and upgrade.verdict.* it starts a sentence ("Slot B"). */
   'upgrade.whileRecovery':
     'La termocamera sta eseguendo il suo slot di recupero, e il suo stesso aggiornamento scrive {name:loc}, che non sta eseguendo. {verdict} È solo un avviso: niente qui impedisce un aggiornamento.',
@@ -544,7 +544,7 @@ export default {
   'writeRefusal.otherFamily':
     'gli indizi dicono che questa termocamera è {detected}, non {family} ({reasons})',
   /** `{reasons}`: writeRefusal.* joined with common:list.semicolon. */
-  'writeRefusal.camera': 'questa termocamera non può essere scritta da qui: {reasons}',
+  'writeRefusal.camera': 'su questa termocamera non si può scrivere da qui: {reasons}',
 
   /* ---- family: what each camera family is (profiles/*: `summary`), the decrypt tab's Summary row ---- */
   /** "Work with firmware slots", "Info", "4.x/Nano", "Dump", "Dump all selectors": the page's own tab and button names; `seek-fw dump` stays English. `{block}` is an address. */

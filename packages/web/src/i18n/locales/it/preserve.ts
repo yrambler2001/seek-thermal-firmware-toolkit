@@ -102,7 +102,7 @@ export default {
   'badge.plannedStop': 'Fermato come previsto: ora il ripristino',
   'badge.failed': 'Fermato: vedi il registro',
   /** A badge on the step that runs next. */
-  'badge.upNext': 'Il prossimo',
+  'badge.upNext': 'Prossimo',
   /* Why the start button is off. */
   'notReady.noRun': 'Disponibile dopo il passaggio 02, che avvia l’esecuzione.',
   /* {step} is the earlier step's number ("02"), {phase} its name (phase.*.label). */

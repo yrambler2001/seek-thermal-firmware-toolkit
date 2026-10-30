@@ -45,7 +45,7 @@ export default {
   'dump.how':
     'Entrambi chiedono prima alla termocamera quale firmware esegue: la versione, con `{getInfo}` (l’unica lettura a cui ogni build Seek risponde allo stesso modo) e, solo se quella build si può leggere tramite USB, un `{begin}` semplice, uno con token e una sola lettura. È così che la pagina capisce di quale famiglia è la termocamera. Questa scheda legge solo la famiglia 4.x e Nano. Una termocamera che secondo le risposte appartiene a un’altra famiglia viene rifiutata prima di leggere qualsiasi cosa, e la pagina indica la scheda giusta. Una termocamera che non comunica la versione, o che esegue una build precedente a 0.8.0.0, non viene letta affatto, e la pagina dice perché.',
   'dump.modes':
-    '**Avvia il dump** legge ogni blocco che raggiunge la tabella dei selettori della build stessa. **Estrai tutti i selettori**, in *Opzioni* qui sotto, prova ogni selettore `{begin}` da `{first}` a `{last}` e salva ciò che restituisce ciascuno: è più lento, ma cattura anche i blocchi che la mappa curata salta.',
+    '**Avvia il dump** legge ogni blocco raggiunto dalla tabella dei selettori della build stessa. **Estrai tutti i selettori**, in *Opzioni* qui sotto, prova ogni selettore `{begin}` da `{first}` a `{last}` e salva ciò che restituisce ciascuno: è più lento, ma cattura anche i blocchi che la mappa curata salta.',
   'dump.sweep': 'Estrai tutti i selettori ({first}–{last})',
   'dump.sweepNote':
     'Prova ogni selettore e salva ciò che restituisce ciascuno. Più lento di Avvia il dump.',

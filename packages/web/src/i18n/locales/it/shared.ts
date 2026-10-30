@@ -33,7 +33,7 @@ export default {
 
   /* lib/camera-lock: another tab holds the camera. */
   'cameraLock.inUseElsewhere':
-    'La termocamera è in uso in un’altra scheda o finestra: prima termina o chiudi lì.',
+    'La termocamera è in uso in un’altra scheda o finestra: prima termina lì o chiudila.',
 
   /* lib/backup-save: shown after core's plan sentence on a write's confirmation. */
   'backup.downloadNote':
@@ -57,7 +57,7 @@ export default {
   'hint.windows':
     'Windows ha bisogno del driver WinUSB associato alla termocamera prima che un browser possa raggiungerla. Usa Zadig (https://zadig.akeo.ie/): Options → List All Devices, scegli la voce che porta il nome della tua termocamera, per esempio «CompactPRO FF», scegli WinUSB e fai clic su Replace Driver.',
   'hint.holding':
-    'Un altro programma o un driver di sistema sta tenendo occupata la termocamera: un solo processo alla volta può tenere l’interfaccia USB. Chiudi qualsiasi altro programma che comunichi con lei, poi scollega e ricollega la termocamera.',
+    'Un altro programma o un driver di sistema sta tenendo occupata la termocamera: un solo processo alla volta può tenere l’interfaccia USB. Chiudi qualsiasi altro programma che la stia usando, poi scollega e ricollega la termocamera.',
   'hint.recipientFallback':
     'Oppure imposta recipient su «device» nelle opzioni di lettura: così non serve acquisire l’interfaccia.',
   /* "Options" is the 4.x/Nano tab's fold-out (v4:options.title): use the same word as there. */
@@ -113,7 +113,7 @@ export default {
   /** Row label: the second key ("Key B"), as core names it (core:keyName.keyB). */
   'deviceInfo.keyB': 'Chiave B',
   'deviceInfo.keysConfirmed':
-    'Confermata confrontandola con lo stato del flusso di chiave di uno slot, ricavato dal testo cifrato stesso. Un caricamento viene preparato in modo che ogni slot lo conservi con la chiave di archiviazione del bootloader ({storeKey}), oppure con la chiave propria dello slot avviato dove la chiave di archiviazione dell’applicazione non è quella.',
+    'Confermate confrontandole con lo stato del flusso di chiave di uno slot, ricavato dal testo cifrato stesso. Un caricamento viene preparato in modo che ogni slot lo conservi con la chiave di archiviazione del bootloader ({storeKey}), oppure con la chiave propria dello slot avviato dove la chiave di archiviazione dell’applicazione non è quella.',
   'deviceInfo.keysDecrypted':
     'Ogni slot è stato decifrato nel browser ricavando il suo flusso di chiave dai suoi vettori di reset, che si sa essere a zero. Decifrare non equivale ad avviare: il bootloader prova sempre e solo {storeKey:acc} e la chiave A, quindi uno slot scritto con qualsiasi altra chiave ha una somma di controllo perfetta e viene comunque saltato. Non è stato scritto nulla.',
   /* {banks} is one bank name or several joined by common:list.and. */
@@ -124,7 +124,7 @@ export default {
       '**Ognuno di questi slot contiene un’immagine del firmware valida, cifrata con una chiave che il bootloader di questa termocamera non conosce: {banks}.** Le immagini sono integre e le loro somme di controllo sono corrette, ma quando controlla uno slot il bootloader prova solo {storeKey:acc} e la chiave A, quindi li salta e avvia qualcos’altro.',
   },
   'deviceInfo.orphanIsTarget':
-    'È lo slot che scrive un aggiornamento. L’applicazione in esecuzione su questa termocamera cifra di nuovo con quella chiave sconosciuta, quindi **scrivere tramite questa pagina produrrà un altro slot che il bootloader non può avviare**: la termocamera continuerà a eseguire {bank:acc}. Per aggirare il problema, scrivi lo slot direttamente con un programmatore SPI o tramite SWD/J-Link.',
+    'È lo slot in cui scrive un aggiornamento. L’applicazione in esecuzione su questa termocamera cifra di nuovo con quella chiave sconosciuta, quindi **scrivere tramite questa pagina produrrà un altro slot che il bootloader non può avviare**: la termocamera continuerà a eseguire {bank:acc}. Per aggirare il problema, scrivi lo slot direttamente con un programmatore SPI o tramite SWD/J-Link.',
   /** deviceInfo.orphanIsTarget's {bank} when the booted bank has no name. A name: a translation may give
    * it case forms ('deviceInfo.otherBank:gen'), like common:bank.*. */
   'deviceInfo.otherBank': 'l’altro slot',
