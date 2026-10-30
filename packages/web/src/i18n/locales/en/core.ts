@@ -865,6 +865,9 @@ export default {
   /** `{signature}`: what the spent reader served, in English (a description of the bytes). `preserve --resume <run-directory>` stays as it is. */
   'preserve.fail.spentReader':
     'the camera’s window reader is budgeted per boot and these reads came back from a spent reader — power-cycle the camera (unplug and replug it, or use its power switch), then re-run `preserve --resume <run-directory>`. Signature: {signature}',
+  /** preserve.fail.spentReader when no image derives from the bytes: `{reasons}` is why each way failed, in English (the log's words), one per line. */
+  'preserve.fail.spentReaderDerive':
+    'the camera’s window reader is budgeted per boot and these reads came back from a spent reader — power-cycle the camera (unplug and replug it, or use its power switch), then re-run `preserve --resume <run-directory>`. Signature: {signature} — no factory plaintext can be derived from these bytes. Every way to read it was tried:\n  - {reasons}',
   /** `{address}` hex; `{sha256}`, `{other}`: SHA-256 values; `{live}`, `{capture}`: hex bytes. */
   'preserve.fail.notInBackup':
     'the backup does not hold {bank} ({address}) — the stock windows cannot serve it',
@@ -913,6 +916,89 @@ export default {
   /** A step refused: the camera runs another firmware than the run's. */
   'preserve.error.otherVersion':
     "the camera reports firmware {camera}, want {version} — the patch is derived from one build's bytes and must not be sent to another",
+  /* ---- preserve: the line gates, before any window is read (preservation/patch) ---- */
+  'preserve.refused.outsideLine':
+    'firmware {version} is not a 0.x or 1.x build, and this run covers only the 2014 and 2016 builds. Nothing was read beyond the version. Read this camera with Dump & decrypt for 4.x and Nano instead: it reads the flash without a patch, every block but the one at 0x14060000, which no read window reaches on those builds.',
+  'preserve.refused.preWidening':
+    'firmware {version} predates the widening route, and the run refuses rather than write over a bank it cannot read back. On this generation the camera turns away every way of starting the read the route needs (measured on 0.3.0.1), its read command does not reach the start of the flash, and the size the patch would change is stored in a different way. It has no read a standard dump can use either. Nothing was read beyond the version.',
+  /* ---- preserve: a bank whose image the run cannot patch (preservation/banks, steps) ---- */
+  /** `{what}` in preserve.image.unknownWords and .unknownRefusal. */
+  'preserve.image.unknown':
+    'holds an unknown image (not the stock {version} firmware, nor a change to it that Preserve knows), so Preserve does not patch it or put it back',
+  /** `{what}` in preserve.image.frameRateWords and .frameRateRefusal; `{hz}` is a number. */
+  'preserve.image.frameRate':
+    'holds a known frame-rate build: the stock {version} firmware with the {hz} Hz frame-rate patch. Preserve patches only the stock firmware, never a patched image, so it does not patch this bank or put it back',
+  'preserve.image.frameRateEarlier':
+    'holds a known frame-rate build: the stock {version} firmware with an earlier {hz} Hz frame-rate patch (made before the USB fix joined it). Preserve patches only the stock firmware, never a patched image, so it does not patch this bank or put it back',
+  /** A bank's row in the bank table and the choices ("it" is the bank). */
+  'preserve.image.unknownWords':
+    'it {what}. To include this bank, write the stock image back to it first (for example from a full flash backup taken before the change), then start a new run',
+  'preserve.image.frameRateWords':
+    'it {what}. To include this bank, write the stock image back to it first (for example from a full flash backup taken before the frame-rate patch), then start a new run; the frame-rate patch can be made again on the stock image afterwards',
+  /** The run stops: `{name}` is the bank as a label ("Slot A"), `{bank}` in a sentence ("slot A"). */
+  'preserve.image.unknownRefusal':
+    '{name} {what}. The run takes the firmware it patches from this bank, so it stops here, before anything is written. To preserve this camera, write the stock image back to {bank} first (for example from a full flash backup taken before the change), then start a new run.',
+  'preserve.image.frameRateRefusal':
+    '{name} {what}. The run takes the firmware it patches from this bank, so it stops here, before anything is written. To preserve this camera, write the stock image back to {bank} first (for example from a full flash backup taken before the frame-rate patch), then start a new run; the frame-rate patch can be made again on the stock image afterwards.',
+  'preserve.image.otherFirmware': 'it holds firmware {image}, not the {camera} the camera runs',
+  'preserve.image.otherFirmwareRefusal':
+    '{name} holds firmware {image}, not the {camera} the camera runs, so this run has no image it can patch there and refuses rather than write over it.',
+  /** `{error}`: the patch builder's refusal, in English (it has no code). */
+  'preserve.image.noImage': 'no image the run can patch derives from it ({error})',
+  /* ---- preserve: why a step cannot run now (preservation/steps describeStepGate) ---- */
+  /** `{step}`, `{next}`, `{steps}`: the run's step ids (backup, patch, commit, drain, restore, verify), as the CLI names them: keep them. `--resume` and `allowJump` are option names: keep them. */
+  'preserve.gate.runDone': 'this run is done — every step completed (run {run})',
+  /** `{finished}`: a date and time (ISO 8601). */
+  'preserve.gate.stepDone':
+    '{step} is already done in this run (finished {finished}) — resume continues at {next}',
+  'preserve.gate.stepDoneUnknownTime':
+    '{step} is already done in this run (finished at an unknown time) — resume continues at {next}',
+  'preserve.gate.backupRerun':
+    'the backup cannot re-run: this run has already completed {steps} and its next step is {next} — use --resume',
+  /** `{error}`: the failed backup's recorded error, or preserve.gate.noErrorText. */
+  'preserve.gate.powerCycle':
+    'the previous backup attempt failed, and the camera must be POWER-CYCLED before this step runs again — a retry on the same start can read stale or blank bytes (measured: a retried backup read the bootloader’s start-up word in place of the boot-config record). Power-cycle the camera (unplug and replug it, or use its power switch), then run the backup again and confirm the power cycle when asked: the run cannot see it happen. The recorded failure: {error}',
+  'preserve.gate.noErrorText': '(no error text)',
+  'preserve.gate.patchAfterBackup':
+    'patch runs after the backup: the run takes the dump of every region the stock plan can read and persists it BEFORE anything else happens — that backup is the only copy of this camera. Run the backup step first.',
+  'preserve.gate.commitAfterBackup': 'commit runs after the backup (see the patch step)',
+  'preserve.gate.commitAfterPatch':
+    'commit runs after the patch step, which records what it stages',
+  'preserve.gate.commitNeedsPatch':
+    'commit needs the patch of {banks}, and the patch step recorded none — run the patch step again',
+  /** `{files}`: file names, joined with ", ". */
+  'preserve.gate.commitFiles':
+    'commit requires the backup files in the run directory and they are missing: {files} — without them a commit has no restore source, so it refuses',
+  'preserve.gate.drainNoCommit':
+    'drain reads the PATCHED part through the widened window, and this run has no completed commit — the drain would stall on a stock camera. Run (or resume at) the commit first, or jump explicitly (allowJump) if the commit landed without its checkpoint.',
+  /** `{build}`: a build's name, preserve.build.firmware or preserve.gate.detectedBuild. `{note}`: the capability table's note, in English. */
+  'preserve.gate.drainRefused': 'the drain step refuses on {build}: {note}',
+  'preserve.gate.detectedBuild': 'the detected build',
+  /** `{sites}`: hex offsets, joined with ", ". */
+  'preserve.gate.drainHazard':
+    'the drain step refuses on {build}: starting the whole-flash read on this build’s unpatched firmware crashes the camera (it reads from a value that is not a flash address; measured on the emulator: 32 KiB served, then the camera faulted). The change that makes the read safe is at {sites}, and it is not among the changes this run recorded for {bank} — run the patch step (and land the write) before the whole-flash read.',
+  'preserve.gate.drainFiles':
+    'drain needs {files} (the delivered dump is post-processed with each written bank’s capture) and it is not in the run directory',
+  'preserve.gate.restoreNoCommit':
+    'restore puts the original banks back over the patch, and this run has no completed commit — there is nothing it can be reverting. Run (or resume at) the commit first, or jump explicitly (allowJump) to restore an already-patched camera.',
+  'preserve.gate.restoreNeedsPatch':
+    'restore needs each written bank’s patch summary (for the staged length) — run the patch step first',
+  'preserve.gate.restoreNoForm':
+    'the restore step refuses on {build}: no form of the original firmware passes the camera’s own check and also stores back as the original bytes — the original firmware’s check sum is 0xB7AB9D17 (measured), not the 0xFFFF the camera demands. This run ends with the complete image in hand and the patch in place; the original content can only go back with a full-flash programmer.',
+  'preserve.gate.restoreFiles':
+    'restore needs {files} (the original of each written bank, from the backup step) and it is not in the run directory',
+  'preserve.gate.verifyNoRestore':
+    'verify compares a fresh boot against the backup, and this run has no completed restore — a patched bank would show as diffs. Run (or resume at) the restore first, or jump explicitly (allowJump) if the restore landed without its checkpoint.',
+  'preserve.gate.verifyNeedsBackup':
+    "verify needs {file} (the comparison's reference) and it is not in the run directory",
+  'preserve.gate.needsBanks': '{step} needs the banks the backup step read, and the state has none',
+  /** `{what}`: why the run's choice offers no bank (preserve.choice.*). */
+  'preserve.gate.noBanks': 'no banks are chosen for this run: {what}',
+  /** `{why}`: the bank's refusal (preserve.refused.*, preserve.image.*). */
+  'preserve.gate.bankRefused': '{bank} cannot be written: {why}',
+  /** `{note}`: the build's route note (preserve.routeNote.*). */
+  'preserve.gate.recoveryOnly':
+    "this build's patch boots from recovery R only: {note} — the run would write {bank}, where the bootloader never runs it",
   /* ---- support: why a build cannot read or write a bank (slots/capability, profiles) ---- */
   /** A reason the build's support table gives (`{reason}` in slots.refused.*, backup.bank.unsupported, fps.plan.noPlain). `--family` is a CLI option: keep it. */
   'support.noWriteArm': 'this build has no write arm for the bank',

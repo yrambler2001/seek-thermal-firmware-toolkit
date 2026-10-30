@@ -25,6 +25,8 @@ export {
   locateDerivation,
   keystream,
   preWideningRefusal,
+  preWideningRefusalMessage,
+  outsideLineRefusalMessage,
   stagedAcceptanceSum,
   stagedFormOf,
   sum16,
@@ -70,6 +72,7 @@ export {
   preservationWindows,
   spentReaderRefusal,
   spentReaderRefusalMessage,
+  spentReaderDeriveMessage,
   widenedWindow,
 } from './windows.js';
 export type { BankKey } from './windows.js';
@@ -100,8 +103,12 @@ export {
   unknownImageRefusal,
   frameRateImageRefusal,
   frameRateImageWords,
+  frameRateImageWordsMessage,
+  frameRateImageRefusalMessage,
   type FrameRateBuild,
   unknownImageWords,
+  unknownImageWordsMessage,
+  unknownImageRefusalMessage,
   warmBootMarkOf,
 } from './banks.js';
 export type {
@@ -163,6 +170,9 @@ export {
   choosePreserveBanks,
   createPreserveRun,
   describeStepGate,
+  stepGateMessage,
+  PRESERVE_GATE,
+  PRESERVE_DERIVE_WORDS,
   drainLeavesReaderReadable,
   isPreserveStepId,
   nextStepAfter,

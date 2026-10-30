@@ -429,10 +429,37 @@ function frameRateRemedy(bank: string): string {
   );
 }
 
+/** `unknownImageWhat` or `frameRateImageWhat` as a message (`build`: the frame-rate build, if any). */
+function imageWhatMessage(cameraVersion: string, build: FrameRateBuild | null): CoreMessage {
+  if (build === null) {
+    return coreMessage(
+      'preserve.image.unknown',
+      { version: cameraVersion },
+      unknownImageWhat(cameraVersion),
+    );
+  }
+  return coreMessage(
+    build.earlierPatch ? 'preserve.image.frameRateEarlier' : 'preserve.image.frameRate',
+    { version: cameraVersion, hz: build.hz },
+    frameRateImageWhat(cameraVersion, build),
+  );
+}
+
 /** A bank that holds a known frame-rate build, as the bank table and the choices say it. */
 export function frameRateImageWords(cameraVersion: string, build: FrameRateBuild): string {
-  return (
-    `it ${frameRateImageWhat(cameraVersion, build)}. To include this bank, ` + frameRateRemedy('it')
+  return frameRateImageWordsMessage(cameraVersion, build).text;
+}
+
+/** `frameRateImageWords` as a message, for the page. */
+export function frameRateImageWordsMessage(
+  cameraVersion: string,
+  build: FrameRateBuild,
+): CoreMessage {
+  return coreMessage(
+    'preserve.image.frameRateWords',
+    { what: imageWhatMessage(cameraVersion, build) },
+    `it ${frameRateImageWhat(cameraVersion, build)}. To include this bank, ` +
+      frameRateRemedy('it'),
   );
 }
 
@@ -442,11 +469,26 @@ export function frameRateImageRefusal(
   cameraVersion: string,
   build: FrameRateBuild,
 ): string {
+  return frameRateImageRefusalMessage(bank, cameraVersion, build).text;
+}
+
+/** `frameRateImageRefusal` as a message, for the page. */
+export function frameRateImageRefusalMessage(
+  bank: BankKey,
+  cameraVersion: string,
+  build: FrameRateBuild,
+): CoreMessage {
   const words = bankWordsOf(bank);
-  return (
+  return coreMessage(
+    'preserve.image.frameRateRefusal',
+    {
+      name: bankParam(bank, 'name'),
+      what: imageWhatMessage(cameraVersion, build),
+      bank: bankParam(bank),
+    },
     `${words.charAt(0).toUpperCase()}${words.slice(1)} ${frameRateImageWhat(cameraVersion, build)}. ` +
-    'The run takes the firmware it patches from this bank, so it stops here, before anything is ' +
-    `written. To preserve this camera, ${frameRateRemedy(words)}.`
+      'The run takes the firmware it patches from this bank, so it stops here, before anything is ' +
+      `written. To preserve this camera, ${frameRateRemedy(words)}.`,
   );
 }
 
@@ -460,16 +502,36 @@ function unknownImageRemedy(bank: string): string {
 
 /** A bank that holds an unknown image, as the bank table and the choices say it. */
 export function unknownImageWords(cameraVersion: string): string {
-  return `it ${unknownImageWhat(cameraVersion)}. To include this bank, ${unknownImageRemedy('it')}`;
+  return unknownImageWordsMessage(cameraVersion).text;
+}
+
+/** `unknownImageWords` as a message, for the page. */
+export function unknownImageWordsMessage(cameraVersion: string): CoreMessage {
+  return coreMessage(
+    'preserve.image.unknownWords',
+    { what: imageWhatMessage(cameraVersion, null) },
+    `it ${unknownImageWhat(cameraVersion)}. To include this bank, ${unknownImageRemedy('it')}`,
+  );
 }
 
 /** The run's refusal when the bank its build is taken from holds an unknown image: nothing is written. */
 export function unknownImageRefusal(bank: BankKey, cameraVersion: string): string {
+  return unknownImageRefusalMessage(bank, cameraVersion).text;
+}
+
+/** `unknownImageRefusal` as a message, for the page. */
+export function unknownImageRefusalMessage(bank: BankKey, cameraVersion: string): CoreMessage {
   const words = bankWordsOf(bank);
-  return (
+  return coreMessage(
+    'preserve.image.unknownRefusal',
+    {
+      name: bankParam(bank, 'name'),
+      what: imageWhatMessage(cameraVersion, null),
+      bank: bankParam(bank),
+    },
     `${words.charAt(0).toUpperCase()}${words.slice(1)} ${unknownImageWhat(cameraVersion)}. ` +
-    'The run takes the firmware it patches from this bank, so it stops here, before anything is ' +
-    `written. To preserve this camera, ${unknownImageRemedy(words)}.`
+      'The run takes the firmware it patches from this bank, so it stops here, before anything is ' +
+      `written. To preserve this camera, ${unknownImageRemedy(words)}.`,
   );
 }
 

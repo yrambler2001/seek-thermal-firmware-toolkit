@@ -200,6 +200,25 @@ export function spentReaderRefusalMessage(signature: string): CoreMessage {
   return coreMessage('preserve.fail.spentReader', { signature }, spentReaderRefusal(signature));
 }
 
+/**
+ * The spent-reader refusal when no image derives from a bank's bytes: `signature` is the bytes'
+ * signature and `reasons` why each way failed, as the log says them (English).
+ */
+export function spentReaderDeriveMessage(
+  signature: string,
+  reasons: readonly string[],
+): CoreMessage {
+  const tried = reasons.join('\n  - ');
+  return coreMessage(
+    'preserve.fail.spentReaderDerive',
+    { signature, reasons: tried },
+    spentReaderRefusal(
+      `${signature} — no factory plaintext can be derived from these bytes. Every way to read it ` +
+        `was tried:\n  - ${tried}`,
+    ),
+  );
+}
+
 export function spentReaderRefusal(signature: string): string {
   return (
     'the camera’s window reader is budgeted per boot and these reads came back from a spent ' +

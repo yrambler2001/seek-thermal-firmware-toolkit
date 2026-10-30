@@ -1381,15 +1381,23 @@ const NO_MATCH_GUIDANCE =
  * nothing (the caller's own gates decide that).
  */
 export function outsideLineRefusal(version: string | null): string | null {
+  return outsideLineRefusalMessage(version)?.text ?? null;
+}
+
+/** `outsideLineRefusal` as a message, for the page. */
+export function outsideLineRefusalMessage(version: string | null): CoreMessage | null {
   const match = /^\s*(\d+)\./.exec(version ?? '');
   if (match === null) return null;
   const major = Number.parseInt(match[1] ?? '', 10);
   if (major <= 1) return null;
-  return (
-    `firmware ${version ?? ''} is not a 0.x or 1.x build, and this run covers only the 2014 and ` +
-    '2016 builds. Nothing was read beyond the version. Read this camera with Dump & decrypt for ' +
-    '4.x and Nano instead: it reads the flash without a patch, every block but the one at ' +
-    '0x14060000, which no read window reaches on those builds.'
+  const said = version ?? '';
+  return coreMessage(
+    'preserve.refused.outsideLine',
+    { version: said },
+    `firmware ${said} is not a 0.x or 1.x build, and this run covers only the 2014 and ` +
+      '2016 builds. Nothing was read beyond the version. Read this camera with Dump & decrypt for ' +
+      '4.x and Nano instead: it reads the flash without a patch, every block but the one at ' +
+      '0x14060000, which no read window reaches on those builds.',
   );
 }
 
@@ -1403,16 +1411,24 @@ export function outsideLineRefusal(version: string | null): string | null {
  * when `version` is not one of those builds.
  */
 export function preWideningRefusal(version: string | null): string | null {
+  return preWideningRefusalMessage(version)?.text ?? null;
+}
+
+/** `preWideningRefusal` as a message, for the page. */
+export function preWideningRefusalMessage(version: string | null): CoreMessage | null {
   const match = /^\s*0\.(\d+)\./.exec(version ?? '');
   const minor = match === null ? Number.NaN : Number.parseInt(match[1] ?? '', 10);
   if (Number.isNaN(minor) || minor >= 7) return null;
-  return (
-    `firmware ${version ?? '(unreadable)'} predates the widening route, and the run refuses ` +
-    'rather than write over a bank it cannot read back. On this generation the camera turns ' +
-    'away every way of starting the read the route needs (measured on 0.3.0.1), its read ' +
-    'command does not reach the start of the flash, and the size the patch would change is ' +
-    'stored in a different way. It has no read a standard dump can use either. Nothing was ' +
-    'read beyond the version.'
+  const said = version ?? '(unreadable)';
+  return coreMessage(
+    'preserve.refused.preWidening',
+    { version: said },
+    `firmware ${said} predates the widening route, and the run refuses ` +
+      'rather than write over a bank it cannot read back. On this generation the camera turns ' +
+      'away every way of starting the read the route needs (measured on 0.3.0.1), its read ' +
+      'command does not reach the start of the flash, and the size the patch would change is ' +
+      'stored in a different way. It has no read a standard dump can use either. Nothing was ' +
+      'read beyond the version.',
   );
 }
 
@@ -1456,8 +1472,10 @@ export function buildV1Patch(plain: Uint8Array): V1Patch {
   /* No table entry matched. The generation the route explicitly does not
    * reach gets its doc-cited refusal first, then the 2014 chain's own pinned
    * messages, then the guidance. */
-  const tooOld = preWideningRefusal(parseImageHeader(plain)?.versionStr ?? null);
-  if (tooOld !== null) throw new SeekError('pipeline/refused', tooOld);
+  const tooOld = preWideningRefusalMessage(parseImageHeader(plain)?.versionStr ?? null);
+  if (tooOld !== null) {
+    throw new SeekError('pipeline/refused', tooOld.text, { coreMessage: tooOld });
+  }
 
   /* The 2014 chain's own refusals — the pinned, measured messages — then the
    * guidance above. */

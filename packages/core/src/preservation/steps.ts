@@ -104,10 +104,10 @@ import {
   preserveBootFactsOf,
   preserveChoiceOf,
   restoreOrderOf,
-  frameRateImageRefusal,
-  frameRateImageWords,
-  unknownImageRefusal,
-  unknownImageWords,
+  frameRateImageRefusalMessage,
+  frameRateImageWordsMessage,
+  unknownImageRefusalMessage,
+  unknownImageWordsMessage,
   warmBootMarkOf,
   type BankHolds,
   type FrameRateBuild,
@@ -144,8 +144,8 @@ import {
   buildV1Patch,
   clearsArmCursor,
   conjugateCapture,
-  outsideLineRefusal,
-  preWideningRefusal,
+  outsideLineRefusalMessage,
+  preWideningRefusalMessage,
   stagedAcceptanceSum,
   stagedFormOf,
   type CommitRouteId,
@@ -169,7 +169,7 @@ import {
   doubleReadWindows,
   isStaleDescriptorWord,
   preservationWindows,
-  spentReaderRefusal,
+  spentReaderDeriveMessage,
   spentReaderRefusalMessage,
   type BankKey,
 } from './windows.js';
@@ -537,35 +537,230 @@ function loadPlain(
 const isDone = (state: PreserveRunState, id: PreserveStepId): boolean =>
   state.steps[id]?.status === 'done';
 
-function buildNameOf(state: PreserveRunState): string {
-  return (
-    state.buildLabel ??
-    (state.expectedVersion === undefined
-      ? 'the detected build'
-      : `firmware ${state.expectedVersion}`)
-  );
+/**
+ * Why a step cannot run now, as messages (`describeStepGate` says their English). `{step}` and `{next}`
+ * are the run's step ids (backup, patch, commit, drain, restore, verify), as the CLI names them.
+ */
+export const PRESERVE_GATE = {
+  /** The run's build when the run has no label and no version for it yet. */
+  detectedBuild: coreMessage('preserve.gate.detectedBuild', {}, 'the detected build'),
+  /** A failed backup's recorded error, when it recorded none. */
+  noErrorText: coreMessage('preserve.gate.noErrorText', {}, '(no error text)'),
+  runDone: (run: string): CoreMessage =>
+    coreMessage(
+      'preserve.gate.runDone',
+      { run },
+      `this run is done — every step completed (run ${run})`,
+    ),
+  stepDone: (step: string, finished: string | undefined, next: string): CoreMessage =>
+    finished === undefined
+      ? coreMessage(
+          'preserve.gate.stepDoneUnknownTime',
+          { step, next },
+          `${step} is already done in this run (finished at an unknown time)` +
+            ` — resume continues at ${next}`,
+        )
+      : coreMessage(
+          'preserve.gate.stepDone',
+          { step, finished, next },
+          `${step} is already done in this run (finished ${finished})` +
+            ` — resume continues at ${next}`,
+        ),
+  backupRerun: (done: readonly string[], next: string): CoreMessage =>
+    coreMessage(
+      'preserve.gate.backupRerun',
+      { steps: done.join(', '), next },
+      'the backup cannot re-run: this run has already completed ' +
+        `${done.join(', ')} and its next step is ${next} — use --resume`,
+    ),
+  /** `error`: the failed backup's recorded error, or NO_ERROR_TEXT. */
+  powerCycle: (error: CoreParam): CoreMessage =>
+    coreMessage(
+      'preserve.gate.powerCycle',
+      { error },
+      'the previous backup attempt failed, and the camera must be POWER-CYCLED before ' +
+        'this step runs again — a retry on the same start can read stale or blank bytes ' +
+        '(measured: a retried backup read the bootloader’s start-up word in place of the ' +
+        'boot-config record). Power-cycle the camera (unplug and replug it, or use its power ' +
+        'switch), then run the backup again and confirm the power cycle when asked: the run ' +
+        'cannot see it happen. The recorded failure: ' +
+        paramText(error),
+    ),
+  patchAfterBackup: coreMessage(
+    'preserve.gate.patchAfterBackup',
+    {},
+    'patch runs after the backup: the run takes the dump of every region the stock plan ' +
+      'can read and persists it BEFORE anything else happens — that backup is the only ' +
+      'copy of this camera. Run the backup step first.',
+  ),
+  commitAfterBackup: coreMessage(
+    'preserve.gate.commitAfterBackup',
+    {},
+    'commit runs after the backup (see the patch step)',
+  ),
+  commitAfterPatch: coreMessage(
+    'preserve.gate.commitAfterPatch',
+    {},
+    'commit runs after the patch step, which records what it stages',
+  ),
+  commitNeedsPatch: (keys: readonly BankKey[]): CoreMessage =>
+    coreMessage(
+      'preserve.gate.commitNeedsPatch',
+      {
+        banks: listParam(
+          keys.map((key) => bankParam(key)),
+          'comma',
+        ),
+      },
+      `commit needs the patch of ${keys.map(bankWordsOf).join(', ')}, and the patch ` +
+        'step recorded none — run the patch step again',
+    ),
+  commitFiles: (missing: readonly string[]): CoreMessage =>
+    coreMessage(
+      'preserve.gate.commitFiles',
+      { files: missing.join(', ') },
+      'commit requires the backup files in the run directory and they are missing: ' +
+        `${missing.join(', ')} — without them a commit has no restore source, so it refuses`,
+    ),
+  drainNoCommit: coreMessage(
+    'preserve.gate.drainNoCommit',
+    {},
+    'drain reads the PATCHED part through the widened window, and this run has no ' +
+      'completed commit — the drain would stall on a stock camera. Run (or resume at) ' +
+      'the commit first, or jump explicitly (allowJump) if the commit landed without ' +
+      'its checkpoint.',
+  ),
+  /** `note`: the capability table's note for the build (English, as the table says it). */
+  drainRefused: (build: CoreParam, note: string): CoreMessage =>
+    coreMessage(
+      'preserve.gate.drainRefused',
+      { build, note },
+      `the drain step refuses on ${paramText(build)}: ${note}`,
+    ),
+  drainHazard: (build: CoreParam, sites: readonly number[], key: BankKey): CoreMessage => {
+    const at = sites.map((offset) => hexUp(offset)).join(', ');
+    return coreMessage(
+      'preserve.gate.drainHazard',
+      { build, sites: at, bank: bankParam(key) },
+      `the drain step refuses on ${paramText(build)}: ` +
+        'starting the whole-flash read on this build’s unpatched firmware crashes the ' +
+        'camera (it reads from a value that is not a flash address; measured on the ' +
+        'emulator: 32 KiB served, then the camera faulted). The change that makes the read ' +
+        'safe is at ' +
+        at +
+        `, and it is not among the changes this run recorded for ${bankWordsOf(key)} — ` +
+        'run the patch step (and land the write) before the whole-flash read.',
+    );
+  },
+  drainFiles: (missing: readonly string[]): CoreMessage =>
+    coreMessage(
+      'preserve.gate.drainFiles',
+      { files: missing.join(', ') },
+      `drain needs ${missing.join(', ')} (the delivered dump is post-processed with each ` +
+        'written bank’s capture) and it is not in the run directory',
+    ),
+  restoreNoCommit: coreMessage(
+    'preserve.gate.restoreNoCommit',
+    {},
+    'restore puts the original banks back over the patch, and this run has no completed ' +
+      'commit — there is nothing it can be reverting. Run (or resume at) the commit ' +
+      'first, or jump explicitly (allowJump) to restore an already-patched camera.',
+  ),
+  restoreNeedsPatch: coreMessage(
+    'preserve.gate.restoreNeedsPatch',
+    {},
+    'restore needs each written bank’s patch summary (for the staged length) — run the patch step first',
+  ),
+  restoreNoForm: (build: CoreParam): CoreMessage =>
+    coreMessage(
+      'preserve.gate.restoreNoForm',
+      { build },
+      `the restore step refuses on ${paramText(build)}: no form of the original ` +
+        'firmware passes the camera’s own check and also stores back as the original ' +
+        'bytes — the original firmware’s check sum is 0xB7AB9D17 (measured), not the ' +
+        '0xFFFF the camera demands. This run ends with the complete image in hand and the ' +
+        'patch in place; the original content can only go back with a full-flash programmer.',
+    ),
+  restoreFiles: (missing: readonly string[]): CoreMessage =>
+    coreMessage(
+      'preserve.gate.restoreFiles',
+      { files: missing.join(', ') },
+      `restore needs ${missing.join(', ')} (the original of each written bank, from the ` +
+        'backup step) and it is not in the run directory',
+    ),
+  verifyNoRestore: coreMessage(
+    'preserve.gate.verifyNoRestore',
+    {},
+    'verify compares a fresh boot against the backup, and this run has no completed ' +
+      'restore — a patched bank would show as diffs. Run (or resume at) the restore ' +
+      'first, or jump explicitly (allowJump) if the restore landed without its checkpoint.',
+  ),
+  verifyNeedsBackup: (file: string): CoreMessage =>
+    coreMessage(
+      'preserve.gate.verifyNeedsBackup',
+      { file },
+      `verify needs ${file} (the comparison's reference) and it is not in ` + 'the run directory',
+    ),
+  needsBanks: (step: string): CoreMessage =>
+    coreMessage(
+      'preserve.gate.needsBanks',
+      { step },
+      `${step} needs the banks the backup step read, and the state has none`,
+    ),
+  /** `what`: why the run's choice offers no bank (preserveChoiceOf's `what`). */
+  noBanks: (what: CoreParam): CoreMessage =>
+    coreMessage(
+      'preserve.gate.noBanks',
+      { what },
+      `no banks are chosen for this run: ${paramText(what)}`,
+    ),
+  /** `why`: the bank's recorded refusal. */
+  bankRefused: (key: BankKey, why: CoreParam): CoreMessage =>
+    coreMessage(
+      'preserve.gate.bankRefused',
+      { bank: bankParam(key), why },
+      `${bankWordsOf(key)} cannot be written: ${paramText(why)}`,
+    ),
+  /** `note`: the build's route note. */
+  recoveryOnly: (note: string, key: BankKey): CoreMessage =>
+    coreMessage(
+      'preserve.gate.recoveryOnly',
+      { note: routeNoteMessage(note), bank: bankParam(key) },
+      `this build's patch boots from recovery R only: ${note} — the run ` +
+        `would write ${bankWordsOf(key)}, where the bootloader never runs it`,
+    ),
+} as const;
+
+/** The run's build in a gate's words: its label, its firmware, or "the detected build". */
+function gateBuildParam(state: PreserveRunState): CoreMessage | string {
+  if (state.buildLabel !== undefined) return state.buildLabel;
+  return state.expectedVersion === undefined
+    ? PRESERVE_GATE.detectedBuild
+    : coreMessage(
+        'preserve.build.firmware',
+        { version: state.expectedVersion },
+        `firmware ${state.expectedVersion}`,
+      );
 }
 
 /** Why the chosen banks cannot be written, or null. Shared by the steps that
  *  touch them. */
-function targetsRefusal(state: PreserveRunState, step: PreserveStepId): string | null {
+function targetsRefusal(state: PreserveRunState, step: PreserveStepId): CoreMessage | null {
   const targets = state.targets;
   if (state.banks === undefined || state.boot === undefined) {
-    return `${step} needs the banks the backup step read, and the state has none`;
+    return PRESERVE_GATE.needsBanks(step);
   }
   if (targets === undefined || targets.length === 0) {
-    return `no banks are chosen for this run: ${preserveChoiceOf(state, state.choice).what}`;
+    const choice = preserveChoiceOf(state, state.choice);
+    return PRESERVE_GATE.noBanks(recordedParam(choice.whatMessage, choice.what));
   }
   for (const key of targets) {
     const bank = state.banks[key];
     if (bank.refused !== null) {
-      return `${bankWordsOf(key)} cannot be written: ${bank.refused}`;
+      return PRESERVE_GATE.bankRefused(key, recordedParam(bank.refusedMessage, bank.refused));
     }
     if (state.route === 'recovery-only' && key !== 'r') {
-      return (
-        `this build's patch boots from recovery R only: ${state.routeNote ?? ''} — the run ` +
-        `would write ${bankWordsOf(key)}, where the bootloader never runs it`
-      );
+      return PRESERVE_GATE.recoveryOnly(state.routeNote ?? '', key);
     }
   }
   return null;
@@ -612,15 +807,22 @@ export async function describeStepGate(
   loadArtifact: PreserveArtifactLoader,
   options: { readonly allowJump?: boolean; readonly powerCycled?: boolean } = {},
 ): Promise<string | null> {
+  return (await stepGateMessage(step, state, loadArtifact, options))?.text ?? null;
+}
+
+/** `describeStepGate` as a message, for the page. */
+export async function stepGateMessage(
+  step: PreserveStepId,
+  state: PreserveRunState,
+  loadArtifact: PreserveArtifactLoader,
+  options: { readonly allowJump?: boolean; readonly powerCycled?: boolean } = {},
+): Promise<CoreMessage | null> {
   if (state.nextStep === 'done') {
-    return `this run is done — every step completed (run ${state.runId})`;
+    return PRESERVE_GATE.runDone(state.runId);
   }
   const mine = state.steps[step];
   if (mine?.status === 'done') {
-    return (
-      `${step} is already done in this run (finished ${mine.finishedAt ?? 'at an unknown time'})` +
-      ` — resume continues at ${state.nextStep}`
-    );
+    return PRESERVE_GATE.stepDone(step, mine.finishedAt, state.nextStep);
   }
 
   const jump = options.allowJump === true;
@@ -628,10 +830,7 @@ export async function describeStepGate(
   switch (step) {
     case 'backup': {
       if (doneSteps.length > 0) {
-        return (
-          'the backup cannot re-run: this run has already completed ' +
-          `${doneSteps.join(', ')} and its next step is ${state.nextStep} — use --resume`
-        );
+        return PRESERVE_GATE.backupRerun(doneSteps, state.nextStep);
       }
       /* THE RETRY GATE: a failed backup re-runs only past the power-cycle
        * acknowledgement. The camera's window reader is budgeted per boot, and
@@ -643,44 +842,28 @@ export async function describeStepGate(
         state.steps.backup.powerCycleRequired === true &&
         options.powerCycled !== true
       ) {
-        return (
-          'the previous backup attempt failed, and the camera must be POWER-CYCLED before ' +
-          'this step runs again — a retry on the same start can read stale or blank bytes ' +
-          '(measured: a retried backup read the bootloader’s start-up word in place of the ' +
-          'boot-config record). Power-cycle the camera (unplug and replug it, or use its power ' +
-          'switch), then run the backup again and confirm the power cycle when asked: the run ' +
-          'cannot see it happen. The recorded failure: ' +
-          (state.steps.backup.error ?? '(no error text)')
+        const recorded = state.steps.backup.error;
+        return PRESERVE_GATE.powerCycle(
+          recorded === undefined
+            ? PRESERVE_GATE.noErrorText
+            : recordedParam(state.steps.backup.errorCode, recorded),
         );
       }
       return null;
     }
     case 'patch': {
-      if (!isDone(state, 'backup')) {
-        return (
-          'patch runs after the backup: the run takes the dump of every region the stock plan ' +
-          'can read and persists it BEFORE anything else happens — that backup is the only ' +
-          'copy of this camera. Run the backup step first.'
-        );
-      }
+      if (!isDone(state, 'backup')) return PRESERVE_GATE.patchAfterBackup;
       return null;
     }
     case 'commit': {
-      if (!isDone(state, 'backup')) return 'commit runs after the backup (see the patch step)';
-      if (!isDone(state, 'patch')) {
-        return 'commit runs after the patch step, which records what it stages';
-      }
+      if (!isDone(state, 'backup')) return PRESERVE_GATE.commitAfterBackup;
+      if (!isDone(state, 'patch')) return PRESERVE_GATE.commitAfterPatch;
       const targets = targetsRefusal(state, 'commit');
       if (targets !== null) return targets;
       const unpatched = (state.targets ?? []).filter(
         (key) => state.banks?.[key].patch === undefined,
       );
-      if (unpatched.length > 0) {
-        return (
-          `commit needs the patch of ${unpatched.map(bankWordsOf).join(', ')}, and the patch ` +
-          'step recorded none — run the patch step again'
-        );
-      }
+      if (unpatched.length > 0) return PRESERVE_GATE.commitNeedsPatch(unpatched);
       const missing = await missingFiles(loadArtifact, [
         PRESERVE_BACKUP_FILE,
         ...(state.targets ?? []).flatMap((key) => [
@@ -688,30 +871,18 @@ export async function describeStepGate(
           preservePlainFile(key),
         ]),
       ]);
-      if (missing.length > 0) {
-        return (
-          'commit requires the backup files in the run directory and they are missing: ' +
-          `${missing.join(', ')} — without them a commit has no restore source, so it refuses`
-        );
-      }
+      if (missing.length > 0) return PRESERVE_GATE.commitFiles(missing);
       return null;
     }
     case 'drain': {
-      if (!isDone(state, 'commit') && !jump) {
-        return (
-          'drain reads the PATCHED part through the widened window, and this run has no ' +
-          'completed commit — the drain would stall on a stock camera. Run (or resume at) ' +
-          'the commit first, or jump explicitly (allowJump) if the commit landed without ' +
-          'its checkpoint.'
-        );
-      }
+      if (!isDone(state, 'commit') && !jump) return PRESERVE_GATE.drainNoCommit;
       const targets = targetsRefusal(state, 'drain');
       if (targets !== null) return targets;
       /* The capability table, consulted where it bites: a build with no
        * whole-part drain gets the documented reason, not a stall on the wire
        * (the 1.0.3.2 builds' EP0 sessions die at ~64-81 KB). */
       if (state.capability !== undefined && !state.capability.wholePart) {
-        return `the drain step refuses on ${buildNameOf(state)}: ${state.capability.note}`;
+        return PRESERVE_GATE.drainRefused(gateBuildParam(state), state.capability.note);
       }
       /* THE MODE-2 HAZARD ORDERING: on the builds whose factory mode-2 row
        * arms *(0x14000000), the nop that makes the arm safe is part of the
@@ -725,16 +896,7 @@ export async function describeStepGate(
           );
           const missing = hazardSites.filter((offset) => !recorded.has(offset));
           if (missing.length > 0) {
-            return (
-              `the drain step refuses on ${buildNameOf(state)}: ` +
-              'starting the whole-flash read on this build’s unpatched firmware crashes the ' +
-              'camera (it reads from a value that is not a flash address; measured on the ' +
-              'emulator: 32 KiB served, then the camera faulted). The change that makes the read ' +
-              'safe is at ' +
-              missing.map((offset) => hexUp(offset)).join(', ') +
-              `, and it is not among the changes this run recorded for ${bankWordsOf(key)} — ` +
-              'run the patch step (and land the write) before the whole-flash read.'
-            );
+            return PRESERVE_GATE.drainHazard(gateBuildParam(state), missing, key);
           }
         }
       }
@@ -742,35 +904,18 @@ export async function describeStepGate(
         loadArtifact,
         (state.targets ?? []).map(preserveCaptureFile),
       );
-      if (missing.length > 0) {
-        return (
-          `drain needs ${missing.join(', ')} (the delivered dump is post-processed with each ` +
-          'written bank’s capture) and it is not in the run directory'
-        );
-      }
+      if (missing.length > 0) return PRESERVE_GATE.drainFiles(missing);
       return null;
     }
     case 'restore': {
-      if (!isDone(state, 'commit') && !jump) {
-        return (
-          'restore puts the original banks back over the patch, and this run has no completed ' +
-          'commit — there is nothing it can be reverting. Run (or resume at) the commit ' +
-          'first, or jump explicitly (allowJump) to restore an already-patched camera.'
-        );
-      }
+      if (!isDone(state, 'commit') && !jump) return PRESERVE_GATE.restoreNoCommit;
       const targets = targetsRefusal(state, 'restore');
       if (targets !== null) return targets;
       if ((state.targets ?? []).some((key) => state.banks?.[key].patch === undefined)) {
-        return 'restore needs each written bank’s patch summary (for the staged length) — run the patch step first';
+        return PRESERVE_GATE.restoreNeedsPatch;
       }
       if (state.restoreForm === 'none') {
-        return (
-          `the restore step refuses on ${buildNameOf(state)}: no form of the original ` +
-          'firmware passes the camera’s own check and also stores back as the original ' +
-          'bytes — the original firmware’s check sum is 0xB7AB9D17 (measured), not the ' +
-          '0xFFFF the camera demands. This run ends with the complete image in hand and the ' +
-          'patch in place; the original content can only go back with a full-flash programmer.'
-        );
+        return PRESERVE_GATE.restoreNoForm(gateBuildParam(state));
       }
       /* A cipher family's restore stages the FACTORY image in the build's
        * staged form (the commit's own transform turns it back into the
@@ -785,27 +930,13 @@ export async function describeStepGate(
             : [preserveCaptureFile(key)],
         ),
       );
-      if (missing.length > 0) {
-        return (
-          `restore needs ${missing.join(', ')} (the original of each written bank, from the ` +
-          'backup step) and it is not in the run directory'
-        );
-      }
+      if (missing.length > 0) return PRESERVE_GATE.restoreFiles(missing);
       return null;
     }
     case 'verify': {
-      if (!isDone(state, 'restore') && !jump) {
-        return (
-          'verify compares a fresh boot against the backup, and this run has no completed ' +
-          'restore — a patched bank would show as diffs. Run (or resume at) the restore ' +
-          'first, or jump explicitly (allowJump) if the restore landed without its checkpoint.'
-        );
-      }
+      if (!isDone(state, 'restore') && !jump) return PRESERVE_GATE.verifyNoRestore;
       if ((await loadArtifact(PRESERVE_BACKUP_FILE)) === null) {
-        return (
-          `verify needs ${PRESERVE_BACKUP_FILE} (the comparison's reference) and it is not in ` +
-          'the run directory'
-        );
+        return PRESERVE_GATE.verifyNeedsBackup(PRESERVE_BACKUP_FILE);
       }
       return null;
     }
@@ -843,8 +974,10 @@ export async function runPreserveStep(
   signal?: AbortSignal,
   options: { readonly allowJump?: boolean; readonly powerCycled?: boolean } = {},
 ): Promise<PreserveStepOutcome> {
-  const refusal = await describeStepGate(step, state, loadArtifact, options);
-  if (refusal !== null) throw new SeekError('pipeline/refused', refusal);
+  const refusal = await stepGateMessage(step, state, loadArtifact, options);
+  if (refusal !== null) {
+    throw new SeekError('pipeline/refused', refusal.text, { coreMessage: refusal });
+  }
 
   const startedAt = new Date().toISOString();
   const fresh: PreserveRunState = { ...state, steps: { ...state.steps } };
@@ -1260,13 +1393,10 @@ async function armAndDrainSlot(
     });
   } catch (error) {
     if (isWireStall(error)) {
-      throw new SeekError(
-        'pipeline/refused',
-        spentReaderRefusal(
-          `${label} stalled at ${error instanceof Error ? error.message : String(error)}`,
-        ),
-        { cause: error },
+      const message = spentReaderRefusalMessage(
+        `${label} stalled at ${error instanceof Error ? error.message : String(error)}`,
       );
+      throw new SeekError('pipeline/refused', message.text, { cause: error, coreMessage: message });
     }
     throw error;
   }
@@ -1382,6 +1512,36 @@ function frameRateBuildOf(plain: Uint8Array): FrameRateBuild | null {
     : null;
 }
 
+/** A bank's derivation failure in words the page translates (`derivationRefusalOf`'s English). */
+export const PRESERVE_DERIVE_WORDS = {
+  otherFirmware: (image: string, camera: string): CoreMessage =>
+    coreMessage(
+      'preserve.image.otherFirmware',
+      { image, camera },
+      `it holds firmware ${image}, not the ${camera} the camera runs`,
+    ),
+  /** The run's refusal when the bank its build is taken from holds another build's firmware. */
+  otherFirmwareRefusal: (bank: BankKey, image: string, camera: string): CoreMessage => {
+    const words = bankWordsOf(bank);
+    return coreMessage(
+      'preserve.image.otherFirmwareRefusal',
+      { name: bankParam(bank, 'name'), image, camera },
+      `${words.charAt(0).toUpperCase()}${words.slice(1)} holds firmware ${image}, not ` +
+        `the ${camera} the camera runs, so this run has no image it can patch there and ` +
+        'refuses rather than write over it.',
+    );
+  },
+  /** `error`: the derivation's own refusal (English: the build gates have no code). */
+  noImage: (error: unknown): CoreMessage => {
+    const why = error instanceof Error ? error.message : String(error);
+    return coreMessage(
+      'preserve.image.noImage',
+      { error: recordedParam(errorCoreMessage(error), why) },
+      `no image the run can patch derives from it (${why})`,
+    );
+  },
+} as const;
+
 function deriveFactoryImage(capture: Uint8Array, cameraVersion: string, bank: BankKey): Derived {
   const words = bankWordsOf(bank);
   const attempts: {
@@ -1456,30 +1616,19 @@ function deriveFactoryImage(capture: Uint8Array, cameraVersion: string, bank: Ba
     ...(frameRate === null ? {} : { frameRate }),
   };
   if (spent !== null) {
-    throw new SeekError(
-      'pipeline/refused',
-      spentReaderRefusal(
-        `${spent} — no factory plaintext can be derived from these bytes. Every way to read it ` +
-          `was tried:\n  - ${reasons.join('\n  - ')}`,
-      ),
-      { detail },
-    );
+    const message = spentReaderDeriveMessage(spent, reasons);
+    throw new SeekError('pipeline/refused', message.text, { detail, coreMessage: message });
   }
   /* The reads are not the problem here — they agreed, and a spent reader was
    * ruled out above. What failed is every derivation's gate set: the refusal
    * says what the bank holds in plain words, and `detail.reasons` (logged by
    * the caller) says why each way failed. */
-  throw new SeekError(
-    'pipeline/refused',
-    otherFirmware
-      ? `${words.charAt(0).toUpperCase()}${words.slice(1)} holds firmware ${imageVersion ?? ''}, not ` +
-          `the ${cameraVersion} the camera runs, so this run has no image it can patch there and ` +
-          'refuses rather than write over it.'
-      : frameRate !== null
-        ? frameRateImageRefusal(bank, cameraVersion, frameRate)
-        : unknownImageRefusal(bank, cameraVersion),
-    { detail },
-  );
+  const refusal = otherFirmware
+    ? PRESERVE_DERIVE_WORDS.otherFirmwareRefusal(bank, imageVersion ?? '', cameraVersion)
+    : frameRate !== null
+      ? frameRateImageRefusalMessage(bank, cameraVersion, frameRate)
+      : unknownImageRefusalMessage(bank, cameraVersion);
+  throw new SeekError('pipeline/refused', refusal.text, { detail, coreMessage: refusal });
 }
 
 /** The ways a refused derivation tried, each with why it failed, in words for the log; none when
@@ -1519,15 +1668,20 @@ export function bankImageRefusal(
 /** A bank's derivation failure in one clause, for the plan: an unknown image,
  *  or the firmware it holds when that is another build's. */
 function derivationRefusalOf(error: unknown, cameraVersion: string): string {
+  return derivationRefusalMessageOf(error, cameraVersion).text;
+}
+
+/** `derivationRefusalOf` as a message, for the page. */
+function derivationRefusalMessageOf(error: unknown, cameraVersion: string): CoreMessage {
   const detail = error instanceof SeekError ? error.detail : undefined;
   const frameRate = frameRateOfDetail(detail?.frameRate);
-  if (frameRate !== null) return frameRateImageWords(cameraVersion, frameRate);
-  if (detail?.unknownImage === true) return unknownImageWords(cameraVersion);
+  if (frameRate !== null) return frameRateImageWordsMessage(cameraVersion, frameRate);
+  if (detail?.unknownImage === true) return unknownImageWordsMessage(cameraVersion);
   const imageVersion = detail?.imageVersion;
   if (typeof imageVersion === 'string') {
-    return `it holds firmware ${imageVersion}, not the ${cameraVersion} the camera runs`;
+    return PRESERVE_DERIVE_WORDS.otherFirmware(imageVersion, cameraVersion);
   }
-  return `no image the run can patch derives from it (${error instanceof Error ? error.message : String(error)})`;
+  return PRESERVE_DERIVE_WORDS.noImage(error);
 }
 
 /** One bank's read on its own admitted boot: a full 64 KiB drain completes
@@ -1891,12 +2045,14 @@ async function captureOther(
           : ''),
       'detail',
     );
+    const refusedMessage = derivationRefusalMessageOf(error, version);
     return {
       holds,
       bytes: row,
       slotReadShas: shas,
       derived: null,
-      refused: derivationRefusalOf(error, version),
+      refused: refusedMessage.text,
+      refusedMessage,
     };
   }
 }
@@ -1940,12 +2096,12 @@ async function runBackupStep(
     const v = await readVersion(device);
     /* THE LINE GATE, before a single window is armed or read: a 4.x or Nano build is
      * the 4.x/Nano flow's, and this run refuses it with the tab to use. */
-    const outside = outsideLineRefusal(v);
+    const outside = outsideLineRefusalMessage(v);
     if (outside !== null) fail(outside);
     /* THE GENERATION GATE, before a single window read: the 2014 builds older
      * than 0.7.0.7 are outside the widening route (doc 36.7, measured) and
      * this run refuses with that evidence instead of reading anything. */
-    const tooOld = preWideningRefusal(v);
+    const tooOld = preWideningRefusalMessage(v);
     if (tooOld !== null) fail(tooOld);
     return { version: v, activeSlotWord: await readActiveSlotWord(device) };
   });

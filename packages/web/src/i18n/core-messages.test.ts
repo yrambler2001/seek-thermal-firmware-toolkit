@@ -160,6 +160,15 @@ import {
   RESTORE_WORDS,
   PRESERVE_FAIL,
   spentReaderRefusalMessage,
+  spentReaderDeriveMessage,
+  outsideLineRefusalMessage,
+  preWideningRefusalMessage,
+  frameRateImageRefusalMessage,
+  frameRateImageWordsMessage,
+  unknownImageRefusalMessage,
+  unknownImageWordsMessage,
+  PRESERVE_DERIVE_WORDS,
+  PRESERVE_GATE,
   COMPACT_2016_EVIDENCE,
   EARLY_COMPACT_EVIDENCE,
   GENERIC_EVIDENCE,
@@ -1114,6 +1123,51 @@ function samples(base: DeviceState): CoreMessage[] {
       add(PRESERVE_FAIL.verify({ count: 12, read: 63, total: 64, places: where, short }));
     }
   }
+
+  /* preserve: the line gates, a bank whose image the run cannot patch, and why a step cannot run */
+  add(spentReaderDeriveMessage('every byte 0xFF', ['one way: no', 'another way: no']));
+  add(outsideLineRefusalMessage('4.8.2.1'));
+  add(preWideningRefusalMessage('0.3.0.1'));
+  add(unknownImageWordsMessage('1.3.0.8'));
+  add(unknownImageRefusalMessage('r', '1.3.0.8'));
+  for (const build of [
+    { hz: 32, earlierPatch: false },
+    { hz: 16, earlierPatch: true },
+  ]) {
+    add(frameRateImageWordsMessage('1.3.0.8', build));
+    add(frameRateImageRefusalMessage('a', '1.3.0.8', build));
+  }
+  add(PRESERVE_DERIVE_WORDS.otherFirmware('1.2.0.0', '1.3.0.8'));
+  add(PRESERVE_DERIVE_WORDS.otherFirmwareRefusal('b', '1.2.0.0', '1.3.0.8'));
+  add(PRESERVE_DERIVE_WORDS.noImage(new Error('image is too small to hold the header window')));
+  for (const gate of Object.values(PRESERVE_GATE)) {
+    if (typeof gate !== 'function') add(gate);
+  }
+  add(PRESERVE_GATE.runDone('2026-10-30T07-00-00Z'));
+  add(PRESERVE_GATE.stepDone('commit', '2026-10-30T07:00:00.000Z', 'drain'));
+  add(PRESERVE_GATE.stepDone('commit', undefined, 'drain'));
+  add(PRESERVE_GATE.backupRerun(['backup', 'patch'], 'commit'));
+  add(PRESERVE_GATE.powerCycle(PRESERVE_GATE.noErrorText));
+  add(PRESERVE_GATE.powerCycle(PRESERVE_FAIL.ffSum));
+  add(PRESERVE_GATE.commitNeedsPatch(['a']));
+  add(PRESERVE_GATE.commitNeedsPatch(['a', 'b', 'r']));
+  add(PRESERVE_GATE.commitFiles(['preserve_backup.bin', 'capture_a.bin']));
+  for (const build of [
+    '1.3.0.8 (Compact)',
+    PRESERVE_GATE.detectedBuild,
+    preserveBuildParam({ expectedVersion: '1.3.0.8' }),
+  ]) {
+    add(PRESERVE_GATE.drainRefused(build, 'the EP0 sessions die at ~64-81 KB'));
+    add(PRESERVE_GATE.drainHazard(build, [0x1234, 0x5678], 'b'));
+    add(PRESERVE_GATE.restoreNoForm(build));
+  }
+  add(PRESERVE_GATE.drainFiles(['capture_a.bin']));
+  add(PRESERVE_GATE.restoreFiles(['capture_a.bin', 'plain_a.bin']));
+  add(PRESERVE_GATE.verifyNeedsBackup('preserve_backup.bin'));
+  add(PRESERVE_GATE.needsBanks('drain'));
+  add(PRESERVE_GATE.noBanks('the backup has not read the banks yet, so no bank can be chosen'));
+  add(PRESERVE_GATE.bankRefused('a', PRESERVE_BANK_REFUSAL.erased()));
+  add(PRESERVE_GATE.recoveryOnly(RECOVERY_ONLY_ROUTE_NOTE, 'a'));
 
   /* copy and restore: the preview's source, notes and warnings */
   for (const version of [null, '1.0.3.0']) {
