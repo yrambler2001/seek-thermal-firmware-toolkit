@@ -112,6 +112,25 @@ What is checked:
 
 Why optional per-language forms and not English-mirrored keys (`bank.slotInSentence.gen` in English, required everywhere): English, Chinese and most others have no cases, and five copies of every name in each of them would be noise that a translator must still fill and keep in step. The types still catch a typo, because the optional keys are typed from the name keys and the five cases, and the parity test checks the rest.
 
+### Romance languages: articles and contractions
+
+French, Italian, Spanish and Portuguese have no cases, but a name inside a sentence needs its article, and the article contracts with the preposition before it (French _du_, _au_; Italian _dello_, _nello_; Spanish _del_, _al_; Portuguese _do_, _ao_, _no_). The five selectors carry the article and the preposition, so the contraction is written once, with the name, and a template never builds it:
+
+| Selector | Romance meaning                                                       | French (slot A, Key A, key block 1)                     |
+| -------- | --------------------------------------------------------------------- | ------------------------------------------------------- |
+| `:acc`   | definite article + name (subject or object)                           | l’emplacement A, la clé A, le bloc de clés 1            |
+| `:gen`   | "of / from" + article                                                 | de l’emplacement A, de la clé A, du bloc de clés 1      |
+| `:dat`   | "to / at" + article                                                   | à l’emplacement A, à la clé A, au bloc de clés 1        |
+| `:loc`   | "in / into" + article                                                 | dans l’emplacement A (Italian _nello_, Portuguese _no_) |
+| `:ins`   | the `:acc` form with a capital letter, for a name starting a sentence | L’emplacement A, La clé A                               |
+
+- **Give all five forms on every name**: `common:bank.slot`, `bank.recovery`, `bank.slotInSentence`, `bank.recoveryInSentence` (the label and the sentence keys get the same case forms: the page passes either, and only the plain form differs, capital or lower case), each `core:keyName.*`, and `shared:deviceInfo.otherBank`. A name whose English already has its article ("the per-device key") has it in the plain form too, and its `:gen` is "de" + that form.
+- **In a template**, write the selector the grammar needs: `'Copier vers {bank:acc}'`, `'Extraction de {bank:gen}…'`, `'le reprogramme {bank:dat}'`, `'Ce qui change {bank:loc}'`, `'{bank:ins} est vide : …'`. Write the plain `{bank}` only where the name stands alone: a table cell, a row value, a heading (`'{bank} — non choisi'`), after a colon or in a list introduced by one (`'dans cet ordre : {order}'`).
+- **`:ins` is for one name only.** On a list it would capitalise every name; start such a sentence another way (`'Ces emplacements contiennent … : {banks:acc}'`).
+- **A param that is not always a name** takes no selector (`core-messages.test.ts` reports "is not a name" or "is not always a name"): core passes some names already capitalised for the start of an English sentence (`fpsBoot.holdsOne`, `fpsBoot.cannotPatch`, `restore.readBack.differs`), as plain text (`upgrade.verdict.bootable` in one caller), or as a sentence in place of a name (`{banks}` in `preserve.banks.afterCommit` may be "no bank", `{next}` in `preserve.result.backupNext` "a bank that is not known"). Put the plain name before a colon there: `'{bank} : ne peut pas être corrigé ici…'`.
+- **A page param passed as text** (`{ text }`: `slots:keys.theBootedBank`, a bank name core does not know) is the same in every case. Where a text may stand in for the name, write the preposition outside the param (`'dans {banks:acc}'` rather than `'{banks:loc}'`).
+- French chose a word for slot, _emplacement_, that starts with a vowel, so every bank name elides the same way (l’, de l’, à l’, dans l’). A language whose slot word has a gender or an initial that changes the article per name writes each name's forms out in full; the template stays the same.
+
 A new page sentence with a bank or a key in it: list the key's name params in `names.ts`, and pass the names with the `…Ref` helpers. Use `bankWords`/`bankName`/`bankList` (strings) only where the name stands alone (a table cell, a label).
 
 ## Markup and slots
@@ -203,7 +222,7 @@ The language loads only when someone picks it (a dynamic `import()`, its own chu
 - **Buttons the text names.** When a sentence names a button ("press _Connect device_"), use the button's own translation from `app`/`shared`, word for word.
 - **Capitals:** keep the English's. A value that starts lower case is said inside another sentence or after a label; one that starts upper case stands alone.
 - **Plurals:** give the forms your language uses (`Intl.PluralRules` categories): ru/uk/pl `one, few, many, other`; es/fr/it/pt `one, many, other`; de `one, other`; zh-Hans `other` only.
-- **Cases** (Polish, Russian, Ukrainian, German; see "Cases" above). A bank or a key inside a sentence can be asked for in a case: `{bank:gen}`, `{bank:dat}`, `{bank:acc}`, `{bank:ins}`, `{bank:loc}`. Two steps:
+- **Cases** (Polish, Russian, Ukrainian, German; see "Cases" above; French, Italian, Spanish and Portuguese use the same selectors for the article and its contraction, see "Romance languages"). A bank or a key inside a sentence can be asked for in a case: `{bank:gen}`, `{bank:dat}`, `{bank:acc}`, `{bank:ins}`, `{bank:loc}`. Two steps:
   1. Give your forms once, next to the plain one, for each name: in `common.ts`, `'bank.slotInSentence:gen': 'slotu {letter}'`, `'bank.recoveryInSentence:loc': 'slocie odzyskiwania {letter}'` (and `bank.slot:*`, `bank.recovery:*` for the label forms where a sentence uses them); in `core.ts`, `'keyName.keyA:ins': 'kluczem A'`, and so on for each `keyName.*`. Write only the cases your language uses; a case you leave out is said in the plain form.
   2. In a sentence, write the case the grammar needs: `'Kopiuj do {bank:gen}'`, `'Zapisz w {bank:loc}'`, `'pod {key:ins}'`. Don't work round a case with a colon or brackets ("pod kluczem: {key}") any more.
 

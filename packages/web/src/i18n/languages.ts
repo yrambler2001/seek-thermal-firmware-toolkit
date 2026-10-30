@@ -33,7 +33,7 @@ export const LANGUAGES: readonly LanguageEntry[] = [
   { code: 'en', name: 'English', load: () => Promise.resolve(en) },
   { code: 'de', name: 'Deutsch', load: () => import('./locales/de').then((m) => m.default) },
   // { code: 'es', name: 'Español', load: () => import('./locales/es').then((m) => m.default) },
-  // { code: 'fr', name: 'Français', load: () => import('./locales/fr').then((m) => m.default) },
+  { code: 'fr', name: 'Français', load: () => import('./locales/fr').then((m) => m.default) },
   // { code: 'it', name: 'Italiano', load: () => import('./locales/it').then((m) => m.default) },
   { code: 'pl', name: 'Polski', load: () => import('./locales/pl').then((m) => m.default) },
   /* European Portuguese (pt-PT spelling). */
