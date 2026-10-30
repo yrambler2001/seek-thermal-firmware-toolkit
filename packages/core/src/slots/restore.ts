@@ -28,7 +28,15 @@
 
 import { sha256hex } from '../bytes.js';
 import { bankWordsOf } from '../profiles/locked-boot.js';
-import { coreMessage, paramText, type CoreMessage, type CoreParam } from '../message.js';
+import {
+  bankParam,
+  coreMessage,
+  listParam,
+  paramText,
+  recordedParam,
+  type CoreMessage,
+  type CoreParam,
+} from '../message.js';
 import { FLASH_DUMP_ALL_SELECTORS_FILE, FLASH_DUMP_ORIGINAL_FILE } from '../archive/flash-files.js';
 import { looksLikeZip, readZipEntries, type ZipEntry } from '../archive/zip-read.js';
 import { PRESERVE_DUMP_ORIGINAL_FILE, PRESERVE_DUMP_PATCHED_FILE } from '../preservation/steps.js';
@@ -253,7 +261,10 @@ export async function fullFlashOf(bytes: Uint8Array, fileName: string): Promise<
       entries = readZipEntries(bytes);
     } catch (error) {
       throw slotRefused(
-        `${fileName} is a ZIP that cannot be read here (${error instanceof Error ? error.message : String(error)}). Nothing was written.`,
+        RESTORE_REFUSAL.zipUnreadable(
+          fileName,
+          error instanceof Error ? error.message : String(error),
+        ),
       );
     }
     let found: { entry: ZipEntry; from: FullFlashSource } | undefined;
@@ -267,14 +278,7 @@ export async function fullFlashOf(bytes: Uint8Array, fileName: string): Promise<
     if (found === undefined) {
       const names = entries.map((candidate) => baseName(candidate.name));
       throw slotRefused(
-        `${fileName} holds no whole flash. A ZIP is taken when it is a Preserve run file that holds ` +
-          `${PRESERVE_DUMP_ORIGINAL_FILE} (once its full-dump step has run), a Dump & decrypt 4.x/Nano zip ` +
-          `(${FLASH_DUMP_ORIGINAL_FILE}) or a Dump all selectors zip (${FLASH_DUMP_ALL_SELECTORS_FILE}); ` +
-          `this ZIP holds ${names.length === 0 ? 'nothing' : names.slice(0, 8).join(', ')}.` +
-          (names.includes(PRESERVE_DUMP_PATCHED_FILE)
-            ? ` Its ${PRESERVE_DUMP_PATCHED_FILE} is the flash with the run's temporary patch in it, so it is not taken.`
-            : '') +
-          ' Nothing was written.',
+        RESTORE_REFUSAL.noWholeFlash(fileName, names, names.includes(PRESERVE_DUMP_PATCHED_FILE)),
       );
     }
     flash = found.entry.data;
@@ -285,11 +289,9 @@ export async function fullFlashOf(bytes: Uint8Array, fileName: string): Promise<
     }
   }
   if (flash.length !== FULL_FLASH_BYTES) {
-    throw slotRefused(
-      `a full flash backup is ${String(FULL_FLASH_BYTES)} B (4 MiB, the whole part a J-Link reads); ` +
-        `${entry ?? fileName} is ${String(flash.length)} B. Nothing was written.`,
-      { size: flash.length },
-    );
+    throw slotRefused(RESTORE_REFUSAL.wrongSize(entry ?? fileName, flash.length), {
+      size: flash.length,
+    });
   }
   return {
     fileName,
@@ -306,6 +308,108 @@ export async function fullFlashOf(bytes: Uint8Array, fileName: string): Promise<
 function byteWords(value: number): string {
   return `0x${value.toString(16).toUpperCase().padStart(2, '0')}`;
 }
+
+/** Why a full flash backup or one of its banks is not restored, as messages (each `text` is the English). */
+export const RESTORE_REFUSAL = {
+  /** `error`: the ZIP reader's own words (English). */
+  zipUnreadable: (file: string, error: string): CoreMessage =>
+    coreMessage(
+      'restore.refused.zipUnreadable',
+      { file, error },
+      `${file} is a ZIP that cannot be read here (${error}). Nothing was written.`,
+    ),
+  /** `names`: the ZIP's file names (at most 8), or none; `patched`: whether one is the run's patched dump. */
+  noWholeFlash: (file: string, names: readonly string[], patched: boolean): CoreMessage => {
+    const held =
+      names.length === 0
+        ? coreMessage('restore.refused.zipEmpty', {}, 'nothing')
+        : names.slice(0, 8).join(', ');
+    const files = {
+      file,
+      preserve: PRESERVE_DUMP_ORIGINAL_FILE,
+      dump: FLASH_DUMP_ORIGINAL_FILE,
+      selectors: FLASH_DUMP_ALL_SELECTORS_FILE,
+      names: held,
+    };
+    return coreMessage(
+      patched ? 'restore.refused.noWholeFlashPatched' : 'restore.refused.noWholeFlash',
+      patched ? { ...files, patched: PRESERVE_DUMP_PATCHED_FILE } : files,
+      `${file} holds no whole flash. A ZIP is taken when it is a Preserve run file that holds ` +
+        `${PRESERVE_DUMP_ORIGINAL_FILE} (once its full-dump step has run), a Dump & decrypt 4.x/Nano zip ` +
+        `(${FLASH_DUMP_ORIGINAL_FILE}) or a Dump all selectors zip (${FLASH_DUMP_ALL_SELECTORS_FILE}); ` +
+        `this ZIP holds ${paramText(held)}.` +
+        (patched
+          ? ` Its ${PRESERVE_DUMP_PATCHED_FILE} is the flash with the run's temporary patch in it, so it is not taken.`
+          : '') +
+        ' Nothing was written.',
+    );
+  },
+  wrongSize: (file: string, size: number): CoreMessage =>
+    coreMessage(
+      'restore.refused.wrongSize',
+      { full: String(FULL_FLASH_BYTES), file, size: String(size) },
+      `a full flash backup is ${String(FULL_FLASH_BYTES)} B (4 MiB, the whole part a J-Link reads); ` +
+        `${file} is ${String(size)} B. Nothing was written.`,
+    ),
+  noBank: (key: SlotKey): CoreMessage =>
+    coreMessage(
+      'restore.refused.noBank',
+      { bank: bankParam(key) },
+      `this build's plan has no ${bankWordsOf(key)}. Nothing was written.`,
+    ),
+  outsideFlash: (name: string, key: SlotKey): CoreMessage =>
+    coreMessage(
+      'restore.refused.outsideFlash',
+      { name: bankNameParam(name, key) },
+      `${name} is not inside a 4 MiB flash. Nothing was written.`,
+    ),
+  /** `reason`: the manifest's reason for the gap (English, as the dump wrote it), or ''. */
+  gap: (
+    where: CoreMessage,
+    file: string,
+    address: number,
+    reason: string,
+    fill: number | null,
+  ): CoreMessage => {
+    const at = `0x${address.toString(16).toUpperCase()}`;
+    const code = `restore.refused.gap${reason === '' ? '' : 'Reason'}${fill === null ? '' : 'Fill'}`;
+    return coreMessage(
+      code,
+      {
+        where,
+        file,
+        address: at,
+        ...(reason === '' ? {} : { gap: reason }),
+        ...(fill === null ? {} : { fill: byteWords(fill) }),
+      },
+      `${where.text} was not read by the dump ${file} comes from: by its manifest.json, ` +
+        `${at} is a gap${reason === '' ? '' : ` (${reason})`}` +
+        `${fill === null ? '' : `, filled with ${byteWords(fill)}`}. There is no image ` +
+        'to restore. Nothing was written.',
+    );
+  },
+  empty: (where: CoreMessage): CoreMessage =>
+    coreMessage(
+      'restore.refused.empty',
+      { where },
+      `${where.text} is empty: every byte is 0xFF. A write programs an image and cannot leave a bank ` +
+        'erased, so an empty bank cannot be restored by a write. Nothing was written.',
+    ),
+  fill: (where: CoreMessage, fill: number): CoreMessage =>
+    coreMessage(
+      'restore.refused.fill',
+      { where, fill: byteWords(fill) },
+      `${where.text} is ${byteWords(fill)} in every byte, the fill the dump writes where it read nothing: ` +
+        'the dump did not read this bank. There is no image to restore. Nothing was written.',
+    ),
+  /** `why`: the decryption's notes, or its status. */
+  notDecrypted: (where: CoreMessage, why: CoreParam): CoreMessage =>
+    coreMessage(
+      'restore.refused.notDecrypted',
+      { where, why },
+      `${where.text} cannot be restored from this file: ${paramText(why)}. Nothing was written.`,
+    ),
+} as const;
 
 /** A restore, planned. */
 export interface SlotRestorePlan {
@@ -449,16 +553,15 @@ export async function planSlotRestore(
 ): Promise<SlotRestorePlan> {
   const entry = report.plan.slots.find((slot) => slot.key === key);
   if (entry === undefined) {
-    throw slotRefused(`this build's plan has no ${bankWordsOf(key)}. Nothing was written.`);
+    throw slotRefused(RESTORE_REFUSAL.noBank(key));
   }
   const offset = entry.address - FLASH_BASE;
   if (offset < 0 || offset + SLOT_BYTES > backup.flash.length) {
-    throw slotRefused(`${entry.name} is not inside a 4 MiB flash. Nothing was written.`);
+    throw slotRefused(RESTORE_REFUSAL.outsideFlash(entry.name, key));
   }
   const stored = backup.flash.slice(offset, offset + SLOT_BYTES);
   const storedSha256 = await sha256hex(stored);
   const whereMessage = RESTORE_WORDS.where(entry.name, key, entry.address);
-  const where = whereMessage.text;
   const gap = backup.gaps.find(
     (candidate) =>
       candidate.address < entry.address + SLOT_BYTES &&
@@ -466,30 +569,26 @@ export async function planSlotRestore(
   );
   if (gap !== undefined) {
     throw slotRefused(
-      `${where} was not read by the dump ${backup.fileName} comes from: by its manifest.json, ` +
-        `0x${gap.address.toString(16).toUpperCase()} is a gap${gap.reason === '' ? '' : ` (${gap.reason})`}` +
-        `${backup.gapFill === null ? '' : `, filled with ${byteWords(backup.gapFill)}`}. There is no image ` +
-        'to restore. Nothing was written.',
+      RESTORE_REFUSAL.gap(whereMessage, backup.fileName, gap.address, gap.reason, backup.gapFill),
     );
   }
   if (stored.every((byte) => byte === 0xff)) {
-    throw slotRefused(
-      `${where} is empty: every byte is 0xFF. A write programs an image and cannot leave a bank ` +
-        'erased, so an empty bank cannot be restored by a write. Nothing was written.',
-    );
+    throw slotRefused(RESTORE_REFUSAL.empty(whereMessage));
   }
   const gapFill = backup.gapFill;
   if (gapFill !== null && stored.every((byte) => byte === gapFill)) {
-    throw slotRefused(
-      `${where} is ${byteWords(gapFill)} in every byte, the fill the dump writes where it read nothing: ` +
-        'the dump did not read this bank. There is no image to restore. Nothing was written.',
-    );
+    throw slotRefused(RESTORE_REFUSAL.fill(whereMessage, gapFill));
   }
   const decryption = await decryptSlotFile(stored, { profile: report.state.profile });
   if (decryption.status !== 'decrypted' || decryption.plain === null) {
+    const notes = decryption.notes.map((note, at) =>
+      recordedParam(decryption.noteMessages?.[at], note),
+    );
     throw slotRefused(
-      `${where} cannot be restored from this file: ${decryption.notes.join('; ') || decryption.status}. ` +
-        'Nothing was written.',
+      RESTORE_REFUSAL.notDecrypted(
+        whereMessage,
+        notes.length === 0 ? decryption.status : listParam(notes, 'semicolon'),
+      ),
     );
   }
   const plain = decryption.plain;

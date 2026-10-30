@@ -95,6 +95,103 @@ export function asSlotRefusal(error: unknown): SeekError {
 
 /* ---- the image itself --------------------------------------------------- */
 
+/** Why an image file is not staged, as messages (each `text` is the refusal's English). */
+export const SLOT_IMAGE_REFUSAL = {
+  tooSmall: coreMessage('slots.image.tooSmall', {}, 'file is too small to hold an image header'),
+  notWordSized: (size: number): CoreMessage =>
+    coreMessage(
+      'slots.image.notWordSized',
+      { size: String(size) },
+      `image size must be a multiple of 4 (got ${String(size)} B)`,
+    ),
+  tooLong: (size: number): CoreMessage =>
+    coreMessage(
+      'slots.image.tooLong',
+      { size: String(size), limit: hexUp(TRY_KEYS_MAX_LEN) },
+      `image is ${String(size)} B; the bootloader rejects any header.length >= ` +
+        `${hexUp(TRY_KEYS_MAX_LEN)}, so it would never boot`,
+    ),
+  noHeader: (magic: number): CoreMessage =>
+    coreMessage(
+      'slots.image.noHeader',
+      { at: hexUp(HEADER_OFFSET), magic: hexUp(magic), expected: hexUp(IMAGE_MAGIC) },
+      `no image header at ${hexUp(HEADER_OFFSET)} (magic ${hexUp(magic)}, expected ` +
+        `${hexUp(IMAGE_MAGIC)}) — this must be a decrypted Seek firmware image, not an ` +
+        'encrypted slot or a flash dump',
+    ),
+  stackOutside: (sp: number): CoreMessage =>
+    coreMessage(
+      'slots.image.stackOutside',
+      { address: hexUp(sp) },
+      `initial stack pointer ${hexUp(sp)} is not in LPC43xx SRAM — this does not look decrypted`,
+    ),
+  stackUnaligned: (sp: number): CoreMessage =>
+    coreMessage(
+      'slots.image.stackUnaligned',
+      { address: hexUp(sp) },
+      `initial stack pointer ${hexUp(sp)} is not word-aligned`,
+    ),
+  notThumb: (entry: number): CoreMessage =>
+    coreMessage(
+      'slots.image.notThumb',
+      { address: hexUp(entry) },
+      `reset vector ${hexUp(entry)} is not a Thumb address`,
+    ),
+  noKeyPair: coreMessage(
+    'slots.image.noKeyPair',
+    {},
+    "this file's name does not carry its key pair, and neither this camera's pair nor a decoded " +
+      'application pair occurs in the image exactly once, so there is no telling which keys the ' +
+      'image was built for. Decrypted files come out named with the keys they contain.',
+  ),
+  /** `mismatch`: what the image holds instead, in English (`describeKeyTableMismatch`). */
+  keyMismatch: (keyA: string, keyB: string, mismatch: string): CoreMessage =>
+    coreMessage(
+      'slots.image.keyMismatch',
+      { keyA, keyB, mismatch },
+      `the filename claims Key A ${keyA} and Key B ${keyB}, ` +
+        `but ${mismatch}. Both keys must be ` +
+        'present, exactly once each.',
+    ),
+  keyInHeader: (offset: number): CoreMessage =>
+    coreMessage(
+      'slots.image.keyInHeader',
+      { at: hexUp(offset) },
+      `this image keeps a key at ${hexUp(offset)}, inside the cleartext header window — ` +
+        'refusing to patch it',
+    ),
+  keysOverlap: (offsetA: number, offsetB: number): CoreMessage =>
+    coreMessage(
+      'slots.image.keysOverlap',
+      { at: hexUp(offsetA), other: hexUp(offsetB) },
+      `the filename's Key A and Key B resolve to overlapping bytes at ${hexUp(offsetA)} and ` +
+        `${hexUp(offsetB)} — they must be two distinct 16-byte values`,
+    ),
+  retargetLost: coreMessage(
+    'slots.image.retargetLost',
+    {},
+    "after retargeting, the image does not carry this camera's key pair exactly once — " +
+      'refusing to build a payload whose later upgrades the bootloader could not key',
+  ),
+  noStageKey: coreMessage(
+    'slots.image.noStageKey',
+    {},
+    'the image carries no key pair of the 2016 line, so there is no stage key to encode it with',
+  ),
+  ffSumNoKeys: coreMessage(
+    'slots.image.ffSumNoKeys',
+    {},
+    'this image has the 16 Hz FF word sum 0xFFFF but does not carry the 1.3.0.8-FF key pair ' +
+      '(both halves, once each), so its staged form cannot be built. Nothing was written.',
+  ),
+  ffNotPlain: coreMessage(
+    'slots.image.ffNotPlain',
+    {},
+    'this is the 1.3.0.8 FF (16 Hz) image, which is staged in its own Key A form (ff-form.ts), ' +
+      'not as a plain image. Nothing was written.',
+  ),
+} as const;
+
 /**
  * The shape checks made before an image is staged: size,
  * header magic, the stack pointer and reset vector of a decrypted image. Each
@@ -102,35 +199,26 @@ export function asSlotRefusal(error: unknown): SeekError {
  */
 export function assertImageShape(bytes: Uint8Array): void {
   if (bytes.length < HEADER_OFFSET + HEADER_SIZE) {
-    throw slotRefused('file is too small to hold an image header');
+    throw slotRefused(SLOT_IMAGE_REFUSAL.tooSmall);
   }
   if (bytes.length & 3) {
-    throw slotRefused(`image size must be a multiple of 4 (got ${String(bytes.length)} B)`);
+    throw slotRefused(SLOT_IMAGE_REFUSAL.notWordSized(bytes.length));
   }
   if (bytes.length >= TRY_KEYS_MAX_LEN) {
-    throw slotRefused(
-      `image is ${String(bytes.length)} B; the bootloader rejects any header.length >= ` +
-        `${hexUp(TRY_KEYS_MAX_LEN)}, so it would never boot`,
-    );
+    throw slotRefused(SLOT_IMAGE_REFUSAL.tooLong(bytes.length));
   }
   const dv = viewOf(bytes);
   const magic = dv.getUint32(HEADER_OFFSET, true);
   if (magic !== IMAGE_MAGIC) {
-    throw slotRefused(
-      `no image header at ${hexUp(HEADER_OFFSET)} (magic ${hexUp(magic)}, expected ` +
-        `${hexUp(IMAGE_MAGIC)}) — this must be a decrypted Seek firmware image, not an ` +
-        'encrypted slot or a flash dump',
-    );
+    throw slotRefused(SLOT_IMAGE_REFUSAL.noHeader(magic));
   }
   const sp = dv.getUint32(0, true);
   const entry = dv.getUint32(4, true);
   if (sp >>> 24 !== 0x10 && sp >>> 24 !== 0x20) {
-    throw slotRefused(
-      `initial stack pointer ${hexUp(sp)} is not in LPC43xx SRAM — this does not look decrypted`,
-    );
+    throw slotRefused(SLOT_IMAGE_REFUSAL.stackOutside(sp));
   }
-  if (sp & 3) throw slotRefused(`initial stack pointer ${hexUp(sp)} is not word-aligned`);
-  if (!(entry & 1)) throw slotRefused(`reset vector ${hexUp(entry)} is not a Thumb address`);
+  if (sp & 3) throw slotRefused(SLOT_IMAGE_REFUSAL.stackUnaligned(sp));
+  if (!(entry & 1)) throw slotRefused(SLOT_IMAGE_REFUSAL.notThumb(entry));
 }
 
 /**
@@ -165,18 +253,16 @@ export function retargetImageKeys(bytes: Uint8Array, fileName: string, mine: Key
   const named = parseKeyFilenameSuffix(fileName);
   const own = named ?? locateOwnKeyPair(bytes, mine);
   if (own === null) {
-    throw slotRefused(
-      "this file's name does not carry its key pair, and neither this camera's pair nor a decoded " +
-        'application pair occurs in the image exactly once, so there is no telling which keys the ' +
-        'image was built for. Decrypted files come out named with the keys they contain.',
-    );
+    throw slotRefused(SLOT_IMAGE_REFUSAL.noKeyPair);
   }
   const at = findEmbeddedKeyTable(bytes, own.keyA, own.keyB);
   if (at === null) {
     throw slotRefused(
-      `the filename claims Key A ${bytesToHex(own.keyA)} and Key B ${bytesToHex(own.keyB)}, ` +
-        `but ${describeKeyTableMismatch(bytes, own.keyA, own.keyB)}. Both keys must be ` +
-        'present, exactly once each.',
+      SLOT_IMAGE_REFUSAL.keyMismatch(
+        bytesToHex(own.keyA),
+        bytesToHex(own.keyB),
+        describeKeyTableMismatch(bytes, own.keyA, own.keyB),
+      ),
       { keyA: bytesToHex(own.keyA), keyB: bytesToHex(own.keyB) },
     );
   }
@@ -184,19 +270,13 @@ export function retargetImageKeys(bytes: Uint8Array, fileName: string, mine: Key
     if (offset < HEADER_OFFSET + HEADER_SIZE && offset + 16 > HEADER_OFFSET) {
       /* Those bytes are stored verbatim so the bootloader can read the length
        * before it has a key; rewriting them would change what it reads. */
-      throw slotRefused(
-        `this image keeps a key at ${hexUp(offset)}, inside the cleartext header window — ` +
-          'refusing to patch it',
-      );
+      throw slotRefused(SLOT_IMAGE_REFUSAL.keyInHeader(offset));
     }
   }
   /* Two distinct 16-byte values: the same key named twice would leave Key A
    * nowhere in the image. */
   if (at.offsetA < at.offsetB + 16 && at.offsetB < at.offsetA + 16) {
-    throw slotRefused(
-      `the filename's Key A and Key B resolve to overlapping bytes at ${hexUp(at.offsetA)} and ` +
-        `${hexUp(at.offsetB)} — they must be two distinct 16-byte values`,
-    );
+    throw slotRefused(SLOT_IMAGE_REFUSAL.keysOverlap(at.offsetA, at.offsetB));
   }
   const alreadyMine = equalBytes(own.keyA, mine.keyA) && equalBytes(own.keyB, mine.keyB);
   let image = bytes;
@@ -206,10 +286,7 @@ export function retargetImageKeys(bytes: Uint8Array, fileName: string, mine: Key
     image.set(mine.keyB, at.offsetB);
   }
   if (findEmbeddedKeyTable(image, mine.keyA, mine.keyB) === null) {
-    throw slotRefused(
-      "after retargeting, the image does not carry this camera's key pair exactly once — " +
-        'refusing to build a payload whose later upgrades the bootloader could not key',
-    );
+    throw slotRefused(SLOT_IMAGE_REFUSAL.retargetLost);
   }
   return image;
 }
@@ -285,9 +362,7 @@ export function stageKeyBlockOf(image: Uint8Array): string {
       return pair.block0;
     }
   }
-  throw slotRefused(
-    'the image carries no key pair of the 2016 line, so there is no stage key to encode it with',
-  );
+  throw slotRefused(SLOT_IMAGE_REFUSAL.noStageKey);
 }
 
 /**
@@ -335,11 +410,7 @@ export function plainChainBuildOf(image: Uint8Array): PlainChainBuild {
   if (fileSum === 0) return 'plain';
   if (locateFFKeys(image) !== null) return 'ff-1308';
   if (fileSum === 0xffff) {
-    throw slotRefused(
-      'this image has the 16 Hz FF word sum 0xFFFF but does not carry the 1.3.0.8-FF key pair ' +
-        '(both halves, once each), so its staged form cannot be built. Nothing was written.',
-      { fileSum },
-    );
+    throw slotRefused(SLOT_IMAGE_REFUSAL.ffSumNoKeys, { fileSum });
   }
   return 'plain';
 }
@@ -352,10 +423,7 @@ export function plainChainBuildOf(image: Uint8Array): PlainChainBuild {
  */
 export function buildPlainPayload(image: Uint8Array, cipher: CipherProfile): StagedBytes {
   if (plainChainBuildOf(image) === 'ff-1308') {
-    throw slotRefused(
-      'this is the 1.3.0.8 FF (16 Hz) image, which is staged in its own Key A form (ff-form.ts), ' +
-        'not as a plain image. Nothing was written.',
-    );
+    throw slotRefused(SLOT_IMAGE_REFUSAL.ffNotPlain);
   }
   try {
     const stamped = setAcceptSum(image, { ...cipher, acceptanceSum: 0 });

@@ -622,6 +622,74 @@ export const SLOT_WRITE_REFUSAL = {
     ),
 } as const;
 
+/** Why a plan is not sent under this analysis, as messages (each `text` is the refusal's English). */
+export const SLOT_PLAN_REFUSAL = {
+  otherFirmware: (built: string | null, reads: string): CoreMessage =>
+    built === null
+      ? coreMessage(
+          'slots.plan.otherFirmwareUnknown',
+          { version: reads },
+          `the plan was built for firmware of unknown version, but the ` +
+            `analysis reads ${reads}. The plan is stale; build it again. Nothing was written.`,
+        )
+      : coreMessage(
+          'slots.plan.otherFirmware',
+          { firmware: built, version: reads },
+          `the plan was built for firmware ${built}, but the ` +
+            `analysis reads ${reads}. The plan is stale; build it again. Nothing was written.`,
+        ),
+  otherCamera: (built: string | null, reads: string | null): CoreMessage => {
+    const camera = built ?? coreMessage('slots.plan.cameraUnknownSerial', {}, 'of unknown serial');
+    const serial = reads ?? coreMessage('slots.plan.unknownSerial', {}, 'an unknown serial');
+    return coreMessage(
+      'slots.plan.otherCamera',
+      { planSerial: camera, serial },
+      `the plan was built for camera ${paramText(camera)}, but the analysis reads ` +
+        `${paramText(serial)}. Refusing to write it here. Nothing was written.`,
+    );
+  },
+  otherAddress: (address: number, entry: SlotEntry): CoreMessage =>
+    coreMessage(
+      'slots.plan.otherAddress',
+      { address: hexUp(address), name: nameOf(entry), at: hexUp(entry.address) },
+      `the plan targets ${hexUp(address)}, but the build's ${entry.name} is at ${hexUp(entry.address)}`,
+    ),
+  notRead: (entry: SlotEntry): CoreMessage =>
+    coreMessage(
+      'slots.plan.notRead',
+      { name: nameOf(entry) },
+      `the analysis no longer reads ${entry.name}. Nothing was written.`,
+    ),
+  edited: coreMessage(
+    'slots.plan.edited',
+    {},
+    'the plan checksum does not match its payload, so the plan was edited. Nothing was written.',
+  ),
+  outsideBank: (size: number, entry: SlotEntry): CoreMessage =>
+    coreMessage(
+      'slots.plan.outsideBank',
+      { size: hex(size), name: nameOf(entry) },
+      `the payload is ${hex(size)} B, outside the ${entry.name} bank`,
+    ),
+  /** A library caller's write without `acknowledgeRisk` (`risk`: why the bank matters). */
+  riskAck: (risk: CoreMessage): CoreMessage =>
+    coreMessage(
+      'slots.plan.riskAck',
+      { risk },
+      `${risk.text}. Writing it needs acknowledgeRisk: true. Nothing was sent.`,
+    ),
+  plainStaging: coreMessage(
+    'slots.plan.plainStaging',
+    { reason: supportReasonMessage(PLAIN_CHAIN_ONLY_REASON) },
+    `this camera cannot take a plain-staged image from here: ${PLAIN_CHAIN_ONLY_REASON}. Nothing was written.`,
+  ),
+  noKeyTable: coreMessage(
+    'slots.plan.noKeyTable',
+    {},
+    "the analysis does not name this camera's bootloader key table, so the image cannot be retargeted to it",
+  ),
+} as const;
+
 function refuseOnCameraWide(state: DeviceState, kind: SlotInputKind): void {
   const refusal = kind === 'raw' ? cameraWriteRefusal(state) : slotWriteRefusal(state);
   if (refusal === null) return;
@@ -638,10 +706,7 @@ function refuseOnCameraWide(state: DeviceState, kind: SlotInputKind): void {
  */
 function refusePlainStaging(state: DeviceState): void {
   if (state.plainChain) return;
-  throw slotRefused(
-    `this camera cannot take a plain-staged image from here: ${PLAIN_CHAIN_ONLY_REASON}. Nothing was written.`,
-    { blockedBy: [PLAIN_CHAIN_ONLY_REASON] },
-  );
+  throw slotRefused(SLOT_PLAN_REFUSAL.plainStaging, { blockedBy: [PLAIN_CHAIN_ONLY_REASON] });
 }
 
 function stageImage(
@@ -659,13 +724,15 @@ function stageImage(
     }
     const keyTable = state.keyTable;
     if (keyTable === null) {
-      throw slotRefused(
-        "the analysis does not name this camera's bootloader key table, so the image cannot be retargeted to it",
-      );
+      throw slotRefused(SLOT_PLAN_REFUSAL.noKeyTable);
     }
     const keys = deriveWriteKeys(state);
     if (keys.refusal !== null || keys.atRest === null || keys.booted === null) {
-      throw slotRefused(keys.refusal ?? 'the upload keys could not be derived');
+      throw slotRefused(
+        keys.refusal === null
+          ? 'the upload keys could not be derived'
+          : (keys.refusalMessage ?? keys.refusal),
+      );
     }
     const mine = retargetImageKeys(input.bytes, input.fileName, keyTable);
     const staged = buildKeyAPayload(
@@ -768,41 +835,31 @@ function stageImage(
  */
 function assertPlanIsCurrent(report: SlotsReport, plan: SlotFlashPlan, entry: SlotEntry): void {
   const { state } = report;
-  if (!report.plan.supportedBuild.supported) throw slotRefused(report.plan.supportedBuild.reason);
+  if (!report.plan.supportedBuild.supported) {
+    throw slotRefused(supportReasonMessage(report.plan.supportedBuild));
+  }
   if (state.version === null) {
     throw slotRefused(SLOT_WRITE_REFUSAL.versionUnknownWrite());
   }
   if (plan.firmwareVersion !== state.version) {
-    throw slotRefused(
-      `the plan was built for firmware ${plan.firmwareVersion ?? 'of unknown version'}, but the ` +
-        `analysis reads ${state.version}. The plan is stale; build it again. Nothing was written.`,
-    );
+    throw slotRefused(SLOT_PLAN_REFUSAL.otherFirmware(plan.firmwareVersion, state.version));
   }
   if (plan.serial !== state.serial) {
-    throw slotRefused(
-      `the plan was built for camera ${plan.serial ?? 'of unknown serial'}, but the analysis reads ` +
-        `${state.serial ?? 'an unknown serial'}. Refusing to write it here. Nothing was written.`,
-    );
+    throw slotRefused(SLOT_PLAN_REFUSAL.otherCamera(plan.serial, state.serial));
   }
   if (plan.address !== entry.address) {
-    throw slotRefused(
-      `the plan targets ${hexUp(plan.address)}, but the build's ${entry.name} is at ${hexUp(entry.address)}`,
-    );
+    throw slotRefused(SLOT_PLAN_REFUSAL.otherAddress(plan.address, entry));
   }
   const slot = slotByKey(state, plan.key);
   if (slot === null || slot.unread) {
-    throw slotRefused(`the analysis no longer reads ${entry.name}. Nothing was written.`);
+    throw slotRefused(SLOT_PLAN_REFUSAL.notRead(entry));
   }
   if (plan.sum16 !== transferSum16(plan.payload)) {
-    throw slotRefused(
-      'the plan checksum does not match its payload, so the plan was edited. Nothing was written.',
-    );
+    throw slotRefused(SLOT_PLAN_REFUSAL.edited);
   }
   const bankBytes = Math.min(entry.length, SLOT_BYTES);
   if (plan.payload.length === 0 || plan.payload.length > bankBytes) {
-    throw slotRefused(
-      `the payload is ${hex(plan.payload.length)} B, outside the ${entry.name} bank`,
-    );
+    throw slotRefused(SLOT_PLAN_REFUSAL.outsideBank(plan.payload.length, entry));
   }
 }
 
@@ -826,9 +883,7 @@ export function checkSlotFlash(
    * first (`useSlotsPanel` `needsRiskAck`, the same rule), and the CLI refuses `slots flash` and
    * `slots patch-fps` without --acknowledge-risk before the plan (`bootRisk`, a superset of this rule). */
   if (risk !== null && !options.acknowledgeRisk) {
-    throw slotRefused(`${risk.text}. Writing it needs acknowledgeRisk: true. Nothing was sent.`, {
-      key: plan.key,
-    });
+    throw slotRefused(SLOT_PLAN_REFUSAL.riskAck(risk), { key: plan.key });
   }
   /* The camera-wide refusal the page's banner shows (`slotWriteRefusal`) binds every staging, so the
    * writer sends nothing the page refuses. On the lines that stage under their own image it names only

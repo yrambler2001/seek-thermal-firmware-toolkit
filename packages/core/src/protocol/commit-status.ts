@@ -33,6 +33,7 @@
  * So three classes, and only the first is "the bank is unchanged".
  * ==================================================================== */
 
+import { coreMessage, type CoreMessage } from '../message.js';
 import { ERR_BAD_CHECKSUM } from './ops.js';
 
 const ERR_UNSUPPORTED = 0x50000;
@@ -79,21 +80,39 @@ export function classifyCommitStatus(status: number | null): CommitStatusClass {
 
 /** The cause in words for a status, as the firmware's own return site names it. */
 export function commitStatusCause(status: number): string {
-  if (status === ERR_BAD_CHECKSUM) return 'the transfer checksum did not match the staged bytes';
+  return commitStatusCauseMessage(status).text;
+}
+
+/** `commitStatusCause` as a message, for the page. */
+export function commitStatusCauseMessage(status: number): CoreMessage {
+  const cause = (code: string, text: string): CoreMessage =>
+    coreMessage(`commit.cause.${code}`, {}, text);
+  return cause(...commitStatusCauseWords(status));
+}
+
+function commitStatusCauseWords(status: number): [string, string] {
+  if (status === ERR_BAD_CHECKSUM)
+    return ['badChecksum', 'the transfer checksum did not match the staged bytes'];
   if (status === ERR_UNSUPPORTED) {
-    return "the image did not decrypt under the camera's keys, or the data type is refused";
+    return [
+      'unsupported',
+      "the image did not decrypt under the camera's keys, or the data type is refused",
+    ];
   }
   if (status === ERR_ACCEPTANCE) {
-    return 'the image was refused by its acceptance check before anything was erased (the check depends on the build)';
+    return [
+      'acceptance',
+      'the image was refused by its acceptance check before anything was erased (the check depends on the build)',
+    ];
   }
-  if ((status & 0xffffff00) === WRONG_FW_OP_CLASS) return 'no bank upgrade was armed';
+  if ((status & 0xffffff00) === WRONG_FW_OP_CLASS) return ['notArmed', 'no bank upgrade was armed'];
   if ((status & 0xffff0000) === FLASH_FAILURE_CLASS) {
     const detail = status & 0xff00;
-    if (detail === ERASE_DETAIL) return 'the erase stage failed';
-    if (detail === PROGRAM_DETAIL) return 'the program stage failed';
-    if (detail === VERIFY_DETAIL) return 'the verify stage failed';
+    if (detail === ERASE_DETAIL) return ['eraseFailed', 'the erase stage failed'];
+    if (detail === PROGRAM_DETAIL) return ['programFailed', 'the program stage failed'];
+    if (detail === VERIFY_DETAIL) return ['verifyFailed', 'the verify stage failed'];
   }
-  return 'a status not known here';
+  return ['unknown', 'a status not known here'];
 }
 
 /**

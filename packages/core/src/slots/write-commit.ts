@@ -17,11 +17,16 @@
 
 import { errorMessage, CancelledError, SeekError } from '../errors.js';
 import { hex, hexUp } from '../bytes.js';
-import { classifyCommitStatus, commitStatusCause } from '../protocol/commit-status.js';
+import { bankParam, coreMessage, paramText, type CoreMessage, type CoreParam } from '../message.js';
+import {
+  classifyCommitStatus,
+  commitStatusCause,
+  commitStatusCauseMessage,
+} from '../protocol/commit-status.js';
 import { EP0_BUF, USB_COMMIT_TIMEOUT_MS } from '../protocol/ops.js';
 import type { WindowEntry } from '../profiles/types.js';
 import { isCancelled, warnIfRecipientFellBack, type WorkflowContext } from '../workflows/types.js';
-import type { SlotEntry } from './types.js';
+import type { SlotEntry, SlotKey } from './types.js';
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -41,51 +46,80 @@ const PROGRESS_MASK = 0x7ff;
  * is said for the first class and for nothing else, and `may be partially
  * written` for the classes that cannot say so.
  */
-export function commitRefusal(name: string, status: number | null): SeekError {
+export function commitRefusal(name: string, status: number | null, key?: SlotKey): SeekError {
   const outcome = classifyCommitStatus(status);
   const reread = 'Read the banks again before doing anything else';
+  const bank: CoreParam =
+    key !== undefined && name === paramText(bankParam(key, 'name')) ? bankParam(key, 'name') : name;
+  const refusal = (message: CoreMessage, safeToRetry: boolean): SeekError =>
+    new SeekError('flash/commit', message.text, {
+      ...(status === null ? {} : { deviceCode: status }),
+      detail: { dropAnalysis: true, safeToRetry, commitOutcome: outcome },
+      coreMessage: message,
+    });
   if (status === null) {
-    return new SeekError(
-      'flash/commit',
-      `the commit status could not be read after CompleteMemoryUpgrade, so ${name} may be ` +
-        `partially written. ${reread}, and keep your dump.`,
-      { detail: { dropAnalysis: true, safeToRetry: false, commitOutcome: outcome } },
+    return refusal(
+      coreMessage(
+        'slots.commit.unread',
+        { name: bank },
+        `the commit status could not be read after CompleteMemoryUpgrade, so ${name} may be ` +
+          `partially written. ${reread}, and keep your dump.`,
+      ),
+      false,
     );
   }
   const shown = hexUp(status);
+  const cause = commitStatusCauseMessage(status);
   if (outcome === 'refused-before-programming') {
     /* Said plainly, because it is an outcome a plan can expect (the 1.3.0.8 FF image on the 8 Hz build,
      * write.ts `ffCommitOf`): the camera refused, nothing was written. */
-    return new SeekError(
-      'flash/commit',
-      `the camera refused the write to ${name} at commit with ${shown}: ` +
-        `${commitStatusCause(status)}. Nothing was written; the bank is unchanged. ${reread}.`,
-      {
-        deviceCode: status,
-        detail: { dropAnalysis: true, safeToRetry: true, commitOutcome: outcome },
-      },
+    return refusal(
+      coreMessage(
+        'slots.commit.refused',
+        { name: bank, status: shown, cause },
+        `the camera refused the write to ${name} at commit with ${shown}: ` +
+          `${commitStatusCause(status)}. Nothing was written; the bank is unchanged. ${reread}.`,
+      ),
+      true,
     );
   }
   if (outcome === 'erase-stage') {
-    return new SeekError(
-      'flash/commit',
-      `CompleteMemoryUpgrade returned ${shown} (${commitStatusCause(status)}) for ${name}: nothing was ` +
-        'programmed, but the erase may have started, so the bank may be partly erased. ' +
-        `${reread}, and keep your dump.`,
-      {
-        deviceCode: status,
-        detail: { dropAnalysis: true, safeToRetry: false, commitOutcome: outcome },
-      },
+    return refusal(
+      coreMessage(
+        'slots.commit.eraseStage',
+        { name: bank, status: shown, cause },
+        `CompleteMemoryUpgrade returned ${shown} (${commitStatusCause(status)}) for ${name}: nothing was ` +
+          'programmed, but the erase may have started, so the bank may be partly erased. ' +
+          `${reread}, and keep your dump.`,
+      ),
+      false,
     );
   }
-  return new SeekError(
-    'flash/commit',
-    `CompleteMemoryUpgrade returned ${shown} (${commitStatusCause(status)}) — ${name} may be partially ` +
-      `written. ${reread}, and keep your dump.`,
-    {
-      deviceCode: status,
-      detail: { dropAnalysis: true, safeToRetry: false, commitOutcome: outcome },
-    },
+  return refusal(
+    coreMessage(
+      'slots.commit.partial',
+      { name: bank, status: shown, cause },
+      `CompleteMemoryUpgrade returned ${shown} (${commitStatusCause(status)}) — ${name} may be partially ` +
+        `written. ${reread}, and keep your dump.`,
+    ),
+    false,
+  );
+}
+
+/** A status the camera reported while a bank was staged, before the commit: nothing was written. */
+export function stagingStatusMessage(
+  status: number,
+  name: string,
+  key: SlotKey | undefined,
+  offset: number,
+): CoreMessage {
+  const bank: CoreParam =
+    key !== undefined && name === paramText(bankParam(key, 'name')) ? bankParam(key, 'name') : name;
+  return coreMessage(
+    'slots.commit.stagingStatus',
+    { status: hex(status), name: bank, offset: hex(offset) },
+    `the camera reported ${hex(status)} while staging ${name} at offset ` +
+      `${hex(offset)} — aborted before CompleteMemoryUpgrade, so nothing was written to flash`,
   );
 }
 
@@ -131,12 +165,12 @@ export async function stageAndCommit(
 
   const startedAt = Date.now();
   const abort = (deviceCode: number, offset: number): never => {
-    throw new SeekError(
-      'slots/refused',
-      `the camera reported ${hex(deviceCode)} while staging ${entry.name} at offset ` +
-        `${hex(offset)} — aborted before CompleteMemoryUpgrade, so nothing was written to flash`,
-      { deviceCode, detail: { offset } },
-    );
+    const message = stagingStatusMessage(deviceCode, entry.name, entry.key, offset);
+    throw new SeekError('slots/refused', message.text, {
+      deviceCode,
+      detail: { offset },
+      coreMessage: message,
+    });
   };
 
   for (let offset = 0; offset < payload.length; offset += EP0_BUF) {
@@ -187,7 +221,7 @@ export async function stageAndCommit(
     status = null;
   }
   /* Not a success: what the status proves is decided by `commitRefusal`. */
-  if (status !== 0) throw commitRefusal(entry.name, status);
+  if (status !== 0) throw commitRefusal(entry.name, status, entry.key);
   reporter.log(`${entry.name}: committed, commit status 0`, 'ok');
   return status;
 }

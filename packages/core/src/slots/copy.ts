@@ -11,7 +11,13 @@
 
 import { hexUp } from '../bytes.js';
 import { bankNameOf } from '../profiles/locked-boot.js';
-import { coreMessage, recordedParam, type CoreMessage } from '../message.js';
+import {
+  coreMessage,
+  paramText,
+  recordedParam,
+  type CoreMessage,
+  type CoreParam,
+} from '../message.js';
 import { bankNameParam } from './backup.js';
 import { slotDumpNames } from './dump.js';
 import { prepareSlotFlash } from './write.js';
@@ -124,20 +130,43 @@ export const COPY_WORDS = {
   },
 } as const;
 
+/** Why a copy is not planned, as messages (`name`: the source bank's name in the plan). */
+export const COPY_REFUSAL = {
+  ontoItself: (name: string, key: SlotKey): CoreMessage =>
+    coreMessage(
+      'copy.refused.ontoItself',
+      { name: bankNameParam(name, key) },
+      `${name} is not copied onto itself. Nothing was written.`,
+    ),
+  /** `why`: the source's refusal (copySourceRefusalMessage). */
+  source: (why: CoreParam): CoreMessage =>
+    coreMessage('copy.refused.source', { why }, `${paramText(why)}. Nothing was written.`),
+  noPlain: (name: string, key: SlotKey): CoreMessage =>
+    coreMessage(
+      'copy.refused.noPlain',
+      { name: bankNameParam(name, key) },
+      `${name} has no decrypted image to copy. Nothing was written.`,
+    ),
+} as const;
+
 /**
  * Plans the copy of `from`'s image into `to`. Throws a refusal (nothing sent) for a copy onto itself, for a
  * source with no image to copy, and for everything `prepareSlotFlash` refuses for a decrypted image in `to`.
  */
 export function planSlotCopy(report: SlotsReport, from: SlotKey, to: SlotKey): SlotCopyPlan {
   const fromName = nameOf(report, from);
-  if (from === to) throw slotRefused(`${fromName} is not copied onto itself. Nothing was written.`);
+  if (from === to) throw slotRefused(COPY_REFUSAL.ontoItself(fromName, from));
   const why = copySourceRefusal(report, from);
-  if (why !== null) throw slotRefused(`${why}. Nothing was written.`);
+  if (why !== null) {
+    throw slotRefused(
+      COPY_REFUSAL.source(recordedParam(copySourceRefusalMessage(report, from), why)),
+    );
+  }
   const view = report.slots.find((candidate) => candidate.entry.key === from);
   const state = view?.state ?? null;
   const plain = state?.plain ?? null;
   if (state === null || plain === null) {
-    throw slotRefused(`${fromName} has no decrypted image to copy. Nothing was written.`);
+    throw slotRefused(COPY_REFUSAL.noPlain(fromName, from));
   }
   const version = state.plainHeader?.versionStr ?? state.header?.versionStr ?? null;
   const storedSha = state.raw === null ? sha256Sync(plain) : sha256Sync(state.raw);

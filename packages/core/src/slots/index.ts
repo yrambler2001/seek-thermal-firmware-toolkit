@@ -91,6 +91,7 @@ export {
   copySourceRefusalMessage,
   planSlotCopy,
   COPY_WORDS,
+  COPY_REFUSAL,
   type SlotCopyPlan,
 } from './copy.js';
 export {
@@ -108,6 +109,7 @@ export {
   fullFlashSourceWords,
   fullFlashSourceMessage,
   RESTORE_WORDS,
+  RESTORE_REFUSAL,
   planSlotRestore,
   restoreReadBack,
   restoreReadBackText,
@@ -245,4 +247,7 @@ export { fpsStoppedMessage } from './fps-patch.js';
 export { FPS_TABLE_REASON } from '../preservation/fps-patch.js';
 export { capabilityNoteMessage, capabilityNotes } from './capability-notes.js';
 export { SUPPORT_REASON, supportReasonMessage, supportReasons } from './capability.js';
-export { SLOT_WRITE_REFUSAL } from './write.js';
+export { SLOT_WRITE_REFUSAL, SLOT_PLAN_REFUSAL } from './write.js';
+export { SLOT_IMAGE_REFUSAL } from './write-image.js';
+export { commitRefusal, stagingStatusMessage } from './write-commit.js';
+export { commitStatusCauseMessage } from '../protocol/commit-status.js';

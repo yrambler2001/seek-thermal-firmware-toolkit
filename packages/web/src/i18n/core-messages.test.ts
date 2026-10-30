@@ -46,6 +46,7 @@ import {
   STAGED_UNDER_IMAGE_BLOCK_0_MESSAGE,
   backupPlanMessage,
   bankParam,
+  listParam,
   bootWordRuleMessage,
   bootsNowMessage,
   copySourceRefusalMessage,
@@ -169,6 +170,12 @@ import {
   unknownImageWordsMessage,
   PRESERVE_DERIVE_WORDS,
   PRESERVE_GATE,
+  COPY_REFUSAL,
+  RESTORE_REFUSAL,
+  SLOT_IMAGE_REFUSAL,
+  SLOT_PLAN_REFUSAL,
+  commitRefusal,
+  stagingStatusMessage,
   COMPACT_2016_EVIDENCE,
   EARLY_COMPACT_EVIDENCE,
   GENERIC_EVIDENCE,
@@ -1168,6 +1175,76 @@ function samples(base: DeviceState): CoreMessage[] {
   add(PRESERVE_GATE.noBanks('the backup has not read the banks yet, so no bank can be chosen'));
   add(PRESERVE_GATE.bankRefused('a', PRESERVE_BANK_REFUSAL.erased()));
   add(PRESERVE_GATE.recoveryOnly(RECOVERY_ONLY_ROUTE_NOTE, 'a'));
+
+  /* slots: an image file's refusal, a stale plan, the commit, a copy's and a restore's refusal */
+  for (const refusal of Object.values(SLOT_IMAGE_REFUSAL)) {
+    if (typeof refusal !== 'function') add(refusal);
+  }
+  add(SLOT_IMAGE_REFUSAL.notWordSized(51850));
+  add(SLOT_IMAGE_REFUSAL.tooLong(0x80000));
+  add(SLOT_IMAGE_REFUSAL.noHeader(0x12345678));
+  add(SLOT_IMAGE_REFUSAL.stackOutside(0x30000000));
+  add(SLOT_IMAGE_REFUSAL.stackUnaligned(0x10008002));
+  add(SLOT_IMAGE_REFUSAL.notThumb(0x1a000200));
+  add(
+    SLOT_IMAGE_REFUSAL.keyMismatch('00'.repeat(16), '11'.repeat(16), 'Key A is not in the image'),
+  );
+  add(SLOT_IMAGE_REFUSAL.keyInHeader(0x210));
+  add(SLOT_IMAGE_REFUSAL.keysOverlap(0x1000, 0x1008));
+  const planEntry = { key: 'a', name: 'Slot A', address: 0x14010000 } as never;
+  for (const refusal of Object.values(SLOT_PLAN_REFUSAL)) {
+    if (typeof refusal !== 'function') add(refusal);
+  }
+  add(SLOT_PLAN_REFUSAL.otherFirmware('1.3.0.8', '1.3.0.0'));
+  add(SLOT_PLAN_REFUSAL.otherFirmware(null, '1.3.0.0'));
+  add(SLOT_PLAN_REFUSAL.otherCamera('SN1', 'SN2'));
+  add(SLOT_PLAN_REFUSAL.otherCamera(null, null));
+  add(SLOT_PLAN_REFUSAL.otherAddress(0x14030000, planEntry));
+  add(SLOT_PLAN_REFUSAL.notRead(planEntry));
+  add(SLOT_PLAN_REFUSAL.outsideBank(0x20000, planEntry));
+  add(SLOT_PLAN_REFUSAL.riskAck(BOOT_UNNAMED_RISK));
+  for (const status of [
+    null,
+    0x70000,
+    0x50000,
+    0x70100,
+    0x30201,
+    0x40000,
+    0x40100,
+    0x40200,
+    0x12345,
+  ]) {
+    add(commitRefusal('Slot A', status, 'a').coreMessage);
+    add(commitRefusal('Bank 2', status).coreMessage);
+  }
+  add(stagingStatusMessage(0x70000, 'Recovery R', 'r', 0x800));
+  add(COPY_REFUSAL.ontoItself('Slot A', 'a'));
+  add(COPY_REFUSAL.source('Slot B is empty'));
+  add(COPY_REFUSAL.noPlain('Slot B', 'b'));
+  add(RESTORE_REFUSAL.zipUnreadable('backup.zip', 'bad central directory'));
+  for (const names of [[], ['preserve_run.json', 'preserve_dump_patched.bin']]) {
+    for (const patched of [false, true]) {
+      add(RESTORE_REFUSAL.noWholeFlash('run.zip', names, patched));
+    }
+  }
+  add(RESTORE_REFUSAL.wrongSize('whole.bin', 100));
+  add(RESTORE_REFUSAL.noBank('r'));
+  add(RESTORE_REFUSAL.outsideFlash('Slot B', 'b'));
+  const restoreWhere = RESTORE_WORDS.where('Slot B', 'b', 0x14030000);
+  for (const gap of ['', 'not reached']) {
+    for (const fill of [null, 0xff]) {
+      add(RESTORE_REFUSAL.gap(restoreWhere, 'dump.zip', 0x14030000, gap, fill));
+    }
+  }
+  add(RESTORE_REFUSAL.empty(restoreWhere));
+  add(RESTORE_REFUSAL.fill(restoreWhere, 0x00));
+  add(RESTORE_REFUSAL.notDecrypted(restoreWhere, 'erased'));
+  add(
+    RESTORE_REFUSAL.notDecrypted(
+      restoreWhere,
+      listParam([SLOT_FILE_WORDS.erasedHeader(), SLOT_FILE_WORDS.storedPlain()], 'semicolon'),
+    ),
+  );
 
   /* copy and restore: the preview's source, notes and warnings */
   for (const version of [null, '1.0.3.0']) {

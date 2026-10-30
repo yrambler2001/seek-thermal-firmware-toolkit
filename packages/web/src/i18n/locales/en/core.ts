@@ -999,6 +999,123 @@ export default {
   /** `{note}`: the build's route note (preserve.routeNote.*). */
   'preserve.gate.recoveryOnly':
     "this build's patch boots from recovery R only: {note} — the run would write {bank}, where the bootloader never runs it",
+  /* ---- slots: why an image file is not staged (slots/write-image) ---- */
+  'slots.image.tooSmall': 'file is too small to hold an image header',
+  'slots.image.notWordSized': 'image size must be a multiple of 4 (got {size} B)',
+  /** `{limit}`: a hex length. `header.length` is a header field: keep it. */
+  'slots.image.tooLong':
+    'image is {size} B; the bootloader rejects any header.length >= {limit}, so it would never boot',
+  /** `{at}`, `{magic}`, `{expected}`: hex. */
+  'slots.image.noHeader':
+    'no image header at {at} (magic {magic}, expected {expected}) — this must be a decrypted Seek firmware image, not an encrypted slot or a flash dump',
+  /** `{address}`: hex. LPC43xx is the chip's name: keep it. */
+  'slots.image.stackOutside':
+    'initial stack pointer {address} is not in LPC43xx SRAM — this does not look decrypted',
+  'slots.image.stackUnaligned': 'initial stack pointer {address} is not word-aligned',
+  'slots.image.notThumb': 'reset vector {address} is not a Thumb address',
+  'slots.image.noKeyPair':
+    "this file's name does not carry its key pair, and neither this camera's pair nor a decoded application pair occurs in the image exactly once, so there is no telling which keys the image was built for. Decrypted files come out named with the keys they contain.",
+  /** `{keyA}`, `{keyB}`: hex keys. `{mismatch}`: what the image holds instead, in English (it has no code). */
+  'slots.image.keyMismatch':
+    'the filename claims Key A {keyA} and Key B {keyB}, but {mismatch}. Both keys must be present, exactly once each.',
+  'slots.image.keyInHeader':
+    'this image keeps a key at {at}, inside the cleartext header window — refusing to patch it',
+  /** `{at}`, `{other}`: hex offsets. */
+  'slots.image.keysOverlap':
+    "the filename's Key A and Key B resolve to overlapping bytes at {at} and {other} — they must be two distinct 16-byte values",
+  'slots.image.retargetLost':
+    "after retargeting, the image does not carry this camera's key pair exactly once — refusing to build a payload whose later upgrades the bootloader could not key",
+  'slots.image.noStageKey':
+    'the image carries no key pair of the 2016 line, so there is no stage key to encode it with',
+  'slots.image.ffSumNoKeys':
+    'this image has the 16 Hz FF word sum 0xFFFF but does not carry the 1.3.0.8-FF key pair (both halves, once each), so its staged form cannot be built. Nothing was written.',
+  /** ff-form.ts is a file name: keep it. */
+  'slots.image.ffNotPlain':
+    'this is the 1.3.0.8 FF (16 Hz) image, which is staged in its own Key A form (ff-form.ts), not as a plain image. Nothing was written.',
+  /* ---- slots: a plan that no longer fits the analysis (slots/write assertPlanIsCurrent) ---- */
+  'slots.plan.otherFirmware':
+    'the plan was built for firmware {firmware}, but the analysis reads {version}. The plan is stale; build it again. Nothing was written.',
+  'slots.plan.otherFirmwareUnknown':
+    'the plan was built for firmware of unknown version, but the analysis reads {version}. The plan is stale; build it again. Nothing was written.',
+  /** `{planSerial}`: a serial, or slots.plan.cameraUnknownSerial; `{serial}`: a serial, or slots.plan.unknownSerial. */
+  'slots.plan.otherCamera':
+    'the plan was built for camera {planSerial}, but the analysis reads {serial}. Refusing to write it here. Nothing was written.',
+  'slots.plan.cameraUnknownSerial': 'of unknown serial',
+  'slots.plan.unknownSerial': 'an unknown serial',
+  /** `{address}`, `{at}`: hex; `{name}`: the bank, as a label. */
+  'slots.plan.otherAddress': "the plan targets {address}, but the build's {name} is at {at}",
+  'slots.plan.notRead': 'the analysis no longer reads {name}. Nothing was written.',
+  'slots.plan.edited':
+    'the plan checksum does not match its payload, so the plan was edited. Nothing was written.',
+  /** `{size}`: a hex byte count. */
+  'slots.plan.outsideBank': 'the payload is {size} B, outside the {name} bank',
+  /** Only a program that uses core directly sees this: `acknowledgeRisk: true` is an option name, keep it. `{risk}`: why the bank matters. */
+  'slots.plan.riskAck': '{risk}. Writing it needs acknowledgeRisk: true. Nothing was sent.',
+  /** `{reason}`: the support table's reason (support.*). */
+  'slots.plan.plainStaging':
+    'this camera cannot take a plain-staged image from here: {reason}. Nothing was written.',
+  'slots.plan.noKeyTable':
+    "the analysis does not name this camera's bootloader key table, so the image cannot be retargeted to it",
+  /* ---- slots: the commit and the staging transfer (slots/write-commit, protocol/commit-status) ---- */
+  /** `{name}`: the bank, as a label. CompleteMemoryUpgrade is a command name: keep it. */
+  'slots.commit.unread':
+    'the commit status could not be read after CompleteMemoryUpgrade, so {name} may be partially written. Read the banks again before doing anything else, and keep your dump.',
+  /** `{status}`: hex; `{cause}`: commit.cause.*. */
+  'slots.commit.refused':
+    'the camera refused the write to {name} at commit with {status}: {cause}. Nothing was written; the bank is unchanged. Read the banks again before doing anything else.',
+  'slots.commit.eraseStage':
+    'CompleteMemoryUpgrade returned {status} ({cause}) for {name}: nothing was programmed, but the erase may have started, so the bank may be partly erased. Read the banks again before doing anything else, and keep your dump.',
+  'slots.commit.partial':
+    'CompleteMemoryUpgrade returned {status} ({cause}) — {name} may be partially written. Read the banks again before doing anything else, and keep your dump.',
+  /** `{status}`, `{offset}`: hex. */
+  'slots.commit.stagingStatus':
+    'the camera reported {status} while staging {name} at offset {offset} — aborted before CompleteMemoryUpgrade, so nothing was written to flash',
+  /** What a commit status means (`{cause}` in slots.commit.*). */
+  'commit.cause.badChecksum': 'the transfer checksum did not match the staged bytes',
+  'commit.cause.unsupported':
+    "the image did not decrypt under the camera's keys, or the data type is refused",
+  'commit.cause.acceptance':
+    'the image was refused by its acceptance check before anything was erased (the check depends on the build)',
+  'commit.cause.notArmed': 'no bank upgrade was armed',
+  'commit.cause.eraseFailed': 'the erase stage failed',
+  'commit.cause.programFailed': 'the program stage failed',
+  'commit.cause.verifyFailed': 'the verify stage failed',
+  'commit.cause.unknown': 'a status not known here',
+  /* ---- copy and restore: why nothing was planned (slots/copy, slots/restore) ---- */
+  'copy.refused.ontoItself': '{name} is not copied onto itself. Nothing was written.',
+  /** `{why}`: the source's refusal (copy.source.*). */
+  'copy.refused.source': '{why}. Nothing was written.',
+  'copy.refused.noPlain': '{name} has no decrypted image to copy. Nothing was written.',
+  /** `{error}`: the ZIP reader's words, in English. */
+  'restore.refused.zipUnreadable':
+    '{file} is a ZIP that cannot be read here ({error}). Nothing was written.',
+  /** `{preserve}`, `{dump}`, `{selectors}`, `{patched}`: file names; `{names}`: the ZIP's file names, or restore.refused.zipEmpty. */
+  'restore.refused.noWholeFlash':
+    '{file} holds no whole flash. A ZIP is taken when it is a Preserve run file that holds {preserve} (once its full-dump step has run), a Dump & decrypt 4.x/Nano zip ({dump}) or a Dump all selectors zip ({selectors}); this ZIP holds {names}. Nothing was written.',
+  'restore.refused.noWholeFlashPatched':
+    "{file} holds no whole flash. A ZIP is taken when it is a Preserve run file that holds {preserve} (once its full-dump step has run), a Dump & decrypt 4.x/Nano zip ({dump}) or a Dump all selectors zip ({selectors}); this ZIP holds {names}. Its {patched} is the flash with the run's temporary patch in it, so it is not taken. Nothing was written.",
+  'restore.refused.zipEmpty': 'nothing',
+  /** `{full}`, `{size}`: byte counts. */
+  'restore.refused.wrongSize':
+    'a full flash backup is {full} B (4 MiB, the whole part a J-Link reads); {file} is {size} B. Nothing was written.',
+  'restore.refused.noBank': "this build's plan has no {bank}. Nothing was written.",
+  'restore.refused.outsideFlash': '{name} is not inside a 4 MiB flash. Nothing was written.',
+  /** `{where}`: restore.where; `{address}`, `{fill}`: hex; `{gap}`: why the dump has a gap there, in English (as the dump's manifest says it). manifest.json is a file name. */
+  'restore.refused.gap':
+    '{where} was not read by the dump {file} comes from: by its manifest.json, {address} is a gap. There is no image to restore. Nothing was written.',
+  'restore.refused.gapReason':
+    '{where} was not read by the dump {file} comes from: by its manifest.json, {address} is a gap ({gap}). There is no image to restore. Nothing was written.',
+  'restore.refused.gapFill':
+    '{where} was not read by the dump {file} comes from: by its manifest.json, {address} is a gap, filled with {fill}. There is no image to restore. Nothing was written.',
+  'restore.refused.gapReasonFill':
+    '{where} was not read by the dump {file} comes from: by its manifest.json, {address} is a gap ({gap}), filled with {fill}. There is no image to restore. Nothing was written.',
+  'restore.refused.empty':
+    '{where} is empty: every byte is 0xFF. A write programs an image and cannot leave a bank erased, so an empty bank cannot be restored by a write. Nothing was written.',
+  'restore.refused.fill':
+    '{where} is {fill} in every byte, the fill the dump writes where it read nothing: the dump did not read this bank. There is no image to restore. Nothing was written.',
+  /** `{why}`: the bank file's decryption notes (decrypt.*), joined with "; ", or its status word. */
+  'restore.refused.notDecrypted':
+    '{where} cannot be restored from this file: {why}. Nothing was written.',
   /* ---- support: why a build cannot read or write a bank (slots/capability, profiles) ---- */
   /** A reason the build's support table gives (`{reason}` in slots.refused.*, backup.bank.unsupported, fps.plan.noPlain). `--family` is a CLI option: keep it. */
   'support.noWriteArm': 'this build has no write arm for the bank',
