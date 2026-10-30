@@ -3070,3 +3070,23 @@ describe('people’s words — one line per sweep, no code names (TESTING.md 42.
     }
   });
 });
+
+describe('recordStepFailure and message codes', () => {
+  it('records a SeekError message code next to its English, and drops a stale one', async () => {
+    const { state } = await createPreserveRun({ runId: 'codes' });
+    const message = { code: 'test.code', params: { n: 1 }, text: 'the English' };
+    const failed = recordStepFailure(
+      state,
+      'backup',
+      new SeekError('slots/refused', 'the English', { coreMessage: message }),
+    );
+    expect(failed.steps.backup).toMatchObject({
+      status: 'failed',
+      error: 'the English',
+      errorCode: message,
+    });
+    const again = recordStepFailure(failed, 'backup', new Error('plain'));
+    expect(again.steps.backup?.error).toBe('plain');
+    expect(again.steps.backup?.errorCode).toBeUndefined();
+  });
+});

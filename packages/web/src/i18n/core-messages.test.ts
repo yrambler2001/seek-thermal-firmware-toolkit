@@ -67,7 +67,7 @@ import {
 import { beforeAll, describe, expect, it } from 'vitest';
 import { tEnglish, type Translate } from '@/i18n';
 import { en } from '@/i18n/locales/en';
-import { coreText, coreTexts } from '@/lib/core-text';
+import { coreText, coreTexts, recordedCoreText } from '@/lib/core-text';
 import { fakeDeviceState } from '@/test-fixtures';
 import { deviceState2016, slotEntry, slotReport, slotReport2016 } from '@/test-slots';
 
@@ -319,5 +319,18 @@ describe('coreText', () => {
     );
     expect(coreText(null, shown)).toBe('');
     expect(coreTexts(undefined, ['a', 'b'], shown)).toEqual(['a', 'b']);
+  });
+});
+
+describe('recordedCoreText (a saved run file)', () => {
+  it('shows the recorded message, or the stored English of an old or damaged file', () => {
+    const message = bootsNowMessage(bankParam('a', 'name'));
+    expect(recordedCoreText(message, 'old English')).toBe(message.text);
+    expect(recordedCoreText(undefined, 'old English')).toBe('old English');
+    expect(recordedCoreText({ code: 'boot.bootsNow' }, 'old English')).toBe('old English');
+    expect(
+      recordedCoreText({ code: 'boot.bootsNow', params: { bank: {} }, text: 'x' }, 'old English'),
+    ).toBe('old English');
+    expect(recordedCoreText(undefined, undefined)).toBeUndefined();
   });
 });

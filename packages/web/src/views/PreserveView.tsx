@@ -57,6 +57,7 @@ import {
   restoreFormWords,
   drainCapabilityWords,
 } from '@seek-fw/core';
+import { recordedCoreText } from '@/lib/core-text';
 import { rich, t } from '@/i18n';
 import { bankList, bankName, bankWords } from '@/lib/bank-names';
 import { Panel, PanelTitle } from '@/components/Panel';
@@ -1032,9 +1033,12 @@ function VerifyVerdict({
     return (
       <Alert tone="err">
         <p>
-          {/* i18n: core message (the step's recorded error) */}
+          {/* i18n: core message (the step's recorded error: errorCode where core's error has one; none has yet) */}
           {rich('preserve:verify.failed', {
-            params: { error: failed.error ?? t('preserve:unknownReason') },
+            params: {
+              error:
+                recordedCoreText(failed.errorCode, failed.error) ?? t('preserve:unknownReason'),
+            },
           })}
         </p>
       </Alert>

@@ -34,7 +34,13 @@ export {
 } from './bytes.js';
 
 /* ---- error taxonomy --------------------------------------------------- */
-export { CancelledError, SeekError, errorMessage, isSeekError } from './errors.js';
+export {
+  CancelledError,
+  SeekError,
+  errorCoreMessage,
+  errorMessage,
+  isSeekError,
+} from './errors.js';
 export {
   bankParam,
   capitalParam,

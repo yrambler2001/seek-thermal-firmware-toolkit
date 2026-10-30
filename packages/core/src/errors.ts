@@ -2,6 +2,8 @@
  * Error taxonomy. Callers branch on `code`, never on message text — messages are
  * for humans and are expected to change.
  */
+import type { CoreMessage } from './message.js';
+
 export type SeekErrorCode =
   /** A caller passed an option outside its accepted range. */
   | 'options/invalid'
@@ -41,12 +43,16 @@ export interface SeekErrorOptions extends ErrorOptions {
   readonly deviceCode?: number;
   /** Extra structured context for logs and reports. */
   readonly detail?: Readonly<Record<string, unknown>>;
+  /** The message as a code + params, for the page (`message` stays the English). */
+  readonly coreMessage?: CoreMessage;
 }
 
 export class SeekError extends Error {
   readonly code: SeekErrorCode;
   readonly deviceCode: number | undefined;
   readonly detail: Readonly<Record<string, unknown>> | undefined;
+  /** The message as a code + params, where the thrower gave one. */
+  readonly coreMessage: CoreMessage | undefined;
 
   constructor(code: SeekErrorCode, message: string, options: SeekErrorOptions = {}) {
     super(message, options);
@@ -54,7 +60,13 @@ export class SeekError extends Error {
     this.code = code;
     this.deviceCode = options.deviceCode;
     this.detail = options.detail;
+    this.coreMessage = options.coreMessage;
   }
+}
+
+/** An error's message as a code + params, when it is a SeekError that carries one. */
+export function errorCoreMessage(error: unknown): CoreMessage | undefined {
+  return error instanceof SeekError ? error.coreMessage : undefined;
 }
 
 /** Raised when the caller's AbortSignal fires. Never indicates a device fault. */

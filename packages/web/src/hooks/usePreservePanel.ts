@@ -59,6 +59,7 @@ import {
   SeekError,
   unpatchedStartOf,
 } from '@seek-fw/core';
+import { recordedCoreText } from '@/lib/core-text';
 import { errorMessage } from '@seek-fw/core';
 import { t, tEnglish } from '@/i18n';
 import { reportInUseElsewhere } from '../lib/camera-lock';
@@ -877,10 +878,12 @@ export function usePreservePanel(params: PreservePanelParams): PreservePanelApi 
                 phaseRep.reset(t('preserve:status.doneEarlier'));
               } else if (records.some((record) => record?.status === 'failed')) {
                 const failed = records.find((record) => record?.status === 'failed');
-                /* i18n: core message (the step's recorded error) */
+                /* i18n: core message (the step's recorded error: errorCode where core's error has one; none has yet) */
                 phaseRep.reset(
                   t('preserve:status.failedEarlier', {
-                    error: failed?.error ?? t('preserve:unknownReason'),
+                    error:
+                      recordedCoreText(failed?.errorCode, failed?.error) ??
+                      t('preserve:unknownReason'),
                   }),
                 );
               } else {

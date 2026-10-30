@@ -176,6 +176,16 @@ import {
  * ==================================================================== */
 
 /** The six steps, in run order. */
+import { errorCoreMessage } from '../errors.js';
+import type { CoreMessage } from '../message.js';
+
+/** A failed record without its error code: a later failure records its own, or none. */
+function withoutErrorCode(record: PreserveStepRecord): PreserveStepRecord {
+  const kept: { -readonly [K in keyof PreserveStepRecord]?: PreserveStepRecord[K] } = { ...record };
+  delete kept.errorCode;
+  return kept as PreserveStepRecord;
+}
+
 export type PreserveStepId = 'backup' | 'patch' | 'commit' | 'drain' | 'restore' | 'verify';
 
 export const PRESERVE_STEP_IDS: readonly PreserveStepId[] = [
@@ -204,6 +214,11 @@ export interface PreserveStepRecord {
   readonly startedAt?: string;
   readonly finishedAt?: string;
   readonly error?: string;
+  /**
+   * `error` as a code + params (`SeekError.coreMessage`), for the page. Absent in run files written before
+   * it existed and for errors without a code: the page then shows `error`, the stored English.
+   */
+  readonly errorCode?: CoreMessage;
   readonly notes?: string;
   /** sha256 of every artifact the step emitted, by artifact name — what a
    *  later step (and `--print-state`) checks the run directory against. */
@@ -845,15 +860,17 @@ export function recordStepFailure(
   /* A drain that stopped because the start entered a bank the run did not patch: another drain
    * would enter the same bank, so the run goes on to the restore (TESTING.md 42.98). */
   const entered = step === 'drain' ? unpatchedStartOf(error) : null;
+  const code = errorCoreMessage(error);
   return {
     ...state,
     ...(entered === null ? {} : { nextStep: 'restore' as const, drainEntered: entered }),
     steps: {
       ...state.steps,
       [step]: {
-        ...(previous?.status === 'failed' ? previous : {}),
+        ...(previous?.status === 'failed' ? withoutErrorCode(previous) : {}),
         status: 'failed',
         error: error instanceof Error ? error.message : String(error),
+        ...(code === undefined ? {} : { errorCode: code }),
         finishedAt: new Date().toISOString(),
         ...(step === 'backup' ? { powerCycleRequired: true } : {}),
       },
