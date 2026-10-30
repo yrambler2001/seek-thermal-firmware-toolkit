@@ -307,6 +307,8 @@ export interface DeviceState {
   readonly bootloaderString: string | null;
   readonly platform: string | null;
   readonly usbSpeed: string | null;
+  /** `usbSpeed` as a message, for the page (absent on a state built before it existed). */
+  readonly usbSpeedMessage?: CoreMessage | null;
   /** roots[2]: the word `fw_update_slot_address()` reads. 0 means slot B. */
   readonly activeSlotWord: number | null;
   /**

@@ -12,6 +12,7 @@
  * ==================================================================== */
 
 import { hex, utf8 } from '../bytes.js';
+import { PROGRESS_WORDS } from '../progress-words.js';
 import { CancelledError, errorMessage } from '../errors.js';
 import type { Artifact } from '../events.js';
 import {
@@ -144,7 +145,8 @@ export async function runSweep(
         cancelled = true;
         break;
       }
-      reporter.progress(subcmd - first, span, `probe selector ${hex(subcmd)} ...`, 'items');
+      const status = PROGRESS_WORDS.probeSelector(subcmd);
+      reporter.progress(subcmd - first, span, status.text, 'items', status);
 
       const payload =
         legacy && unlockToken !== null ? authPayloadFrom(unlockToken, subcmd) : u16Payload(subcmd);
@@ -297,12 +299,8 @@ export async function runSweep(
     reporter.artifact(artifact);
   }
 
-  reporter.progress(
-    1,
-    1,
-    `Done — ${String(armedCount)}/${String(span)} selectors armed, ${String(withData)} with data.`,
-    'items',
-  );
+  const done = PROGRESS_WORDS.selectorsArmed(armedCount, span, withData);
+  reporter.progress(1, 1, done.text, 'items', done);
 
   return {
     artifacts,

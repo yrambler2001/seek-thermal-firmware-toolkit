@@ -19,6 +19,7 @@
  * ==================================================================== */
 
 import { addrTag, bytesToHex, hexUp, sha256hex, utf8, viewOf } from '../bytes.js';
+import { PROGRESS_WORDS } from '../progress-words.js';
 import type { Artifact, Reporter } from '../events.js';
 import {
   buildBootloaderKeysSummary,
@@ -356,12 +357,8 @@ export async function decryptDump(
     const image = images[index];
     if (image === undefined) continue;
 
-    reporter.progress(
-      index,
-      images.length,
-      `decrypt: recovering key for ${hexUp(flashBase + image.base)} ...`,
-      'items',
-    );
+    const status = PROGRESS_WORDS.recoveringKey(hexUp(flashBase + image.base));
+    reporter.progress(index, images.length, status.text, 'items', status);
 
     const source = bytes.subarray(image.base, image.base + image.len);
     const cipherHash = await sha256hex(source);

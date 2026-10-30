@@ -1283,8 +1283,11 @@ export default {
     "{key} {hex}{pair}, named from {bank}, the bank the camera reports it entered after the bootloader's check",
   'report.checkKey.inferredFrom':
     '{key} {hex}{pair}, inferred from {bank}, the bank the camera reports it entered: the bootloader enters that bank without its check, and runs it under the key it checks the other banks under',
-  /** Starts with a space; `{pair}` is an image pair's name (stays as it is). */
+  /** Starts with a space; `{pair}` is keyPair.* (already translated): "the Compact PRO 1.0.3.x 9 Hz pair's block 1". */
   'report.checkKey.pair': " ({pair}'s block 1)",
+  /** A 2016 image pair: the two key blocks one build's images carry. Keep the product name and version. */
+  'keyPair.cp103': 'the Compact PRO 1.0.3.x 9 Hz pair',
+  'keyPair.cp1032ff': 'the Compact PRO 1.0.3.x FF pair',
   /** `{why}` is a checkKey.unnamed.* reason or report.checkKey.couldNotName. */
   'report.checkKey.notNamed': 'not named — {why}',
   'report.checkKey.couldNotName': 'the read could not name it',
@@ -1304,4 +1307,49 @@ export default {
     'staged under keys derived from the booted bank and the running application',
   'report.staged.ffVendor':
     'staged as the vendor app stages the 16 Hz FF image (the image XOR its own key block 0), stored by the camera under Key B',
+
+  /*
+   * Status lines: the line under a run panel's progress bar while a run works
+   * (core's PROGRESS_WORDS). `{address}` and `{selector}` are hex, `{subcmd}` a
+   * hex selector number ("subcmd" is the wire field's name: keep it), the
+   * numbers are counts or bytes. `{label}` in progress.staged is
+   * progress.writingBank or progress.restoringBank, already translated. The
+   * trailing " ..." means "still working".
+   */
+  'progress.backupBlock': 'Backup: block {address}',
+  'progress.backupDone': 'Backup: every block read',
+  'progress.checkBlock': 'Check: block {address}',
+  'progress.checkDone': 'Check: every block read',
+  'progress.writingBank': 'Writing {bank}',
+  'progress.restoringBank': 'Restoring {bank}',
+  'progress.staged': '{label}: staged {done}/{total} B',
+  'progress.wholeFlash': 'Whole-flash read: {got}/{total} B',
+  /** The 4.x dump, one 64 KiB window at a time. "(auth)": the window needed the unlock token. */
+  'progress.readWindow': 'read {address} subcmd={subcmd} ...',
+  'progress.readWindowAuth': 'read {address} subcmd={subcmd} (auth) ...',
+  'progress.windowsRead': 'Done — {ok}/{total} windows read.',
+  'progress.readingBank': 'Reading {bank} ...',
+  'progress.analysing': 'Analysing ...',
+  'progress.probeSelector': 'probe selector {selector} ...',
+  'progress.selectorsArmed': 'Done — {armed}/{span} selectors armed, {withData} with data.',
+  'progress.recoveringKey': 'decrypt: recovering key for {address} ...',
+
+  /*
+   * Slot read and write failures (core's SLOT_ERROR_WORDS). `{bank}` is a bank
+   * label ("Slot A"), `{address}` and `{subcmd}` are hex (keep "subcmd", the
+   * wire field's name), `{error}` is the error met (a USB or browser error
+   * stays English), `{reason}` a plan refusal (support.*), `{file}` a file name.
+   */
+  'slots.window.unread': '{bank} {address} (subcmd {subcmd}) could not be read: {error}',
+  'slots.read.refusedBuild':
+    'refusing to read the firmware slots: {reason}. Nothing beyond the version read was sent, so no bank was touched.',
+  'slots.backup.notSaved':
+    'the backup {file} was not saved, so nothing was written. A write never runs without its backup saved first; try again once it can be saved.',
+  'slots.backup.notSavedWhy':
+    'the backup {file} was not saved ({error}), so nothing was written. A write never runs without its backup saved first; try again once it can be saved.',
+
+  /** The USB link the camera reports (Info: "USB link"). Keep "Mbit/s"; `{code}` is a number the camera gave. */
+  'usb.speed.high': 'high (480 Mbit/s)',
+  'usb.speed.full': 'full (12 Mbit/s)',
+  'usb.speed.code': 'code {code}',
 } as const satisfies NamespaceMessages;

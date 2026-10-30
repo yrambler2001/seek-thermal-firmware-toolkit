@@ -148,8 +148,11 @@ function patchedFileName(key: SlotKey, version: string | null, to: number): stri
  * the button and its reason; `patchBankFps` plans again from a fresh read before it writes.
  */
 export function fpsPlanOfBank(report: SlotsReport, key: SlotKey): FpsPlan {
-  if (!report.plan.supportedBuild.supported) {
-    return { status: 'refused', reason: report.plan.supportedBuild.reason };
+  const build = report.plan.supportedBuild;
+  if (!build.supported) {
+    return build.reasonMessage === undefined
+      ? { status: 'refused', reason: build.reason }
+      : { status: 'refused', reason: build.reason, reasonMessage: build.reasonMessage };
   }
   const view = report.slots.find((candidate) => candidate.entry.key === key);
   if (view === undefined)

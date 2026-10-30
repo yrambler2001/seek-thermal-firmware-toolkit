@@ -89,6 +89,10 @@ import {
   identityRefusal,
   choosePreserveBanks,
   readStatusMessage,
+  PROGRESS_WORDS,
+  SLOT_ERROR_WORDS,
+  usbSpeedWords,
+  keyPairParam,
   WRITTEN_STATUS,
   errorCoreMessage,
   compareWordMessage,
@@ -659,6 +663,33 @@ function samples(base: DeviceState): CoreMessage[] {
 
   /* status lines */
   add(WRITTEN_STATUS);
+  /* status lines under a run panel's bar */
+  add(PROGRESS_WORDS.backupBlock(0x14010000));
+  add(PROGRESS_WORDS.backupDone());
+  add(PROGRESS_WORDS.checkBlock(0x14010000));
+  add(PROGRESS_WORDS.checkDone());
+  add(PROGRESS_WORDS.staged(PROGRESS_WORDS.writingBank('a'), 0x1000, 0xc000));
+  add(PROGRESS_WORDS.staged(PROGRESS_WORDS.restoringBank('r'), 0x1000, 0xc000));
+  add(PROGRESS_WORDS.wholeFlash(0x40000, 0x400000));
+  add(PROGRESS_WORDS.readWindow(0x14010000, 0x12, false));
+  add(PROGRESS_WORDS.readWindow(0x14010000, 0x12, true));
+  add(PROGRESS_WORDS.windowsRead(5, 6));
+  add(PROGRESS_WORDS.readingBank('b', 'Slot B'));
+  add(PROGRESS_WORDS.readingBank('b', 'Bank 2'));
+  add(PROGRESS_WORDS.analysing());
+  add(PROGRESS_WORDS.probeSelector(0x1f));
+  add(PROGRESS_WORDS.selectorsArmed(40, 256, 12));
+  add(PROGRESS_WORDS.recoveringKey('0x14050000'));
+  add(SLOT_ERROR_WORDS.windowUnread('a', 'Slot A', 0x14050000, 0x31, new Error('transfer error')));
+  add(SLOT_ERROR_WORDS.windowUnread('r', 'Bank 3', 0x14070000, 0x33, new Error('stall')));
+  add(SLOT_ERROR_WORDS.refusedBuild('firmware 0.7.4.0 is older than 0.8.0.0', undefined));
+  add(SLOT_ERROR_WORDS.backupNotSaved('seek_backup.zip', null));
+  add(SLOT_ERROR_WORDS.backupNotSaved('seek_backup.zip', 'the download was blocked'));
+  add(keyPairParam('the Compact PRO 1.0.3.x 9 Hz pair') as CoreMessage);
+  add(keyPairParam('the Compact PRO 1.0.3.x FF pair') as CoreMessage);
+  add(usbSpeedWords(2));
+  add(usbSpeedWords(0));
+  add(usbSpeedWords(42405));
   add(readStatusMessage(true, 3, 3));
   add(readStatusMessage(false, 0, 3));
 

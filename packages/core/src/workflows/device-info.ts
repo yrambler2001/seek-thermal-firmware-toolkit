@@ -19,6 +19,7 @@
 import { asciiz, bytesToHex, hex, hexToBytes, hexUp, sha256hex, viewOf } from '../bytes.js';
 import { CancelledError, errorCoreMessage, errorMessage } from '../errors.js';
 import { bankParam, coreMessage, paramText, type CoreMessage, type CoreParam } from '../message.js';
+import { PROGRESS_WORDS } from '../progress-words.js';
 import { decryptImage } from '../crypto/cipher.js';
 import {
   findKeyCandidates,
@@ -587,6 +588,24 @@ const PAIRS_2016: readonly (readonly [string, string])[] = [
   ['the Compact PRO 1.0.3.x FF pair', KEY_PAIRS.cp1032ff.block1],
 ];
 
+const PAIR_CODES: ReadonlyMap<string, string> = new Map([
+  ['the Compact PRO 1.0.3.x 9 Hz pair', 'keyPair.cp103'],
+  ['the Compact PRO 1.0.3.x FF pair', 'keyPair.cp1032ff'],
+]);
+
+/** A 2016 image pair's name (`checkKey.pair`) as a message param, found by its English; another name as it is. */
+export function keyPairParam(name: string): CoreParam {
+  const code = PAIR_CODES.get(name);
+  return code === undefined ? name : coreMessage(code, {}, name);
+}
+
+/** The USB link the camera reports (FW info 17), in words: "high (480 Mbit/s)", "full (12 Mbit/s)", or its code. */
+export function usbSpeedWords(bits: number): CoreMessage {
+  if (bits === 2) return coreMessage('usb.speed.high', {}, 'high (480 Mbit/s)');
+  if (bits === 0) return coreMessage('usb.speed.full', {}, 'full (12 Mbit/s)');
+  return coreMessage('usb.speed.code', { code: bits }, `code ${String(bits)}`);
+}
+
 /**
  * The version word above which a 2016 bootloader seeds its device-seeded stream from its own key block 1,
  * and at or below which from the four device words at 0x40045000 XOR key block 0 (FW-V1
@@ -915,12 +934,11 @@ export async function readDeviceInfo(
   const platform = platformRaw ? asciiz(platformRaw) : null;
 
   const speed = await device.tryFwInfo(17, 2, 'USB port speed');
-  let usbSpeed: string | null = null;
+  let usbSpeedMessage: CoreMessage | null = null;
   if (speed && speed.length >= 2) {
-    const bits = viewOf(speed).getUint16(0, true);
-    usbSpeed =
-      bits === 2 ? 'high (480 Mbit/s)' : bits === 0 ? 'full (12 Mbit/s)' : `code ${String(bits)}`;
+    usbSpeedMessage = usbSpeedWords(viewOf(speed).getUint16(0, true));
   }
+  const usbSpeed = usbSpeedMessage?.text ?? null;
 
   const roots = await device.tryFwInfo(10, 64, 'firmware info roots');
   const activeSlotWord = roots && roots.length >= 12 ? viewOf(roots).getUint32(8, true) : null;
@@ -1000,7 +1018,8 @@ export async function readDeviceInfo(
   const budget = descriptors.length * WINDOW_SIZE; /* upper bound; slots are usually 0xc000 */
   let done = 0;
   for (const descriptor of descriptors) {
-    reporter.progress(done, budget, `Reading ${descriptor.name} ...`);
+    const status = PROGRESS_WORDS.readingBank(descriptor.key, descriptor.name);
+    reporter.progress(done, budget, status.text, undefined, status);
     /* The plan's entry or nothing: see `notInPlan`. */
     const entry = entryForAddress(entries, descriptor.address);
     armedWith.push(entry?.subcmd ?? null);
@@ -1040,7 +1059,8 @@ export async function readDeviceInfo(
     }
     analysed.push(await analyseSlot(read, profile));
   }
-  reporter.progress(1, 1, 'Analysing ...');
+  const analysing = PROGRESS_WORDS.analysing();
+  reporter.progress(1, 1, analysing.text, undefined, analysing);
   /* The camera's own answers for A, B and R, where two builds share the version (see readBankVerdicts). */
   const bankVerdicts: BankVerdicts | null =
     version === FF_1308_VERSION ? await readBankVerdicts(device, reporter) : null;
@@ -1615,6 +1635,7 @@ export async function readDeviceInfo(
     bootloaderString,
     platform,
     usbSpeed,
+    usbSpeedMessage,
     activeSlotWord,
     bankVerdicts,
     serial,

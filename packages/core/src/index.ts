@@ -56,6 +56,7 @@ export {
   type CoreMessage,
   type CoreParam,
 } from './message.js';
+export { PROGRESS_WORDS } from './progress-words.js';
 export type { SeekErrorCode, SeekErrorOptions } from './errors.js';
 
 /* ---- progress, logging and outputs ------------------------------------ */
@@ -637,5 +638,5 @@ export {
   versionUnknownReasonMessage,
   VERSION_NOTE,
 } from './workflows/capability.js';
-export { readStatusMessage } from './workflows/device-info.js';
+export { keyPairParam, readStatusMessage, usbSpeedWords } from './workflows/device-info.js';
 export { WRITTEN_STATUS } from './slots/write.js';

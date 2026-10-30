@@ -65,6 +65,8 @@
  */
 
 import { hexUp, isoStamp, sha256hex } from '../bytes.js';
+import type { CoreMessage } from '../message.js';
+import { PROGRESS_WORDS } from '../progress-words.js';
 import { bankWordsOf } from '../profiles/locked-boot.js';
 import { blockSweepWords } from './words.js';
 import { CancelledError, errorMessage, SeekError } from '../errors.js';
@@ -569,7 +571,8 @@ export async function backupWindows(
   const held: { message: string; level: LogLevel }[] = [];
   for (const entry of windows) {
     assertLive(signal);
-    reporter.progress(index, windows.length, `Backup: block ${hexUp(entry.address, 8)}`, 'items');
+    const status = PROGRESS_WORDS.backupBlock(entry.address);
+    reporter.progress(index, windows.length, status.text, 'items', status);
     const { device, boots, admission } = await openProbedSession(
       opener,
       reporter,
@@ -643,7 +646,8 @@ export async function backupWindows(
     await opener.close(device);
     index++;
   }
-  reporter.progress(windows.length, windows.length, 'Backup: every block read', 'items');
+  const backupDone = PROGRESS_WORDS.backupDone();
+  reporter.progress(windows.length, windows.length, backupDone.text, 'items', backupDone);
   for (const line of blockSweepWords('Backup', admissions)) reporter.log(line, 'info');
   return { windows: out, byAddress, bytes: out.length * WINDOW_BYTES, admissions };
 }
@@ -685,9 +689,16 @@ export async function commitToBank(
   device: SeekDevice,
   bank: BankKey,
   payload: Uint8Array,
-  options: { label: string; reporter: Reporter; commitTimeoutMs?: number; signal?: AbortSignal },
+  options: {
+    label: string;
+    /** `label` as a message (PROGRESS_WORDS.writingBank, restoringBank), for the page's status line. */
+    labelMessage?: CoreMessage;
+    reporter: Reporter;
+    commitTimeoutMs?: number;
+    signal?: AbortSignal;
+  },
 ): Promise<{ chunks: number; sum16: number; status: number; ms: number }> {
-  const { label, reporter } = options;
+  const { label, labelMessage, reporter } = options;
   await device.armWindow(bankWindow(bank));
 
   const startedAt = Date.now();
@@ -709,10 +720,16 @@ export async function commitToBank(
     done = end;
     chunks++;
     if ((chunks & 0xff) === 0) {
+      const staged =
+        labelMessage === undefined
+          ? null
+          : PROGRESS_WORDS.staged(labelMessage, done, payload.length);
       reporter.progress(
         done,
         payload.length,
-        `${label}: staged ${String(done)}/${String(payload.length)} B`,
+        staged?.text ?? `${label}: staged ${String(done)}/${String(payload.length)} B`,
+        undefined,
+        staged ?? undefined,
       );
     }
   }
@@ -872,11 +889,8 @@ export async function drainWholePart(
     onChunk: (got) => {
       if (got - last >= 0x40000) {
         last = got;
-        reporter.progress(
-          got,
-          FLASH_SIZE,
-          `Whole-flash read: ${String(got)}/${String(FLASH_SIZE)} B`,
-        );
+        const status = PROGRESS_WORDS.wholeFlash(got, FLASH_SIZE);
+        reporter.progress(got, FLASH_SIZE, status.text, undefined, status);
       }
     },
   });
@@ -1073,7 +1087,8 @@ export async function verifyAgainstBackup(
   for (const entry of windows) {
     index++;
     assertLive(signal);
-    reporter.progress(index, windows.length, `Check: block ${hexUp(entry.address, 8)}`, 'items');
+    const status = PROGRESS_WORDS.checkBlock(entry.address);
+    reporter.progress(index, windows.length, status.text, 'items', status);
     const { device, boots, admission } = await openProbedSession(
       opener,
       reporter,
@@ -1112,7 +1127,8 @@ export async function verifyAgainstBackup(
       if (read.data[j] !== want[j]) diffBytes++;
     }
   }
-  reporter.progress(windows.length, windows.length, 'Check: every block read', 'items');
+  const checkDone = PROGRESS_WORDS.checkDone();
+  reporter.progress(windows.length, windows.length, checkDone.text, 'items', checkDone);
   for (const line of blockSweepWords('Check', admissions)) reporter.log(line, 'info');
   return { diffBytes, windowsRead, badWindows, readBack, admissions };
 }

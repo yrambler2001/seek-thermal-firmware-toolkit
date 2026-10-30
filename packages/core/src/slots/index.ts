@@ -248,6 +248,7 @@ export { FPS_TABLE_REASON } from '../preservation/fps-patch.js';
 export { capabilityNoteMessage, capabilityNotes } from './capability-notes.js';
 export { SUPPORT_REASON, supportReasonMessage, supportReasons } from './capability.js';
 export { SLOT_WRITE_REFUSAL, SLOT_PLAN_REFUSAL } from './write.js';
+export { SLOT_ERROR_WORDS } from './error-words.js';
 export { SLOT_IMAGE_REFUSAL } from './write-image.js';
 export { commitRefusal, stagingStatusMessage } from './write-commit.js';
 export { commitStatusCauseMessage } from '../protocol/commit-status.js';

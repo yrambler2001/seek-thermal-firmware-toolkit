@@ -36,7 +36,7 @@ import {
   slotWriteRefusalMessages,
   slotWriteRefusals,
 } from '../slots/write-keys.js';
-import { bootableDescription, storeKeyDescriptionMessage } from './device-info.js';
+import { bootableDescription, keyPairParam, storeKeyDescriptionMessage } from './device-info.js';
 import { keyNameParam } from '../slots/write-keys-words.js';
 import type { CheckKey, DeviceState, SlotState } from './types.js';
 
@@ -199,7 +199,7 @@ export function checkKeyReportMessage(checkKey: CheckKey): CoreMessage {
       ? ''
       : coreMessage(
           'report.checkKey.pair',
-          { pair: checkKey.pair },
+          { pair: keyPairParam(checkKey.pair) },
           ` (${checkKey.pair}'s block 1)`,
         );
   const bank = checkKey.from === null ? null : bankWordsOf(checkKey.from);

@@ -20,6 +20,7 @@ import { supportReasonMessage } from './capability.js';
 import { bankParam, coreMessage, listParam, type CoreMessage, type CoreParam } from '../message.js';
 import { hexUp, isoStamp, utf8 } from '../bytes.js';
 import { CancelledError, errorMessage, SeekError } from '../errors.js';
+import { SLOT_ERROR_WORDS } from './error-words.js';
 import type { Artifact } from '../events.js';
 import type { WorkflowContext } from '../workflows/types.js';
 import { dumpSlot, safeVersion, slotDumpNames } from './dump.js';
@@ -494,12 +495,11 @@ export async function saveBackupFirst(backup: WriteBackup, save: SaveBackup): Pr
     why = errorMessage(error);
   }
   if (!saved) {
-    throw new SeekError(
-      'slots/refused',
-      `the backup ${backup.fileName} was not saved${why === null ? '' : ` (${why})`}, so nothing was ` +
-        'written. A write never runs without its backup saved first; try again once it can be saved.',
-      { detail: { backup: backup.fileName } },
-    );
+    const refused = SLOT_ERROR_WORDS.backupNotSaved(backup.fileName, why);
+    throw new SeekError('slots/refused', refused.text, {
+      detail: { backup: backup.fileName },
+      coreMessage: refused,
+    });
   }
 }
 

@@ -87,6 +87,7 @@ import {
 } from '../bytes.js';
 import { CancelledError, SeekError } from '../errors.js';
 import { bankParam, coreMessage, listParam, paramText, recordedParam } from '../message.js';
+import { PROGRESS_WORDS } from '../progress-words.js';
 import type { Artifact, Reporter } from '../events.js';
 import { HEADER_OFFSET, HEADER_SIZE, IMAGE_MAGIC, parseImageHeader } from '../image/header.js';
 import { FLASH_BASE, FLASH_SIZE } from '../profiles/modern-4x.js';
@@ -2604,6 +2605,7 @@ async function runCommitStep(
         assertLive(signal);
         const commit = await commitToBank(device, write.key, write.payload, {
           label: `Writing ${words}`,
+          labelMessage: PROGRESS_WORDS.writingBank(write.key),
           reporter,
           ...(signal === undefined ? {} : { signal }),
         });
@@ -2999,6 +3001,7 @@ async function runRestoreStep(
         assertLive(signal);
         await commitToBank(device, item.key, item.payload, {
           label: `Restoring ${words}`,
+          labelMessage: PROGRESS_WORDS.restoringBank(item.key),
           reporter,
           ...(signal === undefined ? {} : { signal }),
         });

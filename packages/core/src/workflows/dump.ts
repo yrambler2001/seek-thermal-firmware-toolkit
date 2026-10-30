@@ -18,6 +18,7 @@
  * ==================================================================== */
 
 import { hex, utf8 } from '../bytes.js';
+import { PROGRESS_WORDS } from '../progress-words.js';
 import { CancelledError, errorMessage, SeekError } from '../errors.js';
 import type { Artifact } from '../events.js';
 import {
@@ -131,7 +132,8 @@ async function readWindowsInto(
         entry.auth === true ? ' (auth)' : ''
       }`;
 
-      reporter.progress(bytesDone, totalBytes, `${label} ...`);
+      const status = PROGRESS_WORDS.readWindow(entry.address, entry.subcmd, entry.auth === true);
+      reporter.progress(bytesDone, totalBytes, status.text, undefined, status);
 
       let lastError: unknown = null;
       let raw: Awaited<ReturnType<typeof device.readWindow>> | null = null;
@@ -450,7 +452,8 @@ export async function runDump(
   pushArtifact(ctx, artifacts, { name: 'manifest.json', data: utf8(manifestToJson(manifest)) });
   pushArtifact(ctx, artifacts, { name: 'README.md', data: utf8(readme) });
 
-  reporter.progress(1, 1, `Done — ${String(okCount)}/${String(entries.length)} windows read.`);
+  const done = PROGRESS_WORDS.windowsRead(okCount, entries.length);
+  reporter.progress(1, 1, done.text, undefined, done);
 
   return {
     artifacts,

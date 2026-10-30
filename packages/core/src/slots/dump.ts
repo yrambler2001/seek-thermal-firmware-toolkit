@@ -6,6 +6,8 @@ import { keyCheckText, keyConfidencePhrase } from '../crypto/confidence-words.js
 import { findEmbeddedKeyTable, keyFilenameSuffix, type KeyPair } from '../crypto/keys.js';
 import { recoverKeyInfo } from '../crypto/recover.js';
 import { errorMessage, CancelledError, SeekError } from '../errors.js';
+import type { CoreMessage } from '../message.js';
+import { SLOT_ERROR_WORDS } from './error-words.js';
 import {
   HEADER_OFFSET,
   HEADER_SIZE,
@@ -43,6 +45,8 @@ async function readBankWindow(
   entry: WindowEntry,
   label: string,
   reporter: WorkflowContext['reporter'],
+  /** The failure as a message, for the page (SLOT_ERROR_WORDS.windowUnread). */
+  unread?: (error: unknown) => CoreMessage,
 ): Promise<{ data: Uint8Array; stopReason: string | null }> {
   const options = DEFAULT_DUMP_OPTIONS;
   let lastError: unknown = null;
@@ -69,6 +73,7 @@ async function readBankWindow(
   if (lastError instanceof SeekError) throw lastError;
   throw new SeekError('device/window', `${label} could not be read: ${errorMessage(lastError)}`, {
     cause: lastError,
+    ...(unread === undefined ? {} : { coreMessage: unread(lastError) }),
   });
 }
 
@@ -131,7 +136,13 @@ export async function dumpSlot(
 
   const label = `${entry.name} ${hex(entry.address, 8)} (subcmd ${hex(read.subcmd)})`;
   const notes: string[] = [];
-  const { data, stopReason } = await readBankWindow(ctx.device, read, label, ctx.reporter);
+  const { data, stopReason } = await readBankWindow(
+    ctx.device,
+    read,
+    label,
+    ctx.reporter,
+    (error) => SLOT_ERROR_WORDS.windowUnread(key, entry.name, entry.address, read.subcmd, error),
+  );
 
   /* A short read is KEPT, as the whole-flash dump keeps one: the bytes that came
    * off the camera are real, and the rest is named as filled, never passed off

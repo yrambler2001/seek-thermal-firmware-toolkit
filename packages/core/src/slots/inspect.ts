@@ -1,6 +1,7 @@
 /* OWNER: reader agent. See ./types.ts. */
 import { hex } from '../bytes.js';
 import { SeekError } from '../errors.js';
+import { SLOT_ERROR_WORDS } from './error-words.js';
 import { readRunningFirmware, type RunningFirmware } from '../workflows/capability.js';
 import { profileToRereadUnder, readDeviceInfo } from '../workflows/device-info.js';
 import type { DeviceState, SlotState, WorkflowContext } from '../workflows/types.js';
@@ -57,12 +58,14 @@ export async function inspectSlots(
   const plan = options.plan ?? buildSlotPlan(ctx.profile, firmware.version);
 
   if (!plan.supportedBuild.supported) {
-    throw new SeekError(
-      'slots/refused',
-      `refusing to read the firmware slots: ${plan.supportedBuild.reason}. Nothing beyond the ` +
-        'version read was sent, so no bank was touched.',
-      { detail: { firmwareVersion: firmware.version, family: plan.profileId } },
+    const refused = SLOT_ERROR_WORDS.refusedBuild(
+      plan.supportedBuild.reason,
+      plan.supportedBuild.reasonMessage,
     );
+    throw new SeekError('slots/refused', refused.text, {
+      detail: { firmwareVersion: firmware.version, family: plan.profileId },
+      coreMessage: refused,
+    });
   }
   /* A plan is for ONE build of ONE profile. Joining a plan made for another
    * build would pair the camera's banks with the wrong rows, so it is refused. */
