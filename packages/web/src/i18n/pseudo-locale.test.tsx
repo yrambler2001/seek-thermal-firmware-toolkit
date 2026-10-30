@@ -26,7 +26,8 @@ vi.mock('./languages', async (importOriginal) => {
   return {
     ...actual,
     LANGUAGES: [
-      ...actual.LANGUAGES,
+      /* The real Polish, once it exists, steps aside: its words would read as leftover English. */
+      ...actual.LANGUAGES.filter((language) => language.code !== 'pl'),
       /* `pl`, so the plural rules pick among one, few, many and other. */
       { code: 'pl', name: '⟦Ƥšéüðö Б⟧', load: () => Promise.resolve(pseudo) },
     ],
