@@ -48,7 +48,8 @@
  * are back to the old risk.
  */
 
-import { t, tEnglish } from '@/i18n';
+// Relative, not '@/i18n': e2e/second-window.e2e.ts imports this module under e2e's configs (node, no '@/' alias, no JSX).
+import { t, tEnglish } from '../i18n/store';
 
 /** The lock's name. Locks are per origin, so this needs no origin of its own. */
 export const CAMERA_LOCK = 'seek-fw:camera';
