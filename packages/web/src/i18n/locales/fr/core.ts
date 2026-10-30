@@ -201,13 +201,13 @@ export default {
     '{bank} : se relit différemment des octets stockés dans la sauvegarde sur {count} o (premier écart à {offset}).',
 
   /* ---- keys: the keys of a bank write (slots/write-keys) ---- */
-  'keys.derived.same': '{key}, dérivée {bank:gen} démarré',
+  'keys.derived.same': '{key:acc}, dérivée {bank:gen} démarré',
   'keys.derived.holds':
-    '{key} (la clé de stockage), dérivée {bank:gen} démarré, qui contient {holds:acc}',
+    '{key:acc} (la clé de stockage), dérivée {bank:gen} démarré, qui contient {holds:acc}',
   /* The same two lines when the booted bank has no name. */
-  'keys.derived.sameUnnamed': '{key}, dérivée de l’emplacement démarré',
+  'keys.derived.sameUnnamed': '{key:acc}, dérivée de l’emplacement démarré',
   'keys.derived.holdsUnnamed':
-    '{key} (la clé de stockage), dérivée de l’emplacement démarré, qui contient {holds:acc}',
+    '{key:acc} (la clé de stockage), dérivée de l’emplacement démarré, qui contient {holds:acc}',
   'keys.ffVendor.staged':
     'l’image 1.3.0.8 FF (16 Hz) telle que l’app du fabricant la transfère : l’image XOR son propre bloc de clés 0 (clé A), fenêtre d’en-tête telle quelle, dans n’importe quel emplacement ; les clés de cette caméra ne sont pas utilisées',
   'keys.ffVendor.stored':
@@ -370,7 +370,7 @@ export default {
   /* ---- written: a finished bank write's notes (slots/write, slots/write-verify) ---- */
   /** `{name}` is a bank, inside the sentence ("slot A"); `{staged}` is staging.phrase.*; `{size}` is a byte count; the rest hex. */
   'written.committed':
-    '{size} o validés {name:dat} à {address}, {staged} ; état de validation {status}',
+    '{size} o validés {name:loc} à {address}, {staged} ; état de validation {status}',
   'written.noReadWindow':
     'ce build n’indique aucune fenêtre de lecture pour l’emplacement : rien n’a donc été relu',
   /** `{error}`: the error's own message (translated where core gives it a code). */
@@ -506,7 +506,7 @@ export default {
     '{bank:acc} démarré se déchiffre sous {key:acc} ({hex}), une clé que le bootloader essaie ; la clé de stockage de l’application n’est pas celle du bootloader : les écritures stockent donc chaque emplacement sous la clé de l’emplacement démarré',
   /** `{masks}`: key names joined with commas. */
   'keys.evidence.masks':
-    'l’envoi est l’image XOR les flux de clé de {masks:gen} ; l’appareil stocke l’image sous {key:acc}',
+    'l’envoi est l’image XOR les flux de clé {masks:gen} ; l’appareil stocke l’image sous {key:acc}',
   /** `{held}` is a key name or keys.noKnownKey (a sentence, not a name: it takes no case). */
   'keys.evidence.otherBank':
     'la clé sous laquelle {bank:acc} se déchiffre : {held} ; cet emplacement est écrit sous {key:acc} selon la même règle, puis relu pour vérification',

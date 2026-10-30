@@ -113,7 +113,7 @@ export default {
   /** Row label: the second key ("Key B"), as core names it (core:keyName.keyB). */
   'deviceInfo.keyB': 'Clé B',
   'deviceInfo.keysConfirmed':
-    'Confirmée par l’état du flux de clé d’un emplacement, retrouvé à partir du texte chiffré lui-même. Un envoi est construit pour que chaque emplacement le stocke sous la clé de stockage du bootloader ({storeKey}), ou sous la clé propre de l’emplacement de démarrage lorsque la clé de stockage de l’application n’est pas celle-là.',
+    'Confirmée par l’état du flux de clé d’un emplacement, retrouvé à partir du texte chiffré lui-même. Un envoi est construit pour que chaque emplacement le stocke sous la clé de stockage du bootloader ({storeKey}), ou sous la clé propre de l’emplacement démarré lorsque la clé de stockage de l’application n’est pas celle-là.',
   'deviceInfo.keysDecrypted':
     'Chaque emplacement a été déchiffré dans le navigateur en calculant son flux de clé à partir de ses propres vecteurs de réinitialisation, dont on sait qu’ils valent zéro. Déchiffrer n’est pas démarrer : le bootloader n’essaie jamais que {storeKey:acc} et la clé A ; un emplacement écrit sous une autre clé a donc une somme de contrôle parfaite et est quand même ignoré. Rien n’a été écrit.',
   /* {banks} is one bank name or several joined by common:list.and. */

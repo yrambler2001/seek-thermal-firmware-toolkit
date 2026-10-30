@@ -46,7 +46,7 @@ export default {
     'Après chaque étape, votre navigateur télécharge un **fichier d’exécution** nommé d’après le début de l’exécution, l’heure d’enregistrement et l’étape atteinte (`{example}`), avec un dossier par étape à l’intérieur. Gardez le plus récent — il vous permet de reprendre plus tard.',
   /* The amber warning under the list. */
   'how.writeWarning':
-    '**Les étapes 03 et 04 écrivent dans la mémoire flash de la caméra**, et chacune vous demande d’abord confirmation. Pendant que l’une d’elles s’exécute, laissez la caméra branchée (sauf si la page vous demande de la rebrancher) et l’ordinateur allumé, si possible sur secteur. Une écriture interrompue laisse une caméra que seul un programmateur matériel (SPI ou SWD/J-Link) peut réparer.',
+    '**Les étapes 03 et 04 écrivent dans la mémoire flash de la caméra**, et chacune vous demande d’abord confirmation. Pendant que l’une d’elles s’exécute, laissez la caméra branchée (sauf si la page vous demande de la rebrancher) et l’ordinateur hors veille, si possible sur secteur. Une écriture interrompue laisse une caméra que seul un programmateur matériel (SPI ou SWD/J-Link) peut réparer.',
   'how.phone':
     '**Sur un téléphone :** avant l’étape 03, activez le mode avion et coupez le Wi-Fi et les données mobiles, pour qu’un appel ou une notification ne puisse pas détourner le navigateur en pleine écriture — et gardez l’écran allumé. Une fois ouverte, la page continue de fonctionner hors ligne.',
   /*
@@ -76,7 +76,7 @@ export default {
   'step.patch.description':
     'Hors ligne, sans caméra. Prépare le correctif de chaque emplacement que l’exécution peut écrire : il permet à la lecture de la caméra d’atteindre toute la mémoire flash de 4 Mo, et il est écrit sous la forme dans laquelle la caméra le stocke, de sorte que seuls les octets du correctif changent.',
   'step.commit.description':
-    'L’écriture. Relit d’abord chaque emplacement choisi et n’écrit rien si l’un d’eux ne contient plus ce que la sauvegarde a enregistré (une écriture déjà faite n’est jamais répétée), puis écrit chacun d’eux, l’emplacement que la caméra essaie en premier en dernier. La caméra n’est pas redémarrée ici : l’étape suivante s’en charge.',
+    'L’écriture. Relit d’abord chaque emplacement choisi et n’écrit rien si l’un d’eux ne contient plus ce que la sauvegarde a enregistré (une écriture déjà faite n’est jamais répétée), puis les écrit, en terminant par l’emplacement que la caméra essaie en premier. La caméra n’est pas redémarrée ici : l’étape suivante s’en charge.',
   'step.drain.description':
     'Redémarre la caméra pour qu’elle lance le firmware corrigé (elle reste muette une dizaine de secondes ; la page attend et la retrouve), vérifie depuis quel emplacement elle a démarré (un emplacement sans le correctif arrête l’étape avant toute lecture), puis lit toute la mémoire flash de 4 Mo en une seule lecture et replace, dans l’image enregistrée, le firmware d’origine de chaque emplacement écrit, pris dans la sauvegarde. Rien n’est écrit.',
   'step.restore.description':
@@ -115,7 +115,7 @@ export default {
   'phase.noDrain':
     'La lecture complète n’a pas été faite — cette étape remet la caméra en état sans elle. Lancez d’abord l’étape 03, sauf si la lecture complète ne vous importe pas.',
   'phase.keepPlugged':
-    'Laissez la caméra branchée et l’ordinateur allumé jusqu’à la fin de cette étape.',
+    'Laissez la caméra branchée et l’ordinateur hors veille jusqu’à la fin de cette étape.',
   /* The list of the step's parts, with a tick on each one done (its accessible name). */
   'phase.stepsLabel': 'Progression',
   'phase.showDetails': 'Afficher les détails dans le journal',
@@ -252,7 +252,7 @@ export default {
   'confirm.jump':
     'L’ÉCRITURE N’EST PAS ENREGISTRÉE pour cette exécution, et vous affirmez que les écritures ont abouti sans leurs points de contrôle : l’étape commence après l’écriture au lieu d’écrire à nouveau. Les vérifications propres aux étapes ont quand même lieu — la lecture de la version, les vérifications des emplacements — et une erreur de jugement coûte une lecture complète pour rien, pas une caméra hors d’usage.',
   'confirm.jumpKeepPlugged':
-    'Laissez la caméra branchée et l’ordinateur allumé jusqu’à la fin de l’étape.',
+    'Laissez la caméra branchée et l’ordinateur hors veille jusqu’à la fin de l’étape.',
   /* Step 03. "In that order" when there are several banks; the camera tries one bank first at start-up. */
   'confirm.patch':
     'Ceci écrit un petit correctif dans {banks:acc}. L’étape 04 remet les originaux en place. La lecture complète qui suit ne fait que lire.',
@@ -263,7 +263,7 @@ export default {
   'confirm.restoreInOrder':
     'Ceci réécrit votre firmware d’origine dans {banks:acc}, dans cet ordre — l’emplacement que la caméra essaie en premier passe en premier.',
   'confirm.keepPlugged':
-    'Laissez la caméra branchée et l’ordinateur allumé pendant l’écriture — une écriture interrompue laisse une caméra que seul un programmateur matériel (SPI ou SWD/J-Link) peut réparer. Sur un téléphone : mode avion activé et écran maintenu allumé. La caméra redémarre ensuite ; quand la page le demande, appuyez sur Connecter l’appareil et choisissez-la à nouveau. C’est normal.',
+    'Laissez la caméra branchée et l’ordinateur hors veille pendant l’écriture — une écriture interrompue laisse une caméra que seul un programmateur matériel (SPI ou SWD/J-Link) peut réparer. Sur un téléphone : mode avion activé et écran maintenu allumé. La caméra redémarre ensuite ; quand la page le demande, appuyez sur Connecter l’appareil et choisissez-la à nouveau. C’est normal.',
   'confirm.yesJump': 'Oui — passer outre l’écriture',
   'confirm.yesWrite': 'Oui — écrire dans la caméra',
 
