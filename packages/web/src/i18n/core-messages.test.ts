@@ -156,6 +156,8 @@ import {
   stagedClauseMessage,
   FPS_TABLE_REASON,
   VERSION_NOTE,
+  COPY_WORDS,
+  RESTORE_WORDS,
   COMPACT_2016_EVIDENCE,
   EARLY_COMPACT_EVIDENCE,
   GENERIC_EVIDENCE,
@@ -1090,6 +1092,43 @@ function samples(base: DeviceState): CoreMessage[] {
       if (typeof sentence !== 'function') add(sentence);
     }
   }
+
+  /* copy and restore: the preview's source, notes and warnings */
+  for (const version of [null, '1.0.3.0']) {
+    add(COPY_WORDS.source('Slot A', 'a', 0x14010000, version));
+    add(COPY_WORDS.note('Slot B', 'b', version, 51848, 'ab'.repeat(32)));
+    const where = RESTORE_WORDS.where('Recovery R', 'r', 0x14050000);
+    add(RESTORE_WORDS.source(where, 'seek-preserve.zip', version));
+    for (const from of ['flash-file', 'preserve-run', 'dump', 'all-selectors'] as const) {
+      for (const entry of [null, 'flash-original.bin']) {
+        add(
+          RESTORE_WORDS.image({
+            where,
+            file: 'backup.zip',
+            from,
+            entry,
+            stored: 'cd'.repeat(32),
+            version,
+            size: 51848,
+            sha256: 'ef'.repeat(32),
+          }),
+        );
+      }
+    }
+  }
+  add(RESTORE_WORDS.readBack);
+  add(RESTORE_WORDS.otherCamera('SN1', 'SN2', 'Slot A', 'a'));
+  add(RESTORE_WORDS.noIdentity);
+  add(RESTORE_WORDS.serialNotRead('SN1'));
+  add(RESTORE_WORDS.sameCamera('SN1'));
+  add(
+    RESTORE_WORDS.otherFirmware(
+      RESTORE_WORDS.where('Slot B', 'b', 0x14030000),
+      '4.8.1.9',
+      '4.8.2.1',
+    ),
+  );
+  add(RESTORE_WORDS.sameBytes('Slot B', 'b'));
 
   /* fps: the patch table's reasons */
   for (const reason of [

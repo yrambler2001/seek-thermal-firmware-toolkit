@@ -137,6 +137,49 @@ export default {
   'copy.source.noKey':
     'no key this read recovered opens {name}, so there is no decrypted image to copy',
 
+  /* ---- copy: where a copy's image comes from, and its note in the preview (slots/copy) ---- */
+  /** The preview's Source row. `{name}`: the bank ("Slot A"); `{address}` hex; `{version}` a firmware version. */
+  'copy.from': '{name} at {address}, as the slots read decrypted it',
+  'copy.fromVersion': '{name} at {address}, firmware {version}, as the slots read decrypted it',
+  /** `{size}`: bytes; `{sha256}`: a SHA-256. */
+  'copy.note': "The image is {name}'s, as the slots read decrypted it: {size} B, sha256 {sha256}.",
+  'copy.noteVersion':
+    "The image is {name}'s, as the slots read decrypted it: firmware {version}, {size} B, sha256 {sha256}.",
+
+  /* ---- restore: a bank restored from a full flash backup (slots/restore) ---- */
+  /** "the backup's Slot A (at 0x14010000)", said inside restore.* sentences as `{where}`. */
+  'restore.where': "the backup's {name} (at {address})",
+  /** The preview's Source row. `{file}`: the backup's file name. */
+  'restore.from': '{where} in the full flash backup {file}',
+  'restore.fromVersion': '{where} in the full flash backup {file}, firmware {version}',
+  /** What kind of file the backup is: `{kind}` below. "Dump & decrypt 4.x/Nano" and "Dump all selectors" are the page's own tab and button names. */
+  'restore.kind.flash-file': 'a 4 MiB flash image',
+  'restore.kind.preserve-run': 'a Preserve run file',
+  'restore.kind.dump': 'a Dump & decrypt 4.x/Nano zip',
+  'restore.kind.all-selectors': 'a Dump all selectors zip',
+  /** `{decrypted}` below. */
+  'restore.decryptedTo.image': 'an image',
+  'restore.decryptedTo.firmware': 'firmware {version}',
+  /** `{entry}`: the file inside the zip; `{stored}`, `{sha256}`: SHA-256 values; `{size}`: bytes. */
+  'restore.note.image':
+    'The image is {where} in {file}, {kind}: stored sha256 {stored}, decrypted to {decrypted} of {size} B (sha256 {sha256}).',
+  'restore.note.imageEntry':
+    'The image is {where} in {file}, {kind} (its {entry}): stored sha256 {stored}, decrypted to {decrypted} of {size} B (sha256 {sha256}).',
+  'restore.note.readBack':
+    'After the write, the bank read back is compared with the backup’s stored bank bytes.',
+  /** `{serial}`, `{theirs}`, `{camera}`: camera serial numbers. */
+  'restore.note.sameCamera': "The backup's identity block names this camera (serial {serial}).",
+  'restore.note.sameBytes':
+    "{name} holds the backup's stored bytes already: the write puts the same image back.",
+  'restore.warn.otherCamera':
+    "This backup looks like another camera's: its identity block names serial {theirs}, and this camera is {camera}. Only {name}'s image is written; nothing of that camera's identity or calibration is.",
+  'restore.warn.noIdentity':
+    'This backup has no identity block at {address}, so it cannot be told whose camera it was read from.',
+  'restore.warn.serialNotRead':
+    "The camera's serial was not read, so the backup (serial {serial}) cannot be matched to it.",
+  'restore.warn.otherFirmware':
+    '{where} holds firmware {version}, and the camera runs {camera}: the restore puts another firmware in the bank.',
+
   /* ---- restore: a restored bank read back (slots/restore) ---- */
   'restore.readBack.notCompared':
     '{bank} was not read back, so it is not compared with the backup.',

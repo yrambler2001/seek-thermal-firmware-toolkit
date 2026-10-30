@@ -90,6 +90,7 @@ export {
   copySourceRefusal,
   copySourceRefusalMessage,
   planSlotCopy,
+  COPY_WORDS,
   type SlotCopyPlan,
 } from './copy.js';
 export {
@@ -105,6 +106,8 @@ export {
   fullFlashBackupText,
   fullFlashOf,
   fullFlashSourceWords,
+  fullFlashSourceMessage,
+  RESTORE_WORDS,
   planSlotRestore,
   restoreReadBack,
   restoreReadBackText,

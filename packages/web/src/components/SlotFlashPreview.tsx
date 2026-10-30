@@ -10,6 +10,7 @@ import type { ReactElement } from 'react';
 import { FileUp, Flame } from 'lucide-react';
 import {
   hexUp,
+  type CoreMessage,
   type SlotFlashPlan,
   type SlotInputKind,
   bankParam,
@@ -59,7 +60,7 @@ export interface SlotFlashPreviewProps {
   /** The bank holds no image (its header window reads as all 0xFF): the write overwrites no firmware. */
   readonly targetEmpty?: boolean;
   /** Where the image came from when it is not a picked file: another bank, or a bank of a full flash backup. */
-  readonly source?: string | null;
+  readonly source?: CoreMessage | string | null;
   /** What is saved before the write (core's `backupPlanText` and the page's download note). */
   readonly backupText: string;
   readonly onWrite: () => void;
@@ -91,8 +92,9 @@ export function SlotFlashPreview({
   ];
   const rows: readonly KeyValueRow[] = [
     /* A copy or a restore names its source instead of a file the person does not have (TESTING.md 42.96). */
-    /* i18n: core message (the source) */
-    source === null ? [t('slots:preview.file'), what] : [t('slots:preview.source'), source],
+    source === null
+      ? [t('slots:preview.file'), what]
+      : [t('slots:preview.source'), coreText(source)],
     ...(targetEmpty
       ? [
           [

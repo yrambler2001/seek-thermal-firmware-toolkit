@@ -30,6 +30,8 @@ export interface SlotCopyPlan {
   readonly fileName: string;
   /** Where the image comes from, in words ("Slot A, firmware 1.0.3.0, as the slots read decrypted it"). */
   readonly source: string;
+  /** `source` as a message, for the page. */
+  readonly sourceMessage?: CoreMessage;
   readonly plan: SlotFlashPlan;
 }
 
@@ -92,6 +94,40 @@ export function copySourceRefusalMessage(report: SlotsReport, from: SlotKey): Co
  * Plans the copy of `from`'s image into `to`. Throws a refusal (nothing sent) for a copy onto itself, for a
  * source with no image to copy, and for everything `prepareSlotFlash` refuses for a decrypted image in `to`.
  */
+/** What a copy's plan says, as messages for the page (`source` and the note are their English). */
+export const COPY_WORDS = {
+  source: (
+    fromName: string,
+    from: SlotKey,
+    address: number,
+    version: string | null,
+  ): CoreMessage => {
+    const name = bankNameParam(fromName, from);
+    const at = hexUp(address);
+    return coreMessage(
+      version === null ? 'copy.from' : 'copy.fromVersion',
+      version === null ? { name, address: at } : { name, address: at, version },
+      `${fromName} at ${at}` +
+        `${version === null ? '' : `, firmware ${version}`}, as the slots read decrypted it`,
+    );
+  },
+  note: (
+    fromName: string,
+    from: SlotKey,
+    version: string | null,
+    size: number,
+    sha256: string,
+  ): CoreMessage => {
+    const name = bankNameParam(fromName, from);
+    return coreMessage(
+      version === null ? 'copy.note' : 'copy.noteVersion',
+      version === null ? { name, size, sha256 } : { name, version, size, sha256 },
+      `The image is ${fromName}'s, as the slots read decrypted it: ` +
+        `${version === null ? '' : `firmware ${version}, `}${String(size)} B, sha256 ${sha256}.`,
+    );
+  },
+} as const;
+
 export function planSlotCopy(report: SlotsReport, from: SlotKey, to: SlotKey): SlotCopyPlan {
   const fromName = nameOf(report, from);
   if (from === to) throw slotRefused(`${fromName} is not copied onto itself. Nothing was written.`);
@@ -112,17 +148,17 @@ export function planSlotCopy(report: SlotsReport, from: SlotKey, to: SlotKey): S
   );
   const fileName = decrypted ?? `seek-slot-${from}-decrypted.bin`;
   const prepared = prepareSlotFlash(report, to, { kind: 'plain', bytes: plain, fileName });
-  const source =
-    `${fromName} at ${hexUp(view?.entry.address ?? 0)}` +
-    `${version === null ? '' : `, firmware ${version}`}, as the slots read decrypted it`;
-  const note =
-    `The image is ${fromName}'s, as the slots read decrypted it: ` +
-    `${version === null ? '' : `firmware ${version}, `}${String(plain.length)} B, sha256 ${sha256Sync(plain)}.`;
+  const source = COPY_WORDS.source(fromName, from, view?.entry.address ?? 0, version);
+  const note = COPY_WORDS.note(fromName, from, version, plain.length, sha256Sync(plain));
   return {
     from,
     to,
     fileName,
-    source,
-    plan: { ...prepared, notes: [{ source: 'write', text: note }, ...prepared.notes] },
+    source: source.text,
+    sourceMessage: source,
+    plan: {
+      ...prepared,
+      notes: [{ source: 'write', text: note.text, message: note }, ...prepared.notes],
+    },
   };
 }

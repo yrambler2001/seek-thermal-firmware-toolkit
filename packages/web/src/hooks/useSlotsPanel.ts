@@ -77,7 +77,7 @@ import {
   copySourceRefusalMessage,
 } from '@seek-fw/core';
 import { coreText } from '@/lib/core-text';
-import { recordedParam, supportReasonMessage } from '@seek-fw/core';
+import { recordedParam, supportReasonMessage, type CoreMessage } from '@seek-fw/core';
 import { listAnd, t, tEnglish, type Translate } from '@/i18n';
 import { backupDownloadLines, saveBackupAsDownload } from '../lib/backup-save';
 import { bankName, bankWords } from '../lib/bank-names';
@@ -439,7 +439,7 @@ export interface PendingSlotFlash {
    * bank of a full flash backup (a restore). Null for a file. Shown beside the plan so the source is
    * never a surprise.
    */
-  readonly source: string | null;
+  readonly source: CoreMessage | string | null;
   /** What the write is: it names the backup zip saved first. */
   readonly action: WriteAction;
   /** For a restore: the backup's bank, whose stored bytes the read-back is compared with. */
@@ -812,7 +812,7 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
         readonly what: string;
         readonly whatOnPage?: (() => string) | undefined;
         readonly bytes: number;
-        readonly source: string | null;
+        readonly source: CoreMessage | string | null;
         readonly action: WriteAction;
         readonly restore: SlotRestorePlan | null;
       }>,
@@ -843,7 +843,9 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
             }
             const input = await load(current);
             log(`${input.what} — ${input.bytes.toLocaleString()} bytes`, 'detail');
-            if (input.source !== null) log(`image taken from ${input.source}`, 'detail');
+            if (input.source !== null) {
+              log(`image taken from ${coreText(input.source, tEnglish)}`, 'detail');
+            }
             const prepared = input.plan;
             setCurrentPending({
               key,
@@ -916,7 +918,7 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
             what: tEnglish('slots:what.copy', { bank: pageBankName(current, from) }),
             whatOnPage: () => t('slots:what.copy', { bank: bankName(from) }),
             bytes: copy.plan.expectedPlain?.length ?? copy.plan.payload.length,
-            source: copy.source,
+            source: recordedParam(copy.sourceMessage, copy.source),
             action: { kind: 'copy', from } as const,
             restore: null,
           });
@@ -949,7 +951,7 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
             }),
             whatOnPage: () => t('slots:what.restore', { bank: bankName(key), file: file.name }),
             bytes: restore.decryption.plain?.length ?? 0,
-            source: restore.source,
+            source: recordedParam(restore.sourceMessage, restore.source),
             action: { kind: 'restore', fileName: file.name } as const,
             restore,
           };

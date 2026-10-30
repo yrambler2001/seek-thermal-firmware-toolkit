@@ -34,6 +34,7 @@ import { looksLikeZip, readZipEntries, type ZipEntry } from '../archive/zip-read
 import { PRESERVE_DUMP_ORIGINAL_FILE, PRESERVE_DUMP_PATCHED_FILE } from '../preservation/steps.js';
 import { isDeviceBlockHead, DEVICE_BLOCK_ADDRESS } from '../preservation/windows.js';
 import { decryptSlotFile, type SlotFileDecryption } from './decrypt-file.js';
+import { bankNameParam } from './backup.js';
 import { slotDumpNames } from './dump.js';
 import { prepareSlotFlash } from './write.js';
 import { slotRefused } from './write-image.js';
@@ -112,6 +113,11 @@ const FULL_FLASH_ENTRIES: readonly { readonly file: string; readonly from: FullF
   { file: FLASH_DUMP_ORIGINAL_FILE, from: 'dump' },
   { file: FLASH_DUMP_ALL_SELECTORS_FILE, from: 'all-selectors' },
 ];
+
+/** `fullFlashSourceWords` as a message, for the page. */
+export function fullFlashSourceMessage(from: FullFlashSource): CoreMessage {
+  return coreMessage(`restore.kind.${from}`, {}, fullFlashSourceWords(from));
+}
 
 /** What kind of file a full flash backup is, in words, the same on the page and in the CLI. */
 export function fullFlashSourceWords(from: FullFlashSource): string {
@@ -319,8 +325,118 @@ export interface SlotRestorePlan {
   readonly fileName: string;
   /** Where the image comes from, in words. */
   readonly source: string;
+  /** `source` as a message, for the page. */
+  readonly sourceMessage?: CoreMessage;
   readonly plan: SlotFlashPlan;
 }
+
+/**
+ * What a restore's plan says, as messages for the page (the English is the plan's `warnings`, `notes` and
+ * `source`, as the CLI prints them).
+ */
+export const RESTORE_WORDS = {
+  where: (name: string, key: SlotKey, address: number): CoreMessage =>
+    coreMessage(
+      'restore.where',
+      { name: bankNameParam(name, key), address: `0x${address.toString(16).toUpperCase()}` },
+      `the backup's ${name} (at 0x${address.toString(16).toUpperCase()})`,
+    ),
+  image: (facts: {
+    readonly where: CoreMessage;
+    readonly file: string;
+    readonly from: FullFlashSource;
+    readonly entry: string | null;
+    readonly stored: string;
+    readonly version: string | null;
+    readonly size: number;
+    readonly sha256: string;
+  }): CoreMessage => {
+    const decrypted =
+      facts.version === null
+        ? coreMessage('restore.decryptedTo.image', {}, 'an image')
+        : coreMessage(
+            'restore.decryptedTo.firmware',
+            { version: facts.version },
+            `firmware ${facts.version}`,
+          );
+    const params = {
+      where: facts.where,
+      file: facts.file,
+      kind: fullFlashSourceMessage(facts.from),
+      stored: facts.stored,
+      decrypted,
+      size: facts.size,
+      sha256: facts.sha256,
+    };
+    return coreMessage(
+      facts.entry === null ? 'restore.note.image' : 'restore.note.imageEntry',
+      facts.entry === null ? params : { ...params, entry: facts.entry },
+      `The image is ${facts.where.text} in ${facts.file}, ${fullFlashSourceWords(facts.from)}` +
+        `${facts.entry === null ? '' : ` (its ${facts.entry})`}: ` +
+        `stored sha256 ${facts.stored}, decrypted to ${decrypted.text} of ` +
+        `${String(facts.size)} B (sha256 ${facts.sha256}).`,
+    );
+  },
+  readBack: coreMessage(
+    'restore.note.readBack',
+    {},
+    'After the write, the bank read back is compared with the backup’s stored bank bytes.',
+  ),
+  otherCamera: (
+    theirs: string | null,
+    camera: string | null,
+    name: string,
+    key: SlotKey,
+  ): CoreMessage =>
+    coreMessage(
+      'restore.warn.otherCamera',
+      {
+        theirs: theirs ?? '(none)',
+        camera: camera ?? '(serial not read)',
+        name: bankNameParam(name, key),
+      },
+      `This backup looks like another camera's: its identity block names serial ${theirs ?? '(none)'}, and this ` +
+        `camera is ${camera ?? '(serial not read)'}. Only ${name}'s image is written; nothing of that ` +
+        "camera's identity or calibration is.",
+    ),
+  noIdentity: coreMessage(
+    'restore.warn.noIdentity',
+    { address: '0x14020000' },
+    'This backup has no identity block at 0x14020000, so it cannot be told whose camera it was read from.',
+  ),
+  serialNotRead: (serial: string): CoreMessage =>
+    coreMessage(
+      'restore.warn.serialNotRead',
+      { serial },
+      `The camera's serial was not read, so the backup (serial ${serial}) cannot be matched to it.`,
+    ),
+  sameCamera: (serial: string | null): CoreMessage =>
+    coreMessage(
+      'restore.note.sameCamera',
+      { serial: serial ?? '' },
+      `The backup's identity block names this camera (serial ${serial ?? ''}).`,
+    ),
+  otherFirmware: (where: CoreMessage, version: string, camera: string): CoreMessage =>
+    coreMessage(
+      'restore.warn.otherFirmware',
+      { where, version, camera },
+      `${where.text} holds firmware ${version}, and the camera runs ${camera}: the restore puts ` +
+        'another firmware in the bank.',
+    ),
+  sameBytes: (name: string, key: SlotKey): CoreMessage =>
+    coreMessage(
+      'restore.note.sameBytes',
+      { name: bankNameParam(name, key) },
+      `${name} holds the backup's stored bytes already: the write puts the same image back.`,
+    ),
+  source: (where: CoreMessage, file: string, version: string | null): CoreMessage =>
+    coreMessage(
+      version === null ? 'restore.from' : 'restore.fromVersion',
+      version === null ? { where, file } : { where, file, version },
+      `${where.text} in the full flash backup ${file}` +
+        (version === null ? '' : `, firmware ${version}`),
+    ),
+} as const;
 
 /**
  * Plans the restore of bank `key` from a full flash backup: cut, decrypt, stage as a decrypted image, and say
@@ -341,7 +457,8 @@ export async function planSlotRestore(
   }
   const stored = backup.flash.slice(offset, offset + SLOT_BYTES);
   const storedSha256 = await sha256hex(stored);
-  const where = `the backup's ${entry.name} (at 0x${entry.address.toString(16).toUpperCase()})`;
+  const whereMessage = RESTORE_WORDS.where(entry.name, key, entry.address);
+  const where = whereMessage.text;
   const gap = backup.gaps.find(
     (candidate) =>
       candidate.address < entry.address + SLOT_BYTES &&
@@ -392,43 +509,34 @@ export async function planSlotRestore(
   const nowRaw = view?.state?.raw ?? null;
   const sameAsNow = nowRaw !== null && sha256Sync(nowRaw) === storedSha256;
 
-  const warnings: string[] = [];
-  const notes: string[] = [
-    `The image is ${where} in ${backup.fileName}, ${fullFlashSourceWords(backup.from)}` +
-      `${backup.entry === null ? '' : ` (its ${backup.entry})`}: ` +
-      `stored sha256 ${storedSha256}, decrypted to ${version === null ? 'an image' : `firmware ${version}`} of ` +
-      `${String(plain.length)} B (sha256 ${decryption.plainSha256 ?? sha256Sync(plain)}).`,
-    'After the write, the bank read back is compared with the backup’s stored bank bytes.',
+  const warnings: CoreMessage[] = [];
+  const notes: CoreMessage[] = [
+    RESTORE_WORDS.image({
+      where: whereMessage,
+      file: backup.fileName,
+      from: backup.from,
+      entry: backup.entry,
+      stored: storedSha256,
+      version,
+      size: plain.length,
+      sha256: decryption.plainSha256 ?? sha256Sync(plain),
+    }),
+    RESTORE_WORDS.readBack,
   ];
   if (sameCamera === false) {
-    warnings.push(
-      `This backup looks like another camera's: its identity block names serial ${theirs ?? '(none)'}, and this ` +
-        `camera is ${camera ?? '(serial not read)'}. Only ${entry.name}'s image is written; nothing of that ` +
-        "camera's identity or calibration is.",
-    );
+    warnings.push(RESTORE_WORDS.otherCamera(theirs, camera, entry.name, key));
   } else if (sameCamera === null) {
-    warnings.push(
-      theirs === null
-        ? 'This backup has no identity block at 0x14020000, so it cannot be told whose camera it was read from.'
-        : `The camera's serial was not read, so the backup (serial ${theirs}) cannot be matched to it.`,
-    );
+    warnings.push(theirs === null ? RESTORE_WORDS.noIdentity : RESTORE_WORDS.serialNotRead(theirs));
   } else {
-    notes.push(`The backup's identity block names this camera (serial ${theirs ?? ''}).`);
+    notes.push(RESTORE_WORDS.sameCamera(theirs));
   }
   if (version !== null && report.state.version !== null && version !== report.state.version) {
-    warnings.push(
-      `${where} holds firmware ${version}, and the camera runs ${report.state.version}: the restore puts ` +
-        'another firmware in the bank.',
-    );
+    warnings.push(RESTORE_WORDS.otherFirmware(whereMessage, version, report.state.version));
   }
   if (sameAsNow) {
-    notes.push(
-      `${entry.name} holds the backup's stored bytes already: the write puts the same image back.`,
-    );
+    notes.push(RESTORE_WORDS.sameBytes(entry.name, key));
   }
-  const source =
-    `${where} in the full flash backup ${backup.fileName}` +
-    (version === null ? '' : `, firmware ${version}`);
+  const source = RESTORE_WORDS.source(whereMessage, backup.fileName, version);
   return {
     key,
     backup,
@@ -439,11 +547,16 @@ export async function planSlotRestore(
     version,
     decryption,
     fileName,
-    source,
+    source: source.text,
+    sourceMessage: source,
     plan: {
       ...prepared,
-      warnings: [...warnings, ...prepared.warnings],
-      notes: [...notes.map((text) => ({ source: 'write' as const, text })), ...prepared.notes],
+      warnings: [...warnings.map((warning) => warning.text), ...prepared.warnings],
+      warningMessages: [...warnings, ...(prepared.warningMessages ?? prepared.warnings)],
+      notes: [
+        ...notes.map((note) => ({ source: 'write' as const, text: note.text, message: note })),
+        ...prepared.notes,
+      ],
     },
   };
 }
