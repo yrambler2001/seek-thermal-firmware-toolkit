@@ -336,9 +336,10 @@ export default {
     other: 'Corriger la fréquence d’images de {count} emplacements ?',
   },
   'fpsEvery.intro': {
-    one: 'Ceci corrige {count} emplacement qui le propose, en firmware {version} :',
-    many: 'Ceci corrige {count} emplacements qui le proposent, en firmware {version} :',
-    other: 'Ceci corrige {count} emplacements qui le proposent, en firmware {version} :',
+    one: 'Ceci corrige {count} emplacement où le correctif est disponible, en firmware {version} :',
+    many: 'Ceci corrige {count} emplacements où le correctif est disponible, en firmware {version} :',
+    other:
+      'Ceci corrige {count} emplacements où le correctif est disponible, en firmware {version} :',
   },
   /* A bank's name and, when writing it asks for the tick, what it is. */
   'fpsEvery.role.bootedRecovery':
@@ -477,7 +478,7 @@ export default {
   'how.copy':
     '**{copyA}**, **{copyB}** et **{copyR}** sur la ligne d’un emplacement écrivent le firmware que contient cet emplacement, tel que cette lecture l’a déchiffré, dans l’autre emplacement, quel que soit son contenu actuel. L’image est transférée comme toute image déchiffrée : le plan et la confirmation sont donc les mêmes que pour un fichier. **Restaurer depuis une sauvegarde complète** prend un .bin (une image complète de 4 Mo de la flash, comme une lecture J-Link) ou un .zip qui en contient une (un fichier d’exécution Preserve, ou le zip qu’enregistre « Extraire et déchiffrer 4.x/Nano » ou « Extraire tous les sélecteurs »), en extrait cet emplacement, le déchiffre et affiche le plan ; une sauvegarde qui semble venir d’une autre caméra, ou d’un autre firmware, est signalée dans le plan. Un emplacement vide dans la sauvegarde, ou que le dump n’a pas lu, ne peut pas être restauré par une écriture, et la page le dit.',
   'how.fps':
-    '**Passer à N FPS** sur la ligne d’un emplacement modifie l’image de cet emplacement pour une fréquence d’images plus élevée, et **Passer tous les emplacements à N FPS** le fait pour chaque emplacement qui le propose, en une seule confirmation, l’emplacement depuis lequel la caméra démarre actuellement en dernier. Un emplacement qui ne peut pas le proposer indique pourquoi.',
+    '**Passer à N FPS** sur la ligne d’un emplacement modifie l’image de cet emplacement pour une fréquence d’images plus élevée, et **Passer tous les emplacements à N FPS** le fait pour chaque emplacement où le correctif est disponible, en une seule confirmation, l’emplacement depuis lequel la caméra démarre actuellement en dernier. Pour un emplacement où il ne l’est pas, la page indique pourquoi.',
   /* {example} is a file name; keep it as it is. */
   'how.backup':
     '**Chaque écriture enregistre d’abord son emplacement** : l’emplacement est relu et enregistré dans un seul zip téléchargé, nommé d’après l’heure, le numéro de série de la caméra, le firmware, l’emplacement et l’écriture (par exemple `{example}`), qui contient l’emplacement tel que stocké, son image déchiffrée et une note sur chaque fichier. L’écriture attend que le téléchargement ait commencé. Un navigateur ne signale pas quand un téléchargement est arrivé sur le disque : vérifiez votre dossier de téléchargements. Pour revenir en arrière, écrivez le fichier déchiffré du zip avec **Écrire l’image déchiffrée**.',

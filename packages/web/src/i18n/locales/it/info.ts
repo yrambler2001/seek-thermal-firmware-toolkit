@@ -58,7 +58,7 @@ export default {
   /** A table cell answering "Writes to the camera?" for this tab: the word "no", not "number". */
   'tabs.info.writes': 'No.',
   'tabs.preserve.does':
-    'Crea una copia completa della memoria flash da 4 MB della termocamera, salvando un file di esecuzione dopo ogni passaggio, e può rimettere al suo posto un firmware con patch. Ti guida nei passaggi uno alla volta.',
+    'Crea una copia completa della memoria flash da 4 MB della termocamera, salvando un file di esecuzione dopo ogni passaggio. Per leggerla tutta applica per un po’ una patch al firmware, poi rimette al suo posto il firmware originale e lo controlla. Ti guida nei passaggi uno alla volta.',
   'tabs.preserve.cameras':
     'Termocamere con firmware 0.x e 1.x: le build Compact del 2014, le build Compact PRO del 2016 (1.0.3.x) e la build Compact 1.3.0.8 FF (16 Hz).',
   'tabs.preserve.writes':
@@ -152,8 +152,17 @@ export default {
   'report.slotReason': '{slot}: {reason}',
   'report.writing': 'Scrittura',
   'report.noBankWritten': 'Nessuno slot di questa termocamera viene scritto:',
-  /* {staged} is core's phrase for how a bank is written. */
-  'report.oneBank':
-    'Uno slot alla volta: la scheda degli slot scrive o modifica con una patch uno slot di questa termocamera, ogni slot {staged}, e ogni scrittura chiede prima conferma.',
+  /*
+   * The Writing panel: how each bank is staged, one sentence per staging form (core's report.staged.*
+   * says the same clause after "each bank" for the CLI).
+   */
+  'report.oneBank.plain':
+    'Uno slot alla volta: la scheda degli slot scrive o modifica con una patch uno slot di questa termocamera; ogni slot viene trasferito in chiaro (l’immagine così com’è, senza chiave); e ogni scrittura chiede prima conferma.',
+  'report.oneBank.slotKeystream':
+    'Uno slot alla volta: la scheda degli slot scrive o modifica con una patch uno slot di questa termocamera; ogni slot viene trasferito con il blocco di chiavi 0 della sua stessa immagine; e ogni scrittura chiede prima conferma.',
+  'report.oneBank.keyA':
+    'Uno slot alla volta: la scheda degli slot scrive o modifica con una patch uno slot di questa termocamera; ogni slot viene trasferito con chiavi ricavate dallo slot avviato e dall’applicazione in esecuzione; e ogni scrittura chiede prima conferma.',
+  'report.oneBank.ffVendor':
+    'Uno slot alla volta: la scheda degli slot scrive o modifica con una patch uno slot di questa termocamera; ogni slot viene trasferito come l’app del produttore trasferisce l’immagine FF a 16 Hz (l’immagine in XOR con il suo blocco di chiavi 0), e conservato dalla termocamera con la chiave B; e ogni scrittura chiede prima conferma.',
   'report.refusesEvery': 'La scheda degli slot rifiuta ogni slot di questa termocamera:',
 } satisfies Translation<'info'>;

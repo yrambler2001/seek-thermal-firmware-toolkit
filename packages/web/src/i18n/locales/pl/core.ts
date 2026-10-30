@@ -1455,7 +1455,7 @@ export default {
   'report.storeKey.keyBUnidentified':
     'klucz B (klucz urządzenia niezaprogramowany; sam klucz B nierozpoznany)',
   'report.storeKey.keyB': 'klucz B (klucz urządzenia niezaprogramowany)',
-  /** How each bank is staged: said after "each bank" (info:report.oneBank). */
+  /** How each bank is staged: said after "each bank" (the CLI's report; the page says info:report.oneBank.*). */
   'report.staged.plain': 'przesyłany jawnie (obraz bez zmian, bez klucza)',
   'report.staged.slotKeystream': 'przesyłany z szyfrowaniem własnym blokiem kluczy 0 obrazu',
   'report.staged.keyA':

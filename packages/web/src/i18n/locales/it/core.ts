@@ -1458,7 +1458,7 @@ export default {
   'report.storeKey.keyBUnidentified':
     'Chiave B (nessuna chiave propria del dispositivo programmata; la chiave B stessa non è identificata)',
   'report.storeKey.keyB': 'Chiave B (nessuna chiave propria del dispositivo programmata)',
-  /** How each bank is staged: said after "each bank" (info:report.oneBank). */
+  /** How each bank is staged: said after "each bank" (the CLI's report; the page says info:report.oneBank.*). */
   'report.staged.plain': 'trasferito in chiaro (l’immagine così com’è, senza chiave)',
   'report.staged.slotKeystream': 'trasferito con il blocco di chiavi 0 della sua stessa immagine',
   'report.staged.keyA':

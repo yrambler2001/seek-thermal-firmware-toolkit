@@ -57,7 +57,7 @@ export default {
   /** A table cell answering "Writes to the camera?" for this tab: the word "no", not "number". */
   'tabs.info.writes': 'No.',
   'tabs.preserve.does':
-    'Makes a complete copy of the camera’s 4 MiB flash, with a run file saved after every step, and can put a patched firmware back in place. It walks through the steps one at a time.',
+    'Makes a complete copy of the camera’s 4 MiB flash, with a run file saved after every step. To read all of it, it patches the firmware for a while, then puts the original firmware back and checks it. It walks through the steps one at a time.',
   'tabs.preserve.cameras':
     'Cameras on 0.x and 1.x firmware: the 2014 Compact builds, the 2016 Compact PRO builds (1.0.3.x), and the 1.3.0.8 FF (16 Hz) Compact build.',
   'tabs.preserve.writes':
@@ -150,8 +150,17 @@ export default {
   'report.slotReason': '{slot}: {reason}',
   'report.writing': 'Writing',
   'report.noBankWritten': 'No bank of this camera is written:',
-  /* {staged} is core's phrase for how a bank is written. */
-  'report.oneBank':
-    'One bank at a time: the Slots tab writes or patches one bank of this camera, each bank {staged}, and each write asks first.',
+  /*
+   * The Writing panel: how each bank is staged, one sentence per staging form (core's report.staged.*
+   * says the same clause after "each bank" for the CLI).
+   */
+  'report.oneBank.plain':
+    'One bank at a time: the Slots tab writes or patches one bank of this camera, each bank staged plain (the image as it is, with no key), and each write asks first.',
+  'report.oneBank.slotKeystream':
+    "One bank at a time: the Slots tab writes or patches one bank of this camera, each bank staged under its image's own key block 0, and each write asks first.",
+  'report.oneBank.keyA':
+    'One bank at a time: the Slots tab writes or patches one bank of this camera, each bank staged under keys derived from the booted bank and the running application, and each write asks first.',
+  'report.oneBank.ffVendor':
+    'One bank at a time: the Slots tab writes or patches one bank of this camera, each bank staged as the vendor app stages the 16 Hz FF image (the image XOR its own key block 0), stored by the camera under Key B, and each write asks first.',
   'report.refusesEvery': 'The Slots tab refuses every bank of this camera:',
 } as const satisfies NamespaceMessages;

@@ -335,8 +335,8 @@ export default {
     other: 'Die Bildrate von {count} Slots patchen?',
   },
   'fpsEvery.intro': {
-    one: 'Dies patcht {count} Slot, der es anbietet, mit Firmware {version}:',
-    other: 'Dies patcht {count} Slots, die es anbieten, mit Firmware {version}:',
+    one: 'Dies patcht {count} Slot, für den der Patch verfügbar ist, mit Firmware {version}:',
+    other: 'Dies patcht {count} Slots, für die der Patch verfügbar ist, mit Firmware {version}:',
   },
   /* A bank's name and, when writing it asks for the tick, what it is. */
   'fpsEvery.role.bootedRecovery':
@@ -466,7 +466,7 @@ export default {
   'how.copy':
     '**{copyA}**, **{copyB}** und **{copyR}** in einer Slot-Zeile schreiben die Firmware dieses Slots, so wie dieses Lesen sie entschlüsselt hat, in den anderen Slot, egal was dieser jetzt enthält. Das Image wird übertragen wie jedes entschlüsselte Image, Plan und Bestätigung sind also dieselben wie bei einer Datei. **Aus Flash-Sicherung wiederherstellen** nimmt eine .bin (ein ganzes 4-MB-Flash-Abbild, etwa ein Auslesen mit J-Link) oder eine .zip, die eines enthält (eine Preserve-Durchlaufdatei oder die ZIP-Datei, die „Auslesen & entschlüsseln 4.x/Nano“ oder „Alle Selektoren auslesen“ speichert), schneidet diesen Slot daraus heraus, entschlüsselt ihn und zeigt den Plan; sieht eine Sicherung nach einer anderen Kamera oder einer anderen Firmware aus, steht das im Plan. Ein Slot, der in der Sicherung leer ist oder den das Auslesen nicht gelesen hat, kann nicht durch einen Schreibvorgang wiederhergestellt werden, und die Seite sagt das.',
   'how.fps':
-    '**Auf N FPS umstellen** in einer Slot-Zeile bearbeitet das Image dieses Slots auf eine höhere Bildrate, und **Alle Slots auf N FPS umstellen** tut das mit jedem Slot, der es anbietet, mit einer einzigen Bestätigung, den Slot, aus dem die Kamera jetzt startet, als letzten. Ein Slot, für den es nicht angeboten werden kann, sagt, warum.',
+    '**Auf N FPS umstellen** in einer Slot-Zeile bearbeitet das Image dieses Slots auf eine höhere Bildrate, und **Alle Slots auf N FPS umstellen** tut das mit jedem Slot, für den der Patch verfügbar ist, mit einer einzigen Bestätigung, den Slot, aus dem die Kamera jetzt startet, als letzten. Für einen Slot, für den er nicht verfügbar ist, nennt die Seite den Grund.',
   /* {example} is a file name; keep it as it is. */
   'how.backup':
     '**Jeder Schreibvorgang sichert zuerst seinen Slot**: Der Slot wird erneut gelesen und als ein ZIP-Download gespeichert, benannt nach Uhrzeit, Seriennummer der Kamera, Firmware, Slot und Schreibvorgang (zum Beispiel `{example}`). Er enthält den Slot, wie er gespeichert ist, sein entschlüsseltes Image und eine Notiz, was jede Datei ist. Der Schreibvorgang wartet, bis der Download begonnen hat. Ein Browser meldet nicht, wann ein Download auf dem Datenträger angekommen ist, prüfen Sie daher Ihren Download-Ordner. Um zurückzugehen, schreiben Sie die entschlüsselte Datei aus der ZIP-Datei mit **Entschlüsseltes Image schreiben**.',

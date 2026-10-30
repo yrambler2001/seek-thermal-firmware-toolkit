@@ -286,7 +286,7 @@ export default {
   /* The confirmation of "Make N FPS in every bank". {count} is the number of banks patched. */
   'fpsEvery.title': '让所有槽位以 {hz} FPS 运行？',
   'fpsEvery.titleMixed': { other: '修补 {count} 个槽位的帧率？' },
-  'fpsEvery.intro': { other: '这会修补 {count} 个提供该补丁的槽位，固件为 {version}：' },
+  'fpsEvery.intro': { other: '这会修补 {count} 个可用该补丁的槽位，固件为 {version}：' },
   /* A bank's name and, when writing it asks for the tick, what it is. */
   'fpsEvery.role.bootedRecovery': '{bank}（相机当前启动的槽位，也是恢复槽位）',
   'fpsEvery.role.booted': '{bank}（相机当前启动的槽位）',
@@ -399,7 +399,7 @@ export default {
   'how.copy':
     '槽位行上的 **{copyA}**、**{copyB}** 和 **{copyR}** 会把该槽位中的固件（按本次读取的解密结果）写入另一个槽位，无论那个槽位现在存放着什么。镜像的暂存方式与任何解密后的镜像相同，所以计划和确认都与写入文件时一样。**从完整闪存备份还原**接收一个 .bin（完整的 4 MB 闪存镜像，例如用 J-Link 读出的）或包含这种镜像的 .zip（Preserve 运行文件，或“导出并解密 4.x/Nano”或“导出全部选择器”保存的 zip），从中截取出这个槽位，解密并显示计划；如果备份看起来来自另一台相机或另一个固件，计划中会说明。在备份中为空的槽位，或导出时没有读到的槽位，无法通过写入来还原，本页会说明这一点。',
   'how.fps':
-    '槽位行上的**改为 N FPS**会把该槽位的镜像修改为更高的帧率；**所有槽位改为 N FPS**则只需一次确认，对每个提供该补丁的槽位都这样修改，相机当前启动的槽位放在最后。无法提供补丁的槽位会说明原因。',
+    '槽位行上的**改为 N FPS**会把该槽位的镜像修改为更高的帧率；**所有槽位改为 N FPS**则只需一次确认，对每个可用该补丁的槽位都这样修改，相机当前启动的槽位放在最后。对于不能使用该补丁的槽位，页面会说明原因。',
   /* {example} is a file name; keep it as it is. */
   'how.backup':
     '**每次写入都会先保存该槽位**：重新读取该槽位，并保存为一个 zip 下载，文件名包含时间、相机序列号、固件、槽位和写入操作（例如 `{example}`），其中有槽位的存储内容、解密后的镜像，以及说明每个文件是什么的备注。写入会等到下载开始之后才进行。浏览器不会告诉你下载何时真正写入磁盘，所以请检查你的下载文件夹。要恢复原状，请用**写入解密后的镜像**写入 zip 中的解密文件。',

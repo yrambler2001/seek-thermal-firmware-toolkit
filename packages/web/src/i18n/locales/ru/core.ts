@@ -1440,7 +1440,7 @@ export default {
   'report.storeKey.keyBUnidentified':
     'Ключ B (ключ устройства не запрограммирован; сам ключ B не определён)',
   'report.storeKey.keyB': 'Ключ B (ключ устройства не запрограммирован)',
-  /** How each bank is staged: said after "each bank" (info:report.oneBank). */
+  /** How each bank is staged: said after "each bank" (the CLI's report; the page says info:report.oneBank.*). */
   'report.staged.plain': 'передаётся незашифрованным (образ как есть, без ключа)',
   'report.staged.slotKeystream': 'передаётся под собственным блоком ключей 0 своего образа',
   'report.staged.keyA':

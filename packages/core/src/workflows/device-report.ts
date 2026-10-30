@@ -347,6 +347,8 @@ export interface BankWriting {
   readonly refusals: readonly string[];
   /** `staged` as a message, for the page. */
   readonly stagedMessage: CoreMessage | null;
+  /** The form `staged` names, so the page can say one sentence of its own per form; null when `staged` is. */
+  readonly stagedForm: StagingForm | 'ff-vendor' | null;
   /** `refusals` as messages, for the page (a reason with no message is its English). */
   readonly refusalMessages: readonly (CoreMessage | string)[];
 }
@@ -390,12 +392,18 @@ export function bankWritingOf(state: DeviceState): BankWriting {
       staged: null,
       refusals: [verdict.refusal ?? UNVERIFIED_STAGING_REASON, ...refusals],
       stagedMessage: null,
+      stagedForm: null,
       refusalMessages: [why, ...refusalMessages],
     };
   }
   /* The 1.3.0.8 FF build with no bank stored plain stages the FF image in the vendor's form. */
-  const clause = stagedClauseMessage(
-    deriveWriteKeys(state).form === 'ff-vendor' ? 'ff-vendor' : staging,
-  );
-  return { staged: clause.text, refusals, stagedMessage: clause, refusalMessages };
+  const form = deriveWriteKeys(state).form === 'ff-vendor' ? 'ff-vendor' : staging;
+  const clause = stagedClauseMessage(form);
+  return {
+    staged: clause.text,
+    refusals,
+    stagedMessage: clause,
+    stagedForm: form,
+    refusalMessages,
+  };
 }

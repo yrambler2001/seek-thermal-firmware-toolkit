@@ -321,8 +321,8 @@ export default {
     other: 'Patch the frame rate of {count} banks?',
   },
   'fpsEvery.intro': {
-    one: 'This patches {count} bank that offers it, of firmware {version}:',
-    other: 'This patches {count} banks that offer it, of firmware {version}:',
+    one: 'This patches {count} bank where the patch is available, of firmware {version}:',
+    other: 'This patches {count} banks where the patch is available, of firmware {version}:',
   },
   /* A bank's name and, when writing it asks for the tick, what it is. */
   'fpsEvery.role.bootedRecovery': '{bank} (the bank this camera boots now, and the recovery bank)',
@@ -447,7 +447,7 @@ export default {
   'how.copy':
     "**{copyA}**, **{copyB}** and **{copyR}** on a bank row write the firmware that bank holds, as this read decrypted it, into the other bank, whatever it holds now. The image is staged as any decrypted image is, so the plan and the confirmation are the same as for a file. **Restore from full flash backup** takes a .bin (a whole 4 MiB flash image, such as a J-Link read) or a .zip that holds one (a Preserve run file, or the zip a Dump & decrypt 4.x/Nano or a Dump all selectors saves), cuts this bank out of it, decrypts it, and shows the plan; a backup that looks like another camera's, or another firmware, is said in the plan. A bank that is empty in the backup, or that the dump did not read, cannot be restored by a write, and the page says so.",
   'how.fps':
-    "**Make N FPS** on a bank row edits that bank's image to a higher frame rate, and **Make N FPS in every bank** does it to every bank that offers it, in one confirmation, the bank the camera boots now last. A bank that cannot be offered it says why.",
+    "**Make N FPS** on a bank row edits that bank's image to a higher frame rate, and **Make N FPS in every bank** does it to every bank where the patch is available, in one confirmation, the bank the camera boots now last. For a bank where it is not available, the page says why.",
   /* {example} is a file name; keep it as it is. */
   'how.backup':
     "**Every write saves its bank first**: the bank is read again and saved as one zip download, named with the time, the camera's serial, the firmware, the bank and the write (for example `{example}`), holding the bank as stored, its decrypted image and a note of what each file is. The write waits until the download has started. A browser gives no word when a download reaches the disk, so check your downloads folder. To go back, write the zip's decrypted file with **Flash decrypted image**.",

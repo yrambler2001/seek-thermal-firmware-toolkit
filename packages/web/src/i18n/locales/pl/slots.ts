@@ -338,10 +338,10 @@ export default {
     other: 'Zmienić liczbę klatek w {count} slotu?',
   },
   'fpsEvery.intro': {
-    one: 'Łatka obejmie {count} slot, który ją oferuje, z firmware {version}:',
-    few: 'Łatka obejmie {count} sloty, które ją oferują, z firmware {version}:',
-    many: 'Łatka obejmie {count} slotów, które ją oferują, z firmware {version}:',
-    other: 'Łatka obejmie {count} slotu, które ją oferują, z firmware {version}:',
+    one: 'Łatka obejmie {count} slot, dla którego jest dostępna, z firmware {version}:',
+    few: 'Łatka obejmie {count} sloty, dla których jest dostępna, z firmware {version}:',
+    many: 'Łatka obejmie {count} slotów, dla których jest dostępna, z firmware {version}:',
+    other: 'Łatka obejmie {count} slotu, dla których jest dostępna, z firmware {version}:',
   },
   /* A bank's name and, when writing it asks for the tick, what it is. */
   'fpsEvery.role.bootedRecovery':
@@ -483,7 +483,7 @@ export default {
   'how.copy':
     '**{copyA}**, **{copyB}** i **{copyR}** w wierszu slotu zapisują firmware, który zawiera ten slot, w postaci odszyfrowanej przez ten odczyt, do innego slotu, niezależnie od tego, co ten zawiera teraz. Obraz jest przesyłany tak jak każdy odszyfrowany obraz, więc plan i potwierdzenie są takie same jak dla pliku. **Przywróć z pełnej kopii pamięci flash** przyjmuje plik .bin (cały 4 MB obraz pamięci flash, na przykład odczyt przez J-Link) lub plik .zip, który go zawiera (plik przebiegu Preserve albo zip zapisany przez „Zrzut i odszyfrowanie 4.x/Nano” lub „Zrzuć wszystkie selektory”), wycina z niego ten slot, odszyfrowuje go i pokazuje plan; jeśli kopia wygląda na pochodzącą z innej kamery albo z innego firmware, plan to podaje. Slotu, który w kopii jest pusty albo którego zrzut nie odczytał, nie da się przywrócić zapisem, i strona to zgłasza.',
   'how.fps':
-    '**Ustaw N FPS** w wierszu slotu zmienia obraz tego slotu na wyższą liczbę klatek, a **Ustaw N FPS we wszystkich slotach** robi to w każdym slocie, który to oferuje, w ramach jednego potwierdzenia, przy czym slot, z którego kamera teraz się uruchamia, jest ostatni. Slot, któremu nie można tego zaoferować, podaje przyczynę.',
+    '**Ustaw N FPS** w wierszu slotu zmienia obraz tego slotu na wyższą liczbę klatek, a **Ustaw N FPS we wszystkich slotach** robi to w każdym slocie, dla którego łatka jest dostępna, w ramach jednego potwierdzenia, przy czym slot, z którego kamera teraz się uruchamia, jest ostatni. Dla slotu, dla którego łatka nie jest dostępna, strona podaje przyczynę.',
   /* {example} is a file name; keep it as it is. */
   'how.backup':
     '**Każdy zapis najpierw zachowuje swój slot**: slot jest odczytywany ponownie i zachowywany jako jeden plik zip do pobrania, z nazwą zawierającą czas, numer seryjny kamery, firmware, slot i rodzaj zapisu (na przykład `{example}`); zawiera on slot w postaci przechowywanej, jego odszyfrowany obraz i opis każdego pliku. Zapis czeka, aż pobieranie się rozpocznie. Przeglądarka nie informuje, kiedy pobrany plik trafi na dysk, więc sprawdź folder pobranych plików. Aby wrócić do poprzedniego stanu, zapisz odszyfrowany plik z archiwum przyciskiem **Zapisz odszyfrowany obraz**.',

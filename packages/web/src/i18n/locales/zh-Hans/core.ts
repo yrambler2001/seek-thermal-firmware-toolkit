@@ -1231,7 +1231,7 @@ export default {
   'report.storeKey.unknown': '未知——没有读取存放设备专属密钥槽的引导程序块',
   'report.storeKey.keyBUnidentified': '密钥 B（没有烧录设备专属密钥；密钥 B 本身未识别）',
   'report.storeKey.keyB': '密钥 B（没有烧录设备专属密钥）',
-  /** How each bank is staged: said after "each bank" (info:report.oneBank). */
+  /** How each bank is staged: said after "each bank" (the CLI's report; the page says info:report.oneBank.*). */
   'report.staged.plain': '以明文暂存（镜像原样，不使用密钥）',
   'report.staged.slotKeystream': '以其镜像自身的密钥块 0 暂存',
   'report.staged.keyA': '以由当前启动槽位和正在运行的应用程序推导出的密钥暂存',

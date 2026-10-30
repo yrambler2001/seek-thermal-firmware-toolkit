@@ -59,7 +59,7 @@ export default {
   /** A table cell answering "Writes to the camera?" for this tab: the word "no", not "number". */
   'tabs.info.writes': 'Nein.',
   'tabs.preserve.does':
-    'Erstellt eine vollständige Kopie des 4 MB großen Flash-Speichers der Kamera, speichert nach jedem Schritt eine Durchlaufdatei und kann eine gepatchte Firmware wieder an ihren Platz bringen. Er führt Schritt für Schritt durch den Ablauf.',
+    'Erstellt eine vollständige Kopie des 4 MB großen Flash-Speichers der Kamera und speichert nach jedem Schritt eine Durchlaufdatei. Um alles lesen zu können, patcht er die Firmware vorübergehend, bringt danach die ursprüngliche Firmware zurück und prüft sie. Er führt Schritt für Schritt durch den Ablauf.',
   'tabs.preserve.cameras':
     'Kameras mit Firmware 0.x und 1.x: die Compact-Builds von 2014, die Compact-PRO-Builds von 2016 (1.0.3.x) und der Compact-Build 1.3.0.8 FF (16 Hz).',
   'tabs.preserve.writes':
@@ -153,8 +153,17 @@ export default {
   'report.slotReason': '{slot}: {reason}',
   'report.writing': 'Schreiben',
   'report.noBankWritten': 'Kein Slot dieser Kamera wird beschrieben:',
-  /* {staged} is core's phrase for how a bank is written. */
-  'report.oneBank':
-    'Ein Slot nach dem anderen: Der Slots-Tab beschreibt oder patcht jeweils einen Slot dieser Kamera, jeden Slot {staged}, und jeder Schreibvorgang fragt vorher nach.',
+  /*
+   * The Writing panel: how each bank is staged, one sentence per staging form (core's report.staged.*
+   * says the same clause after "each bank" for the CLI).
+   */
+  'report.oneBank.plain':
+    'Ein Slot nach dem anderen: Der Slots-Tab beschreibt oder patcht jeweils einen Slot dieser Kamera; jeder Slot wird unverschlüsselt übertragen (das Image, wie es ist, ohne Schlüssel); und jeder Schreibvorgang fragt vorher nach.',
+  'report.oneBank.slotKeystream':
+    'Ein Slot nach dem anderen: Der Slots-Tab beschreibt oder patcht jeweils einen Slot dieser Kamera; jeder Slot wird unter dem eigenen Schlüsselblock 0 seines Images übertragen; und jeder Schreibvorgang fragt vorher nach.',
+  'report.oneBank.keyA':
+    'Ein Slot nach dem anderen: Der Slots-Tab beschreibt oder patcht jeweils einen Slot dieser Kamera; jeder Slot wird unter Schlüsseln übertragen, die vom gestarteten Slot und der laufenden Anwendung abgeleitet sind; und jeder Schreibvorgang fragt vorher nach.',
+  'report.oneBank.ffVendor':
+    'Ein Slot nach dem anderen: Der Slots-Tab beschreibt oder patcht jeweils einen Slot dieser Kamera; jeder Slot wird so übertragen, wie die Hersteller-App das 16-Hz-FF-Image überträgt (das Image XOR seinen eigenen Schlüsselblock 0), und von der Kamera unter Schlüssel B gespeichert; und jeder Schreibvorgang fragt vorher nach.',
   'report.refusesEvery': 'Der Slots-Tab lehnt jeden Slot dieser Kamera ab:',
 } satisfies Translation<'info'>;

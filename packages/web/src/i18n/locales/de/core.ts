@@ -1400,7 +1400,7 @@ export default {
   'report.storeKey.keyBUnidentified':
     'Schlüssel B (kein Geräteschlüssel programmiert; Schlüssel B selbst nicht erkannt)',
   'report.storeKey.keyB': 'Schlüssel B (kein Geräteschlüssel programmiert)',
-  /** How each bank is staged: said after "each bank" (info:report.oneBank). */
+  /** How each bank is staged: said after "each bank" (the CLI's report; the page says info:report.oneBank.*). */
   'report.staged.plain': 'unverschlüsselt übertragen (das Image, wie es ist, ohne Schlüssel)',
   'report.staged.slotKeystream': 'unter dem eigenen Schlüsselblock 0 seines Images übertragen',
   'report.staged.keyA':

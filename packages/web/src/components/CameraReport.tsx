@@ -9,6 +9,7 @@
 import type { ReactElement } from 'react';
 import {
   bankWritingOf,
+  type BankWriting,
   bootableDescriptionMessage,
   acceptsDescriptionMessage,
   detectedReportMessage,
@@ -53,6 +54,14 @@ import {
   TableRowHeader,
 } from './ui/table';
 import { t } from '@/i18n';
+
+/** The Writing panel's sentence for each way a bank is staged (core's `report.staged.*` clause, said whole). */
+const ONE_BANK = {
+  plain: 'info:report.oneBank.plain',
+  'slot-keystream-ciphertext': 'info:report.oneBank.slotKeystream',
+  'key-a-ciphertext': 'info:report.oneBank.keyA',
+  'ff-vendor': 'info:report.oneBank.ffVendor',
+} as const satisfies Record<NonNullable<BankWriting['stagedForm']>, string>;
 
 export interface CameraReportProps {
   readonly state: DeviceState;
@@ -300,7 +309,7 @@ export function CameraReport({ state }: CameraReportProps): ReactElement {
 
       <Panel>
         <PanelTitle>{t('info:report.writing')}</PanelTitle>
-        {bankWriting.staged === null ? (
+        {bankWriting.stagedForm === null ? (
           <Prose>
             <p>{t('info:report.noBankWritten')}</p>
             <ul>
@@ -311,11 +320,7 @@ export function CameraReport({ state }: CameraReportProps): ReactElement {
           </Prose>
         ) : (
           <Prose>
-            <p>
-              {t('info:report.oneBank', {
-                staged: coreText(bankWriting.stagedMessage ?? bankWriting.staged),
-              })}
-            </p>
+            <p>{t(ONE_BANK[bankWriting.stagedForm])}</p>
             {refusals.length > 0 && (
               <>
                 <p>{t('info:report.refusesEvery')}</p>

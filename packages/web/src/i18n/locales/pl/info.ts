@@ -59,7 +59,7 @@ export default {
   /** A table cell answering "Writes to the camera?" for this tab: the word "no", not "number". */
   'tabs.info.writes': 'Nie.',
   'tabs.preserve.does':
-    'Tworzy pełną kopię 4 MB pamięci flash kamery, z plikiem przebiegu zapisywanym po każdym kroku, i może przywrócić na miejsce zmodyfikowany firmware. Prowadzi przez kroki jeden po drugim.',
+    'Tworzy pełną kopię 4 MB pamięci flash kamery, z plikiem przebiegu zapisywanym po każdym kroku. Aby odczytać całą pamięć, na pewien czas łata firmware, a potem przywraca oryginalny firmware i go sprawdza. Prowadzi przez kroki jeden po drugim.',
   'tabs.preserve.cameras':
     'Kamery z firmware 0.x i 1.x: kompilacje Compact z 2014 roku, kompilacje Compact PRO z 2016 roku (1.0.3.x) oraz kompilacja Compact 1.3.0.8 FF (16 Hz).',
   'tabs.preserve.writes':
@@ -153,8 +153,17 @@ export default {
   'report.slotReason': '{slot}: {reason}',
   'report.writing': 'Zapis',
   'report.noBankWritten': 'Żaden slot tej kamery nie jest zapisywany:',
-  /* {staged} is core's phrase for how a bank is written. */
-  'report.oneBank':
-    'Jeden slot naraz: karta slotów zapisuje lub łata jeden slot tej kamery, każdy slot {staged}, a każdy zapis najpierw pyta.',
+  /*
+   * The Writing panel: how each bank is staged, one sentence per staging form (core's report.staged.*
+   * says the same clause after "each bank" for the CLI).
+   */
+  'report.oneBank.plain':
+    'Jeden slot naraz: karta slotów zapisuje lub łata jeden slot tej kamery; każdy slot jest przesyłany jawnie (obraz bez zmian, bez klucza); a każdy zapis najpierw pyta.',
+  'report.oneBank.slotKeystream':
+    'Jeden slot naraz: karta slotów zapisuje lub łata jeden slot tej kamery; każdy slot jest przesyłany z szyfrowaniem własnym blokiem kluczy 0 obrazu; a każdy zapis najpierw pyta.',
+  'report.oneBank.keyA':
+    'Jeden slot naraz: karta slotów zapisuje lub łata jeden slot tej kamery; każdy slot jest przesyłany z szyfrowaniem kluczami wyprowadzonymi z uruchomionego slotu i działającej aplikacji; a każdy zapis najpierw pyta.',
+  'report.oneBank.ffVendor':
+    'Jeden slot naraz: karta slotów zapisuje lub łata jeden slot tej kamery; każdy slot jest przesyłany tak, jak aplikacja producenta przesyła obraz 16 Hz FF (obraz XOR jego własny blok kluczy 0), i przechowywany przez kamerę pod kluczem B; a każdy zapis najpierw pyta.',
   'report.refusesEvery': 'Karta slotów odrzuca każdy slot tej kamery:',
 } satisfies Translation<'info'>;

@@ -58,7 +58,7 @@ export default {
   /** A table cell answering "Writes to the camera?" for this tab: the word "no", not "number". */
   'tabs.info.writes': 'Non.',
   'tabs.preserve.does':
-    'Fait une copie complète de la mémoire flash de 4 Mo de la caméra, avec un fichier d’exécution enregistré après chaque étape, et peut remettre en place un firmware corrigé. Il vous guide étape par étape.',
+    'Fait une copie complète de la mémoire flash de 4 Mo de la caméra, avec un fichier d’exécution enregistré après chaque étape. Pour tout lire, il corrige le firmware pour un temps, puis remet en place le firmware d’origine et le vérifie. Il vous guide étape par étape.',
   'tabs.preserve.cameras':
     'Caméras en firmware 0.x et 1.x : les builds Compact de 2014, les builds Compact PRO de 2016 (1.0.3.x) et le build Compact 1.3.0.8 FF (16 Hz).',
   'tabs.preserve.writes':
@@ -153,8 +153,17 @@ export default {
   'report.slotReason': '{slot} : {reason}',
   'report.writing': 'Écriture',
   'report.noBankWritten': 'Aucun emplacement de cette caméra n’est écrit :',
-  /* {staged} is core's phrase for how a bank is written. */
-  'report.oneBank':
-    'Un emplacement à la fois : l’onglet des emplacements écrit ou corrige un emplacement de cette caméra, chacun {staged}, et chaque écriture demande d’abord confirmation.',
+  /*
+   * The Writing panel: how each bank is staged, one sentence per staging form (core's report.staged.*
+   * says the same clause after "each bank" for the CLI).
+   */
+  'report.oneBank.plain':
+    'Un emplacement à la fois : l’onglet des emplacements écrit ou corrige un emplacement de cette caméra, chacun étant transféré en clair (l’image telle quelle, sans clé), et chaque écriture demande d’abord confirmation.',
+  'report.oneBank.slotKeystream':
+    'Un emplacement à la fois : l’onglet des emplacements écrit ou corrige un emplacement de cette caméra, chacun étant transféré sous le bloc de clés 0 propre à son image, et chaque écriture demande d’abord confirmation.',
+  'report.oneBank.keyA':
+    'Un emplacement à la fois : l’onglet des emplacements écrit ou corrige un emplacement de cette caméra, chacun étant transféré sous des clés dérivées de l’emplacement démarré et de l’application en cours, et chaque écriture demande d’abord confirmation.',
+  'report.oneBank.ffVendor':
+    'Un emplacement à la fois : l’onglet des emplacements écrit ou corrige un emplacement de cette caméra, chacun étant transféré comme l’app du fabricant transfère l’image FF 16 Hz (l’image XOR son propre bloc de clés 0), et stocké par la caméra sous la clé B, et chaque écriture demande d’abord confirmation.',
   'report.refusesEvery': 'L’onglet des emplacements refuse chaque emplacement de cette caméra :',
 } satisfies Translation<'info'>;

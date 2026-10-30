@@ -1453,7 +1453,7 @@ export default {
   'report.storeKey.keyBUnidentified':
     'clé B (aucune clé propre à l’appareil programmée ; la clé B elle-même n’est pas identifiée)',
   'report.storeKey.keyB': 'clé B (aucune clé propre à l’appareil programmée)',
-  /** How each bank is staged: said after "each bank" (info:report.oneBank). */
+  /** How each bank is staged: said after "each bank" (the CLI's report; the page says info:report.oneBank.*). */
   'report.staged.plain': 'transféré en clair (l’image telle quelle, sans clé)',
   'report.staged.slotKeystream': 'transféré sous le bloc de clés 0 propre à son image',
   'report.staged.keyA':

@@ -57,7 +57,7 @@ export default {
   /** A table cell answering "Writes to the camera?" for this tab: the word "no", not "number". */
   'tabs.info.writes': '否。',
   'tabs.preserve.does':
-    '为相机的 4 MB 闪存制作完整副本，每一步之后都保存一个运行文件，并能把打过补丁的固件还原回原样。它会一步一步地引导你完成。',
+    '为相机的 4 MB 闪存制作完整副本，每一步之后都保存一个运行文件。为了读取全部闪存，它会暂时给固件打补丁，然后把原始固件放回去并加以检查。它会一步一步地引导你完成。',
   'tabs.preserve.cameras':
     '运行 0.x 和 1.x 固件的相机：2014 年的 Compact 版本、2016 年的 Compact PRO 版本（1.0.3.x），以及 1.3.0.8 FF（16 Hz）Compact 版本。',
   'tabs.preserve.writes': '是，分两步，每一步都会先征求确认。它会让相机恢复原样。',
@@ -148,8 +148,17 @@ export default {
   'report.slotReason': '{slot}：{reason}',
   'report.writing': '写入',
   'report.noBankWritten': '这台相机的任何槽位都不会被写入：',
-  /* {staged} is core's phrase for how a bank is written. */
-  'report.oneBank':
-    '一次一个槽位：“固件槽位操作”标签页一次写入或修补这台相机的一个槽位，每个槽位{staged}，每次写入前都会先征求确认。',
+  /*
+   * The Writing panel: how each bank is staged, one sentence per staging form (core's report.staged.*
+   * says the same clause after "each bank" for the CLI).
+   */
+  'report.oneBank.plain':
+    '一次一个槽位：“固件槽位操作”标签页一次写入或修补这台相机的一个槽位，每个槽位都以明文暂存（镜像原样，不使用密钥），每次写入前都会先征求确认。',
+  'report.oneBank.slotKeystream':
+    '一次一个槽位：“固件槽位操作”标签页一次写入或修补这台相机的一个槽位，每个槽位都以其镜像自身的密钥块 0 暂存，每次写入前都会先征求确认。',
+  'report.oneBank.keyA':
+    '一次一个槽位：“固件槽位操作”标签页一次写入或修补这台相机的一个槽位，每个槽位都以由当前启动槽位和正在运行的应用程序推导出的密钥暂存，每次写入前都会先征求确认。',
+  'report.oneBank.ffVendor':
+    '一次一个槽位：“固件槽位操作”标签页一次写入或修补这台相机的一个槽位，每个槽位都按厂商应用暂存 16 Hz FF 镜像的方式暂存（镜像 XOR 其自身的密钥块 0），并由相机以密钥 B 存储，每次写入前都会先征求确认。',
   'report.refusesEvery': '“固件槽位操作”标签页拒绝这台相机的所有槽位：',
 } satisfies Translation<'info'>;

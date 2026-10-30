@@ -1346,7 +1346,7 @@ export default {
   'report.storeKey.keyBUnidentified':
     'Key B (no per-device key programmed; Key B itself not identified)',
   'report.storeKey.keyB': 'Key B (no per-device key programmed)',
-  /** How each bank is staged: said after "each bank" (info:report.oneBank). */
+  /** How each bank is staged: said after "each bank" (the CLI's report; the page says info:report.oneBank.*). */
   'report.staged.plain': 'staged plain (the image as it is, with no key)',
   'report.staged.slotKeystream': "staged under its image's own key block 0",
   'report.staged.keyA':
