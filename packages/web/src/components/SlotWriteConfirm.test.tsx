@@ -28,7 +28,7 @@ function setup(
       backupName={BACKUP}
       open={overrides.open ?? true}
       what="fw_decrypted.bin"
-      slotName="slot B"
+      slotName={{ text: 'slot B' }}
       slotAddress="0x14060000"
       risk={overrides.risk ?? { booted: false, recovery: false, bootUnnamed: false }}
       {...(overrides.warnings === undefined ? {} : { warnings: overrides.warnings })}
@@ -257,7 +257,7 @@ describe('SlotWriteConfirm', () => {
             backupName={BACKUP}
             open={open}
             what="fw_decrypted.bin"
-            slotName="slot B"
+            slotName={{ text: 'slot B' }}
             slotAddress="0x14060000"
             risk={{ booted: true, recovery: false, bootUnnamed: false }}
             onConfirm={(acknowledged) => {
@@ -302,7 +302,7 @@ describe('the key line of the confirmation', () => {
         backupName={BACKUP}
         open
         what="fw_decrypted.bin"
-        slotName="slot B"
+        slotName={{ text: 'slot B' }}
         slotAddress="0x14050000"
         risk={{ booted: false, recovery: false, bootUnnamed: false }}
         keyLine="The image is written under Key B, derived from the booted bank A. Every other bank is written the same way."
@@ -321,7 +321,7 @@ describe('the key line of the confirmation', () => {
         backupName={BACKUP}
         open
         what="raw.bin"
-        slotName="slot B"
+        slotName={{ text: 'slot B' }}
         slotAddress="0x14050000"
         risk={{ booted: false, recovery: false, bootUnnamed: false }}
         onConfirm={vi.fn()}

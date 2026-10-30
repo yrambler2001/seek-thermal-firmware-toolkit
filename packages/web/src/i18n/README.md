@@ -9,7 +9,8 @@ src/i18n/
   rich.tsx        rich(): mini-markup and slots to React nodes
   react.ts        useT(), useLanguage(), useLanguageSwitch()
   detect.ts       ?lang= → saved choice → navigator.languages → en
-  format.ts       {param} interpolation, Intl.PluralRules
+  format.ts       {param} and {param:case} interpolation, Intl.PluralRules
+  names.ts        the page params that carry a bank or key name (the ones a case may go on)
   languages.ts    the registry (the switcher's list and order)
   types.ts        key, param and translation types derived from English
   locales/en/<namespace>.ts
@@ -83,6 +84,36 @@ t('slots:found', { count: images.length, slot: 'B' }); // count is required for 
 - An English plural has `one` and `other`. A translation gives the forms its language needs: ru/uk/pl `one, few, many, other`; es/fr/it/pt `one, many, other` (`many` is for millions); de `one, other`; zh-Hans `other` only. The forms are chosen with `Intl.PluralRules`. A form that is missing falls back to the same language's `other`. The parity test fails on a missing form.
 - Don't put a literal `{` or `}` in a string: pass it as a param.
 
+## Cases
+
+A bank ("slot A", "recovery R") or a key ("Key A", "key block 1") goes into many sentences, and Polish, Russian, Ukrainian and German say it differently after "from", "in", "under", "to". A translation asks for the form it needs in the placeholder: `{bank:gen}`, `{key:ins}`. English never does; it has no case forms.
+
+| Selector | Case         | Polish example (slot A)            |
+| -------- | ------------ | ---------------------------------- |
+| `:gen`   | genitive     | ze **slotu A**                     |
+| `:dat`   | dative       | **slotowi A**                      |
+| `:acc`   | accusative   | na **slot A**                      |
+| `:ins`   | instrumental | pod **kluczem A**, ze **slotem A** |
+| `:loc`   | locative     | w **slocie A**                     |
+
+How it works:
+
+- **The param is a name, not text.** The page passes a `NameValue`: `bankWordsRef(key)` ("slot A"), `bankNameRef(key)` ("Slot A"), `bankListRef(keys, join?)` (a list, "slot A, slot B and recovery R"), `keyNameValue(name)` (a key; one core has no name for stays as it is), or `{ text }` for a phrase that cannot be declined. A `NameRef` is the name's dictionary key and that key's params (`{ name: 'common:bank.slotInSentence', params: { letter: 'A' } }`). Core's bank params (`bankParam`), key names (`keyNameParam`) and lists of them become names in `coreText`.
+- **The forms live with the name**, as optional keys next to it in the language's own file: `'bank.slotInSentence:loc': 'slocie {letter}'` in `common`, `'keyName.keyA:ins': 'kluczem A'` in `core`. Only names have forms: `common:bank.*` and `core:keyName.*` (`NameKey`).
+- **A missing form falls back to the plain form of the same language**, never to English. English and Chinese write no forms at all; German gives only the ones it needs.
+- **A list** gets the case on each name, joined with the language's `common:list.*`: `{banks:loc}` → "slocie A, slocie B i slocie odzyskiwania R".
+- **Nested core messages** work at any depth: each template says its own params in the case it asks for.
+
+What is checked:
+
+- A case form whose case is not one of the five, or a case form of a key that is not a name, does not compile (`Translation<N>`); `locales.test.ts` reports it too, and a case form whose `{params}` differ from its name's.
+- `locales.test.ts` fails on `{x:case}` with an unknown case, or on a page param that `names.ts` does not list as a name. `core-messages.test.ts` fails on `{x:case}` in a core template whose param core does not pass as a bank, a key or a list of them in every sample.
+- A page param that `names.ts` lists must be passed a `NameValue`, and any other param must not be: both are compile errors, so a sentence cannot lose its name to a string already formatted.
+
+Why optional per-language forms and not English-mirrored keys (`bank.slotInSentence.gen` in English, required everywhere): English, Chinese and most others have no cases, and five copies of every name in each of them would be noise that a translator must still fill and keep in step. The types still catch a typo, because the optional keys are typed from the name keys and the five cases, and the parity test checks the rest.
+
+A new page sentence with a bank or a key in it: list the key's name params in `names.ts`, and pass the names with the `…Ref` helpers. Use `bankWords`/`bankName`/`bankList` (strings) only where the name stands alone (a table cell, a label).
+
 ## Markup and slots
 
 Strings keep the mini-markup of `lib/rich-text.tsx`: `**bold**`, `*em*`, `` `code` ``. `t()` returns the markup unchanged, for `<Rich>`/`<RichParagraphs>` or `plainText()`. `rich()` renders it.
@@ -119,7 +150,7 @@ Hooks and libs import the plain function: `import { t } from '@/i18n'`. It reads
 - **Module-level tables.** Make them a function called at render (`tabGuides()` in InfoView, `archiveRows()` in V4View), or give the record getters (`get why(): string { return t('…'); }` in `READ_ONLY_OPCODES`), so the export keeps its shape.
 - **Shown and logged.** When the same sentence goes on the page and into the run log, keep one entry and pass the translate function: `hintFor(error, ua, t)` for the page, the default `tEnglish` for `logHint`. `tEnglish(key, params)` is `t` in English whatever the language; `Translate` is its type. Old English constants (`UDEV_HINT`, `IN_USE_ELSEWHERE_STATUS`) are now `tEnglish(...)`, for the tests and the log; `cancelledStatus(committed, report, tEnglish)` in useSlotsPanel is the same split for a status line that is also logged. The Preserve tab's `canRunPhase({ …, translate: tEnglish })` and `gateReason(gate, tEnglish)` give the gate's reason in English for the run log; the page calls them without it.
 - **A SeekError made by the page.** Its message is English (it is logged). `withPageMessage(error, () => t('…'))` from `lib/identify` attaches the translated wording, and `refusalOf()` shows that one.
-- **Lists of names.** `listAnd(names)` joins with `common:list.and` (`{first} and {second}`, pairwise), so English stays "A and B and C". `bankList(keys)` in `lib/bank-names.ts` names banks inside a sentence as "slot A, slot B and recovery R" (`listComma`, then `common:list.and` before the last name), the English of core's `bankListWords`. `listSemicolon(clauses)` joins clauses with `common:list.semicolon` ("; " in English): core's `semicolon` lists and the Preserve gate's missing parts. Don't join a list shown on the page with `join(', ')` or `join('; ')`.
+- **Lists of names.** `listAnd(names)` joins with `common:list.and` (`{first} and {second}`, pairwise), so English stays "A and B and C". `bankList(keys)` in `lib/bank-names.ts` names banks inside a sentence as "slot A, slot B and recovery R" (`listComma`, then `common:list.and` before the last name), the English of core's `bankListWords`; as a param, pass `bankListRef(keys)` so the language can decline each name (see "Cases"). `listSemicolon(clauses)` joins clauses with `common:list.semicolon` ("; " in English): core's `semicolon` lists and the Preserve gate's missing parts. Don't join a list shown on the page with `join(', ')` or `join('; ')`.
 - **Code, hex, file names inside a sentence.** Pass them as params inside `code` markup: ``'… every `{begin}` selector `{first}`–`{last}` …'``.
 - **Variants, not suffixes.** "Done — 5/5 windows read (cancelled). Check your downloads." is its own key next to the plain one; never append `' (cancelled)'`.
 - **Core's sentences.** Core keeps its English (the CLI and the logs print it) and gives the sentences the page shows a `CoreMessage` too: `{ code, params, text }` (`packages/core/src/message.ts`), from a `…Message` function next to the string one (`bootsNowMessage`, `backupPlanMessage`) or a field next to the text one (`whyMessage`, `warningMessages`, `PlanNote.message`, `messages`). Show it with `coreText(message)` from `lib/core-text.ts`, which renders `core:<code>` with each param translated (a nested message, a bank via `common:bank.*`, a list via `common:list.*`); `coreTexts(messages, texts)` takes a message list with its English fallback, `recordedCoreText(code, text)` a sentence saved in a run file (old files have only the English), and `recordedText(message, text)` one whose message must still say `text` (the Preserve run file's `refusedMessage`, `whyMessage`, `ruleMessage`, and core sentences built from them; core's `recordedParam` is the same rule for a param). A plain string passes through as it is. To give a core sentence a code: wrap it in core with `coreMessage(code, params, text)` without changing `text`, add the template to `locales/en/core.ts`, add a sample to `core-messages.test.ts` (it fails on any drift or on a template no sample reaches). A sentence that is a constant can be found by its English: `capabilityNoteMessage(note)` (a plan's, a bank's or an empty bank's note), `compareWordMessage(word)` (the preview's compare table), `keyNameParam(name)` ("Key A", "per-device key"), `supportReasonMessage(support)` (a refusing `Support` carries its own `reasonMessage`; a reason string, such as an empty bank's `why`, is found by its English when it is a constant). A core test (`packages/core/test/slots/note-messages.test.ts`) fails on a capability note, or a plan's or a family's refusal, with no message; `compareRows` writes the same constants `compareWordMessage` looks up. A message core builds inside a camera flow is reachable by the drift test through an exported builder (`PRESERVE_BANK_REFUSAL`, `SLOT_WRITE_REFUSAL`, `SUPPORT_REASON`, `READ_REASON`, `SLOT_FILE_WORDS`). A `SeekError` can carry `coreMessage`: `refusalOf()` shows it, and `coreText(errorCoreMessage(error) ?? errorMessage(error))` shows any caught error. A status line can too: `reporter.progress(done, total, text, unit, message)`; `useReporter` shows `message` in the language in use and the log keeps `text`. Where the page still shows core English, a `// i18n: core message` comment (or `{/* i18n: core message */}` in JSX) marks it: `grep -rn "i18n: core message" src` is the to-do list.
@@ -158,7 +189,7 @@ Written for the agent that translates one language. You work from the English di
    export default de;
    ```
 4. **Register it.** Uncomment the language's line in `languages.ts`. The order is the rule: English first, then by native name, Latin script, then Cyrillic, then Chinese: English, Deutsch, Español, Français, Italiano, Polski, Português, Русский, Українська, 简体中文.
-5. **Check it:** `npx tsc --noEmit -p packages/web/tsconfig.app.json`, then `npx vitest run packages/web/src/i18n/locales.test.ts packages/web/src/i18n/pseudo-locale.test.tsx packages/web/src/i18n/key-usage.test.ts packages/web/src/i18n/core-messages.test.ts` and the whole web project (`npx vitest run --project web`). `locales.test.ts` checks every registered language against English: keys, plural forms, `{params}` and `<slots>`. Then `npx eslint packages/web` and `npx prettier --write` on your files.
+5. **Check it:** `npx tsc --noEmit -p packages/web/tsconfig.app.json`, then `npx vitest run packages/web/src/i18n/locales.test.ts packages/web/src/i18n/pseudo-locale.test.tsx packages/web/src/i18n/key-usage.test.ts packages/web/src/i18n/core-messages.test.ts packages/web/src/i18n/cases.test.tsx` and the whole web project (`npx vitest run --project web`). `locales.test.ts` checks every registered language against English: keys, plural forms, `{params}` and `<slots>`. Then `npx eslint packages/web` and `npx prettier --write` on your files.
 
 The language loads only when someone picks it (a dynamic `import()`, its own chunk), so a new language adds nothing to the English page.
 
@@ -172,6 +203,12 @@ The language loads only when someone picks it (a dynamic `import()`, its own chu
 - **Buttons the text names.** When a sentence names a button ("press _Connect device_"), use the button's own translation from `app`/`shared`, word for word.
 - **Capitals:** keep the English's. A value that starts lower case is said inside another sentence or after a label; one that starts upper case stands alone.
 - **Plurals:** give the forms your language uses (`Intl.PluralRules` categories): ru/uk/pl `one, few, many, other`; es/fr/it/pt `one, many, other`; de `one, other`; zh-Hans `other` only.
+- **Cases** (Polish, Russian, Ukrainian, German; see "Cases" above). A bank or a key inside a sentence can be asked for in a case: `{bank:gen}`, `{bank:dat}`, `{bank:acc}`, `{bank:ins}`, `{bank:loc}`. Two steps:
+  1. Give your forms once, next to the plain one, for each name: in `common.ts`, `'bank.slotInSentence:gen': 'slotu {letter}'`, `'bank.recoveryInSentence:loc': 'slocie odzyskiwania {letter}'` (and `bank.slot:*`, `bank.recovery:*` for the label forms where a sentence uses them); in `core.ts`, `'keyName.keyA:ins': 'kluczem A'`, and so on for each `keyName.*`. Write only the cases your language uses; a case you leave out is said in the plain form.
+  2. In a sentence, write the case the grammar needs: `'Kopiuj do {bank:gen}'`, `'Zapisz w {bank:loc}'`, `'pod {key:ins}'`. Don't work round a case with a colon or brackets ("pod kluczem: {key}") any more.
+
+  Which params are names: the `{bank}`, `{banks}`, `{a}`, `{b}`, `{r}`, `{order}`, `{key}`, `{storeKey}` of the keys `names.ts` lists (page namespaces), and in `core` the params its header lists as a bank or a key name. A case on any other param fails `locales.test.ts` or `core-messages.test.ts`; if a sentence needs a case on a page param that is not listed, ask the integrator (the code must pass a name there). `{banks}` and `{order}` are lists: the case goes on each name.
+
 - **Params** arrive either already translated (another key, a bank name, a list) or as data that stays as it is (hex, sizes, versions, file names). The comment above a key says which when it matters; the `core` namespace lists them all at its top.
 - **What stays English** whatever the language: the run log lines, the copyable camera report, the CLI, and a browser's or the USB stack's own error text inside a translated sentence. See "What stays English" above.
 

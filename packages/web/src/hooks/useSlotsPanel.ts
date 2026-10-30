@@ -78,9 +78,9 @@ import {
 } from '@seek-fw/core';
 import { coreText } from '@/lib/core-text';
 import { recordedParam, supportReasonMessage, type CoreMessage } from '@seek-fw/core';
-import { listAnd, t, tEnglish, type Translate } from '@/i18n';
+import { t, tEnglish, type Translate } from '@/i18n';
 import { backupDownloadLines, saveBackupAsDownload } from '../lib/backup-save';
-import { bankName, bankWords } from '../lib/bank-names';
+import { bankListRef, bankNameRef, bankWordsRef } from '../lib/bank-names';
 import { reportInUseElsewhere } from '../lib/camera-lock';
 import { downloadBytes } from '../lib/download';
 import { logHint } from '../lib/hints';
@@ -230,7 +230,7 @@ export function patchedStatus(readBackOk: boolean | null): string {
 export function everyPatchedStatus(done: FpsEveryBankResult): string {
   const count = done.results.length;
   if (done.stopped !== null) {
-    return t('slots:status.every.stopped', { count, bank: bankWords(done.stopped.key) });
+    return t('slots:status.every.stopped', { count, bank: bankWordsRef(done.stopped.key) });
   }
   if (done.results.some((one) => one.readBack.ok !== true)) {
     return t('slots:status.every.unchecked', { count });
@@ -250,12 +250,11 @@ export function cancelledStatus(
   translate: Translate = t,
 ): string {
   if (committed.length === 0) return translate('slots:status.cancelled.nothing');
-  const name = (key: SlotKey): string => bankName(key, translate);
   if (committed.length === 1) {
-    return translate('slots:status.cancelled.one', { bank: name(committed[0] ?? 'a') });
+    return translate('slots:status.cancelled.one', { bank: bankNameRef(committed[0] ?? 'a') });
   }
   return translate('slots:status.cancelled.many', {
-    banks: listAnd(committed.map(name), translate),
+    banks: bankListRef(committed, 'and', bankNameRef),
   });
 }
 
@@ -377,7 +376,7 @@ function capitalised(text: string): string {
 
 /** The button's words for a copy target: "Copy to slot A", "Copy to slot B", "Copy to recovery R". */
 export function copyLabel(to: SlotKey, translate: Translate = t): string {
-  return translate('slots:table.copyTo', { bank: bankWords(to, translate) });
+  return translate('slots:table.copyTo', { bank: bankWordsRef(to) });
 }
 
 function contextOf(
@@ -719,7 +718,7 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
   const dump = useCallback(
     async (key: SlotKey): Promise<void> => {
       const result = await runner.start(SLOTS_DUMP_PANEL_ID, async (signal) => {
-        reset(t('slots:status.dumping', { bank: bankWords(key) }));
+        reset(t('slots:status.dumping', { bank: bankWordsRef(key) }));
         const current = reportRef.current;
         let transport: ReturnType<DeviceHandle['makeTransport']> | null = null;
         let usedClient: SeekDevice | null = null;
@@ -775,7 +774,7 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
             );
           }
           for (const note of dumped.notes) log(note, 'detail');
-          workflow.progress(1, 1, t('slots:status.dumped', { bank: bankWords(key) }));
+          workflow.progress(1, 1, t('slots:status.dumped', { bank: bankWordsRef(key) }));
         } catch (error) {
           if (error instanceof CancelledError) {
             log('cancelled', 'warn');
@@ -915,8 +914,8 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
           const copy = (backend.copy ?? planSlotCopy)(current, from, to);
           return Promise.resolve({
             plan: copy.plan,
-            what: tEnglish('slots:what.copy', { bank: pageBankName(current, from) }),
-            whatOnPage: () => t('slots:what.copy', { bank: bankName(from) }),
+            what: tEnglish('slots:what.copy', { bank: { text: pageBankName(current, from) } }),
+            whatOnPage: () => t('slots:what.copy', { bank: bankNameRef(from) }),
             bytes: copy.plan.expectedPlain?.length ?? copy.plan.payload.length,
             source: recordedParam(copy.sourceMessage, copy.source),
             action: { kind: 'copy', from } as const,
@@ -946,10 +945,10 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
           return {
             plan: restore.plan,
             what: tEnglish('slots:what.restore', {
-              bank: pageBankName(current, key),
+              bank: { text: pageBankName(current, key) },
               file: file.name,
             }),
-            whatOnPage: () => t('slots:what.restore', { bank: bankName(key), file: file.name }),
+            whatOnPage: () => t('slots:what.restore', { bank: bankNameRef(key), file: file.name }),
             bytes: restore.decryption.plain?.length ?? 0,
             source: recordedParam(restore.sourceMessage, restore.source),
             action: { kind: 'restore', fileName: file.name } as const,
@@ -1142,7 +1141,7 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
   const patchFps = useCallback(
     async (key: SlotKey, acknowledged: boolean): Promise<void> => {
       const result = await runner.start(SLOTS_FPS_PANEL_ID, async (signal) => {
-        reset(t('slots:status.patching', { bank: bankWords(key) }));
+        reset(t('slots:status.patching', { bank: bankWordsRef(key) }));
         setFpsOutcome(null);
         setFpsEveryOutcome(null);
         const current = reportRef.current;

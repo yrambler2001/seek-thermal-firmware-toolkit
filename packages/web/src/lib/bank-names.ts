@@ -3,10 +3,14 @@
  * (`bankName`), and inside a sentence "slot A", "slot B", "recovery R" (`bankWords`). The English is
  * core's (`bankNameOf`, `bankWordsOf`), which the run log and the CLI keep using; the page shows these.
  * The letter stays A, B or R in every language (`common:bank.*`).
+ *
+ * A bank that goes into a sentence as a param is passed as a name (`bankWordsRef`, `bankNameRef`,
+ * `bankListRef`), not as text, so the language can say it in the case the sentence needs
+ * (`{bank:loc}`, i18n/README.md, "Cases").
  */
 
 import type { SlotKey } from '@seek-fw/core';
-import { listComma, t, type Translate } from '@/i18n';
+import { listComma, t, type NameList, type NameRef, type Translate } from '@/i18n';
 
 function letterOf(key: SlotKey): string {
   return key.toUpperCase();
@@ -39,4 +43,32 @@ export function bankWords(key: SlotKey, translate: Translate = t): string {
   return key === 'r'
     ? translate('common:bank.recoveryInSentence', { letter: letterOf(key) })
     : translate('common:bank.slotInSentence', { letter: letterOf(key) });
+}
+
+/** `bankName` as a param: "Slot A", "Recovery R". */
+export function bankNameRef(key: SlotKey): NameRef {
+  return {
+    name: key === 'r' ? 'common:bank.recovery' : 'common:bank.slot',
+    params: { letter: letterOf(key) },
+  };
+}
+
+/** `bankWords` as a param: "slot A", "recovery R" inside a sentence. */
+export function bankWordsRef(key: SlotKey): NameRef {
+  return {
+    name: key === 'r' ? 'common:bank.recoveryInSentence' : 'common:bank.slotInSentence',
+    params: { letter: letterOf(key) },
+  };
+}
+
+/**
+ * Banks as one list param, each named inside a sentence: `bankList` ("slot A, slot B and recovery R")
+ * by default, or joined by `join` alone (`'comma'`: "slot B, recovery R").
+ */
+export function bankListRef(
+  keys: readonly SlotKey[],
+  join: NameList['join'] = 'commaAnd',
+  name: (key: SlotKey) => NameRef = bankWordsRef,
+): NameList {
+  return { names: keys.map(name), join };
 }

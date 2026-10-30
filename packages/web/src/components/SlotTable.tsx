@@ -29,7 +29,7 @@ import {
 } from '@seek-fw/core';
 import { coreParamText, coreText } from '@/lib/core-text';
 import { t } from '@/i18n';
-import { bankName, bankWords } from '@/lib/bank-names';
+import { bankName, bankNameRef, bankWordsRef } from '@/lib/bank-names';
 import { FilePickerButton } from './FilePickerButton';
 import { Badge } from './ui/badge';
 import { Button } from './ui/button';
@@ -137,7 +137,7 @@ function riskNote(risk: WriteRisk): string | null {
   const booted = bootedNow.charAt(0).toUpperCase() + bootedNow.slice(1);
   if (risk.booted && risk.recovery) return t('slots:table.risk.bootedRecovery', { booted });
   if (risk.booted) return t('slots:table.risk.booted', { booted });
-  if (risk.recovery) return t('slots:table.risk.recovery', { bank: bankName('r') });
+  if (risk.recovery) return t('slots:table.risk.recovery', { bank: bankNameRef('r') });
   if (risk.bootUnnamed) return t('slots:table.risk.bootUnnamed');
   return null;
 }
@@ -199,7 +199,11 @@ export function SlotTable({
   return (
     <Table>
       <TableCaption>
-        {t('slots:table.caption', { a: bankWords('a'), b: bankWords('b'), r: bankWords('r') })}
+        {t('slots:table.caption', {
+          a: bankWordsRef('a'),
+          b: bankWordsRef('b'),
+          r: bankWordsRef('r'),
+        })}
       </TableCaption>
       <TableHeader>
         <TableRow>

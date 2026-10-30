@@ -195,9 +195,10 @@ import {
   type SlotsReport,
 } from '@seek-fw/core';
 import { beforeAll, describe, expect, it } from 'vitest';
-import { tEnglish, type Translate } from '@/i18n';
+import { LANGUAGES, tEnglish, type AnyParam, type NamespaceMessages, type Translate } from '@/i18n';
+import { PLACEHOLDER, isGrammaticalCase } from '@/i18n/format';
 import { en } from '@/i18n/locales/en';
-import { coreText, coreTexts, recordedCoreText } from '@/lib/core-text';
+import { coreNameOf, coreText, coreTexts, recordedCoreText } from '@/lib/core-text';
 import { fakeDeviceState } from '@/test-fixtures';
 import { deviceState2016, slotEntry, slotReport, slotReport2016 } from '@/test-slots';
 
@@ -1377,14 +1378,50 @@ describe('the core namespace', () => {
     expect([...produced].filter((code) => !templates.has(code))).toEqual([]);
     expect([...templates].filter((code) => !produced.has(code))).toEqual([]);
   });
+
+  it('lets a translation put a case only on a param core passes as a name, in every sample', async () => {
+    /* Per code, the params some sample passes as something other than a bank, a key name or a list of them. */
+    const notNames = new Map<string, Set<string>>();
+    for (const message of all) {
+      for (const [param, value] of Object.entries(message.params)) {
+        if (typeof value === 'object' && coreNameOf(value) !== null) continue;
+        notNames.set(message.code, (notNames.get(message.code) ?? new Set()).add(param));
+      }
+    }
+    const produced = new Set(all.map((message) => message.code));
+    const problems: string[] = [];
+    for (const language of LANGUAGES) {
+      const dict = await language.load();
+      for (const [code, message] of Object.entries(dict.core as NamespaceMessages)) {
+        const forms = typeof message === 'string' ? [message] : Object.values(message);
+        for (const form of forms) {
+          for (const [whole, param = '', gramCase] of form.matchAll(PLACEHOLDER)) {
+            if (gramCase === undefined) continue;
+            const id = `${language.code} core:${code}`;
+            if (!isGrammaticalCase(gramCase)) problems.push(`${id}: ${whole} is not a case`);
+            else if (!produced.has(code) || notNames.get(code)?.has(param) === true)
+              problems.push(`${id}: ${whole}, but {${param}} is not always a name`);
+          }
+        }
+      }
+    }
+    expect(problems).toEqual([]);
+  });
 });
 
 describe('coreText', () => {
   /** A translate that shows the key and params it was given. */
-  const shown = ((key: string, params?: Readonly<Record<string, string | number>>) =>
+  const said = (value: AnyParam): string =>
+    typeof value !== 'object'
+      ? String(value)
+      : 'name' in value
+        ? show(value.name, value.params)
+        : '?';
+  const show = (key: string, params?: Readonly<Record<string, AnyParam>>): string =>
     `${key}(${Object.entries(params ?? {})
-      .map(([name, value]) => `${name}=${String(value)}`)
-      .join(',')})`) as unknown as Translate;
+      .map(([name, value]) => `${name}=${said(value)}`)
+      .join(',')})`;
+  const shown = show as unknown as Translate;
 
   it('translates the message and each param with the translate it is given', () => {
     expect(coreText(bootsNowMessage(bankParam('r')), shown)).toBe(

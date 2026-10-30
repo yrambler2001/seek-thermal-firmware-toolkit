@@ -63,8 +63,8 @@ import {
   routeNoteMessage,
 } from '@seek-fw/core';
 import { coreText, recordedText } from '@/lib/core-text';
-import { listComma, rich, t } from '@/i18n';
-import { bankList, bankName, bankWords } from '@/lib/bank-names';
+import { listComma, rich, t, type NameValue } from '@/i18n';
+import { bankListRef, bankName, bankNameRef, bankWordsRef } from '@/lib/bank-names';
 import { Panel, PanelTitle } from '@/components/Panel';
 import { Prose } from '@/components/Prose';
 import { RunPanel } from '@/components/RunPanel';
@@ -183,7 +183,7 @@ export function PreserveView({
             <li>{t('preserve:how.noFile')}</li>
             <li>
               {rich('preserve:how.banks', {
-                params: { a: bankWords('a'), b: bankWords('b'), r: bankWords('r') },
+                params: { a: bankWordsRef('a'), b: bankWordsRef('b'), r: bankWordsRef('r') },
               })}
             </li>
             <li>
@@ -742,7 +742,7 @@ function choiceOption(verdict: PreserveChoiceVerdict): string {
   const choice = choiceName(verdict.choice);
   if (verdict.banks === null) return t('preserve:choice.notOffered', { choice });
   if (verdict.choice === 'next-start' || verdict.choice === 'all') {
-    return t('preserve:choice.withBanks', { choice, banks: bankList(verdict.banks) });
+    return t('preserve:choice.withBanks', { choice, banks: bankListRef(verdict.banks) });
   }
   return choice;
 }
@@ -884,7 +884,7 @@ function PlanFromState({ state }: { readonly state: PreserveRunState }): ReactEl
       summary={
         targets.length === 0
           ? t('preserve:plan.summaryNone', { build })
-          : t('preserve:plan.summary', { build, banks: bankList(targets) })
+          : t('preserve:plan.summary', { build, banks: bankListRef(targets) })
       }
     >
       <p>{t('preserve:plan.intro')}</p>
@@ -945,22 +945,22 @@ function BankPlan({
   const derivation = bank.imageDerivation;
   return (
     <section
-      aria-label={t('preserve:bankPlan.label', { bank: bankWords(key) })}
+      aria-label={t('preserve:bankPlan.label', { bank: bankWordsRef(key) })}
       className="space-y-2"
     >
       <h4 className="text-[0.85rem] font-semibold text-foreground">
         {chosen
-          ? t('preserve:bankPlan.titleChosen', { bank: bankName(key) })
-          : t('preserve:bankPlan.titleNotChosen', { bank: bankName(key) })}
+          ? t('preserve:bankPlan.titleChosen', { bank: bankNameRef(key) })
+          : t('preserve:bankPlan.titleNotChosen', { bank: bankNameRef(key) })}
       </h4>
       <KeyValue
         rows={[
           [
             t('preserve:bankPlan.source'),
             bank.slotReadShas === undefined
-              ? t('preserve:bankPlan.sourceValue', { bank: bankWords(key) })
+              ? t('preserve:bankPlan.sourceValue', { bank: bankWordsRef(key) })
               : t('preserve:bankPlan.sourceTwoReads', {
-                  bank: bankWords(key),
+                  bank: bankWordsRef(key),
                   sha: bank.slotReadShas[0],
                 }),
           ],
@@ -999,7 +999,7 @@ function BankPlan({
         ]}
       />
       <Table>
-        <TableCaption>{t('preserve:bankPlan.caption', { bank: bankWords(key) })}</TableCaption>
+        <TableCaption>{t('preserve:bankPlan.caption', { bank: bankWordsRef(key) })}</TableCaption>
         <TableHeader>
           <TableRow>
             <TableHead className="w-[40%]">{t('preserve:bankPlan.col.what')}</TableHead>
@@ -1099,7 +1099,8 @@ function PhaseConfirm({ request, state, onConfirm, onCancel }: PhaseConfirmProps
   const label = request === null ? '' : phaseMeta(request.phase).label;
   const writing = request !== null && request.phase === 'patch-dump' && !request.jump;
   const order = request === null ? [] : writeOrder(state, request.phase);
-  const banks = order.length === 0 ? t('preserve:confirm.chosenBanks') : bankList(order);
+  const banks: NameValue =
+    order.length === 0 ? { text: t('preserve:confirm.chosenBanks') } : bankListRef(order);
   const inOrder = order.length > 1;
   const warnings =
     writing && state?.targets !== undefined
@@ -1239,7 +1240,7 @@ function VerifySummary({ state, check, busy, onSave }: VerifySummaryProps): Reac
             ...(state.targets ?? []).map(
               (key) =>
                 [
-                  t('preserve:summary.image', { bank: bankWords(key) }),
+                  t('preserve:summary.image', { bank: bankWordsRef(key) }),
                   state.banks?.[key].imageSha256 ?? t('preserve:summary.notProduced'),
                 ] as const,
             ),

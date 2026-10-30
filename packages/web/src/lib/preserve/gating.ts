@@ -25,8 +25,8 @@
 
 import { drainCapabilityMessage, preserveBuildParam, preserveChoiceOf } from '@seek-fw/core';
 import { coreText, recordedText } from '@/lib/core-text';
-import { listSemicolon, t, type Translate } from '@/i18n';
-import { bankWords } from '@/lib/bank-names';
+import { listSemicolon, t, type NameRef, type Translate } from '@/i18n';
+import { bankWordsRef } from '@/lib/bank-names';
 import {
   NEEDS_CONFIRM,
   PRESERVE_BACKUP_FILE,
@@ -118,7 +118,7 @@ function targetGaps(state: PreserveRunState, translate: Translate): string[] {
     if (refused !== null) {
       out.push(
         translate('preserve:gate.bankRefused', {
-          bank: bankWords(key, translate),
+          bank: bankWordsRef(key),
           reason: recordedText(state.banks[key].refusedMessage, refused, translate),
         }),
       );
@@ -126,8 +126,8 @@ function targetGaps(state: PreserveRunState, translate: Translate): string[] {
     if (state.route === 'recovery-only' && key !== 'r') {
       out.push(
         translate('preserve:gate.recoveryRoute', {
-          r: bankWords('r', translate),
-          bank: bankWords(key, translate),
+          r: bankWordsRef('r'),
+          bank: bankWordsRef(key),
         }),
       );
     }
@@ -140,7 +140,7 @@ const targetsOf = (state: PreserveRunState): readonly BankKey[] => state.targets
 export function canRunPhase(input: PreserveGateInput): PreserveGate {
   const { state, phase, has } = input;
   const translate = input.translate ?? t;
-  const bank = (key: BankKey): string => bankWords(key, translate);
+  const bank = (key: BankKey): NameRef => bankWordsRef(key);
   const meta = phaseMeta(phase);
   const first = meta.steps[0] ?? 'backup';
 

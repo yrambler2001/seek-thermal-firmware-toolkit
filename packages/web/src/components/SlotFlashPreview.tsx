@@ -19,7 +19,7 @@ import {
   compareWordMessage,
 } from '@seek-fw/core';
 import { coreText, coreTexts } from '@/lib/core-text';
-import { t } from '@/i18n';
+import { t, type NameValue } from '@/i18n';
 import { KeyValue, type KeyValueRow } from './KeyValue';
 import { Panel, PanelTitle } from './Panel';
 import { Prose } from './Prose';
@@ -50,7 +50,7 @@ function storedText(plan: SlotFlashPlan): string {
 }
 
 export interface SlotFlashPreviewProps {
-  readonly slotName: string;
+  readonly slotName: NameValue;
   readonly address: number;
   /** What is written, in words (`PendingSlotFlash.what`): shown as the File row when the person picked a file. */
   readonly what: string;

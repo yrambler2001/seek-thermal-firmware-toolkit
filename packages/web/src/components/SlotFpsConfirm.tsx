@@ -11,7 +11,7 @@ import { useRef, useState, type ReactElement } from 'react';
 import { Gauge } from 'lucide-react';
 import { bootsNowMessage, type FpsBootWarning, type FpsPlan } from '@seek-fw/core';
 import { coreText, coreTexts } from '@/lib/core-text';
-import { useT } from '@/i18n';
+import { nameText, useT, type NameValue } from '@/i18n';
 import { Checkbox } from './ui/field';
 import {
   AlertDialog,
@@ -29,7 +29,7 @@ export type FpsOffer = Extract<FpsPlan, { status: 'offer' }>;
 
 export interface SlotFpsConfirmProps {
   readonly open: boolean;
-  readonly slotName: string;
+  readonly slotName: NameValue;
   /** The offer the dialog states. Null only while the dialog is closed. */
   readonly offer: FpsOffer | null;
   /** The build the bank's image is, as the camera reports it. */
@@ -95,7 +95,9 @@ export function SlotFpsConfirm({
 
         {risk.booted && (
           <p className="rounded-md border border-destructive/40 bg-destructive/8 px-3 py-2 text-[0.85rem] font-medium text-destructive">
-            {t('slots:fpsConfirm.booted', { bootsNow: coreText(bootsNowMessage(slotName)) })}
+            {t('slots:fpsConfirm.booted', {
+              bootsNow: coreText(bootsNowMessage(nameText(slotName))),
+            })}
           </p>
         )}
         {risk.recovery && (

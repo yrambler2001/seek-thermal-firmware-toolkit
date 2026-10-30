@@ -20,15 +20,15 @@
 
 import { Fragment, type ReactNode } from 'react';
 import { MARKUP_TOKEN } from '@/lib/rich-text';
-import { interpolate } from './format';
-import { template } from './store';
-import type { MessageKey, ParamNamesOf, EntryOf, ParamValue, ParamsOf } from './types';
+import { interpolate, type NameSayer } from './format';
+import { currentSayer, template } from './store';
+import type { AnyParam, MessageKey, ParamNamesOf, EntryOf, ParamsOf } from './types';
 
 /** Gets the slot's text (already rendered; empty for `<name/>`) and returns what goes there. */
 export type Slot = (children: ReactNode) => ReactNode;
 export type Slots = Readonly<Record<string, Slot>>;
 
-type Params = Readonly<Record<string, ParamValue>>;
+type Params = Readonly<Record<string, AnyParam>>;
 
 export type RichOptions<K extends MessageKey> = [ParamNamesOf<EntryOf<K>>] extends [never]
   ? { readonly slots?: Slots }
@@ -41,22 +41,27 @@ export type RichArgs<K extends MessageKey> = [ParamNamesOf<EntryOf<K>>] extends 
 const SLOT = /<([A-Za-z][\w-]*)>([\s\S]*?)<\/\1>|<([A-Za-z][\w-]*)\s*\/>/g;
 
 /** Mini-markup with params, no slots. */
-function inline(text: string, params: Params | undefined, prefix: string): ReactNode[] {
+function inline(
+  text: string,
+  params: Params | undefined,
+  say: NameSayer,
+  prefix: string,
+): ReactNode[] {
   return text
     .split(MARKUP_TOKEN)
     .filter((part) => part !== '')
     .map((part, index) => {
       const key = `${prefix}.${String(index)}`;
       if (part.startsWith('**') && part.endsWith('**') && part.length > 4) {
-        return <strong key={key}>{interpolate(part.slice(2, -2), params)}</strong>;
+        return <strong key={key}>{interpolate(part.slice(2, -2), params, say)}</strong>;
       }
       if (part.startsWith('*') && part.endsWith('*') && part.length > 2) {
-        return <em key={key}>{interpolate(part.slice(1, -1), params)}</em>;
+        return <em key={key}>{interpolate(part.slice(1, -1), params, say)}</em>;
       }
       if (part.startsWith('`') && part.endsWith('`') && part.length > 2) {
-        return <code key={key}>{interpolate(part.slice(1, -1), params)}</code>;
+        return <code key={key}>{interpolate(part.slice(1, -1), params, say)}</code>;
       }
-      return interpolate(part, params);
+      return interpolate(part, params, say);
     });
 }
 
@@ -66,13 +71,14 @@ function inline(text: string, params: Params | undefined, prefix: string): React
  * A slot the caller did not pass renders its text without a wrapper.
  */
 export function renderMarkup(text: string, params?: Params, slots: Slots = {}): ReactNode[] {
+  const say = currentSayer();
   const out: ReactNode[] = [];
   let last = 0;
   let index = 0;
   for (const match of text.matchAll(SLOT)) {
-    out.push(...inline(text.slice(last, match.index), params, String(index)));
+    out.push(...inline(text.slice(last, match.index), params, say, String(index)));
     const name = match[1] ?? match[3] ?? '';
-    const inner = match[2] === undefined ? [] : inline(match[2], params, `${String(index)}s`);
+    const inner = match[2] === undefined ? [] : inline(match[2], params, say, `${String(index)}s`);
     const slot = slots[name];
     out.push(
       <Fragment key={`${String(index)}:${name}`}>
@@ -82,7 +88,7 @@ export function renderMarkup(text: string, params?: Params, slots: Slots = {}): 
     last = match.index + match[0].length;
     index += 1;
   }
-  out.push(...inline(text.slice(last), params, String(index)));
+  out.push(...inline(text.slice(last), params, say, String(index)));
   return out;
 }
 

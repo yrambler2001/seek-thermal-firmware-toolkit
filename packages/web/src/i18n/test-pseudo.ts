@@ -14,13 +14,15 @@
  * registry (see `vi.mock('./languages')` there).
  */
 
+import { CASES } from './format';
+import { NAME_PARAMS, isNameKey } from './names';
 import type { Dictionary, Message, NamespaceMessages } from './types';
 
 const UPPER = 'ÁƁÇÐÉƑĜĤÎĴĶĽṀÑÖÞǪŘŠŢÜṼŴẊÝŽ';
 const LOWER = 'áƀçðéƒĝĥîĵķľɱñöþǫřšţüṽŵẋýž';
 
-/** `{param}` and slot tags: kept as written. */
-const KEEP = /(\{[A-Za-z_]\w*\}|<\/?[A-Za-z][\w-]*\s*\/?>)/;
+/** `{param}`, `{param:case}` and slot tags: kept as written. */
+const KEEP = /(\{[A-Za-z_]\w*(?::[a-z]+)?\}|<\/?[A-Za-z][\w-]*\s*\/?>)/;
 
 function swapLetters(text: string): string {
   return text.replace(/[A-Za-z]/g, (letter) => {
@@ -54,9 +56,37 @@ function pseudoMessage(message: Message): Message {
   };
 }
 
-function pseudoNamespace(messages: NamespaceMessages): NamespaceMessages {
+/**
+ * The case path, exercised: every name (a bank, a key) gets a form in each case, marked `ᶜ`, and each page
+ * param names.ts declares asks for the locative, as a Polish sentence might.
+ */
+function withCases(namespace: string, key: string, message: Message): [string, Message][] {
+  const id = `${namespace}:${key}`;
+  const params = (NAME_PARAMS as Readonly<Record<string, readonly string[]>>)[id] ?? [];
+  const cased = (text: string): string =>
+    params.reduce((out, param) => out.replaceAll(`{${param}}`, `{${param}:loc}`), text);
+  const own: Message =
+    typeof message === 'string'
+      ? cased(message)
+      : {
+          one: cased(message.one ?? message.other),
+          few: cased(message.few ?? message.other),
+          many: cased(message.many ?? message.other),
+          other: cased(message.other),
+        };
+  const entries: [string, Message][] = [[key, own]];
+  if (isNameKey(id) && typeof message === 'string') {
+    for (const gramCase of CASES)
+      entries.push([`${key}:${gramCase}`, message.replace(/ Б⟧$/, ' Бᶜ⟧')]);
+  }
+  return entries;
+}
+
+function pseudoNamespace(namespace: string, messages: NamespaceMessages): NamespaceMessages {
   return Object.fromEntries(
-    Object.entries(messages).map(([key, message]) => [key, pseudoMessage(message)]),
+    Object.entries(messages).flatMap(([key, message]) =>
+      withCases(namespace, key, pseudoMessage(message)),
+    ),
   );
 }
 
@@ -65,7 +95,7 @@ export function pseudoDictionary(english: Dictionary): Dictionary {
   return Object.fromEntries(
     Object.entries(english).map(([namespace, messages]) => [
       namespace,
-      pseudoNamespace(messages as NamespaceMessages),
+      pseudoNamespace(namespace, messages as NamespaceMessages),
     ]),
   ) as unknown as Dictionary;
 }

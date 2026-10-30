@@ -17,6 +17,7 @@
 import {
   evidenceMessages,
   isCoreMessage,
+  keyNameParam,
   recordedParam,
   type BootPolicy,
   type CoreMessage,
@@ -24,26 +25,65 @@ import {
   type FirmwareProfile,
   type ProfileMatch,
 } from '@seek-fw/core';
-import { listAnd, listComma, listSemicolon, t, type Translate } from '@/i18n';
+import {
+  listAnd,
+  listComma,
+  listSemicolon,
+  nameText,
+  t,
+  type AnyParam,
+  type NameKey,
+  type NameValue,
+  type Translate,
+} from '@/i18n';
 import { en } from '@/i18n/locales/en';
-import { bankName, bankWords } from '@/lib/bank-names';
+import { bankNameRef, bankWordsRef } from '@/lib/bank-names';
 
-type LooseTranslate = (key: string, params?: Readonly<Record<string, string | number>>) => string;
+type LooseTranslate = (key: string, params?: Readonly<Record<string, AnyParam>>) => string;
 
 function capitalise(text: string): string {
   return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
-function paramWords(param: CoreParam, translate: Translate): string | number {
-  if (typeof param === 'string' || typeof param === 'number') return param;
-  if ('text' in param) return coreText(param, translate);
+/**
+ * A key's name as a param (`{key}`, `{storeKey}`): the name core gives it ("Key A", keyName.*), which a
+ * language may decline, or a name core does not know, said as it is.
+ */
+export function keyNameValue(name: string): NameValue {
+  const param = keyNameParam(name);
+  return typeof param === 'string' ? { text: param } : { name: `core:${param.code}` as NameKey };
+}
+
+/**
+ * A core param that is a name: a bank, a key core names (keyName.*), or a list of those, which a
+ * template may put in a case (`{bank:loc}`); null for any other param.
+ */
+export function coreNameOf(param: Exclude<CoreParam, string | number>): NameValue | null {
   if ('bank' in param) {
-    return param.form === 'name'
-      ? bankName(param.bank, translate)
-      : bankWords(param.bank, translate);
+    return param.form === 'name' ? bankNameRef(param.bank) : bankWordsRef(param.bank);
   }
-  if ('capital' in param) return capitalise(String(paramWords(param.capital, translate)));
-  const words = param.list.map((item) => String(paramWords(item, translate)));
+  if ('text' in param) {
+    return param.code.startsWith('keyName.') ? { name: `core:${param.code}` as NameKey } : null;
+  }
+  if ('capital' in param || param.join === 'semicolon' || param.list.length === 0) return null;
+  const names: NameValue[] = [];
+  for (const item of param.list) {
+    const name = typeof item === 'object' ? coreNameOf(item) : null;
+    if (name === null) return null;
+    names.push(name);
+  }
+  return { names, join: param.join };
+}
+
+function paramWords(param: CoreParam, translate: Translate): AnyParam {
+  if (typeof param === 'string' || typeof param === 'number') return param;
+  /* A bank, a key name or a list of them stays a name: the template may ask for a case of it. */
+  const name = coreNameOf(param);
+  if (name !== null) return name;
+  if ('text' in param) return coreText(param, translate);
+  if ('capital' in param) return capitalise(coreParamText(param.capital, translate));
+  if ('bank' in param) return ''; /* named above */
+  const words = param.list.map((item) => coreParamText(item, translate));
   if (param.join === 'semicolon') return listSemicolon(words, translate);
   if (param.join === 'comma') return listComma(words, translate);
   if (param.join === 'and') return listAnd(words, translate);
@@ -58,7 +98,8 @@ function paramWords(param: CoreParam, translate: Translate): string | number {
 
 /** One param of a core message in the language in use (a bank, a nested message, a list, plain text). */
 export function coreParamText(param: CoreParam, translate: Translate = t): string {
-  return String(paramWords(param, translate));
+  const words = paramWords(param, translate);
+  return typeof words === 'object' ? nameText(words, translate) : String(words);
 }
 
 /** Whether the page's dictionary has a template for this code. */
@@ -77,7 +118,7 @@ export function coreText(
   if (message === null || message === undefined) return '';
   if (typeof message === 'string') return message;
   if (!knowsCoreCode(message.code)) return message.text;
-  const params: Record<string, string | number> = {};
+  const params: Record<string, AnyParam> = {};
   for (const [name, param] of Object.entries(message.params)) {
     params[name] = paramWords(param, translate);
   }

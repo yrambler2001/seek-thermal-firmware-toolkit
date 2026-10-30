@@ -11,8 +11,8 @@
 import { useRef, useState, type ReactElement } from 'react';
 import { Gauge } from 'lucide-react';
 import type { FpsEveryBankPlan, SlotKey } from '@seek-fw/core';
-import { listAnd, listThen, t } from '@/i18n';
-import { bankName } from '@/lib/bank-names';
+import { listAnd, t } from '@/i18n';
+import { bankListRef, bankName, bankNameRef } from '@/lib/bank-names';
 import { Checkbox } from './ui/field';
 import {
   AlertDialog,
@@ -51,12 +51,12 @@ function commonRate(plan: FpsEveryBankPlan | null): number | null {
 
 /** A bank's name and, when writing it asks for the tick, what it is. */
 function namedWithRole(key: SlotKey, risk: WriteRisk): string {
-  const bank = bankName(key);
+  const bank = bankNameRef(key);
   if (risk.booted && risk.recovery) return t('slots:fpsEvery.role.bootedRecovery', { bank });
   if (risk.booted) return t('slots:fpsEvery.role.booted', { bank });
   if (risk.recovery) return t('slots:fpsEvery.role.recovery', { bank });
   if (risk.bootUnnamed) return t('slots:fpsEvery.role.bootUnnamed', { bank });
-  return bank;
+  return bankName(key);
 }
 
 export function SlotFpsEveryConfirm({
@@ -78,10 +78,14 @@ export function SlotFpsEveryConfirm({
   const confirmable = offers.length > 0 && (!needsAck || acknowledged);
   const rate = commonRate(plan);
   const count = offers.length;
-  const order = listThen(offers.map((offer) => bankName(offer.key)));
+  const order = bankListRef(
+    offers.map((offer) => offer.key),
+    'then',
+    bankNameRef,
+  );
   const others = (plan?.others ?? []).flatMap((other) => {
     const note = fpsOffNote(other.plan, true);
-    return note === null ? [] : [t('slots:fpsEvery.other', { bank: bankName(other.key), note })];
+    return note === null ? [] : [t('slots:fpsEvery.other', { bank: bankNameRef(other.key), note })];
   });
 
   return (

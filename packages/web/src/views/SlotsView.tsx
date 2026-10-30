@@ -50,9 +50,9 @@ import {
   type SlotFlashOutcome,
   type SlotsPanelApi,
 } from '@/hooks/useSlotsPanel';
-import { listComma, listThen, t, useT, type Translate } from '@/i18n';
+import { t, useT, type NameValue, type Translate } from '@/i18n';
 import { backupDownloadNote } from '@/lib/backup-save';
-import { bankName, bankWords } from '@/lib/bank-names';
+import { bankListRef, bankNameRef, bankWordsRef } from '@/lib/bank-names';
 import type { Refusal } from '@/lib/identify';
 
 export interface SlotsViewProps {
@@ -66,7 +66,7 @@ function viewOf(report: SlotsReport, key: SlotKey) {
 }
 
 /** The result panel's first line: the bank, what was written, and the read-back's verdict. */
-function outcomeTitle(bank: string, what: string, verified: boolean | null): string {
+function outcomeTitle(bank: NameValue, what: string, verified: boolean | null): string {
   if (verified === true) return t('slots:outcome.verified', { bank, what });
   if (verified === false) return t('slots:outcome.mismatch', { bank, what });
   /* The page always asks for the read-back. Null means core took it but had no
@@ -110,7 +110,7 @@ function readBackLine(result: FpsPatchResult, every: boolean): string {
 /** "Slot A — patched from 9 Hz to 30 Hz (firmware 1.0.3.0)." */
 function patchedLine(result: FpsPatchResult): string {
   return t('slots:fpsOutcome.title', {
-    bank: bankName(result.key),
+    bank: bankNameRef(result.key),
     fromHz: result.fromHz,
     toHz: result.toHz,
     version: result.patch.version,
@@ -141,11 +141,11 @@ function OutcomePanel({ outcome }: { readonly outcome: SlotFlashOutcome }): Reac
   return (
     <Alert tone={tone} className="mt-3">
       <p>
-        <strong>{outcomeTitle(bankName(key), what, result.verified)}</strong>
+        <strong>{outcomeTitle(bankNameRef(key), what, result.verified)}</strong>
       </p>
       <p>{t('slots:outcome.commitStatus', { status: hexUp(result.commitStatus, 4) })}</p>
       {outcome.targetEmpty === true && (
-        <p>{t('slots:outcome.wasEmpty', { bank: bankName(key) })}</p>
+        <p>{t('slots:outcome.wasEmpty', { bank: bankNameRef(key) })}</p>
       )}
       {outcome.restore !== null && (
         <p>{coreText(restoreReadBackMessage(outcome.restore, bankParam(key, 'name')))}</p>
@@ -181,7 +181,7 @@ function FpsEveryOutcomePanel({ result }: { readonly result: FpsEveryBankResult 
           {t('slots:fpsEveryOutcome.title', {
             done: result.results.length,
             count: result.order.length,
-            order: listComma(result.order.map((key) => bankWords(key))),
+            order: bankListRef(result.order, 'comma'),
           })}
         </strong>
       </p>
@@ -200,7 +200,7 @@ function FpsEveryOutcomePanel({ result }: { readonly result: FpsEveryBankResult 
       {result.unwritten.length > 0 && (
         <p>
           {t('slots:fpsEveryOutcome.notWritten', {
-            banks: listComma(result.unwritten.map((key) => bankWords(key))),
+            banks: bankListRef(result.unwritten, 'comma'),
           })}
         </p>
       )}
@@ -272,7 +272,11 @@ function EveryBankAction({
       : slotActionGate({ entry: view.entry, view, action: 'flash-plain', connected, busy });
   });
   const off = gates.find((gate) => !gate.enabled) ?? null;
-  const order = listThen(plan.offers.map((offer) => bankName(offer.key)));
+  const order = bankListRef(
+    plan.offers.map((offer) => offer.key),
+    'then',
+    bankNameRef,
+  );
   return (
     <Toolbar label={t('slots:everyBank.toolbar')} className="mt-3">
       <Button variant="outline" disabled={off !== null} onClick={onOpen}>
@@ -330,9 +334,9 @@ export function SlotsView({ slots, connected, busy }: SlotsViewProps): ReactElem
           </Badge>
         }
         description={t('slots:section.description', {
-          a: bankWords('a'),
-          b: bankWords('b'),
-          r: bankWords('r'),
+          a: bankWordsRef('a'),
+          b: bankWordsRef('b'),
+          r: bankWordsRef('r'),
         })}
       >
         <Alert tone="err">
@@ -445,7 +449,7 @@ export function SlotsView({ slots, connected, busy }: SlotsViewProps): ReactElem
 
         {pending !== null && pendingView !== null && (
           <SlotFlashPreview
-            slotName={bankName(pending.key)}
+            slotName={bankNameRef(pending.key)}
             address={pendingView.entry.address}
             what={pending.whatOnPage?.() ?? pending.what}
             kind={pending.kind}
@@ -465,7 +469,7 @@ export function SlotsView({ slots, connected, busy }: SlotsViewProps): ReactElem
           <SlotWriteConfirm
             open={confirming}
             what={pending.whatOnPage?.() ?? pending.what}
-            slotName={bankName(pending.key)}
+            slotName={bankNameRef(pending.key)}
             slotAddress={hexUp(pendingView.entry.address)}
             risk={writeRisk(pending.report, pending.key)}
             targetEmpty={pending.plan.targetEmpty === true}
@@ -496,7 +500,7 @@ export function SlotsView({ slots, connected, busy }: SlotsViewProps): ReactElem
         {fpsKey !== null && fpsView !== null && (
           <SlotFpsConfirm
             open={fpsOffer !== null}
-            slotName={bankName(fpsKey)}
+            slotName={bankNameRef(fpsKey)}
             offer={fpsOffer}
             version={report?.state.version ?? null}
             risk={
@@ -555,7 +559,7 @@ export function SlotsView({ slots, connected, busy }: SlotsViewProps): ReactElem
         <Prose>
           <p>{rich('slots:how.read', { params: { minVersion: '0.8.0.0' } })}</p>
           <p>{rich('slots:how.flash')}</p>
-          <p>{rich('slots:how.ff', { params: { letterR: 'R', b: bankWords('b') } })}</p>
+          <p>{rich('slots:how.ff', { params: { letterR: 'R', b: bankWordsRef('b') } })}</p>
           <p>
             {rich('slots:how.copy', {
               params: { copyA: copyLabel('a'), copyB: copyLabel('b'), copyR: copyLabel('r') },

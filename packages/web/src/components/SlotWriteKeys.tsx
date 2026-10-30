@@ -27,11 +27,10 @@ import {
   storedUnderCheckKeyMessage,
   type CoreMessage,
   type CoreParam,
-  keyNameParam,
 } from '@seek-fw/core';
-import { coreParamText, coreText } from '@/lib/core-text';
-import { t } from '@/i18n';
-import { bankName } from '@/lib/bank-names';
+import { coreParamText, coreText, keyNameValue } from '@/lib/core-text';
+import { t, type NameValue } from '@/i18n';
+import { bankNameRef } from '@/lib/bank-names';
 import { KeyValue } from './KeyValue';
 import { Panel, PanelTitle } from './Panel';
 import { Prose } from './Prose';
@@ -200,17 +199,17 @@ export function SlotWriteKeys({ verdict }: SlotWriteKeysProps): ReactElement {
   /* The page's row and core's derivedKeyLine both name the bank in the language in use. */
   const bootedShown =
     verdict.bootedKey == null
-      ? (verdict.bootedName ?? t('slots:keys.theBootedBank'))
-      : bankName(verdict.bootedKey);
+      ? { text: verdict.bootedName ?? t('slots:keys.theBootedBank') }
+      : bankNameRef(verdict.bootedKey);
   /* No name at all: core's sentence says "the booted bank" itself (passing it as the name would double it). */
   const booted: CoreParam | null =
     verdict.bootedKey == null
       ? (verdict.bootedName ?? null)
       : bankNameParam(verdict.bootedName ?? bankNameOf(verdict.bootedKey), verdict.bootedKey);
-  const bootedKey =
+  const bootedKey: NameValue =
     verdict.bootedKeyName === null
-      ? t('slots:keys.unnamedKey')
-      : coreText(keyNameParam(verdict.bootedKeyName));
+      ? { text: t('slots:keys.unnamedKey') }
+      : keyNameValue(verdict.bootedKeyName);
   const key = verdict.keyName ?? t('slots:keys.bootedBanksKey');
   return (
     <Panel className="mt-3">

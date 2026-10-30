@@ -8,8 +8,10 @@
 
 import { describe, expect, it } from 'vitest';
 import { UNLOCK_POWER_CYCLE_NOTE } from '@seek-fw/core';
+import { isGrammaticalCase } from './format';
 import { LANGUAGES } from './languages';
 import { en } from './locales/en';
+import { isNameKey, nameParamsOf } from './names';
 import type { LooseDictionary, Message, Translation } from './types';
 
 const ENGLISH: LooseDictionary = en;
@@ -26,8 +28,40 @@ function names(message: Message, pattern: RegExp): readonly string[] {
   return [...found].sort();
 }
 
-const PLACEHOLDER = /\{([A-Za-z_]\w*)\}/g;
+const PLACEHOLDER = /\{([A-Za-z_]\w*)(?::(\w+))?\}/g;
 const SLOT_TAG = /<([A-Za-z][\w-]*)\s*\/?>/g;
+
+/**
+ * The case selectors in a translated entry that cannot work: a case that is not one of `CASES`, or a case
+ * on a param that is not a name. Core's params are checked against core's samples (core-messages.test.ts).
+ */
+function caseProblems(id: string, message: Message): string[] {
+  const problems: string[] = [];
+  for (const text of texts(message)) {
+    for (const [whole, param = '', gramCase] of text.matchAll(PLACEHOLDER)) {
+      if (gramCase === undefined) continue;
+      if (!isGrammaticalCase(gramCase)) problems.push(`${id} asks for ${whole}: no such case`);
+      else if (!id.startsWith('core:') && !nameParamsOf(id).includes(param))
+        problems.push(`${id} asks for ${whole}: {${param}} is not a name (names.ts)`);
+    }
+  }
+  return problems;
+}
+
+/** A translation's case form of a name (`bank.slot:loc`): fine when the name and the case exist. */
+function caseFormProblems(id: string, own: Message): string[] | null {
+  const split = id.lastIndexOf(':');
+  const base = id.slice(0, split);
+  if (split <= id.indexOf(':') || !isNameKey(base)) return null;
+  const gramCase = id.slice(split + 1);
+  if (!isGrammaticalCase(gramCase)) return [`${id} is a form of ${base} in no known case`];
+  const english = ENGLISH[base.slice(0, base.indexOf(':'))]?.[base.slice(base.indexOf(':') + 1)];
+  if (english === undefined) return [`${id} is a case form of ${base}, which English lacks`];
+  if (typeof own !== 'string') return [`${id} should be a string`];
+  const want = names(english, PLACEHOLDER).join(', ');
+  const have = names(own, PLACEHOLDER).join(', ');
+  return want === have ? [] : [`${id} has params [${have}], ${base} has [${want}]`];
+}
 
 /** Every way `dict` (in language `code`) differs from English, as readable lines. */
 export function parityProblems(code: string, dict: LooseDictionary): string[] {
@@ -60,12 +94,14 @@ export function parityProblems(code: string, dict: LooseDictionary): string[] {
         const have = names(own, pattern).join(', ');
         if (want !== have) problems.push(`${id} has ${what} [${have}], English has [${want}]`);
       }
+      problems.push(...caseProblems(id, own));
     }
   }
   for (const [namespace, messages] of Object.entries(dict)) {
-    for (const key of Object.keys(messages ?? {})) {
-      if (ENGLISH[namespace]?.[key] === undefined)
-        problems.push(`${namespace}:${key} is not in English`);
+    for (const [key, own] of Object.entries(messages ?? {})) {
+      if (ENGLISH[namespace]?.[key] !== undefined) continue;
+      const id = `${namespace}:${key}`;
+      problems.push(...(caseFormProblems(id, own) ?? [`${id} is not in English`]));
     }
   }
   return problems;
@@ -114,6 +150,37 @@ describe('the parity check itself', () => {
     );
     expect(problems.filter((line) => line.startsWith('app:'))).toHaveLength(4);
     expect(parityProblems('en', ENGLISH)).toEqual([]);
+  });
+
+  it('reports a case that does not exist, a case on a param that is not a name, and a bad case form', () => {
+    const fake: LooseDictionary = {
+      ...ENGLISH,
+      common: {
+        ...ENGLISH.common,
+        'bank.slot:loc': 'slocie {letter}',
+        'bank.slot:voc': 'slocie {letter}',
+        'bank.slotInSentence:gen': 'slotu',
+        'list.and:gen': '{first} i {second}',
+      },
+      slots: {
+        ...ENGLISH.slots,
+        'table.copyTo': 'Kopiuj do {bank:gen}',
+        'status.dumping': 'Zrzut {bank:abl} ...',
+        'what.restore': '{bank:gen} z {file:gen}',
+      },
+    };
+    const problems = parityProblems('pl', fake);
+    expect(problems).toEqual(
+      expect.arrayContaining([
+        'slots:status.dumping asks for {bank:abl}: no such case',
+        'slots:what.restore asks for {file:gen}: {file} is not a name (names.ts)',
+        'common:bank.slot:voc is a form of common:bank.slot in no known case',
+        'common:bank.slotInSentence:gen has params [], common:bank.slotInSentence has [letter]',
+        'common:list.and:gen is not in English',
+      ]),
+    );
+    expect(problems.join('\n')).not.toContain('table.copyTo');
+    expect(problems.join('\n')).not.toContain('bank.slot:loc');
   });
 });
 

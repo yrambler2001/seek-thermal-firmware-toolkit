@@ -21,15 +21,14 @@ import {
   bankParam,
   nextStartReportMessage,
   upgradeTargetWarningMessage,
-  keyNameParam,
 } from '@seek-fw/core';
-import { cfg0Words, coreParamText, nullableCoreText, recordedText } from '@/lib/core-text';
-import { bankName } from '@/lib/bank-names';
+import { cfg0Words, keyNameValue, nullableCoreText, recordedText } from '@/lib/core-text';
+import { bankName, bankNameRef } from '@/lib/bank-names';
 import { KeyValue, type KeyValueRow } from './KeyValue';
 import { Panel, PanelTitle } from './Panel';
 import { Prose } from './Prose';
 import { Alert } from './ui/alert';
-import { listAnd, t, useT } from '@/i18n';
+import { t, useT, type NameRef } from '@/i18n';
 
 /**
  * A bank's name as the slot table says it ("Slot A", "Recovery R"), core's `bankNameOf`, the same on every
@@ -37,6 +36,11 @@ import { listAnd, t, useT } from '@/i18n';
  */
 function bankLabel(slot: SlotState): string {
   return bankLabelOf(slot.key);
+}
+
+/** The same name as a param, which a sentence may decline. */
+function bankLabelRef(slot: SlotState): NameRef {
+  return bankNameRef(slot.key);
 }
 
 /** The same name, from the bank's key alone. */
@@ -112,7 +116,7 @@ export function DeviceInfoPanel({ state }: DeviceInfoPanelProps): ReactElement {
       target === null
         ? null
         : t('shared:deviceInfo.bankAt', {
-            bank: bankLabel(target),
+            bank: bankLabelRef(target),
             address: hexUp(target.address),
           }),
     ],
@@ -154,12 +158,12 @@ export function DeviceInfoPanel({ state }: DeviceInfoPanelProps): ReactElement {
           <Prose className="mt-2.5">
             <p>
               {rich('shared:deviceInfo.keysConfirmed', {
-                params: { storeKey: state.storeKey.name },
+                params: { storeKey: keyNameValue(state.storeKey.name) },
               })}
             </p>
             <p>
               {rich('shared:deviceInfo.keysDecrypted', {
-                params: { storeKey: state.storeKey.name },
+                params: { storeKey: keyNameValue(state.storeKey.name) },
               })}
             </p>
           </Prose>
@@ -172,8 +176,8 @@ export function DeviceInfoPanel({ state }: DeviceInfoPanelProps): ReactElement {
             {rich('shared:deviceInfo.orphan', {
               params: {
                 count: orphans.length,
-                banks: listAnd(orphans.map(bankLabel)),
-                storeKey: coreParamText(keyNameParam(state.storeKey.name)),
+                banks: { names: orphans.map(bankLabelRef), join: 'and' },
+                storeKey: keyNameValue(state.storeKey.name),
               },
             })}
           </p>
@@ -181,7 +185,10 @@ export function DeviceInfoPanel({ state }: DeviceInfoPanelProps): ReactElement {
             <p>
               {rich('shared:deviceInfo.orphanIsTarget', {
                 params: {
-                  bank: booted === null ? t('shared:deviceInfo.otherBank') : bankLabel(booted),
+                  bank:
+                    booted === null
+                      ? { text: t('shared:deviceInfo.otherBank') }
+                      : bankLabelRef(booted),
                 },
               })}
             </p>

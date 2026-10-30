@@ -20,10 +20,18 @@ import {
   writeLanguageChoice,
 } from './detect';
 import type { LanguageEnvironment } from './detect';
-import { interpolate, isPluralForms, selectPluralForm } from './format';
+import { interpolate, isPluralForms, selectPluralForm, type NameSayer } from './format';
 import { DEFAULT_LANGUAGE, LANGUAGES, type LanguageCode } from './languages';
 import { en } from './locales/en';
-import type { LooseDictionary, MessageKey, ParamValue, TArgs } from './types';
+import type {
+  AnyParam,
+  GrammaticalCase,
+  LooseDictionary,
+  MessageKey,
+  NameList,
+  NameValue,
+  TArgs,
+} from './types';
 
 interface State {
   readonly lang: LanguageCode;
@@ -149,7 +157,7 @@ export function resetI18n(): void {
  * pick their form by `params.count` with the rules of the language the entry
  * came from.
  */
-export function template(key: string, params?: Readonly<Record<string, ParamValue>>): string {
+export function template(key: string, params?: Readonly<Record<string, AnyParam>>): string {
   return templateIn(state.dict, state.lang, key, params);
 }
 
@@ -157,7 +165,7 @@ function templateIn(
   dict: LooseDictionary,
   dictLang: LanguageCode,
   key: string,
-  params?: Readonly<Record<string, ParamValue>>,
+  params?: Readonly<Record<string, AnyParam>>,
 ): string {
   const split = key.indexOf(':');
   const namespace = key.slice(0, split);
@@ -173,6 +181,56 @@ function templateIn(
   return selectPluralForm(message, lang, Number(params?.count ?? 0));
 }
 
+/** A name entry's form in `gramCase`, when the language gives one (`bank.slot:loc`); English gives none. */
+function caseForm(
+  dict: LooseDictionary,
+  key: string,
+  gramCase: GrammaticalCase,
+): string | undefined {
+  const split = key.indexOf(':');
+  const form = dict[key.slice(0, split)]?.[`${key.slice(split + 1)}:${gramCase}`];
+  return typeof form === 'string' ? form : undefined;
+}
+
+const LIST_KEY: Readonly<Record<Exclude<NameList['join'], 'commaAnd'>, string>> = {
+  and: 'common:list.and',
+  comma: 'common:list.comma',
+  then: 'common:list.then',
+};
+
+/**
+ * Says names in one language: a name in its case form, or its plain form when the language has no such
+ * form (a missing form falls back to the same language's plain one, never to English); a list with each
+ * name in the case, joined with the language's `common:list.*`.
+ */
+function sayerIn(dict: LooseDictionary, lang: LanguageCode): NameSayer {
+  const join = (key: string, first: string, second: string): string =>
+    interpolate(templateIn(dict, lang, key), { first, second });
+  const say: NameSayer = (value, gramCase) => {
+    if ('text' in value) return value.text;
+    if ('name' in value) {
+      const form = gramCase === undefined ? undefined : caseForm(dict, value.name, gramCase);
+      return interpolate(form ?? templateIn(dict, lang, value.name), value.params);
+    }
+    const words = value.names.map((name) => say(name, gramCase));
+    const last = words.at(-1);
+    if (last === undefined) return '';
+    if (value.join !== 'commaAnd') {
+      const key = LIST_KEY[value.join];
+      return words.reduce((joined, word) => join(key, joined, word));
+    }
+    if (words.length === 1) return last;
+    const head = words.slice(0, -1).reduce((joined, word) => join(LIST_KEY.comma, joined, word));
+    return join(LIST_KEY.and, head, last);
+  };
+  return say;
+}
+
+/** Says names in the language in use; rich() fills its templates with it. */
+export function currentSayer(): NameSayer {
+  return sayerIn(state.dict, state.lang);
+}
+
 /**
  * The text for a key, in the language in use, with `{name}` placeholders
  * filled from `params`. Mini-markup (`**bold**`, `*em*`, `` `code` ``, slots)
@@ -184,8 +242,8 @@ function templateIn(
  *     t('common:count.files', { count: 3 })        // "3 files"
  */
 export function t<K extends MessageKey>(key: K, ...args: TArgs<K>): string;
-export function t(key: string, params?: Readonly<Record<string, ParamValue>>): string {
-  return interpolate(template(key, params), params);
+export function t(key: string, params?: Readonly<Record<string, AnyParam>>): string {
+  return interpolate(template(key, params), params, currentSayer());
 }
 
 /**
@@ -196,12 +254,30 @@ export function t(key: string, params?: Readonly<Record<string, ParamValue>>): s
  * same hint through `tEnglish`.
  */
 export function tEnglish<K extends MessageKey>(key: K, ...args: TArgs<K>): string;
-export function tEnglish(key: string, params?: Readonly<Record<string, ParamValue>>): string {
-  return interpolate(templateIn(ENGLISH, DEFAULT_LANGUAGE, key, params), params);
+export function tEnglish(key: string, params?: Readonly<Record<string, AnyParam>>): string {
+  return interpolate(
+    templateIn(ENGLISH, DEFAULT_LANGUAGE, key, params),
+    params,
+    sayerIn(ENGLISH, DEFAULT_LANGUAGE),
+  );
 }
 
 /** `t` or `tEnglish`: for a function that builds text either for the page or for the log. */
 export type Translate = typeof t;
+
+/**
+ * A name on its own, outside a template: in English for `tEnglish`, else in the language in use; in
+ * `gramCase` when the language has that form.
+ */
+export function nameText(
+  value: NameValue,
+  translate: Translate = t,
+  gramCase?: GrammaticalCase,
+): string {
+  const say =
+    translate === tEnglish ? sayerIn(ENGLISH, DEFAULT_LANGUAGE) : sayerIn(state.dict, state.lang);
+  return say(value, gramCase);
+}
 
 /**
  * Joins names into one phrase with `common:list.and`, pairwise from the left:

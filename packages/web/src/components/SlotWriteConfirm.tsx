@@ -12,7 +12,7 @@ import { useRef, useState, type ReactElement } from 'react';
 import { Flame } from 'lucide-react';
 import { bootsNowMessage } from '@seek-fw/core';
 import { coreText } from '@/lib/core-text';
-import { useT } from '@/i18n';
+import { nameText, useT, type NameValue } from '@/i18n';
 import { Checkbox } from './ui/field';
 import {
   AlertDialog,
@@ -29,7 +29,7 @@ export interface SlotWriteConfirmProps {
   readonly open: boolean;
   /** What is written, in words: the file's name, or "Slot A's image" for a copy (`PendingSlotFlash.what`). */
   readonly what: string;
-  readonly slotName: string;
+  readonly slotName: NameValue;
   readonly slotAddress: string;
   readonly risk: WriteRisk;
   /** The bank holds no image: the write overwrites no firmware. */
@@ -101,7 +101,9 @@ export function SlotWriteConfirm({
 
         {risk.booted && (
           <p className="rounded-md border border-destructive/40 bg-destructive/8 px-3 py-2 text-[0.85rem] font-medium text-destructive">
-            {t('slots:writeConfirm.booted', { bootsNow: coreText(bootsNowMessage(slotName)) })}
+            {t('slots:writeConfirm.booted', {
+              bootsNow: coreText(bootsNowMessage(nameText(slotName))),
+            })}
           </p>
         )}
         {risk.recovery && (

@@ -35,7 +35,7 @@ function setup(overrides: Partial<SlotFpsConfirmProps> = {}): ReturnType<typeof 
   const handle = render(
     <SlotFpsConfirm
       open
-      slotName="slot B"
+      slotName={{ text: 'slot B' }}
       offer={OFFER}
       version="1.3.0.0"
       risk={FREE}
@@ -98,7 +98,11 @@ describe('the frame-rate patch confirmation', () => {
       fromHz: 9,
       toHz: 18,
     } as unknown as FpsOffer;
-    const { unmount } = setup({ slotName: 'slot A', version: '4.9.1.15', offer: measured });
+    const { unmount } = setup({
+      slotName: { text: 'slot A' },
+      version: '4.9.1.15',
+      offer: measured,
+    });
     const text = dialog().textContent;
     expect(text).toContain('Make slot A run at 18 FPS?');
     expect(text).toContain(
