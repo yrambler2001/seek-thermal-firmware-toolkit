@@ -195,7 +195,8 @@ export function useDevice(): DeviceHandle {
       if (held !== null && canForget(held)) await held.forget();
       seat.changed();
       adopt(null, 'revoked');
-      return { kind: 'connected', description: t('shared:device.revoked') };
+      /* The outcome's description is for the run log, like connect's (describeUsbDevice in English). */
+      return { kind: 'connected', description: tEnglish('shared:device.revoked') };
     } catch (error) {
       return { kind: 'failed', message: error instanceof Error ? error.message : String(error) };
     }

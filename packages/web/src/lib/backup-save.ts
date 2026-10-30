@@ -9,7 +9,7 @@
  */
 
 import type { WriteBackup } from '@seek-fw/core';
-import { t, tEnglish } from '@/i18n';
+import { t } from '@/i18n';
 import { downloadBytes } from './download';
 
 /** Starts the zip's download. Resolves true once it is handed to the browser; any throw resolves false. */
@@ -31,8 +31,6 @@ export function saveBackupAsDownload(
 export function backupDownloadNote(): string {
   return t('shared:backup.downloadNote');
 }
-/** The same note in English. The slot confirmations still read this; the slots step moves them to backupDownloadNote(). */
-export const BACKUP_DOWNLOAD_NOTE = tEnglish('shared:backup.downloadNote');
 
 /** The log lines once the zip's download was started. */
 export function backupDownloadLines(backup: WriteBackup): string[] {
