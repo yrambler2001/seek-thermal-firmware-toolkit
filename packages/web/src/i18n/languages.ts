@@ -39,7 +39,7 @@ export const LANGUAGES: readonly LanguageEntry[] = [
   /* European Portuguese (pt-PT spelling). */
   // { code: 'pt', name: 'Português', load: () => import('./locales/pt').then((m) => m.default) },
   // { code: 'ru', name: 'Русский', load: () => import('./locales/ru').then((m) => m.default) },
-  // { code: 'uk', name: 'Українська', load: () => import('./locales/uk').then((m) => m.default) },
+  { code: 'uk', name: 'Українська', load: () => import('./locales/uk').then((m) => m.default) },
   {
     code: 'zh-Hans',
     name: '简体中文',
