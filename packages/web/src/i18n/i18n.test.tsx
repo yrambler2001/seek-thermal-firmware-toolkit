@@ -9,6 +9,7 @@ import { act, type ReactElement } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { LanguageSwitch } from '@/components/LanguageSwitch';
 import { useReporter } from '@/hooks/useReporter';
+import { bankName, bankWords } from '@/lib/bank-names';
 import { render, renderHook } from '@/test-helpers';
 import {
   LANG_KEY,
@@ -28,6 +29,8 @@ import {
   getLanguage,
   initI18n,
   listAnd,
+  listComma,
+  listThen,
   resetI18n,
   setLanguage,
   t,
@@ -62,6 +65,9 @@ vi.mock('./languages', async (importOriginal) => {
         other: '{count} файла',
       },
       'list.and': '{first} и {second}',
+      'list.then': '{first}, затем {second}',
+      'bank.slot': 'Слот {letter}',
+      'bank.recovery': 'Резервный {letter}',
     },
     app: { 'connect.test': 'Проверить соединение', 'language.label': 'Язык' },
     shared: { 'status.idle': 'Ожидание.' },
@@ -281,6 +287,29 @@ describe('English for the log, lists', () => {
     await setLanguage('ru');
     expect(listAnd(['A', 'B'])).toBe('A и B');
     expect(listAnd(['A', 'B'], tEnglish)).toBe('A and B');
+  });
+
+  it('listThen() and listComma() join pairwise; a missing translation falls back to English', async () => {
+    expect(listThen(['slot B', 'recovery R', 'slot A'])).toBe(
+      'slot B, then recovery R, then slot A',
+    );
+    expect(listComma(['slot A', 'slot B', 'recovery R'])).toBe('slot A, slot B, recovery R');
+    expect(listThen([])).toBe('');
+    await setLanguage('ru');
+    expect(listThen(['A', 'B'])).toBe('A, затем B');
+    expect(listComma(['A', 'B'])).toBe('A, B');
+  });
+
+  it('names the banks with common:bank.*, the letter as a param', async () => {
+    expect([bankName('a'), bankName('b'), bankName('r')]).toEqual([
+      'Slot A',
+      'Slot B',
+      'Recovery R',
+    ]);
+    expect([bankWords('a'), bankWords('r')]).toEqual(['slot A', 'recovery R']);
+    await setLanguage('ru');
+    expect([bankName('b'), bankName('r')]).toEqual(['Слот B', 'Резервный R']);
+    expect(bankName('r', tEnglish)).toBe('Recovery R');
   });
 
   it('keeps an untouched status line in step with the language, and a set one as set', async () => {

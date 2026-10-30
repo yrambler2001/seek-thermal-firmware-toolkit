@@ -214,3 +214,19 @@ export function listAnd(items: readonly string[], translate: Translate = t): str
     translate('common:list.and', { first: joined, second: item }),
   );
 }
+
+/** Joins names in the order they happen with `common:list.then`, pairwise: "slot A, then slot B, then recovery R". */
+export function listThen(items: readonly string[], translate: Translate = t): string {
+  if (items.length === 0) return '';
+  return items.reduce((joined, item) =>
+    translate('common:list.then', { first: joined, second: item }),
+  );
+}
+
+/** Joins names into a plain list with `common:list.comma`, pairwise: "slot A, slot B, recovery R". */
+export function listComma(items: readonly string[], translate: Translate = t): string {
+  if (items.length === 0) return '';
+  return items.reduce((joined, item) =>
+    translate('common:list.comma', { first: joined, second: item }),
+  );
+}

@@ -15,6 +15,8 @@ export {
   followLanguageChoice,
   tEnglish,
   listAnd,
+  listThen,
+  listComma,
   type Translate,
 } from './store';
 export { rich, renderMarkup, type Slot, type Slots } from './rich';

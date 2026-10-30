@@ -41,4 +41,20 @@ export default {
 
   /* Lists: two names (or a list and one more name) joined by "and". listAnd() uses it. */
   'list.and': '{first} and {second}',
+  /* Two names in the order they happen ("slot A, then recovery R"). listThen() uses it. */
+  'list.then': '{first}, then {second}',
+  /* Two names in a plain list ("slot A, slot B"). listComma() uses it. */
+  'list.comma': '{first}, {second}',
+
+  /*
+   * Firmware banks. A bank is one of the camera's three firmware slots, A, B and R; R is the recovery
+   * slot, the last-resort copy the bootloader falls back to. {letter} is A, B or R: keep the Latin
+   * letter. lib/bank-names.ts builds them (bankName, bankWords).
+   * The name on its own (a table cell, a row label, the start of a line):
+   */
+  'bank.slot': 'Slot {letter}',
+  'bank.recovery': 'Recovery {letter}',
+  /* The same names inside a sentence (English writes them in lower case there). */
+  'bank.slotInSentence': 'slot {letter}',
+  'bank.recoveryInSentence': 'recovery {letter}',
 } as const satisfies NamespaceMessages;
