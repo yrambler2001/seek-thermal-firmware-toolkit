@@ -132,6 +132,24 @@ French, Italian, Spanish and Portuguese have no cases, but a name inside a sente
 - French chose a word for slot, _emplacement_, that starts with a vowel, so every bank name elides the same way (l’, de l’, à l’, dans l’). A language whose slot word has a gender or an initial that changes the article per name writes each name's forms out in full; the template stays the same.
 - **A preposition the five selectors do not carry** (Italian _da_ → _dallo_ and _su_ → _sullo_; Portuguese _por_ → _pelo_) cannot be written outside the param either, since the article must contract with it. Turn the sentence so one of the five fits: Italian says "from slot A" as _in base allo slot A_ (`{bank:dat}`), _quella dello slot A_ (`{bank:gen}`) or _dallo slot avviato ({bank})_, and "on slot A" as _nello slot A_ (`{bank:loc}`).
 
+### Romanian: the article on the noun, and the genitive-dative
+
+Romanian puts the definite article at the end of the noun ("slotul A") and has a genitive-dative ("slotului A"), but no preposition contracts with the article: "din slotul A", "în slotul A", "pe slotul A", "cu cheia A" all take the same form. The selectors carry the article and the case:
+
+| Selector | Romanian meaning                                                                        | Romanian (slot A, Key A, key block 1)   |
+| -------- | --------------------------------------------------------------------------------------- | --------------------------------------- |
+| `:acc`   | the name with its article: subject, object, and after any preposition (din, în, pe, cu) | slotul A, cheia A, blocul de chei 1     |
+| `:gen`   | genitive-dative                                                                         | slotului A, cheii A, blocului de chei 1 |
+| `:dat`   | the same form as `:gen`                                                                 | slotului A, cheii A                     |
+| `:loc`   | "în" + the `:acc` form                                                                  | în slotul A                             |
+| `:ins`   | the `:acc` form with a capital letter, for one name starting a sentence                 | Slotul A, Cheia A                       |
+
+- **The plain in-sentence name already has its article** (`bank.slotInSentence` is "slotul {letter}"), because Romanian names a slot with it; the label (`bank.slot`) is "Slot {letter}", "Recuperare {letter}". Templates still write `:acc` where the name is a subject or an object, so the grammar shows in the template.
+- **"al/a/ai/ale" belongs to the template.** A genitive right after a noun with its article needs nothing ("imaginea {bank:gen}" → "imaginea slotului A"); after an adjective or a noun without its article, the template writes the possessive article that agrees with that noun ("blocul de 64 KB al {bank:gen}", "imaginea derivată a {bank:gen}", "Imaginea este a {name:gen}").
+- **A list in `:gen`** repeats the case on each name ("patch-ul slotului B și slotului de recuperare R"). `:ins` is for one name only, as in the Romance languages: a plural sentence starts another way ("**În {banks:acc} se află câte o imagine…**").
+- **A param that is not always a name** (a text, a capitalised label, "no bank") goes after a colon: `'{bank}: conține un patch…'`, `'această rulare scrie: {banks}'`.
+- **A key with no name** is said indefinitely: `core:keyName.unknown` is "cheie necunoscută", `:acc` "o cheie necunoscută", `:gen` "unei chei necunoscute", `:loc` "într-o cheie necunoscută".
+
 A new page sentence with a bank or a key in it: list the key's name params in `names.ts`, and pass the names with the `…Ref` helpers. Use `bankWords`/`bankName`/`bankList` (strings) only where the name stands alone (a table cell, a label).
 
 ## Markup and slots
@@ -223,7 +241,7 @@ The language loads only when someone picks it (a dynamic `import()`, its own chu
 - **Buttons the text names.** When a sentence names a button ("press _Connect device_"), use the button's own translation from `app`/`shared`, word for word.
 - **Capitals:** keep the English's. A value that starts lower case is said inside another sentence or after a label; one that starts upper case stands alone.
 - **Plurals:** give the forms your language uses (`Intl.PluralRules` categories): ru/uk/pl `one, few, many, other`; es/fr/it/pt `one, many, other`; ro `one, few, other`; de `one, other`; zh-Hans `other` only.
-- **Cases** (Polish, Russian, Ukrainian, German; see "Cases" above; French, Italian, Spanish and Portuguese use the same selectors for the article and its contraction, see "Romance languages"). A bank or a key inside a sentence can be asked for in a case: `{bank:gen}`, `{bank:dat}`, `{bank:acc}`, `{bank:ins}`, `{bank:loc}`. Two steps:
+- **Cases** (Polish, Russian, Ukrainian, German; see "Cases" above; French, Italian, Spanish and Portuguese use the same selectors for the article and its contraction, see "Romance languages"; Romanian for the article and the genitive-dative, see "Romanian"). A bank or a key inside a sentence can be asked for in a case: `{bank:gen}`, `{bank:dat}`, `{bank:acc}`, `{bank:ins}`, `{bank:loc}`. Two steps:
   1. Give your forms once, next to the plain one, for each name: in `common.ts`, `'bank.slotInSentence:gen': 'slotu {letter}'`, `'bank.recoveryInSentence:loc': 'slocie odzyskiwania {letter}'` (and `bank.slot:*`, `bank.recovery:*` for the label forms where a sentence uses them); in `core.ts`, `'keyName.keyA:ins': 'kluczem A'`, and so on for each `keyName.*`. Write only the cases your language uses; a case you leave out is said in the plain form.
   2. In a sentence, write the case the grammar needs: `'Kopiuj do {bank:gen}'`, `'Zapisz w {bank:loc}'`, `'pod {key:ins}'`. Don't work round a case with a colon or brackets ("pod kluczem: {key}") any more.
 
