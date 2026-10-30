@@ -1,8 +1,8 @@
 /**
  * The i18n core against a fake registry: English (the real one), a Russian
  * that has only a few keys but all four plural forms, a Chinese with only the
- * `other` form, a German whose chunk cannot be fetched, and a Polish that loads
- * only when the test says so. None of these strings is a real translation.
+ * `other` form, a German whose chunk cannot be fetched, and a Polish and a
+ * Ukrainian that load only when the test says so. None of these strings is a real translation.
  */
 
 import { act, type ReactElement } from 'react';
@@ -22,20 +22,23 @@ import type * as LanguagesModule from './languages';
 import type { LanguageEntry } from './languages';
 import { useT } from './react';
 import { renderMarkup } from './rich';
-import { getLanguage, initI18n, resetI18n, setLanguage, t } from './store';
+import { followLanguageChoice, getLanguage, initI18n, resetI18n, setLanguage, t } from './store';
 import type { Dictionary } from './types';
 
-const gate = vi.hoisted(() => {
-  let open: () => void = () => undefined;
-  const opened = new Promise<void>((resolve) => {
-    open = resolve;
-  });
-  return {
-    opened,
-    open: () => {
-      open();
-    },
+const [gate, ukGate] = vi.hoisted(() => {
+  const make = () => {
+    let open: () => void = () => undefined;
+    const opened = new Promise<void>((resolve) => {
+      open = resolve;
+    });
+    return {
+      opened,
+      open: () => {
+        open();
+      },
+    };
   };
+  return [make(), make()] as const;
 });
 
 vi.mock('./languages', async (importOriginal) => {
@@ -64,6 +67,7 @@ vi.mock('./languages', async (importOriginal) => {
     },
     { code: 'pt', name: 'Português', load: fake({}) },
     { code: 'ru', name: 'Русский', load: fake(ru) },
+    { code: 'uk', name: 'Українська', load: () => ukGate.opened.then(() => ({}) as Dictionary) },
     { code: 'zh-Hans', name: '简体中文', load: fake(zh) },
   ];
   return { ...actual, LANGUAGES: registry };
@@ -171,6 +175,27 @@ describe('keeping the choice', () => {
     await setLanguage('ru', { persist: true });
     expect(getLanguage()).toBe('ru');
     expect(readLanguageChoice()).toBeNull();
+  });
+
+  it('follows a pick made in another tab, and drops this tab’s ?lang=', async () => {
+    setUrl('/?lang=pt#/v4');
+    const stop = followLanguageChoice();
+    const fire = async (key: string | null, newValue: string | null): Promise<void> => {
+      window.dispatchEvent(new StorageEvent('storage', { key, newValue }));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    };
+    await fire('seek-fw:theme', 'ru');
+    await fire(LANG_KEY, 'xx');
+    await fire(null, null);
+    expect(getLanguage()).toBe('en');
+    expect(window.location.search).toBe('?lang=pt');
+    await fire(LANG_KEY, 'ru');
+    expect(getLanguage()).toBe('ru');
+    expect(window.location.search).toBe('');
+    expect(window.location.hash).toBe('#/v4');
+    stop();
+    await fire(LANG_KEY, 'zh-Hans');
+    expect(getLanguage()).toBe('ru');
   });
 
   it('reads no choice when localStorage itself cannot be reached', () => {
@@ -291,6 +316,7 @@ describe('React', () => {
       ['pl', 'Polski', 'pl'],
       ['pt', 'Português', 'pt'],
       ['ru', 'Русский', 'ru'],
+      ['uk', 'Українська', 'uk'],
       ['zh-Hans', '简体中文', 'zh-Hans'],
     ]);
     expect(select.value).toBe('en');
@@ -307,6 +333,30 @@ describe('React', () => {
     expect(document.documentElement.lang).toBe('ru');
     expect(window.location.search).toBe('');
     expect(window.location.hash).toBe('#/slots');
+    unmount();
+  });
+
+  it('shows a pick while it loads, and lets a pick back to the old language win', async () => {
+    const { container, unmount } = render(<LanguageSwitch />);
+    const select = container.querySelector('select');
+    if (select === null) throw new Error('no select');
+    const pick = async (code: string): Promise<void> => {
+      await act(async () => {
+        select.value = code;
+        select.dispatchEvent(new Event('change', { bubbles: true }));
+        await Promise.resolve();
+      });
+    };
+    await pick('uk');
+    expect(getLanguage()).toBe('en');
+    expect(select.value).toBe('uk');
+    await pick('en');
+    await act(async () => {
+      ukGate.open();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(getLanguage()).toBe('en');
+    expect(select.value).toBe('en');
     unmount();
   });
 });

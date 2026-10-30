@@ -12,8 +12,10 @@
  */
 
 import {
+  LANG_KEY,
   dropLangParam,
   detectLanguage,
+  matchLanguage,
   readLanguageEnvironment,
   writeLanguageChoice,
 } from './detect';
@@ -109,6 +111,30 @@ export async function initI18n(
     apply(DEFAULT_LANGUAGE, ENGLISH);
   }
   return state.lang;
+}
+
+/**
+ * Follows a pick made in another tab of the page, as lib/theme.ts does for the
+ * theme: the switcher there writes `LANG_KEY`, and the browser fires `storage`
+ * in every other tab. The tab loads the language and switches; it does not write
+ * the choice again (it is already kept), but it drops its own `?lang=`, so a
+ * reload of this tab shows the language just picked, not the link's. A value
+ * that is not a registered language, and a cleared store, change nothing.
+ * main.tsx calls this once after `initI18n()`; it returns the unsubscribe.
+ */
+export function followLanguageChoice(target: Window = window): () => void {
+  const onStorage = (event: StorageEvent): void => {
+    if (event.key !== LANG_KEY) return;
+    const lang = matchLanguage(event.newValue);
+    if (lang === null || lang === state.lang) return;
+    setLanguage(lang).then(dropLangParam, () => {
+      /* The chunk could not be fetched (offline): this tab stays as it was. */
+    });
+  };
+  target.addEventListener('storage', onStorage);
+  return () => {
+    target.removeEventListener('storage', onStorage);
+  };
 }
 
 /** Back to English at once, with nothing loaded or kept. The test setup calls it before every test. */

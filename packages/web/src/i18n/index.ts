@@ -4,7 +4,16 @@
  *     import { t, useT } from '@/i18n';
  */
 
-export { t, getLanguage, setLanguage, initI18n, resetI18n, subscribe, loadLanguage } from './store';
+export {
+  t,
+  getLanguage,
+  setLanguage,
+  initI18n,
+  resetI18n,
+  subscribe,
+  loadLanguage,
+  followLanguageChoice,
+} from './store';
 export { rich, renderMarkup, type Slot, type Slots } from './rich';
 export { useLanguage, useLanguageSwitch, useT, type UseT } from './react';
 export { DEFAULT_LANGUAGE, LANGUAGES, type LanguageCode, type LanguageEntry } from './languages';

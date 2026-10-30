@@ -13,23 +13,32 @@
  *
  * A pick loads the language first and then switches (src/i18n/store.ts), and is
  * kept in localStorage. A language that fails to load leaves the page as it was.
+ * While a pick loads, the select shows the pick, not the language in use, so
+ * picking the old language back during a slow load is a change event, and that
+ * later pick wins (store.ts drops the overtaken load).
  */
 
-import type { ChangeEvent, ReactElement } from 'react';
+import { useState, type ChangeEvent, type ReactElement } from 'react';
 import { ChevronDown, Languages } from 'lucide-react';
-import { useLanguageSwitch, useT } from '@/i18n';
+import { useLanguageSwitch, useT, type LanguageCode } from '@/i18n';
 
 export function LanguageSwitch(): ReactElement {
   const { t } = useT();
   const { lang, languages, choose } = useLanguageSwitch();
+  const [pending, setPending] = useState<LanguageCode | null>(null);
   const current = languages.find((entry) => entry.code === lang);
 
   const onChange = (event: ChangeEvent<HTMLSelectElement>): void => {
     const picked = languages.find((entry) => entry.code === event.target.value);
-    if (picked === undefined || picked.code === lang) return;
-    choose(picked.code).catch(() => {
-      /* The chunk could not be fetched (offline): the page stays as it was. */
-    });
+    if (picked === undefined) return;
+    setPending(picked.code);
+    choose(picked.code)
+      .catch(() => {
+        /* The chunk could not be fetched (offline): the page stays as it was. */
+      })
+      .finally(() => {
+        setPending((shown) => (shown === picked.code ? null : shown));
+      });
   };
 
   return (
@@ -45,7 +54,7 @@ export function LanguageSwitch(): ReactElement {
       <select
         id="language-switch"
         title={t('app:language.label')}
-        value={lang}
+        value={pending ?? lang}
         onChange={onChange}
         className="absolute inset-0 size-full cursor-pointer appearance-none rounded-full opacity-0 focus-visible:outline-none"
       >
