@@ -468,12 +468,12 @@ export const VERSION_NOTE = {
       ? coreMessage(
           'identity.note.tooShort',
           { count },
-          `GetFirmwareInfo answered ${String(count)} byte(s), too few for a version`,
+          `GetFirmwareInfo answered ${String(count)} ${count === 1 ? 'byte' : 'bytes'}, too few for a version`,
         )
       : coreMessage(
           'identity.note.tooShortContext',
           { count, context: listParam(context, 'semicolon') },
-          `GetFirmwareInfo answered ${String(count)} byte(s), too few for a version${said}`,
+          `GetFirmwareInfo answered ${String(count)} ${count === 1 ? 'byte' : 'bytes'}, too few for a version${said}`,
         );
   },
   otherRecord: (version: string): CoreMessage =>
@@ -483,11 +483,11 @@ export const VERSION_NOTE = {
       `the first read answered a different record (${version}), which an ` +
         'earlier command had left the firmware-info selector on — that read cleared it',
     ),
-  afterStartup: (refusals: number): CoreMessage =>
+  afterStartup: (count: number): CoreMessage =>
     coreMessage(
       'identity.note.afterStartup',
-      { refusals },
-      `it answered after refusing ${String(refusals)} read(s) while starting up`,
+      { count },
+      `it answered after refusing ${String(count)} ${count === 1 ? 'read' : 'reads'} while starting up`,
     ),
 } as const;
 
@@ -504,7 +504,7 @@ function firmwareFrom(
         'earlier command had left the firmware-info selector on — that read cleared it') +
     (startupRefusals === 0
       ? ''
-      : `; it answered after refusing ${String(startupRefusals)} read(s) while starting up`);
+      : `; it answered after refusing ${String(startupRefusals)} ${startupRefusals === 1 ? 'read' : 'reads'} while starting up`);
   if (bytes.length < 4) {
     const clauses = [
       ...(sameBytes(first, bytes) || first.length < 4

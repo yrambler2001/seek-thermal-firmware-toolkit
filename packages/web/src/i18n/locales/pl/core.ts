@@ -523,9 +523,14 @@ export default {
     'uruchomiony {bank} odszyfrowuje się {key:ins}, ale tabela kluczy tej kamery nie zawiera tego klucza, więc nie da się pod nim zapisać',
   'keys.refused.noApplicationPair':
     'działająca aplikacja ({bank}, firmware {firmware}) nie zawiera żadnej ze znanych par kluczy (pary bootloadera ani zdekodowanych par aplikacji) z każdą połową dokładnie raz, więc nie da się zlokalizować jej klucza A w jej obrazie',
-  /** `{keyA}`, `{keyB}`: how many times each key occurs. */
-  'keys.refused.noApplicationPairCounted':
-    'działająca aplikacja ({bank}, firmware {firmware}) nie zawiera żadnej ze znanych par kluczy (pary bootloadera ani zdekodowanych par aplikacji) z każdą połową dokładnie raz, więc nie da się zlokalizować jej klucza A w jej obrazie (klucz A bootloadera występuje razy: {keyA}, jego klucz B: {keyB})',
+  /** `{count}`, `{keyB}`: how many times Key A and Key B occur. */
+  'keys.refused.noApplicationPairCounted': {
+    one: 'działająca aplikacja ({bank}, firmware {firmware}) nie zawiera żadnej ze znanych par kluczy (pary bootloadera ani zdekodowanych par aplikacji) z każdą połową dokładnie raz, więc nie da się zlokalizować jej klucza A w jej obrazie (klucz A bootloadera występuje {count} raz, jego klucz B — {keyB})',
+    few: 'działająca aplikacja ({bank}, firmware {firmware}) nie zawiera żadnej ze znanych par kluczy (pary bootloadera ani zdekodowanych par aplikacji) z każdą połową dokładnie raz, więc nie da się zlokalizować jej klucza A w jej obrazie (klucz A bootloadera występuje {count} razy, jego klucz B — {keyB})',
+    many: 'działająca aplikacja ({bank}, firmware {firmware}) nie zawiera żadnej ze znanych par kluczy (pary bootloadera ani zdekodowanych par aplikacji) z każdą połową dokładnie raz, więc nie da się zlokalizować jej klucza A w jej obrazie (klucz A bootloadera występuje {count} razy, jego klucz B — {keyB})',
+    other:
+      'działająca aplikacja ({bank}, firmware {firmware}) nie zawiera żadnej ze znanych par kluczy (pary bootloadera ani zdekodowanych par aplikacji) z każdą połową dokładnie raz, więc nie da się zlokalizować jej klucza A w jej obrazie (klucz A bootloadera występuje {count} raza, jego klucz B — {keyB})',
+  },
   /** 0x50000 is the camera's status code. */
   'keys.refused.uploadChecked':
     'działająca aplikacja ({bank}, firmware {firmware}) sprawdza przesłane dane własnymi kluczami, zanim je zaprogramuje (zdekodowany kod źródłowy tej kompilacji sprawdza je jej kluczem A i kluczem zapisu, tak jak bootloader sprawdza slot), a klucz, pod którym przechowują zapisy, {key} ({hex}), nie jest ani jej kluczem A, ani kluczem zapisu, więc kamera odrzuciłaby przesłane dane ze stanem 0x50000, zanim cokolwiek wymaże',
@@ -740,7 +745,7 @@ export default {
   'identity.versionUnknown':
     'kamera nie podała swojej wersji firmware ({note}); numer polecenia nie znaczy tego samego w każdym firmware Seek — w Compact 0.3.0.1 wire id 0x52, czyli id aktywujące okno odczytu, to EnterBootloaderMode — więc dopóki wersja nie jest znana, wysyłane są tylko GetErrorCode, GetOperationMode i GetFirmwareInfo, odczyty, na które każda kompilacja odpowiada tak samo',
   /* Why the version read gave no version (`{note}` above). `{error}`: the USB error (English unless it has
-   * a code); `{reads}`, `{answered}`, `{refusals}`, `{count}`: numbers; `{spacing}`, `{window}`: milliseconds;
+   * a code); `{reads}`, `{answered}`, `{count}`: numbers; `{spacing}`, `{window}`: milliseconds;
    * `{context}`: identity.note.otherRecord / afterStartup, joined with common:list.semicolon. */
   'identity.note.startup':
     'GetFirmwareInfo nie odpowiedziało ({error}) na żaden z {reads} odczytów w odstępach {spacing} ms, w oknie uruchamiania {window} ms; kamera, która wciąż się uruchamia, odpowiada w tym czasie',
@@ -749,14 +754,26 @@ export default {
   'identity.note.noAnswer': 'GetFirmwareInfo nie odpowiedziało ({error})',
   'identity.note.noAnswerSome':
     'GetFirmwareInfo nie odpowiedziało ({error}); odpowiedzi: {answered} z {reads} odczytów, nigdy dwie z rzędu, więc żadnej z nich nie da się odróżnić od rekordu pozostawionego przez wcześniejsze polecenie',
-  'identity.note.tooShort':
-    'GetFirmwareInfo zwróciło za mało bajtów na wersję (liczba bajtów: {count})',
-  'identity.note.tooShortContext':
-    'GetFirmwareInfo zwróciło za mało bajtów na wersję (liczba bajtów: {count}); {context}',
+  'identity.note.tooShort': {
+    one: 'GetFirmwareInfo zwróciło {count} bajt, za mało na wersję',
+    few: 'GetFirmwareInfo zwróciło {count} bajty, za mało na wersję',
+    many: 'GetFirmwareInfo zwróciło {count} bajtów, za mało na wersję',
+    other: 'GetFirmwareInfo zwróciło {count} bajta, za mało na wersję',
+  },
+  'identity.note.tooShortContext': {
+    one: 'GetFirmwareInfo zwróciło {count} bajt, za mało na wersję; {context}',
+    few: 'GetFirmwareInfo zwróciło {count} bajty, za mało na wersję; {context}',
+    many: 'GetFirmwareInfo zwróciło {count} bajtów, za mało na wersję; {context}',
+    other: 'GetFirmwareInfo zwróciło {count} bajta, za mało na wersję; {context}',
+  },
   'identity.note.otherRecord':
     'pierwszy odczyt zwrócił inny rekord ({version}), na którym wcześniejsze polecenie zostawiło selektor informacji o firmware — ten odczyt go wyczyścił',
-  'identity.note.afterStartup':
-    'odpowiedziało po odrzuceniu odczytów podczas uruchamiania (liczba: {refusals})',
+  'identity.note.afterStartup': {
+    one: 'odpowiedziało dopiero po odrzuceniu {count} odczytu podczas uruchamiania',
+    few: 'odpowiedziało dopiero po odrzuceniu {count} odczytów podczas uruchamiania',
+    many: 'odpowiedziało dopiero po odrzuceniu {count} odczytów podczas uruchamiania',
+    other: 'odpowiedziało dopiero po odrzuceniu {count} odczytu podczas uruchamiania',
+  },
   'identity.predates':
     'firmware {version} jest starszy niż protokół zrzutu: jego tabela metod RPC nie ma procedury odczytu dla GetFeaturedFirmwareData (w 0.7.0.7 i 0.7.0.8 jest zarejestrowana tylko jako setter, a wcześniej wire id 0x4F to UploadFirmwareRowSize), więc nie da się nią odczytać żadnego okna; w 0.3.0.1 wire id 0x52 to EnterBootloaderMode, a nie BeginFirmwareUpgrade. Przebieg Preserve odczytuje zamiast tego 0.7.0.7 i 0.7.0.8 przez wire id 0x58 (GetFeaturedData)',
   /** `{operation}` is identity.operation.*, said after "refusing to"; `{reason}` is identity.versionUnknown or identity.predates. */
@@ -930,8 +947,13 @@ export default {
     '{label}: ponownie odczytane bloki: {blocks}, różniące się bajty: 0 — pamięć flash kamery jest identyczna co do bajtu z kopią zapasową.',
   'preserve.result.verifyDiffers':
     '{label}: ponownie odczytane bloki: {blocks}, różniące się bajty: {bytes}.',
-  'preserve.result.verifyDiffersUnread':
-    '{label}: ponownie odczytane bloki: {blocks}, różniące się bajty: {bytes}, nieodczytane bloki: {unread}.',
+  'preserve.result.verifyDiffersUnread': {
+    one: '{label}: ponownie odczytane bloki: {blocks}, różniące się bajty: {bytes}; nie udało się odczytać {count} bloku.',
+    few: '{label}: ponownie odczytane bloki: {blocks}, różniące się bajty: {bytes}; nie udało się odczytać {count} bloków.',
+    many: '{label}: ponownie odczytane bloki: {blocks}, różniące się bajty: {bytes}; nie udało się odczytać {count} bloków.',
+    other:
+      '{label}: ponownie odczytane bloki: {blocks}, różniące się bajty: {bytes}; nie udało się odczytać {count} bloku.',
+  },
   /** The whole-flash read stopped as planned: the start entered a bank the run did not patch. */
   'preserve.unpatchedStart.stop':
     'Zatrzymano przed pełnym odczytem pamięci flash: kamera uruchomiła slot, którego ten przebieg nie załatał, więc nic nie zostało odczytane.',
@@ -975,14 +997,34 @@ export default {
   'preserve.fail.shiftedRebootRefused':
     'pełny odczyt wrócił przesunięty o jedną stronę w górę, a ponowne uruchomienie, które daje kolejny start, zostało ODRZUCONE przez hosta, zanim zostało wysłane (SecurityError: zasada przeglądarki lub zabezpieczenie testowe) — kolejna próba odczytałaby ten sam przesunięty start. Nic nie zachowano; uruchom pełny odczyt ponownie tam, gdzie reset może zostać wysłany.',
   /** `{count}`: bytes; `{read}`/`{total}`: windows; `{places}`: preserve.fail.verifyPlace, joined with commas; `{short}`: window numbers. */
-  'preserve.fail.verify':
-    'weryfikacja odczytała różniące się bajty: {count} w oknach {read}/{total} — układ nie odczytuje się ponownie identycznie z kopią zapasową',
-  'preserve.fail.verifyIn':
-    'weryfikacja odczytała różniące się bajty: {count} w oknach {read}/{total} (w: {places}) — układ nie odczytuje się ponownie identycznie z kopią zapasową',
-  'preserve.fail.verifyShort':
-    'weryfikacja odczytała różniące się bajty: {count} w oknach {read}/{total} (krótkie okna: {short}) — układ nie odczytuje się ponownie identycznie z kopią zapasową',
-  'preserve.fail.verifyInShort':
-    'weryfikacja odczytała różniące się bajty: {count} w oknach {read}/{total} (w: {places}) (krótkie okna: {short}) — układ nie odczytuje się ponownie identycznie z kopią zapasową',
+  'preserve.fail.verify': {
+    one: 'weryfikacja odczytała {count} różniący się bajt w oknach {read}/{total} — układ nie odczytuje się ponownie identycznie z kopią zapasową',
+    few: 'weryfikacja odczytała {count} różniące się bajty w oknach {read}/{total} — układ nie odczytuje się ponownie identycznie z kopią zapasową',
+    many: 'weryfikacja odczytała {count} różniących się bajtów w oknach {read}/{total} — układ nie odczytuje się ponownie identycznie z kopią zapasową',
+    other:
+      'weryfikacja odczytała {count} różniącego się bajta w oknach {read}/{total} — układ nie odczytuje się ponownie identycznie z kopią zapasową',
+  },
+  'preserve.fail.verifyIn': {
+    one: 'weryfikacja odczytała {count} różniący się bajt w oknach {read}/{total} (w: {places}) — układ nie odczytuje się ponownie identycznie z kopią zapasową',
+    few: 'weryfikacja odczytała {count} różniące się bajty w oknach {read}/{total} (w: {places}) — układ nie odczytuje się ponownie identycznie z kopią zapasową',
+    many: 'weryfikacja odczytała {count} różniących się bajtów w oknach {read}/{total} (w: {places}) — układ nie odczytuje się ponownie identycznie z kopią zapasową',
+    other:
+      'weryfikacja odczytała {count} różniącego się bajta w oknach {read}/{total} (w: {places}) — układ nie odczytuje się ponownie identycznie z kopią zapasową',
+  },
+  'preserve.fail.verifyShort': {
+    one: 'weryfikacja odczytała {count} różniący się bajt w oknach {read}/{total} (krótkie okna: {short}) — układ nie odczytuje się ponownie identycznie z kopią zapasową',
+    few: 'weryfikacja odczytała {count} różniące się bajty w oknach {read}/{total} (krótkie okna: {short}) — układ nie odczytuje się ponownie identycznie z kopią zapasową',
+    many: 'weryfikacja odczytała {count} różniących się bajtów w oknach {read}/{total} (krótkie okna: {short}) — układ nie odczytuje się ponownie identycznie z kopią zapasową',
+    other:
+      'weryfikacja odczytała {count} różniącego się bajta w oknach {read}/{total} (krótkie okna: {short}) — układ nie odczytuje się ponownie identycznie z kopią zapasową',
+  },
+  'preserve.fail.verifyInShort': {
+    one: 'weryfikacja odczytała {count} różniący się bajt w oknach {read}/{total} (w: {places}) (krótkie okna: {short}) — układ nie odczytuje się ponownie identycznie z kopią zapasową',
+    few: 'weryfikacja odczytała {count} różniące się bajty w oknach {read}/{total} (w: {places}) (krótkie okna: {short}) — układ nie odczytuje się ponownie identycznie z kopią zapasową',
+    many: 'weryfikacja odczytała {count} różniących się bajtów w oknach {read}/{total} (w: {places}) (krótkie okna: {short}) — układ nie odczytuje się ponownie identycznie z kopią zapasową',
+    other:
+      'weryfikacja odczytała {count} różniącego się bajta w oknach {read}/{total} (w: {places}) (krótkie okna: {short}) — układ nie odczytuje się ponownie identycznie z kopią zapasową',
+  },
   /** `{what}`: a bank, or one of the two below; `{address}` hex. */
   'preserve.fail.verifyPlace': '{what} {address}',
   'preserve.fail.bootConfigBlock': 'blok konfiguracji startu',
@@ -1371,7 +1413,12 @@ export default {
   'report.keyRow.tableAt': 'tabela pod',
   'report.key.notIdentified': '(nierozpoznany)',
   /** `{count}` is a number of candidate key tables. */
-  'report.key.candidates': 'kandydaci: {count}, żaden niepotwierdzony',
+  'report.key.candidates': {
+    one: '{count} kandydat, niepotwierdzony',
+    few: '{count} kandydaci, żaden niepotwierdzony',
+    many: '{count} kandydatów, żaden niepotwierdzony',
+    other: '{count} kandydata, żaden niepotwierdzony',
+  },
   'report.key.tableAt': '{offset} w bloku bootloadera, potwierdzona na slocie',
   'report.key.plainChain':
     'niepotrzebny: sloty są przechowywane jako jawny firmware, więc slot jest odczytywany i zapisywany bez zmian',

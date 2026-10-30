@@ -651,7 +651,7 @@ describe('a camera still starting up, which refuses every request for a while', 
 
     expect(identification.gate).toEqual({ permitsArming: true, version: '4.8.1.7' });
     expect(identification.probe.notes[0]).toContain(
-      'it answered after refusing 9 read(s) while starting up',
+      'it answered after refusing 9 reads while starting up',
     );
     /* Nine refused GetFirmwareInfo, then the two answered ones, then the probe's arms. */
     expect(camera.sentWhileStarting.map((c) => c.op)).toEqual(

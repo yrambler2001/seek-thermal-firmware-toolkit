@@ -479,9 +479,12 @@ export default {
     'der gestartete {bank} entschlüsselt sich unter {key}, aber die Schlüsseltabelle dieser Kamera enthält diesen Schlüssel nicht, daher kann nicht darunter geschrieben werden',
   'keys.refused.noApplicationPair':
     'die laufende Anwendung ({bank}, Firmware {firmware}) enthält keines der bekannten Schlüsselpaare (das des Bootloaders und die dekodierten Anwendungspaare) mit jeder Hälfte genau einmal, daher lässt sich ihr Schlüssel A in ihrem Image nicht finden',
-  /** `{keyA}`, `{keyB}`: how many times each key occurs. */
-  'keys.refused.noApplicationPairCounted':
-    'die laufende Anwendung ({bank}, Firmware {firmware}) enthält keines der bekannten Schlüsselpaare (das des Bootloaders und die dekodierten Anwendungspaare) mit jeder Hälfte genau einmal, daher lässt sich ihr Schlüssel A in ihrem Image nicht finden (Schlüssel A des Bootloaders kommt {keyA}-mal vor, sein Schlüssel B {keyB}-mal)',
+  /** `{count}`, `{keyB}`: how many times Key A and Key B occur. */
+  'keys.refused.noApplicationPairCounted': {
+    one: 'die laufende Anwendung ({bank}, Firmware {firmware}) enthält keines der bekannten Schlüsselpaare (das des Bootloaders und die dekodierten Anwendungspaare) mit jeder Hälfte genau einmal, daher lässt sich ihr Schlüssel A in ihrem Image nicht finden (Schlüssel A des Bootloaders kommt {count}-mal vor, sein Schlüssel B {keyB}-mal)',
+    other:
+      'die laufende Anwendung ({bank}, Firmware {firmware}) enthält keines der bekannten Schlüsselpaare (das des Bootloaders und die dekodierten Anwendungspaare) mit jeder Hälfte genau einmal, daher lässt sich ihr Schlüssel A in ihrem Image nicht finden (Schlüssel A des Bootloaders kommt {count}-mal vor, sein Schlüssel B {keyB}-mal)',
+  },
   /** 0x50000 is the camera's status code. */
   'keys.refused.uploadChecked':
     'die laufende Anwendung ({bank}, Firmware {firmware}) prüft einen Upload unter ihren eigenen Schlüsseln, bevor sie ihn programmiert (der dekodierte Quelltext dieses Builds probiert den Upload unter ihrem Schlüssel A und ihrem Speicherschlüssel, so wie ihr Bootloader einen Slot probiert), und der Schlüssel, unter dem die Schreibvorgänge speichern, {key} ({hex}), ist weder ihr Schlüssel A noch ihr Speicherschlüssel, daher würde die Kamera den Upload mit 0x50000 ablehnen, bevor sie irgendetwas löscht',
@@ -696,7 +699,7 @@ export default {
   'identity.versionUnknown':
     'die Kamera hat ihre Firmware-Version nicht gemeldet ({note}); eine Befehlsnummer bedeutet nicht in jeder Seek-Firmware dasselbe — auf Compact 0.3.0.1 ist Wire-ID 0x52, die ID, die ein Lesefenster öffnet, EnterBootloaderMode —, daher wird, bis die Version bekannt ist, nichts gesendet außer GetErrorCode, GetOperationMode und GetFirmwareInfo, den Lesebefehlen, die jeder Build gleich beantwortet',
   /* Why the version read gave no version (`{note}` above). `{error}`: the USB error (English unless it has
-   * a code); `{reads}`, `{answered}`, `{refusals}`, `{count}`: numbers; `{spacing}`, `{window}`: milliseconds;
+   * a code); `{reads}`, `{answered}`, `{count}`: numbers; `{spacing}`, `{window}`: milliseconds;
    * `{context}`: identity.note.otherRecord / afterStartup, joined with common:list.semicolon. */
   'identity.note.startup':
     'GetFirmwareInfo hat bei keinem von {reads} Lesevorgängen im Abstand von {spacing} ms geantwortet ({error}), einem Startfenster von {window} ms; eine Kamera, die noch startet, antwortet innerhalb dieser Zeit',
@@ -705,14 +708,21 @@ export default {
   'identity.note.noAnswer': 'GetFirmwareInfo hat nicht geantwortet ({error})',
   'identity.note.noAnswerSome':
     'GetFirmwareInfo hat nicht geantwortet ({error}); {answered} von {reads} Lesevorgängen wurden beantwortet, nie zwei hintereinander, daher lässt sich keine dieser Antworten von einem Datensatz unterscheiden, den ein früherer Befehl ausgewählt hinterlassen hat',
-  'identity.note.tooShort':
-    'GetFirmwareInfo hat mit {count} Byte geantwortet, zu wenig für eine Version',
-  'identity.note.tooShortContext':
-    'GetFirmwareInfo hat mit {count} Byte geantwortet, zu wenig für eine Version; {context}',
+  'identity.note.tooShort': {
+    one: 'GetFirmwareInfo hat mit {count} Byte geantwortet, zu wenig für eine Version',
+    other: 'GetFirmwareInfo hat mit {count} Byte geantwortet, zu wenig für eine Version',
+  },
+  'identity.note.tooShortContext': {
+    one: 'GetFirmwareInfo hat mit {count} Byte geantwortet, zu wenig für eine Version; {context}',
+    other: 'GetFirmwareInfo hat mit {count} Byte geantwortet, zu wenig für eine Version; {context}',
+  },
   'identity.note.otherRecord':
     'der erste Lesevorgang hat einen anderen Datensatz geliefert ({version}), auf den ein früherer Befehl den Firmware-Info-Selektor gestellt hatte — dieser Lesevorgang hat ihn zurückgesetzt',
-  'identity.note.afterStartup':
-    'sie hat geantwortet, nachdem sie während des Starts {refusals}-mal das Lesen abgelehnt hatte',
+  'identity.note.afterStartup': {
+    one: 'sie hat geantwortet, nachdem sie während des Starts {count}-mal das Lesen abgelehnt hatte',
+    other:
+      'sie hat geantwortet, nachdem sie während des Starts {count}-mal das Lesen abgelehnt hatte',
+  },
   'identity.predates':
     'Firmware {version} ist älter als das Auslese-Protokoll: Ihre RPC-Methodentabelle hat keinen Lese-Handler für GetFeaturedFirmwareData (auf 0.7.0.7 und 0.7.0.8 ist er nur als Setter registriert, und davor ist Wire-ID 0x4F UploadFirmwareRowSize), daher kann damit kein Fenster gelesen werden; auf 0.3.0.1 ist Wire-ID 0x52 EnterBootloaderMode statt BeginFirmwareUpgrade. Der Preserve-Durchlauf liest 0.7.0.7 und 0.7.0.8 stattdessen über Wire-ID 0x58 (GetFeaturedData)',
   /** `{operation}` is identity.operation.*, said after "refusing to"; `{reason}` is identity.versionUnknown or identity.predates. */
@@ -888,8 +898,11 @@ export default {
     '{label}: {blocks} Blöcke erneut gelesen, 0 Bytes abweichend — der Flash-Speicher der Kamera ist byteidentisch mit der Sicherung.',
   'preserve.result.verifyDiffers':
     '{label}: {blocks} Blöcke erneut gelesen, {bytes} Bytes abweichend.',
-  'preserve.result.verifyDiffersUnread':
-    '{label}: {blocks} Blöcke erneut gelesen, {bytes} Bytes abweichend, nicht lesbare Blöcke: {unread}.',
+  'preserve.result.verifyDiffersUnread': {
+    one: '{label}: {blocks} Blöcke erneut gelesen, {bytes} Bytes abweichend, {count} Block nicht lesbar.',
+    other:
+      '{label}: {blocks} Blöcke erneut gelesen, {bytes} Bytes abweichend, {count} Blöcke nicht lesbar.',
+  },
   /** The whole-flash read stopped as planned: the start entered a bank the run did not patch. */
   'preserve.unpatchedStart.stop':
     'Vor dem vollen Auslesen angehalten: Die Kamera ist aus einem Slot gestartet, den dieser Durchlauf nicht gepatcht hat, daher wurde nichts gelesen.',
@@ -934,14 +947,26 @@ export default {
   'preserve.fail.shiftedRebootRefused':
     'das volle Auslesen kam um eine Seite verschoben zurück, und der Neustart, der einen weiteren Start auslöst, wurde vom Host ABGELEHNT, bevor er hinausging (ein SecurityError: eine Browser-Richtlinie oder ein Test-Schutz) — ein weiterer Versuch würde denselben verschobenen Start auslesen. Es wurde nichts behalten; führen Sie das volle Auslesen erneut dort aus, wo der Reset hinausgehen kann.',
   /** `{count}`: bytes; `{read}`/`{total}`: windows; `{places}`: preserve.fail.verifyPlace, joined with commas; `{short}`: window numbers. */
-  'preserve.fail.verify':
-    'die Prüfung hat {count} abweichende Byte über {read}/{total} Fenster gelesen — der Chip liest sich nicht byteidentisch mit der Sicherung zurück',
-  'preserve.fail.verifyIn':
-    'die Prüfung hat {count} abweichende Byte über {read}/{total} Fenster gelesen (Stellen: {places}) — der Chip liest sich nicht byteidentisch mit der Sicherung zurück',
-  'preserve.fail.verifyShort':
-    'die Prüfung hat {count} abweichende Byte über {read}/{total} Fenster gelesen (kurze Fenster: {short}) — der Chip liest sich nicht byteidentisch mit der Sicherung zurück',
-  'preserve.fail.verifyInShort':
-    'die Prüfung hat {count} abweichende Byte über {read}/{total} Fenster gelesen (Stellen: {places}) (kurze Fenster: {short}) — der Chip liest sich nicht byteidentisch mit der Sicherung zurück',
+  'preserve.fail.verify': {
+    one: 'die Prüfung hat {count} abweichendes Byte über {read}/{total} Fenster gelesen — der Chip liest sich nicht byteidentisch mit der Sicherung zurück',
+    other:
+      'die Prüfung hat {count} abweichende Byte über {read}/{total} Fenster gelesen — der Chip liest sich nicht byteidentisch mit der Sicherung zurück',
+  },
+  'preserve.fail.verifyIn': {
+    one: 'die Prüfung hat {count} abweichendes Byte über {read}/{total} Fenster gelesen (Stellen: {places}) — der Chip liest sich nicht byteidentisch mit der Sicherung zurück',
+    other:
+      'die Prüfung hat {count} abweichende Byte über {read}/{total} Fenster gelesen (Stellen: {places}) — der Chip liest sich nicht byteidentisch mit der Sicherung zurück',
+  },
+  'preserve.fail.verifyShort': {
+    one: 'die Prüfung hat {count} abweichendes Byte über {read}/{total} Fenster gelesen (kurze Fenster: {short}) — der Chip liest sich nicht byteidentisch mit der Sicherung zurück',
+    other:
+      'die Prüfung hat {count} abweichende Byte über {read}/{total} Fenster gelesen (kurze Fenster: {short}) — der Chip liest sich nicht byteidentisch mit der Sicherung zurück',
+  },
+  'preserve.fail.verifyInShort': {
+    one: 'die Prüfung hat {count} abweichendes Byte über {read}/{total} Fenster gelesen (Stellen: {places}) (kurze Fenster: {short}) — der Chip liest sich nicht byteidentisch mit der Sicherung zurück',
+    other:
+      'die Prüfung hat {count} abweichende Byte über {read}/{total} Fenster gelesen (Stellen: {places}) (kurze Fenster: {short}) — der Chip liest sich nicht byteidentisch mit der Sicherung zurück',
+  },
   /** `{what}`: a bank, or one of the two below; `{address}` hex. */
   'preserve.fail.verifyPlace': '{what} {address}',
   'preserve.fail.bootConfigBlock': 'der Boot-Konfigurationsblock',
@@ -1335,7 +1360,10 @@ export default {
   'report.keyRow.tableAt': 'Tabelle bei',
   'report.key.notIdentified': '(nicht erkannt)',
   /** `{count}` is a number of candidate key tables. */
-  'report.key.candidates': 'Kandidaten: {count}, keiner bestätigt',
+  'report.key.candidates': {
+    one: '{count} Kandidat, nicht bestätigt',
+    other: '{count} Kandidaten, keiner bestätigt',
+  },
   'report.key.tableAt': '{offset} im Bootloader-Block, an einem Slot bestätigt',
   'report.key.plainChain':
     'keiner nötig: Die Slots sind als Klartext-Firmware gespeichert, daher wird ein Slot so gelesen und geschrieben, wie er ist',

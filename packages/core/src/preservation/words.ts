@@ -514,9 +514,9 @@ export function preserveStepResultMessage(
           )
         : said(
             'verifyDiffersUnread',
-            { blocks, bytes, unread: String(verify.badWindows.length) },
+            { blocks, bytes, count: String(verify.badWindows.length) },
             `${blocks} blocks read again, ${bytes} bytes differ, ` +
-              `${String(verify.badWindows.length)} block(s) could not be read.`,
+              `${String(verify.badWindows.length)} ${verify.badWindows.length === 1 ? 'block' : 'blocks'} could not be read.`,
           );
     }
   }

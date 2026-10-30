@@ -292,8 +292,8 @@ export function noApplicationPairRefusal(
   const [keyA, keyB] = [String(counted.keyA), String(counted.keyB)];
   return coreMessage(
     'keys.refused.noApplicationPairCounted',
-    { bank, firmware, keyA, keyB },
-    `${text} (the bootloader's Key A occurs ${keyA} time(s), its Key B ${keyB})`,
+    { bank, firmware, count: keyA, keyB },
+    `${text} (the bootloader's Key A occurs ${keyA} ${counted.keyA === 1 ? 'time' : 'times'}, its Key B ${keyB})`,
   );
 }
 

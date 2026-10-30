@@ -1275,7 +1275,7 @@ export const PRESERVE_FAIL = {
         ...(where ? { places: listParam(facts.places, 'comma') } : {}),
         ...(short ? { short: facts.short.join(',') } : {}),
       },
-      `the verify read ${String(facts.count)} differing byte(s) over ` +
+      `the verify read ${String(facts.count)} differing ${facts.count === 1 ? 'byte' : 'bytes'} over ` +
         `${String(facts.read)}/${String(facts.total)} windows` +
         (where ? ` (in ${facts.places.map((place) => place.text).join(', ')})` : '') +
         (short ? ` (short windows: ${facts.short.join(',')})` : '') +

@@ -463,9 +463,12 @@ export default {
     "the booted {bank} decrypts under {key}, but this camera's key table does not carry that key, so it cannot be written under it",
   'keys.refused.noApplicationPair':
     "the running application ({bank}, firmware {firmware}) carries none of the known key pairs (the bootloader's and the decoded application pairs), each half exactly once, so its Key A cannot be located in its image",
-  /** `{keyA}`, `{keyB}`: how many times each key occurs. */
-  'keys.refused.noApplicationPairCounted':
-    "the running application ({bank}, firmware {firmware}) carries none of the known key pairs (the bootloader's and the decoded application pairs), each half exactly once, so its Key A cannot be located in its image (the bootloader's Key A occurs {keyA} time(s), its Key B {keyB})",
+  /** `{count}`, `{keyB}`: how many times Key A and Key B occur. */
+  'keys.refused.noApplicationPairCounted': {
+    one: "the running application ({bank}, firmware {firmware}) carries none of the known key pairs (the bootloader's and the decoded application pairs), each half exactly once, so its Key A cannot be located in its image (the bootloader's Key A occurs {count} time, its Key B {keyB})",
+    other:
+      "the running application ({bank}, firmware {firmware}) carries none of the known key pairs (the bootloader's and the decoded application pairs), each half exactly once, so its Key A cannot be located in its image (the bootloader's Key A occurs {count} times, its Key B {keyB})",
+  },
   /** 0x50000 is the camera's status code. */
   'keys.refused.uploadChecked':
     'the running application ({bank}, firmware {firmware}) checks an upload under its own keys before it programs it (the decoded source of this build tries the upload under its Key A and its store key, as its bootloader tries a bank), and the key the writes store under, {key} ({hex}), is neither its Key A nor its store key, so the camera would refuse the upload with 0x50000 before erasing anything',
@@ -676,7 +679,7 @@ export default {
   'identity.versionUnknown':
     'the camera did not report its firmware version ({note}); a command number does not mean the same thing on every Seek firmware — on Compact 0.3.0.1 wire id 0x52, the id that arms a read window, is EnterBootloaderMode — so until the version is known nothing is sent but GetErrorCode, GetOperationMode and GetFirmwareInfo, the reads every build answers the same way',
   /* Why the version read gave no version (`{note}` above). `{error}`: the USB error (English unless it has
-   * a code); `{reads}`, `{answered}`, `{refusals}`, `{count}`: numbers; `{spacing}`, `{window}`: milliseconds;
+   * a code); `{reads}`, `{answered}`, `{count}`: numbers; `{spacing}`, `{window}`: milliseconds;
    * `{context}`: identity.note.otherRecord / afterStartup, joined with common:list.semicolon. */
   'identity.note.startup':
     'GetFirmwareInfo did not answer ({error}) on any of {reads} reads {spacing} ms apart, a start-up window of {window} ms; a camera still starting up answers within it',
@@ -684,12 +687,20 @@ export default {
   'identity.note.noAnswer': 'GetFirmwareInfo did not answer ({error})',
   'identity.note.noAnswerSome':
     'GetFirmwareInfo did not answer ({error}); {answered} of {reads} reads answered, never two in a row, so none of them can be told from a record an earlier command left selected',
-  'identity.note.tooShort': 'GetFirmwareInfo answered {count} byte(s), too few for a version',
-  'identity.note.tooShortContext':
-    'GetFirmwareInfo answered {count} byte(s), too few for a version; {context}',
+  'identity.note.tooShort': {
+    one: 'GetFirmwareInfo answered {count} byte, too few for a version',
+    other: 'GetFirmwareInfo answered {count} bytes, too few for a version',
+  },
+  'identity.note.tooShortContext': {
+    one: 'GetFirmwareInfo answered {count} byte, too few for a version; {context}',
+    other: 'GetFirmwareInfo answered {count} bytes, too few for a version; {context}',
+  },
   'identity.note.otherRecord':
     'the first read answered a different record ({version}), which an earlier command had left the firmware-info selector on — that read cleared it',
-  'identity.note.afterStartup': 'it answered after refusing {refusals} read(s) while starting up',
+  'identity.note.afterStartup': {
+    one: 'it answered after refusing {count} read while starting up',
+    other: 'it answered after refusing {count} reads while starting up',
+  },
   'identity.predates':
     'firmware {version} predates the dump protocol: its RPC method table has no read handler for GetFeaturedFirmwareData (on 0.7.0.7 and 0.7.0.8 it is registered as a setter only, and before that wire id 0x4F is UploadFirmwareRowSize), so no window can be read with it; on 0.3.0.1 wire id 0x52 is EnterBootloaderMode rather than BeginFirmwareUpgrade. The preservation run reads 0.7.0.7 and 0.7.0.8 through wire id 0x58 (GetFeaturedData) instead',
   /** `{operation}` is identity.operation.*, said after "refusing to"; `{reason}` is identity.versionUnknown or identity.predates. */
@@ -854,8 +865,11 @@ export default {
   'preserve.result.verifyIdentical':
     "{label}: {blocks} blocks read again, 0 bytes differ — the camera's flash is byte-identical to the backup.",
   'preserve.result.verifyDiffers': '{label}: {blocks} blocks read again, {bytes} bytes differ.',
-  'preserve.result.verifyDiffersUnread':
-    '{label}: {blocks} blocks read again, {bytes} bytes differ, {unread} block(s) could not be read.',
+  'preserve.result.verifyDiffersUnread': {
+    one: '{label}: {blocks} blocks read again, {bytes} bytes differ, {count} block could not be read.',
+    other:
+      '{label}: {blocks} blocks read again, {bytes} bytes differ, {count} blocks could not be read.',
+  },
   /** The whole-flash read stopped as planned: the start entered a bank the run did not patch. */
   'preserve.unpatchedStart.stop':
     'Stopped before the whole-flash read: the camera started a bank this run did not patch, so nothing was read.',
@@ -899,14 +913,26 @@ export default {
   'preserve.fail.shiftedRebootRefused':
     'the drain came back one page high, and the reboot that takes another boot was REFUSED by the host before it left (a SecurityError: a browser policy or a test guard) — another attempt would drain the same shifted boot. Nothing was kept; run the drain again where the reset can go out.',
   /** `{count}`: bytes; `{read}`/`{total}`: windows; `{places}`: preserve.fail.verifyPlace, joined with commas; `{short}`: window numbers. */
-  'preserve.fail.verify':
-    'the verify read {count} differing byte(s) over {read}/{total} windows — the part does not re-read byte-identical to the backup',
-  'preserve.fail.verifyIn':
-    'the verify read {count} differing byte(s) over {read}/{total} windows (in {places}) — the part does not re-read byte-identical to the backup',
-  'preserve.fail.verifyShort':
-    'the verify read {count} differing byte(s) over {read}/{total} windows (short windows: {short}) — the part does not re-read byte-identical to the backup',
-  'preserve.fail.verifyInShort':
-    'the verify read {count} differing byte(s) over {read}/{total} windows (in {places}) (short windows: {short}) — the part does not re-read byte-identical to the backup',
+  'preserve.fail.verify': {
+    one: 'the verify read {count} differing byte over {read}/{total} windows — the part does not re-read byte-identical to the backup',
+    other:
+      'the verify read {count} differing bytes over {read}/{total} windows — the part does not re-read byte-identical to the backup',
+  },
+  'preserve.fail.verifyIn': {
+    one: 'the verify read {count} differing byte over {read}/{total} windows (in {places}) — the part does not re-read byte-identical to the backup',
+    other:
+      'the verify read {count} differing bytes over {read}/{total} windows (in {places}) — the part does not re-read byte-identical to the backup',
+  },
+  'preserve.fail.verifyShort': {
+    one: 'the verify read {count} differing byte over {read}/{total} windows (short windows: {short}) — the part does not re-read byte-identical to the backup',
+    other:
+      'the verify read {count} differing bytes over {read}/{total} windows (short windows: {short}) — the part does not re-read byte-identical to the backup',
+  },
+  'preserve.fail.verifyInShort': {
+    one: 'the verify read {count} differing byte over {read}/{total} windows (in {places}) (short windows: {short}) — the part does not re-read byte-identical to the backup',
+    other:
+      'the verify read {count} differing bytes over {read}/{total} windows (in {places}) (short windows: {short}) — the part does not re-read byte-identical to the backup',
+  },
   /** `{what}`: a bank, or one of the two below; `{address}` hex. */
   'preserve.fail.verifyPlace': '{what} {address}',
   'preserve.fail.bootConfigBlock': 'the boot-config block',
@@ -1278,7 +1304,10 @@ export default {
   'report.keyRow.tableAt': 'table at',
   'report.key.notIdentified': '(not identified)',
   /** `{count}` is a number of candidate key tables. */
-  'report.key.candidates': '{count} candidate(s), none confirmed',
+  'report.key.candidates': {
+    one: '{count} candidate, none confirmed',
+    other: '{count} candidates, none confirmed',
+  },
   'report.key.tableAt': '{offset} in the bootloader block, confirmed against a slot',
   'report.key.plainChain':
     'none needed: the banks are stored as plain firmware, so a bank is read and written as it is',

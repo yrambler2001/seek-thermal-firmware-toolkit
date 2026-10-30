@@ -319,7 +319,7 @@ export function keyReportMessageRows(state: DeviceState): ReportMessageRow[] {
         ? coreMessage(
             'report.key.candidates',
             { count: String(state.keyTableCandidates) },
-            `${String(state.keyTableCandidates)} candidate(s), none confirmed`,
+            `${String(state.keyTableCandidates)} ${state.keyTableCandidates === 1 ? 'candidate' : 'candidates'}, none confirmed`,
           )
         : coreMessage(
             'report.key.tableAt',

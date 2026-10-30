@@ -418,9 +418,11 @@ export default {
     '当前启动的{bank} 可用{key} 解密，但这台相机的密钥表中没有该密钥，因此无法以它写入',
   'keys.refused.noApplicationPair':
     '正在运行的应用程序（{bank}，固件 {firmware}）中没有任何已知密钥对（引导程序的密钥对和已解码的应用程序密钥对）是两半各恰好出现一次的，因此无法在其镜像中定位它的密钥 A',
-  /** `{keyA}`, `{keyB}`: how many times each key occurs. */
-  'keys.refused.noApplicationPairCounted':
-    '正在运行的应用程序（{bank}，固件 {firmware}）中没有任何已知密钥对（引导程序的密钥对和已解码的应用程序密钥对）是两半各恰好出现一次的，因此无法在其镜像中定位它的密钥 A（引导程序的密钥 A 出现 {keyA} 次，密钥 B 出现 {keyB} 次）',
+  /** `{count}`, `{keyB}`: how many times Key A and Key B occur. */
+  'keys.refused.noApplicationPairCounted': {
+    other:
+      '正在运行的应用程序（{bank}，固件 {firmware}）中没有任何已知密钥对（引导程序的密钥对和已解码的应用程序密钥对）是两半各恰好出现一次的，因此无法在其镜像中定位它的密钥 A（引导程序的密钥 A 出现 {count} 次，密钥 B 出现 {keyB} 次）',
+  },
   /** 0x50000 is the camera's status code. */
   'keys.refused.uploadChecked':
     '正在运行的应用程序（{bank}，固件 {firmware}）在写入上传的数据之前会用自己的密钥检查它（这个版本解码后的源代码会用它的密钥 A 和存储密钥尝试上传的数据，就像其引导程序检查槽位一样），而写入所用的存储密钥{key}（{hex}）既不是它的密钥 A，也不是它的存储密钥，因此相机会在擦除任何内容之前以 0x50000 拒绝这次上传',
@@ -623,7 +625,7 @@ export default {
   'identity.versionUnknown':
     '相机没有报告它的固件版本（{note}）；同一个命令编号并非在每个 Seek 固件上含义都相同——在 Compact 0.3.0.1 上，用于打开读取窗口的线路 ID 0x52 是 EnterBootloaderMode——因此在知道版本之前，除了 GetErrorCode、GetOperationMode 和 GetFirmwareInfo（所有版本应答方式都相同的读取）之外，不会发送任何命令',
   /* Why the version read gave no version (`{note}` above). `{error}`: the USB error (English unless it has
-   * a code); `{reads}`, `{answered}`, `{refusals}`, `{count}`: numbers; `{spacing}`, `{window}`: milliseconds;
+   * a code); `{reads}`, `{answered}`, `{count}`: numbers; `{spacing}`, `{window}`: milliseconds;
    * `{context}`: identity.note.otherRecord / afterStartup, joined with "; ". */
   'identity.note.startup':
     'GetFirmwareInfo 在间隔 {spacing} ms 的 {reads} 次读取中都没有应答（{error}），启动等待窗口为 {window} ms；仍在启动的相机会在此窗口内应答',
@@ -631,12 +633,13 @@ export default {
   'identity.note.noAnswer': 'GetFirmwareInfo 没有应答（{error}）',
   'identity.note.noAnswerSome':
     'GetFirmwareInfo 没有应答（{error}）；{reads} 次读取中有 {answered} 次应答，但从未连续两次，因此无法把其中任何一次与之前的命令遗留选中的记录区分开',
-  'identity.note.tooShort': 'GetFirmwareInfo 只应答了 {count} 个字节，不足以构成版本号',
-  'identity.note.tooShortContext':
-    'GetFirmwareInfo 只应答了 {count} 个字节，不足以构成版本号；{context}',
+  'identity.note.tooShort': { other: 'GetFirmwareInfo 只应答了 {count} 个字节，不足以构成版本号' },
+  'identity.note.tooShortContext': {
+    other: 'GetFirmwareInfo 只应答了 {count} 个字节，不足以构成版本号；{context}',
+  },
   'identity.note.otherRecord':
     '第一次读取应答的是另一条记录（{version}），这是之前的命令让固件信息选择器停留在那里造成的——那次读取已将其清除',
-  'identity.note.afterStartup': '它在启动期间拒绝了 {refusals} 次读取之后才应答',
+  'identity.note.afterStartup': { other: '它在启动期间拒绝了 {count} 次读取之后才应答' },
   'identity.predates':
     '固件 {version} 早于导出协议：它的 RPC 方法表中没有 GetFeaturedFirmwareData 的读取处理程序（在 0.7.0.7 和 0.7.0.8 上它只注册为 setter，更早的版本中线路 ID 0x4F 是 UploadFirmwareRowSize），因此无法用它读取任何窗口；在 0.3.0.1 上，线路 ID 0x52 是 EnterBootloaderMode，而不是 BeginFirmwareUpgrade。0.x/1.x 标签页的完整备份流程改为通过线路 ID 0x58（GetFeaturedData）读取 0.7.0.7 和 0.7.0.8',
   /** `{operation}` is identity.operation.*, said after "refusing to"; `{reason}` is identity.versionUnknown or identity.predates. */
@@ -787,8 +790,9 @@ export default {
   'preserve.result.verifyIdentical':
     '{label}：重新读取了 {blocks} 个块，0 个字节不同——相机的闪存与备份逐字节相同。',
   'preserve.result.verifyDiffers': '{label}：重新读取了 {blocks} 个块，有 {bytes} 个字节不同。',
-  'preserve.result.verifyDiffersUnread':
-    '{label}：重新读取了 {blocks} 个块，有 {bytes} 个字节不同，{unread} 个块无法读取。',
+  'preserve.result.verifyDiffersUnread': {
+    other: '{label}：重新读取了 {blocks} 个块，有 {bytes} 个字节不同，{count} 个块无法读取。',
+  },
   /** The whole-flash read stopped as planned: the start entered a bank the run did not patch. */
   'preserve.unpatchedStart.stop':
     '在全闪存读取之前停止：相机启动的是本次运行没有修补的槽位，因此没有读取任何内容。',
@@ -830,14 +834,22 @@ export default {
   'preserve.fail.shiftedRebootRefused':
     '全闪存读取返回的数据偏高了一页，而用于再启动一次的重启命令在发出之前就被主机拒绝了（SecurityError：浏览器策略或测试防护）——再试一次也只会读取同样偏移的启动。没有保留任何内容；请在重置命令能够发出的环境中再次运行全闪存读取。',
   /** `{count}`: bytes; `{read}`/`{total}`: windows; `{places}`: preserve.fail.verifyPlace, joined with commas; `{short}`: window numbers. */
-  'preserve.fail.verify':
-    '验证读取在 {read}/{total} 个窗口中发现 {count} 个不同字节——芯片重新读取的结果与备份并不逐字节相同',
-  'preserve.fail.verifyIn':
-    '验证读取在 {read}/{total} 个窗口中发现 {count} 个不同字节（位于 {places}）——芯片重新读取的结果与备份并不逐字节相同',
-  'preserve.fail.verifyShort':
-    '验证读取在 {read}/{total} 个窗口中发现 {count} 个不同字节（不完整的窗口：{short}）——芯片重新读取的结果与备份并不逐字节相同',
-  'preserve.fail.verifyInShort':
-    '验证读取在 {read}/{total} 个窗口中发现 {count} 个不同字节（位于 {places}）（不完整的窗口：{short}）——芯片重新读取的结果与备份并不逐字节相同',
+  'preserve.fail.verify': {
+    other:
+      '验证读取在 {read}/{total} 个窗口中发现 {count} 个不同字节——芯片重新读取的结果与备份并不逐字节相同',
+  },
+  'preserve.fail.verifyIn': {
+    other:
+      '验证读取在 {read}/{total} 个窗口中发现 {count} 个不同字节（位于 {places}）——芯片重新读取的结果与备份并不逐字节相同',
+  },
+  'preserve.fail.verifyShort': {
+    other:
+      '验证读取在 {read}/{total} 个窗口中发现 {count} 个不同字节（不完整的窗口：{short}）——芯片重新读取的结果与备份并不逐字节相同',
+  },
+  'preserve.fail.verifyInShort': {
+    other:
+      '验证读取在 {read}/{total} 个窗口中发现 {count} 个不同字节（位于 {places}）（不完整的窗口：{short}）——芯片重新读取的结果与备份并不逐字节相同',
+  },
   /** `{what}`: a bank, or one of the two below; `{address}` hex. */
   'preserve.fail.verifyPlace': '{what} {address}',
   'preserve.fail.bootConfigBlock': '启动配置块',
@@ -1186,7 +1198,7 @@ export default {
   'report.keyRow.tableAt': '密钥表位置',
   'report.key.notIdentified': '（未识别）',
   /** `{count}` is a number of candidate key tables. */
-  'report.key.candidates': '{count} 个候选，均未确认',
+  'report.key.candidates': { other: '{count} 个候选，均未确认' },
   'report.key.tableAt': '引导程序块中的 {offset}，已与某个槽位核对确认',
   'report.key.plainChain': '不需要：槽位以明文固件存储，因此槽位按原样读取和写入',
   'report.key.tableRefused2016':

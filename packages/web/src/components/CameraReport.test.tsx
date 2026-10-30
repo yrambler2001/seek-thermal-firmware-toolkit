@@ -139,7 +139,7 @@ describe('CameraReport on the 2016 Compact PRO (TESTING.md 42.84)', () => {
       expect(text).toContain(value);
     }
     expect(text).not.toContain('Key A');
-    expect(text).not.toContain('candidate(s), none confirmed');
+    expect(text).not.toContain('candidates, none confirmed');
     unmount();
   });
 
