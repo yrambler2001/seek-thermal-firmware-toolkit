@@ -17,7 +17,8 @@ import type { Dictionary } from './types';
 import { en } from './locales/en';
 
 /** Every language planned for the page. Only the ones in `LANGUAGES` are offered. */
-export type LanguageCode = 'en' | 'de' | 'es' | 'fr' | 'it' | 'pl' | 'pt' | 'ru' | 'uk' | 'zh-Hans';
+export type LanguageCode =
+  'en' | 'de' | 'es' | 'fr' | 'it' | 'pl' | 'pt' | 'ro' | 'ru' | 'uk' | 'zh-Hans';
 
 export interface LanguageEntry {
   /** A BCP 47 tag; it also goes on `<html lang>`. */
@@ -38,6 +39,8 @@ export const LANGUAGES: readonly LanguageEntry[] = [
   { code: 'pl', name: 'Polski', load: () => import('./locales/pl').then((m) => m.default) },
   /* European Portuguese (pt-PT spelling). */
   { code: 'pt', name: 'Português', load: () => import('./locales/pt').then((m) => m.default) },
+  /* Romanian (ro): `ro-RO` and `ro-MD` browsers match it by the primary subtag. */
+  // { code: 'ro', name: 'Română', load: () => import('./locales/ro').then((m) => m.default) },
   { code: 'ru', name: 'Русский', load: () => import('./locales/ru').then((m) => m.default) },
   { code: 'uk', name: 'Українська', load: () => import('./locales/uk').then((m) => m.default) },
   {

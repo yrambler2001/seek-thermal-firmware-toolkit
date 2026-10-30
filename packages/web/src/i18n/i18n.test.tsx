@@ -84,6 +84,7 @@ vi.mock('./languages', async (importOriginal) => {
       load: () => gate.opened.then(() => pl as unknown as Dictionary),
     },
     { code: 'pt', name: 'Português', load: fake({}) },
+    { code: 'ro', name: 'Română', load: fake({}) },
     { code: 'ru', name: 'Русский', load: fake(ru) },
     { code: 'uk', name: 'Українська', load: () => ukGate.opened.then(() => ({}) as Dictionary) },
     { code: 'zh-Hans', name: '简体中文', load: fake(zh) },
@@ -126,6 +127,8 @@ describe('choosing the starting language', () => {
   it('matches the browser by primary subtag, in the browser’s order', () => {
     expect(detectLanguage({ ...env, languages: ['ja-JP', 'zh-TW', 'ru'] })).toBe('zh-Hans');
     expect(detectLanguage({ ...env, languages: ['pt-BR'] })).toBe('pt');
+    expect(detectLanguage({ ...env, languages: ['ro-RO'] })).toBe('ro');
+    expect(detectLanguage({ ...env, languages: ['ro-MD', 'ru'] })).toBe('ro');
     expect(detectLanguage({ ...env, languages: ['en-GB', 'ru'] })).toBe('en');
     expect(matchLanguage('ZH-hans')).toBe('zh-Hans');
     expect(matchLanguage('zh')).toBe('zh-Hans');
@@ -275,6 +278,20 @@ describe('t()', () => {
     ]);
   });
 
+  it('gives Romanian one, few (0, 2–19 and endings 01–19) and other (20 and up)', () => {
+    expect([0, 1, 2, 19, 20, 100, 101, 119, 120].map((n) => pluralCategory('ro', n))).toEqual([
+      'few',
+      'one',
+      'few',
+      'few',
+      'other',
+      'other',
+      'few',
+      'few',
+      'other',
+    ]);
+  });
+
   it('uses `other` alone where the language has one form', async () => {
     await setLanguage('zh-Hans');
     expect(t('common:count.files', { count: 1 })).toBe('1 个文件');
@@ -403,6 +420,7 @@ describe('React', () => {
       ['de', 'Deutsch', 'de'],
       ['pl', 'Polski', 'pl'],
       ['pt', 'Português', 'pt'],
+      ['ro', 'Română', 'ro'],
       ['ru', 'Русский', 'ru'],
       ['uk', 'Українська', 'uk'],
       ['zh-Hans', '简体中文', 'zh-Hans'],

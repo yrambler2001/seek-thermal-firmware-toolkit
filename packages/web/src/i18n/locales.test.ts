@@ -113,7 +113,7 @@ describe('every registered language matches English', () => {
   });
 
   it('lists the languages in the agreed order: English, then by native name', () => {
-    const order = ['en', 'de', 'es', 'fr', 'it', 'pl', 'pt', 'ru', 'uk', 'zh-Hans'];
+    const order = ['en', 'de', 'es', 'fr', 'it', 'pl', 'pt', 'ro', 'ru', 'uk', 'zh-Hans'];
     const codes = LANGUAGES.map((entry) => entry.code);
     expect(codes[0]).toBe('en');
     expect(codes).toEqual(order.filter((code) => codes.includes(code as (typeof codes)[number])));

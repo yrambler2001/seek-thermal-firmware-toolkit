@@ -81,7 +81,7 @@ t('slots:found', { count: images.length, slot: 'B' }); // count is required for 
 ```
 
 - A number is inserted as `String(n)`, with no grouping and no locale formatting. Format hex values, sizes and versions yourself and pass the string.
-- An English plural has `one` and `other`. A translation gives the forms its language needs: ru/uk/pl `one, few, many, other`; es/fr/it/pt `one, many, other` (`many` is for millions); de `one, other`; zh-Hans `other` only. The forms are chosen with `Intl.PluralRules`. A form that is missing falls back to the same language's `other`. The parity test fails on a missing form.
+- An English plural has `one` and `other`. A translation gives the forms its language needs: ru/uk/pl `one, few, many, other`; es/fr/it/pt `one, many, other` (`many` is for millions); ro `one, few, other` (`few` is 0, 2–19 and any number ending in 01–19, `other` is 20 and up: "20 de sloturi"); de `one, other`; zh-Hans `other` only. The forms are chosen with `Intl.PluralRules`. A form that is missing falls back to the same language's `other`. The parity test fails on a missing form.
 - Don't put a literal `{` or `}` in a string: pass it as a param.
 
 ## Cases
@@ -192,7 +192,7 @@ There is no "machine translation" label and no English shown under translated te
 
 Written for the agent that translates one language. You work from the English dictionaries alone; the code is there when a comment is not enough.
 
-1. **Copy English.** `cp -R src/i18n/locales/en src/i18n/locales/<code>` (`de`, `es`, `fr`, `it`, `pl`, `pt`, `ru`, `uk`, `zh-Hans`).
+1. **Copy English.** `cp -R src/i18n/locales/en src/i18n/locales/<code>` (`de`, `es`, `fr`, `it`, `pl`, `pt`, `ro`, `ru`, `uk`, `zh-Hans`).
 2. **Translate each namespace file.** Change the type line and translate every value; keep every key and every comment's meaning (you may translate the comments or leave them):
    ```ts
    import type { Translation } from '../../types';
@@ -208,7 +208,7 @@ Written for the agent that translates one language. You work from the English di
    const de: Dictionary = { common, app, core, shared, info, decrypt, v4, slots, preserve };
    export default de;
    ```
-4. **Register it.** Uncomment the language's line in `languages.ts`. The order is the rule: English first, then by native name, Latin script, then Cyrillic, then Chinese: English, Deutsch, Español, Français, Italiano, Polski, Português, Русский, Українська, 简体中文.
+4. **Register it.** Uncomment the language's line in `languages.ts`. The order is the rule: English first, then by native name, Latin script, then Cyrillic, then Chinese: English, Deutsch, Español, Français, Italiano, Polski, Português, Română, Русский, Українська, 简体中文.
 5. **Check it:** `npx tsc --noEmit -p packages/web/tsconfig.app.json`, then `npx vitest run packages/web/src/i18n/locales.test.ts packages/web/src/i18n/pseudo-locale.test.tsx packages/web/src/i18n/key-usage.test.ts packages/web/src/i18n/core-messages.test.ts packages/web/src/i18n/cases.test.tsx` and the whole web project (`npx vitest run --project web`). `locales.test.ts` checks every registered language against English: keys, plural forms, `{params}` and `<slots>`. Then `npx eslint packages/web` and `npx prettier --write` on your files.
 
 The language loads only when someone picks it (a dynamic `import()`, its own chunk), so a new language adds nothing to the English page.
@@ -222,7 +222,7 @@ The language loads only when someone picks it (a dynamic `import()`, its own chu
 - **Keep as they are:** hex values, versions, file names and paths, register and command names (`cfg[0]`, GetFirmwareInfo, CompleteMemoryUpgrade), opcode names, family and product names (Compact, Compact PRO, Mosaic, Nano, Seek Thermal), programs (Zadig, Chrome, J-Link), WebUSB, and anything in `` `code` ``.
 - **Buttons the text names.** When a sentence names a button ("press _Connect device_"), use the button's own translation from `app`/`shared`, word for word.
 - **Capitals:** keep the English's. A value that starts lower case is said inside another sentence or after a label; one that starts upper case stands alone.
-- **Plurals:** give the forms your language uses (`Intl.PluralRules` categories): ru/uk/pl `one, few, many, other`; es/fr/it/pt `one, many, other`; de `one, other`; zh-Hans `other` only.
+- **Plurals:** give the forms your language uses (`Intl.PluralRules` categories): ru/uk/pl `one, few, many, other`; es/fr/it/pt `one, many, other`; ro `one, few, other`; de `one, other`; zh-Hans `other` only.
 - **Cases** (Polish, Russian, Ukrainian, German; see "Cases" above; French, Italian, Spanish and Portuguese use the same selectors for the article and its contraction, see "Romance languages"). A bank or a key inside a sentence can be asked for in a case: `{bank:gen}`, `{bank:dat}`, `{bank:acc}`, `{bank:ins}`, `{bank:loc}`. Two steps:
   1. Give your forms once, next to the plain one, for each name: in `common.ts`, `'bank.slotInSentence:gen': 'slotu {letter}'`, `'bank.recoveryInSentence:loc': 'slocie odzyskiwania {letter}'` (and `bank.slot:*`, `bank.recovery:*` for the label forms where a sentence uses them); in `core.ts`, `'keyName.keyA:ins': 'kluczem A'`, and so on for each `keyName.*`. Write only the cases your language uses; a case you leave out is said in the plain form.
   2. In a sentence, write the case the grammar needs: `'Kopiuj do {bank:gen}'`, `'Zapisz w {bank:loc}'`, `'pod {key:ins}'`. Don't work round a case with a colon or brackets ("pod kluczem: {key}") any more.
@@ -257,7 +257,7 @@ The first match wins:
 
 1. `?lang=xx` in the URL, for that visit only. Put it before the hash: `…/?lang=ru#/v4`.
 2. The choice saved from the switcher (`localStorage['seek-fw:lang']`; storage that throws counts as no choice).
-3. The first entry in `navigator.languages` whose primary subtag matches (`zh-TW` → `zh-Hans`, `pt-BR` → `pt`).
+3. The first entry in `navigator.languages` whose primary subtag matches (`zh-TW` → `zh-Hans`, `pt-BR` → `pt`, `ro-MD` → `ro`).
 4. English.
 
 `main.tsx` awaits `initI18n()` before the first render, so English never flashes first. A switch loads the language first, then re-renders. `<html lang>` always matches the language in use. A pick in the switcher is saved and removes `?lang=` from the address bar. A pick in one tab is followed by the page's other open tabs (`followLanguageChoice()`, called by `main.tsx`), which also drop their own `?lang=`; the theme does the same.
