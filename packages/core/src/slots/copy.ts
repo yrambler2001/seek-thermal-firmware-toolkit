@@ -90,10 +90,6 @@ export function copySourceRefusalMessage(report: SlotsReport, from: SlotKey): Co
   return null;
 }
 
-/**
- * Plans the copy of `from`'s image into `to`. Throws a refusal (nothing sent) for a copy onto itself, for a
- * source with no image to copy, and for everything `prepareSlotFlash` refuses for a decrypted image in `to`.
- */
 /** What a copy's plan says, as messages for the page (`source` and the note are their English). */
 export const COPY_WORDS = {
   source: (
@@ -128,6 +124,10 @@ export const COPY_WORDS = {
   },
 } as const;
 
+/**
+ * Plans the copy of `from`'s image into `to`. Throws a refusal (nothing sent) for a copy onto itself, for a
+ * source with no image to copy, and for everything `prepareSlotFlash` refuses for a decrypted image in `to`.
+ */
 export function planSlotCopy(report: SlotsReport, from: SlotKey, to: SlotKey): SlotCopyPlan {
   const fromName = nameOf(report, from);
   if (from === to) throw slotRefused(`${fromName} is not copied onto itself. Nothing was written.`);

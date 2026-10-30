@@ -84,15 +84,17 @@ export function coreText(
   return (translate as unknown as LooseTranslate)(`core:${message.code}`, params);
 }
 
-/** Core's sentences in the language in use: `messages` where core gave them, else the English `texts`. */
+/**
+ * Core's sentences in the language in use, one per English `text`: the message at the same place while it
+ * still says that text, else the English. A caller that replaced or filtered one list and not the other
+ * shows its English, and drops no sentence.
+ */
 export function coreTexts(
   messages: readonly (CoreMessage | string)[] | undefined,
   texts: readonly string[],
   translate: Translate = t,
 ): string[] {
-  return messages === undefined
-    ? [...texts]
-    : messages.map((message) => coreText(message, translate));
+  return texts.map((text, at) => recordedText(messages?.[at], text, translate));
 }
 
 /** `coreText`, keeping a missing message missing (a row the page leaves out). */

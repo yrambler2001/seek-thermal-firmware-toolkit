@@ -15,6 +15,7 @@ import { CHECK_ZERO_IDX, KNOWN_ZERO_IDX } from '../../src/crypto/recover.js';
 import { SeekError } from '../../src/errors.js';
 import { silentReporter } from '../../src/events.js';
 import { setAcceptSum } from '../../src/image/bank.js';
+import { paramText } from '../../src/message.js';
 import {
   ADJUST_OFFSET,
   HEADER_OFFSET,
@@ -751,6 +752,10 @@ describe('restore from a full flash backup', () => {
     expect(older.plan.warnings.join('\n')).toMatch(
       /holds firmware 1\.2\.0\.0, and the camera runs 1\.3\.0\.0/,
     );
+    /* The page shows the messages and the CLI the English: the two lists say the same, in the same order. */
+    for (const restore of [theirs, nameless, older]) {
+      expect(restore.plan.warningMessages?.map(paramText)).toEqual(restore.plan.warnings);
+    }
   });
 
   it('an empty bank in the backup cannot be restored by a write, and says so', async () => {
