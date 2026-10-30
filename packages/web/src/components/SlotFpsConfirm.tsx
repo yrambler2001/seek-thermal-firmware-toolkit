@@ -9,7 +9,8 @@
 
 import { useRef, useState, type ReactElement } from 'react';
 import { Gauge } from 'lucide-react';
-import { bootsNowOf, type FpsBootWarning, type FpsPlan } from '@seek-fw/core';
+import { bootsNowMessage, type FpsBootWarning, type FpsPlan } from '@seek-fw/core';
+import { coreText, coreTexts } from '@/lib/core-text';
 import { useT } from '@/i18n';
 import { Checkbox } from './ui/field';
 import {
@@ -94,8 +95,7 @@ export function SlotFpsConfirm({
 
         {risk.booted && (
           <p className="rounded-md border border-destructive/40 bg-destructive/8 px-3 py-2 text-[0.85rem] font-medium text-destructive">
-            {/* i18n: core message (bootsNowOf) */}
-            {t('slots:fpsConfirm.booted', { bootsNow: bootsNowOf(slotName) })}
+            {t('slots:fpsConfirm.booted', { bootsNow: coreText(bootsNowMessage(slotName)) })}
           </p>
         )}
         {risk.recovery && (
@@ -106,8 +106,7 @@ export function SlotFpsConfirm({
 
         {bootWarning !== null && (
           <div className="space-y-1.5 rounded-md border border-warn/40 bg-warn/8 px-3 py-2 text-[0.85rem] text-foreground">
-            {/* i18n: core message (fpsBootWarningOf) */}
-            {bootWarning.paragraphs.map((paragraph) => (
+            {coreTexts(bootWarning.messages, bootWarning.paragraphs).map((paragraph) => (
               <p key={paragraph} className="m-0">
                 {paragraph}
               </p>
@@ -125,7 +124,6 @@ export function SlotFpsConfirm({
             })}
           </span>
           <span className="block">{t('slots:fpsConfirm.bytes', { count: sites })}</span>
-          {/* i18n: core message (backupPlanText), then the page's download note */}
           <span className="block">{`${backupText} ${backupDownloadNote()}`}</span>
           <span className="block font-medium">
             {t('slots:fpsConfirm.wayBack', { bank: slotName })}

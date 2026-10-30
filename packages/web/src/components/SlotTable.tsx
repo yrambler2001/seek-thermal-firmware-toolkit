@@ -11,18 +11,19 @@
 import type { ReactElement, ReactNode } from 'react';
 import { ArchiveRestore, Copy, Download, FileUp, Gauge } from 'lucide-react';
 import {
-  BOOTED_NOW,
-  NOT_BOOTED,
   SLOT_BYTES,
   hexUp,
-  unknownBootabilityWhy,
   writeBannerOf,
   type FpsPlan,
   type SlotInputKind,
   type SlotKey,
   type SlotView,
   type SlotsReport,
+  BOOTED_NOW_MESSAGE,
+  NOT_BOOTED_MESSAGE,
+  unknownBootabilityWhyMessage,
 } from '@seek-fw/core';
+import { coreText } from '@/lib/core-text';
 import { t } from '@/i18n';
 import { bankName, bankWords } from '@/lib/bank-names';
 import { FilePickerButton } from './FilePickerButton';
@@ -120,7 +121,6 @@ function bootability(view: SlotView, unknownWhy: string): ReactNode {
       </span>
     );
   }
-  /* i18n: core message (unknownBootabilityWhy) */
   return <span>{t('slots:table.boot.unknown', { why: unknownWhy })}</span>;
 }
 
@@ -129,8 +129,8 @@ function bootability(view: SlotView, unknownWhy: string): ReactNode {
  * locked lines the bank is the active-slot word's, which 42.56 measured as the bank that ran.
  */
 function riskNote(risk: WriteRisk): string | null {
-  /* i18n: core message (BOOTED_NOW) */
-  const booted = BOOTED_NOW.charAt(0).toUpperCase() + BOOTED_NOW.slice(1);
+  const bootedNow = coreText(BOOTED_NOW_MESSAGE);
+  const booted = bootedNow.charAt(0).toUpperCase() + bootedNow.slice(1);
   if (risk.booted && risk.recovery) return t('slots:table.risk.bootedRecovery', { booted });
   if (risk.booted) return t('slots:table.risk.booted', { booted });
   if (risk.recovery) return t('slots:table.risk.recovery', { bank: bankName('r') });
@@ -249,11 +249,10 @@ export function SlotTable({
                   {hexUp(entry.address)}
                 </span>
                 <span className="mt-1 block">
-                  {/* i18n: core message (BOOTED_NOW, NOT_BOOTED) */}
                   {view.active ? (
-                    <Badge tone="ok">{BOOTED_NOW}</Badge>
+                    <Badge tone="ok">{coreText(BOOTED_NOW_MESSAGE)}</Badge>
                   ) : (
-                    <Badge tone="neutral">{NOT_BOOTED}</Badge>
+                    <Badge tone="neutral">{coreText(NOT_BOOTED_MESSAGE)}</Badge>
                   )}
                 </span>
                 {/* i18n: core message (the bank's notes) */}
@@ -319,7 +318,7 @@ export function SlotTable({
               </TableCell>
 
               <TableCell label={t('slots:table.col.bootable')}>
-                {bootability(view, unknownBootabilityWhy(report.state))}
+                {bootability(view, coreText(unknownBootabilityWhyMessage(report.state)))}
               </TableCell>
 
               <TableCell label={t('slots:table.col.sha')}>

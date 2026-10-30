@@ -79,6 +79,7 @@ export {
   storeKeyDescription,
   targetSlot,
   unknownBootabilityWhy,
+  unknownBootabilityWhyMessage,
   upgradeTargetIsBooted,
   upgradeTargetWarning,
   upgradeTargetWhileRecovery,

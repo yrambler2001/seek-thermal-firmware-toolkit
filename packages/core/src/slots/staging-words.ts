@@ -6,6 +6,7 @@
  * log all take their words from here (TESTING.md 42.87).
  * ==================================================================== */
 
+import { coreMessage, type CoreMessage } from '../message.js';
 import type { PlanStaging } from './types.js';
 
 export interface StagingWords {
@@ -48,4 +49,17 @@ export function stagingPhrase(staging: PlanStaging): string {
 /** What a staging form means, for a plan's "staging" row. */
 export function stagingDetail(staging: PlanStaging): string {
   return STAGING_WORDS[staging].detail;
+}
+
+const STAGING_DETAIL_CODE: Readonly<Record<PlanStaging, string>> = {
+  'key-a-ciphertext': 'staging.detail.keyACiphertext',
+  'slot-keystream-ciphertext': 'staging.detail.slotKeystreamCiphertext',
+  plain: 'staging.detail.plain',
+  'key-a-keystream': 'staging.detail.keyAKeystream',
+  verbatim: 'staging.detail.verbatim',
+};
+
+/** `stagingDetail` as a message, for the page. */
+export function stagingDetailMessage(staging: PlanStaging): CoreMessage {
+  return coreMessage(STAGING_DETAIL_CODE[staging], {}, STAGING_WORDS[staging].detail);
 }

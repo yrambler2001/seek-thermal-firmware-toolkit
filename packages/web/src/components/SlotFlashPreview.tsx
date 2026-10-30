@@ -9,13 +9,14 @@
 import type { ReactElement } from 'react';
 import { FileUp, Flame } from 'lucide-react';
 import {
-  bankWordsOf,
-  derivedKeyLine,
   hexUp,
-  stagingDetail,
   type SlotFlashPlan,
   type SlotInputKind,
+  bankParam,
+  derivedKeyLineMessage,
+  stagingDetailMessage,
 } from '@seek-fw/core';
+import { coreText } from '@/lib/core-text';
 import { t } from '@/i18n';
 import { KeyValue, type KeyValueRow } from './KeyValue';
 import { Panel, PanelTitle } from './Panel';
@@ -108,14 +109,12 @@ export function SlotFlashPreview({
           : t('slots:preview.readAs.plain')
         : t('slots:preview.readAs.raw'),
     ],
-    /* i18n: core message (stagingDetail) */
-    [t('slots:preview.staging'), stagingDetail(plan.staging)],
+    [t('slots:preview.staging'), coreText(stagingDetailMessage(plan.staging))],
     ...(plan.derivedFrom
       ? ([
-          /* i18n: core message (derivedKeyLine) */
           [
             t('slots:preview.key'),
-            derivedKeyLine(plan.derivedFrom, bankWordsOf(plan.derivedFrom.bank)),
+            coreText(derivedKeyLineMessage(plan.derivedFrom, bankParam(plan.derivedFrom.bank))),
           ],
         ] as const satisfies readonly KeyValueRow[])
       : []),
@@ -129,7 +128,6 @@ export function SlotFlashPreview({
     ],
     [t('slots:preview.checksum'), hexUp(plan.sum16, 4)],
     [t('slots:preview.stored'), storedText(plan)],
-    /* i18n: core message (backupPlanText), then the page's download note */
     [t('slots:preview.savedFirst'), backupText],
   ];
 

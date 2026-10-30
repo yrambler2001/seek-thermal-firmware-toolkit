@@ -10,7 +10,8 @@
 
 import { useRef, useState, type ReactElement } from 'react';
 import { Flame } from 'lucide-react';
-import { bootsNowOf } from '@seek-fw/core';
+import { bootsNowMessage } from '@seek-fw/core';
+import { coreText } from '@/lib/core-text';
 import { useT } from '@/i18n';
 import { Checkbox } from './ui/field';
 import {
@@ -100,8 +101,7 @@ export function SlotWriteConfirm({
 
         {risk.booted && (
           <p className="rounded-md border border-destructive/40 bg-destructive/8 px-3 py-2 text-[0.85rem] font-medium text-destructive">
-            {/* i18n: core message (bootsNowOf) */}
-            {t('slots:writeConfirm.booted', { bootsNow: bootsNowOf(slotName) })}
+            {t('slots:writeConfirm.booted', { bootsNow: coreText(bootsNowMessage(slotName)) })}
           </p>
         )}
         {risk.recovery && (

@@ -11,6 +11,9 @@ export {
   reportedBootedOf,
   reportsActiveSlotWord,
   type BootChoice,
+  bootWordRuleMessage,
+  CHECK_KEY_UNNAMED_VERDICT_MESSAGE,
+  CFG0_NOT_READ,
 } from './boot-choice.js';
 export {
   fpsBootWarningOf,
@@ -66,8 +69,16 @@ export {
   type SaveBackup,
   type WriteAction,
   type WriteBackup,
+  backupBankMessage,
+  backupPlanMessage,
+  bankNameParam,
 } from './backup.js';
-export { copySourceRefusal, planSlotCopy, type SlotCopyPlan } from './copy.js';
+export {
+  copySourceRefusal,
+  copySourceRefusalMessage,
+  planSlotCopy,
+  type SlotCopyPlan,
+} from './copy.js';
 export { imageBuildWarningOf, type ImageBuildForm } from './image-build.js';
 export {
   FLASH_BASE,
@@ -85,8 +96,14 @@ export {
   type FullFlashSource,
   type RestoreReadBack,
   type SlotRestorePlan,
+  restoreReadBackMessage,
 } from './restore.js';
-export { stagingDetail, stagingPhrase, type StagingWords } from './staging-words.js';
+export {
+  stagingDetail,
+  stagingDetailMessage,
+  stagingPhrase,
+  type StagingWords,
+} from './staging-words.js';
 export { flashInvalidatesAnalysis } from './write-commit.js';
 export {
   ffBankVerdict,
@@ -98,7 +115,14 @@ export {
   type Verdict,
 } from './running.js';
 export { ffKeyBPlainOf, ffPlainOfStaged, stageFFVendor, FF_ACCEPT_SUM } from './ff-form.js';
-export { BOOTED_NOW, bootsNowOf, NOT_BOOTED } from './booted-words.js';
+export {
+  BOOTED_NOW,
+  BOOTED_NOW_MESSAGE,
+  bootsNowMessage,
+  bootsNowOf,
+  NOT_BOOTED,
+  NOT_BOOTED_MESSAGE,
+} from './booted-words.js';
 export {
   derivedKeyLine,
   deriveWriteKeys,
@@ -116,6 +140,11 @@ export {
   type KeyRef,
   type WriteKeyForm,
   type WriteKeys,
+  derivedKeyLineMessage,
+  FF_VENDOR_STAGED_MESSAGE,
+  FF_VENDOR_STORED_MESSAGE,
+  STAGED_UNDER_IMAGE_BLOCK_0_MESSAGE,
+  storedUnderCheckKeyMessage,
 } from './write-keys.js';
 export { APPLICATION_KEY_PAIRS, type ApplicationKeyPair } from './application-pairs.js';
 export {

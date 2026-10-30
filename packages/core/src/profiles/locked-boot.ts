@@ -21,6 +21,7 @@
  * ==================================================================== */
 
 import { hexUp } from '../bytes.js';
+import { bankParam, coreMessage, paramText, type CoreMessage, type CoreParam } from '../message.js';
 import type { SlotKey } from './types.js';
 
 /** true: the bootloader's check passes. false: it refuses. null: not known (the bank was not read). */
@@ -67,9 +68,18 @@ export function lockedBootOrder(word: number): readonly [SlotKey, SlotKey, SlotK
 
 /** The boot-config word's rule, as the page and the CLI print it. */
 export function lockedBootRule(word: number): string {
+  return lockedBootRuleMessage(word).text;
+}
+
+/** `lockedBootRule` as a message: the page names the banks in the reader's words. */
+export function lockedBootRuleMessage(word: number): CoreMessage {
   const [first, second, last] = lockedBootOrder(word);
-  const name = (key: SlotKey): string => (key === 'r' ? 'recovery R' : key.toUpperCase());
-  return `${bankWordsOf(first)} first, then ${name(second)}, then ${name(last)}`;
+  const name = (key: SlotKey): CoreParam => (key === 'r' ? bankParam('r') : key.toUpperCase());
+  return coreMessage(
+    'boot.rule',
+    { first: bankParam(first), second: name(second), last: name(last) },
+    `${bankWordsOf(first)} first, then ${paramText(name(second))}, then ${paramText(name(last))}`,
+  );
 }
 
 /**
@@ -87,7 +97,16 @@ export interface LockedBootSelection {
   readonly runs: SlotKey | null;
   /** One sentence: the word's rule and the bank it gives, or what could not be checked. */
   readonly why: string;
+  /** `why` as a message (code + params), for the page. */
+  readonly whyMessage: CoreMessage;
 }
+
+/** The default verdict word of a bank whose verdict is unknown: "was not read". */
+export const BANK_NOT_READ_VERDICT: CoreMessage = coreMessage(
+  'boot.verdict.notRead',
+  {},
+  'was not read',
+);
 
 /**
  * boot_select_image(), over the word and each bank's verdict. `unknown` says why a bank has no verdict
@@ -96,31 +115,56 @@ export interface LockedBootSelection {
 export function selectLockedBoot(
   word: number,
   accepts: Readonly<Record<SlotKey, BootVerdict>>,
-  unknown = 'was not read',
+  unknown: CoreParam = BANK_NOT_READ_VERDICT,
 ): LockedBootSelection {
   const [first, second, last] = lockedBootOrder(word);
-  const head = `the boot-config word is ${wordText(word)}, so the bootloader tries ${bankWordsOf(first)} first`;
-  const unchecked = (key: SlotKey): LockedBootSelection => ({
-    runs: null,
-    why: `${head}, but ${bankWordsOf(key)} ${unknown}, so the bank that runs is not known`,
+  const shown = wordText(word);
+  const head = `the boot-config word is ${shown}, so the bootloader tries ${bankWordsOf(first)} first`;
+  const params = { word: shown, first: bankParam(first) };
+  const selected = (
+    runs: SlotKey | null,
+    code: string,
+    more: Readonly<Record<string, CoreParam>>,
+    why: string,
+  ): LockedBootSelection => ({
+    runs,
+    why,
+    whyMessage: coreMessage(code, { ...params, ...more }, why),
   });
+  const unchecked = (key: SlotKey): LockedBootSelection =>
+    selected(
+      null,
+      'boot.select.unknown',
+      { bank: bankParam(key), verdict: unknown },
+      `${head}, but ${bankWordsOf(key)} ${paramText(unknown)}, so the bank that runs is not known`,
+    );
   const firstOk = accepts[first];
   if (firstOk === null) return unchecked(first);
-  if (firstOk) return { runs: first, why: `${head}, and it holds an image the bootloader accepts` };
+  if (firstOk) {
+    return selected(
+      first,
+      'boot.select.first',
+      {},
+      `${head}, and it holds an image the bootloader accepts`,
+    );
+  }
   const secondOk = accepts[second];
   if (secondOk === null) return unchecked(second);
   if (secondOk) {
-    return {
-      runs: second,
-      why: `${head}; ${bankWordsOf(first)} holds no image the bootloader accepts, so it takes ${bankWordsOf(second)}`,
-    };
+    return selected(
+      second,
+      'boot.select.second',
+      { second: bankParam(second) },
+      `${head}; ${bankWordsOf(first)} holds no image the bootloader accepts, so it takes ${bankWordsOf(second)}`,
+    );
   }
-  return {
-    runs: last,
-    why:
-      `${head}; neither ${bankWordsOf(first)} nor ${bankWordsOf(second)} holds an image the ` +
+  return selected(
+    last,
+    last === 'r' ? 'boot.select.lastBoots' : 'boot.select.lastTakes',
+    { second: bankParam(second), last: bankParam(last) },
+    `${head}; neither ${bankWordsOf(first)} nor ${bankWordsOf(second)} holds an image the ` +
       `bootloader accepts, so it ${last === 'r' ? 'boots' : 'takes'} ${bankWordsOf(last)}, which it does not check`,
-  };
+  );
 }
 
 /**

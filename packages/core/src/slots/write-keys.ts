@@ -65,6 +65,7 @@ import { bytesToHex, equalBytes, findAll, hexToBytes, hexUp } from '../bytes.js'
 import { cryptBytes } from '../crypto/cipher.js';
 import { findEmbeddedKeyTable, stateFromKey, UNNAMED_KEY } from '../crypto/keys.js';
 import { bankWordsOf } from '../profiles/locked-boot.js';
+import { coreMessage, paramText, type CoreMessage, type CoreParam } from '../message.js';
 import type { CipherProfile, SlotKey } from '../profiles/types.js';
 import type { DerivedKey } from './types.js';
 import type { DeviceState } from '../workflows/types.js';
@@ -217,10 +218,27 @@ export function derivedKeyLine(
   derived: Pick<DerivedKey, 'key' | 'holds'>,
   bankLabel: string,
 ): string {
+  return derivedKeyLineMessage(derived, bankLabel).text;
+}
+
+/** `derivedKeyLine` as a message; `bank` is a bank param (`bankParam(key)`) or the caller's name for it. */
+export function derivedKeyLineMessage(
+  derived: Pick<DerivedKey, 'key' | 'holds'>,
+  bank: CoreParam,
+): CoreMessage {
+  const bankLabel = paramText(bank);
   if (!derived.holds || derived.holds === derived.key) {
-    return `${derived.key}, derived from the booted ${bankLabel}`;
+    return coreMessage(
+      'keys.derived.same',
+      { key: derived.key, bank },
+      `${derived.key}, derived from the booted ${bankLabel}`,
+    );
   }
-  return `${derived.key} (the store key), derived from the booted ${bankLabel}, which holds ${derived.holds}`;
+  return coreMessage(
+    'keys.derived.holds',
+    { key: derived.key, bank, holds: derived.holds },
+    `${derived.key} (the store key), derived from the booted ${bankLabel}, which holds ${derived.holds}`,
+  );
 }
 
 /** XOR-cancel equal keys pairwise (XOR is self-inverse), keeping the order of the rest. */
@@ -262,6 +280,18 @@ export const FF_VENDOR_STAGED =
 export const FF_VENDOR_STORED =
   'Key B: the camera re-keys the upload with key block 1 and stores the image under it';
 
+/** `FF_VENDOR_STAGED` and `FF_VENDOR_STORED` as messages, for the page. */
+export const FF_VENDOR_STAGED_MESSAGE: CoreMessage = coreMessage(
+  'keys.ffVendor.staged',
+  {},
+  FF_VENDOR_STAGED,
+);
+export const FF_VENDOR_STORED_MESSAGE: CoreMessage = coreMessage(
+  'keys.ffVendor.stored',
+  {},
+  FF_VENDOR_STORED,
+);
+
 /**
  * The keys of a 1.3.0.8 FF write on a camera with no bank stored plain: the FF image in the vendor's form,
  * stored under Key B (ff-form.ts). Nothing is derived from the camera, and nothing is refused here: the
@@ -291,14 +321,34 @@ function ffVendorKeys(state: DeviceState): WriteKeys {
 export const STAGED_UNDER_IMAGE_BLOCK_0 =
   "the image under its own key block 0 (found in the image by value), to any bank; this camera's keys are not used";
 
+/** `STAGED_UNDER_IMAGE_BLOCK_0` as a message, for the page. */
+export const STAGED_UNDER_IMAGE_BLOCK_0_MESSAGE: CoreMessage = coreMessage(
+  'keys.imageBlock0.staged',
+  {},
+  STAGED_UNDER_IMAGE_BLOCK_0,
+);
+
 /**
  * What a 2016 bank is stored under after a write, as the page's "Stored as" row and the CLI's `stored as`
  * row say it: the key its bootloader checks a bank under, by name when the read named it.
  */
 export function storedUnderCheckKey(keys: Pick<WriteKeys, 'atRest'>): string {
+  return storedUnderCheckKeyMessage(keys).text;
+}
+
+/** `storedUnderCheckKey` as a message, for the page. */
+export function storedUnderCheckKeyMessage(keys: Pick<WriteKeys, 'atRest'>): CoreMessage {
   return keys.atRest === null
-    ? 'the key its bootloader checks a bank under (not named on this read); the camera re-encrypts the upload under it'
-    : `${keys.atRest.name}, the key its bootloader checks a bank under; the camera re-encrypts the upload under it`;
+    ? coreMessage(
+        'keys.imageBlock0.storedUnnamed',
+        {},
+        'the key its bootloader checks a bank under (not named on this read); the camera re-encrypts the upload under it',
+      )
+    : coreMessage(
+        'keys.imageBlock0.stored',
+        { key: keys.atRest.name },
+        `${keys.atRest.name}, the key its bootloader checks a bank under; the camera re-encrypts the upload under it`,
+      );
 }
 
 /**

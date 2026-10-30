@@ -28,7 +28,6 @@ import {
   SeekDevice,
   SeekError,
   buildSlotPlan,
-  copySourceRefusal,
   dumpSlot,
   errorMessage,
   flashSlotWithBackup,
@@ -75,7 +74,9 @@ import {
   type WorkflowContext,
   type WriteAction,
   type WriteBackup,
+  copySourceRefusalMessage,
 } from '@seek-fw/core';
+import { coreText } from '@/lib/core-text';
 import { listAnd, t, tEnglish, type Translate } from '@/i18n';
 import { backupDownloadLines, saveBackupAsDownload } from '../lib/backup-save';
 import { bankName, bankWords } from '../lib/bank-names';
@@ -358,8 +359,8 @@ export function slotCopyGate(args: {
     cameraRefusal: args.cameraRefusal ?? null,
   });
   if (!gate.enabled) return gate;
-  const source = copySourceRefusal(args.report, args.from);
-  /* i18n: core message (copySourceRefusal) */
+  const refusal = copySourceRefusalMessage(args.report, args.from);
+  const source = refusal === null ? null : coreText(refusal);
   if (source !== null) return { enabled: false, reason: `${capitalised(source)}.` };
   return { enabled: true, reason: null };
 }

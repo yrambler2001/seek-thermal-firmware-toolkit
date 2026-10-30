@@ -10,6 +10,7 @@
 
 import { identifyFpsImage, FPS_MEASURED_HZ } from '../preservation/fps-patch.js';
 import type { SlotKey } from '../profiles/types.js';
+import { bankParam, capitalParam, coreMessage, listParam, type CoreMessage } from '../message.js';
 import { bankWordsOf, bootChoiceOf, bootRuleKnown } from './boot-choice.js';
 import { fpsPlanOfBank } from './fps-patch.js';
 import type { SlotsReport } from './types.js';
@@ -57,6 +58,8 @@ export interface FpsBootWarning {
   readonly idle: readonly SlotKey[];
   /** The warning, one paragraph each. The page and the CLI show the same text. */
   readonly paragraphs: readonly string[];
+  /** The paragraphs as messages (code + params), for the page. Hand-made warnings in tests may leave it out. */
+  readonly messages?: readonly CoreMessage[];
 }
 
 export interface FpsBootOptions {
@@ -111,29 +114,62 @@ export function fpsBootWarningOf(
   if (idle.length === 0) return null;
 
   const runsName = bankWordsOf(runs);
-  const paragraphs: string[] = [`The camera boots ${runsName}. ${capitalise(choice.why)}.`];
+  const bank = bankParam(runs);
+  const messages: CoreMessage[] = [
+    coreMessage(
+      'fpsBoot.boots',
+      { bank, why: capitalParam(choice.whyMessage ?? choice.why) },
+      `The camera boots ${runsName}. ${capitalise(choice.why)}.`,
+    ),
+  ];
   const patchedNow = idle.filter((key) => holdsNow(key) !== null);
+  const patched = capitalParam(
+    listParam(
+      patchedNow.map((key) => bankParam(key)),
+      'and',
+    ),
+  );
   if (patchedNow.length === 1) {
-    paragraphs.push(
-      `${capitalise(joinBanks(patchedNow))} holds a frame-rate patch, but it does not run, so the patch does not take effect.`,
+    messages.push(
+      coreMessage(
+        'fpsBoot.holdsOne',
+        { bank: patched },
+        `${capitalise(joinBanks(patchedNow))} holds a frame-rate patch, but it does not run, so the patch does not take effect.`,
+      ),
     );
   } else if (patchedNow.length === 2) {
-    paragraphs.push(
-      `${capitalise(joinBanks(patchedNow))} hold frame-rate patches, but neither runs, so the patches do not take effect.`,
+    messages.push(
+      coreMessage(
+        'fpsBoot.holdsTwo',
+        { banks: patched },
+        `${capitalise(joinBanks(patchedNow))} hold frame-rate patches, but neither runs, so the patches do not take effect.`,
+      ),
     );
   }
   const target = options.target;
   if (target !== undefined && idle.includes(target) && holdsNow(target) === null) {
-    paragraphs.push(
-      `Patching ${bankWordsOf(target)} would not make it run, because the camera boots ${runsName} instead.`,
+    messages.push(
+      coreMessage(
+        'fpsBoot.wouldNotRun',
+        { target: bankParam(target), bank },
+        `Patching ${bankWordsOf(target)} would not make it run, because the camera boots ${runsName} instead.`,
+      ),
     );
   }
   const block =
     options.patchBlock === undefined ? patchBlockOf(report, runs) : options.patchBlock(runs);
-  paragraphs.push(
+  messages.push(
     block === null
-      ? `Patch ${runsName} too (the bank that runs): that is what makes the frame-rate patch take effect.`
-      : `${capitalise(runsName)} cannot be patched here (${block}), so a frame-rate patch in another bank does not take effect on this camera.`,
+      ? coreMessage(
+          'fpsBoot.patchRunning',
+          { bank },
+          `Patch ${runsName} too (the bank that runs): that is what makes the frame-rate patch take effect.`,
+        )
+      : coreMessage(
+          'fpsBoot.cannotPatch',
+          { bank: capitalParam(bank), reason: block },
+          `${capitalise(runsName)} cannot be patched here (${block}), so a frame-rate patch in another bank does not take effect on this camera.`,
+        ),
   );
-  return { runs, word: choice.word, idle, paragraphs };
+  return { runs, word: choice.word, idle, paragraphs: messages.map((m) => m.text), messages };
 }

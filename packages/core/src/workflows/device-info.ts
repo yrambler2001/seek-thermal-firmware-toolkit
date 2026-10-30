@@ -18,6 +18,7 @@
 
 import { asciiz, bytesToHex, hex, hexToBytes, hexUp, sha256hex, viewOf } from '../bytes.js';
 import { CancelledError, errorMessage } from '../errors.js';
+import { coreMessage, type CoreMessage } from '../message.js';
 import { decryptImage } from '../crypto/cipher.js';
 import {
   findKeyCandidates,
@@ -661,9 +662,22 @@ function checkKeyIdentity(slot: AnalysedSlot, checkKey: CheckKey, whiteningK: nu
  * table was not read, so the keys it tries cannot be named.
  */
 export function unknownBootabilityWhy(state: Pick<DeviceState, 'checkKey'>): string {
+  return unknownBootabilityWhyMessage(state).text;
+}
+
+/** `unknownBootabilityWhy` as a message, for the page. */
+export function unknownBootabilityWhyMessage(state: Pick<DeviceState, 'checkKey'>): CoreMessage {
   return state.checkKey != null
-    ? 'the key its bootloader checks a bank under was not named on this read'
-    : "the bootloader's key table was not read, so the keys it tries cannot be named";
+    ? coreMessage(
+        'boot.unknownWhy.checkKeyUnnamed',
+        {},
+        'the key its bootloader checks a bank under was not named on this read',
+      )
+    : coreMessage(
+        'boot.unknownWhy.noKeyTable',
+        {},
+        "the bootloader's key table was not read, so the keys it tries cannot be named",
+      );
 }
 
 /**

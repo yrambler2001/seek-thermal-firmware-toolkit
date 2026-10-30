@@ -10,22 +10,22 @@
 import { useMemo, useState, type ReactElement } from 'react';
 import { CircleStop, Gauge, Layers, ScanSearch, Send, ShieldAlert } from 'lucide-react';
 import {
-  bankNameOf,
-  bankWordsOf,
   everyBankBootedLast,
   backupFileNameShown,
-  backupPlanText,
-  derivedKeyLine,
   fpsBootWarningOf,
   hexUp,
-  restoreReadBackText,
   type FpsEveryBankResult,
   type FpsPatchResult,
   type SlotInputKind,
   type SlotKey,
   type SlotsReport,
   type WriteBackup,
+  backupPlanMessage,
+  bankParam,
+  derivedKeyLineMessage,
+  restoreReadBackMessage,
 } from '@seek-fw/core';
+import { coreText, coreTexts } from '@/lib/core-text';
 import { DeviceInfoPanel } from '@/components/DeviceInfoPanel';
 import { Prose } from '@/components/Prose';
 import { RunPanel } from '@/components/RunPanel';
@@ -145,8 +145,9 @@ function OutcomePanel({ outcome }: { readonly outcome: SlotFlashOutcome }): Reac
       {outcome.targetEmpty === true && (
         <p>{t('slots:outcome.wasEmpty', { bank: bankName(key) })}</p>
       )}
-      {/* i18n: core message (restoreReadBackText) */}
-      {outcome.restore !== null && <p>{restoreReadBackText(outcome.restore, bankNameOf(key))}</p>}
+      {outcome.restore !== null && (
+        <p>{coreText(restoreReadBackMessage(outcome.restore, bankParam(key, 'name')))}</p>
+      )}
       <p>{backupLine(outcome.backup)}</p>
       <p>
         {result.verified === true
@@ -386,10 +387,9 @@ export function SlotsView({ slots, connected, busy }: SlotsViewProps): ReactElem
           <>
             <DeviceInfoPanel state={report.state} />
             <SlotWriteKeys verdict={writeKeysVerdictOf(report)} />
-            {/* i18n: core message (fpsBootWarningOf) */}
             {bootWarning !== null && (
               <Alert tone="warn">
-                {bootWarning.paragraphs.map((paragraph) => (
+                {coreTexts(bootWarning.messages, bootWarning.paragraphs).map((paragraph) => (
                   <p key={paragraph}>{paragraph}</p>
                 ))}
               </Alert>
@@ -450,8 +450,7 @@ export function SlotsView({ slots, connected, busy }: SlotsViewProps): ReactElem
             busy={busy}
             targetEmpty={pending.plan.targetEmpty === true}
             source={pending.source}
-            /* i18n: core message (backupPlanText), then the page's download note */
-            backupText={`${backupPlanText(pending.report, [pending.key], pending.action)} ${backupDownloadNote()}`}
+            backupText={`${coreText(backupPlanMessage(pending.report, [pending.key], pending.action))} ${backupDownloadNote()}`}
             onWrite={() => {
               setConfirming(true);
             }}
@@ -471,10 +470,11 @@ export function SlotsView({ slots, connected, busy }: SlotsViewProps): ReactElem
             keyLine={
               pending.plan.derivedFrom
                 ? t('slots:writeConfirm.keyLine', {
-                    /* i18n: core message (derivedKeyLine) */
-                    key: derivedKeyLine(
-                      pending.plan.derivedFrom,
-                      bankWordsOf(pending.plan.derivedFrom.bank),
+                    key: coreText(
+                      derivedKeyLineMessage(
+                        pending.plan.derivedFrom,
+                        bankParam(pending.plan.derivedFrom.bank),
+                      ),
                     ),
                   })
                 : null
@@ -502,9 +502,10 @@ export function SlotsView({ slots, connected, busy }: SlotsViewProps): ReactElem
                 : writeRisk(report, fpsKey)
             }
             bootWarning={dialogBootWarning}
-            /* i18n: core message (backupPlanText) */
             backupText={
-              report === null ? '' : backupPlanText(report, [fpsKey], { kind: 'fps-patch' })
+              report === null
+                ? ''
+                : coreText(backupPlanMessage(report, [fpsKey], { kind: 'fps-patch' }))
             }
             onConfirm={(acknowledged) => {
               const key = fpsKey;
@@ -524,11 +525,12 @@ export function SlotsView({ slots, connected, busy }: SlotsViewProps): ReactElem
             version={report.state.version}
             riskOf={(key) => writeRisk(report, key)}
             bootedLast={everyPlan !== null && everyBankBootedLast(report, everyPlan.order)}
-            /* i18n: core message (backupPlanText) */
             backupText={
               everyPlan === null
                 ? ''
-                : backupPlanText(report, everyPlan.order, { kind: 'fps-patch-every-bank' })
+                : coreText(
+                    backupPlanMessage(report, everyPlan.order, { kind: 'fps-patch-every-bank' }),
+                  )
             }
             onConfirm={(acknowledged) => {
               setFpsEvery(false);

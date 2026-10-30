@@ -141,7 +141,6 @@ export function SlotFpsEveryConfirm({
                 ? t('slots:fpsEvery.orderBootedLast', { order })
                 : t('slots:fpsEvery.order', { order })}
           </span>
-          {/* i18n: core message (backupPlanText), then the page's download note */}
           <span className="block">{`${backupText} ${backupDownloadNote()}`}</span>
           <span className="block font-medium">{t('slots:fpsEvery.wayBack')}</span>
           <span className="block">{t('slots:fpsEvery.noReset')}</span>

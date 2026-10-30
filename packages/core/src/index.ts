@@ -35,6 +35,19 @@ export {
 
 /* ---- error taxonomy --------------------------------------------------- */
 export { CancelledError, SeekError, errorMessage, isSeekError } from './errors.js';
+export {
+  bankParam,
+  capitalParam,
+  coreMessage,
+  isCoreMessage,
+  listParam,
+  paramText,
+  type CoreBankParam,
+  type CoreCapitalParam,
+  type CoreListParam,
+  type CoreMessage,
+  type CoreParam,
+} from './message.js';
 export type { SeekErrorCode, SeekErrorOptions } from './errors.js';
 
 /* ---- progress, logging and outputs ------------------------------------ */
@@ -366,6 +379,7 @@ export {
   targetSlot,
   transportInfoOf,
   unknownBootabilityWhy,
+  unknownBootabilityWhyMessage,
   unlockTokenOf,
   upgradeTargetIsBooted,
   upgradeTargetWarning,
@@ -544,3 +558,9 @@ export type {
 } from './preservation/index.js';
 
 export * from './slots/index.js';
+export {
+  BANK_NOT_READ_VERDICT,
+  lockedBootRuleMessage,
+  selectLockedBoot,
+  type LockedBootSelection,
+} from './profiles/locked-boot.js';

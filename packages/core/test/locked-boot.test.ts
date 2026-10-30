@@ -48,7 +48,7 @@ describe('lockedBootOrder: the order boot_select_image tries the banks in', () =
 
 describe('selectLockedBoot: the bank a start runs', () => {
   it('runs the first bank of the order when its check passes', () => {
-    expect(selectLockedBoot(0xffffffff, ALL_PASS)).toEqual({
+    expect(selectLockedBoot(0xffffffff, ALL_PASS)).toMatchObject({
       runs: 'a',
       why: 'the boot-config word is 0xFFFFFFFF, so the bootloader tries slot A first, and it holds an image the bootloader accepts',
     });

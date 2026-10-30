@@ -28,6 +28,7 @@
 
 import { sha256hex } from '../bytes.js';
 import { bankWordsOf } from '../profiles/locked-boot.js';
+import { coreMessage, paramText, type CoreMessage, type CoreParam } from '../message.js';
 import { FLASH_DUMP_ALL_SELECTORS_FILE, FLASH_DUMP_ORIGINAL_FILE } from '../archive/flash-files.js';
 import { looksLikeZip, readZipEntries, type ZipEntry } from '../archive/zip-read.js';
 import { PRESERVE_DUMP_ORIGINAL_FILE, PRESERVE_DUMP_PATCHED_FILE } from '../preservation/steps.js';
@@ -476,13 +477,32 @@ export function restoreReadBack(stored: Uint8Array, after: Uint8Array | null): R
 
 /** The read-back verdict in words, the same on the page and in the CLI. */
 export function restoreReadBackText(check: RestoreReadBack, bankName: string): string {
-  if (!check.compared)
-    return `${bankName} was not read back, so it is not compared with the backup.`;
-  if (check.equal === true) {
-    return `${bankName} reads back byte for byte as the backup stores it.`;
+  return restoreReadBackMessage(check, bankName).text;
+}
+
+/** `restoreReadBackText` as a message; `bank` is a bank param (`bankParam(key, 'name')`) or the caller's name. */
+export function restoreReadBackMessage(check: RestoreReadBack, bank: CoreParam): CoreMessage {
+  const bankName = paramText(bank);
+  if (!check.compared) {
+    return coreMessage(
+      'restore.readBack.notCompared',
+      { bank },
+      `${bankName} was not read back, so it is not compared with the backup.`,
+    );
   }
-  return (
-    `${bankName} reads back different from the backup's stored bytes in ${String(check.differing)} B ` +
-    `(first at +0x${(check.firstDiffering ?? 0).toString(16).toUpperCase()}).`
+  if (check.equal === true) {
+    return coreMessage(
+      'restore.readBack.equal',
+      { bank },
+      `${bankName} reads back byte for byte as the backup stores it.`,
+    );
+  }
+  const count = String(check.differing);
+  const offset = `+0x${(check.firstDiffering ?? 0).toString(16).toUpperCase()}`;
+  return coreMessage(
+    'restore.readBack.differs',
+    { bank, count, offset },
+    `${bankName} reads back different from the backup's stored bytes in ${count} B ` +
+      `(first at ${offset}).`,
   );
 }

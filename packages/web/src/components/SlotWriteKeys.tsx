@@ -14,18 +14,22 @@ import type { ReactElement } from 'react';
 import { KeyRound } from 'lucide-react';
 import {
   bankNameOf,
-  derivedKeyLine,
   deriveWriteKeys,
-  FF_VENDOR_STAGED,
-  FF_VENDOR_STORED,
-  STAGED_UNDER_IMAGE_BLOCK_0,
-  storedUnderCheckKey,
   writeBannerOf,
   type SlotKey,
   type SlotsReport,
   type WriteKeyForm,
+  bankNameParam,
+  derivedKeyLineMessage,
+  FF_VENDOR_STAGED_MESSAGE,
+  FF_VENDOR_STORED_MESSAGE,
+  STAGED_UNDER_IMAGE_BLOCK_0_MESSAGE,
+  storedUnderCheckKeyMessage,
+  type CoreMessage,
+  type CoreParam,
 } from '@seek-fw/core';
-import { t, tEnglish } from '@/i18n';
+import { coreText } from '@/lib/core-text';
+import { t } from '@/i18n';
 import { bankName } from '@/lib/bank-names';
 import { KeyValue } from './KeyValue';
 import { Panel, PanelTitle } from './Panel';
@@ -59,7 +63,7 @@ export interface WriteKeysVerdict {
   /** The key the booted bank holds (e.g. "Key A"), or null when the page cannot name it. */
   readonly bootedKeyName: string | null;
   /** The 2016 line: what a written bank is stored under, in core's words (`storedUnderCheckKey`); else null. */
-  readonly storedAs: string | null;
+  readonly storedAs: CoreMessage | null;
   /** One line per fact the derivation relied on. */
   readonly evidence: readonly string[];
 }
@@ -81,7 +85,7 @@ export function writeKeysVerdictOf(report: SlotsReport): WriteKeysVerdict {
     bootedKey: keys.booted,
     keyName: keys.atRest?.name ?? null,
     bootedKeyName: keys.bootedKeyName,
-    storedAs: keys.form === 'image-block-0' ? storedUnderCheckKey(keys) : null,
+    storedAs: keys.form === 'image-block-0' ? storedUnderCheckKeyMessage(keys) : null,
     evidence: keys.evidence,
   };
 }
@@ -133,9 +137,11 @@ export function SlotWriteKeys({ verdict }: SlotWriteKeysProps): ReactElement {
         <PanelTitle icon={<KeyRound />}>{t('slots:keys.title')}</PanelTitle>
         <KeyValue
           rows={[
-            /* i18n: core message (STAGED_UNDER_IMAGE_BLOCK_0, storedUnderCheckKey) */
-            [t('slots:keys.stagedAs'), STAGED_UNDER_IMAGE_BLOCK_0],
-            [t('slots:keys.storedAs'), verdict.storedAs ?? storedUnderCheckKey({ atRest: null })],
+            [t('slots:keys.stagedAs'), coreText(STAGED_UNDER_IMAGE_BLOCK_0_MESSAGE)],
+            [
+              t('slots:keys.storedAs'),
+              coreText(verdict.storedAs ?? storedUnderCheckKeyMessage({ atRest: null })),
+            ],
           ]}
         />
         {verdict.evidence.length > 0 && (
@@ -159,9 +165,8 @@ export function SlotWriteKeys({ verdict }: SlotWriteKeysProps): ReactElement {
         <PanelTitle icon={<KeyRound />}>{t('slots:keys.title')}</PanelTitle>
         <KeyValue
           rows={[
-            /* i18n: core message (FF_VENDOR_STAGED, FF_VENDOR_STORED) */
-            [t('slots:keys.stagedAs'), FF_VENDOR_STAGED],
-            [t('slots:keys.storedAs'), FF_VENDOR_STORED],
+            [t('slots:keys.stagedAs'), coreText(FF_VENDOR_STAGED_MESSAGE)],
+            [t('slots:keys.storedAs'), coreText(FF_VENDOR_STORED_MESSAGE)],
           ]}
         />
         {verdict.evidence.length > 0 && (
@@ -188,15 +193,17 @@ export function SlotWriteKeys({ verdict }: SlotWriteKeysProps): ReactElement {
       </Panel>
     );
   }
-  /* The page's row names the bank in the language in use; core's derivedKeyLine gets the English names
-   * (it is core's sentence, English until core's sentences are translated). */
+  /* The page's row and core's derivedKeyLine both name the bank in the language in use. */
   const bootedShown =
     verdict.bootedKey == null
       ? (verdict.bootedName ?? t('slots:keys.theBootedBank'))
       : bankName(verdict.bootedKey);
-  const booted = verdict.bootedName ?? tEnglish('slots:keys.theBootedBank');
+  const booted: CoreParam =
+    verdict.bootedKey == null
+      ? (verdict.bootedName ?? t('slots:keys.theBootedBank'))
+      : bankNameParam(verdict.bootedName ?? bankNameOf(verdict.bootedKey), verdict.bootedKey);
   const bootedKey = verdict.bootedKeyName ?? t('slots:keys.unnamedKey');
-  const key = verdict.keyName ?? tEnglish('slots:keys.bootedBanksKey');
+  const key = verdict.keyName ?? t('slots:keys.bootedBanksKey');
   return (
     <Panel className="mt-3">
       <PanelTitle icon={<KeyRound />}>{t('slots:keys.title')}</PanelTitle>
@@ -208,9 +215,8 @@ export function SlotWriteKeys({ verdict }: SlotWriteKeysProps): ReactElement {
           ],
           [
             t('slots:keys.writtenAs'),
-            /* i18n: core message (derivedKeyLine) */
             t('slots:keys.writtenDerived', {
-              line: derivedKeyLine({ key, holds: verdict.bootedKeyName }, booted),
+              line: coreText(derivedKeyLineMessage({ key, holds: verdict.bootedKeyName }, booted)),
             }),
           ],
         ]}

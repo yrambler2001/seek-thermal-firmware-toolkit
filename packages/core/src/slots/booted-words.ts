@@ -10,11 +10,24 @@
  * plan's warning, the CLI's acknowledgement reason, the page's dialogs, its bank table and its badges.
  * ==================================================================== */
 
+import { coreMessage, paramText, type CoreMessage, type CoreParam } from '../message.js';
+
 /** "<bank> is the bank the camera boots now": the head of every risk sentence about the booted bank. */
 export function bootsNowOf(bank: string): string {
-  return `${bank} is the bank the camera boots now`;
+  return bootsNowMessage(bank).text;
+}
+
+/** `bootsNowOf` as a message; `bank` is a bank param or the caller's name for it. */
+export function bootsNowMessage(bank: CoreParam): CoreMessage {
+  return coreMessage(
+    'boot.bootsNow',
+    { bank },
+    `${paramText(bank)} is the bank the camera boots now`,
+  );
 }
 
 /** The booted bank's badge and note word ("booted now"), and every other bank's badge ("not booted"). */
 export const BOOTED_NOW = 'booted now';
 export const NOT_BOOTED = 'not booted';
+export const BOOTED_NOW_MESSAGE: CoreMessage = coreMessage('boot.bootedNow', {}, BOOTED_NOW);
+export const NOT_BOOTED_MESSAGE: CoreMessage = coreMessage('boot.notBooted', {}, NOT_BOOTED);

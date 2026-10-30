@@ -11,6 +11,8 @@
 
 import { hexUp } from '../bytes.js';
 import { bankNameOf } from '../profiles/locked-boot.js';
+import { coreMessage, type CoreMessage } from '../message.js';
+import { bankNameParam } from './backup.js';
 import { slotDumpNames } from './dump.js';
 import { prepareSlotFlash } from './write.js';
 import { slotRefused } from './write-image.js';
@@ -42,18 +44,43 @@ function nameOf(report: SlotsReport, key: SlotKey): string {
  * write support, the camera-wide refusal, the acknowledgement) are the writer's.
  */
 export function copySourceRefusal(report: SlotsReport, from: SlotKey): string | null {
+  return copySourceRefusalMessage(report, from)?.text ?? null;
+}
+
+const NO_READ: CoreMessage = coreMessage('copy.source.noRead', {}, 'no read');
+
+/** `copySourceRefusal` as a message, for the page. */
+export function copySourceRefusalMessage(report: SlotsReport, from: SlotKey): CoreMessage | null {
   const view = report.slots.find((candidate) => candidate.entry.key === from);
   const name = nameOf(report, from);
-  if (view === undefined) return `${name} is not in this build's plan`;
-  if (view.state === null) {
-    return `${name} was not read (${view.unreadReason ?? 'no read'}), so there is no image to copy`;
+  const bank = { name: bankNameParam(name, from) };
+  if (view === undefined) {
+    return coreMessage('copy.source.notInPlan', bank, `${name} is not in this build's plan`);
   }
-  if (view.content === 'empty') return `${name} is empty: there is no image to copy`;
+  if (view.state === null) {
+    const reason = view.unreadReason ?? NO_READ;
+    return coreMessage(
+      'copy.source.notRead',
+      { ...bank, reason },
+      `${name} was not read (${view.unreadReason ?? NO_READ.text}), so there is no image to copy`,
+    );
+  }
+  if (view.content === 'empty') {
+    return coreMessage('copy.source.empty', bank, `${name} is empty: there is no image to copy`);
+  }
   if (view.content === 'foreign') {
-    return `${name} holds no firmware image this read recognises, so there is nothing to copy`;
+    return coreMessage(
+      'copy.source.foreign',
+      bank,
+      `${name} holds no firmware image this read recognises, so there is nothing to copy`,
+    );
   }
   if (view.state.plain === null) {
-    return `no key this read recovered opens ${name}, so there is no decrypted image to copy`;
+    return coreMessage(
+      'copy.source.noKey',
+      bank,
+      `no key this read recovered opens ${name}, so there is no decrypted image to copy`,
+    );
   }
   return null;
 }

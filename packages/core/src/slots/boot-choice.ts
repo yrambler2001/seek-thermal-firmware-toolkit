@@ -36,7 +36,9 @@ import {
   lockedBootRule,
   selectLockedBoot,
   type BootVerdict,
+  lockedBootRuleMessage,
 } from '../profiles/locked-boot.js';
+import { coreMessage, type CoreMessage } from '../message.js';
 import type { FirmwareProfile, SlotKey } from '../profiles/types.js';
 import type { DeviceState } from '../workflows/types.js';
 import { classifyBuild } from './capability-family.js';
@@ -50,6 +52,19 @@ export { bankNameOf, bankWordsOf };
  */
 export const CHECK_KEY_UNNAMED_VERDICT =
   'could not be checked: the key its bootloader checks a bank under was not named';
+
+/** `CHECK_KEY_UNNAMED_VERDICT` as a message, for the page. */
+export const CHECK_KEY_UNNAMED_VERDICT_MESSAGE: CoreMessage = coreMessage(
+  'boot.verdict.checkKeyUnnamed',
+  {},
+  CHECK_KEY_UNNAMED_VERDICT,
+);
+
+export const CFG0_NOT_READ: CoreMessage = coreMessage(
+  'boot.cfg0NotRead',
+  {},
+  'the boot-config word (cfg[0]) was not read, so the bank the next start runs is not known',
+);
 
 /**
  * Whether this build's boot rule and bank check are decoded, so the page and the CLI name the bank the
@@ -86,6 +101,8 @@ export interface BootChoice {
   readonly reportedBooted: SlotKey | null;
   /** One sentence: the word's rule and the bank it gives, or what could not be checked. */
   readonly why: string;
+  /** `why` as a message (code + params), for the page. Hand-made choices in tests may leave it out. */
+  readonly whyMessage?: CoreMessage;
 }
 
 /**
@@ -125,7 +142,8 @@ export function bootChoiceOf(
       word: null,
       runs: null,
       reportedBooted,
-      why: 'the boot-config word (cfg[0]) was not read, so the bank the next start runs is not known',
+      why: CFG0_NOT_READ.text,
+      whyMessage: CFG0_NOT_READ,
     };
   }
   const word = state.cfg0 >>> 0;
@@ -140,9 +158,15 @@ export function bootChoiceOf(
   const selection = selectLockedBoot(
     word,
     accepts,
-    unnamed ? CHECK_KEY_UNNAMED_VERDICT : undefined,
+    unnamed ? CHECK_KEY_UNNAMED_VERDICT_MESSAGE : undefined,
   );
-  return { word, runs: selection.runs, reportedBooted, why: selection.why };
+  return {
+    word,
+    runs: selection.runs,
+    reportedBooted,
+    why: selection.why,
+    whyMessage: selection.whyMessage,
+  };
 }
 
 /**
@@ -162,4 +186,9 @@ export function lastStartOf(
 /** The boot-config word as the CLI prints it, with the rule it sets. */
 export function bootWordRuleOf(word: number): string {
   return lockedBootRule(word);
+}
+
+/** `bootWordRuleOf` as a message, for the page. */
+export function bootWordRuleMessage(word: number): CoreMessage {
+  return lockedBootRuleMessage(word);
 }

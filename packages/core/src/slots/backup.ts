@@ -16,6 +16,7 @@
 
 import { buildZip } from '../archive/zip.js';
 import { bankNameOf } from '../profiles/locked-boot.js';
+import { bankParam, coreMessage, listParam, type CoreMessage, type CoreParam } from '../message.js';
 import { hexUp, isoStamp, utf8 } from '../bytes.js';
 import { CancelledError, errorMessage, SeekError } from '../errors.js';
 import type { Artifact } from '../events.js';
@@ -203,22 +204,55 @@ export function backupFileNameShown(
  * backup makes is a fresh one, just before the write; this is what that read is expected to find.
  */
 export function backupBankWords(report: SlotsReport, key: SlotKey): string {
+  return backupBankMessage(report, key).text;
+}
+
+/** A plan's name for a bank as a param: the bank itself when it is the usual name ("Slot A"), else the text. */
+export function bankNameParam(name: string, key: SlotKey): CoreParam {
+  return name === bankNameOf(key) ? bankParam(key, 'name') : name;
+}
+
+/** `backupBankWords` as a message, for the page. */
+export function backupBankMessage(report: SlotsReport, key: SlotKey): CoreMessage {
   const view = report.slots.find((candidate) => candidate.entry.key === key);
   const name = view?.entry.name ?? bankNameOf(key);
-  if (view === undefined) return `${name} (not in this build's plan: the zip says so)`;
+  const bank = { name: bankNameParam(name, key) };
+  if (view === undefined) {
+    return coreMessage(
+      'backup.bank.notInPlan',
+      bank,
+      `${name} (not in this build's plan: the zip says so)`,
+    );
+  }
   if (!view.entry.dump.supported) {
-    return `${name} (this build cannot read it, ${view.entry.dump.reason}: the zip says so)`;
+    return coreMessage(
+      'backup.bank.unsupported',
+      { ...bank, reason: view.entry.dump.reason },
+      `${name} (this build cannot read it, ${view.entry.dump.reason}: the zip says so)`,
+    );
   }
   if (view.content === 'empty') {
-    return `${name} (empty, every byte 0xFF: the zip says so, and the write overwrites no firmware)`;
+    return coreMessage(
+      'backup.bank.empty',
+      bank,
+      `${name} (empty, every byte 0xFF: the zip says so, and the write overwrites no firmware)`,
+    );
   }
   if (view.content === 'unread') {
-    return `${name} (the slots read did not reach it: the zip says whether the read before the write does)`;
+    return coreMessage(
+      'backup.bank.unread',
+      bank,
+      `${name} (the slots read did not reach it: the zip says whether the read before the write does)`,
+    );
   }
   if (view.state?.plain == null) {
-    return `${name} (as stored; no key this read recovered opens it, so there is no decrypted file)`;
+    return coreMessage(
+      'backup.bank.noKey',
+      bank,
+      `${name} (as stored; no key this read recovered opens it, so there is no decrypted file)`,
+    );
   }
-  return `${name} (as stored, and decrypted)`;
+  return coreMessage('backup.bank.decrypted', bank, `${name} (as stored, and decrypted)`);
 }
 
 /** "A", "A and B", "A, B and C". */
@@ -236,10 +270,22 @@ export function backupPlanText(
   keys: readonly SlotKey[],
   action: WriteAction,
 ): string {
-  const banks = keys.map((key) => backupBankWords(report, key));
-  return (
-    `Before anything is written, ${listed(banks)} ${keys.length === 1 ? 'is' : 'are'} read again and ` +
-    `saved in one zip with a note of what each file is: ${backupFileNameShown(report, keys, action)}.`
+  return backupPlanMessage(report, keys, action).text;
+}
+
+/** `backupPlanText` as a message, for the page. */
+export function backupPlanMessage(
+  report: SlotsReport,
+  keys: readonly SlotKey[],
+  action: WriteAction,
+): CoreMessage {
+  const banks = keys.map((key) => backupBankMessage(report, key));
+  const file = backupFileNameShown(report, keys, action);
+  return coreMessage(
+    keys.length === 1 ? 'backup.plan.one' : 'backup.plan.many',
+    { banks: listParam(banks, 'commaAnd'), file },
+    `Before anything is written, ${listed(banks.map((bank) => bank.text))} ${keys.length === 1 ? 'is' : 'are'} read again and ` +
+      `saved in one zip with a note of what each file is: ${file}.`,
   );
 }
 
