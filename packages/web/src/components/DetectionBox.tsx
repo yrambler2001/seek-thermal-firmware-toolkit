@@ -6,6 +6,7 @@
  * from the camera) and the offline decryptor (evidence from the dump file).
  */
 
+import { t, useT } from '@/i18n';
 import type { ReactElement } from 'react';
 import type { DetectionResult } from '@seek-fw/core';
 import { KeyValue, type KeyValueRow } from './KeyValue';
@@ -29,11 +30,12 @@ export function DetectionBox({
   scoreBasis,
   actingName,
 }: DetectionBoxProps): ReactElement {
+  const { rich } = useT();
   const best = detection.best;
   const rows: readonly KeyValueRow[] = [
-    ['Detected', best.profile.name],
+    [t('decrypt:detection.detected'), best.profile.name],
     [
-      'Score',
+      t('decrypt:detection.score'),
       <span key="score" className="flex items-center gap-2">
         <span
           aria-hidden="true"
@@ -44,19 +46,20 @@ export function DetectionBox({
             style={{ width: `${String(Math.round(Math.max(0, Math.min(1, best.score)) * 100))}%` }}
           />
         </span>
-        {`${best.score.toFixed(2)} of 1.00, ${scoreBasis}`}
+        {t('decrypt:detection.scoreText', { score: best.score.toFixed(2), basis: scoreBasis })}
       </span>,
     ],
-    ['Read as', actingName === best.profile.name ? null : (actingName ?? null)],
-    ['Summary', best.profile.summary],
+    [t('decrypt:detection.readAs'), actingName === best.profile.name ? null : (actingName ?? null)],
+    [t('decrypt:detection.summary'), best.profile.summary], // i18n: core message
   ];
 
   return (
     <>
       <KeyValue rows={rows} />
       <Prose className="mt-3">
-        <p>Why:</p>
+        <p>{t('decrypt:detection.why')}</p>
         <ul>
+          {/* i18n: core message */}
           {best.reasons.map((reason) => (
             <li key={reason}>{reason}</li>
           ))}
@@ -64,12 +67,7 @@ export function DetectionBox({
       </Prose>
       {detection.ambiguous && (
         <Alert tone="warn" className="mt-3">
-          <p>
-            <strong>The evidence did not settle which family this is.</strong> Either the winner
-            scored no better than the generic fallback, or a runner-up came too close to call. The
-            decryption is unaffected — the key is solved out of the ciphertext either way — but the
-            family named in the report, and anything gated on it, is a guess.
-          </p>
+          <p>{rich('decrypt:detection.ambiguous')}</p>
         </Alert>
       )}
     </>

@@ -77,6 +77,7 @@ export function useSlotFileDecrypt(): SlotFileApi {
     } catch (error) {
       if (current !== pick.current) return;
       /* A file that is not exactly one bank is a refusal of core's, not a failed read. */
+      // i18n: core message (the refusal; a read error is the browser's)
       if (error instanceof SeekError && error.code === 'slots/refused') setRefusal(error.message);
       else setReadError(errorMessage(error));
     } finally {

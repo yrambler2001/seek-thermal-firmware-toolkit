@@ -12,6 +12,7 @@
  * and written into the archive's manifest.
  */
 
+import { t } from '@/i18n';
 import { useCallback, useMemo, useState } from 'react';
 import {
   CancelledError,
@@ -51,7 +52,7 @@ export interface OfflineDecryptApi {
 
 export function useOfflineDecrypt(params: OfflineDecryptParams): OfflineDecryptApi {
   const { id, runner } = params;
-  const reporter = useReporter('No file chosen.');
+  const reporter = useReporter(t('decrypt:status.noFile'));
   const [detection, setDetection] = useState<DetectionResult | null>(null);
   const running = runner.active === id;
 
@@ -62,7 +63,7 @@ export function useOfflineDecrypt(params: OfflineDecryptParams): OfflineDecryptA
 
       if (file.size < HEADER_OFFSET + 8) {
         reporter.reporter.log('file is too small to contain a firmware image header', 'error');
-        reporter.reporter.progress(1, 1, 'Not a usable dump.');
+        reporter.reporter.progress(1, 1, t('decrypt:status.notUsable'));
         return;
       }
       if (file.size % 4 !== 0) {
@@ -72,7 +73,7 @@ export function useOfflineDecrypt(params: OfflineDecryptParams): OfflineDecryptA
         );
       }
 
-      reporter.reporter.progress(0, 1, 'Reading file ...');
+      reporter.reporter.progress(0, 1, t('decrypt:status.reading'));
       await yieldToUi();
       const bytes = new Uint8Array(await file.arrayBuffer());
       const inputSha = await sha256hex(bytes);
@@ -128,7 +129,7 @@ export function useOfflineDecrypt(params: OfflineDecryptParams): OfflineDecryptA
         { name: 'README.md', data: utf8(makeOfflineDecryptReadme(manifest)) },
       ];
 
-      reporter.reporter.progress(1, 1, 'Building archive ...');
+      reporter.reporter.progress(1, 1, t('decrypt:status.building'));
       await yieldToUi();
 
       const dirName = `${stem}_decrypted_${isoStamp()}`;
@@ -145,9 +146,8 @@ export function useOfflineDecrypt(params: OfflineDecryptParams): OfflineDecryptA
         1,
         1,
         nothingDecrypted
-          ? 'No images decrypted — see the log for why. The manifest is in your downloads.'
-          : `Done — ${String(result.slots.length)}/${String(total)} slot(s) decrypted. ` +
-              'Check your downloads.',
+          ? t('decrypt:status.nothingDecrypted')
+          : t('decrypt:status.done', { done: result.slots.length, count: total }),
       );
     },
     [reporter],
@@ -160,19 +160,19 @@ export function useOfflineDecrypt(params: OfflineDecryptParams): OfflineDecryptA
       await runner.start(
         id,
         async (signal) => {
-          reporter.reset('Reading file ...');
+          reporter.reset(t('decrypt:status.reading'));
           setDetection(null);
           try {
             await execute(file, signal);
           } catch (error) {
             if (error instanceof CancelledError) {
               reporter.log('cancelled', 'warn');
-              reporter.setStatus('Cancelled.');
+              reporter.setStatus(t('shared:status.cancelled'));
               return;
             }
             reporter.log(`ERROR: ${errorMessage(error)}`, 'error');
             logHint(reporter.log, error);
-            reporter.setStatus('Failed — see the log above.');
+            reporter.setStatus(t('shared:status.failedSeeLog'));
           } finally {
             reporter.flush();
           }
@@ -185,7 +185,7 @@ export function useOfflineDecrypt(params: OfflineDecryptParams): OfflineDecryptA
 
   const cancel = useCallback((): void => {
     runner.cancel();
-    reporter.setStatus('Cancelling ...');
+    reporter.setStatus(t('shared:status.cancelling'));
   }, [reporter, runner]);
 
   return useMemo(
