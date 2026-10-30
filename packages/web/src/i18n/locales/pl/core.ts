@@ -153,9 +153,9 @@ export default {
     '{name} pod adresem {address}, firmware {version}, w postaci odszyfrowanej przez odczyt slotów',
   /** `{size}`: bytes; `{sha256}`: a SHA-256. */
   'copy.note':
-    'Źródło obrazu: {name}, w postaci odszyfrowanej przez odczyt slotów: {size} B, sha256 {sha256}.',
+    'Obraz pochodzi ze {name:gen}, w postaci odszyfrowanej przez odczyt slotów: {size} B, sha256 {sha256}.',
   'copy.noteVersion':
-    'Źródło obrazu: {name}, w postaci odszyfrowanej przez odczyt slotów: firmware {version}, {size} B, sha256 {sha256}.',
+    'Obraz pochodzi ze {name:gen}, w postaci odszyfrowanej przez odczyt slotów: firmware {version}, {size} B, sha256 {sha256}.',
 
   /* ---- restore: a bank restored from a full flash backup (slots/restore) ---- */
   /** "the backup's Slot A (at 0x14010000)", said inside restore.* sentences as `{where}`. */
@@ -185,7 +185,7 @@ export default {
   'restore.note.sameBytes':
     '{name} już zawiera bajty zapisane w kopii zapasowej: zapis przywraca ten sam obraz.',
   'restore.warn.otherCamera':
-    'Ta kopia zapasowa wygląda na pochodzącą z innej kamery: jej blok tożsamości podaje numer seryjny {theirs}, a ta kamera ma {camera}. Zapisywany jest tylko obraz ({name}); nic z tożsamości ani kalibracji tamtej kamery nie jest zapisywane.',
+    'Ta kopia zapasowa wygląda na pochodzącą z innej kamery: jej blok tożsamości podaje numer seryjny {theirs}, a ta kamera ma {camera}. Zapisywany jest tylko obraz {name:gen}; nic z tożsamości ani kalibracji tamtej kamery nie jest zapisywane.',
   'restore.warn.noIdentity':
     'Ta kopia zapasowa nie ma bloku tożsamości pod adresem {address}, więc nie da się ustalić, z czyjej kamery została odczytana.',
   'restore.warn.serialNotRead':
@@ -202,9 +202,9 @@ export default {
     'Odczyt kontrolny: {bank} różni się od bajtów zapisanych w kopii zapasowej w {count} B (pierwsza różnica pod {offset}).',
 
   /* ---- keys: the keys of a bank write (slots/write-keys) ---- */
-  'keys.derived.same': '{key}, wyprowadzony z uruchomionego slotu ({bank})',
+  'keys.derived.same': '{key}, wyprowadzony z uruchomionego {bank:gen}',
   'keys.derived.holds':
-    '{key} (klucz zapisu), wyprowadzony z uruchomionego slotu ({bank}), który zawiera {holds}',
+    '{key} (klucz zapisu), wyprowadzony z uruchomionego {bank:gen}, który zawiera {holds}',
   /* The same two lines when the booted bank has no name. */
   'keys.derived.sameUnnamed': '{key}, wyprowadzony z uruchomionego slotu',
   'keys.derived.holdsUnnamed':
@@ -410,17 +410,62 @@ export default {
 
   /* ---- keyName: the names core gives keys; a param `{key}`, `{held}`, `{holds}`, `{masks}` arrives as one of these ---- */
   'keyName.keyA': 'klucz A',
+  'keyName.keyA:gen': 'klucza A',
+  'keyName.keyA:dat': 'kluczowi A',
+  'keyName.keyA:acc': 'klucz A',
+  'keyName.keyA:ins': 'kluczem A',
+  'keyName.keyA:loc': 'kluczu A',
   'keyName.keyB': 'klucz B',
+  'keyName.keyB:gen': 'klucza B',
+  'keyName.keyB:dat': 'kluczowi B',
+  'keyName.keyB:acc': 'klucz B',
+  'keyName.keyB:ins': 'kluczem B',
+  'keyName.keyB:loc': 'kluczu B',
   /** A key programmed into this one camera. */
   'keyName.perDevice': 'klucz urządzenia',
+  'keyName.perDevice:gen': 'klucza urządzenia',
+  'keyName.perDevice:dat': 'kluczowi urządzenia',
+  'keyName.perDevice:acc': 'klucz urządzenia',
+  'keyName.perDevice:ins': 'kluczem urządzenia',
+  'keyName.perDevice:loc': 'kluczu urządzenia',
   'keyName.thePerDevice': 'klucz urządzenia',
+  'keyName.thePerDevice:gen': 'klucza urządzenia',
+  'keyName.thePerDevice:dat': 'kluczowi urządzenia',
+  'keyName.thePerDevice:acc': 'klucz urządzenia',
+  'keyName.thePerDevice:ins': 'kluczem urządzenia',
+  'keyName.thePerDevice:loc': 'kluczu urządzenia',
   'keyName.applicationKeyA': 'klucz A aplikacji',
+  'keyName.applicationKeyA:gen': 'klucza A aplikacji',
+  'keyName.applicationKeyA:dat': 'kluczowi A aplikacji',
+  'keyName.applicationKeyA:acc': 'klucz A aplikacji',
+  'keyName.applicationKeyA:ins': 'kluczem A aplikacji',
+  'keyName.applicationKeyA:loc': 'kluczu A aplikacji',
   'keyName.applicationKeyB': 'klucz B aplikacji',
+  'keyName.applicationKeyB:gen': 'klucza B aplikacji',
+  'keyName.applicationKeyB:dat': 'kluczowi B aplikacji',
+  'keyName.applicationKeyB:acc': 'klucz B aplikacji',
+  'keyName.applicationKeyB:ins': 'kluczem B aplikacji',
+  'keyName.applicationKeyB:loc': 'kluczu B aplikacji',
   /** The 2016 line's check key: the second block of the image's own key table. */
   'keyName.block1': 'blok kluczy 1',
+  'keyName.block1:gen': 'bloku kluczy 1',
+  'keyName.block1:dat': 'blokowi kluczy 1',
+  'keyName.block1:acc': 'blok kluczy 1',
+  'keyName.block1:ins': 'blokiem kluczy 1',
+  'keyName.block1:loc': 'bloku kluczy 1',
   'keyName.theDeviceKey': 'klucz urządzenia',
+  'keyName.theDeviceKey:gen': 'klucza urządzenia',
+  'keyName.theDeviceKey:dat': 'kluczowi urządzenia',
+  'keyName.theDeviceKey:acc': 'klucz urządzenia',
+  'keyName.theDeviceKey:ins': 'kluczem urządzenia',
+  'keyName.theDeviceKey:loc': 'kluczu urządzenia',
   /** A slot's key when the read names none (a placeholder, not a key's name). */
   'keyName.unknown': 'nieznany klucz',
+  'keyName.unknown:gen': 'nieznanego klucza',
+  'keyName.unknown:dat': 'nieznanemu kluczowi',
+  'keyName.unknown:acc': 'nieznany klucz',
+  'keyName.unknown:ins': 'nieznanym kluczem',
+  'keyName.unknown:loc': 'nieznanym kluczu',
   'keys.noKnownKey': 'brak znanego klucza',
 
   /* ---- keys.evidence: the facts a write's keys rest on, one list item each (slots/write-keys-words) ---- */
@@ -441,9 +486,9 @@ export default {
   'keys.evidence.checkKeyNamed':
     'kamera odszyfrowuje przesłane dane tym kluczem i ponownie szyfruje je kluczem, którym jej bootloader sprawdza slot — {key} {hex} — więc każdy zapisany przez nią slot jest przechowywany tak, jak przyjmuje go bootloader',
   'keys.evidence.checkKeyInferred':
-    'kamera odszyfrowuje przesłane dane tym kluczem i ponownie szyfruje je kluczem, którym jej bootloader sprawdza slot — {key} {hex} (wywnioskowanym ze slotu, który według kamery uruchomiła, a do którego bootloader wszedł bez sprawdzenia: {bank}) — więc każdy zapisany przez nią slot jest przechowywany tak, jak przyjmuje go bootloader',
+    'kamera odszyfrowuje przesłane dane tym kluczem i ponownie szyfruje je {key:ins} {hex}, kluczem, którym jej bootloader sprawdza slot (wywnioskowanym ze {bank:gen}, slotu, który według kamery uruchomiła, a do którego bootloader wszedł bez sprawdzenia), więc każdy zapisany przez nią slot jest przechowywany tak, jak przyjmuje go bootloader',
   'keys.evidence.checkKeyNamedFrom':
-    'kamera odszyfrowuje przesłane dane tym kluczem i ponownie szyfruje je kluczem, którym jej bootloader sprawdza slot — {key} {hex} (wskazanym na podstawie slotu, który według kamery uruchomiła: {bank}) — więc każdy zapisany przez nią slot jest przechowywany tak, jak przyjmuje go bootloader',
+    'kamera odszyfrowuje przesłane dane tym kluczem i ponownie szyfruje je {key:ins} {hex}, kluczem, którym jej bootloader sprawdza slot (wskazanym na podstawie {bank:gen}, slotu, który według kamery uruchomiła), więc każdy zapisany przez nią slot jest przechowywany tak, jak przyjmuje go bootloader',
   /** `{source}` is keys.source.*. */
   'keys.evidence.applicationKeyA':
     'działająca aplikacja ({bank}, firmware {firmware}) zawiera swój klucz A {keyA} pod {keyAAt} (źródło: {source})',
@@ -457,26 +502,25 @@ export default {
   'keys.evidence.noPerDevice':
     'klucz urządzenia nie jest zaprogramowany, więc aplikacja ponownie szyfruje dane własnym kluczem B',
   'keys.evidence.storeKey':
-    'klucz zapisu aplikacji to {key} bootloadera ({hex}), więc zapisy przechowują pod nim każdy slot; uruchomiony slot ({bank}) zawiera {held}, który bootloader również akceptuje',
+    'klucz zapisu aplikacji to {key} bootloadera ({hex}), więc zapisy przechowują pod nim każdy slot; uruchomiony {bank} zawiera {held}, który bootloader również akceptuje',
   'keys.evidence.bootedKey':
-    'uruchomiony slot ({bank}) odszyfrowuje się przy użyciu: {key} ({hex}) — klucza, który sprawdza bootloader; klucz zapisu aplikacji nie jest kluczem bootloadera, więc zapisy przechowują każdy slot pod kluczem uruchomionego slotu',
+    'uruchomiony {bank} odszyfrowuje się {key:ins} ({hex}), kluczem, który sprawdza bootloader; klucz zapisu aplikacji nie jest kluczem bootloadera, więc zapisy przechowują każdy slot pod kluczem uruchomionego slotu',
   /** `{masks}`: key names joined with commas. */
   'keys.evidence.masks':
-    'przesyłane dane to obraz XOR strumienie kluczy: {masks}; urządzenie przechowuje obraz pod kluczem: {key}',
+    'przesyłane dane to obraz XOR strumienie {masks:gen}; urządzenie przechowuje obraz pod {key:ins}',
   /** `{held}` is a key name or keys.noKnownKey. */
   'keys.evidence.otherBank':
-    '{bank} — klucz odszyfrowania: {held}; według tej samej zasady jest zapisywany z kluczem: {key} i odczytywany kontrolnie',
-
+    '{bank} odszyfrowuje się {held:ins}; według tej samej zasady jest zapisywany pod {key:ins} i odczytywany kontrolnie',
   /* ---- keys.refused: why no upload key is derived (the "refused" row, or the banner) ---- */
   'keys.refused.bootUnnamed':
     'nie udało się ustalić uruchomionego slotu, więc nie da się z niego odczytać klucza, pod którym slot jest przechowywany',
   'keys.refused.notDerived': 'nie udało się wyprowadzić kluczy',
   'keys.refused.notDecrypted':
-    'uruchomiony slot ({bank}) nie odszyfrowuje się do obrazu, więc nie da się odczytać klucza, pod którym jest przechowywany',
+    'uruchomiony {bank} nie odszyfrowuje się do obrazu, więc nie da się odczytać klucza, pod którym jest przechowywany',
   'keys.refused.noBootKey':
-    'uruchomiony slot ({bank}) nie odszyfrowuje się żadnym kluczem, który sprawdza bootloader (jego kluczem A ani kluczem zapisu), więc nie da się z niego odczytać klucza, pod którym slot jest przechowywany',
+    'uruchomiony {bank} nie odszyfrowuje się żadnym kluczem, który sprawdza bootloader (jego kluczem A ani kluczem zapisu), więc nie da się z niego odczytać klucza, pod którym slot jest przechowywany',
   'keys.refused.keyNotInTable':
-    'uruchomiony slot ({bank}) odszyfrowuje się przy użyciu: {key}, ale tabela kluczy tej kamery nie zawiera tego klucza, więc nie da się pod nim zapisać',
+    'uruchomiony {bank} odszyfrowuje się {key:ins}, ale tabela kluczy tej kamery nie zawiera tego klucza, więc nie da się pod nim zapisać',
   'keys.refused.noApplicationPair':
     'działająca aplikacja ({bank}, firmware {firmware}) nie zawiera żadnej ze znanych par kluczy (pary bootloadera ani zdekodowanych par aplikacji) z każdą połową dokładnie raz, więc nie da się zlokalizować jej klucza A w jej obrazie',
   /** `{keyA}`, `{keyB}`: how many times each key occurs. */
@@ -619,7 +663,7 @@ export default {
     'tego obrazu nie ma w tabeli łatek liczby klatek, więc dla tej kompilacji nie powstaje żadna łatka. Tabela obejmuje kompilacje Compact od 0.7.0.8 do 1.3.0.8 (8 Hz; 0.7.0.8 odrzuca kod slotów), 1.3.0.8 (16 Hz FF), 4.8.1.7, 4.8.1.9, 4.8.2.1 i 4.16.1.7 FF oraz kompilacje Compact PRO 1.0.3.x i 4.9.x; żadna inna kompilacja nie ma pozycji',
 
   /* ---- fps: why a bank's frame-rate patch is not offered, or why a patch of every bank stopped (slots/fps-patch) ---- */
-  'fps.plan.noBank': '{bank} nie należy do planu tej kompilacji',
+  'fps.plan.noBank': 'plan tej kompilacji nie obejmuje {bank:gen}',
   /** `{reason}`: the build's own reason (English: the support table has no codes yet). */
   'fps.plan.noPlain': '{bank} nie może przyjąć odszyfrowanego obrazu w tej kompilacji: {reason}',
   'fps.plan.empty': '{bank} nie ma odszyfrowanego obrazu do załatania (jest pusty)',
@@ -760,7 +804,7 @@ export default {
   'boot.verdict.unsettled': 'nie dał się odczytać dwa razy tak samo',
   /** `{why}` is a boot.select.* sentence; "[inferred]" is a tag the project uses for an inference: keep it as it is. */
   'preserve.boot.inferred':
-    '{why} (klucz, którym bootloader sprawdza slot, wywnioskowano ze slotu, do którego bootloader wszedł bez sprawdzenia — {bank}) [inferred]',
+    '{why} (klucz, którym bootloader sprawdza slot, wywnioskowano ze {bank:gen}, do którego bootloader wszedł bez sprawdzenia) [inferred]',
   /** The "Last start" row. `{word}` is the active-slot word as a decimal number. */
   'preserve.lastStart.entered': '{bank} według zapisu kamery (słowo aktywnego slotu {word})',
   'preserve.lastStart.notRead': 'nieznane — nie udało się odczytać słowa aktywnego slotu',
@@ -912,7 +956,7 @@ export default {
     'czytnik okien kamery ma limit na jedno uruchomienie, a te odczyty zwrócił wyczerpany czytnik — wyłącz kamerę i włącz ją ponownie (odłącz ją i podłącz albo użyj jej wyłącznika), a potem uruchom ponownie `preserve --resume <run-directory>`. Sygnatura: {signature} — z tych bajtów nie da się wyprowadzić fabrycznego jawnego tekstu. Wypróbowano każdy sposób odczytu:\n  - {reasons}',
   /** `{address}` hex; `{sha256}`, `{other}`: SHA-256 values; `{live}`, `{capture}`: hex bytes. */
   'preserve.fail.notInBackup':
-    '{bank} ({address}) nie występuje w kopii zapasowej — oryginalne okna nie mogą go podać',
+    'kopia zapasowa nie zawiera {bank:gen} ({address}) — oryginalne okna nie mogą go podać',
   'preserve.fail.readsDisagree':
     '{bank}: dwa odczyty się różnią (sha256 {sha256} i {other}) — do kamery, która nie potrafi dwa razy z rzędu podać tego samego uruchomionego slotu, nie należy zapisywać; przechwycone dane są źródłem przywrócenia i danymi wejściowymi do wyprowadzenia łatki',
   'preserve.fail.notFactory':
@@ -979,9 +1023,9 @@ export default {
     'slot {what}. Aby uwzględnić ten slot, najpierw zapisz na niego z powrotem oryginalny obraz (na przykład z pełnej kopii zapasowej pamięci flash wykonanej przed łatką liczby klatek), a potem rozpocznij nowy przebieg; łatkę liczby klatek można potem nałożyć ponownie na oryginalny obraz',
   /** The run stops: `{name}` is the bank as a label ("Slot A"), `{bank}` in a sentence ("slot A"). */
   'preserve.image.unknownRefusal':
-    '{name} {what}. Przebieg pobiera łatany firmware z tego slotu, więc zatrzymuje się tutaj, zanim cokolwiek zostanie zapisane. Aby zachować tę kamerę, najpierw zapisz z powrotem oryginalny obraz na {bank} (na przykład z pełnej kopii zapasowej pamięci flash wykonanej przed zmianą), a potem rozpocznij nowy przebieg.',
+    '{name} {what}. Przebieg pobiera łatany firmware z tego slotu, więc zatrzymuje się tutaj, zanim cokolwiek zostanie zapisane. Aby zachować tę kamerę, najpierw zapisz z powrotem oryginalny obraz w {bank:loc} (na przykład z pełnej kopii zapasowej pamięci flash wykonanej przed zmianą), a potem rozpocznij nowy przebieg.',
   'preserve.image.frameRateRefusal':
-    '{name} {what}. Przebieg pobiera łatany firmware z tego slotu, więc zatrzymuje się tutaj, zanim cokolwiek zostanie zapisane. Aby zachować tę kamerę, najpierw zapisz z powrotem oryginalny obraz na {bank} (na przykład z pełnej kopii zapasowej pamięci flash wykonanej przed łatką liczby klatek), a potem rozpocznij nowy przebieg; łatkę liczby klatek można potem nałożyć ponownie na oryginalny obraz.',
+    '{name} {what}. Przebieg pobiera łatany firmware z tego slotu, więc zatrzymuje się tutaj, zanim cokolwiek zostanie zapisane. Aby zachować tę kamerę, najpierw zapisz z powrotem oryginalny obraz w {bank:loc} (na przykład z pełnej kopii zapasowej pamięci flash wykonanej przed łatką liczby klatek), a potem rozpocznij nowy przebieg; łatkę liczby klatek można potem nałożyć ponownie na oryginalny obraz.',
   'preserve.image.otherFirmware':
     'zawiera firmware {image}, a nie {camera}, który działa na kamerze',
   'preserve.image.otherFirmwareRefusal':
@@ -1092,7 +1136,7 @@ export default {
   /** `{address}`, `{at}`: hex; `{name}`: the bank, as a label. */
   'slots.plan.otherAddress':
     'plan dotyczy adresu {address}, ale w tej kompilacji {name} jest pod {at}',
-  'slots.plan.notRead': '{name} nie jest już odczytywany przez analizę. Nic nie zostało zapisane.',
+  'slots.plan.notRead': 'analiza nie odczytuje już {name:gen}. Nic nie zostało zapisane.',
   'slots.plan.edited':
     'suma kontrolna planu nie zgadza się z jego danymi, więc plan został zmieniony. Nic nie zostało zapisane.',
   /** `{size}`: a hex byte count. */
@@ -1147,7 +1191,8 @@ export default {
   /** `{full}`, `{size}`: byte counts. */
   'restore.refused.wrongSize':
     'pełna kopia zapasowa pamięci flash ma {full} B (4 MB, cały układ odczytywany przez J-Link); {file} ma {size} B. Nic nie zostało zapisane.',
-  'restore.refused.noBank': '{bank} nie należy do planu tej kompilacji. Nic nie zostało zapisane.',
+  'restore.refused.noBank':
+    'plan tej kompilacji nie obejmuje {bank:gen}. Nic nie zostało zapisane.',
   'restore.refused.outsideFlash':
     '{name} nie mieści się w 4 MB pamięci flash. Nic nie zostało zapisane.',
   /** `{where}`: restore.where; `{address}`, `{fill}`: hex; `{gap}`: why the dump has a gap there, in English (as the dump's manifest says it). manifest.json is a file name. */
@@ -1335,9 +1380,9 @@ export default {
   /** `{key}` is a key name; `{hex}` the key's bytes; `{pair}` is report.checkKey.pair or empty. */
   'report.checkKey.named': '{key} {hex}{pair}',
   'report.checkKey.namedFrom':
-    '{key} {hex}{pair}, wskazany na podstawie slotu, który według kamery uruchomiła po sprawdzeniu przez bootloader: {bank}',
+    '{key} {hex}{pair}, wskazany na podstawie {bank:gen}, slotu, który według kamery uruchomiła po sprawdzeniu przez bootloader',
   'report.checkKey.inferredFrom':
-    '{key} {hex}{pair}, wywnioskowany ze slotu, który według kamery uruchomiła: {bank}; bootloader wchodzi do tego slotu bez sprawdzenia i uruchamia go pod kluczem, którym sprawdza pozostałe sloty',
+    '{key} {hex}{pair}, wywnioskowany ze {bank:gen}, slotu, który według kamery uruchomiła; bootloader wchodzi do tego slotu bez sprawdzenia i uruchamia go pod kluczem, którym sprawdza pozostałe sloty',
   /** Starts with a space; `{pair}` is keyPair.* (already translated): "the Compact PRO 1.0.3.x 9 Hz pair's block 1". */
   'report.checkKey.pair': ' (blok 1, {pair})',
   /** A 2016 image pair: the two key blocks one build's images carry. Keep the product name and version. */
@@ -1375,15 +1420,15 @@ export default {
   'progress.backupDone': 'Kopia zapasowa: odczytano każdy blok',
   'progress.checkBlock': 'Sprawdzenie: blok {address}',
   'progress.checkDone': 'Sprawdzenie: odczytano każdy blok',
-  'progress.writingBank': 'Zapis: {bank}',
-  'progress.restoringBank': 'Przywracanie: {bank}',
+  'progress.writingBank': 'Zapisywanie {bank:gen}',
+  'progress.restoringBank': 'Przywracanie {bank:gen}',
   'progress.staged': '{label}: przesłano {done}/{total} B',
   'progress.wholeFlash': 'Pełny odczyt: {got}/{total} B',
   /** The 4.x dump, one 64 KiB window at a time. "(auth)": the window needed the unlock token. */
   'progress.readWindow': 'odczyt {address} subcmd={subcmd} ...',
   'progress.readWindowAuth': 'odczyt {address} subcmd={subcmd} (auth) ...',
   'progress.windowsRead': 'Gotowe — odczytane okna: {ok}/{total}.',
-  'progress.readingBank': 'Odczyt: {bank} ...',
+  'progress.readingBank': 'Odczyt {bank:gen} ...',
   'progress.analysing': 'Analiza ...',
   'progress.probeSelector': 'sprawdzanie selektora {selector} ...',
   'progress.selectorsArmed': 'Gotowe — aktywowane selektory: {armed}/{span}, z danymi: {withData}.',

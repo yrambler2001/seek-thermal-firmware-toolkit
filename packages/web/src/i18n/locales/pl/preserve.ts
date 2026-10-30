@@ -190,7 +190,7 @@ export default {
   'plan.outro':
     'W postaci przechowywanej przez kamerę zmieniają się te same bajty i żadne inne, więc firmware kamery zmienia się dokładnie o tę różnicę i nic więcej.',
   /* One bank's patch: its region's accessible name and heading. */
-  'bankPlan.label': 'Łatka: {bank}',
+  'bankPlan.label': 'Łatka {bank:gen}',
   'bankPlan.titleChosen': '{bank} — zapisywany w tym przebiegu',
   'bankPlan.titleNotChosen': '{bank} — niewybrany',
   'bankPlan.source': 'Źródło obrazu',
@@ -216,7 +216,7 @@ export default {
   'bankPlan.rebalance': 'Słowo wyrównania',
   /* {word} and {balance} are hex words. */
   'bankPlan.rebalanceValue': '{word} (było {balance}, wyrównanie zmiany)',
-  'bankPlan.caption': 'Dokładne bajty zmieniane przez łatkę — {bank}',
+  'bankPlan.caption': 'Dokładne bajty zmieniane przez łatkę w {bank:loc}',
   'bankPlan.col.what': 'Co zmienia',
   'bankPlan.col.offset': 'Przesunięcie',
   'bankPlan.col.before': 'Przed',
@@ -368,20 +368,20 @@ export default {
   'gate.backupFirst': 'kopia zapasowa pamięci flash (wykonywana jako pierwsza w tym etapie)',
   'gate.backup': 'kopia zapasowa pamięci flash',
   'gate.patchStep': 'krok „Łatka”',
-  'gate.patchOf': 'łatka ({bank})',
+  'gate.patchOf': 'łatka {bank:gen}',
   'gate.backupFile': 'plik okien kopii zapasowej',
   /* What a step lacks from the run's files: a bank's two agreeing reads, its decrypted image. */
-  'gate.capture': 'przechwycone dane ({bank})',
-  'gate.derived': 'wyprowadzony obraz ({bank})',
+  'gate.capture': 'przechwycone dane {bank:gen}',
+  'gate.derived': 'wyprowadzony obraz {bank:gen}',
   /* "Write" is the step's name on its chip (core:preserve.step.commit): use the same word as there. */
   'gate.writeStep': 'krok „Zapis” (najpierw wykonaj go lub wznów od niego)',
   'gate.drainRefused':
     'pełny odczyt pamięci flash jest niedostępny dla tej kompilacji ({build}) — {why}',
-  'gate.patchSummary': 'podsumowanie łatki ({bank}; długość przesyłanych danych)',
+  'gate.patchSummary': 'podsumowanie łatki {bank:gen} (długość przesyłanych danych)',
   'gate.restoreRefused':
     'przywracanie jest niedostępne dla tej kompilacji ({build}) — żadna postać oryginalnego firmware nie zapisuje się z powrotem jako oryginalne bajty; przebieg kończy się pełnym obrazem i łatką na miejscu',
   /* {file} is a file name in the run file. */
-  'gate.plaintext': 'fabryczny jawny tekst ({bank}; {file}, z kroku kopii zapasowej)',
+  'gate.plaintext': 'fabryczny jawny tekst {bank:gen} ({file}, z kroku kopii zapasowej)',
   'gate.restoreFirst': 'przywrócenie (wykonywane jako pierwsze w tym etapie)',
   'gate.powerCycle':
     'potwierdzenie wyłączenia i włączenia — wyłącz i włącz kamerę ponownie (odłącz ją i podłącz albo użyj jej wyłącznika), a potem użyj przycisku ponownego uruchomienia',

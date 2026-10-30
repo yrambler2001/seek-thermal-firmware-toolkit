@@ -36,8 +36,28 @@ export default {
    * The name on its own (a table cell, a row label, the start of a line):
    */
   'bank.slot': 'Slot {letter}',
+  'bank.slot:gen': 'slotu {letter}',
+  'bank.slot:dat': 'slotowi {letter}',
+  'bank.slot:acc': 'slot {letter}',
+  'bank.slot:ins': 'slotem {letter}',
+  'bank.slot:loc': 'slocie {letter}',
   'bank.recovery': 'Slot odzyskiwania {letter}',
+  'bank.recovery:gen': 'slotu odzyskiwania {letter}',
+  'bank.recovery:dat': 'slotowi odzyskiwania {letter}',
+  'bank.recovery:acc': 'slot odzyskiwania {letter}',
+  'bank.recovery:ins': 'slotem odzyskiwania {letter}',
+  'bank.recovery:loc': 'slocie odzyskiwania {letter}',
   /* The same names inside a sentence (English writes them in lower case there). */
   'bank.slotInSentence': 'slot {letter}',
+  'bank.slotInSentence:gen': 'slotu {letter}',
+  'bank.slotInSentence:dat': 'slotowi {letter}',
+  'bank.slotInSentence:acc': 'slot {letter}',
+  'bank.slotInSentence:ins': 'slotem {letter}',
+  'bank.slotInSentence:loc': 'slocie {letter}',
   'bank.recoveryInSentence': 'slot odzyskiwania {letter}',
+  'bank.recoveryInSentence:gen': 'slotu odzyskiwania {letter}',
+  'bank.recoveryInSentence:dat': 'slotowi odzyskiwania {letter}',
+  'bank.recoveryInSentence:acc': 'slot odzyskiwania {letter}',
+  'bank.recoveryInSentence:ins': 'slotem odzyskiwania {letter}',
+  'bank.recoveryInSentence:loc': 'slocie odzyskiwania {letter}',
 } satisfies Translation<'common'>;

@@ -313,6 +313,7 @@ function samples(base: DeviceState): CoreMessage[] {
   });
   add(derivedKeyLineMessage({ key: 'Key A', holds: 'Key A' }, bankParam('a')));
   add(derivedKeyLineMessage({ key: 'Key B', holds: 'per-device key' }, 'slot B'));
+  add(derivedKeyLineMessage({ key: 'Key B', holds: 'per-device key' }, bankParam('b', 'name')));
   add(derivedKeyLineMessage({ key: 'Key A', holds: 'Key A' }, null));
   add(derivedKeyLineMessage({ key: 'Key B', holds: 'per-device key' }, null));
   add(FF_VENDOR_STAGED_MESSAGE);
@@ -1379,16 +1380,17 @@ describe('the core namespace', () => {
     expect([...templates].filter((code) => !produced.has(code))).toEqual([]);
   });
 
-  it('lets a translation put a case only on a param core passes as a name, in every sample', async () => {
-    /* Per code, the params some sample passes as something other than a bank, a key name or a list of them. */
-    const notNames = new Map<string, Set<string>>();
+  it('lets a translation put a case only on a param core passes as a name', async () => {
+    /* Per code, the params a sample passes as a bank, a key name or a list of them. Some are a name core
+     * does not know in another sample (a family's own bank name, an unnamed key), which is then said as it
+     * is; a param no sample passes as a name (a count, a hex value) takes no case. */
+    const names = new Map<string, Set<string>>();
     for (const message of all) {
       for (const [param, value] of Object.entries(message.params)) {
-        if (typeof value === 'object' && coreNameOf(value) !== null) continue;
-        notNames.set(message.code, (notNames.get(message.code) ?? new Set()).add(param));
+        if (typeof value !== 'object' || coreNameOf(value) === null) continue;
+        names.set(message.code, (names.get(message.code) ?? new Set()).add(param));
       }
     }
-    const produced = new Set(all.map((message) => message.code));
     const problems: string[] = [];
     for (const language of LANGUAGES) {
       const dict = await language.load();
@@ -1399,8 +1401,8 @@ describe('the core namespace', () => {
             if (gramCase === undefined) continue;
             const id = `${language.code} core:${code}`;
             if (!isGrammaticalCase(gramCase)) problems.push(`${id}: ${whole} is not a case`);
-            else if (!produced.has(code) || notNames.get(code)?.has(param) === true)
-              problems.push(`${id}: ${whole}, but {${param}} is not always a name`);
+            else if (names.get(code)?.has(param) !== true)
+              problems.push(`${id}: ${whole}, but {${param}} is not a name`);
           }
         }
       }

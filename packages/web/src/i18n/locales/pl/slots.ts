@@ -75,13 +75,13 @@ export default {
   'status.refused': 'Odmowa — nic nie zostało aktywowane. Zobacz komunikat pod dziennikiem.',
   'status.disconnected': 'Urządzenie odłączone — odczytaj sloty ponownie.',
   'status.newDevice': 'Wybrano nowe urządzenie — odczytaj sloty ponownie.',
-  'status.dumping': 'Zrzucanie: {bank} ...',
-  'status.dumped': 'Zrzucono: {bank}.',
+  'status.dumping': 'Zrzucanie {bank:gen} ...',
+  'status.dumped': 'Zrzucono {bank:acc}.',
   'status.readingImage': 'Odczyt obrazu ...',
   'status.ready': 'Gotowe — przejrzyj plan, a potem go zapisz.',
   'status.rejected': 'Odrzucono — zobacz dziennik powyżej.',
   'status.writing': 'Zapisywanie ...',
-  'status.patching': 'Łatanie: {bank} ...',
+  'status.patching': 'Łatanie {bank:gen} ...',
   'status.patchingEvery': 'Łatanie wszystkich slotów ...',
   /* After a write: how it ended. The result panel says what to do next. */
   'status.written.mismatch': 'Zapisano, ale odczyt kontrolny się nie zgadza — zobacz wynik.',
@@ -94,10 +94,10 @@ export default {
   'status.patched.unchecked': 'Załatano. Odczytu kontrolnego nie sprawdzono — zobacz wynik.',
   /* After "Make N FPS in every bank"; {count} is the number of banks patched. */
   'status.every.stopped': {
-    one: 'Zatrzymano, gdy przyszła kolej na {bank} — załatano {count} slot; zobacz wynik.',
-    few: 'Zatrzymano, gdy przyszła kolej na {bank} — załatano {count} sloty; zobacz wynik.',
-    many: 'Zatrzymano, gdy przyszła kolej na {bank} — załatano {count} slotów; zobacz wynik.',
-    other: 'Zatrzymano, gdy przyszła kolej na {bank} — załatano {count} slotu; zobacz wynik.',
+    one: 'Zatrzymano na {bank:loc} — załatano {count} slot; zobacz wynik.',
+    few: 'Zatrzymano na {bank:loc} — załatano {count} sloty; zobacz wynik.',
+    many: 'Zatrzymano na {bank:loc} — załatano {count} slotów; zobacz wynik.',
+    other: 'Zatrzymano na {bank:loc} — załatano {count} slotu; zobacz wynik.',
   },
   'status.every.unchecked': {
     one: 'Załatano {count} slot, ale jeden z odczytów kontrolnych nie został sprawdzony zgodnie z planem — zobacz wynik.',
@@ -119,10 +119,9 @@ export default {
    */
   'status.cancelled.nothing': 'Anulowano — nic nie zostało zapisane.',
   'status.cancelled.one':
-    'Anulowano po wysłaniu zatwierdzenia zapisu — {bank} może być zapisany tylko częściowo. Odczytaj go, zanim zaczniesz na nim polegać.',
+    'Anulowano po wysłaniu zatwierdzenia zapisu do {bank:gen} — slot może być zapisany tylko częściowo. Odczytaj go, zanim zaczniesz na nim polegać.',
   'status.cancelled.many':
-    'Anulowano po wysłaniu zatwierdzeń zapisu — {banks} mogą być zapisane tylko częściowo. Odczytaj je, zanim zaczniesz na nich polegać.',
-
+    'Anulowano po wysłaniu zatwierdzeń zapisu do {banks:gen} — każdy z nich może być zapisany tylko częściowo. Odczytaj je, zanim zaczniesz na nich polegać.',
   /* Why a bank's button is off, shown under it. */
   'gate.connectFirst': 'Najpierw połącz kamerę.',
   'gate.busy': 'Trwa inna operacja — zaczekaj, aż się zakończy.',
@@ -180,7 +179,7 @@ export default {
   'table.restore': 'Przywróć z pełnej kopii pamięci flash (.bin lub .zip)…',
   'table.makeFps': 'Ustaw {hz} FPS',
   /* {bank} is the target bank inside a sentence ("Copy to slot A"). */
-  'table.copyTo': 'Kopiuj na {bank}',
+  'table.copyTo': 'Kopiuj do {bank:gen}',
   /* Why one copy button is off: {button} is its label (table.copyTo), {reason} why. */
   'table.copyOff': '{button}: {reason}',
   'table.copyOffNoReason': '{button}: wyłączone',
@@ -225,11 +224,11 @@ export default {
     'Łata {order} w ramach jednego potwierdzenia, a slot, z którego kamera teraz się uruchamia, na końcu; każdy slot jest najpierw zachowywany w jednym pliku zip do pobrania, a po zapisie odczytywany kontrolnie.',
 
   /* What is written, shown in the plan and the confirmation: a copy of another bank, a bank cut out of a backup file. */
-  'what.copy': 'obraz ({bank})',
+  'what.copy': 'obraz {bank:gen}',
   'what.restore': '{bank} z pliku {file}',
 
   /* The plan of a prepared write ("Prepared for Slot A at 0x14050000"). */
-  'preview.title': 'Zapis przygotowany — {bank} pod adresem {address}',
+  'preview.title': 'Zapis przygotowany dla {bank:gen} pod adresem {address}',
   'preview.file': 'Plik',
   'preview.source': 'Źródło obrazu',
   'preview.target': 'Cel',
@@ -258,7 +257,7 @@ export default {
   'preview.storedPredicted': 'przewidywane {size} B',
   'preview.storedKeyB': 'przewidywane {size} B — obraz XOR klucz B, a nie same przesyłane dane',
   'preview.savedFirst': 'Kopia przed zapisem',
-  'preview.compareCaption': 'Co się zmieni: {bank}',
+  'preview.compareCaption': 'Co się zmieni w {bank:loc}',
   'preview.col.field': 'Pole',
   'preview.col.now': 'Teraz',
   'preview.col.after': 'Po zapisie',
@@ -266,13 +265,13 @@ export default {
   /* {note} is core's note about this write. */
   'preview.note': 'Uwaga: {note}',
   'preview.nothingSent':
-    'Do kamery nic jeszcze nie zostało wysłane. Zapis prześle te dane na {bank} i je zatwierdzi.',
-  'preview.toolbar': 'Działania zapisu — {bank}',
-  'preview.write': 'Zapisz na {bank}…',
+    'Do kamery nic jeszcze nie zostało wysłane. Zapis prześle te dane do {bank:gen} i je zatwierdzi.',
+  'preview.toolbar': 'Działania zapisu dla {bank:gen}',
+  'preview.write': 'Zapisz w {bank:loc}…',
   'preview.discard': 'Odrzuć',
 
   /* The write's confirmation dialog. {what} is a file name or what.copy / what.restore. */
-  'writeConfirm.title': 'Zapisać {what} na {bank} pod adresem {address}?',
+  'writeConfirm.title': 'Zapisać {what} w {bank:loc} pod adresem {address}?',
   /* {bootsNow} is core's sentence "Slot A is the bank the camera boots now", translated by core's messages. */
   'writeConfirm.booted':
     '{bootsNow}. Zapis zastąpi firmware, który kamera teraz uruchamia. Jeśli nowy obraz nie zadziała, kamera może w ogóle się nie uruchomić.',
@@ -283,9 +282,9 @@ export default {
   'writeConfirm.empty':
     '{bank} jest pusty: nie zawiera obrazu, więc żaden firmware nie zostanie nadpisany.',
   'writeConfirm.eraseEmpty':
-    'Zapis mimo to wymaże blok 64 KB pamięci flash kamery, który zajmuje {bank} (już pusty), i zaprogramuje go od nowa.',
+    'Zapis mimo to wymaże blok 64 KB pamięci flash kamery w {bank:loc} (już pusty) i zaprogramuje go od nowa.',
   'writeConfirm.erase':
-    'To wymaże blok 64 KB pamięci flash kamery, który zajmuje {bank}, i zaprogramuje go od nowa.',
+    'To wymaże blok 64 KB pamięci flash kamery w {bank:loc} i zaprogramuje go od nowa.',
   /* {key} is core's line naming the key and the bank it was derived from. */
   'writeConfirm.keyLine':
     'Obraz zostanie zapisany z kluczem: {key}. Każdy inny slot jest zapisywany tak samo.',
@@ -297,8 +296,7 @@ export default {
     'Jeśli obraz nie zadziała, kamery nie da się przywrócić przez USB — tylko przez SWD/J-Link lub programatorem SPI.',
   'writeConfirm.ackUnnamed':
     'Rozumiem, że kamera nie podaje, z którego slotu się uruchamia, więc ten slot jest traktowany jako uruchomiony, i że wadliwy obraz może sprawić, że kamera przestanie się uruchamiać.',
-  'writeConfirm.confirm': 'Tak — zapisz na {bank}',
-
+  'writeConfirm.confirm': 'Tak — zapisz w {bank:loc}',
   /* The tick box both write dialogs ask for before a risky bank. */
   'ack.booted':
     'Rozumiem, że z tego slotu kamera teraz się uruchamia i że wadliwy obraz może sprawić, że kamera przestanie się uruchamiać.',
@@ -324,7 +322,7 @@ export default {
       'Łatka zmienia {count} bajta obrazu i słowo sumy kontrolnej, więc suma sprawdzana przez bootloader pozostaje zachowana. Para kluczy nie jest zmieniana.',
   },
   'fpsConfirm.wayBack':
-    'Odszyfrowany plik w tym pliku zip pozwala wrócić do poprzedniego stanu: aby cofnąć łatkę, zapisz go przyciskiem „Zapisz odszyfrowany obraz” na {bank}.',
+    'Odszyfrowany plik w tym pliku zip pozwala wrócić do poprzedniego stanu: aby cofnąć łatkę, zapisz go w {bank:loc} przyciskiem „Zapisz odszyfrowany obraz”.',
   'fpsConfirm.noReset':
     'Reset nie jest wysyłany. Potem odłącz kamerę i podłącz ją ponownie, aby załatany slot zaczął obowiązywać.',
   'fpsConfirm.ackUnnamed':
@@ -448,8 +446,7 @@ export default {
   /* {reason} is core's. */
   'fpsEveryOutcome.stopped': 'Zatrzymano: {reason}.',
   /* {banks}: the names inside a sentence ("slot B, recovery R"), joined by common:list.comma. */
-  'fpsEveryOutcome.notWritten': 'Niezapisane: {banks}.',
-
+  'fpsEveryOutcome.notWritten': 'Nie zapisano {banks:gen}.',
   /* The panel of the keys the writes use. */
   'keys.refusedTitle': 'Żadnego slotu tej kamery nie można stąd zapisać.',
   'keys.title': 'Klucze używane przy zapisie',

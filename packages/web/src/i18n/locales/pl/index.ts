@@ -17,7 +17,7 @@
  * - image → obraz; decrypted image → odszyfrowany obraz; stock/factory image → oryginalny / fabryczny
  *   obraz; plaintext → jawny tekst / postać jawna; decrypt → odszyfrować
  * - write, flash (verb) → zapisać, zapis ("Flash decrypted image" → „Zapisz odszyfrowany obraz”);
- *   "write to slot A" → "zapisać na slot A" (see Cases below); erase → wymazać; commit → zatwierdzenie;
+ *   "write to slot A" → "zapisać w slocie A" (see Cases below); erase → wymazać; commit → zatwierdzenie;
  *   read-back → odczyt kontrolny; save a file (backup zip) → zachować / plik do pobrania, so "zapisać"
  *   mostly means writing to the camera
  * - boot / start → uruchomić (się), start; next start → następne uruchomienie; bootable → startuje /
@@ -41,16 +41,17 @@
  *   karta 4.x/Nano, karta 0.x/1.x, karta slotów, karta „Info”.
  * - Sizes: KB and MB (never KiB/MiB) with a space after the number; B, Hz, FPS as they are.
  *
- * Cases around params. Polish declines nouns, and a param arrives in one fixed form, the nominative.
- * The bank names (slot A, slot odzyskiwania R) and the key names (klucz A, klucz urządzenia, blok
- * kluczy 1) are all masculine inanimate nouns, whose accusative is the same as the nominative, so a
- * bank or key param goes where the nominative or the accusative is right: as the subject ("{bank}
- * jest pusty"), the object ("Kamera uruchamia {bank}"), after "na" / "przez" / "poza" + accusative
- * ("Zapisz na {bank}…", "przesyłania na {name}"), after a colon or a dash, in brackets ("uruchomiony
- * slot ({bank})"), or in a label: value line. Where Polish needs the genitive, locative or
- * instrumental ("from slot A", "in slot A", "under Key A"), the sentence is turned round or the
- * template writes the governing noun itself ("pod kluczem: {key}", "slot {letterR}" for a bare letter).
- * Negation takes the genitive in Polish, so "Not written: {banks}" is a label (Niezapisane: {banks}).
+ * Cases around params. A bank or key name is declined with a case selector (../../README.md, "Cases"):
+ * `{bank:gen}` ze slotu A, `{bank:dat}` slotowi A, `{bank:acc}` slot A, `{bank:ins}` slotem A,
+ * `{bank:loc}` w slocie A; `{key:ins}` pod kluczem A, `{masks:gen}` strumienie klucza A. The forms are
+ * in common.ts (bank.*:case, lower case also for the label forms Slot A / Slot odzyskiwania R, since a
+ * case form is always said inside a sentence) and core.ts (keyName.*:case). Write the case the grammar
+ * needs ("Zapisz w {bank:loc}", "Kopiuj do {bank:gen}", "zapisywany pod {key:ins}", "Nie zapisano
+ * {banks:gen}"), never a colon or brackets around the name. A list ({banks}, {order}) takes the case on
+ * each name. A plain `{bank}` is the nominative, which is also the accusative of these masculine
+ * inanimate nouns. A param that is not a name (a nested sentence such as {recovered}, or "wybrane
+ * sloty" in confirm.chosenBanks) cannot be declined: there the sentence is turned round or keeps the
+ * accusative ("zapisać na {banks}").
  * Plurals: one / few / many / other (1 slot, 2–4 sloty, 5+ slotów, a fraction → slotu); a count whose
  * noun cannot be declined around it is written as a label ("odczytane okna: {read}/{expected}").
  * Kept in English: command and register names, family ids (legacy-auth …), CLI options (--resume,
