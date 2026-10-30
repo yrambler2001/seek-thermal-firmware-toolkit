@@ -77,6 +77,7 @@ import {
   copySourceRefusalMessage,
 } from '@seek-fw/core';
 import { coreText } from '@/lib/core-text';
+import { supportReasonMessage } from '@seek-fw/core';
 import { listAnd, t, tEnglish, type Translate } from '@/i18n';
 import { backupDownloadLines, saveBackupAsDownload } from '../lib/backup-save';
 import { bankName, bankWords } from '../lib/bank-names';
@@ -291,8 +292,9 @@ export function slotActionGate(args: {
   readonly cameraRefusal?: string | null;
 }): ActionGate {
   const support = slotActionSupport(args.entry, args.action);
-  /* i18n: core message */
-  if (!support.supported) return { enabled: false, reason: support.reason };
+  if (!support.supported) {
+    return { enabled: false, reason: coreText(supportReasonMessage(support.reason)) };
+  }
   if (!args.connected) return { enabled: false, reason: t('slots:gate.connectFirst') };
   if (args.busy) return { enabled: false, reason: t('slots:gate.busy') };
   if (args.view === null) return { enabled: false, reason: t('slots:gate.readFirst') };
@@ -305,11 +307,12 @@ export function slotActionGate(args: {
   if (args.action !== 'dump' && args.view.state === null) {
     return {
       enabled: false,
-      /* i18n: core message (the unread reason) */
       reason:
         args.view.unreadReason === null
           ? t('slots:gate.notReadNoReason')
-          : t('slots:gate.notRead', { reason: args.view.unreadReason }),
+          : t('slots:gate.notRead', {
+              reason: coreText(args.view.unreadReasonMessage ?? args.view.unreadReason),
+            }),
     };
   }
   /* An empty bank is writable where the plan says so; where it does not, the write is off
@@ -321,8 +324,9 @@ export function slotActionGate(args: {
   ) {
     return {
       enabled: false,
-      /* i18n: core message (the plan's reason) */
-      reason: t('slots:gate.emptyNotWritable', { reason: args.entry.emptyBank.writable.reason }),
+      reason: t('slots:gate.emptyNotWritable', {
+        reason: coreText(supportReasonMessage(args.entry.emptyBank.writable.reason)),
+      }),
     };
   }
   return { enabled: true, reason: null };

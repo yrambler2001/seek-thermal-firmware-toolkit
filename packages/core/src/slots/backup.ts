@@ -16,6 +16,7 @@
 
 import { buildZip } from '../archive/zip.js';
 import { bankNameOf } from '../profiles/locked-boot.js';
+import { supportReasonMessage } from './capability.js';
 import { bankParam, coreMessage, listParam, type CoreMessage, type CoreParam } from '../message.js';
 import { hexUp, isoStamp, utf8 } from '../bytes.js';
 import { CancelledError, errorMessage, SeekError } from '../errors.js';
@@ -227,7 +228,7 @@ export function backupBankMessage(report: SlotsReport, key: SlotKey): CoreMessag
   if (!view.entry.dump.supported) {
     return coreMessage(
       'backup.bank.unsupported',
-      { ...bank, reason: view.entry.dump.reason },
+      { ...bank, reason: supportReasonMessage(view.entry.dump.reason) },
       `${name} (this build cannot read it, ${view.entry.dump.reason}: the zip says so)`,
     );
   }

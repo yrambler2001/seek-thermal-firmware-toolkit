@@ -25,6 +25,7 @@ import {
   derivedKeyLineMessage,
   restoreReadBackMessage,
   capabilityNoteMessage,
+  supportReasonMessage,
 } from '@seek-fw/core';
 import { coreText, coreTexts } from '@/lib/core-text';
 import { DeviceInfoPanel } from '@/components/DeviceInfoPanel';
@@ -236,7 +237,6 @@ function RefusalAlert({ refusal }: { readonly refusal: Refusal }): ReactElement 
       <p>
         <strong>{t('slots:refusal.title')}</strong>
       </p>
-      {/* i18n: core message (the refusal) */}
       <p>{refusal.message}</p>
       {refusal.hint !== null && <p>{refusal.hint}</p>}
     </Alert>
@@ -311,7 +311,9 @@ export function SlotsView({ slots, connected, busy }: SlotsViewProps): ReactElem
     [report, fpsKey],
   );
   const unsupported =
-    plan !== null && !plan.supportedBuild.supported ? plan.supportedBuild.reason : null;
+    plan !== null && !plan.supportedBuild.supported
+      ? coreText(supportReasonMessage(plan.supportedBuild.reason))
+      : null;
   const pendingView = pending === null ? null : viewOf(pending.report, pending.key);
 
   return (
@@ -370,7 +372,7 @@ export function SlotsView({ slots, connected, busy }: SlotsViewProps): ReactElem
             <p>
               <strong>{t('slots:unsupported.title')}</strong>
             </p>
-            {/* i18n: core message (the build's support reason) */}
+            {/* i18n: core message (a family refusal that names the version) */}
             <p>{unsupported}</p>
           </Alert>
         )}

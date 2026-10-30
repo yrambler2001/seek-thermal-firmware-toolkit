@@ -111,6 +111,10 @@ import {
   stagingPhraseMessage,
   writtenCommittedNote,
   SeekError,
+  SLOT_WRITE_REFUSAL,
+  joinSlotViews,
+  supportReasonMessage,
+  supportReasons,
   PRESERVE_BANK_REFUSAL,
   PRESERVE_UNPATCHED_START_NEXT_MESSAGE,
   PRESERVE_UNPATCHED_START_STOP_MESSAGE,
@@ -837,6 +841,39 @@ function samples(base: DeviceState): CoreMessage[] {
     add(messages.detail);
   }
   add(preserveOtherVersionMessage('1.3.0.0', '1.3.0.8'));
+
+  /* support: the constant reasons */
+  supportReasons().forEach((reason) => {
+    message(supportReasonMessage(reason));
+  });
+
+  /* slots: why a bank was not read */
+  const views = joinSlotViews(
+    {
+      ...report.plan,
+      slots: report.plan.slots.map((entry) => ({
+        ...entry,
+        read: entry.key === 'a' ? null : ({ subcmd: 1, address: 0 } as never),
+      })),
+    },
+    { byKey: new Map([['b', { unread: true, reason: null }]]), boot: null } as never,
+  );
+  views.forEach((view) => {
+    message(view.unreadReasonMessage ?? null);
+  });
+
+  /* slots: a write's refusals */
+  const entry = report.slots[0]?.entry ?? slotEntry('a');
+  add(SLOT_WRITE_REFUSAL.nothingWritten(KEY_TABLE_REFUSAL, KEY_TABLE_REFUSAL.text));
+  add(SLOT_WRITE_REFUSAL.versionUnknown());
+  add(SLOT_WRITE_REFUSAL.versionUnknownWrite());
+  add(SLOT_WRITE_REFUSAL.emptyInput());
+  add(SLOT_WRITE_REFUSAL.emptyNotWritable(entry, supportReasons()[1] ?? 'x'));
+  add(SLOT_WRITE_REFUSAL.noRaw(entry, 'a reason the build gives'));
+  add(SLOT_WRITE_REFUSAL.noPlain(entry, supportReasons()[0] ?? 'x'));
+  add(SLOT_WRITE_REFUSAL.noStaging(entry));
+  add(SLOT_WRITE_REFUSAL.rawTooLong(entry, 9, 0x40000));
+  add(SLOT_WRITE_REFUSAL.imageTooLong(entry, 9, 0x40000));
 
   const all: CoreMessage[] = [];
   out.forEach((message) => {

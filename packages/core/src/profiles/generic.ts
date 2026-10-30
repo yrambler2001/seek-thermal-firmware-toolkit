@@ -38,7 +38,7 @@ import {
  */
 export const GENERIC_BASELINE = 0.1;
 
-const FLASH_REFUSAL =
+export const FLASH_REFUSAL =
   "the camera's family is not known, so neither is the key its banks are written under, and a " +
   'camera takes a bank written under the wrong key and then will not start from it. Dump and ' +
   'decrypt this camera, identify it from the dump, then name its family with --family.';

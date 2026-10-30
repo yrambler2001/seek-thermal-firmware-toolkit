@@ -24,6 +24,7 @@ export {
 } from './fps-boot-warning.js';
 export {
   inspectSlots,
+  joinSlotViews,
   slotContentOf,
   type InspectFirmware,
   type InspectSlotsOptions,
@@ -237,3 +238,5 @@ export {
 } from './write-keys-words.js';
 export { fpsStoppedMessage } from './fps-patch.js';
 export { capabilityNoteMessage, capabilityNotes } from './capability-notes.js';
+export { supportReasonMessage, supportReasons } from './capability.js';
+export { SLOT_WRITE_REFUSAL } from './write.js';

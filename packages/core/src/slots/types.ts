@@ -169,6 +169,8 @@ export interface SlotView {
   /** What the read found; null when the slot was not read (see `unreadReason`). */
   readonly state: SlotState | null;
   readonly unreadReason: string | null;
+  /** `unreadReason` as a message, for the page (a reason the read gave is its English). */
+  readonly unreadReasonMessage?: CoreMessage | string;
   /** What the bank holds. 'unread' exactly when `state` is null. */
   readonly content: SlotContent;
   /** The bootloader boots this slot now. */

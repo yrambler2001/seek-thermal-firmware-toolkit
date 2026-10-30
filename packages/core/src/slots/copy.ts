@@ -11,7 +11,7 @@
 
 import { hexUp } from '../bytes.js';
 import { bankNameOf } from '../profiles/locked-boot.js';
-import { coreMessage, type CoreMessage } from '../message.js';
+import { coreMessage, recordedParam, type CoreMessage } from '../message.js';
 import { bankNameParam } from './backup.js';
 import { slotDumpNames } from './dump.js';
 import { prepareSlotFlash } from './write.js';
@@ -58,7 +58,10 @@ export function copySourceRefusalMessage(report: SlotsReport, from: SlotKey): Co
     return coreMessage('copy.source.notInPlan', bank, `${name} is not in this build's plan`);
   }
   if (view.state === null) {
-    const reason = view.unreadReason ?? NO_READ;
+    const reason =
+      view.unreadReason === null
+        ? NO_READ
+        : recordedParam(view.unreadReasonMessage, view.unreadReason);
     return coreMessage(
       'copy.source.notRead',
       { ...bank, reason },

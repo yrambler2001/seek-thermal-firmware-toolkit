@@ -6,6 +6,8 @@ import { profileToRereadUnder, readDeviceInfo } from '../workflows/device-info.j
 import type { DeviceState, SlotState, WorkflowContext } from '../workflows/types.js';
 import { buildSlotPlan } from './capability.js';
 import type { SlotContent, SlotEntry, SlotPlan, SlotsReport, SlotView } from './types.js';
+import { coreMessage } from '../message.js';
+import { bankNameParam } from './backup.js';
 
 /** The build the caller already read: what `readRunningFirmware` or an identify probe returns. */
 export type InspectFirmware = Pick<RunningFirmware, 'version'>;
@@ -146,13 +148,19 @@ export function joinSlotViews(
 ): SlotView[] {
   return plan.slots.map((entry: SlotEntry): SlotView => {
     const active = state.boot?.booted === entry.key;
+    const name = bankNameParam(entry.name, entry.key);
     if (entry.read === null) {
+      const message = coreMessage(
+        'slots.unread.noWindow',
+        { name, address: hex(entry.address, 8) },
+        `${entry.name} at ${hex(entry.address, 8)} is not readable on this build: its selector ` +
+          'table has no window there, so nothing was armed for it',
+      );
       return {
         entry,
         state: null,
-        unreadReason:
-          `${entry.name} at ${hex(entry.address, 8)} is not readable on this build: its selector ` +
-          'table has no window there, so nothing was armed for it',
+        unreadReason: message.text,
+        unreadReasonMessage: message,
         content: 'unread',
         active,
       };
@@ -163,6 +171,11 @@ export function joinSlotViews(
         entry,
         state: null,
         unreadReason: `${entry.name} is missing from the camera analysis`,
+        unreadReasonMessage: coreMessage(
+          'slots.unread.missing',
+          { name },
+          `${entry.name} is missing from the camera analysis`,
+        ),
         content: 'unread',
         active,
       };
@@ -172,6 +185,9 @@ export function joinSlotViews(
         entry,
         state: null,
         unreadReason: found.reason ?? `${entry.name} was not read`,
+        unreadReasonMessage:
+          found.reason ??
+          coreMessage('slots.unread.notRead', { name }, `${entry.name} was not read`),
         content: 'unread',
         active,
       };

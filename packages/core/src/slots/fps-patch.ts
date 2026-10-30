@@ -41,6 +41,7 @@
 
 import { equalBytes, viewOf } from '../bytes.js';
 import { bankWordsOf } from '../profiles/locked-boot.js';
+import { supportReasonMessage } from './capability.js';
 import { CancelledError, errorCoreMessage, errorMessage, SeekError } from '../errors.js';
 import { bankParam, coreMessage, paramText, type CoreMessage, type CoreParam } from '../message.js';
 import { decryptImage } from '../crypto/cipher.js';
@@ -163,7 +164,7 @@ export function fpsPlanOfBank(report: SlotsReport, key: SlotKey): FpsPlan {
     return refusedPlan(
       coreMessage(
         'fps.plan.noPlain',
-        { bank: bankParam(key), reason: view.entry.flashPlain.reason },
+        { bank: bankParam(key), reason: supportReasonMessage(view.entry.flashPlain.reason) },
         `${bankWordsOf(key)} cannot take a decrypted image on this build: ${view.entry.flashPlain.reason}`,
       ),
     );

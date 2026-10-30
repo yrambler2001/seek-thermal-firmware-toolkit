@@ -49,6 +49,9 @@ import type {
   WindowPlan,
 } from '../profiles/types.js';
 import { SUPPORTED, unsupported } from '../profiles/types.js';
+import { FLASH_REFUSAL } from '../profiles/generic.js';
+import { NO_READ_COMMAND, NO_WRITE_PATH } from '../profiles/compact-2014.js';
+import { coreMessage, type CoreMessage } from '../message.js';
 import {
   BANK_KEYS,
   BANK_NAME,
@@ -195,7 +198,7 @@ function flashSupport(
 ): Support {
   if (family === 'unverified-locked') return unsupported(UNVERIFIED_STAGING_REASON);
   if (write === null) {
-    return unsupported(writeReason ?? 'this build has no write arm for the bank');
+    return unsupported(writeReason ?? NO_WRITE_ARM);
   }
   const gate = profile.capabilities.flash;
   return gate.supported ? SUPPORTED : gate;
@@ -212,8 +215,8 @@ function emptyBankPolicy(family: SlotFamily, flash: Support): EmptyBankPolicy {
   const why = emptyBankWhy(family);
   if (why === null) {
     return {
-      writable: unsupported('this build has no staging form, so an empty bank is not written'),
-      why: 'this build has no staging form, so an empty bank is not written',
+      writable: unsupported(NO_STAGING_EMPTY),
+      why: NO_STAGING_EMPTY,
     };
   }
   return { writable: SUPPORTED, why };
@@ -258,7 +261,7 @@ function supportedEntry(
 export function buildSlotPlan(profile: FirmwareProfile, firmwareVersion: string | null): SlotPlan {
   const verdict = classifyBuild(profile, firmwareVersion);
   if (verdict.refusal !== null || verdict.version === null) {
-    return refusedPlan(profile, firmwareVersion, verdict.refusal ?? 'the build is unknown');
+    return refusedPlan(profile, firmwareVersion, verdict.refusal ?? BUILD_UNKNOWN);
   }
 
   const family = verdict.family;
@@ -280,4 +283,38 @@ export function buildSlotPlan(profile: FirmwareProfile, firmwareVersion: string 
     slots,
     notes,
   };
+}
+
+/* ---- the support reasons, as messages for the page ------------------------------------------- *
+ * A reason the support table gives as a constant is found by its English; a reason built from the build's
+ * own facts (a version, an address) stays English. */
+const NO_WRITE_ARM = 'this build has no write arm for the bank';
+const NO_STAGING_EMPTY = 'this build has no staging form, so an empty bank is not written';
+const BUILD_UNKNOWN = 'the build is unknown';
+
+let REASON_MESSAGES: ReadonlyMap<string, CoreMessage> | null = null;
+
+function reasonMessages(): ReadonlyMap<string, CoreMessage> {
+  const pairs: readonly (readonly [string, string])[] = [
+    [NO_WRITE_ARM, 'support.noWriteArm'],
+    [NO_STAGING_EMPTY, 'support.noStagingEmpty'],
+    [BUILD_UNKNOWN, 'support.buildUnknown'],
+    [UNVERIFIED_STAGING_REASON, 'support.unverifiedStaging'],
+    [FLASH_REFUSAL, 'support.unknownFamily'],
+    [NO_READ_COMMAND, 'support.noReadCommand'],
+    [NO_WRITE_PATH, 'support.noWritePath'],
+  ];
+  return new Map(pairs.map(([text, code]) => [text, coreMessage(code, {}, text)] as const));
+}
+
+/** A support reason (`Support.reason`, an empty bank's `why`) as a message; one it does not know as it is. */
+export function supportReasonMessage(reason: string): CoreMessage | string {
+  REASON_MESSAGES ??= reasonMessages();
+  return REASON_MESSAGES.get(reason) ?? reason;
+}
+
+/** Every reason `supportReasonMessage` knows, for the page's tests. */
+export function supportReasons(): string[] {
+  REASON_MESSAGES ??= reasonMessages();
+  return [...REASON_MESSAGES.keys()];
 }

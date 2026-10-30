@@ -71,10 +71,13 @@ import { keyNameParam } from './write-keys-words.js';
 
 /** Every refusal of this page is one code, so a front end can tell "nothing was sent" apart. */
 export function slotRefused(
-  message: string,
+  message: string | CoreMessage,
   detail?: Readonly<Record<string, unknown>>,
 ): SeekError {
-  return new SeekError('slots/refused', message, detail === undefined ? {} : { detail });
+  return new SeekError('slots/refused', typeof message === 'string' ? message : message.text, {
+    ...(detail === undefined ? {} : { detail }),
+    ...(typeof message === 'string' ? {} : { coreMessage: message }),
+  });
 }
 
 /** Re-throw a helper's refusal under this page's code, keeping its message and cause. */

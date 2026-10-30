@@ -268,12 +268,14 @@ export function SlotTable({
               </TableRowHeader>
 
               <TableCell label={t('slots:table.col.firmware')}>
-                {/* i18n: core message (the unread reason, the empty bank's reason, the image's reason) */}
+                {/* i18n: core message (the empty bank's and the image's reason below) */}
                 {state === null ? (
                   <span className="text-warn">
                     {view.unreadReason === null
                       ? t('slots:table.notReadNoReason')
-                      : t('slots:table.notRead', { reason: view.unreadReason })}
+                      : t('slots:table.notRead', {
+                          reason: coreText(view.unreadReasonMessage ?? view.unreadReason),
+                        })}
                   </span>
                 ) : empty ? (
                   <>

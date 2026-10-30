@@ -35,11 +35,12 @@
  *   (`{file}`), a SHA-256 (`{sha256}`) and family names (`{family}`,
  *   `{detected}`).
  * - Still English inside a translated sentence (core gives them no code yet):
- *   `{reason}` in fpsBoot.cannotPatch, backup.bank.unsupported,
- *   copy.source.notRead and fps.plan.noPlain (the build's support table and the
- *   read's unread reasons); `{why}` in keys.evidence.checkKeyUnnamedWhy; `{note}`
- *   in identity.versionUnknown; `{reasons}` in writeRefusal.otherFamily (the
- *   detection's evidence); `{error}` when the error has no code.
+ *   `{reason}` in fpsBoot.cannotPatch (the patch table's reason); a `{reason}`
+ *   from the build's support table or the read that names a version or an
+ *   address (the constant ones are support.*); `{why}` in
+ *   keys.evidence.checkKeyUnnamedWhy; `{note}` in identity.versionUnknown;
+ *   `{reasons}` in writeRefusal.otherFamily (the detection's evidence); `{error}`
+ *   when the error has no code.
  * - Capitals: keep the English's. A template that starts lower case is said
  *   inside another sentence or after a label ("Note: …", a list item, "Not
  *   read: …"); one that starts upper case stands alone.
@@ -695,4 +696,39 @@ export default {
   /** A step refused: the camera runs another firmware than the run's. */
   'preserve.error.otherVersion':
     "the camera reports firmware {camera}, want {version} — the patch is derived from one build's bytes and must not be sent to another",
+  /* ---- support: why a build cannot read or write a bank (slots/capability, profiles) ---- */
+  /** A reason the build's support table gives (`{reason}` in slots.refused.*, backup.bank.unsupported, fps.plan.noPlain). `--family` is a CLI option: keep it. */
+  'support.noWriteArm': 'this build has no write arm for the bank',
+  'support.noStagingEmpty': 'this build has no staging form, so an empty bank is not written',
+  'support.buildUnknown': 'the build is unknown',
+  'support.unverifiedStaging':
+    'this build is on the locked 0.x/1.x line but is not one of the builds the preservation patch tables were measured on (0.8.0.0 .. 1.3.0.8 and 1.0.3.0 / 1.0.3.2), so the staging form its bank takes is unknown and nothing is written',
+  'support.unknownFamily':
+    "the camera's family is not known, so neither is the key its banks are written under, and a camera takes a bank written under the wrong key and then will not start from it. Dump and decrypt this camera, identify it from the dump, then name its family with --family.",
+  'support.noReadCommand':
+    "firmware older than 0.8.0.0 has no read handler for GetFeaturedFirmwareData, the command a dump reads flash with. On 0.7.0.7 and 0.7.0.8 it is in the RPC method table at 0x4F but registered as a setter (write handler) only, so the control-IN read a dump sends cannot be dispatched (the preservation run reads those two builds through wire id 0x58, GetFeaturedData, instead); before 0.7.0.7 wire id 0x4F is UploadFirmwareRowSize, and on 0.3.0.1 wire id 0x52 — the one a dump arms with — is EnterBootloaderMode rather than BeginFirmwareUpgrade: the camera stays in its application, but every arm sets a flash target and arms that build's firmware-upgrade stage (GetErrorCode then reads 0x00400000), which is not a read window. Recovered from the images' own method tables, both handler columns; see test/firmware/facts.json.",
+  'support.noWritePath':
+    'these builds take new firmware through an older upgrade sequence that this toolkit does not send, and their banks were never mapped, so nothing is written.',
+  /* ---- slots: why a bank was not read, and a write's refusals (slots/inspect, slots/write) ---- */
+  /** `{name}` is the bank's name ("Slot A", in your words) or the build's own name for it; `{address}` a hex address. */
+  'slots.unread.noWindow':
+    '{name} at {address} is not readable on this build: its selector table has no window there, so nothing was armed for it',
+  'slots.unread.missing': '{name} is missing from the camera analysis',
+  'slots.unread.notRead': '{name} was not read',
+  /** `{refusal}` is the camera-wide refusal (keys.refusal.* / writeRefusal.*), already a sentence. */
+  'slots.refused.nothingWritten': '{refusal}. Nothing was written.',
+  'slots.refused.versionUnknown':
+    'the analysis does not say which firmware the camera runs, and the slot commands mean different things on different builds. Read the device info again.',
+  'slots.refused.versionUnknownWrite':
+    'the analysis does not say which firmware the camera runs. Nothing was written.',
+  'slots.refused.emptyInput': 'the input is empty',
+  /** `{reason}` is a support.* reason (or core's English for one built from the build's facts). */
+  'slots.refused.emptyNotWritable': '{name} is empty and cannot be written on this build: {reason}',
+  'slots.refused.noRaw': '{name} cannot take raw bytes on this build: {reason}',
+  'slots.refused.noPlain': '{name} cannot take a decrypted image on this build: {reason}',
+  'slots.refused.noStaging':
+    '{name} has no staging form on this build, so an image cannot be encoded for it',
+  /** `{size}` is a byte count, `{bankSize}` the bank's size in hex. */
+  'slots.refused.rawTooLong': '{size} B is longer than the {name} bank ({bankSize} B)',
+  'slots.refused.imageTooLong': 'image is {size} B, longer than the {name} bank ({bankSize} B)',
 } as const satisfies NamespaceMessages;

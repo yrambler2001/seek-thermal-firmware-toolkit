@@ -103,7 +103,7 @@ import type { CipherProfile, WindowEntry } from './types.js';
  */
 export const FIRST_READABLE_VERSION = '0.8.0.0';
 
-const NO_READ_COMMAND =
+export const NO_READ_COMMAND =
   'firmware older than 0.8.0.0 has no read handler for GetFeaturedFirmwareData, the ' +
   'command a dump reads flash with. On 0.7.0.7 and 0.7.0.8 it is in the RPC method ' +
   'table at 0x4F but registered as a setter (write handler) only, so the control-IN read a ' +
@@ -120,7 +120,7 @@ const NO_READ_COMMAND =
 /* The firmware's own names for that sequence: UploadFirmware, VerifyFirmwareSendCRC16,
  * EnterBootloaderMode. None is implemented here, and the selector map, key table and bank
  * layout were all decoded against later builds. */
-const NO_WRITE_PATH =
+export const NO_WRITE_PATH =
   'these builds take new firmware through an older upgrade sequence that this toolkit does ' +
   'not send, and their banks were never mapped, so nothing is written.';
 

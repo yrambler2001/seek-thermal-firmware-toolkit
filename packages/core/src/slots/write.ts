@@ -56,8 +56,10 @@ import {
 import { ffKeyBStoredOf } from './ff-form.js';
 import {
   cameraWriteRefusal,
+  cameraWriteRefusalMessage,
   deriveWriteKeys,
   slotWriteRefusal,
+  slotWriteRefusalMessage,
   slotWriteRefusals,
   uploadLandsUnder,
 } from './write-keys.js';
@@ -79,7 +81,8 @@ import {
 } from './write-image.js';
 import { bankNameParam } from './backup.js';
 import { bootsNowMessage } from './booted-words.js';
-import { bankParam, coreMessage, paramText, type CoreMessage } from '../message.js';
+import { bankParam, coreMessage, paramText, type CoreMessage, type CoreParam } from '../message.js';
+import { supportReasonMessage } from './capability.js';
 import {
   BOOT_UNNAMED_RISK,
   bootloaderRejectsWarning,
@@ -316,10 +319,7 @@ export function prepareSlotFlash(
   const entry = entryFor(report, key);
   if (!plan.supportedBuild.supported) throw slotRefused(plan.supportedBuild.reason);
   if (state.version === null) {
-    throw slotRefused(
-      'the analysis does not say which firmware the camera runs, and the slot commands mean ' +
-        'different things on different builds. Read the device info again.',
-    );
+    throw slotRefused(SLOT_WRITE_REFUSAL.versionUnknown());
   }
   writeWindowOf(entry);
   const slot = slotByKey(state, key);
@@ -336,11 +336,11 @@ export function prepareSlotFlash(
    * otherwise is refused with its own reason, before anything is built. */
   const targetEmpty = slotContentOf(slot) === 'empty';
   if (targetEmpty && !entry.emptyBank.writable.supported) {
-    throw slotRefused(
-      `${entry.name} is empty and cannot be written on this build: ${entry.emptyBank.writable.reason}`,
-    );
+    throw slotRefused(SLOT_WRITE_REFUSAL.emptyNotWritable(entry, entry.emptyBank.writable.reason));
   }
-  if (input.bytes.length === 0) throw slotRefused('the input is empty');
+  if (input.bytes.length === 0) {
+    throw slotRefused(SLOT_WRITE_REFUSAL.emptyInput());
+  }
   const bankBytes = Math.min(entry.length, SLOT_BYTES);
   const cipher = state.profile.cipher;
   /* The warnings, as messages where core has a code for them, else as English text. */
@@ -354,15 +354,13 @@ export function prepareSlotFlash(
   let body: Body;
   if (input.kind === 'raw') {
     if (!entry.flashRaw.supported) {
-      throw slotRefused(
-        `${entry.name} cannot take raw bytes on this build: ${entry.flashRaw.reason}`,
-      );
+      throw slotRefused(SLOT_WRITE_REFUSAL.noRaw(entry, entry.flashRaw.reason));
     }
     if (input.bytes.length > bankBytes) {
-      throw slotRefused(
-        `${String(input.bytes.length)} B is longer than the ${entry.name} bank (${hex(bankBytes)} B)`,
-        { length: input.bytes.length, bank: bankBytes },
-      );
+      throw slotRefused(SLOT_WRITE_REFUSAL.rawTooLong(entry, input.bytes.length, bankBytes), {
+        length: input.bytes.length,
+        bank: bankBytes,
+      });
     }
     refuseOnCameraWide(state, input.kind);
     const payload = input.bytes.slice();
@@ -429,20 +427,14 @@ export function prepareSlotFlash(
     }
   } else {
     if (!entry.flashPlain.supported) {
-      throw slotRefused(
-        `${entry.name} cannot take a decrypted image on this build: ${entry.flashPlain.reason}`,
-      );
+      throw slotRefused(SLOT_WRITE_REFUSAL.noPlain(entry, entry.flashPlain.reason));
     }
     if (entry.staging === null) {
-      throw slotRefused(
-        `${entry.name} has no staging form on this build, so an image cannot be encoded for it`,
-      );
+      throw slotRefused(SLOT_WRITE_REFUSAL.noStaging(entry));
     }
     assertImageShape(input.bytes);
     if (input.bytes.length > bankBytes) {
-      throw slotRefused(
-        `image is ${String(input.bytes.length)} B, longer than the ${entry.name} bank (${hex(bankBytes)} B)`,
-      );
+      throw slotRefused(SLOT_WRITE_REFUSAL.imageTooLong(entry, input.bytes.length, bankBytes));
     }
     refuseOnCameraWide(state, input.kind);
     const staged = stageImage(report, slot, entry.staging, input, cipher);
@@ -555,10 +547,82 @@ interface StagedImage {
  * less than the writer, and the CLI and the frame-rate patch refuse what the page refuses. The refusal carries
  * the reasons it was made for (`detail.blockedBy`).
  */
+/** A camera-wide refusal and "Nothing was written.", as a message: the refusal's own message where it has one. */
+function nothingWritten(state: DeviceState, refusal: string): CoreMessage {
+  const said = [slotWriteRefusalMessage(state), cameraWriteRefusalMessage(state)].find(
+    (message) => message !== null && paramText(message) === refusal,
+  );
+  return SLOT_WRITE_REFUSAL.nothingWritten(said ?? refusal, refusal);
+}
+
+/** A slot's name as a param ("Slot A" in the reader's words, a named bank as it is). */
+const nameOf = (entry: { readonly name: string; readonly key: SlotKey }): CoreParam =>
+  bankNameParam(entry.name, entry.key);
+
+/** The refusals a slot write raises before it sends anything, as messages (the SeekError's text is theirs). */
+export const SLOT_WRITE_REFUSAL = {
+  nothingWritten: (said: CoreParam, refusal: string): CoreMessage =>
+    coreMessage(
+      'slots.refused.nothingWritten',
+      { refusal: said },
+      `${refusal}. Nothing was written.`,
+    ),
+  versionUnknown: (): CoreMessage =>
+    coreMessage(
+      'slots.refused.versionUnknown',
+      {},
+      'the analysis does not say which firmware the camera runs, and the slot commands mean ' +
+        'different things on different builds. Read the device info again.',
+    ),
+  versionUnknownWrite: (): CoreMessage =>
+    coreMessage(
+      'slots.refused.versionUnknownWrite',
+      {},
+      'the analysis does not say which firmware the camera runs. Nothing was written.',
+    ),
+  emptyInput: (): CoreMessage => coreMessage('slots.refused.emptyInput', {}, 'the input is empty'),
+  emptyNotWritable: (entry: SlotEntry, reason: string): CoreMessage =>
+    coreMessage(
+      'slots.refused.emptyNotWritable',
+      { name: nameOf(entry), reason: supportReasonMessage(reason) },
+      `${entry.name} is empty and cannot be written on this build: ${reason}`,
+    ),
+  noRaw: (entry: SlotEntry, reason: string): CoreMessage =>
+    coreMessage(
+      'slots.refused.noRaw',
+      { name: nameOf(entry), reason: supportReasonMessage(reason) },
+      `${entry.name} cannot take raw bytes on this build: ${reason}`,
+    ),
+  noPlain: (entry: SlotEntry, reason: string): CoreMessage =>
+    coreMessage(
+      'slots.refused.noPlain',
+      { name: nameOf(entry), reason: supportReasonMessage(reason) },
+      `${entry.name} cannot take a decrypted image on this build: ${reason}`,
+    ),
+  noStaging: (entry: SlotEntry): CoreMessage =>
+    coreMessage(
+      'slots.refused.noStaging',
+      { name: nameOf(entry) },
+      `${entry.name} has no staging form on this build, so an image cannot be encoded for it`,
+    ),
+  rawTooLong: (entry: SlotEntry, size: number, bankBytes: number): CoreMessage =>
+    coreMessage(
+      'slots.refused.rawTooLong',
+      { size: String(size), name: nameOf(entry), bankSize: hex(bankBytes) },
+      `${String(size)} B is longer than the ${entry.name} bank (${hex(bankBytes)} B)`,
+    ),
+  imageTooLong: (entry: SlotEntry, size: number, bankBytes: number): CoreMessage =>
+    coreMessage(
+      'slots.refused.imageTooLong',
+      { size: String(size), name: nameOf(entry), bankSize: hex(bankBytes) },
+      `image is ${String(size)} B, longer than the ${entry.name} bank (${hex(bankBytes)} B)`,
+    ),
+} as const;
+
 function refuseOnCameraWide(state: DeviceState, kind: SlotInputKind): void {
   const refusal = kind === 'raw' ? cameraWriteRefusal(state) : slotWriteRefusal(state);
   if (refusal === null) return;
-  throw slotRefused(`${refusal}. Nothing was written.`, {
+  throw slotRefused(nothingWritten(state, refusal), {
     blockedBy: kind === 'raw' ? [...state.bankWriteRefusals] : slotWriteRefusals(state),
   });
 }
@@ -703,9 +767,7 @@ function assertPlanIsCurrent(report: SlotsReport, plan: SlotFlashPlan, entry: Sl
   const { state } = report;
   if (!report.plan.supportedBuild.supported) throw slotRefused(report.plan.supportedBuild.reason);
   if (state.version === null) {
-    throw slotRefused(
-      'the analysis does not say which firmware the camera runs. Nothing was written.',
-    );
+    throw slotRefused(SLOT_WRITE_REFUSAL.versionUnknownWrite());
   }
   if (plan.firmwareVersion !== state.version) {
     throw slotRefused(
@@ -770,7 +832,7 @@ export function checkSlotFlash(
    * the read's camera-wide refusals (no key-table or derivation reason applies there). */
   const refusal = slotWriteRefusal(report.state);
   if (refusal !== null) {
-    throw slotRefused(`${refusal}. Nothing was written.`, {
+    throw slotRefused(nothingWritten(report.state, refusal), {
       blockedBy: slotWriteRefusals(report.state),
     });
   }
