@@ -154,7 +154,7 @@ export default {
     "The image is {name}'s, as the slots read decrypted it: firmware {version}, {size} B, sha256 {sha256}.",
 
   /* ---- restore: a bank restored from a full flash backup (slots/restore) ---- */
-  /** "the backup's Slot A (at 0x14010000)", said inside restore.* sentences as `{where}`. */
+  /** "the backup's slot A (at 0x14010000)", said inside restore.* sentences as `{where}`. */
   'restore.where': "the backup's {name} (at {address})",
   /** The preview's Source row. `{file}`: the backup's file name. */
   'restore.from': '{where} in the full flash backup {file}',
@@ -355,7 +355,7 @@ export default {
   'staging.phrase.verbatim': 'sent as given',
 
   /* ---- written: a finished bank write's notes (slots/write, slots/write-verify) ---- */
-  /** `{name}` is a bank (label form); `{staged}` is staging.phrase.*; `{size}` is a byte count; the rest hex. */
+  /** `{name}` is a bank, inside the sentence ("slot A"); `{staged}` is staging.phrase.*; `{size}` is a byte count; the rest hex. */
   'written.committed':
     'committed {size} B to {name} at {address}, {staged}; commit status {status}',
   'written.noReadWindow': 'this build names no read window for the bank, so nothing was read back',
@@ -1085,7 +1085,7 @@ export default {
     'the plan was built for camera {planSerial}, but the analysis reads {serial}. Refusing to write it here. Nothing was written.',
   'slots.plan.cameraUnknownSerial': 'of unknown serial',
   'slots.plan.unknownSerial': 'an unknown serial',
-  /** `{address}`, `{at}`: hex; `{name}`: the bank, as a label. */
+  /** `{address}`, `{at}`: hex; `{name}`: the bank, inside the sentence ("slot A"). */
   'slots.plan.otherAddress': "the plan targets {address}, but the build's {name} is at {at}",
   'slots.plan.notRead': 'the analysis no longer reads {name}. Nothing was written.',
   'slots.plan.edited':
