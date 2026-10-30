@@ -21,8 +21,14 @@ export type LanguageCode =
   'en' | 'de' | 'es' | 'fr' | 'it' | 'pl' | 'pt' | 'ro' | 'ru' | 'uk' | 'zh-Hans';
 
 export interface LanguageEntry {
-  /** A BCP 47 tag; it also goes on `<html lang>`. */
+  /** A BCP 47 tag, as URLs (`?lang=`), storage and the switcher use it. */
   readonly code: LanguageCode;
+  /**
+   * The tag for `<html lang>` and the switcher's options, when the text is more
+   * specific than `code`: hyphenation, fonts and screen-reader voices key on it.
+   * Defaults to `code`.
+   */
+  readonly htmlLang?: string;
   /** The language's own name for itself, as the switcher shows it. */
   readonly name: string;
   readonly load: () => Promise<Dictionary>;
@@ -38,7 +44,12 @@ export const LANGUAGES: readonly LanguageEntry[] = [
   { code: 'it', name: 'Italiano', load: () => import('./locales/it').then((m) => m.default) },
   { code: 'pl', name: 'Polski', load: () => import('./locales/pl').then((m) => m.default) },
   /* European Portuguese (pt-PT spelling). */
-  { code: 'pt', name: 'Português', load: () => import('./locales/pt').then((m) => m.default) },
+  {
+    code: 'pt',
+    htmlLang: 'pt-PT',
+    name: 'Português',
+    load: () => import('./locales/pt').then((m) => m.default),
+  },
   /* Romanian (ro): `ro-RO` and `ro-MD` browsers match it by the primary subtag. */
   { code: 'ro', name: 'Română', load: () => import('./locales/ro').then((m) => m.default) },
   { code: 'ru', name: 'Русский', load: () => import('./locales/ru').then((m) => m.default) },

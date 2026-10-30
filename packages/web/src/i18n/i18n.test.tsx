@@ -83,7 +83,7 @@ vi.mock('./languages', async (importOriginal) => {
       name: 'Polski',
       load: () => gate.opened.then(() => pl as unknown as Dictionary),
     },
-    { code: 'pt', name: 'Português', load: fake({}) },
+    { code: 'pt', htmlLang: 'pt-PT', name: 'Português', load: fake({}) },
     { code: 'ro', name: 'Română', load: fake({}) },
     { code: 'ru', name: 'Русский', load: fake(ru) },
     { code: 'uk', name: 'Українська', load: () => ukGate.opened.then(() => ({}) as Dictionary) },
@@ -154,6 +154,14 @@ describe('loading and switching', () => {
     expect(document.documentElement.lang).toBe('ru');
     resetI18n();
     expect(document.documentElement.lang).toBe('en');
+  });
+
+  it('puts the more specific tag on <html lang> where the registry names one, not in the code', async () => {
+    await setLanguage('pt');
+    expect(getLanguage()).toBe('pt');
+    expect(document.documentElement.lang).toBe('pt-PT');
+    await setLanguage('zh-Hans');
+    expect(document.documentElement.lang).toBe('zh-Hans');
   });
 
   it('stays in English when the language cannot be loaded', async () => {
@@ -419,7 +427,7 @@ describe('React', () => {
       ['en', 'English', 'en'],
       ['de', 'Deutsch', 'de'],
       ['pl', 'Polski', 'pl'],
-      ['pt', 'Português', 'pt'],
+      ['pt', 'Português', 'pt-PT'],
       ['ro', 'Română', 'ro'],
       ['ru', 'Русский', 'ru'],
       ['uk', 'Українська', 'uk'],

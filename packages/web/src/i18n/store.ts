@@ -61,7 +61,8 @@ export function subscribe(listener: () => void): () => void {
 
 /** Sets `<html lang>`, which screen readers, hyphenation and fonts key on. */
 export function syncHtmlLang(lang: LanguageCode, doc: Document = document): void {
-  doc.documentElement.lang = lang;
+  const entry = LANGUAGES.find((candidate) => candidate.code === lang);
+  doc.documentElement.lang = entry?.htmlLang ?? lang;
 }
 
 function apply(lang: LanguageCode, dict: LooseDictionary): void {

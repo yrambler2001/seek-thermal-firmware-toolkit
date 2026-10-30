@@ -278,7 +278,7 @@ The first match wins:
 3. The first entry in `navigator.languages` whose primary subtag matches (`zh-TW` → `zh-Hans`, `pt-BR` → `pt`, `ro-MD` → `ro`).
 4. English.
 
-`main.tsx` awaits `initI18n()` before the first render, so English never flashes first. A switch loads the language first, then re-renders. `<html lang>` always matches the language in use. A pick in the switcher is saved and removes `?lang=` from the address bar. A pick in one tab is followed by the page's other open tabs (`followLanguageChoice()`, called by `main.tsx`), which also drop their own `?lang=`; the theme does the same.
+`main.tsx` awaits `initI18n()` before the first render, so English never flashes first. A switch loads the language first, then re-renders. `<html lang>` always matches the language in use: its code, or the more specific tag its registry entry names (`htmlLang`: `pt` is `pt-PT`), which hyphenation and screen-reader voices key on. A pick in the switcher is saved and removes `?lang=` from the address bar. A pick in one tab is followed by the page's other open tabs (`followLanguageChoice()`, called by `main.tsx`), which also drop their own `?lang=`; the theme does the same.
 
 ## Tests
 

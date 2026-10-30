@@ -59,7 +59,7 @@ export function LanguageSwitch(): ReactElement {
         className="absolute inset-0 size-full cursor-pointer appearance-none rounded-full opacity-0 focus-visible:outline-none"
       >
         {languages.map((entry) => (
-          <option key={entry.code} value={entry.code} lang={entry.code}>
+          <option key={entry.code} value={entry.code} lang={entry.htmlLang ?? entry.code}>
             {entry.name}
           </option>
         ))}
