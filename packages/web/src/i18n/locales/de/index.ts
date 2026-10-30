@@ -35,7 +35,7 @@
  *   wieder einstecken; a fresh power-up → frisch eingeschaltet
  * - frame-rate patch → Bildraten-Patch; "Make N FPS" → „Auf N FPS umstellen“; patch (verb) → patchen
  * - acceptance sum → Prüfsumme (the sum the bootloader checks); acceptance check → Annahmeprüfung;
- *   word sum → Wortsumme; transfer checksum → Übertragungsprüfsumme; header / footer → Header / Footer
+ *   word sum → Wortsumme; transfer checksum → Übertragungs-Prüfsumme (hyphenated so a narrow cell can wrap); header / footer → Header / Footer
  * - stage / staging (how a write's bytes are sent) → übertragen / Übertragung, Übertragungsform;
  *   payload → Nutzdaten
  * - whole-flash read (the Preserve "drain") → volles Auslesen (chip: „Volles Auslesen“); restore →

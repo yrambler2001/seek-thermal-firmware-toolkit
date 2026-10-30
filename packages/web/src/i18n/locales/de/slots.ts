@@ -248,7 +248,7 @@ export default {
     one: '{size} B in {count} Teil zu höchstens {chunk} B',
     other: '{size} B in {count} Teilen zu je höchstens {chunk} B',
   },
-  'preview.checksum': 'Übertragungsprüfsumme',
+  'preview.checksum': 'Übertragungs-Prüfsumme',
   /** Row label: what the bank should hold after the write. */
   'preview.stored': 'Danach gespeichert',
   'preview.storedNotPredicted': 'nicht vorhergesagt — das Rücklesen ist die Prüfung',

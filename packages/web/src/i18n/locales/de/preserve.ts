@@ -99,7 +99,7 @@ export default {
   'badge.writes': 'schreibt in die Kamera',
   'badge.running': 'Läuft',
   'badge.done': 'Fertig',
-  'badge.plannedStop': 'Wie geplant angehalten — als Nächstes die Wiederherstellung',
+  'badge.plannedStop': 'Wie geplant angehalten — Wiederherstellung folgt',
   'badge.failed': 'Angehalten — siehe Protokoll',
   /** A badge on the step that runs next. */
   'badge.upNext': 'Als Nächstes',
@@ -137,7 +137,7 @@ export default {
   'yourTurn.powerCycle.title':
     'Sie sind dran: Ziehen Sie die Kamera ab, stecken Sie sie wieder ein, klicken Sie auf „Gerät verbinden“ — und versuchen Sie es dann erneut.',
   'yourTurn.powerCycle.body':
-    'Die Kamera muss frisch eingeschaltet werden, bevor ihr Lesemechanismus wieder gelesen werden kann. Der Durchlauf ist hier noch geladen; nichts geht verloren.',
+    'Die Kamera muss frisch eingeschaltet werden, bevor sie wieder gelesen werden kann. Der Durchlauf ist hier noch geladen; nichts geht verloren.',
   'yourTurn.powerCycleAssert.title':
     'Sie sind dran: Ziehen Sie die Kamera ab, stecken Sie sie wieder ein, klicken Sie auf „Gerät verbinden“ — und fahren Sie dann fort.',
   'yourTurn.powerCycleAssert.body':
@@ -240,7 +240,7 @@ export default {
   /* ---- the confirmation before a write ---- */
   /* {phase} is phase.*.label; {banks} the banks it writes, or confirm.chosenBanks. */
   'confirm.titleWrite': '{phase} — in {banks} schreiben?',
-  'confirm.titleJump': '{phase} — über den nicht verzeichneten Schreibvorgang springen?',
+  'confirm.titleJump': '{phase} — nicht verzeichnetes Schreiben überspringen?',
   'confirm.chosenBanks': 'die gewählten Slots',
   'confirm.jump':
     'DER SCHREIBVORGANG IST FÜR DIESEN DURCHLAUF NICHT VERZEICHNET, und Sie versichern, dass die Schreibvorgänge ohne ihre Checkpoints angekommen sind: Der Schritt beginnt nach dem Schreiben, statt erneut zu schreiben. Die eigenen Prüfungen der Schritte laufen trotzdem — das Lesen der Version, die Prüfungen der Slots —, und eine falsche Annahme kostet ein vergebliches volles Auslesen, keine unbrauchbar gemachte Kamera.',
@@ -257,7 +257,7 @@ export default {
     'Dies schreibt Ihre Original-Firmware zurück in {banks}, in dieser Reihenfolge — der Slot, den die Kamera zuerst versucht, kommt zuerst.',
   'confirm.keepPlugged':
     'Lassen Sie die Kamera angeschlossen und den Computer wach, solange geschrieben wird — ein unterbrochener Schreibvorgang hinterlässt eine Kamera, die nur noch ein Hardware-Programmiergerät (SPI oder SWD/J-Link) retten kann. Auf einem Telefon: Flugmodus an und den Bildschirm eingeschaltet lassen. Danach startet die Kamera neu; wenn die Seite darum bittet, klicken Sie auf „Gerät verbinden“ und wählen Sie sie erneut aus. Das ist so vorgesehen.',
-  'confirm.yesJump': 'Ja — über den Schreibvorgang springen',
+  'confirm.yesJump': 'Ja — Schreiben überspringen',
   'confirm.yesWrite': 'Ja — in die Kamera schreiben',
 
   /* ---- the last screen: the proof ---- */
@@ -286,7 +286,7 @@ export default {
   'summary.image': 'Firmware-Image (entschlüsselt, {bank})',
   'summary.verify': 'Prüfung',
   'summary.toolbar': 'Archiv-Aktionen',
-  'summary.download': 'Vollständiges Archiv herunterladen (Durchlaufdatei)',
+  'summary.download': 'Gesamtarchiv herunterladen (Durchlaufdatei)',
 
   /* ---- the run file section ---- */
   'runFile.eyebrow': 'Optional — um einen Durchlauf später fortzusetzen',
