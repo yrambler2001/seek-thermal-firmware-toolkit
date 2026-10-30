@@ -32,6 +32,7 @@ import {
   preservePatchedFile,
   preservePlainFile,
 } from '@seek-fw/core';
+import { t } from '@/i18n';
 
 export type {
   BankKey,
@@ -125,54 +126,51 @@ export interface PreserveStepMeta {
 export const PRESERVE_STEPS: readonly PreserveStepMeta[] = [
   {
     id: 'backup',
+    /* i18n: core message (the step's name) */
     label: preserveStepLabel('backup'),
-    description:
-      'Reads the 31 blocks of 64 KiB a stock camera can read, then reads every bank a second ' +
-      'time (the two reads must agree byte for byte), gets each bank’s firmware out of what the ' +
-      'camera stores (decrypted where it is stored encrypted) and checks it, and works out which ' +
-      'bank the camera starts next. This is the run’s only copy of this camera, taken before ' +
-      'anything is written.',
+    get description(): string {
+      return t('preserve:step.backup.description');
+    },
   },
   {
     id: 'patch',
+    /* i18n: core message (the step's name) */
     label: preserveStepLabel('patch'),
-    description:
-      'Offline, no camera. Builds the patch for each bank the run can write: it lets the ' +
-      'camera’s read reach the whole 4 MiB flash, and it is written in the form the camera ' +
-      'stores it, so only the patch’s own bytes change.',
+    get description(): string {
+      return t('preserve:step.patch.description');
+    },
   },
   {
     id: 'commit',
+    /* i18n: core message (the step's name) */
     label: preserveStepLabel('commit'),
-    description:
-      'The write. Reads every chosen bank back first and writes nothing unless each still holds ' +
-      'what the backup recorded (a write that already landed is never repeated), then writes ' +
-      'each one, the bank the camera tries first last. The camera is not restarted here: the ' +
-      'next step restarts it.',
+    get description(): string {
+      return t('preserve:step.commit.description');
+    },
   },
   {
     id: 'drain',
+    /* i18n: core message (the step's name) */
     label: preserveStepLabel('drain'),
-    description:
-      'Restarts the camera so it starts the patched firmware (it is silent for about ten ' +
-      'seconds; the page waits and finds it again), checks which bank it started from (a bank ' +
-      'without the patch stops the step before anything is read), then reads the whole 4 MiB ' +
-      'flash in one read and puts each written bank’s original firmware, from the backup, into ' +
-      'the saved image. Nothing is written.',
+    get description(): string {
+      return t('preserve:step.drain.description');
+    },
   },
   {
     id: 'restore',
+    /* i18n: core message (the step's name) */
     label: preserveStepLabel('restore'),
-    description:
-      'The other write. Writes each written bank’s original firmware back while the patched ' +
-      'firmware still runs, then restarts the camera.',
+    get description(): string {
+      return t('preserve:step.restore.description');
+    },
   },
   {
     id: 'verify',
+    /* i18n: core message (the step's name) */
     label: preserveStepLabel('verify'),
-    description:
-      'After a fresh start, reads the 31 blocks again, every bank among them: 0 differing bytes ' +
-      'proves the camera’s flash is byte-identical to the backup. Read-only.',
+    get description(): string {
+      return t('preserve:step.verify.description');
+    },
   },
 ];
 
@@ -191,6 +189,8 @@ export type PreservePhaseId = 'read-build' | 'patch-dump' | 'restore-verify';
 export interface PreservePhaseMeta {
   readonly id: PreservePhaseId;
   readonly label: string;
+  /** The label inside a sentence ("Start read & build"), in the language in use. */
+  readonly labelInSentence: string;
   readonly description: string;
   /** The core steps the phase runs, in order, in one task. */
   readonly steps: readonly PreserveStepId[];
@@ -209,36 +209,45 @@ export interface PreservePhaseMeta {
 export const PRESERVE_PHASES: readonly PreservePhaseMeta[] = [
   {
     id: 'read-build',
-    label: 'Read & build',
-    description:
-      'Reads everything a stock camera lets out — 31 blocks of 64 KiB — and keeps it as your ' +
-      'backup, reads each firmware bank a second time, works out which bank the camera ' +
-      'starts from next time, and prepares the small patch the next step writes. Nothing is ' +
-      'written to the camera. Usually under a minute. If the camera needs a restart along the ' +
-      'way, the page asks you to press "Connect device" and pick it again — that is expected.',
+    get label(): string {
+      return t('preserve:phase.readBuild.label');
+    },
+    get labelInSentence(): string {
+      return t('preserve:phase.readBuild.inSentence');
+    },
+    get description(): string {
+      return t('preserve:phase.readBuild.description');
+    },
     steps: ['backup', 'patch'],
     resetsCamera: true,
     replugAfter: false,
   },
   {
     id: 'patch-dump',
-    label: 'Write & whole-flash read',
-    description:
-      'Writes a small, temporary patch into the firmware banks chosen in step 02 (by ' +
-      'default the bank the camera starts from next), so it can read out all of its flash. ' +
-      'Then the camera restarts — press "Connect device" and pick it again when the page asks ' +
-      '— and the whole 4 MiB flash is read. Step 04 puts the original firmware back.',
+    get label(): string {
+      return t('preserve:phase.patchDump.label');
+    },
+    get labelInSentence(): string {
+      return t('preserve:phase.patchDump.inSentence');
+    },
+    get description(): string {
+      return t('preserve:phase.patchDump.description');
+    },
     steps: ['commit', 'drain'],
     resetsCamera: true,
     replugAfter: true,
   },
   {
     id: 'restore-verify',
-    label: 'Restore & verify',
-    description:
-      'Writes your original firmware back, restarts the camera (press "Connect device" and ' +
-      'pick it again when asked), then reads everything once more to check it matches the ' +
-      'backup byte for byte.',
+    get label(): string {
+      return t('preserve:phase.restoreVerify.label');
+    },
+    get labelInSentence(): string {
+      return t('preserve:phase.restoreVerify.inSentence');
+    },
+    get description(): string {
+      return t('preserve:phase.restoreVerify.description');
+    },
     steps: ['restore', 'verify'],
     resetsCamera: true,
     replugAfter: false,

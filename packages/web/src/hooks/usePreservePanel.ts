@@ -60,6 +60,7 @@ import {
   unpatchedStartOf,
 } from '@seek-fw/core';
 import { errorMessage } from '@seek-fw/core';
+import { t, tEnglish } from '@/i18n';
 import { reportInUseElsewhere } from '../lib/camera-lock';
 import { downloadBytes } from '../lib/download';
 import { isPowerCycleRefusal, logHint } from '../lib/hints';
@@ -289,13 +290,13 @@ async function authorizedCameraCount(): Promise<number | null> {
 export function usePreservePanel(params: PreservePanelParams): PreservePanelApi {
   const { runner, device, form } = params;
 
-  const loadReporter = useReporter('No run file chosen.');
+  const loadReporter = useReporter(t('preserve:status.noFile'));
   /* Three fixed hook calls, one per phase — each phase's bar, status and log
    * live in its own RunPanel for the whole life of the wizard. */
   const phaseReporters: Readonly<Record<PreservePhaseId, ReporterHandle>> = {
-    'read-build': useReporter('Not run yet.'),
-    'patch-dump': useReporter('Not run yet.'),
-    'restore-verify': useReporter('Not run yet.'),
+    'read-build': useReporter(t('preserve:status.notRun')),
+    'patch-dump': useReporter(t('preserve:status.notRun')),
+    'restore-verify': useReporter(t('preserve:status.notRun')),
   };
   const reportersRef = useRef(phaseReporters);
   reportersRef.current = phaseReporters;
@@ -432,7 +433,7 @@ export function usePreservePanel(params: PreservePanelParams): PreservePanelApi 
                         'reset is silent for a couple of seconds while it boots',
                   patient ? 'detail' : 'warn',
                 );
-                rep.setStatus('The camera is restarting — this takes about ten seconds …');
+                rep.setStatus(t('preserve:status.restarting'));
               }
               /* A missed `connect` event must not strand the run: the camera
                * re-enumerates while the page holds nothing, and getDevices()
@@ -456,7 +457,7 @@ export function usePreservePanel(params: PreservePanelParams): PreservePanelApi 
                       'serial number). The step carries on as soon as you pick it.',
                     'info',
                   );
-                  rep.setStatus('Waiting for you — press "Connect device" and pick the camera …');
+                  rep.setStatus(t('preserve:status.waitConnect'));
                 } else if (instructed && attempt % 30 === 29) {
                   rep.log(
                     `still waiting — press "Connect device" and pick the camera ` +
@@ -500,7 +501,7 @@ export function usePreservePanel(params: PreservePanelParams): PreservePanelApi 
       runner.cancel();
       sawDisconnect.current = false;
       rep.log(`${why} — stopping the phase (the camera may be a different unit)`, 'warn');
-      rep.setStatus('Stopped — the camera changed. Check it, then run the phase again.');
+      rep.setStatus(t('preserve:status.swapped'));
     },
     [runner],
   );
@@ -523,7 +524,7 @@ export function usePreservePanel(params: PreservePanelParams): PreservePanelApi 
           'the camera is unplugged — plug it back in, then press "Connect device" and pick it',
           'detail',
         );
-        rep.setStatus('Waiting for you — plug the camera back in, then press "Connect device" …');
+        rep.setStatus(t('preserve:status.waitPlugBack'));
         return;
       }
       /* A device LEFT. On a phase that resets the camera this is the reset
@@ -536,7 +537,7 @@ export function usePreservePanel(params: PreservePanelParams): PreservePanelApi 
           'the camera is restarting, as expected — waiting for it to come back',
           'detail',
         );
-        rep.setStatus('The camera is restarting — this takes about ten seconds …');
+        rep.setStatus(t('preserve:status.restarting'));
         return;
       }
       stopForSwap(rep, 'the camera left the bus mid-phase');
@@ -569,7 +570,7 @@ export function usePreservePanel(params: PreservePanelParams): PreservePanelApi 
       }
       clearReconnect();
       rep.reporter.log('the camera is back — continuing', 'ok');
-      rep.setStatus('The camera is back — continuing …');
+      rep.setStatus(t('preserve:status.back'));
     })();
   }, [clearReconnect, device, runner, stopForSwap]);
 
@@ -601,7 +602,7 @@ export function usePreservePanel(params: PreservePanelParams): PreservePanelApi 
           'before the restore. The run file is already saved.',
         'info',
       );
-      rep.setStatus('Waiting for you — unplug the camera and plug it back in …');
+      rep.setStatus(t('preserve:status.waitReplug'));
       try {
         const deadline = Date.now() + REPLUG_WAIT_MS;
         while (Date.now() < deadline && !signal.aborted) {
@@ -647,7 +648,7 @@ export function usePreservePanel(params: PreservePanelParams): PreservePanelApi 
         sawDisconnect.current = false;
         setPrompt(null);
         rep.reset(
-          meta.resetsCamera ? 'Running — the camera restarts during this step …' : 'Running …',
+          meta.resetsCamera ? t('preserve:status.runningRestarts') : t('preserve:status.running'),
         );
         const allowJump = options.allowJump === true;
 
@@ -655,7 +656,7 @@ export function usePreservePanel(params: PreservePanelParams): PreservePanelApi 
         if (current === null) {
           if (phase !== 'read-build') {
             rep.log('no run is active — the first phase creates the run', 'error');
-            rep.setStatus('No run.');
+            rep.setStatus(t('preserve:status.noRun'));
             return;
           }
           try {
@@ -678,19 +679,25 @@ export function usePreservePanel(params: PreservePanelParams): PreservePanelApi 
           } catch (error) {
             rep.log(`cannot create the run: ${errorMessage(error)}`, 'error');
             logHint(rep.log, error);
-            rep.setStatus('Not created — see the log above.');
+            rep.setStatus(t('preserve:status.notCreated'));
             return;
           }
         }
 
-        const gate = canRunPhase({ state: current, phase, has: hasCheckpoint });
+        /* English: this gate's reason goes to the run log. */
+        const gate = canRunPhase({
+          state: current,
+          phase,
+          has: hasCheckpoint,
+          translate: tEnglish,
+        });
         /* The power-cycle assertion the row's re-run control armed satisfies
          * the gate's one power-cycle gap — core's own retry gate takes the
          * same flag, so the panel must not refuse what core will accept. */
         const powerCycleArmed = gate.needsPowerCycle && options.powerCycled === true;
         if (!gate.ok && !(gate.jumpable && allowJump) && !powerCycleArmed) {
-          rep.log(`refused: this phase ${gateReason(gate) ?? 'cannot run'}`, 'error');
-          rep.setStatus('Refused — the phase list above says what is missing.');
+          rep.log(`refused: this phase ${gateReason(gate, tEnglish) ?? 'cannot run'}`, 'error');
+          rep.setStatus(t('preserve:status.refused'));
           return;
         }
         if (allowJump && gate.jumpable) {
@@ -783,20 +790,11 @@ export function usePreservePanel(params: PreservePanelParams): PreservePanelApi 
                   'info',
                 );
               }
-              rep.reporter.progress(
-                1,
-                1,
-                `${meta.label} — done, and the run file is saved. Before the restore: unplug the ` +
-                  'camera, plug it back in and press "Connect device".',
-              );
+              rep.reporter.progress(1, 1, t('preserve:status.doneReplug', { phase: meta.label }));
               return;
             }
           }
-          rep.reporter.progress(
-            1,
-            1,
-            `${meta.label} — done. The run file in your downloads is up to date.`,
-          );
+          rep.reporter.progress(1, 1, t('preserve:status.done', { phase: meta.label }));
         } catch (error) {
           if (!isCancelledStep(error)) {
             /* The drain's planned stop is logged as a stop, not an error (TESTING.md 42.102). */
@@ -812,12 +810,12 @@ export function usePreservePanel(params: PreservePanelParams): PreservePanelApi 
             /* A backup that refuses the camera wrote nothing, and its words say what to do. */
             rep.setStatus(
               unpatchedStartOf(error) !== null
-                ? PRESERVE_UNPATCHED_START_STOP
+                ? /* i18n: core message */ PRESERVE_UNPATCHED_START_STOP
                 : stepInFlight === 'backup' &&
                     error instanceof SeekError &&
                     error.code === 'pipeline/refused'
-                  ? 'Refused — nothing was written. See the log above.'
-                  : 'Failed — see the log above.',
+                  ? t('preserve:status.backupRefused')
+                  : t('preserve:status.failed'),
             );
             /* A failed STEP is a fact about the run: record it so a resume
              * sees it, and refresh the file. A CANCELLED step is not
@@ -835,7 +833,7 @@ export function usePreservePanel(params: PreservePanelParams): PreservePanelApi 
             );
           } else {
             rep.log('cancelled', 'warn');
-            rep.setStatus('Cancelled — the run file still says where the run stopped.');
+            rep.setStatus(t('preserve:status.cancelled'));
             /* The steps that finished before the cancel are recorded in
              * memory; put them in the file too, so closing the tab here
              * does not take a recorded commit with it. */
@@ -864,7 +862,7 @@ export function usePreservePanel(params: PreservePanelParams): PreservePanelApi 
         LOAD_PANEL_ID,
         async () => {
           const rep = loadReporter;
-          rep.reset('Reading run file …');
+          rep.reset(t('preserve:status.readingFile'));
           try {
             const bytes = new Uint8Array(await file.arrayBuffer());
             rep.reporter.log(`${file.name} — ${String(bytes.length)} B`, 'detail');
@@ -876,12 +874,17 @@ export function usePreservePanel(params: PreservePanelParams): PreservePanelApi 
               const phaseRep = phaseReporters[meta.id];
               const records = meta.steps.map((id) => parsed.state.steps[id]);
               if (records.every((record) => record?.status === 'done')) {
-                phaseRep.reset('Done earlier — loaded from the run file.');
+                phaseRep.reset(t('preserve:status.doneEarlier'));
               } else if (records.some((record) => record?.status === 'failed')) {
                 const failed = records.find((record) => record?.status === 'failed');
-                phaseRep.reset(`Failed earlier: ${failed?.error ?? 'unknown reason'}`);
+                /* i18n: core message (the step's recorded error) */
+                phaseRep.reset(
+                  t('preserve:status.failedEarlier', {
+                    error: failed?.error ?? t('preserve:unknownReason'),
+                  }),
+                );
               } else {
-                phaseRep.reset('Not run yet.');
+                phaseRep.reset(t('preserve:status.notRun'));
               }
             }
             rep.reporter.log(
@@ -915,7 +918,7 @@ export function usePreservePanel(params: PreservePanelParams): PreservePanelApi 
             rep.reporter.progress(
               1,
               1,
-              `Resumed at ${parsed.state.nextStep}. The phase list picks up from there.`,
+              t('preserve:status.resumed', { step: parsed.state.nextStep }),
             );
             setLastSave({
               runId: parsed.state.runId,
@@ -927,7 +930,7 @@ export function usePreservePanel(params: PreservePanelParams): PreservePanelApi 
           } catch (error) {
             rep.log(`cannot resume from this file: ${errorMessage(error)}`, 'error');
             logHint(rep.log, error);
-            rep.setStatus('Not resumed — see the log above.');
+            rep.setStatus(t('preserve:status.notResumed'));
           } finally {
             rep.flush();
           }
@@ -941,12 +944,13 @@ export function usePreservePanel(params: PreservePanelParams): PreservePanelApi 
   const chooseBanks = useCallback(
     (choice: PreserveBankChoice): string | null => {
       const current = stateRef.current;
-      if (current === null) return 'no run is active — step 02 starts one';
-      if (runner.busy) return 'a step is running — choose the banks once it has finished';
+      if (current === null) return t('preserve:banks.refusedNoRun');
+      if (runner.busy) return t('preserve:banks.refusedBusy');
       try {
         applyState(choosePreserveBanks(current, choice));
         return null;
       } catch (error) {
+        /* i18n: core message (choosePreserveBanks' refusal) */
         return errorMessage(error);
       }
     },

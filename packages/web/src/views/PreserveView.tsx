@@ -32,10 +32,7 @@ import {
   ScanSearch,
 } from 'lucide-react';
 import {
-  bankChoiceWords,
-  bankListWords,
   bankRecordWords,
-  bankWordsOf,
   commitOrderOf,
   hexUp,
   isPreserveBankChoice,
@@ -46,6 +43,7 @@ import {
   restoreOrderOf,
   BANK_KEYS,
   type BankKey,
+  type PreserveBankChoice,
   type PreserveBankRecord,
   type PreserveChoiceVerdict,
   bankChoiceWritesWords,
@@ -59,6 +57,8 @@ import {
   restoreFormWords,
   drainCapabilityWords,
 } from '@seek-fw/core';
+import { rich, t } from '@/i18n';
+import { bankList, bankName, bankWords } from '@/lib/bank-names';
 import { Panel, PanelTitle } from '@/components/Panel';
 import { Prose } from '@/components/Prose';
 import { RunPanel } from '@/components/RunPanel';
@@ -157,66 +157,40 @@ export function PreserveView({
     <>
       <Section
         id="preserve-how"
-        title="What to expect"
+        title={t('preserve:how.title')}
         icon={<ListChecks />}
         description={
           state === null
-            ? 'Connect the camera, then start at step 02.'
-            : `Run ${state.runId}${
-                state.expectedVersion === undefined ? '' : ` — firmware ${state.expectedVersion}`
-              }.`
+            ? t('preserve:how.descriptionIdle')
+            : state.expectedVersion === undefined
+              ? t('preserve:how.descriptionRun', { runId: state.runId })
+              : t('preserve:how.descriptionRunVersion', {
+                  runId: state.runId,
+                  version: state.expectedVersion,
+                })
         }
       >
         <Prose>
           <ul>
+            <li>{rich('preserve:how.restarts')}</li>
+            <li>{t('preserve:how.noFile')}</li>
             <li>
-              The camera <strong>restarts</strong> during each step. After a restart Chrome no
-              longer recognises it (it has no USB serial number), so the page asks you to press{' '}
-              <strong>Connect device</strong> and pick the camera again. That is the normal flow —
-              the step carries on by itself once you do.
-            </li>
-            <li>There is no firmware file to pick: everything is read from the camera itself.</li>
-            <li>
-              The camera keeps its firmware in three <strong>banks</strong> (slot A, slot B and
-              recovery R). Step 02 reads all three and works out which one the camera starts from
-              next; the patch only works if that bank holds it. You choose the banks step 03 patches
-              — by default the one the next start enters — and step 04 puts every one of them back.
+              {rich('preserve:how.banks', {
+                params: { a: bankWords('a'), b: bankWords('b'), r: bankWords('r') },
+              })}
             </li>
             <li>
-              After every step your browser downloads a <strong>run file</strong> named after the
-              run&apos;s start, the save time and the step it reached (
-              <code>preserve-…-verified.zip</code>), with one folder per step inside. Keep the
-              newest one — it lets you continue later.
+              {rich('preserve:how.runFile', { params: { example: 'preserve-…-verified.zip' } })}
             </li>
           </ul>
         </Prose>
         <Alert tone="warn">
-          <p>
-            <strong>Steps 03 and 04 write to the camera&apos;s flash</strong>, and each asks you to
-            confirm first. While one of them runs, keep the camera plugged in (unless the page asks
-            you to replug it) and the computer awake, ideally on mains power. An interrupted write
-            leaves a camera that only a hardware programmer (SPI or SWD/J-Link) can fix.
-          </p>
-          <p>
-            <strong>On a phone:</strong> before step 03, turn on airplane mode and switch off Wi-Fi
-            and mobile data, so a call or a notification cannot pull the browser away mid-write —
-            and keep the screen on. The page keeps working offline once it is open.
-          </p>
+          <p>{rich('preserve:how.writeWarning')}</p>
+          <p>{rich('preserve:how.phone')}</p>
         </Alert>
         {pastCommitLoud && (
           <Alert tone="err">
-            <p>
-              <strong>
-                The write is not on record for this run, so the steps after it are shut.
-              </strong>{' '}
-              The camera may already be running the patched image (an interrupted write) or may not
-              (the write never started) — the run file cannot prove which. Do not run the
-              whole-flash read or the restore against a patched camera without the write on record;
-              the way forward is step 03, whose check before the write reads the bank and refuses to
-              write it blindly again. Only if that check has already refused with{' '}
-              <em>already holds the patched bytes</em> does the jump apply — and it goes through its
-              own dialog.
-            </p>
+            <p>{rich('preserve:how.pastCommit')}</p>
           </Alert>
         )}
       </Section>
@@ -256,32 +230,34 @@ export function PreserveView({
       <Section
         id="preserve-runfile"
         tone="quiet"
-        eyebrow="Optional — to continue a run later"
-        title="Run file"
+        eyebrow={t('preserve:runFile.eyebrow')}
+        title={t('preserve:runFile.title')}
         icon={<Save />}
-        description="The run's only record. It downloads by itself after every step (and after a step that stopped early); keep the newest one. To continue later, or after a problem, load it here and the page picks up where it left off."
+        description={t('preserve:runFile.description')}
       >
         {state !== null && preserve.lastSave !== null ? (
           <KeyValue
             rows={[
-              ['Run', state.runId],
-              ['File', preserve.lastSave.fileName],
+              [t('preserve:runFile.run'), state.runId],
+              [t('preserve:runFile.file'), preserve.lastSave.fileName],
               [
-                'Last saved',
-                `after ${preserve.lastSave.afterStep} — ${preserve.lastSave.at} (${String(
-                  preserve.lastSave.bytes,
-                )} B)`,
+                t('preserve:runFile.lastSaved'),
+                t('preserve:runFile.lastSavedValue', {
+                  step: preserve.lastSave.afterStep,
+                  at: preserve.lastSave.at,
+                  bytes: preserve.lastSave.bytes,
+                }),
               ],
-              ['Next step', state.nextStep],
+              [t('preserve:runFile.nextStep'), state.nextStep],
             ]}
           />
         ) : (
           <Prose>
-            <p>No run is active. Step 02 starts one, or load a run file here.</p>
+            <p>{t('preserve:runFile.none')}</p>
           </Prose>
         )}
 
-        <Toolbar label="Run file actions">
+        <Toolbar label={t('preserve:runFile.toolbar')}>
           <Button
             id="preservePickRun"
             variant="default"
@@ -293,7 +269,7 @@ export function PreserveView({
             }}
           >
             <Archive />
-            Load a run file…
+            {t('preserve:runFile.load')}
           </Button>
           <Button
             disabled={state === null || busy}
@@ -302,13 +278,13 @@ export function PreserveView({
             }}
           >
             <Save />
-            Save the run file again
+            {t('preserve:runFile.save')}
           </Button>
         </Toolbar>
 
         <RunPanel
           id="preserve-load"
-          label="Resume"
+          label={t('preserve:runFile.panel')}
           progress={preserve.loadReporter.progress}
           lines={preserve.loadReporter.lines}
           trimmed={preserve.loadReporter.trimmed}
@@ -367,15 +343,15 @@ function notReadyLine(
   index: number,
 ): string | null {
   if (gate.ok || gate.jumpable || gate.needsPowerCycle) return null;
-  if (state === null) return 'Available after step 02 — it starts the run.';
+  if (state === null) return t('preserve:notReady.noRun');
   /* The run is over: nothing is waiting, so there is nothing to explain (TESTING.md 42.98). */
   if (state.nextStep === 'done') return null;
   const previous = PRESERVE_PHASES[index - 1];
   if (previous?.steps.some((step) => state.steps[step]?.status !== 'done')) {
-    return `Available after step ${stepNumber(index - 1)} (${previous.label}).`;
+    return t('preserve:notReady.previous', { step: stepNumber(index - 1), phase: previous.label });
   }
   const reason = gateReason(gate);
-  return reason === null ? null : `Not ready yet — ${reason}.`;
+  return reason === null ? null : t('preserve:notReady.gate', { reason });
 }
 
 function PhaseSection({
@@ -432,30 +408,30 @@ function PhaseSection({
 
   const jumpOnly = gate.jumpable && !gate.ok;
   const startLabel = plannedStop
-    ? 'Go on to step 04: restore the banks'
+    ? t('preserve:phase.goRestore')
     : jumpOnly
-      ? 'Run past the unrecorded write'
+      ? t('preserve:phase.jumpOnly')
       : phaseFailed
-        ? `Try ${meta.label.toLowerCase()} again`
-        : `Start ${meta.label.toLowerCase()}`;
+        ? t('preserve:phase.retry', { phase: meta.labelInSentence })
+        : t('preserve:phase.start', { phase: meta.labelInSentence });
   const notReady = phaseDone || plannedStop ? null : notReadyLine(gate, state, index);
 
   const status = active ? (
     <Badge tone="accent">
       <Loader2 className="animate-spin motion-reduce:animate-none" />
-      Running
+      {t('preserve:badge.running')}
     </Badge>
   ) : phaseDone ? (
     <Badge tone="ok">
       <CircleCheck />
-      Done
+      {t('preserve:badge.done')}
     </Badge>
   ) : plannedStop ? (
-    <Badge tone="accent">Stopped as planned — the restore is next</Badge>
+    <Badge tone="accent">{t('preserve:badge.plannedStop')}</Badge>
   ) : phaseFailed ? (
-    <Badge tone="warn">Stopped — see the log</Badge>
+    <Badge tone="warn">{t('preserve:badge.failed')}</Badge>
   ) : upNext ? (
-    <Badge tone="accent">Up next</Badge>
+    <Badge tone="accent">{t('preserve:badge.upNext')}</Badge>
   ) : null;
 
   return (
@@ -471,7 +447,7 @@ function PhaseSection({
              * dialog already say which steps write. */}
             {writes && (
               <Badge tone="neutral" className="hidden sm:inline-flex">
-                writes to the camera
+                {t('preserve:badge.writes')}
               </Badge>
             )}
             {status}
@@ -479,7 +455,7 @@ function PhaseSection({
         )
       }
     >
-      <Toolbar label={`${meta.label} actions`}>
+      <Toolbar label={t('preserve:phase.toolbar', { phase: meta.label })}>
         <Button
           variant="default"
           disabled={
@@ -502,12 +478,12 @@ function PhaseSection({
               onArm(true);
             }}
           >
-            Skip the write — start at the whole-flash read
+            {t('preserve:phase.skipWrite')}
           </Button>
         )}
         <Button variant="ghost" disabled={!active} onClick={preserve.cancel}>
           <CircleStop />
-          Cancel
+          {t('common:cancel')}
         </Button>
       </Toolbar>
 
@@ -520,7 +496,7 @@ function PhaseSection({
       {ask !== null && (
         <YourTurn
           kind={ask}
-          label={meta.label}
+          label={meta.labelInSentence}
           busy={busy}
           connected={connected}
           onConnect={onConnect}
@@ -532,12 +508,14 @@ function PhaseSection({
 
       {notReady !== null && <p className="text-[0.8rem] text-muted-foreground">{notReady}</p>}
       {plannedStop && (
-        <p className="text-[0.8rem] text-muted-foreground">{PRESERVE_UNPATCHED_START_NEXT}</p>
+        <p className="text-[0.8rem] text-muted-foreground">
+          {/* i18n: core message */}
+          {PRESERVE_UNPATCHED_START_NEXT}
+        </p>
       )}
       {gate.pastCommit && (
         <p className="text-[0.8rem] font-medium text-warn">
-          Concerns the patched camera while the write is not on record — the camera may already be
-          patched. See the note under &ldquo;What to expect&rdquo;.
+          {t('preserve:phase.pastCommit', { section: t('preserve:how.title') })}
         </p>
       )}
       {phase === 'restore-verify' &&
@@ -546,15 +524,10 @@ function PhaseSection({
         state !== null &&
         state.steps.commit?.status === 'done' &&
         state.steps.drain?.status !== 'done' && (
-          <p className="text-[0.8rem] text-warn">
-            The whole-flash read has not run — this step puts the camera back without it. Run step
-            03 first unless the whole-flash read does not matter to you.
-          </p>
+          <p className="text-[0.8rem] text-warn">{t('preserve:phase.noDrain')}</p>
         )}
       {active && writes && ask === null && (
-        <p className="text-[0.8rem] text-muted-foreground">
-          Keep the camera plugged in and the computer awake until this step finishes.
-        </p>
+        <p className="text-[0.8rem] text-muted-foreground">{t('preserve:phase.keepPlugged')}</p>
       )}
 
       {phase === 'read-build' && state !== null && (
@@ -574,7 +547,7 @@ function PhaseSection({
             setShowDetails(event.target.checked);
           }}
         />
-        <label htmlFor={`preserve-phase-${phase}-details`}>Show details in the log</label>
+        <label htmlFor={`preserve-phase-${phase}-details`}>{t('preserve:phase.showDetails')}</label>
       </div>
       <RunPanel
         id={`preserve-phase-${phase}`}
@@ -586,9 +559,10 @@ function PhaseSection({
         trimmed={reporter.trimmed}
       />
 
-      <Disclosure summary="What this step does, in detail">
+      <Disclosure summary={t('preserve:phase.inDetail')}>
         {meta.steps.map((step) => (
           <p key={step}>
+            {/* i18n: core message (the step's name) */}
             <strong className="text-foreground">{stepMeta(step).label}.</strong>{' '}
             {stepMeta(step).description}
           </p>
@@ -602,6 +576,7 @@ function PhaseSection({
 
 interface YourTurnProps {
   readonly kind: PreservePrompt['kind'] | 'power-cycle-assert';
+  /** The phase's name inside a sentence (`labelInSentence`). */
   readonly label: string;
   readonly busy: boolean;
   readonly connected: boolean;
@@ -609,42 +584,39 @@ interface YourTurnProps {
   readonly onPowerCycled: () => void;
 }
 
-const YOUR_TURN: Readonly<
-  Record<YourTurnProps['kind'], { readonly title: string; readonly body: string }>
-> = {
-  reconnect: {
-    title: 'Your turn: press Connect device and pick the camera.',
-    body:
-      'The camera restarted, as planned. Chrome cannot recognise it again by itself (it has no ' +
-      'USB serial number), so it needs you to pick it once more. The step carries on as soon as ' +
-      'you do.',
-  },
-  replug: {
-    title: 'Your turn: unplug the camera, plug it back in, then press Connect device.',
-    body:
-      'This run’s patch was made before the reader fix, so the camera needs a fresh power-up ' +
-      'before the restore. The run file is already saved.',
-  },
-  'replug-before-restore': {
-    title: 'Before step 04: unplug the camera, plug it back in, then press Connect device.',
-    body:
-      'This run’s patch was made before the reader fix, so the camera needs a fresh power-up ' +
-      'before the restore. The run file is already saved.',
-  },
-  'power-cycle': {
-    title: 'Your turn: unplug the camera, plug it back in, press Connect device — then try again.',
-    body:
-      'The camera’s reader needs a fresh power-up before it can be read again. The run is still ' +
-      'loaded here; nothing is lost.',
-  },
-  'power-cycle-assert': {
-    title: 'Your turn: unplug the camera, plug it back in, press Connect device — then continue.',
-    body:
-      'The last backup attempt stopped, and the camera needs a fresh power-up before it runs ' +
-      'again. The camera cannot report that by itself, so the button below tells the page you ' +
-      'did it.',
-  },
-};
+/** The ask's heading and body, in the language in use. */
+function yourTurnCopy(kind: YourTurnProps['kind']): {
+  readonly title: string;
+  readonly body: string;
+} {
+  switch (kind) {
+    case 'reconnect':
+      return {
+        title: t('preserve:yourTurn.reconnect.title'),
+        body: t('preserve:yourTurn.reconnect.body'),
+      };
+    case 'replug':
+      return {
+        title: t('preserve:yourTurn.replug.title'),
+        body: t('preserve:yourTurn.replug.body'),
+      };
+    case 'replug-before-restore':
+      return {
+        title: t('preserve:yourTurn.replugBeforeRestore.title'),
+        body: t('preserve:yourTurn.replug.body'),
+      };
+    case 'power-cycle':
+      return {
+        title: t('preserve:yourTurn.powerCycle.title'),
+        body: t('preserve:yourTurn.powerCycle.body'),
+      };
+    case 'power-cycle-assert':
+      return {
+        title: t('preserve:yourTurn.powerCycleAssert.title'),
+        body: t('preserve:yourTurn.powerCycleAssert.body'),
+      };
+  }
+}
 
 function YourTurn({
   kind,
@@ -655,7 +627,7 @@ function YourTurn({
   onPowerCycled,
 }: YourTurnProps): ReactElement {
   const ref = useRef<HTMLDivElement | null>(null);
-  const copy = YOUR_TURN[kind];
+  const copy = yourTurnCopy(kind);
   /* The ask can land while the user is reading elsewhere on the page: bring
    * it into view once, gently. */
   useEffect(() => {
@@ -673,14 +645,14 @@ function YourTurn({
           <strong>{copy.title}</strong>
         </p>
         <p>{copy.body}</p>
-        <Toolbar label="Your turn" className="pt-1">
+        <Toolbar label={t('preserve:yourTurn.toolbar')} className="pt-1">
           {onConnect !== undefined && (
             <Button
               variant={kind === 'power-cycle-assert' && connected ? 'outline' : 'default'}
               onClick={onConnect}
             >
               <Plug />
-              Connect device
+              {t('app:connect.connect')}
             </Button>
           )}
           {kind === 'power-cycle-assert' && (
@@ -690,7 +662,7 @@ function YourTurn({
               onClick={onPowerCycled}
             >
               <Play />
-              {`I replugged it — continue ${label.toLowerCase()}`}
+              {t('preserve:yourTurn.replugged', { phase: label })}
             </Button>
           )}
         </Toolbar>
@@ -708,7 +680,7 @@ function StepChips({
   readonly state: PreserveRunState | null;
 }): ReactElement {
   return (
-    <ul className="flex flex-wrap gap-x-4 gap-y-1" aria-label="Progress">
+    <ul className="flex flex-wrap gap-x-4 gap-y-1" aria-label={t('preserve:phase.stepsLabel')}>
       {steps.map((step) => {
         const record = state?.steps[step];
         const Icon =
@@ -725,6 +697,7 @@ function StepChips({
                     : 'size-3.5 text-muted-foreground'
               }
             />
+            {/* i18n: core message (the step's name) */}
             {stepMeta(step).label}
           </li>
         );
@@ -748,18 +721,21 @@ function patchedBanks(state: PreserveRunState): BankKey[] {
   ];
 }
 
-function sentence(text: string): string {
-  return `${text.charAt(0).toUpperCase()}${text.slice(1)}`;
+/** A choice of banks by name, on its own (core's `bankChoiceWords`, capitalised, in English). */
+function choiceName(choice: PreserveBankChoice): string {
+  if (choice === 'next-start') return t('preserve:choice.nextStart');
+  if (choice === 'all') return t('preserve:choice.all');
+  return bankName(choice);
 }
 
 /** The choice as the menu names it: the banks it writes, or that it is not offered. */
 function choiceOption(verdict: PreserveChoiceVerdict): string {
-  const words = sentence(bankChoiceWords(verdict.choice));
-  if (verdict.banks === null) return `${words} — not offered`;
+  const choice = choiceName(verdict.choice);
+  if (verdict.banks === null) return t('preserve:choice.notOffered', { choice });
   if (verdict.choice === 'next-start' || verdict.choice === 'all') {
-    return `${words} — ${bankListWords(verdict.banks)}`;
+    return t('preserve:choice.withBanks', { choice, banks: bankList(verdict.banks) });
   }
-  return words;
+  return choice;
 }
 
 interface BankChoiceProps {
@@ -784,21 +760,22 @@ function BankChoice({ state, busy, chooseBanks }: BankChoiceProps): ReactElement
   const targets = state.targets;
   return (
     <Panel>
-      <PanelTitle icon={<Layers />}>Which banks step 03 patches</PanelTitle>
+      <PanelTitle icon={<Layers />}>{t('preserve:banks.title')}</PanelTitle>
+      {/* i18n: core message (the boot rule, the last and next start) */}
       <KeyValue
         rows={[
-          ['Boot-config word', `${hexUp(boot.word)} — ${boot.rule}`],
-          ['Last start', lastStartWords(boot)],
-          ['Next start', nextStartWords(boot)],
+          [t('preserve:banks.bootWord'), `${hexUp(boot.word)} — ${boot.rule}`],
+          [t('preserve:banks.lastStart'), lastStartWords(boot)],
+          [t('preserve:banks.nextStart'), nextStartWords(boot)],
         ]}
       />
       <Table>
-        <TableCaption>The three firmware banks, as step 02 read them</TableCaption>
+        <TableCaption>{t('preserve:banks.caption')}</TableCaption>
         <TableHeader>
           <TableRow>
-            <TableHead className="w-[22%]">Bank</TableHead>
-            <TableHead>Address</TableHead>
-            <TableHead>What it holds</TableHead>
+            <TableHead className="w-[22%]">{t('preserve:banks.col.bank')}</TableHead>
+            <TableHead>{t('preserve:banks.col.address')}</TableHead>
+            <TableHead>{t('preserve:banks.col.holds')}</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -807,24 +784,27 @@ function BankChoice({ state, busy, chooseBanks }: BankChoiceProps): ReactElement
             return (
               <TableRow key={key}>
                 <TableRowHeader>
-                  {sentence(bankWordsOf(key))}
+                  {bankName(key)}
                   {boot.nextStart === key && (
                     <>
                       {' '}
-                      <Badge tone="accent">next start</Badge>
+                      <Badge tone="accent">{t('preserve:banks.nextStartBadge')}</Badge>
                     </>
                   )}
                 </TableRowHeader>
-                <TableCell label="Address">
+                <TableCell label={t('preserve:banks.col.address')}>
                   <code>{hexUp(bank.address, 8)}</code>
                 </TableCell>
-                <TableCell label="What it holds">{bankRecordWords(bank)}</TableCell>
+                <TableCell label={t('preserve:banks.col.holds')}>
+                  {/* i18n: core message */}
+                  {bankRecordWords(bank)}
+                </TableCell>
               </TableRow>
             );
           })}
         </TableBody>
       </Table>
-      <Field htmlFor="preserveBankChoice" label="Banks to patch">
+      <Field htmlFor="preserveBankChoice" label={t('preserve:banks.choiceLabel')}>
         <Select
           id="preserveBankChoice"
           value={state.choice}
@@ -842,22 +822,23 @@ function BankChoice({ state, busy, chooseBanks }: BankChoiceProps): ReactElement
         </Select>
       </Field>
       <p className="text-[0.85rem]" data-testid="preserve-banks-to-write">
+        {/* i18n: core message (the choice's `what`, bankChoiceWritesWords) */}
         {targets === undefined
-          ? `No bank is chosen yet: ${chosen.what}. Choose a bank by name above.`
-          : `Step 03 writes ${bankChoiceWritesWords(chosen)}.`}
+          ? t('preserve:banks.notChosen', { what: chosen.what })
+          : t('preserve:banks.writes', { what: bankChoiceWritesWords(chosen) })}
       </p>
-      {fixed && (
-        <p className="text-[0.8rem] text-muted-foreground">
-          The write has run, so the choice is fixed: step 04 puts back exactly these banks.
-        </p>
-      )}
+      {fixed && <p className="text-[0.8rem] text-muted-foreground">{t('preserve:banks.fixed')}</p>}
       {verdicts.some((verdict) => verdict.banks === null) && (
         <ul className="list-disc pl-5 text-[0.8rem] text-muted-foreground">
           {verdicts
             .filter((verdict) => verdict.banks === null)
             .map((verdict) => (
               <li key={verdict.choice}>
-                {sentence(bankChoiceWords(verdict.choice))}: not offered — {verdict.what}.
+                {/* i18n: core message (the verdict's `what`) */}
+                {t('preserve:banks.notOfferedLine', {
+                  choice: choiceName(verdict.choice),
+                  why: verdict.what,
+                })}
               </li>
             ))}
         </ul>
@@ -865,6 +846,7 @@ function BankChoice({ state, busy, chooseBanks }: BankChoiceProps): ReactElement
       {targets !== undefined &&
         chosen.warnings.map((warning) => (
           <Alert key={warning} tone="warn">
+            {/* i18n: core message */}
             <p>{warning}</p>
           </Alert>
         ))}
@@ -878,41 +860,40 @@ function BankChoice({ state, busy, chooseBanks }: BankChoiceProps): ReactElement
 function PlanFromState({ state }: { readonly state: PreserveRunState }): ReactElement {
   const keys = patchedBanks(state);
   const targets = state.targets ?? [];
+  /* i18n: core message (the build's label or id) */
+  const build = state.buildLabel ?? state.buildId ?? t('preserve:plan.yourCamera');
   return (
     <Disclosure
-      summary={`The plan — ${state.buildLabel ?? state.buildId ?? 'your camera'}, ${
-        targets.length === 0 ? 'no bank chosen yet' : `patches ${bankListWords(targets)}`
-      }`}
+      summary={
+        targets.length === 0
+          ? t('preserve:plan.summaryNone', { build })
+          : t('preserve:plan.summary', { build, banks: bankList(targets) })
+      }
     >
-      <p>
-        Printed from the camera&apos;s own bytes. Nothing is written until step 03 runs, and step 04
-        puts every byte it writes back.
-      </p>
+      <p>{t('preserve:plan.intro')}</p>
+      {/* i18n: core message (every row's value) */}
       <KeyValue
         rows={[
-          ['Build', preserveBuildWords(state)],
-          ['Firmware version', state.expectedVersion ?? '?'],
+          [t('preserve:plan.build'), preserveBuildWords(state)],
+          [t('preserve:plan.version'), state.expectedVersion ?? '?'],
           ...(state.stagedForm === undefined
             ? []
-            : [['Written', stagedFormWords(state.stagedForm)] as const]),
+            : [[t('preserve:plan.written'), stagedFormWords(state.stagedForm)] as const]),
           ...(state.route === 'recovery-only' && state.routeNote != null
-            ? ([['Where it goes', state.routeNote]] as const)
+            ? ([[t('preserve:plan.route'), state.routeNote]] as const)
             : []),
           ...(state.restoreForm === undefined
             ? []
-            : [['Restore', restoreFormWords(state.restoreForm)] as const]),
+            : [[t('preserve:plan.restore'), restoreFormWords(state.restoreForm)] as const]),
           ...(state.capability === undefined
             ? []
-            : [['Whole-flash read', drainCapabilityWords(state.capability)] as const]),
+            : [[t('preserve:plan.wholeFlash'), drainCapabilityWords(state.capability)] as const]),
         ]}
       />
       {keys.map((key) => (
         <BankPlan key={key} bank={key} state={state} chosen={targets.includes(key)} />
       ))}
-      <p>
-        In the form the camera stores, the same bytes change and no others, so the camera&apos;s
-        firmware changes by exactly this difference and nothing else.
-      </p>
+      <p>{t('preserve:plan.outro')}</p>
     </Disclosure>
   );
 }
@@ -932,65 +913,82 @@ function BankPlan({
   if (bank === undefined || patch === undefined) return null;
   const derivation = bank.imageDerivation;
   return (
-    <section aria-label={`The patch of ${bankWordsOf(key)}`} className="space-y-2">
+    <section
+      aria-label={t('preserve:bankPlan.label', { bank: bankWords(key) })}
+      className="space-y-2"
+    >
       <h4 className="text-[0.85rem] font-semibold text-foreground">
-        {sentence(bankWordsOf(key))} — {chosen ? 'written by this run' : 'not chosen'}
+        {chosen
+          ? t('preserve:bankPlan.titleChosen', { bank: bankName(key) })
+          : t('preserve:bankPlan.titleNotChosen', { bank: bankName(key) })}
       </h4>
       <KeyValue
         rows={[
           [
-            'Image source',
+            t('preserve:bankPlan.source'),
             bank.slotReadShas === undefined
-              ? `${bankWordsOf(key)} as stored`
-              : `${bankWordsOf(key)} as stored, two agreeing reads (sha256 ${bank.slotReadShas[0]})`,
+              ? t('preserve:bankPlan.sourceValue', { bank: bankWords(key) })
+              : t('preserve:bankPlan.sourceTwoReads', {
+                  bank: bankWords(key),
+                  sha: bank.slotReadShas[0],
+                }),
           ],
           ...(derivation === undefined
             ? []
             : [
                 [
-                  'Image edit',
-                  `${derivation.label} (${derivation.id}) on the factory image. Its balance, ` +
-                    `${hexUp(derivation.balanceWord)}, is in the adjust word; the patch balances ` +
-                    'on top of it, and step 04 puts the image back with the edit.',
+                  t('preserve:bankPlan.edit'),
+                  /* i18n: core message (the edit's label) */
+                  t('preserve:bankPlan.editValue', {
+                    label: derivation.label,
+                    id: derivation.id,
+                    balance: hexUp(derivation.balanceWord),
+                  }),
                 ] as const,
               ]),
-          ['Factory plaintext sha256', bank.imageSha256 ?? '?'],
-          ['Patched sha256', patch.patchedSha256],
-          ['Bytes that move on the part', String(patch.diffCount)],
+          [t('preserve:bankPlan.factorySha'), bank.imageSha256 ?? '?'],
+          [t('preserve:bankPlan.patchedSha'), patch.patchedSha256],
+          [t('preserve:bankPlan.diffCount'), String(patch.diffCount)],
           [
-            'Staged length',
-            `${String(patch.stagedLength)} B in ${String(patch.chunkCount)} chunks`,
+            t('preserve:bankPlan.staged'),
+            t('preserve:bankPlan.stagedValue', {
+              size: patch.stagedLength,
+              count: patch.chunkCount,
+            }),
           ],
           [
-            'Rebalance word',
+            t('preserve:bankPlan.rebalance'),
             derivation === undefined
               ? hexUp(patch.rebalanceWord)
-              : `${hexUp(patch.rebalanceWord)} (was ${hexUp(derivation.balanceWord)}, the ` +
-                'edit’s balance)',
+              : t('preserve:bankPlan.rebalanceValue', {
+                  word: hexUp(patch.rebalanceWord),
+                  balance: hexUp(derivation.balanceWord),
+                }),
           ],
         ]}
       />
       <Table>
-        <TableCaption>The exact bytes the patch moves in {bankWordsOf(key)}</TableCaption>
+        <TableCaption>{t('preserve:bankPlan.caption', { bank: bankWords(key) })}</TableCaption>
         <TableHeader>
           <TableRow>
-            <TableHead className="w-[40%]">What it changes</TableHead>
-            <TableHead>Offset</TableHead>
-            <TableHead>Before</TableHead>
-            <TableHead>After</TableHead>
+            <TableHead className="w-[40%]">{t('preserve:bankPlan.col.what')}</TableHead>
+            <TableHead>{t('preserve:bankPlan.col.offset')}</TableHead>
+            <TableHead>{t('preserve:bankPlan.col.before')}</TableHead>
+            <TableHead>{t('preserve:bankPlan.col.after')}</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           {patch.sites.map((site) => (
             <TableRow key={site.offset}>
+              {/* i18n: core message (the patch site's name) */}
               <TableRowHeader>{patchSiteWords(site.name)}</TableRowHeader>
-              <TableCell label="Offset">
+              <TableCell label={t('preserve:bankPlan.col.offset')}>
                 <code>{hexUp(site.offset)}</code>
               </TableCell>
-              <TableCell label="Before">
+              <TableCell label={t('preserve:bankPlan.col.before')}>
                 <code>{bytesHex(site.before)}</code>
               </TableCell>
-              <TableCell label="After">
+              <TableCell label={t('preserve:bankPlan.col.after')}>
                 <code>{bytesHex(site.after)}</code>
               </TableCell>
             </TableRow>
@@ -1014,11 +1012,17 @@ function VerifyVerdict({
     return (
       <Alert tone="ok">
         <p>
-          <strong>Verified — a perfect match.</strong> After a fresh start the camera was read
-          again: {String(verify.windowsRead)}/31 blocks, {String(verify.diffBytes)} differing
-          byte(s)
-          {verify.badWindows.length > 0 ? ` (short blocks: ${verify.badWindows.join(',')})` : ''}.
-          Its flash is exactly what it was before the first write.
+          {verify.badWindows.length > 0
+            ? rich('preserve:verify.okShort', {
+                params: {
+                  read: verify.windowsRead,
+                  count: verify.diffBytes,
+                  blocks: verify.badWindows.join(','),
+                },
+              })
+            : rich('preserve:verify.ok', {
+                params: { read: verify.windowsRead, count: verify.diffBytes },
+              })}
         </p>
       </Alert>
     );
@@ -1028,8 +1032,10 @@ function VerifyVerdict({
     return (
       <Alert tone="err">
         <p>
-          <strong>The check found differences against the backup.</strong>{' '}
-          {failed.error ?? 'unknown reason'}
+          {/* i18n: core message (the step's recorded error) */}
+          {rich('preserve:verify.failed', {
+            params: { error: failed.error ?? t('preserve:unknownReason') },
+          })}
         </p>
       </Alert>
     );
@@ -1059,8 +1065,8 @@ function PhaseConfirm({ request, state, onConfirm, onCancel }: PhaseConfirmProps
   const label = request === null ? '' : phaseMeta(request.phase).label;
   const writing = request !== null && request.phase === 'patch-dump' && !request.jump;
   const order = request === null ? [] : writeOrder(state, request.phase);
-  const banks = order.length === 0 ? 'the chosen banks' : bankListWords(order);
-  const inOrder = order.length > 1 ? ', in that order' : '';
+  const banks = order.length === 0 ? t('preserve:confirm.chosenBanks') : bankList(order);
+  const inOrder = order.length > 1;
   const warnings =
     writing && state?.targets !== undefined ? preserveChoiceOf(state, state.choice).warnings : [];
   return (
@@ -1073,55 +1079,46 @@ function PhaseConfirm({ request, state, onConfirm, onCancel }: PhaseConfirmProps
       <AlertDialogContent aria-describedby="preserve-confirm-what">
         <AlertDialogTitle>
           {request?.jump === true
-            ? `${label} — jump past the unrecorded write?`
-            : `${label} — write to ${banks}?`}
+            ? t('preserve:confirm.titleJump', { phase: label })
+            : t('preserve:confirm.titleWrite', { phase: label, banks })}
         </AlertDialogTitle>
         <AlertDialogDescription id="preserve-confirm-what" className="space-y-2">
           {request?.jump === true ? (
             <>
-              <span className="block">
-                THE WRITE IS NOT ON RECORD for this run, and you are asserting that the writes
-                landed without their checkpoints: the step starts past the write instead of writing
-                again. The steps&apos; own checks still run — the version read, the bank checks —
-                and a wrong guess costs a wasted whole-flash read, not a bricked camera.
-              </span>
-              <span className="block">
-                Keep the camera plugged in and the computer awake until the step finishes.
-              </span>
+              <span className="block">{t('preserve:confirm.jump')}</span>
+              <span className="block">{t('preserve:confirm.jumpKeepPlugged')}</span>
             </>
           ) : (
             <>
               <span className="block">
                 {writing
-                  ? `This writes a small patch into ${banks}${inOrder}` +
-                    (order.length > 1 ? ' — the bank the camera tries first goes last' : '') +
-                    '. Step 04 puts the originals back. The whole-flash read that follows only reads.'
-                  : `This writes your original firmware back into ${banks}${inOrder}` +
-                    (order.length > 1 ? ' — the bank the camera tries first goes first' : '') +
-                    '.'}
+                  ? inOrder
+                    ? t('preserve:confirm.patchInOrder', { banks })
+                    : t('preserve:confirm.patch', { banks })
+                  : inOrder
+                    ? t('preserve:confirm.restoreInOrder', { banks })
+                    : t('preserve:confirm.restore', { banks })}
               </span>
               {warnings.map((warning) => (
                 <span key={warning} className="block font-medium text-warn">
+                  {/* i18n: core message */}
                   {warning}
                 </span>
               ))}
-              <span className="block">
-                Keep the camera plugged in and the computer awake while it writes — an interrupted
-                write leaves a camera that only a hardware programmer (SPI or SWD/J-Link) can fix.
-                On a phone, airplane mode on and the screen kept on. The camera then restarts; when
-                the page asks, press Connect device and pick it again. That is expected.
-              </span>
+              <span className="block">{t('preserve:confirm.keepPlugged')}</span>
             </>
           )}
         </AlertDialogDescription>
         <AlertDialogFooter>
-          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogCancel>{t('common:cancel')}</AlertDialogCancel>
           <AlertDialogAction
             onClick={() => {
               if (request !== null) onConfirm(request);
             }}
           >
-            {request?.jump === true ? 'Yes — jump past the write' : 'Yes — write to the camera'}
+            {request?.jump === true
+              ? t('preserve:confirm.yesJump')
+              : t('preserve:confirm.yesWrite')}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
@@ -1151,14 +1148,15 @@ function deliveredVerdict(check: DeliveredCheck | null): ReactNode {
   if (check.differing.length > 0) {
     return (
       <Badge tone="err">
-        {`differs from the backup in ${String(check.differing.length)} of ` +
-          `${String(check.blocksCompared)} blocks: ${blockList(check.differing)}`}
+        {t('preserve:summary.differs', {
+          differing: check.differing.length,
+          count: check.blocksCompared,
+          blocks: blockList(check.differing),
+        })}
       </Badge>
     );
   }
-  return (
-    <Badge tone="ok">{`matches the backup on all ${String(check.blocksCompared)} blocks`}</Badge>
-  );
+  return <Badge tone="ok">{t('preserve:summary.matches', { count: check.blocksCompared })}</Badge>;
 }
 
 function VerifySummary({ state, check, busy, onSave }: VerifySummaryProps): ReactElement {
@@ -1167,53 +1165,58 @@ function VerifySummary({ state, check, busy, onSave }: VerifySummaryProps): Reac
     <Section
       id="preserve-done"
       tone="ok"
+      /* i18n: core message (preserveDoneWords) */
       title={done.title}
       icon={<CircleCheck />}
       description={done.detail}
     >
       <Panel>
-        <PanelTitle icon={<CircleCheck />}>The proof</PanelTitle>
+        <PanelTitle icon={<CircleCheck />}>{t('preserve:summary.proof')}</PanelTitle>
         <KeyValue
           rows={[
             [
-              'Complete image (4 MiB)',
+              t('preserve:summary.complete'),
               <>
-                {state.deliveredSha256 ?? 'not produced'} {deliveredVerdict(check)}
+                {state.deliveredSha256 ?? t('preserve:summary.notProduced')}{' '}
+                {deliveredVerdict(check)}
               </>,
             ],
             ...(check === null || check.onlyInFullDump.length === 0
               ? []
               : ([
                   [
-                    'Only in the whole-flash read',
-                    `${String(check.onlyInFullDump.length)} block(s) a stock read cannot reach: ` +
-                      blockList(check.onlyInFullDump),
+                    t('preserve:summary.onlyInFull'),
+                    t('preserve:summary.onlyInFullValue', {
+                      count: check.onlyInFullDump.length,
+                      blocks: blockList(check.onlyInFullDump),
+                    }),
                   ],
                 ] as const)),
             [
-              'Whole-flash read, as read',
+              t('preserve:summary.rawDump'),
               <>
-                {state.rawDumpSha256 ?? 'not produced'}{' '}
+                {state.rawDumpSha256 ?? t('preserve:summary.notProduced')}{' '}
                 {state.rawDumpSha256 !== undefined && (
-                  <Badge tone="neutral">the same, with the patch still in</Badge>
+                  <Badge tone="neutral">{t('preserve:summary.rawDumpBadge')}</Badge>
                 )}
               </>,
             ],
             ...(state.targets ?? []).map(
               (key) =>
                 [
-                  `Firmware image (decrypted, ${bankWordsOf(key)})`,
-                  state.banks?.[key].imageSha256 ?? 'not produced',
+                  t('preserve:summary.image', { bank: bankWords(key) }),
+                  state.banks?.[key].imageSha256 ?? t('preserve:summary.notProduced'),
                 ] as const,
             ),
-            ['Verify', preserveStepResultWords(state, 'verify')],
+            /* i18n: core message (the verify step's result) */
+            [t('preserve:summary.verify'), preserveStepResultWords(state, 'verify')],
           ]}
         />
       </Panel>
-      <Toolbar label="Archive actions">
+      <Toolbar label={t('preserve:summary.toolbar')}>
         <Button variant="default" disabled={busy} onClick={onSave}>
           <Save />
-          Download the full archive (run file)
+          {t('preserve:summary.download')}
         </Button>
       </Toolbar>
     </Section>

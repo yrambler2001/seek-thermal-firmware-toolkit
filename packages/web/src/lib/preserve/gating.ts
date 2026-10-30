@@ -23,12 +23,9 @@
  * replaying a write that may already be on the camera.
  */
 
-import {
-  bankWordsOf,
-  drainCapabilityWords,
-  preserveBuildWords,
-  preserveChoiceOf,
-} from '@seek-fw/core';
+import { drainCapabilityWords, preserveBuildWords, preserveChoiceOf } from '@seek-fw/core';
+import { t, type Translate } from '@/i18n';
+import { bankWords } from '@/lib/bank-names';
 import {
   NEEDS_CONFIRM,
   PRESERVE_BACKUP_FILE,
@@ -84,6 +81,11 @@ export interface PreserveGateInput {
   readonly phase: PreservePhaseId;
   /** Whether a checkpoint's bytes are in memory (run so far or loaded run file). */
   readonly has: (name: CheckpointName) => boolean;
+  /**
+   * The language of `missing`: the page's (`t`, the default) for the start button's note, English
+   * (`tEnglish`) where the gate's reason goes to the run log.
+   */
+  readonly translate?: Translate;
 }
 
 const done = (state: PreserveRunState, step: PreserveStepId): boolean =>
@@ -94,21 +96,33 @@ const buildName = (state: PreserveRunState): string => preserveBuildWords(state)
 /** What the chosen banks lack, in core's order: the banks the backup read, a
  *  resolved choice, and each chosen bank writable (and, on a recovery-only
  *  build, recovery R). */
-function targetGaps(state: PreserveRunState): string[] {
+function targetGaps(state: PreserveRunState, translate: Translate): string[] {
   if (state.banks === undefined || state.boot === undefined) {
-    return ['the banks the backup reads'];
+    return [translate('preserve:gate.banksRead')];
   }
   const targets = state.targets;
   if (targets === undefined || targets.length === 0) {
-    return [`a choice of banks — ${preserveChoiceOf(state, state.choice).what}`];
+    /* i18n: core message (the choice's `what`) */
+    return [translate('preserve:gate.choice', { why: preserveChoiceOf(state, state.choice).what })];
   }
   const out: string[] = [];
   for (const key of targets) {
     const refused = state.banks[key].refused;
-    if (refused !== null) out.push(`${bankWordsOf(key)} cannot be written: ${refused}`);
+    /* i18n: core message (`refused`) */
+    if (refused !== null) {
+      out.push(
+        translate('preserve:gate.bankRefused', {
+          bank: bankWords(key, translate),
+          reason: refused,
+        }),
+      );
+    }
     if (state.route === 'recovery-only' && key !== 'r') {
       out.push(
-        `the recovery-slot route (this build runs only from recovery R, not ${bankWordsOf(key)})`,
+        translate('preserve:gate.recoveryRoute', {
+          r: bankWords('r', translate),
+          bank: bankWords(key, translate),
+        }),
       );
     }
   }
@@ -119,13 +133,15 @@ const targetsOf = (state: PreserveRunState): readonly BankKey[] => state.targets
 
 export function canRunPhase(input: PreserveGateInput): PreserveGate {
   const { state, phase, has } = input;
+  const translate = input.translate ?? t;
+  const bank = (key: BankKey): string => bankWords(key, translate);
   const meta = phaseMeta(phase);
   const first = meta.steps[0] ?? 'backup';
 
   if (state === null) {
     return {
       ok: phase === 'read-build',
-      missing: phase === 'read-build' ? [] : ['no run is active — the first phase creates the run'],
+      missing: phase === 'read-build' ? [] : [translate('preserve:gate.noRun')],
       pastCommit: false,
       jumpable: false,
       startStep: first,
@@ -137,7 +153,7 @@ export function canRunPhase(input: PreserveGateInput): PreserveGate {
   if (state.nextStep === 'done') {
     return {
       ok: false,
-      missing: ['this run is done — every phase completed'],
+      missing: [translate('preserve:gate.runDone')],
       pastCommit: false,
       jumpable: false,
       startStep: first,
@@ -151,7 +167,7 @@ export function canRunPhase(input: PreserveGateInput): PreserveGate {
   if (startStep === null) {
     return {
       ok: false,
-      missing: [`already done — resume continues at ${state.nextStep}`],
+      missing: [translate('preserve:gate.alreadyDone', { step: state.nextStep })],
       pastCommit: false,
       jumpable: false,
       startStep: first,
@@ -183,55 +199,62 @@ export function canRunPhase(input: PreserveGateInput): PreserveGate {
         /* Nothing comes before it, and a run with work done never re-runs it. */
         break;
       case 'patch':
-        want('backup', 'the flash backup (it runs first in this phase)');
+        want('backup', translate('preserve:gate.backupFirst'));
         break;
       case 'commit': {
-        want('backup', 'the flash backup');
-        want('patch', 'the patch step');
-        if (effDone.has('backup')) missing.push(...targetGaps(state));
+        want('backup', translate('preserve:gate.backup'));
+        want('patch', translate('preserve:gate.patchStep'));
+        if (effDone.has('backup')) missing.push(...targetGaps(state, translate));
         if (done(state, 'patch')) {
           for (const key of targetsOf(state)) {
             if (state.banks?.[key].patch === undefined) {
-              missing.push(`the patch of ${bankWordsOf(key)}`);
+              missing.push(translate('preserve:gate.patchOf', { bank: bank(key) }));
             }
           }
         }
         if (done(state, 'backup')) {
-          if (!has(PRESERVE_BACKUP_FILE)) missing.push('the backup windows file');
+          if (!has(PRESERVE_BACKUP_FILE)) missing.push(translate('preserve:gate.backupFile'));
           for (const key of targetsOf(state)) {
-            if (!has(preserveCaptureFile(key))) missing.push(`${bankWordsOf(key)}’s capture`);
-            if (!has(preservePlainFile(key))) missing.push(`${bankWordsOf(key)}’s derived image`);
+            if (!has(preserveCaptureFile(key))) {
+              missing.push(translate('preserve:gate.capture', { bank: bank(key) }));
+            }
+            if (!has(preservePlainFile(key))) {
+              missing.push(translate('preserve:gate.derived', { bank: bank(key) }));
+            }
           }
         }
         break;
       }
       case 'drain': {
-        want('commit', 'the Write step (run or resume at it first)');
-        missing.push(...targetGaps(state));
+        want('commit', translate('preserve:gate.writeStep'));
+        missing.push(...targetGaps(state, translate));
         if (state.capability !== undefined && !state.capability.wholePart) {
+          /* i18n: core message (the build's name, the capability) */
           missing.push(
-            `the whole-flash read refuses on ${buildName(state)} — ${drainCapabilityWords(state.capability)}`,
+            translate('preserve:gate.drainRefused', {
+              build: buildName(state),
+              why: drainCapabilityWords(state.capability),
+            }),
           );
         }
         for (const key of targetsOf(state)) {
-          if (!has(preserveCaptureFile(key))) missing.push(`${bankWordsOf(key)}’s capture`);
+          if (!has(preserveCaptureFile(key))) {
+            missing.push(translate('preserve:gate.capture', { bank: bank(key) }));
+          }
         }
         break;
       }
       case 'restore': {
-        want('commit', 'the Write step (run or resume at it first)');
-        missing.push(...targetGaps(state));
+        want('commit', translate('preserve:gate.writeStep'));
+        missing.push(...targetGaps(state, translate));
         for (const key of targetsOf(state)) {
           if (state.banks?.[key].patch === undefined) {
-            missing.push(`the patch summary of ${bankWordsOf(key)} (the staged length)`);
+            missing.push(translate('preserve:gate.patchSummary', { bank: bank(key) }));
           }
         }
         if (state.restoreForm === 'none') {
-          missing.push(
-            `the restore refuses on ${buildName(state)} — no form of the original firmware ` +
-              'stores back as the original bytes; the run ends with the complete image and ' +
-              'the patch in place',
-          );
+          /* i18n: core message (the build's name) */
+          missing.push(translate('preserve:gate.restoreRefused', { build: buildName(state) }));
         }
         for (const key of targetsOf(state)) {
           if (
@@ -240,16 +263,21 @@ export function canRunPhase(input: PreserveGateInput): PreserveGate {
             !has(preservePlainFile(key))
           ) {
             missing.push(
-              `${bankWordsOf(key)}’s factory plaintext (${preservePlainFile(key)}, from the backup step)`,
+              translate('preserve:gate.plaintext', {
+                bank: bank(key),
+                file: preservePlainFile(key),
+              }),
             );
           }
-          if (!has(preserveCaptureFile(key))) missing.push(`${bankWordsOf(key)}’s capture`);
+          if (!has(preserveCaptureFile(key))) {
+            missing.push(translate('preserve:gate.capture', { bank: bank(key) }));
+          }
         }
         break;
       }
       case 'verify': {
-        want('restore', 'the restore (it runs first in this phase)');
-        if (!has(PRESERVE_BACKUP_FILE)) missing.push('the flash backup');
+        want('restore', translate('preserve:gate.restoreFirst'));
+        if (!has(PRESERVE_BACKUP_FILE)) missing.push(translate('preserve:gate.backup'));
         break;
       }
     }
@@ -268,9 +296,7 @@ export function canRunPhase(input: PreserveGateInput): PreserveGate {
     state.steps.backup?.status === 'failed' &&
     state.steps.backup.powerCycleRequired === true;
   if (needsPowerCycle) {
-    missing.push(
-      'the power-cycle assertion — power-cycle the camera (unplug and replug it, or use its power switch), then use the re-run control',
-    );
+    missing.push(translate('preserve:gate.powerCycle'));
   }
 
   /* allowJump relaxes exactly the ordering gates past the commit — nothing
@@ -320,8 +346,11 @@ export function canRunPhase(input: PreserveGateInput): PreserveGate {
   };
 }
 
-/** One line for a row's subtitle: why the Run button is dark. */
-export function gateReason(gate: PreserveGate): string | null {
+/**
+ * One line for a row's subtitle: why the Run button is dark. `translate` is the language of the line around
+ * the gaps; give the gate's `missing` in the same one (`PreserveGateInput.translate`).
+ */
+export function gateReason(gate: PreserveGate, translate: Translate = t): string | null {
   if (gate.ok || gate.jumpable) return null;
-  return `needs ${gate.missing.join('; ')}`;
+  return translate('preserve:gate.needs', { missing: gate.missing.join('; ') });
 }
