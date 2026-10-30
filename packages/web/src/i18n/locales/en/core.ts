@@ -39,11 +39,14 @@
  *   names (`{file}`), a SHA-256 (`{sha256}`), a selector table's name
  *   (`{table}`) and family names (`{family}`, `{detected}`).
  * - Still English inside a translated sentence (core gives them no code yet):
- *   `{error}` when the error has no code (a USB error, a bug, a refusal only a
- *   broken run file reaches, or one not converted yet: a Preserve step's
- *   precondition, the patch derivation, a slot plan file, write-image,
- *   write-commit), a read reason (read.reason.*'s place) that came from such
- *   an error, and `{signature}` in preserve.fail.spentReader.
+ *   `{error}` when the error has no code (a USB error, a ZIP reader's error,
+ *   a bug, or a refusal only a broken run file reaches, such as the patch
+ *   builder's own gates), a read reason (read.reason.*'s place) that came
+ *   from such an error, `{signature}` in preserve.fail.* (it describes the
+ *   bytes or the wire stall; people paste it to the owner), `{reasons}` in
+ *   preserve.fail.spentReaderDerive, `{note}` in preserve.gate.drainRefused,
+ *   `{gap}` in restore.refused.gap*, and `{mismatch}` in
+ *   slots.image.keyMismatch.
  * - Capitals: keep the English's. A template that starts lower case is said
  *   inside another sentence or after a label ("Note: …", a list item, "Not
  *   read: …"); one that starts upper case stands alone.
