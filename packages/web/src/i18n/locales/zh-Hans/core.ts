@@ -761,6 +761,13 @@ export default {
   'preserve.step.drain': '全闪存读取',
   'preserve.step.restore': '还原',
   'preserve.step.verify': '检查',
+  /* A step named at the start of a gate sentence: the CLI's step id in English; a translation names
+   * the step the way its chip does (preserve.step.*), lower case, with what its grammar needs around it. */
+  'preserve.stepId.patch': '补丁步骤',
+  'preserve.stepId.commit': '写入步骤',
+  'preserve.stepId.drain': '全闪存读取',
+  'preserve.stepId.restore': '还原',
+  'preserve.stepId.verify': '检查',
   /** A step's result. `{label}` is a preserve.step.* name; `{error}` is the step's error (another key of this namespace, or core's English). */
   'preserve.result.stoppedPlanned':
     '{label}：按计划停止——相机启动的是{bank}，本次运行没有修补它，因此没有读取任何内容。',
@@ -912,16 +919,16 @@ export default {
     '上一次备份尝试失败了，在再次运行此步骤之前，必须先给相机断电重启——在同一次启动中重试，可能会读到过时或空白的字节（实测：一次重试的备份读到的是引导程序的启动字，而不是启动配置记录）。请给相机断电重启（拔下再重新插上，或使用它的电源开关），然后再次运行备份，并在询问时确认已断电重启：本次运行无法自己察觉这一点。记录的失败：{error}',
   'preserve.gate.noErrorText': '（无错误文本）',
   'preserve.gate.patchAfterBackup':
-    '补丁步骤在备份之后运行：本次运行会先导出原厂方案能读取的每个区域并保存下来，然后才做其他任何事——那份备份是这台相机唯一的副本。请先运行备份步骤。',
-  'preserve.gate.commitAfterBackup': '提交在备份之后运行（参见补丁步骤）',
-  'preserve.gate.commitAfterPatch': '提交在补丁步骤之后运行，补丁步骤会记录它要暂存的内容',
+    '{step}在备份之后运行：本次运行会先导出原厂方案能读取的每个区域并保存下来，然后才做其他任何事——那份备份是这台相机唯一的副本。请先运行备份步骤。',
+  'preserve.gate.commitAfterBackup': '{step}在备份之后运行（参见补丁步骤）',
+  'preserve.gate.commitAfterPatch': '{step}在补丁步骤之后运行，补丁步骤会记录它要暂存的内容',
   'preserve.gate.commitNeedsPatch':
-    '提交需要{banks} 的补丁，而补丁步骤没有记录任何补丁——请重新运行补丁步骤',
+    '{step}需要{banks} 的补丁，而补丁步骤没有记录任何补丁——请重新运行补丁步骤',
   /** `{files}`: file names, joined with ", ". */
   'preserve.gate.commitFiles':
-    '提交需要运行目录中的备份文件，但它们缺失了：{files}——没有它们，提交就没有还原来源，因此拒绝执行',
+    '{step}需要运行目录中的备份文件，但它们缺失了：{files}——没有它们，提交就没有还原来源，因此拒绝执行',
   'preserve.gate.drainNoCommit':
-    '全闪存读取要通过扩大的窗口读取打过补丁的芯片，而本次运行没有已完成的提交——在原厂相机上全闪存读取会停滞。请先运行提交（或从提交继续）；如果提交已经完成但没有留下检查点，请明确跳过（allowJump）。',
+    '{step}要通过扩大的窗口读取打过补丁的芯片，而本次运行没有已完成的提交——在原厂相机上全闪存读取会停滞。请先运行提交（或从提交继续）；如果提交已经完成但没有留下检查点，请明确跳过（allowJump）。',
   /** `{build}`: a build's name, preserve.build.firmware or preserve.gate.detectedBuild. `{note}`: the capability table's note, in English. */
   'preserve.gate.drainRefused': '全闪存读取步骤在 {build} 上拒绝运行：{note}',
   'preserve.gate.detectedBuild': '检测到的版本',
@@ -929,18 +936,18 @@ export default {
   'preserve.gate.drainHazard':
     '全闪存读取步骤在 {build} 上拒绝运行：在这个版本未打补丁的固件上开始全闪存读取会让相机崩溃（它从一个不是闪存地址的值读取；在模拟器上测得：提供 32 KB 后相机出错）。使读取安全的修改位于 {sites}，但它不在本次运行为{bank} 记录的修改之中——请在全闪存读取之前运行补丁步骤（并完成写入）。',
   'preserve.gate.drainFiles':
-    '全闪存读取需要 {files}（读出的镜像要用每个已写入槽位的采集数据做后处理），但运行目录中没有它',
+    '{step}需要 {files}（读出的镜像要用每个已写入槽位的采集数据做后处理），但运行目录中没有它',
   'preserve.gate.restoreNoCommit':
-    '还原会把原始槽位写回到补丁之上，而本次运行没有已完成的提交——没有任何可以还原的内容。请先运行提交（或从提交继续），或者明确跳过（allowJump）以还原一台已经打过补丁的相机。',
+    '{step}会把原始槽位写回到补丁之上，而本次运行没有已完成的提交——没有任何可以还原的内容。请先运行提交（或从提交继续），或者明确跳过（allowJump）以还原一台已经打过补丁的相机。',
   'preserve.gate.restoreNeedsPatch':
-    '还原需要每个已写入槽位的补丁摘要（用于暂存长度）——请先运行补丁步骤',
+    '{step}需要每个已写入槽位的补丁摘要（用于暂存长度）——请先运行补丁步骤',
   'preserve.gate.restoreNoForm':
     '还原步骤在 {build} 上拒绝运行：原始固件没有任何一种形式既能通过相机自身的检查、又能存回为原始字节——原始固件的校验和是 0xB7AB9D17（实测），而不是相机要求的 0xFFFF。本次运行将以手中的完整镜像结束，补丁仍保留在相机中；原始内容只能用全闪存编程器写回。',
   'preserve.gate.restoreFiles':
-    '还原需要 {files}（每个已写入槽位的原始内容，来自备份步骤），但运行目录中没有它',
+    '{step}需要 {files}（每个已写入槽位的原始内容，来自备份步骤），但运行目录中没有它',
   'preserve.gate.verifyNoRestore':
-    '验证会把重新启动后的读取与备份比较，而本次运行没有已完成的还原——打过补丁的槽位会显示为差异。请先运行还原（或从还原继续）；如果还原已经完成但没有留下检查点，请明确跳过（allowJump）。',
-  'preserve.gate.verifyNeedsBackup': '验证需要 {file}（比较的参照），但运行目录中没有它',
+    '{step}会把重新启动后的读取与备份比较，而本次运行没有已完成的还原——打过补丁的槽位会显示为差异。请先运行还原（或从还原继续）；如果还原已经完成但没有留下检查点，请明确跳过（allowJump）。',
+  'preserve.gate.verifyNeedsBackup': '{step}需要 {file}（比较的参照），但运行目录中没有它',
   'preserve.gate.needsBanks': '{step} 需要备份步骤读取的槽位，但当前状态中没有',
   /** `{what}`: why the run's choice offers no bank (preserve.choice.*). */
   'preserve.gate.noBanks': '本次运行没有选择任何槽位：{what}',

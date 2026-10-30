@@ -539,6 +539,14 @@ const isDone = (state: PreserveRunState, id: PreserveStepId): boolean =>
   state.steps[id]?.status === 'done';
 
 /**
+ * A step named at the start of a gate sentence. Its English is the step's id, as the CLI takes it
+ * (`--from-step patch`); the page names the step as its chip does (core:preserve.stepId.*).
+ */
+function stepId(step: PreserveStepId): CoreMessage {
+  return coreMessage(`preserve.stepId.${step}`, {}, step);
+}
+
+/**
  * Why a step cannot run now, as messages (`describeStepGate` says their English). `{step}` and `{next}`
  * are the run's step ids (backup, patch, commit, drain, restore, verify), as the CLI names them.
  */
@@ -589,25 +597,26 @@ export const PRESERVE_GATE = {
     ),
   patchAfterBackup: coreMessage(
     'preserve.gate.patchAfterBackup',
-    {},
+    { step: stepId('patch') },
     'patch runs after the backup: the run takes the dump of every region the stock plan ' +
       'can read and persists it BEFORE anything else happens — that backup is the only ' +
       'copy of this camera. Run the backup step first.',
   ),
   commitAfterBackup: coreMessage(
     'preserve.gate.commitAfterBackup',
-    {},
+    { step: stepId('commit') },
     'commit runs after the backup (see the patch step)',
   ),
   commitAfterPatch: coreMessage(
     'preserve.gate.commitAfterPatch',
-    {},
+    { step: stepId('commit') },
     'commit runs after the patch step, which records what it stages',
   ),
   commitNeedsPatch: (keys: readonly BankKey[]): CoreMessage =>
     coreMessage(
       'preserve.gate.commitNeedsPatch',
       {
+        step: stepId('commit'),
         banks: listParam(
           keys.map((key) => bankParam(key)),
           'comma',
@@ -619,13 +628,13 @@ export const PRESERVE_GATE = {
   commitFiles: (missing: readonly string[]): CoreMessage =>
     coreMessage(
       'preserve.gate.commitFiles',
-      { files: listParam(missing, 'comma') },
+      { step: stepId('commit'), files: listParam(missing, 'comma') },
       'commit requires the backup files in the run directory and they are missing: ' +
         `${missing.join(', ')} — without them a commit has no restore source, so it refuses`,
     ),
   drainNoCommit: coreMessage(
     'preserve.gate.drainNoCommit',
-    {},
+    { step: stepId('drain') },
     'drain reads the PATCHED part through the widened window, and this run has no ' +
       'completed commit — the drain would stall on a stock camera. Run (or resume at) ' +
       'the commit first, or jump explicitly (allowJump) if the commit landed without ' +
@@ -663,20 +672,20 @@ export const PRESERVE_GATE = {
   drainFiles: (missing: readonly string[]): CoreMessage =>
     coreMessage(
       'preserve.gate.drainFiles',
-      { files: listParam(missing, 'comma') },
+      { step: stepId('drain'), files: listParam(missing, 'comma') },
       `drain needs ${missing.join(', ')} (the delivered dump is post-processed with each ` +
         'written bank’s capture) and it is not in the run directory',
     ),
   restoreNoCommit: coreMessage(
     'preserve.gate.restoreNoCommit',
-    {},
+    { step: stepId('restore') },
     'restore puts the original banks back over the patch, and this run has no completed ' +
       'commit — there is nothing it can be reverting. Run (or resume at) the commit ' +
       'first, or jump explicitly (allowJump) to restore an already-patched camera.',
   ),
   restoreNeedsPatch: coreMessage(
     'preserve.gate.restoreNeedsPatch',
-    {},
+    { step: stepId('restore') },
     'restore needs each written bank’s patch summary (for the staged length) — run the patch step first',
   ),
   restoreNoForm: (build: CoreParam): CoreMessage =>
@@ -692,13 +701,13 @@ export const PRESERVE_GATE = {
   restoreFiles: (missing: readonly string[]): CoreMessage =>
     coreMessage(
       'preserve.gate.restoreFiles',
-      { files: listParam(missing, 'comma') },
+      { step: stepId('restore'), files: listParam(missing, 'comma') },
       `restore needs ${missing.join(', ')} (the original of each written bank, from the ` +
         'backup step) and it is not in the run directory',
     ),
   verifyNoRestore: coreMessage(
     'preserve.gate.verifyNoRestore',
-    {},
+    { step: stepId('verify') },
     'verify compares a fresh boot against the backup, and this run has no completed ' +
       'restore — a patched bank would show as diffs. Run (or resume at) the restore ' +
       'first, or jump explicitly (allowJump) if the restore landed without its checkpoint.',
@@ -706,7 +715,7 @@ export const PRESERVE_GATE = {
   verifyNeedsBackup: (file: string): CoreMessage =>
     coreMessage(
       'preserve.gate.verifyNeedsBackup',
-      { file },
+      { step: stepId('verify'), file },
       `verify needs ${file} (the comparison's reference) and it is not in ` + 'the run directory',
     ),
   needsBanks: (step: string): CoreMessage =>

@@ -833,6 +833,13 @@ export default {
   'preserve.step.drain': 'Whole-flash read',
   'preserve.step.restore': 'Restore',
   'preserve.step.verify': 'Check',
+  /* A step named at the start of a gate sentence: the CLI's step id in English; a translation names
+   * the step the way its chip does (preserve.step.*), lower case, with what its grammar needs around it. */
+  'preserve.stepId.patch': 'patch',
+  'preserve.stepId.commit': 'commit',
+  'preserve.stepId.drain': 'drain',
+  'preserve.stepId.restore': 'restore',
+  'preserve.stepId.verify': 'verify',
   /** A step's result. `{label}` is a preserve.step.* name; `{error}` is the step's error (another key of this namespace, or core's English). */
   'preserve.result.stoppedPlanned':
     '{label}: stopped as planned — the camera started {bank}, which this run did not patch, so nothing was read.',
@@ -996,17 +1003,17 @@ export default {
     'the previous backup attempt failed, and the camera must be POWER-CYCLED before this step runs again — a retry on the same start can read stale or blank bytes (measured: a retried backup read the bootloader’s start-up word in place of the boot-config record). Power-cycle the camera (unplug and replug it, or use its power switch), then run the backup again and confirm the power cycle when asked: the run cannot see it happen. The recorded failure: {error}',
   'preserve.gate.noErrorText': '(no error text)',
   'preserve.gate.patchAfterBackup':
-    'patch runs after the backup: the run takes the dump of every region the stock plan can read and persists it BEFORE anything else happens — that backup is the only copy of this camera. Run the backup step first.',
-  'preserve.gate.commitAfterBackup': 'commit runs after the backup (see the patch step)',
+    '{step} runs after the backup: the run takes the dump of every region the stock plan can read and persists it BEFORE anything else happens — that backup is the only copy of this camera. Run the backup step first.',
+  'preserve.gate.commitAfterBackup': '{step} runs after the backup (see the patch step)',
   'preserve.gate.commitAfterPatch':
-    'commit runs after the patch step, which records what it stages',
+    '{step} runs after the patch step, which records what it stages',
   'preserve.gate.commitNeedsPatch':
-    'commit needs the patch of {banks}, and the patch step recorded none — run the patch step again',
+    '{step} needs the patch of {banks}, and the patch step recorded none — run the patch step again',
   /** `{files}`: file names, joined with common:list.comma. */
   'preserve.gate.commitFiles':
-    'commit requires the backup files in the run directory and they are missing: {files} — without them a commit has no restore source, so it refuses',
+    '{step} requires the backup files in the run directory and they are missing: {files} — without them a commit has no restore source, so it refuses',
   'preserve.gate.drainNoCommit':
-    'drain reads the PATCHED part through the widened window, and this run has no completed commit — the drain would stall on a stock camera. Run (or resume at) the commit first, or jump explicitly (allowJump) if the commit landed without its checkpoint.',
+    '{step} reads the PATCHED part through the widened window, and this run has no completed commit — the drain would stall on a stock camera. Run (or resume at) the commit first, or jump explicitly (allowJump) if the commit landed without its checkpoint.',
   /** `{build}`: a build's name, preserve.build.firmware or preserve.gate.detectedBuild. `{note}`: the capability table's note, in English. */
   'preserve.gate.drainRefused': 'the drain step refuses on {build}: {note}',
   'preserve.gate.detectedBuild': 'the detected build',
@@ -1014,19 +1021,19 @@ export default {
   'preserve.gate.drainHazard':
     'the drain step refuses on {build}: starting the whole-flash read on this build’s unpatched firmware crashes the camera (it reads from a value that is not a flash address; measured on the emulator: 32 KiB served, then the camera faulted). The change that makes the read safe is at {sites}, and it is not among the changes this run recorded for {bank} — run the patch step (and land the write) before the whole-flash read.',
   'preserve.gate.drainFiles':
-    'drain needs {files} (the delivered dump is post-processed with each written bank’s capture) and it is not in the run directory',
+    '{step} needs {files} (the delivered dump is post-processed with each written bank’s capture) and it is not in the run directory',
   'preserve.gate.restoreNoCommit':
-    'restore puts the original banks back over the patch, and this run has no completed commit — there is nothing it can be reverting. Run (or resume at) the commit first, or jump explicitly (allowJump) to restore an already-patched camera.',
+    '{step} puts the original banks back over the patch, and this run has no completed commit — there is nothing it can be reverting. Run (or resume at) the commit first, or jump explicitly (allowJump) to restore an already-patched camera.',
   'preserve.gate.restoreNeedsPatch':
-    'restore needs each written bank’s patch summary (for the staged length) — run the patch step first',
+    '{step} needs each written bank’s patch summary (for the staged length) — run the patch step first',
   'preserve.gate.restoreNoForm':
     'the restore step refuses on {build}: no form of the original firmware passes the camera’s own check and also stores back as the original bytes — the original firmware’s check sum is 0xB7AB9D17 (measured), not the 0xFFFF the camera demands. This run ends with the complete image in hand and the patch in place; the original content can only go back with a full-flash programmer.',
   'preserve.gate.restoreFiles':
-    'restore needs {files} (the original of each written bank, from the backup step) and it is not in the run directory',
+    '{step} needs {files} (the original of each written bank, from the backup step) and it is not in the run directory',
   'preserve.gate.verifyNoRestore':
-    'verify compares a fresh boot against the backup, and this run has no completed restore — a patched bank would show as diffs. Run (or resume at) the restore first, or jump explicitly (allowJump) if the restore landed without its checkpoint.',
+    '{step} compares a fresh boot against the backup, and this run has no completed restore — a patched bank would show as diffs. Run (or resume at) the restore first, or jump explicitly (allowJump) if the restore landed without its checkpoint.',
   'preserve.gate.verifyNeedsBackup':
-    "verify needs {file} (the comparison's reference) and it is not in the run directory",
+    "{step} needs {file} (the comparison's reference) and it is not in the run directory",
   'preserve.gate.needsBanks': '{step} needs the banks the backup step read, and the state has none',
   /** `{what}`: why the run's choice offers no bank (preserve.choice.*). */
   'preserve.gate.noBanks': 'no banks are chosen for this run: {what}',

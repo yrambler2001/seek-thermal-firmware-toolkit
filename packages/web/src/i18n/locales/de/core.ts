@@ -864,6 +864,13 @@ export default {
   'preserve.step.drain': 'Volles Auslesen',
   'preserve.step.restore': 'Wiederherstellung',
   'preserve.step.verify': 'Prüfung',
+  /* A step named at the start of a gate sentence: the CLI's step id in English; a translation names
+   * the step the way its chip does (preserve.step.*), lower case, with what its grammar needs around it. */
+  'preserve.stepId.patch': 'der Patch',
+  'preserve.stepId.commit': 'der Schritt „Schreiben“',
+  'preserve.stepId.drain': 'das volle Auslesen',
+  'preserve.stepId.restore': 'die Wiederherstellung',
+  'preserve.stepId.verify': 'die Prüfung',
   /** A step's result. `{label}` is a preserve.step.* name; `{error}` is the step's error (another key of this namespace, or core's English). */
   'preserve.result.stoppedPlanned':
     '{label}: wie geplant angehalten — die Kamera ist aus {bank} gestartet, den dieser Durchlauf nicht gepatcht hat, daher wurde nichts gelesen.',
@@ -1034,18 +1041,17 @@ export default {
     'der vorige Sicherungsversuch ist fehlgeschlagen, und die Kamera muss AUS- UND WIEDER EINGESCHALTET werden, bevor dieser Schritt erneut läuft — ein erneuter Versuch im selben Start kann veraltete oder leere Bytes lesen (gemessen: Eine wiederholte Sicherung las das Startwort des Bootloaders anstelle des Boot-Konfigurationsdatensatzes). Schalten Sie die Kamera aus und wieder ein (abziehen und wieder einstecken oder ihren Netzschalter verwenden), führen Sie dann die Sicherung erneut aus und bestätigen Sie das Aus- und Einschalten, wenn Sie gefragt werden: Der Durchlauf kann es nicht selbst sehen. Der festgehaltene Fehler: {error}',
   'preserve.gate.noErrorText': '(kein Fehlertext)',
   'preserve.gate.patchAfterBackup':
-    'der Patch läuft nach der Sicherung: Der Durchlauf liest jeden Bereich, den der Standardplan lesen kann, und speichert ihn dauerhaft, BEVOR irgendetwas anderes geschieht — diese Sicherung ist die einzige Kopie dieser Kamera. Führen Sie zuerst den Sicherungsschritt aus.',
-  'preserve.gate.commitAfterBackup':
-    'der Commit läuft nach der Sicherung (siehe den Patch-Schritt)',
+    '{step} läuft nach der Sicherung: Der Durchlauf liest jeden Bereich, den der Standardplan lesen kann, und speichert ihn dauerhaft, BEVOR irgendetwas anderes geschieht — diese Sicherung ist die einzige Kopie dieser Kamera. Führen Sie zuerst den Sicherungsschritt aus.',
+  'preserve.gate.commitAfterBackup': '{step} läuft nach der Sicherung (siehe den Patch-Schritt)',
   'preserve.gate.commitAfterPatch':
-    'der Commit läuft nach dem Patch-Schritt, der festhält, was er überträgt',
+    '{step} läuft nach dem Patch-Schritt, der festhält, was er überträgt',
   'preserve.gate.commitNeedsPatch':
-    'der Commit braucht den Patch von {banks}, und der Patch-Schritt hat keinen festgehalten — führen Sie den Patch-Schritt erneut aus',
+    '{step} braucht den Patch von {banks}, und der Patch-Schritt hat keinen festgehalten — führen Sie den Patch-Schritt erneut aus',
   /** `{files}`: file names, joined with common:list.comma. */
   'preserve.gate.commitFiles':
-    'der Commit braucht die Sicherungsdateien im Durchlaufverzeichnis, und sie fehlen: {files} — ohne sie hat ein Commit keine Quelle für die Wiederherstellung, daher lehnt er ab',
+    '{step} braucht die Sicherungsdateien im Durchlaufverzeichnis, und sie fehlen: {files} — ohne sie hat ein Commit keine Quelle für die Wiederherstellung, daher lehnt er ab',
   'preserve.gate.drainNoCommit':
-    'das volle Auslesen liest den GEPATCHTEN Chip über das erweiterte Fenster, und dieser Durchlauf hat keinen abgeschlossenen Commit — auf einer Kamera im Originalzustand würde das volle Auslesen hängen bleiben. Führen Sie zuerst den Commit aus (oder setzen Sie dort fort), oder springen Sie ausdrücklich (allowJump), wenn der Commit ohne seinen Checkpoint angekommen ist.',
+    '{step} liest den GEPATCHTEN Chip über das erweiterte Fenster, und dieser Durchlauf hat keinen abgeschlossenen Commit — auf einer Kamera im Originalzustand würde das volle Auslesen hängen bleiben. Führen Sie zuerst den Commit aus (oder setzen Sie dort fort), oder springen Sie ausdrücklich (allowJump), wenn der Commit ohne seinen Checkpoint angekommen ist.',
   /** `{build}`: a build's name, preserve.build.firmware or preserve.gate.detectedBuild. `{note}`: the capability table's note, in English. */
   'preserve.gate.drainRefused': 'der Schritt des vollen Auslesens lehnt auf {build} ab: {note}',
   'preserve.gate.detectedBuild': 'dem erkannten Build',
@@ -1053,19 +1059,19 @@ export default {
   'preserve.gate.drainHazard':
     'der Schritt des vollen Auslesens lehnt auf {build} ab: Das volle Auslesen auf der ungepatchten Firmware dieses Builds zu starten, lässt die Kamera abstürzen (sie liest von einem Wert, der keine Flash-Adresse ist; auf dem Emulator gemessen: 32 KB geliefert, dann ein Fehler der Kamera). Die Änderung, die das Lesen sicher macht, liegt bei {sites}, und sie gehört nicht zu den Änderungen, die dieser Durchlauf für {bank} festgehalten hat — führen Sie den Patch-Schritt aus (und schließen Sie das Schreiben ab), bevor Sie voll auslesen.',
   'preserve.gate.drainFiles':
-    'das volle Auslesen braucht {files} (das gelieferte Abbild wird mit der Aufnahme jedes beschriebenen Slots nachbearbeitet), und das fehlt im Durchlaufverzeichnis',
+    '{step} braucht {files} (das gelieferte Abbild wird mit der Aufnahme jedes beschriebenen Slots nachbearbeitet), und das fehlt im Durchlaufverzeichnis',
   'preserve.gate.restoreNoCommit':
-    'die Wiederherstellung schreibt die Original-Slots über den Patch zurück, und dieser Durchlauf hat keinen abgeschlossenen Commit — es gibt nichts, was sie rückgängig machen könnte. Führen Sie zuerst den Commit aus (oder setzen Sie dort fort), oder springen Sie ausdrücklich (allowJump), um eine bereits gepatchte Kamera wiederherzustellen.',
+    '{step} schreibt die Original-Slots über den Patch zurück, und dieser Durchlauf hat keinen abgeschlossenen Commit — es gibt nichts, was sie rückgängig machen könnte. Führen Sie zuerst den Commit aus (oder setzen Sie dort fort), oder springen Sie ausdrücklich (allowJump), um eine bereits gepatchte Kamera wiederherzustellen.',
   'preserve.gate.restoreNeedsPatch':
-    'die Wiederherstellung braucht die Patch-Zusammenfassung jedes beschriebenen Slots (für die übertragene Länge) — führen Sie zuerst den Patch-Schritt aus',
+    '{step} braucht die Patch-Zusammenfassung jedes beschriebenen Slots (für die übertragene Länge) — führen Sie zuerst den Patch-Schritt aus',
   'preserve.gate.restoreNoForm':
     'der Wiederherstellungsschritt lehnt auf {build} ab: Keine Form der Original-Firmware besteht die eigene Prüfung der Kamera und wird zugleich wieder als die Original-Bytes gespeichert — die Prüfsumme der Original-Firmware ist 0xB7AB9D17 (gemessen), nicht das 0xFFFF, das die Kamera verlangt. Dieser Durchlauf endet mit dem vollständigen Abbild in der Hand und dem Patch an seinem Platz; der ursprüngliche Inhalt kann nur mit einem Programmiergerät für den ganzen Flash-Speicher zurückgebracht werden.',
   'preserve.gate.restoreFiles':
-    'die Wiederherstellung braucht {files} (das Original jedes beschriebenen Slots, aus dem Sicherungsschritt), und das fehlt im Durchlaufverzeichnis',
+    '{step} braucht {files} (das Original jedes beschriebenen Slots, aus dem Sicherungsschritt), und das fehlt im Durchlaufverzeichnis',
   'preserve.gate.verifyNoRestore':
-    'die Prüfung vergleicht einen frischen Start mit der Sicherung, und dieser Durchlauf hat keine abgeschlossene Wiederherstellung — ein gepatchter Slot würde als Abweichung erscheinen. Führen Sie zuerst die Wiederherstellung aus (oder setzen Sie dort fort), oder springen Sie ausdrücklich (allowJump), wenn die Wiederherstellung ohne ihren Checkpoint angekommen ist.',
+    '{step} vergleicht einen frischen Start mit der Sicherung, und dieser Durchlauf hat keine abgeschlossene Wiederherstellung — ein gepatchter Slot würde als Abweichung erscheinen. Führen Sie zuerst die Wiederherstellung aus (oder setzen Sie dort fort), oder springen Sie ausdrücklich (allowJump), wenn die Wiederherstellung ohne ihren Checkpoint angekommen ist.',
   'preserve.gate.verifyNeedsBackup':
-    'die Prüfung braucht {file} (die Referenz für den Vergleich), und die Datei fehlt im Durchlaufverzeichnis',
+    '{step} braucht {file} (die Referenz für den Vergleich), und die Datei fehlt im Durchlaufverzeichnis',
   'preserve.gate.needsBanks':
     '{step} braucht die Slots, die der Sicherungsschritt gelesen hat, und der Zustand enthält keine',
   /** `{what}`: why the run's choice offers no bank (preserve.choice.*). */

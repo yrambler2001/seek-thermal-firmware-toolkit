@@ -913,6 +913,13 @@ export default {
   'preserve.step.drain': 'Pełny odczyt',
   'preserve.step.restore': 'Przywrócenie',
   'preserve.step.verify': 'Sprawdzenie',
+  /* A step named at the start of a gate sentence: the CLI's step id in English; a translation names
+   * the step the way its chip does (preserve.step.*), lower case, with what its grammar needs around it. */
+  'preserve.stepId.patch': 'krok „Łatka”',
+  'preserve.stepId.commit': 'krok „Zapis”',
+  'preserve.stepId.drain': 'pełny odczyt',
+  'preserve.stepId.restore': 'przywrócenie',
+  'preserve.stepId.verify': 'sprawdzenie',
   /** A step's result. `{label}` is a preserve.step.* name; `{error}` is the step's error (another key of this namespace, or core's English). */
   'preserve.result.stoppedPlanned':
     '{label}: zatrzymano zgodnie z planem — kamera uruchomiła {bank}, którego ten przebieg nie załatał, więc nic nie zostało odczytane.',
@@ -1091,18 +1098,17 @@ export default {
     'poprzednia próba kopii zapasowej nie powiodła się, a przed ponownym wykonaniem tego kroku kamerę trzeba WYŁĄCZYĆ I WŁĄCZYĆ PONOWNIE — ponowna próba przy tym samym uruchomieniu może odczytać nieaktualne lub puste bajty (zmierzono: ponowiona kopia zapasowa odczytała słowo startowe bootloadera zamiast rekordu konfiguracji startu). Wyłącz kamerę i włącz ją ponownie (odłącz ją i podłącz albo użyj jej wyłącznika), a potem wykonaj kopię zapasową jeszcze raz i potwierdź wyłączenie i włączenie, gdy pojawi się pytanie: przebieg nie widzi, że to nastąpiło. Zarejestrowany błąd: {error}',
   'preserve.gate.noErrorText': '(brak opisu błędu)',
   'preserve.gate.patchAfterBackup':
-    'krok „Łatka” wykonuje się po kopii zapasowej: przebieg pobiera zrzut każdego obszaru, który może odczytać oryginalny plan, i zapisuje go TRWALE, ZANIM stanie się cokolwiek innego — ta kopia zapasowa to jedyna kopia tej kamery. Najpierw wykonaj krok kopii zapasowej.',
-  'preserve.gate.commitAfterBackup':
-    'krok „Zapis” wykonuje się po kopii zapasowej (zobacz krok „Łatka”)',
+    '{step} wykonuje się po kopii zapasowej: przebieg pobiera zrzut każdego obszaru, który może odczytać oryginalny plan, i zapisuje go TRWALE, ZANIM stanie się cokolwiek innego — ta kopia zapasowa to jedyna kopia tej kamery. Najpierw wykonaj krok kopii zapasowej.',
+  'preserve.gate.commitAfterBackup': '{step} wykonuje się po kopii zapasowej (zobacz krok „Łatka”)',
   'preserve.gate.commitAfterPatch':
-    'krok „Zapis” wykonuje się po kroku „Łatka”, który rejestruje, co przesyła',
+    '{step} wykonuje się po kroku „Łatka”, który rejestruje, co przesyła',
   'preserve.gate.commitNeedsPatch':
-    'krok „Zapis” wymaga łatki ({banks}), a krok „Łatka” żadnej nie zarejestrował — wykonaj krok „Łatka” ponownie',
+    '{step} wymaga łatki ({banks}), a krok „Łatka” żadnej nie zarejestrował — wykonaj krok „Łatka” ponownie',
   /** `{files}`: file names, joined with common:list.comma. */
   'preserve.gate.commitFiles':
-    'krok „Zapis” wymaga plików kopii zapasowej w katalogu przebiegu, a ich brakuje: {files} — bez nich zapis nie ma źródła przywrócenia, więc odmawia',
+    '{step} wymaga plików kopii zapasowej w katalogu przebiegu, a ich brakuje: {files} — bez nich zapis nie ma źródła przywrócenia, więc odmawia',
   'preserve.gate.drainNoCommit':
-    'pełny odczyt czyta ZAŁATANY układ przez poszerzone okno, a ten przebieg nie ma zakończonego zatwierdzenia — na oryginalnej kamerze pełny odczyt by się zawiesił. Najpierw wykonaj zatwierdzenie (lub wznów od niego) albo przeskocz jawnie (allowJump), jeśli zatwierdzenie wykonało się bez punktu kontrolnego.',
+    '{step} czyta ZAŁATANY układ przez poszerzone okno, a ten przebieg nie ma zakończonego zatwierdzenia — na oryginalnej kamerze pełny odczyt by się zawiesił. Najpierw wykonaj zatwierdzenie (lub wznów od niego) albo przeskocz jawnie (allowJump), jeśli zatwierdzenie wykonało się bez punktu kontrolnego.',
   /** `{build}`: a build's name, preserve.build.firmware or preserve.gate.detectedBuild. `{note}`: the capability table's note, in English. */
   'preserve.gate.drainRefused': 'krok pełnego odczytu odmawia dla tej kompilacji ({build}): {note}',
   'preserve.gate.detectedBuild': 'wykryta kompilacja',
@@ -1110,19 +1116,19 @@ export default {
   'preserve.gate.drainHazard':
     'krok pełnego odczytu odmawia dla tej kompilacji ({build}): rozpoczęcie pełnego odczytu pamięci flash na niezałatanym firmware tej kompilacji powoduje awarię kamery (czyta z wartości, która nie jest adresem w pamięci flash; zmierzono w emulatorze: podano 32 KB, potem nastąpiła awaria kamery). Zmiana, która czyni odczyt bezpiecznym, jest pod {sites}, a nie ma jej wśród zmian zarejestrowanych w tym przebiegu ({bank}) — przed pełnym odczytem wykonaj krok „Łatka” (i doprowadź zapis do końca).',
   'preserve.gate.drainFiles':
-    'pełny odczyt wymaga {files} (dostarczony zrzut jest uzupełniany przechwyconymi danymi każdego zapisanego slotu), a nie ma tego w katalogu przebiegu',
+    '{step} wymaga {files} (dostarczony zrzut jest uzupełniany przechwyconymi danymi każdego zapisanego slotu), a nie ma tego w katalogu przebiegu',
   'preserve.gate.restoreNoCommit':
-    'przywrócenie zapisuje oryginalne sloty z powrotem na łatkę, a ten przebieg nie ma zakończonego zatwierdzenia — nie ma czego cofać. Najpierw wykonaj zatwierdzenie (lub wznów od niego) albo przeskocz jawnie (allowJump), aby przywrócić już załataną kamerę.',
+    '{step} zapisuje oryginalne sloty z powrotem na łatkę, a ten przebieg nie ma zakończonego zatwierdzenia — nie ma czego cofać. Najpierw wykonaj zatwierdzenie (lub wznów od niego) albo przeskocz jawnie (allowJump), aby przywrócić już załataną kamerę.',
   'preserve.gate.restoreNeedsPatch':
-    'przywrócenie wymaga podsumowania łatki każdego zapisanego slotu (dla długości przesyłanych danych) — najpierw wykonaj krok „Łatka”',
+    '{step} wymaga podsumowania łatki każdego zapisanego slotu (dla długości przesyłanych danych) — najpierw wykonaj krok „Łatka”',
   'preserve.gate.restoreNoForm':
     'krok przywrócenia odmawia dla tej kompilacji ({build}): żadna postać oryginalnego firmware nie przechodzi własnego sprawdzenia kamery i jednocześnie nie zapisuje się z powrotem jako oryginalne bajty — suma kontrolna oryginalnego firmware to 0xB7AB9D17 (zmierzono), a nie wymagane przez kamerę 0xFFFF. Ten przebieg kończy się pełnym obrazem i łatką na miejscu; oryginalną zawartość można przywrócić tylko programatorem całej pamięci flash.',
   'preserve.gate.restoreFiles':
-    'przywrócenie wymaga {files} (oryginału każdego zapisanego slotu z kroku kopii zapasowej), a nie ma tego w katalogu przebiegu',
+    '{step} wymaga {files} (oryginału każdego zapisanego slotu z kroku kopii zapasowej), a nie ma tego w katalogu przebiegu',
   'preserve.gate.verifyNoRestore':
-    'sprawdzenie porównuje świeży start z kopią zapasową, a ten przebieg nie ma zakończonego przywrócenia — załatany slot pokazałby się jako różnice. Najpierw wykonaj przywrócenie (lub wznów od niego) albo przeskocz jawnie (allowJump), jeśli przywrócenie wykonało się bez punktu kontrolnego.',
+    '{step} porównuje świeży start z kopią zapasową, a ten przebieg nie ma zakończonego przywrócenia — załatany slot pokazałby się jako różnice. Najpierw wykonaj przywrócenie (lub wznów od niego) albo przeskocz jawnie (allowJump), jeśli przywrócenie wykonało się bez punktu kontrolnego.',
   'preserve.gate.verifyNeedsBackup':
-    'sprawdzenie wymaga {file} (wzorca do porównania), a nie ma go w katalogu przebiegu',
+    '{step} wymaga {file} (wzorca do porównania), a nie ma go w katalogu przebiegu',
   'preserve.gate.needsBanks':
     'krok {step} wymaga slotów odczytanych w kroku kopii zapasowej, a stan ich nie zawiera',
   /** `{what}`: why the run's choice offers no bank (preserve.choice.*). */
