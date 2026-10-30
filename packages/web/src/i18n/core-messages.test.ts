@@ -111,6 +111,29 @@ import {
   stagingPhraseMessage,
   writtenCommittedNote,
   SeekError,
+  PRESERVE_BANK_REFUSAL,
+  PRESERVE_UNPATCHED_START_NEXT_MESSAGE,
+  PRESERVE_UNPATCHED_START_STOP_MESSAGE,
+  bankChoiceWritesMessage,
+  bankRecordMessage,
+  drainCapabilityMessage,
+  inferredBootWhyMessage,
+  lastStartMessage,
+  nextStartMessage,
+  patchSiteMessage,
+  preserveBootFactsOf,
+  preserveBuildParam,
+  preserveChoiceOf,
+  preserveDoneMessages,
+  preserveOtherVersionMessage,
+  preserveStepResultMessage,
+  restoreFormMessage,
+  stagedFormMessage,
+  type PreserveBankChoice,
+  type PreserveBankRecord,
+  type PreserveBootFacts,
+  type PreserveChoiceFacts,
+  type PreserveRunState,
   type CoreMessage,
   type CoreParam,
   type DeviceState,
@@ -602,6 +625,218 @@ function samples(base: DeviceState): CoreMessage[] {
       }),
     ),
   );
+
+  /* preserve: the boot facts, the bank table, the choices, the plan, the results */
+  const unsettled = preserveBootFactsOf({
+    cfgHead: new Uint8Array(32),
+    activeSlotWord: 0,
+    line: '2014',
+    banks: {
+      a: { key: 'a', bytes: new Uint8Array(0x400), holds: 'unsettled' },
+      b: { key: 'b', bytes: new Uint8Array(0x400), holds: 'erased' },
+      r: { key: 'r', bytes: new Uint8Array(0x400), holds: 'erased' },
+    },
+  });
+  add(unsettled.whyMessage);
+  add(unsettled.ruleMessage);
+  const selected = selectLockedBoot(0, { a: true, b: true, r: true });
+  add(inferredBootWhyMessage(selected.whyMessage, 'b'));
+  const boot = (
+    nextStart: SlotKey | null,
+    entered: SlotKey | null = 'a',
+    activeSlotWord: number | null = 0,
+  ): PreserveBootFacts => ({
+    cfgHex: '',
+    word: 0,
+    rule: 'x',
+    activeSlotWord,
+    entered,
+    verdicts: { a: true, b: true, r: true },
+    nextStart,
+    why: selected.why,
+    whyMessage: selected.whyMessage,
+    checkKeyUnnamed: null,
+  });
+  add(lastStartMessage(boot('a')));
+  add(lastStartMessage(boot('a', null, null)));
+  add(lastStartMessage(boot('a', null, 7)));
+  add(nextStartMessage(boot('b')));
+  add(nextStartMessage(boot(null)));
+  const erased = PRESERVE_BANK_REFUSAL.erased();
+  const record = (key: SlotKey, fields: Partial<PreserveBankRecord> = {}): PreserveBankRecord => ({
+    key,
+    address: 0,
+    mode: 7,
+    holds: 'image',
+    refused: null,
+    ...fields,
+  });
+  const refusedRecord = (key: SlotKey, message: CoreMessage): PreserveBankRecord =>
+    record(key, { refused: message.text, refusedMessage: message });
+  for (const message of [
+    PRESERVE_BANK_REFUSAL.secondRead(new Error('transfer failed')),
+    PRESERVE_BANK_REFUSAL.readsDisagree('aa', 'bb'),
+    erased,
+    PRESERVE_BANK_REFUSAL.watchdogMark(0x12345678),
+    PRESERVE_BANK_REFUSAL.noHeader(),
+    PRESERVE_BANK_REFUSAL.otherBuild('Compact 1.3.0.8 (16 Hz)', 'ff1308', 'Compact 1.3.0.0'),
+    PRESERVE_BANK_REFUSAL.otherKey(),
+  ]) {
+    add(bankRecordMessage(refusedRecord('b', message)));
+  }
+  add(bankRecordMessage(record('a')));
+  add(
+    bankRecordMessage(
+      record('a', { buildLabel: 'Compact 1.0.3.0', patch: { diffCount: 9 } as never }),
+    ),
+  );
+  add(
+    bankRecordMessage(
+      record('a', { imageDerivation: { id: 'x', label: 'the 16 Hz edit', balanceWord: 0 } }),
+    ),
+  );
+  add(
+    bankRecordMessage(
+      record('a', {
+        patch: { diffCount: 9 } as never,
+        imageDerivation: { id: 'x', label: 'the 16 Hz edit', balanceWord: 0 },
+      }),
+    ),
+  );
+  const writable = { a: record('a'), b: record('b'), r: record('r') };
+  const blocked = { ...writable, b: refusedRecord('b', erased) };
+  const none = {
+    a: record('a', { holds: 'erased' }),
+    b: record('b', { holds: 'erased' }),
+    r: record('r', { holds: 'erased' }),
+  };
+  const allRefused = {
+    a: refusedRecord('a', erased),
+    b: refusedRecord('b', erased),
+    r: refusedRecord('r', erased),
+  };
+  const choices: [PreserveChoiceFacts, PreserveBankChoice][] = [
+    [{}, 'all'],
+    [{ boot: boot('a'), banks: blocked }, 'all'],
+    [{ boot: boot('a'), banks: writable }, 'all'],
+    [{ boot: boot('a'), banks: none }, 'all'],
+    [{ boot: boot('a'), banks: writable }, 'next-start'],
+    [{ boot: boot('b'), banks: blocked }, 'next-start'],
+    [{ boot: boot(null), banks: writable }, 'next-start'],
+    [{ boot: boot(null), banks: blocked }, 'next-start'],
+    [{ boot: boot('a'), banks: writable }, 'b'],
+    [{ boot: boot(null), banks: writable }, 'a'],
+    [{ boot: boot('a'), banks: blocked }, 'b'],
+  ];
+  for (const [facts, choice] of choices) {
+    const verdict = preserveChoiceOf(facts, choice);
+    add(verdict.whatMessage);
+    verdict.warningMessages?.forEach(add);
+    message(bankChoiceWritesMessage(verdict));
+  }
+  refusalOf(() =>
+    choosePreserveBanks(
+      { steps: { backup: { status: 'done' } }, boot: boot('a'), banks: blocked } as never,
+      'b',
+    ),
+  );
+  message(preserveBuildParam({}));
+  message(preserveBuildParam({ expectedVersion: '1.3.0.8' }));
+  for (const form of ['plain', 'xor-ks0', 'xor-ks0-ksD'] as const) add(stagedFormMessage(form));
+  for (const form of ['capture-verbatim', 'factory-staged', 'none'] as const) {
+    add(restoreFormMessage(form));
+  }
+  add(drainCapabilityMessage({ wholePart: false } as never));
+  add(drainCapabilityMessage({ wholePart: true, losslessReadUnit: 64 } as never));
+  add(
+    drainCapabilityMessage({
+      wholePart: true,
+      losslessReadUnit: 64,
+      rotation: 1,
+      modeTwoHazardSites: [],
+    } as never),
+  );
+  for (const site of [
+    'mov.w r3,#0x10000 -> #0x400000',
+    'ldrh r1,[r0]',
+    'ldrh r2,[r0]',
+    'strh r3,[r0]',
+    'strh r5,[r0]',
+    'mode-2 guard',
+    'mode-2 indirection',
+    'arm-tail hook',
+    'something else',
+  ]) {
+    add(patchSiteMessage(site));
+  }
+  const done = { status: 'done' as const };
+  const run = (fields: object): PreserveRunState => ({ steps: {}, ...fields }) as never;
+  const stopped = new SeekError('pipeline/refused', erased.text, { coreMessage: erased });
+  for (const [state, step] of [
+    [run({ steps: { drain: { status: 'failed' } }, drainEntered: 'b', targets: ['a'] }), 'drain'],
+    [run({ steps: { patch: { status: 'failed' } } }), 'patch'],
+    [
+      run({ steps: { patch: { status: 'failed', error: erased.text, errorCode: erased } } }),
+      'patch',
+    ],
+    [run({ steps: { backup: done }, banks: writable }), 'backup'],
+    [run({ steps: { backup: done }, banks: blocked, boot: boot('a') }), 'backup'],
+    [run({ steps: { backup: done }, banks: allRefused, boot: boot(null) }), 'backup'],
+    [
+      run({
+        steps: { backup: done },
+        banks: { a: record('a'), b: refusedRecord('b', erased), r: refusedRecord('r', erased) },
+      }),
+      'backup',
+    ],
+    [
+      run({
+        steps: { patch: done },
+        banks: {
+          a: record('a', { patch: { diffCount: 9 } as never }),
+          b: record('b', { patch: { diffCount: 9 } as never }),
+          r: refusedRecord('r', erased),
+        },
+      }),
+      'patch',
+    ],
+    [run({ steps: { patch: done }, banks: allRefused }), 'patch'],
+    [run({ steps: { commit: done }, targets: ['a'] }), 'commit'],
+    [run({ steps: { commit: done }, targets: ['a', 'b'] }), 'commit'],
+    [run({ steps: { drain: done } }), 'drain'],
+    [run({ steps: { drain: done }, deliveredSha256: 'ab' }), 'drain'],
+    [run({ steps: { drain: done }, deliveredSha256: 'ab', drainEntered: 'b' }), 'drain'],
+    [run({ steps: { restore: done }, targets: ['a'] }), 'restore'],
+    [run({ steps: { restore: done }, targets: ['a', 'r'], stagedForm: 'xor-ks0' }), 'restore'],
+    [run({ steps: { verify: done } }), 'verify'],
+    [
+      run({ steps: { verify: done }, verify: { windowsRead: 9, diffBytes: 0, badWindows: [] } }),
+      'verify',
+    ],
+    [
+      run({ steps: { verify: done }, verify: { windowsRead: 9, diffBytes: 4, badWindows: [] } }),
+      'verify',
+    ],
+    [
+      run({ steps: { verify: done }, verify: { windowsRead: 9, diffBytes: 4, badWindows: [1] } }),
+      'verify',
+    ],
+  ] as const) {
+    add(preserveStepResultMessage(state, step));
+  }
+  add(errorCoreMessage(stopped));
+  add(PRESERVE_UNPATCHED_START_STOP_MESSAGE);
+  add(PRESERVE_UNPATCHED_START_NEXT_MESSAGE);
+  for (const state of [
+    run({ deliveredSha256: 'ab' }),
+    run({}),
+    run({ verify: { windowsRead: 9, diffBytes: 0, badWindows: [] } }),
+  ]) {
+    const messages = preserveDoneMessages(state);
+    add(messages.title);
+    add(messages.detail);
+  }
+  add(preserveOtherVersionMessage('1.3.0.0', '1.3.0.8'));
 
   const all: CoreMessage[] = [];
   out.forEach((message) => {

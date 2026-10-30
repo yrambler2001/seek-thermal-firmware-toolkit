@@ -28,11 +28,12 @@ import {
   PRESERVE_RUN_STATE_FILE,
   PRESERVE_VERIFY_FILE,
   preserveCaptureFile,
-  preserveStepLabel,
+  preserveStepLabelMessage,
   preservePatchedFile,
   preservePlainFile,
 } from '@seek-fw/core';
 import { t } from '@/i18n';
+import { coreText } from '@/lib/core-text';
 
 export type {
   BankKey,
@@ -126,48 +127,54 @@ export interface PreserveStepMeta {
 export const PRESERVE_STEPS: readonly PreserveStepMeta[] = [
   {
     id: 'backup',
-    /* i18n: core message (the step's name) */
-    label: preserveStepLabel('backup'),
+    get label(): string {
+      return coreText(preserveStepLabelMessage('backup'));
+    },
     get description(): string {
       return t('preserve:step.backup.description');
     },
   },
   {
     id: 'patch',
-    /* i18n: core message (the step's name) */
-    label: preserveStepLabel('patch'),
+    get label(): string {
+      return coreText(preserveStepLabelMessage('patch'));
+    },
     get description(): string {
       return t('preserve:step.patch.description');
     },
   },
   {
     id: 'commit',
-    /* i18n: core message (the step's name) */
-    label: preserveStepLabel('commit'),
+    get label(): string {
+      return coreText(preserveStepLabelMessage('commit'));
+    },
     get description(): string {
       return t('preserve:step.commit.description');
     },
   },
   {
     id: 'drain',
-    /* i18n: core message (the step's name) */
-    label: preserveStepLabel('drain'),
+    get label(): string {
+      return coreText(preserveStepLabelMessage('drain'));
+    },
     get description(): string {
       return t('preserve:step.drain.description');
     },
   },
   {
     id: 'restore',
-    /* i18n: core message (the step's name) */
-    label: preserveStepLabel('restore'),
+    get label(): string {
+      return coreText(preserveStepLabelMessage('restore'));
+    },
     get description(): string {
       return t('preserve:step.restore.description');
     },
   },
   {
     id: 'verify',
-    /* i18n: core message (the step's name) */
-    label: preserveStepLabel('verify'),
+    get label(): string {
+      return coreText(preserveStepLabelMessage('verify'));
+    },
     get description(): string {
       return t('preserve:step.verify.description');
     },

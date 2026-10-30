@@ -108,3 +108,12 @@ export function paramText(param: CoreParam): string {
   if (param.join === 'and' || words.length < 2) return words.join(' and ');
   return `${words.slice(0, -1).join(', ')} and ${words.at(-1) ?? ''}`;
 }
+
+/**
+ * A sentence a saved file recorded twice (its English and its message), as a param: the message while it
+ * still says the recorded English, else the English. A file written before the message existed, or one
+ * whose English a caller replaced, keeps its own words.
+ */
+export function recordedParam(message: unknown, text: string): CoreMessage | string {
+  return isCoreMessage(message) && message.text === text ? message : text;
+}

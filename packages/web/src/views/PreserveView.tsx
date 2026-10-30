@@ -46,18 +46,22 @@ import {
   type PreserveBankChoice,
   type PreserveBankRecord,
   type PreserveChoiceVerdict,
+  bankChoiceWritesMessage,
   bankChoiceWritesWords,
-  preserveDoneWords,
-  preserveBuildWords,
-  preserveStepResultWords,
+  bankRecordMessage,
+  lastStartMessage,
+  nextStartMessage,
+  preserveDoneMessages,
+  preserveBuildParam,
+  preserveStepResultMessage,
   preserveStoppedForRestore,
-  PRESERVE_UNPATCHED_START_NEXT,
-  patchSiteWords,
-  stagedFormWords,
-  restoreFormWords,
-  drainCapabilityWords,
+  PRESERVE_UNPATCHED_START_NEXT_MESSAGE,
+  patchSiteMessage,
+  stagedFormMessage,
+  restoreFormMessage,
+  drainCapabilityMessage,
 } from '@seek-fw/core';
-import { recordedCoreText } from '@/lib/core-text';
+import { coreText, recordedCoreText, recordedText } from '@/lib/core-text';
 import { rich, t } from '@/i18n';
 import { bankList, bankName, bankWords } from '@/lib/bank-names';
 import { Panel, PanelTitle } from '@/components/Panel';
@@ -510,8 +514,7 @@ function PhaseSection({
       {notReady !== null && <p className="text-[0.8rem] text-muted-foreground">{notReady}</p>}
       {plannedStop && (
         <p className="text-[0.8rem] text-muted-foreground">
-          {/* i18n: core message */}
-          {PRESERVE_UNPATCHED_START_NEXT}
+          {coreText(PRESERVE_UNPATCHED_START_NEXT_MESSAGE)}
         </p>
       )}
       {gate.pastCommit && (
@@ -563,7 +566,6 @@ function PhaseSection({
       <Disclosure summary={t('preserve:phase.inDetail')}>
         {meta.steps.map((step) => (
           <p key={step}>
-            {/* i18n: core message (the step's name) */}
             <strong className="text-foreground">{stepMeta(step).label}.</strong>{' '}
             {stepMeta(step).description}
           </p>
@@ -698,7 +700,6 @@ function StepChips({
                     : 'size-3.5 text-muted-foreground'
               }
             />
-            {/* i18n: core message (the step's name) */}
             {stepMeta(step).label}
           </li>
         );
@@ -730,6 +731,11 @@ function choiceName(choice: PreserveBankChoice): string {
 }
 
 /** The choice as the menu names it: the banks it writes, or that it is not offered. */
+/** A choice's warnings in the language in use (core's English where a run file has no message). */
+function choiceWarningTexts(verdict: PreserveChoiceVerdict): string[] {
+  return verdict.warnings.map((text, at) => recordedText(verdict.warningMessages?.[at], text));
+}
+
 function choiceOption(verdict: PreserveChoiceVerdict): string {
   const choice = choiceName(verdict.choice);
   if (verdict.banks === null) return t('preserve:choice.notOffered', { choice });
@@ -762,12 +768,20 @@ function BankChoice({ state, busy, chooseBanks }: BankChoiceProps): ReactElement
   return (
     <Panel>
       <PanelTitle icon={<Layers />}>{t('preserve:banks.title')}</PanelTitle>
-      {/* i18n: core message (the boot rule, the last and next start) */}
       <KeyValue
         rows={[
-          [t('preserve:banks.bootWord'), `${hexUp(boot.word)} — ${boot.rule}`],
-          [t('preserve:banks.lastStart'), lastStartWords(boot)],
-          [t('preserve:banks.nextStart'), nextStartWords(boot)],
+          [
+            t('preserve:banks.bootWord'),
+            `${hexUp(boot.word)} — ${recordedText(boot.ruleMessage, boot.rule)}`,
+          ],
+          [
+            t('preserve:banks.lastStart'),
+            recordedText(lastStartMessage(boot), lastStartWords(boot)),
+          ],
+          [
+            t('preserve:banks.nextStart'),
+            recordedText(nextStartMessage(boot), nextStartWords(boot)),
+          ],
         ]}
       />
       <Table>
@@ -797,8 +811,7 @@ function BankChoice({ state, busy, chooseBanks }: BankChoiceProps): ReactElement
                   <code>{hexUp(bank.address, 8)}</code>
                 </TableCell>
                 <TableCell label={t('preserve:banks.col.holds')}>
-                  {/* i18n: core message */}
-                  {bankRecordWords(bank)}
+                  {recordedText(bankRecordMessage(bank), bankRecordWords(bank))}
                 </TableCell>
               </TableRow>
             );
@@ -823,10 +836,13 @@ function BankChoice({ state, busy, chooseBanks }: BankChoiceProps): ReactElement
         </Select>
       </Field>
       <p className="text-[0.85rem]" data-testid="preserve-banks-to-write">
-        {/* i18n: core message (the choice's `what`, bankChoiceWritesWords) */}
         {targets === undefined
-          ? t('preserve:banks.notChosen', { what: chosen.what })
-          : t('preserve:banks.writes', { what: bankChoiceWritesWords(chosen) })}
+          ? t('preserve:banks.notChosen', {
+              what: recordedText(chosen.whatMessage, chosen.what),
+            })
+          : t('preserve:banks.writes', {
+              what: recordedText(bankChoiceWritesMessage(chosen), bankChoiceWritesWords(chosen)),
+            })}
       </p>
       {fixed && <p className="text-[0.8rem] text-muted-foreground">{t('preserve:banks.fixed')}</p>}
       {verdicts.some((verdict) => verdict.banks === null) && (
@@ -835,19 +851,17 @@ function BankChoice({ state, busy, chooseBanks }: BankChoiceProps): ReactElement
             .filter((verdict) => verdict.banks === null)
             .map((verdict) => (
               <li key={verdict.choice}>
-                {/* i18n: core message (the verdict's `what`) */}
                 {t('preserve:banks.notOfferedLine', {
                   choice: choiceName(verdict.choice),
-                  why: verdict.what,
+                  why: recordedText(verdict.whatMessage, verdict.what),
                 })}
               </li>
             ))}
         </ul>
       )}
       {targets !== undefined &&
-        chosen.warnings.map((warning) => (
+        choiceWarningTexts(chosen).map((warning) => (
           <Alert key={warning} tone="warn">
-            {/* i18n: core message */}
             <p>{warning}</p>
           </Alert>
         ))}
@@ -861,7 +875,7 @@ function BankChoice({ state, busy, chooseBanks }: BankChoiceProps): ReactElement
 function PlanFromState({ state }: { readonly state: PreserveRunState }): ReactElement {
   const keys = patchedBanks(state);
   const targets = state.targets ?? [];
-  /* i18n: core message (the build's label or id) */
+  /* The build's name and id stay as they are. */
   const build = state.buildLabel ?? state.buildId ?? t('preserve:plan.yourCamera');
   return (
     <Disclosure
@@ -872,23 +886,38 @@ function PlanFromState({ state }: { readonly state: PreserveRunState }): ReactEl
       }
     >
       <p>{t('preserve:plan.intro')}</p>
-      {/* i18n: core message (every row's value) */}
       <KeyValue
         rows={[
-          [t('preserve:plan.build'), preserveBuildWords(state)],
+          [t('preserve:plan.build'), coreText(preserveBuildParam(state))],
           [t('preserve:plan.version'), state.expectedVersion ?? '?'],
           ...(state.stagedForm === undefined
             ? []
-            : [[t('preserve:plan.written'), stagedFormWords(state.stagedForm)] as const]),
+            : [
+                [
+                  t('preserve:plan.written'),
+                  coreText(stagedFormMessage(state.stagedForm)),
+                ] as const,
+              ]),
+          /* i18n: core message (the build's route note, from core's build table) */
           ...(state.route === 'recovery-only' && state.routeNote != null
             ? ([[t('preserve:plan.route'), state.routeNote]] as const)
             : []),
           ...(state.restoreForm === undefined
             ? []
-            : [[t('preserve:plan.restore'), restoreFormWords(state.restoreForm)] as const]),
+            : [
+                [
+                  t('preserve:plan.restore'),
+                  coreText(restoreFormMessage(state.restoreForm)),
+                ] as const,
+              ]),
           ...(state.capability === undefined
             ? []
-            : [[t('preserve:plan.wholeFlash'), drainCapabilityWords(state.capability)] as const]),
+            : [
+                [
+                  t('preserve:plan.wholeFlash'),
+                  coreText(drainCapabilityMessage(state.capability)),
+                ] as const,
+              ]),
         ]}
       />
       {keys.map((key) => (
@@ -939,7 +968,7 @@ function BankPlan({
             : [
                 [
                   t('preserve:bankPlan.edit'),
-                  /* i18n: core message (the edit's label) */
+                  /* The edit's name and id stay as they are. */
                   t('preserve:bankPlan.editValue', {
                     label: derivation.label,
                     id: derivation.id,
@@ -981,8 +1010,7 @@ function BankPlan({
         <TableBody>
           {patch.sites.map((site) => (
             <TableRow key={site.offset}>
-              {/* i18n: core message (the patch site's name) */}
-              <TableRowHeader>{patchSiteWords(site.name)}</TableRowHeader>
+              <TableRowHeader>{coreText(patchSiteMessage(site.name))}</TableRowHeader>
               <TableCell label={t('preserve:bankPlan.col.offset')}>
                 <code>{hexUp(site.offset)}</code>
               </TableCell>
@@ -1033,7 +1061,6 @@ function VerifyVerdict({
     return (
       <Alert tone="err">
         <p>
-          {/* i18n: core message (the step's recorded error: errorCode where core's error has one; none has yet) */}
           {rich('preserve:verify.failed', {
             params: {
               error:
@@ -1072,7 +1099,9 @@ function PhaseConfirm({ request, state, onConfirm, onCancel }: PhaseConfirmProps
   const banks = order.length === 0 ? t('preserve:confirm.chosenBanks') : bankList(order);
   const inOrder = order.length > 1;
   const warnings =
-    writing && state?.targets !== undefined ? preserveChoiceOf(state, state.choice).warnings : [];
+    writing && state?.targets !== undefined
+      ? choiceWarningTexts(preserveChoiceOf(state, state.choice))
+      : [];
   return (
     <AlertDialog
       open={request !== null}
@@ -1105,7 +1134,6 @@ function PhaseConfirm({ request, state, onConfirm, onCancel }: PhaseConfirmProps
               </span>
               {warnings.map((warning) => (
                 <span key={warning} className="block font-medium text-warn">
-                  {/* i18n: core message */}
                   {warning}
                 </span>
               ))}
@@ -1164,15 +1192,15 @@ function deliveredVerdict(check: DeliveredCheck | null): ReactNode {
 }
 
 function VerifySummary({ state, check, busy, onSave }: VerifySummaryProps): ReactElement {
-  const done = preserveDoneWords(state);
+  const done = preserveDoneMessages(state);
+  const verifyResult = preserveStepResultMessage(state, 'verify');
   return (
     <Section
       id="preserve-done"
       tone="ok"
-      /* i18n: core message (preserveDoneWords) */
-      title={done.title}
+      title={coreText(done.title)}
       icon={<CircleCheck />}
-      description={done.detail}
+      description={coreText(done.detail)}
     >
       <Panel>
         <PanelTitle icon={<CircleCheck />}>{t('preserve:summary.proof')}</PanelTitle>
@@ -1212,8 +1240,10 @@ function VerifySummary({ state, check, busy, onSave }: VerifySummaryProps): Reac
                   state.banks?.[key].imageSha256 ?? t('preserve:summary.notProduced'),
                 ] as const,
             ),
-            /* i18n: core message (the verify step's result) */
-            [t('preserve:summary.verify'), preserveStepResultWords(state, 'verify')],
+            [
+              t('preserve:summary.verify'),
+              verifyResult === null ? null : recordedText(verifyResult, verifyResult.text),
+            ],
           ]}
         />
       </Panel>

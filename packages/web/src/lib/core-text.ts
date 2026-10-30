@@ -14,7 +14,13 @@
  * shows core's English.
  */
 
-import { isCoreMessage, type BootPolicy, type CoreMessage, type CoreParam } from '@seek-fw/core';
+import {
+  isCoreMessage,
+  recordedParam,
+  type BootPolicy,
+  type CoreMessage,
+  type CoreParam,
+} from '@seek-fw/core';
 import { listAnd, listComma, t, type Translate } from '@/i18n';
 import { en } from '@/i18n/locales/en';
 import { bankName, bankWords } from '@/lib/bank-names';
@@ -109,4 +115,13 @@ export function recordedCoreText(
   } catch {
     return text;
   }
+}
+
+/**
+ * A sentence a run file recorded as English with a message beside it (a bank's refusal, the boot facts'
+ * why), or one core builds from such a file: the message while it still says `text` and renders, else
+ * `text`.
+ */
+export function recordedText(message: unknown, text: string, translate: Translate = t): string {
+  return recordedCoreText(recordedParam(message, text), text, translate) ?? text;
 }

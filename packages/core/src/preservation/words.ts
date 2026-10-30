@@ -13,6 +13,15 @@ import { hexUp } from '../bytes.js';
 import { bankListWords } from './banks.js';
 import type { DrainCapability, RestoreFormId, StagedFormId } from './patch.js';
 import type { BankKey } from './windows.js';
+import {
+  bankParam,
+  coreMessage,
+  listParam,
+  paramText,
+  recordedParam,
+  type CoreMessage,
+  type CoreParam,
+} from '../message.js';
 
 /** The code names people's text must not carry: the tests hold every line against these. */
 export const PRESERVE_CODE_NAMES: readonly RegExp[] = [
@@ -44,10 +53,22 @@ export function preserveBuildWords(state: {
   readonly buildLabel?: string | undefined;
   readonly expectedVersion?: string | undefined;
 }): string {
+  return paramText(preserveBuildParam(state));
+}
+
+/** `preserveBuildWords` as a param, for the page: the build's label is a name and stays as it is. */
+export function preserveBuildParam(state: {
+  readonly buildLabel?: string | undefined;
+  readonly expectedVersion?: string | undefined;
+}): CoreMessage | string {
   if (state.buildLabel !== undefined) return state.buildLabel;
   return state.expectedVersion === undefined
-    ? 'not known yet'
-    : `firmware ${state.expectedVersion}`;
+    ? coreMessage('preserve.build.notKnown', {}, 'not known yet')
+    : coreMessage(
+        'preserve.build.firmware',
+        { version: state.expectedVersion },
+        `firmware ${state.expectedVersion}`,
+      );
 }
 
 /**
@@ -77,54 +98,110 @@ export function bankDerivedWords(bank: BankKey, method: string, buildLabel: stri
 
 /** How a written bank is sent to the camera and put back, from the staged-form id. */
 export function stagedFormWords(form: StagedFormId): string {
+  return stagedFormMessage(form).text;
+}
+
+/** `stagedFormWords` as a message, for the page. */
+export function stagedFormMessage(form: StagedFormId): CoreMessage {
   switch (form) {
     case 'plain':
-      return 'as the camera stores it (this camera keeps its firmware unencrypted)';
+      return coreMessage(
+        'preserve.stagedForm.plain',
+        {},
+        'as the camera stores it (this camera keeps its firmware unencrypted)',
+      );
     case 'xor-ks0':
-      return "in the form the camera stores it (encrypted under the camera's key)";
+      return coreMessage(
+        'preserve.stagedForm.oneKey',
+        {},
+        "in the form the camera stores it (encrypted under the camera's key)",
+      );
     case 'xor-ks0-ksD':
-      return "in the form the camera stores it (encrypted under the camera's two keys)";
+      return coreMessage(
+        'preserve.stagedForm.twoKeys',
+        {},
+        "in the form the camera stores it (encrypted under the camera's two keys)",
+      );
   }
 }
 
 /** The plan's restore row: can the run put a written bank back exactly? */
 export function restoreFormWords(form: RestoreFormId): string {
+  return restoreFormMessage(form).text;
+}
+
+/** `restoreFormWords` as a message, for the page. */
+export function restoreFormMessage(form: RestoreFormId): CoreMessage {
   switch (form) {
     case 'capture-verbatim':
-      return 'each written bank gets back the exact bytes the backup read from it';
+      return coreMessage(
+        'preserve.restoreForm.verbatim',
+        {},
+        'each written bank gets back the exact bytes the backup read from it',
+      );
     case 'factory-staged':
-      return (
+      return coreMessage(
+        'preserve.restoreForm.factoryStaged',
+        {},
         'each written bank gets back its original firmware, written in the form the camera ' +
-        'stores it, so the bank ends byte for byte as the backup read it'
+          'stores it, so the bank ends byte for byte as the backup read it',
       );
     case 'none':
-      return (
+      return coreMessage(
+        'preserve.restoreForm.none',
+        {},
         'not possible on this build: no form of the original firmware passes the camera’s own ' +
-        'check and also stores back as the original bytes, so the run ends with the complete ' +
-        'image and the patch still in place'
+          'check and also stores back as the original bytes, so the run ends with the complete ' +
+          'image and the patch still in place',
       );
   }
 }
 
 /** The plan's drain row: what the whole-flash read can promise on this build. */
 export function drainCapabilityWords(capability: DrainCapability): string {
+  return drainCapabilityMessage(capability).text;
+}
+
+/** `drainCapabilityWords` as a message, for the page. */
+export function drainCapabilityMessage(capability: DrainCapability): CoreMessage {
   if (!capability.wholePart) {
-    return (
+    return coreMessage(
+      'preserve.drain.notPossible',
+      {},
       'not possible on this build: the patched firmware cannot read the whole flash, so the run ' +
-      'has no complete image to give'
+        'has no complete image to give',
     );
   }
-  const notes: string[] = [];
+  const notes: CoreMessage[] = [];
   if (capability.rotation !== undefined) {
-    notes.push('the camera serves it rotated, and the run puts it back in order');
+    notes.push(
+      coreMessage(
+        'preserve.drain.rotated',
+        {},
+        'the camera serves it rotated, and the run puts it back in order',
+      ),
+    );
   }
   if (capability.modeTwoHazardSites !== undefined) {
-    notes.push('the patch avoids a read on this build that crashes the camera');
+    notes.push(
+      coreMessage(
+        'preserve.drain.hazard',
+        {},
+        'the patch avoids a read on this build that crashes the camera',
+      ),
+    );
   }
-  return (
-    `the whole 4 MiB flash in one read, ${String(capability.losslessReadUnit)} bytes at a time` +
-    (notes.length === 0 ? '' : `; ${notes.join('; ')}`)
-  );
+  const size = String(capability.losslessReadUnit);
+  const text =
+    `the whole 4 MiB flash in one read, ${size} bytes at a time` +
+    (notes.length === 0 ? '' : `; ${notes.map((note) => note.text).join('; ')}`);
+  return notes.length === 0
+    ? coreMessage('preserve.drain.whole', { size }, text)
+    : coreMessage(
+        'preserve.drain.wholeNotes',
+        { size, notes: listParam(notes, 'semicolon') },
+        text,
+      );
 }
 
 /**
@@ -132,35 +209,58 @@ export function drainCapabilityWords(capability: DrainCapability): string {
  * its first " (", as the run file keeps it) stays in JSON.
  */
 export function patchSiteWords(name: string): string {
+  return patchSiteMessage(name).text;
+}
+
+/** `patchSiteWords` as a message, for the page. */
+export function patchSiteMessage(name: string): CoreMessage {
+  const said = (code: string, text: string): CoreMessage =>
+    coreMessage(`preserve.site.${code}`, {}, text);
   if (name.includes('mov.w r3,#0x10000 -> #0x400000')) {
-    return "lets the camera's read command reach the whole 4 MiB flash, not just the first 64 KiB";
+    return said(
+      'wholeFlash',
+      "lets the camera's read command reach the whole 4 MiB flash, not just the first 64 KiB",
+    );
   }
   if (name.startsWith('ldrh r1,')) {
-    return 'lets the read position count past 64 KiB, so a read does not wrap back to the start';
+    return said(
+      'countPast',
+      'lets the read position count past 64 KiB, so a read does not wrap back to the start',
+    );
   }
   if (name.startsWith('ldrh r2,')) {
-    return 'keeps the whole read position when it moves on after each read';
+    return said('keepPosition', 'keeps the whole read position when it moves on after each read');
   }
-  if (name.startsWith('strh r3,')) return 'saves the moved-on read position in full';
+  if (name.startsWith('strh r3,')) {
+    return said('savePosition', 'saves the moved-on read position in full');
+  }
   if (name.startsWith('strh r5,')) {
-    return (
+    return said(
+      'clearPosition',
       'clears the whole read position each time a read starts, so the camera can still be ' +
-      'read after the whole-flash read'
+        'read after the whole-flash read',
     );
   }
   if (name.startsWith('mode-2 guard')) {
-    return 'lets the whole-flash read start like any other read (the stock firmware turns it away)';
+    return said(
+      'modeTwoGuard',
+      'lets the whole-flash read start like any other read (the stock firmware turns it away)',
+    );
   }
   if (name.startsWith('mode-2 indirection')) {
-    return (
+    return said(
+      'modeTwoIndirection',
       'points the whole-flash read at the start of the flash (the stock firmware points it at a ' +
-      'value that crashes the camera)'
+        'value that crashes the camera)',
     );
   }
   if (name.startsWith('arm-tail hook')) {
-    return 'removes a call that freezes the camera when a read starts on this build';
+    return said(
+      'armTail',
+      'removes a call that freezes the camera when a read starts on this build',
+    );
   }
-  return 'changes one instruction the whole-flash read needs';
+  return said('other', 'changes one instruction the whole-flash read needs');
 }
 
 /* ---- the block reads: one line for the sweep, one more per block that differs ---------- */
@@ -236,7 +336,12 @@ export interface PreserveWordsState {
   readonly steps: Partial<
     Record<
       'backup' | 'patch' | 'commit' | 'drain' | 'restore' | 'verify',
-      { readonly status: 'done' | 'failed'; readonly error?: string | undefined } | undefined
+      | {
+          readonly status: 'done' | 'failed';
+          readonly error?: string | undefined;
+          readonly errorCode?: CoreMessage | undefined;
+        }
+      | undefined
     >
   >;
 }
@@ -257,9 +362,24 @@ export function preserveStepResultWords(
   state: PreserveWordsState,
   step: 'backup' | 'patch' | 'commit' | 'drain' | 'restore' | 'verify',
 ): string | null {
+  return preserveStepResultMessage(state, step)?.text ?? null;
+}
+
+/** `preserveStepResultWords` as a message, for the page. */
+export function preserveStepResultMessage(
+  state: PreserveWordsState,
+  step: 'backup' | 'patch' | 'commit' | 'drain' | 'restore' | 'verify',
+): CoreMessage | null {
   const record = state.steps[step];
   if (record === undefined) return null;
-  const label = STEP_LABEL[step];
+  const label = preserveStepLabelMessage(step);
+  const said = (code: string, params: Record<string, CoreParam>, text: string): CoreMessage =>
+    coreMessage(`preserve.result.${code}`, { label, ...params }, `${label.text}: ${text}`);
+  const banks = (keys: readonly BankKey[]): CoreParam =>
+    listParam(
+      keys.map((key) => bankParam(key)),
+      'commaAnd',
+    );
   if (record.status === 'failed') {
     /* The planned stop (the start entered a bank the run did not patch) was said in full when it
      * happened; the result says it in one clause, not a third copy (TESTING.md 42.105). */
@@ -270,69 +390,134 @@ export function preserveStepResultWords(
       entered !== null &&
       !(state.targets ?? []).includes(entered)
     ) {
-      return (
-        `${label}: stopped as planned — the camera started ${bankWordsOf(entered)}, which this ` +
-        'run did not patch, so nothing was read.'
+      return said(
+        'stoppedPlanned',
+        { bank: bankParam(entered) },
+        `stopped as planned — the camera started ${bankWordsOf(entered)}, which this ` +
+          'run did not patch, so nothing was read.',
       );
     }
-    return `${label}: stopped — ${record.error ?? 'no reason was recorded'}`;
+    const error =
+      record.error === undefined
+        ? coreMessage('preserve.result.noReason', {}, 'no reason was recorded')
+        : recordedParam(record.errorCode, record.error);
+    return said('stopped', { error }, `stopped — ${paramText(error)}`);
   }
   const targets = state.targets ?? [];
   switch (step) {
     case 'backup': {
       const writable = writableOf(state);
       const next = state.boot?.nextStart;
-      return (
-        `${label}: every block a normal read reaches was saved; ` +
-        (writable.length === 0
-          ? 'no bank holds firmware the run can patch'
-          : `${bankListWords(writable)} hold${writable.length === 1 ? 's' : ''} firmware the ` +
-            'run can patch') +
-        (next === undefined
-          ? '.'
-          : `; the next start enters ${next === null ? 'a bank that is not known' : bankWordsOf(next)}.`)
+      const holds =
+        writable.length === 0
+          ? coreMessage(
+              'preserve.result.writable.none',
+              {},
+              'no bank holds firmware the run can patch',
+            )
+          : coreMessage(
+              writable.length === 1
+                ? 'preserve.result.writable.one'
+                : 'preserve.result.writable.many',
+              { banks: banks(writable) },
+              `${bankListWords(writable)} hold${writable.length === 1 ? 's' : ''} firmware the ` +
+                'run can patch',
+            );
+      if (next === undefined) {
+        return said(
+          'backup',
+          { writable: holds },
+          `every block a normal read reaches was saved; ${holds.text}.`,
+        );
+      }
+      const enters =
+        next === null
+          ? coreMessage('preserve.result.nextUnknown', {}, 'a bank that is not known')
+          : bankParam(next);
+      return said(
+        'backupNext',
+        { writable: holds, next: enters },
+        `every block a normal read reaches was saved; ${holds.text}; the next start enters ` +
+          `${paramText(enters)}.`,
       );
     }
     case 'patch': {
-      const banks = state.banks;
-      const counts = writableOf(state).map((key) => banks?.[key].patch?.diffCount ?? 0);
+      const records = state.banks;
+      const writable = writableOf(state);
+      const counts = writable.map((key) => records?.[key].patch?.diffCount ?? 0);
       const same = counts.every((count) => count === counts[0]);
-      return (
-        `${label}: built for ${bankListWords(writableOf(state))}` +
-        (counts.length > 0 && same ? `; ${String(counts[0])} bytes change in each.` : '.')
-      );
+      return counts.length > 0 && same
+        ? said(
+            'patchCount',
+            { banks: banks(writable), count: String(counts[0]) },
+            `built for ${bankListWords(writable)}; ${String(counts[0])} bytes change in each.`,
+          )
+        : said('patch', { banks: banks(writable) }, `built for ${bankListWords(writable)}.`);
     }
     case 'commit':
-      return (
-        `${label}: ${bankListWords(targets)} written with the patch, and the camera accepted ` +
-        (targets.length === 1 ? 'it.' : 'each.')
+      return said(
+        targets.length === 1 ? 'commitOne' : 'commitMany',
+        { banks: banks(targets) },
+        `${bankListWords(targets)} written with the patch, and the camera accepted ` +
+          (targets.length === 1 ? 'it.' : 'each.'),
       );
-    case 'drain':
-      return state.deliveredSha256 === undefined
-        ? `${label}: not read.`
-        : `${label}: the whole 4 MiB flash was read` +
-            (state.drainEntered === undefined || state.drainEntered === null
-              ? ''
-              : ` through ${bankWordsOf(state.drainEntered)}`) +
-            `; the complete image has sha256 ${state.deliveredSha256}.`;
-    case 'restore':
-      return (
-        `${label}: ${bankListWords(targets)} written back` +
-        (state.stagedForm === undefined ? '' : ` ${stagedFormWords(state.stagedForm)}`) +
-        '.'
+    case 'drain': {
+      const sha256 = state.deliveredSha256;
+      if (sha256 === undefined) return said('drainNotRead', {}, 'not read.');
+      const through = state.drainEntered;
+      return through === undefined || through === null
+        ? said(
+            'drain',
+            { sha256 },
+            `the whole 4 MiB flash was read; the complete image has sha256 ${sha256}.`,
+          )
+        : said(
+            'drainThrough',
+            { bank: bankParam(through), sha256 },
+            `the whole 4 MiB flash was read through ${bankWordsOf(through)}; the complete ` +
+              `image has sha256 ${sha256}.`,
+          );
+    }
+    case 'restore': {
+      if (state.stagedForm === undefined) {
+        return said(
+          'restore',
+          { banks: banks(targets) },
+          `${bankListWords(targets)} written back.`,
+        );
+      }
+      const form = stagedFormMessage(state.stagedForm);
+      return said(
+        'restoreForm',
+        { banks: banks(targets), form },
+        `${bankListWords(targets)} written back ${form.text}.`,
       );
+    }
     case 'verify': {
       const verify = state.verify;
-      if (verify === undefined) return `${label}: done.`;
-      return verify.diffBytes === 0 && verify.badWindows.length === 0
-        ? `${label}: ${String(verify.windowsRead)} blocks read again, 0 bytes differ — the ` +
-            "camera's flash is byte-identical to the backup."
-        : `${label}: ${String(verify.windowsRead)} blocks read again, ${String(verify.diffBytes)} ` +
-            `bytes differ` +
-            (verify.badWindows.length === 0
-              ? ''
-              : `, ${String(verify.badWindows.length)} block(s) could not be read`) +
-            '.';
+      if (verify === undefined) return said('verifyDone', {}, 'done.');
+      const blocks = String(verify.windowsRead);
+      if (verify.diffBytes === 0 && verify.badWindows.length === 0) {
+        return said(
+          'verifyIdentical',
+          { blocks },
+          `${blocks} blocks read again, 0 bytes differ — the ` +
+            "camera's flash is byte-identical to the backup.",
+        );
+      }
+      const bytes = String(verify.diffBytes);
+      return verify.badWindows.length === 0
+        ? said(
+            'verifyDiffers',
+            { blocks, bytes },
+            `${blocks} blocks read again, ${bytes} bytes differ.`,
+          )
+        : said(
+            'verifyDiffersUnread',
+            { blocks, bytes, unread: String(verify.badWindows.length) },
+            `${blocks} blocks read again, ${bytes} bytes differ, ` +
+              `${String(verify.badWindows.length)} block(s) could not be read.`,
+          );
     }
   }
 }
@@ -351,6 +536,13 @@ export function preserveStepLabel(
   step: 'backup' | 'patch' | 'commit' | 'drain' | 'restore' | 'verify',
 ): string {
   return STEP_LABEL[step];
+}
+
+/** `preserveStepLabel` as a message, for the page. */
+export function preserveStepLabelMessage(
+  step: 'backup' | 'patch' | 'commit' | 'drain' | 'restore' | 'verify',
+): CoreMessage {
+  return coreMessage(`preserve.step.${step}`, {}, STEP_LABEL[step]);
 }
 
 /** The site's addresses, kept for callers that print one site per line. */

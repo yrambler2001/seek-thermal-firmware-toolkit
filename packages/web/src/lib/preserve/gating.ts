@@ -23,7 +23,8 @@
  * replaying a write that may already be on the camera.
  */
 
-import { drainCapabilityWords, preserveBuildWords, preserveChoiceOf } from '@seek-fw/core';
+import { drainCapabilityMessage, preserveBuildParam, preserveChoiceOf } from '@seek-fw/core';
+import { coreText, recordedText } from '@/lib/core-text';
 import { t, type Translate } from '@/i18n';
 import { bankWords } from '@/lib/bank-names';
 import {
@@ -91,7 +92,9 @@ export interface PreserveGateInput {
 const done = (state: PreserveRunState, step: PreserveStepId): boolean =>
   state.steps[step]?.status === 'done';
 
-const buildName = (state: PreserveRunState): string => preserveBuildWords(state);
+/* The build's name stays as it is; "not known yet" and "firmware …" are core's words. */
+const buildName = (state: PreserveRunState, translate: Translate): string =>
+  coreText(preserveBuildParam(state), translate);
 
 /** What the chosen banks lack, in core's order: the banks the backup read, a
  *  resolved choice, and each chosen bank writable (and, on a recovery-only
@@ -102,18 +105,21 @@ function targetGaps(state: PreserveRunState, translate: Translate): string[] {
   }
   const targets = state.targets;
   if (targets === undefined || targets.length === 0) {
-    /* i18n: core message (the choice's `what`) */
-    return [translate('preserve:gate.choice', { why: preserveChoiceOf(state, state.choice).what })];
+    const verdict = preserveChoiceOf(state, state.choice);
+    return [
+      translate('preserve:gate.choice', {
+        why: recordedText(verdict.whatMessage, verdict.what, translate),
+      }),
+    ];
   }
   const out: string[] = [];
   for (const key of targets) {
     const refused = state.banks[key].refused;
-    /* i18n: core message (`refused`) */
     if (refused !== null) {
       out.push(
         translate('preserve:gate.bankRefused', {
           bank: bankWords(key, translate),
-          reason: refused,
+          reason: recordedText(state.banks[key].refusedMessage, refused, translate),
         }),
       );
     }
@@ -229,11 +235,10 @@ export function canRunPhase(input: PreserveGateInput): PreserveGate {
         want('commit', translate('preserve:gate.writeStep'));
         missing.push(...targetGaps(state, translate));
         if (state.capability !== undefined && !state.capability.wholePart) {
-          /* i18n: core message (the build's name, the capability) */
           missing.push(
             translate('preserve:gate.drainRefused', {
-              build: buildName(state),
-              why: drainCapabilityWords(state.capability),
+              build: buildName(state, translate),
+              why: coreText(drainCapabilityMessage(state.capability), translate),
             }),
           );
         }
@@ -253,8 +258,9 @@ export function canRunPhase(input: PreserveGateInput): PreserveGate {
           }
         }
         if (state.restoreForm === 'none') {
-          /* i18n: core message (the build's name) */
-          missing.push(translate('preserve:gate.restoreRefused', { build: buildName(state) }));
+          missing.push(
+            translate('preserve:gate.restoreRefused', { build: buildName(state, translate) }),
+          );
         }
         for (const key of targetsOf(state)) {
           if (

@@ -86,7 +86,7 @@ import {
   viewOf,
 } from '../bytes.js';
 import { CancelledError, SeekError } from '../errors.js';
-import { bankParam, coreMessage, listParam, paramText } from '../message.js';
+import { bankParam, coreMessage, listParam, paramText, recordedParam } from '../message.js';
 import type { Artifact, Reporter } from '../events.js';
 import { HEADER_OFFSET, HEADER_SIZE, IMAGE_MAGIC, parseImageHeader } from '../image/header.js';
 import { FLASH_BASE, FLASH_SIZE } from '../profiles/modern-4x.js';
@@ -478,7 +478,13 @@ export function choosePreserveBanks(
     throw new SeekError('pipeline/refused', message.text, { coreMessage: message });
   }
   const verdict = preserveChoiceOf(state, choice);
-  if (verdict.banks === null) throw new SeekError('pipeline/refused', verdict.what);
+  if (verdict.banks === null) {
+    throw new SeekError(
+      'pipeline/refused',
+      verdict.what,
+      verdict.whatMessage === undefined ? {} : { coreMessage: verdict.whatMessage },
+    );
+  }
   return { ...state, choice, targets: verdict.banks };
 }
 
@@ -902,9 +908,13 @@ export function unpatchedStartOf(error: unknown): BankKey | null {
 }
 
 /** What a front end says of that stop, in place of a failure: the run planned for it. */
-export const PRESERVE_UNPATCHED_START_STOP =
+export const PRESERVE_UNPATCHED_START_STOP_MESSAGE: CoreMessage = coreMessage(
+  'preserve.unpatchedStart.stop',
+  {},
   'Stopped before the whole-flash read: the camera started a bank this run did not patch, so ' +
-  'nothing was read.';
+    'nothing was read.',
+);
+export const PRESERVE_UNPATCHED_START_STOP = PRESERVE_UNPATCHED_START_STOP_MESSAGE.text;
 
 /**
  * Whether the run's whole-flash read stopped as planned (the start entered a bank the run did
@@ -916,9 +926,13 @@ export function preserveStoppedForRestore(state: PreserveRunState): boolean {
 }
 
 /** The action after that stop, in words: the restore, not the read again. */
-export const PRESERVE_UNPATCHED_START_NEXT =
+export const PRESERVE_UNPATCHED_START_NEXT_MESSAGE: CoreMessage = coreMessage(
+  'preserve.unpatchedStart.next',
+  {},
   'Next: the restore puts every written bank back. The whole-flash read is not tried again: ' +
-  'the camera would start the same bank.';
+    'the camera would start the same bank.',
+);
+export const PRESERVE_UNPATCHED_START_NEXT = PRESERVE_UNPATCHED_START_NEXT_MESSAGE.text;
 
 /**
  * The run's ending, for the last screen and the last lines: a run whose whole-flash read ran
@@ -929,22 +943,46 @@ export function preserveDoneWords(state: PreserveRunState): {
   readonly title: string;
   readonly detail: string;
 } {
+  const done = preserveDoneMessages(state);
+  return { title: done.title.text, detail: done.detail.text };
+}
+
+/** `preserveDoneWords` as messages, for the page. */
+export function preserveDoneMessages(state: PreserveRunState): {
+  readonly title: CoreMessage;
+  readonly detail: CoreMessage;
+} {
   if (state.deliveredSha256 !== undefined) {
     return {
-      title: 'Done — your firmware is preserved',
-      detail:
+      title: coreMessage('preserve.done.title', {}, 'Done — your firmware is preserved'),
+      detail: coreMessage(
+        'preserve.done.detail',
+        {},
         "The complete image is the camera's whole original flash, and the camera itself is back " +
-        'exactly as it was.',
+          'exactly as it was.',
+      ),
     };
   }
   const blocks = state.verify === undefined ? '' : ` ${String(state.verify.windowsRead)}`;
+  const detail =
+    'The whole-flash read did not run, so this run has no complete image of the flash. Every ' +
+    `written bank was put back, and a fresh read of the${blocks} blocks a normal dump reaches ` +
+    'matches the backup. For the complete image, start a new run with a choice that includes ' +
+    'the bank the next start enters.';
   return {
-    title: 'Done — the camera is back as it was; there is no complete image',
+    title: coreMessage(
+      'preserve.done.titleNoImage',
+      {},
+      'Done — the camera is back as it was; there is no complete image',
+    ),
     detail:
-      'The whole-flash read did not run, so this run has no complete image of the flash. Every ' +
-      `written bank was put back, and a fresh read of the${blocks} blocks a normal dump reaches ` +
-      'matches the backup. For the complete image, start a new run with a choice that includes ' +
-      'the bank the next start enters.',
+      state.verify === undefined
+        ? coreMessage('preserve.done.detailNoImage', {}, detail)
+        : coreMessage(
+            'preserve.done.detailNoImageCount',
+            { blocks: String(state.verify.windowsRead) },
+            detail,
+          ),
   };
 }
 
@@ -960,11 +998,8 @@ async function gateVersion(device: SeekDevice, state: PreserveRunState): Promise
     fail('the run state carries no expected version — the backup step has not derived the image');
   }
   if (version !== state.expectedVersion) {
-    throw new SeekError(
-      'pipeline/refused',
-      `the camera reports firmware ${version}, want ${state.expectedVersion} — the patch is ` +
-        "derived from one build's bytes and must not be sent to another",
-    );
+    const message = preserveOtherVersionMessage(version, state.expectedVersion);
+    throw new SeekError('pipeline/refused', message.text, { coreMessage: message });
   }
   applyReaderOp(device, version);
   return version;
@@ -1597,6 +1632,59 @@ function logDerived(reporter: Reporter, bank: BankKey, derived: Derived): void {
 }
 
 /** Another bank's two reads and derivation: never refuses the backup. */
+/** The reasons the backup records for a bank the run cannot write, as messages (`refused` is the text). */
+export const PRESERVE_BANK_REFUSAL = {
+  secondRead: (error: unknown): CoreMessage => {
+    const why = error instanceof Error ? error.message : String(error);
+    return coreMessage(
+      'preserve.refused.secondRead',
+      { error: recordedParam(errorCoreMessage(error), why) },
+      `its second read failed (${why})`,
+    );
+  },
+  readsDisagree: (first: string, second: string): CoreMessage =>
+    coreMessage(
+      'preserve.refused.readsDisagree',
+      { sha256: first, other: second },
+      `its two reads disagree (sha256 ${first} vs ${second})`,
+    ),
+  erased: (): CoreMessage => coreMessage('preserve.refused.erased', {}, 'it is erased'),
+  watchdogMark: (mark: number): CoreMessage =>
+    coreMessage(
+      'preserve.refused.watchdogMark',
+      { word: hexUp(mark) },
+      `its header word at +0x200 holds ${hexUp(mark)}, the mark the bootloader writes ` +
+        'over a bank after a watchdog reset early in a start; the bootloader no longer ' +
+        'takes this bank, and the run has no image to patch there',
+    ),
+  noHeader: (): CoreMessage =>
+    coreMessage('preserve.refused.noHeader', {}, 'it holds no image header at +0x200'),
+  otherBuild: (image: string, id: string, camera: string): CoreMessage =>
+    coreMessage(
+      'preserve.refused.otherBuild',
+      { image, id, camera },
+      `it holds ${image} (${id}), not the build the camera runs (${camera})`,
+    ),
+  otherKey: (): CoreMessage =>
+    coreMessage(
+      'preserve.refused.otherKey',
+      {},
+      'the bootloader’s check refuses it: it is stored under another key than the one this ' +
+        'camera’s bootloader checks banks under, and a write through the camera would store ' +
+        'it under that key, so the restore could not put its exact bytes back',
+    ),
+} as const;
+
+/** The refusal when the camera runs another build than the run's: the patch is that build's alone. */
+export function preserveOtherVersionMessage(camera: string, want: string): CoreMessage {
+  return coreMessage(
+    'preserve.error.otherVersion',
+    { camera, version: want },
+    `the camera reports firmware ${camera}, want ${want} — the patch is ` +
+      "derived from one build's bytes and must not be sent to another",
+  );
+}
+
 interface OtherCapture {
   readonly holds: BankHolds;
   readonly bytes: Uint8Array;
@@ -1604,6 +1692,8 @@ interface OtherCapture {
   readonly derived: Derived | null;
   /** Why the run cannot write this bank, before the build and key rules. */
   readonly refused: string | null;
+  /** `refused` as a message, for the page. */
+  readonly refusedMessage?: CoreMessage;
 }
 
 async function captureOther(
@@ -1636,6 +1726,7 @@ async function captureOther(
       slotReadShas: null,
       derived: null,
       refused: `its second read failed (${why})`,
+      refusedMessage: PRESERVE_BANK_REFUSAL.secondRead(error),
     };
   }
   const shas: readonly [string, string] = [await sha256hex(row), await sha256hex(fresh)];
@@ -1650,6 +1741,7 @@ async function captureOther(
       slotReadShas: shas,
       derived: null,
       refused: `its two reads disagree (sha256 ${shas[0]} vs ${shas[1]})`,
+      refusedMessage: PRESERVE_BANK_REFUSAL.readsDisagree(shas[0], shas[1]),
     };
   }
   reporter.log(
@@ -1659,16 +1751,15 @@ async function captureOther(
   const holds = bankHoldsOf(row);
   if (holds !== 'image') {
     const mark = warmBootMarkOf(row);
-    const refused =
+    const refusedMessage =
       holds === 'erased'
-        ? 'it is erased'
+        ? PRESERVE_BANK_REFUSAL.erased()
         : mark !== null
-          ? `its header word at +0x200 holds ${hexUp(mark)}, the mark the bootloader writes ` +
-            'over a bank after a watchdog reset early in a start; the bootloader no longer ' +
-            'takes this bank, and the run has no image to patch there'
-          : 'it holds no image header at +0x200';
+          ? PRESERVE_BANK_REFUSAL.watchdogMark(mark)
+          : PRESERVE_BANK_REFUSAL.noHeader();
+    const refused = refusedMessage.text;
     reporter.log(`${words}: ${refused}`, 'detail');
-    return { holds, bytes: row, slotReadShas: shas, derived: null, refused };
+    return { holds, bytes: row, slotReadShas: shas, derived: null, refused, refusedMessage };
   }
   try {
     const derived = deriveFactoryImage(row, version, bank);
@@ -1854,10 +1945,14 @@ async function runBackupStep(
     const other = others.get(key);
     const derived = other === undefined ? anchorRead.derived : other.derived;
     let refused: string | null = other === undefined ? null : other.refused;
+    let refusedMessage: CoreMessage | undefined = other?.refusedMessage;
     if (refused === null && derived !== null && derived.patch.buildId !== anchorPatch.buildId) {
-      refused =
-        `it holds ${derived.patch.label} (${derived.patch.buildId}), not the build the camera ` +
-        `runs (${anchorPatch.label})`;
+      refusedMessage = PRESERVE_BANK_REFUSAL.otherBuild(
+        derived.patch.label,
+        derived.patch.buildId,
+        anchorPatch.label,
+      );
+      refused = refusedMessage.text;
     }
     if (refused === null && anchorPatch.route === 'recovery-only' && key !== 'r') {
       refused = `this build runs only from recovery R: ${anchorPatch.routeNote ?? ''}`;
@@ -1868,10 +1963,8 @@ async function runBackupStep(
       anchorPatch.family === 'compact-2016' &&
       boot.verdicts[key] === false
     ) {
-      refused =
-        'the bootloader’s check refuses it: it is stored under another key than the one this ' +
-        'camera’s bootloader checks banks under, and a write through the camera would store ' +
-        'it under that key, so the restore could not put its exact bytes back';
+      refusedMessage = PRESERVE_BANK_REFUSAL.otherKey();
+      refused = refusedMessage.text;
     }
     const capture = other === undefined ? anchorRead.capture : other.bytes;
     const shas = other === undefined ? anchorRead.slotReadShas : other.slotReadShas;
@@ -1880,6 +1973,7 @@ async function runBackupStep(
       ...base,
       holds,
       refused,
+      ...(refusedMessage?.text === refused ? { refusedMessage } : {}),
       ...(shas === null ? {} : { slotReadShas: shas }),
       ...(derived === null
         ? {}

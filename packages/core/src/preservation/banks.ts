@@ -37,11 +37,21 @@ import {
   bankWordsOf,
   lockedBootOrder,
   lockedBootRule,
+  lockedBootRuleMessage,
   selectLockedBoot,
   type BootVerdict,
 } from '../profiles/locked-boot.js';
+import {
+  bankParam,
+  coreMessage,
+  listParam,
+  paramText,
+  recordedParam,
+  type CoreMessage,
+  type CoreParam,
+} from '../message.js';
 import { getProfile } from '../profiles/registry.js';
-import { CHECK_KEY_UNNAMED_VERDICT } from '../slots/boot-choice.js';
+import { CHECK_KEY_UNNAMED_VERDICT_MESSAGE } from '../slots/boot-choice.js';
 import { plainBankVerdict } from '../slots/running.js';
 import { checkKeyOf, type CheckKeyBank } from '../workflows/device-info.js';
 import type { PreservePatchSummary, PreserveRunState } from './steps.js';
@@ -129,11 +139,18 @@ export interface PreserveBootFacts {
   readonly nextStart: BankKey | null;
   /** One sentence: the word's rule and the bank it gives, or what could not be checked. */
   readonly why: string;
+  /** `rule` and `why` as messages, for the page (a run file written before them has only the English). */
+  readonly ruleMessage?: CoreMessage;
+  readonly whyMessage?: CoreMessage;
   /** 2016 only: why the key the bootloader checks banks under could not be named; null when it was. */
   readonly checkKeyUnnamed: string | null;
 }
 
-const UNSETTLED_VERDICT = 'could not be read the same way twice';
+export const UNSETTLED_VERDICT: CoreMessage = coreMessage(
+  'boot.verdict.unsettled',
+  {},
+  'could not be read the same way twice',
+);
 
 /** The 2014 bootloader's check (image_sum_ok on the stored bytes). */
 function verdict2014(read: PreserveBankRead): BootVerdict {
@@ -159,7 +176,7 @@ export function preserveBootFactsOf(input: {
   const word = viewOf(head).getUint32(0, true) >>> 0;
   const entered = bankOfActiveSlotWord(input.activeSlotWord);
   const verdicts: Record<BankKey, BootVerdict> = { a: null, b: null, r: null };
-  let unknown = UNSETTLED_VERDICT;
+  let unknown: CoreParam = UNSETTLED_VERDICT;
   let checkKeyUnnamed: string | null = null;
   /* 2016: the bank the key was inferred from, when the camera entered it without its check. */
   let inferredFrom: BankKey | null = null;
@@ -195,7 +212,7 @@ export function preserveBootFactsOf(input: {
       slotOf: (key) => analysed.get(key),
     });
     if (checkKey.key === null) {
-      unknown = CHECK_KEY_UNNAMED_VERDICT;
+      unknown = CHECK_KEY_UNNAMED_VERDICT_MESSAGE;
       checkKeyUnnamed = checkKey.unnamedWhy;
     } else if (checkKey.inferred) {
       inferredFrom = checkKey.from;
@@ -217,6 +234,15 @@ export function preserveBootFactsOf(input: {
     }
   }
   const selection = selectLockedBoot(word, verdicts, unknown);
+  const whyMessage =
+    inferredFrom === null
+      ? selection.whyMessage
+      : inferredBootWhyMessage(selection.whyMessage, inferredFrom);
+  const why =
+    inferredFrom === null
+      ? selection.why
+      : `${selection.why} (the key the bootloader checks a bank under is inferred from ` +
+        `${bankWordsOf(inferredFrom)}, which it entered without its check) [inferred]`;
   return {
     cfgHex: Array.from(head.subarray(0, 28), (b) => b.toString(16).padStart(2, '0')).join(''),
     word,
@@ -225,11 +251,9 @@ export function preserveBootFactsOf(input: {
     entered,
     verdicts,
     nextStart: selection.runs,
-    why:
-      inferredFrom === null
-        ? selection.why
-        : `${selection.why} (the key the bootloader checks a bank under is inferred from ` +
-          `${bankWordsOf(inferredFrom)}, which it entered without its check) [inferred]`,
+    why,
+    ruleMessage: lockedBootRuleMessage(word),
+    ...(whyMessage.text === why ? { whyMessage } : {}),
     checkKeyUnnamed,
   };
 }
@@ -248,6 +272,8 @@ export interface PreserveBankRecord {
   readonly holds: BankHolds;
   /** Null when the run can patch this bank and put it back; otherwise why it cannot, in words. */
   readonly refused: string | null;
+  /** `refused` as a message, for the page, where core gives the reason one. */
+  readonly refusedMessage?: CoreMessage;
   /** The two reads' sha256s, when the bank was captured. */
   readonly slotReadShas?: readonly [string, string];
   /** The derived image's sha256, when the image derived. */
@@ -276,7 +302,35 @@ export interface PreserveChoiceVerdict {
   readonly what: string;
   /** What the person reads before the commit. A warning never stops the run. */
   readonly warnings: readonly string[];
+  /** `what` and `warnings` as messages, for the page. */
+  readonly whatMessage?: CoreMessage;
+  readonly warningMessages?: readonly CoreMessage[];
 }
+
+/** The boot facts' `why` when the key the bootloader checks under was inferred from the bank it entered. */
+export function inferredBootWhyMessage(why: CoreMessage, from: BankKey): CoreMessage {
+  return coreMessage(
+    'preserve.boot.inferred',
+    { why, bank: bankParam(from) },
+    `${why.text} (the key the bootloader checks a bank under is inferred from ` +
+      `${bankWordsOf(from)}, which it entered without its check) [inferred]`,
+  );
+}
+
+/* ---- params from a run file's recorded sentences ---- */
+const whyParam = (boot: {
+  readonly why: string;
+  readonly whyMessage?: CoreMessage | undefined;
+}): CoreParam => recordedParam(boot.whyMessage, boot.why);
+const refusedParam = (bank: {
+  readonly refused: string | null;
+  readonly refusedMessage?: CoreMessage | undefined;
+}): CoreParam => recordedParam(bank.refusedMessage, bank.refused ?? '');
+const banksParam = (keys: readonly BankKey[]): CoreParam =>
+  listParam(
+    keys.map((key) => bankParam(key)),
+    'commaAnd',
+  );
 
 /** Banks in words: "slot A, slot B and recovery R". */
 export function bankListWords(keys: readonly BankKey[]): string {
@@ -287,20 +341,47 @@ export function bankListWords(keys: readonly BankKey[]): string {
 
 /** The bank the camera reports it entered at the backup, in words. */
 export function lastStartWords(boot: PreserveBootFacts): string {
+  return lastStartMessage(boot).text;
+}
+
+/** `lastStartWords` as a message, for the page. */
+export function lastStartMessage(boot: PreserveBootFacts): CoreMessage {
   if (boot.entered !== null) {
-    return (
+    return coreMessage(
+      'preserve.lastStart.entered',
+      { bank: bankParam(boot.entered), word: String(boot.activeSlotWord) },
       `${bankWordsOf(boot.entered)}, as the camera records it (active-slot word ` +
-      `${String(boot.activeSlotWord)})`
+        `${String(boot.activeSlotWord)})`,
     );
   }
   return boot.activeSlotWord === null
-    ? 'not known — the active-slot word could not be read'
-    : `not known — the active-slot word is ${String(boot.activeSlotWord)}, which names no bank`;
+    ? coreMessage(
+        'preserve.lastStart.notRead',
+        {},
+        'not known — the active-slot word could not be read',
+      )
+    : coreMessage(
+        'preserve.lastStart.noBank',
+        { word: String(boot.activeSlotWord) },
+        `not known — the active-slot word is ${String(boot.activeSlotWord)}, which names no bank`,
+      );
 }
 
 /** The bank the next start enters, and why, in words. */
 export function nextStartWords(boot: PreserveBootFacts): string {
-  return `${boot.nextStart === null ? 'not known' : bankWordsOf(boot.nextStart)} — ${boot.why}`;
+  return nextStartMessage(boot).text;
+}
+
+/** `nextStartWords` as a message, for the page. */
+export function nextStartMessage(boot: PreserveBootFacts): CoreMessage {
+  const text = `${boot.nextStart === null ? 'not known' : bankWordsOf(boot.nextStart)} — ${boot.why}`;
+  return boot.nextStart === null
+    ? coreMessage('preserve.nextStart.unknown', { why: whyParam(boot) }, text)
+    : coreMessage(
+        'preserve.nextStart.known',
+        { bank: bankParam(boot.nextStart), why: whyParam(boot) },
+        text,
+      );
 }
 
 /**
@@ -394,18 +475,40 @@ export function unknownImageRefusal(bank: BankKey, cameraVersion: string): strin
 
 /** One bank of the run in words: its build and that the run can write it, or why it cannot. */
 export function bankRecordWords(bank: PreserveBankRecord): string {
-  if (bank.refused !== null) return `not written — ${bank.refused}`;
-  return (
+  return bankRecordMessage(bank).text;
+}
+
+/** `bankRecordWords` as a message, for the page. The build's label is a name and stays as it is. */
+export function bankRecordMessage(bank: PreserveBankRecord): CoreMessage {
+  if (bank.refused !== null) {
+    return coreMessage(
+      'preserve.bank.notWritten',
+      { reason: refusedParam(bank) },
+      `not written — ${bank.refused}`,
+    );
+  }
+  const text =
     `${bank.buildLabel ?? 'an image'} — can be written` +
     (bank.patch === undefined ? '' : `; the patch changes ${String(bank.patch.diffCount)} bytes`) +
-    (bank.imageDerivation === undefined ? '' : `; carries ${bank.imageDerivation.label}`)
+    (bank.imageDerivation === undefined ? '' : `; carries ${bank.imageDerivation.label}`);
+  const build: CoreParam = bank.buildLabel ?? coreMessage('preserve.bank.anImage', {}, 'an image');
+  return coreMessage(
+    `preserve.bank.writable${bank.patch === undefined ? '' : 'Patch'}${
+      bank.imageDerivation === undefined ? '' : 'Edit'
+    }`,
+    {
+      build,
+      ...(bank.patch === undefined ? {} : { count: bank.patch.diffCount }),
+      ...(bank.imageDerivation === undefined ? {} : { edit: bank.imageDerivation.label }),
+    },
+    text,
   );
 }
 
 /** The banks every-bank writes, or why it cannot. */
 function everyBank(
   banks: NonNullable<PreserveRunState['banks']>,
-): { banks: BankKey[] } | { why: string } {
+): { banks: BankKey[] } | { why: CoreMessage } {
   const holding = BANK_KEYS.filter((key) => {
     const holds = banks[key].holds;
     return holds === 'image' || holds === 'unsettled';
@@ -414,25 +517,36 @@ function everyBank(
   if (blocked.length > 0) {
     const first = blocked[0] ?? 'a';
     return {
-      why:
+      why: coreMessage(
+        'preserve.choice.everyBlocked',
+        { bank: bankParam(first), reason: refusedParam(banks[first]) },
         `every bank that holds an image cannot be written: ${bankWordsOf(first)} cannot — ` +
-        (banks[first].refused ?? ''),
+          (banks[first].refused ?? ''),
+      ),
     };
   }
-  if (holding.length === 0) return { why: 'no bank holds an image the run can write' };
+  if (holding.length === 0) {
+    return {
+      why: coreMessage('preserve.choice.noImage', {}, 'no bank holds an image the run can write'),
+    };
+  }
   return { banks: holding };
 }
 
 /** The warnings for writing `targets`, from the boot facts. */
-function choiceWarnings(facts: PreserveChoiceFacts, targets: readonly BankKey[]): string[] {
+function choiceWarnings(facts: PreserveChoiceFacts, targets: readonly BankKey[]): CoreMessage[] {
   const boot = facts.boot;
   if (boot === undefined) return [];
-  const out: string[] = [];
+  const out: CoreMessage[] = [];
   if (boot.nextStart !== null && !targets.includes(boot.nextStart)) {
     out.push(
-      `The next start enters ${bankWordsOf(boot.nextStart)} (${boot.why}), and this choice does ` +
-        'not patch it: after the restart the camera runs that bank’s own image, so the whole-flash ' +
-        'read stops before it reads anything. The restore still puts every written bank back.',
+      coreMessage(
+        'preserve.choice.warnNotPatched',
+        { bank: bankParam(boot.nextStart), why: whyParam(boot) },
+        `The next start enters ${bankWordsOf(boot.nextStart)} (${boot.why}), and this choice does ` +
+          'not patch it: after the restart the camera runs that bank’s own image, so the whole-flash ' +
+          'read stops before it reads anything. The restore still puts every written bank back.',
+      ),
     );
   }
   if (boot.nextStart === null && facts.banks !== undefined) {
@@ -440,8 +554,12 @@ function choiceWarnings(facts: PreserveChoiceFacts, targets: readonly BankKey[])
     const covered = 'banks' in every && every.banks.every((key) => targets.includes(key));
     if (!covered) {
       out.push(
-        `Which bank the next start enters is not known (${boot.why}). If it enters a bank this ` +
-          'choice does not patch, the whole-flash read stops before it reads anything.',
+        coreMessage(
+          'preserve.choice.warnUnknownStart',
+          { why: whyParam(boot) },
+          `Which bank the next start enters is not known (${boot.why}). If it enters a bank this ` +
+            'choice does not patch, the whole-flash read stops before it reads anything.',
+        ),
       );
     }
   }
@@ -455,30 +573,45 @@ export function preserveChoiceOf(
 ): PreserveChoiceVerdict {
   const banks = facts.banks;
   const boot = facts.boot;
-  if (banks === undefined || boot === undefined) {
-    return {
-      choice,
-      banks: null,
-      what: 'the backup has not read the banks yet, so no bank can be chosen',
-      warnings: [],
-    };
-  }
-  const offered = (targets: readonly BankKey[], what: string): PreserveChoiceVerdict => ({
-    choice,
-    banks: targets,
-    what,
-    warnings: choiceWarnings(facts, targets),
-  });
-  const refused = (what: string): PreserveChoiceVerdict => ({
+  const refused = (what: CoreMessage): PreserveChoiceVerdict => ({
     choice,
     banks: null,
-    what,
+    what: what.text,
+    whatMessage: what,
     warnings: [],
+    warningMessages: [],
   });
+  if (banks === undefined || boot === undefined) {
+    return refused(
+      coreMessage(
+        'preserve.choice.notRead',
+        {},
+        'the backup has not read the banks yet, so no bank can be chosen',
+      ),
+    );
+  }
+  const offered = (targets: readonly BankKey[], what: CoreMessage): PreserveChoiceVerdict => {
+    const warnings = choiceWarnings(facts, targets);
+    return {
+      choice,
+      banks: targets,
+      what: what.text,
+      whatMessage: what,
+      warnings: warnings.map((warning) => warning.text),
+      warningMessages: warnings,
+    };
+  };
   if (choice === 'all') {
     const every = everyBank(banks);
     return 'banks' in every
-      ? offered(every.banks, `every bank that holds an image: ${bankListWords(every.banks)}`)
+      ? offered(
+          every.banks,
+          coreMessage(
+            'preserve.choice.every',
+            { banks: banksParam(every.banks) },
+            `every bank that holds an image: ${bankListWords(every.banks)}`,
+          ),
+        )
       : refused(every.why);
   }
   if (choice === 'next-start') {
@@ -487,29 +620,54 @@ export function preserveChoiceOf(
       return bank.refused === null
         ? offered(
             [boot.nextStart],
-            `${bankWordsOf(boot.nextStart)}, the bank the next start enters: ${boot.why}`,
+            coreMessage(
+              'preserve.choice.nextStart',
+              { bank: bankParam(boot.nextStart), why: whyParam(boot) },
+              `${bankWordsOf(boot.nextStart)}, the bank the next start enters: ${boot.why}`,
+            ),
           )
         : refused(
-            `the next start enters ${bankWordsOf(boot.nextStart)} (${boot.why}), and the run cannot ` +
-              `write it: ${bank.refused}`,
+            coreMessage(
+              'preserve.choice.nextStartRefused',
+              { bank: bankParam(boot.nextStart), why: whyParam(boot), reason: refusedParam(bank) },
+              `the next start enters ${bankWordsOf(boot.nextStart)} (${boot.why}), and the run cannot ` +
+                `write it: ${bank.refused}`,
+            ),
           );
     }
     const every = everyBank(banks);
     return 'banks' in every
       ? offered(
           every.banks,
-          `every bank that holds an image (${bankListWords(every.banks)}): which bank the next start ` +
-            `enters is not known (${boot.why})`,
+          coreMessage(
+            'preserve.choice.everyUnknownStart',
+            { banks: banksParam(every.banks), why: whyParam(boot) },
+            `every bank that holds an image (${bankListWords(every.banks)}): which bank the next start ` +
+              `enters is not known (${boot.why})`,
+          ),
         )
       : refused(
-          `which bank the next start enters is not known (${boot.why}), and ${every.why}; choose ` +
-            'a bank by name',
+          coreMessage(
+            'preserve.choice.unknownStartRefused',
+            { why: whyParam(boot), reason: every.why },
+            `which bank the next start enters is not known (${boot.why}), and ${every.why.text}; choose ` +
+              'a bank by name',
+          ),
         );
   }
   const bank = banks[choice];
   return bank.refused === null
-    ? offered([choice], bankWordsOf(choice))
-    : refused(`${bankWordsOf(choice)} cannot be written: ${bank.refused}`);
+    ? offered(
+        [choice],
+        coreMessage('preserve.choice.bank', { bank: bankParam(choice) }, bankWordsOf(choice)),
+      )
+    : refused(
+        coreMessage(
+          'preserve.choice.bankRefused',
+          { bank: bankParam(choice), reason: refusedParam(bank) },
+          `${bankWordsOf(choice)} cannot be written: ${bank.refused}`,
+        ),
+      );
 }
 
 /**
@@ -519,10 +677,19 @@ export function preserveChoiceOf(
  * reason.
  */
 export function bankChoiceWritesWords(verdict: PreserveChoiceVerdict): string {
+  return paramText(bankChoiceWritesMessage(verdict));
+}
+
+/** `bankChoiceWritesWords` as a message, for the page. */
+export function bankChoiceWritesMessage(verdict: PreserveChoiceVerdict): CoreMessage | string {
   if (verdict.banks === null || verdict.choice === 'next-start' || verdict.choice === 'all') {
-    return verdict.what;
+    return recordedParam(verdict.whatMessage, verdict.what);
   }
-  return `${bankListWords(verdict.banks)}, the bank chosen by name`;
+  return coreMessage(
+    'preserve.choice.byName',
+    { banks: banksParam(verdict.banks) },
+    `${bankListWords(verdict.banks)}, the bank chosen by name`,
+  );
 }
 
 /** Every choice, in the order the page and the CLI list them. */

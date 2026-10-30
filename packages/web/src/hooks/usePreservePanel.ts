@@ -55,7 +55,7 @@ import {
   type PreserveBankChoice,
   type SessionOpener,
   type WebUsbTransport,
-  PRESERVE_UNPATCHED_START_STOP,
+  PRESERVE_UNPATCHED_START_STOP_MESSAGE,
   SeekError,
   unpatchedStartOf,
 } from '@seek-fw/core';
@@ -811,7 +811,7 @@ export function usePreservePanel(params: PreservePanelParams): PreservePanelApi 
             /* A backup that refuses the camera wrote nothing, and its words say what to do. */
             rep.setStatus(
               unpatchedStartOf(error) !== null
-                ? /* i18n: core message */ PRESERVE_UNPATCHED_START_STOP
+                ? coreText(PRESERVE_UNPATCHED_START_STOP_MESSAGE)
                 : stepInFlight === 'backup' &&
                     error instanceof SeekError &&
                     error.code === 'pipeline/refused'
@@ -878,7 +878,6 @@ export function usePreservePanel(params: PreservePanelParams): PreservePanelApi 
                 phaseRep.reset(t('preserve:status.doneEarlier'));
               } else if (records.some((record) => record?.status === 'failed')) {
                 const failed = records.find((record) => record?.status === 'failed');
-                /* i18n: core message (the step's recorded error: errorCode where core's error has one; none has yet) */
                 phaseRep.reset(
                   t('preserve:status.failedEarlier', {
                     error:
@@ -953,7 +952,6 @@ export function usePreservePanel(params: PreservePanelParams): PreservePanelApi 
         applyState(choosePreserveBanks(current, choice));
         return null;
       } catch (error) {
-        /* i18n: core message (the choice's own `what` is English until words.ts has codes) */
         return coreText(errorCoreMessage(error) ?? errorMessage(error));
       }
     },

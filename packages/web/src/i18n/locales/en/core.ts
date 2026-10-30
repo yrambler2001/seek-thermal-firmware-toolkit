@@ -22,7 +22,8 @@
  *   - a nested sentence: `{why}`, `{reason}`, `{verdict}`, `{risk}`,
  *     `{untested}`, `{outcome}`, `{failure}`, `{answers}`, `{predicted}`,
  *     `{plain}`, `{ff}`, `{reference}`, `{recovered}`, `{check}`, `{phrase}`,
- *     `{staged}`, `{source}`, `{operation}`, `{error}`. Each is another key of
+ *     `{staged}`, `{source}`, `{operation}`, `{error}`, `{label}`, `{writable}`,
+ *     `{next}`, `{form}`, `{notes}`. Each is another key of
  *     this namespace (the comment above a key says which), already in your
  *     language. A `{why}` that starts a sentence arrives with a capital letter.
  *   - a list: `{banks}`, `{reasons}` (joined with your common:list.* words, or
@@ -539,4 +540,159 @@ export default {
   'compare.notImage': '(not an image)',
   'compare.notPredicted': '(not predicted: the device decides what it stores)',
   'compare.plaintext': 'none (plaintext)',
+  /* ---- preserve: the Preserve tab's bank table, choices, plan, results and refusals (preservation/banks, words, steps) ---- */
+  /** A bank's verdict word inside boot.select.unknown: its two reads differed. */
+  'boot.verdict.unsettled': 'could not be read the same way twice',
+  /** `{why}` is a boot.select.* sentence; "[inferred]" is a tag the project uses for an inference: keep it as it is. */
+  'preserve.boot.inferred':
+    '{why} (the key the bootloader checks a bank under is inferred from {bank}, which it entered without its check) [inferred]',
+  /** The "Last start" row. `{word}` is the active-slot word as a decimal number. */
+  'preserve.lastStart.entered': '{bank}, as the camera records it (active-slot word {word})',
+  'preserve.lastStart.notRead': 'not known — the active-slot word could not be read',
+  'preserve.lastStart.noBank': 'not known — the active-slot word is {word}, which names no bank',
+  /** The "Next start" row: `{why}` is a boot.select.* sentence. */
+  'preserve.nextStart.known': '{bank} — {why}',
+  'preserve.nextStart.unknown': 'not known — {why}',
+  /** The bank table's "Holds" cell. `{reason}` is a preserve.refused.* sentence (or core's English for an unread image). */
+  'preserve.bank.notWritten': 'not written — {reason}',
+  /** `{build}` in preserve.bank.writable*, when the bank's build has no name. */
+  'preserve.bank.anImage': 'an image',
+  /** `{build}` is the build's name ("Compact Pro 1.0.3.0 (9 Hz)", kept as it is) or preserve.bank.anImage; `{edit}` is a frame-rate edit's name (kept as it is). */
+  'preserve.bank.writable': '{build} — can be written',
+  'preserve.bank.writablePatch': '{build} — can be written; the patch changes {count} bytes',
+  'preserve.bank.writableEdit': '{build} — can be written; carries {edit}',
+  'preserve.bank.writablePatchEdit':
+    '{build} — can be written; the patch changes {count} bytes; carries {edit}',
+  /** The bank choice: what it writes, or why it cannot. `{why}` is a boot.select.* sentence, `{reason}` a preserve.refused.* one. */
+  'preserve.choice.notRead': 'the backup has not read the banks yet, so no bank can be chosen',
+  'preserve.choice.every': 'every bank that holds an image: {banks}',
+  'preserve.choice.everyBlocked':
+    'every bank that holds an image cannot be written: {bank} cannot — {reason}',
+  'preserve.choice.noImage': 'no bank holds an image the run can write',
+  'preserve.choice.nextStart': '{bank}, the bank the next start enters: {why}',
+  'preserve.choice.nextStartRefused':
+    'the next start enters {bank} ({why}), and the run cannot write it: {reason}',
+  'preserve.choice.everyUnknownStart':
+    'every bank that holds an image ({banks}): which bank the next start enters is not known ({why})',
+  /** `{reason}` is preserve.choice.everyBlocked or preserve.choice.noImage. */
+  'preserve.choice.unknownStartRefused':
+    'which bank the next start enters is not known ({why}), and {reason}; choose a bank by name',
+  /** A choice by name: just the bank. */
+  'preserve.choice.bank': '{bank}',
+  'preserve.choice.bankRefused': '{bank} cannot be written: {reason}',
+  'preserve.choice.byName': '{banks}, the bank chosen by name',
+  'preserve.choice.warnNotPatched':
+    'The next start enters {bank} ({why}), and this choice does not patch it: after the restart the camera runs that bank’s own image, so the whole-flash read stops before it reads anything. The restore still puts every written bank back.',
+  'preserve.choice.warnUnknownStart':
+    'Which bank the next start enters is not known ({why}). If it enters a bank this choice does not patch, the whole-flash read stops before it reads anything.',
+  /** The plan's "Build" row when the build has no name yet. */
+  'preserve.build.notKnown': 'not known yet',
+  'preserve.build.firmware': 'firmware {version}',
+  /** How a written bank is sent and put back (the plan's "Written" row; `{form}` in preserve.result.restoreForm). */
+  'preserve.stagedForm.plain':
+    'as the camera stores it (this camera keeps its firmware unencrypted)',
+  'preserve.stagedForm.oneKey':
+    "in the form the camera stores it (encrypted under the camera's key)",
+  'preserve.stagedForm.twoKeys':
+    "in the form the camera stores it (encrypted under the camera's two keys)",
+  /** The plan's "Restore" row. */
+  'preserve.restoreForm.verbatim':
+    'each written bank gets back the exact bytes the backup read from it',
+  'preserve.restoreForm.factoryStaged':
+    'each written bank gets back its original firmware, written in the form the camera stores it, so the bank ends byte for byte as the backup read it',
+  'preserve.restoreForm.none':
+    'not possible on this build: no form of the original firmware passes the camera’s own check and also stores back as the original bytes, so the run ends with the complete image and the patch still in place',
+  /** The plan's "Whole flash" row. `{notes}` is preserve.drain.rotated / .hazard, joined with "; ". */
+  'preserve.drain.notPossible':
+    'not possible on this build: the patched firmware cannot read the whole flash, so the run has no complete image to give',
+  'preserve.drain.rotated': 'the camera serves it rotated, and the run puts it back in order',
+  'preserve.drain.hazard': 'the patch avoids a read on this build that crashes the camera',
+  'preserve.drain.whole': 'the whole 4 MiB flash in one read, {size} bytes at a time',
+  'preserve.drain.wholeNotes': 'the whole 4 MiB flash in one read, {size} bytes at a time; {notes}',
+  /** What one changed instruction of the patch does (the patch table's first column). */
+  'preserve.site.wholeFlash':
+    "lets the camera's read command reach the whole 4 MiB flash, not just the first 64 KiB",
+  'preserve.site.countPast':
+    'lets the read position count past 64 KiB, so a read does not wrap back to the start',
+  'preserve.site.keepPosition': 'keeps the whole read position when it moves on after each read',
+  'preserve.site.savePosition': 'saves the moved-on read position in full',
+  'preserve.site.clearPosition':
+    'clears the whole read position each time a read starts, so the camera can still be read after the whole-flash read',
+  'preserve.site.modeTwoGuard':
+    'lets the whole-flash read start like any other read (the stock firmware turns it away)',
+  'preserve.site.modeTwoIndirection':
+    'points the whole-flash read at the start of the flash (the stock firmware points it at a value that crashes the camera)',
+  'preserve.site.armTail':
+    'removes a call that freezes the camera when a read starts on this build',
+  'preserve.site.other': 'changes one instruction the whole-flash read needs',
+  /** A step's name (`{label}` in preserve.result.*). */
+  'preserve.step.backup': 'Backup',
+  'preserve.step.patch': 'Patch',
+  'preserve.step.commit': 'Write',
+  'preserve.step.drain': 'Whole-flash read',
+  'preserve.step.restore': 'Restore',
+  'preserve.step.verify': 'Check',
+  /** A step's result. `{label}` is a preserve.step.* name; `{error}` is the step's error (another key of this namespace, or core's English). */
+  'preserve.result.stoppedPlanned':
+    '{label}: stopped as planned — the camera started {bank}, which this run did not patch, so nothing was read.',
+  'preserve.result.noReason': 'no reason was recorded',
+  'preserve.result.stopped': '{label}: stopped — {error}',
+  /** `{writable}` in preserve.result.backup*. */
+  'preserve.result.writable.none': 'no bank holds firmware the run can patch',
+  'preserve.result.writable.one': '{banks} holds firmware the run can patch',
+  'preserve.result.writable.many': '{banks} hold firmware the run can patch',
+  'preserve.result.backup': '{label}: every block a normal read reaches was saved; {writable}.',
+  /** `{next}` in preserve.result.backupNext when no bank is known. */
+  'preserve.result.nextUnknown': 'a bank that is not known',
+  'preserve.result.backupNext':
+    '{label}: every block a normal read reaches was saved; {writable}; the next start enters {next}.',
+  'preserve.result.patch': '{label}: built for {banks}.',
+  'preserve.result.patchCount': '{label}: built for {banks}; {count} bytes change in each.',
+  'preserve.result.commitOne':
+    '{label}: {banks} written with the patch, and the camera accepted it.',
+  'preserve.result.commitMany':
+    '{label}: {banks} written with the patch, and the camera accepted each.',
+  'preserve.result.drainNotRead': '{label}: not read.',
+  'preserve.result.drain':
+    '{label}: the whole 4 MiB flash was read; the complete image has sha256 {sha256}.',
+  'preserve.result.drainThrough':
+    '{label}: the whole 4 MiB flash was read through {bank}; the complete image has sha256 {sha256}.',
+  'preserve.result.restore': '{label}: {banks} written back.',
+  /** `{form}` is a preserve.stagedForm.* phrase. */
+  'preserve.result.restoreForm': '{label}: {banks} written back {form}.',
+  'preserve.result.verifyDone': '{label}: done.',
+  'preserve.result.verifyIdentical':
+    "{label}: {blocks} blocks read again, 0 bytes differ — the camera's flash is byte-identical to the backup.",
+  'preserve.result.verifyDiffers': '{label}: {blocks} blocks read again, {bytes} bytes differ.',
+  'preserve.result.verifyDiffersUnread':
+    '{label}: {blocks} blocks read again, {bytes} bytes differ, {unread} block(s) could not be read.',
+  /** The whole-flash read stopped as planned: the start entered a bank the run did not patch. */
+  'preserve.unpatchedStart.stop':
+    'Stopped before the whole-flash read: the camera started a bank this run did not patch, so nothing was read.',
+  'preserve.unpatchedStart.next':
+    'Next: the restore puts every written bank back. The whole-flash read is not tried again: the camera would start the same bank.',
+  /** The last screen's title and text. */
+  'preserve.done.title': 'Done — your firmware is preserved',
+  'preserve.done.detail':
+    "The complete image is the camera's whole original flash, and the camera itself is back exactly as it was.",
+  'preserve.done.titleNoImage': 'Done — the camera is back as it was; there is no complete image',
+  'preserve.done.detailNoImage':
+    'The whole-flash read did not run, so this run has no complete image of the flash. Every written bank was put back, and a fresh read of the blocks a normal dump reaches matches the backup. For the complete image, start a new run with a choice that includes the bank the next start enters.',
+  'preserve.done.detailNoImageCount':
+    'The whole-flash read did not run, so this run has no complete image of the flash. Every written bank was put back, and a fresh read of the {blocks} blocks a normal dump reaches matches the backup. For the complete image, start a new run with a choice that includes the bank the next start enters.',
+  /** Why the run cannot write a bank (`{reason}` in preserve.bank.notWritten and preserve.choice.*). `{error}` is the read's error; `{sha256}`/`{other}` are hashes. */
+  'preserve.refused.secondRead': 'its second read failed ({error})',
+  'preserve.refused.readsDisagree': 'its two reads disagree (sha256 {sha256} vs {other})',
+  'preserve.refused.erased': 'it is erased',
+  'preserve.refused.watchdogMark':
+    'its header word at +0x200 holds {word}, the mark the bootloader writes over a bank after a watchdog reset early in a start; the bootloader no longer takes this bank, and the run has no image to patch there',
+  'preserve.refused.noHeader': 'it holds no image header at +0x200',
+  /** `{image}` and `{camera}` are build names, `{id}` a build id: all kept as they are. */
+  'preserve.refused.otherBuild':
+    'it holds {image} ({id}), not the build the camera runs ({camera})',
+  'preserve.refused.otherKey':
+    'the bootloader’s check refuses it: it is stored under another key than the one this camera’s bootloader checks banks under, and a write through the camera would store it under that key, so the restore could not put its exact bytes back',
+  /** A step refused: the camera runs another firmware than the run's. */
+  'preserve.error.otherVersion':
+    "the camera reports firmware {camera}, want {version} — the patch is derived from one build's bytes and must not be sent to another",
 } as const satisfies NamespaceMessages;
