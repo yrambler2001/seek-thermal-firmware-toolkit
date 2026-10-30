@@ -158,7 +158,7 @@ export default {
   'table.keyNone': 'none (plaintext)',
   /* The Bootable cell. The text after "—" says why. */
   'table.boot.empty': '— nothing to boot',
-  'table.boot.bootable': 'bootable — the bootloader can key it',
+  'table.boot.bootable': 'bootable — the bootloader accepts it',
   'table.boot.notBootable': 'not bootable — skipped at boot',
   'table.boot.recoveryOnly':
     'recovery only — {letterR} runs when {letterA} and {letterB} hold nothing the bootloader takes (measured on a camera for an earlier form of this image); whether this form starts is untested',
@@ -321,8 +321,8 @@ export default {
     other: 'Patch the frame rate of {count} banks?',
   },
   'fpsEvery.intro': {
-    one: 'This patches {count} bank where the patch is available, of firmware {version}:',
-    other: 'This patches {count} banks where the patch is available, of firmware {version}:',
+    one: 'This patches {count} bank where the patch is available (firmware {version}):',
+    other: 'This patches {count} banks where the patch is available (firmware {version}):',
   },
   /* A bank's name and, when writing it asks for the tick, what it is. */
   'fpsEvery.role.bootedRecovery': '{bank} (the bank this camera boots now, and the recovery bank)',

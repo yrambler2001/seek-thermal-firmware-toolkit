@@ -165,7 +165,7 @@ export default {
   'table.keyNone': 'ninguna (sin cifrar)',
   /* The Bootable cell. The text after "—" says why. */
   'table.boot.empty': '— nada que arrancar',
-  'table.boot.bootable': 'arrancable: el bootloader tiene su clave',
+  'table.boot.bootable': 'arrancable: el bootloader la acepta',
   'table.boot.notBootable': 'no arrancable: se salta al arrancar',
   'table.boot.recoveryOnly':
     'solo recuperación: {letterR} arranca cuando {letterA} y {letterB} no contienen nada que acepte el bootloader (medido en una cámara con una forma anterior de esta imagen); no se ha probado si esta forma arranca',
@@ -337,10 +337,10 @@ export default {
     other: '¿Aplicar el parche de velocidad de fotogramas a {count} ranuras?',
   },
   'fpsEvery.intro': {
-    one: 'Esto aplica el parche a {count} ranura en la que está disponible, con el firmware {version}:',
-    many: 'Esto aplica el parche a {count} de ranuras en las que está disponible, con el firmware {version}:',
+    one: 'Esto aplica el parche a {count} ranura en la que está disponible (firmware {version}):',
+    many: 'Esto aplica el parche a {count} de ranuras en las que está disponible (firmware {version}):',
     other:
-      'Esto aplica el parche a {count} ranuras en las que está disponible, con el firmware {version}:',
+      'Esto aplica el parche a {count} ranuras en las que está disponible (firmware {version}):',
   },
   /* A bank's name and, when writing it asks for the tick, what it is. */
   'fpsEvery.role.bootedRecovery':

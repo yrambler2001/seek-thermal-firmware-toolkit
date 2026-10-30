@@ -141,7 +141,7 @@ export default {
   'table.keyNone': '无（明文）',
   /* The Bootable cell. The text after "—" says why. */
   'table.boot.empty': '——没有可启动的内容',
-  'table.boot.bootable': '可启动——引导程序能为它找到密钥',
+  'table.boot.bootable': '可启动——引导程序接受它',
   'table.boot.notBootable': '不可启动——启动时会被跳过',
   'table.boot.recoveryOnly':
     '仅作恢复——当 {letterA} 和 {letterB} 中都没有引导程序接受的内容时，才会运行 {letterR}（这是在一台相机上针对此镜像的较早形式测得的）；这种形式能否启动尚未测试',
@@ -286,7 +286,9 @@ export default {
   /* The confirmation of "Make N FPS in every bank". {count} is the number of banks patched. */
   'fpsEvery.title': '让所有槽位以 {hz} FPS 运行？',
   'fpsEvery.titleMixed': { other: '修补 {count} 个槽位的帧率？' },
-  'fpsEvery.intro': { other: '这会修补 {count} 个可用该补丁的槽位，固件为 {version}：' },
+  'fpsEvery.intro': {
+    other: '这会修补 {count} 个可用该补丁的槽位（固件 {version}）：',
+  },
   /* A bank's name and, when writing it asks for the tick, what it is. */
   'fpsEvery.role.bootedRecovery': '{bank}（相机当前启动的槽位，也是恢复槽位）',
   'fpsEvery.role.booted': '{bank}（相机当前启动的槽位）',

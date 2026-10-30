@@ -253,7 +253,9 @@ export default {
   'summary.notProduced': '未生成',
   /* The complete image against the backup, block by block. {differing} of {count} blocks; {blocks} are hex addresses. */
   'summary.differs': { other: '与备份相比，{count} 个块中有 {differing} 个不同：{blocks}' },
-  'summary.matches': { other: '与备份的全部 {count} 个块一致' },
+  'summary.matches': {
+    other: '与备份一致（全部 {count} 个块）',
+  },
   'summary.onlyInFull': '仅在全闪存读取中',
   /* {count} blocks hold data a normal read cannot reach; {blocks} are their hex addresses. */
   'summary.onlyInFullValue': { other: '{count} 个原厂读取无法访问的块：{blocks}' },

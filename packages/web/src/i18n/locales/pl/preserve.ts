@@ -279,10 +279,10 @@ export default {
     other: 'różni się od kopii zapasowej w {differing} z {count} bloku: {blocks}',
   },
   'summary.matches': {
-    one: 'zgadza się z kopią zapasową w jej {count} bloku',
-    few: 'zgadza się z kopią zapasową we wszystkich {count} blokach',
-    many: 'zgadza się z kopią zapasową we wszystkich {count} blokach',
-    other: 'zgadza się z kopią zapasową we wszystkich {count} bloku',
+    one: 'zgadza się z kopią zapasową ({count} blok)',
+    few: 'zgadza się z kopią zapasową (wszystkie {count} bloki)',
+    many: 'zgadza się z kopią zapasową (wszystkie {count} bloków)',
+    other: 'zgadza się z kopią zapasową (wszystkie {count} bloku)',
   },
   'summary.onlyInFull': 'Tylko w pełnym odczycie pamięci flash',
   /* {count} blocks hold data a normal read cannot reach; {blocks} are their hex addresses. */

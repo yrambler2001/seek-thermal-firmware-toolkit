@@ -166,7 +166,7 @@ export default {
   'table.keyNone': 'keiner (Klartext)',
   /* The Bootable cell. The text after "—" says why. */
   'table.boot.empty': '— nichts zu starten',
-  'table.boot.bootable': 'startfähig — der Bootloader hat den passenden Schlüssel',
+  'table.boot.bootable': 'startfähig — der Bootloader nimmt ihn an',
   'table.boot.notBootable': 'nicht startfähig — wird beim Start übersprungen',
   'table.boot.recoveryOnly':
     'nur Recovery — {letterR} läuft, wenn {letterA} und {letterB} nichts enthalten, was der Bootloader annimmt (an einer Kamera für eine frühere Form dieses Images gemessen); ob diese Form startet, ist ungetestet',
@@ -335,8 +335,8 @@ export default {
     other: 'Die Bildrate von {count} Slots patchen?',
   },
   'fpsEvery.intro': {
-    one: 'Dies patcht {count} Slot, für den der Patch verfügbar ist, mit Firmware {version}:',
-    other: 'Dies patcht {count} Slots, für die der Patch verfügbar ist, mit Firmware {version}:',
+    one: 'Dies patcht {count} Slot, für den der Patch verfügbar ist (Firmware {version}):',
+    other: 'Dies patcht {count} Slots, für die der Patch verfügbar ist (Firmware {version}):',
   },
   /* A bank's name and, when writing it asks for the tick, what it is. */
   'fpsEvery.role.bootedRecovery':

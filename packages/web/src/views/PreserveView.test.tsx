@@ -583,7 +583,7 @@ describe('PreserveView', () => {
     });
     /* The complete image is held against the backup — the comparison that can
      * actually match — never against the one-slot firmware image's sha. */
-    expect(container.textContent).toContain('matches the backup on all 31 blocks');
+    expect(container.textContent).toContain('matches the backup (all 31 blocks)');
     expect(container.textContent).not.toContain('DOES NOT match');
     expect(container.textContent).toContain('Only in the whole-flash read');
     expect(container.textContent).toContain('0x14000000');

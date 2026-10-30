@@ -116,7 +116,7 @@ export default {
   'report.nextStart': 'Next start',
   'report.upgradeTarget': 'Upgrade target',
   /** Value: the camera was not asked for its upgrade target, so there is none to show. */
-  'report.notReplayed': '(not replayed)',
+  'report.notReplayed': '(not asked)',
   'report.targetConfirmed': '{slot} (confirmed on the wire)',
   /* {why} is core's reason. */
   'report.buildNotKnown':

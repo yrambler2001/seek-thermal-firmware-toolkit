@@ -271,8 +271,8 @@ export default {
     other: 'weicht von der Sicherung in {differing} von {count} Blöcken ab: {blocks}',
   },
   'summary.matches': {
-    one: 'stimmt mit der Sicherung in ihrem {count} Block überein',
-    other: 'stimmt mit der Sicherung in allen {count} Blöcken überein',
+    one: 'stimmt mit der Sicherung überein ({count} Block)',
+    other: 'stimmt mit der Sicherung überein (alle {count} Blöcke)',
   },
   'summary.onlyInFull': 'Nur im vollen Auslesen',
   /* {count} blocks hold data a normal read cannot reach; {blocks} are their hex addresses. */

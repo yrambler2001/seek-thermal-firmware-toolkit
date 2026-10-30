@@ -280,10 +280,10 @@ export default {
     other: 'отличается от резервной копии в {differing} из {count} блока: {blocks}',
   },
   'summary.matches': {
-    one: 'совпадает с резервной копией в {count} блоке',
-    few: 'совпадает с резервной копией во всех {count} блоках',
-    many: 'совпадает с резервной копией во всех {count} блоках',
-    other: 'совпадает с резервной копией во всех блоках ({count})',
+    one: 'совпадает с резервной копией ({count} блок)',
+    few: 'совпадает с резервной копией (все {count} блока)',
+    many: 'совпадает с резервной копией (все {count} блоков)',
+    other: 'совпадает с резервной копией (все {count} блока)',
   },
   'summary.onlyInFull': 'Есть только в полном считывании',
   /* {count} blocks hold data a normal read cannot reach; {blocks} are their hex addresses. */

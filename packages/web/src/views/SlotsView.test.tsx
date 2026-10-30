@@ -262,7 +262,7 @@ describe('SlotsView', () => {
     expect(rows[2]?.textContent).toContain('0x14070000');
     expect(rows[0]?.textContent).toContain('4.9.1.5');
     expect(rows[0]?.textContent).toContain('Key A');
-    expect(rows[0]?.textContent).toContain('bootable — the bootloader can key it');
+    expect(rows[0]?.textContent).toContain('bootable — the bootloader accepts it');
     expect(rows[0]?.textContent).toContain('ee'.repeat(32));
     unmount();
   });
@@ -1277,7 +1277,7 @@ describe('SlotsView: the frame-rate row action', () => {
     expect(text).toContain('Staged as');
     expect(text).not.toContain('No bank of this camera can be written');
     /* Each bank's verdict comes from the check key: bootable, not "unknown". */
-    expect(bankRows(container)[2]?.textContent).toContain('bootable — the bootloader can key it');
+    expect(bankRows(container)[2]?.textContent).toContain('bootable — the bootloader accepts it');
     unmount();
   });
 

@@ -279,9 +279,9 @@ export default {
     other: 'diffère de la sauvegarde sur {differing} blocs sur {count} : {blocks}',
   },
   'summary.matches': {
-    one: 'correspond à la sauvegarde sur son unique bloc ({count})',
-    many: 'correspond à la sauvegarde sur l’ensemble des {count} blocs',
-    other: 'correspond à la sauvegarde sur l’ensemble des {count} blocs',
+    one: 'correspond à la sauvegarde ({count} bloc)',
+    many: 'correspond à la sauvegarde (tous les {count} blocs)',
+    other: 'correspond à la sauvegarde (tous les {count} blocs)',
   },
   'summary.onlyInFull': 'Seulement dans la lecture complète',
   /* {count} blocks hold data a normal read cannot reach; {blocks} are their hex addresses. */

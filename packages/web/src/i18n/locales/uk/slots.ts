@@ -168,7 +168,7 @@ export default {
   'table.keyNone': 'немає (незашифровано)',
   /* The Bootable cell. The text after "—" says why. */
   'table.boot.empty': '— нічого запускати',
-  'table.boot.bootable': 'запускається — завантажувач має для нього ключ',
+  'table.boot.bootable': 'запускається — завантажувач його приймає',
   'table.boot.notBootable': 'не запускається — під час запуску пропускається',
   'table.boot.recoveryOnly':
     'лише як слот відновлення — слот {letterR} запускається, коли в слотах {letterA} і {letterB} немає нічого, що приймає завантажувач (виміряно на камері для ранішої форми цього образу); чи запускається ця форма, не перевірено',
@@ -340,10 +340,10 @@ export default {
     other: 'Змінити частоту кадрів у {count} слотах?',
   },
   'fpsEvery.intro': {
-    one: 'Буде пропатчено {count} слот із прошивкою {version}, для якого це доступно:',
-    few: 'Буде пропатчено {count} слоти із прошивкою {version}, для яких це доступно:',
-    many: 'Буде пропатчено {count} слотів із прошивкою {version}, для яких це доступно:',
-    other: 'Буде пропатчено {count} слота із прошивкою {version}, для яких це доступно:',
+    one: 'Буде пропатчено {count} слот, для якого це доступно (прошивка {version}):',
+    few: 'Буде пропатчено {count} слоти, для яких це доступно (прошивка {version}):',
+    many: 'Буде пропатчено {count} слотів, для яких це доступно (прошивка {version}):',
+    other: 'Буде пропатчено {count} слота, для яких це доступно (прошивка {version}):',
   },
   /* A bank's name and, when writing it asks for the tick, what it is. */
   'fpsEvery.role.bootedRecovery':

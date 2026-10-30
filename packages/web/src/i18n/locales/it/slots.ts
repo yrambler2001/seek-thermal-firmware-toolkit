@@ -164,7 +164,7 @@ export default {
   'table.keyNone': 'nessuna (in chiaro)',
   /* The Bootable cell. The text after "—" says why. */
   'table.boot.empty': '— niente da avviare',
-  'table.boot.bootable': 'avviabile: il bootloader ne ha la chiave',
+  'table.boot.bootable': 'avviabile: il bootloader lo accetta',
   'table.boot.notBootable': 'non avviabile: saltato all’avvio',
   'table.boot.recoveryOnly':
     'solo recupero: {letterR} viene eseguito quando {letterA} e {letterB} non contengono nulla che il bootloader accetti (misurato su una termocamera per una forma precedente di questa immagine); non è stato testato se questa forma si avvii',
@@ -336,10 +336,10 @@ export default {
     other: 'Applicare la patch della frequenza dei fotogrammi a {count} slot?',
   },
   'fpsEvery.intro': {
-    one: 'Questa operazione applica la patch a {count} slot per cui è disponibile, con il firmware {version}:',
-    many: 'Questa operazione applica la patch a {count} di slot per cui è disponibile, con il firmware {version}:',
+    one: 'Questa operazione applica la patch a {count} slot per cui è disponibile (firmware {version}):',
+    many: 'Questa operazione applica la patch a {count} di slot per cui è disponibile (firmware {version}):',
     other:
-      'Questa operazione applica la patch a {count} slot per cui è disponibile, con il firmware {version}:',
+      'Questa operazione applica la patch a {count} slot per cui è disponibile (firmware {version}):',
   },
   /* A bank's name and, when writing it asks for the tick, what it is. */
   'fpsEvery.role.bootedRecovery':

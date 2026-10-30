@@ -170,7 +170,7 @@ export default {
   'table.keyNone': 'нет (не зашифрован)',
   /* The Bootable cell. The text after "—" says why. */
   'table.boot.empty': '— запускать нечего',
-  'table.boot.bootable': 'запускается — загрузчик может подобрать к нему ключ',
+  'table.boot.bootable': 'запускается — загрузчик его принимает',
   'table.boot.notBootable': 'не запускается — пропускается при запуске',
   'table.boot.recoveryOnly':
     'только восстановление — {letterR} запускается, когда ни {letterA}, ни {letterB} не содержат ничего, что принял бы загрузчик (измерено на камере для более ранней формы этого образа); запустится ли эта форма, не проверено',
@@ -343,10 +343,10 @@ export default {
     other: 'Пропатчить частоту кадров {count} слота?',
   },
   'fpsEvery.intro': {
-    one: 'Будет пропатчен {count} слот, где патч доступен, с прошивкой {version}:',
-    few: 'Будут пропатчены {count} слота, где патч доступен, с прошивкой {version}:',
-    many: 'Будут пропатчены {count} слотов, где патч доступен, с прошивкой {version}:',
-    other: 'Будут пропатчены слоты, где это предлагается ({count}), с прошивкой {version}:',
+    one: 'Будет пропатчен {count} слот, где патч доступен (прошивка {version}):',
+    few: 'Будут пропатчены {count} слота, где патч доступен (прошивка {version}):',
+    many: 'Будут пропатчены {count} слотов, где патч доступен (прошивка {version}):',
+    other: 'Будут пропатчены слоты, где патч доступен ({count}; прошивка {version}):',
   },
   /* A bank's name and, when writing it asks for the tick, what it is. */
   'fpsEvery.role.bootedRecovery':

@@ -278,10 +278,10 @@ export default {
     other: 'відрізняється від резервної копії в {differing} із {count} блоків: {blocks}',
   },
   'summary.matches': {
-    one: 'збігається з резервною копією в її {count} блоці',
-    few: 'збігається з резервною копією в усіх {count} блоках',
-    many: 'збігається з резервною копією в усіх {count} блоках',
-    other: 'збігається з резервною копією в усіх {count} блоках',
+    one: 'збігається з резервною копією ({count} блок)',
+    few: 'збігається з резервною копією (усі {count} блоки)',
+    many: 'збігається з резервною копією (усі {count} блоків)',
+    other: 'збігається з резервною копією (усі {count} блока)',
   },
   'summary.onlyInFull': 'Лише в повному зчитуванні',
   /* {count} blocks hold data a normal read cannot reach; {blocks} are their hex addresses. */

@@ -166,7 +166,7 @@ export default {
   'table.keyNone': 'brak (jawny tekst)',
   /* The Bootable cell. The text after "—" says why. */
   'table.boot.empty': '— nie ma czego uruchomić',
-  'table.boot.bootable': 'startuje — bootloader zna jego klucz',
+  'table.boot.bootable': 'startuje — bootloader go przyjmuje',
   'table.boot.notBootable': 'nie startuje — pomijany przy uruchamianiu',
   'table.boot.recoveryOnly':
     'tylko odzyskiwanie — slot {letterR} uruchamia się, gdy sloty {letterA} i {letterB} nie zawierają niczego, co przyjmie bootloader (zmierzono na kamerze dla wcześniejszej postaci tego obrazu); czy ta postać się uruchamia, nie zostało przetestowane',
@@ -338,10 +338,10 @@ export default {
     other: 'Zmienić liczbę klatek w {count} slotu?',
   },
   'fpsEvery.intro': {
-    one: 'Łatka obejmie {count} slot, dla którego jest dostępna, z firmware {version}:',
-    few: 'Łatka obejmie {count} sloty, dla których jest dostępna, z firmware {version}:',
-    many: 'Łatka obejmie {count} slotów, dla których jest dostępna, z firmware {version}:',
-    other: 'Łatka obejmie {count} slotu, dla których jest dostępna, z firmware {version}:',
+    one: 'Łatka obejmie {count} slot, dla którego jest dostępna (firmware {version}):',
+    few: 'Łatka obejmie {count} sloty, dla których jest dostępna (firmware {version}):',
+    many: 'Łatka obejmie {count} slotów, dla których jest dostępna (firmware {version}):',
+    other: 'Łatka obejmie {count} slotu, dla których jest dostępna (firmware {version}):',
   },
   /* A bank's name and, when writing it asks for the tick, what it is. */
   'fpsEvery.role.bootedRecovery':

@@ -705,7 +705,7 @@ describe.skipIf(reason !== null)(title, () => {
 
     const text = await t.page.evaluate(() => document.body.innerText);
     expect(text).toContain('Done — your firmware is preserved');
-    expect(text).toContain('matches the backup on all 31 blocks');
+    expect(text).toContain('matches the backup (all 31 blocks)');
     expect(text).toContain('Verified — a perfect match.');
     expect(text).not.toContain('Before step 04');
     expect(await t.wizard.redAlerts()).toEqual([]);

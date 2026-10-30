@@ -272,8 +272,8 @@ export default {
     other: 'differs from the backup in {differing} of {count} blocks: {blocks}',
   },
   'summary.matches': {
-    one: 'matches the backup on its {count} block',
-    other: 'matches the backup on all {count} blocks',
+    one: 'matches the backup ({count} block)',
+    other: 'matches the backup (all {count} blocks)',
   },
   'summary.onlyInFull': 'Only in the whole-flash read',
   /* {count} blocks hold data a normal read cannot reach; {blocks} are their hex addresses. */

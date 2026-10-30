@@ -278,9 +278,9 @@ export default {
     other: 'differisce dal backup in {differing} blocchi su {count}: {blocks}',
   },
   'summary.matches': {
-    one: 'corrisponde al backup nel suo {count} blocco',
-    many: 'corrisponde al backup in tutti i {count} di blocchi',
-    other: 'corrisponde al backup in tutti i {count} blocchi',
+    one: 'corrisponde al backup ({count} blocco)',
+    many: 'corrisponde al backup (tutti i {count} di blocchi)',
+    other: 'corrisponde al backup (tutti i {count} blocchi)',
   },
   'summary.onlyInFull': 'Solo nella lettura completa',
   /* {count} blocks hold data a normal read cannot reach; {blocks} are their hex addresses. */

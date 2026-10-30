@@ -1093,7 +1093,7 @@ export default {
   'preserve.image.noImage':
     'no se deriva de ella ninguna imagen a la que la ejecución pueda aplicar el parche ({error})',
   /* ---- preserve: why a step cannot run now (preservation/steps describeStepGate) ---- */
-  /** `{step}`, `{next}`, `{steps}`: the run's step ids (backup, patch, commit, drain, restore, verify), as the CLI names them: keep them. `--resume` and `allowJump` are option names: keep them. */
+  /** In preserve.gate.stepDone, stepDoneUnknownTime and backupRerun, `{step}`, `{next}` and `{steps}` are the run's step ids as the CLI names them (backup, patch, commit, drain, restore, verify): keep them. In the other gate sentences, `{step}` is a step's name (preserve.stepId.*), already translated. `--resume` and `allowJump` are option names: keep them. */
   'preserve.gate.runDone':
     'esta ejecución ha terminado: se completaron todos los pasos (ejecución {run})',
   /** `{finished}`: a date and time (ISO 8601). */

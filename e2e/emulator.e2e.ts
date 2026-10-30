@@ -293,7 +293,7 @@ describe.skipIf(UNAVAILABLE !== null)('the web app on the emulated camera (bridg
 
     const text = await p.evaluate(() => document.body.innerText);
     expect(text).toContain('Done — your firmware is preserved');
-    expect(text).toContain('matches the backup on all 31 blocks');
+    expect(text).toContain('matches the backup (all 31 blocks)');
     expect(text).toContain('Verified — a perfect match.');
     expect(await w.redAlerts()).toEqual([]);
   });

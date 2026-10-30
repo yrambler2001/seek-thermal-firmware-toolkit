@@ -278,9 +278,9 @@ export default {
     other: 'difiere de la copia de seguridad en {differing} de {count} bloques: {blocks}',
   },
   'summary.matches': {
-    one: 'coincide con la copia de seguridad en su único bloque ({count})',
-    many: 'coincide con la copia de seguridad en los {count} de bloques',
-    other: 'coincide con la copia de seguridad en los {count} bloques',
+    one: 'coincide con la copia de seguridad ({count} bloque)',
+    many: 'coincide con la copia de seguridad (los {count} de bloques)',
+    other: 'coincide con la copia de seguridad (los {count} bloques)',
   },
   'summary.onlyInFull': 'Solo en la lectura completa',
   /* {count} blocks hold data a normal read cannot reach; {blocks} are their hex addresses. */

@@ -164,7 +164,7 @@ export default {
   'table.keyNone': 'aucune (en clair)',
   /* The Bootable cell. The text after "—" says why. */
   'table.boot.empty': '— rien à démarrer',
-  'table.boot.bootable': 'démarrable — le bootloader trouve sa clé',
+  'table.boot.bootable': 'démarrable — le bootloader l’accepte',
   'table.boot.notBootable': 'non démarrable — ignoré au démarrage',
   'table.boot.recoveryOnly':
     'secours uniquement — {letterR} démarre quand {letterA} et {letterB} ne contiennent rien que le bootloader accepte (mesuré sur une caméra pour une forme antérieure de cette image) ; le démarrage de cette forme n’est pas testé',
@@ -336,10 +336,10 @@ export default {
     other: 'Corriger la fréquence d’images de {count} emplacements ?',
   },
   'fpsEvery.intro': {
-    one: 'Ceci corrige {count} emplacement où le correctif est disponible, en firmware {version} :',
-    many: 'Ceci corrige {count} emplacements où le correctif est disponible, en firmware {version} :',
+    one: 'Ceci corrige {count} emplacement où le correctif est disponible (firmware {version}) :',
+    many: 'Ceci corrige {count} emplacements où le correctif est disponible (firmware {version}) :',
     other:
-      'Ceci corrige {count} emplacements où le correctif est disponible, en firmware {version} :',
+      'Ceci corrige {count} emplacements où le correctif est disponible (firmware {version}) :',
   },
   /* A bank's name and, when writing it asks for the tick, what it is. */
   'fpsEvery.role.bootedRecovery':
