@@ -8,6 +8,7 @@
  * field name rides along so the UI can point at the input that is wrong.
  */
 
+import { t } from '@/i18n';
 import { DEFAULT_DUMP_OPTIONS, WINDOW_SIZE, isSeekError } from '@seek-fw/core';
 
 export type RecipientChoice = 'auto' | 'interface' | 'device';
@@ -115,23 +116,20 @@ export function readOptions(form: OptionsForm): ResolvedOptions {
       'chunk',
       /* The ceiling is core's window size, not a copy of it: a form that
        * accepted a chunk core rejects would fail in the middle of a run. */
-      `chunk must be between 1 and ${String(WINDOW_SIZE)}, got ${form.chunk}`,
+      t('v4:options.chunkRange', { max: WINDOW_SIZE, value: form.chunk }),
     );
   }
   const gapFill = parseNum(form.gapFill, DEFAULT_DUMP_OPTIONS.gapFill);
   if (!Number.isInteger(gapFill) || gapFill < 0 || gapFill > 0xff) {
-    throw new OptionsError('gapFill', `gap-fill must be a single byte, got ${form.gapFill}`);
+    throw new OptionsError('gapFill', t('v4:options.gapFillByte', { value: form.gapFill }));
   }
   const retries = parseNum(form.retries, DEFAULT_DUMP_OPTIONS.retries);
   if (!Number.isInteger(retries) || retries < 0) {
-    throw new OptionsError('retries', `retries must be zero or more, got ${form.retries}`);
+    throw new OptionsError('retries', t('v4:options.retriesMin', { value: form.retries }));
   }
   const retryDelayMs = parseNum(form.retryDelay, DEFAULT_DUMP_OPTIONS.retryDelayMs);
   if (!Number.isInteger(retryDelayMs) || retryDelayMs < 0) {
-    throw new OptionsError(
-      'retryDelay',
-      `retry delay must be zero or more, got ${form.retryDelay}`,
-    );
+    throw new OptionsError('retryDelay', t('v4:options.retryDelayMin', { value: form.retryDelay }));
   }
   return {
     chunk,

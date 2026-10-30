@@ -3,6 +3,7 @@
  * and the same explanatory paragraph as the original's `<details class="opts">`.
  */
 
+import { t, useT } from '@/i18n';
 import type { ReactElement, ReactNode } from 'react';
 import { SlidersHorizontal } from 'lucide-react';
 import { Prose } from './Prose';
@@ -32,6 +33,7 @@ export function OptionsDetails({
   errorMessage,
   actions,
 }: OptionsDetailsProps): ReactElement {
+  const { rich } = useT();
   const invalid = (field: OptionField): boolean => invalidField === field;
   const describedBy = errorMessage === null ? undefined : 'opt-error';
   const flag = (
@@ -45,15 +47,13 @@ export function OptionsDetails({
     <Disclosure
       summary={
         <span className="inline-flex items-center gap-2">
-          <span className="font-semibold">Options</span>
-          <span className="font-normal text-muted-foreground">
-            — the defaults are correct; you do not need to change anything here.
-          </span>
+          <span className="font-semibold">{t('v4:options.title')}</span>
+          <span className="font-normal text-muted-foreground">{t('v4:options.subtitle')}</span>
         </span>
       }
     >
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        <Field htmlFor="optChunk" label="chunk (control-IN bytes)">
+        <Field htmlFor="optChunk" label={t('v4:options.chunk')}>
           <Input
             type="number"
             id="optChunk"
@@ -68,7 +68,7 @@ export function OptionsDetails({
             }}
           />
         </Field>
-        <Field htmlFor="optGapFill" label="gap-fill byte">
+        <Field htmlFor="optGapFill" label={t('v4:options.gapFill')}>
           <Input
             type="text"
             id="optGapFill"
@@ -81,7 +81,7 @@ export function OptionsDetails({
             }}
           />
         </Field>
-        <Field htmlFor="optRetries" label="retries per window">
+        <Field htmlFor="optRetries" label={t('v4:options.retries')}>
           <Input
             type="number"
             id="optRetries"
@@ -96,7 +96,7 @@ export function OptionsDetails({
             }}
           />
         </Field>
-        <Field htmlFor="optRetryDelay" label="retry delay (ms)">
+        <Field htmlFor="optRetryDelay" label={t('v4:options.retryDelay')}>
           <Input
             type="number"
             id="optRetryDelay"
@@ -111,7 +111,7 @@ export function OptionsDetails({
             }}
           />
         </Field>
-        <Field htmlFor="optRecipient" label="control transfer recipient">
+        <Field htmlFor="optRecipient" label={t('v4:options.recipient')}>
           <Select
             id="optRecipient"
             value={value.recipient}
@@ -120,12 +120,16 @@ export function OptionsDetails({
               onChange({ ...value, recipient: event.target.value as RecipientChoice });
             }}
           >
-            <option value="auto">auto</option>
-            <option value="interface">interface (0x41/0xC1)</option>
-            <option value="device">device (0x40/0xC0)</option>
+            <option value="auto">{t('v4:options.recipientAuto')}</option>
+            <option value="interface">
+              {t('v4:options.recipientInterface', { requestTypes: '0x41/0xC1' })}
+            </option>
+            <option value="device">
+              {t('v4:options.recipientDevice', { requestTypes: '0x40/0xC0' })}
+            </option>
           </Select>
         </Field>
-        <Field htmlFor="optDecrypt" label="decrypt firmware">
+        <Field htmlFor="optDecrypt" label={t('v4:options.decrypt')}>
           <Select
             id="optDecrypt"
             value={value.decrypt ? '1' : '0'}
@@ -134,8 +138,8 @@ export function OptionsDetails({
               onChange({ ...value, decrypt: event.target.value === '1' });
             }}
           >
-            <option value="1">yes</option>
-            <option value="0">no</option>
+            <option value="1">{t('v4:options.yes')}</option>
+            <option value="0">{t('v4:options.no')}</option>
           </Select>
         </Field>
       </div>
@@ -158,15 +162,7 @@ export function OptionsDetails({
       )}
 
       <Prose>
-        <p>
-          <strong>chunk</strong> is the size of each control-IN read, at most 64: one EP0 packet. A
-          longer read can lose a packet to the camera's boot ROM when the camera idles at a low
-          clock, so a larger value is read 64 bytes at a time; a smaller one is used as given, and
-          if a camera stalls the page drops lower on its own and carries on.{' '}
-          <strong>gap-fill</strong> is the byte written into the one 64 KiB block USB cannot reach.{' '}
-          <strong>recipient</strong> defaults to interface and falls back to device if the browser
-          cannot claim interface 0 — the firmware accepts both.
-        </p>
+        <p>{rich('v4:options.help')}</p>
       </Prose>
     </Disclosure>
   );

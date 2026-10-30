@@ -82,6 +82,19 @@ export async function chooseActingProfile(
   };
 }
 
+/*
+ * A SeekError this page builds itself (not core) has its English message for
+ * the run log; `withPageMessage` attaches the same sentence, translated, for
+ * the refusal shown on the page. Core's own errors have none yet.
+ */
+const pageMessages = new WeakMap<object, () => string>();
+
+/** Attaches the page's translated wording to `error`; returns `error`. */
+export function withPageMessage<E extends object>(error: E, message: () => string): E {
+  pageMessages.set(error, message);
+  return error;
+}
+
 /** A run the toolkit refused before it read anything, and why, for the page to show. */
 export interface Refusal {
   readonly code: Extract<SeekErrorCode, 'device/version-unknown' | 'family/unsupported'>;
@@ -102,5 +115,6 @@ export function refusalOf(error: unknown, userAgent?: string): Refusal | null {
     return null;
   }
   /* The hint is shown on the page, so it is translated; the message is core's. i18n: core message */
-  return { code: error.code, message: error.message, hint: hintFor(error, userAgent, t) };
+  const message = pageMessages.get(error)?.() ?? error.message;
+  return { code: error.code, message, hint: hintFor(error, userAgent, t) };
 }

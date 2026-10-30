@@ -40,7 +40,15 @@ import { reportInUseElsewhere } from '../lib/camera-lock';
 import { downloadArchive, mib } from '../lib/download';
 import { logHint } from '../lib/hints';
 import { firmwareLineOf } from '../lib/family-line';
-import { chooseActingProfile, refusalOf, type ActingProfile, type Refusal } from '../lib/identify';
+import { t, tEnglish } from '@/i18n';
+import { ROUTE_LABEL } from '@/lib/routing';
+import {
+  chooseActingProfile,
+  refusalOf,
+  withPageMessage,
+  type ActingProfile,
+  type Refusal,
+} from '../lib/identify';
 import {
   asOptionsFailure,
   readOptions,
@@ -93,15 +101,17 @@ export interface DumpPanelApi {
  * names the tab that does cover it.
  */
 function notThisFamily(id: string, name: string): SeekError {
-  const what =
+  const tab = (): string => ROUTE_LABEL.preserve;
+  const english =
     id === 'generic'
-      ? 'The camera did not match the 4.x/Nano family, and this tab reads only that family.'
-      : `The camera looks like ${name} (${id}), not a 4.x/Nano camera, and this tab reads only 4.x/Nano.`;
-  return new SeekError(
-    'family/unsupported',
-    `${what} Nothing was read. For a 0.x or 1.x camera (2014 or 2016 builds), use ` +
-      '"Dump & decrypt 0.x/1.x 2014/2016".',
-    { detail: { family: id } },
+      ? tEnglish('v4:refusal.generic', { tab: tEnglish('app:tab.preserve') })
+      : tEnglish('v4:refusal.otherFamily', { name, id, tab: tEnglish('app:tab.preserve') });
+  return withPageMessage(
+    new SeekError('family/unsupported', english, { detail: { family: id } }),
+    () =>
+      id === 'generic'
+        ? t('v4:refusal.generic', { tab: tab() })
+        : t('v4:refusal.otherFamily', { name, id, tab: tab() }),
   );
 }
 
@@ -111,21 +121,19 @@ function notThisFamily(id: string, name: string): SeekError {
  * arms and a window read, which a camera of the other line must not see.
  */
 function lineRefusal(version: string): SeekError {
-  return new SeekError(
-    'family/unsupported',
-    `The camera runs ${version}, a 0.x or 1.x build (2014 or 2016), and this tab reads only ` +
-      '4.x/Nano. Nothing was read but the version. For a 0.x or 1.x camera, use ' +
-      '"Dump & decrypt 0.x/1.x 2014/2016".',
-    { detail: { version } },
+  return withPageMessage(
+    new SeekError(
+      'family/unsupported',
+      tEnglish('v4:refusal.legacyLine', { version, tab: tEnglish('app:tab.preserve') }),
+      { detail: { version } },
+    ),
+    () => t('v4:refusal.legacyLine', { version, tab: ROUTE_LABEL.preserve }),
   );
 }
 
-/** The original's cancel copy for these panels. */
-const CANCELLING = 'Cancelling — will save whatever has been read so far ...';
-
 export function useDumpPanel(params: DumpPanelParams): DumpPanelApi {
   const { id, runner, device, form, profileId, dirPrefix, sweepPrefix, onOptionsFailure } = params;
-  const reporter = useReporter('Idle.');
+  const reporter = useReporter();
   const running = runner.active === id;
   const [acting, setActing] = useState<ActingProfile | null>(null);
   const [refusal, setRefusal] = useState<Refusal | null>(null);
@@ -185,7 +193,7 @@ export function useDumpPanel(params: DumpPanelParams): DumpPanelApi {
         const result =
           mode === 'sweep' ? await runSweep(ctx, dumpOptions) : await runDump(ctx, dumpOptions);
 
-        reporter.setStatus('Building archive ...');
+        reporter.setStatus(t('v4:status.building'));
         await yieldToUi();
         const archive = downloadArchive(dirName, result.artifacts);
         reporter.reporter.log('');
@@ -197,14 +205,16 @@ export function useDumpPanel(params: DumpPanelParams): DumpPanelApi {
 
         /* The original's exact closing line, including the "(cancelled)" the
          * partial archive earns. */
-        const partial = result.cancelled ? ' (cancelled)' : '';
         if ('selectorsArmed' in result) {
           const [first, last] = chosen.profile.sweepRange;
           reporter.reporter.progress(
             1,
             1,
-            `Done — ${String(result.selectorsArmed)}/${String(last - first + 1)} selectors armed, ` +
-              `${String(result.selectorsWithData)} with data${partial}. Check your downloads.`,
+            t(result.cancelled ? 'v4:status.sweepDoneCancelled' : 'v4:status.sweepDone', {
+              armed: result.selectorsArmed,
+              total: last - first + 1,
+              withData: result.selectorsWithData,
+            }),
           );
         } else {
           /* A window the build's own table reaches and that did not come
@@ -225,8 +235,14 @@ export function useDumpPanel(params: DumpPanelParams): DumpPanelApi {
           reporter.reporter.progress(
             1,
             1,
-            `Done — ${String(result.windowsRead)}/${String(result.windowsExpected)} windows read` +
-              `${incomplete ? ' (incomplete — see the log)' : partial}. Check your downloads.`,
+            t(
+              incomplete
+                ? 'v4:status.dumpDoneIncomplete'
+                : result.cancelled
+                  ? 'v4:status.dumpDoneCancelled'
+                  : 'v4:status.dumpDone',
+              { read: result.windowsRead, expected: result.windowsExpected },
+            ),
           );
         }
       } finally {
@@ -242,7 +258,7 @@ export function useDumpPanel(params: DumpPanelParams): DumpPanelApi {
   const start = useCallback(
     async (mode: DumpMode): Promise<void> => {
       const outcome = await runner.start(id, async (signal) => {
-        reporter.reset('Starting ...');
+        reporter.reset(t('v4:status.starting'));
         onOptionsFailure(null);
         setActing(null);
         setRefusal(null);
@@ -254,7 +270,7 @@ export function useDumpPanel(params: DumpPanelParams): DumpPanelApi {
           /* A dump no longer throws on cancel, but anything deeper still can. */
           if (error instanceof CancelledError) {
             reporter.log('cancelled — nothing was packaged', 'warn');
-            reporter.setStatus('Cancelled.');
+            reporter.setStatus(t('shared:status.cancelled'));
             return;
           }
           const refused = refusalOf(error);
@@ -265,9 +281,7 @@ export function useDumpPanel(params: DumpPanelParams): DumpPanelApi {
           reporter.log(`ERROR: ${errorMessage(error)}`, 'error');
           logHint(reporter.log, error);
           reporter.setStatus(
-            refused === null
-              ? 'Failed — see the log above.'
-              : 'Refused — nothing was read. See the message above the log.',
+            refused === null ? t('shared:status.failedSeeLog') : t('v4:status.refused'),
           );
         } finally {
           reporter.flush();
@@ -280,7 +294,7 @@ export function useDumpPanel(params: DumpPanelParams): DumpPanelApi {
 
   const cancel = useCallback((): void => {
     runner.cancel();
-    reporter.setStatus(CANCELLING);
+    reporter.setStatus(t('v4:status.cancelling'));
     reporter.log('cancel requested', 'warn');
   }, [reporter, runner]);
 

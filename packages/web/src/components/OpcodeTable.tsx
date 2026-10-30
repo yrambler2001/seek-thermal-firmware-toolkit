@@ -12,6 +12,7 @@ import {
   TableRowHeader,
 } from './ui/table';
 import { cn } from '@/lib/utils';
+import { t } from '@/i18n';
 
 export interface OpcodeRow {
   readonly opcode: string;
@@ -31,10 +32,10 @@ export function OpcodeTable({ caption, rows }: OpcodeTableProps): ReactElement {
       <TableCaption>{caption}</TableCaption>
       <TableHeader>
         <TableRow>
-          <TableHead className="w-[5.5rem]">Opcode</TableHead>
-          <TableHead>Name</TableHead>
-          <TableHead className="w-[4rem]">Dir</TableHead>
-          <TableHead>Why it is used</TableHead>
+          <TableHead className="w-[5.5rem]">{t('v4:opcodes.opcode')}</TableHead>
+          <TableHead>{t('v4:opcodes.name')}</TableHead>
+          <TableHead className="w-[4rem]">{t('v4:opcodes.dir')}</TableHead>
+          <TableHead>{t('v4:opcodes.why')}</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -42,14 +43,14 @@ export function OpcodeTable({ caption, rows }: OpcodeTableProps): ReactElement {
           <TableRow key={row.opcode}>
             <TableRowHeader className="font-mono font-semibold whitespace-nowrap">
               <span className="cell-label" aria-hidden="true">
-                Opcode
+                {t('v4:opcodes.opcode')}
               </span>
               {row.opcode}
             </TableRowHeader>
-            <TableCell label="Name" className="font-mono">
+            <TableCell label={t('v4:opcodes.name')} className="font-mono">
               {row.name}
             </TableCell>
-            <TableCell label="Dir">
+            <TableCell label={t('v4:opcodes.dir')}>
               <span
                 className={cn(
                   'inline-flex rounded border px-1.5 py-px font-mono text-[0.68rem] font-semibold',
@@ -61,7 +62,7 @@ export function OpcodeTable({ caption, rows }: OpcodeTableProps): ReactElement {
                 {row.dir}
               </span>
             </TableCell>
-            <TableCell label="Why it is used" className="text-muted-foreground">
+            <TableCell label={t('v4:opcodes.why')} className="text-muted-foreground">
               {row.why}
             </TableCell>
           </TableRow>
@@ -76,26 +77,54 @@ export function OpcodeTable({ caption, rows }: OpcodeTableProps): ReactElement {
  * version read that has gone out before every dump since the toolkit started
  * reading each build's own selector table (core `READ_ONLY_OPS`).
  */
+/* Each `why` is a getter, so it is translated when the table renders, not at module load. */
 export const READ_ONLY_OPCODES: readonly OpcodeRow[] = [
   {
     opcode: '0x4e',
     name: 'GetFirmwareInfo',
     dir: 'IN',
-    why: "the running firmware version, read first: it decides which build's selector table the dump uses, and a camera that does not report one is not read",
+    get why(): string {
+      return t('v4:opcodes.getInfo');
+    },
   },
-  { opcode: '0x35', name: 'GetErrorCode', dir: 'IN', why: 'check status after each step' },
+  {
+    opcode: '0x35',
+    name: 'GetErrorCode',
+    dir: 'IN',
+    get why(): string {
+      return t('v4:opcodes.getError');
+    },
+  },
   {
     opcode: '0x3c',
     name: 'SetOperationMode',
     dir: 'OUT',
-    why: 'only to select mode 0, and only if not already there',
+    get why(): string {
+      return t('v4:opcodes.setMode');
+    },
   },
-  { opcode: '0x3d', name: 'GetOperationMode', dir: 'IN', why: 'read the current mode' },
-  { opcode: '0x4f', name: 'GetFeaturedFirmwareData', dir: 'IN', why: 'the actual flash read' },
+  {
+    opcode: '0x3d',
+    name: 'GetOperationMode',
+    dir: 'IN',
+    get why(): string {
+      return t('v4:opcodes.getMode');
+    },
+  },
+  {
+    opcode: '0x4f',
+    name: 'GetFeaturedFirmwareData',
+    dir: 'IN',
+    get why(): string {
+      return t('v4:opcodes.getData');
+    },
+  },
   {
     opcode: '0x52',
     name: 'BeginFirmwareUpgrade',
     dir: 'OUT',
-    why: 'volatile read-window selector only — it selects which 64 KiB block the next reads return, and writes nothing',
+    get why(): string {
+      return t('v4:opcodes.begin');
+    },
   },
 ];

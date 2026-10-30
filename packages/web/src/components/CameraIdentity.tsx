@@ -14,6 +14,7 @@ import { KeyValue } from './KeyValue';
 import { Panel, PanelTitle } from './Panel';
 import { Alert } from './ui/alert';
 import type { ActingProfile, Refusal } from '@/lib/identify';
+import { t } from '@/i18n';
 
 export interface CameraIdentityProps {
   readonly acting: ActingProfile | null;
@@ -27,10 +28,11 @@ export function CameraIdentity({ acting, refusal }: CameraIdentityProps): ReactE
         <p>
           <strong>
             {refusal.code === 'device/version-unknown'
-              ? 'Not read: the camera did not say which firmware it runs.'
-              : 'Not read: this camera cannot be read this way.'}
+              ? t('v4:identity.versionUnknown')
+              : t('v4:identity.unsupported')}
           </strong>
         </p>
+        {/* i18n: core message (or the page's own refusal, already translated) */}
         <p>{refusal.message}</p>
         {refusal.hint !== null && <p>{refusal.hint}</p>}
       </Alert>
@@ -39,22 +41,19 @@ export function CameraIdentity({ acting, refusal }: CameraIdentityProps): ReactE
   if (acting === null) return null;
   return (
     <Panel>
-      <PanelTitle icon={<ScanSearch />}>Detected camera</PanelTitle>
+      <PanelTitle icon={<ScanSearch />}>{t('v4:identity.title')}</PanelTitle>
       <KeyValue
         className="mb-2"
         rows={[
           [
-            'Firmware',
+            t('v4:identity.firmware'),
             acting.firmwareVersion === null
               ? null
               : `${acting.firmwareVersion}${acting.buildString ? `  ${acting.buildString}` : ''}`,
           ],
         ]}
       />
-      <DetectionBox
-        detection={acting.detection}
-        scoreBasis="from the camera's answers, before any bank is read"
-      />
+      <DetectionBox detection={acting.detection} scoreBasis={t('v4:identity.scoreBasis')} />
     </Panel>
   );
 }
