@@ -79,7 +79,7 @@ import {
 } from './write-image.js';
 import { bankNameParam } from './backup.js';
 import { bootsNowMessage } from './booted-words.js';
-import { bankParam, paramText, type CoreMessage } from '../message.js';
+import { bankParam, coreMessage, paramText, type CoreMessage } from '../message.js';
 import {
   BOOT_UNNAMED_RISK,
   bootloaderRejectsWarning,
@@ -862,7 +862,7 @@ export async function flashSlot(
    * prints its read-back lines with the replug and the command to run. Saying it here too printed it twice
    * after one write or one frame-rate patch (TESTING.md 42.84), and the CLI's copy named "the device info"
    * (TESTING.md 42.87). */
-  reporter.progress(1, 1, 'Written.');
+  reporter.progress(1, 1, WRITTEN_STATUS.text, undefined, WRITTEN_STATUS);
 
   return {
     key: plan.key,
@@ -873,6 +873,9 @@ export async function flashSlot(
     noteMessages: notes,
   };
 }
+
+/** The status line a finished bank write leaves. */
+export const WRITTEN_STATUS: CoreMessage = coreMessage('status.written', {}, 'Written.');
 
 /* ==================================================================== *
  * flashSlotWithBackup: the write a person makes

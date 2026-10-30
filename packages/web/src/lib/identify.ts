@@ -26,6 +26,7 @@ import {
   type SeekDevice,
   type SeekErrorCode,
 } from '@seek-fw/core';
+import { coreText } from '@/lib/core-text';
 import { t } from '@/i18n';
 import { hintFor } from './hints';
 
@@ -114,7 +115,7 @@ export function refusalOf(error: unknown, userAgent?: string): Refusal | null {
   if (error.code !== 'device/version-unknown' && error.code !== 'family/unsupported') {
     return null;
   }
-  /* The hint is shown on the page, so it is translated; the message is core's. i18n: core message */
-  const message = pageMessages.get(error)?.() ?? error.message;
+  /* The hint and the message are shown on the page: the page's own wording, else core's message. */
+  const message = pageMessages.get(error)?.() ?? coreText(error.coreMessage ?? error.message);
   return { code: error.code, message, hint: hintFor(error, userAgent, t) };
 }

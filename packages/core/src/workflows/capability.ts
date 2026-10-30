@@ -35,6 +35,7 @@
 
 import { asciiz } from '../bytes.js';
 import { CancelledError, errorMessage, SeekError, type SeekErrorCode } from '../errors.js';
+import { coreMessage, type CoreMessage } from '../message.js';
 import type { SeekDevice } from '../protocol/client.js';
 import { DEFAULT_READ_CHUNK, OP } from '../protocol/ops.js';
 import { OLD_FW_UNLOCK_TOKEN, authPayload } from '../profiles/legacy-auth.js';
@@ -123,12 +124,19 @@ export function predatesDumpProtocol(version: string | null): boolean {
 
 /** Why a build `predatesDumpProtocol` says no, in one sentence for a user. */
 export function predatesDumpProtocolReason(version: string): string {
-  return (
+  return predatesDumpProtocolReasonMessage(version).text;
+}
+
+/** `predatesDumpProtocolReason` as a message, for the page. */
+export function predatesDumpProtocolReasonMessage(version: string): CoreMessage {
+  return coreMessage(
+    'identity.predates',
+    { version },
     `firmware ${version} predates the dump protocol: its RPC method table has no read handler ` +
-    'for GetFeaturedFirmwareData (on 0.7.0.7 and 0.7.0.8 it is registered as a setter only, ' +
-    'and before that wire id 0x4F is UploadFirmwareRowSize), so no window can be read with it; ' +
-    'on 0.3.0.1 wire id 0x52 is EnterBootloaderMode rather than BeginFirmwareUpgrade. The ' +
-    'preservation run reads 0.7.0.7 and 0.7.0.8 through wire id 0x58 (GetFeaturedData) instead'
+      'for GetFeaturedFirmwareData (on 0.7.0.7 and 0.7.0.8 it is registered as a setter only, ' +
+      'and before that wire id 0x4F is UploadFirmwareRowSize), so no window can be read with it; ' +
+      'on 0.3.0.1 wire id 0x52 is EnterBootloaderMode rather than BeginFirmwareUpgrade. The ' +
+      'preservation run reads 0.7.0.7 and 0.7.0.8 through wire id 0x58 (GetFeaturedData) instead',
   );
 }
 
@@ -143,12 +151,19 @@ export interface RunningFirmware {
 
 /** Why nothing beyond `SAFE_BEFORE_IDENTITY` goes out to a camera that has not said what it runs. */
 export function versionUnknownReason(note: string): string {
-  return (
+  return versionUnknownReasonMessage(note).text;
+}
+
+/** `versionUnknownReason` as a message, for the page; `note` is the version read's own account. */
+export function versionUnknownReasonMessage(note: string): CoreMessage {
+  return coreMessage(
+    'identity.versionUnknown',
+    { note },
     `the camera did not report its firmware version (${note}); a command number does not ` +
-    'mean the same thing on every Seek firmware — on Compact 0.3.0.1 wire id 0x52, the id ' +
-    'that arms a read window, is EnterBootloaderMode — so until the version is known nothing ' +
-    'is sent but GetErrorCode, GetOperationMode and GetFirmwareInfo, the reads every build ' +
-    'answers the same way'
+      'mean the same thing on every Seek firmware — on Compact 0.3.0.1 wire id 0x52, the id ' +
+      'that arms a read window, is EnterBootloaderMode — so until the version is known nothing ' +
+      'is sent but GetErrorCode, GetOperationMode and GetFirmwareInfo, the reads every build ' +
+      'answers the same way',
   );
 }
 
@@ -160,6 +175,8 @@ export type IdentityGate =
       /** `device/version-unknown` when there was no version; `family/unsupported` when it predates. */
       readonly code: Extract<SeekErrorCode, 'device/version-unknown' | 'family/unsupported'>;
       readonly reason: string;
+      /** `reason` as a message, for the page. */
+      readonly reasonMessage?: CoreMessage;
     };
 
 /**
@@ -179,17 +196,21 @@ export type IdentityGate =
  */
 export function identityGate(firmware: RunningFirmware): IdentityGate {
   if (firmware.version === null) {
+    const reason = versionUnknownReasonMessage(firmware.note);
     return {
       permitsArming: false,
       code: 'device/version-unknown',
-      reason: versionUnknownReason(firmware.note),
+      reason: reason.text,
+      reasonMessage: reason,
     };
   }
   if (predatesDumpProtocol(firmware.version)) {
+    const reason = predatesDumpProtocolReasonMessage(firmware.version);
     return {
       permitsArming: false,
       code: 'family/unsupported',
-      reason: predatesDumpProtocolReason(firmware.version),
+      reason: reason.text,
+      reasonMessage: reason,
     };
   }
   return { permitsArming: true, version: firmware.version };

@@ -84,6 +84,12 @@ import {
   uploadCheckedRefusal,
   whiteningRefusal,
   writeBannerMessage,
+  identityGate,
+  identityRefusal,
+  choosePreserveBanks,
+  readStatusMessage,
+  WRITTEN_STATUS,
+  errorCoreMessage,
   NO_READ_WINDOW_NOTE,
   capabilityNoteMessage,
   capabilityNotes,
@@ -521,6 +527,44 @@ function samples(base: DeviceState): CoreMessage[] {
       bankWriteRefusalMessages: [KEY_TABLE_REFUSAL],
     }),
   );
+
+  /* identity: the arming gate's refusals */
+  for (const version of [null, '0.3.0.1']) {
+    const gate = identityGate({ version, buildString: null, note: 'no answer' });
+    if (!gate.permitsArming) {
+      if (gate.reasonMessage !== undefined) add(gate.reasonMessage);
+      for (const operation of ['dump', 'dump all selectors', 'read the device info'] as const) {
+        add(identityRefusal(gate, version, operation, 'modern-4x').coreMessage);
+      }
+    }
+  }
+
+  /* preserve: choosing the banks */
+  const refusalOf = (run: () => unknown): void => {
+    try {
+      run();
+    } catch (error) {
+      add(errorCoreMessage(error));
+    }
+  };
+  refusalOf(() => choosePreserveBanks({ steps: {} } as never, {} as never));
+  refusalOf(() =>
+    choosePreserveBanks(
+      { steps: { backup: { status: 'done' }, commit: {} }, targets: ['a', 'r'] } as never,
+      {} as never,
+    ),
+  );
+  refusalOf(() =>
+    choosePreserveBanks(
+      { steps: { backup: { status: 'done' }, commit: {} } } as never,
+      {} as never,
+    ),
+  );
+
+  /* status lines */
+  add(WRITTEN_STATUS);
+  add(readStatusMessage(true, 3, 3));
+  add(readStatusMessage(false, 0, 3));
 
   /* notes: every capability note */
   capabilityNotes().forEach((note) => {

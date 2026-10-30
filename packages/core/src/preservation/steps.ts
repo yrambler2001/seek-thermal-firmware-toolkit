@@ -86,6 +86,7 @@ import {
   viewOf,
 } from '../bytes.js';
 import { CancelledError, SeekError } from '../errors.js';
+import { bankParam, coreMessage, listParam, paramText } from '../message.js';
 import type { Artifact, Reporter } from '../events.js';
 import { HEADER_OFFSET, HEADER_SIZE, IMAGE_MAGIC, parseImageHeader } from '../image/header.js';
 import { FLASH_BASE, FLASH_SIZE } from '../profiles/modern-4x.js';
@@ -451,18 +452,30 @@ export function choosePreserveBanks(
   choice: PreserveBankChoice,
 ): PreserveRunState {
   if (state.steps.backup?.status !== 'done') {
-    throw new SeekError(
-      'pipeline/refused',
+    const message = coreMessage(
+      'preserve.banks.beforeBackup',
+      {},
       'the banks are chosen after the backup, which reads them — run the backup first',
     );
+    throw new SeekError('pipeline/refused', message.text, { coreMessage: message });
   }
   if (state.steps.commit !== undefined) {
-    throw new SeekError(
-      'pipeline/refused',
+    const targets = state.targets ?? [];
+    const banks =
+      targets.length === 0
+        ? coreMessage('preserve.banks.none', {}, 'no bank')
+        : listParam(
+            targets.map((key) => bankParam(key)),
+            'comma',
+          );
+    const message = coreMessage(
+      'preserve.banks.afterCommit',
+      { banks },
       `the banks cannot change once the commit has run or been tried: this run writes ` +
-        `${(state.targets ?? []).map(bankWordsOf).join(', ') || 'no bank'}, and the restore puts ` +
+        `${paramText(banks)}, and the restore puts ` +
         'back exactly those',
     );
+    throw new SeekError('pipeline/refused', message.text, { coreMessage: message });
   }
   const verdict = preserveChoiceOf(state, choice);
   if (verdict.banks === null) throw new SeekError('pipeline/refused', verdict.what);

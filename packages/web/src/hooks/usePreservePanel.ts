@@ -59,8 +59,8 @@ import {
   SeekError,
   unpatchedStartOf,
 } from '@seek-fw/core';
-import { recordedCoreText } from '@/lib/core-text';
-import { errorMessage } from '@seek-fw/core';
+import { coreText, recordedCoreText } from '@/lib/core-text';
+import { errorCoreMessage, errorMessage } from '@seek-fw/core';
 import { t, tEnglish } from '@/i18n';
 import { reportInUseElsewhere } from '../lib/camera-lock';
 import { downloadBytes } from '../lib/download';
@@ -953,8 +953,8 @@ export function usePreservePanel(params: PreservePanelParams): PreservePanelApi 
         applyState(choosePreserveBanks(current, choice));
         return null;
       } catch (error) {
-        /* i18n: core message (choosePreserveBanks' refusal) */
-        return errorMessage(error);
+        /* i18n: core message (the choice's own `what` is English until words.ts has codes) */
+        return coreText(errorCoreMessage(error) ?? errorMessage(error));
       }
     },
     [applyState, runner.busy],

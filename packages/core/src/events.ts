@@ -1,3 +1,4 @@
+import type { CoreMessage } from './message.js';
 /** Severity of a line written to a run log. Maps to CSS classes in the web UI
  *  and to colours in the CLI. */
 export type LogLevel = 'info' | 'ok' | 'warn' | 'error' | 'detail';
@@ -46,7 +47,14 @@ export type RunEvent = LogEvent | ProgressEvent | ArtifactEvent;
  */
 export interface Reporter {
   log(message: string, level?: LogLevel): void;
-  progress(done: number, total: number, text?: string, unit?: ProgressUnit): void;
+  /** `message` is `text` as a code + params, for the page (`text` stays the English). */
+  progress(
+    done: number,
+    total: number,
+    text?: string,
+    unit?: ProgressUnit,
+    message?: CoreMessage,
+  ): void;
   /** Called as soon as each artifact is final, so a consumer may stream it. */
   artifact(artifact: Artifact): void;
 }
@@ -64,8 +72,8 @@ export function prefixed(inner: Reporter, prefix: string): Reporter {
     log: (message, level) => {
       inner.log(`${prefix}${message}`, level);
     },
-    progress: (done, total, text, unit) => {
-      inner.progress(done, total, text, unit);
+    progress: (done, total, text, unit, message) => {
+      inner.progress(done, total, text, unit, message);
     },
     artifact: (artifact) => {
       inner.artifact(artifact);
@@ -93,8 +101,8 @@ export function withLevelMap(
       const mapped = map(level, message);
       if (mapped !== null) inner.log(message, mapped);
     },
-    progress: (done, total, text, unit) => {
-      inner.progress(done, total, text, unit);
+    progress: (done, total, text, unit, message) => {
+      inner.progress(done, total, text, unit, message);
     },
     artifact: (artifact) => {
       inner.artifact(artifact);

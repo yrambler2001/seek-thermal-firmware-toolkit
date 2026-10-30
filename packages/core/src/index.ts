@@ -577,3 +577,9 @@ export {
   selectLockedBoot,
   type LockedBootSelection,
 } from './profiles/locked-boot.js';
+export {
+  predatesDumpProtocolReasonMessage,
+  versionUnknownReasonMessage,
+} from './workflows/capability.js';
+export { readStatusMessage } from './workflows/device-info.js';
+export { WRITTEN_STATUS } from './slots/write.js';

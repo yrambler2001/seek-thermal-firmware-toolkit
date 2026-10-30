@@ -19,6 +19,7 @@ import {
   type RunningFirmware,
 } from './capability.js';
 import type { WorkflowContext } from './types.js';
+import { coreMessage, type CoreParam } from '../message.js';
 
 export interface DevicePlan {
   readonly firmware: RunningFirmware;
@@ -35,21 +36,36 @@ export type PlannedOperation = 'dump' | 'dump all selectors' | 'read the device 
  * asked the camera first (`identifyCamera`) throws the same one before the run
  * starts, so the user reads one reason whichever of the two stopped them.
  */
+const OPERATION_CODE: Readonly<Record<PlannedOperation, string>> = {
+  dump: 'identity.operation.dump',
+  'dump all selectors': 'identity.operation.dumpAll',
+  'read the device info': 'identity.operation.readInfo',
+};
+
 export function identityRefusal(
   gate: Extract<IdentityGate, { readonly permitsArming: false }>,
   firmwareVersion: string | null,
   operation: PlannedOperation,
   profile: ProfileId,
 ): SeekError {
-  return new SeekError(
-    gate.code,
+  const message =
     `refusing to ${operation}: ${gate.reason}` +
-      (firmwareVersion === null
-        ? '. Nothing was armed. Unplug the camera, let it finish starting up, plug it back ' +
-          'in and try again.'
-        : ''),
-    { detail: { firmwareVersion, capability: operation, family: profile } },
-  );
+    (firmwareVersion === null
+      ? '. Nothing was armed. Unplug the camera, let it finish starting up, plug it back ' +
+        'in and try again.'
+      : '');
+  const params = {
+    operation: coreMessage(OPERATION_CODE[operation], {}, operation),
+    reason: gate.reasonMessage ?? gate.reason,
+  } satisfies Record<string, CoreParam>;
+  return new SeekError(gate.code, message, {
+    detail: { firmwareVersion, capability: operation, family: profile },
+    coreMessage: coreMessage(
+      firmwareVersion === null ? 'identity.refusingNoVersion' : 'identity.refusing',
+      params,
+      message,
+    ),
+  });
 }
 
 /**

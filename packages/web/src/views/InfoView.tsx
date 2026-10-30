@@ -28,6 +28,7 @@ import {
 } from '@/components/ui/table';
 import { Toolbar } from '@/components/ui/toolbar';
 import type { InfoPanelApi } from '@/hooks/useInfoPanel';
+import { coreText } from '@/lib/core-text';
 import { firmwareLineOf } from '@/lib/family-line';
 import { ROUTE_HREF, ROUTE_LABEL, type Route } from '@/lib/routing';
 import { t, useT } from '@/i18n';
@@ -185,8 +186,7 @@ export function InfoView({ info, connected, busy }: InfoViewProps): ReactElement
                   <p>
                     <strong>{t('info:result.noTab')}</strong>
                   </p>
-                  {/* i18n: core message */}
-                  <p>{result.gate.reason}</p>
+                  <p>{coreText(result.gate.reasonMessage ?? result.gate.reason)}</p>
                 </Alert>
               )}
               {result.gate.permitsArming && target !== null && (

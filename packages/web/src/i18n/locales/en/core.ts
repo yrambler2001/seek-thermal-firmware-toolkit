@@ -464,4 +464,32 @@ export default {
     'Nano 300 44.27.3.10: the modern 63-window map, measured confirming every window on the emulator. Its arm command (BeginFirmwareUpgrade) refuses a data type past the span it accepts (0x7F) as a bad first argument, and modes 7 to 9 are inside that span.',
   'notes.ff1308':
     "1.3.0.8-FF (16 Hz) reports the same version as the 8 Hz build. The read tells them apart from the camera: the camera says, bank by bank, whether its application takes the bank, and each build predicts its own answers from the banks. The FF image is sent in the form the vendor app sends it, and the camera stores it under its own key. It goes to slot A, slot B or recovery R. The 8 Hz build is expected to refuse it before it writes anything; while the camera's answers cannot tell the builds apart, the plan says what each build does with it. {untested}",
+
+  /* ---- identity: why nothing is armed before the camera names its build (workflows/capability, window-plan) ---- */
+  /** `{note}`: the version read's own account (English). Command names (GetErrorCode, …) and wire ids stay. */
+  'identity.versionUnknown':
+    'the camera did not report its firmware version ({note}); a command number does not mean the same thing on every Seek firmware — on Compact 0.3.0.1 wire id 0x52, the id that arms a read window, is EnterBootloaderMode — so until the version is known nothing is sent but GetErrorCode, GetOperationMode and GetFirmwareInfo, the reads every build answers the same way',
+  'identity.predates':
+    'firmware {version} predates the dump protocol: its RPC method table has no read handler for GetFeaturedFirmwareData (on 0.7.0.7 and 0.7.0.8 it is registered as a setter only, and before that wire id 0x4F is UploadFirmwareRowSize), so no window can be read with it; on 0.3.0.1 wire id 0x52 is EnterBootloaderMode rather than BeginFirmwareUpgrade. The preservation run reads 0.7.0.7 and 0.7.0.8 through wire id 0x58 (GetFeaturedData) instead',
+  /** `{operation}` is identity.operation.*, said after "refusing to"; `{reason}` is identity.versionUnknown or identity.predates. */
+  'identity.refusing': 'refusing to {operation}: {reason}',
+  'identity.refusingNoVersion':
+    'refusing to {operation}: {reason}. Nothing was armed. Unplug the camera, let it finish starting up, plug it back in and try again.',
+  'identity.operation.dump': 'dump',
+  'identity.operation.dumpAll': 'dump all selectors',
+  'identity.operation.readInfo': 'read the device info',
+
+  /* ---- preserve: a Preserve run's own refusals (preservation/steps) ---- */
+  'preserve.banks.beforeBackup':
+    'the banks are chosen after the backup, which reads them — run the backup first',
+  /** `{banks}`: the banks the run writes, joined with commas, or preserve.banks.none. */
+  'preserve.banks.afterCommit':
+    'the banks cannot change once the commit has run or been tried: this run writes {banks}, and the restore puts back exactly those',
+  'preserve.banks.none': 'no bank',
+
+  /* ---- status: a status line a run leaves under its progress bar ---- */
+  'status.written': 'Written.',
+  /** `{count}` of `{of}` slots answered. */
+  'status.read': 'Read. {count}/{of} slots readable.',
+  'status.readRefused': 'Read, but no bank of this camera can be written from here — see the log.',
 } as const satisfies NamespaceMessages;

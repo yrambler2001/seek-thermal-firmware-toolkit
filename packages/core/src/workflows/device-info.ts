@@ -1536,13 +1536,12 @@ export async function readDeviceInfo(
     checkKey,
   };
 
-  reporter.progress(
-    1,
-    1,
-    bankWriteRefusals.length === 0
-      ? `Read. ${String(slots.filter((s) => s.present).length)}/${String(descriptors.length)} slots readable.`
-      : 'Read, but no bank of this camera can be written from here — see the log.',
+  const readStatus = readStatusMessage(
+    bankWriteRefusals.length === 0,
+    slots.filter((s) => s.present).length,
+    descriptors.length,
   );
+  reporter.progress(1, 1, readStatus.text, undefined, readStatus);
   return state;
 }
 
@@ -1745,4 +1744,17 @@ export function bootableDescription(slot: SlotState): string {
   if (slot.bootability === 'unknown') return 'unknown';
   if (slot.bootability === 'recovery-only') return 'recovery only';
   return slot.bootable ? 'yes' : 'no';
+}
+
+/** The status line a device-info read leaves: how many slots read, or that no bank can be written. */
+export function readStatusMessage(writable: boolean, readable: number, total: number): CoreMessage {
+  if (!writable) {
+    return coreMessage(
+      'status.readRefused',
+      {},
+      'Read, but no bank of this camera can be written from here — see the log.',
+    );
+  }
+  const [count, of] = [String(readable), String(total)];
+  return coreMessage('status.read', { count, of }, `Read. ${count}/${of} slots readable.`);
 }

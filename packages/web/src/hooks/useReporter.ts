@@ -14,6 +14,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Artifact, LogLevel, Reporter } from '@seek-fw/core';
+import { coreText } from '@/lib/core-text';
 import { t } from '@/i18n';
 
 /** The original's repaint throttle, in milliseconds. */
@@ -158,9 +159,11 @@ export function useReporter(initialStatus: string = t('shared:status.idle')): Re
       log: (message, level) => {
         pushLine(message, level ?? 'info');
       },
-      progress: (done, total, text) => {
+      progress: (done, total, text, _unit, message) => {
         touched.current = true;
-        if (text !== undefined) statusText.current = text;
+        /* The status line in the language in use; the log keeps core's English. */
+        if (text !== undefined)
+          statusText.current = message === undefined ? text : coreText(message);
         buffer.current.progress = { done, total, text: statusText.current };
         /* The one event that must never be swallowed by the throttle. */
         if (total > 0 && done >= total) flush();
