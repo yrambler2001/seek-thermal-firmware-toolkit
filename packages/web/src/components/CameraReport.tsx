@@ -261,6 +261,7 @@ export function CameraReport({ state }: CameraReportProps): ReactElement {
                 .filter((slot) => slot.reason !== null)
                 .map((slot) => (
                   <li key={slot.key}>
+                    {/* i18n: core message (the read's per-slot reason, and the slot's name as core names it) */}
                     {t('info:report.slotReason', { slot: slot.name, reason: slot.reason ?? '' })}
                   </li>
                 ))}

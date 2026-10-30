@@ -8,15 +8,43 @@
  * page keep saying the same thing in English. Don't reword a template here
  * without rewording core, and the other way round.
  *
- * For translators:
- * - A param that is a bank (`{bank}`, `{first}`, `{name}`, `{target}`) arrives
- *   already named in your language from common:bank.* (in-sentence form, or the
- *   label form "Slot A" where the English starts a sentence or names a row).
- * - `{why}`, `{reason}`, `{verdict}` and `{banks}` are other core sentences or
- *   lists, already translated; a `{why}` that starts a sentence arrives with a
- *   capital first letter.
- * - `{word}`, `{offset}`, `{file}`, `{key}`, `{holds}`, `{count}` are values
- *   (hex, a file name, a key's name such as "Key A") and stay as they are.
+ * For translators (the `core` namespace):
+ * - Every value here is a sentence core also prints in English (the CLI, the
+ *   logs, the copyable report). Translate the sentence; keep its `{params}`.
+ * - Params that arrive ALREADY TRANSLATED (another core message, or a page word):
+ *   - a bank: `{bank}`, `{name}`, `{first}`, `{second}`, `{last}`, `{target}`.
+ *     Inside a sentence it is "slot A" / "recovery R" (common:bank.*InSentence);
+ *     where the English starts a sentence or names a row it is the label form
+ *     "Slot A" / "Recovery R". `{first}`/`{second}`/`{last}` in boot.rule may be
+ *     a bare letter ("A").
+ *   - a key name: `{key}`, `{held}`, `{holds}`, `{masks}` (keyName.*: "Key A",
+ *     "per-device key", …; `{masks}` is several, joined with commas).
+ *   - a nested sentence: `{why}`, `{reason}`, `{verdict}`, `{risk}`,
+ *     `{untested}`, `{outcome}`, `{failure}`, `{answers}`, `{predicted}`,
+ *     `{plain}`, `{ff}`, `{reference}`, `{recovered}`, `{check}`, `{phrase}`,
+ *     `{staged}`, `{source}`, `{operation}`, `{error}`. Each is another key of
+ *     this namespace (the comment above a key says which), already in your
+ *     language. A `{why}` that starts a sentence arrives with a capital letter.
+ *   - a list: `{banks}`, `{reasons}` (joined with your common:list.* words, or
+ *     "; " where the English uses a semicolon).
+ * - Params that stay AS THEY ARE: hex values and offsets (`{word}`, `{offset}`,
+ *   `{sum}`, `{hex}`, `{address}`, `{status}`, `{magic}`, `{length}`, `{k}`),
+ *   byte counts (`{size}`, `{count}`), firmware versions (`{version}`,
+ *   `{image}`, `{camera}`, `{firmware}`, `{builds}`, `{only}`), file names
+ *   (`{file}`), a SHA-256 (`{sha256}`) and family names (`{family}`,
+ *   `{detected}`).
+ * - Still English inside a translated sentence (core gives them no code yet):
+ *   `{reason}` in fpsBoot.cannotPatch, backup.bank.unsupported,
+ *   copy.source.notRead and fps.plan.noPlain (the build's support table and the
+ *   read's unread reasons); `{why}` in keys.evidence.checkKeyUnnamedWhy; `{note}`
+ *   in identity.versionUnknown; `{reasons}` in writeRefusal.otherFamily (the
+ *   detection's evidence); `{error}` when the error has no code.
+ * - Capitals: keep the English's. A template that starts lower case is said
+ *   inside another sentence or after a label ("Note: …", a list item, "Not
+ *   read: …"); one that starts upper case stands alone.
+ * - Names stay English: command names (GetFirmwareInfo, CompleteMemoryUpgrade,
+ *   BeginFirmwareUpgrade), wire ids, mode numbers, header fields
+ *   (`header.length`, "CODE"), PRESERVATION.md, UNTESTED.
  *
  * Owner: phase 3 (core messages). Phase 1 put the unlock note here as the
  * first entry.
@@ -492,4 +520,21 @@ export default {
   /** `{count}` of `{of}` slots answered. */
   'status.read': 'Read. {count}/{of} slots readable.',
   'status.readRefused': 'Read, but no bank of this camera can be written from here — see the log.',
+
+  /* ---- compare: the "now / after the write" table of a write's preview (slots/write-image compareRows) ---- */
+  'compare.field.version': 'Firmware version',
+  'compare.field.imageId': 'Image id',
+  /** SP: the stack pointer word of the image's vector table (keep "SP"). */
+  'compare.field.initialSp': 'Initial SP',
+  'compare.field.resetVector': 'Reset vector',
+  'compare.field.size': 'Size',
+  'compare.field.shaExpected': 'SHA-256 of the expected plain image',
+  'compare.field.sha': 'SHA-256 of the image',
+  'compare.field.shaNotStored': 'SHA-256 of the expected plain image (stored bytes not predicted)',
+  'compare.field.key': 'Key',
+  /** The values in brackets stand where a value would be. */
+  'compare.noImage': '(no image)',
+  'compare.notImage': '(not an image)',
+  'compare.notPredicted': '(not predicted: the device decides what it stores)',
+  'compare.plaintext': 'none (plaintext)',
 } as const satisfies NamespaceMessages;

@@ -67,6 +67,7 @@ import type { CipherProfile } from '../profiles/types.js';
 import type { StagingForm } from './types.js';
 import { sha256Sync } from './write-sha.js';
 import { coreMessage, type CoreMessage } from '../message.js';
+import { keyNameParam } from './write-keys-words.js';
 
 /** Every refusal of this page is one code, so a front end can tell "nothing was sent" apart. */
 export function slotRefused(
@@ -659,4 +660,38 @@ export function bankImageOf(payload: Uint8Array, bankBytes: number): Uint8Array 
   const out = new Uint8Array(bankBytes).fill(0xff);
   out.set(payload.subarray(0, bankBytes), 0);
   return out;
+}
+
+/* ---- the compare table's words, as messages for the page: each is a constant, so its English names it ---- */
+const COMPARE_WORDS: ReadonlyMap<string, string> = new Map([
+  ['Firmware version', 'compare.field.version'],
+  ['Image id', 'compare.field.imageId'],
+  ['Initial SP', 'compare.field.initialSp'],
+  ['Reset vector', 'compare.field.resetVector'],
+  ['Size', 'compare.field.size'],
+  ['SHA-256 of the expected plain image', 'compare.field.shaExpected'],
+  ['SHA-256 of the image', 'compare.field.sha'],
+  [
+    'SHA-256 of the expected plain image (stored bytes not predicted)',
+    'compare.field.shaNotStored',
+  ],
+  ['Key', 'compare.field.key'],
+  ['(no image)', 'compare.noImage'],
+  ['(not an image)', 'compare.notImage'],
+  ['(not predicted: the device decides what it stores)', 'compare.notPredicted'],
+  ['none (plaintext)', 'compare.plaintext'],
+]);
+
+/**
+ * A word of `compareRows` (a field name, or a value such as "(no image)") as a message; a key's name as
+ * `keyNameParam` gives it; any other value (a version, a hex word) as it is.
+ */
+export function compareWordMessage(text: string): CoreMessage | string {
+  const code = COMPARE_WORDS.get(text);
+  return code === undefined ? keyNameParam(text) : coreMessage(code, {}, text);
+}
+
+/** Every word `compareWordMessage` gives a code, for the page's tests. */
+export function compareWords(): string[] {
+  return [...COMPARE_WORDS.keys()];
 }

@@ -15,6 +15,7 @@ import {
   bankParam,
   derivedKeyLineMessage,
   stagingDetailMessage,
+  compareWordMessage,
 } from '@seek-fw/core';
 import { coreText, coreTexts } from '@/lib/core-text';
 import { t } from '@/i18n';
@@ -151,21 +152,20 @@ export function SlotFlashPreview({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {/* i18n: core message (the compare rows' field names) */}
               {plan.compare.map((row) => (
                 <TableRow key={row.field}>
-                  <TableRowHeader>{row.field}</TableRowHeader>
+                  <TableRowHeader>{coreText(compareWordMessage(row.field))}</TableRowHeader>
                   <TableCell
                     label={t('slots:preview.col.now')}
                     className="font-mono text-[0.8rem] [overflow-wrap:anywhere]"
                   >
-                    {row.before}
+                    {coreText(compareWordMessage(row.before))}
                   </TableCell>
                   <TableCell
                     label={t('slots:preview.col.after')}
                     className="font-mono text-[0.8rem] [overflow-wrap:anywhere]"
                   >
-                    {row.after}
+                    {coreText(compareWordMessage(row.after))}
                   </TableCell>
                 </TableRow>
               ))}

@@ -57,7 +57,7 @@ export {
   readBackReferenceOf,
   writtenCommittedNote,
 } from './write-verify.js';
-export { bootloaderFailureMessages } from './write-image.js';
+export { bootloaderFailureMessages, compareWordMessage, compareWords } from './write-image.js';
 export { keyCheckMessage, keyConfidenceMessage } from '../crypto/confidence-words.js';
 export {
   BACKUP_TEXT_NAME,

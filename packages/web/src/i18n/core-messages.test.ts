@@ -90,6 +90,8 @@ import {
   readStatusMessage,
   WRITTEN_STATUS,
   errorCoreMessage,
+  compareWordMessage,
+  compareWords,
   NO_READ_WINDOW_NOTE,
   capabilityNoteMessage,
   capabilityNotes,
@@ -565,6 +567,11 @@ function samples(base: DeviceState): CoreMessage[] {
   add(WRITTEN_STATUS);
   add(readStatusMessage(true, 3, 3));
   add(readStatusMessage(false, 0, 3));
+
+  /* compare: the preview's table words */
+  compareWords().forEach((word) => {
+    message(compareWordMessage(word));
+  });
 
   /* notes: every capability note */
   capabilityNotes().forEach((note) => {
