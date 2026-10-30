@@ -103,7 +103,11 @@ export default {
     one: 'Patched {count} bank. Each reads back as planned.',
     other: 'Patched {count} banks. Each reads back as planned.',
   },
-  /* After a cancel. Also written to the run log, in English. {banks} is joined by common:list.and. */
+  /*
+   * After a cancel. Also written to the run log, in English. {bank} and each name in {banks} are the bank's
+   * name on its own (common:bank.slot / bank.recovery: "Slot A", "Recovery R"), as English has always
+   * written them here; {banks} is joined by common:list.and.
+   */
   'status.cancelled.nothing': 'Cancelled — nothing was written.',
   'status.cancelled.one':
     'Cancelled after the commit to {bank} was sent — the bank may be partly written. Read it before relying on it.',
@@ -200,7 +204,10 @@ export default {
   'everyBank.toolbar': 'Every bank',
   'everyBank.make': 'Make {hz} FPS in every bank',
   'everyBank.faster': 'Make every bank faster',
-  /* {order} is the banks joined by common:list.then. */
+  /*
+   * {order} is the banks' names on their own (common:bank.slot / bank.recovery: "Slot B, then Recovery R,
+   * then Slot A"), joined by common:list.then.
+   */
   'everyBank.note':
     'Patches {order} in one confirmation; each is saved first, in one zip download, and read back.',
   'everyBank.noteBootedLast':
@@ -326,10 +333,10 @@ export default {
   },
   /* A bank that is not patched, and why ({note} is fps.*). */
   'fpsEvery.other': '{bank}: {note}',
-  /* {others} is one or more fpsEvery.other lines. */
+  /* {others} is one or more fpsEvery.other lines, joined by a space. */
   'fpsEvery.others': 'Left as they are: {others}',
   'fpsEvery.orderOne': 'It writes {bank} alone, and reads it back.',
-  /* {order} is the banks joined by common:list.then. */
+  /* {order}: as in everyBank.note, the names on their own ("Slot B, then Recovery R"), joined by common:list.then. */
   'fpsEvery.order':
     'They are written in this order: {order}. Each is read back before the next, and the first failure stops the rest.',
   'fpsEvery.orderBootedLast':
@@ -384,7 +391,10 @@ export default {
       'The read-back does NOT differ only as planned: {unexpected} unexpected and {count} missing byte(s).',
   },
   'fpsOutcome.notTaken': 'The read-back was not taken, so the patch is not checked here.',
-  /* After "Make N FPS in every bank": {done} of {count} banks, in {order} (common:list.comma). */
+  /*
+   * After "Make N FPS in every bank": {done} of {count} banks, in {order}: the names inside a sentence
+   * ("slot B, recovery R"), joined by common:list.comma.
+   */
   'fpsEveryOutcome.title': {
     one: 'Every bank: {done} of {count} patched, in this order: {order}.',
     other: 'Every bank: {done} of {count} patched, in this order: {order}.',
@@ -396,7 +406,7 @@ export default {
   'fpsEveryOutcome.notTaken': 'The read-back was not taken.',
   /* {reason} is core's. */
   'fpsEveryOutcome.stopped': 'Stopped: {reason}.',
-  /* {banks} joined by common:list.comma. */
+  /* {banks}: the names inside a sentence ("slot B, recovery R"), joined by common:list.comma. */
   'fpsEveryOutcome.notWritten': 'Not written: {banks}.',
 
   /* The panel of the keys the writes use. */
