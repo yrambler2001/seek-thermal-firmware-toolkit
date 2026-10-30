@@ -199,7 +199,7 @@ export default {
   /* {label} and {id} name a known edit of the factory image (core's); {balance} is a hex word. */
   'bankPlan.editValue':
     '{label} ({id}) у заводському образі. Її баланс, {balance}, — у слові коригування; патч балансується поверх нього, а крок 04 повертає образ разом із цією зміною.',
-  'bankPlan.factorySha': 'sha256 заводського розшифрованого образу',
+  'bankPlan.factorySha': 'sha256 заводського образу',
   'bankPlan.patchedSha': 'sha256 після патча',
   'bankPlan.diffCount': 'Змінені байти на мікросхемі',
   /** Row label: the length of the image as sent to the camera, in bytes. */
@@ -362,7 +362,7 @@ export default {
   'gate.bankRefused': '{bank} не можна записати: {reason}',
   /* {r} is the recovery bank inside a sentence ("recovery R"), {bank} a chosen bank. */
   'gate.recoveryRoute':
-    'маршрут через слот відновлення (ця збірка запускається лише з {r:gen}, а не з {bank:gen})',
+    'маршрут через слот відновлення (ця збірка запускається лише зі {r:gen}, а не зі {bank:gen})',
   'gate.backupFirst': 'резервна копія флеш-пам’яті (вона виконується першою на цьому етапі)',
   'gate.backup': 'резервна копія флеш-пам’яті',
   'gate.patchStep': 'крок патча',
