@@ -50,7 +50,8 @@ const FLOOR: Readonly<Record<string, Readonly<Record<string, number>>>> = {
     'th[scope="row"]': 4,
   },
   '#/preserve': {
-    'section[aria-labelledby]': 5,
+    'section[aria-labelledby]': 6,
+    'table > caption': 1,
     '[aria-live="polite"]': 3,
     '[role="progressbar"]': 3,
     '[aria-current="page"]': 1,

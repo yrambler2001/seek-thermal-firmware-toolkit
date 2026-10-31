@@ -297,6 +297,39 @@ export default {
   'summary.toolbar': 'Acciones del archivo',
   'summary.download': 'Descargar el archivo completo (archivo de ejecución)',
 
+  /* ---- what the run file holds (views/PreserveView) ---- */
+  'output.title': 'Lo que obtienes',
+  'output.intro':
+    'El archivo de ejecución es una sola descarga `{ext}`. Cada guardado contiene todo lo que la ejecución ha generado hasta ese momento, con una carpeta por paso:',
+  'output.caption': 'Archivos dentro del archivo de ejecución',
+  'output.file': 'Archivo',
+  'output.what': 'Qué es',
+  'output.runState':
+    'el registro de la ejecución: carga el zip en esta pestaña para continuar la ejecución o para volver a verla',
+  'output.readme': 'qué hay en el zip y dónde',
+  'output.backup':
+    'tu copia de seguridad: los 31 bloques que deja leer una cámara de serie, leídos antes de escribir nada, cada uno en su dirección de la flash ({fill} donde un bloque no se puede leer así)',
+  'output.capture':
+    'cada ranura de firmware que la ejecución puede escribir, tal como la guarda la cámara (a, b o r en el nombre), leída dos veces con las dos lecturas iguales',
+  'output.plain': 'el firmware de cada una de esas ranuras, descifrado',
+  'output.patched':
+    'para cada ranura que parchea la ejecución: su firmware con el parche temporal de lectura',
+  'output.decrypted':
+    'la copia de seguridad descifrada: el firmware de cada ranura y un informe sobre él',
+  'output.manifest': 'los detalles de ese descifrado',
+  'output.decryptReadme': 'qué contiene ese descifrado y cuáles son sus límites',
+  'output.pageBuild': 'qué compilación de esta página hizo la ejecución',
+  'output.dumpPatched':
+    'los 4 MB completos tal como se leyeron, con el parche aún en las ranuras donde se escribió',
+  'output.dumpOriginal':
+    'la imagen completa: los 4 MB enteros con el firmware original de vuelta en su sitio; la flash original de tu cámara',
+  'output.verify':
+    'los 31 bloques leídos de nuevo tras la restauración, ordenados como la copia de seguridad; deberían coincidir con ella',
+  'output.grows':
+    'Cada archivo aparece cuando se ha ejecutado el paso que lo genera, así que un archivo de ejecución temprano solo contiene la primera carpeta.',
+  'output.keep':
+    'El archivo que debes conservar es `{original}`: toda la flash de tu cámara tal como estaba. El resto muestra cómo llegó ahí la ejecución.',
+
   /* ---- the run file section ---- */
   'runFile.eyebrow': 'Opcional: para continuar una ejecución más tarde',
   'runFile.title': 'Archivo de ejecución',

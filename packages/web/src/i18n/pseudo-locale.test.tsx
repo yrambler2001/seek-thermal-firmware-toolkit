@@ -127,6 +127,10 @@ const STAYS_ENGLISH: readonly { readonly pattern: RegExp; readonly why: string }
     pattern: /[^\s"'(),:;]*\.(?:bin|zip|json|txt|md)\b/g,
     why: 'file names and paths the page saves, reads or names (README.md, windows/*.bin)',
   },
+  {
+    pattern: /\b\d\d-[a-z]+(?:-[a-z]+)*\/(?:[\w-]+\/)*/g,
+    why: "the run file's folders, which the page names (02-read-build/decrypted/)",
+  },
   { pattern: /\bpreserve-[\w-]+/g, why: 'a Preserve run id, which names its files' },
   { pattern: /\b0x[0-9A-Fa-f]+\b/g, why: 'hex: addresses, status words, USB ids' },
   { pattern: /\b[0-9A-Fa-f]{16,}\b/g, why: 'SHA-256 digests and AES keys, as hex' },

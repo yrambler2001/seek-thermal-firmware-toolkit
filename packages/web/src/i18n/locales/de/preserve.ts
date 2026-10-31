@@ -288,6 +288,38 @@ export default {
   'summary.toolbar': 'Archiv-Aktionen',
   'summary.download': 'Gesamtarchiv herunterladen (Durchlaufdatei)',
 
+  /* ---- what the run file holds (views/PreserveView) ---- */
+  'output.title': 'Was Sie erhalten',
+  'output.intro':
+    'Die Durchlaufdatei ist ein einziger `{ext}`-Download. Jede Speicherung enthält alles, was der Durchlauf bis dahin erzeugt hat, mit einem Ordner pro Schritt:',
+  'output.caption': 'Dateien in der Durchlaufdatei',
+  'output.file': 'Datei',
+  'output.what': 'Inhalt',
+  'output.runState':
+    'der Stand des Durchlaufs: Laden Sie die ZIP-Datei auf diesem Tab, um den Durchlauf fortzusetzen oder ihn noch einmal anzusehen',
+  'output.readme': 'was in der ZIP-Datei liegt und wo',
+  'output.backup':
+    'Ihre Sicherung: die 31 Blöcke, die eine Kamera im Originalzustand herausgibt, gelesen, bevor etwas geschrieben wird, jeder an seiner Flash-Adresse ({fill}, wo ein Block so nicht lesbar ist)',
+  'output.capture':
+    'jeder Firmware-Slot, den der Durchlauf schreiben kann, so wie die Kamera ihn speichert (a, b oder r im Namen), zweimal gelesen, mit zwei gleichen Ergebnissen',
+  'output.plain': 'die Firmware aus jedem dieser Slots, entschlüsselt',
+  'output.patched':
+    'für jeden Slot, den der Durchlauf patcht: seine Firmware mit dem vorübergehenden Lese-Patch',
+  'output.decrypted': 'die Sicherung, entschlüsselt: die Firmware jedes Slots und ein Bericht dazu',
+  'output.manifest': 'die Einzelheiten dieser Entschlüsselung',
+  'output.decryptReadme': 'was diese Entschlüsselung enthält und wo ihre Grenzen liegen',
+  'output.pageBuild': 'welcher Build dieser Seite den Durchlauf ausgeführt hat',
+  'output.dumpPatched':
+    'die gesamten 4 MB wie gelesen, mit dem Patch noch in den Slots, in die er geschrieben wurde',
+  'output.dumpOriginal':
+    'das vollständige Abbild: die gesamten 4 MB mit der wieder eingesetzten Original-Firmware — der ursprüngliche Flash-Speicher Ihrer Kamera',
+  'output.verify':
+    'die 31 Blöcke, nach der Wiederherstellung erneut gelesen und wie die Sicherung angeordnet; sie sollten ihr gleichen',
+  'output.grows':
+    'Eine Datei ist erst da, wenn der Schritt gelaufen ist, der sie erzeugt; eine frühe Durchlaufdatei enthält also nur den ersten Ordner.',
+  'output.keep':
+    'Aufbewahren sollten Sie `{original}`: den gesamten Flash-Speicher Ihrer Kamera, wie er war. Der Rest zeigt, wie der Durchlauf dorthin kam.',
+
   /* ---- the run file section ---- */
   'runFile.eyebrow': 'Optional — um einen Durchlauf später fortzusetzen',
   'runFile.title': 'Durchlaufdatei',

@@ -297,6 +297,38 @@ export default {
   'summary.toolbar': 'Azioni sull’archivio',
   'summary.download': 'Scarica l’archivio completo (file di esecuzione)',
 
+  /* ---- what the run file holds (views/PreserveView) ---- */
+  'output.title': 'Cosa ottieni',
+  'output.intro':
+    'Il file di esecuzione è un unico download `{ext}`. Ogni salvataggio contiene tutto ciò che l’esecuzione ha prodotto fin lì, con una cartella per passaggio:',
+  'output.caption': 'File contenuti nel file di esecuzione',
+  'output.file': 'File',
+  'output.what': 'Cos’è',
+  'output.runState':
+    'il registro dell’esecuzione: carica lo zip in questa scheda per proseguire l’esecuzione o per rivederla',
+  'output.readme': 'cosa c’è nello zip e dove',
+  'output.backup':
+    'il tuo backup: i 31 blocchi che una termocamera originale lascia uscire, letti prima di scrivere qualsiasi cosa, ciascuno al suo indirizzo nella flash ({fill} dove un blocco non si può leggere così)',
+  'output.capture':
+    'ogni slot del firmware che l’esecuzione può scrivere, così come lo conserva la termocamera (a, b o r nel nome), letto due volte con due letture identiche',
+  'output.plain': 'il firmware di ciascuno di quegli slot, decifrato',
+  'output.patched':
+    'per ogni slot a cui l’esecuzione applica la patch: il suo firmware con la patch temporanea di lettura',
+  'output.decrypted': 'il backup decifrato: il firmware di ogni slot e un rapporto su di esso',
+  'output.manifest': 'i dettagli di quella decifratura',
+  'output.decryptReadme': 'cosa contiene quella decifratura e quali sono i suoi limiti',
+  'output.pageBuild': 'con quale build di questa pagina è stata fatta l’esecuzione',
+  'output.dumpPatched':
+    'tutti i 4 MB così come sono stati letti, con la patch ancora negli slot in cui è stata scritta',
+  'output.dumpOriginal':
+    'l’immagine completa: tutti i 4 MB con il firmware originale rimesso al suo posto — la flash originale della tua termocamera',
+  'output.verify':
+    'i 31 blocchi riletti dopo il ripristino, disposti come il backup; devono coincidere con esso',
+  'output.grows':
+    'Un file compare solo dopo che è stato eseguito il passaggio che lo produce, quindi un file di esecuzione dei primi passaggi contiene solo la prima cartella.',
+  'output.keep':
+    'Il file da conservare è `{original}`: tutta la flash della tua termocamera com’era. Il resto mostra come l’esecuzione ci è arrivata.',
+
   /* ---- the run file section ---- */
   'runFile.eyebrow': 'Facoltativo: per continuare un’esecuzione in seguito',
   'runFile.title': 'File di esecuzione',

@@ -300,6 +300,38 @@ export default {
   'summary.toolbar': 'Działania na archiwum',
   'summary.download': 'Pobierz pełne archiwum (plik przebiegu)',
 
+  /* ---- what the run file holds (views/PreserveView) ---- */
+  'output.title': 'Co otrzymujesz',
+  'output.intro':
+    'Plik przebiegu to jeden plik `{ext}` do pobrania. Każdy zapis zawiera wszystko, co przebieg dotąd wytworzył, z jednym folderem na każdy krok:',
+  'output.caption': 'Pliki w pliku przebiegu',
+  'output.file': 'Plik',
+  'output.what': 'Co to jest',
+  'output.runState':
+    'zapis stanu przebiegu: wczytaj ten zip na tej karcie, aby kontynuować przebieg albo obejrzeć go ponownie',
+  'output.readme': 'co jest w zipie i gdzie',
+  'output.backup':
+    'twoja kopia zapasowa: 31 bloków, które udostępnia kamera w oryginalnym stanie, odczytanych przed jakimkolwiek zapisem, każdy pod swoim adresem we flashu ({fill} tam, gdzie bloku nie da się tak odczytać)',
+  'output.capture':
+    'każdy slot firmware, który przebieg może zapisać, w takiej postaci, w jakiej przechowuje go kamera (a, b lub r w nazwie), odczytany dwa razy z identycznym wynikiem',
+  'output.plain': 'firmware z każdego z tych slotów, odszyfrowany',
+  'output.patched':
+    'dla każdego slotu, który przebieg łata: jego firmware z tymczasową łatką do odczytu',
+  'output.decrypted': 'odszyfrowana kopia zapasowa: firmware każdego slotu i raport o nim',
+  'output.manifest': 'szczegóły tego odszyfrowania',
+  'output.decryptReadme': 'co zawiera to odszyfrowanie i jakie ma ograniczenia',
+  'output.pageBuild': 'która kompilacja tej strony wykonała przebieg',
+  'output.dumpPatched':
+    'całe 4 MB w odczytanej postaci, z łatką wciąż w slotach, w których ją zapisano',
+  'output.dumpOriginal':
+    'pełny obraz: całe 4 MB z przywróconym oryginalnym firmware — oryginalna pamięć flash twojej kamery',
+  'output.verify':
+    '31 bloków odczytanych ponownie po przywróceniu, ułożonych jak kopia zapasowa; powinny być z nią identyczne',
+  'output.grows':
+    'Plik pojawia się dopiero po wykonaniu kroku, który go tworzy, więc wczesny plik przebiegu zawiera tylko pierwszy folder.',
+  'output.keep':
+    'Plik do zachowania to `{original}`: cała pamięć flash twojej kamery w pierwotnym stanie. Reszta pokazuje, jak przebieg do tego doszedł.',
+
   /* ---- the run file section ---- */
   'runFile.eyebrow': 'Opcjonalnie — aby kontynuować przebieg później',
   'runFile.title': 'Plik przebiegu',

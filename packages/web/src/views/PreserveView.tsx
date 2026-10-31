@@ -21,6 +21,7 @@ import {
   CircleCheck,
   CircleStop,
   CircleX,
+  FolderArchive,
   HardDriveDownload,
   Layers,
   ListChecks,
@@ -61,10 +62,13 @@ import {
   restoreFormMessage,
   drainCapabilityMessage,
   routeNoteMessage,
+  PRESERVE_DUMP_MANIFEST_FILE,
+  PRESERVE_DUMP_README_FILE,
 } from '@seek-fw/core';
 import { coreText, recordedText } from '@/lib/core-text';
 import { listComma, rich, t, type NameValue } from '@/i18n';
 import { bankListRef, bankName, bankNameRef, bankWordsRef } from '@/lib/bank-names';
+import { FileTable } from '@/components/FileTable';
 import { Panel, PanelTitle } from '@/components/Panel';
 import { Prose } from '@/components/Prose';
 import { RunPanel } from '@/components/RunPanel';
@@ -97,10 +101,21 @@ import {
 } from '@/components/ui/table';
 import { Toolbar } from '@/components/ui/toolbar';
 import { canRunPhase, gateReason, type PreserveGate } from '@/lib/preserve/gating';
+import { RUN_README_FILE } from '@/lib/preserve/run-file';
 import {
+  PAGE_BUILD_FILE,
+  PHASE_FOLDER,
+  PRESERVE_BACKUP_FILE,
+  PRESERVE_DUMP_ORIGINAL_FILE,
+  PRESERVE_DUMP_PATCHED_FILE,
   PRESERVE_PHASES,
+  PRESERVE_VERIFY_FILE,
+  RUN_STATE_FILE,
   WRITES_FLASH,
   phaseMeta,
+  preserveCaptureFile,
+  preservePatchedFile,
+  preservePlainFile,
   stepMeta,
   type PreservePhaseId,
   type PreserveRunState,
@@ -119,6 +134,37 @@ const PHASE_ICON: Readonly<Record<PreservePhaseId, ReactNode>> = {
   'patch-dump': <HardDriveDownload />,
   'restore-verify': <RotateCcw />,
 };
+
+/** A per-bank file name with the bank's letter as `*`: `preserve_bank_*_capture.bin`. */
+function anyBank(name: (bank: BankKey) => string): string {
+  return name('a').replace('_a_', '_*_');
+}
+
+/**
+ * The run file's entries (names as `run-file.ts` writes them, `*` for each bank's letter, a trailing
+ * `/` for a folder) and what each is, translated at render. In the order of the zip: the record and
+ * the guide at the top, then one folder per step.
+ */
+export function runFileRows(): readonly (readonly [string, string])[] {
+  const read = PHASE_FOLDER['read-build'];
+  const dump = PHASE_FOLDER['patch-dump'];
+  const verify = PHASE_FOLDER['restore-verify'];
+  return [
+    [RUN_STATE_FILE, t('preserve:output.runState')],
+    [RUN_README_FILE, t('preserve:output.readme')],
+    [`${read}/${PRESERVE_BACKUP_FILE}`, t('preserve:output.backup', { fill: '0xFF' })],
+    [`${read}/${anyBank(preserveCaptureFile)}`, t('preserve:output.capture')],
+    [`${read}/${anyBank(preservePlainFile)}`, t('preserve:output.plain')],
+    [`${read}/${anyBank(preservePatchedFile)}`, t('preserve:output.patched')],
+    [`${read}/decrypted/`, t('preserve:output.decrypted')],
+    [`${read}/${PRESERVE_DUMP_MANIFEST_FILE}`, t('preserve:output.manifest')],
+    [`${read}/${PRESERVE_DUMP_README_FILE}`, t('preserve:output.decryptReadme')],
+    [`${read}/${PAGE_BUILD_FILE}`, t('preserve:output.pageBuild')],
+    [`${dump}/${PRESERVE_DUMP_PATCHED_FILE}`, t('preserve:output.dumpPatched')],
+    [`${dump}/${PRESERVE_DUMP_ORIGINAL_FILE}`, t('preserve:output.dumpOriginal')],
+    [`${verify}/${PRESERVE_VERIFY_FILE}`, t('preserve:output.verify')],
+  ];
+}
 
 function stepNumber(index: number): string {
   return String(index + FIRST_PHASE_STEP).padStart(2, '0');
@@ -233,6 +279,24 @@ export function PreserveView({
           }}
         />
       )}
+
+      <Section id="preserve-output" title={t('preserve:output.title')} icon={<FolderArchive />}>
+        <Prose>
+          <p>{rich('preserve:output.intro', { params: { ext: '.zip' } })}</p>
+        </Prose>
+        <FileTable
+          caption={t('preserve:output.caption')}
+          fileHeader={t('preserve:output.file')}
+          whatHeader={t('preserve:output.what')}
+          rows={runFileRows()}
+        />
+        <Prose>
+          <p>{t('preserve:output.grows')}</p>
+          <p>
+            {rich('preserve:output.keep', { params: { original: PRESERVE_DUMP_ORIGINAL_FILE } })}
+          </p>
+        </Prose>
+      </Section>
 
       <Section
         id="preserve-runfile"

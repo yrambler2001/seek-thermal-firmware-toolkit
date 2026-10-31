@@ -298,6 +298,39 @@ export default {
   'summary.toolbar': 'Actions sur l’archive',
   'summary.download': 'Télécharger l’archive complète (fichier d’exécution)',
 
+  /* ---- what the run file holds (views/PreserveView) ---- */
+  'output.title': 'Ce que vous obtenez',
+  'output.intro':
+    'Le fichier d’exécution est un seul téléchargement `{ext}`. Chaque enregistrement contient tout ce que l’exécution a produit jusque-là, avec un dossier par étape :',
+  'output.caption': 'Fichiers contenus dans le fichier d’exécution',
+  'output.file': 'Fichier',
+  'output.what': 'Contenu',
+  'output.runState':
+    'le relevé de l’exécution : chargez le zip dans cet onglet pour reprendre l’exécution ou pour la revoir',
+  'output.readme': 'ce que contient le zip, et où',
+  'output.backup':
+    'votre sauvegarde : les 31 blocs qu’une caméra d’origine laisse sortir, lus avant toute écriture, chacun à son adresse en flash ({fill} là où un bloc ne peut pas être lu ainsi)',
+  'output.capture':
+    'chaque emplacement de firmware que l’exécution peut écrire, tel que la caméra le stocke (a, b ou r dans le nom), lu deux fois, les deux lectures étant identiques',
+  'output.plain': 'le firmware de chacun de ces emplacements, déchiffré',
+  'output.patched':
+    'pour chaque emplacement que l’exécution corrige : son firmware avec le correctif de lecture temporaire',
+  'output.decrypted':
+    'la sauvegarde déchiffrée : le firmware de chaque emplacement et un rapport à son sujet',
+  'output.manifest': 'le détail de ce déchiffrement',
+  'output.decryptReadme': 'ce que contient ce déchiffrement et quelles sont ses limites',
+  'output.pageBuild': 'quelle version de cette page a mené l’exécution',
+  'output.dumpPatched':
+    'les 4 Mo entiers tels que lus, avec le correctif encore dans les emplacements où il a été écrit',
+  'output.dumpOriginal':
+    'l’image complète : les 4 Mo entiers avec le firmware d’origine remis en place — la mémoire flash d’origine de votre caméra',
+  'output.verify':
+    'les 31 blocs relus après la restauration, disposés comme la sauvegarde ; ils doivent lui être identiques',
+  'output.grows':
+    'Un fichier n’apparaît qu’une fois exécutée l’étape qui le produit : un fichier d’exécution précoce ne contient donc que le premier dossier.',
+  'output.keep':
+    'Le fichier à garder est `{original}` : toute la mémoire flash de votre caméra telle qu’elle était. Le reste montre comment l’exécution y est arrivée.',
+
   /* ---- the run file section ---- */
   'runFile.eyebrow': 'Facultatif — pour reprendre une exécution plus tard',
   'runFile.title': 'Fichier d’exécution',

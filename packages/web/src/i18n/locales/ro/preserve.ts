@@ -296,6 +296,39 @@ export default {
   'summary.toolbar': 'Acțiuni pentru arhivă',
   'summary.download': 'Descărcare arhivă completă (fișier de rulare)',
 
+  /* ---- what the run file holds (views/PreserveView) ---- */
+  'output.title': 'Ce primiți',
+  'output.intro':
+    'Fișierul de rulare este o singură descărcare `{ext}`. Fiecare salvare conține tot ce a produs rularea până atunci, cu câte un dosar pentru fiecare pas:',
+  'output.caption': 'Fișierele din fișierul de rulare',
+  'output.file': 'Fișier',
+  'output.what': 'Ce este',
+  'output.runState':
+    'evidența rulării: încărcați arhiva zip în această filă ca să continuați rularea sau ca să o revedeți',
+  'output.readme': 'ce se află în arhiva zip și unde',
+  'output.backup':
+    'copia dumneavoastră de rezervă: cele 31 de blocuri pe care le lasă să iasă o cameră nemodificată, citite înainte să se scrie ceva, fiecare la adresa sa din memoria flash ({fill} unde un bloc nu poate fi citit astfel)',
+  'output.capture':
+    'fiecare slot de firmware pe care rularea îl poate scrie, așa cum îl păstrează camera (a, b sau r în nume), citit de două ori, cu ambele citiri identice',
+  'output.plain': 'firmware-ul din fiecare dintre aceste sloturi, decriptat',
+  'output.patched':
+    'pentru fiecare slot în care rularea pune patch-ul: firmware-ul său cu patch-ul temporar de citire',
+  'output.decrypted':
+    'copia de rezervă decriptată: firmware-ul fiecărui slot și un raport despre el',
+  'output.manifest': 'detaliile acestei decriptări',
+  'output.decryptReadme': 'ce conține această decriptare și care îi sunt limitele',
+  'output.pageBuild': 'ce versiune a acestei pagini a făcut rularea',
+  'output.dumpPatched':
+    'toți cei 4 MB așa cum au fost citiți, cu patch-ul încă în sloturile în care a fost scris',
+  'output.dumpOriginal':
+    'imaginea completă: toți cei 4 MB cu firmware-ul original pus la loc — memoria flash originală a camerei dumneavoastră',
+  'output.verify':
+    'cele 31 de blocuri citite din nou după restaurare, așezate ca în copia de rezervă; ar trebui să fie identice cu ea',
+  'output.grows':
+    'Un fișier apare abia după ce a rulat pasul care îl produce, așa că un fișier de rulare timpuriu conține doar primul dosar.',
+  'output.keep':
+    'Fișierul de păstrat este `{original}`: întreaga memorie flash a camerei dumneavoastră, așa cum era. Restul arată cum a ajuns rularea acolo.',
+
   /* ---- the run file section ---- */
   'runFile.eyebrow': 'Opțional — pentru a continua o rulare mai târziu',
   'runFile.title': 'Fișier de rulare',

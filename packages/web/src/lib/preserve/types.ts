@@ -67,6 +67,9 @@ export {
 /** The run-state file, by its name inside the run ZIP. */
 export const RUN_STATE_FILE: string = PRESERVE_RUN_STATE_FILE;
 
+/** The note of which build of the page ran the run, in the run ZIP's step 02 folder. */
+export const PAGE_BUILD_FILE = 'page-build.txt';
+
 /** One checkpoint the run can produce: the backup, each bank's capture,
  *  derived image and patched image, the dumps and the verify's re-read. */
 export type CheckpointName = string;

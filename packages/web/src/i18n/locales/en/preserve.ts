@@ -289,6 +289,41 @@ export default {
   'summary.toolbar': 'Archive actions',
   'summary.download': 'Download the full archive (run file)',
 
+  /*
+   * ---- what the run file holds (views/PreserveView, "What you get") ----
+   * The file and folder names in the table stay as they are; {fill} is a byte (0xFF), {original} a file name.
+   */
+  'output.title': 'What you get',
+  'output.intro':
+    'The run file is a single `{ext}` download. Each save holds everything the run has made so far, with one folder per step:',
+  'output.caption': 'Files inside the run file',
+  'output.file': 'File',
+  'output.what': 'What it is',
+  'output.runState':
+    "the run's record: load the zip on this tab to carry on with the run, or to look at it again",
+  'output.readme': 'what is in the zip and where',
+  'output.backup':
+    'your backup: the 31 blocks a stock camera lets out, read before anything is written, each at its flash address ({fill} where a block cannot be read this way)',
+  'output.capture':
+    'each firmware bank the run can write, as the camera stores it (a, b or r in the name), read twice with both reads the same',
+  'output.plain': 'the firmware from each of those banks, decrypted',
+  'output.patched':
+    'for each bank the run patches: its firmware with the temporary read patch in it',
+  'output.decrypted': "the backup decrypted: each bank's firmware and a report on it",
+  'output.manifest': 'the details of that decryption',
+  'output.decryptReadme': 'what that decryption holds and what its limits are',
+  'output.pageBuild': 'which build of this page ran the run',
+  'output.dumpPatched':
+    'the whole 4 MiB as read, with the patch still in the banks it was written to',
+  'output.dumpOriginal':
+    "the complete image: the whole 4 MiB with the original firmware put back — your camera's original flash",
+  'output.verify':
+    'the 31 blocks read again after the restore, laid out like the backup; they should match it',
+  'output.grows':
+    'A file is there once the step that makes it has run, so an early run file holds only the first folder.',
+  'output.keep':
+    'The file to keep is `{original}`: the whole flash of your camera as it was. The rest shows how the run got there.',
+
   /* ---- the run file section ---- */
   'runFile.eyebrow': 'Optional — to continue a run later',
   'runFile.title': 'Run file',

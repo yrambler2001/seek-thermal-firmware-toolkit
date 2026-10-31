@@ -267,6 +267,32 @@ export default {
   'summary.toolbar': '压缩包操作',
   'summary.download': '下载完整压缩包（运行文件）',
 
+  /* ---- what the run file holds (views/PreserveView) ---- */
+  'output.title': '你会得到什么',
+  'output.intro':
+    '运行文件是一个 `{ext}` 下载文件。每次保存都包含本次运行到那时为止生成的全部内容，每个步骤一个文件夹：',
+  'output.caption': '运行文件中的文件',
+  'output.file': '文件',
+  'output.what': '内容',
+  'output.runState': '本次运行的记录：在此标签页加载这个 zip，即可继续运行或重新查看',
+  'output.readme': 'zip 中有什么、在哪里',
+  'output.backup':
+    '你的备份：原厂相机允许读出的 31 个块，在写入任何内容之前读取，每块放在它的闪存地址上（无法这样读取的块填 {fill}）',
+  'output.capture':
+    '本次运行可以写入的每个固件槽位，按相机存储的原样保存（文件名中带 a、b 或 r），读取两遍且两遍一致',
+  'output.plain': '这些槽位中的固件，已解密',
+  'output.patched': '本次运行要打补丁的每个槽位：带有临时读取补丁的固件',
+  'output.decrypted': '解密后的备份：每个槽位的固件及其报告',
+  'output.manifest': '这次解密的详细信息',
+  'output.decryptReadme': '这次解密包含什么、有哪些局限',
+  'output.pageBuild': '执行本次运行的页面版本',
+  'output.dumpPatched': '按读取原样的完整 4 MB，补丁仍留在写入过的槽位中',
+  'output.dumpOriginal': '完整镜像：放回原始固件后的完整 4 MB——你的相机原本的闪存',
+  'output.verify': '恢复之后再次读取的 31 个块，排列方式与备份相同；应当与备份一致',
+  'output.grows': '某个步骤运行之后，它生成的文件才会出现，所以较早的运行文件只包含第一个文件夹。',
+  'output.keep':
+    '要保留的文件是 `{original}`：你的相机原本的完整闪存。其余文件记录了这次运行是如何得到它的。',
+
   /* ---- the run file section ---- */
   'runFile.eyebrow': '可选——用于以后继续运行',
   'runFile.title': '运行文件',

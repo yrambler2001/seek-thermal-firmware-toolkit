@@ -9,7 +9,10 @@
 
 import type { LogLine } from '@/hooks/useReporter';
 
-export function visibleLogLines(lines: readonly LogLine[], showDetails: boolean): readonly LogLine[] {
+export function visibleLogLines(
+  lines: readonly LogLine[],
+  showDetails: boolean,
+): readonly LogLine[] {
   if (showDetails) return lines;
   const shown: LogLine[] = [];
   for (const line of lines) {

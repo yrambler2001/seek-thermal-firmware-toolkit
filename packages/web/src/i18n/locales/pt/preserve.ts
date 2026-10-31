@@ -298,6 +298,39 @@ export default {
   'summary.toolbar': 'Ações do arquivo',
   'summary.download': 'Transferir o arquivo completo (ficheiro de execução)',
 
+  /* ---- what the run file holds (views/PreserveView) ---- */
+  'output.title': 'O que obtém',
+  'output.intro':
+    'O ficheiro de execução é uma única transferência `{ext}`. Cada gravação contém tudo o que a execução produziu até então, com uma pasta por passo:',
+  'output.caption': 'Ficheiros dentro do ficheiro de execução',
+  'output.file': 'Ficheiro',
+  'output.what': 'O que é',
+  'output.runState':
+    'o registo da execução: carregue o zip neste separador para continuar a execução ou para a rever',
+  'output.readme': 'o que está no zip e onde',
+  'output.backup':
+    'a sua cópia de segurança: os 31 blocos que uma câmara sem alterações deixa ler, lidos antes de qualquer escrita, cada um no seu endereço da flash ({fill} onde um bloco não pode ser lido desta forma)',
+  'output.capture':
+    'cada ranhura de firmware que a execução pode escrever, tal como a câmara a guarda (a, b ou r no nome), lida duas vezes, com as duas leituras iguais',
+  'output.plain': 'o firmware de cada uma dessas ranhuras, desencriptado',
+  'output.patched':
+    'para cada ranhura em que a execução aplica o patch: o seu firmware com o patch temporário de leitura',
+  'output.decrypted':
+    'a cópia de segurança desencriptada: o firmware de cada ranhura e um relatório sobre ele',
+  'output.manifest': 'os pormenores dessa desencriptação',
+  'output.decryptReadme': 'o que essa desencriptação contém e quais são os seus limites',
+  'output.pageBuild': 'que compilação desta página fez a execução',
+  'output.dumpPatched':
+    'os 4 MB completos tal como foram lidos, com o patch ainda nas ranhuras onde foi escrito',
+  'output.dumpOriginal':
+    'a imagem completa: os 4 MB inteiros com o firmware original reposto — a flash original da sua câmara',
+  'output.verify':
+    'os 31 blocos lidos de novo depois da reposição, dispostos como a cópia de segurança; devem coincidir com ela',
+  'output.grows':
+    'Um ficheiro só aparece depois de correr o passo que o cria, por isso um ficheiro de execução inicial contém apenas a primeira pasta.',
+  'output.keep':
+    'O ficheiro a guardar é `{original}`: toda a flash da sua câmara tal como estava. O resto mostra como a execução lá chegou.',
+
   /* ---- the run file section ---- */
   'runFile.eyebrow': 'Opcional — para continuar uma execução mais tarde',
   'runFile.title': 'Ficheiro de execução',

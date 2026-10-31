@@ -80,6 +80,7 @@ import { buildRunFile, parseRunFile } from '../lib/preserve/run-file';
 import { cameraNotBackEnglish, stepErrorText } from '../lib/preserve/step-error';
 import {
   isCheckpointName,
+  PAGE_BUILD_FILE,
   PHASE_FOLDER,
   PRESERVE_BACKUP_FILE,
   PRESERVE_DUMP_ORIGINAL_FILE,
@@ -670,7 +671,7 @@ export function usePreservePanel(params: PreservePanelParams): PreservePanelApi 
              * caches the page hard — so every run names its bundle. It is a
              * file name, so it goes to the run file, not the log (42.105). */
             extra.current.set(
-              `${PHASE_FOLDER['read-build']}/page-build.txt`,
+              `${PHASE_FOLDER['read-build']}/${PAGE_BUILD_FILE}`,
               new TextEncoder().encode(`${bundleTag()}\n`),
             );
           } catch (error) {

@@ -12,6 +12,7 @@ import type { ReactElement } from 'react';
 import { CircleStop, FolderArchive, ListFilter, Play, Radar } from 'lucide-react';
 import { FLASH_DUMP_ORIGINAL_FILE } from '@seek-fw/core';
 import { CameraIdentity } from '@/components/CameraIdentity';
+import { FileTable } from '@/components/FileTable';
 import { OptionsDetails } from '@/components/OptionsDetails';
 import { Prose } from '@/components/Prose';
 import { RunPanel } from '@/components/RunPanel';
@@ -19,16 +20,6 @@ import { Section } from '@/components/Section';
 import { UnlockNote } from '@/components/UnlockNote';
 import { Button } from '@/components/ui/button';
 import { Disclosure } from '@/components/ui/disclosure';
-import {
-  Table,
-  TableBody,
-  TableCaption,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-  TableRowHeader,
-} from '@/components/ui/table';
 import { Toolbar } from '@/components/ui/toolbar';
 import type { DumpPanelApi } from '@/hooks/useDumpPanel';
 import type { OptionField, OptionsForm } from '@/lib/options';
@@ -140,27 +131,12 @@ export function V4View({
           <p>{rich('v4:output.intro', { params: { ext: '.zip' } })}</p>
         </Prose>
 
-        <Table>
-          <TableCaption>{t('v4:output.caption')}</TableCaption>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="w-[19rem]">{t('v4:output.file')}</TableHead>
-              <TableHead>{t('v4:output.what')}</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {archiveRows().map(([file, what]) => (
-              <TableRow key={file}>
-                <TableRowHeader className="font-mono text-[0.8rem] font-normal">
-                  {file}
-                </TableRowHeader>
-                <TableCell label={t('v4:output.what')} className="text-muted-foreground">
-                  {what}
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+        <FileTable
+          caption={t('v4:output.caption')}
+          fileHeader={t('v4:output.file')}
+          whatHeader={t('v4:output.what')}
+          rows={archiveRows()}
+        />
 
         <Prose>
           <p>{t('v4:output.keyFromDump')}</p>
