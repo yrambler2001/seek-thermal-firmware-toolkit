@@ -16,6 +16,11 @@ All notable changes to this project are listed here. The format follows [Keep a 
 - An image too long for a bank is "longer than slot A", not "longer than the Slot A bank".
 - The upgrade-target warning ends in two sentences: "…, which the upgrade replaces. Slot B is left unbootable if the upgrade stops partway."
 - Plainer words on the page: "Bytes changed on the flash chip" (was "Bytes that move on the part"), "(not asked)" for an upgrade target the camera was not asked for (was "(not replayed)"), "matches the backup (all 31 blocks)" (was "on all 31 blocks"), and "bootable — the bootloader accepts it" (was "can key it").
+- The page leaves out a number of technical notes and explanations: the notes under the slot plan and the bank rows (the unlock token, the 2014 boot word, the 4.x gap and others), the warning that an upgrade would replace the booted bank, the empty-bank line of a slot dump, the list of evidence behind the write keys, the Info tab's "Where the 2016 and 1.3.0.8 FF builds are" and the 4.x/Nano tab's "Read-only guarantee". The CLI still prints its notes and warnings.
+- The 0.x/1.x tab is now "Dump & decrypt 0.x/1.x" (was "Dump & decrypt 0.x/1.x 2014/2016"), also in the CLI's help and in `seek-fw info`.
+- The frame-rate refusal for an image of another build no longer quotes the patch id.
+- The Platform notes are on the Info tab, below the read, instead of at the end of the 4.x/Nano tab.
+- The 4.x/Nano tab has the same icon as the 0.x/1.x tab.
 
 ### Added
 
@@ -23,11 +28,14 @@ All notable changes to this project are listed here. The format follows [Keep a 
 - **The page in 11 languages:** English, Deutsch, Español, Français, Italiano, Polski, Português (European), Română, Русский, Українська and 简体中文. Each language other than English is downloaded only when it is used.
 - The page opens in the browser's language, or in English when it does not have it. The language switch next to the theme switch picks another one, and the browser remembers it. `?lang=xx` before the `#` picks one for that visit: `…/?lang=de#/slots`.
 - The command-line tool, the run log, the copyable camera report, hex values, firmware versions and file names stay in English.
+- **What you get** on the Dump & decrypt 0.x/1.x tab: what the run file holds, file by file.
 
 ### Fixed
 
 - Buttons and badges with long labels wrap instead of running off a phone screen. "Dump all selectors (0x00–0xFF)" crossed the Options panel's border even in English.
 - When the booted bank has no name, the Work with firmware slots tab no longer says "the booted the booted bank".
+- The Info tab's log no longer fills with blank lines while it reads (four in a row on a Compact 1.3.0.0): with the details hidden, a run of them shows as one, as the CLI prints it.
+- "Restore from full flash backup (.bin or .zip)…" on the slots tab, and any other button label that takes two lines, starts beside its icon like the other buttons instead of being centred.
 
 ### Development
 
