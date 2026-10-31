@@ -3,7 +3,7 @@
  *
  * Owner: phase 2, rest-of-page agent.
  * Covers: views/V4View.tsx, hooks/useDumpPanel.ts, components/CameraIdentity.tsx,
- * components/OpcodeTable.tsx, components/OptionsDetails.tsx, lib/options.ts.
+ * components/OptionsDetails.tsx, lib/options.ts.
  *
  * src/i18n/README.md has the conventions.
  */
@@ -69,18 +69,6 @@ export default {
     'A chave é recuperada do próprio dump, por isso não é preciso nenhum ficheiro de chave nem segredo do dispositivo.',
   'output.bestEffort':
     'Mesmo assim, a desencriptação não é garantida. Se não for encontrada nenhuma chave — por exemplo, numa unidade cujo bootloader deriva a chave da OTP do chip, que não está num dump da flash —, essa ranhura é simplesmente ignorada e o resto do arquivo não é afetado.',
-
-  /* views/V4View: the read-only guarantee. Command names are params, in `code`. <link> wraps the Slots tab's name. */
-  'readonly.title': 'Garantia de só leitura',
-  'readonly.intro':
-    'Este separador só pode enviar exatamente seis comandos do fabricante. É todo o seu vocabulário — não há nenhum caminho no código para mais nada:',
-  'readonly.caption': 'Os seis comandos do fabricante, só de leitura',
-  'readonly.absent':
-    '`{setData}`, `{complete}`, `{reset}` e todos os comandos de envio, confirmação e apagamento estão ausentes desta vista. `{usbReset}` também nunca é chamado; ao tentar de novo, a página apenas fecha e volta a abrir a ligação. A desencriptação é feita inteiramente em memória, na cópia que está no seu browser, e nunca toca no dispositivo.',
-  'readonly.writing':
-    'A escrita na câmara está noutro separador, <link>{tab}</link>, que escreve uma ranhura de cada vez e pede confirmação antes de cada escrita. Nada *neste* separador consegue chegar a esses comandos.',
-  'readonly.firstReads':
-    'Até a câmara indicar a versão do firmware, só são enviados três dos seis, e só como leituras: `{getInfo}`, `{getMode}` e `{getError}`. São as leituras que estão no mesmo número de comando, com o mesmo significado, em todas as 36 imagens de firmware examinadas; um número de comando não significa o mesmo em todas as compilações, por isso não sai mais nada até a compilação ser conhecida.',
   'gap.summary': 'A lacuna em {address}',
   'gap.where':
     'O conjunto de comandos USB tem um seletor de janela de leitura para cada bloco de 64 KB da flash de 4 MB, exceto `{range}`. Esse bloco é preenchido com `{fill}` na imagem combinada e registado em `{manifest}`.',
@@ -92,20 +80,6 @@ export default {
     'Essa redundância é também a razão pela qual uma câmara cujo `{address}` se lê como `{fill}` está bem: o firmware arrancável continua a existir nas outras ranhuras. De qualquer forma, nada neste separador escreve no dispositivo — a lacuna só afeta o ficheiro que transfere.',
   'gap.complete':
     'Se quiser mesmo uma imagem estritamente completa, byte a byte — para comparar a flash com uma referência, por exemplo —, leia-a por SWD/J-Link ou com um programador SPI.',
-
-  /* components/OpcodeTable. Opcodes, names and IN/OUT stay as they are. */
-  'opcodes.opcode': 'Opcode',
-  'opcodes.name': 'Nome',
-  'opcodes.dir': 'Dir.',
-  'opcodes.why': 'Para que é usado',
-  'opcodes.getInfo':
-    'a versão do firmware em execução, lida primeiro: decide qual a tabela de seletores de compilação que o dump usa, e uma câmara que não a indique não é lida',
-  'opcodes.getError': 'verificar o estado depois de cada passo',
-  'opcodes.setMode': 'só para selecionar o modo 0, e só se ainda não estiver nele',
-  'opcodes.getMode': 'ler o modo atual',
-  'opcodes.getData': 'a leitura propriamente dita da flash',
-  'opcodes.begin':
-    'só escolhe qual o bloco de 64 KB que as leituras seguintes devolvem — a escolha não é guardada e não é escrito nada',
 
   /* components/CameraIdentity: what the camera said before the dump. */
   'identity.versionUnknown': 'Não lida: a câmara não disse qual o firmware que executa.',

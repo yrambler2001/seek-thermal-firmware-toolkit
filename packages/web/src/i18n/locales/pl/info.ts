@@ -80,16 +80,6 @@ export default {
   'tabs.slots.cameras': 'Kamery z firmware 0.8.0.0 i nowszym.',
   'tabs.slots.writes': 'Tak, jeden slot naraz, i każdy zapis najpierw pyta.',
 
-  /* views/InfoView: where the 2016 and 1.3.0.8 FF builds are. Tab names in ** are the tab labels. */
-  'split.title': 'Gdzie są kompilacje z 2016 roku i 1.3.0.8 FF',
-  'split.where':
-    'Kompilacje Compact PRO z 2016 roku (1.0.3.0 i 1.0.3.2, łącznie z ich wariantami FF) i kompilacja Compact 1.3.0.8 FF (16 Hz) **nie** są kamerami 4.x i nie są odczytywane tak jak one. Ich protokół to zablokowany protokół z lat 2014–2017, a ich firmware przechowuje sloty innym szyfrem (2016) albo jako łańcuch jawnego tekstu z 2014 roku z drogą tylko przez slot odzyskiwania (FF). Dlatego są na karcie **Zrzut i odszyfrowanie 0.x/1.x 2014/2016**, a karta 4.x/Nano odrzuca je, zanim cokolwiek odczyta.',
-  'split.evidence':
-    'Dowody, że działają na karcie 0.x/1.x: proces Preserve ma wyprowadzoną łatkę dla każdej z nich, a jego przebiegi w emulatorze kończą się sukcesem dla obu. Kompilacja 1.0.3.0 na swoim natywnym zrzucie z 2016 roku przeszła kopię zapasową, łatkę, zatwierdzenie, pełny odczyt, przywrócenie i weryfikację; 1.3.0.8 FF przeszła swoją drogę przez slot odzyskiwania. Na kamerze testowej, Compact PRO 1.0.3.0, odczyt w kroku 02 Preserve zakończył się bez resetu i bez zapisu, a kamera została rozpoznana jako szyfr z 2016 roku. W tych kompilacjach mapa selektorów 4.x jest odrzucana dla 38 z jej 63 selektorów, więc karta 4.x mogłaby dla nich zwrócić tylko luki.',
-  /* "There" is the 4.x/Nano tab: the page once had a firmware-family selector there, and it is gone, so no setting routes these builds into the 4.x/Nano read. */
-  'split.stay':
-    'Dlatego pozostają na karcie 0.x/1.x, a karta 4.x/Nano nie ma wyboru rodziny, który mógłby je tam skierować.',
-
   /*
    * components/CameraReport: the page's panels after a read (labels only).
    * Row values that are sentences come from core and stay as core wrote them.

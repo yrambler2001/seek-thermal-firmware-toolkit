@@ -79,16 +79,6 @@ export default {
   'tabs.slots.cameras': 'Camere cu firmware 0.8.0.0 sau mai nou.',
   'tabs.slots.writes': 'Da, câte un slot pe rând, și fiecare scriere întreabă mai întâi.',
 
-  /* views/InfoView: where the 2016 and 1.3.0.8 FF builds are. Tab names in ** are the tab labels. */
-  'split.title': 'Unde sunt build-urile din 2016 și 1.3.0.8 FF',
-  'split.where':
-    'Build-urile Compact PRO din 2016 (1.0.3.0 și 1.0.3.2, inclusiv variantele lor FF) și build-ul Compact 1.3.0.8 FF (16 Hz) **nu** sunt camere 4.x și nu se citesc ca una. Protocolul lor este cel blocat din 2014–2017, iar firmware-ul lor stochează sloturile cu un cifru diferit (2016) sau ca lanțul necriptat din 2014, cu o rută doar prin slotul de recuperare (FF). De aceea sunt pe **Extragere și decriptare 0.x/1.x 2014/2016**, iar fila 4.x/Nano le refuză înainte să citească ceva.',
-  'split.evidence':
-    'Dovada că funcționează pe fila 0.x/1.x: procesul Preserve are un patch derivat pentru fiecare dintre ele, iar rulările lui în emulator trec pentru amândouă. Build-ul 1.0.3.0, pe dump-ul său nativ din 2016, a trecut prin copia de rezervă, patch, confirmare, citirea completă, restaurare și verificare; 1.3.0.8 FF a trecut prin ruta lui de recuperare. Pe camera de test, un Compact PRO 1.0.3.0, citirea din pasul 02 Preserve s-a încheiat fără resetare și fără scriere, iar camera a fost identificată ca având cifrul din 2016. Pe aceste build-uri, harta de selectori 4.x este refuzată pentru 38 din cei 63 de selectori, așa că fila 4.x nu ar fi putut returna pentru ele decât goluri.',
-  /* "There" is the 4.x/Nano tab: the page once had a firmware-family selector there, and it is gone, so no setting routes these builds into the 4.x/Nano read. */
-  'split.stay':
-    'Așa că rămân pe fila 0.x/1.x, iar fila 4.x/Nano nu are niciun selector de familie care să le trimită acolo.',
-
   /*
    * components/CameraReport: the page's panels after a read (labels only).
    * Row values that are sentences come from core and stay as core wrote them.

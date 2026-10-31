@@ -78,16 +78,6 @@ export default {
   'tabs.slots.cameras': 'Câmaras com firmware 0.8.0.0 ou posterior.',
   'tabs.slots.writes': 'Sim, uma ranhura de cada vez, e cada escrita pede confirmação antes.',
 
-  /* views/InfoView: where the 2016 and 1.3.0.8 FF builds are. Tab names in ** are the tab labels. */
-  'split.title': 'Onde estão as compilações de 2016 e 1.3.0.8 FF',
-  'split.where':
-    'As compilações Compact PRO de 2016 (1.0.3.0 e 1.0.3.2, incluindo as variantes FF) e a compilação Compact 1.3.0.8 FF (16 Hz) **não** são câmaras 4.x e não são lidas como tal. O protocolo delas é o protocolo bloqueado de 2014–2017, e o firmware guarda as ranhuras com uma cifra diferente (2016) ou como a cadeia sem encriptação de 2014, com uma via só de recuperação (FF). Por isso estão em **Dump e desencriptação 0.x/1.x 2014/2016**, e o separador 4.x/Nano recusa-as antes de ler o que quer que seja.',
-  'split.evidence':
-    'Os indícios de que funcionam no separador 0.x/1.x: o processo Preserve tem um patch derivado para cada uma delas, e as execuções no emulador passam em ambas. A compilação 1.0.3.0, no seu dump nativo de 2016, passou pela cópia de segurança, patch, escrita, leitura completa, restauro e verificação; a 1.3.0.8 FF passou pela sua via de recuperação. Na câmara de bancada, uma Compact PRO 1.0.3.0, a leitura do passo 02 do Preserve terminou sem reinício e sem escrita, e foi identificada na câmara a cifra de 2016. Nestas compilações, o mapa de seletores 4.x é recusado em 38 dos seus 63 seletores, por isso o separador 4.x só conseguiria devolver lacunas para eles.',
-  /* "There" is the 4.x/Nano tab: the page once had a firmware-family selector there, and it is gone, so no setting routes these builds into the 4.x/Nano read. */
-  'split.stay':
-    'Por isso ficam no separador 0.x/1.x, e o separador 4.x/Nano não tem nenhum seletor de família que as envie para lá.',
-
   /*
    * components/CameraReport: the page's panels after a read (labels only).
    * Row values that are sentences come from core and stay as core wrote them.

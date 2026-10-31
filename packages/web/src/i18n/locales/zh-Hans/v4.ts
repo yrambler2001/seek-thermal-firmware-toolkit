@@ -3,7 +3,7 @@
  *
  * Owner: phase 2, rest-of-page agent.
  * Covers: views/V4View.tsx, hooks/useDumpPanel.ts, components/CameraIdentity.tsx,
- * components/OpcodeTable.tsx, components/OptionsDetails.tsx, lib/options.ts.
+ * components/OptionsDetails.tsx, lib/options.ts.
  *
  * src/i18n/README.md has the conventions.
  */
@@ -64,18 +64,6 @@ export default {
   'output.keyFromDump': '密钥是从导出的镜像本身恢复的，因此不需要密钥文件或设备机密。',
   'output.bestEffort':
     '解密仍然是尽力而为。如果没有找到密钥——例如在引导程序从芯片 OTP 推导密钥的设备上，而 OTP 不在闪存镜像中——那个槽位就会被直接跳过，压缩包的其余部分不受影响。',
-
-  /* views/V4View: the read-only guarantee. Command names are params, in `code`. <link> wraps the Slots tab's name. */
-  'readonly.title': '只读保证',
-  'readonly.intro':
-    '本标签页只能发出恰好六个厂商命令。这就是它的全部词汇——没有任何代码路径能发出其他命令：',
-  'readonly.caption': '六个只读厂商命令',
-  'readonly.absent':
-    '`{setData}`、`{complete}`、`{reset}` 以及所有上传、提交和擦除命令都不在此视图中。`{usbReset}` 也从不调用；重试路径只是关闭再重新打开句柄。解密完全在内存中、在你浏览器里的副本上进行，绝不触及设备。',
-  'readonly.writing':
-    '写入相机的功能在另一个标签页<link>{tab}</link>中，它一次写入一个槽位，并在每次写入前征求确认。*此*标签页上的任何内容都无法发出那些命令。',
-  'readonly.firstReads':
-    '在相机报告固件版本之前，六个命令中只会发送三个，而且只作为读取：`{getInfo}`、`{getMode}` 和 `{getError}`。在检查过的全部 36 个固件镜像中，这三个读取都位于相同的命令编号，含义也相同；同一个命令编号并非在每个版本上都含义相同，所以在确定版本之前不会发送任何其他命令。',
   'gap.summary': '{address} 空缺',
   'gap.where':
     'USB 命令集为 4 MB 闪存的每个 64 KB 块都提供了读取窗口选择器，唯独 `{range}` 除外。合并镜像中该块用 `{fill}` 填充，并记录在 `{manifest}` 中。',
@@ -87,20 +75,6 @@ export default {
     '这种冗余也说明了为什么 `{address}` 读出为 `{fill}` 的相机没有问题：可启动的固件仍存在于其他槽位中。无论如何，本标签页都不会向设备写入任何内容——这个空缺只影响你下载的文件。',
   'gap.complete':
     '如果你确实需要严格完整、逐字节的镜像——比如要把闪存与参考镜像做比对——请通过 SWD/J-Link 或用 SPI 编程器读取。',
-
-  /* components/OpcodeTable. Opcodes, names and IN/OUT stay as they are. */
-  'opcodes.opcode': '操作码',
-  'opcodes.name': '名称',
-  'opcodes.dir': '方向',
-  'opcodes.why': '用途',
-  'opcodes.getInfo':
-    '正在运行的固件版本，最先读取：它决定导出使用哪个版本的选择器表；不报告版本的相机不会被读取',
-  'opcodes.getError': '每一步之后检查状态',
-  'opcodes.setMode': '仅用于选择模式 0，且仅在当前不是该模式时',
-  'opcodes.getMode': '读取当前模式',
-  'opcodes.getData': '实际的闪存读取',
-  'opcodes.begin':
-    '仅为易失性的读取窗口选择器——它选择接下来的读取返回哪个 64 KB 块，不写入任何内容',
 
   /* components/CameraIdentity: what the camera said before the dump. */
   'identity.versionUnknown': '未读取：相机没有说明它运行的是哪个固件。',

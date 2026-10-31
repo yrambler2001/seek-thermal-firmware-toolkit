@@ -79,16 +79,6 @@ export default {
   'tabs.slots.cameras': 'Termocamere con firmware 0.8.0.0 o successivo.',
   'tabs.slots.writes': 'Sì, uno slot alla volta, e ogni scrittura chiede prima conferma.',
 
-  /* views/InfoView: where the 2016 and 1.3.0.8 FF builds are. Tab names in ** are the tab labels. */
-  'split.title': 'Dove si trovano le build 2016 e 1.3.0.8 FF',
-  'split.where':
-    'Le build Compact PRO del 2016 (1.0.3.0 e 1.0.3.2, comprese le varianti FF) e la build Compact 1.3.0.8 FF (16 Hz) **non** sono termocamere 4.x e non si leggono come tali. Il loro protocollo è quello bloccato del 2014–2017, e il loro firmware conserva gli slot con un cifrario diverso (2016) oppure come la catena in chiaro del 2014, con un percorso che passa solo dal recupero (FF). Per questo si trovano in **Estrai e decifra 0.x/1.x 2014/2016**, e la scheda 4.x/Nano le rifiuta prima di leggere qualsiasi cosa.',
-  'split.evidence':
-    'Le prove che funzionano nella scheda 0.x/1.x: la procedura Preserve ha una patch ricavata per ciascuna di esse, e le sue esecuzioni nell’emulatore sono verdi per entrambe. La build 1.0.3.0 sul suo dump nativo del 2016 ha superato backup, patch, conferma, lettura completa, ripristino e verifica; la 1.3.0.8 FF ha seguito il suo percorso di recupero. Sulla termocamera di prova, una Compact PRO 1.0.3.0, la lettura del passaggio 02 di Preserve è terminata senza reset e senza scrittura, e la termocamera è stata riconosciuta con il cifrario del 2016. Su queste build la mappa dei selettori 4.x viene rifiutata per 38 dei suoi 63 selettori, quindi la scheda 4.x potrebbe restituire per questi solo lacune.',
-  /* "There" is the 4.x/Nano tab: the page once had a firmware-family selector there, and it is gone, so no setting routes these builds into the 4.x/Nano read. */
-  'split.stay':
-    'Per questo restano nella scheda 0.x/1.x, e la scheda 4.x/Nano non ha un selettore di famiglia che le manderebbe lì.',
-
   /*
    * components/CameraReport: the page's panels after a read (labels only).
    * Row values that are sentences come from core and stay as core wrote them.

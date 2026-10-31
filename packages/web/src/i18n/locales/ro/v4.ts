@@ -3,7 +3,7 @@
  *
  * Owner: phase 2, rest-of-page agent.
  * Covers: views/V4View.tsx, hooks/useDumpPanel.ts, components/CameraIdentity.tsx,
- * components/OpcodeTable.tsx, components/OptionsDetails.tsx, lib/options.ts.
+ * components/OptionsDetails.tsx, lib/options.ts.
  *
  * src/i18n/README.md has the conventions.
  */
@@ -68,18 +68,6 @@ export default {
     'Cheia este recuperată chiar din dump, așa că nu este nevoie de niciun fișier de cheie sau secret al dispozitivului.',
   'output.bestEffort':
     'Decriptarea rămâne totuși fără garanții. Dacă nu se găsește nicio cheie — de exemplu pe un exemplar al cărui bootloader derivă cheia din OTP-ul cipului, care nu există într-un dump al memoriei flash —, acel slot este pur și simplu sărit, iar restul arhivei nu este afectat.',
-
-  /* views/V4View: the read-only guarantee. Command names are params, in `code`. <link> wraps the Slots tab's name. */
-  'readonly.title': 'Garanția de doar citire',
-  'readonly.intro':
-    'Această filă poate trimite exact șase comenzi de producător. Acesta este tot vocabularul ei — nu există nicio cale în cod către altceva:',
-  'readonly.caption': 'Cele șase comenzi de producător doar pentru citire',
-  'readonly.absent':
-    '`{setData}`, `{complete}`, `{reset}` și toate comenzile de încărcare, confirmare și ștergere lipsesc din această vizualizare. Nici `{usbReset}` nu este apelat vreodată; reîncercarea doar închide și redeschide conexiunea. Decriptarea se face în întregime în memorie, pe copia din browserul dumneavoastră, și nu atinge niciodată dispozitivul.',
-  'readonly.writing':
-    'Scrierea în cameră se face pe altă filă, <link>{tab}</link>, care scrie câte un slot pe rând și întreabă înainte de fiecare scriere. Nimic de pe *această* filă nu poate ajunge la acele comenzi.',
-  'readonly.firstReads':
-    'Până când camera își raportează versiunea firmware-ului, se trimit doar trei din cele șase, și doar ca citiri: `{getInfo}`, `{getMode}` și `{getError}`. Ele sunt citirile care au același număr de comandă, cu același sens, în toate cele 36 de imagini de firmware examinate; un număr de comandă nu înseamnă același lucru pe orice build, așa că nu pleacă nimic altceva până nu se cunoaște build-ul.',
   'gap.summary': 'Golul de la {address}',
   'gap.where':
     'Setul de comenzi USB oferă un selector de fereastră de citire pentru fiecare bloc de 64 KB din memoria flash de 4 MB, cu excepția `{range}`. Acel bloc este umplut cu `{fill}` în imaginea combinată și consemnat în `{manifest}`.',
@@ -91,20 +79,6 @@ export default {
     'Tot din cauza acestei redundanțe este în regulă o cameră a cărei zonă `{address}` se citește ca `{fill}`: firmware-ul care poate porni există în continuare în celelalte sloturi. Oricum, nimic de pe această filă nu scrie în dispozitiv — golul afectează doar fișierul pe care îl descărcați.',
   'gap.complete':
     'Dacă doriți totuși o imagine strict completă, octet cu octet — de exemplu, ca să comparați memoria flash cu o referință —, citiți-o prin SWD/J-Link sau cu un programator SPI.',
-
-  /* components/OpcodeTable. Opcodes, names and IN/OUT stay as they are. */
-  'opcodes.opcode': 'Opcode',
-  'opcodes.name': 'Nume',
-  'opcodes.dir': 'Dir.',
-  'opcodes.why': 'De ce este folosită',
-  'opcodes.getInfo':
-    'versiunea firmware-ului care rulează, citită prima: de ea depinde al cărui build este tabelul de selectori folosit la extragere, iar o cameră care nu își raportează versiunea nu este citită',
-  'opcodes.getError': 'verifică starea după fiecare pas',
-  'opcodes.setMode': 'doar pentru a selecta modul 0, și doar dacă nu este deja în el',
-  'opcodes.getMode': 'citește modul curent',
-  'opcodes.getData': 'citirea propriu-zisă a memoriei flash',
-  'opcodes.begin':
-    'alege doar ce bloc de 64 KB returnează citirile următoare — alegerea nu este păstrată și nu se scrie nimic',
 
   /* components/CameraIdentity: what the camera said before the dump. */
   'identity.versionUnknown': 'Necitită: camera nu a spus ce firmware rulează.',

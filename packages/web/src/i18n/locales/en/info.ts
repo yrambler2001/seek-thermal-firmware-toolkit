@@ -78,16 +78,6 @@ export default {
   'tabs.slots.cameras': 'Cameras on 0.8.0.0 and newer firmware.',
   'tabs.slots.writes': 'Yes, one bank at a time, and each write asks first.',
 
-  /* views/InfoView: where the 2016 and 1.3.0.8 FF builds are. Tab names in ** are the tab labels. */
-  'split.title': 'Where the 2016 and 1.3.0.8 FF builds are',
-  'split.where':
-    'The 2016 Compact PRO builds (1.0.3.0 and 1.0.3.2, including their FF variants) and the 1.3.0.8 FF (16 Hz) Compact build are **not** 4.x cameras, and they are not read like one. Their protocol is the locked 2014–2017 one, and their firmware stores the slots under a different cipher (2016) or as the 2014 plaintext chain with a recovery-only route (FF). So they are on **Dump & decrypt 0.x/1.x 2014/2016**, and the 4.x/Nano tab refuses them before it reads anything.',
-  'split.evidence':
-    'The evidence that they work on the 0.x/1.x tab: the Preserve pipeline has a derived patch for each of them, and its emulator runs are green for both. The 1.0.3.0 build on its native 2016 dump went through backup, patch, commit, drain, restore and verify; the 1.3.0.8 FF went through its recovery route. On the bench camera, a Compact PRO 1.0.3.0, the Preserve step 02 read completed with no reset and no write, and the camera was identified as the 2016 cipher. On these builds the 4.x selector map is refused for 38 of its 63 selectors, so the 4.x tab could only return gaps for them.',
-  /* "There" is the 4.x/Nano tab: the page once had a firmware-family selector there, and it is gone, so no setting routes these builds into the 4.x/Nano read. */
-  'split.stay':
-    'So they stay on the 0.x/1.x tab, and the 4.x/Nano tab has no family selector that would send them there.',
-
   /*
    * components/CameraReport: the page's panels after a read (labels only).
    * Row values that are sentences come from core and stay as core wrote them.

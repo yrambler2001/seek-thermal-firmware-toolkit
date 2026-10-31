@@ -80,16 +80,6 @@ export default {
   'tabs.slots.writes':
     'Oui, un emplacement à la fois, et chaque écriture demande d’abord confirmation.',
 
-  /* views/InfoView: where the 2016 and 1.3.0.8 FF builds are. Tab names in ** are the tab labels. */
-  'split.title': 'Où se trouvent les builds 2016 et 1.3.0.8 FF',
-  'split.where':
-    'Les builds Compact PRO de 2016 (1.0.3.0 et 1.0.3.2, y compris leurs variantes FF) et le build Compact 1.3.0.8 FF (16 Hz) **ne sont pas** des caméras 4.x, et ne se lisent pas comme elles. Leur protocole est le protocole verrouillé de 2014–2017, et leur firmware stocke les emplacements avec un autre chiffrement (2016) ou sous forme de la chaîne en clair de 2014 avec une voie par l’emplacement de secours seul (FF). Ils relèvent donc de **Extraire et déchiffrer 0.x/1.x 2014/2016**, et l’onglet 4.x/Nano les refuse avant toute lecture.',
-  'split.evidence':
-    'Ce qui montre qu’ils fonctionnent dans l’onglet 0.x/1.x : la procédure Preserve dispose d’un correctif dérivé pour chacun d’eux, et ses essais sur émulateur réussissent pour les deux. Le build 1.0.3.0, sur son propre dump de 2016, a passé la sauvegarde, le correctif, la validation, la lecture complète, la restauration et la vérification ; le 1.3.0.8 FF est passé par sa voie de secours. Sur la caméra de test, une Compact PRO 1.0.3.0, la lecture de l’étape 02 de Preserve s’est terminée sans réinitialisation ni écriture, et la caméra a été identifiée comme utilisant le chiffrement de 2016. Sur ces builds, la table des sélecteurs 4.x est refusée pour 38 de ses 63 sélecteurs : l’onglet 4.x ne pourrait donc rendre que des trous pour eux.',
-  /* "There" is the 4.x/Nano tab: the page once had a firmware-family selector there, and it is gone, so no setting routes these builds into the 4.x/Nano read. */
-  'split.stay':
-    'Ils restent donc dans l’onglet 0.x/1.x, et l’onglet 4.x/Nano n’a aucun sélecteur de famille qui les y enverrait.',
-
   /*
    * components/CameraReport: the page's panels after a read (labels only).
    * Row values that are sentences come from core and stay as core wrote them.

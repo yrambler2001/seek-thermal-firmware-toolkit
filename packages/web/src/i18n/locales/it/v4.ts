@@ -3,7 +3,7 @@
  *
  * Owner: phase 2, rest-of-page agent.
  * Covers: views/V4View.tsx, hooks/useDumpPanel.ts, components/CameraIdentity.tsx,
- * components/OpcodeTable.tsx, components/OptionsDetails.tsx, lib/options.ts.
+ * components/OptionsDetails.tsx, lib/options.ts.
  *
  * src/i18n/README.md has the conventions.
  */
@@ -69,18 +69,6 @@ export default {
     'La chiave viene ricavata dal dump stesso, quindi non servono file di chiavi né segreti del dispositivo.',
   'output.bestEffort':
     'La decifratura resta comunque un tentativo. Se non si trova una chiave, per esempio su un esemplare il cui bootloader ricava la chiave dall’OTP del chip, che non è presente in un dump della flash, quello slot viene semplicemente saltato e il resto dell’archivio non ne risente.',
-
-  /* views/V4View: the read-only guarantee. Command names are params, in `code`. <link> wraps the Slots tab's name. */
-  'readonly.title': 'Garanzia di sola lettura',
-  'readonly.intro':
-    'Questa scheda può inviare esattamente sei comandi vendor. È tutto il suo vocabolario: non esiste un percorso nel codice verso nient’altro:',
-  'readonly.caption': 'I sei comandi vendor di sola lettura',
-  'readonly.absent':
-    '`{setData}`, `{complete}`, `{reset}` e tutti i comandi di caricamento, conferma e cancellazione sono assenti da questa vista. Nemmeno `{usbReset}` viene mai chiamato: per riprovare la pagina chiude e riapre semplicemente il collegamento. La decifratura avviene interamente in memoria, sulla copia nel tuo browser, e non tocca mai il dispositivo.',
-  'readonly.writing':
-    'La scrittura nella termocamera si trova in un’altra scheda, <link>{tab}</link>, che scrive uno slot alla volta e chiede conferma prima di ogni scrittura. Niente in *questa* scheda può raggiungere quei comandi.',
-  'readonly.firstReads':
-    'Finché la termocamera non ha comunicato la versione del firmware, vengono inviati solo tre dei sei, e solo come letture: `{getInfo}`, `{getMode}` e `{getError}`. Sono le letture che si trovano allo stesso numero di comando, con lo stesso significato, in tutte le 36 immagini del firmware esaminate; un numero di comando non significa la stessa cosa in ogni build, quindi non parte nient’altro finché la build non è nota.',
   'gap.summary': 'Il vuoto a {address}',
   'gap.where':
     'Il set di comandi USB offre un selettore di finestra di lettura per ogni blocco da 64 KB della flash da 4 MB, tranne `{range}`. Quel blocco viene riempito con `{fill}` nell’immagine combinata e annotato in `{manifest}`.',
@@ -92,20 +80,6 @@ export default {
     'È per questa ridondanza che una termocamera il cui `{address}` si rilegge come `{fill}` non ha problemi: il firmware avviabile esiste ancora negli altri slot. In ogni caso niente in questa scheda scrive nel dispositivo: il vuoto riguarda solo il file che scarichi.',
   'gap.complete':
     'Se vuoi davvero un’immagine completa byte per byte, per esempio per confrontare la flash con un riferimento, leggila tramite SWD/J-Link o con un programmatore SPI.',
-
-  /* components/OpcodeTable. Opcodes, names and IN/OUT stay as they are. */
-  'opcodes.opcode': 'Opcode',
-  'opcodes.name': 'Nome',
-  'opcodes.dir': 'Dir.',
-  'opcodes.why': 'Perché si usa',
-  'opcodes.getInfo':
-    'la versione del firmware in esecuzione, letta per prima: decide quale tabella dei selettori di quale build usa il dump, e una termocamera che non la comunica non viene letta',
-  'opcodes.getError': 'controlla lo stato dopo ogni passaggio',
-  'opcodes.setMode': 'solo per scegliere la modalità 0, e solo se non è già attiva',
-  'opcodes.getMode': 'legge la modalità attuale',
-  'opcodes.getData': 'la lettura vera e propria della flash',
-  'opcodes.begin':
-    'sceglie solo quale blocco da 64 KB restituiscono le letture successive: la scelta non viene conservata e non viene scritto nulla',
 
   /* components/CameraIdentity: what the camera said before the dump. */
   'identity.versionUnknown': 'Non letta: la termocamera non ha detto quale firmware esegue.',

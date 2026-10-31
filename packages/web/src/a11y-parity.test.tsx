@@ -42,7 +42,7 @@ function count(root: ParentNode, selector: string): number {
  */
 const FLOOR: Readonly<Record<string, Readonly<Record<string, number>>>> = {
   '#/': {
-    'section[aria-labelledby]': 4,
+    'section[aria-labelledby]': 3,
     '[aria-live="polite"]': 2,
     '[role="progressbar"]': 1,
     '[aria-current="page"]': 1,
@@ -56,12 +56,12 @@ const FLOOR: Readonly<Record<string, Readonly<Record<string, number>>>> = {
     '[aria-current="page"]': 1,
   },
   '#/v4': {
-    'section[aria-labelledby]': 4,
+    'section[aria-labelledby]': 3,
     '[aria-live="polite"]': 1,
     '[role="progressbar"]': 1,
     '[aria-current="page"]': 1,
     '[role="group"][aria-label]': 1,
-    'th[scope="col"]': 4,
+    'th[scope="col"]': 2,
     'th[scope="row"]': 5,
     'table > caption': 1,
     'label[for]': 6,

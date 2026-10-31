@@ -3,7 +3,7 @@
  *
  * Owner: phase 2, rest-of-page agent.
  * Covers: views/V4View.tsx, hooks/useDumpPanel.ts, components/CameraIdentity.tsx,
- * components/OpcodeTable.tsx, components/OptionsDetails.tsx, lib/options.ts.
+ * components/OptionsDetails.tsx, lib/options.ts.
  *
  * src/i18n/README.md has the conventions.
  */
@@ -69,18 +69,6 @@ export default {
     'Der Schlüssel wird aus dem Flash-Abbild selbst gewonnen, es ist also weder eine Schlüsseldatei noch ein Gerätegeheimnis nötig.',
   'output.bestEffort':
     'Die Entschlüsselung bleibt trotzdem ohne Gewähr. Wird kein Schlüssel gefunden — zum Beispiel bei einem Gerät, dessen Bootloader den Schlüssel aus dem OTP-Speicher des Chips ableitet, der in einem Flash-Abbild nicht enthalten ist —, wird dieser Slot einfach übersprungen, und der Rest des Archivs ist nicht betroffen.',
-
-  /* views/V4View: the read-only guarantee. Command names are params, in `code`. <link> wraps the Slots tab's name. */
-  'readonly.title': 'Nur-Lese-Garantie',
-  'readonly.intro':
-    'Dieser Tab kann genau sechs Herstellerbefehle senden. Das ist sein gesamter Wortschatz — es gibt keinen Codepfad zu irgendetwas anderem:',
-  'readonly.caption': 'Die sechs reinen Lese-Herstellerbefehle',
-  'readonly.absent':
-    '`{setData}`, `{complete}`, `{reset}` und alle Befehle zum Hochladen, Committen und Löschen fehlen in dieser Ansicht. Auch `{usbReset}` wird nie aufgerufen; bei einem erneuten Versuch wird die Verbindung nur geschlossen und neu geöffnet. Die Entschlüsselung geschieht vollständig im Arbeitsspeicher, an der Kopie in Ihrem Browser, und berührt das Gerät nie.',
-  'readonly.writing':
-    'Das Schreiben in die Kamera liegt in einem anderen Tab, <link>{tab}</link>, der jeweils einen Slot schreibt und vor jedem Schreibvorgang nachfragt. Nichts in *diesem* Tab kann diese Befehle erreichen.',
-  'readonly.firstReads':
-    'Bis die Kamera ihre Firmware-Version gemeldet hat, werden nur drei der sechs gesendet, und nur als Lesevorgänge: `{getInfo}`, `{getMode}` und `{getError}`. Das sind die Lesebefehle, die in allen 36 untersuchten Firmware-Images dieselbe Befehlsnummer mit derselben Bedeutung haben. Eine Befehlsnummer bedeutet nicht in jedem Build dasselbe, daher geht nichts anderes hinaus, bis der Build bekannt ist.',
   'gap.summary': 'Die Lücke bei {address}',
   'gap.where':
     'Der USB-Befehlssatz bietet einen Selektor für das Lesefenster für jeden 64-KB-Block des 4 MB großen Flash-Speichers außer `{range}`. Dieser Block wird im zusammengesetzten Abbild mit `{fill}` gefüllt und in `{manifest}` vermerkt.',
@@ -92,20 +80,6 @@ export default {
     'Diese Redundanz ist auch der Grund, warum eine Kamera, deren `{address}` als `{fill}` gelesen wird, in Ordnung ist: Die startfähige Firmware ist in den anderen Slots weiterhin vorhanden. Nichts in diesem Tab schreibt ohnehin in das Gerät — die Lücke betrifft nur die Datei, die Sie herunterladen.',
   'gap.complete':
     'Wenn Sie wirklich ein streng vollständiges Abbild Byte für Byte brauchen — etwa um den Flash-Speicher mit einer Referenz zu vergleichen —, lesen Sie ihn über SWD/J-Link oder mit einem SPI-Programmiergerät.',
-
-  /* components/OpcodeTable. Opcodes, names and IN/OUT stay as they are. */
-  'opcodes.opcode': 'Opcode',
-  'opcodes.name': 'Name',
-  'opcodes.dir': 'Richtung',
-  'opcodes.why': 'Wozu er dient',
-  'opcodes.getInfo':
-    'die laufende Firmware-Version, zuerst gelesen: Sie entscheidet, welche Selektortabelle das Auslesen verwendet, und eine Kamera, die keine meldet, wird nicht gelesen',
-  'opcodes.getError': 'Status nach jedem Schritt prüfen',
-  'opcodes.setMode': 'nur um Modus 0 zu wählen, und nur, wenn er nicht schon aktiv ist',
-  'opcodes.getMode': 'den aktuellen Modus lesen',
-  'opcodes.getData': 'das eigentliche Lesen des Flash-Speichers',
-  'opcodes.begin':
-    'nur flüchtiger Selektor für das Lesefenster — er wählt, welchen 64-KB-Block die nächsten Lesevorgänge liefern, und schreibt nichts',
 
   /* components/CameraIdentity: what the camera said before the dump. */
   'identity.versionUnknown':

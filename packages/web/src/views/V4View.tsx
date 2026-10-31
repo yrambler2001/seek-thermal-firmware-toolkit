@@ -9,10 +9,9 @@
  */
 
 import type { ReactElement } from 'react';
-import { CircleStop, FolderArchive, ListFilter, Play, Radar, ShieldCheck } from 'lucide-react';
+import { CircleStop, FolderArchive, ListFilter, Play, Radar } from 'lucide-react';
 import { FLASH_DUMP_ORIGINAL_FILE } from '@seek-fw/core';
 import { CameraIdentity } from '@/components/CameraIdentity';
-import { OpcodeTable, READ_ONLY_OPCODES } from '@/components/OpcodeTable';
 import { OptionsDetails } from '@/components/OptionsDetails';
 import { PlatformNotes } from '@/components/PlatformNotes';
 import { Prose } from '@/components/Prose';
@@ -34,7 +33,6 @@ import {
 import { Toolbar } from '@/components/ui/toolbar';
 import type { DumpPanelApi } from '@/hooks/useDumpPanel';
 import type { OptionField, OptionsForm } from '@/lib/options';
-import { ROUTE_LABEL } from '@/lib/routing';
 import { t, useT } from '@/i18n';
 
 /** The archive's files (names as written) and what each is, translated at render. */
@@ -169,44 +167,6 @@ export function V4View({
           <p>{t('v4:output.keyFromDump')}</p>
           <p>{t('v4:output.bestEffort')}</p>
         </Prose>
-      </Section>
-
-      <PlatformNotes />
-
-      <Section id="readonly" tone="ok" title={t('v4:readonly.title')} icon={<ShieldCheck />}>
-        <Prose>
-          <p>{t('v4:readonly.intro')}</p>
-        </Prose>
-
-        <OpcodeTable caption={t('v4:readonly.caption')} rows={READ_ONLY_OPCODES} />
-
-        <Prose>
-          <p>
-            {rich('v4:readonly.absent', {
-              params: {
-                setData: 'SetFeaturedFirmwareData',
-                complete: 'CompleteMemoryUpgrade',
-                reset: 'ResetDevice',
-                usbReset: 'USBDevice.reset()',
-              },
-            })}
-          </p>
-          <p>
-            {rich('v4:readonly.writing', {
-              params: { tab: ROUTE_LABEL.slots },
-              slots: { link: (text) => <a href="#/slots">{text}</a> },
-            })}
-          </p>
-          <p>
-            {rich('v4:readonly.firstReads', {
-              params: {
-                getInfo: 'GetFirmwareInfo',
-                getMode: 'GetOperationMode',
-                getError: 'GetErrorCode',
-              },
-            })}
-          </p>
-        </Prose>
 
         <Disclosure summary={t('v4:gap.summary', { address: '0x14060000' })}>
           <p>
@@ -224,6 +184,8 @@ export function V4View({
           <p>{t('v4:gap.complete')}</p>
         </Disclosure>
       </Section>
+
+      <PlatformNotes />
     </>
   );
 }

@@ -3,7 +3,7 @@
  *
  * Owner: phase 2, rest-of-page agent.
  * Covers: views/V4View.tsx, hooks/useDumpPanel.ts, components/CameraIdentity.tsx,
- * components/OpcodeTable.tsx, components/OptionsDetails.tsx, lib/options.ts.
+ * components/OptionsDetails.tsx, lib/options.ts.
  *
  * src/i18n/README.md has the conventions.
  */
@@ -69,18 +69,6 @@ export default {
     'La clé est retrouvée à partir du dump lui-même : aucun fichier de clé ni secret de l’appareil n’est nécessaire.',
   'output.bestEffort':
     'Le déchiffrement reste au mieux. Si aucune clé n’est trouvée — par exemple sur un appareil dont le bootloader dérive la clé de l’OTP de la puce, absent d’un dump de la flash —, cet emplacement est simplement ignoré et le reste de l’archive n’est pas touché.',
-
-  /* views/V4View: the read-only guarantee. Command names are params, in `code`. <link> wraps the Slots tab's name. */
-  'readonly.title': 'Garantie de lecture seule',
-  'readonly.intro':
-    'Cet onglet peut envoyer exactement six commandes du fabricant. C’est tout son vocabulaire — aucun chemin du code ne mène à autre chose :',
-  'readonly.caption': 'Les six commandes du fabricant en lecture seule',
-  'readonly.absent':
-    '`{setData}`, `{complete}`, `{reset}` et toute commande de téléversement, de validation ou d’effacement sont absents de cette vue. `{usbReset}` n’est jamais appelé non plus ; en cas de nouvel essai, la connexion est simplement fermée puis rouverte. Le déchiffrement se fait entièrement en mémoire, sur la copie qui est dans votre navigateur, et ne touche jamais l’appareil.',
-  'readonly.writing':
-    'L’écriture dans la caméra se fait dans un autre onglet, <link>{tab}</link>, qui écrit un emplacement à la fois et demande confirmation avant chaque écriture. Rien dans *cet* onglet ne peut atteindre ces commandes.',
-  'readonly.firstReads':
-    'Tant que la caméra n’a pas annoncé sa version de firmware, seules trois des six sont envoyées, et seulement comme lectures : `{getInfo}`, `{getMode}` et `{getError}`. Ce sont les lectures qui ont le même numéro de commande, avec le même sens, dans les 36 images de firmware examinées ; un numéro de commande n’a pas le même sens dans tous les builds, donc rien d’autre ne part tant que le build n’est pas connu.',
   'gap.summary': 'Le trou à {address}',
   'gap.where':
     'Le jeu de commandes USB offre un sélecteur de fenêtre de lecture pour chaque bloc de 64 Ko de la mémoire flash de 4 Mo, sauf `{range}`. Ce bloc est rempli avec `{fill}` dans l’image assemblée et consigné dans `{manifest}`.',
@@ -92,20 +80,6 @@ export default {
     'C’est aussi grâce à cette redondance qu’une caméra dont le bloc `{address}` se relit comme `{fill}` n’a pas de problème : le firmware démarrable existe toujours dans les autres emplacements. De toute façon, rien dans cet onglet n’écrit dans l’appareil — le trou ne concerne que le fichier que vous téléchargez.',
   'gap.complete':
     'Si vous voulez vraiment une image complète octet pour octet — pour comparer la flash à une référence, par exemple —, lisez-la par SWD/J-Link ou avec un programmateur SPI.',
-
-  /* components/OpcodeTable. Opcodes, names and IN/OUT stay as they are. */
-  'opcodes.opcode': 'Opcode',
-  'opcodes.name': 'Nom',
-  'opcodes.dir': 'Sens',
-  'opcodes.why': 'Pourquoi il est utilisé',
-  'opcodes.getInfo':
-    'la version du firmware en cours, lue en premier : elle décide quelle table de sélecteurs le dump utilise, et une caméra qui n’en annonce pas n’est pas lue',
-  'opcodes.getError': 'vérifier l’état après chaque étape',
-  'opcodes.setMode': 'seulement pour choisir le mode 0, et seulement s’il n’est pas déjà actif',
-  'opcodes.getMode': 'lire le mode actuel',
-  'opcodes.getData': 'la lecture proprement dite de la flash',
-  'opcodes.begin':
-    'choisit seulement quel bloc de 64 Ko les lectures suivantes renvoient — ce choix n’est pas conservé, et rien n’est écrit',
 
   /* components/CameraIdentity: what the camera said before the dump. */
   'identity.versionUnknown': 'Non lue : la caméra n’a pas dit quel firmware elle exécute.',

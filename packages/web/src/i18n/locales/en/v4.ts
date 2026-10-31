@@ -3,7 +3,7 @@
  *
  * Owner: phase 2, rest-of-page agent.
  * Covers: views/V4View.tsx, hooks/useDumpPanel.ts, components/CameraIdentity.tsx,
- * components/OpcodeTable.tsx, components/OptionsDetails.tsx, lib/options.ts.
+ * components/OptionsDetails.tsx, lib/options.ts.
  *
  * src/i18n/README.md has the conventions.
  */
@@ -67,18 +67,6 @@ export default {
     'The key is recovered from the dump itself, so no key file or device secret is needed.',
   'output.bestEffort':
     'Decryption is still best-effort. If no key is found — for example on a unit whose bootloader derives the key from chip OTP, which is not present in a flash dump — that slot is simply skipped and the rest of the archive is unaffected.',
-
-  /* views/V4View: the read-only guarantee. Command names are params, in `code`. <link> wraps the Slots tab's name. */
-  'readonly.title': 'Read-only guarantee',
-  'readonly.intro':
-    'This tab can issue exactly six vendor commands. That is its entire vocabulary — there is no code path to anything else:',
-  'readonly.caption': 'The six read-only vendor commands',
-  'readonly.absent':
-    '`{setData}`, `{complete}`, `{reset}` and every upload, commit and erase command are absent from this view. `{usbReset}` is never called either; the retry path just closes and reopens the handle. Decryption happens entirely in memory on the copy in your browser and never touches the device.',
-  'readonly.writing':
-    'Writing to the camera lives on another tab, <link>{tab}</link>, which writes one bank at a time and asks before every write. Nothing on *this* tab can reach those commands.',
-  'readonly.firstReads':
-    'Until the camera has reported its firmware version, only three of the six are sent, and only as reads: `{getInfo}`, `{getMode}` and `{getError}`. They are the reads that sit at the same command number, with the same meaning, in all 36 firmware images examined; a command number does not mean the same thing on every build, so nothing else goes out until the build is known.',
   'gap.summary': 'The {address} gap',
   'gap.where':
     'The USB command set exposes a read-window selector for every 64 KiB block of the 4 MiB flash except `{range}`. That block is filled with `{fill}` in the combined image and recorded in `{manifest}`.',
@@ -90,20 +78,6 @@ export default {
     'That redundancy is also why a camera whose `{address}` reads back as `{fill}` is fine: the bootable firmware still exists in the other slots. Nothing on this tab writes to the device in any case — the gap affects only the file you download.',
   'gap.complete':
     'If you do want a strictly complete byte-for-byte image — to diff flash against a reference, say — read it over SWD/J-Link or with an SPI programmer.',
-
-  /* components/OpcodeTable. Opcodes, names and IN/OUT stay as they are. */
-  'opcodes.opcode': 'Opcode',
-  'opcodes.name': 'Name',
-  'opcodes.dir': 'Dir',
-  'opcodes.why': 'Why it is used',
-  'opcodes.getInfo':
-    "the running firmware version, read first: it decides which build's selector table the dump uses, and a camera that does not report one is not read",
-  'opcodes.getError': 'check status after each step',
-  'opcodes.setMode': 'only to select mode 0, and only if not already there',
-  'opcodes.getMode': 'read the current mode',
-  'opcodes.getData': 'the actual flash read',
-  'opcodes.begin':
-    'only picks which 64 KiB block the next reads return — the choice is not kept, and nothing is written',
 
   /* components/CameraIdentity: what the camera said before the dump. */
   'identity.versionUnknown': 'Not read: the camera did not say which firmware it runs.',

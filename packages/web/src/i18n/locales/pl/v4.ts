@@ -3,7 +3,7 @@
  *
  * Owner: phase 2, rest-of-page agent.
  * Covers: views/V4View.tsx, hooks/useDumpPanel.ts, components/CameraIdentity.tsx,
- * components/OpcodeTable.tsx, components/OptionsDetails.tsx, lib/options.ts.
+ * components/OptionsDetails.tsx, lib/options.ts.
  *
  * src/i18n/README.md has the conventions.
  */
@@ -68,18 +68,6 @@ export default {
     'Klucz jest odtwarzany z samego zrzutu, więc nie jest potrzebny plik klucza ani sekret urządzenia.',
   'output.bestEffort':
     'Odszyfrowanie nadal działa na zasadzie „w miarę możliwości”. Jeśli klucz nie zostanie znaleziony — na przykład w egzemplarzu, którego bootloader wyprowadza klucz z pamięci OTP układu, nieobecnej w zrzucie pamięci flash — ten slot jest po prostu pomijany, a reszta archiwum pozostaje bez zmian.',
-
-  /* views/V4View: the read-only guarantee. Command names are params, in `code`. <link> wraps the Slots tab's name. */
-  'readonly.title': 'Gwarancja tylko do odczytu',
-  'readonly.intro':
-    'Ta karta może wysłać dokładnie sześć poleceń producenta. To całe jej słownictwo — nie ma w kodzie ścieżki do niczego innego:',
-  'readonly.caption': 'Sześć poleceń producenta tylko do odczytu',
-  'readonly.absent':
-    '`{setData}`, `{complete}`, `{reset}` oraz wszystkie polecenia przesyłania, zatwierdzania i kasowania są w tym widoku nieobecne. `{usbReset}` również nigdy nie jest wywoływane; ponowna próba po prostu zamyka i ponownie otwiera uchwyt. Odszyfrowanie odbywa się w całości w pamięci, na kopii w przeglądarce, i nigdy nie dotyka urządzenia.',
-  'readonly.writing':
-    'Zapis do kamery znajduje się na innej karcie, <link>{tab}</link>, która zapisuje jeden slot naraz i pyta przed każdym zapisem. Nic na *tej* karcie nie może sięgnąć do tych poleceń.',
-  'readonly.firstReads':
-    'Dopóki kamera nie poda swojej wersji firmware, wysyłane są tylko trzy z sześciu poleceń i tylko jako odczyty: `{getInfo}`, `{getMode}` i `{getError}`. To odczyty, które we wszystkich 36 zbadanych obrazach firmware mają ten sam numer polecenia i to samo znaczenie; numer polecenia nie znaczy tego samego w każdej kompilacji, więc nic innego nie jest wysyłane, dopóki kompilacja nie jest znana.',
   'gap.summary': 'Luka {address}',
   'gap.where':
     'Zestaw poleceń USB udostępnia selektor okna odczytu dla każdego bloku 64 KB z 4 MB pamięci flash z wyjątkiem `{range}`. Ten blok jest w połączonym obrazie wypełniony wartością `{fill}` i odnotowany w `{manifest}`.',
@@ -91,20 +79,6 @@ export default {
     'Ta nadmiarowość wyjaśnia też, dlaczego kamera, której `{address}` odczytuje się jako `{fill}`, jest w porządku: firmware zdolny do uruchomienia nadal istnieje w pozostałych slotach. Tak czy inaczej nic na tej karcie nie zapisuje do urządzenia — luka dotyczy tylko pobieranego pliku.',
   'gap.complete':
     'Jeśli naprawdę potrzebny jest ściśle kompletny obraz bajt w bajt — na przykład do porównania pamięci flash z wzorcem — odczytaj pamięć flash przez SWD/J-Link lub programatorem SPI.',
-
-  /* components/OpcodeTable. Opcodes, names and IN/OUT stay as they are. */
-  'opcodes.opcode': 'Kod',
-  'opcodes.name': 'Nazwa',
-  'opcodes.dir': 'Kier.',
-  'opcodes.why': 'Do czego służy',
-  'opcodes.getInfo':
-    'wersja działającego firmware, odczytywana jako pierwsza: decyduje, z tabeli selektorów której kompilacji korzysta zrzut, a kamera, która jej nie podaje, nie jest odczytywana',
-  'opcodes.getError': 'sprawdzenie stanu po każdym kroku',
-  'opcodes.setMode': 'tylko do wybrania trybu 0 i tylko wtedy, gdy kamera jeszcze w nim nie jest',
-  'opcodes.getMode': 'odczyt bieżącego trybu',
-  'opcodes.getData': 'właściwy odczyt pamięci flash',
-  'opcodes.begin':
-    'tylko ulotny selektor okna odczytu — wybiera, który blok 64 KB zwrócą następne odczyty, i niczego nie zapisuje',
 
   /* components/CameraIdentity: what the camera said before the dump. */
   'identity.versionUnknown': 'Nie odczytano: kamera nie podała, jaki firmware działa.',

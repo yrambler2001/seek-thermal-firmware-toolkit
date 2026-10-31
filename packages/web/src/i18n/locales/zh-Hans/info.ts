@@ -76,16 +76,6 @@ export default {
   'tabs.slots.cameras': '运行 0.8.0.0 及更新固件的相机。',
   'tabs.slots.writes': '是，一次一个槽位，每次写入前都会先征求确认。',
 
-  /* views/InfoView: where the 2016 and 1.3.0.8 FF builds are. Tab names in ** are the tab labels. */
-  'split.title': '2016 和 1.3.0.8 FF 版本在哪里',
-  'split.where':
-    '2016 年的 Compact PRO 版本（1.0.3.0 和 1.0.3.2，包括它们的 FF 变体）以及 1.3.0.8 FF（16 Hz）Compact 版本**不是** 4.x 相机，也不能按 4.x 相机的方式读取。它们使用的是 2014–2017 年那套加锁的协议；其固件存储槽位的方式，要么是另一种加密（2016），要么是 2014 年的明文链加上只能从恢复槽位启动的路径（FF）。因此它们归**导出并解密 0.x/1.x 2014/2016** 处理，4.x/Nano 标签页会在读取任何内容之前拒绝它们。',
-  'split.evidence':
-    '它们在 0.x/1.x 标签页上可用的证据：Preserve 流程为它们各自推导出了补丁，两者在模拟器中的运行都全部通过。1.0.3.0 版本在其原生的 2016 镜像上走完了备份、补丁、提交、全闪存读取、还原和验证；1.3.0.8 FF 走完了它的恢复槽位路径。在测试台的相机（一台 Compact PRO 1.0.3.0）上，Preserve 步骤 02 的读取已完成，期间没有重置、没有写入，相机被识别为 2016 加密。在这些版本上，4.x 选择器映射的 63 个选择器中有 38 个被拒绝，所以 4.x 标签页对它们只能返回空缺。',
-  /* "There" is the 4.x/Nano tab: the page once had a firmware-family selector there, and it is gone, so no setting routes these builds into the 4.x/Nano read. */
-  'split.stay':
-    '所以它们留在 0.x/1.x 标签页；4.x/Nano 标签页也没有能把它们转过去读取的固件系列选择器。',
-
   /*
    * components/CameraReport: the page's panels after a read (labels only).
    * Row values that are sentences come from core and stay as core wrote them.

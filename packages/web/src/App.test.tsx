@@ -31,7 +31,7 @@ const NO_USB = detectSupport({
 
 const TAB_LABELS = [
   'Info',
-  'Dump & decrypt 0.x/1.x 2014/2016',
+  'Dump & decrypt 0.x/1.x',
   'Dump & decrypt 4.x/Nano',
   'Decrypt File/Slot',
   'Work with firmware slots',
@@ -130,14 +130,12 @@ describe('Info', () => {
     unmount();
   });
 
-  it('says where the 2016 and 1.3.0.8 FF builds go, and why', () => {
+  it('has no section on where the 2016 and 1.3.0.8 FF builds are (owner, 2026-10-31)', () => {
     window.location.hash = '#/';
     const { container, unmount } = render(<App support={READY} />);
     const text = container.textContent;
-    expect(text).toContain('Where the 2016 and 1.3.0.8 FF builds are');
-    expect(text).toContain('The 2016 Compact PRO builds (1.0.3.0 and 1.0.3.2');
-    expect(text).toContain('the 1.3.0.8 FF (16 Hz) Compact build');
-    expect(text).toContain('refused for 38 of its 63 selectors');
+    expect(text).not.toContain('Where the 2016 and 1.3.0.8 FF builds are');
+    expect(text).not.toContain('refused for 38 of its 63 selectors');
     /* No source file is shown to a person (TESTING.md 42.87). */
     expect(text).not.toMatch(/\.ts\b|packages\/core/);
     unmount();
@@ -186,7 +184,7 @@ describe('Dump & decrypt 4.x/Nano', () => {
     unmount();
   });
 
-  it('keeps the read options, the archive and the read-only guarantee', () => {
+  it('keeps the read options and the archive, with its gap note, and no read-only guarantee section', () => {
     window.location.hash = '#/v4';
     const { container, unmount } = render(<App support={READY} />);
     for (const id of [
@@ -200,8 +198,8 @@ describe('Dump & decrypt 4.x/Nano', () => {
       expect(container.querySelector(`#${id}`), id).toBeTruthy();
     }
     expect(container.textContent).toContain('What you get');
-    expect(container.textContent).toContain('Read-only guarantee');
-    expect(container.textContent).toContain('GetFeaturedFirmwareData');
+    expect(container.textContent).not.toContain('Read-only guarantee');
+    expect(container.textContent).toContain('The 0x14060000 gap');
     unmount();
   });
 
@@ -209,7 +207,7 @@ describe('Dump & decrypt 4.x/Nano', () => {
     window.location.hash = '#/v4';
     const { container, unmount } = render(<App support={READY} />);
     expect(container.textContent).toContain('A camera on another firmware line is refused');
-    expect(container.textContent).toContain('Dump & decrypt 0.x/1.x 2014/2016');
+    expect(container.textContent).toContain('Dump & decrypt 0.x/1.x');
     unmount();
   });
 });
@@ -229,7 +227,7 @@ describe('Decrypt File/Slot', () => {
   });
 });
 
-describe('Dump & decrypt 0.x/1.x 2014/2016', () => {
+describe('Dump & decrypt 0.x/1.x', () => {
   it('is the Preserve wizard under its new name, with its Connect step', () => {
     window.location.hash = '#/preserve';
     const { container, unmount } = render(<App support={READY} />);

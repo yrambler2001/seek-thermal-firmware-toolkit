@@ -78,16 +78,6 @@ export default {
   'tabs.slots.cameras': 'Cámaras con firmware 0.8.0.0 y posteriores.',
   'tabs.slots.writes': 'Sí, una ranura cada vez, y cada escritura pregunta antes.',
 
-  /* views/InfoView: where the 2016 and 1.3.0.8 FF builds are. Tab names in ** are the tab labels. */
-  'split.title': 'Dónde están las compilaciones de 2016 y 1.3.0.8 FF',
-  'split.where':
-    'Las compilaciones Compact PRO de 2016 (1.0.3.0 y 1.0.3.2, incluidas sus variantes FF) y la compilación Compact 1.3.0.8 FF (16 Hz) **no** son cámaras 4.x, y no se leen como tales. Su protocolo es el bloqueado de 2014–2017, y su firmware almacena las ranuras con otro cifrado (2016) o como la cadena sin cifrar de 2014 con una vía solo de recuperación (FF). Por eso están en **Volcar y descifrar 0.x/1.x 2014/2016**, y la pestaña 4.x/Nano las rechaza antes de leer nada.',
-  'split.evidence':
-    'Los indicios de que funcionan en la pestaña 0.x/1.x: el proceso de Preserve tiene un parche derivado para cada una de ellas, y sus ejecuciones en el emulador salen bien en las dos. La compilación 1.0.3.0, con su volcado nativo de 2016, pasó por la copia de seguridad, el parche, la escritura, la lectura completa, la restauración y la comprobación; la 1.3.0.8 FF pasó por su vía de recuperación. En la cámara de pruebas, una Compact PRO 1.0.3.0, la lectura del paso 02 de Preserve se completó sin ningún reinicio ni escritura, y la cámara se identificó como el cifrado de 2016. En estas compilaciones, el mapa de selectores de 4.x se rechaza en 38 de sus 63 selectores, así que la pestaña 4.x solo podría devolver huecos para ellos.',
-  /* "There" is the 4.x/Nano tab: the page once had a firmware-family selector there, and it is gone, so no setting routes these builds into the 4.x/Nano read. */
-  'split.stay':
-    'Por eso se quedan en la pestaña 0.x/1.x, y la pestaña 4.x/Nano no tiene ningún selector de familia que las mande allí.',
-
   /*
    * components/CameraReport: the page's panels after a read (labels only).
    * Row values that are sentences come from core and stay as core wrote them.

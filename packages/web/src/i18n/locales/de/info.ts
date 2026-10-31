@@ -80,16 +80,6 @@ export default {
   'tabs.slots.cameras': 'Kameras mit Firmware 0.8.0.0 und neuer.',
   'tabs.slots.writes': 'Ja, jeweils einen Slot, und jeder Schreibvorgang fragt vorher nach.',
 
-  /* views/InfoView: where the 2016 and 1.3.0.8 FF builds are. Tab names in ** are the tab labels. */
-  'split.title': 'Wo die Builds von 2016 und 1.3.0.8 FF zu finden sind',
-  'split.where':
-    'Die Compact-PRO-Builds von 2016 (1.0.3.0 und 1.0.3.2, einschließlich ihrer FF-Varianten) und der Compact-Build 1.3.0.8 FF (16 Hz) sind **keine** 4.x-Kameras und werden auch nicht wie eine gelesen. Ihr Protokoll ist das gesperrte von 2014–2017, und ihre Firmware speichert die Slots mit einer anderen Verschlüsselung (2016) oder als Klartext-Kette von 2014 mit einem Weg nur über den Recovery-Slot (FF). Sie gehören deshalb zu **Auslesen & entschlüsseln 0.x/1.x 2014/2016**, und der 4.x/Nano-Tab lehnt sie ab, bevor er irgendetwas liest.',
-  'split.evidence':
-    'Der Nachweis, dass sie im 0.x/1.x-Tab funktionieren: Die Preserve-Pipeline hat für jeden von ihnen einen abgeleiteten Patch, und ihre Emulator-Läufe sind für beide erfolgreich. Der Build 1.0.3.0 hat auf seinem nativen Flash-Abbild von 2016 Sicherung, Patch, Commit, vollständiges Auslesen, Wiederherstellung und Prüfung durchlaufen; der 1.3.0.8 FF hat seinen Weg über den Recovery-Slot durchlaufen. Auf der Testkamera, einer Compact PRO 1.0.3.0, wurde das Lesen in Preserve-Schritt 02 ohne Reset und ohne Schreiben abgeschlossen, und die Kamera wurde als 2016er-Verschlüsselung erkannt. Auf diesen Builds wird die 4.x-Selektortabelle bei 38 ihrer 63 Selektoren abgelehnt, der 4.x-Tab könnte für sie also nur Lücken liefern.',
-  /* "There" is the 4.x/Nano tab: the page once had a firmware-family selector there, and it is gone, so no setting routes these builds into the 4.x/Nano read. */
-  'split.stay':
-    'Sie bleiben deshalb im 0.x/1.x-Tab, und der 4.x/Nano-Tab hat keine Auswahl der Firmware-Familie, über die sie dort gelesen würden.',
-
   /*
    * components/CameraReport: the page's panels after a read (labels only).
    * Row values that are sentences come from core and stay as core wrote them.

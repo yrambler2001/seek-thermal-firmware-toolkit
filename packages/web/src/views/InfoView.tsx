@@ -237,14 +237,6 @@ export function InfoView({ info, connected, busy }: InfoViewProps): ReactElement
           </TableBody>
         </Table>
       </Section>
-
-      <Section id="split" title={t('info:split.title')} icon={<InfoIcon />}>
-        <Prose>
-          <p>{rich('info:split.where')}</p>
-          <p>{t('info:split.evidence')}</p>
-          <p>{t('info:split.stay')}</p>
-        </Prose>
-      </Section>
     </>
   );
 }

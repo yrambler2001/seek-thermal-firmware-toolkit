@@ -52,9 +52,7 @@ const DUMP_COPY: readonly string[] = [
   /* the read-only promise */
   'Read-only: this tab issues no flash write, erase, upload, commit, or reset command.',
   'A camera on another firmware line is refused before anything is read.',
-  'This tab can issue exactly six vendor commands. That is its entire vocabulary — there is no code path to anything else:',
-  'Until the camera has reported its firmware version, only three of the six are sent, and only as reads: GetFirmwareInfo, GetOperationMode and GetErrorCode.',
-  'USBDevice.reset() is never called either; the retry path just closes and reopens the handle.',
+  /* The "Read-only guarantee" section, with its table of six commands, was removed (owner, 2026-10-31). */
 
   /* detection, and the one check nothing skips */
   'A camera that does not report its version, or runs a build older than 0.8.0.0, is not read at all, and the page says why.',
@@ -68,20 +66,6 @@ const DUMP_COPY: readonly string[] = [
   'In practice this costs you nothing.',
   'That redundancy is also why a camera whose 0x14060000 reads back as 0xff is fine: the bootable firmware still exists in the other slots.',
   'If you do want a strictly complete byte-for-byte image — to diff flash against a reference, say — read it over SWD/J-Link or with an SPI programmer.',
-
-  /* the read-only opcode table, every row */
-  'GetFirmwareInfo',
-  "the running firmware version, read first: it decides which build's selector table the dump uses, and a camera that does not report one is not read",
-  'GetErrorCode',
-  'check status after each step',
-  'SetOperationMode',
-  'only to select mode 0, and only if not already there',
-  'GetOperationMode',
-  'read the current mode',
-  'GetFeaturedFirmwareData',
-  'the actual flash read',
-  'BeginFirmwareUpgrade',
-  'only picks which 64 KiB block the next reads return — the choice is not kept, and nothing is written',
 ];
 
 /* ---- the firmware slots tab ------------------------------------------ */
