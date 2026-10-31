@@ -30,6 +30,7 @@ import { Toolbar } from '@/components/ui/toolbar';
 import type { InfoPanelApi } from '@/hooks/useInfoPanel';
 import { coreText } from '@/lib/core-text';
 import { firmwareLineOf } from '@/lib/family-line';
+import { visibleLogLines } from '@/lib/log-lines';
 import { ROUTE_HREF, ROUTE_LABEL, type Route } from '@/lib/routing';
 import { t, useT } from '@/i18n';
 
@@ -161,11 +162,7 @@ export function InfoView({ info, connected, busy }: InfoViewProps): ReactElement
           id="info"
           label={t('info:read.panel')}
           progress={info.reporter.progress}
-          lines={
-            showDetails
-              ? info.reporter.lines
-              : info.reporter.lines.filter((line) => line.level !== 'detail')
-          }
+          lines={visibleLogLines(info.reporter.lines, showDetails)}
           trimmed={info.reporter.trimmed}
         />
 

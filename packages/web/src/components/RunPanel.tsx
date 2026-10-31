@@ -107,11 +107,16 @@ export function RunPanel({
               {t('shared:runPanel.trimmed', { count: trimmed })}
             </div>
           )}
-          {lines.map((line) => (
-            <div key={line.seq} className={LEVEL_CLASS[line.level]}>
-              {line.text === '' ? ' ' : line.text}
-            </div>
-          ))}
+          {/* A blank line is a gap, not a line holding a space: copying the log gives an empty line. */}
+          {lines.map((line) =>
+            line.text === '' ? (
+              <div key={line.seq} className="min-h-[1lh]" />
+            ) : (
+              <div key={line.seq} className={LEVEL_CLASS[line.level]}>
+                {line.text}
+              </div>
+            ),
+          )}
         </div>
       )}
 
