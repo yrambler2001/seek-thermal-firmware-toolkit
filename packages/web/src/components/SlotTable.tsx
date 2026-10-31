@@ -8,11 +8,13 @@
  * buttons. Below 48rem the table becomes one card per bank (`table-cards`), and
  * the labels repeat above each value there.
  *
- * At table widths the actions column takes the room the others do not need
- * (42% of the table, or all that is left), so its buttons keep their labels on
- * one line where they fit: from 64rem the hash is printed whole in four lines
- * of 16 digits, and a long bank name may wrap. A label still wraps when the
- * column has no room.
+ * Three columns: the slot (its name, address, whether it is booted, and whether
+ * the bootloader takes it), the firmware (version and image id, then its key,
+ * size and SHA-256 as labelled lines, the labels being the former columns'
+ * headers), and the actions, which take all the width the other two do not
+ * need, so their buttons keep their labels on one line where they fit. The hash
+ * is printed whole, in four lines of 16 digits (two of 32 in a phone's card). A
+ * label still wraps when the column has no room.
  */
 
 import type { ReactElement, ReactNode } from 'react';
@@ -142,7 +144,28 @@ function numberWithUnit(text: string, number: string): ReactNode {
   );
 }
 
-/** A bank's bootability cell. `unknownWhy` is core's reason a verdict is unknown on this camera (`unknownBootabilityWhy`). */
+/**
+ * One labelled line of a cell: a small muted label (a former column's header) above its value. Inside a
+ * `<dl>`, so the label names its value for a screen reader too.
+ */
+function Field({
+  label,
+  children,
+}: {
+  readonly label: string;
+  readonly children: ReactNode;
+}): ReactElement {
+  return (
+    <div>
+      <dt className="text-[0.68rem] font-semibold tracking-[0.06em] text-muted-foreground uppercase hyphens-auto">
+        {label}
+      </dt>
+      <dd>{children}</dd>
+    </div>
+  );
+}
+
+/** A bank's bootability verdict. `unknownWhy` is core's reason a verdict is unknown on this camera (`unknownBootabilityWhy`). */
 function bootability(view: SlotView, unknownWhy: string): ReactNode {
   const state = view.state;
   if (state === null) return '—';
@@ -263,11 +286,8 @@ export function SlotTable({
         <TableRow>
           <TableHead>{t('slots:table.col.bank')}</TableHead>
           <TableHead>{t('slots:table.col.firmware')}</TableHead>
-          <TableHead>{t('slots:table.col.size')}</TableHead>
-          <TableHead>{t('slots:table.col.key')}</TableHead>
-          <TableHead>{t('slots:table.col.bootable')}</TableHead>
-          <TableHead className="hyphens-auto">{t('slots:table.col.sha')}</TableHead>
-          <TableHead className="md:w-[42%]">{t('slots:table.col.actions')}</TableHead>
+          {/* All the width the slot and firmware columns do not need. */}
+          <TableHead className="md:w-full">{t('slots:table.col.actions')}</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -337,6 +357,11 @@ export function SlotTable({
                     {coreText(capabilityNoteMessage(text))}
                   </span>
                 ))}
+                <dl className="mt-2 font-normal md:min-w-[8rem]">
+                  <Field label={t('slots:table.col.bootable')}>
+                    {bootability(view, coreText(unknownBootabilityWhyMessage(report.state)))}
+                  </Field>
+                </dl>
               </TableRowHeader>
 
               <TableCell label={t('slots:table.col.firmware')}>
@@ -381,39 +406,37 @@ export function SlotTable({
                       : coreText(recordedParam(state.reasonMessage, state.reason))}
                   </span>
                 )}
-              </TableCell>
-
-              <TableCell label={t('slots:table.col.size')}>
-                {numberWithUnit(
-                  t('slots:table.bankSize', { size: SLOT_BYTES.toLocaleString() }),
-                  SLOT_BYTES.toLocaleString(),
-                )}
-                {state?.header != null && (
-                  <span className="block text-[0.75rem] text-muted-foreground">
+                <dl className="mt-2 space-y-1.5 lg:min-w-[11rem]">
+                  <Field label={t('slots:table.col.key')}>
+                    {state?.keyName == null
+                      ? state?.plain == null
+                        ? '—'
+                        : t('slots:table.keyNone')
+                      : lastWordsTogether(coreParamText(keyNameParam(state.keyName)))}
+                  </Field>
+                  <Field label={t('slots:table.col.size')}>
                     {numberWithUnit(
-                      t('slots:table.imageSize', { size: state.header.length.toLocaleString() }),
-                      state.header.length.toLocaleString(),
+                      t('slots:table.bankSize', { size: SLOT_BYTES.toLocaleString() }),
+                      SLOT_BYTES.toLocaleString(),
                     )}
-                  </span>
-                )}
-              </TableCell>
-
-              <TableCell label={t('slots:table.col.key')}>
-                {state?.keyName == null
-                  ? state?.plain == null
-                    ? '—'
-                    : t('slots:table.keyNone')
-                  : lastWordsTogether(coreParamText(keyNameParam(state.keyName)))}
-              </TableCell>
-
-              <TableCell label={t('slots:table.col.bootable')}>
-                {bootability(view, coreText(unknownBootabilityWhyMessage(report.state)))}
-              </TableCell>
-
-              <TableCell label={t('slots:table.col.sha')}>
-                <span className="block font-mono text-[0.72rem] [overflow-wrap:anywhere] md:max-w-[16ch] lg:w-[16ch]">
-                  {state?.sha256 ?? '—'}
-                </span>
+                    {state?.header != null && (
+                      <span className="block text-[0.75rem] text-muted-foreground">
+                        {numberWithUnit(
+                          t('slots:table.imageSize', {
+                            size: state.header.length.toLocaleString(),
+                          }),
+                          state.header.length.toLocaleString(),
+                        )}
+                      </span>
+                    )}
+                  </Field>
+                  <Field label={t('slots:table.col.sha')}>
+                    {/* Whole and selectable as one string: 16 digits a line in the table, 32 in a phone's card. */}
+                    <span className="block w-[32ch] max-w-full font-mono text-[0.72rem] [overflow-wrap:anywhere] md:w-[16ch]">
+                      {state?.sha256 ?? '—'}
+                    </span>
+                  </Field>
+                </dl>
               </TableCell>
 
               <TableCell label={t('slots:table.col.actions')}>

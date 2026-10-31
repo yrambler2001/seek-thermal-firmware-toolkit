@@ -799,13 +799,44 @@ describe('SlotsView', () => {
     const table = container.querySelector('table');
     expect(table?.classList.contains('table-cards')).toBe(true);
     expect(table?.querySelector('caption')?.textContent).toContain('Each firmware bank');
-    expect(container.querySelectorAll('th[scope="col"]')).toHaveLength(7);
+    /* Three columns: the slot, its firmware (key, size and hash as labelled lines), the actions. */
+    expect(container.querySelectorAll('th[scope="col"]')).toHaveLength(3);
     expect(container.querySelectorAll('th[scope="row"]')).toHaveLength(3);
     expect(container.querySelectorAll('[role="button"]')).toHaveLength(0);
     for (const button of container.querySelectorAll('button')) {
       expect(button.textContent.trim().length, 'a button has no accessible name').toBeGreaterThan(
         0,
       );
+    }
+    unmount();
+  });
+
+  it('says under the slot whether it boots, and under the firmware its key, size and whole hash, each labelled', () => {
+    const { container, unmount } = view(panel({ plan: slotPlan(true), report: slotReport(base) }));
+
+    const rows = [...container.querySelectorAll('tbody tr')];
+    expect(rows).toHaveLength(3);
+    for (const row of rows) {
+      /* The verdict sits in the row header, under the slot's name, labelled with the former column's header. */
+      const slot = row.querySelector('th[scope="row"]');
+      expect(slot?.querySelector('dt')?.textContent).toBe('Bootable');
+      expect(slot?.querySelector('dd')?.textContent).toBe('bootable — the bootloader accepts it');
+      /* Two cells: the firmware, then the actions. */
+      const cells = row.querySelectorAll('td');
+      expect(cells).toHaveLength(2);
+      const firmware = cells[0];
+      if (firmware === undefined) throw new Error('the firmware cell');
+      expect([...firmware.querySelectorAll('dt')].map((dt) => dt.textContent)).toEqual([
+        'Key',
+        'Size',
+        'SHA-256 of plaintext',
+      ]);
+      const values = [...firmware.querySelectorAll('dd')].map((dd) => dd.textContent);
+      expect(values[0]).toBe('Key A');
+      expect(values[1]).toContain('65,536 B bank');
+      /* The hash is one string, whole: the cell's width breaks it into lines, not the markup. */
+      expect(values[2]).toMatch(/^[0-9a-f]{64}$/);
+      expect(cells[1]?.querySelectorAll('button').length).toBeGreaterThan(0);
     }
     unmount();
   });
