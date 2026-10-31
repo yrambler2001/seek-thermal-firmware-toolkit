@@ -8,7 +8,7 @@
  */
 
 import type { ReactElement } from 'react';
-import { Archive, FileKey2, Info, Layers, Radar, Thermometer } from 'lucide-react';
+import { Archive, FileKey2, Info, Layers, Thermometer } from 'lucide-react';
 import { REPO_URL } from '@seek-fw/core';
 import { useT } from '@/i18n';
 import { ROUTE_HREF, ROUTE_LABEL, ROUTES, type Route } from '@/lib/routing';
@@ -41,7 +41,7 @@ function GitHubMark({ className }: { readonly className?: string }): ReactElemen
 const ICONS: Readonly<Record<Route, ReactElement>> = {
   info: <Info className="size-4" />,
   preserve: <Archive className="size-4" />,
-  v4: <Radar className="size-4" />,
+  v4: <Archive className="size-4" />,
   decrypt: <FileKey2 className="size-4" />,
   slots: <Layers className="size-4" />,
 };
