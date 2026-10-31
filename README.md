@@ -442,7 +442,7 @@ Reading a camera needs WebUSB: Chrome, Edge or another Chromium browser. On macO
 
 - **One tab at a time.** The page runs one camera operation at a time across all its tabs and windows; a second one sends nothing and says so. That does not reach another browser or the CLI, so use one of them at a time.
 
-[HOW_IT_WORKS.md](HOW_IT_WORKS.md#browser-and-platform-details) has the details.
+The page's Info tab has these notes too, under **Platform notes**. [HOW_IT_WORKS.md](HOW_IT_WORKS.md#browser-and-platform-details) has the details.
 
 ## More
 
