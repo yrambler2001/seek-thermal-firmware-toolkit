@@ -272,8 +272,6 @@ export default {
   /** The "Next start" row: `{why}` is boot.select.* or boot.cfg0NotRead. */
   'report.nextStart.unknown': 'unbekannt — {why}',
   'report.nextStart.runs': '{bank} — {why}',
-  'upgrade.targetBooted':
-    '{name} ist sowohl der Slot, aus dem die Kamera gestartet ist, als auch der Slot, in den ihr eigenes Upgrade schreibt. Ein Upgrade, das von dieser Kamera aus läuft, würde das Image überschreiben, das sie gerade ausführt. Das ist nur eine Warnung: Nichts hier verhindert ein Upgrade.',
   /** `{verdict}` is one of upgrade.verdict.*. */
   'upgrade.whileRecovery':
     'Die Kamera läuft aus ihrem Recovery-Slot, und ihr eigenes Upgrade schreibt in {name}, aus dem sie nicht läuft. {verdict} Das ist nur eine Warnung: Nichts hier verhindert ein Upgrade.',
@@ -421,7 +419,6 @@ export default {
   'keyName.theDeviceKey': 'der Geräteschlüssel',
   /** A slot's key when the read names none (a placeholder, not a key's name). */
   'keyName.unknown': 'unbekannter Schlüssel',
-  'keys.noKnownKey': 'kein bekannter Schlüssel',
 
   /* ---- keys.evidence: the facts a write's keys rest on, one list item each (slots/write-keys-words) ---- */
   /** `{hex}`, `{keyA}`, `{keyB}` are key bytes in hex; `{keyAAt}`, `{keyBAt}` offsets; `{firmware}` a version or "?". */
@@ -444,28 +441,6 @@ export default {
     'die Kamera entschlüsselt den Upload mit diesem Schlüssel und verschlüsselt ihn neu unter {key} {hex}, dem Schlüssel, unter dem ihr Bootloader einen Slot prüft (erschlossen aus {bank}, dem Slot, aus dem die Kamera laut eigener Meldung gestartet ist und den der Bootloader ohne seine Prüfung angesprungen hat), daher wird jeder Slot, den sie schreibt, so gespeichert, wie der Bootloader ihn annimmt',
   'keys.evidence.checkKeyNamedFrom':
     'die Kamera entschlüsselt den Upload mit diesem Schlüssel und verschlüsselt ihn neu unter {key} {hex}, dem Schlüssel, unter dem ihr Bootloader einen Slot prüft (benannt anhand von {bank}, dem Slot, aus dem die Kamera laut eigener Meldung gestartet ist), daher wird jeder Slot, den sie schreibt, so gespeichert, wie der Bootloader ihn annimmt',
-  /** `{source}` is keys.source.*. */
-  'keys.evidence.applicationKeyA':
-    'die laufende Anwendung ({bank}, Firmware {firmware}) trägt ihren Schlüssel A {keyA} bei {keyAAt}, aus {source}',
-  'keys.evidence.applicationKeys':
-    'die laufende Anwendung ({bank}, Firmware {firmware}) trägt ihren Schlüssel A {keyA} bei {keyAAt}, aus {source}, und ihren Schlüssel B {keyB} bei {keyBAt}',
-  'keys.source.keyTable': 'der Schlüsseltabelle des Bootloaders',
-  /** `{builds}`: firmware versions. */
-  'keys.source.applicationPair': 'dem dekodierten Anwendungspaar von {builds}',
-  'keys.evidence.perDevice':
-    'ein Geräteschlüssel ist programmiert, daher verschlüsselt die Anwendung unter ihm neu',
-  'keys.evidence.noPerDevice':
-    'es ist kein Geräteschlüssel programmiert, daher verschlüsselt die Anwendung unter ihrem eigenen Schlüssel B neu',
-  'keys.evidence.storeKey':
-    'der Speicherschlüssel der Anwendung ist {key} des Bootloaders ({hex}), daher speichern die Schreibvorgänge jeden Slot darunter; im gestarteten {bank} liegt {held}, was der Bootloader ebenfalls annimmt',
-  'keys.evidence.bootedKey':
-    'der gestartete {bank} entschlüsselt sich unter {key} ({hex}), einem Schlüssel, den der Bootloader probiert; der Speicherschlüssel der Anwendung ist nicht der des Bootloaders, daher speichern die Schreibvorgänge jeden Slot unter dem Schlüssel des gestarteten Slots',
-  /** `{masks}`: key names joined with commas. */
-  'keys.evidence.masks':
-    'der Upload ist das Image XOR die Schlüsselströme von {masks}; das Gerät speichert das Image unter {key}',
-  /** `{held}` is a key name or keys.noKnownKey. */
-  'keys.evidence.otherBank':
-    'zu {bank} passt {held}; er wird nach derselben Regel unter {key} geschrieben und zur Prüfung zurückgelesen',
 
   /* ---- keys.refused: why no upload key is derived (the "refused" row, or the banner) ---- */
   'keys.refused.bootUnnamed':
@@ -596,7 +571,7 @@ export default {
   'detect.legacy.none': 'nichts Beobachtetes deutet auf den authentifizierten Lesekanal hin',
 
   /* ---- fps.table: why the frame-rate patch table makes no patch for an image (preservation/fps-patch) ---- */
-  /* `{version}`, `{image}`, `{camera}`: firmware versions; `{id}`: the table entry's name; `{hz}`: a rate.
+  /* `{version}`, `{image}`, `{camera}`: firmware versions; `{hz}`: a rate.
    * "stage two", Key A / Key B, f96ac57eda75 and the build names stay as they are. */
   'fps.table.withheld':
     'nach einem Lauf an einer Kamera zurückgehalten: Dort hat der Patch die Ausgaberate nicht erhöht, und der Verschluss hat nach dem Schreiben bei jedem Bild ausgelöst',
@@ -609,9 +584,9 @@ export default {
   'fps.table.notOffered': 'nicht angeboten',
   'fps.table.notImage': 'das ist kein Firmware-Image, daher gilt dafür kein Bildraten-Patch',
   'fps.table.otherBuild':
-    'das Image ist der Build {image} („{id}“), aber die Kamera meldet {camera}; der Patch wird abgelehnt, statt auf einen Build angewendet zu werden, zu dem er nicht passt',
+    'das Image ist der Build {image}, aber die Kamera meldet {camera}; der Patch wird abgelehnt, statt auf einen Build angewendet zu werden, zu dem er nicht passt',
   'fps.table.otherBuildNoVersion':
-    'das Image ist der Build {image} („{id}“), aber die Kamera meldet keine Version; der Patch wird abgelehnt, statt auf einen Build angewendet zu werden, zu dem er nicht passt',
+    'das Image ist der Build {image}, aber die Kamera meldet keine Version; der Patch wird abgelehnt, statt auf einen Build angewendet zu werden, zu dem er nicht passt',
   'fps.table.patched': 'der Bildraten-Patch ist bereits angewendet: Dieses Image läuft mit {hz} Hz',
   'fps.table.earlierPatch':
     'dieses Image enthält einen früheren {hz}-Hz-Bildraten-Patch ohne die USB-Korrektur, und ein Patch wird nie auf ein gepatchtes Image angewendet: Stellen Sie das Original-Image wieder her und patchen Sie es dann',
@@ -637,26 +612,17 @@ export default {
   /* ---- notes: what the read measured about a build, a bank or an empty bank (slots/capability-notes) ----
    * Mode numbers, addresses, version numbers and command names (CompleteMemoryUpgrade, BeginFirmwareUpgrade,
    * EP0, PRESERVATION.md) are names: keep them. `{untested}` is notes.ffBootUntested. */
-  /** "This line" is the firmware line (the 2014 0.x/1.x builds, as in notes.token), not a line of text: on these builds, the bank the page or the CLI calls booted is the one the camera entered at its last start. */
-  'notes.lockedBootWord':
-    'Der gestartete Slot, der auf dieser Firmware-Linie genannt wird, ist der Slot, aus dem die Kamera bei ihrem letzten Start gestartet ist, wie ihn das Aktiv-Slot-Wort festhält (0 Slot A, 1 Slot B, 2 Recovery-Slot R). Der nächste Start wird durch das Boot-Konfigurationswort festgelegt: 0 oder 0xFFFFFFFF wählen zuerst A, 1 zuerst B, jeder andere Wert zuerst Recovery-Slot R. Recovery-Slot R läuft immer dann, wenn A und B nichts enthalten, was der Bootloader von 2014 annimmt (einen Slot, dessen Wörter sich zu 0 summieren), egal was R enthält (an einer Kamera gemessen).',
   /** "This line" is the firmware line (the 2016 Compact PRO 1.0.3.x builds), not a line of text: on these builds, the bank the page or the CLI calls booted is the one the camera entered at its last start. */
   'notes.locked2016BootWord':
     'Der gestartete Slot, der auf dieser Firmware-Linie genannt wird, ist der Slot, aus dem die Kamera bei ihrem letzten Start gestartet ist, wie der Bootloader ihn im Aktiv-Slot-Wort festhält (0 Slot A, 1 Slot B, 2 Recovery-Slot R). Der nächste Start wird durch das Boot-Konfigurationswort festgelegt: 0 oder 0xFFFFFFFF wählen zuerst A, 1 zuerst B, jeder andere Wert zuerst Recovery-Slot R. Der Bootloader von 2016 nimmt einen Slot nur an, wenn er sich unter dem Schlüssel, unter dem er einen Slot prüft (Schlüsselblock 1 auf seinem Bootloader 1.2.0.0), zu einer Wortsumme von 0 entschlüsselt, und der letzte Slot dieser Reihenfolge läuft ungeprüft, wenn die anderen beiden scheitern. Das Lesen benennt diesen Schlüssel anhand des Slots, aus dem die Kamera gestartet ist, weil der Bootloader-Block, der ihn enthält, auf jedem Kanal abgelehnt wird (an einer Kamera gemessen).',
   'notes.ep0of1032':
     '1.0.3.2: EP0-Sitzungen brechen bei etwa 64 bis 81 KB ab, und 128 B ist die verlustfreie Leseeinheit, daher ist ein 64-KB-Slot pro Sitzung die gemessene Grenze. Ein volles Auslesen des ganzen Chips wird auf diesem Build abgelehnt (PRESERVATION.md: Es gibt kein volles Auslesen mit einer einzigen Öffnung). Das Auslesen der Slots liest einen Slot nach dem anderen, in Anfragen zu 64 Bytes.',
-  'notes.token':
-    'Auf dieser Firmware-Linie sind die Slots gesperrt: Die Kamera öffnet einen Slot nur dann zum Schreiben, wenn sie mit der Entsperrung dieser Linie gefragt wird, die in allen 22 erfassten Firmware-Images dieser Linie gleich ist. Eine Kamera mit einer anderen Entsperrung lehnt ihre Slots ab.',
   'notes.staging.lockedPlain':
     'Übertragen: das Image selbst, höchstens 56 KB (das Meiste, was die Kamera in einem Schreibvorgang annimmt). Der Schreibvorgang löscht den 64-KB-Slot und schreibt genau diese Bytes, und der Rest des Slots liest sich gelöscht. Der Bootloader startet einen Slot nur, wenn dessen Wörter sich zu 0 summieren, daher wird das Image vor dem Senden auf diese Summe ausgeglichen.',
   'notes.staging.locked2016':
     'Übertragen: das Image, XOR den xorshift128-Schlüsselstrom seines EIGENEN Schlüsselblocks 0 (der Übertragungsschlüssel, im Image anhand des Werts gefunden), nur in Image-Länge (höchstens 0xE000 Bytes). Das Gerät entschlüsselt die Nutzdaten mit diesem Schlüssel und speichert sie unter dem Schlüssel, unter dem sein Bootloader einen Slot prüft (Schlüsselblock 1), daher sind die gespeicherten Bytes nicht die übertragenen. Zum Übertragen wird nichts aus dem Ziel-Slot gelesen: Der Schlüsselstrom des Slots dient nur zum Zurücklesen des Slots.',
   'notes.staging.modern':
     'Übertragen: der ganze 64-KB-Slot, Image + 0xFF-Auffüllung + „CODE“-Footer. Das Image wird mit den Schlüsselströmen XOR-verknüpft, die dafür sorgen, dass die zwei eigenen Durchgänge der laufenden Anwendung es unter dem Schlüssel ablegen, den der gestartete Slot enthält: Wenn der Commit-Befehl (CompleteMemoryUpgrade) Datentyp 7, 8 oder 9 erhält, entschlüsselt die Anwendung den Upload mit ihrem Schlüssel A, verschlüsselt ihn unter ihrem Speicherschlüssel neu und programmiert den Slot. Der Footer sorgt dafür, dass der Bootloader den Slot annimmt; ein Slot ohne ihn wird abgelehnt.',
-  'notes.modernGap':
-    'Slot B liegt auf dieser Firmware-Linie bei 0x14050000 (Modus 8). Kein Selektor erreicht 0x14060000 auf irgendeinem Build 2.x, 4.x, 10.x, 42.x oder 44.x (dekodiert aus den 14 Images der Sammlung ab 2018), daher liegt dort kein Slot. Das Layout mit 0x14060000 gehört zur gesperrten Linie 0.x/1.x.',
-  'notes.modernNamedWrite':
-    'Benannte Schreibvorgänge (Modi 7 bis 9) sind aus der Firmware dekodiert. Der Emulator schreibt A, B und R über sie auf den 4.x-Builds, und an einer Kamera wurde Slot A einer Compact XR 4.8.2.1 über Modus 7 vom Bildraten-Patch beschrieben. Ein Slot-Schreiben öffnet nie Modus 0, das Upgrade-Ziel.',
   'notes.unverified':
     'Nur Lesen. Das Slot-Layout ist die dekodierte Tabelle der gesperrten Linie, aber für diesen Build wurde keine Übertragungsform gemessen, daher wird kein Schreibvorgang geplant.',
   'notes.empty.plain':
@@ -667,12 +633,6 @@ export default {
     'Ein leerer Slot nimmt ein Image genauso an wie ein belegter. Der Übertragungsschlüssel ist Schlüsselblock 0 aus dem eigenen Paar des IMAGES, kein aus dem Ziel-Slot gelesener Schlüssel, und das Gerät entschlüsselt die Nutzdaten damit, speichert sie unter seinem eigenen Schlüssel und löscht den Block, ohne ihn zu lesen. Auf dem Emulator nachgewiesen; an einer Kamera noch nicht gemessen.',
   'notes.mode2of080':
     '0.8.0.0: Modus 2 (0x14000000) ist auf diesem Build eine Absturzgefahr, ein geöffnetes Lesen läuft über das SRAM hinaus (PRESERVATION.md). Ein Slot-Lesen oder -Schreiben öffnet nur die Modi 7 bis 9 und nie Modus 2.',
-  'notes.keyPairs2016':
-    'Die 9-Hz-Builds von 1.0.3.0 und 1.0.3.2 teilen sich ein Schlüsselpaar, die FF-Builds ein anderes. Die Versionszeichenkette unterscheidet sie nicht, daher wird der Schlüsselstrom aus dem Slot selbst gewonnen, und das eigene Image des Slots entscheidet.',
-  'notes.board1030':
-    'Die Anwendung 1.0.3.0 startet auf jeder Platine außer der der Compact Pro neu, daher läuft sie auf einer Compact-Platine nur mit dem Platinen-Patch in ihren Slots.',
-  'notes.bank.modernA':
-    'Geschrieben über eine Slot-Öffnung, die die moderne Tabelle auslässt; eine Compact XR 4.8.2.1 hat darüber einen Schreibvorgang angenommen (an einer Kamera).',
   'notes.bank.recovery2016':
     'An einer Compact PRO 1.0.3.0 gemessen: Recovery-Slot R hat sein eigenes Image, eine Änderung um ein Byte und die Rohdaten so, wie sie gesendet wurden, angenommen, jeweils ohne Fehler geschrieben.',
   'notes.bank.ff1308A':

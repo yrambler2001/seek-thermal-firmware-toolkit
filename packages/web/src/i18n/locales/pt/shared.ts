@@ -40,8 +40,7 @@ export default {
     'A câmara está a ser usada noutro separador ou noutra janela — termine ou feche primeiro o que está aberto lá.',
 
   /* lib/backup-save: shown after core's plan sentence on a write's confirmation. */
-  'backup.downloadNote':
-    'O zip é transferido automaticamente, antes de qualquer envio. O browser não avisa quando uma transferência chega ao disco, por isso confirme que o zip está na pasta de transferências antes de contar com ele.',
+  'backup.downloadNote': 'O zip é transferido automaticamente, antes de qualquer envio.',
 
   /* useDevice: the connection line when no camera is held. */
   'device.none': 'Nenhum dispositivo selecionado.',
@@ -85,9 +84,9 @@ export default {
     'A imagem não tem o par de chaves que o nome do ficheiro indica. Use o ficheiro desencriptado exatamente como o dump o escreveu, incluindo o nome.',
   'hint.flashRefused': 'Não foi escrito nada na câmara.',
   'hint.familyUnsupported':
-    'Não foi lido nem escrito nada. Cada separador cobre um intervalo de versões de firmware: as câmaras 0.x e 1.x vão para «Dump e desencriptação 0.x/1.x 2014/2016», as câmaras 4.x e Nano para «Dump e desencriptação 4.x/Nano». O separador Informação indica qual é o separador da câmara.',
+    'Não foi lido nem escrito nada. Cada separador cobre um intervalo de versões de firmware: as câmaras 0.x e 1.x vão para «Dump e desencriptação 0.x/1.x», as câmaras 4.x e Nano para «Dump e desencriptação 4.x/Nano». O separador Informação indica qual é o separador da câmara.',
   'hint.firmwareTooOld':
-    'Nenhuma família de firmware consegue ler esta compilação aqui: o firmware não tem resposta de leitura para o comando com que este separador lê a flash, por isso não lhe foi enviado nada cuja resposta pudesse ser mal lida. Uma Compact com 0.7.0.7 ou 0.7.0.8 pode ser lida em «Dump e desencriptação 0.x/1.x 2014/2016». Um dump feito com um programador SPI ou por SWD/J-Link pode ainda ser desencriptado nesta página, em «Desencriptar ficheiro/ranhura».',
+    'Nenhuma família de firmware consegue ler esta compilação aqui: o firmware não tem resposta de leitura para o comando com que este separador lê a flash, por isso não lhe foi enviado nada cuja resposta pudesse ser mal lida. Uma Compact com 0.7.0.7 ou 0.7.0.8 pode ser lida em «Dump e desencriptação 0.x/1.x». Um dump feito com um programador SPI ou por SWD/J-Link pode ainda ser desencriptado nesta página, em «Desencriptar ficheiro/ranhura».',
   'hint.powerCycle':
     'Neste assistente: desconecte a câmara e volte a conectá-la, prima «Conectar dispositivo» e escolha-a; depois inicie de novo o mesmo passo. A execução continua carregada aqui — não há nada para retomar.',
 
@@ -115,10 +114,6 @@ export default {
   'deviceInfo.keyA': 'Chave A',
   /** Row label: the second key ("Key B"), as core names it (core:keyName.keyB). */
   'deviceInfo.keyB': 'Chave B',
-  'deviceInfo.keysConfirmed':
-    'Confirmadas pela correspondência com o estado do fluxo de chave de uma ranhura, recuperado do próprio texto cifrado. Um envio é preparado para que cada ranhura o guarde com a chave de armazenamento do bootloader ({storeKey}), ou com a chave própria da ranhura de arranque quando a chave de armazenamento da aplicação não é essa.',
-  'deviceInfo.keysDecrypted':
-    'Cada ranhura foi desencriptada no browser: o seu fluxo de chave foi deduzido a partir dos seus próprios vetores de reset, que se sabe serem zero. Desencriptar não é o mesmo que arrancar: o bootloader só experimenta {storeKey:acc} e a chave A, por isso uma ranhura escrita com qualquer outra chave tem a soma de verificação perfeita e mesmo assim é ignorada. Não foi escrito nada.',
   /* {banks} is one bank name or several joined by common:list.and. */
   'deviceInfo.orphan': {
     one: '**{banks:ins} contém uma imagem de firmware válida, encriptada com uma chave que o bootloader desta câmara não conhece.** A imagem está intacta e a soma de verificação está correta, mas o bootloader só experimenta {storeKey:acc} e a chave A quando verifica uma ranhura, por isso ignora-a e arranca a partir de outra.',

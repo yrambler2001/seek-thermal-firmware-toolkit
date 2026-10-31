@@ -40,8 +40,7 @@ export default {
     'La cámara se está usando en otra pestaña o ventana: termina allí o ciérrala primero.',
 
   /* lib/backup-save: shown after core's plan sentence on a write's confirmation. */
-  'backup.downloadNote':
-    'El zip se descarga automáticamente, antes de enviar nada. El navegador no avisa cuando una descarga llega al disco, así que comprueba que está en tu carpeta de descargas antes de contar con él.',
+  'backup.downloadNote': 'El zip se descarga automáticamente, antes de enviar nada.',
 
   /* useDevice: the connection line when no camera is held. */
   'device.none': 'Ningún dispositivo seleccionado.',
@@ -86,9 +85,9 @@ export default {
     'La imagen no lleva el par de claves que indica su nombre de archivo. Usa el archivo descifrado exactamente como lo escribió el volcado, con su nombre incluido.',
   'hint.flashRefused': 'No se escribió nada en la cámara.',
   'hint.familyUnsupported':
-    'No se leyó ni se escribió nada. Cada pestaña cubre un intervalo de versiones de firmware: las cámaras 0.x y 1.x van a «Volcar y descifrar 0.x/1.x 2014/2016», y las 4.x y Nano a «Volcar y descifrar 4.x/Nano». La pestaña «Información» dice a qué pestaña va la cámara.',
+    'No se leyó ni se escribió nada. Cada pestaña cubre un intervalo de versiones de firmware: las cámaras 0.x y 1.x van a «Volcar y descifrar 0.x/1.x», y las 4.x y Nano a «Volcar y descifrar 4.x/Nano». La pestaña «Información» dice a qué pestaña va la cámara.',
   'hint.firmwareTooOld':
-    'Ninguna familia de firmware puede leer aquí esta compilación: su firmware no tiene manejador de lectura para el comando con el que esta pestaña lee la flash, así que no se le envió nada que pudiera malinterpretarse. Una Compact con 0.7.0.7 o 0.7.0.8 se puede leer en «Volcar y descifrar 0.x/1.x 2014/2016». Un volcado hecho con un programador SPI o por SWD/J-Link se puede descifrar igualmente en esta página, en «Descifrar archivo/ranura».',
+    'Ninguna familia de firmware puede leer aquí esta compilación: su firmware no tiene manejador de lectura para el comando con el que esta pestaña lee la flash, así que no se le envió nada que pudiera malinterpretarse. Una Compact con 0.7.0.7 o 0.7.0.8 se puede leer en «Volcar y descifrar 0.x/1.x». Un volcado hecho con un programador SPI o por SWD/J-Link se puede descifrar igualmente en esta página, en «Descifrar archivo/ranura».',
   'hint.powerCycle':
     'En este asistente: desconecta la cámara y vuelve a conectarla, pulsa «Conectar dispositivo» y elígela, y luego vuelve a empezar el mismo paso. La ejecución sigue cargada aquí: no hay nada que reanudar.',
 
@@ -116,10 +115,6 @@ export default {
   'deviceInfo.keyA': 'Clave A',
   /** Row label: the second key ("Key B"), as core names it (core:keyName.keyB). */
   'deviceInfo.keyB': 'Clave B',
-  'deviceInfo.keysConfirmed':
-    'Confirmada al coincidir con el estado del flujo de clave de una ranura, recuperado del propio texto cifrado. Lo que se envía se prepara para que cada ranura lo almacene con la clave de almacenamiento del bootloader ({storeKey}), o con la propia clave de la ranura de arranque cuando la clave de almacenamiento de la aplicación no es esa.',
-  'deviceInfo.keysDecrypted':
-    'Cada ranura se descifró en el navegador resolviendo su flujo de clave a partir de sus propios vectores de reinicio, que se sabe que valen cero. Descifrar no es lo mismo que arrancar: el bootloader solo prueba {storeKey:acc} y la clave A, así que una ranura escrita con cualquier otra clave tiene una suma de comprobación perfecta y aun así se salta. No se escribió nada.',
   /* {banks} is one bank name or several joined by common:list.and. */
   'deviceInfo.orphan': {
     one: '**{banks:ins} contiene una imagen de firmware válida cifrada con una clave que el bootloader de esta cámara no conoce.** La imagen está intacta y su suma de comprobación es correcta, pero el bootloader solo prueba {storeKey:acc} y la clave A cuando comprueba una ranura, así que la salta y arranca otra cosa.',

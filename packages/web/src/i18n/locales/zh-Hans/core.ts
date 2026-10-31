@@ -237,8 +237,6 @@ export default {
   /** The "Next start" row: `{why}` is boot.select.* or boot.cfg0NotRead. */
   'report.nextStart.unknown': '未知——{why}',
   'report.nextStart.runs': '{bank}——{why}',
-  'upgrade.targetBooted':
-    '{name} 既是相机本次启动的槽位，也是它自身升级时写入的槽位。从这台相机运行升级会覆盖它正在运行的镜像。这只是警告：这里不会阻止升级。',
   /** `{verdict}` is one of upgrade.verdict.*. */
   'upgrade.whileRecovery':
     '相机正在运行它的恢复槽位，而它自身的升级会写入{name}，即它没有在运行的那个槽位。{verdict}这只是警告：这里不会阻止升级。',
@@ -366,7 +364,6 @@ export default {
   'keyName.theDeviceKey': '设备密钥',
   /** A slot's key when the read names none (a placeholder, not a key's name). */
   'keyName.unknown': '未知密钥',
-  'keys.noKnownKey': '没有已知密钥',
 
   /* ---- keys.evidence: the facts a write's keys rest on, one list item each (slots/write-keys-words) ---- */
   /** `{hex}`, `{keyA}`, `{keyB}` are key bytes in hex; `{keyAAt}`, `{keyBAt}` offsets; `{firmware}` a version or "?". */
@@ -389,24 +386,6 @@ export default {
     '相机用该密钥解密上传的数据，再以{key} {hex}（其引导程序检查槽位时使用的密钥，是从{bank} 推断得出的——相机报告它进入了该槽位，而引导程序进入它时没有检查）重新加密，因此它写入的每个槽位都以引导程序接受的方式存储',
   'keys.evidence.checkKeyNamedFrom':
     '相机用该密钥解密上传的数据，再以{key} {hex}（其引导程序检查槽位时使用的密钥，根据相机报告它进入的{bank} 指明）重新加密，因此它写入的每个槽位都以引导程序接受的方式存储',
-  /** `{source}` is keys.source.*. */
-  'keys.evidence.applicationKeyA':
-    '正在运行的应用程序（{bank}，固件 {firmware}）在 {keyAAt} 处带有它的密钥 A {keyA}，来自{source}',
-  'keys.evidence.applicationKeys':
-    '正在运行的应用程序（{bank}，固件 {firmware}）在 {keyAAt} 处带有它的密钥 A {keyA}，来自{source}，并在 {keyBAt} 处带有它的密钥 B {keyB}',
-  'keys.source.keyTable': '引导程序的密钥表',
-  /** `{builds}`: firmware versions. */
-  'keys.source.applicationPair': '{builds} 的已解码应用程序密钥对',
-  'keys.evidence.perDevice': '已烧录设备专属密钥，因此应用程序会以它重新加密',
-  'keys.evidence.noPerDevice': '没有烧录设备专属密钥，因此应用程序会以它自己的密钥 B 重新加密',
-  'keys.evidence.storeKey':
-    '应用程序的存储密钥就是引导程序的{key}（{hex}），因此写入时每个槽位都以它存储；当前启动的{bank} 持有{held}，引导程序同样接受',
-  'keys.evidence.bootedKey':
-    '当前启动的{bank} 可用{key}（{hex}）解密，这是引导程序会尝试的密钥；应用程序的存储密钥不是引导程序的密钥，因此写入时每个槽位都以当前启动槽位的密钥存储',
-  /** `{masks}`: key names joined with commas. */
-  'keys.evidence.masks': '上传的数据是镜像与{masks} 的密钥流异或的结果；设备以{key} 存储镜像',
-  /** `{held}` is a key name or keys.noKnownKey. */
-  'keys.evidence.otherBank': '{bank} 可用{held} 解密；按同样的规则，它以{key} 写入，并回读检查',
 
   /* ---- keys.refused: why no upload key is derived (the "refused" row, or the banner) ---- */
   'keys.refused.bootUnnamed': '无法确定当前启动的槽位，因此无法从中读出槽位存储所用的密钥',
@@ -523,7 +502,7 @@ export default {
   'detect.legacy.none': '没有观察到任何迹象指向认证读取通道',
 
   /* ---- fps.table: why the frame-rate patch table makes no patch for an image (preservation/fps-patch) ---- */
-  /* `{version}`, `{image}`, `{camera}`: firmware versions; `{id}`: the table entry's name; `{hz}`: a rate.
+  /* `{version}`, `{image}`, `{camera}`: firmware versions; `{hz}`: a rate.
    * "stage two", Key A / Key B, f96ac57eda75 and the build names stay as they are. */
   'fps.table.withheld':
     '在一台相机上运行后暂不提供：在那台相机上，补丁没有提高发布帧率，而且写入后每一帧都会触发快门',
@@ -536,9 +515,9 @@ export default {
   'fps.table.notOffered': '不提供',
   'fps.table.notImage': '这不是固件镜像，因此不适用任何帧率补丁',
   'fps.table.otherBuild':
-    '镜像是 {image} 版本（“{id}”），但相机报告的是 {camera}；补丁不会应用到与它不匹配的版本上，因此被拒绝',
+    '镜像是 {image} 版本，但相机报告的是 {camera}；补丁不会应用到与它不匹配的版本上，因此被拒绝',
   'fps.table.otherBuildNoVersion':
-    '镜像是 {image} 版本（“{id}”），但相机没有报告版本；补丁不会应用到与它不匹配的版本上，因此被拒绝',
+    '镜像是 {image} 版本，但相机没有报告版本；补丁不会应用到与它不匹配的版本上，因此被拒绝',
   'fps.table.patched': '帧率补丁已经应用：此镜像以 {hz} Hz 运行',
   'fps.table.earlierPatch':
     '此镜像带有较早的、不含 USB 修复的 {hz} Hz 帧率补丁，而补丁绝不会应用到已打过补丁的镜像上：请先还原原厂镜像，再打补丁',
@@ -563,26 +542,17 @@ export default {
   /* ---- notes: what the read measured about a build, a bank or an empty bank (slots/capability-notes) ----
    * Mode numbers, addresses, version numbers and command names (CompleteMemoryUpgrade, BeginFirmwareUpgrade,
    * EP0, PRESERVATION.md) are names: keep them. `{untested}` is notes.ffBootUntested. */
-  /** "This line" is the firmware line (the 2014 0.x/1.x builds, as in notes.token), not a line of text: on these builds, the bank the page or the CLI calls booted is the one the camera entered at its last start. */
-  'notes.lockedBootWord':
-    '在这条固件线上，所说的当前启动槽位是相机上次启动时进入的槽位，按活动槽位字的记录（0 为槽位 A，1 为槽位 B，2 为恢复槽位 R）。下次启动由启动配置字决定：0 或 0xFFFFFFFF 先选 A，1 先选 B，其他任何值先选恢复槽位 R。只要 A 和 B 中都没有 2014 年引导程序接受的内容（字累加和为 0 的槽位），无论 R 中存放的是什么，都会运行恢复槽位 R（已在相机上测得）。',
   /** "This line" is the firmware line (the 2016 Compact PRO 1.0.3.x builds), not a line of text: on these builds, the bank the page or the CLI calls booted is the one the camera entered at its last start. */
   'notes.locked2016BootWord':
     '在这条固件线上，所说的当前启动槽位是相机上次启动时进入的槽位，由引导程序记录在活动槽位字中（0 为槽位 A，1 为槽位 B，2 为恢复槽位 R）。下次启动由启动配置字决定：0 或 0xFFFFFFFF 先选 A，1 先选 B，其他任何值先选恢复槽位 R。2016 年的引导程序只有在槽位用它检查槽位的密钥（其 1.2.0.0 引导程序上为密钥块 1）解密后字累加和为 0 时才接受该槽位；当另外两个都不通过时，该顺序中的最后一个槽位会不经检查直接运行。由于存放该密钥的引导程序块在所有通道上都被拒绝读取，本次读取根据相机进入的槽位来指明该密钥（已在相机上测得）。',
   'notes.ep0of1032':
     '1.0.3.2：EP0 会话在大约 64 到 81 KB 时中断，128 B 是无损读取单位，因此每个会话读取一个 64 KB 槽位是测得的上限。这个版本拒绝整片闪存读取（PRESERVATION.md：不存在单次打开的整片读取）。槽位导出一次读取一个槽位，每次请求 64 字节。',
-  'notes.token':
-    '这条固件线上的槽位是加锁的：只有在请求附带该固件线的解锁时，相机才会为写入打开槽位；在已记录的这条固件线的全部 22 个固件镜像中，这个解锁都相同。使用其他解锁的相机会拒绝打开它的槽位。',
   'notes.staging.lockedPlain':
     '暂存：镜像本身，最多 56 KB（相机一次写入最多接受的大小）。写入会擦除 64 KB 槽位并准确写入这些字节，槽位的其余部分读出为已擦除状态。引导程序只有在槽位的字累加和为 0 时才会启动它，所以镜像在发送之前会被平衡到这个和值。',
   'notes.staging.locked2016':
     '暂存：镜像与其自身密钥块 0（暂存密钥，按值在镜像中找到）的 xorshift128 密钥流异或，仅为镜像长度（最多 0xE000 字节）。设备用该密钥解密载荷，再以其引导程序检查槽位时使用的密钥（密钥块 1）存储，因此存储的字节与暂存的字节不同。暂存时不会从目标槽位读取任何内容：该槽位的密钥流只用于回读槽位。',
   'notes.staging.modern':
     '暂存：整个 64 KB 槽位，即镜像 + 0xFF 填充 + “CODE”尾部。镜像会与特定的密钥流异或，使正在运行的应用程序自己的两轮处理最终以当前启动槽位持有的密钥存储它：当提交命令（CompleteMemoryUpgrade）收到数据类型 7、8 或 9 时，应用程序用它的密钥 A 解密上传的数据，再以它的存储密钥重新加密并写入槽位。正是尾部让引导程序接受该槽位，所以缺少尾部的槽位会被拒绝。',
-  'notes.modernGap':
-    '在这条固件线上，槽位 B 位于 0x14050000（模式 8）。在任何 2.x、4.x、10.x、42.x 或 44.x 版本上，都没有选择器能访问 0x14060000（根据 14 个 2018 年后的资料库镜像解码得出），所以那里没有槽位。0x14060000 的布局属于加锁的 0.x/1.x 固件线。',
-  'notes.modernNamedWrite':
-    '命名写入（模式 7 到 9）是从固件中解码出来的。模拟器在 4.x 版本上通过它们写入 A、B 和 R；在相机上，帧率补丁曾通过模式 7 写入一台 Compact XR 4.8.2.1 的槽位 A。槽位写入绝不会打开模式 0，即升级目标。',
   'notes.unverified':
     '只读。槽位布局采用加锁固件线的已解码表，但还没有为这个版本测得任何暂存形式，所以不规划任何写入。',
   'notes.empty.plain':
@@ -593,12 +563,6 @@ export default {
     '空槽位接受镜像的方式与已用槽位完全相同。暂存密钥是镜像自身密钥对中的密钥块 0，而不是从目标槽位读取的密钥；设备用它解密载荷，以自己的密钥存储，并在不读取的情况下擦除该块。已在模拟器上证实；尚未在相机上测得。',
   'notes.mode2of080':
     '0.8.0.0：在这个版本上，模式 2（0x14000000）有导致崩溃的风险，打开后的读取会越出 SRAM 范围（PRESERVATION.md）。槽位读取或写入只会打开模式 7 到 9，绝不会打开模式 2。',
-  'notes.keyPairs2016':
-    '1.0.3.0 和 1.0.3.2 的 9 Hz 版本共用一对密钥，FF 版本共用另一对。版本字符串无法区分它们，所以密钥流是从槽位本身恢复的，由槽位自己的镜像决定。',
-  'notes.board1030':
-    '1.0.3.0 应用程序在 Compact Pro 以外的任何主板上都会重启，所以只有槽位中带有主板补丁时，Compact 主板才能运行它。',
-  'notes.bank.modernA':
-    '通过现代映射遗漏的一种槽位打开方式写入；在相机上，一台 Compact XR 4.8.2.1 曾通过它接受写入。',
   'notes.bank.recovery2016':
     '已在一台 Compact PRO 1.0.3.0 上测得：恢复槽位 R 接受了它自己的镜像、一个改动一个字节的镜像，以及按发送原样的原始字节，每次写入都没有出错。',
   'notes.bank.ff1308A':

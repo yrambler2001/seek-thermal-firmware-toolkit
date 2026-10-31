@@ -77,6 +77,7 @@ import {
   copySourceRefusalMessage,
 } from '@seek-fw/core';
 import { coreText } from '@/lib/core-text';
+import { pageDumpNotes } from '@/lib/page-hidden';
 import { recordedParam, supportReasonMessage, type CoreMessage } from '@seek-fw/core';
 import { t, tEnglish, type Translate } from '@/i18n';
 import { backupDownloadLines, saveBackupAsDownload } from '../lib/backup-save';
@@ -773,7 +774,7 @@ export function useSlotsPanel(params: SlotsPanelParams): SlotsPanelApi {
               'detail',
             );
           }
-          for (const note of dumped.notes) log(note, 'detail');
+          for (const note of pageDumpNotes(dumped.notes)) log(note, 'detail');
           workflow.progress(1, 1, t('slots:status.dumped', { bank: bankWordsRef(key) }));
         } catch (error) {
           if (error instanceof CancelledError) {

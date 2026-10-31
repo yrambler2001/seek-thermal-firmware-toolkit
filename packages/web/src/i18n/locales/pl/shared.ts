@@ -42,8 +42,7 @@ export default {
     'Kamera jest używana w innej karcie lub oknie przeglądarki — najpierw zakończ tam pracę lub je zamknij.',
 
   /* lib/backup-save: shown after core's plan sentence on a write's confirmation. */
-  'backup.downloadNote':
-    'Plik zip jest pobierany automatycznie, zanim cokolwiek zostanie wysłane. Przeglądarka nie informuje, kiedy pobrany plik trafi na dysk, więc sprawdź folder pobranych plików, zanim zaczniesz na nim polegać.',
+  'backup.downloadNote': 'Plik zip jest pobierany automatycznie, zanim cokolwiek zostanie wysłane.',
 
   /* useDevice: the connection line when no camera is held. */
   'device.none': 'Nie wybrano urządzenia.',
@@ -88,9 +87,9 @@ export default {
     'Obraz nie zawiera pary kluczy, którą podaje jego nazwa pliku. Użyj odszyfrowanego pliku dokładnie w takiej postaci, w jakiej zapisał go zrzut, łącznie z nazwą.',
   'hint.flashRefused': 'Do kamery nic nie zostało zapisane.',
   'hint.familyUnsupported':
-    'Nic nie zostało odczytane ani zapisane. Każda karta obsługuje pewien zakres wersji firmware: kamery 0.x i 1.x obsługuje „Zrzut i odszyfrowanie 0.x/1.x 2014/2016”, kamery 4.x i Nano — „Zrzut i odszyfrowanie 4.x/Nano”. Karta „Info” podaje, która karta jest właściwa dla kamery.',
+    'Nic nie zostało odczytane ani zapisane. Każda karta obsługuje pewien zakres wersji firmware: kamery 0.x i 1.x obsługuje „Zrzut i odszyfrowanie 0.x/1.x”, kamery 4.x i Nano — „Zrzut i odszyfrowanie 4.x/Nano”. Karta „Info” podaje, która karta jest właściwa dla kamery.',
   'hint.firmwareTooOld':
-    'Żadna rodzina firmware nie może tu odczytać tej kompilacji: jej firmware nie obsługuje polecenia, którym ta karta odczytuje pamięć flash, więc nie wysłano do niej niczego, co mogłoby zostać błędnie odczytane. Kamerę Compact z wersją 0.7.0.7 lub 0.7.0.8 można odczytać na karcie „Zrzut i odszyfrowanie 0.x/1.x 2014/2016”. Zrzut wykonany programatorem SPI lub przez SWD/J-Link nadal można odszyfrować na tej stronie, na karcie „Odszyfruj plik/slot”.',
+    'Żadna rodzina firmware nie może tu odczytać tej kompilacji: jej firmware nie obsługuje polecenia, którym ta karta odczytuje pamięć flash, więc nie wysłano do niej niczego, co mogłoby zostać błędnie odczytane. Kamerę Compact z wersją 0.7.0.7 lub 0.7.0.8 można odczytać na karcie „Zrzut i odszyfrowanie 0.x/1.x”. Zrzut wykonany programatorem SPI lub przez SWD/J-Link nadal można odszyfrować na tej stronie, na karcie „Odszyfruj plik/slot”.',
   'hint.powerCycle':
     'W tym kreatorze: odłącz kamerę i podłącz ją ponownie, naciśnij „Połącz urządzenie” i wybierz ją, a potem uruchom ten sam krok jeszcze raz. Przebieg jest nadal wczytany — nie ma czego wznawiać.',
 
@@ -118,10 +117,6 @@ export default {
   'deviceInfo.keyA': 'Klucz A',
   /** Row label: the second key ("Key B"), as core names it (core:keyName.keyB). */
   'deviceInfo.keyB': 'Klucz B',
-  'deviceInfo.keysConfirmed':
-    'Potwierdzone przez dopasowanie stanu strumienia klucza slotu, odtworzonego z samego szyfrogramu. Przesyłane dane są przygotowywane tak, aby każdy slot zapisał je pod kluczem zapisu bootloadera ({storeKey}) albo pod własnym kluczem uruchomionego slotu, jeśli klucz zapisu aplikacji jest inny.',
-  'deviceInfo.keysDecrypted':
-    'Każdy slot odszyfrowano w przeglądarce, wyznaczając jego strumień klucza z jego własnych wektorów resetu, o których wiadomo, że są zerami. Odszyfrowanie to nie to samo co uruchomienie: bootloader sprawdza zawsze tylko {storeKey} i klucz A, więc slot zapisany pod jakimkolwiek innym kluczem ma idealną sumę kontrolną, a mimo to zostaje pominięty. Nic nie zostało zapisane.',
   /* {banks} is one bank name or several joined by common:list.and. */
   'deviceInfo.orphan': {
     one: '**{banks} zawiera prawidłowy obraz firmware zaszyfrowany kluczem, którego bootloader tej kamery nie zna.** Obraz jest nienaruszony, a jego suma kontrolna jest poprawna, ale przy sprawdzaniu slotu bootloader bierze pod uwagę tylko {storeKey} i klucz A, więc pomija ten slot i uruchamia coś innego.',

@@ -63,7 +63,7 @@
  * said inside a sentence), core.ts (keyName.*:case) and shared.ts (deviceInfo.otherBank:case). "с" before
  * "слот" is written «со» (со слота A). The accusative of these inanimate nouns equals the nominative; it
  * is still written where the grammar asks for it. A param that is not a name (a nested sentence, a build
- * name, «выбранные слоты», keys.noKnownKey) cannot be declined: there the sentence is turned so the
+ * name, «выбранные слоты») cannot be declined: there the sentence is turned so the
  * nominative fits, or the value follows a colon or a dash ("следующий запуск: {next}", "ключ расшифровки —
  * {held}").
  * Plurals: one / few / many / other (1 слот, 2–4 слота, 5+ слотов, a fraction → слота). Where a noun after

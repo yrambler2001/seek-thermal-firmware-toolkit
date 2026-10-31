@@ -31,8 +31,7 @@ export default {
   'cameraLock.inUseElsewhere': '相机正在另一个标签页或窗口中使用——请先在那里完成操作或将其关闭。',
 
   /* lib/backup-save: shown after core's plan sentence on a write's confirmation. */
-  'backup.downloadNote':
-    'zip 文件会在发送任何内容之前自动下载。浏览器不会告诉你下载何时真正写入磁盘，所以在依赖它之前，请先到下载文件夹中确认它已存在。',
+  'backup.downloadNote': 'zip 文件会在发送任何内容之前自动下载。',
 
   /* useDevice: the connection line when no camera is held. */
   'device.none': '未选择设备。',
@@ -74,9 +73,9 @@ export default {
     '该镜像中没有其文件名所声称的密钥对。请原样使用导出时写出的解密文件，包括文件名。',
   'hint.flashRefused': '没有向相机写入任何内容。',
   'hint.familyUnsupported':
-    '没有读取或写入任何内容。每个标签页适用于一段固件版本：0.x 和 1.x 相机请使用“导出并解密 0.x/1.x 2014/2016”，4.x 和 Nano 相机请使用“导出并解密 4.x/Nano”。“信息”标签页会告诉你相机该用哪个标签页。',
+    '没有读取或写入任何内容。每个标签页适用于一段固件版本：0.x 和 1.x 相机请使用“导出并解密 0.x/1.x”，4.x 和 Nano 相机请使用“导出并解密 4.x/Nano”。“信息”标签页会告诉你相机该用哪个标签页。',
   'hint.firmwareTooOld':
-    '在这里，没有任何固件系列能读取这个版本：它的固件不处理此标签页读取闪存所用的命令，因此没有向它发送任何可能被误读的命令。运行 0.7.0.7 或 0.7.0.8 的 Compact 可以在“导出并解密 0.x/1.x 2014/2016”中读取。用 SPI 编程器或通过 SWD/J-Link 读出的闪存镜像，仍可在本页的“解密文件/槽位”中解密。',
+    '在这里，没有任何固件系列能读取这个版本：它的固件不处理此标签页读取闪存所用的命令，因此没有向它发送任何可能被误读的命令。运行 0.7.0.7 或 0.7.0.8 的 Compact 可以在“导出并解密 0.x/1.x”中读取。用 SPI 编程器或通过 SWD/J-Link 读出的闪存镜像，仍可在本页的“解密文件/槽位”中解密。',
   'hint.powerCycle':
     '在本向导中：拔下相机再重新插上，按“连接设备”并选择它，然后重新开始同一步骤。本次运行仍保留在页面中——无需从运行文件继续。',
 
@@ -104,10 +103,6 @@ export default {
   'deviceInfo.keyA': '密钥 A',
   /** Row label: the second key ("Key B"), as core names it (core:keyName.keyB). */
   'deviceInfo.keyB': '密钥 B',
-  'deviceInfo.keysConfirmed':
-    '已通过与某个槽位的密钥流状态相匹配得到确认，该状态是从密文本身恢复出来的。上传的数据经过构造，使每个槽位都以引导程序的存储密钥（{storeKey}）保存它；如果应用程序的存储密钥不是这一个，则以当前启动槽位自己的密钥保存。',
-  'deviceInfo.keysDecrypted':
-    '每个槽位都已在浏览器中解密：利用它自身已知为零的复位向量求出密钥流。能解密不等于能启动：引导程序只会尝试 {storeKey} 和密钥 A，因此用其他任何密钥写入的槽位，即使校验和完全正确，也仍会被跳过。没有写入任何内容。',
   /* {banks} is one bank name or several joined by common:list.and. */
   'deviceInfo.orphan': {
     other:

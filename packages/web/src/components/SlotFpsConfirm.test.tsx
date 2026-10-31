@@ -116,7 +116,7 @@ describe('the frame-rate patch confirmation', () => {
     const text = dialog().textContent;
     expect(text).toContain(BACKUP_TEXT);
     expect(text).toContain('The zip is downloaded automatically, before anything is sent.');
-    expect(text).toContain('check your downloads folder for it');
+    expect(text).not.toContain('gives no word');
     expect(text).toContain(
       'The decrypted file in that zip is the way back: to undo the patch, write it with "Flash decrypted image" on slot B.',
     );

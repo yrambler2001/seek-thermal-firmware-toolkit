@@ -5,7 +5,7 @@
  * before anything is sent.
  *
  * A browser gives no event for a download reaching the disk, so true here means the download was started.
- * The page says so, and says what to check (`backupDownloadLines`).
+ *
  */
 
 import type { WriteBackup } from '@seek-fw/core';
@@ -27,7 +27,7 @@ export function saveBackupAsDownload(
   }
 }
 
-/** What the page says a write saves first, after core's plan sentence: where the zip goes, and what to check. */
+/** What the page says a write saves first, after core's plan sentence: where the zip goes. */
 export function backupDownloadNote(): string {
   return t('shared:backup.downloadNote');
 }
@@ -36,7 +36,5 @@ export function backupDownloadNote(): string {
 export function backupDownloadLines(backup: WriteBackup): string[] {
   return [
     `saved first, as a download: ${backup.fileName} (${backup.zip.length.toLocaleString()} B)`,
-    'the browser gives no word when a download reaches the disk: check your downloads folder for it ' +
-      'before you rely on it',
   ];
 }

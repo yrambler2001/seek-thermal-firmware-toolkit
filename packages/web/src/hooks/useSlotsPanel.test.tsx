@@ -1533,9 +1533,7 @@ describe('useSlotsPanel: the frame-rate patch', () => {
         'saved first, as a download: seek_backup_2026-10-26T12-00-00Z_SN-1_v4.9.1.5_bank-B_before-fps-patch.zip',
       ),
     ).toBe(true);
-    expect(
-      lineIncludes(result.current.panel.reporter.lines, 'check your downloads folder for it'),
-    ).toBe(true);
+    expect(lineIncludes(result.current.panel.reporter.lines, 'gives no word')).toBe(false);
     expect(result.current.panel.fpsOutcome?.key).toBe('b');
     expect(result.current.panel.writing).toBe(false);
   });

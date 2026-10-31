@@ -272,9 +272,7 @@ export default {
   /** The "Next start" row: `{why}` is boot.select.* or boot.cfg0NotRead. */
   'report.nextStart.unknown': 'desconhecido — {why}',
   'report.nextStart.runs': '{bank} — {why}',
-  'upgrade.targetBooted':
-    '{name:ins} é ao mesmo tempo a ranhura a partir da qual a câmara arrancou e a ranhura que a sua própria atualização escreve. Uma atualização feita a partir desta câmara substituiria a imagem que está a executar. Isto é apenas um aviso: nada aqui impede uma atualização.',
-  /** `{verdict}` is one of upgrade.verdict.*. `{name}` here is the bank inside a sentence ("slot B"); in upgrade.targetBooted and upgrade.verdict.* it starts a sentence ("Slot B"). */
+  /** `{verdict}` is one of upgrade.verdict.*. `{name}` here is the bank inside a sentence ("slot B"); in upgrade.verdict.* it starts a sentence ("Slot B"). */
   'upgrade.whileRecovery':
     'A câmara está a executar a ranhura de recuperação, e a sua própria atualização escreve {name:acc}, que não está a executar. {verdict} Isto é apenas um aviso: nada aqui impede uma atualização.',
   'upgrade.verdict.notRead':
@@ -467,7 +465,6 @@ export default {
   'keyName.unknown:dat': 'à chave desconhecida',
   'keyName.unknown:loc': 'na chave desconhecida',
   'keyName.unknown:ins': 'A chave desconhecida',
-  'keys.noKnownKey': 'nenhuma chave conhecida',
 
   /* ---- keys.evidence: the facts a write's keys rest on, one list item each (slots/write-keys-words) ---- */
   /** `{hex}`, `{keyA}`, `{keyB}` are key bytes in hex; `{keyAAt}`, `{keyBAt}` offsets; `{firmware}` a version or "?". */
@@ -490,28 +487,6 @@ export default {
     'a câmara desencripta o envio com essa chave e volta a encriptá-lo com {key:acc} {hex}, a chave com que o bootloader verifica uma ranhura (deduzida a partir {bank:gen}, a ranhura em que a câmara indica ter entrado, e na qual o bootloader entrou sem a verificar), por isso cada ranhura que escreve fica guardada da forma que o bootloader aceita',
   'keys.evidence.checkKeyNamedFrom':
     'a câmara desencripta o envio com essa chave e volta a encriptá-lo com {key:acc} {hex}, a chave com que o bootloader verifica uma ranhura (identificada a partir {bank:gen}, a ranhura em que a câmara indica ter entrado), por isso cada ranhura que escreve fica guardada da forma que o bootloader aceita',
-  /** `{source}` is keys.source.*. */
-  'keys.evidence.applicationKeyA':
-    'a aplicação em execução ({bank}, firmware {firmware}) tem a sua chave A {keyA} em {keyAAt} (fonte: {source})',
-  'keys.evidence.applicationKeys':
-    'a aplicação em execução ({bank}, firmware {firmware}) tem a sua chave A {keyA} em {keyAAt} (fonte: {source}) e a sua chave B {keyB} em {keyBAt}',
-  'keys.source.keyTable': 'a tabela de chaves do bootloader',
-  /** `{builds}`: firmware versions. */
-  'keys.source.applicationPair': 'o par de chaves da aplicação descodificado de {builds}',
-  'keys.evidence.perDevice':
-    'está programada uma chave própria do dispositivo, por isso a aplicação volta a encriptar com ela',
-  'keys.evidence.noPerDevice':
-    'não está programada nenhuma chave própria do dispositivo, por isso a aplicação volta a encriptar com a sua própria chave B',
-  'keys.evidence.storeKey':
-    'a chave de armazenamento da aplicação é {key:acc} do bootloader ({hex}), por isso as escritas guardam todas as ranhuras com ela; {bank:acc} (a de arranque) contém {held:acc}, que o bootloader também aceita',
-  'keys.evidence.bootedKey':
-    '{bank:acc} (a de arranque) desencripta-se com {key:acc} ({hex}), uma chave que o bootloader experimenta; a chave de armazenamento da aplicação não é a do bootloader, por isso as escritas guardam todas as ranhuras com a chave da ranhura de arranque',
-  /** `{masks}`: key names joined with commas. */
-  'keys.evidence.masks':
-    'o envio é a imagem XOR os fluxos de chave {masks:gen}; o dispositivo guarda a imagem com {key:acc}',
-  /** `{held}` is a key name or keys.noKnownKey (a sentence, not a name: it takes no case). */
-  'keys.evidence.otherBank':
-    'a chave {bank:gen} é: {held}; a ranhura é escrita com {key:acc} pela mesma regra, e relida para verificar',
 
   /* ---- keys.refused: why no upload key is derived (the "refused" row, or the banner) ---- */
   'keys.refused.bootUnnamed':
@@ -642,7 +617,7 @@ export default {
   'detect.legacy.none': 'nada do que foi observado aponta para o canal de leitura autenticado',
 
   /* ---- fps.table: why the frame-rate patch table makes no patch for an image (preservation/fps-patch) ---- */
-  /* `{version}`, `{image}`, `{camera}`: firmware versions; `{id}`: the table entry's name; `{hz}`: a rate.
+  /* `{version}`, `{image}`, `{camera}`: firmware versions; `{hz}`: a rate.
    * "stage two", Key A / Key B, f96ac57eda75 and the build names stay as they are. */
   'fps.table.withheld':
     'retido depois de uma execução numa câmara: aí o patch não aumentou a taxa de publicação, e o obturador disparou em cada fotograma depois da escrita',
@@ -656,9 +631,9 @@ export default {
   'fps.table.notImage':
     'isto não é uma imagem de firmware, por isso não se lhe aplica nenhum patch da taxa de fotogramas',
   'fps.table.otherBuild':
-    'a imagem é a compilação {image} («{id}»), mas a câmara indica {camera}; o patch é recusado em vez de ser aplicado a uma compilação a que não corresponde',
+    'a imagem é a compilação {image}, mas a câmara indica {camera}; o patch é recusado em vez de ser aplicado a uma compilação a que não corresponde',
   'fps.table.otherBuildNoVersion':
-    'a imagem é a compilação {image} («{id}»), mas a câmara não indica nenhuma versão; o patch é recusado em vez de ser aplicado a uma compilação a que não corresponde',
+    'a imagem é a compilação {image}, mas a câmara não indica nenhuma versão; o patch é recusado em vez de ser aplicado a uma compilação a que não corresponde',
   'fps.table.patched':
     'o patch da taxa de fotogramas já está aplicado: esta imagem funciona a {hz} Hz',
   'fps.table.earlierPatch':
@@ -686,26 +661,17 @@ export default {
   /* ---- notes: what the read measured about a build, a bank or an empty bank (slots/capability-notes) ----
    * Mode numbers, addresses, version numbers and command names (CompleteMemoryUpgrade, BeginFirmwareUpgrade,
    * EP0, PRESERVATION.md) are names: keep them. `{untested}` is notes.ffBootUntested. */
-  /** "This line" is the firmware line (the 2014 0.x/1.x builds, as in notes.token), not a line of text: on these builds, the bank the page or the CLI calls booted is the one the camera entered at its last start. */
-  'notes.lockedBootWord':
-    'A ranhura de arranque indicada nesta linha de firmware é a ranhura em que a câmara entrou no último arranque, tal como a palavra de ranhura ativa a regista (0 ranhura A, 1 ranhura B, 2 ranhura de recuperação R). O próximo arranque é definido pela palavra de configuração de arranque: 0 ou 0xFFFFFFFF escolhem primeiro A, 1 primeiro B, qualquer outro valor primeiro a ranhura de recuperação R. A ranhura de recuperação R arranca sempre que A e B não contêm nada que o bootloader de 2014 aceite (uma ranhura cujas palavras somam 0), seja o que for que R contenha (medido numa câmara).',
   /** "This line" is the firmware line (the 2016 Compact PRO 1.0.3.x builds), not a line of text: on these builds, the bank the page or the CLI calls booted is the one the camera entered at its last start. */
   'notes.locked2016BootWord':
     'A ranhura de arranque indicada nesta linha de firmware é a ranhura em que a câmara entrou no último arranque, tal como o bootloader a regista na palavra de ranhura ativa (0 ranhura A, 1 ranhura B, 2 ranhura de recuperação R). O próximo arranque é definido pela palavra de configuração de arranque: 0 ou 0xFFFFFFFF escolhem primeiro A, 1 primeiro B, qualquer outro valor primeiro a ranhura de recuperação R. O bootloader de 2016 só aceita uma ranhura quando esta se desencripta numa soma de palavras de 0 com a chave com que verifica uma ranhura (o bloco de chaves 1 no seu bootloader 1.2.0.0), e a última ranhura dessa ordem arranca sem verificação quando as outras duas falham. A leitura identifica essa chave a partir da ranhura em que a câmara entrou, porque o bloco do bootloader que a contém é recusado em todos os canais (medido numa câmara).',
   'notes.ep0of1032':
     '1.0.3.2: as sessões EP0 morrem por volta dos 64 a 81 KB e 128 B é a unidade de leitura sem perdas, por isso uma ranhura de 64 KB por sessão é o limite medido. A leitura completa da flash é recusada nesta compilação (PRESERVATION.md: não existe leitura completa com uma só abertura). O dump de ranhuras lê uma ranhura de cada vez, em pedidos de 64 bytes.',
-  'notes.token':
-    'As ranhuras estão bloqueadas nesta linha: a câmara só abre uma ranhura para escrita quando o pedido traz o desbloqueio da linha, que é o mesmo em todas as 22 imagens de firmware desta linha registadas. Uma câmara com outro desbloqueio recusa as suas ranhuras.',
   'notes.staging.lockedPlain':
     'Preparação: a própria imagem, no máximo 56 KB (o máximo que a câmara aceita numa escrita). A escrita apaga a ranhura de 64 KB e escreve exatamente esses bytes, e o resto da ranhura fica apagado. O bootloader só arranca uma ranhura quando as suas palavras somam 0, por isso a imagem é equilibrada para essa soma antes de ser enviada.',
   'notes.staging.locked2016':
     'Preparação: a imagem, XOR o fluxo de chave xorshift128 do seu PRÓPRIO bloco de chaves 0 (a chave de envio, encontrada na imagem pelo valor), só com o comprimento da imagem (no máximo 0xE000 bytes). O dispositivo desencripta os dados com essa chave e guarda-os com a chave com que o bootloader verifica uma ranhura (bloco de chaves 1), por isso os bytes guardados não são os preparados. Não se lê nada da ranhura de destino para a preparação: o fluxo de chave da ranhura só é usado para a reler.',
   'notes.staging.modern':
     'Preparação: a ranhura inteira de 64 KB, imagem + preenchimento 0xFF + rodapé «CODE». A imagem é combinada por XOR com os fluxos de chave que fazem com que as duas passagens da própria aplicação em execução a guardem com a chave que a ranhura de arranque contém: quando o comando de confirmação (CompleteMemoryUpgrade) recebe o tipo de dados 7, 8 ou 9, a aplicação desencripta o envio com a sua chave A, volta a encriptá-lo com a sua chave de armazenamento e programa a ranhura. O rodapé é o que permite ao bootloader aceitar a ranhura, por isso uma ranhura sem ele é recusada.',
-  'notes.modernGap':
-    'A ranhura B está em 0x14050000 nesta linha (modo 8). Nenhum seletor chega a 0x14060000 em nenhuma compilação 2.x, 4.x, 10.x, 42.x ou 44.x (descodificado das 14 imagens do corpus posteriores a 2018), por isso não há nenhuma ranhura aí. A disposição com 0x14060000 pertence à linha bloqueada 0.x/1.x.',
-  'notes.modernNamedWrite':
-    'As escritas com nome (modos 7 a 9) foram descodificadas do firmware. O emulador escreve A, B e R através delas nas compilações 4.x, e numa câmara a ranhura A de uma Compact XR 4.8.2.1 foi escrita através do modo 7 pelo patch da taxa de fotogramas. Uma escrita de ranhura nunca abre o modo 0, o destino da atualização.',
   'notes.unverified':
     'Só leitura. A disposição das ranhuras é a tabela descodificada da linha bloqueada, mas não foi medida nenhuma forma de preparação para esta compilação, por isso não é planeada nenhuma escrita.',
   'notes.empty.plain':
@@ -716,12 +682,6 @@ export default {
     'Uma ranhura vazia recebe uma imagem exatamente como uma ranhura usada. A chave de envio é o bloco de chaves 0 do par da própria IMAGEM, não uma chave lida da ranhura de destino, e o dispositivo desencripta os dados com ela, guarda-os com a sua própria chave e apaga o bloco sem o ler. Provado no emulador; ainda não medido numa câmara.',
   'notes.mode2of080':
     '0.8.0.0: nesta compilação, o modo 2 (0x14000000) pode bloquear a câmara: uma leitura aberta sai da SRAM (PRESERVATION.md). Uma leitura ou escrita de ranhura só abre os modos 7 a 9 e nunca o modo 2.',
-  'notes.keyPairs2016':
-    'As compilações de 9 Hz da 1.0.3.0 e da 1.0.3.2 partilham um par de chaves, e as compilações FF partilham outro. O texto da versão não as distingue, por isso o fluxo de chave é recuperado da própria ranhura e é a imagem da própria ranhura que decide.',
-  'notes.board1030':
-    'A aplicação 1.0.3.0 reinicia em qualquer placa que não seja a da Compact Pro, por isso uma placa Compact só a executa com o patch de placa nas suas ranhuras.',
-  'notes.bank.modernA':
-    'Escrita através de uma abertura de ranhura que o mapa moderno deixa de fora; uma Compact XR 4.8.2.1 aceitou uma escrita por ela numa câmara.',
   'notes.bank.recovery2016':
     'Medido numa Compact PRO 1.0.3.0: a ranhura de recuperação R aceitou a sua própria imagem, uma alteração de um byte e os bytes em bruto tal como foram enviados, cada um escrito sem erro.',
   'notes.bank.ff1308A':

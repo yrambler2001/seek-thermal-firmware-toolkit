@@ -17,7 +17,6 @@ import {
   lastStartReportMessage,
   nextStartReportMessage,
   recoveryTargetVerdictMessage,
-  upgradeTargetBootedWarning,
   upgradeWhileRecoveryWarning,
   BOOT_UNNAMED_RISK,
   FF_BOOT_UNTESTED_MESSAGE,
@@ -61,27 +60,18 @@ import {
   FF_VENDOR_EVIDENCE,
   KEY_NAMES,
   KEY_TABLE_REFUSAL,
-  KEY_TABLE_SOURCE,
   LINE_2016_EVIDENCE,
   NOT_DERIVED_REFUSAL,
   PLAIN_CHAIN_EVIDENCE,
   acceptanceSumRefusal,
-  applicationEvidence,
-  applicationPairSource,
-  bootedKeyEvidence,
   cameraRefusalMessage,
   checkKeyEvidence,
-  deriveWriteKeys,
   keyNameParam,
   keyNotInTableRefusal,
-  masksEvidence,
   noApplicationPairRefusal,
   noBootKeyRefusal,
   notDecryptedRefusal,
-  otherBankEvidence,
   otherFamilyRefusal,
-  storeEvidence,
-  storeKeyEvidence,
   uploadCheckedRefusal,
   whiteningRefusal,
   writeBannerMessage,
@@ -199,6 +189,7 @@ import { LANGUAGES, tEnglish, type AnyParam, type NamespaceMessages, type Transl
 import { PLACEHOLDER, isGrammaticalCase } from '@/i18n/format';
 import { en } from '@/i18n/locales/en';
 import { coreNameOf, coreText, coreTexts, recordedCoreText } from '@/lib/core-text';
+import { pageShowsNote } from '@/lib/page-hidden';
 import { fakeDeviceState } from '@/test-fixtures';
 import { deviceState2016, slotEntry, slotReport, slotReport2016 } from '@/test-slots';
 
@@ -376,7 +367,6 @@ function samples(base: DeviceState): CoreMessage[] {
   add(nextStartReportMessage(deviceState2016(base), (key) => bankParam(key, 'name')));
   add(nextStartReportMessage(deviceState2016(base, { checkKeyNamed: false }), () => 'x'));
   const name = bankParam('a', 'name');
-  add(upgradeTargetBootedWarning(name));
   const slot = (fields: object) =>
     ({ present: true, blank: false, sha256: 'aa', ...fields }) as never;
   for (const target of [
@@ -557,33 +547,6 @@ function samples(base: DeviceState): CoreMessage[] {
   add(checkKeyEvidence({ name: 'key block 1', hex: 'aa', from: null, inferred: false }, null));
   add(checkKeyEvidence({ name: 'key block 1', hex: 'aa', from: 'b', inferred: true }, null));
   add(checkKeyEvidence({ name: 'Key B', hex: 'aa', from: 'r', inferred: false }, null));
-  add(
-    applicationEvidence({
-      bank: 'a',
-      firmware: '4.9.1.15',
-      keyA: 'aa',
-      keyAAt: '0x100',
-      source: KEY_TABLE_SOURCE,
-      keyB: null,
-    }),
-  );
-  add(
-    applicationEvidence({
-      bank: 'b',
-      firmware: '?',
-      keyA: 'aa',
-      keyAAt: '0x100',
-      source: applicationPairSource('4.9.1.15'),
-      keyB: { hex: 'bb', at: '0x110' },
-    }),
-  );
-  add(storeEvidence(true));
-  add(storeEvidence(false));
-  add(storeKeyEvidence({ key: 'per-device key', hex: 'cc', bank: 'a', held: 'Key A' }));
-  add(bootedKeyEvidence({ bank: 'b', key: 'Key A', hex: 'dd' }));
-  add(masksEvidence(['Key B', 'the per-device key', "the application's Key A"], 'Key B'));
-  add(otherBankEvidence('r', null, 'Key B'));
-  add(otherBankEvidence('b', "the application's Key B", 'per-device key'));
   add(BOOT_UNNAMED_REFUSAL);
   add(NOT_DERIVED_REFUSAL);
   add(notDecryptedRefusal('a'));
@@ -601,7 +564,6 @@ function samples(base: DeviceState): CoreMessage[] {
     ]),
   );
   add(cameraRefusalMessage(['an old reason']));
-  (deriveWriteKeys(base).evidenceMessages ?? []).forEach(add);
   message(
     writeBannerMessage({
       ...base,
@@ -702,10 +664,12 @@ function samples(base: DeviceState): CoreMessage[] {
     message(compareWordMessage(word));
   });
 
-  /* notes: every capability note */
-  capabilityNotes().forEach((note) => {
-    message(capabilityNoteMessage(note));
-  });
+  /* notes: every capability note the page shows */
+  capabilityNotes()
+    .filter(pageShowsNote)
+    .forEach((note) => {
+      message(capabilityNoteMessage(note));
+    });
 
   /* fps: a bank's plan refused, a patch of every bank stopped */
   for (const fpsReport of [
@@ -1337,8 +1301,8 @@ function samples(base: DeviceState): CoreMessage[] {
     FPS_TABLE_REASON.stageTwo,
     FPS_TABLE_REASON.notOffered,
     FPS_TABLE_REASON.notImage,
-    FPS_TABLE_REASON.otherBuild('1.3.0.8-FF', '1308ff-16hz', '1.3.0.0'),
-    FPS_TABLE_REASON.otherBuild('1.3.0.8', '1308-32hz', null),
+    FPS_TABLE_REASON.otherBuild('1.3.0.8-FF', '1.3.0.0'),
+    FPS_TABLE_REASON.otherBuild('1.3.0.8', null),
     FPS_TABLE_REASON.patched(32),
     FPS_TABLE_REASON.earlierPatch(16),
     FPS_TABLE_REASON.atRate(16),
@@ -1396,8 +1360,8 @@ describe('the core namespace', () => {
      * does not know in another sample (a family's own bank name, an unnamed key), which is then said as it
      * is; a param no sample passes as a name (a count, a hex value) takes no case. */
     const names = new Map<string, Set<string>>();
-    /* Per code, the params some sample passes as a sentence or a phrase, not a name (`{held}` is
-     * keys.noKnownKey when no key is known): a case there would be dropped, so it is a problem too. An
+    /* Per code, the params some sample passes as a sentence or a phrase, not a name (a phrase core
+     * passes where another sample passes a name): a case there would be dropped, so it is a problem too. An
      * empty list says nothing in any case, so it does not count. */
     const notNames = new Map<string, Set<string>>();
     for (const message of all) {

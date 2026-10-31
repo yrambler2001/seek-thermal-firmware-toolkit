@@ -28,6 +28,7 @@ import {
   keyNameParam,
 } from '@seek-fw/core';
 import { coreParamText, coreText } from '@/lib/core-text';
+import { pageShowsNote } from '@/lib/page-hidden';
 import { t } from '@/i18n';
 import { bankName, bankNameRef, bankWordsRef } from '@/lib/bank-names';
 import { FilePickerButton } from './FilePickerButton';
@@ -264,7 +265,7 @@ export function SlotTable({
                     <Badge tone="neutral">{coreText(NOT_BOOTED_MESSAGE)}</Badge>
                   )}
                 </span>
-                {entry.notes.map((text) => (
+                {entry.notes.filter(pageShowsNote).map((text) => (
                   <span
                     key={text}
                     className="block text-[0.72rem] leading-snug font-normal whitespace-normal text-muted-foreground"

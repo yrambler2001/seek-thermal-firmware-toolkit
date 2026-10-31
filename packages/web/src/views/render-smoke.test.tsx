@@ -295,7 +295,7 @@ describe('InfoView', () => {
     unmount();
   });
 
-  it('shows the rest of seek-fw info once the camera is read, and the warning when the target is the booted bank', async () => {
+  it('shows the rest of seek-fw info once the camera is read, and no warning when the target is the booted bank', async () => {
     const [a] = reporters(1);
     const state = await fakeDeviceState();
     const sameBank = { ...state, boot: { booted: 'b', target: 'b' } } as DeviceState;
@@ -328,7 +328,7 @@ describe('InfoView', () => {
     expect(text).toContain('Product');
     expect(text).toContain('Store key');
     expect(text).toContain('Detected');
-    expect(text).toContain('nothing here stops an upgrade');
+    expect(text).not.toContain('nothing here stops an upgrade');
     unmount();
   });
 

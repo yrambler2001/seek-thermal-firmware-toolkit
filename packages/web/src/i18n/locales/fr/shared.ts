@@ -36,8 +36,7 @@ export default {
     'La caméra est utilisée dans un autre onglet ou une autre fenêtre — terminez ou fermez d’abord là-bas.',
 
   /* lib/backup-save: shown after core's plan sentence on a write's confirmation. */
-  'backup.downloadNote':
-    'Le zip est téléchargé automatiquement, avant tout envoi. Un navigateur ne signale pas quand un téléchargement est arrivé sur le disque : vérifiez qu’il se trouve dans votre dossier de téléchargements avant de compter dessus.',
+  'backup.downloadNote': 'Le zip est téléchargé automatiquement, avant tout envoi.',
 
   /* useDevice: the connection line when no camera is held. */
   'device.none': 'Aucun appareil sélectionné.',
@@ -82,9 +81,9 @@ export default {
     'L’image ne contient pas la paire de clés que son nom de fichier annonce. Utilisez le fichier déchiffré exactement tel que le dump l’a écrit, nom compris.',
   'hint.flashRefused': 'Rien n’a été écrit dans la caméra.',
   'hint.familyUnsupported':
-    'Rien n’a été lu ni écrit. Chaque onglet couvre une plage de versions de firmware : les caméras 0.x et 1.x relèvent de « Extraire et déchiffrer 0.x/1.x 2014/2016 », les caméras 4.x et Nano de « Extraire et déchiffrer 4.x/Nano ». L’onglet Infos indique l’onglet qui convient à la caméra.',
+    'Rien n’a été lu ni écrit. Chaque onglet couvre une plage de versions de firmware : les caméras 0.x et 1.x relèvent de « Extraire et déchiffrer 0.x/1.x », les caméras 4.x et Nano de « Extraire et déchiffrer 4.x/Nano ». L’onglet Infos indique l’onglet qui convient à la caméra.',
   'hint.firmwareTooOld':
-    'Aucune famille de firmware ne peut lire ce build ici : son firmware n’a pas de gestionnaire de lecture pour la commande avec laquelle cet onglet lit la flash, donc rien qui puisse être mal interprété ne lui a été envoyé. Une Compact en 0.7.0.7 ou 0.7.0.8 peut être lue dans « Extraire et déchiffrer 0.x/1.x 2014/2016 ». Un dump fait avec un programmateur SPI ou par SWD/J-Link peut quand même être déchiffré sur cette page, dans « Déchiffrer fichier/emplacement ».',
+    'Aucune famille de firmware ne peut lire ce build ici : son firmware n’a pas de gestionnaire de lecture pour la commande avec laquelle cet onglet lit la flash, donc rien qui puisse être mal interprété ne lui a été envoyé. Une Compact en 0.7.0.7 ou 0.7.0.8 peut être lue dans « Extraire et déchiffrer 0.x/1.x ». Un dump fait avec un programmateur SPI ou par SWD/J-Link peut quand même être déchiffré sur cette page, dans « Déchiffrer fichier/emplacement ».',
   'hint.powerCycle':
     'Dans cet assistant : débranchez la caméra et rebranchez-la, appuyez sur « Connecter l’appareil » et choisissez-la, puis relancez la même étape. L’exécution est toujours chargée ici — il n’y a rien à reprendre.',
 
@@ -112,10 +111,6 @@ export default {
   'deviceInfo.keyA': 'Clé A',
   /** Row label: the second key ("Key B"), as core names it (core:keyName.keyB). */
   'deviceInfo.keyB': 'Clé B',
-  'deviceInfo.keysConfirmed':
-    'Confirmée par l’état du flux de clé d’un emplacement, retrouvé à partir du texte chiffré lui-même. Un envoi est construit pour que chaque emplacement le stocke sous la clé de stockage du bootloader ({storeKey}), ou sous la clé propre de l’emplacement démarré lorsque la clé de stockage de l’application n’est pas celle-là.',
-  'deviceInfo.keysDecrypted':
-    'Chaque emplacement a été déchiffré dans le navigateur en calculant son flux de clé à partir de ses propres vecteurs de réinitialisation, dont on sait qu’ils valent zéro. Déchiffrer n’est pas démarrer : le bootloader n’essaie jamais que {storeKey:acc} et la clé A ; un emplacement écrit sous une autre clé a donc une somme de contrôle parfaite et est quand même ignoré. Rien n’a été écrit.',
   /* {banks} is one bank name or several joined by common:list.and. */
   'deviceInfo.orphan': {
     one: '**{banks:ins} contient une image de firmware valide, chiffrée avec une clé que le bootloader de cette caméra ne connaît pas.** L’image est intacte et sa somme de contrôle est correcte, mais le bootloader n’essaie que {storeKey:acc} et la clé A quand il vérifie un emplacement : il l’ignore donc et démarre autre chose.',

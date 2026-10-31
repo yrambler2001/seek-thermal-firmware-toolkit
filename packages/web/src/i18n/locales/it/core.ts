@@ -270,9 +270,7 @@ export default {
   /** The "Next start" row: `{why}` is boot.select.* or boot.cfg0NotRead. */
   'report.nextStart.unknown': 'non noto — {why}',
   'report.nextStart.runs': '{bank} — {why}',
-  'upgrade.targetBooted':
-    '{name:ins} è sia lo slot da cui la termocamera si è avviata sia lo slot in cui scrive il suo stesso aggiornamento. Un aggiornamento eseguito da questa termocamera sovrascriverebbe l’immagine che sta eseguendo. È solo un avviso: niente qui impedisce un aggiornamento.',
-  /** `{verdict}` is one of upgrade.verdict.*. `{name}` here is the bank inside a sentence ("slot B"); in upgrade.targetBooted and upgrade.verdict.* it starts a sentence ("Slot B"). */
+  /** `{verdict}` is one of upgrade.verdict.*. `{name}` here is the bank inside a sentence ("slot B"); in upgrade.verdict.* it starts a sentence ("Slot B"). */
   'upgrade.whileRecovery':
     'La termocamera sta eseguendo il suo slot di recupero, e il suo stesso aggiornamento scrive {name:loc}, che non sta eseguendo. {verdict} È solo un avviso: niente qui impedisce un aggiornamento.',
   'upgrade.verdict.notRead':
@@ -463,7 +461,6 @@ export default {
   'keyName.unknown:dat': 'a una chiave sconosciuta',
   'keyName.unknown:loc': 'in una chiave sconosciuta',
   'keyName.unknown:ins': 'Una chiave sconosciuta',
-  'keys.noKnownKey': 'nessuna chiave nota',
 
   /* ---- keys.evidence: the facts a write's keys rest on, one list item each (slots/write-keys-words) ---- */
   /** `{hex}`, `{keyA}`, `{keyB}` are key bytes in hex; `{keyAAt}`, `{keyBAt}` offsets; `{firmware}` a version or "?". */
@@ -486,28 +483,6 @@ export default {
     'la termocamera decifra il caricamento con quella chiave e lo cifra di nuovo con {key:acc} {hex}, la chiave con cui il suo bootloader controlla uno slot (dedotta in base {bank:dat}, lo slot in cui la termocamera comunica di essere entrata, e in cui il bootloader è entrato senza il suo controllo), quindi ogni slot che scrive è conservato come il bootloader lo accetta',
   'keys.evidence.checkKeyNamedFrom':
     'la termocamera decifra il caricamento con quella chiave e lo cifra di nuovo con {key:acc} {hex}, la chiave con cui il suo bootloader controlla uno slot (indicata in base {bank:dat}, lo slot in cui la termocamera comunica di essere entrata), quindi ogni slot che scrive è conservato come il bootloader lo accetta',
-  /** `{source}` is keys.source.*. */
-  'keys.evidence.applicationKeyA':
-    'l’applicazione in esecuzione ({bank}, firmware {firmware}) contiene la sua chiave A {keyA} a {keyAAt}, secondo {source}',
-  'keys.evidence.applicationKeys':
-    'l’applicazione in esecuzione ({bank}, firmware {firmware}) contiene la sua chiave A {keyA} a {keyAAt}, secondo {source}, e la sua chiave B {keyB} a {keyBAt}',
-  'keys.source.keyTable': 'la tabella delle chiavi del bootloader',
-  /** `{builds}`: firmware versions. */
-  'keys.source.applicationPair': 'la coppia dell’applicazione decodificata di {builds}',
-  'keys.evidence.perDevice':
-    'è programmata una chiave propria del dispositivo, quindi l’applicazione cifra di nuovo con quella',
-  'keys.evidence.noPerDevice':
-    'non è programmata alcuna chiave propria del dispositivo, quindi l’applicazione cifra di nuovo con la sua chiave B',
-  'keys.evidence.storeKey':
-    'la chiave di archiviazione dell’applicazione è {key:acc} del bootloader ({hex}), quindi le scritture conservano ogni slot con quella chiave; lo slot avviato ({bank}) contiene {held:acc}, che anche il bootloader accetta',
-  'keys.evidence.bootedKey':
-    'lo slot avviato ({bank}) si decifra con {key:acc} ({hex}), una chiave che il bootloader prova; la chiave di archiviazione dell’applicazione non è quella del bootloader, quindi le scritture conservano ogni slot con la chiave dello slot avviato',
-  /** `{masks}`: key names joined with commas. */
-  'keys.evidence.masks':
-    'il caricamento è l’immagine in XOR con i flussi di chiave {masks:gen}; il dispositivo conserva l’immagine con {key:acc}',
-  /** `{held}` is a key name or keys.noKnownKey (a sentence, not a name: it takes no case). */
-  'keys.evidence.otherBank':
-    '{bank:ins} si decifra con: {held}; viene scritto con {key:acc} secondo la stessa regola, e riletto per controllo',
 
   /* ---- keys.refused: why no upload key is derived (the "refused" row, or the banner) ---- */
   'keys.refused.bootUnnamed':
@@ -641,7 +616,7 @@ export default {
   'detect.legacy.none': 'nulla di quanto osservato indica il canale di lettura autenticato',
 
   /* ---- fps.table: why the frame-rate patch table makes no patch for an image (preservation/fps-patch) ---- */
-  /* `{version}`, `{image}`, `{camera}`: firmware versions; `{id}`: the table entry's name; `{hz}`: a rate.
+  /* `{version}`, `{image}`, `{camera}`: firmware versions; `{hz}`: a rate.
    * "stage two", Key A / Key B, f96ac57eda75 and the build names stay as they are. */
   'fps.table.withheld':
     'trattenuta dopo una prova su una termocamera: lì la patch non ha aumentato la frequenza di pubblicazione, e l’otturatore è scattato a ogni fotogramma dopo la scrittura',
@@ -655,9 +630,9 @@ export default {
   'fps.table.notImage':
     'questa non è un’immagine del firmware, quindi non le si applica alcuna patch della frequenza dei fotogrammi',
   'fps.table.otherBuild':
-    'l’immagine è la build {image} («{id}»), ma la termocamera comunica {camera}; la patch viene rifiutata invece di essere applicata a una build a cui non corrisponde',
+    'l’immagine è la build {image}, ma la termocamera comunica {camera}; la patch viene rifiutata invece di essere applicata a una build a cui non corrisponde',
   'fps.table.otherBuildNoVersion':
-    'l’immagine è la build {image} («{id}»), ma la termocamera non comunica alcuna versione; la patch viene rifiutata invece di essere applicata a una build a cui non corrisponde',
+    'l’immagine è la build {image}, ma la termocamera non comunica alcuna versione; la patch viene rifiutata invece di essere applicata a una build a cui non corrisponde',
   'fps.table.patched':
     'la patch della frequenza dei fotogrammi è già applicata: questa immagine funziona a {hz} Hz',
   'fps.table.earlierPatch':
@@ -684,26 +659,17 @@ export default {
   /* ---- notes: what the read measured about a build, a bank or an empty bank (slots/capability-notes) ----
    * Mode numbers, addresses, version numbers and command names (CompleteMemoryUpgrade, BeginFirmwareUpgrade,
    * EP0, PRESERVATION.md) are names: keep them. `{untested}` is notes.ffBootUntested. */
-  /** "This line" is the firmware line (the 2014 0.x/1.x builds, as in notes.token), not a line of text: on these builds, the bank the page or the CLI calls booted is the one the camera entered at its last start. */
-  'notes.lockedBootWord':
-    'Lo slot avviato indicato su questa linea di firmware è quello in cui la termocamera è entrata all’ultimo avvio, come lo registra la parola dello slot attivo (0 slot A, 1 slot B, 2 slot di recupero R). Il prossimo avvio è stabilito dalla parola di configurazione di avvio: 0 o 0xFFFFFFFF scelgono prima A, 1 prima B, qualsiasi altro valore prima lo slot di recupero R. Lo slot di recupero R viene eseguito ogni volta che A e B non contengono nulla che il bootloader del 2014 accetti (uno slot le cui parole sommano a 0), qualunque cosa contenga R (misurato su una termocamera).',
   /** "This line" is the firmware line (the 2016 Compact PRO 1.0.3.x builds), not a line of text: on these builds, the bank the page or the CLI calls booted is the one the camera entered at its last start. */
   'notes.locked2016BootWord':
     'Lo slot avviato indicato su questa linea di firmware è quello in cui la termocamera è entrata all’ultimo avvio, come il bootloader lo registra nella parola dello slot attivo (0 slot A, 1 slot B, 2 slot di recupero R). Il prossimo avvio è stabilito dalla parola di configurazione di avvio: 0 o 0xFFFFFFFF scelgono prima A, 1 prima B, qualsiasi altro valore prima lo slot di recupero R. Il bootloader del 2016 accetta uno slot solo quando si decifra in una somma delle parole pari a 0 con la chiave con cui controlla uno slot (il blocco di chiavi 1 sul suo bootloader 1.2.0.0), e l’ultimo slot di quell’ordine viene eseguito senza controllo quando gli altri due falliscono. La lettura indica quella chiave in base allo slot in cui la termocamera è entrata, perché il blocco del bootloader che la contiene viene rifiutato su ogni canale (misurato su una termocamera).',
   'notes.ep0of1032':
     '1.0.3.2: le sessioni EP0 cadono a circa 64-81 KB e 128 B è l’unità di lettura senza perdite, quindi uno slot da 64 KB per sessione è il limite misurato. Una lettura completa del chip è rifiutata su questa build (PRESERVATION.md: non esiste una lettura completa con una sola apertura). Il dump degli slot legge uno slot alla volta, con richieste da 64 byte.',
-  'notes.token':
-    'Su questa linea di firmware gli slot sono bloccati: la termocamera apre uno slot per una scrittura solo quando glielo si chiede con lo sblocco della linea, che è lo stesso in tutte le 22 immagini del firmware di questa linea in archivio. Una termocamera con un altro sblocco rifiuta i suoi slot.',
   'notes.staging.lockedPlain':
     'Trasferimento: l’immagine stessa, al massimo 56 KB (il massimo che la termocamera accetta in una scrittura). La scrittura cancella lo slot da 64 KB e scrive esattamente quei byte, e il resto dello slot risulta cancellato. Il bootloader avvia uno slot solo quando le sue parole sommano a 0, quindi l’immagine viene bilanciata su quella somma prima di essere inviata.',
   'notes.staging.locked2016':
     'Trasferimento: l’immagine, in XOR con il flusso di chiave xorshift128 del SUO blocco di chiavi 0 (la chiave di trasferimento, trovata nell’immagine per valore), solo per la lunghezza dell’immagine (al massimo 0xE000 byte). Il dispositivo decifra i dati con quella chiave e li conserva con la chiave con cui il suo bootloader controlla uno slot (blocco di chiavi 1), quindi i byte conservati non sono quelli trasferiti. Per il trasferimento non si legge nulla dallo slot di destinazione: il flusso di chiave dello slot serve solo a rileggerlo.',
   'notes.staging.modern':
     'Trasferimento: l’intero slot da 64 KB, immagine + riempimento 0xFF + footer «CODE». L’immagine è in XOR con i flussi di chiave che fanno sì che i due passaggi dell’applicazione in esecuzione la portino sotto la chiave contenuta nello slot avviato: quando il comando di conferma (CompleteMemoryUpgrade) riceve il tipo di dati 7, 8 o 9, l’applicazione decifra il caricamento con la sua chiave A, lo cifra di nuovo con la sua chiave di archiviazione e programma lo slot. È il footer che permette al bootloader di accettare lo slot, quindi uno slot senza footer viene rifiutato.',
-  'notes.modernGap':
-    'Su questa linea lo slot B è a 0x14050000 (modalità 8). Nessun selettore raggiunge 0x14060000 su alcuna build 2.x, 4.x, 10.x, 42.x o 44.x (decodificato dalle 14 immagini successive al 2018 del corpus), quindi lì non c’è alcuno slot. La disposizione con 0x14060000 appartiene alla linea bloccata 0.x/1.x.',
-  'notes.modernNamedWrite':
-    'Le scritture con nome (modalità da 7 a 9) sono decodificate dal firmware. L’emulatore scrive A, B e R tramite queste sulle build 4.x, e su una termocamera lo slot A di una Compact XR 4.8.2.1 è stato scritto tramite la modalità 7 dalla patch della frequenza dei fotogrammi. Una scrittura di uno slot non apre mai la modalità 0, la destinazione dell’aggiornamento.',
   'notes.unverified':
     'Sola lettura. La disposizione degli slot è la tabella decodificata della linea bloccata, ma per questa build non è stata misurata alcuna forma di trasferimento, quindi non è prevista alcuna scrittura.',
   'notes.empty.plain':
@@ -714,12 +680,6 @@ export default {
     'Uno slot vuoto riceve un’immagine esattamente come uno usato. La chiave di trasferimento è il blocco di chiavi 0 della coppia propria dell’IMMAGINE, non una chiave letta dallo slot di destinazione, e il dispositivo decifra i dati con essa, li conserva con la propria chiave e cancella il blocco senza leggerlo. Dimostrato sull’emulatore; non ancora misurato su una termocamera.',
   'notes.mode2of080':
     '0.8.0.0: su questa build la modalità 2 (0x14000000) rischia di bloccare la termocamera, perché una lettura aperta esce dalla SRAM (PRESERVATION.md). La lettura o la scrittura di uno slot apre solo le modalità da 7 a 9 e mai la modalità 2.',
-  'notes.keyPairs2016':
-    'Le build a 9 Hz di 1.0.3.0 e 1.0.3.2 condividono una coppia di chiavi, e le build FF ne condividono un’altra. La stringa della versione non le distingue, quindi il flusso di chiave viene ricavato dallo slot stesso e decide l’immagine dello slot.',
-  'notes.board1030':
-    'L’app 1.0.3.0 si riavvia su qualsiasi scheda elettronica tranne quella della Compact Pro, quindi una scheda Compact la esegue solo con la patch per la scheda nei suoi slot.',
-  'notes.bank.modernA':
-    'Scritto tramite un’apertura di slot che la mappa moderna tralascia; su una termocamera vera, una Compact XR 4.8.2.1 ha accettato una scrittura in questo modo.',
   'notes.bank.recovery2016':
     'Misurato su una Compact PRO 1.0.3.0: lo slot di recupero R ha accettato la propria immagine, una modifica di un byte e i byte grezzi così come sono stati inviati, ciascuno scritto senza errori.',
   'notes.bank.ff1308A':

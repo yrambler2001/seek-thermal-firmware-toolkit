@@ -263,9 +263,7 @@ export default {
   /** The "Next start" row: `{why}` is boot.select.* or boot.cfg0NotRead. */
   'report.nextStart.unknown': 'not known — {why}',
   'report.nextStart.runs': '{bank} — {why}',
-  'upgrade.targetBooted':
-    '{name} is both the bank the camera booted from and the bank its own upgrade writes. An upgrade run from this camera would overwrite the image it is running. This is a warning only: nothing here stops an upgrade.',
-  /** `{verdict}` is one of upgrade.verdict.*. `{name}` here is the bank inside a sentence ("slot B"); in upgrade.targetBooted and upgrade.verdict.* it starts a sentence ("Slot B"). */
+  /** `{verdict}` is one of upgrade.verdict.*. `{name}` here is the bank inside a sentence ("slot B"); in upgrade.verdict.* it starts a sentence ("Slot B"). */
   'upgrade.whileRecovery':
     'The camera is running its recovery bank, and its own upgrade writes {name}, which it is not running. {verdict} This is a warning only: nothing here stops an upgrade.',
   'upgrade.verdict.notRead':
@@ -405,7 +403,6 @@ export default {
   'keyName.theDeviceKey': 'the device key',
   /** A slot's key when the read names none (a placeholder, not a key's name). */
   'keyName.unknown': 'unknown key',
-  'keys.noKnownKey': 'no known key',
 
   /* ---- keys.evidence: the facts a write's keys rest on, one list item each (slots/write-keys-words) ---- */
   /** `{hex}`, `{keyA}`, `{keyB}` are key bytes in hex; `{keyAAt}`, `{keyBAt}` offsets; `{firmware}` a version or "?". */
@@ -428,28 +425,6 @@ export default {
     'the camera decrypts the upload with that key and re-encrypts it under {key} {hex}, the key its bootloader checks a bank under (inferred from {bank}, the bank the camera reports it entered, which the bootloader entered without its check), so every bank it writes is stored the way the bootloader takes it',
   'keys.evidence.checkKeyNamedFrom':
     'the camera decrypts the upload with that key and re-encrypts it under {key} {hex}, the key its bootloader checks a bank under (named from {bank}, the bank the camera reports it entered), so every bank it writes is stored the way the bootloader takes it',
-  /** `{source}` is keys.source.*. */
-  'keys.evidence.applicationKeyA':
-    'the running application ({bank}, firmware {firmware}) carries its Key A {keyA} at {keyAAt}, from {source}',
-  'keys.evidence.applicationKeys':
-    'the running application ({bank}, firmware {firmware}) carries its Key A {keyA} at {keyAAt}, from {source}, and its Key B {keyB} at {keyBAt}',
-  'keys.source.keyTable': "the bootloader's key table",
-  /** `{builds}`: firmware versions. */
-  'keys.source.applicationPair': 'the decoded application pair of {builds}',
-  'keys.evidence.perDevice':
-    'a per-device key is programmed, so the application re-encrypts under it',
-  'keys.evidence.noPerDevice':
-    'no per-device key is programmed, so the application re-encrypts under its own Key B',
-  'keys.evidence.storeKey':
-    "the application's store key is the bootloader's {key} ({hex}), so the writes store every bank under it; the booted {bank} holds {held}, which the bootloader accepts as well",
-  'keys.evidence.bootedKey':
-    "the booted {bank} decrypts under {key} ({hex}), a key the bootloader tries; the application's store key is not the bootloader's, so the writes store every bank under the booted bank’s key",
-  /** `{masks}`: key names joined with commas. */
-  'keys.evidence.masks':
-    'the upload is the image XOR the keystreams of {masks}; the device stores the image under {key}',
-  /** `{held}` is a key name or keys.noKnownKey (a sentence, not a name: it takes no case). */
-  'keys.evidence.otherBank':
-    '{bank} decrypts under {held}; it is written under {key} by the same rule, and read back to check',
 
   /* ---- keys.refused: why no upload key is derived (the "refused" row, or the banner) ---- */
   'keys.refused.bootUnnamed':
@@ -577,7 +552,7 @@ export default {
   'detect.legacy.none': 'nothing observed points at the authenticated read channel',
 
   /* ---- fps.table: why the frame-rate patch table makes no patch for an image (preservation/fps-patch) ---- */
-  /* `{version}`, `{image}`, `{camera}`: firmware versions; `{id}`: the table entry's name; `{hz}`: a rate.
+  /* `{version}`, `{image}`, `{camera}`: firmware versions; `{hz}`: a rate.
    * "stage two", Key A / Key B, f96ac57eda75 and the build names stay as they are. */
   'fps.table.withheld':
     'withheld after a run on a camera: there the patch did not raise the publish rate, and the shutter fired on every frame after the write',
@@ -590,9 +565,9 @@ export default {
   'fps.table.notOffered': 'not offered',
   'fps.table.notImage': 'this is not a firmware image, so no frame-rate patch applies to it',
   'fps.table.otherBuild':
-    'the image is the {image} build ("{id}"), but the camera reports {camera}; the patch is refused rather than applied to a build it does not match',
+    'the image is the {image} build, but the camera reports {camera}; the patch is refused rather than applied to a build it does not match',
   'fps.table.otherBuildNoVersion':
-    'the image is the {image} build ("{id}"), but the camera reports no version; the patch is refused rather than applied to a build it does not match',
+    'the image is the {image} build, but the camera reports no version; the patch is refused rather than applied to a build it does not match',
   'fps.table.patched': 'the frame-rate patch is already applied: this image runs at {hz} Hz',
   'fps.table.earlierPatch':
     'this image holds an earlier {hz} Hz frame-rate patch without the USB fix, and a patch is never applied to a patched image: restore the stock image, then patch it',
@@ -617,26 +592,17 @@ export default {
   /* ---- notes: what the read measured about a build, a bank or an empty bank (slots/capability-notes) ----
    * Mode numbers, addresses, version numbers and command names (CompleteMemoryUpgrade, BeginFirmwareUpgrade,
    * EP0, PRESERVATION.md) are names: keep them. `{untested}` is notes.ffBootUntested. */
-  /** "This line" is the firmware line (the 2014 0.x/1.x builds, as in notes.token), not a line of text: on these builds, the bank the page or the CLI calls booted is the one the camera entered at its last start. */
-  'notes.lockedBootWord':
-    'The booted bank named on this line is the bank the camera entered at its last start, as the active-slot word records it (0 slot A, 1 slot B, 2 recovery R). The next start is set by the boot-config word: 0 or 0xFFFFFFFF choose A first, 1 B first, any other value recovery R first. Recovery R runs whenever A and B hold nothing the 2014 bootloader takes (a bank whose words sum to 0), whatever R holds (measured on a camera).',
   /** "This line" is the firmware line (the 2016 Compact PRO 1.0.3.x builds), not a line of text: on these builds, the bank the page or the CLI calls booted is the one the camera entered at its last start. */
   'notes.locked2016BootWord':
     'The booted bank named on this line is the bank the camera entered at its last start, as the bootloader records it in the active-slot word (0 slot A, 1 slot B, 2 recovery R). The next start is set by the boot-config word: 0 or 0xFFFFFFFF choose A first, 1 B first, any other value recovery R first. The 2016 bootloader takes a bank only when it decrypts to a word sum of 0 under the key it checks a bank under (key block 1 on its 1.2.0.0 bootloader), and the last bank of that order runs unchecked when the other two fail. The read names that key from the bank the camera entered, because the bootloader block that holds it is refused on every channel (measured on a camera).',
   'notes.ep0of1032':
     '1.0.3.2: EP0 sessions die at about 64 to 81 KB and 128 B is the lossless read unit, so one 64 KiB bank per session is the measured limit. A whole-part drain is refused on this build (PRESERVATION.md: no single-arm drain exists). The slot dump reads one bank at a time, in 64-byte asks.',
-  'notes.token':
-    'Banks are locked on this line: the camera opens a bank for a write only when it is asked with the line’s unlock, which is the same in all 22 firmware images of this line on record. A camera with another unlock refuses its banks.',
   'notes.staging.lockedPlain':
     'Staged: the image itself, at most 56 KiB (the most the camera takes in one write). The write erases the 64 KiB bank and writes exactly those bytes, and the rest of the bank reads erased. The bootloader starts a bank only when its words sum to 0, so the image is balanced to that sum before it is sent.',
   'notes.staging.locked2016':
     'Staged: the image, XORed with the xorshift128 keystream of its OWN key block 0 (the stage key, found in the image by value), image length only (at most 0xE000 bytes). The device decrypts the payload with that key and stores it under the key its bootloader checks a bank under (key block 1), so the stored bytes are not the staged ones. Nothing is read from the target bank to stage it: the bank’s keystream is used only to read the bank back.',
   'notes.staging.modern':
     'Staged: the whole 64 KiB bank, image + 0xFF pad + "CODE" footer. The image is XORed with the keystreams that make the running application’s own two passes land it under the key the booted bank holds: when the commit command (CompleteMemoryUpgrade) takes data type 7, 8 or 9, the application decrypts the upload with its Key A, re-encrypts it under its store key and programs the bank. The footer is what lets the bootloader take the bank, so a bank short of it is refused.',
-  'notes.modernGap':
-    'Slot B is 0x14050000 on this line (mode 8). No selector reaches 0x14060000 on any 2.x, 4.x, 10.x, 42.x or 44.x build (decoded from the 14 post-2018 corpus images), so no bank sits there. The 0x14060000 layout belongs to the locked 0.x/1.x line.',
-  'notes.modernNamedWrite':
-    'Named writes (modes 7 to 9) are decoded from the firmware. The emulator writes A, B and R through them on the 4.x builds, and on a camera slot A of a Compact XR 4.8.2.1 was written through mode 7 by the frame-rate patch. A slot write never arms mode 0, the upgrade target.',
   'notes.unverified':
     'Read only. The bank layout is the locked line’s decoded table, but no staging form has been measured for this build, so no write is planned.',
   'notes.empty.plain':
@@ -647,12 +613,6 @@ export default {
     'An empty bank takes an image exactly as a used one does. The stage key is key block 0 of the IMAGE’s own pair, not a key read from the target bank, and the device decrypts the payload with it, stores it under its own key and erases the block without reading it. Proven on the emulator; not yet measured on a camera.',
   'notes.mode2of080':
     '0.8.0.0: mode 2 (0x14000000) is a crash hazard on this build, an armed read walks off SRAM (PRESERVATION.md). A slot read or write arms modes 7 to 9 only and never mode 2.',
-  'notes.keyPairs2016':
-    'The 9 Hz builds of 1.0.3.0 and 1.0.3.2 share one key pair, and the FF builds share another. The version string does not tell them apart, so the keystream is recovered from the bank itself and the bank’s own image decides.',
-  'notes.board1030':
-    'The 1.0.3.0 app reboots on any board but the Compact Pro’s, so a Compact board runs it only with the board patch in its banks.',
-  'notes.bank.modernA':
-    'Written through a bank arm the modern map leaves out; a Compact XR 4.8.2.1 took a write through it on a camera.',
   'notes.bank.recovery2016':
     'Measured on a Compact PRO 1.0.3.0: recovery R took its own image, a one-byte change and the raw bytes as they were sent, each written without an error.',
   'notes.bank.ff1308A':

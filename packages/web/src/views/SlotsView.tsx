@@ -28,6 +28,7 @@ import {
   supportReasonMessage,
 } from '@seek-fw/core';
 import { coreText, coreTexts } from '@/lib/core-text';
+import { pageShowsNote } from '@/lib/page-hidden';
 import { DeviceInfoPanel } from '@/components/DeviceInfoPanel';
 import { Prose } from '@/components/Prose';
 import { RunPanel } from '@/components/RunPanel';
@@ -44,7 +45,6 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Toolbar } from '@/components/ui/toolbar';
 import {
-  copyLabel,
   slotActionGate,
   writeRisk,
   type SlotFlashOutcome,
@@ -307,6 +307,8 @@ export function SlotsView({ slots, connected, busy }: SlotsViewProps): ReactElem
   const fpsOffer: FpsOffer | null = fpsPlan !== null && fpsPlan.status === 'offer' ? fpsPlan : null;
   const fpsView = fpsKey === null || report === null ? null : viewOf(report, fpsKey);
   /* The boot warning on the page: a patched bank the camera does not run. Core decides it (boot-choice.ts). */
+  /* The camera's notes the page shows (lib/page-hidden.ts leaves some out). */
+  const shownNotes = plan === null ? [] : plan.notes.filter(pageShowsNote);
   const bootWarning = useMemo(() => (report === null ? null : fpsBootWarningOf(report)), [report]);
   /* The same warning for the bank the person is about to patch, which then counts as holding the patch. */
   const dialogBootWarning = useMemo(
@@ -380,10 +382,10 @@ export function SlotsView({ slots, connected, busy }: SlotsViewProps): ReactElem
           </Alert>
         )}
 
-        {plan !== null && plan.notes.length > 0 && (
+        {shownNotes.length > 0 && (
           <Prose>
             <ul>
-              {plan.notes.map((note) => (
+              {shownNotes.map((note) => (
                 <li key={note}>{coreText(capabilityNoteMessage(note))}</li>
               ))}
             </ul>
@@ -557,14 +559,10 @@ export function SlotsView({ slots, connected, busy }: SlotsViewProps): ReactElem
 
       <Section id="slots-how" title={t('slots:how.title')} icon={<Send />}>
         <Prose>
-          <p>{rich('slots:how.read', { params: { minVersion: '0.8.0.0' } })}</p>
+          <p>{rich('slots:how.read')}</p>
           <p>{rich('slots:how.flash')}</p>
           <p>{rich('slots:how.ff', { params: { letterR: 'R', b: bankWordsRef('b') } })}</p>
-          <p>
-            {rich('slots:how.copy', {
-              params: { copyA: copyLabel('a'), copyB: copyLabel('b'), copyR: copyLabel('r') },
-            })}
-          </p>
+          <p>{rich('slots:how.copy')}</p>
           <p>{rich('slots:how.fps')}</p>
           <p>
             {rich('slots:how.backup', {

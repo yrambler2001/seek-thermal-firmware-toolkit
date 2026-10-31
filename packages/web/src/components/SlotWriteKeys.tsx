@@ -232,16 +232,6 @@ export function SlotWriteKeys({ verdict }: SlotWriteKeysProps): ReactElement {
           ],
         ]}
       />
-      {verdict.evidence.length > 0 && (
-        <Prose>
-          <ul>
-            {verdict.evidence.map((said) => {
-              const line = coreText(said);
-              return <li key={line}>{line}</li>;
-            })}
-          </ul>
-        </Prose>
-      )}
     </Panel>
   );
 }

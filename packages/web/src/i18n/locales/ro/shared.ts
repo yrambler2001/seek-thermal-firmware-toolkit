@@ -36,8 +36,7 @@ export default {
     'Camera este folosită în altă filă sau fereastră — terminați sau închideți mai întâi acolo.',
 
   /* lib/backup-save: shown after core's plan sentence on a write's confirmation. */
-  'backup.downloadNote':
-    'Arhiva zip se descarcă automat, înainte să se trimită ceva. Browserul nu anunță când o descărcare ajunge pe disc, așa că verificați dosarul de descărcări înainte să vă bazați pe ea.',
+  'backup.downloadNote': 'Arhiva zip se descarcă automat, înainte să se trimită ceva.',
 
   /* useDevice: the connection line when no camera is held. */
   'device.none': 'Niciun dispozitiv selectat.',
@@ -82,9 +81,9 @@ export default {
     'Imaginea nu conține perechea de chei pe care o indică numele fișierului. Folosiți fișierul decriptat exact așa cum a fost salvat la extragere, cu tot cu nume.',
   'hint.flashRefused': 'Nu s-a scris nimic în cameră.',
   'hint.familyUnsupported':
-    'Nu s-a citit și nu s-a scris nimic. Fiecare filă acoperă un interval de versiuni de firmware: camerele 0.x și 1.x merg la „Extragere și decriptare 0.x/1.x 2014/2016”, camerele 4.x și Nano la „Extragere și decriptare 4.x/Nano”. Fila Info spune la ce filă merge camera.',
+    'Nu s-a citit și nu s-a scris nimic. Fiecare filă acoperă un interval de versiuni de firmware: camerele 0.x și 1.x merg la „Extragere și decriptare 0.x/1.x”, camerele 4.x și Nano la „Extragere și decriptare 4.x/Nano”. Fila Info spune la ce filă merge camera.',
   'hint.firmwareTooOld':
-    'Nicio familie de firmware nu poate citi aici acest build: firmware-ul lui nu are o rutină de citire pentru comanda cu care această filă citește memoria flash, așa că nu i s-a trimis nimic ce ar putea fi citit greșit. Un Compact cu 0.7.0.7 sau 0.7.0.8 poate fi citit pe „Extragere și decriptare 0.x/1.x 2014/2016”. Un dump făcut cu un programator SPI sau prin SWD/J-Link poate fi totuși decriptat pe această pagină, la „Decriptare fișier/slot”.',
+    'Nicio familie de firmware nu poate citi aici acest build: firmware-ul lui nu are o rutină de citire pentru comanda cu care această filă citește memoria flash, așa că nu i s-a trimis nimic ce ar putea fi citit greșit. Un Compact cu 0.7.0.7 sau 0.7.0.8 poate fi citit pe „Extragere și decriptare 0.x/1.x”. Un dump făcut cu un programator SPI sau prin SWD/J-Link poate fi totuși decriptat pe această pagină, la „Decriptare fișier/slot”.',
   'hint.powerCycle':
     'În acest asistent: deconectați camera și conectați-o din nou, apăsați „Conectare dispozitiv” și alegeți-o, apoi porniți din nou același pas. Rularea este încă încărcată aici — nu este nimic de reluat.',
 
@@ -112,10 +111,6 @@ export default {
   'deviceInfo.keyA': 'Cheia A',
   /** Row label: the second key ("Key B"), as core names it (core:keyName.keyB). */
   'deviceInfo.keyB': 'Cheia B',
-  'deviceInfo.keysConfirmed':
-    'Confirmate prin potrivirea cu starea fluxului de cheie a unui slot, recuperată chiar din textul criptat. O încărcare este construită astfel încât fiecare slot să o stocheze cu cheia de stocare a bootloader-ului ({storeKey}) sau, acolo unde cheia de stocare a aplicației nu este aceasta, cu cheia proprie a slotului de pornire.',
-  'deviceInfo.keysDecrypted':
-    'Fiecare slot a fost decriptat în browser, calculându-i fluxul de cheie din propriii vectori de reset despre care se știe că sunt zero. Decriptarea nu este același lucru cu pornirea: bootloader-ul încearcă doar {storeKey:acc} și cheia A, așa că un slot scris cu orice altă cheie are suma de control perfectă și totuși este sărit. Nu s-a scris nimic.',
   /* {banks} is one bank name or several joined by common:list.and. */
   'deviceInfo.orphan': {
     one: '**În {banks:acc} se află o imagine de firmware validă, criptată cu o cheie pe care bootloader-ul acestei camere nu o cunoaște.** Imaginea este intactă și suma ei de control este corectă, dar bootloader-ul încearcă doar {storeKey:acc} și cheia A când verifică un slot, așa că îl sare și pornește altceva.',

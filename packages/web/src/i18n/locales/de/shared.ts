@@ -36,7 +36,7 @@ export default {
 
   /* lib/backup-save: shown after core's plan sentence on a write's confirmation. */
   'backup.downloadNote':
-    'Die ZIP-Datei wird automatisch heruntergeladen, bevor irgendetwas gesendet wird. Ein Browser meldet nicht, wann ein Download auf dem Datenträger angekommen ist. Prüfen Sie daher Ihren Download-Ordner, bevor Sie sich auf die Datei verlassen.',
+    'Die ZIP-Datei wird automatisch heruntergeladen, bevor irgendetwas gesendet wird.',
 
   /* useDevice: the connection line when no camera is held. */
   'device.none': 'Kein Gerät ausgewählt.',
@@ -83,9 +83,9 @@ export default {
     'Das Image enthält nicht das Schlüsselpaar, das sein Dateiname angibt. Verwenden Sie die entschlüsselte Datei genau so, wie das Auslesen sie gespeichert hat, auch mit unverändertem Namen.',
   'hint.flashRefused': 'Es wurde nichts in die Kamera geschrieben.',
   'hint.familyUnsupported':
-    'Es wurde nichts gelesen oder geschrieben. Jeder Tab deckt einen Bereich von Firmware-Versionen ab: Kameras mit 0.x und 1.x gehören zu „Auslesen & entschlüsseln 0.x/1.x 2014/2016“, Kameras mit 4.x und Nano zu „Auslesen & entschlüsseln 4.x/Nano“. Der Tab „Info“ sagt, zu welchem Tab die Kamera gehört.',
+    'Es wurde nichts gelesen oder geschrieben. Jeder Tab deckt einen Bereich von Firmware-Versionen ab: Kameras mit 0.x und 1.x gehören zu „Auslesen & entschlüsseln 0.x/1.x“, Kameras mit 4.x und Nano zu „Auslesen & entschlüsseln 4.x/Nano“. Der Tab „Info“ sagt, zu welchem Tab die Kamera gehört.',
   'hint.firmwareTooOld':
-    'Keine Firmware-Familie kann diesen Build hier lesen: Seine Firmware hat keinen Lese-Handler für den Befehl, mit dem dieser Tab den Flash-Speicher liest. Deshalb wurde nichts an sie gesendet, was falsch gelesen werden könnte. Eine Compact mit 0.7.0.7 oder 0.7.0.8 lässt sich unter „Auslesen & entschlüsseln 0.x/1.x 2014/2016“ lesen. Ein Flash-Abbild, das mit einem SPI-Programmiergerät oder über SWD/J-Link erstellt wurde, kann auf dieser Seite trotzdem entschlüsselt werden, unter „Datei/Slot entschlüsseln“.',
+    'Keine Firmware-Familie kann diesen Build hier lesen: Seine Firmware hat keinen Lese-Handler für den Befehl, mit dem dieser Tab den Flash-Speicher liest. Deshalb wurde nichts an sie gesendet, was falsch gelesen werden könnte. Eine Compact mit 0.7.0.7 oder 0.7.0.8 lässt sich unter „Auslesen & entschlüsseln 0.x/1.x“ lesen. Ein Flash-Abbild, das mit einem SPI-Programmiergerät oder über SWD/J-Link erstellt wurde, kann auf dieser Seite trotzdem entschlüsselt werden, unter „Datei/Slot entschlüsseln“.',
   'hint.powerCycle':
     'In diesem Assistenten: Ziehen Sie die Kamera ab und stecken Sie sie wieder ein, klicken Sie auf „Gerät verbinden“ und wählen Sie sie aus, und starten Sie dann denselben Schritt noch einmal. Der Durchlauf ist hier noch geladen — es gibt nichts fortzusetzen.',
 
@@ -113,10 +113,6 @@ export default {
   'deviceInfo.keyA': 'Schlüssel A',
   /** Row label: the second key ("Key B"), as core names it (core:keyName.keyB). */
   'deviceInfo.keyB': 'Schlüssel B',
-  'deviceInfo.keysConfirmed':
-    'Bestätigt durch Abgleich mit dem Schlüsselstrom-Zustand eines Slots, der aus dem Chiffretext selbst gewonnen wurde. Ein Upload wird so gebaut, dass jeder Slot ihn unter dem Speicherschlüssel des Bootloaders ({storeKey}) ablegt, oder unter dem eigenen Schlüssel des gestarteten Slots, wo der Speicherschlüssel der Anwendung ein anderer ist.',
-  'deviceInfo.keysDecrypted':
-    'Jeder Slot wurde im Browser entschlüsselt, indem sein Schlüsselstrom aus seinen eigenen Reset-Vektoren berechnet wurde, deren Klartext bekanntermaßen null ist. Entschlüsseln ist nicht dasselbe wie Starten: Der Bootloader probiert immer nur {storeKey} und Schlüssel A. Ein Slot, der unter einem anderen Schlüssel geschrieben wurde, hat deshalb eine fehlerfreie Prüfsumme und wird trotzdem übersprungen. Es wurde nichts geschrieben.',
   /* {banks} is one bank name or several joined by common:list.and. */
   'deviceInfo.orphan': {
     one: '**{banks} enthält ein gültiges Firmware-Image, das mit einem Schlüssel verschlüsselt ist, den der Bootloader dieser Kamera nicht kennt.** Das Image ist intakt und seine Prüfsumme stimmt, aber der Bootloader probiert beim Prüfen eines Slots nur {storeKey} und Schlüssel A. Deshalb überspringt er ihn und startet etwas anderes.',

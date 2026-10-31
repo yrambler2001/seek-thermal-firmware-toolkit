@@ -436,21 +436,18 @@ export default {
 
   /* "What these buttons do", below the tab. */
   'how.title': 'What these buttons do',
-  'how.read':
-    '**Read slots** and **Dump** change nothing in the camera. The camera is asked which build it runs before anything else; a build older than {minVersion} is reported, and its banks are not read.',
+  'how.read': '**Read slots** and **Dump** change nothing in the camera.',
   'how.flash':
     "**Flash decrypted image** takes a plaintext image, encrypts it the way that bank's firmware needs before it is staged, and shows the plan. **Flash raw bytes** stages the file exactly as given. Neither sends anything until you confirm.",
-  /* FF = the 16 Hz "FF" build of the Compact; the vendor app = Seek's own phone app. */
   'how.ff':
-    "A Compact on 1.3.0.8 can be the 8 Hz build or the 16 Hz FF build, and both report the same version. The camera tells them apart itself: its own answer for each bank says whether the application that answers takes it, and each build predicts its answers. The 8 Hz image goes to any bank. The FF image is staged the way the vendor app stages it (the image XOR Key A), and the 16 Hz build stores it under Key B, to any bank. The page does not refuse it: the plan says, before you confirm, what the camera is expected to do with it (the 8 Hz build refuses it at commit, and a camera on another version programs it as it is sent, which it cannot start). Whether the FF image boots is UNTESTED: no genuine bootloader for this build is in the corpus. Writing {letterR} asks for the extra confirmation like any recovery write. An **empty** bank (its header window reads as all 0xFF, as on many 2014 cameras' {b}) is a state, not a fault. It dumps as the raw 64 KiB of 0xFF with nothing to decrypt, and it is written exactly like any other bank; the plan and the confirmation say that no firmware is overwritten.",
-  /* {copyA}, {copyB}, {copyR} are the three copy buttons' own labels (table.copyTo: "Copy to slot A"…). */
+    "Writing {letterR} asks for the extra confirmation like any recovery write. An **empty** bank (its header window reads as all 0xFF, as on many 2014 cameras' {b}) is a state, not a fault. It is written exactly like any other bank.",
   'how.copy':
-    "**{copyA}**, **{copyB}** and **{copyR}** on a bank row write the firmware that bank holds, as this read decrypted it, into the other bank, whatever it holds now. The image is staged as any decrypted image is, so the plan and the confirmation are the same as for a file. **Restore from full flash backup** takes a .bin (a whole 4 MiB flash image, such as a J-Link read) or a .zip that holds one (a Preserve run file, or the zip a Dump & decrypt 4.x/Nano or a Dump all selectors saves), cuts this bank out of it, decrypts it, and shows the plan; a backup that looks like another camera's, or another firmware, is said in the plan. A bank that is empty in the backup, or that the dump did not read, cannot be restored by a write, and the page says so.",
+    "**Restore from full flash backup** takes a .bin (a whole 4 MiB flash image, such as a J-Link read) or a .zip that holds one (a Preserve run file, or the zip a Dump & decrypt 4.x/Nano or a Dump all selectors saves), cuts this bank out of it, decrypts it, and shows the plan; a backup that looks like another camera's, or another firmware, is said in the plan.",
   'how.fps':
     "**Make N FPS** on a bank row edits that bank's image to a higher frame rate, and **Make N FPS in every bank** does it to every bank where the patch is available, in one confirmation, the bank the camera boots now last. For a bank where it is not available, the page says why.",
   /* {example} is a file name; keep it as it is. */
   'how.backup':
-    "**Every write saves its bank first**: the bank is read again and saved as one zip download, named with the time, the camera's serial, the firmware, the bank and the write (for example `{example}`), holding the bank as stored, its decrypted image and a note of what each file is. The write waits until the download has started. A browser gives no word when a download reaches the disk, so check your downloads folder. To go back, write the zip's decrypted file with **Flash decrypted image**.",
+    "**Every write saves its bank first**: the bank is read again and saved as one zip download, named with the time, the camera's serial, the firmware, the bank and the write (for example `{example}`), holding the bank as stored, its decrypted image and a note of what each file is. To go back, write the zip's decrypted file with **Flash decrypted image**.",
   /* {address} is the bootloader's flash address. */
   'how.write':
     'A write erases one 64 KiB bank and programs it. The bootloader at `{address}` and the boot config are never written here, and there is no control for choosing the active bank. The bank takes effect only after the camera is unplugged and replugged.',

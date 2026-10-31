@@ -66,6 +66,7 @@ import type {
   WriteAction,
   WriteBackup,
 } from '@seek-fw/core';
+import { pageShowsNote } from '@/lib/page-hidden';
 import { SlotsView, backupLine } from './SlotsView';
 
 /** What a prepared write from a picked file is, for the backup's name. */
@@ -614,7 +615,10 @@ describe('SlotsView', () => {
     }
     /* The plan's own note states the rule, and the page explains it once more in words. */
     expect(container.textContent).toContain('UNTESTED');
-    expect(container.textContent).toContain('The camera tells them apart itself');
+    /* The page leaves out the line's token and boot-word notes (lib/page-hidden.ts), and the long FF paragraph. */
+    expect(container.textContent).not.toContain('The camera tells them apart itself');
+    expect(container.textContent).not.toContain('Banks are locked on this line');
+    expect(container.textContent).not.toContain('as the active-slot word records it');
     /* The flash controls on every bank are on: the image decides, not the version. */
     expect(buttonByText(rows[2] as HTMLElement, 'Flash decrypted image…').disabled).toBe(false);
     unmount();
@@ -1356,7 +1360,10 @@ describe('SlotsView: the frame-rate row action', () => {
     );
     expect(items).toEqual([warning]);
     /* Each camera note is on the page once: above the device panel, not again in the plan. */
-    for (const note of plan.notes) expect(text.split(note)).toHaveLength(2);
+    for (const note of plan.notes)
+      expect(text.split(note)).toHaveLength(pageShowsNote(note) ? 2 : 1);
+    /* The 2016 line's token and key-pair notes are among those the page leaves out. */
+    expect(plan.notes.filter((note) => !pageShowsNote(note)).length).toBeGreaterThan(0);
     expect(text).not.toContain('Note: ');
     booted.unmount();
 

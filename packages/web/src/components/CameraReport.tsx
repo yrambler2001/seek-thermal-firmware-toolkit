@@ -39,6 +39,7 @@ import {
   nullableCoreText,
   recordedText,
 } from '@/lib/core-text';
+import { pageUpgradeWarning } from '@/lib/page-hidden';
 import { KeyValue } from './KeyValue';
 import { Panel, PanelTitle } from './Panel';
 import { Prose } from './Prose';
@@ -126,8 +127,10 @@ function bankPresence(
 export function CameraReport({ state }: CameraReportProps): ReactElement {
   const warning = nullableCoreText(
     /* A bank the read did not list is still named as a bank ("Slot B"), never by its bare letter. */
-    upgradeTargetWarningMessage(state, (slot, key) =>
-      bankNameParam(slot?.name ?? bankNameOf(key), key),
+    pageUpgradeWarning(
+      upgradeTargetWarningMessage(state, (slot, key) =>
+        bankNameParam(slot?.name ?? bankNameOf(key), key),
+      ),
     ),
   );
   const running = runningText(state);

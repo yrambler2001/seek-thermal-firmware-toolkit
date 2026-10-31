@@ -35,8 +35,7 @@ export default {
     'The camera is in use in another tab or window — finish or close it there first.',
 
   /* lib/backup-save: shown after core's plan sentence on a write's confirmation. */
-  'backup.downloadNote':
-    'The zip is downloaded automatically, before anything is sent. A browser gives no word when a download reaches the disk, so check your downloads folder for it before you rely on it.',
+  'backup.downloadNote': 'The zip is downloaded automatically, before anything is sent.',
 
   /* useDevice: the connection line when no camera is held. */
   'device.none': 'No device selected.',
@@ -80,9 +79,9 @@ export default {
     'The image does not carry the key pair its filename claims. Use the decrypted file exactly as the dump wrote it, name and all.',
   'hint.flashRefused': 'Nothing was written to the camera.',
   'hint.familyUnsupported':
-    'Nothing was read or written. Each tab covers a range of firmware versions: 0.x and 1.x cameras go to "Dump & decrypt 0.x/1.x 2014/2016", 4.x and Nano cameras to "Dump & decrypt 4.x/Nano". The Info tab says which tab the camera goes to.',
+    'Nothing was read or written. Each tab covers a range of firmware versions: 0.x and 1.x cameras go to "Dump & decrypt 0.x/1.x", 4.x and Nano cameras to "Dump & decrypt 4.x/Nano". The Info tab says which tab the camera goes to.',
   'hint.firmwareTooOld':
-    'No firmware family can read this build here: its firmware has no read handler for the command this tab reads flash with, so nothing that could be misread was sent to it. A Compact on 0.7.0.7 or 0.7.0.8 can be read on "Dump & decrypt 0.x/1.x 2014/2016". A dump taken with an SPI programmer or over SWD/J-Link can still be decrypted on this page, under "Decrypt File/Slot".',
+    'No firmware family can read this build here: its firmware has no read handler for the command this tab reads flash with, so nothing that could be misread was sent to it. A Compact on 0.7.0.7 or 0.7.0.8 can be read on "Dump & decrypt 0.x/1.x". A dump taken with an SPI programmer or over SWD/J-Link can still be decrypted on this page, under "Decrypt File/Slot".',
   'hint.powerCycle':
     'In this wizard: unplug the camera and plug it back in, press "Connect device" and pick it, then start the same step again. The run is still loaded here — there is nothing to resume.',
 
@@ -110,10 +109,6 @@ export default {
   'deviceInfo.keyA': 'Key A',
   /** Row label: the second key ("Key B"), as core names it (core:keyName.keyB). */
   'deviceInfo.keyB': 'Key B',
-  'deviceInfo.keysConfirmed':
-    "Confirmed by matching a slot's keystream state, recovered from the ciphertext itself. An upload is built so each bank stores it under the bootloader's store key ({storeKey}), or under the booted bank's own key where the application's store key is not that one.",
-  'deviceInfo.keysDecrypted':
-    'Each slot was decrypted in the browser by solving for its keystream from its own known-zero reset vectors. Decrypting is not the same as booting: the bootloader only ever tries {storeKey} and Key A, so a slot written under any other key checksums perfectly and is still skipped. Nothing was written.',
   /* {banks} is one bank name or several joined by common:list.and. */
   'deviceInfo.orphan': {
     one: "**{banks} holds a valid firmware image encrypted with a key this camera's bootloader does not know.** The image is intact and its checksum is correct, but the bootloader only tries {storeKey} and Key A when it checks a bank, so it skips it and boots something else.",

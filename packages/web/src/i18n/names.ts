@@ -88,8 +88,6 @@ export const NAME_PARAMS = {
   'preserve:gate.patchSummary': ['bank'],
   'preserve:gate.plaintext': ['bank'],
   'shared:deviceInfo.bankAt': ['bank'],
-  'shared:deviceInfo.keysConfirmed': ['storeKey'],
-  'shared:deviceInfo.keysDecrypted': ['storeKey'],
   'shared:deviceInfo.orphan': ['banks', 'storeKey'],
   'shared:deviceInfo.orphanIsTarget': ['bank'],
 } as const satisfies NameParamTable;

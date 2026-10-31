@@ -36,8 +36,7 @@ export default {
     'La termocamera è in uso in un’altra scheda o finestra: prima termina lì o chiudila.',
 
   /* lib/backup-save: shown after core's plan sentence on a write's confirmation. */
-  'backup.downloadNote':
-    'Lo zip viene scaricato automaticamente, prima di inviare qualsiasi cosa. Il browser non avvisa quando un download arriva sul disco, quindi controlla che sia nella cartella dei download prima di farci affidamento.',
+  'backup.downloadNote': 'Lo zip viene scaricato automaticamente, prima di inviare qualsiasi cosa.',
 
   /* useDevice: the connection line when no camera is held. */
   'device.none': 'Nessun dispositivo selezionato.',
@@ -82,9 +81,9 @@ export default {
     'L’immagine non contiene la coppia di chiavi indicata dal suo nome file. Usa il file decifrato esattamente come l’ha scritto il dump, nome compreso.',
   'hint.flashRefused': 'Non è stato scritto nulla nella termocamera.',
   'hint.familyUnsupported':
-    'Non è stato letto né scritto nulla. Ogni scheda copre un intervallo di versioni del firmware: le termocamere 0.x e 1.x vanno in «Estrai e decifra 0.x/1.x 2014/2016», quelle 4.x e Nano in «Estrai e decifra 4.x/Nano». La scheda Info dice in quale scheda va la termocamera.',
+    'Non è stato letto né scritto nulla. Ogni scheda copre un intervallo di versioni del firmware: le termocamere 0.x e 1.x vanno in «Estrai e decifra 0.x/1.x», quelle 4.x e Nano in «Estrai e decifra 4.x/Nano». La scheda Info dice in quale scheda va la termocamera.',
   'hint.firmwareTooOld':
-    'Nessuna famiglia di firmware può leggere questa build qui: il suo firmware non ha un gestore di lettura per il comando con cui questa scheda legge la flash, quindi non le è stato inviato nulla che potesse essere letto male. Una Compact con 0.7.0.7 o 0.7.0.8 si può leggere in «Estrai e decifra 0.x/1.x 2014/2016». Un dump fatto con un programmatore SPI o tramite SWD/J-Link si può comunque decifrare in questa pagina, in «Decifra file/slot».',
+    'Nessuna famiglia di firmware può leggere questa build qui: il suo firmware non ha un gestore di lettura per il comando con cui questa scheda legge la flash, quindi non le è stato inviato nulla che potesse essere letto male. Una Compact con 0.7.0.7 o 0.7.0.8 si può leggere in «Estrai e decifra 0.x/1.x». Un dump fatto con un programmatore SPI o tramite SWD/J-Link si può comunque decifrare in questa pagina, in «Decifra file/slot».',
   'hint.powerCycle':
     'In questa procedura: scollega la termocamera e ricollegala, premi «Collega dispositivo» e selezionala, poi avvia di nuovo lo stesso passaggio. L’esecuzione è ancora caricata qui: non c’è nulla da riprendere.',
 
@@ -112,10 +111,6 @@ export default {
   'deviceInfo.keyA': 'Chiave A',
   /** Row label: the second key ("Key B"), as core names it (core:keyName.keyB). */
   'deviceInfo.keyB': 'Chiave B',
-  'deviceInfo.keysConfirmed':
-    'Confermate confrontandole con lo stato del flusso di chiave di uno slot, ricavato dal testo cifrato stesso. Un caricamento viene preparato in modo che ogni slot lo conservi con la chiave di archiviazione del bootloader ({storeKey}), oppure con la chiave propria dello slot avviato dove la chiave di archiviazione dell’applicazione non è quella.',
-  'deviceInfo.keysDecrypted':
-    'Ogni slot è stato decifrato nel browser ricavando il suo flusso di chiave dai suoi vettori di reset, che si sa essere a zero. Decifrare non equivale ad avviare: il bootloader prova sempre e solo {storeKey:acc} e la chiave A, quindi uno slot scritto con qualsiasi altra chiave ha una somma di controllo perfetta e viene comunque saltato. Non è stato scritto nulla.',
   /* {banks} is one bank name or several joined by common:list.and. */
   'deviceInfo.orphan': {
     one: '**{banks:ins} contiene un’immagine del firmware valida, cifrata con una chiave che il bootloader di questa termocamera non conosce.** L’immagine è integra e la sua somma di controllo è corretta, ma quando controlla uno slot il bootloader prova solo {storeKey:acc} e la chiave A, quindi lo salta e avvia qualcos’altro.',

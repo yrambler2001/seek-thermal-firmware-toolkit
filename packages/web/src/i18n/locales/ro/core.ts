@@ -270,9 +270,7 @@ export default {
   /** The "Next start" row: `{why}` is boot.select.* or boot.cfg0NotRead. */
   'report.nextStart.unknown': 'necunoscut — {why}',
   'report.nextStart.runs': '{bank} — {why}',
-  'upgrade.targetBooted':
-    '{name:ins} este atât slotul din care a pornit camera, cât și slotul pe care îl scrie propria ei actualizare. O actualizare pornită de pe această cameră ar suprascrie imaginea pe care o rulează. Este doar un avertisment: nimic de aici nu oprește o actualizare.',
-  /** `{verdict}` is one of upgrade.verdict.*. `{name}` here is the bank inside a sentence ("slot B"); in upgrade.targetBooted and upgrade.verdict.* it starts a sentence ("Slot B"). */
+  /** `{verdict}` is one of upgrade.verdict.*. `{name}` here is the bank inside a sentence ("slot B"); in upgrade.verdict.* it starts a sentence ("Slot B"). */
   'upgrade.whileRecovery':
     'Camera rulează din slotul ei de recuperare, iar propria ei actualizare scrie în {name:acc}, din care nu rulează. {verdict} Este doar un avertisment: nimic de aici nu oprește o actualizare.',
   'upgrade.verdict.notRead':
@@ -463,7 +461,6 @@ export default {
   'keyName.unknown:dat': 'unei chei necunoscute',
   'keyName.unknown:loc': 'într-o cheie necunoscută',
   'keyName.unknown:ins': 'O cheie necunoscută',
-  'keys.noKnownKey': 'nicio cheie cunoscută',
 
   /* ---- keys.evidence: the facts a write's keys rest on, one list item each (slots/write-keys-words) ---- */
   /** `{hex}`, `{keyA}`, `{keyB}` are key bytes in hex; `{keyAAt}`, `{keyBAt}` offsets; `{firmware}` a version or "?". */
@@ -486,28 +483,6 @@ export default {
     'camera decriptează datele încărcate cu acea cheie și le recriptează cu {key:acc} {hex}, cheia cu care bootloader-ul ei verifică un slot (dedusă din {bank:acc}, slotul în care camera raportează că a intrat, în care bootloader-ul a intrat fără verificare), așa că fiecare slot pe care îl scrie este stocat așa cum îl acceptă bootloader-ul',
   'keys.evidence.checkKeyNamedFrom':
     'camera decriptează datele încărcate cu acea cheie și le recriptează cu {key:acc} {hex}, cheia cu care bootloader-ul ei verifică un slot (numită pe baza {bank:gen}, slotul în care camera raportează că a intrat), așa că fiecare slot pe care îl scrie este stocat așa cum îl acceptă bootloader-ul',
-  /** `{source}` is keys.source.*. */
-  'keys.evidence.applicationKeyA':
-    'aplicația care rulează ({bank}, firmware {firmware}) conține cheia ei A {keyA} la {keyAAt}, din {source}',
-  'keys.evidence.applicationKeys':
-    'aplicația care rulează ({bank}, firmware {firmware}) conține cheia ei A {keyA} la {keyAAt}, din {source}, și cheia ei B {keyB} la {keyBAt}',
-  'keys.source.keyTable': 'tabelul de chei al bootloader-ului',
-  /** `{builds}`: firmware versions. */
-  'keys.source.applicationPair': 'perechea decodată a aplicației din {builds}',
-  'keys.evidence.perDevice':
-    'este programată o cheie proprie a dispozitivului, așa că aplicația recriptează cu ea',
-  'keys.evidence.noPerDevice':
-    'nu este programată nicio cheie proprie a dispozitivului, așa că aplicația recriptează cu propria ei cheie B',
-  'keys.evidence.storeKey':
-    'cheia de stocare a aplicației este {key:acc} din bootloader ({hex}), așa că scrierile stochează fiecare slot cu această cheie; slotul de pornire, {bank:acc}, conține {held:acc}, o cheie pe care bootloader-ul o acceptă și ea',
-  'keys.evidence.bootedKey':
-    'slotul de pornire, {bank:acc}, se decriptează cu {key:acc} ({hex}), o cheie pe care bootloader-ul o încearcă; cheia de stocare a aplicației nu este cea a bootloader-ului, așa că scrierile stochează fiecare slot cu cheia slotului de pornire',
-  /** `{masks}`: key names joined with commas. */
-  'keys.evidence.masks':
-    'datele încărcate sunt imaginea XOR fluxurile de cheie ale acestor chei: {masks}; dispozitivul stochează imaginea cu {key:acc}',
-  /** `{held}` is a key name or keys.noKnownKey (a sentence, not a name: it takes no case). */
-  'keys.evidence.otherBank':
-    '{bank:ins} se decriptează cu: {held}; este scris cu {key:acc} după aceeași regulă și recitit pentru verificare',
 
   /* ---- keys.refused: why no upload key is derived (the "refused" row, or the banner) ---- */
   'keys.refused.bootUnnamed':
@@ -639,7 +614,7 @@ export default {
   'detect.legacy.none': 'nimic din ce s-a observat nu indică canalul de citire autentificat',
 
   /* ---- fps.table: why the frame-rate patch table makes no patch for an image (preservation/fps-patch) ---- */
-  /* `{version}`, `{image}`, `{camera}`: firmware versions; `{id}`: the table entry's name; `{hz}`: a rate.
+  /* `{version}`, `{image}`, `{camera}`: firmware versions; `{hz}`: a rate.
    * "stage two", Key A / Key B, f96ac57eda75 and the build names stay as they are. */
   'fps.table.withheld':
     'retras după o rulare pe o cameră: acolo patch-ul nu a crescut rata de publicare, iar obturatorul s-a declanșat la fiecare cadru după scriere',
@@ -653,9 +628,9 @@ export default {
   'fps.table.notImage':
     'aceasta nu este o imagine de firmware, așa că nu i se aplică niciun patch pentru rata de cadre',
   'fps.table.otherBuild':
-    'imaginea este build-ul {image} („{id}”), dar camera raportează {camera}; patch-ul este refuzat, nu aplicat unui build cu care nu se potrivește',
+    'imaginea este build-ul {image}, dar camera raportează {camera}; patch-ul este refuzat, nu aplicat unui build cu care nu se potrivește',
   'fps.table.otherBuildNoVersion':
-    'imaginea este build-ul {image} („{id}”), dar camera nu raportează nicio versiune; patch-ul este refuzat, nu aplicat unui build cu care nu se potrivește',
+    'imaginea este build-ul {image}, dar camera nu raportează nicio versiune; patch-ul este refuzat, nu aplicat unui build cu care nu se potrivește',
   'fps.table.patched':
     'patch-ul pentru rata de cadre este deja aplicat: această imagine rulează la {hz} Hz',
   'fps.table.earlierPatch':
@@ -683,26 +658,17 @@ export default {
   /* ---- notes: what the read measured about a build, a bank or an empty bank (slots/capability-notes) ----
    * Mode numbers, addresses, version numbers and command names (CompleteMemoryUpgrade, BeginFirmwareUpgrade,
    * EP0, PRESERVATION.md) are names: keep them. `{untested}` is notes.ffBootUntested. */
-  /** "This line" is the firmware line (the 2014 0.x/1.x builds, as in notes.token), not a line of text: on these builds, the bank the page or the CLI calls booted is the one the camera entered at its last start. */
-  'notes.lockedBootWord':
-    'Slotul de pornire numit pe această linie de firmware este slotul în care a intrat camera la ultima pornire, așa cum îl consemnează cuvântul slotului activ (0 slotul A, 1 slotul B, 2 slotul de recuperare R). Următoarea pornire este stabilită de cuvântul de configurare a pornirii: 0 sau 0xFFFFFFFF aleg întâi A, 1 întâi B, orice altă valoare întâi slotul de recuperare R. Slotul de recuperare R rulează ori de câte ori A și B nu conțin nimic din ce acceptă bootloader-ul din 2014 (un slot ale cărui cuvinte au suma 0), indiferent ce conține R (măsurat pe o cameră).',
   /** "This line" is the firmware line (the 2016 Compact PRO 1.0.3.x builds), not a line of text: on these builds, the bank the page or the CLI calls booted is the one the camera entered at its last start. */
   'notes.locked2016BootWord':
     'Slotul de pornire numit pe această linie de firmware este slotul în care a intrat camera la ultima pornire, așa cum îl consemnează bootloader-ul în cuvântul slotului activ (0 slotul A, 1 slotul B, 2 slotul de recuperare R). Următoarea pornire este stabilită de cuvântul de configurare a pornirii: 0 sau 0xFFFFFFFF aleg întâi A, 1 întâi B, orice altă valoare întâi slotul de recuperare R. Bootloader-ul din 2016 acceptă un slot doar când acesta se decriptează la o sumă a cuvintelor 0 cu cheia cu care verifică un slot (blocul de chei 1 pe bootloader-ul lui 1.2.0.0), iar ultimul slot din această ordine rulează neverificat când celelalte două eșuează. Citirea numește acea cheie pe baza slotului în care a intrat camera, pentru că blocul bootloader-ului care o conține este refuzat pe orice canal (măsurat pe o cameră).',
   'notes.ep0of1032':
     '1.0.3.2: sesiunile EP0 se întrerup la aproximativ 64 până la 81 KB, iar 128 B este unitatea de citire fără pierderi, așa că un slot de 64 KB pe sesiune este limita măsurată. O citire completă a cipului este refuzată pe acest build (PRESERVATION.md: nu există citire completă cu o singură activare). Extragerea unui slot citește câte un slot pe rând, în cereri de 64 de octeți.',
-  'notes.token':
-    'Sloturile sunt blocate pe această linie de firmware: camera deschide un slot pentru scriere doar când i se cere cu deblocarea liniei, care este aceeași în toate cele 22 de imagini de firmware consemnate ale acestei linii. O cameră cu altă deblocare își refuză sloturile.',
   'notes.staging.lockedPlain':
     'Transfer: imaginea însăși, cel mult 56 KB (cât acceptă camera la o singură scriere). Scrierea șterge slotul de 64 KB și scrie exact acei octeți, iar restul slotului rămâne șters. Bootloader-ul pornește un slot doar când cuvintele lui au suma 0, așa că imaginea este echilibrată la această sumă înainte să fie trimisă.',
   'notes.staging.locked2016':
     'Transfer: imaginea, combinată prin XOR cu fluxul de cheie xorshift128 al PROPRIULUI ei bloc de chei 0 (cheia de transfer, găsită în imagine după valoare), doar lungimea imaginii (cel mult 0xE000 B). Dispozitivul decriptează datele cu acea cheie și le stochează cu cheia cu care bootloader-ul lui verifică un slot (blocul de chei 1), așa că octeții stocați nu sunt cei transferați. Nu se citește nimic din slotul țintă pentru transfer: fluxul de cheie al slotului este folosit doar la recitirea slotului.',
   'notes.staging.modern':
     'Transfer: întregul slot de 64 KB, imagine + umplutură 0xFF + footer „CODE”. Imaginea este combinată prin XOR cu fluxurile de cheie care fac ca cele două treceri proprii ale aplicației care rulează să o stocheze cu cheia pe care o conține slotul de pornire: când comanda de confirmare (CompleteMemoryUpgrade) primește tipul de date 7, 8 sau 9, aplicația decriptează datele încărcate cu cheia ei A, le recriptează cu cheia ei de stocare și programează slotul. Footerul este cel care permite bootloader-ului să accepte slotul, așa că un slot fără el este refuzat.',
-  'notes.modernGap':
-    'Slotul B este 0x14050000 pe această linie de firmware (modul 8). Niciun selector nu ajunge la 0x14060000 pe vreun build 2.x, 4.x, 10.x, 42.x sau 44.x (decodat din cele 14 imagini din corpus de după 2018), așa că acolo nu se află niciun slot. Dispunerea cu 0x14060000 aparține liniei blocate 0.x/1.x.',
-  'notes.modernNamedWrite':
-    'Scrierile numite (modurile 7 până la 9) sunt decodate din firmware. Emulatorul scrie A, B și R prin ele pe build-urile 4.x, iar pe o cameră, slotul A al unui Compact XR 4.8.2.1 a fost scris prin modul 7 de patch-ul pentru rata de cadre. O scriere de slot nu activează niciodată modul 0, ținta actualizării.',
   'notes.unverified':
     'Doar citire. Dispunerea sloturilor este tabelul decodat al liniei blocate, dar pentru acest build nu s-a măsurat nicio formă de transfer, așa că nu se planifică nicio scriere.',
   'notes.empty.plain':
@@ -713,12 +679,6 @@ export default {
     'Un slot gol primește o imagine exact ca unul folosit. Cheia de transfer este blocul de chei 0 al perechii proprii a IMAGINII, nu o cheie citită din slotul țintă, iar dispozitivul decriptează datele cu ea, le stochează cu propria lui cheie și șterge blocul fără să-l citească. Dovedit pe emulator; încă nemăsurat pe o cameră.',
   'notes.mode2of080':
     '0.8.0.0: modul 2 (0x14000000) poate bloca acest build — o citire activată iese din SRAM (PRESERVATION.md). O citire sau o scriere de slot activează doar modurile 7 până la 9, niciodată modul 2.',
-  'notes.keyPairs2016':
-    'Build-urile de 9 Hz ale versiunilor 1.0.3.0 și 1.0.3.2 au o pereche de chei comună, iar build-urile FF au alta. Șirul de versiune nu le deosebește, așa că fluxul de cheie este recuperat chiar din slot, iar imaginea proprie a slotului decide.',
-  'notes.board1030':
-    'Aplicația 1.0.3.0 repornește pe orice placă în afară de cea a modelului Compact Pro, așa că o placă Compact o rulează doar cu patch-ul pentru placă în sloturile ei.',
-  'notes.bank.modernA':
-    'Scris printr-o activare de slot pe care harta modernă o omite; un Compact XR 4.8.2.1 a acceptat o scriere prin ea, pe o cameră.',
   'notes.bank.recovery2016':
     'Măsurat pe un Compact PRO 1.0.3.0: slotul de recuperare R a acceptat propria imagine, o modificare de un octet și octeții bruți așa cum au fost trimiși, fiecare scris fără eroare.',
   'notes.bank.ff1308A':

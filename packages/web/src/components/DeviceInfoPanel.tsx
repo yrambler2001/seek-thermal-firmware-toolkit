@@ -26,8 +26,8 @@ import { cfg0Words, keyNameValue, nullableCoreText, recordedText } from '@/lib/c
 import { bankName, bankNameRef } from '@/lib/bank-names';
 import { KeyValue, type KeyValueRow } from './KeyValue';
 import { Panel, PanelTitle } from './Panel';
-import { Prose } from './Prose';
 import { Alert } from './ui/alert';
+import { pageUpgradeWarning } from '@/lib/page-hidden';
 import { t, useT, type NameRef } from '@/i18n';
 
 /**
@@ -125,9 +125,10 @@ export function DeviceInfoPanel({ state }: DeviceInfoPanelProps): ReactElement {
 
   const orphans = orphanSlots(state);
   const targetIsOrphan = target !== null && orphans.includes(target);
-  /* TESTING.md 42.50: the upgrade target is the bank the camera booted from. A warning, never a gate. */
+  /* The upgrade-target warning, never a gate. The case where the target is the booted bank (TESTING.md
+   * 42.50) is left out on the page (lib/page-hidden.ts); the recovery case (42.67) is shown. */
   const targetWarning = nullableCoreText(
-    upgradeTargetWarningMessage(state, (_slot, key) => bankParam(key, 'name')),
+    pageUpgradeWarning(upgradeTargetWarningMessage(state, (_slot, key) => bankParam(key, 'name'))),
   );
 
   return (
@@ -155,18 +156,6 @@ export function DeviceInfoPanel({ state }: DeviceInfoPanelProps): ReactElement {
               [t('shared:deviceInfo.keyB'), bytesToHex(state.keyTable.keyB)],
             ]}
           />
-          <Prose className="mt-2.5">
-            <p>
-              {rich('shared:deviceInfo.keysConfirmed', {
-                params: { storeKey: keyNameValue(state.storeKey.name) },
-              })}
-            </p>
-            <p>
-              {rich('shared:deviceInfo.keysDecrypted', {
-                params: { storeKey: keyNameValue(state.storeKey.name) },
-              })}
-            </p>
-          </Prose>
         </Panel>
       )}
 

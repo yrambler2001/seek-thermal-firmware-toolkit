@@ -271,9 +271,7 @@ export default {
   /** The "Next start" row: `{why}` is boot.select.* or boot.cfg0NotRead. */
   'report.nextStart.unknown': 'inconnu — {why}',
   'report.nextStart.runs': '{bank} — {why}',
-  'upgrade.targetBooted':
-    '{name:ins} est à la fois l’emplacement depuis lequel la caméra a démarré et celui qu’écrit sa propre mise à jour. Une mise à jour lancée depuis cette caméra écraserait l’image qu’elle exécute. Ce n’est qu’un avertissement : rien ici n’empêche une mise à jour.',
-  /** `{verdict}` is one of upgrade.verdict.*. `{name}` here is the bank inside a sentence ("slot B"); in upgrade.targetBooted and upgrade.verdict.* it starts a sentence ("Slot B"). */
+  /** `{verdict}` is one of upgrade.verdict.*. `{name}` here is the bank inside a sentence ("slot B"); in upgrade.verdict.* it starts a sentence ("Slot B"). */
   'upgrade.whileRecovery':
     'La caméra fonctionne sur son emplacement de secours, et sa propre mise à jour écrit {name:acc}, qu’elle n’exécute pas. {verdict} Ce n’est qu’un avertissement : rien ici n’empêche une mise à jour.',
   'upgrade.verdict.notRead':
@@ -465,7 +463,6 @@ export default {
   'keyName.unknown:dat': 'à une clé inconnue',
   'keyName.unknown:loc': 'dans une clé inconnue',
   'keyName.unknown:ins': 'Une clé inconnue',
-  'keys.noKnownKey': 'aucune clé connue',
 
   /* ---- keys.evidence: the facts a write's keys rest on, one list item each (slots/write-keys-words) ---- */
   /** `{hex}`, `{keyA}`, `{keyB}` are key bytes in hex; `{keyAAt}`, `{keyBAt}` offsets; `{firmware}` a version or "?". */
@@ -488,28 +485,6 @@ export default {
     'la caméra déchiffre l’envoi avec cette clé et le rechiffre sous {key:acc} {hex}, la clé avec laquelle son bootloader vérifie un emplacement (déduite {bank:gen}, l’emplacement où la caméra indique être entrée, dans lequel le bootloader est entré sans sa vérification) : chaque emplacement qu’elle écrit est donc stocké comme le bootloader l’accepte',
   'keys.evidence.checkKeyNamedFrom':
     'la caméra déchiffre l’envoi avec cette clé et le rechiffre sous {key:acc} {hex}, la clé avec laquelle son bootloader vérifie un emplacement (identifiée à partir {bank:gen}, l’emplacement où la caméra indique être entrée) : chaque emplacement qu’elle écrit est donc stocké comme le bootloader l’accepte',
-  /** `{source}` is keys.source.*. */
-  'keys.evidence.applicationKeyA':
-    'l’application en cours ({bank}, firmware {firmware}) contient sa clé A {keyA} à {keyAAt}, d’après {source}',
-  'keys.evidence.applicationKeys':
-    'l’application en cours ({bank}, firmware {firmware}) contient sa clé A {keyA} à {keyAAt}, d’après {source}, et sa clé B {keyB} à {keyBAt}',
-  'keys.source.keyTable': 'la table des clés du bootloader',
-  /** `{builds}`: firmware versions. */
-  'keys.source.applicationPair': 'la paire d’application décodée de {builds}',
-  'keys.evidence.perDevice':
-    'une clé propre à l’appareil est programmée : l’application rechiffre donc sous cette clé',
-  'keys.evidence.noPerDevice':
-    'aucune clé propre à l’appareil n’est programmée : l’application rechiffre donc sous sa propre clé B',
-  'keys.evidence.storeKey':
-    'la clé de stockage de l’application est {key:acc} du bootloader ({hex}) : les écritures stockent donc chaque emplacement sous cette clé ; la clé que contient {bank:acc} démarré ({held}) est elle aussi acceptée par le bootloader',
-  'keys.evidence.bootedKey':
-    '{bank:acc} démarré se déchiffre sous {key:acc} ({hex}), une clé que le bootloader essaie ; la clé de stockage de l’application n’est pas celle du bootloader : les écritures stockent donc chaque emplacement sous la clé de l’emplacement démarré',
-  /** `{masks}`: key names joined with commas. */
-  'keys.evidence.masks':
-    'l’envoi est l’image XOR les flux de clé {masks:gen} ; l’appareil stocke l’image sous {key:acc}',
-  /** `{held}` is a key name or keys.noKnownKey (a sentence, not a name: it takes no case). */
-  'keys.evidence.otherBank':
-    'la clé sous laquelle {bank:acc} se déchiffre : {held} ; cet emplacement est écrit sous {key:acc} selon la même règle, puis relu pour vérification',
 
   /* ---- keys.refused: why no upload key is derived (the "refused" row, or the banner) ---- */
   'keys.refused.bootUnnamed':
@@ -643,7 +618,7 @@ export default {
   'detect.legacy.none': 'rien d’observé n’indique le canal de lecture authentifié',
 
   /* ---- fps.table: why the frame-rate patch table makes no patch for an image (preservation/fps-patch) ---- */
-  /* `{version}`, `{image}`, `{camera}`: firmware versions; `{id}`: the table entry's name; `{hz}`: a rate.
+  /* `{version}`, `{image}`, `{camera}`: firmware versions; `{hz}`: a rate.
    * "stage two", Key A / Key B, f96ac57eda75 and the build names stay as they are. */
   'fps.table.withheld':
     'retenu après un essai sur une caméra : le correctif n’y a pas augmenté la fréquence de publication, et l’obturateur se déclenchait à chaque image après l’écriture',
@@ -657,9 +632,9 @@ export default {
   'fps.table.notImage':
     'ce n’est pas une image de firmware : aucun correctif de fréquence d’images ne s’y applique',
   'fps.table.otherBuild':
-    'l’image est le build {image} (« {id} »), mais la caméra annonce {camera} ; le correctif est refusé plutôt qu’appliqué à un build auquel il ne correspond pas',
+    'l’image est le build {image}, mais la caméra annonce {camera} ; le correctif est refusé plutôt qu’appliqué à un build auquel il ne correspond pas',
   'fps.table.otherBuildNoVersion':
-    'l’image est le build {image} (« {id} »), mais la caméra n’annonce aucune version ; le correctif est refusé plutôt qu’appliqué à un build auquel il ne correspond pas',
+    'l’image est le build {image}, mais la caméra n’annonce aucune version ; le correctif est refusé plutôt qu’appliqué à un build auquel il ne correspond pas',
   'fps.table.patched':
     'le correctif de fréquence d’images est déjà appliqué : cette image tourne à {hz} Hz',
   'fps.table.earlierPatch':
@@ -686,26 +661,17 @@ export default {
   /* ---- notes: what the read measured about a build, a bank or an empty bank (slots/capability-notes) ----
    * Mode numbers, addresses, version numbers and command names (CompleteMemoryUpgrade, BeginFirmwareUpgrade,
    * EP0, PRESERVATION.md) are names: keep them. `{untested}` is notes.ffBootUntested. */
-  /** "This line" is the firmware line (the 2014 0.x/1.x builds, as in notes.token), not a line of text: on these builds, the bank the page or the CLI calls booted is the one the camera entered at its last start. */
-  'notes.lockedBootWord':
-    'L’emplacement démarré indiqué sur cette lignée est celui où la caméra est entrée à son dernier démarrage, tel que l’enregistre le mot de l’emplacement actif (0 emplacement A, 1 emplacement B, 2 emplacement de secours R). Le prochain démarrage est fixé par le mot de configuration de démarrage : 0 ou 0xFFFFFFFF choisissent A en premier, 1 B en premier, toute autre valeur l’emplacement de secours R en premier. L’emplacement de secours R s’exécute chaque fois que A et B ne contiennent rien que le bootloader de 2014 accepte (un emplacement dont la somme des mots vaut 0), quel que soit le contenu de R (mesuré sur une caméra).',
   /** "This line" is the firmware line (the 2016 Compact PRO 1.0.3.x builds), not a line of text: on these builds, the bank the page or the CLI calls booted is the one the camera entered at its last start. */
   'notes.locked2016BootWord':
     'L’emplacement démarré indiqué sur cette lignée est celui où la caméra est entrée à son dernier démarrage, tel que le bootloader l’enregistre dans le mot de l’emplacement actif (0 emplacement A, 1 emplacement B, 2 emplacement de secours R). Le prochain démarrage est fixé par le mot de configuration de démarrage : 0 ou 0xFFFFFFFF choisissent A en premier, 1 B en premier, toute autre valeur l’emplacement de secours R en premier. Le bootloader de 2016 n’accepte un emplacement que s’il se déchiffre avec une somme des mots de 0 sous la clé avec laquelle il vérifie un emplacement (le bloc de clés 1 sur son bootloader 1.2.0.0), et le dernier emplacement de cet ordre s’exécute sans vérification quand les deux autres échouent. La lecture identifie cette clé à partir de l’emplacement où la caméra est entrée, car le bloc du bootloader qui la contient est refusé sur tous les canaux (mesuré sur une caméra).',
   'notes.ep0of1032':
     '1.0.3.2 : les sessions EP0 meurent vers 64 à 81 Ko, et 128 o est l’unité de lecture sans perte : un emplacement de 64 Ko par session est donc la limite mesurée. Une lecture complète de la puce est refusée sur ce build (PRESERVATION.md : il n’existe pas de lecture complète en une seule ouverture). L’extraction d’un emplacement lit un emplacement à la fois, par demandes de 64 octets.',
-  'notes.token':
-    'Les emplacements sont verrouillés sur cette lignée : la caméra n’ouvre un emplacement en écriture que si on le lui demande avec le déverrouillage de la lignée, qui est le même dans les 22 images de firmware connues de cette lignée. Une caméra avec un autre déverrouillage refuse ses emplacements.',
   'notes.staging.lockedPlain':
     'Transfert : l’image elle-même, 56 Ko au plus (le maximum que la caméra accepte en une écriture). L’écriture efface l’emplacement de 64 Ko et écrit exactement ces octets ; le reste de l’emplacement se lit comme effacé. Le bootloader ne démarre un emplacement que si la somme de ses mots vaut 0 : l’image est donc équilibrée à cette somme avant l’envoi.',
   'notes.staging.locked2016':
     'Transfert : l’image, combinée par XOR au flux de clé xorshift128 de son PROPRE bloc de clés 0 (la clé de transfert, trouvée dans l’image par sa valeur), sur la seule longueur de l’image (0xE000 octets au plus). L’appareil déchiffre les données avec cette clé et les stocke sous la clé avec laquelle son bootloader vérifie un emplacement (le bloc de clés 1) : les octets stockés ne sont donc pas ceux transférés. Rien n’est lu dans l’emplacement cible pour le transfert : le flux de clé de l’emplacement ne sert qu’à le relire.',
   'notes.staging.modern':
     'Transfert : l’emplacement entier de 64 Ko, image + remplissage 0xFF + pied « CODE ». L’image est combinée par XOR aux flux de clé qui font que les deux passes propres à l’application en cours la placent sous la clé que contient l’emplacement démarré : quand la commande de validation (CompleteMemoryUpgrade) reçoit le type de données 7, 8 ou 9, l’application déchiffre l’envoi avec sa clé A, le rechiffre sous sa clé de stockage et programme l’emplacement. C’est le pied qui permet au bootloader d’accepter l’emplacement : un emplacement qui n’en a pas est refusé.',
-  'notes.modernGap':
-    'Sur cette lignée, l’emplacement B est à 0x14050000 (mode 8). Aucun sélecteur n’atteint 0x14060000 sur aucun build 2.x, 4.x, 10.x, 42.x ou 44.x (décodé à partir des 14 images du corpus d’après 2018) : aucun emplacement ne s’y trouve. La disposition à 0x14060000 appartient à la lignée verrouillée 0.x/1.x.',
-  'notes.modernNamedWrite':
-    'Les écritures nommées (modes 7 à 9) sont décodées à partir du firmware. L’émulateur écrit A, B et R par ce biais sur les builds 4.x et, sur une caméra, l’emplacement A d’une Compact XR 4.8.2.1 a été écrit par le mode 7 par le correctif de fréquence d’images. Une écriture d’emplacement n’ouvre jamais le mode 0, la cible de mise à jour.',
   'notes.unverified':
     'Lecture seule. La disposition des emplacements est la table décodée de la lignée verrouillée, mais aucune forme de transfert n’a été mesurée pour ce build : aucune écriture n’est donc prévue.',
   'notes.empty.plain':
@@ -716,12 +682,6 @@ export default {
     'Un emplacement vide accepte une image exactement comme un emplacement utilisé. La clé de transfert est le bloc de clés 0 de la propre paire de l’IMAGE, pas une clé lue dans l’emplacement cible, et l’appareil déchiffre les données avec elle, les stocke sous sa propre clé et efface le bloc sans le lire. Prouvé sur l’émulateur ; pas encore mesuré sur une caméra.',
   'notes.mode2of080':
     '0.8.0.0 : le mode 2 (0x14000000) risque de planter ce build, une lecture ouverte sort de la SRAM (PRESERVATION.md). Une lecture ou une écriture d’emplacement n’ouvre que les modes 7 à 9, jamais le mode 2.',
-  'notes.keyPairs2016':
-    'Les builds 9 Hz de 1.0.3.0 et 1.0.3.2 partagent une paire de clés, et les builds FF en partagent une autre. La chaîne de version ne permet pas de les distinguer : le flux de clé est donc retrouvé à partir de l’emplacement lui-même, et c’est l’image propre à l’emplacement qui tranche.',
-  'notes.board1030':
-    'L’app 1.0.3.0 redémarre sur toute carte autre que celle de la Compact Pro : une carte Compact ne l’exécute donc qu’avec le correctif de carte dans ses emplacements.',
-  'notes.bank.modernA':
-    'Écrit par une ouverture d’emplacement que la table moderne omet ; une Compact XR 4.8.2.1 a accepté une écriture par ce biais sur une caméra.',
   'notes.bank.recovery2016':
     'Mesuré sur une Compact PRO 1.0.3.0 : l’emplacement de secours R a accepté sa propre image, une modification d’un octet et les octets bruts tels qu’envoyés, chacun écrit sans erreur.',
   'notes.bank.ff1308A':

@@ -273,9 +273,7 @@ export default {
   /** The "Next start" row: `{why}` is boot.select.* or boot.cfg0NotRead. */
   'report.nextStart.unknown': 'no se sabe: {why}',
   'report.nextStart.runs': '{bank} — {why}',
-  'upgrade.targetBooted':
-    '{name:ins} es a la vez la ranura desde la que arrancó la cámara y la ranura que escribe su propia actualización. Una actualización ejecutada desde esta cámara sobrescribiría la imagen que está ejecutando. Esto es solo una advertencia: nada de lo que hay aquí impide una actualización.',
-  /** `{verdict}` is one of upgrade.verdict.*. `{name}` here is the bank inside a sentence ("slot B"); in upgrade.targetBooted and upgrade.verdict.* it starts a sentence ("Slot B"). */
+  /** `{verdict}` is one of upgrade.verdict.*. `{name}` here is the bank inside a sentence ("slot B"); in upgrade.verdict.* it starts a sentence ("Slot B"). */
   'upgrade.whileRecovery':
     'La cámara está ejecutando su ranura de recuperación, y su propia actualización escribe {name:loc}, que no está ejecutando. {verdict} Esto es solo una advertencia: nada de lo que hay aquí impide una actualización.',
   'upgrade.verdict.notRead':
@@ -468,7 +466,6 @@ export default {
   'keyName.unknown:dat': 'a una clave desconocida',
   'keyName.unknown:loc': 'en una clave desconocida',
   'keyName.unknown:ins': 'Una clave desconocida',
-  'keys.noKnownKey': 'ninguna clave conocida',
 
   /* ---- keys.evidence: the facts a write's keys rest on, one list item each (slots/write-keys-words) ---- */
   /** `{hex}`, `{keyA}`, `{keyB}` are key bytes in hex; `{keyAAt}`, `{keyBAt}` offsets; `{firmware}` a version or "?". */
@@ -491,28 +488,6 @@ export default {
     'la cámara descifra los datos enviados con esa clave y los vuelve a cifrar con {key:acc} {hex}, la clave con la que su bootloader comprueba una ranura (deducida {bank:gen}, la ranura en la que la cámara indica que entró y en la que el bootloader entró sin hacer su comprobación), así que cada ranura que escribe queda almacenada como el bootloader la acepta',
   'keys.evidence.checkKeyNamedFrom':
     'la cámara descifra los datos enviados con esa clave y los vuelve a cifrar con {key:acc} {hex}, la clave con la que su bootloader comprueba una ranura (identificada a partir {bank:gen}, la ranura en la que la cámara indica que entró), así que cada ranura que escribe queda almacenada como el bootloader la acepta',
-  /** `{source}` is keys.source.*. */
-  'keys.evidence.applicationKeyA':
-    'la aplicación en ejecución ({bank}, firmware {firmware}) lleva su clave A {keyA} en {keyAAt}, según {source}',
-  'keys.evidence.applicationKeys':
-    'la aplicación en ejecución ({bank}, firmware {firmware}) lleva su clave A {keyA} en {keyAAt}, según {source}, y su clave B {keyB} en {keyBAt}',
-  'keys.source.keyTable': 'la tabla de claves del bootloader',
-  /** `{builds}`: firmware versions. */
-  'keys.source.applicationPair': 'el par de la aplicación decodificado de {builds}',
-  'keys.evidence.perDevice':
-    'hay una clave propia del dispositivo programada, así que la aplicación vuelve a cifrar con ella',
-  'keys.evidence.noPerDevice':
-    'no hay ninguna clave propia del dispositivo programada, así que la aplicación vuelve a cifrar con su propia clave B',
-  'keys.evidence.storeKey':
-    'la clave de almacenamiento de la aplicación es {key:acc} del bootloader ({hex}), así que las escrituras almacenan todas las ranuras con ella; {bank:acc}, con la que arrancó la cámara, contiene {held:acc}, que el bootloader también acepta',
-  'keys.evidence.bootedKey':
-    '{bank:acc}, con la que arrancó la cámara, se descifra con {key:acc} ({hex}), una clave que el bootloader prueba; la clave de almacenamiento de la aplicación no es la del bootloader, así que las escrituras almacenan todas las ranuras con la clave de la ranura de arranque',
-  /** `{masks}`: key names joined with commas. */
-  'keys.evidence.masks':
-    'lo que se envía es la imagen XOR los flujos de clave {masks:gen}; el dispositivo almacena la imagen con {key:acc}',
-  /** `{held}` is a key name or keys.noKnownKey (a sentence, not a name: it takes no case). */
-  'keys.evidence.otherBank':
-    '{bank:ins} — clave con la que se descifra: {held}; se escribe con {key:acc} por la misma regla, y se relee para comprobarla',
 
   /* ---- keys.refused: why no upload key is derived (the "refused" row, or the banner) ---- */
   'keys.refused.bootUnnamed':
@@ -645,7 +620,7 @@ export default {
   'detect.legacy.none': 'nada de lo observado apunta al canal de lectura autenticado',
 
   /* ---- fps.table: why the frame-rate patch table makes no patch for an image (preservation/fps-patch) ---- */
-  /* `{version}`, `{image}`, `{camera}`: firmware versions; `{id}`: the table entry's name; `{hz}`: a rate.
+  /* `{version}`, `{image}`, `{camera}`: firmware versions; `{hz}`: a rate.
    * "stage two", Key A / Key B, f96ac57eda75 and the build names stay as they are. */
   'fps.table.withheld':
     'retenido tras una prueba en una cámara: allí el parche no subió la frecuencia de publicación, y el obturador se disparó en cada fotograma después de la escritura',
@@ -659,9 +634,9 @@ export default {
   'fps.table.notImage':
     'esto no es una imagen de firmware, así que no se le aplica ningún parche de velocidad de fotogramas',
   'fps.table.otherBuild':
-    'la imagen es la compilación {image} («{id}»), pero la cámara indica {camera}; el parche se rechaza en lugar de aplicarse a una compilación con la que no coincide',
+    'la imagen es la compilación {image}, pero la cámara indica {camera}; el parche se rechaza en lugar de aplicarse a una compilación con la que no coincide',
   'fps.table.otherBuildNoVersion':
-    'la imagen es la compilación {image} («{id}»), pero la cámara no indica ninguna versión; el parche se rechaza en lugar de aplicarse a una compilación con la que no coincide',
+    'la imagen es la compilación {image}, pero la cámara no indica ninguna versión; el parche se rechaza en lugar de aplicarse a una compilación con la que no coincide',
   'fps.table.patched':
     'el parche de velocidad de fotogramas ya está aplicado: esta imagen funciona a {hz} Hz',
   'fps.table.earlierPatch':
@@ -690,26 +665,17 @@ export default {
   /* ---- notes: what the read measured about a build, a bank or an empty bank (slots/capability-notes) ----
    * Mode numbers, addresses, version numbers and command names (CompleteMemoryUpgrade, BeginFirmwareUpgrade,
    * EP0, PRESERVATION.md) are names: keep them. `{untested}` is notes.ffBootUntested. */
-  /** "This line" is the firmware line (the 2014 0.x/1.x builds, as in notes.token), not a line of text: on these builds, the bank the page or the CLI calls booted is the one the camera entered at its last start. */
-  'notes.lockedBootWord':
-    'La ranura de arranque que se nombra en esta línea de firmware es la ranura en la que entró la cámara en su último arranque, tal como la registra la palabra de ranura activa (0 ranura A, 1 ranura B, 2 ranura de recuperación R). El próximo arranque lo fija la palabra de configuración de arranque: 0 o 0xFFFFFFFF eligen primero A, 1 primero B, y cualquier otro valor primero la ranura de recuperación R. La ranura de recuperación R arranca siempre que A y B no contengan nada que acepte el bootloader de 2014 (una ranura cuyas palabras sumen 0), contenga lo que contenga R (medido en una cámara).',
   /** "This line" is the firmware line (the 2016 Compact PRO 1.0.3.x builds), not a line of text: on these builds, the bank the page or the CLI calls booted is the one the camera entered at its last start. */
   'notes.locked2016BootWord':
     'La ranura de arranque que se nombra en esta línea de firmware es la ranura en la que entró la cámara en su último arranque, tal como la registra el bootloader en la palabra de ranura activa (0 ranura A, 1 ranura B, 2 ranura de recuperación R). El próximo arranque lo fija la palabra de configuración de arranque: 0 o 0xFFFFFFFF eligen primero A, 1 primero B, y cualquier otro valor primero la ranura de recuperación R. El bootloader de 2016 acepta una ranura solo cuando se descifra con una suma de palabras 0 con la clave con la que comprueba una ranura (el bloque de claves 1 en su bootloader 1.2.0.0), y la última ranura de ese orden arranca sin comprobar cuando fallan las otras dos. La lectura identifica esa clave a partir de la ranura en la que entró la cámara, porque el bloque del bootloader que la contiene se rechaza en todos los canales (medido en una cámara).',
   'notes.ep0of1032':
     '1.0.3.2: las sesiones EP0 mueren hacia los 64 a 81 KB, y 128 B es la unidad de lectura sin pérdidas, así que el límite medido es una ranura de 64 KB por sesión. En esta compilación se rechaza la lectura completa del chip (PRESERVATION.md: no existe una lectura completa con una sola apertura). El volcado de ranuras lee una ranura cada vez, en peticiones de 64 bytes.',
-  'notes.token':
-    'En esta línea de firmware las ranuras están bloqueadas: la cámara abre una ranura para escribir solo cuando se le pide con el desbloqueo de la línea, que es el mismo en las 22 imágenes de firmware de esta línea que constan. Una cámara con otro desbloqueo rechaza sus ranuras.',
   'notes.staging.lockedPlain':
     'Transferencia: la propia imagen, de 56 KB como máximo (lo máximo que acepta la cámara en una escritura). La escritura borra la ranura de 64 KB y escribe exactamente esos bytes, y el resto de la ranura queda borrado. El bootloader arranca una ranura solo cuando sus palabras suman 0, así que la imagen se equilibra a esa suma antes de enviarla.',
   'notes.staging.locked2016':
     'Transferencia: la imagen, con XOR con el flujo de clave xorshift128 de su PROPIO bloque de claves 0 (la clave de transferencia, que se encuentra en la imagen por su valor), solo la longitud de la imagen (0xE000 bytes como máximo). El dispositivo descifra los datos con esa clave y los almacena con la clave con la que su bootloader comprueba una ranura (el bloque de claves 1), así que los bytes almacenados no son los transferidos. No se lee nada de la ranura de destino para transferir: el flujo de clave de la ranura solo se usa para releerla.',
   'notes.staging.modern':
     'Transferencia: la ranura entera de 64 KB, imagen + relleno 0xFF + pie «CODE». La imagen se combina con XOR con los flujos de clave que hacen que las dos pasadas propias de la aplicación en ejecución la dejen con la clave que contiene la ranura de arranque: cuando el comando de confirmación (CompleteMemoryUpgrade) recibe el tipo de datos 7, 8 o 9, la aplicación descifra los datos enviados con su clave A, los vuelve a cifrar con su clave de almacenamiento y programa la ranura. El pie es lo que permite al bootloader aceptar la ranura, así que una ranura sin él se rechaza.',
-  'notes.modernGap':
-    'En esta línea de firmware, la ranura B está en 0x14050000 (modo 8). Ningún selector llega a 0x14060000 en ninguna compilación 2.x, 4.x, 10.x, 42.x o 44.x (según las 14 imágenes posteriores a 2018 de la colección), así que ahí no hay ninguna ranura. La disposición con 0x14060000 es la de la línea bloqueada 0.x/1.x.',
-  'notes.modernNamedWrite':
-    'Las escrituras con nombre (modos 7 a 9) se han decodificado del firmware. El emulador escribe A, B y R con ellas en las compilaciones 4.x, y en una cámara se escribió la ranura A de una Compact XR 4.8.2.1 por el modo 7 con el parche de velocidad de fotogramas. Una escritura de ranura nunca abre el modo 0, el destino de las actualizaciones.',
   'notes.unverified':
     'Solo lectura. La disposición de las ranuras es la tabla decodificada de la línea bloqueada, pero no se ha medido ninguna forma de transferencia para esta compilación, así que no se planifica ninguna escritura.',
   'notes.empty.plain':
@@ -720,12 +686,6 @@ export default {
     'Una ranura vacía recibe una imagen exactamente igual que una usada. La clave de transferencia es el bloque de claves 0 del par propio de la IMAGEN, no una clave leída de la ranura de destino, y el dispositivo descifra los datos con ella, los almacena con su propia clave y borra el bloque sin leerlo. Probado en el emulador; aún no medido en una cámara.',
   'notes.mode2of080':
     '0.8.0.0: el modo 2 (0x14000000) puede bloquear esta compilación, porque una lectura abierta se sale de la SRAM (PRESERVATION.md). Una lectura o escritura de ranura abre solo los modos 7 a 9, nunca el modo 2.',
-  'notes.keyPairs2016':
-    'Las compilaciones de 9 Hz de 1.0.3.0 y 1.0.3.2 comparten un par de claves, y las compilaciones FF comparten otro. La cadena de versión no permite distinguirlas, así que el flujo de clave se recupera de la propia ranura y decide la propia imagen de la ranura.',
-  'notes.board1030':
-    'La aplicación 1.0.3.0 se reinicia en cualquier placa que no sea la de la Compact Pro, así que una placa de Compact solo la ejecuta con el parche de placa en sus ranuras.',
-  'notes.bank.modernA':
-    'Se escribe mediante una apertura de ranura que el mapa moderno omite; una Compact XR 4.8.2.1 aceptó una escritura por ella en una cámara.',
   'notes.bank.recovery2016':
     'Medido en una Compact PRO 1.0.3.0: la ranura de recuperación R aceptó su propia imagen, un cambio de un byte y los bytes sin procesar tal como se enviaron, cada uno escrito sin errores.',
   'notes.bank.ff1308A':

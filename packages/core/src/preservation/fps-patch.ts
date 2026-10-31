@@ -160,18 +160,18 @@ export const FPS_TABLE_REASON = {
     {},
     'this is not a firmware image, so no frame-rate patch applies to it',
   ),
-  otherBuild: (image: string, id: string, camera: string | null): CoreMessage =>
+  otherBuild: (image: string, camera: string | null): CoreMessage =>
     camera === null
       ? coreMessage(
           'fps.table.otherBuildNoVersion',
-          { image, id },
-          `the image is the ${image} build ("${id}"), but the camera reports ` +
+          { image },
+          `the image is the ${image} build, but the camera reports ` +
             'no version; the patch is refused rather than applied to a build it does not match',
         )
       : coreMessage(
           'fps.table.otherBuild',
-          { image, id, camera },
-          `the image is the ${image} build ("${id}"), but the camera reports ` +
+          { image, camera },
+          `the image is the ${image} build, but the camera reports ` +
             `${camera}; the patch is refused rather than applied to a build it does not match`,
         ),
   patched: (hz: number): CoreMessage =>
@@ -550,7 +550,7 @@ export function planFpsPatch(image: Uint8Array, cameraVersion: string | null): F
     }
     const build = entry.version.replace(/-FF$/, '');
     if (cameraVersion !== build) {
-      return refusedPlan(FPS_TABLE_REASON.otherBuild(entry.version, entry.id, cameraVersion));
+      return refusedPlan(FPS_TABLE_REASON.otherBuild(entry.version, cameraVersion));
     }
     const sites: FpsSite[] = [];
     for (const edit of entry.edits) {

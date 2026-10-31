@@ -74,7 +74,8 @@ describe('SlotWriteKeys', () => {
     expect(text).toContain(
       'Key B (the store key), derived from the booted slot A, which holds Key A; every bank is written the same way',
     );
-    expect(text).toContain('the running application carries its Key A at 0x4100');
+    /* The derivation's evidence lines are not shown on the page (owner, 2026-10-31); the CLI prints them. */
+    expect(text).not.toContain('the running application carries its Key A at 0x4100');
     unmount();
   });
 
