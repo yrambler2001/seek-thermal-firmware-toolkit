@@ -11,11 +11,12 @@ import { cn } from '@/lib/utils';
  * A label wider than the row it sits in (a long translation, on a phone) wraps
  * inside the button, balanced and hyphenated in the page's language, instead of
  * pushing the button past the screen's edge. A label that fits stays one line,
- * at the height it always had.
+ * at the height it always had. A wrapped label's lines start beside the icon,
+ * as a one-line label does, not centred under it.
  */
 export const buttonVariants = cva(
   'inline-flex max-w-full shrink-0 cursor-pointer items-center justify-center gap-2 rounded-md ' +
-    'text-center text-sm leading-tight font-semibold text-balance hyphens-auto transition-colors select-none ' +
+    'text-start text-sm leading-tight font-semibold text-balance hyphens-auto transition-colors select-none ' +
     'disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-45 ' +
     '[&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0',
   {
