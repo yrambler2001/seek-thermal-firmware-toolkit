@@ -3,9 +3,16 @@
  * and what this build lets the page do to it.
  *
  * A control that is off always says WHY, in words beside it. Greyed out alone
- * is not an answer, and a tooltip does not show on a phone. Below 48rem the
- * table becomes one card per bank (`table-cards`), and the labels repeat above
- * each value there.
+ * is not an answer, and a tooltip does not show on a phone. When every off
+ * control of a row is off for the same reason, the row says it once, under its
+ * buttons. Below 48rem the table becomes one card per bank (`table-cards`), and
+ * the labels repeat above each value there.
+ *
+ * At table widths the actions column takes the room the others do not need
+ * (42% of the table, or all that is left), so its buttons keep their labels on
+ * one line where they fit: from 64rem the hash is printed whole in four lines
+ * of 16 digits, and a long bank name may wrap. A label still wraps when the
+ * column has no room.
  */
 
 import type { ReactElement, ReactNode } from 'react';
@@ -106,6 +113,35 @@ export function fpsOffNote(plan: FpsPlan, supported: boolean): string | null {
   return t('slots:fps.notOffered', { reason: coreText(plan.reasonMessage ?? plan.reason) });
 }
 
+/**
+ * A name with its last two words kept on one line ("восстановления R", "Key A"): where the column is narrow
+ * and a long name wraps, its letter never sits alone on a line of its own.
+ */
+function lastWordsTogether(name: string): ReactNode {
+  const cut = name.lastIndexOf(' ', name.lastIndexOf(' ') - 1) + 1;
+  return (
+    <>
+      {name.slice(0, cut)}
+      <span className="whitespace-nowrap">{name.slice(cut)}</span>
+    </>
+  );
+}
+
+/** A size line with its number and the unit after it kept on one line ("65,536 B"), wherever it wraps. */
+function numberWithUnit(text: string, number: string): ReactNode {
+  const at = text.indexOf(number);
+  if (at < 0) return text;
+  const rest = text.slice(at + number.length);
+  const unit = /^\s\S+/u.exec(rest)?.[0] ?? '';
+  return (
+    <>
+      {text.slice(0, at)}
+      <span className="whitespace-nowrap">{number + unit}</span>
+      {rest.slice(unit.length)}
+    </>
+  );
+}
+
 /** A bank's bootability cell. `unknownWhy` is core's reason a verdict is unknown on this camera (`unknownBootabilityWhy`). */
 function bootability(view: SlotView, unknownWhy: string): ReactNode {
   const state = view.state;
@@ -160,20 +196,37 @@ function copyReasons(
     .join(' ');
 }
 
-/** A control and, under it, the words for why it is off (or what it will ask). */
+/**
+ * The one reason every off control of a row is off for, or null. When two or more controls are off and all
+ * for the same reason (the camera's refusal, no camera connected), the row says it once under its buttons
+ * instead of under each; controls off for different reasons keep their own words.
+ */
+export function sharedOffReason(gates: readonly ActionGate[]): string | null {
+  const off = gates.filter((gate) => !gate.enabled);
+  const first = off[0]?.reason ?? null;
+  if (off.length < 2 || first === null) return null;
+  return off.every((gate) => gate.reason === first) ? first : null;
+}
+
+/**
+ * A control and, under it, the words for why it is off (or what it will ask). `shared` is set when the
+ * row says the reason once under its buttons (sharedOffReason): the control then says nothing of its own.
+ */
 function Action({
   reason,
   note,
+  shared,
   children,
 }: {
   readonly reason: string | null;
   readonly note: string | null;
+  readonly shared: boolean;
   readonly children: ReactNode;
 }): ReactElement {
   return (
     <div className="flex flex-col items-start gap-1">
       {children}
-      {reason !== null && (
+      {reason !== null && !shared && (
         <span className="text-[0.75rem] leading-snug text-muted-foreground">{reason}</span>
       )}
       {reason === null && note !== null && (
@@ -213,8 +266,8 @@ export function SlotTable({
           <TableHead>{t('slots:table.col.size')}</TableHead>
           <TableHead>{t('slots:table.col.key')}</TableHead>
           <TableHead>{t('slots:table.col.bootable')}</TableHead>
-          <TableHead>{t('slots:table.col.sha')}</TableHead>
-          <TableHead>{t('slots:table.col.actions')}</TableHead>
+          <TableHead className="hyphens-auto">{t('slots:table.col.sha')}</TableHead>
+          <TableHead className="md:w-[42%]">{t('slots:table.col.actions')}</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -250,11 +303,22 @@ export function SlotTable({
           /* The frame-rate patch belongs to this row: its own image decides the entry, or the reason none. */
           const fps = planFps(key);
           const supported = report.plan.supportedBuild.supported;
+          /* Every control of the cell, in its order (restore and the frame-rate patch use the plain write's gate). */
+          const shared = sharedOffReason([
+            dumpGate,
+            plainGate,
+            rawGate,
+            ...copies.map((copy) => copy.gate),
+            plainGate,
+            ...(fps.status === 'offer' ? [plainGate] : []),
+          ]);
+          const sharing = shared !== null;
+          const fpsOff = fpsOffNote(fps, supported);
 
           return (
             <TableRow key={key}>
-              <TableRowHeader className="md:whitespace-nowrap">
-                <span className="block">{bankName(key)}</span>
+              <TableRowHeader>
+                <span className="block">{lastWordsTogether(bankName(key))}</span>
                 <span className="block font-mono text-[0.75rem] font-normal text-muted-foreground">
                   {hexUp(entry.address)}
                 </span>
@@ -320,10 +384,16 @@ export function SlotTable({
               </TableCell>
 
               <TableCell label={t('slots:table.col.size')}>
-                {t('slots:table.bankSize', { size: SLOT_BYTES.toLocaleString() })}
+                {numberWithUnit(
+                  t('slots:table.bankSize', { size: SLOT_BYTES.toLocaleString() }),
+                  SLOT_BYTES.toLocaleString(),
+                )}
                 {state?.header != null && (
                   <span className="block text-[0.75rem] text-muted-foreground">
-                    {t('slots:table.imageSize', { size: state.header.length.toLocaleString() })}
+                    {numberWithUnit(
+                      t('slots:table.imageSize', { size: state.header.length.toLocaleString() }),
+                      state.header.length.toLocaleString(),
+                    )}
                   </span>
                 )}
               </TableCell>
@@ -333,7 +403,7 @@ export function SlotTable({
                   ? state?.plain == null
                     ? '—'
                     : t('slots:table.keyNone')
-                  : coreParamText(keyNameParam(state.keyName))}
+                  : lastWordsTogether(coreParamText(keyNameParam(state.keyName)))}
               </TableCell>
 
               <TableCell label={t('slots:table.col.bootable')}>
@@ -341,14 +411,14 @@ export function SlotTable({
               </TableCell>
 
               <TableCell label={t('slots:table.col.sha')}>
-                <span className="font-mono text-[0.72rem] [overflow-wrap:anywhere]">
+                <span className="block font-mono text-[0.72rem] [overflow-wrap:anywhere] md:max-w-[16ch] lg:w-[16ch]">
                   {state?.sha256 ?? '—'}
                 </span>
               </TableCell>
 
               <TableCell label={t('slots:table.col.actions')}>
                 <div className="space-y-3">
-                  <Action reason={dumpGate.reason} note={null}>
+                  <Action reason={dumpGate.reason} note={null} shared={sharing}>
                     <Button
                       variant="outline"
                       disabled={!dumpGate.enabled}
@@ -361,7 +431,7 @@ export function SlotTable({
                     </Button>
                   </Action>
 
-                  <Action reason={plainGate.reason} note={null}>
+                  <Action reason={plainGate.reason} note={null} shared={sharing}>
                     <FilePickerButton
                       id={`slot-${key}-plain-file`}
                       variant="danger"
@@ -375,7 +445,7 @@ export function SlotTable({
                     />
                   </Action>
 
-                  <Action reason={rawGate.reason} note={null}>
+                  <Action reason={rawGate.reason} note={null} shared={sharing}>
                     <FilePickerButton
                       id={`slot-${key}-raw-file`}
                       variant="danger"
@@ -395,7 +465,11 @@ export function SlotTable({
                     </span>
                   )}
 
-                  <Action reason={copyReasons(copies)} note={t('slots:table.copyNote')}>
+                  <Action
+                    reason={copyReasons(copies)}
+                    note={t('slots:table.copyNote')}
+                    shared={sharing}
+                  >
                     <div className="flex flex-wrap gap-2">
                       {copies.map((copy) => (
                         <Button
@@ -413,7 +487,11 @@ export function SlotTable({
                     </div>
                   </Action>
 
-                  <Action reason={plainGate.reason} note={t('slots:table.restoreNote')}>
+                  <Action
+                    reason={plainGate.reason}
+                    note={t('slots:table.restoreNote')}
+                    shared={sharing}
+                  >
                     <FilePickerButton
                       id={`slot-${key}-restore-file`}
                       variant="outline"
@@ -427,8 +505,8 @@ export function SlotTable({
                     />
                   </Action>
 
-                  {fps.status === 'offer' ? (
-                    <Action reason={plainGate.reason} note={fpsNote(fps)}>
+                  {fps.status === 'offer' && (
+                    <Action reason={plainGate.reason} note={fpsNote(fps)} shared={sharing}>
                       <Button
                         variant="outline"
                         disabled={!plainGate.enabled}
@@ -440,12 +518,19 @@ export function SlotTable({
                         {t('slots:table.makeFps', { hz: fps.toHz })}
                       </Button>
                     </Action>
-                  ) : (
-                    fpsOffNote(fps, supported) !== null && (
-                      <span className="block text-[0.75rem] leading-snug text-muted-foreground">
-                        {fpsOffNote(fps, supported)}
-                      </span>
-                    )
+                  )}
+
+                  {/* The one reason every off control above is off for, once, under the buttons. */}
+                  {shared !== null && (
+                    <span className="block text-[0.75rem] leading-snug text-muted-foreground">
+                      {shared}
+                    </span>
+                  )}
+
+                  {fpsOff !== null && (
+                    <span className="block text-[0.75rem] leading-snug text-muted-foreground">
+                      {fpsOff}
+                    </span>
                   )}
                 </div>
               </TableCell>

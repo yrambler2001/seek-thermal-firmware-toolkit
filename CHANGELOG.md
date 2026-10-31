@@ -36,6 +36,7 @@ All notable changes to this project are listed here. The format follows [Keep a 
 - When the booted bank has no name, the Work with firmware slots tab no longer says "the booted the booted bank".
 - The Info tab's log no longer fills with blank lines while it reads (four in a row on a Compact 1.3.0.0): with the details hidden, a run of them shows as one, as the CLI prints it.
 - "Restore from full flash backup (.bin or .zip)…" on the slots tab, and any other button label that takes two lines, starts beside its icon like the other buttons instead of being centred.
+- The slots table's actions column was very narrow, most of all in Russian, and repeated the same reason under each greyed-out button.
 
 ### Development
 

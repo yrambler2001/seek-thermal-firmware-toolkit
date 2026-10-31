@@ -2,6 +2,8 @@
  * The slots page's verdicts, row by row, against the banner. What is pinned here:
  *   - a camera-wide refusal (the banner) turns every flash control off in every row, with the reason in
  *     words beside it, and Dump stays on (reading changes nothing);
+ *   - a reason every off button of a row shares is said once, under the row's buttons; buttons off for
+ *     different reasons keep their own words;
  *   - a bank the read could not read puts no banner on the camera: the other banks keep their controls;
  *   - a bank that is not offered the frame-rate patch says why, an empty bank included.
  * The state is core's real read (`fakeDeviceState`), changed in the one field each test is about.
@@ -14,6 +16,7 @@ import { fakeDeviceState } from '../test-fixtures';
 import { render, renderHook } from '../test-helpers';
 import { slotPlan, slotReport } from '../test-slots';
 import { getProfile, type DeviceState, type FpsPlan, type SlotKey } from '@seek-fw/core';
+import { sharedOffReason } from '../components/SlotTable';
 import { SlotsView } from './SlotsView';
 
 let base: DeviceState;
@@ -131,6 +134,41 @@ describe('SlotsView: the camera-wide refusal reaches every row', () => {
     unmount();
   });
 
+  it('says the refusal once in each row, under its last button, not under every button it turns off', () => {
+    const reason = 'This camera cannot be written from here';
+    const state = refusedCamera('this camera could not be read');
+    const { container, unmount } = view(panel({ plan: slotPlan(true), report: slotReport(state) }));
+    for (const row of bankRows(container)) {
+      const off = buttonsOf(row).filter((button) => !button.enabled);
+      expect(off.length, 'several buttons are off in the row').toBeGreaterThanOrEqual(4);
+      expect(row.textContent.split(reason).length - 1, 'the reason is said once').toBe(1);
+      /* It stays on the page, as words, after the row's last button. */
+      const words = [...row.querySelectorAll('span')].find((span) =>
+        span.textContent.startsWith(reason),
+      );
+      const buttons = [...row.querySelectorAll('button')];
+      const last = buttons[buttons.length - 1];
+      if (words === undefined || last === undefined) throw new Error('the reason and the buttons');
+      expect(last.compareDocumentPosition(words) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
+      /* What an off button would do is not said: the notes belong to buttons that are on. */
+      expect(row.textContent).not.toContain('You review the plan before anything is sent');
+    }
+    unmount();
+  });
+
+  it('keeps each button’s own reason when the off buttons of a row are off for different reasons', () => {
+    const { container, unmount } = view(
+      panel({ plan: slotPlan(true), report: slotReport(unreadB(), 'b') }),
+    );
+    const b = bankRows(container)[1];
+    if (b === undefined) throw new Error('bank B');
+    /* Bank B's writes are off as not read; its copies are off for their own reason (a source not read). */
+    const notRead = 'Not read: the window would not arm. Read the slots again before writing it.';
+    /* Flash decrypted image, Flash raw bytes and Restore, each under its own button. */
+    expect(b.textContent.split(notRead).length - 1).toBe(3);
+    unmount();
+  });
+
   it('a bank the read could not read puts no banner on the camera: A and R keep their flash controls', () => {
     const state = unreadB();
     const { container, unmount } = view(
@@ -211,5 +249,20 @@ describe('SlotsView: a bank not offered the frame-rate patch says why, empty ban
     expect(container.textContent).toContain('This build is not supported here');
     expect(container.textContent).not.toContain('Frame-rate patch not offered');
     unmount();
+  });
+});
+
+describe('sharedOffReason: one reason for the off buttons of a row', () => {
+  const on = { enabled: true, reason: null };
+  const off = (reason: string) => ({ enabled: false, reason });
+
+  it('is the reason when two or more buttons are off and all for it', () => {
+    expect(sharedOffReason([on, off('no camera'), off('no camera'), on])).toBe('no camera');
+  });
+
+  it('is null when the off buttons differ, when one button alone is off, or when none is', () => {
+    expect(sharedOffReason([off('no camera'), off('not read')])).toBeNull();
+    expect(sharedOffReason([on, off('no camera')])).toBeNull();
+    expect(sharedOffReason([on, on])).toBeNull();
   });
 });
