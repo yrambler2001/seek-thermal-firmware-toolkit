@@ -23,7 +23,7 @@ export default {
 
   /* ---- tabs (lib/routing.ts) ---- */
   'tab.info': 'Información',
-  'tab.preserve': 'Volcar y descifrar 0.x/1.x 2014/2016',
+  'tab.preserve': 'Volcar y descifrar 0.x/1.x',
   'tab.v4': 'Volcar y descifrar 4.x/Nano',
   'tab.decrypt': 'Descifrar archivo/ranura',
   'tab.slots': 'Gestionar ranuras de firmware',

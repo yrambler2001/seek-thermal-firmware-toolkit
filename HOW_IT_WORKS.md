@@ -32,14 +32,14 @@ The code sorts every camera into a **firmware family**: a group of builds that s
 | `--family` id | Name on the page | Builds | Read by | Firmware stored |
 | --- | --- | --- | --- | --- |
 | `modern-4x` | Modern (2018+ selector map) | 2018 and later (2.x, 4.x, 10.x, 42.x, 44.x): Compact 4.8/4.16, Compact Pro 4.9/4.18, Compact Pro FF, Compact XR, Mosaic 2.27/10.9, Nano 200, Nano 300 | the Dump & decrypt 4.x/Nano tab and `seek-fw dump` | encrypted: xorshift128, K=0x13579BDF, sum 0x0000FFFF |
-| `legacy-auth` | Legacy locked firmware | the 2014 Compacts 0.8.0.0 to 1.3.0.8, the 1.3.0.8 FF (16 Hz) among them | the preservation run on the Dump & decrypt 0.x/1.x 2014/2016 tab (`seek-fw preserve`) | plain: no key, the stored words sum to 0; the 1.3.0.8 FF build is encrypted (two keystreams, K=0, sum 0x0000FFFF) |
+| `legacy-auth` | Legacy locked firmware | the 2014 Compacts 0.8.0.0 to 1.3.0.8, the 1.3.0.8 FF (16 Hz) among them | the preservation run on the Dump & decrypt 0.x/1.x tab (`seek-fw preserve`) | plain: no key, the stored words sum to 0; the 1.3.0.8 FF build is encrypted (two keystreams, K=0, sum 0x0000FFFF) |
 | `compact-2016` | 2016 Compact Pro | the Compact PRO 1.0.3.x (1.0.3.0, 1.0.3.2) | the preservation run (`seek-fw preserve`) | encrypted: xorshift128, K=0, the decrypted words sum to 0 |
 | `early-compact` | Early Compact (pre-0.8) | the Compacts before 0.8.0.0: 0.3.0.1, 0.5.0.2, 0.5.1.0, 0.5.1.3, 0.6.0.4, 0.7.0.7, 0.7.0.8 | none for 0.3.0.1 to 0.6.0.4; the preservation run for 0.7.0.7 and 0.7.0.8 | plain on 0.7.0.7 and 0.7.0.8; the older builds are never read |
 | `generic` | Unidentified camera | a camera no other family matches | `seek-fw dump`, with the 4.x selector map; the 4.x/Nano tab refuses it | not known: a decrypt tries the 4.x cipher, and the key is solved from the image either way |
 
 Every family decrypts offline on the Decrypt File/Slot tab (`seek-fw decrypt`), whatever took the dump. The Info tab (`seek-fw info`) reads every family from 0.8.0.0, `generic` included; the Work with firmware slots tab (`seek-fw slots`) reads `modern-4x`, `legacy-auth` and `compact-2016` and refuses `generic`. An `early-compact` camera is read by neither past its version. No family has a whole-image write: banks are written one at a time on the Work with firmware slots tab, and what each build allows is in [Which cameras](#which-cameras).
 
-The Info tab's first read, "Read firmware version", shows only the version range: 0.x / 1.x goes to the Dump & decrypt 0.x/1.x 2014/2016 tab, 2.x and newer to the Dump & decrypt 4.x/Nano tab. That is the tab, not the family; the family comes with the full read.
+The Info tab's first read, "Read firmware version", shows only the version range: 0.x / 1.x goes to the Dump & decrypt 0.x/1.x tab, 2.x and newer to the Dump & decrypt 4.x/Nano tab. That is the tab, not the family; the family comes with the full read.
 
 The family is detected from evidence — and, on an attached camera, from **asking it**. Before a dump, a dump of every selector or a device-info read, both the CLI and the web app send up to four read-only transfers (`--no-probe` turns this off on the CLI): the running firmware's version, then — only if that build can be read at all — a plain 2-byte arm of a bank the locked line protects, the 18-byte authenticated arm of the same bank, and a read of a bank that is open on every line. Those answers separate the families directly, where a USB product string or an acceptance sum only correlates with them. The web app asks, and says why when it will not read a camera. On `info`, `decrypt` and `slots`, `--family <id>` overrides detection; on `info` and `slots` it also skips the probe — but not the version check: the run still reads the version first and refuses a camera that does not report it, or runs a build older than 0.8.0.0, whatever family was named. The web app names no family by hand: its 4.x/Nano tab reads only the modern family and refuses any other.
 
@@ -348,7 +348,7 @@ The commands are the web app's tabs, one each ([README.md](README.md#command-lin
 | Command | Tab | What it does |
 | --- | --- | --- |
 | `seek-fw info` | Info | firmware version, identity, slots, key table, boot config, upgrade target; `--devices` lists the cameras, `--families` the families |
-| `seek-fw preserve` | Dump & decrypt 0.x/1.x 2014/2016 | the six-step preservation run; `--bank` chooses the banks it patches (default: the one the next start enters), `--backup-only` is its read-only first step, `--zip <file>` saves the run as one archive |
+| `seek-fw preserve` | Dump & decrypt 0.x/1.x | the six-step preservation run; `--bank` chooses the banks it patches (default: the one the next start enters), `--backup-only` is its read-only first step, `--zip <file>` saves the run as one archive |
 | `seek-fw dump` | Dump & decrypt 4.x/Nano | read the whole 4 MiB flash and decrypt it; `--all-selectors` probes every selector instead |
 | `seek-fw decrypt file <dump>` | Decrypt File/Slot | decrypt a dump you already have — no camera needed |
 | `seek-fw decrypt slot <file>` | Decrypt File/Slot | decrypt one 64 KiB firmware bank from a file — no camera needed |

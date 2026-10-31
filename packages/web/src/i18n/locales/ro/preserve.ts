@@ -1,5 +1,5 @@
 /**
- * Namespace `preserve`, română (ro), translated from the English source: the "Dump & decrypt 0.x/1.x 2014/2016" tab, a guided run that
+ * Namespace `preserve`, română (ro), translated from the English source: the "Dump & decrypt 0.x/1.x" tab, a guided run that
  * backs up the camera, writes a temporary patch so the whole flash can be read, then puts the original
  * firmware back and checks it.
  *

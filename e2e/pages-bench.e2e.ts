@@ -525,9 +525,7 @@ describe.skipIf(!RUNNABLE)('the web app pages on the bench camera (1.3.0.0, real
       );
       const text = await app.page.evaluate(() => document.body.innerText);
       expect(text, 'the refusal says nothing was read').toContain('Nothing was read');
-      expect(text, 'the refusal names the 0.x/1.x tab').toContain(
-        'Dump & decrypt 0.x/1.x 2014/2016',
-      );
+      expect(text, 'the refusal names the 0.x/1.x tab').toContain('Dump & decrypt 0.x/1.x');
       const wire = wireSince(before, countsOf(await guardOf(app.page)));
       say(`4.x wire: ${describeWire(wire)}`);
       /* The 4.x tab's vocabulary has no info selector: 0x55 and 0x5a stay refused on this tab. */

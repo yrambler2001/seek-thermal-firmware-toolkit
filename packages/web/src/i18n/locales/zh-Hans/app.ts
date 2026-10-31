@@ -23,7 +23,7 @@ export default {
 
   /* ---- tabs (lib/routing.ts) ---- */
   'tab.info': '信息',
-  'tab.preserve': '导出并解密 0.x/1.x 2014/2016',
+  'tab.preserve': '导出并解密 0.x/1.x',
   'tab.v4': '导出并解密 4.x/Nano',
   'tab.decrypt': '解密文件/槽位',
   'tab.slots': '固件槽位操作',

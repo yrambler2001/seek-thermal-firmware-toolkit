@@ -11,7 +11,7 @@
  *   - Info: reads the firmware version of a 1.3.0.0 Compact, a 4.8.2.1
  *     Compact and a 2016 Compact PRO, and says which tab covers it. With no
  *     camera it says so and writes nothing.
- *   - Dump & decrypt 0.x/1.x 2014/2016: the read-only first step (Read &
+ *   - Dump & decrypt 0.x/1.x: the read-only first step (Read &
  *     build) completes on the 2014 and 2016 cameras, and its backup holds the
  *     emulated flash's 31 windows. A 4.x camera is refused by this tab before
  *     any write.
@@ -176,7 +176,7 @@ const INFO_CAMERAS: readonly {
       'Compact 1.3.0.0',
     ),
     version: '1.3.0.0',
-    tab: 'Dump & decrypt 0.x/1.x 2014/2016',
+    tab: 'Dump & decrypt 0.x/1.x',
     reads: 1,
   },
   {
@@ -196,7 +196,7 @@ const INFO_CAMERAS: readonly {
       'Compact PRO 2016 1.0.3.0',
     ),
     version: '1.0.3.0',
-    tab: 'Dump & decrypt 0.x/1.x 2014/2016',
+    tab: 'Dump & decrypt 0.x/1.x',
     /* One read since 42.84 (294712f): the probe picks compact-2016 on 1.0.3.x, so the evidence names the
      * profile the read ran under and nothing is re-read (`profileToRereadUnder`). Before, the first read ran
      * under legacy-auth and a second under compact-2016: 8 selector writes, 2 blocks (42.68). */
@@ -279,7 +279,7 @@ describe.skipIf(UNAVAILABLE !== null)('the Info tab with no camera [emu]', () =>
 });
 
 /* ==================================================================== *
- * Dump & decrypt 0.x/1.x 2014/2016 (Preserve: the read-only first step)
+ * Dump & decrypt 0.x/1.x (Preserve: the read-only first step)
  * ==================================================================== */
 
 /**
@@ -649,7 +649,7 @@ describe.skipIf(UNAVAILABLE !== null)(
       say(`refusal on the 4.x tab: ${alert}`);
       expect(alert).toContain('Not read: this camera cannot be read this way.');
       expect(alert).toContain('The camera runs 1.3.0.0, a 0.x or 1.x build');
-      expect(alert).toContain('Dump & decrypt 0.x/1.x 2014/2016');
+      expect(alert).toContain('Dump & decrypt 0.x/1.x');
       expect(alert).toContain('Nothing was read but the version.');
       const wire = await s.wire();
       say(`1.3.0.0 on the 4.x tab, wire: ${JSON.stringify([...wire.entries()])}`);

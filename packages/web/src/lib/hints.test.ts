@@ -99,7 +99,7 @@ describe('hintFor', () => {
       'Early Compact (pre-0.8) does not support dump: …',
       { detail: { family: 'early-compact', capability: 'dump', reason: '…' } },
     );
-    expect(hintFor(capability, MAC)).toContain('Dump & decrypt 0.x/1.x 2014/2016');
+    expect(hintFor(capability, MAC)).toContain('Dump & decrypt 0.x/1.x');
   });
 
   it('turns the CLI resume remedy of a power-cycle refusal into the wizard’s own', () => {

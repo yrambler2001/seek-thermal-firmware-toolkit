@@ -19,8 +19,7 @@ export const DUMP_COMMAND_FAMILIES: ReadonlySet<ProfileId> = new Set([V4_TAB_FAM
 export function familyReadBy(profile: FirmwareProfile): string {
   if (profile.id === V4_TAB_FAMILY) return 'the Dump & decrypt 4.x/Nano tab and `seek-fw dump`';
   if (DUMP_COMMAND_FAMILIES.has(profile.id)) return '`seek-fw dump`; the 4.x/Nano tab refuses it';
-  const preserve =
-    'the preservation run on the Dump & decrypt 0.x/1.x 2014/2016 tab (`seek-fw preserve`)';
+  const preserve = 'the preservation run on the Dump & decrypt 0.x/1.x tab (`seek-fw preserve`)';
   /* A family that refuses a dump is the pre-0.8 Compact's: the preservation run reads 0.7.0.7 and
    * 0.7.0.8 through another command and refuses the older builds (preservation/patch.ts
    * `preWideningRefusal`). */

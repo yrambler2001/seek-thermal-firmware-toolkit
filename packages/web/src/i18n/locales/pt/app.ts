@@ -23,7 +23,7 @@ export default {
 
   /* ---- tabs (lib/routing.ts) ---- */
   'tab.info': 'Informação',
-  'tab.preserve': 'Dump e desencriptação 0.x/1.x 2014/2016',
+  'tab.preserve': 'Dump e desencriptação 0.x/1.x',
   'tab.v4': 'Dump e desencriptação 4.x/Nano',
   'tab.decrypt': 'Desencriptar ficheiro/ranhura',
   'tab.slots': 'Gerir ranhuras de firmware',

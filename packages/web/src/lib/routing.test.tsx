@@ -19,7 +19,7 @@ describe('the tabs', () => {
     expect(ROUTES).toEqual(['info', 'preserve', 'v4', 'decrypt', 'slots']);
     expect(ROUTES.map((route) => ROUTE_LABEL[route])).toEqual([
       'Info',
-      'Dump & decrypt 0.x/1.x 2014/2016',
+      'Dump & decrypt 0.x/1.x',
       'Dump & decrypt 4.x/Nano',
       'Decrypt File/Slot',
       'Work with firmware slots',

@@ -23,7 +23,7 @@ export default {
 
   /* ---- tabs (lib/routing.ts) ---- */
   'tab.info': 'Info',
-  'tab.preserve': 'Auslesen & entschlüsseln 0.x/1.x 2014/2016',
+  'tab.preserve': 'Auslesen & entschlüsseln 0.x/1.x',
   'tab.v4': 'Auslesen & entschlüsseln 4.x/Nano',
   'tab.decrypt': 'Datei/Slot entschlüsseln',
   'tab.slots': 'Firmware-Slots bearbeiten',

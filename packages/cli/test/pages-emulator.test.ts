@@ -279,7 +279,7 @@ describe.skipIf(!available)('the Info command through the CLI, on the emulated c
         ]);
         const wanted = subject.version.startsWith('4.')
           ? 'Dump & decrypt 4.x/Nano'
-          : 'Dump & decrypt 0.x/1.x 2014/2016';
+          : 'Dump & decrypt 0.x/1.x';
         const profile = r.json?.family as { actedUnder?: { id?: string } } | undefined;
         expect(profile?.actedUnder?.id, 'the family info acted under').toBeTruthy();
         say(

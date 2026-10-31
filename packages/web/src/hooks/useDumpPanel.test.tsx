@@ -482,7 +482,7 @@ describe('the 4.x/Nano tab reads only its own family', () => {
     const refusal = result.current.panel.refusal;
     expect(refusal?.code).toBe('family/unsupported');
     expect(refusal?.message).toContain('The camera runs 1.0.3.0, a 0.x or 1.x build');
-    expect(refusal?.message).toContain('Dump & decrypt 0.x/1.x 2014/2016');
+    expect(refusal?.message).toContain('Dump & decrypt 0.x/1.x');
     expect(refusal?.message).toContain('Nothing was read but the version');
     expect(downloads).toHaveLength(0);
     /* The version read (two unarmed reads), and not one request after it: no probe, no arm, no window. */

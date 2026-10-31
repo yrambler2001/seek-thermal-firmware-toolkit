@@ -71,9 +71,9 @@ The page is in English, Deutsch, Español, Français, Italiano, Polski, Portugu�
 
 **Read firmware version** asks the camera what it runs, how it boots, which keys it holds and what each bank holds, and names the tab for that camera. It writes nothing to the flash. CLI: `seek-fw info`.
 
-### Dump & decrypt 0.x/1.x 2014/2016 (`#/preserve`)
+### Dump & decrypt 0.x/1.x (`#/preserve`)
 
-![The Dump & decrypt 0.x/1.x 2014/2016 tab](.github/readme/preserve.avif)
+![The Dump & decrypt 0.x/1.x tab](.github/readme/preserve.avif)
 
 For the 2014 to 2017 cameras. They only let 31 of their 64 flash blocks be read, so this tab backs up what it can, writes a small temporary patch, reads the whole flash, then puts the original firmware back and checks it byte for byte. The two steps that write ask first. CLI: `seek-fw preserve`.
 
@@ -119,7 +119,7 @@ https://github.com/user-attachments/assets/008b7710-6bd9-4ebc-be95-d6ddce9901f4
 
 **Dumping**
 
-- 00:27 Go to the **Dump & decrypt 0.x/1.x 2014/2016** tab
+- 00:27 Go to the **Dump & decrypt 0.x/1.x** tab
 - 00:29 Press **Start read & build**
 - 01:20 Press **Start write & whole-flash read**
 - 01:26 Press **Connect device**
@@ -148,7 +148,7 @@ https://github.com/user-attachments/assets/008b7710-6bd9-4ebc-be95-d6ddce9901f4
 
 </details>
 
-1. **Back up the whole flash** on **Dump & decrypt 0.x/1.x 2014/2016**: [the preservation run](#back-up-a-0x1x-camera-the-preservation-run). Keep its last run file.
+1. **Back up the whole flash** on **Dump & decrypt 0.x/1.x**: [the preservation run](#back-up-a-0x1x-camera-the-preservation-run). Keep its last run file.
 2. On **Info**, press **Read firmware version**: the firmware is 1.3.0.0.
 3. On **Work with firmware slots**, press **Read slots**. Each bank that holds 1.3.0.0 has **Make 32 FPS**.
 4. Press **Make 32 FPS in every bank**, read the plan, tick the box and press **Yes — patch … banks** (the number is how many banks offer the patch: 2 in the picture below, where slot B is empty; [what happens](#what-make-n-fps-in-every-bank-does)).
@@ -322,7 +322,7 @@ https://github.com/user-attachments/assets/cb1c8de5-d379-4a1c-b958-438e3fefb245
 
 **Dumping**
 
-- 00:24 Go to the **Dump & decrypt 0.x/1.x 2014/2016** tab
+- 00:24 Go to the **Dump & decrypt 0.x/1.x** tab
 - 00:28 Press **Start read & build**
 - 01:00 Press **Start write & whole-flash read**
 - 01:07 Press **Connect device**
@@ -351,7 +351,7 @@ https://github.com/user-attachments/assets/cb1c8de5-d379-4a1c-b958-438e3fefb245
 
 </details>
 
-1. **Back up the whole flash** on **Dump & decrypt 0.x/1.x 2014/2016**: [the preservation run](#back-up-a-0x1x-camera-the-preservation-run). Keep its last run file.
+1. **Back up the whole flash** on **Dump & decrypt 0.x/1.x**: [the preservation run](#back-up-a-0x1x-camera-the-preservation-run). Keep its last run file.
 2. On **Info**, press **Read firmware version**: the firmware is 1.0.3.0.
 3. On **Work with firmware slots**, press **Read slots**. Each bank that holds 1.0.3.0 has **Make 18 FPS**.
 4. Press **Make 18 FPS in every bank**, read the plan, tick the box and press **Yes — patch … banks**.
@@ -361,7 +361,7 @@ The commands are those of the Compact 1.3.0.0. This build measured 17.68 fps on 
 
 ### Back up a 0.x/1.x camera: the preservation run
 
-On **Dump & decrypt 0.x/1.x 2014/2016**, press **Connect device** and pick the camera. Then:
+On **Dump & decrypt 0.x/1.x**, press **Connect device** and pick the camera. Then:
 
 1. **02 Read & build** — press **Start read & build**. It reads the 31 blocks the camera lets out and keeps them as your backup, reads each bank twice, works out which bank the camera starts from next and prepares the patch. Nothing is written; it usually takes under a minute. Leave **Banks to patch** as it is.
 2. **03 Write & whole-flash read** — press **Start write & whole-flash read**, then **Yes — write to the camera**. It writes a small temporary patch into that bank, restarts the camera and reads the whole 4 MiB flash. When the blue "Your turn" box asks, press **Connect device** and pick the camera again: that is expected, because the camera has no USB serial number and Chrome forgets it at every restart.
@@ -420,7 +420,7 @@ npm ci && npm run build
 node packages/cli/dist/bin.js --help
 ```
 
-`npm link --workspace @seek-fw/cli` puts `seek-fw` on your `PATH`; otherwise use `node packages/cli/dist/bin.js` where this page says `seek-fw`. There is one command per tab: `seek-fw info` (Info), `seek-fw preserve` (Dump & decrypt 0.x/1.x 2014/2016), `seek-fw dump` (Dump & decrypt 4.x/Nano), `seek-fw decrypt file` and `decrypt slot` (Decrypt File/Slot), and `seek-fw slots` (Work with firmware slots). `seek-fw <command> --help` lists each command's options, and [HOW_IT_WORKS.md](HOW_IT_WORKS.md#command-line-reference) has the common ones. On Linux the CLI needs the udev rule below.
+`npm link --workspace @seek-fw/cli` puts `seek-fw` on your `PATH`; otherwise use `node packages/cli/dist/bin.js` where this page says `seek-fw`. There is one command per tab: `seek-fw info` (Info), `seek-fw preserve` (Dump & decrypt 0.x/1.x), `seek-fw dump` (Dump & decrypt 4.x/Nano), `seek-fw decrypt file` and `decrypt slot` (Decrypt File/Slot), and `seek-fw slots` (Work with firmware slots). `seek-fw <command> --help` lists each command's options, and [HOW_IT_WORKS.md](HOW_IT_WORKS.md#command-line-reference) has the common ones. On Linux the CLI needs the udev rule below.
 
 ## Browser and platform support
 

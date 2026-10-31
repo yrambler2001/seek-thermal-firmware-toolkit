@@ -150,7 +150,7 @@ describe.skipIf(!REAL)('the CLI on the bench camera (1.3.0.0, real USB)', () => 
       const run = cli(['info']);
       expect(run.status, run.out).toBe(0);
       expect(run.out).toContain('1.3.0.0');
-      expect(run.out).toContain('Dump & decrypt 0.x/1.x 2014/2016');
+      expect(run.out).toContain('Dump & decrypt 0.x/1.x');
     },
     CLI_TIMEOUT_MS,
   );

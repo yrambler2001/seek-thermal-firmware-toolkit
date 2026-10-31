@@ -10,7 +10,7 @@
  * The commands mirror the web app's tabs, one each:
  *
  *   info        Info
- *   preserve    Dump & decrypt 0.x/1.x 2014/2016
+ *   preserve    Dump & decrypt 0.x/1.x
  *   dump        Dump & decrypt 4.x/Nano
  *   decrypt     Decrypt File/Slot   (decrypt file <dump> | decrypt slot <file>)
  *   slots       Work with firmware slots

@@ -23,7 +23,7 @@ export default {
 
   /* ---- tabs (lib/routing.ts) ---- */
   'tab.info': 'Info',
-  'tab.preserve': 'Extragere și decriptare 0.x/1.x 2014/2016',
+  'tab.preserve': 'Extragere și decriptare 0.x/1.x',
   'tab.v4': 'Extragere și decriptare 4.x/Nano',
   'tab.decrypt': 'Decriptare fișier/slot',
   'tab.slots': 'Lucru cu sloturile de firmware',

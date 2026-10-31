@@ -23,7 +23,7 @@ export default {
 
   /* ---- tabs (lib/routing.ts) ---- */
   'tab.info': 'Info',
-  'tab.preserve': 'Zrzut i odszyfrowanie 0.x/1.x 2014/2016',
+  'tab.preserve': 'Zrzut i odszyfrowanie 0.x/1.x',
   'tab.v4': 'Zrzut i odszyfrowanie 4.x/Nano',
   'tab.decrypt': 'Odszyfruj plik/slot',
   'tab.slots': 'Sloty firmware',

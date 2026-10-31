@@ -23,7 +23,7 @@ export default {
 
   /* ---- tabs (lib/routing.ts) ---- */
   'tab.info': 'Сведения',
-  'tab.preserve': 'Дамп и расшифровка 0.x/1.x 2014/2016',
+  'tab.preserve': 'Дамп и расшифровка 0.x/1.x',
   'tab.v4': 'Дамп и расшифровка 4.x/Nano',
   'tab.decrypt': 'Расшифровать файл/слот',
   'tab.slots': 'Слоты прошивки',

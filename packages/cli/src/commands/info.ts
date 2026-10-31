@@ -419,7 +419,7 @@ export const TABS: readonly {
     does: "the camera's firmware version, identity, boot state and slots (--devices, --families)",
   },
   {
-    tab: 'Dump & decrypt 0.x/1.x 2014/2016',
+    tab: 'Dump & decrypt 0.x/1.x',
     command: 'seek-fw preserve',
     does: 'the six-step preservation run; --backup-only saves the read-only backup as a zip',
   },

@@ -29,7 +29,7 @@ function noCameraIo(overrides: Parameters<typeof testIo>[0] = {}): ReturnType<ty
 
 const TABS: readonly { readonly tab: string; readonly command: CommandName }[] = [
   { tab: 'Info', command: 'info' },
-  { tab: 'Dump & decrypt 0.x/1.x 2014/2016', command: 'preserve' },
+  { tab: 'Dump & decrypt 0.x/1.x', command: 'preserve' },
   { tab: 'Dump & decrypt 4.x/Nano', command: 'dump' },
   { tab: 'Decrypt File/Slot', command: 'decrypt' },
   { tab: 'Work with firmware slots', command: 'slots' },
@@ -148,7 +148,7 @@ describe('the listings in info need no camera', () => {
     expect(stdout.text).not.toMatch(/sweep|deviceInfo/);
     expect(stdout.text).toContain('read by: the Dump & decrypt 4.x/Nano tab and `seek-fw dump`');
     expect(stdout.text).toContain(
-      'read by: the preservation run on the Dump & decrypt 0.x/1.x 2014/2016 tab (`seek-fw preserve`)',
+      'read by: the preservation run on the Dump & decrypt 0.x/1.x tab (`seek-fw preserve`)',
     );
     expect(stdout.text).toContain('refuses dump and Dump all selectors: ');
     /* compact-2016's banks are written on the slots tab (TESTING.md 42.85), and the listing says so. */

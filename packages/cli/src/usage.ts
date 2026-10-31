@@ -27,7 +27,7 @@ Usage
 Commands: one for each tab of the web app
   info                   Info: the firmware version and identity of the camera, and the
                          lists of connected cameras and firmware families (--devices, --families)
-  preserve               Dump & decrypt 0.x/1.x 2014/2016: the six-step preservation run.
+  preserve               Dump & decrypt 0.x/1.x: the six-step preservation run.
                          --backup-only is its read-only first step, which saves the zip
   dump                   Dump & decrypt 4.x/Nano: read the whole 4 MiB flash and decrypt it
                          (--all-selectors probes every selector instead)
@@ -86,7 +86,7 @@ decryptable or actually bootable. Read-only: nothing is written to the camera.
 
 ${EVERY_COMMAND}
 `,
-  preserve: `seek-fw preserve — the Dump & decrypt tab for 0.x/1.x 2014/2016
+  preserve: `seek-fw preserve — the Dump & decrypt tab for 0.x/1.x
 
 Usage
   seek-fw preserve [--out <dir>] [--zip <file>] [--bank <choice>] [--backup-only] [--yes] [options]
