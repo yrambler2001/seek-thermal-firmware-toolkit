@@ -656,50 +656,11 @@ export default {
   /** `{error}`: the error's message (translated where core gives it a code). */
   'fpsEvery.stopped.error': '{name}: {error}',
 
-  /* ---- notes: what the read measured about a build, a bank or an empty bank (slots/capability-notes) ----
-   * Mode numbers, addresses, version numbers and command names (CompleteMemoryUpgrade, BeginFirmwareUpgrade,
-   * EP0, PRESERVATION.md) are names: keep them. `{untested}` is notes.ffBootUntested. */
-  /** "This line" is the firmware line (the 2016 Compact PRO 1.0.3.x builds), not a line of text: on these builds, the bank the page or the CLI calls booted is the one the camera entered at its last start. */
-  'notes.locked2016BootWord':
-    'Lo slot avviato indicato su questa linea di firmware è quello in cui la termocamera è entrata all’ultimo avvio, come il bootloader lo registra nella parola dello slot attivo (0 slot A, 1 slot B, 2 slot di recupero R). Il prossimo avvio è stabilito dalla parola di configurazione di avvio: 0 o 0xFFFFFFFF scelgono prima A, 1 prima B, qualsiasi altro valore prima lo slot di recupero R. Il bootloader del 2016 accetta uno slot solo quando si decifra in una somma delle parole pari a 0 con la chiave con cui controlla uno slot (il blocco di chiavi 1 sul suo bootloader 1.2.0.0), e l’ultimo slot di quell’ordine viene eseguito senza controllo quando gli altri due falliscono. La lettura indica quella chiave in base allo slot in cui la termocamera è entrata, perché il blocco del bootloader che la contiene viene rifiutato su ogni canale (misurato su una termocamera).',
-  'notes.ep0of1032':
-    '1.0.3.2: le sessioni EP0 cadono a circa 64-81 KB e 128 B è l’unità di lettura senza perdite, quindi uno slot da 64 KB per sessione è il limite misurato. Una lettura completa del chip è rifiutata su questa build (PRESERVATION.md: non esiste una lettura completa con una sola apertura). Il dump degli slot legge uno slot alla volta, con richieste da 64 byte.',
-  'notes.staging.lockedPlain':
-    'Trasferimento: l’immagine stessa, al massimo 56 KB (il massimo che la termocamera accetta in una scrittura). La scrittura cancella lo slot da 64 KB e scrive esattamente quei byte, e il resto dello slot risulta cancellato. Il bootloader avvia uno slot solo quando le sue parole sommano a 0, quindi l’immagine viene bilanciata su quella somma prima di essere inviata.',
-  'notes.staging.locked2016':
-    'Trasferimento: l’immagine, in XOR con il flusso di chiave xorshift128 del SUO blocco di chiavi 0 (la chiave di trasferimento, trovata nell’immagine per valore), solo per la lunghezza dell’immagine (al massimo 0xE000 byte). Il dispositivo decifra i dati con quella chiave e li conserva con la chiave con cui il suo bootloader controlla uno slot (blocco di chiavi 1), quindi i byte conservati non sono quelli trasferiti. Per il trasferimento non si legge nulla dallo slot di destinazione: il flusso di chiave dello slot serve solo a rileggerlo.',
-  'notes.staging.modern':
-    'Trasferimento: l’intero slot da 64 KB, immagine + riempimento 0xFF + footer «CODE». L’immagine è in XOR con i flussi di chiave che fanno sì che i due passaggi dell’applicazione in esecuzione la portino sotto la chiave contenuta nello slot avviato: quando il comando di conferma (CompleteMemoryUpgrade) riceve il tipo di dati 7, 8 o 9, l’applicazione decifra il caricamento con la sua chiave A, lo cifra di nuovo con la sua chiave di archiviazione e programma lo slot. È il footer che permette al bootloader di accettare lo slot, quindi uno slot senza footer viene rifiutato.',
+  /* ---- notes: what the read measured about a build (slots/capability-notes) ----
+   * The page shows only this one; it leaves the others out (lib/page-hidden.ts), and the CLI prints them
+   * in English. */
   'notes.unverified':
     'Sola lettura. La disposizione degli slot è la tabella decodificata della linea bloccata, ma per questa build non è stata misurata alcuna forma di trasferimento, quindi non è prevista alcuna scrittura.',
-  'notes.empty.plain':
-    'Uno slot vuoto riceve un’immagine esattamente come uno usato. La catena in chiaro trasferisce i byte dell’immagine così come sono, senza chiave, e la conferma della scrittura cancella prima il blocco, quindi non si legge nulla dallo slot di destinazione. Misurato su una Compact: un’immagine scritta in uno slot B vuoto è stata riletta identica, e B si è avviato da solo.',
-  'notes.empty.modern':
-    'Uno slot vuoto riceve un’immagine esattamente come uno usato. I dati sono cifrati con chiavi ricavate dallo slot avviato e dall’applicazione in esecuzione, non dallo slot di destinazione, e il dispositivo li cifra di nuovo e cancella il blocco senza leggerlo. Il footer viene copiato da uno slot che ne ha uno valido, altrimenti viene creato vuoto. Dimostrato sull’emulatore; non ancora misurato su una termocamera.',
-  'notes.empty.locked2016':
-    'Uno slot vuoto riceve un’immagine esattamente come uno usato. La chiave di trasferimento è il blocco di chiavi 0 della coppia propria dell’IMMAGINE, non una chiave letta dallo slot di destinazione, e il dispositivo decifra i dati con essa, li conserva con la propria chiave e cancella il blocco senza leggerlo. Dimostrato sull’emulatore; non ancora misurato su una termocamera.',
-  'notes.mode2of080':
-    '0.8.0.0: su questa build la modalità 2 (0x14000000) rischia di bloccare la termocamera, perché una lettura aperta esce dalla SRAM (PRESERVATION.md). La lettura o la scrittura di uno slot apre solo le modalità da 7 a 9 e mai la modalità 2.',
-  'notes.bank.recovery2016':
-    'Misurato su una Compact PRO 1.0.3.0: lo slot di recupero R ha accettato la propria immagine, una modifica di un byte e i byte grezzi così come sono stati inviati, ciascuno scritto senza errori.',
-  'notes.bank.ff1308A':
-    'L’immagine 1.3.0.8 FF (16 Hz) va qui nella forma in cui la invia l’app del produttore, e la termocamera la conserva con la propria chiave. Il bootloader del 2014 avvia uno slot solo quando le sue parole sommano a 0, quindi all’avvio salta questo; se la build a 16 Hz si avvii dallo slot A è UNTESTED (non testato). L’immagine a 8 Hz viene scritta così com’è.',
-  'notes.bank.ff1308B':
-    'L’immagine 1.3.0.8 FF (16 Hz) va qui nella forma in cui la invia l’app del produttore, e la termocamera la conserva con la propria chiave. Il bootloader del 2014 avvia uno slot solo quando le sue parole sommano a 0, quindi all’avvio salta questo; se la build a 16 Hz si avvii dallo slot B è UNTESTED (non testato). L’immagine a 8 Hz viene scritta così com’è.',
-  'notes.bank.ff1308R':
-    'L’immagine 1.3.0.8 FF (16 Hz) va qui nella forma in cui la invia l’app del produttore, e la termocamera la conserva con la propria chiave. Il bootloader 0.9.0.0 avvia lo slot di recupero R così come è conservato, senza decodificarlo, quindi questa forma potrebbe non avviarsi: UNTESTED (non testato), e una forma precedente di questa immagine si è avviata da qui (misurato su una termocamera). L’immagine a 8 Hz viene scritta così com’è.',
-  'notes.product.4_8_2_1':
-    'Compact 4.8.2.1 e Compact XR 4.8.2.1 (una sola immagine): la mappa moderna a 63 finestre; l’emulatore ha confermato 63 finestre su 63 sul dump completo della Compact e su quello della Compact XR.',
-  'notes.product.10_9_1_31':
-    'Mosaic 320x240 10.9.1.31: la mappa moderna a 63 finestre, con ogni finestra confermata sull’emulatore.',
-  'notes.product.2_27_1_33':
-    'Mosaic 320x240 FF 2.27.1.33: la mappa moderna a 63 finestre, con ogni finestra confermata sull’emulatore.',
-  'notes.product.42_32_3_10':
-    'Nano 200 42.32.3.10: la mappa moderna a 63 finestre, con ogni finestra confermata sull’emulatore. Il suo comando di conferma (CompleteMemoryUpgrade) non ha un gestore per il tipo di dati 32, che una scrittura tramite la modalità 7, 8 o 9 non chiede mai.',
-  'notes.product.44_27_3_10':
-    'Nano 300 44.27.3.10: la mappa moderna a 63 finestre, con ogni finestra confermata sull’emulatore. Il suo comando di apertura (BeginFirmwareUpgrade) rifiuta come primo argomento non valido un tipo di dati oltre l’intervallo che accetta (0x7F), e le modalità da 7 a 9 sono dentro quell’intervallo.',
-  'notes.ff1308':
-    '1.3.0.8-FF (16 Hz) comunica la stessa versione della build a 8 Hz. La lettura le distingue tramite la termocamera: la termocamera dice, slot per slot, se la sua applicazione accetta lo slot, e ogni build prevede le proprie risposte a partire dagli slot. L’immagine FF viene inviata nella forma in cui la invia l’app del produttore, e la termocamera la conserva con la propria chiave. Va nello slot A, nello slot B o nello slot di recupero R. Ci si aspetta che la build a 8 Hz la rifiuti prima di scrivere qualsiasi cosa; finché le risposte della termocamera non distinguono le build, il piano dice cosa fa ciascuna build con essa. {untested}',
 
   /* ---- identity: why nothing is armed before the camera names its build (workflows/capability, window-plan) ---- */
   /** `{note}`: identity.note.*, the version read's own account. Command names (GetErrorCode, …) and wire ids stay. */

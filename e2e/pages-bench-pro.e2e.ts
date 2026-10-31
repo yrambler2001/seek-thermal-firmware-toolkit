@@ -54,7 +54,8 @@
  * And the words 42.86 fixed: the capitalised replug prompt once (the result panel), one replug record in
  * the log and none in the status; a patched bank's row "Frame-rate patch applied"; no code name
  * (acknowledgeRisk, the table id) on the slots page; the probe's score and the read's score each labelled.
- * And 42.87's: the staging note once on the page (not on every bank row); the extra confirmation once in
+ * And 42.87's: no staging note on a bank row (the page now leaves the staging and boot notes out
+ * altogether, lib/page-hidden.ts); the extra confirmation once in
  * the booted bank's row and once in R's (not in R's note and under each flash button); the staging form in
  * words in the write log, not its code name; the boot note naming no front end; a write plan saying the
  * acknowledgement once.
@@ -269,10 +270,10 @@ const CODE_NAMES = [
 /** The key recovery's verdict in the read-back and dump lines, in words (core's `keyCheckText`; 42.88). */
 const KEY_VERIFIED = 'key verified by the acceptance sum 0x00000000';
 const READ_BACK_VERIFIED = `under the keystream recovered from the read-back (${KEY_VERIFIED})`;
-/** The camera's staging note, said once on the page, not on each bank row (TESTING.md 42.87). */
+/** The camera's staging note: once on the page in TESTING.md 42.87; the page now leaves it out (lib/page-hidden.ts). */
 const STAGING_NOTE =
   /Staged: the image, XORed with the xorshift128 keystream of its OWN key block 0/g;
-/** The 2016 boot note, naming neither front end (TESTING.md 42.87). */
+/** The 2016 boot note: the page now leaves it out too (lib/page-hidden.ts). */
 const BOOT_NOTE =
   'The booted bank named on this line is the bank the camera entered at its last start';
 /** The staging form in the write log, in words (core's `stagingPhrase`; TESTING.md 42.87). */
@@ -487,10 +488,10 @@ describe.skipIf(!RUNNABLE)(
       for (const name of CODE_NAMES)
         expect(text, `the slots page shows the code name "${name}"`).not.toContain(name);
       expect(await writeBanner(page), 'no "cannot be written" banner').toBeNull();
-      /* TESTING.md 42.87: a note that holds for every bank is said once; each acknowledgement once in its
-       * row; the boot note names no front end. */
-      expect(count(text, STAGING_NOTE), 'the staging note, once on the page').toBe(1);
-      expect(text, 'the boot note').toContain(BOOT_NOTE);
+      /* TESTING.md 42.87: each acknowledgement once in its row; the boot note names no front end. The
+       * staging and boot notes are left out of the page now (lib/page-hidden.ts). */
+      expect(count(text, STAGING_NOTE), 'the staging note, left out').toBe(0);
+      expect(text, 'the boot note, left out').not.toContain(BOOT_NOTE);
       expect(text, 'the boot note names no front end').not.toContain('Where the page names');
       const rowTexts = await page.$$eval(SLOTS_TABLE_ROWS, (trs) =>
         trs.map((tr) => (tr as HTMLElement).innerText),
@@ -863,7 +864,7 @@ describe.skipIf(!RUNNABLE)(
             undo.letter === 'b' ? [] : [expect.stringMatching(ASKS_ONE)],
           );
           const sectionNow = await wizard.text(SLOTS_SECTION);
-          expect(count(sectionNow, STAGING_NOTE), 'the staging note, once in the section').toBe(1);
+          expect(count(sectionNow, STAGING_NOTE), 'the staging note, left out').toBe(0);
           await openWriteConfirm(wizard, page, name);
           const dialog = await page.$eval(CONFIRM_DIALOG, (el) => (el as HTMLElement).innerText);
           await keep(`undo-${undo.letter}-dialog`, dialog);

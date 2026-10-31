@@ -596,7 +596,7 @@ describe('SlotsView', () => {
     unmount();
   });
 
-  it('on a 1.3.0.8 plan, says beside each bank where the FF image goes, and explains the two builds', () => {
+  it('on a 1.3.0.8 plan, leaves out the FF notes beside each bank and the FF paragraph', () => {
     const realPlan = buildSlotPlan(getProfile('legacy-auth'), '1.3.0.8');
     const report: SlotsReport = {
       ...slotReport(base),
@@ -606,16 +606,16 @@ describe('SlotsView', () => {
     const { container, unmount } = view(panel({ plan: realPlan, report }));
 
     const rows = bankRows(container);
-    /* In words: the key it is stored under, not its name (TESTING.md 42.110). */
+    /* The bank rows' FF notes (notes.bank.ff1308A/B/R) are left out (lib/page-hidden.ts). */
     for (const row of rows) {
-      expect(row.textContent).toContain(
-        'goes here in the form the vendor app sends it, and the camera stores it under its own key',
-      );
+      expect(row.textContent).not.toContain('goes here in the form the vendor app sends it');
       expect(row.textContent).not.toMatch(/TESTING|\(42\.\d+\)|token form/);
     }
-    /* The plan's own note states the rule, and the page explains it once more in words. */
-    expect(container.textContent).toContain('UNTESTED');
-    /* The page leaves out the line's token and boot-word notes (lib/page-hidden.ts), and the long FF paragraph. */
+    /* So are the plan's FF note (notes.ff1308), the line's token and boot-word notes, the staging note and
+     * the long FF paragraph. */
+    expect(container.textContent).not.toContain('reports the same version as the 8 Hz build');
+    expect(container.textContent).not.toContain('UNTESTED');
+    expect(container.textContent).not.toContain('Staged:');
     expect(container.textContent).not.toContain('The camera tells them apart itself');
     expect(container.textContent).not.toContain('Banks are locked on this line');
     expect(container.textContent).not.toContain('as the active-slot word records it');
@@ -856,7 +856,9 @@ describe('SlotsView: an empty bank', () => {
     expect(row.textContent).toContain('empty');
     expect(row.textContent).toContain('header window reads as all 0xFF');
     expect(row.textContent).toContain('writing it overwrites no firmware');
-    expect(row.textContent).toContain('Can be written. an empty bank is written like a used one');
+    expect(row.textContent).toContain('Can be written.');
+    /* The why (core's `emptyBankWhy`) is left out (lib/page-hidden.ts). */
+    expect(row.textContent).not.toContain('an empty bank is written like a used one');
     /* Nothing to boot, and no verdict on an image that is not there. */
     expect(row.textContent).toContain('nothing to boot');
     expect(row.textContent).not.toContain('not bootable');
@@ -1285,9 +1287,10 @@ describe('SlotsView: the frame-rate row action', () => {
     unmount();
   });
 
-  it('on a 2016 Compact PRO, says the staging note once for the camera and each acknowledgement once in its row (TESTING.md 42.87)', () => {
+  it('on a 2016 Compact PRO, leaves out the staging, boot and recovery notes, and says each acknowledgement once in its row (TESTING.md 42.87)', () => {
     /* core's real 1.0.3.0 plan: its notes and its bank entries. Before, every row carried "Staged: …", and
-     * R's row said the acknowledgement three times (its note and under both flash buttons). */
+     * R's row said the acknowledgement three times (its note and under both flash buttons). The staging note,
+     * the boot note and R's note are now left out (lib/page-hidden.ts). */
     const fixture = slotReport2016(base);
     const plan = buildSlotPlan(getProfile('compact-2016'), '1.0.3.0');
     const report: SlotsReport = {
@@ -1300,16 +1303,13 @@ describe('SlotsView: the frame-rate row action', () => {
     };
     const { container, unmount } = view(panel({ plan, report }));
     const text = container.textContent;
-    expect(text.match(/Staged: the image, XORed with the xorshift128 keystream/g)).toHaveLength(1);
+    expect(text).not.toContain('Staged:');
     const rows = bankRows(container);
-    for (const row of rows) expect(row.textContent).not.toContain('Staged:');
     expect(rows[0]?.textContent.match(/extra confirmation|acknowledge/g)).toHaveLength(1);
     expect(rows[1]?.textContent).not.toMatch(/extra confirmation|acknowledge/);
     expect(rows[2]?.textContent.match(/extra confirmation|acknowledge/g)).toHaveLength(1);
-    expect(rows[2]?.textContent).toContain(
-      'Measured on a Compact PRO 1.0.3.0: recovery R took its own image',
-    );
-    expect(text).toContain('The booted bank named on this line is the bank the camera entered');
+    expect(text).not.toContain('Measured on a Compact PRO 1.0.3.0: recovery R took its own image');
+    expect(text).not.toContain('The booted bank named on this line is the bank the camera entered');
     expect(text).not.toContain('Where the page names');
     unmount();
   });
@@ -1359,15 +1359,15 @@ describe('SlotsView: the frame-rate row action', () => {
       (li) => li.textContent,
     );
     expect(items).toEqual([warning]);
-    /* Each camera note is on the page once: above the device panel, not again in the plan. */
+    /* A camera note the page shows is on it once: above the device panel, not again in the plan. On this
+     * line the page leaves every one of them out (lib/page-hidden.ts), so none is on the page. */
     for (const note of plan.notes)
       expect(text.split(note)).toHaveLength(pageShowsNote(note) ? 2 : 1);
-    /* The 2016 line's token and key-pair notes are among those the page leaves out. */
-    expect(plan.notes.filter((note) => !pageShowsNote(note)).length).toBeGreaterThan(0);
+    expect(plan.notes.filter(pageShowsNote)).toEqual([]);
     expect(text).not.toContain('Note: ');
     booted.unmount();
 
-    /* Recovery R: its own note is on its row, so the plan does not say it again either. */
+    /* Recovery R: its own note is left out of its row, and the plan does not say it either. */
     const recovery = view(
       panel({
         plan,
@@ -1377,7 +1377,8 @@ describe('SlotsView: the frame-rate row action', () => {
     );
     const rNote = plan.slots.find((entry) => entry.key === 'r')?.notes[0] ?? '';
     expect(rNote).toContain('Measured on a Compact PRO 1.0.3.0: recovery R took its own image');
-    expect(recovery.container.textContent.split(rNote)).toHaveLength(2);
+    expect(pageShowsNote(rNote)).toBe(false);
+    expect(recovery.container.textContent).not.toContain(rNote);
     recovery.unmount();
 
     /* B: no warning and no note of its own write, so no "Read before writing" at all. */

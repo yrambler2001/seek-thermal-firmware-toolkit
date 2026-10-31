@@ -43,8 +43,7 @@ export default {
   'run.label': 'Sloturi',
 
   /* Before any read. */
-  'empty.connected':
-    'Apăsați „Citire sloturi”. Camera este întrebată mai întâi ce build rulează și nu se activează nimic pe un build pe care această pagină nu îl acceptă.',
+  'empty.connected': 'Apăsați „Citire sloturi”.',
   'empty.disconnected': 'Conectați camera, apoi apăsați „Citire sloturi”.',
 
   /* A build the page does not support; core's reason follows it. */
@@ -149,8 +148,8 @@ export default {
   'table.empty': 'gol',
   'table.emptyNote':
     'Nicio imagine: fereastra antetului acestui slot se citește numai 0xFF, așa că nu se decriptează nimic din el, iar scrierea lui nu suprascrie niciun firmware.',
-  /* {why} and {reason} are core's. */
-  'table.emptyWritable': 'Poate fi scris. {why}',
+  /* {reason} is core's. */
+  'table.emptyWritable': 'Poate fi scris.',
   'table.emptyNotWritable': 'Nu poate fi scris pe acest build: {reason}',
   'table.unknownVersion': 'versiune necunoscută',
   /* {id} is the image id in hex. */

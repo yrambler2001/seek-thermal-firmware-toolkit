@@ -658,50 +658,11 @@ export default {
   /** `{error}`: the error's message (translated where core gives it a code). */
   'fpsEvery.stopped.error': '{name} : {error}',
 
-  /* ---- notes: what the read measured about a build, a bank or an empty bank (slots/capability-notes) ----
-   * Mode numbers, addresses, version numbers and command names (CompleteMemoryUpgrade, BeginFirmwareUpgrade,
-   * EP0, PRESERVATION.md) are names: keep them. `{untested}` is notes.ffBootUntested. */
-  /** "This line" is the firmware line (the 2016 Compact PRO 1.0.3.x builds), not a line of text: on these builds, the bank the page or the CLI calls booted is the one the camera entered at its last start. */
-  'notes.locked2016BootWord':
-    'L’emplacement démarré indiqué sur cette lignée est celui où la caméra est entrée à son dernier démarrage, tel que le bootloader l’enregistre dans le mot de l’emplacement actif (0 emplacement A, 1 emplacement B, 2 emplacement de secours R). Le prochain démarrage est fixé par le mot de configuration de démarrage : 0 ou 0xFFFFFFFF choisissent A en premier, 1 B en premier, toute autre valeur l’emplacement de secours R en premier. Le bootloader de 2016 n’accepte un emplacement que s’il se déchiffre avec une somme des mots de 0 sous la clé avec laquelle il vérifie un emplacement (le bloc de clés 1 sur son bootloader 1.2.0.0), et le dernier emplacement de cet ordre s’exécute sans vérification quand les deux autres échouent. La lecture identifie cette clé à partir de l’emplacement où la caméra est entrée, car le bloc du bootloader qui la contient est refusé sur tous les canaux (mesuré sur une caméra).',
-  'notes.ep0of1032':
-    '1.0.3.2 : les sessions EP0 meurent vers 64 à 81 Ko, et 128 o est l’unité de lecture sans perte : un emplacement de 64 Ko par session est donc la limite mesurée. Une lecture complète de la puce est refusée sur ce build (PRESERVATION.md : il n’existe pas de lecture complète en une seule ouverture). L’extraction d’un emplacement lit un emplacement à la fois, par demandes de 64 octets.',
-  'notes.staging.lockedPlain':
-    'Transfert : l’image elle-même, 56 Ko au plus (le maximum que la caméra accepte en une écriture). L’écriture efface l’emplacement de 64 Ko et écrit exactement ces octets ; le reste de l’emplacement se lit comme effacé. Le bootloader ne démarre un emplacement que si la somme de ses mots vaut 0 : l’image est donc équilibrée à cette somme avant l’envoi.',
-  'notes.staging.locked2016':
-    'Transfert : l’image, combinée par XOR au flux de clé xorshift128 de son PROPRE bloc de clés 0 (la clé de transfert, trouvée dans l’image par sa valeur), sur la seule longueur de l’image (0xE000 octets au plus). L’appareil déchiffre les données avec cette clé et les stocke sous la clé avec laquelle son bootloader vérifie un emplacement (le bloc de clés 1) : les octets stockés ne sont donc pas ceux transférés. Rien n’est lu dans l’emplacement cible pour le transfert : le flux de clé de l’emplacement ne sert qu’à le relire.',
-  'notes.staging.modern':
-    'Transfert : l’emplacement entier de 64 Ko, image + remplissage 0xFF + pied « CODE ». L’image est combinée par XOR aux flux de clé qui font que les deux passes propres à l’application en cours la placent sous la clé que contient l’emplacement démarré : quand la commande de validation (CompleteMemoryUpgrade) reçoit le type de données 7, 8 ou 9, l’application déchiffre l’envoi avec sa clé A, le rechiffre sous sa clé de stockage et programme l’emplacement. C’est le pied qui permet au bootloader d’accepter l’emplacement : un emplacement qui n’en a pas est refusé.',
+  /* ---- notes: what the read measured about a build (slots/capability-notes) ----
+   * The page shows only this one; it leaves the others out (lib/page-hidden.ts), and the CLI prints them
+   * in English. */
   'notes.unverified':
     'Lecture seule. La disposition des emplacements est la table décodée de la lignée verrouillée, mais aucune forme de transfert n’a été mesurée pour ce build : aucune écriture n’est donc prévue.',
-  'notes.empty.plain':
-    'Un emplacement vide accepte une image exactement comme un emplacement utilisé. La chaîne en clair transfère les octets de l’image tels quels, sans clé, et la validation efface d’abord le bloc : rien n’est donc lu dans l’emplacement cible. Mesuré sur une Compact : une image écrite dans un emplacement B vide s’est relue à l’identique, et B a démarré seul.',
-  'notes.empty.modern':
-    'Un emplacement vide accepte une image exactement comme un emplacement utilisé. Les données sont chiffrées sous des clés dérivées de l’emplacement démarré et de l’application en cours, pas de l’emplacement cible, et l’appareil les rechiffre et efface le bloc sans le lire. Le pied est copié d’un emplacement qui en a un valide, sinon il est construit vierge. Prouvé sur l’émulateur ; pas encore mesuré sur une caméra.',
-  'notes.empty.locked2016':
-    'Un emplacement vide accepte une image exactement comme un emplacement utilisé. La clé de transfert est le bloc de clés 0 de la propre paire de l’IMAGE, pas une clé lue dans l’emplacement cible, et l’appareil déchiffre les données avec elle, les stocke sous sa propre clé et efface le bloc sans le lire. Prouvé sur l’émulateur ; pas encore mesuré sur une caméra.',
-  'notes.mode2of080':
-    '0.8.0.0 : le mode 2 (0x14000000) risque de planter ce build, une lecture ouverte sort de la SRAM (PRESERVATION.md). Une lecture ou une écriture d’emplacement n’ouvre que les modes 7 à 9, jamais le mode 2.',
-  'notes.bank.recovery2016':
-    'Mesuré sur une Compact PRO 1.0.3.0 : l’emplacement de secours R a accepté sa propre image, une modification d’un octet et les octets bruts tels qu’envoyés, chacun écrit sans erreur.',
-  'notes.bank.ff1308A':
-    'L’image 1.3.0.8 FF (16 Hz) va ici sous la forme dans laquelle l’app du fabricant l’envoie, et la caméra la stocke sous sa propre clé. Le bootloader de 2014 ne démarre un emplacement que si la somme de ses mots vaut 0 : il ignore donc celui-ci au démarrage ; savoir si le build 16 Hz démarre depuis l’emplacement A n’est PAS TESTÉ (UNTESTED). L’image 8 Hz est écrite telle quelle.',
-  'notes.bank.ff1308B':
-    'L’image 1.3.0.8 FF (16 Hz) va ici sous la forme dans laquelle l’app du fabricant l’envoie, et la caméra la stocke sous sa propre clé. Le bootloader de 2014 ne démarre un emplacement que si la somme de ses mots vaut 0 : il ignore donc celui-ci au démarrage ; savoir si le build 16 Hz démarre depuis l’emplacement B n’est PAS TESTÉ (UNTESTED). L’image 8 Hz est écrite telle quelle.',
-  'notes.bank.ff1308R':
-    'L’image 1.3.0.8 FF (16 Hz) va ici sous la forme dans laquelle l’app du fabricant l’envoie, et la caméra la stocke sous sa propre clé. Le bootloader 0.9.0.0 démarre l’emplacement de secours R tel qu’il est stocké, sans le décoder : cette forme risque donc de ne pas démarrer — UNTESTED (non testé), et une forme antérieure de cette image a bien démarré depuis cet emplacement (mesuré sur une caméra). L’image 8 Hz est écrite telle quelle.',
-  'notes.product.4_8_2_1':
-    'Compact 4.8.2.1 et Compact XR 4.8.2.1 (une seule image) : la table moderne de 63 fenêtres ; l’émulateur a confirmé 63 fenêtres sur 63 sur le dump complet de la Compact et sur celui de la Compact XR.',
-  'notes.product.10_9_1_31':
-    'Mosaic 320x240 10.9.1.31 : la table moderne de 63 fenêtres, chaque fenêtre confirmée par mesure sur l’émulateur.',
-  'notes.product.2_27_1_33':
-    'Mosaic 320x240 FF 2.27.1.33 : la table moderne de 63 fenêtres, chaque fenêtre confirmée par mesure sur l’émulateur.',
-  'notes.product.42_32_3_10':
-    'Nano 200 42.32.3.10 : la table moderne de 63 fenêtres, chaque fenêtre confirmée par mesure sur l’émulateur. Sa commande de validation (CompleteMemoryUpgrade) n’a pas de gestionnaire pour le type de données 32, qu’une écriture par le mode 7, 8 ou 9 ne demande jamais.',
-  'notes.product.44_27_3_10':
-    'Nano 300 44.27.3.10 : la table moderne de 63 fenêtres, chaque fenêtre confirmée par mesure sur l’émulateur. Sa commande d’ouverture (BeginFirmwareUpgrade) refuse un type de données au-delà de la plage qu’elle accepte (0x7F) comme premier argument invalide, et les modes 7 à 9 sont dans cette plage.',
-  'notes.ff1308':
-    '1.3.0.8-FF (16 Hz) annonce la même version que le build 8 Hz. La lecture les distingue grâce à la caméra : la caméra dit, emplacement par emplacement, si son application accepte l’emplacement, et chaque build prévoit ses propres réponses à partir des emplacements. L’image FF est envoyée sous la forme dans laquelle l’app du fabricant l’envoie, et la caméra la stocke sous sa propre clé. Elle va dans l’emplacement A, l’emplacement B ou l’emplacement de secours R. Le build 8 Hz devrait la refuser avant d’écrire quoi que ce soit ; tant que les réponses de la caméra ne permettent pas de distinguer les builds, le plan indique ce que chaque build en fait. {untested}',
 
   /* ---- identity: why nothing is armed before the camera names its build (workflows/capability, window-plan) ---- */
   /** `{note}`: identity.note.*, the version read's own account. Command names (GetErrorCode, …) and wire ids stay. */

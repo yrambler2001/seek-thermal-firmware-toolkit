@@ -293,10 +293,9 @@ export function SlotTable({
                       {t('slots:table.emptyNote')}
                     </span>
                     <span className="mt-1 block text-[0.72rem] leading-snug text-muted-foreground">
+                      {/* An empty bank's why (core's `emptyBankWhy`, notes.empty.*) is left out (lib/page-hidden.ts). */}
                       {entry.emptyBank.writable.supported
-                        ? t('slots:table.emptyWritable', {
-                            why: coreText(capabilityNoteMessage(entry.emptyBank.why)),
-                          })
+                        ? t('slots:table.emptyWritable')
                         : t('slots:table.emptyNotWritable', {
                             reason: coreText(supportReasonMessage(entry.emptyBank.writable)),
                           })}

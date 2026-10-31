@@ -609,50 +609,11 @@ export default {
   /** `{error}`: the error's message (translated where core gives it a code). */
   'fpsEvery.stopped.error': '{name}: {error}',
 
-  /* ---- notes: what the read measured about a build, a bank or an empty bank (slots/capability-notes) ----
-   * Mode numbers, addresses, version numbers and command names (CompleteMemoryUpgrade, BeginFirmwareUpgrade,
-   * EP0, PRESERVATION.md) are names: keep them. `{untested}` is notes.ffBootUntested. */
-  /** "This line" is the firmware line (the 2016 Compact PRO 1.0.3.x builds), not a line of text: on these builds, the bank the page or the CLI calls booted is the one the camera entered at its last start. */
-  'notes.locked2016BootWord':
-    'Der gestartete Slot, der auf dieser Firmware-Linie genannt wird, ist der Slot, aus dem die Kamera bei ihrem letzten Start gestartet ist, wie der Bootloader ihn im Aktiv-Slot-Wort festhält (0 Slot A, 1 Slot B, 2 Recovery-Slot R). Der nächste Start wird durch das Boot-Konfigurationswort festgelegt: 0 oder 0xFFFFFFFF wählen zuerst A, 1 zuerst B, jeder andere Wert zuerst Recovery-Slot R. Der Bootloader von 2016 nimmt einen Slot nur an, wenn er sich unter dem Schlüssel, unter dem er einen Slot prüft (Schlüsselblock 1 auf seinem Bootloader 1.2.0.0), zu einer Wortsumme von 0 entschlüsselt, und der letzte Slot dieser Reihenfolge läuft ungeprüft, wenn die anderen beiden scheitern. Das Lesen benennt diesen Schlüssel anhand des Slots, aus dem die Kamera gestartet ist, weil der Bootloader-Block, der ihn enthält, auf jedem Kanal abgelehnt wird (an einer Kamera gemessen).',
-  'notes.ep0of1032':
-    '1.0.3.2: EP0-Sitzungen brechen bei etwa 64 bis 81 KB ab, und 128 B ist die verlustfreie Leseeinheit, daher ist ein 64-KB-Slot pro Sitzung die gemessene Grenze. Ein volles Auslesen des ganzen Chips wird auf diesem Build abgelehnt (PRESERVATION.md: Es gibt kein volles Auslesen mit einer einzigen Öffnung). Das Auslesen der Slots liest einen Slot nach dem anderen, in Anfragen zu 64 Bytes.',
-  'notes.staging.lockedPlain':
-    'Übertragen: das Image selbst, höchstens 56 KB (das Meiste, was die Kamera in einem Schreibvorgang annimmt). Der Schreibvorgang löscht den 64-KB-Slot und schreibt genau diese Bytes, und der Rest des Slots liest sich gelöscht. Der Bootloader startet einen Slot nur, wenn dessen Wörter sich zu 0 summieren, daher wird das Image vor dem Senden auf diese Summe ausgeglichen.',
-  'notes.staging.locked2016':
-    'Übertragen: das Image, XOR den xorshift128-Schlüsselstrom seines EIGENEN Schlüsselblocks 0 (der Übertragungsschlüssel, im Image anhand des Werts gefunden), nur in Image-Länge (höchstens 0xE000 Bytes). Das Gerät entschlüsselt die Nutzdaten mit diesem Schlüssel und speichert sie unter dem Schlüssel, unter dem sein Bootloader einen Slot prüft (Schlüsselblock 1), daher sind die gespeicherten Bytes nicht die übertragenen. Zum Übertragen wird nichts aus dem Ziel-Slot gelesen: Der Schlüsselstrom des Slots dient nur zum Zurücklesen des Slots.',
-  'notes.staging.modern':
-    'Übertragen: der ganze 64-KB-Slot, Image + 0xFF-Auffüllung + „CODE“-Footer. Das Image wird mit den Schlüsselströmen XOR-verknüpft, die dafür sorgen, dass die zwei eigenen Durchgänge der laufenden Anwendung es unter dem Schlüssel ablegen, den der gestartete Slot enthält: Wenn der Commit-Befehl (CompleteMemoryUpgrade) Datentyp 7, 8 oder 9 erhält, entschlüsselt die Anwendung den Upload mit ihrem Schlüssel A, verschlüsselt ihn unter ihrem Speicherschlüssel neu und programmiert den Slot. Der Footer sorgt dafür, dass der Bootloader den Slot annimmt; ein Slot ohne ihn wird abgelehnt.',
+  /* ---- notes: what the read measured about a build (slots/capability-notes) ----
+   * The page shows only this one; it leaves the others out (lib/page-hidden.ts), and the CLI prints them
+   * in English. */
   'notes.unverified':
     'Nur Lesen. Das Slot-Layout ist die dekodierte Tabelle der gesperrten Linie, aber für diesen Build wurde keine Übertragungsform gemessen, daher wird kein Schreibvorgang geplant.',
-  'notes.empty.plain':
-    'Ein leerer Slot nimmt ein Image genauso an wie ein belegter. Die Klartext-Kette überträgt die Image-Bytes, wie sie sind, ohne Schlüssel, und der Commit löscht den Block zuerst, daher wird nichts aus dem Ziel-Slot gelesen. An einer Compact gemessen: Ein in einen leeren Slot B geschriebenes Image las sich identisch zurück, und B startete allein.',
-  'notes.empty.modern':
-    'Ein leerer Slot nimmt ein Image genauso an wie ein belegter. Die Nutzdaten werden unter Schlüsseln verschlüsselt, die vom gestarteten Slot und der laufenden Anwendung abgeleitet sind, nicht vom Ziel-Slot, und das Gerät verschlüsselt sie neu und löscht den Block, ohne ihn zu lesen. Der Footer wird aus einem Slot kopiert, der einen gültigen enthält, sonst leer aufgebaut. Auf dem Emulator nachgewiesen; an einer Kamera noch nicht gemessen.',
-  'notes.empty.locked2016':
-    'Ein leerer Slot nimmt ein Image genauso an wie ein belegter. Der Übertragungsschlüssel ist Schlüsselblock 0 aus dem eigenen Paar des IMAGES, kein aus dem Ziel-Slot gelesener Schlüssel, und das Gerät entschlüsselt die Nutzdaten damit, speichert sie unter seinem eigenen Schlüssel und löscht den Block, ohne ihn zu lesen. Auf dem Emulator nachgewiesen; an einer Kamera noch nicht gemessen.',
-  'notes.mode2of080':
-    '0.8.0.0: Modus 2 (0x14000000) ist auf diesem Build eine Absturzgefahr, ein geöffnetes Lesen läuft über das SRAM hinaus (PRESERVATION.md). Ein Slot-Lesen oder -Schreiben öffnet nur die Modi 7 bis 9 und nie Modus 2.',
-  'notes.bank.recovery2016':
-    'An einer Compact PRO 1.0.3.0 gemessen: Recovery-Slot R hat sein eigenes Image, eine Änderung um ein Byte und die Rohdaten so, wie sie gesendet wurden, angenommen, jeweils ohne Fehler geschrieben.',
-  'notes.bank.ff1308A':
-    'Das 1.3.0.8-FF-Image (16 Hz) kommt hierher in der Form, in der die Hersteller-App es sendet, und die Kamera speichert es unter ihrem eigenen Schlüssel. Der Bootloader von 2014 startet einen Slot nur, wenn dessen Wörter sich zu 0 summieren, daher übergeht er diesen beim Start; ob der 16-Hz-Build aus Slot A startet, ist UNTESTED (ungetestet). Das 8-Hz-Image wird so geschrieben, wie es ist.',
-  'notes.bank.ff1308B':
-    'Das 1.3.0.8-FF-Image (16 Hz) kommt hierher in der Form, in der die Hersteller-App es sendet, und die Kamera speichert es unter ihrem eigenen Schlüssel. Der Bootloader von 2014 startet einen Slot nur, wenn dessen Wörter sich zu 0 summieren, daher übergeht er diesen beim Start; ob der 16-Hz-Build aus Slot B startet, ist UNTESTED (ungetestet). Das 8-Hz-Image wird so geschrieben, wie es ist.',
-  'notes.bank.ff1308R':
-    'Das 1.3.0.8-FF-Image (16 Hz) kommt hierher in der Form, in der die Hersteller-App es sendet, und die Kamera speichert es unter ihrem eigenen Schlüssel. Der Bootloader 0.9.0.0 startet Recovery-Slot R so, wie er gespeichert ist, ohne ihn zu dekodieren, daher startet diese Form womöglich nicht: UNTESTED (ungetestet), und eine frühere Form dieses Images ist von hier gestartet (an einer Kamera gemessen). Das 8-Hz-Image wird so geschrieben, wie es ist.',
-  'notes.product.4_8_2_1':
-    'Compact 4.8.2.1 und Compact XR 4.8.2.1 (ein Image): die moderne Tabelle mit 63 Fenstern; der Emulator hat 63 von 63 Fenstern am vollständigen Flash-Abbild der Compact und an dem der Compact XR bestätigt.',
-  'notes.product.10_9_1_31':
-    'Mosaic 320x240 10.9.1.31: die moderne Tabelle mit 63 Fenstern, gemessen: Auf dem Emulator wird jedes Fenster bestätigt.',
-  'notes.product.2_27_1_33':
-    'Mosaic 320x240 FF 2.27.1.33: die moderne Tabelle mit 63 Fenstern, gemessen: Auf dem Emulator wird jedes Fenster bestätigt.',
-  'notes.product.42_32_3_10':
-    'Nano 200 42.32.3.10: die moderne Tabelle mit 63 Fenstern, gemessen: Auf dem Emulator wird jedes Fenster bestätigt. Sein Commit-Befehl (CompleteMemoryUpgrade) hat keinen Handler für Datentyp 32, nach dem ein Schreiben über Modus 7, 8 oder 9 nie fragt.',
-  'notes.product.44_27_3_10':
-    'Nano 300 44.27.3.10: die moderne Tabelle mit 63 Fenstern, gemessen: Auf dem Emulator wird jedes Fenster bestätigt. Sein Öffnungsbefehl (BeginFirmwareUpgrade) lehnt einen Datentyp jenseits des angenommenen Bereichs (0x7F) als ungültiges erstes Argument ab, und die Modi 7 bis 9 liegen innerhalb dieses Bereichs.',
-  'notes.ff1308':
-    '1.3.0.8-FF (16 Hz) meldet dieselbe Version wie der 8-Hz-Build. Das Lesen unterscheidet sie an der Kamera: Die Kamera sagt Slot für Slot, ob ihre Anwendung den Slot annimmt, und für jeden Build lassen sich seine Antworten aus den Slots vorhersagen. Das FF-Image wird in der Form gesendet, in der die Hersteller-App es sendet, und die Kamera speichert es unter ihrem eigenen Schlüssel. Es kann in Slot A, Slot B oder Recovery-Slot R. Vom 8-Hz-Build wird erwartet, dass er es ablehnt, bevor er irgendetwas schreibt; solange die Antworten der Kamera die Builds nicht unterscheiden können, sagt der Plan, was jeder Build damit tut. {untested}',
 
   /* ---- identity: why nothing is armed before the camera names its build (workflows/capability, window-plan) ---- */
   /** `{note}`: identity.note.*, the version read's own account. Command names (GetErrorCode, …) and wire ids stay. */

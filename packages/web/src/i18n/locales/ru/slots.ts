@@ -43,8 +43,7 @@ export default {
   'run.label': 'Слоты',
 
   /* Before any read. */
-  'empty.connected':
-    'Нажмите «Считать слоты». Сначала камеру спросят, какая сборка на ней работает, и на сборке, которую эта страница не поддерживает, ничего не будет активировано.',
+  'empty.connected': 'Нажмите «Считать слоты».',
   'empty.disconnected': 'Подключите камеру, затем нажмите «Считать слоты».',
 
   /* A build the page does not support; core's reason follows it. */
@@ -156,8 +155,8 @@ export default {
   'table.empty': 'пусто',
   'table.emptyNote':
     'Образа нет: окно заголовка этого слота читается как сплошные 0xFF, поэтому из него ничего не расшифровывается, а запись в него не перезаписывает никакую прошивку.',
-  /* {why} and {reason} are core's. */
-  'table.emptyWritable': 'Можно записать. {why}',
+  /* {reason} is core's. */
+  'table.emptyWritable': 'Можно записать.',
   'table.emptyNotWritable': 'На этой сборке записать нельзя: {reason}',
   'table.unknownVersion': 'версия неизвестна',
   /* {id} is the image id in hex. */

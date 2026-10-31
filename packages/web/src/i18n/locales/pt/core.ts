@@ -658,50 +658,11 @@ export default {
   /** `{error}`: the error's message (translated where core gives it a code). */
   'fpsEvery.stopped.error': '{name}: {error}',
 
-  /* ---- notes: what the read measured about a build, a bank or an empty bank (slots/capability-notes) ----
-   * Mode numbers, addresses, version numbers and command names (CompleteMemoryUpgrade, BeginFirmwareUpgrade,
-   * EP0, PRESERVATION.md) are names: keep them. `{untested}` is notes.ffBootUntested. */
-  /** "This line" is the firmware line (the 2016 Compact PRO 1.0.3.x builds), not a line of text: on these builds, the bank the page or the CLI calls booted is the one the camera entered at its last start. */
-  'notes.locked2016BootWord':
-    'A ranhura de arranque indicada nesta linha de firmware é a ranhura em que a câmara entrou no último arranque, tal como o bootloader a regista na palavra de ranhura ativa (0 ranhura A, 1 ranhura B, 2 ranhura de recuperação R). O próximo arranque é definido pela palavra de configuração de arranque: 0 ou 0xFFFFFFFF escolhem primeiro A, 1 primeiro B, qualquer outro valor primeiro a ranhura de recuperação R. O bootloader de 2016 só aceita uma ranhura quando esta se desencripta numa soma de palavras de 0 com a chave com que verifica uma ranhura (o bloco de chaves 1 no seu bootloader 1.2.0.0), e a última ranhura dessa ordem arranca sem verificação quando as outras duas falham. A leitura identifica essa chave a partir da ranhura em que a câmara entrou, porque o bloco do bootloader que a contém é recusado em todos os canais (medido numa câmara).',
-  'notes.ep0of1032':
-    '1.0.3.2: as sessões EP0 morrem por volta dos 64 a 81 KB e 128 B é a unidade de leitura sem perdas, por isso uma ranhura de 64 KB por sessão é o limite medido. A leitura completa da flash é recusada nesta compilação (PRESERVATION.md: não existe leitura completa com uma só abertura). O dump de ranhuras lê uma ranhura de cada vez, em pedidos de 64 bytes.',
-  'notes.staging.lockedPlain':
-    'Preparação: a própria imagem, no máximo 56 KB (o máximo que a câmara aceita numa escrita). A escrita apaga a ranhura de 64 KB e escreve exatamente esses bytes, e o resto da ranhura fica apagado. O bootloader só arranca uma ranhura quando as suas palavras somam 0, por isso a imagem é equilibrada para essa soma antes de ser enviada.',
-  'notes.staging.locked2016':
-    'Preparação: a imagem, XOR o fluxo de chave xorshift128 do seu PRÓPRIO bloco de chaves 0 (a chave de envio, encontrada na imagem pelo valor), só com o comprimento da imagem (no máximo 0xE000 bytes). O dispositivo desencripta os dados com essa chave e guarda-os com a chave com que o bootloader verifica uma ranhura (bloco de chaves 1), por isso os bytes guardados não são os preparados. Não se lê nada da ranhura de destino para a preparação: o fluxo de chave da ranhura só é usado para a reler.',
-  'notes.staging.modern':
-    'Preparação: a ranhura inteira de 64 KB, imagem + preenchimento 0xFF + rodapé «CODE». A imagem é combinada por XOR com os fluxos de chave que fazem com que as duas passagens da própria aplicação em execução a guardem com a chave que a ranhura de arranque contém: quando o comando de confirmação (CompleteMemoryUpgrade) recebe o tipo de dados 7, 8 ou 9, a aplicação desencripta o envio com a sua chave A, volta a encriptá-lo com a sua chave de armazenamento e programa a ranhura. O rodapé é o que permite ao bootloader aceitar a ranhura, por isso uma ranhura sem ele é recusada.',
+  /* ---- notes: what the read measured about a build (slots/capability-notes) ----
+   * The page shows only this one; it leaves the others out (lib/page-hidden.ts), and the CLI prints them
+   * in English. */
   'notes.unverified':
     'Só leitura. A disposição das ranhuras é a tabela descodificada da linha bloqueada, mas não foi medida nenhuma forma de preparação para esta compilação, por isso não é planeada nenhuma escrita.',
-  'notes.empty.plain':
-    'Uma ranhura vazia recebe uma imagem exatamente como uma ranhura usada. A cadeia sem encriptação prepara os bytes da imagem tal como estão, sem chave, e a confirmação da escrita apaga primeiro o bloco, por isso não se lê nada da ranhura de destino. Medido numa Compact: uma imagem escrita numa ranhura B vazia foi relida idêntica, e B arrancou sozinha.',
-  'notes.empty.modern':
-    'Uma ranhura vazia recebe uma imagem exatamente como uma ranhura usada. Os dados são encriptados com chaves derivadas da ranhura de arranque e da aplicação em execução, não da ranhura de destino, e o dispositivo volta a encriptá-los e apaga o bloco sem o ler. O rodapé é copiado de uma ranhura que tenha um válido; caso contrário, é criado em branco. Provado no emulador; ainda não medido numa câmara.',
-  'notes.empty.locked2016':
-    'Uma ranhura vazia recebe uma imagem exatamente como uma ranhura usada. A chave de envio é o bloco de chaves 0 do par da própria IMAGEM, não uma chave lida da ranhura de destino, e o dispositivo desencripta os dados com ela, guarda-os com a sua própria chave e apaga o bloco sem o ler. Provado no emulador; ainda não medido numa câmara.',
-  'notes.mode2of080':
-    '0.8.0.0: nesta compilação, o modo 2 (0x14000000) pode bloquear a câmara: uma leitura aberta sai da SRAM (PRESERVATION.md). Uma leitura ou escrita de ranhura só abre os modos 7 a 9 e nunca o modo 2.',
-  'notes.bank.recovery2016':
-    'Medido numa Compact PRO 1.0.3.0: a ranhura de recuperação R aceitou a sua própria imagem, uma alteração de um byte e os bytes em bruto tal como foram enviados, cada um escrito sem erro.',
-  'notes.bank.ff1308A':
-    'A imagem 1.3.0.8 FF (16 Hz) vai para aqui na forma em que a aplicação do fabricante a envia, e a câmara guarda-a com a sua própria chave. O bootloader de 2014 só arranca uma ranhura quando as suas palavras somam 0, por isso ignora esta no arranque; se a compilação de 16 Hz arranca a partir da ranhura A está UNTESTED (não testado). A imagem de 8 Hz é escrita tal como está.',
-  'notes.bank.ff1308B':
-    'A imagem 1.3.0.8 FF (16 Hz) vai para aqui na forma em que a aplicação do fabricante a envia, e a câmara guarda-a com a sua própria chave. O bootloader de 2014 só arranca uma ranhura quando as suas palavras somam 0, por isso ignora esta no arranque; se a compilação de 16 Hz arranca a partir da ranhura B está UNTESTED (não testado). A imagem de 8 Hz é escrita tal como está.',
-  'notes.bank.ff1308R':
-    'A imagem 1.3.0.8 FF (16 Hz) vai para aqui na forma em que a aplicação do fabricante a envia, e a câmara guarda-a com a sua própria chave. O bootloader 0.9.0.0 arranca a ranhura de recuperação R tal como está guardada, sem a descodificar, por isso esta forma pode não arrancar: UNTESTED (não testado), e uma forma anterior desta imagem arrancou a partir daqui (medido numa câmara). A imagem de 8 Hz é escrita tal como está.',
-  'notes.product.4_8_2_1':
-    'Compact 4.8.2.1 e Compact XR 4.8.2.1 (uma só imagem): o mapa moderno de 63 janelas; o emulador confirmou 63 de 63 janelas no dump completo da Compact e no da Compact XR.',
-  'notes.product.10_9_1_31':
-    'Mosaic 320x240 10.9.1.31: o mapa moderno de 63 janelas, com todas as janelas confirmadas no emulador.',
-  'notes.product.2_27_1_33':
-    'Mosaic 320x240 FF 2.27.1.33: o mapa moderno de 63 janelas, com todas as janelas confirmadas no emulador.',
-  'notes.product.42_32_3_10':
-    'Nano 200 42.32.3.10: o mapa moderno de 63 janelas, com todas as janelas confirmadas no emulador. O seu comando de confirmação (CompleteMemoryUpgrade) não tem handler para o tipo de dados 32, que uma escrita pelos modos 7, 8 ou 9 nunca pede.',
-  'notes.product.44_27_3_10':
-    'Nano 300 44.27.3.10: o mapa moderno de 63 janelas, com todas as janelas confirmadas no emulador. O seu comando de abertura (BeginFirmwareUpgrade) recusa um tipo de dados para lá do intervalo que aceita (0x7F) como primeiro argumento inválido, e os modos 7 a 9 estão dentro desse intervalo.',
-  'notes.ff1308':
-    'A 1.3.0.8-FF (16 Hz) indica a mesma versão que a compilação de 8 Hz. A leitura distingue-as a partir da câmara: a câmara diz, ranhura a ranhura, se a sua aplicação aceita a ranhura, e cada compilação prevê as suas próprias respostas a partir das ranhuras. A imagem FF é enviada na forma em que a aplicação do fabricante a envia, e a câmara guarda-a com a sua própria chave. Vai para a ranhura A, a ranhura B ou a ranhura de recuperação R. Espera-se que a compilação de 8 Hz a recuse antes de escrever o que quer que seja; enquanto as respostas da câmara não distinguirem as compilações, o plano diz o que cada compilação faz com ela. {untested}',
 
   /* ---- identity: why nothing is armed before the camera names its build (workflows/capability, window-plan) ---- */
   /** `{note}`: identity.note.*, the version read's own account. Command names (GetErrorCode, …) and wire ids stay. */

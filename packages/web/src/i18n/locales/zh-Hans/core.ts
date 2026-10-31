@@ -539,50 +539,11 @@ export default {
   /** `{error}`: the error's message (translated where core gives it a code). */
   'fpsEvery.stopped.error': '{name}：{error}',
 
-  /* ---- notes: what the read measured about a build, a bank or an empty bank (slots/capability-notes) ----
-   * Mode numbers, addresses, version numbers and command names (CompleteMemoryUpgrade, BeginFirmwareUpgrade,
-   * EP0, PRESERVATION.md) are names: keep them. `{untested}` is notes.ffBootUntested. */
-  /** "This line" is the firmware line (the 2016 Compact PRO 1.0.3.x builds), not a line of text: on these builds, the bank the page or the CLI calls booted is the one the camera entered at its last start. */
-  'notes.locked2016BootWord':
-    '在这条固件线上，所说的当前启动槽位是相机上次启动时进入的槽位，由引导程序记录在活动槽位字中（0 为槽位 A，1 为槽位 B，2 为恢复槽位 R）。下次启动由启动配置字决定：0 或 0xFFFFFFFF 先选 A，1 先选 B，其他任何值先选恢复槽位 R。2016 年的引导程序只有在槽位用它检查槽位的密钥（其 1.2.0.0 引导程序上为密钥块 1）解密后字累加和为 0 时才接受该槽位；当另外两个都不通过时，该顺序中的最后一个槽位会不经检查直接运行。由于存放该密钥的引导程序块在所有通道上都被拒绝读取，本次读取根据相机进入的槽位来指明该密钥（已在相机上测得）。',
-  'notes.ep0of1032':
-    '1.0.3.2：EP0 会话在大约 64 到 81 KB 时中断，128 B 是无损读取单位，因此每个会话读取一个 64 KB 槽位是测得的上限。这个版本拒绝整片闪存读取（PRESERVATION.md：不存在单次打开的整片读取）。槽位导出一次读取一个槽位，每次请求 64 字节。',
-  'notes.staging.lockedPlain':
-    '暂存：镜像本身，最多 56 KB（相机一次写入最多接受的大小）。写入会擦除 64 KB 槽位并准确写入这些字节，槽位的其余部分读出为已擦除状态。引导程序只有在槽位的字累加和为 0 时才会启动它，所以镜像在发送之前会被平衡到这个和值。',
-  'notes.staging.locked2016':
-    '暂存：镜像与其自身密钥块 0（暂存密钥，按值在镜像中找到）的 xorshift128 密钥流异或，仅为镜像长度（最多 0xE000 字节）。设备用该密钥解密载荷，再以其引导程序检查槽位时使用的密钥（密钥块 1）存储，因此存储的字节与暂存的字节不同。暂存时不会从目标槽位读取任何内容：该槽位的密钥流只用于回读槽位。',
-  'notes.staging.modern':
-    '暂存：整个 64 KB 槽位，即镜像 + 0xFF 填充 + “CODE”尾部。镜像会与特定的密钥流异或，使正在运行的应用程序自己的两轮处理最终以当前启动槽位持有的密钥存储它：当提交命令（CompleteMemoryUpgrade）收到数据类型 7、8 或 9 时，应用程序用它的密钥 A 解密上传的数据，再以它的存储密钥重新加密并写入槽位。正是尾部让引导程序接受该槽位，所以缺少尾部的槽位会被拒绝。',
+  /* ---- notes: what the read measured about a build (slots/capability-notes) ----
+   * The page shows only this one; it leaves the others out (lib/page-hidden.ts), and the CLI prints them
+   * in English. */
   'notes.unverified':
     '只读。槽位布局采用加锁固件线的已解码表，但还没有为这个版本测得任何暂存形式，所以不规划任何写入。',
-  'notes.empty.plain':
-    '空槽位接受镜像的方式与已用槽位完全相同。明文链按原样暂存镜像字节，不使用密钥，提交时会先擦除该块，所以不会从目标槽位读取任何内容。已在一台 Compact 上测得：写入空槽位 B 的镜像回读结果完全相同，并且仅凭 B 就能启动。',
-  'notes.empty.modern':
-    '空槽位接受镜像的方式与已用槽位完全相同。载荷使用由当前启动槽位和正在运行的应用程序推导出的密钥加密，而不是由目标槽位推导，设备会重新加密它，并在不读取的情况下擦除该块。尾部从存有有效尾部的槽位复制，否则构造一个空白尾部。已在模拟器上证实；尚未在相机上测得。',
-  'notes.empty.locked2016':
-    '空槽位接受镜像的方式与已用槽位完全相同。暂存密钥是镜像自身密钥对中的密钥块 0，而不是从目标槽位读取的密钥；设备用它解密载荷，以自己的密钥存储，并在不读取的情况下擦除该块。已在模拟器上证实；尚未在相机上测得。',
-  'notes.mode2of080':
-    '0.8.0.0：在这个版本上，模式 2（0x14000000）有导致崩溃的风险，打开后的读取会越出 SRAM 范围（PRESERVATION.md）。槽位读取或写入只会打开模式 7 到 9，绝不会打开模式 2。',
-  'notes.bank.recovery2016':
-    '已在一台 Compact PRO 1.0.3.0 上测得：恢复槽位 R 接受了它自己的镜像、一个改动一个字节的镜像，以及按发送原样的原始字节，每次写入都没有出错。',
-  'notes.bank.ff1308A':
-    '1.3.0.8 FF（16 Hz）镜像以厂商应用发送的形式写入这里，相机会以它自己的密钥存储。2014 年的引导程序只有在槽位的字累加和为 0 时才会启动它，因此启动时会跳过这个槽位；16 Hz 版本能否从槽位 A 启动尚未测试（UNTESTED）。8 Hz 镜像按原样写入。',
-  'notes.bank.ff1308B':
-    '1.3.0.8 FF（16 Hz）镜像以厂商应用发送的形式写入这里，相机会以它自己的密钥存储。2014 年的引导程序只有在槽位的字累加和为 0 时才会启动它，因此启动时会跳过这个槽位；16 Hz 版本能否从槽位 B 启动尚未测试（UNTESTED）。8 Hz 镜像按原样写入。',
-  'notes.bank.ff1308R':
-    '1.3.0.8 FF（16 Hz）镜像以厂商应用发送的形式写入这里，相机会以它自己的密钥存储。0.9.0.0 引导程序按存储原样启动恢复槽位 R，不会对其解码，所以这种形式可能无法启动：尚未测试（UNTESTED），而这个镜像的较早形式曾从这里启动（已在相机上测得）。8 Hz 镜像按原样写入。',
-  'notes.product.4_8_2_1':
-    'Compact 4.8.2.1 和 Compact XR 4.8.2.1（同一个镜像）：现代的 63 窗口映射；模拟器在 Compact 和 Compact XR 的完整导出上都确认了 63 个窗口中的全部 63 个。',
-  'notes.product.10_9_1_31':
-    'Mosaic 320x240 10.9.1.31：现代的 63 窗口映射，在模拟器上测得每个窗口都已确认。',
-  'notes.product.2_27_1_33':
-    'Mosaic 320x240 FF 2.27.1.33：现代的 63 窗口映射，在模拟器上测得每个窗口都已确认。',
-  'notes.product.42_32_3_10':
-    'Nano 200 42.32.3.10：现代的 63 窗口映射，在模拟器上测得每个窗口都已确认。它的提交命令（CompleteMemoryUpgrade）没有数据类型 32 的处理程序，而通过模式 7、8 或 9 的写入从不请求该类型。',
-  'notes.product.44_27_3_10':
-    'Nano 300 44.27.3.10：现代的 63 窗口映射，在模拟器上测得每个窗口都已确认。它的打开命令（BeginFirmwareUpgrade）会把超出其接受范围（0x7F）的数据类型当作错误的第一个参数拒绝，而模式 7 到 9 在该范围之内。',
-  'notes.ff1308':
-    '1.3.0.8-FF（16 Hz）报告的版本号与 8 Hz 版本相同。读取时由相机来区分它们：相机会逐个槽位说明它的应用程序是否接受该槽位，而每个版本都会根据槽位预测自己的应答。FF 镜像以厂商应用发送的形式发送，相机会以它自己的密钥存储。它可以写入槽位 A、槽位 B 或恢复槽位 R。预计 8 Hz 版本会在写入任何内容之前拒绝它；当相机的应答无法区分这两个版本时，计划会说明每个版本会如何处理它。{untested}',
 
   /* ---- identity: why nothing is armed before the camera names its build (workflows/capability, window-plan) ---- */
   /** `{note}`: identity.note.*, the version read's own account. Command names (GetErrorCode, …) and wire ids stay. */

@@ -43,8 +43,7 @@ export default {
   'run.label': 'Emplacements',
 
   /* Before any read. */
-  'empty.connected':
-    'Appuyez sur Lire les emplacements. La caméra est d’abord interrogée sur le build qu’elle exécute, et rien n’est ouvert sur un build que cette page ne prend pas en charge.',
+  'empty.connected': 'Appuyez sur Lire les emplacements.',
   'empty.disconnected': 'Connectez la caméra, puis appuyez sur Lire les emplacements.',
 
   /* A build the page does not support; core's reason follows it. */
@@ -150,8 +149,8 @@ export default {
   'table.empty': 'vide',
   'table.emptyNote':
     'Aucune image : la fenêtre d’en-tête de cet emplacement se lit entièrement comme 0xFF, rien n’en est donc déchiffré, et l’écrire n’écrase aucun firmware.',
-  /* {why} and {reason} are core's. */
-  'table.emptyWritable': 'Peut être écrit. {why}',
+  /* {reason} is core's. */
+  'table.emptyWritable': 'Peut être écrit.',
   'table.emptyNotWritable': 'Ne peut pas être écrit sur ce build : {reason}',
   'table.unknownVersion': 'version inconnue',
   /* {id} is the image id in hex. */

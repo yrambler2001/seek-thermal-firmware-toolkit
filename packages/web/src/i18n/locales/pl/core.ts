@@ -655,50 +655,11 @@ export default {
   /** `{error}`: the error's message (translated where core gives it a code). */
   'fpsEvery.stopped.error': '{name}: {error}',
 
-  /* ---- notes: what the read measured about a build, a bank or an empty bank (slots/capability-notes) ----
-   * Mode numbers, addresses, version numbers and command names (CompleteMemoryUpgrade, BeginFirmwareUpgrade,
-   * EP0, PRESERVATION.md) are names: keep them. `{untested}` is notes.ffBootUntested. */
-  /** "This line" is the firmware line (the 2016 Compact PRO 1.0.3.x builds), not a line of text: on these builds, the bank the page or the CLI calls booted is the one the camera entered at its last start. */
-  'notes.locked2016BootWord':
-    'Uruchomiony slot wskazany w tej linii to slot, który kamera uruchomiła przy ostatnim starcie, zgodnie z zapisem bootloadera w słowie aktywnego slotu (0 slot A, 1 slot B, 2 slot odzyskiwania R). Następny start określa słowo konfiguracji startu: 0 lub 0xFFFFFFFF wybiera najpierw A, 1 najpierw B, każda inna wartość najpierw slot odzyskiwania R. Bootloader z 2016 roku przyjmuje slot tylko wtedy, gdy ten odszyfrowuje się do sumy słów 0 kluczem, którym bootloader sprawdza slot (blok kluczy 1 w bootloaderze 1.2.0.0), a ostatni slot w tej kolejności uruchamia się bez sprawdzenia, gdy dwa pozostałe zawiodą. Odczyt wskazuje ten klucz na podstawie slotu, który kamera uruchomiła, bo blok bootloadera, który go zawiera, jest odrzucany na każdym kanale (zmierzono na kamerze).',
-  'notes.ep0of1032':
-    '1.0.3.2: sesje EP0 kończą się po około 64–81 KB, a 128 B to bezstratna jednostka odczytu, więc zmierzony limit to jeden slot 64 KB na sesję. Pełny odczyt całego układu jest w tej kompilacji odrzucany (PRESERVATION.md: nie ma pełnego odczytu jednym aktywowaniem). Zrzut slotu odczytuje jeden slot naraz, w porcjach po 64 bajty.',
-  'notes.staging.lockedPlain':
-    'Przesyłane: sam obraz, najwyżej 56 KB (tyle, ile kamera przyjmuje w jednym zapisie). Zapis wymazuje slot 64 KB i zapisuje dokładnie te bajty, a reszta slotu odczytuje się jako wymazana. Bootloader uruchamia slot tylko wtedy, gdy jego słowa sumują się do 0, więc obraz jest wyrównywany do tej sumy przed wysłaniem.',
-  'notes.staging.locked2016':
-    'Przesyłane: obraz XOR strumień klucza xorshift128 jego WŁASNEGO bloku kluczy 0 (klucza przesyłania, znalezionego w obrazie po wartości), tylko długość obrazu (najwyżej 0xE000 bajtów). Urządzenie odszyfrowuje dane tym kluczem i przechowuje je pod kluczem, którym bootloader sprawdza slot (blok kluczy 1), więc przechowywane bajty nie są przesłanymi. Do przesłania nic nie jest odczytywane ze slotu docelowego: strumień klucza slotu służy tylko do odczytu kontrolnego.',
-  'notes.staging.modern':
-    'Przesyłane: cały slot 64 KB, obraz + dopełnienie 0xFF + stopka „CODE”. Obraz jest XOR-owany ze strumieniami kluczy, dzięki którym dwa własne przebiegi działającej aplikacji umieszczają go pod kluczem, który zawiera uruchomiony slot: gdy polecenie zatwierdzenia (CompleteMemoryUpgrade) przyjmuje typ danych 7, 8 lub 9, aplikacja odszyfrowuje przesłane dane swoim kluczem A, szyfruje je ponownie kluczem zapisu i programuje slot. Stopka pozwala bootloaderowi przyjąć slot, więc slot bez niej jest odrzucany.',
+  /* ---- notes: what the read measured about a build (slots/capability-notes) ----
+   * The page shows only this one; it leaves the others out (lib/page-hidden.ts), and the CLI prints them
+   * in English. */
   'notes.unverified':
     'Tylko odczyt. Układ slotów to zdekodowana tabela zablokowanej linii, ale dla tej kompilacji nie zmierzono żadnej postaci przesyłania, więc żaden zapis nie jest planowany.',
-  'notes.empty.plain':
-    'Pusty slot przyjmuje obraz dokładnie tak samo jak używany. Łańcuch jawnego tekstu przesyła bajty obrazu bez zmian, bez klucza, a zatwierdzenie najpierw wymazuje blok, więc nic nie jest odczytywane ze slotu docelowego. Zmierzono na kamerze Compact: obraz zapisany do pustego slotu B odczytał się identycznie, a B uruchomił się samodzielnie.',
-  'notes.empty.modern':
-    'Pusty slot przyjmuje obraz dokładnie tak samo jak używany. Dane są szyfrowane kluczami wyprowadzonymi z uruchomionego slotu i działającej aplikacji, a nie ze slotu docelowego, a urządzenie szyfruje je ponownie i wymazuje blok bez odczytywania go. Stopka jest kopiowana ze slotu, który ma prawidłową, a w przeciwnym razie budowana pusta. Potwierdzone w emulatorze; jeszcze niezmierzone na kamerze.',
-  'notes.empty.locked2016':
-    'Pusty slot przyjmuje obraz dokładnie tak samo jak używany. Klucz przesyłania to blok kluczy 0 własnej pary OBRAZU, a nie klucz odczytany ze slotu docelowego; urządzenie odszyfrowuje nim dane, przechowuje je pod własnym kluczem i wymazuje blok bez odczytywania go. Potwierdzone w emulatorze; jeszcze niezmierzone na kamerze.',
-  'notes.mode2of080':
-    '0.8.0.0: tryb 2 (0x14000000) grozi w tej kompilacji awarią, aktywowany odczyt wychodzi poza SRAM (PRESERVATION.md). Odczyt lub zapis slotu aktywuje tylko tryby 7–9 i nigdy trybu 2.',
-  'notes.bank.recovery2016':
-    'Zmierzono na Compact PRO 1.0.3.0: slot odzyskiwania R przyjął własny obraz, zmianę jednego bajtu i surowe bajty w przesłanej postaci, każde zapisane bez błędu.',
-  'notes.bank.ff1308A':
-    'Obraz 1.3.0.8 FF (16 Hz) trafia tutaj w postaci, w jakiej wysyła go aplikacja producenta, a kamera przechowuje go pod własnym kluczem. Bootloader z 2014 roku uruchamia slot tylko wtedy, gdy jego słowa sumują się do 0, więc przy starcie pomija ten slot; czy kompilacja 16 Hz uruchamia się ze slotu A, jest UNTESTED (nieprzetestowane). Obraz 8 Hz jest zapisywany bez zmian.',
-  'notes.bank.ff1308B':
-    'Obraz 1.3.0.8 FF (16 Hz) trafia tutaj w postaci, w jakiej wysyła go aplikacja producenta, a kamera przechowuje go pod własnym kluczem. Bootloader z 2014 roku uruchamia slot tylko wtedy, gdy jego słowa sumują się do 0, więc przy starcie pomija ten slot; czy kompilacja 16 Hz uruchamia się ze slotu B, jest UNTESTED (nieprzetestowane). Obraz 8 Hz jest zapisywany bez zmian.',
-  'notes.bank.ff1308R':
-    'Obraz 1.3.0.8 FF (16 Hz) trafia tutaj w postaci, w jakiej wysyła go aplikacja producenta, a kamera przechowuje go pod własnym kluczem. Bootloader 0.9.0.0 uruchamia slot odzyskiwania R w postaci przechowywanej, bez dekodowania, więc ta postać może się nie uruchomić: UNTESTED (nieprzetestowane), a wcześniejsza postać tego obrazu uruchomiła się stąd (zmierzono na kamerze). Obraz 8 Hz jest zapisywany bez zmian.',
-  'notes.product.4_8_2_1':
-    'Compact 4.8.2.1 i Compact XR 4.8.2.1 (jeden obraz): nowoczesna mapa 63 okien; emulator potwierdził 63 z 63 okien na pełnym zrzucie kamery Compact i kamery Compact XR.',
-  'notes.product.10_9_1_31':
-    'Mosaic 320x240 10.9.1.31: nowoczesna mapa 63 okien; zmierzono, że emulator potwierdza każde okno.',
-  'notes.product.2_27_1_33':
-    'Mosaic 320x240 FF 2.27.1.33: nowoczesna mapa 63 okien; zmierzono, że emulator potwierdza każde okno.',
-  'notes.product.42_32_3_10':
-    'Nano 200 42.32.3.10: nowoczesna mapa 63 okien; zmierzono, że emulator potwierdza każde okno. Jej polecenie zatwierdzenia (CompleteMemoryUpgrade) nie obsługuje typu danych 32, o który zapis przez tryb 7, 8 lub 9 nigdy nie prosi.',
-  'notes.product.44_27_3_10':
-    'Nano 300 44.27.3.10: nowoczesna mapa 63 okien; zmierzono, że emulator potwierdza każde okno. Jej polecenie aktywowania (BeginFirmwareUpgrade) odrzuca typ danych spoza akceptowanego zakresu (0x7F) jako błędny pierwszy argument, a tryby 7–9 mieszczą się w tym zakresie.',
-  'notes.ff1308':
-    '1.3.0.8-FF (16 Hz) podaje tę samą wersję co kompilacja 8 Hz. Odczyt rozróżnia je na podstawie kamery: kamera mówi, slot po slocie, czy jej aplikacja przyjmuje dany slot, a każda kompilacja przewiduje własne odpowiedzi na podstawie slotów. Obraz FF jest wysyłany w postaci, w jakiej wysyła go aplikacja producenta, a kamera przechowuje go pod własnym kluczem. Trafia do slotu A, slotu B lub slotu odzyskiwania R. Należy się spodziewać, że kompilacja 8 Hz odrzuci go, zanim cokolwiek zapisze; dopóki odpowiedzi kamery nie rozróżniają kompilacji, plan mówi, co każda z nich z nim zrobi. {untested}',
 
   /* ---- identity: why nothing is armed before the camera names its build (workflows/capability, window-plan) ---- */
   /** `{note}`: identity.note.*, the version read's own account. Command names (GetErrorCode, …) and wire ids stay. */

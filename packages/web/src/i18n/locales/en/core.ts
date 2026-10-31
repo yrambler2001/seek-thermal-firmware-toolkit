@@ -589,50 +589,11 @@ export default {
   /** `{error}`: the error's message (translated where core gives it a code). */
   'fpsEvery.stopped.error': '{name}: {error}',
 
-  /* ---- notes: what the read measured about a build, a bank or an empty bank (slots/capability-notes) ----
-   * Mode numbers, addresses, version numbers and command names (CompleteMemoryUpgrade, BeginFirmwareUpgrade,
-   * EP0, PRESERVATION.md) are names: keep them. `{untested}` is notes.ffBootUntested. */
-  /** "This line" is the firmware line (the 2016 Compact PRO 1.0.3.x builds), not a line of text: on these builds, the bank the page or the CLI calls booted is the one the camera entered at its last start. */
-  'notes.locked2016BootWord':
-    'The booted bank named on this line is the bank the camera entered at its last start, as the bootloader records it in the active-slot word (0 slot A, 1 slot B, 2 recovery R). The next start is set by the boot-config word: 0 or 0xFFFFFFFF choose A first, 1 B first, any other value recovery R first. The 2016 bootloader takes a bank only when it decrypts to a word sum of 0 under the key it checks a bank under (key block 1 on its 1.2.0.0 bootloader), and the last bank of that order runs unchecked when the other two fail. The read names that key from the bank the camera entered, because the bootloader block that holds it is refused on every channel (measured on a camera).',
-  'notes.ep0of1032':
-    '1.0.3.2: EP0 sessions die at about 64 to 81 KB and 128 B is the lossless read unit, so one 64 KiB bank per session is the measured limit. A whole-part drain is refused on this build (PRESERVATION.md: no single-arm drain exists). The slot dump reads one bank at a time, in 64-byte asks.',
-  'notes.staging.lockedPlain':
-    'Staged: the image itself, at most 56 KiB (the most the camera takes in one write). The write erases the 64 KiB bank and writes exactly those bytes, and the rest of the bank reads erased. The bootloader starts a bank only when its words sum to 0, so the image is balanced to that sum before it is sent.',
-  'notes.staging.locked2016':
-    'Staged: the image, XORed with the xorshift128 keystream of its OWN key block 0 (the stage key, found in the image by value), image length only (at most 0xE000 bytes). The device decrypts the payload with that key and stores it under the key its bootloader checks a bank under (key block 1), so the stored bytes are not the staged ones. Nothing is read from the target bank to stage it: the bank’s keystream is used only to read the bank back.',
-  'notes.staging.modern':
-    'Staged: the whole 64 KiB bank, image + 0xFF pad + "CODE" footer. The image is XORed with the keystreams that make the running application’s own two passes land it under the key the booted bank holds: when the commit command (CompleteMemoryUpgrade) takes data type 7, 8 or 9, the application decrypts the upload with its Key A, re-encrypts it under its store key and programs the bank. The footer is what lets the bootloader take the bank, so a bank short of it is refused.',
+  /* ---- notes: what the read measured about a build (slots/capability-notes) ----
+   * The page shows only this one; it leaves the others out (lib/page-hidden.ts), and the CLI prints them
+   * in English. */
   'notes.unverified':
     'Read only. The bank layout is the locked line’s decoded table, but no staging form has been measured for this build, so no write is planned.',
-  'notes.empty.plain':
-    'An empty bank takes an image exactly as a used one does. The plaintext chain stages the image bytes as they are, with no key, and the commit erases the block first, so nothing is read from the target bank. Measured on a Compact: an image written into an empty slot B read back identical, and B booted alone.',
-  'notes.empty.modern':
-    'An empty bank takes an image exactly as a used one does. The payload is encrypted under keys derived from the booted bank and the running application, not from the target bank, and the device re-keys it and erases the block without reading it. The footer is copied from a bank that holds a valid one, else built blank. Proven on the emulator; not yet measured on a camera.',
-  'notes.empty.locked2016':
-    'An empty bank takes an image exactly as a used one does. The stage key is key block 0 of the IMAGE’s own pair, not a key read from the target bank, and the device decrypts the payload with it, stores it under its own key and erases the block without reading it. Proven on the emulator; not yet measured on a camera.',
-  'notes.mode2of080':
-    '0.8.0.0: mode 2 (0x14000000) is a crash hazard on this build, an armed read walks off SRAM (PRESERVATION.md). A slot read or write arms modes 7 to 9 only and never mode 2.',
-  'notes.bank.recovery2016':
-    'Measured on a Compact PRO 1.0.3.0: recovery R took its own image, a one-byte change and the raw bytes as they were sent, each written without an error.',
-  'notes.bank.ff1308A':
-    'The 1.3.0.8 FF (16 Hz) image goes here in the form the vendor app sends it, and the camera stores it under its own key. The 2014 bootloader starts a bank only when its words sum to 0, so it passes this one over at boot; whether the 16 Hz build starts from slot A is UNTESTED. The 8 Hz image is written as it is.',
-  'notes.bank.ff1308B':
-    'The 1.3.0.8 FF (16 Hz) image goes here in the form the vendor app sends it, and the camera stores it under its own key. The 2014 bootloader starts a bank only when its words sum to 0, so it passes this one over at boot; whether the 16 Hz build starts from slot B is UNTESTED. The 8 Hz image is written as it is.',
-  'notes.bank.ff1308R':
-    'The 1.3.0.8 FF (16 Hz) image goes here in the form the vendor app sends it, and the camera stores it under its own key. The 0.9.0.0 bootloader starts recovery R as it is stored, without decoding it, so this form may not start: UNTESTED, and an earlier form of this image did start from here (measured on a camera). The 8 Hz image is written as it is.',
-  'notes.product.4_8_2_1':
-    'Compact 4.8.2.1 and Compact XR 4.8.2.1 (one image): the modern 63-window map; the emulator confirmed 63 of 63 windows on the Compact’s full dump and on the Compact XR’s.',
-  'notes.product.10_9_1_31':
-    'Mosaic 320x240 10.9.1.31: the modern 63-window map, measured confirming every window on the emulator.',
-  'notes.product.2_27_1_33':
-    'Mosaic 320x240 FF 2.27.1.33: the modern 63-window map, measured confirming every window on the emulator.',
-  'notes.product.42_32_3_10':
-    'Nano 200 42.32.3.10: the modern 63-window map, measured confirming every window on the emulator. Its commit command (CompleteMemoryUpgrade) has no handler for data type 32, which a write through mode 7, 8 or 9 never asks for.',
-  'notes.product.44_27_3_10':
-    'Nano 300 44.27.3.10: the modern 63-window map, measured confirming every window on the emulator. Its arm command (BeginFirmwareUpgrade) refuses a data type past the span it accepts (0x7F) as a bad first argument, and modes 7 to 9 are inside that span.',
-  'notes.ff1308':
-    "1.3.0.8-FF (16 Hz) reports the same version as the 8 Hz build. The read tells them apart from the camera: the camera says, bank by bank, whether its application takes the bank, and each build predicts its own answers from the banks. The FF image is sent in the form the vendor app sends it, and the camera stores it under its own key. It goes to slot A, slot B or recovery R. The 8 Hz build is expected to refuse it before it writes anything; while the camera's answers cannot tell the builds apart, the plan says what each build does with it. {untested}",
 
   /* ---- identity: why nothing is armed before the camera names its build (workflows/capability, window-plan) ---- */
   /** `{note}`: identity.note.*, the version read's own account. Command names (GetErrorCode, …) and wire ids stay. */

@@ -43,8 +43,7 @@ export default {
   'run.label': '槽位',
 
   /* Before any read. */
-  'empty.connected':
-    '请按“读取槽位”。会先询问相机运行的是哪个版本；在本页不支持的版本上，不会打开任何读写窗口。',
+  'empty.connected': '请按“读取槽位”。',
   'empty.disconnected': '请连接相机，然后按“读取槽位”。',
 
   /* A build the page does not support; core's reason follows it. */
@@ -127,8 +126,8 @@ export default {
   'table.empty': '空',
   'table.emptyNote':
     '没有镜像：这个槽位的头部窗口读出全是 0xFF，因此不会从中解密任何内容，写入它也不会覆盖任何固件。',
-  /* {why} and {reason} are core's. */
-  'table.emptyWritable': '可以写入。{why}',
+  /* {reason} is core's. */
+  'table.emptyWritable': '可以写入。',
   'table.emptyNotWritable': '在此版本上无法写入：{reason}',
   'table.unknownVersion': '版本未知',
   /* {id} is the image id in hex. */

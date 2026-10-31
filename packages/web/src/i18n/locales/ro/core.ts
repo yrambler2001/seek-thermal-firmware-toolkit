@@ -655,50 +655,11 @@ export default {
   /** `{error}`: the error's message (translated where core gives it a code). */
   'fpsEvery.stopped.error': '{name}: {error}',
 
-  /* ---- notes: what the read measured about a build, a bank or an empty bank (slots/capability-notes) ----
-   * Mode numbers, addresses, version numbers and command names (CompleteMemoryUpgrade, BeginFirmwareUpgrade,
-   * EP0, PRESERVATION.md) are names: keep them. `{untested}` is notes.ffBootUntested. */
-  /** "This line" is the firmware line (the 2016 Compact PRO 1.0.3.x builds), not a line of text: on these builds, the bank the page or the CLI calls booted is the one the camera entered at its last start. */
-  'notes.locked2016BootWord':
-    'Slotul de pornire numit pe această linie de firmware este slotul în care a intrat camera la ultima pornire, așa cum îl consemnează bootloader-ul în cuvântul slotului activ (0 slotul A, 1 slotul B, 2 slotul de recuperare R). Următoarea pornire este stabilită de cuvântul de configurare a pornirii: 0 sau 0xFFFFFFFF aleg întâi A, 1 întâi B, orice altă valoare întâi slotul de recuperare R. Bootloader-ul din 2016 acceptă un slot doar când acesta se decriptează la o sumă a cuvintelor 0 cu cheia cu care verifică un slot (blocul de chei 1 pe bootloader-ul lui 1.2.0.0), iar ultimul slot din această ordine rulează neverificat când celelalte două eșuează. Citirea numește acea cheie pe baza slotului în care a intrat camera, pentru că blocul bootloader-ului care o conține este refuzat pe orice canal (măsurat pe o cameră).',
-  'notes.ep0of1032':
-    '1.0.3.2: sesiunile EP0 se întrerup la aproximativ 64 până la 81 KB, iar 128 B este unitatea de citire fără pierderi, așa că un slot de 64 KB pe sesiune este limita măsurată. O citire completă a cipului este refuzată pe acest build (PRESERVATION.md: nu există citire completă cu o singură activare). Extragerea unui slot citește câte un slot pe rând, în cereri de 64 de octeți.',
-  'notes.staging.lockedPlain':
-    'Transfer: imaginea însăși, cel mult 56 KB (cât acceptă camera la o singură scriere). Scrierea șterge slotul de 64 KB și scrie exact acei octeți, iar restul slotului rămâne șters. Bootloader-ul pornește un slot doar când cuvintele lui au suma 0, așa că imaginea este echilibrată la această sumă înainte să fie trimisă.',
-  'notes.staging.locked2016':
-    'Transfer: imaginea, combinată prin XOR cu fluxul de cheie xorshift128 al PROPRIULUI ei bloc de chei 0 (cheia de transfer, găsită în imagine după valoare), doar lungimea imaginii (cel mult 0xE000 B). Dispozitivul decriptează datele cu acea cheie și le stochează cu cheia cu care bootloader-ul lui verifică un slot (blocul de chei 1), așa că octeții stocați nu sunt cei transferați. Nu se citește nimic din slotul țintă pentru transfer: fluxul de cheie al slotului este folosit doar la recitirea slotului.',
-  'notes.staging.modern':
-    'Transfer: întregul slot de 64 KB, imagine + umplutură 0xFF + footer „CODE”. Imaginea este combinată prin XOR cu fluxurile de cheie care fac ca cele două treceri proprii ale aplicației care rulează să o stocheze cu cheia pe care o conține slotul de pornire: când comanda de confirmare (CompleteMemoryUpgrade) primește tipul de date 7, 8 sau 9, aplicația decriptează datele încărcate cu cheia ei A, le recriptează cu cheia ei de stocare și programează slotul. Footerul este cel care permite bootloader-ului să accepte slotul, așa că un slot fără el este refuzat.',
+  /* ---- notes: what the read measured about a build (slots/capability-notes) ----
+   * The page shows only this one; it leaves the others out (lib/page-hidden.ts), and the CLI prints them
+   * in English. */
   'notes.unverified':
     'Doar citire. Dispunerea sloturilor este tabelul decodat al liniei blocate, dar pentru acest build nu s-a măsurat nicio formă de transfer, așa că nu se planifică nicio scriere.',
-  'notes.empty.plain':
-    'Un slot gol primește o imagine exact ca unul folosit. Lanțul necriptat transferă octeții imaginii ca atare, fără cheie, iar confirmarea scrierii șterge mai întâi blocul, așa că nu se citește nimic din slotul țintă. Măsurat pe un Compact: o imagine scrisă într-un slot B gol s-a recitit identic, iar B a pornit singur.',
-  'notes.empty.modern':
-    'Un slot gol primește o imagine exact ca unul folosit. Datele sunt criptate cu chei derivate din slotul de pornire și din aplicația care rulează, nu din slotul țintă, iar dispozitivul le recriptează și șterge blocul fără să-l citească. Footerul este copiat dintr-un slot care are unul valid, altfel este construit gol. Dovedit pe emulator; încă nemăsurat pe o cameră.',
-  'notes.empty.locked2016':
-    'Un slot gol primește o imagine exact ca unul folosit. Cheia de transfer este blocul de chei 0 al perechii proprii a IMAGINII, nu o cheie citită din slotul țintă, iar dispozitivul decriptează datele cu ea, le stochează cu propria lui cheie și șterge blocul fără să-l citească. Dovedit pe emulator; încă nemăsurat pe o cameră.',
-  'notes.mode2of080':
-    '0.8.0.0: modul 2 (0x14000000) poate bloca acest build — o citire activată iese din SRAM (PRESERVATION.md). O citire sau o scriere de slot activează doar modurile 7 până la 9, niciodată modul 2.',
-  'notes.bank.recovery2016':
-    'Măsurat pe un Compact PRO 1.0.3.0: slotul de recuperare R a acceptat propria imagine, o modificare de un octet și octeții bruți așa cum au fost trimiși, fiecare scris fără eroare.',
-  'notes.bank.ff1308A':
-    'Imaginea 1.3.0.8 FF (16 Hz) ajunge aici în forma în care o trimite aplicația producătorului, iar camera o stochează cu propria ei cheie. Bootloader-ul din 2014 pornește un slot doar când cuvintele lui au suma 0, așa că îl sare pe acesta la pornire; dacă build-ul de 16 Hz pornește din slotul A este UNTESTED (netestat). Imaginea de 8 Hz este scrisă ca atare.',
-  'notes.bank.ff1308B':
-    'Imaginea 1.3.0.8 FF (16 Hz) ajunge aici în forma în care o trimite aplicația producătorului, iar camera o stochează cu propria ei cheie. Bootloader-ul din 2014 pornește un slot doar când cuvintele lui au suma 0, așa că îl sare pe acesta la pornire; dacă build-ul de 16 Hz pornește din slotul B este UNTESTED (netestat). Imaginea de 8 Hz este scrisă ca atare.',
-  'notes.bank.ff1308R':
-    'Imaginea 1.3.0.8 FF (16 Hz) ajunge aici în forma în care o trimite aplicația producătorului, iar camera o stochează cu propria ei cheie. Bootloader-ul 0.9.0.0 pornește slotul de recuperare R așa cum este stocat, fără să-l decodeze, așa că această formă s-ar putea să nu pornească: UNTESTED (netestat), iar o formă anterioară a acestei imagini a pornit de aici (măsurat pe o cameră). Imaginea de 8 Hz este scrisă ca atare.',
-  'notes.product.4_8_2_1':
-    'Compact 4.8.2.1 și Compact XR 4.8.2.1 (o singură imagine): harta modernă cu 63 de ferestre; emulatorul a confirmat 63 din 63 de ferestre pe dump-ul complet al modelului Compact și pe cel al modelului Compact XR.',
-  'notes.product.10_9_1_31':
-    'Mosaic 320x240 10.9.1.31: harta modernă cu 63 de ferestre, fiecare fereastră confirmată prin măsurare pe emulator.',
-  'notes.product.2_27_1_33':
-    'Mosaic 320x240 FF 2.27.1.33: harta modernă cu 63 de ferestre, fiecare fereastră confirmată prin măsurare pe emulator.',
-  'notes.product.42_32_3_10':
-    'Nano 200 42.32.3.10: harta modernă cu 63 de ferestre, fiecare fereastră confirmată prin măsurare pe emulator. Comanda lui de confirmare (CompleteMemoryUpgrade) nu are rutină pentru tipul de date 32, pe care o scriere prin modul 7, 8 sau 9 nu îl cere niciodată.',
-  'notes.product.44_27_3_10':
-    'Nano 300 44.27.3.10: harta modernă cu 63 de ferestre, fiecare fereastră confirmată prin măsurare pe emulator. Comanda lui de activare (BeginFirmwareUpgrade) refuză, ca prim argument greșit, un tip de date dincolo de intervalul pe care îl acceptă (0x7F), iar modurile 7 până la 9 sunt în acest interval.',
-  'notes.ff1308':
-    '1.3.0.8-FF (16 Hz) raportează aceeași versiune ca build-ul de 8 Hz. Citirea le deosebește pe baza camerei: camera spune, slot cu slot, dacă aplicația ei acceptă slotul, iar fiecare build își prezice propriile răspunsuri din sloturi. Imaginea FF este trimisă în forma în care o trimite aplicația producătorului, iar camera o stochează cu propria ei cheie. Ea merge în slotul A, slotul B sau slotul de recuperare R. Build-ul de 8 Hz ar trebui să o refuze înainte să scrie ceva; cât timp răspunsurile camerei nu pot deosebi build-urile, planul spune ce face fiecare build cu ea. {untested}',
 
   /* ---- identity: why nothing is armed before the camera names its build (workflows/capability, window-plan) ---- */
   /** `{note}`: identity.note.*, the version read's own account. Command names (GetErrorCode, …) and wire ids stay. */

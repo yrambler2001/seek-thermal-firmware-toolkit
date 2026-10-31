@@ -43,8 +43,7 @@ export default {
   'run.label': 'Слоти',
 
   /* Before any read. */
-  'empty.connected':
-    'Натисніть «Зчитати слоти». Спершу камеру запитають, яку збірку вона виконує, і на збірці, яку ця сторінка не підтримує, нічого не буде активовано.',
+  'empty.connected': 'Натисніть «Зчитати слоти».',
   'empty.disconnected': 'Під’єднайте камеру, потім натисніть «Зчитати слоти».',
 
   /* A build the page does not support; core's reason follows it. */
@@ -154,8 +153,8 @@ export default {
   'table.empty': 'порожній',
   'table.emptyNote':
     'Образу немає: вікно заголовка цього слота читається як суцільні 0xFF, тож із нього нічого не розшифровується, а запис у нього не перезаписує жодної прошивки.',
-  /* {why} and {reason} are core's. */
-  'table.emptyWritable': 'Можна записати. {why}',
+  /* {reason} is core's. */
+  'table.emptyWritable': 'Можна записати.',
   'table.emptyNotWritable': 'На цій збірці не можна записати: {reason}',
   'table.unknownVersion': 'невідома версія',
   /* {id} is the image id in hex. */

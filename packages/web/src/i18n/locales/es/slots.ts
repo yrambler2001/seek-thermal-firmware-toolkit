@@ -43,8 +43,7 @@ export default {
   'run.label': 'Ranuras',
 
   /* Before any read. */
-  'empty.connected':
-    'Pulsa «Leer ranuras». Primero se pregunta a la cámara qué compilación ejecuta, y en una compilación que esta página no admite no se abre nada.',
+  'empty.connected': 'Pulsa «Leer ranuras».',
   'empty.disconnected': 'Conecta la cámara y luego pulsa «Leer ranuras».',
 
   /* A build the page does not support; core's reason follows it. */
@@ -151,8 +150,8 @@ export default {
   'table.empty': 'vacía',
   'table.emptyNote':
     'Sin imagen: la ventana de cabecera de esta ranura se lee toda como 0xFF, así que no se descifra nada de ella, y escribir en ella no sobrescribe ningún firmware.',
-  /* {why} and {reason} are core's. */
-  'table.emptyWritable': 'Se puede escribir. {why}',
+  /* {reason} is core's. */
+  'table.emptyWritable': 'Se puede escribir.',
   'table.emptyNotWritable': 'No se puede escribir en esta compilación: {reason}',
   'table.unknownVersion': 'versión desconocida',
   /* {id} is the image id in hex. */

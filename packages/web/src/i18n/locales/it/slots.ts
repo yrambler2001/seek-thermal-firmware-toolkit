@@ -43,8 +43,7 @@ export default {
   'run.label': 'Slot',
 
   /* Before any read. */
-  'empty.connected':
-    'Premi Leggi slot. Alla termocamera viene chiesto prima di tutto quale build esegue, e su una build che questa pagina non supporta non viene aperto nulla.',
+  'empty.connected': 'Premi Leggi slot.',
   'empty.disconnected': 'Collega la termocamera, poi premi Leggi slot.',
 
   /* A build the page does not support; core's reason follows it. */
@@ -150,8 +149,8 @@ export default {
   'table.empty': 'vuoto',
   'table.emptyNote':
     'Nessuna immagine: la finestra dell’intestazione di questo slot si legge tutta come 0xFF, quindi non viene decifrato nulla e scriverlo non sovrascrive alcun firmware.',
-  /* {why} and {reason} are core's. */
-  'table.emptyWritable': 'Può essere scritto. {why}',
+  /* {reason} is core's. */
+  'table.emptyWritable': 'Può essere scritto.',
   'table.emptyNotWritable': 'Non può essere scritto su questa build: {reason}',
   'table.unknownVersion': 'versione sconosciuta',
   /* {id} is the image id in hex. */

@@ -662,50 +662,11 @@ export default {
   /** `{error}`: the error's message (translated where core gives it a code). */
   'fpsEvery.stopped.error': '{name}: {error}',
 
-  /* ---- notes: what the read measured about a build, a bank or an empty bank (slots/capability-notes) ----
-   * Mode numbers, addresses, version numbers and command names (CompleteMemoryUpgrade, BeginFirmwareUpgrade,
-   * EP0, PRESERVATION.md) are names: keep them. `{untested}` is notes.ffBootUntested. */
-  /** "This line" is the firmware line (the 2016 Compact PRO 1.0.3.x builds), not a line of text: on these builds, the bank the page or the CLI calls booted is the one the camera entered at its last start. */
-  'notes.locked2016BootWord':
-    'La ranura de arranque que se nombra en esta línea de firmware es la ranura en la que entró la cámara en su último arranque, tal como la registra el bootloader en la palabra de ranura activa (0 ranura A, 1 ranura B, 2 ranura de recuperación R). El próximo arranque lo fija la palabra de configuración de arranque: 0 o 0xFFFFFFFF eligen primero A, 1 primero B, y cualquier otro valor primero la ranura de recuperación R. El bootloader de 2016 acepta una ranura solo cuando se descifra con una suma de palabras 0 con la clave con la que comprueba una ranura (el bloque de claves 1 en su bootloader 1.2.0.0), y la última ranura de ese orden arranca sin comprobar cuando fallan las otras dos. La lectura identifica esa clave a partir de la ranura en la que entró la cámara, porque el bloque del bootloader que la contiene se rechaza en todos los canales (medido en una cámara).',
-  'notes.ep0of1032':
-    '1.0.3.2: las sesiones EP0 mueren hacia los 64 a 81 KB, y 128 B es la unidad de lectura sin pérdidas, así que el límite medido es una ranura de 64 KB por sesión. En esta compilación se rechaza la lectura completa del chip (PRESERVATION.md: no existe una lectura completa con una sola apertura). El volcado de ranuras lee una ranura cada vez, en peticiones de 64 bytes.',
-  'notes.staging.lockedPlain':
-    'Transferencia: la propia imagen, de 56 KB como máximo (lo máximo que acepta la cámara en una escritura). La escritura borra la ranura de 64 KB y escribe exactamente esos bytes, y el resto de la ranura queda borrado. El bootloader arranca una ranura solo cuando sus palabras suman 0, así que la imagen se equilibra a esa suma antes de enviarla.',
-  'notes.staging.locked2016':
-    'Transferencia: la imagen, con XOR con el flujo de clave xorshift128 de su PROPIO bloque de claves 0 (la clave de transferencia, que se encuentra en la imagen por su valor), solo la longitud de la imagen (0xE000 bytes como máximo). El dispositivo descifra los datos con esa clave y los almacena con la clave con la que su bootloader comprueba una ranura (el bloque de claves 1), así que los bytes almacenados no son los transferidos. No se lee nada de la ranura de destino para transferir: el flujo de clave de la ranura solo se usa para releerla.',
-  'notes.staging.modern':
-    'Transferencia: la ranura entera de 64 KB, imagen + relleno 0xFF + pie «CODE». La imagen se combina con XOR con los flujos de clave que hacen que las dos pasadas propias de la aplicación en ejecución la dejen con la clave que contiene la ranura de arranque: cuando el comando de confirmación (CompleteMemoryUpgrade) recibe el tipo de datos 7, 8 o 9, la aplicación descifra los datos enviados con su clave A, los vuelve a cifrar con su clave de almacenamiento y programa la ranura. El pie es lo que permite al bootloader aceptar la ranura, así que una ranura sin él se rechaza.',
+  /* ---- notes: what the read measured about a build (slots/capability-notes) ----
+   * The page shows only this one; it leaves the others out (lib/page-hidden.ts), and the CLI prints them
+   * in English. */
   'notes.unverified':
     'Solo lectura. La disposición de las ranuras es la tabla decodificada de la línea bloqueada, pero no se ha medido ninguna forma de transferencia para esta compilación, así que no se planifica ninguna escritura.',
-  'notes.empty.plain':
-    'Una ranura vacía recibe una imagen exactamente igual que una usada. La cadena sin cifrar transfiere los bytes de la imagen tal cual, sin clave, y la confirmación borra antes el bloque, así que no se lee nada de la ranura de destino. Medido en una Compact: una imagen escrita en una ranura B vacía se releyó idéntica, y B arrancó por sí sola.',
-  'notes.empty.modern':
-    'Una ranura vacía recibe una imagen exactamente igual que una usada. Los datos se cifran con claves derivadas de la ranura de arranque y de la aplicación en ejecución, no de la ranura de destino, y el dispositivo les cambia la clave y borra el bloque sin leerlo. El pie se copia de una ranura que tenga uno válido; si no, se crea en blanco. Probado en el emulador; aún no medido en una cámara.',
-  'notes.empty.locked2016':
-    'Una ranura vacía recibe una imagen exactamente igual que una usada. La clave de transferencia es el bloque de claves 0 del par propio de la IMAGEN, no una clave leída de la ranura de destino, y el dispositivo descifra los datos con ella, los almacena con su propia clave y borra el bloque sin leerlo. Probado en el emulador; aún no medido en una cámara.',
-  'notes.mode2of080':
-    '0.8.0.0: el modo 2 (0x14000000) puede bloquear esta compilación, porque una lectura abierta se sale de la SRAM (PRESERVATION.md). Una lectura o escritura de ranura abre solo los modos 7 a 9, nunca el modo 2.',
-  'notes.bank.recovery2016':
-    'Medido en una Compact PRO 1.0.3.0: la ranura de recuperación R aceptó su propia imagen, un cambio de un byte y los bytes sin procesar tal como se enviaron, cada uno escrito sin errores.',
-  'notes.bank.ff1308A':
-    'La imagen 1.3.0.8 FF (16 Hz) va aquí en la forma en que la envía la app del fabricante, y la cámara la almacena con su propia clave. El bootloader de 2014 arranca una ranura solo cuando sus palabras suman 0, así que en el arranque pasa por alto esta; si la compilación de 16 Hz arranca desde la ranura A está UNTESTED (sin probar). La imagen de 8 Hz se escribe tal cual.',
-  'notes.bank.ff1308B':
-    'La imagen 1.3.0.8 FF (16 Hz) va aquí en la forma en que la envía la app del fabricante, y la cámara la almacena con su propia clave. El bootloader de 2014 arranca una ranura solo cuando sus palabras suman 0, así que en el arranque pasa por alto esta; si la compilación de 16 Hz arranca desde la ranura B está UNTESTED (sin probar). La imagen de 8 Hz se escribe tal cual.',
-  'notes.bank.ff1308R':
-    'La imagen 1.3.0.8 FF (16 Hz) va aquí en la forma en que la envía la app del fabricante, y la cámara la almacena con su propia clave. El bootloader 0.9.0.0 arranca la ranura de recuperación R tal como está almacenada, sin decodificarla, así que puede que esta forma no arranque: UNTESTED (sin probar), y una forma anterior de esta imagen sí arrancó desde aquí (medido en una cámara). La imagen de 8 Hz se escribe tal cual.',
-  'notes.product.4_8_2_1':
-    'Compact 4.8.2.1 y Compact XR 4.8.2.1 (una sola imagen): el mapa moderno de 63 ventanas; el emulador confirmó 63 de 63 ventanas en el volcado completo de la Compact y en el de la Compact XR.',
-  'notes.product.10_9_1_31':
-    'Mosaic 320x240 10.9.1.31: el mapa moderno de 63 ventanas; se midió en el emulador y confirmó todas las ventanas.',
-  'notes.product.2_27_1_33':
-    'Mosaic 320x240 FF 2.27.1.33: el mapa moderno de 63 ventanas; se midió en el emulador y confirmó todas las ventanas.',
-  'notes.product.42_32_3_10':
-    'Nano 200 42.32.3.10: el mapa moderno de 63 ventanas; se midió en el emulador y confirmó todas las ventanas. Su comando de confirmación (CompleteMemoryUpgrade) no tiene manejador para el tipo de datos 32, que una escritura por el modo 7, 8 o 9 nunca pide.',
-  'notes.product.44_27_3_10':
-    'Nano 300 44.27.3.10: el mapa moderno de 63 ventanas; se midió en el emulador y confirmó todas las ventanas. Su comando de apertura (BeginFirmwareUpgrade) rechaza como primer argumento erróneo un tipo de datos más allá del intervalo que acepta (0x7F), y los modos 7 a 9 están dentro de ese intervalo.',
-  'notes.ff1308':
-    '1.3.0.8-FF (16 Hz) indica la misma versión que la compilación de 8 Hz. La lectura las distingue a partir de la cámara: la cámara dice, ranura por ranura, si su aplicación acepta la ranura, y cada compilación predice sus propias respuestas a partir de las ranuras. La imagen FF se envía en la forma en que la envía la app del fabricante, y la cámara la almacena con su propia clave. Va a la ranura A, a la ranura B o a la ranura de recuperación R. Se espera que la compilación de 8 Hz la rechace antes de escribir nada; mientras las respuestas de la cámara no permitan distinguir las compilaciones, el plan dice qué hace cada compilación con ella. {untested}',
 
   /* ---- identity: why nothing is armed before the camera names its build (workflows/capability, window-plan) ---- */
   /** `{note}`: identity.note.*, the version read's own account. Command names (GetErrorCode, …) and wire ids stay. */

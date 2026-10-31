@@ -43,8 +43,7 @@ export default {
   'run.label': 'Slots',
 
   /* Before any read. */
-  'empty.connected':
-    'Klicken Sie auf „Slots lesen“. Die Kamera wird zuerst gefragt, welchen Build sie ausführt, und auf einem Build, den diese Seite nicht unterstützt, wird kein Fenster geöffnet.',
+  'empty.connected': 'Klicken Sie auf „Slots lesen“.',
   'empty.disconnected': 'Verbinden Sie die Kamera und klicken Sie dann auf „Slots lesen“.',
 
   /* A build the page does not support; core's reason follows it. */
@@ -152,8 +151,8 @@ export default {
   'table.empty': 'leer',
   'table.emptyNote':
     'Kein Image: Das Header-Fenster dieses Slots liest sich vollständig als 0xFF. Daraus wird nichts entschlüsselt, und ein Schreiben überschreibt keine Firmware.',
-  /* {why} and {reason} are core's. */
-  'table.emptyWritable': 'Kann beschrieben werden. {why}',
+  /* {reason} is core's. */
+  'table.emptyWritable': 'Kann beschrieben werden.',
   'table.emptyNotWritable': 'Kann auf diesem Build nicht beschrieben werden: {reason}',
   'table.unknownVersion': 'unbekannte Version',
   /* {id} is the image id in hex. */

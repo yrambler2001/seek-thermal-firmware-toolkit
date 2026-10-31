@@ -102,7 +102,6 @@ function exactly(names: readonly string[]): RegExp {
  */
 const FIXTURE_ENGLISH = [
   'Fake PIR324' /* the fake camera's USB product string: what a camera reports */,
-  'an empty bank is written like a used one',
   'the window would not arm',
   'this write targets a bank that matters',
   /* preparedSlot's compare rows; core's compareRows writes words compareWordMessage knows */

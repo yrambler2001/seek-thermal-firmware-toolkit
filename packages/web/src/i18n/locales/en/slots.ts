@@ -43,8 +43,7 @@ export default {
   'run.label': 'Slots',
 
   /* Before any read. */
-  'empty.connected':
-    'Press Read slots. The camera is asked which build it runs first, and nothing is armed on a build this page does not support.',
+  'empty.connected': 'Press Read slots.',
   'empty.disconnected': 'Connect the camera, then press Read slots.',
 
   /* A build the page does not support; core's reason follows it. */
@@ -144,8 +143,8 @@ export default {
   'table.empty': 'empty',
   'table.emptyNote':
     "No image: this bank's header window reads as all 0xFF, so nothing is decrypted from it and writing it overwrites no firmware.",
-  /* {why} and {reason} are core's. */
-  'table.emptyWritable': 'Can be written. {why}',
+  /* {reason} is core's. */
+  'table.emptyWritable': 'Can be written.',
   'table.emptyNotWritable': 'Cannot be written on this build: {reason}',
   'table.unknownVersion': 'unknown version',
   /* {id} is the image id in hex. */

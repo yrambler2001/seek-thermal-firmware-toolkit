@@ -43,8 +43,7 @@ export default {
   'run.label': 'Ranhuras',
 
   /* Before any read. */
-  'empty.connected':
-    'Prima «Ler ranhuras». Primeiro, a câmara é questionada sobre a compilação que executa, e não é aberta nenhuma janela numa compilação que esta página não suporte.',
+  'empty.connected': 'Prima «Ler ranhuras».',
   'empty.disconnected': 'Conecte a câmara e depois prima «Ler ranhuras».',
 
   /* A build the page does not support; core's reason follows it. */
@@ -150,8 +149,8 @@ export default {
   'table.empty': 'vazia',
   'table.emptyNote':
     'Sem imagem: a janela do cabeçalho desta ranhura lê-se toda como 0xFF, por isso não se desencripta nada dela e escrevê-la não substitui nenhum firmware.',
-  /* {why} and {reason} are core's. */
-  'table.emptyWritable': 'Pode ser escrita. {why}',
+  /* {reason} is core's. */
+  'table.emptyWritable': 'Pode ser escrita.',
   'table.emptyNotWritable': 'Não pode ser escrita nesta compilação: {reason}',
   'table.unknownVersion': 'versão desconhecida',
   /* {id} is the image id in hex. */

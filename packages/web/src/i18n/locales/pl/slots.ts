@@ -43,8 +43,7 @@ export default {
   'run.label': 'Sloty',
 
   /* Before any read. */
-  'empty.connected':
-    'Naciśnij „Odczytaj sloty”. Kamera jest najpierw pytana, jaką kompilację uruchamia, a w kompilacji, której ta strona nie obsługuje, nic nie zostaje aktywowane.',
+  'empty.connected': 'Naciśnij „Odczytaj sloty”.',
   'empty.disconnected': 'Połącz kamerę, a potem naciśnij „Odczytaj sloty”.',
 
   /* A build the page does not support; core's reason follows it. */
@@ -152,8 +151,8 @@ export default {
   'table.empty': 'pusty',
   'table.emptyNote':
     'Brak obrazu: okno nagłówka tego slotu odczytuje się jako same 0xFF, więc nic z niego nie jest odszyfrowywane, a jego zapis nie nadpisuje żadnego firmware.',
-  /* {why} and {reason} are core's. */
-  'table.emptyWritable': 'Można zapisać. {why}',
+  /* {reason} is core's. */
+  'table.emptyWritable': 'Można zapisać.',
   'table.emptyNotWritable': 'W tej kompilacji nie można zapisać: {reason}',
   'table.unknownVersion': 'nieznana wersja',
   /* {id} is the image id in hex. */
