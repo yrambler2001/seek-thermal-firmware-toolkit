@@ -3,7 +3,7 @@
  * 4.x/Nano tab lists its dump archive with it, the 0.x/1.x tab its run file.
  */
 
-import type { ReactElement } from 'react';
+import { Fragment, type ReactElement } from 'react';
 import {
   Table,
   TableBody,
@@ -23,6 +23,23 @@ export interface FileTableProps {
   readonly rows: readonly (readonly [string, string])[];
 }
 
+/**
+ * A path that wraps only after a `/`: `02-read-build/` stays whole rather than breaking at its hyphens.
+ */
+function FileName({ name }: { readonly name: string }): ReactElement {
+  const parts = name.split(/(?<=\/)(?=.)/);
+  return (
+    <>
+      {parts.map((part, index) => (
+        <Fragment key={index}>
+          {index > 0 && <wbr />}
+          <span className="whitespace-nowrap">{part}</span>
+        </Fragment>
+      ))}
+    </>
+  );
+}
+
 export function FileTable({ caption, fileHeader, whatHeader, rows }: FileTableProps): ReactElement {
   return (
     <Table>
@@ -36,7 +53,9 @@ export function FileTable({ caption, fileHeader, whatHeader, rows }: FileTablePr
       <TableBody>
         {rows.map(([file, what]) => (
           <TableRow key={file}>
-            <TableRowHeader className="font-mono text-[0.8rem] font-normal">{file}</TableRowHeader>
+            <TableRowHeader className="font-mono text-[0.8rem] font-normal">
+              <FileName name={file} />
+            </TableRowHeader>
             <TableCell label={whatHeader} className="text-muted-foreground">
               {what}
             </TableCell>
