@@ -37,6 +37,7 @@ All notable changes to this project are listed here. The format follows [Keep a 
 - The Info tab's log no longer fills with blank lines while it reads (four in a row on a Compact 1.3.0.0): with the details hidden, a run of them shows as one, as the CLI prints it.
 - "Restore from full flash backup (.bin or .zip)…" on the slots tab, and any other button label that takes two lines, starts beside its icon like the other buttons instead of being centred.
 - The slots table's actions column was very narrow, most of all in Russian, and repeated the same reason under each greyed-out button. The table now has three columns (slot, firmware, actions): whether a bank boots is said under its name, its key, size and SHA-256 are labelled lines under its firmware, the buttons get most of the width, and a reason shared by every greyed-out button of a row is said once.
+- On a phone, the last card of a table had no border.
 
 ### Development
 

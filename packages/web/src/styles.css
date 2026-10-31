@@ -211,6 +211,12 @@
    * Tables stay real tables. Below 48rem each row becomes a card, and
    * the explicit ARIA roles on every element keep the grid semantics
    * that `display: block` would otherwise strip out.
+   *
+   * The two queries below meet at 48rem without overlapping, the same
+   * edge as Tailwind's `md:`. TableRow (ui/table.tsx) drops the last
+   * row's line with `md:last:border-0`: a utility outranks these rules
+   * whatever the selector, so without the `md:` the last card had no
+   * border at all.
    * ---------------------------------------------------------------- */
   .table-cards .cell-label {
     display: none;
@@ -219,14 +225,14 @@
   /* At table widths a button or badge keeps its label on one line, as it always
    * did, and the columns size around it. In the phone's cards it may wrap
    * (ui/button.tsx, ui/badge.tsx). */
-  @media (min-width: 48rem) {
+  @media (width >= 48rem) {
     .table-cards [data-slot='button'],
     .table-cards [data-slot='badge'] {
       white-space: nowrap;
     }
   }
 
-  @media (max-width: 48rem) {
+  @media (width < 48rem) {
     .table-cards,
     .table-cards tbody,
     .table-cards tr,
@@ -248,6 +254,7 @@
       border-width: 0;
     }
 
+    /* The colour is TableRow's `border-border/70`, which wins over this one. */
     .table-cards tr {
       border: 1px solid var(--border);
       border-radius: var(--radius-md);

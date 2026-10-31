@@ -37,11 +37,16 @@ export function TableBody({ className, ...props }: ComponentProps<'tbody'>): Rea
   return <tbody role="rowgroup" className={cn('', className)} {...props} />;
 }
 
+/**
+ * A line under each row, none under the last, at table widths. The reset is `md:` only: below 48rem
+ * the row is a card with a border all round (styles.css), and the same reset without `md:` would
+ * take the last card's whole border away.
+ */
 export function TableRow({ className, ...props }: ComponentProps<'tr'>): ReactElement {
   return (
     <tr
       role="row"
-      className={cn('border-b border-border/70 last:border-0', className)}
+      className={cn('border-b border-border/70 md:last:border-0', className)}
       {...props}
     />
   );
