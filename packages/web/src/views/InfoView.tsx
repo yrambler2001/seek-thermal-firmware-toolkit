@@ -2,13 +2,15 @@
  * Info: the landing tab. It reads the connected camera the way `seek-fw info` does (TESTING.md 42.64):
  * the firmware version, the family the camera answers as, the boot state, the keys and every bank. It
  * writes nothing. It says which firmware line the version belongs to, and tells the person in plain words
- * what each tab is for and which cameras it covers.
+ * what each tab is for and which cameras it covers. Between the two, the platform notes: what a browser
+ * needs on each system before it can see the camera.
  */
 
 import { useState, type ReactElement } from 'react';
 import { CircleStop, Info as InfoIcon, ListChecks, ScanSearch } from 'lucide-react';
 import { KeyValue, type KeyValueRow } from '@/components/KeyValue';
 import { Panel, PanelTitle } from '@/components/Panel';
+import { PlatformNotes } from '@/components/PlatformNotes';
 import { Prose } from '@/components/Prose';
 import { CameraReport } from '@/components/CameraReport';
 import { RunPanel } from '@/components/RunPanel';
@@ -201,6 +203,8 @@ export function InfoView({ info, connected, busy }: InfoViewProps): ReactElement
           </>
         )}
       </Section>
+
+      <PlatformNotes />
 
       <Section id="tabs" title={t('info:tabs.title')} icon={<ListChecks />}>
         <Prose>

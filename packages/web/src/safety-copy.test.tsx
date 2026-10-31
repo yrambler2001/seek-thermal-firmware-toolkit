@@ -78,7 +78,7 @@ const SLOTS_COPY: readonly string[] = [
   'The bank takes effect only after the camera is unplugged and replugged.',
 ];
 
-/* ---- shown in both ---------------------------------------------------- */
+/* ---- the platform notes, on the Info tab ------------------------------ */
 
 const PLATFORM_COPY: readonly string[] = [
   'Works out of the box in Chrome, Edge or any Chromium browser. No driver install, no admin rights.',
@@ -98,8 +98,16 @@ describe('safety copy is carried verbatim', () => {
   it('the 4.x/Nano tab keeps every read-only promise and caveat', () => {
     const { text, unmount } = viewText('#/v4');
     expectAll(text, DUMP_COPY);
-    expectAll(text, PLATFORM_COPY);
     unmount();
+  });
+
+  it('the Info tab keeps every platform note, and the 4.x/Nano tab no longer shows them', () => {
+    const info = viewText('#/');
+    expectAll(info.text, PLATFORM_COPY);
+    info.unmount();
+    const v4 = viewText('#/v4');
+    expect(v4.text).not.toContain(PLATFORM_COPY[0]);
+    v4.unmount();
   });
 
   it('never calls the unlock token build-specific, on either view', () => {

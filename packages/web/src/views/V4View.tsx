@@ -13,7 +13,6 @@ import { CircleStop, FolderArchive, ListFilter, Play, Radar } from 'lucide-react
 import { FLASH_DUMP_ORIGINAL_FILE } from '@seek-fw/core';
 import { CameraIdentity } from '@/components/CameraIdentity';
 import { OptionsDetails } from '@/components/OptionsDetails';
-import { PlatformNotes } from '@/components/PlatformNotes';
 import { Prose } from '@/components/Prose';
 import { RunPanel } from '@/components/RunPanel';
 import { Section } from '@/components/Section';
@@ -184,8 +183,6 @@ export function V4View({
           <p>{t('v4:gap.complete')}</p>
         </Disclosure>
       </Section>
-
-      <PlatformNotes />
     </>
   );
 }

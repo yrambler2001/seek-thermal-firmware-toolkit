@@ -1,4 +1,4 @@
-/** The platform notes, carried over word for word (app:platform.*). Shown on the 4.x/Nano tab. */
+/** The platform notes, carried over word for word (app:platform.*). Shown on the Info tab, below the read. */
 
 import type { ReactElement, ReactNode } from 'react';
 import { Laptop, Monitor, Smartphone, TabletSmartphone, Terminal } from 'lucide-react';
