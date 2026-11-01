@@ -65,10 +65,10 @@ export default {
   'status.readingAgain': 'Lizdai skaitomi iš naujo ...',
   /* {count} banks in all, {read} of them read. */
   'status.read': {
-    one: 'Nuskaityta. Nuskaityta lizdų: {read}/{count}.',
-    few: 'Nuskaityta. Nuskaityta lizdų: {read}/{count}.',
-    many: 'Nuskaityta. Nuskaityta lizdų: {read}/{count}.',
-    other: 'Nuskaityta. Nuskaityta lizdų: {read}/{count}.',
+    one: 'Baigta. Nuskaityta lizdų: {read}/{count}.',
+    few: 'Baigta. Nuskaityta lizdų: {read}/{count}.',
+    many: 'Baigta. Nuskaityta lizdų: {read}/{count}.',
+    other: 'Baigta. Nuskaityta lizdų: {read}/{count}.',
   },
   'status.unsupported': 'Šiame leidime nepalaikoma — joks lizdas nenuskaitytas.',
   'status.refused': 'Atmesta — niekas neaktyvuota. Žr. pranešimą po žurnalu.',
@@ -93,10 +93,10 @@ export default {
   'status.patched.unchecked': 'Pataisyta. Kontrolinis nuskaitymas nepatikrintas — žr. rezultatą.',
   /* After "Make N FPS in every bank"; {count} is the number of banks patched. */
   'status.every.stopped': {
-    one: 'Sustota ties {bank:ins} — pataisytas {count} lizdas; žr. rezultatą.',
-    few: 'Sustota ties {bank:ins} — pataisyti {count} lizdai; žr. rezultatą.',
-    many: 'Sustota ties {bank:ins} — pataisyta {count} lizdo; žr. rezultatą.',
-    other: 'Sustota ties {bank:ins} — pataisyta {count} lizdų; žr. rezultatą.',
+    one: 'Sustabdyta ties {bank:ins} — pataisytas {count} lizdas; žr. rezultatą.',
+    few: 'Sustabdyta ties {bank:ins} — pataisyti {count} lizdai; žr. rezultatą.',
+    many: 'Sustabdyta ties {bank:ins} — pataisyta {count} lizdo; žr. rezultatą.',
+    other: 'Sustabdyta ties {bank:ins} — pataisyta {count} lizdų; žr. rezultatą.',
   },
   'status.every.unchecked': {
     one: 'Pataisytas {count} lizdas, bet kontrolinis nuskaitymas nepatikrintas, kaip planuota — žr. rezultatą.',

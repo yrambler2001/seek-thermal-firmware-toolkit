@@ -711,7 +711,7 @@ export default {
   /* ---- status: a status line a run leaves under its progress bar ---- */
   'status.written': 'Įrašyta.',
   /** `{count}` of `{of}` slots answered. */
-  'status.read': 'Nuskaityta. Perskaitoma lizdų: {count}/{of}.',
+  'status.read': 'Nuskaityta. Perskaitomų lizdų: {count}/{of}.',
   'status.readRefused':
     'Nuskaityta, bet iš čia negalima įrašyti nė vieno šios kameros lizdo — žr. žurnalą.',
 
