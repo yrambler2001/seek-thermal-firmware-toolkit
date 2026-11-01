@@ -191,6 +191,21 @@ Hungarian says "in", "into", "from", "with" as a suffix on the noun, and the art
 - **Lists:** each name takes the case (the default `'each'`), since every name says its noun: "az A-slotba, a B-slotba és a helyreállító R-slotba".
 - **Numbers, versions, sizes and file names** take no suffix and no article in a template (both depend on how the value is read): they go after a colon or in brackets. A unit the template writes itself takes its suffix after a hyphen ("64 KB-os", "{hz} Hz-en").
 
+### Bulgarian: the full and the short article
+
+Bulgarian has no cases, but the definite article sits on the noun and has two forms for a masculine noun: the full article for a subject, the short one everywhere else. Prepositions stay in the template and do not change the name ("в слота A", "от слота A", "с ключа A"):
+
+| Selector | Bulgarian meaning                                                | slot A / recovery R / Key A                      |
+| -------- | ---------------------------------------------------------------- | ------------------------------------------------ |
+| `:nom`   | full article: the subject                                        | слотът A / слотът за възстановяване R / ключът A |
+| `:acc`   | short article: an object, and after any preposition              | слота A / слота за възстановяване R / ключа A    |
+| `:ins`   | the `:nom` form with a capital, for one name starting a sentence | Слотът A / Слотът за възстановяване R / Ключът A |
+
+- **The plain name has no article**: "Слот A" (the label), "слот A" (inside a sentence), for a table cell, a heading, a name before a colon or in a list after one. The label forms (`bank.slot`, `bank.recovery`) carry the same lower-case `:nom`/`:acc` forms as the sentence forms.
+- **"Recovery R" is "слот за възстановяване R"**: the article lands on "слот" for all three names, so one template serves A, B and R. No letter needs its own form.
+- **`:ins` is for one name only**, as in the Romance languages; a plural sentence starts another way ("В {banks:acc} има…").
+- **A param that is not always a name** stays plain, after a colon ("{bank}: съдържа пач…").
+
 A new page sentence with a bank or a key in it: list the key's name params in `names.ts`, and pass the names with the `…Ref` helpers. Use `bankWords`/`bankName`/`bankList` (strings) only where the name stands alone (a table cell, a label).
 
 ## Markup and slots
@@ -251,7 +266,7 @@ There is no "machine translation" label and no English shown under translated te
 
 Written for the agent that translates one language. You work from the English dictionaries alone; the code is there when a comment is not enough.
 
-1. **Copy English.** `cp -R src/i18n/locales/en src/i18n/locales/<code>` (today `cs`, `de`, `es`, `fr`, `hu`, `it`, `pl`, `pt`, `ro`, `ru`, `uk`, `zh-Hans`; planned `et`, `lv`, `lt`, `sk`, `sl`, `sr`, `bg`).
+1. **Copy English.** `cp -R src/i18n/locales/en src/i18n/locales/<code>` (today `bg`, `cs`, `de`, `es`, `fr`, `hu`, `it`, `pl`, `pt`, `ro`, `ru`, `uk`, `zh-Hans`; planned `et`, `lv`, `lt`, `sk`, `sl`, `sr`).
 2. **Translate each namespace file.** Change the type line and translate every value; keep every key and every comment's meaning (you may translate the comments or leave them):
    ```ts
    import type { Translation } from '../../types';

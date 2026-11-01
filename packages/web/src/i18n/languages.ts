@@ -21,7 +21,20 @@ import { en } from './locales/en';
 
 /** Every language planned for the page. Only the ones in `LANGUAGES` are offered. */
 export type LanguageCode =
-  'en' | 'cs' | 'de' | 'es' | 'fr' | 'hu' | 'it' | 'pl' | 'pt' | 'ro' | 'ru' | 'uk' | 'zh-Hans';
+  | 'en'
+  | 'bg'
+  | 'cs'
+  | 'de'
+  | 'es'
+  | 'fr'
+  | 'hu'
+  | 'it'
+  | 'pl'
+  | 'pt'
+  | 'ro'
+  | 'ru'
+  | 'uk'
+  | 'zh-Hans';
 
 export interface LanguageEntry {
   /** A BCP 47 tag, as URLs (`?lang=`), storage and the switcher use it. */
@@ -68,7 +81,7 @@ export const LANGUAGES: readonly LanguageEntry[] = [
   /* sk — Slovenčina */
   /* sl — Slovenščina */
   /* sr — Srpski, Latin script (htmlLang: 'sr-Latn'; sr-Cyrl browsers match it too) */
-  /* bg — Български */
+  { code: 'bg', name: 'Български', load: () => import('./locales/bg').then((m) => m.default) },
   { code: 'ru', name: 'Русский', load: () => import('./locales/ru').then((m) => m.default) },
   { code: 'uk', name: 'Українська', load: () => import('./locales/uk').then((m) => m.default) },
   {
