@@ -452,7 +452,7 @@ export default {
 
   /* The panel of the keys the writes use. */
   'keys.refusedTitle': 'Žiadny slot tejto kamery sa odtiaľto nedá zapísať.',
-  'keys.title': 'Kľúče na zápisy',
+  'keys.title': 'Kľúče na zápis',
   'keys.chain': 'Reťazec',
   'keys.chainPlain':
     'nešifrovaný reťazec z roku 2014: každý slot je uložený v otvorenej podobe, takže žiadny neobsahuje kľúč',

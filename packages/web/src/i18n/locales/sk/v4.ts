@@ -96,7 +96,7 @@ export default {
   'options.chunk': 'chunk (bajty control-IN)',
   /** Option label: the byte value written where a window could not be read (0xFF by default). */
   'options.gapFill': 'bajt gap-fill',
-  'options.retries': 'opakovania na okno',
+  'options.retries': 'počet opakovaní na okno',
   'options.retryDelay': 'oneskorenie pred opakovaním (ms)',
   'options.recipient': 'recipient riadiaceho prenosu',
   /** A choice in the USB recipient option: chosen automatically. */

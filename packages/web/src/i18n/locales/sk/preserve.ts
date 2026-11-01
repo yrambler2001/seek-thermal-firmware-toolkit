@@ -45,7 +45,7 @@ export default {
     'Po každom kroku prehliadač stiahne **súbor behu** pomenovaný podľa začiatku behu, času uloženia a kroku, kam beh došiel (`{example}`), s jedným priečinkom pre každý krok. Ponechajte si ten najnovší — umožní vám pokračovať neskôr.',
   /* The amber warning under the list. */
   'how.writeWarning':
-    '**Kroky 03 a 04 zapisujú do pamäte flash kamery** a každý vás najprv požiada o potvrdenie. Kým niektorý z nich beží, nechajte kameru pripojenú (ak vás stránka nepožiada, aby ste ju odpojili a znova pripojili) a počítač zapnutý, najlepšie napájaný zo siete. Prerušený zápis zanechá kameru, ktorú opraví len hardvérový programátor (SPI alebo SWD/J-Link).',
+    '**Kroky 03 a 04 zapisujú do pamäte flash kamery** a každý vás najprv požiada o potvrdenie. Kým niektorý z nich beží, nechajte kameru pripojenú (ak vás stránka nepožiada, aby ste ju odpojili a znova pripojili) a nedovoľte, aby počítač prešiel do spánku; najlepšie ho napájajte zo siete. Prerušený zápis zanechá kameru, ktorú opraví len hardvérový programátor (SPI alebo SWD/J-Link).',
   'how.phone':
     '**Na telefóne:** pred krokom 03 zapnite režim v lietadle a vypnite Wi-Fi aj mobilné dáta, aby hovor ani upozornenie nemohli prehliadač uprostred zápisu odviesť inam — a nechajte obrazovku zapnutú. Keď je stránka otvorená, funguje aj offline.',
   /*
@@ -113,7 +113,8 @@ export default {
     'Týka sa záplatovanej kamery, kým zápis nie je zaznamenaný — kamera už môže byť záplatovaná. Pozrite si poznámku v časti „{section}“.',
   'phase.noDrain':
     'Čítanie celej pamäte flash neprebehlo — tento krok vráti kameru do pôvodného stavu bez neho. Ak vám na čítaní celej pamäte flash záleží, spustite najprv krok 03.',
-  'phase.keepPlugged': 'Kým tento krok neskončí, nechajte kameru pripojenú a počítač zapnutý.',
+  'phase.keepPlugged':
+    'Kým tento krok neskončí, nechajte kameru pripojenú a nedovoľte, aby počítač prešiel do spánku.',
   /* The list of the step's parts, with a tick on each one done (its accessible name). */
   'phase.stepsLabel': 'Priebeh',
   'phase.showDetails': 'Zobraziť podrobnosti v protokole',
@@ -249,7 +250,8 @@ export default {
   'confirm.chosenBanks': 'zvolených slotov',
   'confirm.jump':
     'ZÁPIS NIE JE PRE TENTO BEH ZAZNAMENANÝ a vy tvrdíte, že zápisy prebehli bez svojich kontrolných bodov: krok začne za zápisom namiesto toho, aby zapisoval znova. Vlastné kontroly krokov napriek tomu prebehnú — čítanie verzie, kontroly slotov — a chybný odhad stojí zbytočné čítanie celej pamäte flash, nie zničenú kameru.',
-  'confirm.jumpKeepPlugged': 'Kým krok neskončí, nechajte kameru pripojenú a počítač zapnutý.',
+  'confirm.jumpKeepPlugged':
+    'Kým krok neskončí, nechajte kameru pripojenú a nedovoľte, aby počítač prešiel do spánku.',
   /* Step 03. "In that order" when there are several banks; the camera tries one bank first at start-up. */
   'confirm.patch':
     'Tým sa do {banks:gen} zapíše malá záplata. Krok 04 vráti pôvodný obsah. Čítanie celej pamäte flash, ktoré nasleduje, len číta.',
@@ -260,7 +262,7 @@ export default {
   'confirm.restoreInOrder':
     'Tým sa do {banks:gen} zapíše späť váš pôvodný firmvér, v tomto poradí — slot, ktorý kamera skúša ako prvý, príde na rad prvý.',
   'confirm.keepPlugged':
-    'Počas zápisu nechajte kameru pripojenú a počítač zapnutý — prerušený zápis zanechá kameru, ktorú opraví len hardvérový programátor (SPI alebo SWD/J-Link). Na telefóne zapnite režim v lietadle a nechajte obrazovku zapnutú. Kamera sa potom reštartuje; keď o to stránka požiada, stlačte „Pripojiť zariadenie“ a znova ju vyberte. To sa očakáva.',
+    'Počas zápisu nechajte kameru pripojenú a nedovoľte, aby počítač prešiel do spánku — prerušený zápis zanechá kameru, ktorú opraví len hardvérový programátor (SPI alebo SWD/J-Link). Na telefóne zapnite režim v lietadle a nechajte obrazovku zapnutú. Kamera sa potom reštartuje; keď o to stránka požiada, stlačte „Pripojiť zariadenie“ a znova ju vyberte. To sa očakáva.',
   'confirm.yesJump': 'Áno — preskočiť zápis',
   'confirm.yesWrite': 'Áno — zapísať do kamery',
 
