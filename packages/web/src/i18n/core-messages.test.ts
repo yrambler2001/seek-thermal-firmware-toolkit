@@ -1400,7 +1400,7 @@ describe('the core namespace', () => {
     const problems: string[] = [];
     for (const language of LANGUAGES) {
       const dict = await language.load();
-      problems.push(...coreCaseProblems(language.code, dict.core as NamespaceMessages));
+      problems.push(...coreCaseProblems(language.code, dict.core));
     }
     expect(problems).toEqual([]);
   });
