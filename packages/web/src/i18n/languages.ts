@@ -21,7 +21,7 @@ import { en } from './locales/en';
 
 /** Every language planned for the page. Only the ones in `LANGUAGES` are offered. */
 export type LanguageCode =
-  'en' | 'cs' | 'de' | 'es' | 'fr' | 'it' | 'pl' | 'pt' | 'ro' | 'ru' | 'uk' | 'zh-Hans';
+  'en' | 'cs' | 'de' | 'es' | 'fr' | 'hu' | 'it' | 'pl' | 'pt' | 'ro' | 'ru' | 'uk' | 'zh-Hans';
 
 export interface LanguageEntry {
   /** A BCP 47 tag, as URLs (`?lang=`), storage and the switcher use it. */
@@ -36,7 +36,7 @@ export interface LanguageEntry {
   readonly name: string;
   /**
    * How a case asked of a list of names reaches them (`ListCase`): each name
-   * (the default, as Polish and Russian say it), or only the last (Hungarian).
+   * (the default, as Polish and Russian say it), or only the last (Estonian, for some cases).
    */
   readonly listCase?: ListCase;
   readonly load: () => Promise<Dictionary>;
@@ -54,7 +54,7 @@ export const LANGUAGES: readonly LanguageEntry[] = [
   { code: 'it', name: 'Italiano', load: () => import('./locales/it').then((m) => m.default) },
   /* lv — Latviešu */
   /* lt — Lietuvių */
-  /* hu — Magyar (listCase: 'last') */
+  { code: 'hu', name: 'Magyar', load: () => import('./locales/hu').then((m) => m.default) },
   { code: 'pl', name: 'Polski', load: () => import('./locales/pl').then((m) => m.default) },
   /* European Portuguese (pt-PT spelling). */
   {

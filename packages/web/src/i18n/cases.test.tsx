@@ -118,7 +118,8 @@ vi.mock('./languages', async (importOriginal) => {
   return {
     ...actual,
     LANGUAGES: [
-      ...actual.LANGUAGES.filter((language) => language.code !== 'pl'),
+      // The fakes replace the real entries of the same code (Polish, and Hungarian once it is registered).
+      ...actual.LANGUAGES.filter((language) => !['pl', 'hu', 'et'].includes(language.code)),
       { code: 'pl', name: 'Polski', load: () => Promise.resolve(pl) },
       {
         code: 'hu' as LanguageCode,
