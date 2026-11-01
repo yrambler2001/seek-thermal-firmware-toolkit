@@ -444,7 +444,7 @@ export default {
   'how.flash':
     '**Kirjuta dekrüptitud kujutis** võtab avateksti kujutise, krüptib selle nii, nagu selle pesa püsivara enne ettevalmistust vajab, ja näitab plaani. **Kirjuta toorbaidid** valmistab faili ette täpselt sellisena, nagu see anti. Kumbki ei saada midagi enne, kui kinnitate.',
   'how.ff':
-    'Taastepesa {letterR} kirjutamine nõuab lisakinnitust nagu iga taastepesa kirjutamine. **Tühi** pesa (selle päiseaken on täielikult 0xFF, nagu paljude 2014. aasta kaamerate {b} puhul) on olek, mitte viga. Seda kirjutatakse täpselt nagu iga teist pesa.',
+    'Taastepesa {letterR} kirjutamine nõuab lisakinnitust nagu iga kirjutamine taastepesasse. **Tühi** pesa (selle päiseaken on täielikult 0xFF, nagu paljude 2014. aasta kaamerate {b} puhul) on olek, mitte viga. Seda kirjutatakse täpselt nagu iga teist pesa.',
   'how.copy':
     '**Taasta täielikust välkmälu varukoopiast** võtab .bin-faili (kogu 4 MB välkmälu tõmmis, näiteks J-Linkiga loetud) või .zip-faili, milles see on (0.x/1.x vahekaardi seansifail või ZIP-fail, mille salvestab vahekaart „Tõmmis ja dekrüptimine 4.x/Nano“ või nupp „Loe kõik selektorid“), lõikab sellest selle pesa välja, dekrüptib selle ja näitab plaani; kui varukoopia näib olevat teise kaamera või teise püsivara oma, öeldakse see plaanis.',
   'how.fps':
