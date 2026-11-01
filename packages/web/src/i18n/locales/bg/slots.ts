@@ -29,7 +29,7 @@ import type { Translation } from '../../types';
 export default {
   /* The section: its heading, badge and one-line summary. */
   'section.title': 'Работа със слотовете на фърмуера',
-  'section.badge': 'Записва във флаш паметта',
+  'section.badge': 'Записва в паметта',
   'section.description':
     '„Четене на слотовете“ пита камерата какво изпълнява, чете трите ѝ слота на фърмуера — {a}, {b} и {r} — и показва какво съдържа всеки. Четенето и дъмпът не променят нищо. Бутонът за запис пита, преди да бъде изпратен и един байт.',
   /* The red warning at the top of the tab. */
