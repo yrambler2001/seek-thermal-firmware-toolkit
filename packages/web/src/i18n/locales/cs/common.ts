@@ -36,12 +36,14 @@ export default {
    * The name on its own (a table cell, a row label, the start of a line):
    */
   'bank.slot': 'Slot {letter}',
+  'bank.slot:nom': 'slot {letter}',
   'bank.slot:gen': 'slotu {letter}',
   'bank.slot:dat': 'slotu {letter}',
   'bank.slot:acc': 'slot {letter}',
   'bank.slot:ins': 'slotem {letter}',
   'bank.slot:loc': 'slotu {letter}',
   'bank.recovery': 'Slot pro obnovu {letter}',
+  'bank.recovery:nom': 'slot pro obnovu {letter}',
   'bank.recovery:gen': 'slotu pro obnovu {letter}',
   'bank.recovery:dat': 'slotu pro obnovu {letter}',
   'bank.recovery:acc': 'slot pro obnovu {letter}',

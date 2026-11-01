@@ -43,7 +43,7 @@ export default {
   'dump.start': 'Spustit výpis',
   'dump.panel': 'Výpis',
   'dump.how':
-    'Oba se nejdřív kamery zeptají, jaký firmware v ní běží: na verzi pomocí `{getInfo}` — jediného čtení, na které odpovídá každé sestavení Seek stejně — a jen pokud lze toto sestavení číst přes USB, ještě jedním prostým a jedním `{begin}` s tokenem a jedním čtením. Tak stránka pozná, do které rodiny kamera patří. Tato karta čte jen rodinu 4.x a Nano. Kamera, kterou odpovědi zařadí kamkoli jinam, je odmítnuta dřív, než se cokoli přečte, a stránka uvede kartu, která je pro ni. Kamera, která nenahlásí svou verzi nebo používá sestavení starší než 0.8.0.0, se nečte vůbec a stránka řekne proč.',
+    'Oba způsoby se nejdřív kamery zeptají, jaký firmware v ní běží: na verzi pomocí `{getInfo}` — jediného čtení, na které odpovídá každé sestavení Seek stejně — a jen pokud lze toto sestavení číst přes USB, ještě jedním prostým a jedním `{begin}` s tokenem a jedním čtením. Tak stránka pozná, do které rodiny kamera patří. Tato karta čte jen rodinu 4.x a Nano. Kamera, kterou odpovědi zařadí kamkoli jinam, je odmítnuta dřív, než se cokoli přečte, a stránka uvede kartu, která je pro ni. Kamera, která nenahlásí svou verzi nebo používá sestavení starší než 0.8.0.0, se nečte vůbec a stránka řekne proč.',
   'dump.modes':
     '**Spustit výpis** přečte každý blok, na který dosáhne tabulka selektorů daného sestavení. **Vyčíst všechny selektory** v části *Možnosti* níže vyzkouší každý selektor `{begin}` `{first}`–`{last}` a uloží vše, co který vrátí — pomaleji, ale zachytí i bloky, které vybraná mapa vynechává.',
   'dump.sweep': 'Vyčíst všechny selektory ({first}–{last})',

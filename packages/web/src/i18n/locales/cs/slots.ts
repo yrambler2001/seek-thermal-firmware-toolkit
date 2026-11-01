@@ -252,7 +252,7 @@ export default {
   },
   'preview.checksum': 'Kontrolní součet přenosu',
   /** Row label: what the bank should hold after the write. */
-  'preview.stored': 'Uloženo potom',
+  'preview.stored': 'Uloženo po zápisu',
   'preview.storedNotPredicted': 'nepředpovídá se — ověří to kontrolní čtení',
   'preview.storedPredicted': '{size} B (předpověď)',
   'preview.storedKeyB': '{size} B (předpověď) — obraz XOR klíč B, ne samotná data',
@@ -278,7 +278,7 @@ export default {
   'writeConfirm.recovery':
     '{bank} je slot pro obnovu, poslední záložní kopie, ke které se bootloader vrací. Zápis do něj nechá kameru bez této kopie, dokud ji neobnovíte.',
   'writeConfirm.bootUnnamed':
-    'Kamera neuvádí, ze kterého slotu startuje, takže se {bank} bere jako slot, ze kterého teď startuje. Zápis do něj může nahradit firmware, který v kameře běží.',
+    'Kamera neuvádí, ze kterého slotu startuje, takže se {bank:nom} bere jako slot, ze kterého teď startuje. Zápis do něj může nahradit firmware, který v kameře běží.',
   'writeConfirm.empty':
     '{bank} je prázdný: neobsahuje žádný obraz, takže se žádný firmware nepřepíše.',
   'writeConfirm.eraseEmpty':
@@ -289,7 +289,7 @@ export default {
   'writeConfirm.keyLine':
     'Obraz se zapíše s tímto klíčem: {key}. Každý jiný slot se zapisuje stejně.',
   'writeConfirm.backup':
-    'Než se cokoli odešle, {bank} se znovu přečte a uloží jako jeden stažený soubor zip: {file}. Najdete ho ve složce se staženými soubory.',
+    'Než se cokoli odešle, {bank:nom} se znovu přečte a uloží jako jeden stažený soubor zip: {file}. Najdete ho ve složce se staženými soubory.',
   'writeConfirm.noReset':
     'Neposílá se žádný reset. Aby se slot projevil, kameru potom odpojte a znovu připojte.',
   'writeConfirm.noUsbRecovery':

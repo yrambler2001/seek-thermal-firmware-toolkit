@@ -79,12 +79,12 @@ export default {
   'boot.select.first':
     'slovo konfigurace startu je {word}, takže bootloader zkouší nejdřív {first:acc} a ten obsahuje obraz, který bootloader přijme',
   'boot.select.second':
-    'slovo konfigurace startu je {word}, takže bootloader zkouší nejdřív {first:acc}; {first} neobsahuje žádný obraz, který bootloader přijme, takže vezme {second:acc}',
+    'slovo konfigurace startu je {word}, takže bootloader zkouší nejdřív {first:acc}; {first:nom} neobsahuje žádný obraz, který bootloader přijme, takže vezme {second:acc}',
   /** The last bank is recovery R ("boots"); boot.select.lastTakes is the same with a slot ("takes"). */
   'boot.select.lastBoots':
-    'slovo konfigurace startu je {word}, takže bootloader zkouší nejdřív {first:acc}; {first} ani {second} neobsahuje obraz, který bootloader přijme, takže spustí {last:acc}, který nekontroluje',
+    'slovo konfigurace startu je {word}, takže bootloader zkouší nejdřív {first:acc}; {first:nom} ani {second:nom} neobsahuje obraz, který bootloader přijme, takže spustí {last:acc}, který nekontroluje',
   'boot.select.lastTakes':
-    'slovo konfigurace startu je {word}, takže bootloader zkouší nejdřív {first:acc}; {first} ani {second} neobsahuje obraz, který bootloader přijme, takže vezme {last:acc}, který nekontroluje',
+    'slovo konfigurace startu je {word}, takže bootloader zkouší nejdřív {first:acc}; {first:nom} ani {second:nom} neobsahuje obraz, který bootloader přijme, takže vezme {last:acc}, který nekontroluje',
   'boot.bootsNow': '{bank} je slot, ze kterého kamera teď startuje',
   /** A bank's badge (lower case in English). */
   'boot.bootedNow': 'právě spuštěný',
