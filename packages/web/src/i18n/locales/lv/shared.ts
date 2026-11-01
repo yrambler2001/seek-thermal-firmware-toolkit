@@ -98,7 +98,7 @@ export default {
   'deviceInfo.usbLink': 'USB savienojums',
   /** Row label: the boot-config word (cfg[0]) and what it means. */
   'deviceInfo.bootConfig': 'Sāknēšanas konfigurācija',
-  'deviceInfo.bootedFrom': 'Sāknēta no',
+  'deviceInfo.bootedFrom': 'Sāknēts no',
   'deviceInfo.nextStart': 'Nākamā sāknēšana',
   'deviceInfo.upgradeTarget': 'Jaunināšanas mērķis (kameras pašas jaunināšanai)',
   'deviceInfo.bankAt': '{bank} adresē {address}',

@@ -29,7 +29,7 @@ import type { Translation } from '../../types';
 
 export default {
   /* ---- "What to expect", the first section ---- */
-  'how.title': 'Kas jāgaida',
+  'how.title': 'Ko sagaidīt',
   'how.descriptionIdle': 'Pievienojiet kameru, pēc tam sāciet ar 02. soli.',
   /* {runId} is the run's id (a time stamp), {version} the camera's firmware version. */
   'how.descriptionRun': 'Sesija {runId}.',
