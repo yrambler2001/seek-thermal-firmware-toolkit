@@ -35,6 +35,7 @@ export type LanguageCode =
   | 'ro'
   | 'ru'
   | 'sk'
+  | 'sl'
   | 'sr'
   | 'uk'
   | 'zh-Hans';
@@ -82,7 +83,7 @@ export const LANGUAGES: readonly LanguageEntry[] = [
   /* Romanian (ro): `ro-RO` and `ro-MD` browsers match it by the primary subtag. */
   { code: 'ro', name: 'Română', load: () => import('./locales/ro').then((m) => m.default) },
   { code: 'sk', name: 'Slovenčina', load: () => import('./locales/sk').then((m) => m.default) },
-  /* sl — Slovenščina */
+  { code: 'sl', name: 'Slovenščina', load: () => import('./locales/sl').then((m) => m.default) },
   /* Serbian in Latin script (gajica), the ekavian standard: `sr-Latn`; `sr-Cyrl` browsers match it by the primary subtag. */
   {
     code: 'sr',
