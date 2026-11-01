@@ -30,6 +30,7 @@ export type LanguageCode =
   | 'hu'
   | 'it'
   | 'lt'
+  | 'lv'
   | 'pl'
   | 'pt'
   | 'ro'
@@ -69,7 +70,7 @@ export const LANGUAGES: readonly LanguageEntry[] = [
   { code: 'es', name: 'Español', load: () => import('./locales/es').then((m) => m.default) },
   { code: 'fr', name: 'Français', load: () => import('./locales/fr').then((m) => m.default) },
   { code: 'it', name: 'Italiano', load: () => import('./locales/it').then((m) => m.default) },
-  /* lv — Latviešu */
+  { code: 'lv', name: 'Latviešu', load: () => import('./locales/lv').then((m) => m.default) },
   { code: 'lt', name: 'Lietuvių', load: () => import('./locales/lt').then((m) => m.default) },
   { code: 'hu', name: 'Magyar', load: () => import('./locales/hu').then((m) => m.default) },
   { code: 'pl', name: 'Polski', load: () => import('./locales/pl').then((m) => m.default) },
