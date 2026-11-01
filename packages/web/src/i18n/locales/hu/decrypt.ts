@@ -41,7 +41,7 @@ export default {
   'slot.title': 'Firmware-slot visszafejtése',
   'slot.description': 'Egy slot fájlból: 64 KB, ahogy a kamera tárolja.',
   'slot.intro':
-    'Válasszon egy fájlt, amely egyetlen firmware-slotot tartalmaz – egy slotot, 65 536 bájtot, ahogy a(z) <link>{tab}</link> fülön a slot kiolvasása menti, vagy egy teljes flash-memóriaképből egy slot címén kezdődő 64 KB-ot. Az oldal a slot saját bájtjaiból találja meg a kulcsot, visszafejti a lemezképet, és letöltésre kínálja; a kulcs, a méret és az SHA-256 is megjelenik. Nem használ kamerát, így semmit sem kell csatlakoztatni.',
+    'Válasszon egy fájlt, amely egyetlen firmware-slotot tartalmaz – egy slotot, 65 536 bájtot, ahogy a <link>{tab}</link> fülön a slot kiolvasása menti, vagy egy teljes flash-memóriaképből egy slot címén kezdődő 64 KB-ot. Az oldal a slot saját bájtjaiból találja meg a kulcsot, visszafejti a lemezképet, és letöltésre kínálja; a kulcs, a méret és az SHA-256 is megjelenik. Nem használ kamerát, így semmit sem kell csatlakoztatni.',
   'slot.refusedIntro':
     'Az olyan fájlt, amely nem egy slot, nem tartalmaz firmware-lemezképet, vagy nem fejthető vissza, az oldal az ok megnevezésével elutasítja. Egy törölt slotról ezt közli, és nincs mit visszafejteni.',
   'slot.actions': 'Slotfájl-műveletek',

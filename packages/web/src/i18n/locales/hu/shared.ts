@@ -57,7 +57,7 @@ export default {
   'hint.holding':
     'Egy másik program vagy egy rendszer-illesztőprogram foglalja a kamerát – az USB-interfészt egyszerre csak egy folyamat foglalhatja le. Lépjen ki minden mással, ami kommunikál vele, majd húzza ki és dugja vissza a kamerát.',
   'hint.recipientFallback':
-    'Vagy az olvasási beállításokban állítsa a recipient értékét „device”-ra, amelyhez nem kell lefoglalni az interfészt.',
+    'Vagy az olvasási beállításokban állítsa a recipient beállítást „device” értékre, amelyhez nem kell lefoglalni az interfészt.',
   /* "Options" is the 4.x/Nano tab's fold-out (v4:options.title): use the same word as there. */
   'hint.optionsInvalid':
     'Nyissa meg a „Beállítások” részt, és nézze meg a mezők alatti megjegyzést az egyes tartományokról.',
@@ -66,7 +66,7 @@ export default {
   'hint.usbStalled':
     'A kamera elutasította a kérést. Ez általában azt jelenti, hogy a firmware-e nem támogatja. Az oldal bármilyen olvasás előtt megkérdezi a kamerától, melyik családba tartozik, így a folyamatosan elutasított kérések a kamera által jelentett családnak szóltak. Ellenőrizze a firmware verzióját az Info fülön.',
   'hint.usbNotOpen':
-    'Egy másik program vagy egy rendszer-illesztőprogram foglalja a kamerát. Zárja be, vagy az olvasási beállításokban állítsa a recipient értékét „device”-ra, amelyhez nem kell lefoglalni az interfészt.',
+    'Egy másik program vagy egy rendszer-illesztőprogram foglalja a kamerát. Zárja be, vagy az olvasási beállításokban állítsa a recipient beállítást „device” értékre, amelyhez nem kell lefoglalni az interfészt.',
   'hint.usbTransferFailed': 'Húzza ki és dugja vissza a kamerát, majd próbálja újra.',
   'hint.deviceMode':
     'A kamera nem lépett ki a képalkotó módból. Húzza ki, várja meg, amíg teljesen kikapcsol, majd dugja vissza.',

@@ -67,10 +67,9 @@ export default {
     'Nyissa meg az oldalt HTTPS-en keresztül vagy a `http://localhost` címről. Egy egyszerű helyi hálózati cím, például `http://192.168.1.10:8000`, nem megfelelő.',
   /** `{tab}` is app:tab.decrypt. */
   'support.offlineStillWorks':
-    'A(z) **{tab}** fület továbbra is használhatja – az teljes egészében egy Ön által kiválasztott fájlon dolgozik, és nincs szüksége USB-hozzáférésre.',
+    'A **{tab}** fület továbbra is használhatja – az teljes egészében egy Ön által kiválasztott fájlon dolgozik, és nincs szüksége USB-hozzáférésre.',
   /** `{connect}` is app:connect.connect, the button's own label. */
-  'support.ready':
-    '**Kész.** Csatlakoztassa a Seek kamerát, és nyomja meg a(z) *{connect}* gombot.',
+  'support.ready': '**Kész.** Csatlakoztassa a Seek kamerát, és nyomja meg az *{connect}* gombot.',
   'support.fileProtocol':
     'Helyi fájlként nyitotta meg, ezért a böngésző újratöltéskor nem emlékszik az eszközre. Ez nem okoz gondot.',
 

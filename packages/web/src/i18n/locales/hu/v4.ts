@@ -31,11 +31,11 @@ export default {
    * the run log keeps them in English. The quoted tab name is the 0.x/1.x tab's label.
    */
   'refusal.generic':
-    'A kamera nem a 4.x/Nano családba tartozik, ez a fül pedig csak ezt a családot olvassa. Semmi sem lett kiolvasva. 0.x vagy 1.x kamerához (2014-es vagy 2016-os változat) használja a(z) „{tab}” fület.',
+    'A kamera nem a 4.x/Nano családba tartozik, ez a fül pedig csak ezt a családot olvassa. Semmi sem lett kiolvasva. 0.x vagy 1.x kamerához (2014-es vagy 2016-os változat) használja a „{tab}” fület.',
   'refusal.otherFamily':
-    'A kamera {name} ({id}) családúnak tűnik, nem 4.x/Nano kamerának, ez a fül pedig csak 4.x/Nano kamerát olvas. Semmi sem lett kiolvasva. 0.x vagy 1.x kamerához (2014-es vagy 2016-os változat) használja a(z) „{tab}” fület.',
+    'A kamera a jelek szerint ebbe a családba tartozik: {name} ({id}), nem 4.x/Nano kamera, ez a fül pedig csak 4.x/Nano kamerát olvas. Semmi sem lett kiolvasva. 0.x vagy 1.x kamerához (2014-es vagy 2016-os változat) használja a „{tab}” fület.',
   'refusal.legacyLine':
-    'A kamera firmware-e {version}, ez 0.x vagy 1.x változat (2014-es vagy 2016-os), ez a fül pedig csak 4.x/Nano kamerát olvas. A verzión kívül semmi sem lett kiolvasva. 0.x vagy 1.x kamerához használja a(z) „{tab}” fület.',
+    'A kamera firmware-e {version}, ez 0.x vagy 1.x változat (2014-es vagy 2016-os), ez a fül pedig csak 4.x/Nano kamerát olvas. A verzión kívül semmi sem lett kiolvasva. 0.x vagy 1.x kamerához használja a „{tab}” fület.',
 
   /* views/V4View: step 2, the dump. */
   'dump.title': 'Kiolvasás',
