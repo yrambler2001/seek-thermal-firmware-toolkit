@@ -266,7 +266,7 @@ There is no "machine translation" label and no English shown under translated te
 
 Written for the agent that translates one language. You work from the English dictionaries alone; the code is there when a comment is not enough.
 
-1. **Copy English.** `cp -R src/i18n/locales/en src/i18n/locales/<code>` (today `bg`, `cs`, `de`, `es`, `fr`, `hu`, `it`, `pl`, `pt`, `ro`, `ru`, `uk`, `zh-Hans`; planned `et`, `lv`, `lt`, `sk`, `sl`, `sr`).
+1. **Copy English.** `cp -R src/i18n/locales/en src/i18n/locales/<code>` (today `bg`, `cs`, `de`, `es`, `fr`, `hu`, `it`, `pl`, `pt`, `ro`, `ru`, `sk`, `uk`, `zh-Hans`; planned `et`, `lv`, `lt`, `sl`, `sr`).
 2. **Translate each namespace file.** Change the type line and translate every value; keep every key and every comment's meaning (you may translate the comments or leave them):
    ```ts
    import type { Translation } from '../../types';

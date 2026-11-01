@@ -33,6 +33,7 @@ export type LanguageCode =
   | 'pt'
   | 'ro'
   | 'ru'
+  | 'sk'
   | 'uk'
   | 'zh-Hans';
 
@@ -78,7 +79,7 @@ export const LANGUAGES: readonly LanguageEntry[] = [
   },
   /* Romanian (ro): `ro-RO` and `ro-MD` browsers match it by the primary subtag. */
   { code: 'ro', name: 'Română', load: () => import('./locales/ro').then((m) => m.default) },
-  /* sk — Slovenčina */
+  { code: 'sk', name: 'Slovenčina', load: () => import('./locales/sk').then((m) => m.default) },
   /* sl — Slovenščina */
   /* sr — Srpski, Latin script (htmlLang: 'sr-Latn'; sr-Cyrl browsers match it too) */
   { code: 'bg', name: 'Български', load: () => import('./locales/bg').then((m) => m.default) },
