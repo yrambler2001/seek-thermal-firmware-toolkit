@@ -29,6 +29,7 @@ export type LanguageCode =
   | 'fr'
   | 'hu'
   | 'it'
+  | 'lt'
   | 'pl'
   | 'pt'
   | 'ro'
@@ -68,7 +69,7 @@ export const LANGUAGES: readonly LanguageEntry[] = [
   { code: 'fr', name: 'Français', load: () => import('./locales/fr').then((m) => m.default) },
   { code: 'it', name: 'Italiano', load: () => import('./locales/it').then((m) => m.default) },
   /* lv — Latviešu */
-  /* lt — Lietuvių */
+  { code: 'lt', name: 'Lietuvių', load: () => import('./locales/lt').then((m) => m.default) },
   { code: 'hu', name: 'Magyar', load: () => import('./locales/hu').then((m) => m.default) },
   { code: 'pl', name: 'Polski', load: () => import('./locales/pl').then((m) => m.default) },
   /* European Portuguese (pt-PT spelling). */
