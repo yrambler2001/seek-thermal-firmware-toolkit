@@ -32,7 +32,7 @@ export default {
   },
 
   /* Status lines several panels set. */
-  'status.idle': 'V mirovanju.',
+  'status.idle': 'V mirovanju.',
   'status.cancelled': 'Preklicano.',
   'status.cancelling': 'Preklicevanje …',
   'status.failedSeeLog': 'Ni uspelo — glejte dnevnik zgoraj.',
@@ -58,7 +58,7 @@ export default {
    * rule file stay English: they are what the program and the system show.
    */
   'hint.udev':
-    'V Linuxu kamera potrebuje pravilo udev, preden jo lahko brskalnik odpre:\n\n{rule}\n\nNato kamero odklopite in znova priklopite. Različice Chromiuma iz paketov Snap in Flatpak so pogosto v peskovniku brez dostopa do surovih naprav USB; zanesljiva je različica .deb ali .rpm.',
+    'V Linuxu kamera potrebuje pravilo udev, preden jo lahko brskalnik odpre:\n\n{rule}\n\nNato kamero odklopite in znova priklopite. Različice Chromiuma iz paketov Snap in Flatpak so pogosto v peskovniku brez dostopa do surovih naprav USB; zanesljiva je različica .deb ali .rpm.',
   'hint.windows':
     'Windows potrebuje gonilnik WinUSB, vezan na kamero, preden jo lahko doseže kateri koli brskalnik. Uporabite Zadig (https://zadig.akeo.ie/): Options → List All Devices, izberite vnos, poimenovan po vaši kameri — na primer „CompactPRO FF“ — izberite WinUSB in kliknite Replace Driver.',
   'hint.holding':
@@ -84,13 +84,13 @@ export default {
   'hint.imageUnsupported': 'Te slike ni mogoče pripraviti za kamero takšne, kot je.',
   'hint.imageKeyTable':
     'Slika ne vsebuje para ključev, ki ga navaja ime datoteke. Uporabite dešifrirano datoteko natanko tako, kot jo je zapisal izpis, vključno z imenom.',
-  'hint.flashRefused': 'V kamero ni bilo zapisano nič.',
+  'hint.flashRefused': 'V kamero ni bilo zapisano nič.',
   'hint.familyUnsupported':
     'Nič ni bilo prebrano ali zapisano. Vsak zavihek pokriva svoj obseg različic vdelane programske opreme: kamere 0.x in 1.x sodijo na zavihek „Izpis in dešifriranje 0.x/1.x“, kamere 4.x in Nano na „Izpis in dešifriranje 4.x/Nano“. Zavihek Informacije pove, na kateri zavihek sodi kamera.',
   'hint.firmwareTooOld':
     'Nobena družina vdelane programske opreme tukaj ne more prebrati te izdaje: njena vdelana programska oprema nima obdelovalnika za ukaz, s katerim ta zavihek bere bliskovni pomnilnik, zato ji ni bilo poslano nič, kar bi se lahko napačno prebralo. Compact z 0.7.0.7 ali 0.7.0.8 lahko preberete na zavihku „Izpis in dešifriranje 0.x/1.x“. Izpis, narejen s programatorjem SPI ali prek SWD/J-Link, lahko na tej strani še vedno dešifrirate pod „Dešifriranje datoteke/reže“.',
   'hint.powerCycle':
-    'V tem čarovniku: kamero odklopite in znova priklopite, pritisnite „Poveži napravo“ in jo izberite, nato znova zaženite isti korak. Izvedba je tukaj še vedno naložena — ničesar ni treba nadaljevati.',
+    'V tem čarovniku: kamero odklopite in znova priklopite, pritisnite „Poveži napravo“ in jo izberite, nato znova zaženite isti korak. Izvedba je tukaj še vedno naložena — ničesar ni treba nadaljevati.',
 
   /* components/DeviceInfoPanel: what a read found. Bank names ("slot A") come from core. */
   'deviceInfo.running': 'Delujoča vdelana programska oprema',
@@ -105,7 +105,7 @@ export default {
   'deviceInfo.bootConfig': 'Zagonska konfiguracija',
   'deviceInfo.bootedFrom': 'Zagnano iz',
   'deviceInfo.nextStart': 'Naslednji zagon',
-  'deviceInfo.upgradeTarget': 'Cilj nadgradnje (njene lastne)',
+  'deviceInfo.upgradeTarget': 'Cilj lastne nadgradnje kamere',
   'deviceInfo.bankAt': '{bank} na naslovu {address}',
   'deviceInfo.perDeviceKey': 'Ključ naprave',
   'deviceInfo.notProgrammed': 'ni programiran — kamera namesto njega uporabi ključ B',

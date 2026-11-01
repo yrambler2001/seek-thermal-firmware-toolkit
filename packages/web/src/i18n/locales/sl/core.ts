@@ -101,7 +101,7 @@ export default {
   'fpsBoot.holdsTwo':
     '{banks}: obe vsebujeta popravek hitrosti sličic, vendar se nobena ne zažene, zato popravka ne začneta veljati.',
   'fpsBoot.wouldNotRun':
-    'Popravek {target:gen} ne bi poskrbel, da se zažene, ker se kamera namesto nje zažene iz {bank:gen}.',
+    'Popravek {target:gen} ne bi pomagal, ker se kamera ne zažene iz nje, temveč iz {bank:gen}.',
   'fpsBoot.patchRunning':
     'Popravite tudi {bank:acc} (režo, ki teče): šele to poskrbi, da popravek hitrosti sličic začne veljati.',
   /** `{reason}`: fps.table.*, or a fps.plan.* reason. */
@@ -189,7 +189,7 @@ export default {
   'restore.warn.serialNotRead':
     'Serijska številka kamere ni bila prebrana, zato varnostne kopije (serijska številka {serial}) ni mogoče povezati z njo.',
   'restore.warn.otherFirmware':
-    'V varnostni kopiji vsebuje {where} vdelano programsko opremo {version}, kamera pa poganja {camera}: obnovitev v režo vnese drugo vdelano programsko opremo.',
+    'V varnostni kopiji vsebuje {where} vdelano programsko opremo {version}, kamera pa poganja {camera}: obnovitev v režo vnese drugo vdelano programsko opremo.',
 
   /* ---- restore: a restored bank read back (slots/restore) ---- */
   'restore.readBack.notCompared':
@@ -273,20 +273,20 @@ export default {
   'upgrade.whileRecovery':
     'Kamera poganja svojo obnovitveno režo, njena lastna nadgradnja pa piše v {name:acc}, ki je ne poganja. {verdict} To je le opozorilo: nič tukaj ne ustavi nadgradnje.',
   'upgrade.verdict.notRead':
-    'Pri tem preverjanju {name:gen} ni bilo mogoče prebrati, zato ni znano, kaj vsebuje.',
+    'Pri tem preverjanju ni bilo mogoče prebrati {name:gen}, zato ni znano, kaj vsebuje.',
   'upgrade.verdict.blank': '{name} je prazna, zato nadgradnja piše v prazno režo.',
   'upgrade.verdict.bootableSame':
     '{name} vsebuje isto zagonsko sliko kot reža, ki teče, in nadgradnja jo zamenja. Če se nadgradnja ustavi sredi poti, {name:nom} ostane nezagonska.',
   'upgrade.verdict.bootable':
     '{name}: vsebuje zagonsko sliko, ki jo nadgradnja zamenja. Če se nadgradnja ustavi sredi poti, ta reža ostane nezagonska.',
   'upgrade.verdict.unknown':
-    'Zagonskost {name:gen} pri tem branju ni znana, zato lahko nadgradnja zamenja sliko, ki bi jo kamera zagnala.',
+    'Pri tem branju ni znano, ali je {name:nom} zagonska, zato lahko nadgradnja zamenja sliko, ki bi jo kamera zagnala.',
   'upgrade.verdict.notBootable':
     '{name} pri tem branju ni prikazana kot zagonska, zato nadgradnja ne zamenja nobene slike, ki bi jo kamera zagnala.',
   /** The Info tab's "Booted" row: the bank's name alone, or with how the camera records it. */
   'report.booted.name': '{bank}',
   'report.booted.entered':
-    '{bank} — reža, v katero je zagonski nalagalnik vstopil ob tem zagonu, kot jo beleži',
+    '{bank} — reža, v katero je ob tem zagonu vstopil zagonski nalagalnik, kot to beleži kamera',
   /** The Info tab's "Last start" row; `{word}` is the active-slot word. */
   'report.lastStart.notRead': 'ni prebrano',
   'report.lastStart.noBank': 'kamera sporoča {word}, kar ne označuje nobene reže',
@@ -373,9 +373,9 @@ export default {
   'written.verifyOff': 'preverjanje je izklopljeno: reža ni bila kontrolno prebrana',
   /** What the read-back was compared with, inside readBack.sizeDiffers and readBack.differs. */
   'readBack.reference.folded':
-    'z bajti, za katere je načrt napovedal, da bodo v reži (slika, kot jo shrani izdaja 16 Hz, ne poslani bajti)',
+    'z bajti, za katere je načrt napovedal, da bodo v reži (slika, kot jo shrani izdaja 16 Hz, ne poslani bajti)',
   'readBack.reference.asSent':
-    'z bajti, za katere je načrt napovedal, da bodo v reži (bajti, kot so bili poslani)',
+    'z bajti, za katere je načrt napovedal, da bodo v reži (bajti, kot so bili poslani)',
   'readBack.sizeDiffers':
     'kontrolno branje ima {size} B, načrt je napovedal {predictedSize} B: reža se NE ujema {reference}',
   'readBack.matchesFolded':
@@ -390,7 +390,7 @@ export default {
   'readBack.tooShort':
     'kontrolno branje ima {size} B, kar je premalo za sliko velikosti {length} B: reža se NE dešifrira v pričakovano sliko',
   /** `{check}` is keyCheck.*; said after "under the" in readBack.decrypts and readBack.decryptDiffers. */
-  'readBack.recovered': 's tokom ključa, obnovljenim iz kontrolnega branja ({check})',
+  'readBack.recovered': 's tokom ključa, obnovljenim iz kontrolnega branja ({check})',
   /** `{recovered}` is readBack.recovered. */
   'readBack.decrypts': 'reža se dešifrira v pričakovano sliko ({length} B) {recovered}',
   'readBack.decryptDiffers':
@@ -524,7 +524,7 @@ export default {
   /** `{reasons}`: the detection's evidence (detect.*), joined with common:list.semicolon. */
   'writeRefusal.otherFamily': 'dokazi pravijo, da je ta kamera {detected}, ne {family} ({reasons})',
   /** `{reasons}`: writeRefusal.* joined with common:list.semicolon. */
-  'writeRefusal.camera': 'v to kamero od tukaj ni mogoče pisati: {reasons}',
+  'writeRefusal.camera': 'v to kamero od tukaj ni mogoče pisati: {reasons}',
 
   /* ---- family: what each camera family is (profiles/*: `summary`), the decrypt tab's Summary row ---- */
   /** "Work with firmware slots", "Info", "4.x/Nano", "Dump", "Dump all selectors": the page's own tab and button names; `seek-fw dump` stays English. `{block}` is an address. */
@@ -750,7 +750,7 @@ export default {
   'preserve.boot.inferred':
     '{why} (ključ, s katerim zagonski nalagalnik preverja režo, je sklepan iz {bank:gen}, v katero je vstopil brez preverjanja) [inferred]',
   /** The "Last start" row. `{word}` is the active-slot word as a decimal number. */
-  'preserve.lastStart.entered': '{bank}, kot jo beleži kamera (beseda aktivne reže {word})',
+  'preserve.lastStart.entered': '{bank}, kot to beleži kamera (beseda aktivne reže {word})',
   'preserve.lastStart.notRead': 'ni znano — besede aktivne reže ni bilo mogoče prebrati',
   'preserve.lastStart.noBank':
     'ni znano — beseda aktivne reže je {word}, kar ne označuje nobene reže',
@@ -797,19 +797,19 @@ export default {
   /** How a written bank is sent and put back (the plan's "Written" row; `{form}` in preserve.result.restoreForm). */
   'preserve.stagedForm.plain':
     'kot jo hrani kamera (ta kamera hrani vdelano programsko opremo nešifrirano)',
-  'preserve.stagedForm.oneKey': 'v obliki, v kateri jo hrani kamera (šifrirano s ključem kamere)',
+  'preserve.stagedForm.oneKey': 'v obliki, v kateri jo hrani kamera (šifrirano s ključem kamere)',
   'preserve.stagedForm.twoKeys':
-    'v obliki, v kateri jo hrani kamera (šifrirano z dvema ključema kamere)',
+    'v obliki, v kateri jo hrani kamera (šifrirano z dvema ključema kamere)',
   /** The plan's "Restore" row. */
   'preserve.restoreForm.verbatim':
     'vsaka zapisana reža dobi nazaj natanko tiste bajte, ki jih je iz nje prebrala varnostna kopija',
   'preserve.restoreForm.factoryStaged':
     'vsaka zapisana reža dobi nazaj svojo izvirno vdelano programsko opremo, zapisano v obliki, v kateri jo hrani kamera, tako da je reža na koncu bajt za bajtom takšna, kot jo je prebrala varnostna kopija',
   'preserve.restoreForm.none':
-    'v tej izdaji ni mogoče: nobena oblika izvirne vdelane programske opreme ne prestane lastnega preverjanja kamere in se hkrati ne shrani nazaj kot izvirni bajti, zato se izvedba konča s celotno sliko in s popravkom še na mestu',
+    'v tej izdaji ni mogoče: nobena oblika izvirne vdelane programske opreme ne prestane lastnega preverjanja kamere in se hkrati ne shrani nazaj kot izvirni bajti, zato se izvedba konča s celotno sliko in s popravkom še na mestu',
   /** The plan's "Whole flash" row. `{notes}` is preserve.drain.rotated / .hazard, joined with common:list.semicolon. */
   'preserve.drain.notPossible':
-    'v tej izdaji ni mogoče: popravljena vdelana programska oprema ne more prebrati celotnega bliskovnega pomnilnika, zato izvedba nima celotne slike',
+    'v tej izdaji ni mogoče: popravljena vdelana programska oprema ne more prebrati celotnega bliskovnega pomnilnika, zato izvedba nima celotne slike',
   'preserve.drain.rotated': 'kamera ga posreduje zamaknjenega, izvedba pa ga uredi nazaj',
   'preserve.drain.hazard': 'popravek se izogne branju, ki v tej izdaji sesuje kamero',
   'preserve.drain.whole':
@@ -823,7 +823,7 @@ export default {
     'omogoči, da položaj branja šteje čez 64 KB, tako da se branje ne vrne na začetek',
   'preserve.site.keepPosition':
     'ohrani celoten položaj branja, ko se po vsakem branju premakne naprej',
-  'preserve.site.savePosition': 'v celoti shrani premaknjeni položaj branja',
+  'preserve.site.savePosition': 'v celoti shrani premaknjeni položaj branja',
   'preserve.site.clearPosition':
     'ob vsakem začetku branja počisti celoten položaj branja, tako da je kamero mogoče brati tudi po branju celotnega pomnilnika',
   'preserve.site.modeTwoGuard':
@@ -929,9 +929,9 @@ export default {
     'začetek {bank:gen} se je od varnostne kopije spremenil (ne vsebuje niti izvirnega zajema niti popravljenih bajtov) — zapis čez neznano stanje reže je zavrnjen; nič ni bilo zapisano. Začetek v šestnajstiškem zapisu: zdaj {live}, v zajemu {capture}',
   /** `--resume` stays as it is. */
   'preserve.fail.landedOne':
-    'V {banks:loc} so popravljeni bajti že zapisani — potrditev zapisa je uspela v prejšnjem poskusu in se ne sme ponoviti. Nadaljujte pri koraku branja celotnega pomnilnika (--resume), ki zažene popravljeno sliko in nadaljuje od tam.',
+    'V {banks:loc} so popravljeni bajti že zapisani — potrditev zapisa je uspela v prejšnjem poskusu in se ne sme ponoviti. Nadaljujte pri koraku branja celotnega pomnilnika (--resume), ki zažene popravljeno sliko in nadaljuje od tam.',
   'preserve.fail.landed':
-    'V {banks:loc} so popravljeni bajti že zapisani — potrditev zapisa je uspela v prejšnjem poskusu in se ne sme ponoviti. Nadaljujte pri koraku branja celotnega pomnilnika (--resume), ki zažene popravljeno sliko in nadaljuje od tam.',
+    'V {banks:loc} so popravljeni bajti že zapisani — potrditev zapisa je uspela v prejšnjem poskusu in se ne sme ponoviti. Nadaljujte pri koraku branja celotnega pomnilnika (--resume), ki zažene popravljeno sliko in nadaljuje od tam.',
   'preserve.fail.drainRebootRefused':
     'gostitelj je ukaz za ponovni zagon v koraku branja celotnega pomnilnika ZAVRNIL, preden je bil poslan (SecurityError: pravilnik brskalnika ali testna zaščita), zato kamera še vedno poganja sliko, s katero se je zagnala, ne potrjenega popravka. Branje celotnega pomnilnika bere le skozi razširjeno okno popravljene slike, zato se ustavi, preden karkoli aktivira; nič ni bilo prebrano. Branje celotnega pomnilnika znova zaženite tam, kjer gostitelj prepusti ukaz za ponovni zagon.',
   'preserve.fail.shiftedRebootRefused':
@@ -1111,7 +1111,7 @@ export default {
   /** `{planSerial}`: a serial, or slots.plan.cameraUnknownSerial; `{serial}`: a serial, or slots.plan.unknownSerial. */
   'slots.plan.otherCamera':
     'načrt je bil sestavljen za kamero {planSerial}, analiza pa bere {serial}. Zapis tukaj je zavrnjen. Nič ni bilo zapisano.',
-  'slots.plan.cameraUnknownSerial': 'z neznano serijsko številko',
+  'slots.plan.cameraUnknownSerial': 'z neznano serijsko številko',
   'slots.plan.unknownSerial': 'neznano serijsko številko',
   /** `{address}`, `{at}`: hex; `{name}`: the bank, inside the sentence ("slot A"). */
   'slots.plan.otherAddress': 'načrt cilja na {address}, {name} te izdaje pa je na {at}',
@@ -1302,9 +1302,9 @@ export default {
   'read.reason.stopped': 'branje reže se je ustavilo pri {count}/{size} B',
   /** `{table}` is the name of the build's selector table; `{address}` a hex address. */
   'read.reason.notInPlan':
-    'v vdelani programski opremi {version} ni berljivo: njen načrt ({table}) nima okna na {address}, zato zanj ni bilo nič aktivirano',
+    'v vdelani programski opremi {version} ni berljivo: njen načrt ({table}) nima okna na {address}, zato zanj ni bilo nič aktivirano',
   'read.reason.notInPlanUnknown':
-    'v vdelani programski opremi neznane različice ni berljivo: njen načrt ({table}) nima okna na {address}, zato zanj ni bilo nič aktivirano',
+    'v vdelani programski opremi neznane različice ni berljivo: njen načrt ({table}) nima okna na {address}, zato zanj ni bilo nič aktivirano',
   /** `{remedy}` is read.spentRemedy. `{word}` and `{hex}` are hex words. */
   'read.reason.staleDescriptor':
     'okno je posredovalo bajte zastarelega deskriptorja bralnika — beseda 0 {word} s ponastavitvijo {hex} je tabela vektorjev naslova 0x14000000, ne vsebina te reže, zato iz nje ni bilo nič analizirano: {remedy}',

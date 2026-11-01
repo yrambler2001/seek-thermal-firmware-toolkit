@@ -140,7 +140,7 @@ export default {
   /* {reason} is core's. */
   'report.slotReason': '{slot}: {reason}',
   'report.writing': 'Zapisovanje',
-  'report.noBankWritten': 'V nobeno režo te kamere se ne piše:',
+  'report.noBankWritten': 'V nobeno režo te kamere se ne piše:',
   /*
    * The Writing panel: how each bank is staged, one sentence per staging form (core's report.staged.*
    * says the same clause after "each bank" for the CLI).

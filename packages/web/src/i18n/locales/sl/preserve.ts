@@ -64,7 +64,7 @@ export default {
   'phase.patchDump.label': 'Zapis in branje celotnega pomnilnika',
   'phase.patchDump.inSentence': 'zapis in branje celotnega pomnilnika',
   'phase.patchDump.description':
-    'V reže vdelane programske opreme, izbrane v koraku 02 (privzeto v režo, iz katere se kamera zažene naslednjič), zapiše majhen začasen popravek, da kamera lahko izda ves svoj bliskovni pomnilnik. Nato se kamera znova zažene — ko vas stran prosi, pritisnite „Poveži napravo“ in jo znova izberite — in prebere se celoten 4 MB bliskovni pomnilnik. Korak 04 povrne izvirno vdelano programsko opremo.',
+    'V reže vdelane programske opreme, izbrane v koraku 02 (privzeto v režo, iz katere se kamera zažene naslednjič), zapiše majhen začasen popravek, da kamera lahko izda ves svoj bliskovni pomnilnik. Nato se kamera znova zažene — ko vas stran prosi, pritisnite „Poveži napravo“ in jo znova izberite — in prebere se celoten 4 MB bliskovni pomnilnik. Korak 04 povrne izvirno vdelano programsko opremo.',
   'phase.restoreVerify.label': 'Obnovitev in preverjanje',
   'phase.restoreVerify.inSentence': 'obnovitev in preverjanje',
   'phase.restoreVerify.description':
@@ -189,7 +189,7 @@ export default {
   'plan.restore': 'Obnovitev',
   'plan.wholeFlash': 'Branje celotnega pomnilnika',
   'plan.outro':
-    'V obliki, ki jo hrani kamera, se spremenijo isti bajti in nobeni drugi, zato se vdelana programska oprema kamere spremeni natanko za to razliko in nič drugega.',
+    'V obliki, ki jo hrani kamera, se spremenijo isti bajti in nobeni drugi, zato se vdelana programska oprema kamere spremeni natanko za to razliko in nič drugega.',
   /* One bank's patch: its region's accessible name and heading. */
   'bankPlan.label': 'Popravek {bank:gen}',
   'bankPlan.titleChosen': '{bank} — zapiše jo ta izvedba',
@@ -256,13 +256,13 @@ export default {
     'Kamera naj bo priključena, računalnik pa buden, dokler se korak ne konča.',
   /* Step 03. "In that order" when there are several banks; the camera tries one bank first at start-up. */
   'confirm.patch':
-    'S tem se v {banks:acc} zapiše majhen popravek. Korak 04 povrne izvirnike. Branje celotnega pomnilnika, ki sledi, samo bere.',
+    'S tem se v {banks:acc} zapiše majhen popravek. Korak 04 povrne izvirnike. Branje celotnega pomnilnika, ki sledi, samo bere.',
   'confirm.patchInOrder':
-    'S tem se v {banks:acc} zapiše majhen popravek, v tem vrstnem redu — reža, ki jo kamera poskusi najprej, je zadnja. Korak 04 povrne izvirnike. Branje celotnega pomnilnika, ki sledi, samo bere.',
+    'S tem se v {banks:acc} zapiše majhen popravek, v tem vrstnem redu — reža, ki jo kamera poskusi najprej, je zadnja. Korak 04 povrne izvirnike. Branje celotnega pomnilnika, ki sledi, samo bere.',
   /* Step 04. */
-  'confirm.restore': 'S tem se vaša izvirna vdelana programska oprema zapiše nazaj v {banks:acc}.',
+  'confirm.restore': 'S tem se vaša izvirna vdelana programska oprema zapiše nazaj v {banks:acc}.',
   'confirm.restoreInOrder':
-    'S tem se vaša izvirna vdelana programska oprema zapiše nazaj v {banks:acc}, v tem vrstnem redu — reža, ki jo kamera poskusi najprej, je prva.',
+    'S tem se vaša izvirna vdelana programska oprema zapiše nazaj v {banks:acc}, v tem vrstnem redu — reža, ki jo kamera poskusi najprej, je prva.',
   'confirm.keepPlugged':
     'Med zapisovanjem naj bo kamera priključena, računalnik pa buden — po prekinjenem zapisu lahko kamero popravi le strojni programator (SPI ali SWD/J-Link). Na telefonu vklopite način za letalo in pustite zaslon vklopljen. Kamera se nato znova zažene; ko vas stran prosi, pritisnite „Poveži napravo“ in jo znova izberite. To je pričakovano.',
   'confirm.yesJump': 'Da — preskoči zapis',

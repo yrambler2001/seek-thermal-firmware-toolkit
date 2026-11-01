@@ -69,7 +69,7 @@ export default {
     few: 'Prebrano. Prebrane reže: {read}/{count}.',
     other: 'Prebrano. Prebrane reže: {read}/{count}.',
   },
-  'status.unsupported': 'V tej izdaji ni podprto — nobena reža ni bila prebrana.',
+  'status.unsupported': 'V tej izdaji ni podprto — nobena reža ni bila prebrana.',
   'status.refused': 'Zavrnjeno — nič ni bilo aktivirano. Glejte sporočilo pod dnevnikom.',
   'status.disconnected': 'Naprava je odklopljena — znova preberite reže.',
   'status.newDevice': 'Izbrana je nova naprava — znova preberite reže.',
@@ -126,7 +126,7 @@ export default {
   'gate.busy': 'Teče druga operacija — počakajte, da se konča.',
   'gate.readFirst': 'Najprej preberite reže.',
   'gate.cameraRefused':
-    'V to kamero od tukaj ni mogoče pisati iz razloga, navedenega v pasici zgoraj. Nič se ne pošlje.',
+    'V to kamero od tukaj ni mogoče pisati iz razloga, navedenega v pasici zgoraj. Nič se ne pošlje.',
   /* {reason} is core's reason the bank was not read. */
   'gate.notRead': 'Ni prebrano: {reason}. Pred zapisom znova preberite reže.',
   'gate.notReadNoReason':
@@ -153,7 +153,7 @@ export default {
     'Ni slike: okno glave te reže se bere kot sam 0xFF, zato se iz nje nič ne dešifrira, zapis vanjo pa ne prepiše nobene vdelane programske opreme.',
   /* {reason} is core's. */
   'table.emptyWritable': 'Vanjo je mogoče pisati.',
-  'table.emptyNotWritable': 'V tej izdaji je ni mogoče zapisati: {reason}',
+  'table.emptyNotWritable': 'V tej izdaji je ni mogoče zapisati: {reason}',
   'table.unknownVersion': 'neznana različica',
   /* {id} is the image id in hex. */
   'table.imageId': 'slika {id}',
@@ -187,7 +187,7 @@ export default {
   'table.restoreNote':
     'Izberite polno varnostno kopijo bliskovnega pomnilnika: datoteko .bin (celotno 4 MB sliko bliskovnega pomnilnika, na primer branje prek J-Link) ali .zip, ki jo vsebuje (datoteko izvedbe zavihka 0.x/1.x ali zip, ki ga shrani „Izpis in dešifriranje 4.x/Nano“ ali „Izpiši vse selektorje“). Ta reža se izreže iz nje, dešifrira in prikaže kot načrt, preden se karkoli pošlje.',
   'table.fpsNote':
-    'S spremembo bajtov poskrbi, da ta reža namesto pri {fromHz} Hz teče pri {toHz} Hz. Reža se najprej shrani v prenos zip, dešifrirana datoteka v njem pa je pot nazaj.',
+    'S spremembo bajtov poskrbi, da ta reža namesto pri {fromHz} Hz teče pri {toHz} Hz. Reža se najprej shrani v prenos zip, dešifrirana datoteka v njem pa je pot nazaj.',
   /*
    * The extra confirmation a write to this bank asks for. {booted} is core's word for the booted bank
    * ("Booted now", the badge's word with a capital), translated by core's messages.
@@ -281,7 +281,7 @@ export default {
   'writeConfirm.eraseEmpty':
     'Zapis kljub temu izbriše blok velikosti 64 KB v bliskovnem pomnilniku kamere na mestu {bank:gen} (ki je že prazen) in ga programira.',
   'writeConfirm.erase':
-    'S tem se izbriše blok velikosti 64 KB v bliskovnem pomnilniku kamere in se na mestu {bank:gen} znova programira.',
+    'S tem se izbriše blok velikosti 64 KB v bliskovnem pomnilniku kamere in se na mestu {bank:gen} znova programira.',
   /* {key} is core's line naming the key and the bank it was derived from. */
   'writeConfirm.keyLine': 'Ključ za zapis slike: {key}. Vse druge reže se zapišejo na enak način.',
   'writeConfirm.backup':
@@ -336,11 +336,11 @@ export default {
     other: 'Želite popraviti hitrost sličic v {count} režah?',
   },
   'fpsEvery.intro': {
-    one: 'S tem se popravi {count} reža, za katero je popravek na voljo (vdelana programska oprema {version}):',
-    two: 'S tem se popravita {count} reži, za kateri je popravek na voljo (vdelana programska oprema {version}):',
-    few: 'S tem se popravijo {count} reže, za katere je popravek na voljo (vdelana programska oprema {version}):',
+    one: 'S tem se popravi {count} reža, za katero je popravek na voljo (vdelana programska oprema {version}):',
+    two: 'S tem se popravita {count} reži, za kateri je popravek na voljo (vdelana programska oprema {version}):',
+    few: 'S tem se popravijo {count} reže, za katere je popravek na voljo (vdelana programska oprema {version}):',
     other:
-      'S tem se popravi {count} rež, za katere je popravek na voljo (vdelana programska oprema {version}):',
+      'S tem se popravi {count} rež, za katere je popravek na voljo (vdelana programska oprema {version}):',
   },
   /* A bank's name and, when writing it asks for the tick, what it is. */
   'fpsEvery.role.bootedRecovery':
