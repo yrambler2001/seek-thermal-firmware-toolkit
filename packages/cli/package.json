@@ -1,6 +1,6 @@
 {
   "name": "@seek-fw/cli",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "private": true,
   "type": "module",
   "bin": {
@@ -13,7 +13,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
-    "@seek-fw/core": "2.0.0",
+    "@seek-fw/core": "2.1.0",
     "usb": "^3.1.0"
   }
 }

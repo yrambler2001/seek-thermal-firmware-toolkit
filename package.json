@@ -1,6 +1,6 @@
 {
   "name": "seek-thermal-firmware-toolkit",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "private": true,
   "type": "module",
   "description": "Dump, decrypt and reflash Seek Thermal camera firmware \u2014 browser app, CLI and shared core.",
