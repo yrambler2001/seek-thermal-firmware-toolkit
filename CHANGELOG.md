@@ -25,7 +25,7 @@ All notable changes to this project are listed here. The format follows [Keep a 
 ### Added
 
 - A link to the repository in the page's top right corner.
-- **The page in 11 languages:** English, Deutsch, Español, Français, Italiano, Polski, Português (European), Română, Русский, Українська and 简体中文. Each language other than English is downloaded only when it is used.
+- **The page in 20 languages:** English, Čeština, Deutsch, Eesti, Español, Français, Italiano, Latviešu, Lietuvių, Magyar, Polski, Português (European), Română, Slovenčina, Slovenščina, Srpski, Български, Русский, Українська and 简体中文. Each language other than English is downloaded only when it is used.
 - The page opens in the browser's language, or in English when it does not have it. The language switch next to the theme switch picks another one, and the browser remembers it. `?lang=xx` before the `#` picks one for that visit: `…/?lang=de#/slots`.
 - The command-line tool, the run log, the copyable camera report, hex values, firmware versions and file names stay in English.
 - **What you get** on the Dump & decrypt 0.x/1.x tab: what the run file holds, file by file.
@@ -38,11 +38,12 @@ All notable changes to this project are listed here. The format follows [Keep a 
 - "Restore from full flash backup (.bin or .zip)…" on the slots tab, and any other button label that takes two lines, starts beside its icon like the other buttons instead of being centred.
 - The slots table's actions column was very narrow, most of all in Russian, and repeated the same reason under each greyed-out button. The table now has three columns (slot, firmware, actions): whether a bank boots is said under its name, its key, size and SHA-256 are labelled lines under its firmware, the buttons get most of the width, and a reason shared by every greyed-out button of a row is said once.
 - On a phone, the last card of a table had no border.
+- On a phone, a section heading no longer wraps word by word beside its badge ("Writes to flash", "Done") or runs under it: when the two do not fit on one line, the badge moves under the heading.
 
 ### Development
 
-- i18n tests: the page in a pseudo-locale with no English left, every key used, every locale with the same keys and params as English, the case forms of bank and key names, and no drift between core's English and its message templates.
-- `npm run e2e:phone:i18n` checks the phone-width layout in every language.
+- i18n tests: the page in a pseudo-locale with no English left, every key used, every locale with the same keys and params as English, the case forms of bank and key names in all 22 cases and in lists, each language's plural forms held to the categories its `Intl.PluralRules` uses, the switcher's order, and no drift between core's English and its message templates.
+- `npm run e2e:phone:i18n` checks the phone-width layout in every language, and that no heading's text runs under the badge beside it.
 
 ## [2.0.0] - 2026-10-27
 
