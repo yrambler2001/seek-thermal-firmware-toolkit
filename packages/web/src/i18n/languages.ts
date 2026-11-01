@@ -34,6 +34,7 @@ export type LanguageCode =
   | 'ro'
   | 'ru'
   | 'sk'
+  | 'sr'
   | 'uk'
   | 'zh-Hans';
 
@@ -81,7 +82,13 @@ export const LANGUAGES: readonly LanguageEntry[] = [
   { code: 'ro', name: 'Română', load: () => import('./locales/ro').then((m) => m.default) },
   { code: 'sk', name: 'Slovenčina', load: () => import('./locales/sk').then((m) => m.default) },
   /* sl — Slovenščina */
-  /* sr — Srpski, Latin script (htmlLang: 'sr-Latn'; sr-Cyrl browsers match it too) */
+  /* Serbian in Latin script (gajica), the ekavian standard: `sr-Latn`; `sr-Cyrl` browsers match it by the primary subtag. */
+  {
+    code: 'sr',
+    htmlLang: 'sr-Latn',
+    name: 'Srpski',
+    load: () => import('./locales/sr').then((m) => m.default),
+  },
   { code: 'bg', name: 'Български', load: () => import('./locales/bg').then((m) => m.default) },
   { code: 'ru', name: 'Русский', load: () => import('./locales/ru').then((m) => m.default) },
   { code: 'uk', name: 'Українська', load: () => import('./locales/uk').then((m) => m.default) },
