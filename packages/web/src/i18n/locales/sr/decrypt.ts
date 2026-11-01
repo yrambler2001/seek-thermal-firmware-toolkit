@@ -31,7 +31,7 @@ export default {
   'offline.intro':
     'Korak 2 kartice 4.x/Nano već dešifruje sve što pročita, pa vam ovo treba samo ako je vaša slika fleša došla odnekud drugde — iz ranijeg iščitavanja, sa J-Linka ili sa SPI programatora. Datoteka se čita lokalno i nikada se ne otprema. **Ovaj deo radi u svakom pregledaču**, uključujući Safari i iOS, jer mu nije potreban pristup USB-u.',
   'offline.actions': 'Radnje dešifrovanja bez kamere',
-  'offline.choose': 'Izaberi datoteku kopije…',
+  'offline.choose': 'Izaberi kopiju fleša…',
   'offline.panel': 'Dešifrovanje bez kamere',
   'offline.detectedTitle': 'Prepoznata porodica firmvera',
   'offline.detectedIntro':

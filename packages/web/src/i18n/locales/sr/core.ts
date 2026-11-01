@@ -842,7 +842,7 @@ export default {
   'preserve.result.patch': '{label}: napravljena za {banks}.',
   /** The patch step when every bank was refused: nothing to build for. */
   'preserve.result.patchNone':
-    '{label}: zakrpa nije napravljena: nijedan slot ne sadrži firmver koji sesija može da zakrpi.',
+    '{label}: nije napravljena, jer nijedan slot ne sadrži firmver koji sesija može da zakrpi.',
   'preserve.result.patchCount': '{label}: napravljena za {banks}; u svakom se menja {count} B.',
   'preserve.result.commitOne': '{label}: {banks} upisan sa zakrpom, i kamera ga je prihvatila.',
   'preserve.result.commitMany':
@@ -852,12 +852,12 @@ export default {
     '{label}: pročitan je ceo fleš od 4 MB; potpuna slika ima sha256 {sha256}.',
   'preserve.result.drainThrough':
     '{label}: pročitan je ceo fleš od 4 MB preko {bank:gen}; potpuna slika ima sha256 {sha256}.',
-  'preserve.result.restore': '{label}: vraćeno: {banks}.',
+  'preserve.result.restore': '{label}: {banks} — vraćeno.',
   /** `{form}` is a preserve.stagedForm.* phrase. */
   'preserve.result.restoreForm': '{label}: {banks} — vraćeno {form}.',
   'preserve.result.verifyDone': '{label}: gotovo.',
   'preserve.result.verifyIdentical':
-    '{label}: ponovo pročitani blokovi: {blocks}, različitih bajtova: 0 — fleš kamere je bajt po bajt identičan rezervnoj kopiji.',
+    '{label}: ponovo pročitani blokovi: {blocks}, različiti bajtovi: 0 — fleš kamere je bajt po bajt identičan rezervnoj kopiji.',
   'preserve.result.verifyDiffers':
     '{label}: ponovo pročitani blokovi: {blocks}, različiti bajtovi: {bytes}.',
   'preserve.result.verifyDiffersUnread': {
