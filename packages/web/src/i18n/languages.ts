@@ -21,7 +21,7 @@ import { en } from './locales/en';
 
 /** Every language planned for the page. Only the ones in `LANGUAGES` are offered. */
 export type LanguageCode =
-  'en' | 'de' | 'es' | 'fr' | 'it' | 'pl' | 'pt' | 'ro' | 'ru' | 'uk' | 'zh-Hans';
+  'en' | 'cs' | 'de' | 'es' | 'fr' | 'it' | 'pl' | 'pt' | 'ro' | 'ru' | 'uk' | 'zh-Hans';
 
 export interface LanguageEntry {
   /** A BCP 47 tag, as URLs (`?lang=`), storage and the switcher use it. */
@@ -46,7 +46,7 @@ export const DEFAULT_LANGUAGE: LanguageCode = 'en';
 
 export const LANGUAGES: readonly LanguageEntry[] = [
   { code: 'en', name: 'English', load: () => Promise.resolve(en) },
-  /* cs — Čeština */
+  { code: 'cs', name: 'Čeština', load: () => import('./locales/cs').then((m) => m.default) },
   { code: 'de', name: 'Deutsch', load: () => import('./locales/de').then((m) => m.default) },
   /* et — Eesti (listCase: { lastOnly: ['ter', 'ess', 'abe', 'com'], before: 'gen' }) */
   { code: 'es', name: 'Español', load: () => import('./locales/es').then((m) => m.default) },
