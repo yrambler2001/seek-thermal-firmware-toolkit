@@ -26,6 +26,7 @@ export type LanguageCode =
   | 'cs'
   | 'de'
   | 'es'
+  | 'et'
   | 'fr'
   | 'hu'
   | 'it'
@@ -66,7 +67,13 @@ export const LANGUAGES: readonly LanguageEntry[] = [
   { code: 'en', name: 'English', load: () => Promise.resolve(en) },
   { code: 'cs', name: 'Čeština', load: () => import('./locales/cs').then((m) => m.default) },
   { code: 'de', name: 'Deutsch', load: () => import('./locales/de').then((m) => m.default) },
-  /* et — Eesti (listCase: { lastOnly: ['ter', 'ess', 'abe', 'com'], before: 'gen' }) */
+  /* Estonian: the terminative, essive, abessive and comitative go on the last name only ("pesa A ja pesaga B"). */
+  {
+    code: 'et',
+    name: 'Eesti',
+    listCase: { lastOnly: ['ter', 'ess', 'abe', 'com'], before: 'gen' },
+    load: () => import('./locales/et').then((m) => m.default),
+  },
   { code: 'es', name: 'Español', load: () => import('./locales/es').then((m) => m.default) },
   { code: 'fr', name: 'Français', load: () => import('./locales/fr').then((m) => m.default) },
   { code: 'it', name: 'Italiano', load: () => import('./locales/it').then((m) => m.default) },
