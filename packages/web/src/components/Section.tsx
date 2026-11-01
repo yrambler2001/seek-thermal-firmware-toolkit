@@ -58,25 +58,32 @@ export function Section({
               {icon}
             </span>
           )}
-          <div className="min-w-0 flex-1">
-            {eyebrow !== undefined && (
-              <p className="mb-0.5 text-[0.68rem] font-semibold tracking-[0.08em] text-muted-foreground uppercase">
-                {eyebrow}
-              </p>
-            )}
-            <div className="flex items-baseline gap-2">
-              {step !== undefined && (
-                <span
-                  className="font-mono text-[0.78rem] font-semibold text-muted-foreground tabular-nums"
-                  aria-hidden="true"
-                >
-                  {step.padStart(2, '0')}
-                </span>
+          {/* The heading and its badges. The heading asks for its whole line
+           * (flex-basis auto: its width unwrapped), so the badges stay beside it
+           * only when both fit; otherwise they move under it, in line with the
+           * heading's text. A heading squeezed beside a badge wrapped word by
+           * word and, with a word longer than its share, ran under the badge. */}
+          <div className="flex min-w-0 flex-1 flex-wrap items-start gap-x-3 gap-y-1.5">
+            <div className="min-w-0 grow">
+              {eyebrow !== undefined && (
+                <p className="mb-0.5 text-[0.68rem] font-semibold tracking-[0.08em] text-muted-foreground uppercase">
+                  {eyebrow}
+                </p>
               )}
-              <CardTitle id={`${id}-heading`}>{title}</CardTitle>
+              <div className="flex items-baseline gap-2">
+                {step !== undefined && (
+                  <span
+                    className="font-mono text-[0.78rem] font-semibold text-muted-foreground tabular-nums"
+                    aria-hidden="true"
+                  >
+                    {step.padStart(2, '0')}
+                  </span>
+                )}
+                <CardTitle id={`${id}-heading`}>{title}</CardTitle>
+              </div>
             </div>
+            {aside !== undefined && <div className="max-w-full">{aside}</div>}
           </div>
-          {aside !== undefined && <div className="ms-auto shrink-0">{aside}</div>}
           {description !== undefined && <CardDescription>{description}</CardDescription>}
         </CardHeader>
         <CardContent className="space-y-3.5">{children}</CardContent>

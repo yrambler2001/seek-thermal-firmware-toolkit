@@ -16,7 +16,9 @@
  *     badge, row label or heading whose text spills out of its box;
  *   - no table that scrolls sideways (below 48rem every row is a card that
  *     must fit), and the masthead title whole;
- *   - no two buttons, tabs or badges on top of each other.
+ *   - no two buttons, tabs or badges on top of each other, and no heading
+ *     whose text runs under a badge or button beside it (a section heading
+ *     and its "writes to flash" badge, measured on the text's line boxes).
  *
  * Exempt, because they are built to scroll sideways: the hex blocks
  * (HexBlock, a fixed-width dump that keeps its columns) and the run logs
@@ -26,7 +28,8 @@
  * A full-page screenshot per language and state goes to SEEK_E2E_SHOTS (kept
  * with SEEK_E2E_KEEP=1), with the masthead as a phone first shows it. The
  * summary also names, per language, the button and badge labels that now take
- * two lines (a close-up of each is saved beside the screenshots) and how many
+ * two lines (a close-up of each is saved beside the screenshots, as is one of
+ * each section heading that carries a badge, `header-<section>-<n>.png`) and how many
  * rows the tab strip takes: neither fails the run, both are worth a look. Not reachable here: the camera's own states (the
  * slot table, the slot write and FPS dialogs, a running Preserve phase), and
  * the language menu itself, which is the system's native picker.
@@ -244,6 +247,32 @@ function findProblems(viewportWidth: number): Problem[] {
       }
     }
   }
+
+  /* A heading's text under a badge or button beside it. Measured on the text's
+   * own line boxes, not the heading's box: a heading squeezed narrower than a
+   * word draws that word past its box, onto whatever sits next to it. */
+  for (const heading of all.filter((el) => el.matches('h1, h2, h3'))) {
+    const range = document.createRange();
+    range.selectNodeContents(heading);
+    const lines = [...range.getClientRects()].filter((r) => r.width > 0 && r.height > 0);
+    for (const control of controls) {
+      if (control.contains(heading) || heading.contains(control)) continue;
+      const rc = control.getBoundingClientRect();
+      const hit = lines.find(
+        (r) =>
+          Math.min(r.right, rc.right) - Math.max(r.left, rc.left) > 1 &&
+          Math.min(r.bottom, rc.bottom) - Math.max(r.top, rc.top) > 1,
+      );
+      if (hit !== undefined) {
+        problems.push({
+          kind: 'heading text under a control',
+          element: `${describeEl(heading)} / ${describeEl(control)}`,
+          text: `${textOf(heading)} / ${textOf(control)}`,
+          widths: `text ${px(hit.left)}..${px(hit.right)}, control ${px(rc.left)}..${px(rc.right)}`,
+        });
+      }
+    }
+  }
   return problems;
 }
 
@@ -332,6 +361,7 @@ describe.skipIf(unavailable !== null)(
         let states = 0;
         let found = 0;
         const wraps = new Set<string>();
+        const headers = new Set<string>();
         let tabRows = 0;
 
         const check = async (name: string): Promise<void> => {
@@ -365,6 +395,27 @@ describe.skipIf(unavailable !== null)(
           await page.$$eval('[data-e2e-wrapped]', (all) => {
             for (const el of all) el.removeAttribute('data-e2e-wrapped');
           });
+          /* A close-up of each section heading that carries a badge, once per heading and badge. */
+          for (const header of await page.$$('section [data-slot="card-header"]')) {
+            const { id, badges } = await header.evaluate((el) => ({
+              id:
+                el
+                  .closest('section')
+                  ?.getAttribute('aria-labelledby')
+                  ?.replace(/-heading$/, '') ?? '',
+              badges:
+                el.getClientRects().length === 0
+                  ? ''
+                  : [...el.querySelectorAll('[data-slot="badge"]')]
+                      .filter((badge) => badge.getClientRects().length > 0)
+                      .map((badge) => badge.textContent)
+                      .join(' | '),
+            }));
+            if (id === '' || badges === '' || headers.has(`${id}: ${badges}`)) continue;
+            headers.add(`${id}: ${badges}`);
+            const n = [...headers].filter((seen) => seen.startsWith(`${id}: `)).length;
+            await header.screenshot({ path: path.join(dir, `header-${id}-${String(n)}.png`) });
+          }
           for (const p of problems) {
             failures.push(
               `${lang} · ${name} · ${p.kind} · ${p.element} · "${p.text}" · ${p.widths}`,
