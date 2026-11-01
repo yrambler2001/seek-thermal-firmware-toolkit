@@ -81,36 +81,57 @@ t('slots:found', { count: images.length, slot: 'B' }); // count is required for 
 ```
 
 - A number is inserted as `String(n)`, with no grouping and no locale formatting. Format hex values, sizes and versions yourself and pass the string.
-- An English plural has `one` and `other`. A translation gives the forms its language needs: ru/uk/pl `one, few, many, other`; es/fr/it/pt `one, many, other` (`many` is for millions); ro `one, few, other` (`few` is 0, 2–19 and any number ending in 01–19, `other` is 20 and up: "20 de sloturi"); de `one, other`; zh-Hans `other` only. The forms are chosen with `Intl.PluralRules`. A form that is missing falls back to the same language's `other`. The parity test fails on a missing form.
+- An English plural has `one` and `other`. A translation gives the forms its language needs: ru/uk/pl/cs/sk/lt `one, few, many, other`; es/fr/it/pt `one, many, other` (`many` is for millions); ro `one, few, other` (`few` is 0, 2–19 and any number ending in 01–19, `other` is 20 and up: "20 de sloturi"); sr `one, few, other`; sl `one, two, few, other`; lv `zero, one, other`; de/et/hu/bg `one, other`; zh-Hans `other` only (the notes under "How to add a language" say which numbers each form gets). The forms are chosen with `Intl.PluralRules`. A form that is missing falls back to the same language's `other`.
+- A translated file names its language, `satisfies Translation<'common', 'lv'>`, and its plural entries must then give exactly that language's categories (`PluralCategoriesOf` in `types.ts`): a missing `zero` in Latvian, or a `few` Latvian never picks, does not compile. The parity test reports both too.
 - Don't put a literal `{` or `}` in a string: pass it as a param.
 
 ## Cases
 
-A bank ("slot A", "recovery R") or a key ("Key A", "key block 1") goes into many sentences, and Polish, Russian, Ukrainian and German say it differently after "from", "in", "under", "to". A translation asks for the form it needs in the placeholder: `{bank:gen}`, `{key:ins}`. English never does; it has no case forms.
+A bank ("slot A", "recovery R") or a key ("Key A", "key block 1") goes into many sentences, and Polish, Russian, Ukrainian and German say it differently after "from", "in", "under", "to"; Hungarian and Estonian say "in", "into", "from", "with" with a suffix on the noun itself. A translation asks for the form it needs in the placeholder: `{bank:gen}`, `{key:ins}`, `{bank:ill}`. English never does; it has no case forms.
 
-| Selector | Case         | Polish example (slot A)            |
-| -------- | ------------ | ---------------------------------- |
-| `:gen`   | genitive     | ze **slotu A**                     |
-| `:dat`   | dative       | **slotowi A**                      |
-| `:acc`   | accusative   | na **slot A**                      |
-| `:ins`   | instrumental | pod **kluczem A**, ze **slotem A** |
-| `:loc`   | locative     | w **slocie A**                     |
+The selectors (`CASES` in `format.ts`). Each language uses the ones its grammar has and leaves the rest alone; the meanings say what the case is for, not a word to translate:
+
+| Selector | Case         | Meaning                                                                    | Example (slot A, Key A; Estonian _võti_, a key)      |
+| -------- | ------------ | -------------------------------------------------------------------------- | ---------------------------------------------------- |
+| `:nom`   | nominative   | the subject inside a sentence, where it differs from the plain form        | Hungarian **az A slot** üres; Bulgarian **слотът A** |
+| `:gen`   | genitive     | of, from; Estonian's possessor and finished object                         | Polish ze **slotu A**; Estonian **võtme**            |
+| `:dat`   | dative       | to, for (the receiver)                                                     | Polish **slotowi A**; Hungarian **az A slotnak**     |
+| `:acc`   | accusative   | the direct object                                                          | Polish na **slot A**; Hungarian **az A slotot**      |
+| `:ins`   | instrumental | with, by means of; under (Slavic); Hungarian "with" (-val/-vel)            | Polish pod **kluczem A**; Hungarian **az A slottal** |
+| `:loc`   | locative     | in, on, about, after a preposition (Slavic)                                | Polish w **slocie A**                                |
+| `:ine`   | inessive     | in                                                                         | Hungarian az A slot**ban**; Estonian võtme**s**      |
+| `:ill`   | illative     | into                                                                       | Hungarian az A slot**ba**; Estonian võtme**sse**     |
+| `:ela`   | elative      | out of; about                                                              | Hungarian az A slot**ból**; Estonian võtme**st**     |
+| `:sup`   | superessive  | on (Hungarian)                                                             | az A slot**on**                                      |
+| `:sub`   | sublative    | onto (Hungarian)                                                           | az A slot**ra**                                      |
+| `:del`   | delative     | off, from the surface of; about (Hungarian)                                | az A slot**ról**                                     |
+| `:ade`   | adessive     | at, by; Estonian also "on" and "has"                                       | Hungarian az A slot**nál**; Estonian võtme**l**      |
+| `:all`   | allative     | to, towards                                                                | Hungarian az A slot**hoz**; Estonian võtme**le**     |
+| `:abl`   | ablative     | from, away from                                                            | Hungarian az A slot**tól**; Estonian võtme**lt**     |
+| `:tra`   | translative  | into a state, becoming ("turns into")                                      | Hungarian az A slot**tá**; Estonian võtme**ks**      |
+| `:ter`   | terminative  | until, as far as                                                           | Hungarian az A slot**ig**; Estonian võtme**ni**      |
+| `:ess`   | essive       | as, in the role of                                                         | Hungarian az A slot**ként**; Estonian võtme**na**    |
+| `:com`   | comitative   | with, together with (Estonian; Hungarian uses `:ins`)                      | Estonian võtme**ga**                                 |
+| `:abe`   | abessive     | without (Estonian)                                                         | Estonian võtme**ta**                                 |
+| `:par`   | partitive    | Estonian's object of an unfinished action, after a number, with some words | Estonian võti**t**                                   |
+| `:cau`   | causal-final | for, for the sake of (Hungarian -ért)                                      | az A slot**ért**                                     |
 
 How it works:
 
 - **The param is a name, not text.** The page passes a `NameValue`: `bankWordsRef(key)` ("slot A"), `bankNameRef(key)` ("Slot A"), `bankListRef(keys, join?)` (a list, "slot A, slot B and recovery R"), `keyNameValue(name)` (a key; one core has no name for stays as it is), or `{ text }` for a phrase that cannot be declined. A `NameRef` is the name's dictionary key and that key's params (`{ name: 'common:bank.slotInSentence', params: { letter: 'A' } }`). Core's bank params (`bankParam`), key names (`keyNameParam`) and lists of them become names in `coreText`.
 - **The forms live with the name**, as optional keys next to it in the language's own file: `'bank.slotInSentence:loc': 'slocie {letter}'` in `common`, `'keyName.keyA:ins': 'kluczem A'` in `core`. Only names have forms: `common:bank.*`, `core:keyName.*` and `shared:deviceInfo.otherBank` ("the other bank", said where the booted bank has no name) (`NameKey`).
 - **A missing form falls back to the plain form of the same language**, never to English. English and Chinese write no forms at all; German gives only the ones it needs.
-- **A list** gets the case on each name, joined with the language's `common:list.*`: `{banks:loc}` → "slocie A, slocie B i slocie odzyskiwania R".
+- **A list** gets the case on each name, joined with the language's `common:list.*`: `{banks:loc}` → "slocie A, slocie B i slocie odzyskiwania R". A language whose grammar puts the case only on the last name says so in its registry entry, `listCase` (`ListCase` in `types.ts`): `'last'` (Hungarian: "az A slot és a B slotba"; the names before the last are said in `:nom`, or the plain form when the language gives no `:nom`), or `{ lastOnly, before }` for some cases only (Estonian: `{ lastOnly: ['ter', 'ess', 'abe', 'com'], before: 'gen' }`, "A-pesa ja B-pesaga", the others reach each name). Without `listCase`, every name takes the case, as today.
+- **A form for one letter.** Where the words around a bank's letter change with the letter (Hungarian "az A slot" but "a B slot"), give the case form for that letter as well: `'bank.slotInSentence:nom#B': 'a {letter} slot'` next to `'bank.slotInSentence:nom': 'az {letter} slot'`. The letter's form comes first, then the case form, then the plain form. Only the bank names have a `{letter}`; the letters are `A`, `B` and `R`.
 - **Nested core messages** work at any depth: each template says its own params in the case it asks for.
 
 What is checked:
 
-- A case form whose case is not one of the five, or a case form of a key that is not a name, does not compile (`Translation<N>`); `locales.test.ts` reports it too, and a case form whose `{params}` differ from its name's.
+- A case form whose case is not in `CASES`, a letter form for a letter no bank has, or a case form of a key that is not a name, does not compile (`Translation<N>`); `locales.test.ts` reports it too, and a case form whose `{params}` differ from its name's.
 - `locales.test.ts` fails on `{x:case}` with an unknown case, or on a page param that `names.ts` does not list as a name. `core-messages.test.ts` fails on `{x:case}` in a core template whose param core does not pass as a bank, a key or a list of them in every sample.
 - A page param that `names.ts` lists must be passed a `NameValue`, and any other param must not be: both are compile errors, so a sentence cannot lose its name to a string already formatted.
 
-Why optional per-language forms and not English-mirrored keys (`bank.slotInSentence.gen` in English, required everywhere): English, Chinese and most others have no cases, and five copies of every name in each of them would be noise that a translator must still fill and keep in step. The types still catch a typo, because the optional keys are typed from the name keys and the five cases, and the parity test checks the rest.
+Why optional per-language forms and not English-mirrored keys (`bank.slotInSentence.gen` in English, required everywhere): English, Chinese and most others have no cases, and a copy of every name per case in each of them would be noise that a translator must still fill and keep in step. The types still catch a typo, because the optional keys are typed from the name keys and `GrammaticalCase`, and the parity test checks the rest.
 
 ### Romance languages: articles and contractions
 
@@ -210,13 +231,13 @@ There is no "machine translation" label and no English shown under translated te
 
 Written for the agent that translates one language. You work from the English dictionaries alone; the code is there when a comment is not enough.
 
-1. **Copy English.** `cp -R src/i18n/locales/en src/i18n/locales/<code>` (`de`, `es`, `fr`, `it`, `pl`, `pt`, `ro`, `ru`, `uk`, `zh-Hans`).
+1. **Copy English.** `cp -R src/i18n/locales/en src/i18n/locales/<code>` (today `de`, `es`, `fr`, `it`, `pl`, `pt`, `ro`, `ru`, `uk`, `zh-Hans`; planned `cs`, `et`, `lv`, `lt`, `hu`, `sk`, `sl`, `sr`, `bg`).
 2. **Translate each namespace file.** Change the type line and translate every value; keep every key and every comment's meaning (you may translate the comments or leave them):
    ```ts
    import type { Translation } from '../../types';
    export default {
      'connect.test': 'Verbindung testen' /* every key */,
-   } satisfies Translation<'app'>;
+   } satisfies Translation<'app', 'de'>;
    ```
    A missing key, an extra key, or a string where English has plural forms is a compile error.
 3. **`locales/<code>/index.ts`:**
@@ -226,8 +247,15 @@ Written for the agent that translates one language. You work from the English di
    const de: Dictionary = { common, app, core, shared, info, decrypt, v4, slots, preserve };
    export default de;
    ```
-4. **Register it.** Uncomment the language's line in `languages.ts`. The order is the rule: English first, then by native name, Latin script, then Cyrillic, then Chinese: English, Deutsch, Español, Français, Italiano, Polski, Português, Română, Русский, Українська, 简体中文.
-5. **Check it:** `npx tsc --noEmit -p packages/web/tsconfig.app.json`, then `npx vitest run packages/web/src/i18n/locales.test.ts packages/web/src/i18n/pseudo-locale.test.tsx packages/web/src/i18n/key-usage.test.ts packages/web/src/i18n/core-messages.test.ts packages/web/src/i18n/cases.test.tsx` and the whole web project (`npx vitest run --project web`). `locales.test.ts` checks every registered language against English: keys, plural forms, `{params}` and `<slots>`. Then `npx eslint packages/web` and `npx prettier --write` on your files.
+4. **Register it**, in the same commit as your dictionaries (the types accept only a complete language):
+   - **`languages.ts`:** add the code to `LanguageCode`, and replace your language's comment in `LANGUAGES` with its entry, in that place: `{ code: 'cs', name: 'Čeština', load: () => import('./locales/cs').then((m) => m.default) }`. Serbian adds `htmlLang: 'sr-Latn'` (the page is in Latin script); Hungarian adds `listCase: 'last'`, Estonian `listCase: { lastOnly: ['ter', 'ess', 'abe', 'com'], before: 'gen' }` (see "Cases").
+   - **`<html lang>`** and each switcher option's `lang` come from `htmlLang`, else the code: nothing more to do.
+   - **Detection:** nothing to do. `?lang=`, the kept choice and `navigator.languages` match the registry exactly, then by primary subtag: `cs-CZ` → `cs`, `sl-SI` → `sl`, and `sr`, `sr-RS`, `sr-Latn-RS`, `sr-Cyrl-RS` all → `sr` (`languages.test.tsx`).
+   - **Switcher position:** the comment's place. The rule is English first, then the native names in Latin script in alphabetical order, then Cyrillic, then Chinese: English, Čeština, Deutsch, Eesti, Español, Français, Italiano, Latviešu, Lietuvių, Magyar, Polski, Português, Română, Slovenčina, Slovenščina, Srpski, Български, Русский, Українська, 简体中文. `languages.test.tsx` checks the order from the names.
+   - **Plural categories:** `PluralCategoriesOf` in `types.ts` lists all twenty languages; your files name the language (`Translation<'<ns>', '<code>'>`).
+   - **Tests and e2e that list languages:** none to edit. `locales.test.ts`, `core-messages.test.ts` and the phone e2e (`npm run e2e:phone:i18n`, which reads the languages from the switcher) cover every registered language; `languages.test.tsx` already lists all twenty; `i18n.test.tsx` uses its own fake registry.
+   - **The language sentences:** add your language, in the switcher's order, to the root `README.md` ("The page is in English, …" and its `?lang=` code list) and to step 1 above. The integrator updates the CHANGELOG line and rebuilds `docs/` once, after the last language.
+5. **Check it:** `npx tsc --noEmit -p packages/web/tsconfig.app.json`, then `npx vitest run packages/web/src/i18n/locales.test.ts packages/web/src/i18n/pseudo-locale.test.tsx packages/web/src/i18n/key-usage.test.ts packages/web/src/i18n/core-messages.test.ts packages/web/src/i18n/cases.test.tsx packages/web/src/i18n/languages.test.tsx` and the whole web project (`npx vitest run --project web`). `locales.test.ts` checks every registered language against English: keys, plural forms, `{params}` and `<slots>`. Then `npx eslint packages/web` and `npx prettier --write` on your files.
 
 The language loads only when someone picks it (a dynamic `import()`, its own chunk), so a new language adds nothing to the English page.
 
@@ -240,8 +268,8 @@ The language loads only when someone picks it (a dynamic `import()`, its own chu
 - **Keep as they are:** hex values, versions, file names and paths, register and command names (`cfg[0]`, GetFirmwareInfo, CompleteMemoryUpgrade), opcode names, family and product names (Compact, Compact PRO, Mosaic, Nano, Seek Thermal), programs (Zadig, Chrome, J-Link), WebUSB, and anything in `` `code` ``.
 - **Buttons the text names.** When a sentence names a button ("press _Connect device_"), use the button's own translation from `app`/`shared`, word for word.
 - **Capitals:** keep the English's. A value that starts lower case is said inside another sentence or after a label; one that starts upper case stands alone.
-- **Plurals:** give the forms your language uses (`Intl.PluralRules` categories): ru/uk/pl `one, few, many, other`; es/fr/it/pt `one, many, other`; ro `one, few, other`; de `one, other`; zh-Hans `other` only.
-- **Cases** (Polish, Russian, Ukrainian, German; see "Cases" above; French, Italian, Spanish and Portuguese use the same selectors for the article and its contraction, see "Romance languages"; Romanian for the article and the genitive-dative, see "Romanian"). A bank or a key inside a sentence can be asked for in a case: `{bank:gen}`, `{bank:dat}`, `{bank:acc}`, `{bank:ins}`, `{bank:loc}`. Two steps:
+- **Plurals:** give the forms your language uses (`Intl.PluralRules` categories): ru/uk/pl/cs/sk/lt `one, few, many, other`; es/fr/it/pt `one, many, other`; ro `one, few, other`; sr `one, few, other`; sl `one, two, few, other`; lv `zero, one, other`; de/et/hu/bg `one, other`; zh-Hans `other` only.
+- **Cases** (Polish, Russian, Ukrainian, German; see "Cases" above; French, Italian, Spanish and Portuguese use the same selectors for the article and its contraction, see "Romance languages"; Romanian for the article and the genitive-dative, see "Romanian"). A bank or a key inside a sentence can be asked for in a case: `{bank:gen}`, `{bank:dat}`, `{bank:acc}`, `{bank:ins}`, `{bank:loc}`, and the others in the table under "Cases" (`{bank:ill}`, `{key:com}`, …). Two steps:
   1. Give your forms once, next to the plain one, for each name: in `common.ts`, `'bank.slotInSentence:gen': 'slotu {letter}'`, `'bank.recoveryInSentence:loc': 'slocie odzyskiwania {letter}'` (and `bank.slot:*`, `bank.recovery:*` for the label forms where a sentence uses them); in `core.ts`, `'keyName.keyA:ins': 'kluczem A'`, and so on for each `keyName.*`. Write only the cases your language uses; a case you leave out is said in the plain form.
   2. In a sentence, write the case the grammar needs: `'Kopiuj do {bank:gen}'`, `'Zapisz w {bank:loc}'`, `'pod {key:ins}'`. Don't work round a case with a colon or brackets ("pod kluczem: {key}") any more.
 
@@ -249,6 +277,19 @@ The language loads only when someone picks it (a dynamic `import()`, its own chu
 
 - **Params** arrive either already translated (another key, a bank name, a list) or as data that stays as it is (hex, sizes, versions, file names). The comment above a key says which when it matters; the `core` namespace lists them all at its top.
 - **What stays English** whatever the language: the run log lines, the copyable camera report, the CLI, and a browser's or the USB stack's own error text inside a translated sentence. See "What stays English" above.
+
+### Notes for the languages added after Romanian
+
+Czech, Estonian, Latvian, Lithuanian, Hungarian, Slovak, Slovenian, Serbian and Bulgarian. Each translator adds a section like "Romanian" above for their language when its selectors need explaining.
+
+- **Plural forms, which numbers get which.** cs, sk: `one` 1, `few` 2–4, `many` a fraction ("1,5 souboru"), `other` 0 and 5 up. lt: `one` 1, 21, 31 … (not 11), `few` 2–9, 22–29 … (not 12–19), `many` a fraction, `other` 0, 10–20, 30 …. lv: `zero` 0, 10–20, 30, 40 … ("0 failu"), `one` 1, 21, 31 … (not 11), `other` the rest. sl: `one` 1, 101 …, `two` 2, 102 … (the dual), `few` 3, 4, 103, 104 … and fractions, `other` the rest. sr: `one` 1, 21 … (not 11), `few` 2–4, 22–24 … (not 12–14), `other` the rest. et, hu, bg: `one` 1, `other` the rest. Hungarian says the noun after a number in the singular ("3 fájl"), so its `one` and `other` often read the same; Estonian puts it in the partitive singular ("2 faili", "5 pesa"), in the `other` form.
+- **Czech, Slovak, Slovenian, Serbian, Lithuanian, Latvian** decline the name like Polish: give `gen`, `dat`, `acc`, `ins`, `loc` forms ("ve slotu A", "se slotem A"; Latvian "slotā A", "ar slotu A"; Lithuanian "slote A"). No language here needs the vocative for a name.
+- **Hungarian:** say the letter first and put the suffix on the noun, so the suffix follows the noun's vowels, not the letter's: "az A slotba", "a B slotba". The article is "az" before a vowel sound: A (á) and R (er) take "az", B (bé) takes "a". Put the article in the names' forms and give B its own form (`'bank.slotInSentence:ill': 'az {letter} slotba'`, `'bank.slotInSentence:ill#B': 'a {letter} slotba'`, and `:nom` for a subject), or leave it out of every name; never write "a" or "az" before a name param in a template. The keys are separate entries ("az A kulcs", "a B kulcs"), so each writes its own article. Lists take the suffix on the last name only (`listCase: 'last'`); the names before it are said in `:nom`. Hungarian has no gender and uses `:ins` for "with".
+- **Estonian:** the case is a suffix on the noun, as in Hungarian, with `:gen` and `:par` doing much of the work: a finished object in the genitive, an unfinished one, a negated one and a counted noun in the partitive. A letter on its own takes its ending after a hyphen ("A-st"); a compound like "A-pesa" declines its noun ("A-pesas"). `listCase` puts the terminative, essive, abessive and comitative on the last name only, with the names before it in the genitive.
+- **Latvian:** no article. The instrumental is "ar" + the accusative in the singular, so `:ins` may be that whole phrase or left out.
+- **Serbian:** Latin script only (č, ć, đ, š, ž), never Cyrillic: the registry says `htmlLang: 'sr-Latn'`, and a browser set to Serbian Cyrillic gets this page too. Use the ekavian standard of Serbia.
+- **Bulgarian:** no noun cases, but the definite article sits on the noun, as in Romanian: the full article for a subject ("слотът A", `:nom`), the short article as an object and after a preposition ("в слота A", "запишете слота A", `:acc`); the plain `{bank}` is the label without an article ("Слот A"). Sizes in Cyrillic like Russian and Ukrainian: **КБ, МБ, Б**; Hz and FPS stay.
+- **Fonts:** the page uses the system's own fonts (`--font-sans` is `system-ui`, Segoe UI, Roboto…; `--font-mono` `ui-monospace`, SF Mono, Menlo, Consolas…), which cover every letter these languages use (ő ű, č ď ě ň ř ů ľ ĺ ŕ, ā ē ī ū ģ ķ ļ ņ ė į ų õ, đ ć, Cyrillic). Nothing to do.
 
 ### Glossary
 
@@ -275,7 +316,7 @@ The first match wins:
 
 1. `?lang=xx` in the URL, for that visit only. Put it before the hash: `…/?lang=ru#/v4`.
 2. The choice saved from the switcher (`localStorage['seek-fw:lang']`; storage that throws counts as no choice).
-3. The first entry in `navigator.languages` whose primary subtag matches (`zh-TW` → `zh-Hans`, `pt-BR` → `pt`, `ro-MD` → `ro`).
+3. The first entry in `navigator.languages` whose primary subtag matches (`zh-TW` → `zh-Hans`, `pt-BR` → `pt`, `ro-MD` → `ro`; once registered, `sr-Cyrl-RS` → `sr`, `cs-CZ` → `cs`).
 4. English.
 
 `main.tsx` awaits `initI18n()` before the first render, so English never flashes first. A switch loads the language first, then re-renders. `<html lang>` always matches the language in use: its code, or the more specific tag its registry entry names (`htmlLang`: `pt` is `pt-PT`), which hyphenation and screen-reader voices key on. A pick in the switcher is saved and removes `?lang=` from the address bar. A pick in one tab is followed by the page's other open tabs (`followLanguageChoice()`, called by `main.tsx`), which also drop their own `?lang=`; the theme does the same.

@@ -281,7 +281,7 @@ describe('a name in a case', () => {
       { bank: listParam([bankParam('a'), bankParam('b'), bankParam('r')], 'commaAnd') },
       'slot A, slot B and recovery R',
     );
-    expect(coreText(list)).toBe('A slot, B slot és R mentőslotba');
+    expect(coreText(list)).toBe('az A slot, a B slot és R mentőslotba');
   });
 
   it('puts a list’s case on each name, or only on the last, as the language says', async () => {
@@ -290,9 +290,9 @@ describe('a name in a case', () => {
     expect(nameText(banks, t, 'loc')).toBe('slocie A, slocie B i slot odzyskiwania R');
     await inLanguage('hu');
     expect(t('slots:fpsEveryOutcome.notWritten', { banks })).toBe(
-      'Semmi sem került A slot, B slot és R mentőslotba.',
+      'Semmi sem került az A slot, a B slot és R mentőslotba.',
     );
-    expect(nameText(bankListRef(['a', 'b'], 'and'), t, 'ine')).toBe('A slot és B slotban');
+    expect(nameText(bankListRef(['a', 'b'], 'and'), t, 'ine')).toBe('az A slot és B slotban');
     expect(nameText(bankListRef(['b'], 'and'), t, 'ine')).toBe('B slotban');
     await inLanguage('et');
     /* Estonian: the inessive on each name, the comitative only on the last, the others in the genitive. */
@@ -309,18 +309,18 @@ describe('a name in a case', () => {
     /* No letter form for this case: the case form, then the plain form. */
     expect(nameText(bankWordsRef('b'), t, 'ill')).toBe('B slotba');
     expect(nameText(bankWordsRef('b'))).toBe('B slot');
-    expect(nameText(bankListRef(['a', 'b']), t, 'nom')).toBe('A slot és a B slot');
+    expect(nameText(bankListRef(['a', 'b']), t, 'nom')).toBe('az A slot és a B slot');
   });
 
   it('picks the case of each name in a list from the rule', () => {
     const estonian = { lastOnly: ['ter', 'ess', 'abe', 'com'], before: 'gen' } as const;
     expect(listItemCase('each', 'ine', false)).toBe('ine');
-    expect(listItemCase('last', 'ine', false)).toBeUndefined();
+    expect(listItemCase('last', 'ine', false)).toBe('nom');
     expect(listItemCase('last', 'ine', true)).toBe('ine');
     expect(listItemCase(estonian, 'com', false)).toBe('gen');
     expect(listItemCase(estonian, 'com', true)).toBe('com');
     expect(listItemCase(estonian, 'ine', false)).toBe('ine');
-    expect(listItemCase({ lastOnly: ['com'] }, 'com', false)).toBeUndefined();
+    expect(listItemCase({ lastOnly: ['com'] }, 'com', false)).toBe('nom');
     expect(listItemCase('last', undefined, false)).toBeUndefined();
   });
 

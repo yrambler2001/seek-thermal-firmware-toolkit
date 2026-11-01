@@ -209,7 +209,8 @@ const LIST_KEY: Readonly<Record<Exclude<NameList['join'], 'commaAnd'>, string>> 
 
 /**
  * The case a name in a list is said in, when the list is asked for `gramCase` (`ListCase`): the last name
- * always takes it; the others take it too, or keep their plain form, or take the rule's `before`.
+ * always takes it; the others take it too, or the nominative (a missing `:nom` form is the plain form),
+ * or the rule's `before`.
  */
 export function listItemCase(
   rule: ListCase,
@@ -217,8 +218,8 @@ export function listItemCase(
   isLast: boolean,
 ): GrammaticalCase | undefined {
   if (isLast || gramCase === undefined || rule === 'each') return gramCase;
-  if (rule === 'last') return undefined;
-  return rule.lastOnly.includes(gramCase) ? rule.before : gramCase;
+  if (rule === 'last') return 'nom';
+  return rule.lastOnly.includes(gramCase) ? (rule.before ?? 'nom') : gramCase;
 }
 
 /**

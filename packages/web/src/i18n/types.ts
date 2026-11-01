@@ -139,10 +139,10 @@ export type GrammaticalCase =
 /**
  * How a case asked of a list reaches its names (the language's registry entry, `listCase`):
  * - `'each'`: every name takes it ("w slocie A i slocie B"), the default;
- * - `'last'`: only the last name does and the others keep their plain form, as Hungarian closes a
- *   coordinated list with one suffix;
+ * - `'last'`: only the last name does and the others are said in the nominative (`:nom`, else the
+ *   plain form), as Hungarian closes a coordinated list with one suffix;
  * - `{ lastOnly, before }`: for the cases in `lastOnly` only the last name takes the case and the others
- *   take `before` (their plain form when it is left out); every other case reaches each name. Estonian
+ *   take `before` (the nominative when it is left out); every other case reaches each name. Estonian
  *   says the terminative, essive, abessive and comitative this way, the names before the last in the
  *   genitive ("Mardi ja Juhaniga").
  */
