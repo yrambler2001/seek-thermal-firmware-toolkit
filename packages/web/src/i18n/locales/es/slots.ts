@@ -481,4 +481,4 @@ export default {
   /* {address} is the bootloader's flash address. */
   'how.write':
     'Una escritura borra una ranura de 64 KB y la programa. El bootloader en `{address}` y la configuración de arranque nunca se escriben aquí, y no hay ningún control para elegir la ranura activa. La ranura solo tiene efecto después de desconectar la cámara y volver a conectarla.',
-} satisfies Translation<'slots'>;
+} satisfies Translation<'slots', 'es'>;

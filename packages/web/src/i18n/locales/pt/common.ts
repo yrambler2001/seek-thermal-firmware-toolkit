@@ -59,4 +59,4 @@ export default {
   'bank.recoveryInSentence:dat': 'à ranhura de recuperação {letter}',
   'bank.recoveryInSentence:loc': 'na ranhura de recuperação {letter}',
   'bank.recoveryInSentence:ins': 'A ranhura de recuperação {letter}',
-} satisfies Translation<'common'>;
+} satisfies Translation<'common', 'pt'>;

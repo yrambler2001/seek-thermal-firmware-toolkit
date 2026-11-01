@@ -486,4 +486,4 @@ export default {
   /* {address} is the bootloader's flash address. */
   'how.write':
     'Zapis wymazuje jeden 64 KB slot i programuje go od nowa. Bootloader pod `{address}` i konfiguracja startu nigdy nie są tu zapisywane, a strona nie ma żadnej opcji wyboru aktywnego slotu. Slot zaczyna obowiązywać dopiero po odłączeniu i ponownym podłączeniu kamery.',
-} satisfies Translation<'slots'>;
+} satisfies Translation<'slots', 'pl'>;

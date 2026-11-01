@@ -55,4 +55,4 @@ export default {
   'bank.recoveryInSentence:dat': 'allo slot di recupero {letter}',
   'bank.recoveryInSentence:loc': 'nello slot di recupero {letter}',
   'bank.recoveryInSentence:ins': 'Lo slot di recupero {letter}',
-} satisfies Translation<'common'>;
+} satisfies Translation<'common', 'it'>;

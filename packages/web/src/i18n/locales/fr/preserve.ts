@@ -426,4 +426,4 @@ export default {
    */
   'error.cameraNotBack':
     'la caméra n’est pas revenue après {minutes} min de tentatives : {error} — si Chrome n’a rien demandé, rebranchez la caméra et relancez la phase ; si le journal demandait de la reconnecter, c’est le clic sur « Connecter l’appareil » qui était attendu',
-} satisfies Translation<'preserve'>;
+} satisfies Translation<'preserve', 'fr'>;

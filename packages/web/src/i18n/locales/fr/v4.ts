@@ -115,4 +115,4 @@ export default {
   'options.gapFillByte': 'gap-fill doit être un seul octet, reçu {value}',
   'options.retriesMin': 'le nombre de nouveaux essais doit être zéro ou plus, reçu {value}',
   'options.retryDelayMin': 'le délai entre essais doit être zéro ou plus, reçu {value}',
-} satisfies Translation<'v4'>;
+} satisfies Translation<'v4', 'fr'>;

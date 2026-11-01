@@ -427,4 +427,4 @@ export default {
    */
   'error.cameraNotBack':
     'a câmara não voltou depois de {minutes} min de tentativas: {error} — se o Chrome não perguntou nada, desconecte a câmara, volte a conectá-la e execute a fase de novo; se o registo disse para a voltar a conectar, era do clique em «Conectar dispositivo» que estava à espera',
-} satisfies Translation<'preserve'>;
+} satisfies Translation<'preserve', 'pt'>;

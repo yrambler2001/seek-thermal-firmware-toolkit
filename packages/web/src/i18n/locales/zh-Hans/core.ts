@@ -1207,4 +1207,4 @@ export default {
   'usb.speed.high': '高速（480 Mbit/s）',
   'usb.speed.full': '全速（12 Mbit/s）',
   'usb.speed.code': '代码 {code}',
-} satisfies Translation<'core'>;
+} satisfies Translation<'core', 'zh-Hans'>;

@@ -1423,4 +1423,4 @@ export default {
   'usb.speed.high': 'viteză mare (480 Mbit/s)',
   'usb.speed.full': 'viteză completă (12 Mbit/s)',
   'usb.speed.code': 'cod {code}',
-} satisfies Translation<'core'>;
+} satisfies Translation<'core', 'ro'>;

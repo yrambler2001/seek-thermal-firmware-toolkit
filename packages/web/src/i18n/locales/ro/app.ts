@@ -109,4 +109,4 @@ export default {
     '**Nu poate citi o cameră**, iar acest lucru nu se va schimba. Safari nu implementează WebUSB, iar pe iOS și iPadOS orice browser — inclusiv Chrome și Firefox — este obligat să folosească WebKit, așa că niciunul nu oferă această interfață. Nu există nicio setare, extensie sau aplicație care să ocolească asta. Pentru extragere folosiți un calculator desktop sau un telefon Android.',
   'platform.ios.decrypt':
     'Decriptorul opțional funcționează aici: decriptarea unui dump pe care îl aveți deja nu are nevoie de acces la USB, așa că o puteți face de pe un iPhone sau iPad, ori din Firefox și Safari pe desktop.',
-} satisfies Translation<'app'>;
+} satisfies Translation<'app', 'ro'>;

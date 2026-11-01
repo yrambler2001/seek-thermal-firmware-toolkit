@@ -109,4 +109,4 @@ export default {
     '**Nie może odczytać kamery** i to się nie zmieni. Safari nie obsługuje WebUSB, a w iOS i iPadOS każda przeglądarka — łącznie z Chrome i Firefoksem — musi renderować za pomocą WebKit, więc żadna z nich nie udostępnia tego API. Nie ma flagi, rozszerzenia ani aplikacji, które by to obeszły. Do zrzutu użyj komputera stacjonarnego lub telefonu z Androidem.',
   'platform.ios.decrypt':
     'Opcjonalne odszyfrowywanie działa tutaj: odszyfrowanie zrzutu, który już masz, nie wymaga dostępu do USB, więc można to zrobić z iPhone’a lub iPada albo z Firefoksa i Safari na komputerze.',
-} satisfies Translation<'app'>;
+} satisfies Translation<'app', 'pl'>;

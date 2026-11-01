@@ -55,4 +55,4 @@ export default {
   'bank.recoveryInSentence:dat': 'slotului de recuperare {letter}',
   'bank.recoveryInSentence:loc': 'în slotul de recuperare {letter}',
   'bank.recoveryInSentence:ins': 'Slotul de recuperare {letter}',
-} satisfies Translation<'common'>;
+} satisfies Translation<'common', 'ro'>;

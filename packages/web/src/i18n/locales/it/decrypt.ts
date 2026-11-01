@@ -102,4 +102,4 @@ export default {
   'detection.why': 'Perché:',
   'detection.ambiguous':
     '**Gli indizi non hanno stabilito di quale famiglia si tratti.** O la vincitrice non ha ottenuto un punteggio migliore della soluzione generica di ripiego, o la seconda le è arrivata troppo vicino per decidere. La decifratura non ne risente, perché la chiave viene comunque ricavata dal testo cifrato, ma la famiglia indicata nel rapporto, e tutto ciò che dipende da essa, è un’ipotesi.',
-} satisfies Translation<'decrypt'>;
+} satisfies Translation<'decrypt', 'it'>;

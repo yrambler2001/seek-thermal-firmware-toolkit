@@ -110,4 +110,4 @@ export default {
     '**Non può leggere una termocamera**, e non cambierà. Safari non implementa WebUSB e su iOS e iPadOS ogni browser, compresi Chrome e Firefox, è obbligato a usare WebKit, quindi nessuno di loro offre questa API. Nessun flag, estensione o app la aggira. Per il dump usa un computer desktop o un telefono Android.',
   'platform.ios.decrypt':
     'Il decifratore opzionale invece funziona: decifrare un dump che hai già non richiede l’accesso USB, quindi puoi farlo da un iPhone o un iPad, oppure da Firefox e Safari sul desktop.',
-} satisfies Translation<'app'>;
+} satisfies Translation<'app', 'it'>;

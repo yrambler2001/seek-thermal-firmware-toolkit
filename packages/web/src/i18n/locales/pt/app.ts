@@ -109,4 +109,4 @@ export default {
     '**Não consegue ler uma câmara**, e isto não vai mudar. O Safari não implementa o WebUSB e, em iOS e iPadOS, todos os browsers — incluindo o Chrome e o Firefox — são obrigados a usar o WebKit, por isso nenhum deles disponibiliza a API. Não há opção, extensão nem aplicação que contorne isto. Para fazer o dump, use um computador ou um telemóvel Android.',
   'platform.ios.decrypt':
     'O desencriptador opcional funciona aqui: desencriptar um dump que já tem não precisa de acesso USB, por isso pode fazê-lo num iPhone ou iPad, ou no Firefox e no Safari num computador.',
-} satisfies Translation<'app'>;
+} satisfies Translation<'app', 'pt'>;

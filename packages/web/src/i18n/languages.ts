@@ -7,13 +7,16 @@
  * English and the one language they read.
  *
  * Adding a language is one folder, `locales/<code>/` (a copy of `locales/en/`
- * with every string translated), plus one line here. The order is the rule:
- * English first, then by native name — Latin script, then Cyrillic, then
- * Chinese. The planned lines below are in that order already; a translator
- * uncomments theirs once the folder exists.
+ * with every string translated), its code in `LanguageCode`, and one entry
+ * here (README.md, "How to add a language", has the whole checklist). The
+ * order is the rule: English first, then by native name — Latin script, then
+ * Cyrillic, then Chinese. Each planned language has a comment where its entry
+ * goes; replace the comment with the entry once the folder exists.
+ * languages.test.ts checks the order from the names, so an entry in the wrong
+ * place fails it.
  */
 
-import type { Dictionary } from './types';
+import type { Dictionary, ListCase } from './types';
 import { en } from './locales/en';
 
 /** Every language planned for the page. Only the ones in `LANGUAGES` are offered. */
@@ -31,6 +34,11 @@ export interface LanguageEntry {
   readonly htmlLang?: string;
   /** The language's own name for itself, as the switcher shows it. */
   readonly name: string;
+  /**
+   * How a case asked of a list of names reaches them (`ListCase`): each name
+   * (the default, as Polish and Russian say it), or only the last (Hungarian).
+   */
+  readonly listCase?: ListCase;
   readonly load: () => Promise<Dictionary>;
 }
 
@@ -38,10 +46,15 @@ export const DEFAULT_LANGUAGE: LanguageCode = 'en';
 
 export const LANGUAGES: readonly LanguageEntry[] = [
   { code: 'en', name: 'English', load: () => Promise.resolve(en) },
+  /* cs — Čeština */
   { code: 'de', name: 'Deutsch', load: () => import('./locales/de').then((m) => m.default) },
+  /* et — Eesti (listCase: { lastOnly: ['ter', 'ess', 'abe', 'com'], before: 'gen' }) */
   { code: 'es', name: 'Español', load: () => import('./locales/es').then((m) => m.default) },
   { code: 'fr', name: 'Français', load: () => import('./locales/fr').then((m) => m.default) },
   { code: 'it', name: 'Italiano', load: () => import('./locales/it').then((m) => m.default) },
+  /* lv — Latviešu */
+  /* lt — Lietuvių */
+  /* hu — Magyar (listCase: 'last') */
   { code: 'pl', name: 'Polski', load: () => import('./locales/pl').then((m) => m.default) },
   /* European Portuguese (pt-PT spelling). */
   {
@@ -52,6 +65,10 @@ export const LANGUAGES: readonly LanguageEntry[] = [
   },
   /* Romanian (ro): `ro-RO` and `ro-MD` browsers match it by the primary subtag. */
   { code: 'ro', name: 'Română', load: () => import('./locales/ro').then((m) => m.default) },
+  /* sk — Slovenčina */
+  /* sl — Slovenščina */
+  /* sr — Srpski, Latin script (htmlLang: 'sr-Latn'; sr-Cyrl browsers match it too) */
+  /* bg — Български */
   { code: 'ru', name: 'Русский', load: () => import('./locales/ru').then((m) => m.default) },
   { code: 'uk', name: 'Українська', load: () => import('./locales/uk').then((m) => m.default) },
   {

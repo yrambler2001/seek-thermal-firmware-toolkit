@@ -156,4 +156,4 @@ export default {
   'report.oneBank.ffVendor':
     'Jeden slot naraz: karta slotów zapisuje lub łata jeden slot tej kamery; każdy slot jest przesyłany tak, jak aplikacja producenta przesyła obraz 16 Hz FF (obraz XOR jego własny blok kluczy 0), i przechowywany przez kamerę pod kluczem B; a każdy zapis najpierw pyta.',
   'report.refusesEvery': 'Karta slotów odrzuca każdy slot tej kamery:',
-} satisfies Translation<'info'>;
+} satisfies Translation<'info', 'pl'>;

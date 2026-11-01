@@ -60,4 +60,4 @@ export default {
   'bank.recoveryInSentence:acc': 'slot odzyskiwania {letter}',
   'bank.recoveryInSentence:ins': 'slotem odzyskiwania {letter}',
   'bank.recoveryInSentence:loc': 'slocie odzyskiwania {letter}',
-} satisfies Translation<'common'>;
+} satisfies Translation<'common', 'pl'>;

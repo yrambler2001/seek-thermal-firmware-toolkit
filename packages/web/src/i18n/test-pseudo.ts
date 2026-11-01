@@ -14,7 +14,7 @@
  * registry (see `vi.mock('./languages')` there).
  */
 
-import { CASES } from './format';
+import { CASES, PLURAL_CATEGORIES } from './format';
 import { NAME_PARAMS, isNameKey } from './names';
 import type { Dictionary, Message, NamespaceMessages } from './types';
 
@@ -69,9 +69,12 @@ function withCases(namespace: string, key: string, message: Message): [string, M
     typeof message === 'string'
       ? cased(message)
       : {
-          one: cased(message.one ?? message.other),
-          few: cased(message.few ?? message.other),
-          many: cased(message.many ?? message.other),
+          ...Object.fromEntries(
+            PLURAL_CATEGORIES.map((category) => [
+              category,
+              cased(message[category] ?? message.other),
+            ]),
+          ),
           other: cased(message.other),
         };
   const entries: [string, Message][] = [[key, own]];

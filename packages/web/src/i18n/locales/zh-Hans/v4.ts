@@ -110,4 +110,4 @@ export default {
   'options.gapFillByte': 'gap-fill 必须是单个字节，当前为 {value}',
   'options.retriesMin': '重试次数必须为零或更多，当前为 {value}',
   'options.retryDelayMin': '重试间隔必须为零或更多，当前为 {value}',
-} satisfies Translation<'v4'>;
+} satisfies Translation<'v4', 'zh-Hans'>;

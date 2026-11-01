@@ -102,4 +102,4 @@ export default {
   'detection.why': 'Por qué:',
   'detection.ambiguous':
     '**Los indicios no permitieron decidir qué familia es.** O la ganadora no puntuó mejor que la alternativa genérica, o la segunda quedó demasiado cerca para decidir. El descifrado no se ve afectado (la clave se resuelve igualmente a partir del texto cifrado), pero la familia que nombra el informe, y todo lo que depende de ella, es una suposición.',
-} satisfies Translation<'decrypt'>;
+} satisfies Translation<'decrypt', 'es'>;

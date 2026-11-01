@@ -404,4 +404,4 @@ export default {
   /* {address} is the bootloader's flash address. */
   'how.write':
     '一次写入会擦除一个 64 KB 槽位，再写入新内容。位于 `{address}` 的引导程序和启动配置在这里永远不会被写入，也没有用于选择活动槽位的控件。只有在拔下相机再重新插上之后，该槽位才会生效。',
-} satisfies Translation<'slots'>;
+} satisfies Translation<'slots', 'zh-Hans'>;

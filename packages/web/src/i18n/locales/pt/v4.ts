@@ -116,4 +116,4 @@ export default {
   'options.retriesMin': 'as tentativas têm de ser zero ou mais; recebido: {value}',
   'options.retryDelayMin':
     'o intervalo entre tentativas tem de ser zero ou mais; recebido: {value}',
-} satisfies Translation<'v4'>;
+} satisfies Translation<'v4', 'pt'>;

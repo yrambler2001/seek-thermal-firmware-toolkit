@@ -100,4 +100,4 @@ export default {
   'detection.why': 'Begründung:',
   'detection.ambiguous':
     '**Die Hinweise haben nicht eindeutig ergeben, welche Familie das ist.** Entweder hat die führende Familie nicht besser abgeschnitten als der allgemeine Ersatz, oder eine zweite lag zu knapp dahinter, um zu entscheiden. Die Entschlüsselung ist davon nicht betroffen — der Schlüssel wird in jedem Fall aus dem Chiffretext berechnet —, aber die im Bericht genannte Familie und alles, was davon abhängt, ist eine Vermutung.',
-} satisfies Translation<'decrypt'>;
+} satisfies Translation<'decrypt', 'de'>;

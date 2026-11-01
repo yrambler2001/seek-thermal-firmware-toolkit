@@ -15,11 +15,40 @@ import type {
 /** `{name}`, or `{name:case}` for a name in a grammatical case. */
 export const PLACEHOLDER = /\{([A-Za-z_]\w*)(?::([a-z]+))?\}/g;
 
-/** Every case a template may ask for (README.md, "Cases"). */
-export const CASES: readonly GrammaticalCase[] = ['gen', 'dat', 'acc', 'ins', 'loc'];
+/** Every case a template may ask for (README.md, "Cases"), in the order the README lists them. */
+export const CASES = [
+  'nom',
+  'gen',
+  'dat',
+  'acc',
+  'ins',
+  'loc',
+  'ine',
+  'ill',
+  'ela',
+  'sup',
+  'sub',
+  'del',
+  'ade',
+  'all',
+  'abl',
+  'tra',
+  'ter',
+  'ess',
+  'com',
+  'abe',
+  'par',
+  'cau',
+] as const satisfies readonly GrammaticalCase[];
+
+type AssertTrue<T extends true> = T;
+/** Every `GrammaticalCase` is in `CASES`: a case added to the type and not here does not compile. */
+export type EveryCaseListed = AssertTrue<
+  [Exclude<GrammaticalCase, (typeof CASES)[number]>] extends [never] ? true : false
+>;
 
 export function isGrammaticalCase(value: string | undefined): value is GrammaticalCase {
-  return CASES.includes(value as GrammaticalCase);
+  return (CASES as readonly string[]).includes(value ?? '');
 }
 
 /** Says a name in a case (`undefined`: its plain form), in the language that fills the template. */
@@ -62,14 +91,37 @@ const rules = new Map<string, Intl.PluralRules>();
  */
 const PLURAL_LOCALE: Readonly<Record<string, string>> = { pt: 'pt-PT' };
 
-/** The CLDR plural category of `count` in `lang` (cached per language). */
-export function pluralCategory(lang: string, count: number): PluralCategory {
+/** Every CLDR plural category, in CLDR's order. */
+export const PLURAL_CATEGORIES: readonly PluralCategory[] = [
+  'zero',
+  'one',
+  'two',
+  'few',
+  'many',
+  'other',
+];
+
+function pluralRules(lang: string): Intl.PluralRules {
   let rule = rules.get(lang);
   if (rule === undefined) {
     rule = new Intl.PluralRules(PLURAL_LOCALE[lang] ?? lang);
     rules.set(lang, rule);
   }
-  return rule.select(count);
+  return rule;
+}
+
+/** The CLDR plural category of `count` in `lang` (cached per language). */
+export function pluralCategory(lang: string, count: number): PluralCategory {
+  return pluralRules(lang).select(count);
+}
+
+/**
+ * The plural categories `lang` uses, in CLDR's order: Latvian `zero, one, other`, Slovenian
+ * `one, two, few, other`. A translation's plural entries give exactly these (locales.test.ts).
+ */
+export function pluralCategories(lang: string): readonly PluralCategory[] {
+  const used = new Set<string>(pluralRules(lang).resolvedOptions().pluralCategories);
+  return PLURAL_CATEGORIES.filter((category) => used.has(category));
 }
 
 export function isPluralForms(message: Message): message is PluralForms {

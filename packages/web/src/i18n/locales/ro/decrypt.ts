@@ -101,4 +101,4 @@ export default {
   'detection.why': 'De ce:',
   'detection.ambiguous':
     '**Dovezile nu au stabilit ce familie este aceasta.** Fie câștigătoarea nu a obținut un scor mai bun decât varianta generică de rezervă, fie a doua clasată a fost prea aproape ca să se poată decide. Decriptarea nu este afectată — cheia se calculează oricum din textul criptat —, dar familia numită în raport, și tot ce depinde de ea, este o presupunere.',
-} satisfies Translation<'decrypt'>;
+} satisfies Translation<'decrypt', 'ro'>;

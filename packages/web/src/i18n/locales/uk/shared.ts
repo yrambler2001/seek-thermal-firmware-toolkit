@@ -138,4 +138,4 @@ export default {
   'deviceInfo.otherBank:acc': 'слот, з якого вона запускається зараз',
   'deviceInfo.otherBank:ins': 'слотом, з якого вона запускається зараз',
   'deviceInfo.otherBank:loc': 'слоті, з якого вона запускається зараз',
-} satisfies Translation<'shared'>;
+} satisfies Translation<'shared', 'uk'>;

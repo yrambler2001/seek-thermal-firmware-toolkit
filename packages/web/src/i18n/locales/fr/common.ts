@@ -55,4 +55,4 @@ export default {
   'bank.recoveryInSentence:dat': 'à l’emplacement de secours {letter}',
   'bank.recoveryInSentence:loc': 'dans l’emplacement de secours {letter}',
   'bank.recoveryInSentence:ins': 'L’emplacement de secours {letter}',
-} satisfies Translation<'common'>;
+} satisfies Translation<'common', 'fr'>;

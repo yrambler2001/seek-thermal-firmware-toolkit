@@ -469,4 +469,4 @@ export default {
   /* {address} is the bootloader's flash address. */
   'how.write':
     'Ein Schreibvorgang löscht einen 64-KB-Slot und programmiert ihn. Der Bootloader bei `{address}` und die Boot-Konfiguration werden hier nie geschrieben, und es gibt kein Bedienelement, um den aktiven Slot zu wählen. Der Slot wird erst wirksam, nachdem die Kamera abgezogen und wieder eingesteckt wurde.',
-} satisfies Translation<'slots'>;
+} satisfies Translation<'slots', 'de'>;

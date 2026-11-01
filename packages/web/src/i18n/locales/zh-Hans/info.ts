@@ -151,4 +151,4 @@ export default {
   'report.oneBank.ffVendor':
     '一次一个槽位：“固件槽位操作”标签页一次写入或修补这台相机的一个槽位，每个槽位都按厂商应用暂存 16 Hz FF 镜像的方式暂存（镜像 XOR 其自身的密钥块 0），并由相机以密钥 B 存储，每次写入前都会先征求确认。',
   'report.refusesEvery': '“固件槽位操作”标签页拒绝这台相机的所有槽位：',
-} satisfies Translation<'info'>;
+} satisfies Translation<'info', 'zh-Hans'>;

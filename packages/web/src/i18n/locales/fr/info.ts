@@ -156,4 +156,4 @@ export default {
   'report.oneBank.ffVendor':
     'Un emplacement à la fois : l’onglet des emplacements écrit ou corrige un emplacement de cette caméra, chacun étant transféré comme l’app du fabricant transfère l’image FF 16 Hz (l’image XOR son propre bloc de clés 0), et stocké par la caméra sous la clé B, et chaque écriture demande d’abord confirmation.',
   'report.refusesEvery': 'L’onglet des emplacements refuse chaque emplacement de cette caméra :',
-} satisfies Translation<'info'>;
+} satisfies Translation<'info', 'fr'>;

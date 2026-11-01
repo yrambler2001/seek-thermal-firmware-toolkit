@@ -128,4 +128,4 @@ export default {
   'deviceInfo.otherBank:dat': 'celuilalt slot',
   'deviceInfo.otherBank:loc': 'în celălalt slot',
   'deviceInfo.otherBank:ins': 'Celălalt slot',
-} satisfies Translation<'shared'>;
+} satisfies Translation<'shared', 'ro'>;

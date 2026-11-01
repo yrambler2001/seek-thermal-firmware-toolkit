@@ -116,4 +116,4 @@ export default {
     'numărul de reîncercări trebuie să fie zero sau mai mare, s-a primit {value}',
   'options.retryDelayMin':
     'pauza între reîncercări trebuie să fie zero sau mai mare, s-a primit {value}',
-} satisfies Translation<'v4'>;
+} satisfies Translation<'v4', 'ro'>;

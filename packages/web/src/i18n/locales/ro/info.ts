@@ -155,4 +155,4 @@ export default {
   'report.oneBank.ffVendor':
     'Câte un slot pe rând: fila sloturilor scrie sau aplică patch-ul pe câte un slot al acestei camere, fiecare slot fiind transferat așa cum aplicația producătorului transferă imaginea FF de 16 Hz (imaginea XOR propriul ei bloc de chei 0), stocată de cameră cu cheia B, și fiecare scriere întreabă mai întâi.',
   'report.refusesEvery': 'Fila sloturilor refuză fiecare slot al acestei camere:',
-} satisfies Translation<'info'>;
+} satisfies Translation<'info', 'ro'>;

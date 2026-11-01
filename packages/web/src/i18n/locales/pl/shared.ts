@@ -128,4 +128,4 @@ export default {
   'deviceInfo.orphanIsTarget':
     'To ten slot zapisuje aktualizacja. Aplikacja działająca na tej kamerze szyfruje ponownie tym nieznanym kluczem, więc **zapis przez tę stronę da kolejny slot, którego bootloader nie uruchomi** — kamera nadal będzie uruchamiać {bank}. Obejściem jest zapis slotu bezpośrednio programatorem SPI lub przez SWD/J-Link.',
   'deviceInfo.otherBank': 'drugi slot',
-} satisfies Translation<'shared'>;
+} satisfies Translation<'shared', 'pl'>;

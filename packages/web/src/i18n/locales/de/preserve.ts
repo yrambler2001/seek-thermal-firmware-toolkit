@@ -417,4 +417,4 @@ export default {
    */
   'error.cameraNotBack':
     'die Kamera ist nach {minutes} Min. wiederholter Versuche nicht zurückgekommen: {error} — wenn Chrome nichts gefragt hat, stecken Sie die Kamera neu ein und führen Sie den Schritt erneut aus; wenn das Protokoll sagte, sie neu zu verbinden, war der Klick auf „Gerät verbinden“ das, worauf gewartet wurde',
-} satisfies Translation<'preserve'>;
+} satisfies Translation<'preserve', 'de'>;

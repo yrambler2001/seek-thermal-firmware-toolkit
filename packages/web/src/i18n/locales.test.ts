@@ -8,7 +8,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { UNLOCK_POWER_CYCLE_NOTE } from '@seek-fw/core';
-import { isGrammaticalCase } from './format';
+import { isGrammaticalCase, pluralCategories } from './format';
 import { LANGUAGES } from './languages';
 import { en } from './locales/en';
 import { isNameKey, nameParamsOf } from './names';
@@ -53,11 +53,15 @@ function caseFormProblems(id: string, own: Message): string[] | null {
   const split = id.lastIndexOf(':');
   const base = id.slice(0, split);
   if (split <= id.indexOf(':') || !isNameKey(base)) return null;
-  const gramCase = id.slice(split + 1);
+  const [gramCase, letter, ...rest] = id.slice(split + 1).split('#');
   if (!isGrammaticalCase(gramCase)) return [`${id} is a form of ${base} in no known case`];
   const english = ENGLISH[base.slice(0, base.indexOf(':'))]?.[base.slice(base.indexOf(':') + 1)];
   if (english === undefined) return [`${id} is a case form of ${base}, which English lacks`];
   if (typeof own !== 'string') return [`${id} should be a string`];
+  if (letter !== undefined && (!['A', 'B', 'R'].includes(letter) || rest.length > 0))
+    return [`${id} is a form for no bank letter (A, B, R)`];
+  if (letter !== undefined && !names(english, PLACEHOLDER).includes('letter'))
+    return [`${id} is a form for one letter, but ${base} has no {letter}`];
   const want = names(english, PLACEHOLDER).join(', ');
   const have = names(own, PLACEHOLDER).join(', ');
   return want === have ? [] : [`${id} has params [${have}], ${base} has [${want}]`];
@@ -66,7 +70,7 @@ function caseFormProblems(id: string, own: Message): string[] | null {
 /** Every way `dict` (in language `code`) differs from English, as readable lines. */
 export function parityProblems(code: string, dict: LooseDictionary): string[] {
   const problems: string[] = [];
-  const needed = new Intl.PluralRules(code).resolvedOptions().pluralCategories;
+  const needed = pluralCategories(code);
   for (const [namespace, messages] of Object.entries(ENGLISH)) {
     for (const [key, english] of Object.entries(messages ?? {})) {
       const id = `${namespace}:${key}`;
@@ -84,6 +88,10 @@ export function parityProblems(code: string, dict: LooseDictionary): string[] {
       if (typeof own === 'object') {
         for (const category of needed) {
           if (own[category] === undefined) problems.push(`${id} lacks the "${category}" form`);
+        }
+        for (const category of Object.keys(own)) {
+          if (!(needed as readonly string[]).includes(category))
+            problems.push(`${id} has a "${category}" form, which ${code} never picks`);
         }
       }
       for (const [what, pattern] of [
@@ -112,12 +120,7 @@ describe('every registered language matches English', () => {
     expect(parityProblems(code, await entry.load())).toEqual([]);
   });
 
-  it('lists the languages in the agreed order: English, then by native name', () => {
-    const order = ['en', 'de', 'es', 'fr', 'it', 'pl', 'pt', 'ro', 'ru', 'uk', 'zh-Hans'];
-    const codes = LANGUAGES.map((entry) => entry.code);
-    expect(codes[0]).toBe('en');
-    expect(codes).toEqual(order.filter((code) => codes.includes(code as (typeof codes)[number])));
-  });
+  /* The switcher's order is checked in languages.test.tsx, from the names. */
 });
 
 describe('the parity check itself', () => {
@@ -165,14 +168,14 @@ describe('the parity check itself', () => {
       slots: {
         ...ENGLISH.slots,
         'table.copyTo': 'Kopiuj do {bank:gen}',
-        'status.dumping': 'Zrzut {bank:abl} ...',
+        'status.dumping': 'Zrzut {bank:voc} ...',
         'what.restore': '{bank:gen} z {file:gen}',
       },
     };
     const problems = parityProblems('pl', fake);
     expect(problems).toEqual(
       expect.arrayContaining([
-        'slots:status.dumping asks for {bank:abl}: no such case',
+        'slots:status.dumping asks for {bank:voc}: no such case',
         'slots:what.restore asks for {file:gen}: {file} is not a name (names.ts)',
         'common:bank.slot:voc is a form of common:bank.slot in no known case',
         'common:bank.slotInSentence:gen has params [], common:bank.slotInSentence has [letter]',
@@ -181,6 +184,47 @@ describe('the parity check itself', () => {
     );
     expect(problems.join('\n')).not.toContain('table.copyTo');
     expect(problems.join('\n')).not.toContain('bank.slot:loc');
+  });
+
+  it('takes the local cases on names, and only there', () => {
+    const fake: LooseDictionary = {
+      ...ENGLISH,
+      common: {
+        ...ENGLISH.common,
+        'bank.slotInSentence:ine': '{letter} slotban',
+        'bank.slotInSentence:ill': '{letter} slotba',
+        'bank.slotInSentence:par': 'sloti {letter}',
+        'bank.slotInSentence:nom': 'az {letter} slot',
+        'bank.slotInSentence:nom#B': 'a {letter} slot',
+        'bank.slotInSentence:ill#b': 'a {letter} slotba',
+      },
+      core: { ...ENGLISH.core, 'keyName.keyA:nom#A': 'az A kulcs' },
+      slots: {
+        ...ENGLISH.slots,
+        'table.copyTo': 'Másolás {bank:ill}',
+        'what.restore': '{bank:ela} {file:ine}',
+        'fpsEveryOutcome.notWritten': 'Semmi {banks:ine}.',
+      },
+    };
+    expect(parityProblems('hu', fake)).toEqual([
+      'slots:what.restore asks for {file:ine}: {file} is not a name (names.ts)',
+      'common:bank.slotInSentence:ill#b is a form for no bank letter (A, B, R)',
+      'core:keyName.keyA:nom#A is a form for one letter, but core:keyName.keyA has no {letter}',
+    ]);
+  });
+
+  it('reports a plural form the language never picks, and one it needs', () => {
+    const fake: LooseDictionary = {
+      ...ENGLISH,
+      common: {
+        ...ENGLISH.common,
+        'count.files': { one: '{count} fails', few: '{count} faili', other: '{count} faili' },
+      },
+    };
+    expect(parityProblems('lv', fake).filter((line) => line.startsWith('common:'))).toEqual([
+      'common:count.files lacks the "zero" form',
+      'common:count.files has a "few" form, which lv never picks',
+    ]);
   });
 });
 

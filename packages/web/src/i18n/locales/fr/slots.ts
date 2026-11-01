@@ -481,4 +481,4 @@ export default {
   /* {address} is the bootloader's flash address. */
   'how.write':
     'Une écriture efface un emplacement de 64 Ko et le reprogramme. Le bootloader à `{address}` et la configuration de démarrage ne sont jamais écrits ici, et aucune commande ne permet de choisir l’emplacement actif. L’emplacement ne prend effet qu’une fois la caméra débranchée puis rebranchée.',
-} satisfies Translation<'slots'>;
+} satisfies Translation<'slots', 'fr'>;

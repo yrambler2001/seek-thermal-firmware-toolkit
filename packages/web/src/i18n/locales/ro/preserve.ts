@@ -425,4 +425,4 @@ export default {
    */
   'error.cameraNotBack':
     'camera nu a revenit după {minutes} min de reîncercări: {error} — dacă Chrome nu a cerut nimic, reconectați camera și rulați din nou pasul; dacă jurnalul a spus să o reconectați, clicul pe „Conectare dispozitiv” este ceea ce aștepta',
-} satisfies Translation<'preserve'>;
+} satisfies Translation<'preserve', 'ro'>;

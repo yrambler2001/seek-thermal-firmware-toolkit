@@ -102,4 +102,4 @@ export default {
   'detection.why': 'Pourquoi :',
   'detection.ambiguous':
     '**Les indices n’ont pas permis de trancher sur la famille.** Soit la gagnante n’a pas fait mieux que la famille générique de repli, soit une autre est arrivée trop près pour départager. Le déchiffrement n’est pas touché — la clé est calculée à partir du texte chiffré dans tous les cas — mais la famille indiquée dans le rapport, et tout ce qui en dépend, reste une supposition.',
-} satisfies Translation<'decrypt'>;
+} satisfies Translation<'decrypt', 'fr'>;

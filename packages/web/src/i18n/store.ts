@@ -26,9 +26,11 @@ import { en } from './locales/en';
 import type {
   AnyParam,
   GrammaticalCase,
+  ListCase,
   LooseDictionary,
   MessageKey,
   NameList,
+  NameRef,
   NameValue,
   TArgs,
 } from './types';
@@ -182,14 +184,20 @@ function templateIn(
   return selectPluralForm(message, lang, Number(params?.count ?? 0));
 }
 
-/** A name entry's form in `gramCase`, when the language gives one (`bank.slot:loc`); English gives none. */
+/**
+ * A name entry's form in `gramCase`, when the language gives one (`bank.slot:loc`); English gives none.
+ * A form for the name's own letter (`bank.slot:nom#B`) comes first.
+ */
 function caseForm(
   dict: LooseDictionary,
-  key: string,
+  value: NameRef,
   gramCase: GrammaticalCase,
 ): string | undefined {
-  const split = key.indexOf(':');
-  const form = dict[key.slice(0, split)]?.[`${key.slice(split + 1)}:${gramCase}`];
+  const split = value.name.indexOf(':');
+  const own = dict[value.name.slice(0, split)];
+  const key = `${value.name.slice(split + 1)}:${gramCase}`;
+  const letter = value.params?.letter;
+  const form = (letter === undefined ? undefined : own?.[`${key}#${letter}`]) ?? own?.[key];
   return typeof form === 'string' ? form : undefined;
 }
 
@@ -200,20 +208,38 @@ const LIST_KEY: Readonly<Record<Exclude<NameList['join'], 'commaAnd'>, string>> 
 };
 
 /**
+ * The case a name in a list is said in, when the list is asked for `gramCase` (`ListCase`): the last name
+ * always takes it; the others take it too, or keep their plain form, or take the rule's `before`.
+ */
+export function listItemCase(
+  rule: ListCase,
+  gramCase: GrammaticalCase | undefined,
+  isLast: boolean,
+): GrammaticalCase | undefined {
+  if (isLast || gramCase === undefined || rule === 'each') return gramCase;
+  if (rule === 'last') return undefined;
+  return rule.lastOnly.includes(gramCase) ? rule.before : gramCase;
+}
+
+/**
  * Says names in one language: a name in its case form, or its plain form when the language has no such
- * form (a missing form falls back to the same language's plain one, never to English); a list with each
- * name in the case, joined with the language's `common:list.*`.
+ * form (a missing form falls back to the same language's plain one, never to English); a list with its
+ * names in the case as the language's `listCase` says (each name, by default), joined with the
+ * language's `common:list.*`.
  */
 function sayerIn(dict: LooseDictionary, lang: LanguageCode): NameSayer {
   const join = (key: string, first: string, second: string): string =>
     interpolate(templateIn(dict, lang, key), { first, second });
+  const rule = LANGUAGES.find((entry) => entry.code === lang)?.listCase ?? 'each';
   const say: NameSayer = (value, gramCase) => {
     if ('text' in value) return value.text;
     if ('name' in value) {
-      const form = gramCase === undefined ? undefined : caseForm(dict, value.name, gramCase);
+      const form = gramCase === undefined ? undefined : caseForm(dict, value, gramCase);
       return interpolate(form ?? templateIn(dict, lang, value.name), value.params);
     }
-    const words = value.names.map((name) => say(name, gramCase));
+    const words = value.names.map((name, at) =>
+      say(name, listItemCase(rule, gramCase, at === value.names.length - 1)),
+    );
     const last = words.at(-1);
     if (last === undefined) return '';
     if (value.join !== 'commaAnd') {

@@ -480,4 +480,4 @@ export default {
   /* {address} is the bootloader's flash address. */
   'how.write':
     'O scriere șterge un slot de 64 KB și îl programează. Bootloader-ul de la `{address}` și configurația de pornire nu sunt scrise niciodată aici și nu există nicio comandă pentru alegerea slotului activ. Slotul are efect doar după ce camera este deconectată și reconectată.',
-} satisfies Translation<'slots'>;
+} satisfies Translation<'slots', 'ro'>;

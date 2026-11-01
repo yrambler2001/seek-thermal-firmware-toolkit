@@ -128,4 +128,4 @@ export default {
   'deviceInfo.otherBank:dat': 'à l’autre emplacement',
   'deviceInfo.otherBank:loc': 'dans l’autre emplacement',
   'deviceInfo.otherBank:ins': 'L’autre emplacement',
-} satisfies Translation<'shared'>;
+} satisfies Translation<'shared', 'fr'>;

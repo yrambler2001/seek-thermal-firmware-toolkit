@@ -1427,4 +1427,4 @@ export default {
   'usb.speed.high': 'haute vitesse (480 Mbit/s)',
   'usb.speed.full': 'pleine vitesse (12 Mbit/s)',
   'usb.speed.code': 'code {code}',
-} satisfies Translation<'core'>;
+} satisfies Translation<'core', 'fr'>;

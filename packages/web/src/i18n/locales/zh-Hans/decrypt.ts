@@ -93,4 +93,4 @@ export default {
   'detection.why': '原因：',
   'detection.ambiguous':
     '**证据不足以确定这是哪个固件系列。**要么得分最高者并不比通用后备方案更好，要么第二名与它太接近，无法判定。解密不受影响——无论哪种情况，密钥都是从密文中求出的——但报告中写的固件系列，以及任何依赖它的内容，都只是猜测。',
-} satisfies Translation<'decrypt'>;
+} satisfies Translation<'decrypt', 'zh-Hans'>;

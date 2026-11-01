@@ -422,4 +422,4 @@ export default {
    */
   'error.cameraNotBack':
     'la termocamera non è tornata dopo {minutes} min di tentativi: {error}. Se Chrome non ha chiesto nulla, ricollega la termocamera ed esegui di nuovo la fase; se il registro diceva di ricollegarla, è il clic su «Collega dispositivo» che stava aspettando',
-} satisfies Translation<'preserve'>;
+} satisfies Translation<'preserve', 'it'>;

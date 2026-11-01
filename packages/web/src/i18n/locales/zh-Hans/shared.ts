@@ -111,4 +111,4 @@ export default {
   'deviceInfo.orphanIsTarget':
     '这正是升级时写入的槽位。这台相机上运行的应用程序会用那个未知密钥重新加密，所以**通过本页写入只会再产生一个引导程序无法启动的槽位**——相机会继续运行{bank}。用 SPI 编程器或通过 SWD/J-Link 直接写入该槽位，可以绕过这个问题。',
   'deviceInfo.otherBank': '另一个槽位',
-} satisfies Translation<'shared'>;
+} satisfies Translation<'shared', 'zh-Hans'>;

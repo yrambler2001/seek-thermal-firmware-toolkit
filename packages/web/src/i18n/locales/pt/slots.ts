@@ -477,4 +477,4 @@ export default {
   /* {address} is the bootloader's flash address. */
   'how.write':
     'Uma escrita apaga uma ranhura de 64 KB e programa-a. O bootloader em `{address}` e a configuração de arranque nunca são escritos aqui, e não há nenhum controlo para escolher a ranhura ativa. A ranhura só passa a ter efeito depois de a câmara ser desconectada e voltar a ser conectada.',
-} satisfies Translation<'slots'>;
+} satisfies Translation<'slots', 'pt'>;

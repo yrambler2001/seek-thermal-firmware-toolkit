@@ -156,4 +156,4 @@ export default {
   'report.oneBank.ffVendor':
     'Ein Slot nach dem anderen: Der Slots-Tab beschreibt oder patcht jeweils einen Slot dieser Kamera; jeder Slot wird so übertragen, wie die Hersteller-App das 16-Hz-FF-Image überträgt (das Image XOR seinen eigenen Schlüsselblock 0), und von der Kamera unter Schlüssel B gespeichert; und jeder Schreibvorgang fragt vorher nach.',
   'report.refusesEvery': 'Der Slots-Tab lehnt jeden Slot dieser Kamera ab:',
-} satisfies Translation<'info'>;
+} satisfies Translation<'info', 'de'>;

@@ -424,4 +424,4 @@ export default {
    */
   'error.cameraNotBack':
     'камера не повернулася після {minutes} хв спроб: {error} — якщо Chrome нічого не запитував, перепід’єднайте камеру й запустіть етап ще раз; якщо журнал просив під’єднати її знову, сторінка чекала саме натискання «Під’єднати пристрій»',
-} satisfies Translation<'preserve'>;
+} satisfies Translation<'preserve', 'uk'>;

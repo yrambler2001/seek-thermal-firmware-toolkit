@@ -35,4 +35,4 @@ export default {
   /* The same names inside a sentence (English writes them in lower case there). */
   'bank.slotInSentence': '槽位 {letter}',
   'bank.recoveryInSentence': '恢复槽位 {letter}',
-} satisfies Translation<'common'>;
+} satisfies Translation<'common', 'zh-Hans'>;

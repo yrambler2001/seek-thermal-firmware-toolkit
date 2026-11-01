@@ -60,4 +60,4 @@ export default {
   'bank.recoveryInSentence:acc': 'слот відновлення {letter}',
   'bank.recoveryInSentence:ins': 'слотом відновлення {letter}',
   'bank.recoveryInSentence:loc': 'слоті відновлення {letter}',
-} satisfies Translation<'common'>;
+} satisfies Translation<'common', 'uk'>;

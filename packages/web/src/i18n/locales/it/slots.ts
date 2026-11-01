@@ -480,4 +480,4 @@ export default {
   /* {address} is the bootloader's flash address. */
   'how.write':
     'Una scrittura cancella uno slot da 64 KB e lo programma. Il bootloader a `{address}` e la configurazione di avvio qui non vengono mai scritti, e non c’è alcun comando per scegliere lo slot attivo. Lo slot ha effetto solo dopo che la termocamera è stata scollegata e ricollegata.',
-} satisfies Translation<'slots'>;
+} satisfies Translation<'slots', 'it'>;

@@ -154,4 +154,4 @@ export default {
   'report.oneBank.ffVendor':
     'Uma ranhura de cada vez: o separador de ranhuras escreve uma ranhura desta câmara ou aplica-lhe o patch, cada ranhura preparada como a aplicação do fabricante prepara a imagem FF de 16 Hz (a imagem XOR o seu próprio bloco de chaves 0) e guardada pela câmara com a chave B, e cada escrita pede confirmação antes.',
   'report.refusesEvery': 'O separador de ranhuras recusa todas as ranhuras desta câmara:',
-} satisfies Translation<'info'>;
+} satisfies Translation<'info', 'pt'>;

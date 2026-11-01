@@ -155,4 +155,4 @@ export default {
   'report.oneBank.ffVendor':
     'Uno slot alla volta: la scheda degli slot scrive o modifica con una patch uno slot di questa termocamera; ogni slot viene trasferito come l’app del produttore trasferisce l’immagine FF a 16 Hz (l’immagine in XOR con il suo blocco di chiavi 0), e conservato dalla termocamera con la chiave B; e ogni scrittura chiede prima conferma.',
   'report.refusesEvery': 'La scheda degli slot rifiuta ogni slot di questa termocamera:',
-} satisfies Translation<'info'>;
+} satisfies Translation<'info', 'it'>;

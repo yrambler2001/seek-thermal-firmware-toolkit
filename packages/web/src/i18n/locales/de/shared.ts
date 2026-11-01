@@ -122,4 +122,4 @@ export default {
   'deviceInfo.orphanIsTarget':
     'Das ist der Slot, in den ein Upgrade schreibt. Die Anwendung, die auf dieser Kamera läuft, verschlüsselt mit diesem unbekannten Schlüssel neu. **Ein Schreiben über diese Seite erzeugt deshalb nur einen weiteren Slot, aus dem der Bootloader nicht starten kann** — in Betrieb bleibt {bank}. Der Ausweg ist, den Slot direkt mit einem SPI-Programmiergerät oder über SWD/J-Link zu schreiben.',
   'deviceInfo.otherBank': 'der andere Slot',
-} satisfies Translation<'shared'>;
+} satisfies Translation<'shared', 'de'>;

@@ -154,4 +154,4 @@ export default {
   'report.oneBank.ffVendor':
     'De una ranura en una: la pestaña de ranuras escribe o parchea una sola ranura de esta cámara cada vez; cada ranura se transfiere como la app del fabricante transfiere la imagen FF de 16 Hz (la imagen XOR su propio bloque de claves 0), y la cámara la almacena con la clave B. Cada escritura pregunta antes.',
   'report.refusesEvery': 'La pestaña de ranuras rechaza todas las ranuras de esta cámara:',
-} satisfies Translation<'info'>;
+} satisfies Translation<'info', 'es'>;

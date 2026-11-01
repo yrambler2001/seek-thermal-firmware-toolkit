@@ -383,4 +383,4 @@ export default {
    */
   'error.cameraNotBack':
     '重试 {minutes} 分钟后相机仍未重新连接：{error}——如果 Chrome 没有弹出任何询问，请重新插拔相机并再次运行该步骤；如果日志提示重新连接，那么它等待的正是你点击“连接设备”',
-} satisfies Translation<'preserve'>;
+} satisfies Translation<'preserve', 'zh-Hans'>;

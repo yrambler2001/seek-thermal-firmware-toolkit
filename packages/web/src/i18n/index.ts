@@ -27,8 +27,10 @@ export { DEFAULT_LANGUAGE, LANGUAGES, type LanguageCode, type LanguageEntry } fr
 export { LANG_KEY, LANG_PARAM, detectLanguage, matchLanguage } from './detect';
 export type {
   AnyParam,
+  BankLetter,
   Dictionary,
   GrammaticalCase,
+  ListCase,
   MessageKey,
   NameKey,
   NameList,
@@ -38,5 +40,6 @@ export type {
   NamespaceMessages,
   ParamValue,
   PluralForms,
+  PluralLanguage,
   Translation,
 } from './types';

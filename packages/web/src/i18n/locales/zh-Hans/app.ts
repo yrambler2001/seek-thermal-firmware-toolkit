@@ -106,4 +106,4 @@ export default {
     '**无法读取相机**，而且这一点不会改变。Safari 没有实现 WebUSB，而在 iOS 和 iPadOS 上，所有浏览器——包括 Chrome 和 Firefox——都必须使用 WebKit 渲染，因此它们都不提供这个接口。没有任何开关、扩展或应用可以绕过这一点。请使用台式电脑或 Android 手机进行导出。',
   'platform.ios.decrypt':
     '可选的解密功能在这里可以使用：解密你已有的镜像文件不需要 USB 访问，所以你可以在 iPhone 或 iPad 上，或者在台式电脑的 Firefox 和 Safari 中进行。',
-} satisfies Translation<'app'>;
+} satisfies Translation<'app', 'zh-Hans'>;

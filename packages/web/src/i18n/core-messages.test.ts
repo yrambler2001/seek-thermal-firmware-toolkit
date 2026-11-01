@@ -1355,7 +1355,11 @@ describe('the core namespace', () => {
     expect([...templates].filter((code) => !produced.has(code))).toEqual([]);
   });
 
-  it('lets a translation put a case only on a param core passes as a name', async () => {
+  /**
+   * The case selectors in one language's core templates that cannot work: a case that is not one of
+   * `CASES`, or a case on a param that the samples do not always pass as a name.
+   */
+  function coreCaseProblems(language: string, core: NamespaceMessages): string[] {
     /* Per code, the params a sample passes as a bank, a key name or a list of them. Some are a name core
      * does not know in another sample (a family's own bank name, an unnamed key), which is then said as it
      * is; a param no sample passes as a name (a count, a hex value) takes no case. */
@@ -1375,24 +1379,51 @@ describe('the core namespace', () => {
       }
     }
     const problems: string[] = [];
-    for (const language of LANGUAGES) {
-      const dict = await language.load();
-      for (const [code, message] of Object.entries(dict.core as NamespaceMessages)) {
-        const forms = typeof message === 'string' ? [message] : Object.values(message);
-        for (const form of forms) {
-          for (const [whole, param = '', gramCase] of form.matchAll(PLACEHOLDER)) {
-            if (gramCase === undefined) continue;
-            const id = `${language.code} core:${code}`;
-            if (!isGrammaticalCase(gramCase)) problems.push(`${id}: ${whole} is not a case`);
-            else if (names.get(code)?.has(param) !== true)
-              problems.push(`${id}: ${whole}, but {${param}} is not a name`);
-            else if (notNames.get(code)?.has(param) === true)
-              problems.push(`${id}: ${whole}, but {${param}} is not always a name`);
-          }
+    for (const [code, message] of Object.entries(core)) {
+      const forms = typeof message === 'string' ? [message] : Object.values(message);
+      for (const form of forms) {
+        for (const [whole, param = '', gramCase] of form.matchAll(PLACEHOLDER)) {
+          if (gramCase === undefined) continue;
+          const id = `${language} core:${code}`;
+          if (!isGrammaticalCase(gramCase)) problems.push(`${id}: ${whole} is not a case`);
+          else if (names.get(code)?.has(param) !== true)
+            problems.push(`${id}: ${whole}, but {${param}} is not a name`);
+          else if (notNames.get(code)?.has(param) === true)
+            problems.push(`${id}: ${whole}, but {${param}} is not always a name`);
         }
       }
     }
+    return problems;
+  }
+
+  it('lets a translation put a case only on a param core passes as a name', async () => {
+    const problems: string[] = [];
+    for (const language of LANGUAGES) {
+      const dict = await language.load();
+      problems.push(...coreCaseProblems(language.code, dict.core as NamespaceMessages));
+    }
     expect(problems).toEqual([]);
+  });
+
+  it('checks the local cases (Hungarian, Estonian) the same way', () => {
+    const core: NamespaceMessages = {
+      ...en.core,
+      'boot.bootsNow': '{bank:ine} fut most a kamera',
+      'preserve.banks.afterCommit': en.core['preserve.banks.afterCommit'].replace(
+        '{banks}',
+        '{banks:ill}',
+      ),
+      'preserve.result.backupNext': en.core['preserve.result.backupNext'].replace(
+        '{next}',
+        '{next:com}',
+      ),
+      'unlock.powerCycleNote': '{bank:voc}',
+    };
+    expect(coreCaseProblems('hu', core).sort()).toEqual([
+      'hu core:preserve.banks.afterCommit: {banks:ill}, but {banks} is not always a name',
+      'hu core:preserve.result.backupNext: {next:com}, but {next} is not always a name',
+      'hu core:unlock.powerCycleNote: {bank:voc} is not a case',
+    ]);
   });
 });
 

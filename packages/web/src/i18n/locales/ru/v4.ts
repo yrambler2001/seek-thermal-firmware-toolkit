@@ -114,4 +114,4 @@ export default {
   'options.gapFillByte': 'gap-fill должен быть одним байтом, получено {value}',
   'options.retriesMin': 'число повторов должно быть не меньше нуля, получено {value}',
   'options.retryDelayMin': 'пауза перед повтором должна быть не меньше нуля, получено {value}',
-} satisfies Translation<'v4'>;
+} satisfies Translation<'v4', 'ru'>;

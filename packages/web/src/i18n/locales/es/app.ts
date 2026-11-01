@@ -109,4 +109,4 @@ export default {
     '**No puede leer una cámara**, y esto no va a cambiar. Safari no implementa WebUSB, y en iOS y iPadOS todos los navegadores, incluidos Chrome y Firefox, están obligados a usar WebKit, así que ninguno ofrece la API. No hay ninguna opción, extensión ni app que lo evite. Para volcar, usa un equipo de escritorio o un teléfono Android.',
   'platform.ios.decrypt':
     'El descifrador opcional sí funciona aquí: descifrar un volcado que ya tienes no necesita acceso USB, así que puedes hacerlo desde un iPhone o un iPad, o desde Firefox y Safari en un equipo de escritorio.',
-} satisfies Translation<'app'>;
+} satisfies Translation<'app', 'es'>;

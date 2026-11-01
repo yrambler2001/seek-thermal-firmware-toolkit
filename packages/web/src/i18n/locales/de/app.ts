@@ -110,4 +110,4 @@ export default {
     '**Kann keine Kamera lesen**, und daran wird sich nichts ändern. Safari unterstützt WebUSB nicht, und unter iOS und iPadOS muss jeder Browser — auch Chrome und Firefox — mit WebKit darstellen, daher bietet keiner von ihnen diese Schnittstelle an. Es gibt keine Einstellung, keine Erweiterung und keine App, die das umgeht. Verwenden Sie zum Auslesen einen Desktop-Computer oder ein Android-Telefon.',
   'platform.ios.decrypt':
     'Das optionale Entschlüsseln funktioniert hier: Ein vorhandenes Flash-Abbild zu entschlüsseln braucht keinen USB-Zugriff, das geht also auf einem iPhone oder iPad oder mit Firefox und Safari auf dem Desktop.',
-} satisfies Translation<'app'>;
+} satisfies Translation<'app', 'de'>;

@@ -101,4 +101,4 @@ export default {
   'detection.why': 'Dlaczego:',
   'detection.ambiguous':
     '**Dowody nie rozstrzygnęły, która to rodzina.** Albo zwycięzca nie wypadł lepiej niż ogólna rodzina zastępcza, albo druga w kolejności była zbyt blisko, aby rozstrzygnąć. Nie wpływa to na odszyfrowanie — klucz i tak jest wyznaczany z szyfrogramu — ale rodzina podana w raporcie i wszystko, co od niej zależy, to przypuszczenie.',
-} satisfies Translation<'decrypt'>;
+} satisfies Translation<'decrypt', 'pl'>;

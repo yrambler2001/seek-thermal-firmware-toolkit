@@ -131,4 +131,4 @@ export default {
   'deviceInfo.otherBank:dat': 'à outra ranhura',
   'deviceInfo.otherBank:loc': 'na outra ranhura',
   'deviceInfo.otherBank:ins': 'A outra ranhura',
-} satisfies Translation<'shared'>;
+} satisfies Translation<'shared', 'pt'>;

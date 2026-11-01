@@ -115,4 +115,4 @@ export default {
   'options.gapFillByte': 'gap-fill deve essere un singolo byte, ricevuto {value}',
   'options.retriesMin': 'i tentativi devono essere zero o più, ricevuto {value}',
   'options.retryDelayMin': 'la pausa tra i tentativi deve essere zero o più, ricevuto {value}',
-} satisfies Translation<'v4'>;
+} satisfies Translation<'v4', 'it'>;
